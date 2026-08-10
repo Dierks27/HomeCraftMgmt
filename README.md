@@ -5,9 +5,9 @@ A Minecraft **Paper** plugin. See [`DESIGN.md`](DESIGN.md) for the full spec and
 
 - **Target server:** Paper **26.2**, Java **25**
 - **Build:** Gradle (toolchain pinned to Java 25), shaded runnable jar
-- **Status:** **Phase 2** — Phase 1 (skeleton + PC + Mini Workbench) plus the
-  **Dynamic Market Engine**. Amazon store GUI (Phase 3) and Minis (Phase 4) are
-  stubs where they connect.
+- **Status:** **Phase 2.5** — Phase 1 (skeleton + PC + Mini Workbench) plus the
+  **finite-stock commodities market**. Amazon store GUI (Phase 3) and Minis
+  (Phase 4) are stubs where they connect.
 
 ---
 
@@ -22,7 +22,7 @@ A Minecraft **Paper** plugin. See [`DESIGN.md`](DESIGN.md) for the full spec and
 | **The PC** | A custom item **crafted at the Mini Workbench** via an admin-defined, **empty-by-default** recipe. Placeable; right-click opens a placeholder **Amazon** GUI (real market is Phase 3). |
 | **Recipes** | Fully **data-driven and reloadable** — nothing hardcoded. Workbench recipe (vanilla, bootstrap) and PC recipe (Workbench-GUI) both live in `config.yml`. |
 | **Protection** | Towny + WorldGuard build-permission checks for place/use/break, via reflection so they stay optional soft-depends and degrade gracefully. |
-| **Dynamic Market** (Phase 2) | Config-driven catalog (base price / floor / ceiling), elasticity + inertia pricing, Vault-backed buy/sell, per-item price + demand persisted to SQLite. Test commands: `/hcm market list|price|buy|sell`. |
+| **Finite-Stock Market** (Phase 2.5) | Real conserved stock per commodity (sell adds, buy subtracts, floored at 0), out-of-stock enforcement, scarcity pricing (empty→ceiling, full→floor) with buy/sell spread, per-item starting stock, daily anti-whale sell limit, and a price-history log — all persisted to SQLite, Vault-backed. Commands: `/hcm market list|price|history|buy|sell`. |
 
 ### Verified build coordinates
 
@@ -91,34 +91,50 @@ Edit `config.yml`, run `/hcm reload`, done — no restart needed.
 
 ---
 
-## Dynamic Market (Phase 2)
+## Finite-Stock Market (Phase 2.5)
 
-The online-market prices move with supply and demand — **buying raises** a price,
-**selling lowers** it, each clamped to the item's floor/ceiling and eased toward
-its target by an inertia factor. This is the **Amazon side only**; QuickShop
-player-shops are untouched. The store GUI arrives in Phase 3 — for now these
-commands drive the engine directly:
+A real commodities exchange with **finite, conserved stock** — not an infinite
+vending machine. The market holds a real **stock** count per commodity:
+
+- **Selling adds** to stock; **buying subtracts**. Stock never goes negative.
+- **At zero stock an item is OUT OF STOCK** — you can't buy it at all.
+- **Price is a function of stock:** empty ⇒ **ceiling** price (and unbuyable);
+  full ⇒ **floor** price; `elasticity` shapes the curve, `inertia` glides it.
+- **Buy/sell spread:** the market sells to you slightly above, and buys from you
+  slightly below, the mid price — kills round-trip arbitrage.
+- **Per-item starting stock:** staples (cobblestone) seed with generous stock
+  (cheap & available); ores (gold, diamond) start at **0** → ceiling price and
+  unbuyable until players sell some in.
+- **Daily per-player sell limit** (anti-whale): caps money and/or units sold per
+  UTC day; resets daily; bypass with `hcm.market.limit.bypass` or raise per rank.
+- **Price history** is snapshotted periodically (for the Phase 5 dashboard).
+
+Amazon side only; QuickShop is untouched. Money flows through **Vault** (cash is
+infinite; only item stock runs dry). The store GUI arrives in Phase 3 — for now
+these commands drive the engine:
 
 | Command | Does |
 |---|---|
-| `/hcm market list` | List every catalog item and its current price. |
-| `/hcm market price <item>` | Show price, base/floor/ceiling, and net demand. |
-| `/hcm market buy <item> <qty>` | Withdraw money via Vault, give items, raise the price. |
-| `/hcm market sell <item> <qty>` | Take items, deposit money via Vault, lower the price. |
+| `/hcm market list` | Every commodity with its buy/sell price and stock. |
+| `/hcm market price <item>` | Stock (vs full), buy/sell/mid price, floor/ceiling. |
+| `/hcm market history <item>` | Recent price/stock snapshots. |
+| `/hcm market buy <item> <qty>` | Pay via Vault, receive items, stock −N (price rises). |
+| `/hcm market sell <item> <qty>` | Hand over items, paid via Vault, stock +N (price falls). |
 
 **Requires Vault + an economy plugin** (EssentialsX). Without one, buy/sell are
 refused with a clear message (everything else still works).
 
-**Tuning** lives in `config.yml` under `market`: `elasticity` (how hard prices
-react), `inertia` (glide smoothing), and the `catalog` list (per-item
-`base_price` / `floor` / `ceiling`). Edit and `/hcm reload` — existing prices and
-demand are preserved; new items start at their base price.
+**Tuning** lives in `config.yml` under `market`: `elasticity`, `inertia`,
+`spread`, `default_full_stock`, `sell_limits`, `price_history`, and the `catalog`
+(per-item `floor` / `ceiling` / `initial_stock` / `full_stock`). Edit and
+`/hcm reload` — existing stock/price is preserved; new items seed fresh.
 
 **Verify the engine:**
-1. `/hcm market price diamond` → note the price.
-2. `/hcm market buy diamond 16` → price rises; `/hcm market buy diamond 64` → rises more (toward the ceiling, never past it).
-3. `/hcm market sell diamond 32` → price falls (toward the floor, never below).
-4. Restart the server → `/hcm market price diamond` shows the **same** moved price (persisted).
+1. `/hcm market price diamond` → starts **OUT OF STOCK** at the ceiling; `buy` is refused.
+2. `/hcm market sell diamond 64` → market stock becomes **+64** and the price drops.
+3. `/hcm market buy diamond 16` → stock falls, price ticks back up; `sell`/`buy` prices differ (spread).
+4. `/hcm market price cobblestone` → seeded with stock, cheap and buyable from day one.
+5. Restart the server → prices and stock come back **unchanged** (persisted).
 
 ---
 

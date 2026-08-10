@@ -2,7 +2,7 @@ package com.dierks.homecraft.block;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig;
-import com.dierks.homecraft.gui.AmazonHolder;
+import com.dierks.homecraft.gui.StoreMenu;
 import com.dierks.homecraft.crafting.WorkbenchHolder;
 import com.dierks.homecraft.integration.ProtectionService;
 import com.dierks.homecraft.item.CustomItems;
@@ -140,7 +140,7 @@ public final class CustomBlockListener implements Listener {
                     player.sendMessage(Text.of("&cYou can't use this PC."));
                     return;
                 }
-                AmazonHolder.open(player);
+                new StoreMenu(plugin, player).open(player);
             }
         }
     }

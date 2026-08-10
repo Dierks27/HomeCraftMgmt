@@ -6,14 +6,17 @@ import com.dierks.homecraft.command.HcmCommand;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.crafting.RecipeManager;
 import com.dierks.homecraft.crafting.WorkbenchListener;
-import com.dierks.homecraft.gui.AmazonListener;
+import com.dierks.homecraft.gui.MenuListener;
 import com.dierks.homecraft.integration.EconomyService;
 import com.dierks.homecraft.integration.ProtectionService;
 import com.dierks.homecraft.item.CustomItems;
 import com.dierks.homecraft.market.MarketService;
+import com.dierks.homecraft.order.OrderDeliveryListener;
+import com.dierks.homecraft.order.OrderService;
 import com.dierks.homecraft.storage.Database;
 import com.dierks.homecraft.storage.DailySellDao;
 import com.dierks.homecraft.storage.MarketStateDao;
+import com.dierks.homecraft.storage.OrderDao;
 import com.dierks.homecraft.storage.PlacedBlockDao;
 import com.dierks.homecraft.storage.PriceHistoryDao;
 import com.dierks.homecraft.util.Keys;
@@ -24,12 +27,12 @@ import org.bukkit.scheduler.BukkitTask;
 import java.sql.SQLException;
 
 /**
- * HomeCraft Management — Phase 1.
+ * HomeCraft Management.
  *
- * <p>Delivers the project skeleton, an extensible SQLite datastore, the Mini
- * Workbench (placeable custom block → crafting GUI), and the PC (config-crafted
- * at the bench → placeholder Amazon GUI). The market, shipping, and Mini modules
- * are intentionally left as stubs where they connect.
+ * <p>Project skeleton + SQLite datastore, the Mini Workbench and PC custom blocks,
+ * the finite-stock commodities market, and the PC-gated Amazon Store with
+ * real-time shipping. Minis (Phase 4) and the web dashboard (Phase 5) are stubs
+ * where they connect.
  */
 public final class HomeCraftManagement extends JavaPlugin {
 
@@ -41,7 +44,9 @@ public final class HomeCraftManagement extends JavaPlugin {
     private ProtectionService protection;
     private EconomyService economy;
     private MarketService market;
+    private OrderService orderService;
     private BukkitTask historyTask;
+    private BukkitTask deliveryTask;
 
     @Override
     public void onEnable() {
@@ -75,10 +80,15 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.market.reload();
         scheduleHistorySnapshots();
 
+        // Amazon ordering + shipping (Phase 3).
+        this.orderService = new OrderService(this, new OrderDao(database), market, economy);
+        scheduleDeliveries();
+
         getServer().getPluginManager().registerEvents(
                 new CustomBlockListener(this, config, blockService, items, protection), this);
         getServer().getPluginManager().registerEvents(new WorkbenchListener(this, recipeManager), this);
-        getServer().getPluginManager().registerEvents(new AmazonListener(), this);
+        getServer().getPluginManager().registerEvents(new MenuListener(), this);
+        getServer().getPluginManager().registerEvents(new OrderDeliveryListener(orderService), this);
 
         PluginCommand hcm = getCommand("hcm");
         if (hcm != null) {
@@ -95,6 +105,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (historyTask != null) {
             historyTask.cancel();
             historyTask = null;
+        }
+        if (deliveryTask != null) {
+            deliveryTask.cancel();
+            deliveryTask = null;
         }
         if (recipeManager != null) {
             recipeManager.unregisterRecipes();
@@ -126,6 +140,14 @@ public final class HomeCraftManagement extends JavaPlugin {
         historyTask = getServer().getScheduler().runTaskTimer(this, market::snapshotHistory, 20L * 30L, periodTicks);
     }
 
+    /** Poll for due Amazon deliveries (flips in-transit orders to ready) every 20s. */
+    private void scheduleDeliveries() {
+        if (deliveryTask != null) {
+            deliveryTask.cancel();
+        }
+        deliveryTask = getServer().getScheduler().runTaskTimer(this, orderService::tick, 20L * 10L, 20L * 20L);
+    }
+
     public PluginConfig config() {
         return config;
     }
@@ -152,5 +174,9 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public MarketService market() {
         return market;
+    }
+
+    public OrderService orderService() {
+        return orderService;
     }
 }

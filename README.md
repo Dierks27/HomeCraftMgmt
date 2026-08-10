@@ -5,11 +5,12 @@ A Minecraft **Paper** plugin. See [`DESIGN.md`](DESIGN.md) for the full spec and
 
 - **Target server:** Paper **26.2**, Java **25**
 - **Build:** Gradle (toolchain pinned to Java 25), shaded runnable jar
-- **Status:** **Phase 3** — Phase 1 (skeleton + PC + Mini Workbench), the
-  **finite-stock commodities market** (Phase 2.5, with proportional + integrated
-  pricing in 2.5.1), and the **GUI storefronts**: a PC-gated Amazon Store with
-  real-time shipping, plus an instant Market GUI. Minis (Phase 4) and the web
-  dashboard (Phase 5) are stubs where they connect.
+- **Status:** **Phase 4** — Phase 1 (skeleton + PC + Mini Workbench), the
+  **finite-stock commodities market** (2.5 + proportional/integrated pricing in
+  2.5.1), the **Crate storefronts** (PC-gated store with real-time shipping +
+  instant Market GUI), and the **Minis collectibles** core (config catalog,
+  rarity styling, minting + provenance, Museum & Shop GUI). Vending Machine /
+  Auction House / wild-drops and the Marketplace/dashboard are follow-ups.
 
 ---
 
@@ -168,6 +169,37 @@ inventories; `/hcm …` stays admin/testing only.
    in **My Orders** as *in transit*, then flips to **ready**; click to collect.
 4. Restart mid-transit → the order still delivers on schedule.
 5. Open **Instant Market** → left-click buy / right-click sell; stock & price move.
+
+---
+
+## Minis — Collectibles (Phase 4, core)
+
+Rarity-tiered collectible heads (and, later, posed armor stands), all
+**config-driven** under `minis:` in `config.yml`:
+
+- **Assign a rarity; the style follows.** The `rarity_styles` palette maps each
+  tier → pane colour, name colour, enchant glint, and default cap/price. Edit it
+  once instead of styling every Mini.
+- **Catalog** = hand-picked `series` → `entries` (name, `category`/Type,
+  optional `texture` Base64 head value, `cap`, `price`, `craftable`). Entries
+  inherit their series' rarity and the palette defaults unless overridden.
+- **Minting** is the single source of truth: buying at the Museum, or an admin
+  give, **mints** a uniquely-tagged copy — a per-copy UUID in the item's PDC
+  (anti-dupe), the type id, and the **Mint #N**. Caps are enforced; circulation
+  is tracked (`minted − destroyed`).
+- **Museum & Shop GUI** — a button on the PC store (or `/hcm mini museum`):
+  browse every Mini with live **minted/cap** + **circulation**, click to mint one
+  (paid via Vault); minted-out Minis show as trade-only.
+
+**Admin/testing:** `/hcm mini list`, `/hcm mini give <id> [player]`,
+`/hcm mini museum`.
+
+**Verify:** `/hcm reload` → `/hcm mini list` shows the example Minis → open the
+Museum (PC → Mini Museum) → mint one → check the item's tooltip (Type/Series/
+Rarity/Mint #) and that the count went up; a capped Legendary stops at its cap.
+
+*Deferred to follow-ups:* Vending Machine, Auction House, wild-drops, posed
+armor-stand spawning, and the checkmark web-import.
 
 ---
 

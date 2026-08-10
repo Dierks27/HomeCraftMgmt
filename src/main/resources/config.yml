@@ -188,7 +188,38 @@ shipping:
     two_day:   { real_hours: 48, percent: 10, flat: 250, prime_flat: true }
     three_day: { real_hours: 72, percent: 0,  flat: 0 }   # free tier
 
-# Phase 4 — Minis (Heads & Armor Stands)
+# ---------------------------------------------------------------------
+#  Phase 4 — Minis (collectible heads & armor stands)
+#  You assign each Mini a rarity + (optionally) a cap/price; the colour,
+#  glint, and smart defaults follow from the rarity palette below. Edit the
+#  palette once instead of styling every Mini. Everything reloads with
+#  /hcm reload. The catalog is hand-picked — add only what you want.
+# ---------------------------------------------------------------------
 minis:
-  pricing_mode: ESCALATING   # FIXED | ESCALATING (overridable per series)
-  series: []
+  pricing_mode: ESCALATING   # FIXED | ESCALATING (informational; per-entry price wins)
+
+  # Assign the tier; colour + glint + default cap/price come from here.
+  rarity_styles:
+    LEGENDARY: { pane: YELLOW,     name_color: gold,         glint: true,  default_cap: 5,   default_price: 50000 }
+    EPIC:      { pane: PURPLE,     name_color: light_purple, glint: true,  default_cap: 20,  default_price: 15000 }
+    RARE:      { pane: BLUE,       name_color: aqua,         glint: false, default_cap: 100, default_price: 4000 }
+    UNCOMMON:  { pane: GREEN,      name_color: green,        glint: false, default_cap: 500, default_price: 800 }
+    COMMON:    { pane: LIGHT_GRAY, name_color: gray,         glint: false, default_cap: -1,  default_price: 150 }
+
+  # Your "Type" list (the subject) — open/editable, used for browsing/filtering.
+  categories: [ ANIMAL, FOOD, LETTER, SYMBOL, CHARACTER, VEHICLE, HOLIDAY, MISC ]
+
+  # The catalog. Each entry inherits its series' rarity unless it sets its own;
+  # cap/price default from the rarity palette. `texture` is a Base64 head value
+  # (from minecraft-heads.com's "Value" field) — leave blank for a plain head.
+  # `id` is optional (auto-derived from the name if omitted).
+  series:
+    - name: "Starter Critters"
+      rarity: COMMON
+      entries:
+        - { name: "Piggy Mini",  category: ANIMAL, texture: "" }
+        - { name: "Chick Mini",  category: ANIMAL, texture: "" }
+    - name: "Legendary Relics"
+      rarity: LEGENDARY
+      entries:
+        - { name: "Golden Idol", category: SYMBOL, texture: "", cap: 5 }

@@ -42,6 +42,7 @@ permissions:
       hcm.workbench.use: true
       hcm.market.order: true
       hcm.market.limit.bypass: true
+      hcm.mini.buy: true
       hcm.protection.bypass: true
   hcm.use:
     description: Run the /hcm command (view market list/prices).
@@ -52,6 +53,9 @@ permissions:
   hcm.market.limit.bypass:
     description: Exempt from the daily per-player sell limit.
     default: op
+  hcm.mini.buy:
+    description: Mint/buy Minis at the Museum.
+    default: true
   hcm.pc.use:
     description: Open the Amazon store by right-clicking a placed PC.
     default: true

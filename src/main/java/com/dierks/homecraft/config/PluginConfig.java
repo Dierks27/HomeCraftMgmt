@@ -2,11 +2,17 @@ package com.dierks.homecraft.config;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.market.MarketItem;
+import com.dierks.homecraft.mini.MiniDef;
+import com.dierks.homecraft.mini.MiniType;
+import com.dierks.homecraft.mini.Rarity;
+import com.dierks.homecraft.mini.RarityStyle;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -91,6 +97,30 @@ public final class PluginConfig {
     public record Store(String name, String displayUrl) {
     }
 
+    /** The Minis catalog + rarity styling (Phase 4). */
+    public record Minis(String pricingMode, Map<Rarity, RarityStyle> rarityStyles,
+                        List<String> categories, List<MiniDef> catalog) {
+        public RarityStyle style(Rarity rarity) {
+            return rarityStyles.getOrDefault(rarity, DEFAULT_RARITY_STYLES.get(rarity));
+        }
+    }
+
+    /** Built-in rarity palette + smart defaults; overridable under {@code minis.rarity_styles}. */
+    private static final Map<Rarity, RarityStyle> DEFAULT_RARITY_STYLES = new EnumMap<>(Rarity.class);
+
+    static {
+        DEFAULT_RARITY_STYLES.put(Rarity.LEGENDARY,
+                new RarityStyle(Material.YELLOW_STAINED_GLASS_PANE, NamedTextColor.GOLD, true, 5, 50000));
+        DEFAULT_RARITY_STYLES.put(Rarity.EPIC,
+                new RarityStyle(Material.PURPLE_STAINED_GLASS_PANE, NamedTextColor.LIGHT_PURPLE, true, 20, 15000));
+        DEFAULT_RARITY_STYLES.put(Rarity.RARE,
+                new RarityStyle(Material.BLUE_STAINED_GLASS_PANE, NamedTextColor.AQUA, false, 100, 4000));
+        DEFAULT_RARITY_STYLES.put(Rarity.UNCOMMON,
+                new RarityStyle(Material.GREEN_STAINED_GLASS_PANE, NamedTextColor.GREEN, false, 500, 800));
+        DEFAULT_RARITY_STYLES.put(Rarity.COMMON,
+                new RarityStyle(Material.LIGHT_GRAY_STAINED_GLASS_PANE, NamedTextColor.GRAY, false, -1, 150));
+    }
+
     private final HomeCraftManagement plugin;
     private final Logger log;
 
@@ -100,6 +130,7 @@ public final class PluginConfig {
     private Market market;
     private Shipping shipping;
     private Store store;
+    private Minis minis;
 
     public PluginConfig(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -124,6 +155,10 @@ public final class PluginConfig {
 
     public Store store() {
         return store;
+    }
+
+    public Minis minis() {
+        return minis;
     }
 
     public Market market() {
@@ -161,6 +196,124 @@ public final class PluginConfig {
         this.store = new Store(
                 c.getString("store.name", "Crate"),
                 c.getString("store.display_url", "www.Crate.com"));
+
+        // ---- Minis (Phase 4) ----
+        this.minis = readMinis(c);
+    }
+
+    private Minis readMinis(FileConfiguration c) {
+        String pricingMode = c.getString("minis.pricing_mode", "ESCALATING");
+
+        Map<Rarity, RarityStyle> styles = new EnumMap<>(DEFAULT_RARITY_STYLES);
+        ConfigurationSection stylesSec = c.getConfigurationSection("minis.rarity_styles");
+        if (stylesSec != null) {
+            for (String key : stylesSec.getKeys(false)) {
+                Rarity rarity;
+                try {
+                    rarity = Rarity.valueOf(key.toUpperCase());
+                } catch (IllegalArgumentException e) {
+                    log.warning("Unknown rarity '" + key + "' in minis.rarity_styles; skipping.");
+                    continue;
+                }
+                ConfigurationSection s = stylesSec.getConfigurationSection(key);
+                if (s == null) {
+                    continue;
+                }
+                RarityStyle d = styles.get(rarity);
+                styles.put(rarity, new RarityStyle(
+                        paneMaterial(s.getString("pane"), d.pane()),
+                        colorOf(s.getString("name_color"), d.nameColor()),
+                        s.getBoolean("glint", d.glint()),
+                        s.getLong("default_cap", d.defaultCap()),
+                        s.getDouble("default_price", d.defaultPrice())));
+            }
+        }
+
+        List<String> categories = c.getStringList("minis.categories");
+        if (categories.isEmpty()) {
+            categories = List.of("ANIMAL", "FOOD", "LETTER", "SYMBOL", "CHARACTER", "VEHICLE", "HOLIDAY", "MISC");
+        }
+
+        List<MiniDef> catalog = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (Map<?, ?> seriesRow : c.getMapList("minis.series")) {
+            String seriesName = str(seriesRow.get("name"), "Series");
+            Rarity seriesRarity = parseRarity(seriesRow.get("rarity"), Rarity.COMMON);
+            if (!(seriesRow.get("entries") instanceof List<?> entries)) {
+                continue;
+            }
+            for (Object entryObj : entries) {
+                if (!(entryObj instanceof Map<?, ?> e)) {
+                    continue;
+                }
+                String name = str(e.get("name"), null);
+                if (name == null || name.isBlank()) {
+                    continue;
+                }
+                Rarity rarity = parseRarity(e.get("rarity"), seriesRarity);
+                RarityStyle style = styles.get(rarity);
+                MiniType type = parseMiniType(e.get("type"));
+                String category = str(e.get("category"), "MISC");
+                String texture = str(e.get("texture"), "");
+                long cap = e.get("cap") != null ? (long) number(e.get("cap"), style.defaultCap()) : style.defaultCap();
+                double price = e.get("price") != null ? number(e.get("price"), style.defaultPrice()) : style.defaultPrice();
+                boolean craftable = e.get("craftable") instanceof Boolean b
+                        ? b : Boolean.parseBoolean(String.valueOf(e.get("craftable")));
+                String id = str(e.get("id"), slug(name));
+                if (id.isBlank() || !seen.add(id)) {
+                    log.warning("Skipping Mini with empty/duplicate id '" + id + "'.");
+                    continue;
+                }
+                catalog.add(new MiniDef(id, name, seriesName, category, rarity, type, texture, cap, price, craftable));
+            }
+        }
+        return new Minis(pricingMode, styles, categories, catalog);
+    }
+
+    private Material paneMaterial(String color, Material fallback) {
+        if (color == null || color.isBlank()) {
+            return fallback;
+        }
+        Material m = Material.matchMaterial(color.trim().toUpperCase() + "_STAINED_GLASS_PANE");
+        return m != null ? m : fallback;
+    }
+
+    private NamedTextColor colorOf(String name, NamedTextColor fallback) {
+        if (name == null || name.isBlank()) {
+            return fallback;
+        }
+        NamedTextColor c = NamedTextColor.NAMES.value(name.trim().toLowerCase());
+        return c != null ? c : fallback;
+    }
+
+    private Rarity parseRarity(Object value, Rarity fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        try {
+            return Rarity.valueOf(String.valueOf(value).trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return fallback;
+        }
+    }
+
+    private MiniType parseMiniType(Object value) {
+        if (value == null) {
+            return MiniType.HEAD;
+        }
+        try {
+            return MiniType.valueOf(String.valueOf(value).trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return MiniType.HEAD;
+        }
+    }
+
+    private String str(Object value, String fallback) {
+        return value != null ? String.valueOf(value) : fallback;
+    }
+
+    private String slug(String name) {
+        return name.toLowerCase().replaceAll("[^a-z0-9]+", "_").replaceAll("^_|_$", "");
     }
 
     private Shipping readShipping(FileConfiguration c) {

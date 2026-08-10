@@ -96,6 +96,24 @@ public final class Database {
             );
             CREATE INDEX IF NOT EXISTS idx_orders_player ON market_orders (player_uuid, status);
             CREATE INDEX IF NOT EXISTS idx_orders_status ON market_orders (status, deliver_at);
+            """,
+            // v7 — Minis collectibles (Phase 4): per-type mint tallies + per-copy
+            // provenance. mint_counts.minted is the single source of truth for caps;
+            // circulation = minted - destroyed.
+            """
+            CREATE TABLE IF NOT EXISTS mini_counts (
+                mini_id   TEXT    PRIMARY KEY,
+                minted    INTEGER NOT NULL DEFAULT 0,
+                destroyed INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS mini_individuals (
+                uid         TEXT    PRIMARY KEY,
+                mini_id     TEXT    NOT NULL,
+                mint_number INTEGER NOT NULL,
+                owner       TEXT,
+                minted_at   INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_mini_ind_type ON mini_individuals (mini_id);
             """
     };
 

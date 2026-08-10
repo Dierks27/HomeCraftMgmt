@@ -11,11 +11,13 @@ import com.dierks.homecraft.integration.EconomyService;
 import com.dierks.homecraft.integration.ProtectionService;
 import com.dierks.homecraft.item.CustomItems;
 import com.dierks.homecraft.market.MarketService;
+import com.dierks.homecraft.mini.MiniService;
 import com.dierks.homecraft.order.OrderDeliveryListener;
 import com.dierks.homecraft.order.OrderService;
 import com.dierks.homecraft.storage.Database;
 import com.dierks.homecraft.storage.DailySellDao;
 import com.dierks.homecraft.storage.MarketStateDao;
+import com.dierks.homecraft.storage.MiniDao;
 import com.dierks.homecraft.storage.OrderDao;
 import com.dierks.homecraft.storage.PlacedBlockDao;
 import com.dierks.homecraft.storage.PriceHistoryDao;
@@ -45,6 +47,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private EconomyService economy;
     private MarketService market;
     private OrderService orderService;
+    private MiniService miniService;
     private BukkitTask historyTask;
     private BukkitTask deliveryTask;
 
@@ -80,9 +83,13 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.market.reload();
         scheduleHistorySnapshots();
 
-        // Amazon ordering + shipping (Phase 3).
+        // Crate ordering + shipping (Phase 3).
         this.orderService = new OrderService(this, new OrderDao(database), market, economy);
         scheduleDeliveries();
+
+        // Minis collectibles (Phase 4).
+        this.miniService = new MiniService(this, new MiniDao(database), economy);
+        this.miniService.reload();
 
         getServer().getPluginManager().registerEvents(
                 new CustomBlockListener(this, config, blockService, items, protection), this);
@@ -126,6 +133,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         recipeManager.registerRecipes();
         market.reload();
         scheduleHistorySnapshots();
+        miniService.reload();
     }
 
     /** (Re)schedule the periodic price-history snapshot task at the configured cadence. */
@@ -178,5 +186,9 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public OrderService orderService() {
         return orderService;
+    }
+
+    public MiniService miniService() {
+        return miniService;
     }
 }

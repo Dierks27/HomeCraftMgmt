@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.dierks.homecraft'
-version = '0.3.1-phase3.1'
+version = '0.4.0-phase4'
 description = 'HomeCraft Management — Paper plugin (Phase 1: PC + Mini Workbench)'
 
 // Target server: Paper 26.2 / Java 25. The toolchain is pinned to 25 so the

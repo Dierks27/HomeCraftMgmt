@@ -48,6 +48,36 @@ public final class Database {
                 demand        INTEGER NOT NULL,
                 updated_at    INTEGER NOT NULL
             );
+            """,
+            // v3 — finite-stock revision (Phase 2.5): replace the abstract signed
+            // 'demand' with real held 'stock'. Existing rows get stock = -1 (an
+            // "unseeded" sentinel) so the service seeds them from config on load.
+            """
+            ALTER TABLE market_state ADD COLUMN stock INTEGER NOT NULL DEFAULT -1;
+            ALTER TABLE market_state DROP COLUMN demand;
+            """,
+            // v4 — per-player daily sell tallies (anti-whale limit). day = UTC epoch-day.
+            """
+            CREATE TABLE IF NOT EXISTS market_daily_sells (
+                player_uuid TEXT    NOT NULL,
+                day         INTEGER NOT NULL,
+                item_id     TEXT    NOT NULL,
+                units       INTEGER NOT NULL,
+                money       REAL    NOT NULL,
+                PRIMARY KEY (player_uuid, day, item_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_daily_sells_day ON market_daily_sells (player_uuid, day);
+            """,
+            // v5 — periodic price/stock snapshots (feeds the Phase 5 dashboard charts).
+            """
+            CREATE TABLE IF NOT EXISTS market_price_history (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id   TEXT    NOT NULL,
+                price     REAL    NOT NULL,
+                stock     INTEGER NOT NULL,
+                recorded_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_price_history_item ON market_price_history (item_id, recorded_at);
             """
     };
 

@@ -1,0 +1,62 @@
+plugins {
+    id 'java'
+    // Produces the shaded (fat) jar that bundles the SQLite JDBC driver.
+    id 'com.gradleup.shadow' version '8.3.5'
+}
+
+group = 'com.dierks.homecraft'
+version = '0.1.0-phase1'
+description = 'HomeCraft Management — Paper plugin (Phase 1: PC + Mini Workbench)'
+
+// Target server: Paper 26.2 / Java 25. The toolchain is pinned to 25 so the
+// bytecode matches the live server exactly. If JDK 25 is not installed, Gradle
+// will attempt to provision it via the foojay resolver (see settings.gradle).
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        name = 'papermc'
+        // paper-api is published ONLY here (not on Maven Central).
+        url = 'https://repo.papermc.io/repository/maven-public/'
+    }
+}
+
+dependencies {
+    // Paper 26.2 API. Verified coordinate/version (javadocs: 26.2.build.107-stable).
+    // The 'build.+' selector always resolves the latest published 26.2 build.
+    compileOnly 'io.papermc.paper:paper-api:26.2.build.+'
+
+    // Bundled at runtime (shaded) so the plugin needs no external DB server.
+    implementation 'org.xerial:sqlite-jdbc:3.50.1.0'
+}
+
+def targetJavaVersion = 25
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release.set(targetJavaVersion)
+}
+
+processResources {
+    def props = [version: project.version]
+    inputs.properties(props)
+    filteringCharset = 'UTF-8'
+    filesMatching('plugin.yml') {
+        expand(props)
+    }
+}
+
+shadowJar {
+    // Emit the shaded jar as the primary artifact (no '-all' classifier).
+    archiveClassifier.set('')
+}
+
+// `gradle build` should yield the runnable shaded jar.
+tasks.named('build') {
+    dependsOn tasks.named('shadowJar')
+}

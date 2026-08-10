@@ -38,7 +38,7 @@ public final class OrdersMenu extends Menu {
         List<Order> list = orders.ordersFor(player);
         if (list.isEmpty()) {
             set(22, Menus.icon(Material.PAPER, "&7No active orders",
-                    "&8Order something from the Amazon Store."), null);
+                    "&8Order something from " + plugin.config().store().name() + "."), null);
         }
 
         long now = System.currentTimeMillis();

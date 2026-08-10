@@ -1,6 +1,7 @@
 package com.dierks.homecraft.gui;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.market.MarketService;
 import com.dierks.homecraft.util.Text;
@@ -27,7 +28,8 @@ public final class StoreMenu extends Menu {
     public StoreMenu(HomeCraftManagement plugin, Player player) {
         super(plugin);
         this.player = player;
-        init(54, Text.of("&6Amazon Store"));
+        PluginConfig.Store store = plugin.config().store();
+        init(54, Text.of("&6Welcome to " + store.name() + " &8· &7" + store.displayUrl()));
     }
 
     @Override

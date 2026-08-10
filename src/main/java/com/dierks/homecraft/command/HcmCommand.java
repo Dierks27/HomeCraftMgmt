@@ -118,10 +118,13 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Text.of("&7The market catalog is empty."));
                     return;
                 }
-                sender.sendMessage(Text.of("&6Market — " + market.catalog().size() + " item(s):"));
+                sender.sendMessage(Text.of("&6Market — " + market.catalog().size() + " commodity(ies):"));
                 for (MarketItem item : market.catalog()) {
-                    sender.sendMessage(Text.of("&e" + item.id() + " &7(" + item.label() + "&7) &f"
-                            + plugin.economy().format(market.price(item.id()))));
+                    MarketState st = market.state(item.id());
+                    String stock = st.stock() <= 0 ? "&cOUT" : "&f" + st.stock();
+                    sender.sendMessage(Text.of("&e" + item.id() + " &7buy &a"
+                            + plugin.economy().format(market.buyPrice(item.id())) + " &7sell &c"
+                            + plugin.economy().format(market.sellPrice(item.id())) + " &7stock " + stock));
                 }
             }
             case "price" -> {
@@ -135,16 +138,42 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     return;
                 }
                 MarketState state = market.state(item.id());
+                long stock = state.stock();
                 sender.sendMessage(Text.of("&6" + item.label()));
-                sender.sendMessage(Text.of("&7  price: &f" + plugin.economy().format(state.currentPrice())));
-                sender.sendMessage(Text.of("&7  base: &f" + plugin.economy().format(item.basePrice())
-                        + " &7 floor: &f" + plugin.economy().format(item.floor())
+                sender.sendMessage(Text.of("&7  stock: " + (stock <= 0 ? "&cOUT OF STOCK" : "&f" + stock)
+                        + " &7/ full &f" + item.fullStock()));
+                sender.sendMessage(Text.of("&7  buy: &a" + plugin.economy().format(market.buyPrice(item.id()))
+                        + " &7 sell: &c" + plugin.economy().format(market.sellPrice(item.id()))
+                        + " &7 mid: &f" + plugin.economy().format(state.currentPrice())));
+                sender.sendMessage(Text.of("&7  floor: &f" + plugin.economy().format(item.floor())
                         + " &7 ceiling: &f" + plugin.economy().format(item.ceiling())));
-                sender.sendMessage(Text.of("&7  net demand: &f" + state.demand()));
+            }
+            case "history" -> {
+                if (args.length < 3) {
+                    sender.sendMessage(Text.of("&cUsage: /hcm market history <item>"));
+                    return;
+                }
+                MarketItem item = market.item(args[2].toLowerCase(Locale.ROOT));
+                if (item == null) {
+                    sender.sendMessage(Text.of("&cNo market item '" + args[2] + "'."));
+                    return;
+                }
+                var snapshots = market.recentHistory(item.id(), 10);
+                if (snapshots.isEmpty()) {
+                    sender.sendMessage(Text.of("&7No price history yet for " + item.label() + "&7."));
+                    return;
+                }
+                sender.sendMessage(Text.of("&6" + item.label() + " &7— recent snapshots:"));
+                long now = System.currentTimeMillis();
+                for (var snap : snapshots) {
+                    long minutesAgo = Math.max(0, (now - snap.recordedAt()) / 60_000L);
+                    sender.sendMessage(Text.of("&7  " + minutesAgo + "m ago: &f"
+                            + plugin.economy().format(snap.price()) + " &7stock &f" + snap.stock()));
+                }
             }
             case "buy" -> handleTrade(sender, args, true);
             case "sell" -> handleTrade(sender, args, false);
-            default -> sender.sendMessage(Text.of("&cUsage: /hcm market <list|price|buy|sell> …"));
+            default -> sender.sendMessage(Text.of("&cUsage: /hcm market <list|price|history|buy|sell> …"));
         }
     }
 
@@ -175,9 +204,11 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         MarketItem item = market.item(id);
         String verb = buy ? "Bought" : "Sold";
         String flow = buy ? "&7 for &f" : "&7 for &a+";
-        player.sendMessage(Text.of("&a" + verb + " &f" + result.qty() + " &7" + item.label()
+        String cap = result.qty() < qty ? " &8(capped from " + qty + ")" : "";
+        player.sendMessage(Text.of("&a" + verb + " &f" + result.qty() + " &7" + item.label() + cap
                 + flow + plugin.economy().format(result.amount())
-                + "&7. New price: &f" + plugin.economy().format(result.priceAfter())));
+                + "&7. price &f" + plugin.economy().format(result.priceAfter())
+                + " &7stock &f" + result.stockAfter()));
     }
 
     private int parseQty(CommandSender sender, String raw) {
@@ -211,8 +242,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.of("&e/hcm reload &7- reload config & recipes"));
             sender.sendMessage(Text.of("&e/hcm give <workbench|pc> [player] &7- get a custom item"));
         }
-        sender.sendMessage(Text.of("&e/hcm market list &7- list market items & prices"));
-        sender.sendMessage(Text.of("&e/hcm market price <item> &7- inspect an item"));
+        sender.sendMessage(Text.of("&e/hcm market list &7- list commodities (buy/sell/stock)"));
+        sender.sendMessage(Text.of("&e/hcm market price <item> &7- inspect a commodity"));
+        sender.sendMessage(Text.of("&e/hcm market history <item> &7- recent price snapshots"));
         sender.sendMessage(Text.of("&e/hcm market buy|sell <item> <qty> &7- trade"));
     }
 
@@ -237,9 +269,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("market")) {
-            addMatches(out, args[1], "list", "price", "buy", "sell");
+            addMatches(out, args[1], "list", "price", "history", "buy", "sell");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("market")
-                && List.of("price", "buy", "sell").contains(args[1].toLowerCase(Locale.ROOT))) {
+                && List.of("price", "history", "buy", "sell").contains(args[1].toLowerCase(Locale.ROOT))) {
             String prefix = args[2].toLowerCase(Locale.ROOT);
             for (MarketItem item : plugin.market().catalog()) {
                 if (item.id().startsWith(prefix)) {

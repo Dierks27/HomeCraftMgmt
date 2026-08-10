@@ -41,6 +41,7 @@ permissions:
       hcm.workbench.place: true
       hcm.workbench.use: true
       hcm.market.order: true
+      hcm.market.limit.bypass: true
       hcm.protection.bypass: true
   hcm.use:
     description: Run the /hcm command (view market list/prices).
@@ -48,6 +49,9 @@ permissions:
   hcm.market.order:
     description: Buy from and sell to the dynamic market.
     default: true
+  hcm.market.limit.bypass:
+    description: Exempt from the daily per-player sell limit.
+    default: op
   hcm.pc.use:
     description: Open the Amazon store by right-clicking a placed PC.
     default: true

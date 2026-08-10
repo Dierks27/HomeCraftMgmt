@@ -83,8 +83,12 @@ public final class PluginConfig {
                                double percent, double flat, boolean primeFlat) {
     }
 
-    /** Amazon shipping config (Phase 3). Tiers ordered cheapest → fastest. */
+    /** Crate shipping config (Phase 3). Tiers ordered cheapest → fastest. */
     public record Shipping(ShippingMode mode, List<ShippingTier> tiers) {
+    }
+
+    /** Online store branding shown in-game (name + display URL). */
+    public record Store(String name, String displayUrl) {
     }
 
     private final HomeCraftManagement plugin;
@@ -95,6 +99,7 @@ public final class PluginConfig {
     private Pc pc;
     private Market market;
     private Shipping shipping;
+    private Store store;
 
     public PluginConfig(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -115,6 +120,10 @@ public final class PluginConfig {
 
     public Shipping shipping() {
         return shipping;
+    }
+
+    public Store store() {
+        return store;
     }
 
     public Market market() {
@@ -147,6 +156,11 @@ public final class PluginConfig {
 
         // ---- Shipping (Phase 3) ----
         this.shipping = readShipping(c);
+
+        // ---- Store branding (Phase 3) ----
+        this.store = new Store(
+                c.getString("store.name", "Crate"),
+                c.getString("store.display_url", "www.Crate.com"));
     }
 
     private Shipping readShipping(FileConfiguration c) {

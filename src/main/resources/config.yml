@@ -7,6 +7,12 @@
 #  re-reads this file and re-registers recipes live.
 # =====================================================================
 
+# The online store branding shown in-game (the PC opens this). Both are just
+# display text — the URL is not clickable and never resolves.
+store:
+  name: "Crate"
+  display_url: "www.Crate.com"
+
 crafting:
   # Respect Towny / WorldGuard build permissions when placing/using/breaking
   # HomeCraft custom blocks. If those plugins are absent this is a no-op.

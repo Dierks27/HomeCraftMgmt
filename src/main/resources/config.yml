@@ -74,56 +74,101 @@ crafting:
       #   R: REDSTONE_BLOCK
 
 # ---------------------------------------------------------------------
-# Stubs below — not used in Phase 1, kept so later phases extend cleanly.
-# ---------------------------------------------------------------------
-
-# ---------------------------------------------------------------------
-#  Phase 2 — Dynamic Market Engine (the "Amazon" prices only; QuickShop
-#  player-shops set their own prices and are never touched).
+#  Phase 2.5 — Finite, conserved commodities market (the "Amazon" side
+#  ONLY; QuickShop player-shops set their own prices and are untouched).
+#
+#  The market holds a REAL, finite stock per commodity. Selling ADDS to
+#  stock; buying SUBTRACTS. Stock never goes negative. Price is a function
+#  of stock: empty (0) = ceiling price AND out of stock; full = floor price.
 # ---------------------------------------------------------------------
 market:
-  # How hard the target price reacts to net demand:
-  #   target = base_price * (1 + elasticity * demand)
-  elasticity: 0.05
-  # Price glide smoothing. Each trade the current price moves (1 - inertia)
-  # of the way to the target, so it eases in instead of snapping.
-  # Higher inertia = slower movement. Range [0, 1).
+  # Price curve shape. price = floor + (ceiling-floor) * (1 - stock/full_stock)^elasticity
+  #   1.0 = linear from ceiling (empty) down to floor (full).
+  #   > 1 = stays cheap once decently stocked, spikes only near empty.
+  #   < 1 = stays pricey until nearly full. Range > 0.
+  elasticity: 1.0
+  # Glide smoothing: each trade the price moves (1 - inertia) of the way to
+  # the stock-implied target, so it eases in instead of snapping. Range [0, 1).
   inertia: 0.2
+  # Bid/ask spread: the market SELLS to you slightly above, and BUYS from you
+  # slightly below, the mid price — kills round-trip arbitrage. 0.10 = ±5%.
+  spread: 0.10
+  # Stock level at which price reaches the floor, for items that don't set
+  # their own full_stock.
+  default_full_stock: 1024
+
+  # Daily per-player sell limit (anti-whale): caps how much a player can sell
+  # to the market per UTC day. Resets daily; tracked in SQLite.
+  sell_limits:
+    enabled: true
+    max_money_per_day: 100000   # 0 = unlimited money/day
+    max_units_per_day: 0        # 0 = unlimited units/day (counted per item)
+    bypass_permission: "hcm.market.limit.bypass"
+    # Optional higher ceilings per LuckPerms-managed permission node. The most
+    # generous node the player holds wins. Grant these via LuckPerms.
+    ranks:
+      - permission: "hcm.market.limit.vip"
+        max_money_per_day: 250000
+        max_units_per_day: 0
+
+  # Periodic price/stock snapshots (feed the Phase 5 web dashboard charts).
+  price_history:
+    interval_minutes: 30
 
   # Admin-defined catalog. Each item:
-  #   id           unique key used in commands (lower-case)
-  #   material     a Bukkit Material (what is bought/sold)
-  #   display_name optional pretty name (&-colour codes)
-  #   base_price   the anchor price at zero demand
-  #   floor        price never drops below this
-  #   ceiling      price never rises above this
-  # Edit this list and run /hcm reload — prices/demand for existing items
-  # are preserved; new items start at their base_price.
+  #   id            unique key used in commands (lower-case)
+  #   material      a Bukkit Material (what is bought/sold)
+  #   display_name  optional pretty name (&-colour codes)
+  #   floor         lowest price (reached when stock is at/above full_stock)
+  #   ceiling       highest price (reached at zero stock; also = out of stock)
+  #   initial_stock starting units the market holds (sets the starting price)
+  #   full_stock    units at which price hits the floor (default: default_full_stock)
+  # Staples seed with generous stock (cheap & available from day one); ores can
+  # start at 0 → pinned at ceiling and UNBUYABLE until players sell some in.
+  # Edit + /hcm reload: existing stock/price is preserved; new items seed fresh.
   catalog:
-    - id: iron_ingot
-      material: IRON_INGOT
-      display_name: "&fIron Ingot"
-      base_price: 10.0
-      floor: 4.0
-      ceiling: 40.0
-    - id: diamond
-      material: DIAMOND
-      display_name: "&bDiamond"
-      base_price: 120.0
-      floor: 60.0
-      ceiling: 400.0
-    - id: wheat
-      material: WHEAT
-      display_name: "&eWheat"
-      base_price: 2.0
-      floor: 1.0
-      ceiling: 12.0
+    - id: cobblestone
+      material: COBBLESTONE
+      display_name: "&7Cobblestone"
+      floor: 0.10
+      ceiling: 5.0
+      initial_stock: 20000
+      full_stock: 20000
     - id: oak_log
       material: OAK_LOG
       display_name: "&6Oak Log"
-      base_price: 3.0
       floor: 1.0
       ceiling: 20.0
+      initial_stock: 4000
+      full_stock: 8000
+    - id: wheat
+      material: WHEAT
+      display_name: "&eWheat"
+      floor: 1.0
+      ceiling: 12.0
+      initial_stock: 3000
+      full_stock: 6000
+    - id: iron_ingot
+      material: IRON_INGOT
+      display_name: "&fIron Ingot"
+      floor: 4.0
+      ceiling: 40.0
+      initial_stock: 512
+      full_stock: 2048
+    - id: gold_ingot
+      material: GOLD_INGOT
+      display_name: "&6Gold Ingot"
+      floor: 20.0
+      ceiling: 150.0
+      initial_stock: 0          # starts empty -> ceiling price, out of stock
+      full_stock: 1024
+    - id: diamond
+      material: DIAMOND
+      display_name: "&bDiamond"
+      floor: 60.0
+      ceiling: 400.0
+      initial_stock: 0          # starts empty -> ceiling price, out of stock
+      full_stock: 512
 
 # Phase 3 — Amazon Ordering + Shipping
 shipping:

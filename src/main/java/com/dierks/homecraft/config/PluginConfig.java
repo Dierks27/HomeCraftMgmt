@@ -57,8 +57,19 @@ public final class PluginConfig {
     public record Pc(Material baseBlock, String displayName, List<String> lore, String headTexture, PcRecipe recipe) {
     }
 
-    /** The dynamic-market tuning + catalog (Phase 2). */
-    public record Market(double elasticity, double inertia, List<MarketItem> catalog) {
+    /** A daily sell allowance (0 = unlimited on that axis). */
+    public record RankLimit(String permission, double maxMoneyPerDay, long maxUnitsPerDay) {
+    }
+
+    /** Anti-whale daily sell limits, with an optional per-permission override table. */
+    public record SellLimits(boolean enabled, double maxMoneyPerDay, long maxUnitsPerDay,
+                             String bypassPermission, List<RankLimit> ranks) {
+    }
+
+    /** The finite-stock market tuning + catalog (Phase 2.5). */
+    public record Market(double elasticity, double inertia, double spread,
+                         List<MarketItem> catalog, SellLimits sellLimits,
+                         int priceHistoryIntervalMinutes) {
     }
 
     private final HomeCraftManagement plugin;
@@ -111,13 +122,16 @@ public final class PluginConfig {
         PcRecipe pcRecipe = readPcRecipe(c, "crafting.pc.recipe");
         this.pc = new Pc(pcBase, pcName, pcLore, texture, pcRecipe);
 
-        // ---- Market (Phase 2) ----
+        // ---- Market (Phase 2.5 — finite stock) ----
         this.market = readMarket(c);
     }
 
     private Market readMarket(FileConfiguration c) {
-        double elasticity = c.getDouble("market.elasticity", 0.05);
+        double elasticity = c.getDouble("market.elasticity", 1.0);
         double inertia = c.getDouble("market.inertia", 0.2);
+        double spread = c.getDouble("market.spread", 0.10);
+        long defaultFullStock = c.getLong("market.default_full_stock", 1024);
+        int historyMinutes = c.getInt("market.price_history.interval_minutes", 30);
 
         List<MarketItem> catalog = new ArrayList<>();
         Set<String> seen = new HashSet<>();
@@ -139,9 +153,8 @@ public final class PluginConfig {
             }
             String displayName = row.get("display_name") != null ? String.valueOf(row.get("display_name")) : null;
 
-            double base = number(row.get("base_price"), 1.0);
             double floor = number(row.get("floor"), 0.0);
-            double ceiling = number(row.get("ceiling"), Math.max(base, 1.0) * 100.0);
+            double ceiling = number(row.get("ceiling"), Math.max(floor, 1.0) * 100.0);
             if (floor < 0) {
                 floor = 0;
             }
@@ -149,11 +162,35 @@ public final class PluginConfig {
                 log.warning("market.catalog[" + id + "] ceiling < floor; raising ceiling to floor.");
                 ceiling = floor;
             }
-            base = Math.max(floor, Math.min(ceiling, base));
+            long initialStock = Math.max(0L, (long) number(row.get("initial_stock"), 0));
+            long fullStock = (long) number(row.get("full_stock"), defaultFullStock);
+            if (fullStock < 1) {
+                fullStock = 1; // avoid divide-by-zero in the pricing curve
+            }
 
-            catalog.add(new MarketItem(id, material, displayName, base, floor, ceiling));
+            catalog.add(new MarketItem(id, material, displayName, floor, ceiling, initialStock, fullStock));
         }
-        return new Market(elasticity, inertia, catalog);
+        return new Market(elasticity, inertia, spread, catalog, readSellLimits(c), Math.max(1, historyMinutes));
+    }
+
+    private SellLimits readSellLimits(FileConfiguration c) {
+        boolean enabled = c.getBoolean("market.sell_limits.enabled", true);
+        double maxMoney = c.getDouble("market.sell_limits.max_money_per_day", 0);
+        long maxUnits = c.getLong("market.sell_limits.max_units_per_day", 0);
+        String bypass = c.getString("market.sell_limits.bypass_permission", "hcm.market.limit.bypass");
+
+        List<RankLimit> ranks = new ArrayList<>();
+        for (Map<?, ?> row : c.getMapList("market.sell_limits.ranks")) {
+            Object perm = row.get("permission");
+            if (perm == null || String.valueOf(perm).isBlank()) {
+                continue;
+            }
+            ranks.add(new RankLimit(
+                    String.valueOf(perm),
+                    number(row.get("max_money_per_day"), 0),
+                    (long) number(row.get("max_units_per_day"), 0)));
+        }
+        return new SellLimits(enabled, maxMoney, maxUnits, bypass, ranks);
     }
 
     private double number(Object value, double fallback) {

@@ -134,6 +134,15 @@ public final class MarketService {
     // ---------------------------------------------------------------------
 
     public TradeResult buy(Player player, String id, int qty) {
+        return executeBuy(player, id, qty, true);
+    }
+
+    /** Buy for an Amazon order: charge + consume stock now, but deliver the goods later. */
+    public TradeResult purchaseForOrder(Player player, String id, int qty) {
+        return executeBuy(player, id, qty, false);
+    }
+
+    private TradeResult executeBuy(Player player, String id, int qty, boolean deliverNow) {
         MarketItem item = catalog.get(id);
         if (item == null) {
             return TradeResult.fail("No market item '" + id + "'.");
@@ -142,28 +151,31 @@ public final class MarketService {
             return TradeResult.fail("The market is offline (no Vault economy).");
         }
         MarketState state = states.get(id);
-        long stock = state.stock();
-        if (stock <= 0) {
+        if (state.stock() <= 0) {
             return TradeResult.fail(item.label() + " is out of stock.");
         }
 
-        int allowed = (int) Math.min(qty, stock);
-        double unit = engine.buyPrice(state.currentPrice());
-        double cost = unit * allowed;
-
-        if (!economy.has(player, cost)) {
-            return TradeResult.fail("You can't afford " + economy.format(cost) + " for " + allowed + ".");
+        // Integrate the price across the order: each unit costs a little more as
+        // stock drops, so the total is the area under the rising price curve.
+        Plan plan = simulateBuy(item, state.currentPrice(), state.stock(), qty);
+        if (plan.filled() <= 0) {
+            return TradeResult.fail(item.label() + " is out of stock.");
         }
-        if (!economy.withdraw(player, cost)) {
+        if (!economy.has(player, plan.total())) {
+            return TradeResult.fail("You can't afford " + economy.format(plan.total())
+                    + " for " + plan.filled() + " " + item.label() + ".");
+        }
+        if (!economy.withdraw(player, plan.total())) {
             return TradeResult.fail("Payment failed.");
         }
 
-        Map<Integer, ItemStack> leftover = player.getInventory().addItem(new ItemStack(item.material(), allowed));
-        leftover.values().forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
+        if (deliverNow) {
+            Map<Integer, ItemStack> leftover = player.getInventory().addItem(new ItemStack(item.material(), plan.filled()));
+            leftover.values().forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
+        }
 
-        state.setStock(stock - allowed);   // BUY SUBTRACTS from market stock
-        applyPrice(item, state);
-        return new TradeResult(true, null, allowed, cost, state.currentPrice(), state.stock());
+        commit(state, plan);   // BUY SUBTRACTS from market stock; price ends where the order ended
+        return new TradeResult(true, null, plan.filled(), plan.total(), state.currentPrice(), state.stock());
     }
 
     public TradeResult sell(Player player, String id, int qty) {
@@ -181,54 +193,126 @@ public final class MarketService {
             return TradeResult.fail("You have no " + item.label() + " to sell.");
         }
 
-        double unit = Math.max(0.0, engine.sellPrice(state.currentPrice()));
-        int allowed = Math.min(qty, have);
-
-        // Apply the daily anti-whale limit.
+        // Resolve the daily anti-whale allowance (money + units) for this player.
         Limits limits = resolveLimits(player);
-        if (limits.enforced()) {
+        boolean enforced = limits.enforced();
+        double remainingMoney = 0;
+        long remainingUnits = 0;
+        if (enforced) {
             long day = epochDay();
             try {
                 if (limits.maxUnits() > 0) {
-                    long remaining = limits.maxUnits() - dailyDao.unitsSold(player.getUniqueId(), day, id);
-                    if (remaining <= 0) {
+                    remainingUnits = limits.maxUnits() - dailyDao.unitsSold(player.getUniqueId(), day, id);
+                    if (remainingUnits <= 0) {
                         return TradeResult.fail(limitReachedMessage());
                     }
-                    allowed = (int) Math.min(allowed, remaining);
                 }
-                if (limits.maxMoney() > 0 && unit > 0) {
-                    double remaining = limits.maxMoney() - dailyDao.moneyEarned(player.getUniqueId(), day);
-                    if (remaining <= 0) {
+                if (limits.maxMoney() > 0) {
+                    remainingMoney = limits.maxMoney() - dailyDao.moneyEarned(player.getUniqueId(), day);
+                    if (remainingMoney <= 0) {
                         return TradeResult.fail(limitReachedMessage());
                     }
-                    allowed = (int) Math.min(allowed, (long) Math.floor(remaining / unit));
                 }
             } catch (SQLException e) {
                 plugin.getLogger().severe("Failed to read daily sell tally: " + e.getMessage());
-            }
-            if (allowed <= 0) {
-                return TradeResult.fail(limitReachedMessage());
+                enforced = false;
             }
         }
 
-        if (!removeMaterial(player, item.material(), allowed)) {
+        // Integrate the price across the order (earn a little less per unit as
+        // stock rises), stopping at whatever the daily limit allows.
+        Plan plan = simulateSell(item, state.currentPrice(), state.stock(),
+                Math.min(qty, have), enforced, limits.maxMoney(), remainingMoney, limits.maxUnits(), remainingUnits);
+        if (plan.filled() <= 0) {
+            return TradeResult.fail(enforced ? limitReachedMessage()
+                    : "You have no " + item.label() + " to sell.");
+        }
+
+        if (!removeMaterial(player, item.material(), plan.filled())) {
             return TradeResult.fail("Could not take the items from your inventory.");
         }
-        double proceeds = unit * allowed;
-        if (!economy.deposit(player, proceeds)) {
-            player.getInventory().addItem(new ItemStack(item.material(), allowed));
+        if (!economy.deposit(player, plan.total())) {
+            player.getInventory().addItem(new ItemStack(item.material(), plan.filled()));
             return TradeResult.fail("Payout failed — your items were returned.");
         }
 
-        state.setStock(state.stock() + allowed);   // SELL ADDS to market stock
-        applyPrice(item, state);
+        commit(state, plan);   // SELL ADDS to market stock
 
         try {
-            dailyDao.record(player.getUniqueId(), epochDay(), id, allowed, proceeds);
+            dailyDao.record(player.getUniqueId(), epochDay(), id, plan.filled(), plan.total());
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to record daily sell tally: " + e.getMessage());
         }
-        return new TradeResult(true, null, allowed, proceeds, state.currentPrice(), state.stock());
+        return new TradeResult(true, null, plan.filled(), plan.total(), state.currentPrice(), state.stock());
+    }
+
+    /** A previewed/executed order: how many units, the integrated total, and the resulting price/stock. */
+    public record Plan(int filled, double total, double endPrice, long endStock) {
+    }
+
+    /** Preview the cost of buying up to {@code qty} without mutating anything (for GUIs). */
+    public Plan quoteBuy(String id, int qty) {
+        MarketItem item = catalog.get(id);
+        MarketState state = states.get(id);
+        if (item == null || state == null) {
+            return new Plan(0, 0, Double.NaN, 0);
+        }
+        return simulateBuy(item, state.currentPrice(), state.stock(), qty);
+    }
+
+    /** Preview the proceeds of selling up to {@code qty} (ignoring daily limits) for GUIs. */
+    public Plan quoteSell(String id, int qty) {
+        MarketItem item = catalog.get(id);
+        MarketState state = states.get(id);
+        if (item == null || state == null) {
+            return new Plan(0, 0, Double.NaN, 0);
+        }
+        return simulateSell(item, state.currentPrice(), state.stock(), qty, false, 0, 0, 0, 0);
+    }
+
+    private Plan simulateBuy(MarketItem item, double startPrice, long startStock, int want) {
+        long stock = startStock;
+        double price = startPrice;
+        double total = 0;
+        int filled = 0;
+        int cap = (int) Math.max(0, Math.min(want, stock));
+        for (; filled < cap; filled++) {
+            total += engine.buyPrice(price);
+            stock -= 1;
+            price = engine.nextPrice(item, price, stock);
+        }
+        return new Plan(filled, total, price, stock);
+    }
+
+    private Plan simulateSell(MarketItem item, double startPrice, long startStock, int want,
+                             boolean limited, double maxMoney, double remainingMoney,
+                             long maxUnits, long remainingUnits) {
+        long stock = startStock;
+        double price = startPrice;
+        double total = 0;
+        int filled = 0;
+        int cap = Math.max(0, want);
+        if (limited && maxUnits > 0) {
+            cap = (int) Math.min(cap, remainingUnits);
+        }
+        for (; filled < cap; filled++) {
+            double unit = Math.max(0.0, engine.sellPrice(price));
+            if (limited && maxMoney > 0 && total + unit > remainingMoney) {
+                break; // this unit would exceed the daily earning cap
+            }
+            total += unit;
+            stock += 1;
+            price = engine.nextPrice(item, price, stock);
+        }
+        return new Plan(filled, total, price, stock);
+    }
+
+    /** Apply a plan's resulting stock + price to the state and persist. */
+    private void commit(MarketState state, Plan plan) {
+        state.setStock(plan.endStock());
+        state.setCurrentPrice(plan.endPrice());
+        state.setUpdatedAt(System.currentTimeMillis());
+        persist(state);
     }
 
     /** Record a price/stock snapshot for every commodity (periodic history). */
@@ -265,12 +349,6 @@ public final class MarketService {
     }
 
     // ---------------------------------------------------------------------
-
-    private void applyPrice(MarketItem item, MarketState state) {
-        state.setCurrentPrice(engine.nextPrice(item, state.currentPrice(), state.stock()));
-        state.setUpdatedAt(System.currentTimeMillis());
-        persist(state);
-    }
 
     private void persist(MarketState state) {
         try {

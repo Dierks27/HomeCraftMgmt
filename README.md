@@ -5,9 +5,11 @@ A Minecraft **Paper** plugin. See [`DESIGN.md`](DESIGN.md) for the full spec and
 
 - **Target server:** Paper **26.2**, Java **25**
 - **Build:** Gradle (toolchain pinned to Java 25), shaded runnable jar
-- **Status:** **Phase 2.5** — Phase 1 (skeleton + PC + Mini Workbench) plus the
-  **finite-stock commodities market**. Amazon store GUI (Phase 3) and Minis
-  (Phase 4) are stubs where they connect.
+- **Status:** **Phase 3** — Phase 1 (skeleton + PC + Mini Workbench), the
+  **finite-stock commodities market** (Phase 2.5, with proportional + integrated
+  pricing in 2.5.1), and the **GUI storefronts**: a PC-gated Amazon Store with
+  real-time shipping, plus an instant Market GUI. Minis (Phase 4) and the web
+  dashboard (Phase 5) are stubs where they connect.
 
 ---
 
@@ -129,12 +131,43 @@ refused with a clear message (everything else still works).
 (per-item `floor` / `ceiling` / `initial_stock` / `full_stock`). Edit and
 `/hcm reload` — existing stock/price is preserved; new items seed fresh.
 
-**Verify the engine:**
+**Pricing (Phase 2.5.1):** price is a **geometric** curve of stock, so an equal %
+stock change moves price a comparable % for any item (cheap staples no longer
+whipsaw, dear items no longer sit still). Bulk orders **integrate** price across
+the order — a large buy's total is the area under the rising price and the final
+displayed price is where the order ended.
+
+**Verify the engine (admin commands):**
 1. `/hcm market price diamond` → starts **OUT OF STOCK** at the ceiling; `buy` is refused.
 2. `/hcm market sell diamond 64` → market stock becomes **+64** and the price drops.
 3. `/hcm market buy diamond 16` → stock falls, price ticks back up; `sell`/`buy` prices differ (spread).
-4. `/hcm market price cobblestone` → seeded with stock, cheap and buyable from day one.
-5. Restart the server → prices and stock come back **unchanged** (persisted).
+4. `/hcm market buy cobblestone 600` → moves the price only a small %, not floor→near-ceiling.
+
+---
+
+## Store & Market GUIs (Phase 3)
+
+**GUI-first — players never type market commands.** Everything is clickable
+inventories; `/hcm …` stays admin/testing only.
+
+- **The PC opens the Amazon Store.** Right-click a placed PC → paginated catalog
+  with live buy price + stock. Click an item → pick a quantity → **checkout**:
+  choose a shipping tier and pay (item cost + shipping) via Vault.
+- **Shipping tiers** (from `config.yml` `shipping`): **3-Day free, 2-Day 10%,
+  1-Day 20%** (percentage or flat, plus a Prime-style flat option). The order
+  **delivers after the real-time delay** and is **collected at the PC** under
+  **My Orders** (in-transit countdown → ready-to-collect). Orders persist and
+  deliver on schedule across restarts.
+- **Instant Market GUI** (a button in the store): click to **buy/sell now** at
+  the live price against the same finite stock — no shipping, no commands.
+
+**Verify (needs Vault + EssentialsX):**
+1. Craft/`/hcm give pc`, place it, right-click → the **Amazon Store** opens.
+2. Order cobblestone with **1-Day** vs **3-Day** — see the shipping cost/ETA differ.
+3. Set a tier's `real_hours` low (e.g. `0.02`), reload, place an order → it lands
+   in **My Orders** as *in transit*, then flips to **ready**; click to collect.
+4. Restart mid-transit → the order still delivers on schedule.
+5. Open **Instant Market** → left-click buy / right-click sell; stock & price move.
 
 ---
 

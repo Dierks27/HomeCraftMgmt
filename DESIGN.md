@@ -1,4 +1,4 @@
-# HomeCraft Management — Plugin Design Specification (v9)
+# HomeCraft Management — Plugin Design Specification (v10)
 
 > **Purpose of this document:** the build spec for a custom Paper plugin. It is written to be handed to Claude Code (or any implementer) as the source of truth. Design decisions still open are marked **[DECISION]** with a recommended default.
 
@@ -60,21 +60,43 @@ Declare Vault / Towny / WorldGuard / LuckPerms / PlaceholderAPI as **soft-depend
 
 ## 3. Module Specifications
 
-### 3.1 Dynamic Market Engine
+### 3.1 The Market — a Finite, Conserved Commodities Exchange
 
-The market's prices move with supply and demand — an **elasticity model**:
+Not a shop with an infinite vending machine — a **real commodities market** with a **finite, conserved supply.** This is the economic heart of the server.
 
-- Each catalog item has a **base price**, a **current price**, and a **stock/demand counter**.
-- **Buying** raises the price (demand up, stock down); **selling** lowers it (supply up).
-- **Price bounds:** each item has a configurable **floor** and **ceiling** so prices never run away.
-- **Inertia:** prices glide toward their target instead of snapping, for a smooth market feel.
-- **Only the Amazon market uses these prices.** Player shops (QuickShop) are completely independent.
+**Finite, conserved stock (closed-loop — the core rule):**
+- The market holds a **real inventory (stock count) per commodity.** Nothing is ever vaporized into an infinite sink — everything is **logged.**
+- **Selling to the market** removes the item from the player and **adds it to the market's stock** (+N); the player is paid.
+- **Buying from the market** removes it from stock (−N) and gives it to the player; the player pays.
+- **At ZERO stock, the item is OUT OF STOCK — you cannot buy it at all** (not merely expensive — genuinely unavailable). *(Confirmed.)*
+- New material enters only when players **mine it and sell it in**; it leaves only when players **buy and hold/use it.** The market itself neither creates nor destroys material → supply is real and conserved. *(We are NOT capping world mining — the **market pool** is the finite thing; players can still mine fresh ore, which is the natural supply that feeds the market.)*
 
-Reference: DynamicShopGUI uses an elasticity-based model with market inertia — a good conceptual starting point.
+**Scarcity pricing (price = a function of real stock):**
+- Low stock → price climbs toward the item's **ceiling**; high stock → falls toward its **floor**. Configurable **elasticity** sets how hard price reacts to stock changes; **inertia** makes it glide, not snap.
+- So "zero diamonds in the market" naturally means diamonds are maxed on price *and* unbuyable — exactly like a real shortage.
+
+**Starting stock is per-item — this is what makes it *feel* right:**
+- Each commodity has a configurable **initial stock**, which sets its starting price.
+- **Abundant staples (cobblestone, dirt):** seed with generous stock so they're **available and cheap from day one.** Starting them empty would be silly.
+- **Valuable ores (gold, diamond):** start at **ZERO stock → price pinned at the ceiling and unbuyable.** You literally can't buy gold until players mine it and sell it in — scarcity is *earned*, which makes demand feel *correct*.
+- **Rule:** zero stock ⇒ price = **ceiling** (max) AND out of stock; full stock ⇒ price near the **floor**.
+
+**Speculation & collecting become meaningful.** Because prices float on *actual* supply, stockpiling is investment: buy cheap when a commodity floods in, hold, sell when it dries up. Collectors and hoarders are playing a real market. The **web dashboard (§3.7)** is their trading terminal.
+
+**Market rules & safeguards:**
+- **Cash is effectively infinite; only *item* stock is finite.** The market always buys/sells at the current price — it's the economy's money faucet *and* sink. Only item inventory can run dry (→ out of stock).
+- **Buy/sell spread (margin):** the market's **buy price sits slightly above its sell price** (configurable bid/ask spread) — kills round-trip self-arbitrage and gives the market a realistic margin.
+- **Daily per-player sell limit (anti-whale):** cap how much any one player can **sell to the market per day** so nobody floods it and vacuums up all the money. Configurable as **max money earned/day** and/or **max units of a given item/day**; resets daily; tracked per-player (persists); optional higher ceiling per LuckPerms rank. GUI shows "daily limit reached — resets in Xh."
+- *(Optional, symmetric — DECISION):* a **daily buy limit / anti-cornering** cap so one rich player can't instantly buy out a whole commodity the moment it's in stock.
+
+**Scope:** these dynamic prices are the **market/Amazon side ONLY.** Player shops (QuickShop) set their own prices and are untouched. This market **replaces DynamicShopGUI entirely.**
+
+**Engine-revision note (from Phase 2 live testing):** Phase 2 shipped a basic engine using an **abstract signed demand counter** — which is why selling 64 diamonds read as **−64**. Revise to the **finite-stock model**: stock is **positive held inventory** (selling **adds** — the market now *holds* them; buying **subtracts**; floored at 0 — so sell 64 ⇒ stock **+64**), with out-of-stock enforcement, per-item starting stock, and price driven by actual stock. (Reference DynamicShopGUI's elasticity math for the *pricing curve* only; the finite-stock/conservation model is ours.)
 
 ### 3.2 Amazon Ordering + Shipping
 
 - **Access:** ONLY through a placed PC (see 3.3). No global command opens it.
+- **GUI-first principle (whole plugin):** ALL player buying/selling/browsing happens in **clickable GUIs** — players **never type market commands.** A market/exchange GUI (instant buy/sell at current prices) plus this Amazon ordering GUI cover it. `/hcm ...` commands are **admin-only**.
 - **Flow:** browse catalog (live dynamic prices) → add to cart → choose shipping tier → pay (item cost + shipping) → order enters transit.
 - **Shipping tiers:** **1-day, 2-day, 3-day** — measured in **REAL time**. **[CONFIRMED: real days]**
 - **Shipping cost:** configurable, with a **mode switch**:
@@ -162,6 +184,18 @@ A central **commercial district at spawn** — the high-traffic heart of commerc
   - Players weigh traffic vs cost — a real commercial-real-estate decision.
 - **Implementation — reuse Towny:** Towny already supports **plot renting**, so the Mall = an **admin Towny town at spawn** with rentable plots. The rental mechanic already exists; our plugin just anchors the official Mini shop in the district. Minimal custom code, maximum reuse.
 
+### 3.7 The Market Web Dashboard (the "trading floor")
+
+A **live web page for the economy** — the BlueMap of your market. Anyone opens a URL in a browser and sees the whole commodities exchange in real time.
+
+- **Shows every commodity:** current price, a **price-history chart** (stock-ticker / candlestick style), **stock on hand**, and 24h change / trend arrows.
+- **Reads like a stock market** — players study it to time buys and sells, spot shortages, and plan investments. A shortage literally shows up as a spiking line everyone can see.
+- **Served by the plugin itself** (an embedded lightweight web server + a static HTML/JS charting frontend), exactly like BlueMap serves its map. Runs on its own port.
+- **External access:** to let outside friends view it, tunnel its port (a second Playit tunnel, same trick as BlueMap's 8100). On LAN it just works.
+- **Data source:** the market engine's live stock + price + **price-history** tables (§5). No client install — it's a website.
+
+This is what turns holding and collecting into real *trading*: the dashboard is the terminal players read to play the market.
+
 ---
 
 ## 4. Configuration Schema (sketch)
@@ -218,10 +252,14 @@ Everything must survive server restarts (real-time shipping demands durable time
 
 Build and test each phase before starting the next.
 
-- **Phase 1 — Skeleton + The PC:** project setup, plugin.yml, main class, the rare-parts recipe, the PC item/block, right-click opens a placeholder menu. *Deliverable: craftable, placeable PC that opens a GUI.*
-- **Phase 2 — Dynamic Market Engine:** catalog, elasticity pricing, buy/sell, price bounds, persistence.
-- **Phase 3 — Amazon + Shipping:** the ordering GUI behind the PC, the shipping-cost config (%/flat/Prime switch), real 1/2/5-day delivery, package collection, restart-safe timers.
-- **Phase 4 — Heads Collectible System:** series/rarity/caps, Museum & Shop GUI, minting, circulation tracking, minecraft-heads.com-sourced data-driven catalog.
+- **Phase 1 — Skeleton + The PC ✅ (done, merged):** project setup, plugin.yml, main class, the PC item/block + Mini Workbench, right-click opens a placeholder menu.
+- **Phase 2 — Basic Market Engine ✅ (done, merged):** catalog, elasticity pricing, buy/sell, price bounds, Vault, persistence. *Note: uses an abstract signed demand counter (sells read as negative) — superseded by Phase 2.5.*
+- **Phase 2.5 — Finite-Stock Market Revision (NEXT):** convert the engine to the **finite, conserved commodities model** (§3.1) — real positive per-item **stock** (sell adds, buy subtracts, floored at 0), **out-of-stock enforcement** (can't buy at zero), **per-item starting stock** (staples seeded and cheap; ores start at zero → ceiling price), and a **price-history** log for the dashboard charts.
+- **Phase 3 — Amazon Store + Market GUIs (GUI-first):** the ordering GUI behind the PC (shipping %/flat/Prime switch, real **1/2/3-day** delivery, package collection, restart-safe timers) **plus** a market/exchange GUI for instant buy/sell — **no player commands**.
+- **Phase 4 — Minis Collectible System:** series/rarity/caps, Museum & Shop, minting, circulation tracking, curated minecraft-heads.com import, Vending Machine + Auction House.
+- **Phase 5 — Market Web Dashboard (§3.7):** the live stock-market website — prices, charts, stock, trends — served like BlueMap.
+
+Then: retire DynamicShopGUI once Phase 3's market GUI is live.
 
 ---
 

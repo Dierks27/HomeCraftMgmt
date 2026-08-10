@@ -1,7 +1,7 @@
 name: HomeCraftManagement
 version: '${version}'
 main: com.dierks.homecraft.HomeCraftManagement
-description: HomeCraft Management — dynamic market, online ordering, and Mini collectibles (Phase 1).
+description: HomeCraft Management — dynamic market, online ordering, and Mini collectibles.
 authors: [Dierks27]
 website: https://github.com/Dierks27/HomeCraftMgmt
 
@@ -26,7 +26,8 @@ commands:
     usage: |-
       /hcm reload            - reload config.yml and re-register recipes
       /hcm give <workbench|pc> [player]
-    permission: hcm.admin
+      /hcm market list|price <item>|buy <item> <qty>|sell <item> <qty>
+    permission: hcm.use
     aliases: [homecraft]
 
 permissions:
@@ -34,11 +35,19 @@ permissions:
     description: Full access to all HomeCraft Management admin functions.
     default: op
     children:
+      hcm.use: true
       hcm.pc.use: true
       hcm.pc.craft: true
       hcm.workbench.place: true
       hcm.workbench.use: true
+      hcm.market.order: true
       hcm.protection.bypass: true
+  hcm.use:
+    description: Run the /hcm command (view market list/prices).
+    default: true
+  hcm.market.order:
+    description: Buy from and sell to the dynamic market.
+    default: true
   hcm.pc.use:
     description: Open the Amazon store by right-clicking a placed PC.
     default: true

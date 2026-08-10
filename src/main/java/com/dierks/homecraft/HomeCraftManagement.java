@@ -12,11 +12,14 @@ import com.dierks.homecraft.integration.ProtectionService;
 import com.dierks.homecraft.item.CustomItems;
 import com.dierks.homecraft.market.MarketService;
 import com.dierks.homecraft.storage.Database;
+import com.dierks.homecraft.storage.DailySellDao;
 import com.dierks.homecraft.storage.MarketStateDao;
 import com.dierks.homecraft.storage.PlacedBlockDao;
+import com.dierks.homecraft.storage.PriceHistoryDao;
 import com.dierks.homecraft.util.Keys;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.sql.SQLException;
 
@@ -38,6 +41,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private ProtectionService protection;
     private EconomyService economy;
     private MarketService market;
+    private BukkitTask historyTask;
 
     @Override
     public void onEnable() {
@@ -64,10 +68,12 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.recipeManager = new RecipeManager(this, config, items);
         this.recipeManager.registerRecipes();
 
-        // Dynamic market engine (Phase 2).
+        // Finite-stock market engine (Phase 2.5).
         this.economy = new EconomyService(this);
-        this.market = new MarketService(this, new MarketStateDao(database), economy);
+        this.market = new MarketService(this, new MarketStateDao(database),
+                new DailySellDao(database), new PriceHistoryDao(database), economy);
         this.market.reload();
+        scheduleHistorySnapshots();
 
         getServer().getPluginManager().registerEvents(
                 new CustomBlockListener(this, config, blockService, items, protection), this);
@@ -81,11 +87,15 @@ public final class HomeCraftManagement extends JavaPlugin {
             hcm.setTabCompleter(executor);
         }
 
-        getLogger().info("HomeCraft Management (Phase 1) enabled.");
+        getLogger().info("HomeCraft Management enabled.");
     }
 
     @Override
     public void onDisable() {
+        if (historyTask != null) {
+            historyTask.cancel();
+            historyTask = null;
+        }
         if (recipeManager != null) {
             recipeManager.unregisterRecipes();
         }
@@ -101,6 +111,19 @@ public final class HomeCraftManagement extends JavaPlugin {
         config.load();
         recipeManager.registerRecipes();
         market.reload();
+        scheduleHistorySnapshots();
+    }
+
+    /** (Re)schedule the periodic price-history snapshot task at the configured cadence. */
+    private void scheduleHistorySnapshots() {
+        if (historyTask != null) {
+            historyTask.cancel();
+            historyTask = null;
+        }
+        int minutes = Math.max(1, config.market().priceHistoryIntervalMinutes());
+        long periodTicks = minutes * 60L * 20L;
+        // First snapshot ~30s after (re)load, then every configured interval.
+        historyTask = getServer().getScheduler().runTaskTimer(this, market::snapshotHistory, 20L * 30L, periodTicks);
     }
 
     public PluginConfig config() {

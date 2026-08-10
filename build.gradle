@@ -37,7 +37,12 @@ dependencies {
     compileOnly 'io.papermc.paper:paper-api:26.2.build.+'
 
     // Vault economy abstraction — provided at runtime by the Vault plugin.
-    compileOnly 'com.github.MilkBowl:VaultAPI:1.7'
+    // Exclude VaultAPI's ancient transitive org.bukkit:bukkit:1.13.1 — it is
+    // unresolvable and conflicts with paper-api's Bukkit capability. paper-api
+    // supplies every Bukkit class we compile against.
+    compileOnly('com.github.MilkBowl:VaultAPI:1.7') {
+        exclude group: 'org.bukkit', module: 'bukkit'
+    }
 
     // Bundled at runtime (shaded) so the plugin needs no external DB server.
     implementation 'org.xerial:sqlite-jdbc:3.50.1.0'

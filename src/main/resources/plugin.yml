@@ -1,0 +1,56 @@
+name: HomeCraftManagement
+version: '${version}'
+main: com.dierks.homecraft.HomeCraftManagement
+description: HomeCraft Management — dynamic market, online ordering, and Mini collectibles (Phase 1).
+authors: [Dierks27]
+website: https://github.com/Dierks27/HomeCraftMgmt
+
+# Paper 26.2 target. api-version selects the compatibility contract; '1.21' is a
+# broadly-supported baseline. If the live 26.2 server logs that this value is
+# unsupported/legacy, bump it to the newest token that server accepts.
+api-version: '1.21'
+
+# All integrations are OPTIONAL. We load after them when present and degrade
+# gracefully when absent (see integration.ProtectionService). We never hard-depend.
+softdepend:
+  - Vault
+  - Towny
+  - WorldGuard
+  - WorldEdit
+  - LuckPerms
+  - PlaceholderAPI
+
+commands:
+  hcm:
+    description: HomeCraft Management admin & utility commands.
+    usage: |-
+      /hcm reload            - reload config.yml and re-register recipes
+      /hcm give <workbench|pc> [player]
+    permission: hcm.admin
+    aliases: [homecraft]
+
+permissions:
+  hcm.admin:
+    description: Full access to all HomeCraft Management admin functions.
+    default: op
+    children:
+      hcm.pc.use: true
+      hcm.pc.craft: true
+      hcm.workbench.place: true
+      hcm.workbench.use: true
+      hcm.protection.bypass: true
+  hcm.pc.use:
+    description: Open the Amazon store by right-clicking a placed PC.
+    default: true
+  hcm.pc.craft:
+    description: Craft the PC at a Mini Workbench.
+    default: true
+  hcm.workbench.place:
+    description: Place a Mini Workbench.
+    default: true
+  hcm.workbench.use:
+    description: Open the crafting GUI of a placed Mini Workbench.
+    default: true
+  hcm.protection.bypass:
+    description: Bypass Towny/WorldGuard build checks for HomeCraft custom blocks.
+    default: op

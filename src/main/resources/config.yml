@@ -1,0 +1,97 @@
+# =====================================================================
+#  HomeCraft Management — configuration
+#  Phase 1 wires the `crafting` section fully. `market`, `shipping`, and
+#  `minis` are stubs here so the schema is stable for later phases.
+#  Recipes are DATA-DRIVEN and RELOADABLE — never hardcoded. Ship empty;
+#  nothing is craftable until an admin fills a recipe in. `/hcm reload`
+#  re-reads this file and re-registers recipes live.
+# =====================================================================
+
+crafting:
+  # Respect Towny / WorldGuard build permissions when placing/using/breaking
+  # HomeCraft custom blocks. If those plugins are absent this is a no-op.
+  respect_town_perms: true
+
+  # ---- The Mini Workbench --------------------------------------------
+  # A placeable custom block. Right-click opens the custom crafting GUI
+  # where the PC (and, later, craftable Minis) are made.
+  workbench:
+    # Vanilla base block it is disguised as. Must be a tile-entity block so
+    # the placed block can also carry a PDC marker. CRAFTER is thematic.
+    base_block: CRAFTER
+    display_name: "&6Mini Workbench"
+    lore:
+      - "&7Right-click to open the crafting bench."
+      - "&8HomeCraft Management"
+    # Bootstrap recipe for obtaining the Workbench itself, registered as a
+    # normal (vanilla) shaped recipe. EMPTY by default = not craftable yet.
+    # Fill `shape` (1–3 rows, up to 3 chars each) and map every symbol in
+    # `ingredients` to a Material. Space = empty cell.
+    recipe:
+      shape: []
+      ingredients: {}
+      # Example (delete the [] above and uncomment to enable):
+      # shape:
+      #   - "IRI"
+      #   - "RCR"
+      #   - "IRI"
+      # ingredients:
+      #   I: IRON_INGOT
+      #   R: REDSTONE
+      #   C: CRAFTING_TABLE
+
+  # ---- The PC --------------------------------------------------------
+  # The gate to the Amazon market. Crafted ONLY at the Mini Workbench via
+  # the admin-defined recipe below. EMPTY by default = not craftable yet.
+  pc:
+    base_block: PLAYER_HEAD
+    display_name: "&bPersonal Computer"
+    lore:
+      - "&7Right-click to open the Amazon store."
+      - "&8HomeCraft Management"
+    # Optional base64 texture value (minecraft-heads.com style) applied to the
+    # head so it looks like a computer/monitor. Leave blank for a plain head.
+    head_texture: ""
+    # Workbench recipe. type: SHAPED uses `shape` + `ingredients` (symbol->Material,
+    # laid out in the 3x3 grid). type: SHAPELESS uses `ingredients` as a list of
+    # { material, amount }. EMPTY = not craftable.
+    recipe:
+      type: SHAPED
+      shape: []
+      ingredients: {}
+      # Example rare-tier recipe (uncomment to enable):
+      # type: SHAPED
+      # shape:
+      #   - "NGN"
+      #   - "EAS"
+      #   - "NRN"
+      # ingredients:
+      #   N: NETHERITE_INGOT
+      #   G: GLASS_PANE
+      #   E: ECHO_SHARD
+      #   A: AMETHYST_SHARD
+      #   S: NETHER_STAR
+      #   R: REDSTONE_BLOCK
+
+# ---------------------------------------------------------------------
+# Stubs below — not used in Phase 1, kept so later phases extend cleanly.
+# ---------------------------------------------------------------------
+
+# Phase 2 — Dynamic Market Engine
+market:
+  elasticity: 0.05     # how hard prices react to buys/sells
+  inertia: 0.2         # price glide smoothing
+  # per-item floor/ceiling live in the (future) catalog
+
+# Phase 3 — Amazon Ordering + Shipping
+shipping:
+  mode: PERCENTAGE     # PERCENTAGE | FLAT
+  tiers:
+    one_day:   { real_hours: 24, percent: 20, flat: 500 }
+    two_day:   { real_hours: 48, percent: 10, flat: 250, prime_flat: true }
+    three_day: { real_hours: 72, percent: 0,  flat: 0 }   # free tier
+
+# Phase 4 — Minis (Heads & Armor Stands)
+minis:
+  pricing_mode: ESCALATING   # FIXED | ESCALATING (overridable per series)
+  series: []

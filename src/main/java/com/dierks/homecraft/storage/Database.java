@@ -78,6 +78,24 @@ public final class Database {
                 recorded_at INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_price_history_item ON market_price_history (item_id, recorded_at);
+            """,
+            // v6 — Amazon orders + real-time shipping (Phase 3). deliver_at is an
+            // absolute epoch-ms timestamp so deliveries survive restarts.
+            """
+            CREATE TABLE IF NOT EXISTS market_orders (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                player_uuid   TEXT    NOT NULL,
+                item_id       TEXT    NOT NULL,
+                qty           INTEGER NOT NULL,
+                item_cost     REAL    NOT NULL,
+                shipping_cost REAL    NOT NULL,
+                tier          TEXT    NOT NULL,
+                placed_at     INTEGER NOT NULL,
+                deliver_at    INTEGER NOT NULL,
+                status        TEXT    NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_orders_player ON market_orders (player_uuid, status);
+            CREATE INDEX IF NOT EXISTS idx_orders_status ON market_orders (status, deliver_at);
             """
     };
 

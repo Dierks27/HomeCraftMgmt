@@ -171,6 +171,10 @@ market:
       full_stock: 512
 
 # Phase 3 — Amazon Ordering + Shipping
+# mode PERCENTAGE = shipping is percent% of the order's item cost; FLAT = the
+# flat fee. prime_flat forces a flat fee for that tier regardless of order size
+# (Prime-style). real_hours is the real-time delivery delay and accepts decimals
+# — set it tiny (e.g. 0.02 ≈ 72s) to watch a delivery arrive while testing.
 shipping:
   mode: PERCENTAGE     # PERCENTAGE | FLAT
   tiers:

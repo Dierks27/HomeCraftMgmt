@@ -72,6 +72,21 @@ public final class PluginConfig {
                          int priceHistoryIntervalMinutes) {
     }
 
+    /** How shipping is priced. */
+    public enum ShippingMode {PERCENTAGE, FLAT}
+
+    /**
+     * One shipping tier. {@code realHours} is the real-time delivery delay;
+     * {@code primeFlat} forces a flat fee regardless of order size (Prime-style).
+     */
+    public record ShippingTier(String id, String label, double realHours,
+                               double percent, double flat, boolean primeFlat) {
+    }
+
+    /** Amazon shipping config (Phase 3). Tiers ordered cheapest → fastest. */
+    public record Shipping(ShippingMode mode, List<ShippingTier> tiers) {
+    }
+
     private final HomeCraftManagement plugin;
     private final Logger log;
 
@@ -79,6 +94,7 @@ public final class PluginConfig {
     private Workbench workbench;
     private Pc pc;
     private Market market;
+    private Shipping shipping;
 
     public PluginConfig(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -95,6 +111,10 @@ public final class PluginConfig {
 
     public Pc pc() {
         return pc;
+    }
+
+    public Shipping shipping() {
+        return shipping;
     }
 
     public Market market() {
@@ -124,6 +144,34 @@ public final class PluginConfig {
 
         // ---- Market (Phase 2.5 — finite stock) ----
         this.market = readMarket(c);
+
+        // ---- Shipping (Phase 3) ----
+        this.shipping = readShipping(c);
+    }
+
+    private Shipping readShipping(FileConfiguration c) {
+        ShippingMode mode;
+        try {
+            mode = ShippingMode.valueOf(c.getString("shipping.mode", "PERCENTAGE").toUpperCase());
+        } catch (IllegalArgumentException e) {
+            log.warning("Invalid shipping.mode; defaulting to PERCENTAGE.");
+            mode = ShippingMode.PERCENTAGE;
+        }
+        List<ShippingTier> tiers = new ArrayList<>();
+        // Ordered cheapest → fastest for display.
+        tiers.add(readTier(c, "three_day", "3-Day", 72));
+        tiers.add(readTier(c, "two_day", "2-Day", 48));
+        tiers.add(readTier(c, "one_day", "1-Day", 24));
+        return new Shipping(mode, tiers);
+    }
+
+    private ShippingTier readTier(FileConfiguration c, String key, String label, double defaultHours) {
+        String base = "shipping.tiers." + key;
+        double hours = c.getDouble(base + ".real_hours", defaultHours);
+        double percent = c.getDouble(base + ".percent", 0);
+        double flat = c.getDouble(base + ".flat", 0);
+        boolean prime = c.getBoolean(base + ".prime_flat", false);
+        return new ShippingTier(key, label, Math.max(0, hours), Math.max(0, percent), Math.max(0, flat), prime);
     }
 
     private Market readMarket(FileConfiguration c) {

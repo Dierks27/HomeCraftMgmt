@@ -77,11 +77,53 @@ crafting:
 # Stubs below — not used in Phase 1, kept so later phases extend cleanly.
 # ---------------------------------------------------------------------
 
-# Phase 2 — Dynamic Market Engine
+# ---------------------------------------------------------------------
+#  Phase 2 — Dynamic Market Engine (the "Amazon" prices only; QuickShop
+#  player-shops set their own prices and are never touched).
+# ---------------------------------------------------------------------
 market:
-  elasticity: 0.05     # how hard prices react to buys/sells
-  inertia: 0.2         # price glide smoothing
-  # per-item floor/ceiling live in the (future) catalog
+  # How hard the target price reacts to net demand:
+  #   target = base_price * (1 + elasticity * demand)
+  elasticity: 0.05
+  # Price glide smoothing. Each trade the current price moves (1 - inertia)
+  # of the way to the target, so it eases in instead of snapping.
+  # Higher inertia = slower movement. Range [0, 1).
+  inertia: 0.2
+
+  # Admin-defined catalog. Each item:
+  #   id           unique key used in commands (lower-case)
+  #   material     a Bukkit Material (what is bought/sold)
+  #   display_name optional pretty name (&-colour codes)
+  #   base_price   the anchor price at zero demand
+  #   floor        price never drops below this
+  #   ceiling      price never rises above this
+  # Edit this list and run /hcm reload — prices/demand for existing items
+  # are preserved; new items start at their base_price.
+  catalog:
+    - id: iron_ingot
+      material: IRON_INGOT
+      display_name: "&fIron Ingot"
+      base_price: 10.0
+      floor: 4.0
+      ceiling: 40.0
+    - id: diamond
+      material: DIAMOND
+      display_name: "&bDiamond"
+      base_price: 120.0
+      floor: 60.0
+      ceiling: 400.0
+    - id: wheat
+      material: WHEAT
+      display_name: "&eWheat"
+      base_price: 2.0
+      floor: 1.0
+      ceiling: 12.0
+    - id: oak_log
+      material: OAK_LOG
+      display_name: "&6Oak Log"
+      base_price: 3.0
+      floor: 1.0
+      ceiling: 20.0
 
 # Phase 3 — Amazon Ordering + Shipping
 shipping:

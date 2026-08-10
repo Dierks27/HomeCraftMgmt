@@ -1,14 +1,17 @@
 package com.dierks.homecraft.config;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.market.MarketItem;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Logger;
 
 /**
@@ -54,12 +57,17 @@ public final class PluginConfig {
     public record Pc(Material baseBlock, String displayName, List<String> lore, String headTexture, PcRecipe recipe) {
     }
 
+    /** The dynamic-market tuning + catalog (Phase 2). */
+    public record Market(double elasticity, double inertia, List<MarketItem> catalog) {
+    }
+
     private final HomeCraftManagement plugin;
     private final Logger log;
 
     private boolean respectTownPerms = true;
     private Workbench workbench;
     private Pc pc;
+    private Market market;
 
     public PluginConfig(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -76,6 +84,10 @@ public final class PluginConfig {
 
     public Pc pc() {
         return pc;
+    }
+
+    public Market market() {
+        return market;
     }
 
     /** (Re)parse config.yml into the typed views above. */
@@ -98,6 +110,64 @@ public final class PluginConfig {
         String texture = c.getString("crafting.pc.head_texture", "");
         PcRecipe pcRecipe = readPcRecipe(c, "crafting.pc.recipe");
         this.pc = new Pc(pcBase, pcName, pcLore, texture, pcRecipe);
+
+        // ---- Market (Phase 2) ----
+        this.market = readMarket(c);
+    }
+
+    private Market readMarket(FileConfiguration c) {
+        double elasticity = c.getDouble("market.elasticity", 0.05);
+        double inertia = c.getDouble("market.inertia", 0.2);
+
+        List<MarketItem> catalog = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (Map<?, ?> row : c.getMapList("market.catalog")) {
+            Object idObj = row.get("id");
+            Object matObj = row.get("material");
+            if (idObj == null || matObj == null) {
+                log.warning("Skipping market.catalog entry missing 'id' or 'material'.");
+                continue;
+            }
+            String id = String.valueOf(idObj).trim().toLowerCase();
+            if (id.isEmpty() || !seen.add(id)) {
+                log.warning("Skipping market.catalog entry with empty/duplicate id '" + id + "'.");
+                continue;
+            }
+            Material material = material(String.valueOf(matObj), null, "market.catalog[" + id + "].material");
+            if (material == null) {
+                continue;
+            }
+            String displayName = row.get("display_name") != null ? String.valueOf(row.get("display_name")) : null;
+
+            double base = number(row.get("base_price"), 1.0);
+            double floor = number(row.get("floor"), 0.0);
+            double ceiling = number(row.get("ceiling"), Math.max(base, 1.0) * 100.0);
+            if (floor < 0) {
+                floor = 0;
+            }
+            if (ceiling < floor) {
+                log.warning("market.catalog[" + id + "] ceiling < floor; raising ceiling to floor.");
+                ceiling = floor;
+            }
+            base = Math.max(floor, Math.min(ceiling, base));
+
+            catalog.add(new MarketItem(id, material, displayName, base, floor, ceiling));
+        }
+        return new Market(elasticity, inertia, catalog);
+    }
+
+    private double number(Object value, double fallback) {
+        if (value instanceof Number n) {
+            return n.doubleValue();
+        }
+        if (value != null) {
+            try {
+                return Double.parseDouble(String.valueOf(value).trim());
+            } catch (NumberFormatException ignored) {
+                // fall through
+            }
+        }
+        return fallback;
     }
 
     private Shaped readShaped(FileConfiguration c, String path) {

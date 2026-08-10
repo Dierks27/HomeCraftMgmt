@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.dierks.homecraft'
-version = '0.1.0-phase1'
+version = '0.2.0-phase2'
 description = 'HomeCraft Management — Paper plugin (Phase 1: PC + Mini Workbench)'
 
 // Target server: Paper 26.2 / Java 25. The toolchain is pinned to 25 so the
@@ -24,12 +24,25 @@ repositories {
         // paper-api is published ONLY here (not on Maven Central).
         url = 'https://repo.papermc.io/repository/maven-public/'
     }
+    maven {
+        name = 'jitpack'
+        // Vault API (com.github.MilkBowl:VaultAPI) is published here.
+        url = 'https://jitpack.io'
+    }
 }
 
 dependencies {
     // Paper 26.2 API. Verified coordinate/version (javadocs: 26.2.build.107-stable).
     // The 'build.+' selector always resolves the latest published 26.2 build.
     compileOnly 'io.papermc.paper:paper-api:26.2.build.+'
+
+    // Vault economy abstraction — provided at runtime by the Vault plugin.
+    // Exclude VaultAPI's ancient transitive org.bukkit:bukkit:1.13.1 — it is
+    // unresolvable and conflicts with paper-api's Bukkit capability. paper-api
+    // supplies every Bukkit class we compile against.
+    compileOnly('com.github.MilkBowl:VaultAPI:1.7') {
+        exclude group: 'org.bukkit', module: 'bukkit'
+    }
 
     // Bundled at runtime (shaded) so the plugin needs no external DB server.
     implementation 'org.xerial:sqlite-jdbc:3.50.1.0'

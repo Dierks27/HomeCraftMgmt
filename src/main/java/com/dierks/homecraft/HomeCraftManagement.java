@@ -7,9 +7,12 @@ import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.crafting.RecipeManager;
 import com.dierks.homecraft.crafting.WorkbenchListener;
 import com.dierks.homecraft.gui.AmazonListener;
+import com.dierks.homecraft.integration.EconomyService;
 import com.dierks.homecraft.integration.ProtectionService;
 import com.dierks.homecraft.item.CustomItems;
+import com.dierks.homecraft.market.MarketService;
 import com.dierks.homecraft.storage.Database;
+import com.dierks.homecraft.storage.MarketStateDao;
 import com.dierks.homecraft.storage.PlacedBlockDao;
 import com.dierks.homecraft.util.Keys;
 import org.bukkit.command.PluginCommand;
@@ -33,6 +36,8 @@ public final class HomeCraftManagement extends JavaPlugin {
     private CustomBlockService blockService;
     private RecipeManager recipeManager;
     private ProtectionService protection;
+    private EconomyService economy;
+    private MarketService market;
 
     @Override
     public void onEnable() {
@@ -58,6 +63,11 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.blockService = new CustomBlockService(this, placedBlockDao);
         this.recipeManager = new RecipeManager(this, config, items);
         this.recipeManager.registerRecipes();
+
+        // Dynamic market engine (Phase 2).
+        this.economy = new EconomyService(this);
+        this.market = new MarketService(this, new MarketStateDao(database), economy);
+        this.market.reload();
 
         getServer().getPluginManager().registerEvents(
                 new CustomBlockListener(this, config, blockService, items, protection), this);
@@ -85,11 +95,12 @@ public final class HomeCraftManagement extends JavaPlugin {
         getLogger().info("HomeCraft Management disabled.");
     }
 
-    /** Reload config.yml and re-register data-driven recipes live. */
+    /** Reload config.yml, re-register data-driven recipes, and reload the market catalog live. */
     public void reloadAll() {
         reloadConfig();
         config.load();
         recipeManager.registerRecipes();
+        market.reload();
     }
 
     public PluginConfig config() {
@@ -110,5 +121,13 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public ProtectionService protection() {
         return protection;
+    }
+
+    public EconomyService economy() {
+        return economy;
+    }
+
+    public MarketService market() {
+        return market;
     }
 }

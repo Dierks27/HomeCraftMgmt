@@ -39,6 +39,15 @@ public final class Database {
             );
             CREATE INDEX IF NOT EXISTS idx_placed_owner ON placed_blocks (owner);
             CREATE INDEX IF NOT EXISTS idx_placed_type  ON placed_blocks (type);
+            """,
+            // v2 — dynamic market state: per-item current price + net demand (Phase 2).
+            """
+            CREATE TABLE IF NOT EXISTS market_state (
+                item_id       TEXT    PRIMARY KEY,
+                current_price REAL    NOT NULL,
+                demand        INTEGER NOT NULL,
+                updated_at    INTEGER NOT NULL
+            );
             """
     };
 

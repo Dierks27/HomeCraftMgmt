@@ -230,21 +230,67 @@ public final class MiniService {
 
     /** @return the identity of a minted Mini item, or null if the item isn't a tagged Mini. */
     public MiniRef identify(ItemStack item) {
-        if (item == null) {
+        if (item == null || !item.hasItemMeta()) {
             return null;
         }
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) {
+        var pdc = item.getItemMeta().getPersistentDataContainer();
+        // MINI_ID (a String) is the definitive marker — strings are immune to the
+        // numeric-type coercion that can silently shrink a small LONG on Paper's
+        // data-component NBT round-trip, which would make a strict LONG read throw.
+        String miniId = readString(pdc, Keys.MINI_ID);
+        if (miniId == null) {
             return null;
         }
-        var pdc = meta.getPersistentDataContainer();
-        String uid = pdc.get(Keys.MINI_UID, PersistentDataType.STRING);
-        String miniId = pdc.get(Keys.MINI_ID, PersistentDataType.STRING);
-        if (uid == null || miniId == null) {
+        String uid = readString(pdc, Keys.MINI_UID);
+        long mint = readLong(pdc, Keys.MINI_MINT);
+        return new MiniRef(uid == null ? "" : uid, miniId, mint);
+    }
+
+    private String readString(org.bukkit.persistence.PersistentDataContainer pdc,
+                              org.bukkit.NamespacedKey key) {
+        try {
+            return pdc.get(key, PersistentDataType.STRING);
+        } catch (Throwable t) {
             return null;
         }
-        Long mint = pdc.get(Keys.MINI_MINT, PersistentDataType.LONG);
-        return new MiniRef(uid, miniId, mint == null ? 0 : mint);
+    }
+
+    /** Read a whole-number PDC value tolerating any numeric type it may have been stored as. */
+    private long readLong(org.bukkit.persistence.PersistentDataContainer pdc,
+                          org.bukkit.NamespacedKey key) {
+        try {
+            Long l = pdc.get(key, PersistentDataType.LONG);
+            if (l != null) {
+                return l;
+            }
+        } catch (Throwable ignored) {
+            // stored as a narrower numeric type — try those
+        }
+        try {
+            Integer i = pdc.get(key, PersistentDataType.INTEGER);
+            if (i != null) {
+                return i;
+            }
+        } catch (Throwable ignored) {
+            // fall through
+        }
+        try {
+            Short s = pdc.get(key, PersistentDataType.SHORT);
+            if (s != null) {
+                return s;
+            }
+        } catch (Throwable ignored) {
+            // fall through
+        }
+        try {
+            Byte b = pdc.get(key, PersistentDataType.BYTE);
+            if (b != null) {
+                return b;
+            }
+        } catch (Throwable ignored) {
+            // give up — mint number is cosmetic for detection
+        }
+        return 0;
     }
 
     public boolean isMini(ItemStack item) {

@@ -2,6 +2,7 @@ package com.dierks.homecraft.config;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.market.MarketItem;
+import com.dierks.homecraft.mini.Loot;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.mini.MiniType;
 import com.dierks.homecraft.mini.Rarity;
@@ -113,6 +114,14 @@ public final class PluginConfig {
         }
     }
 
+    /** Appearance (base material + display name) of a placeable custom block. */
+    public record BlockDef(Material material, String name) {
+    }
+
+    /** The Mini trading blocks' appearance (Phase 4c). */
+    public record MiniBlocks(BlockDef vending, BlockDef display, BlockDef auction) {
+    }
+
     /** Built-in rarity palette + smart defaults; overridable under {@code minis.rarity_styles}. */
     private static final Map<Rarity, RarityStyle> DEFAULT_RARITY_STYLES = new EnumMap<>(Rarity.class);
 
@@ -140,6 +149,8 @@ public final class PluginConfig {
     private Store store;
     private MenuTitles menuTitles;
     private Minis minis;
+    private MiniBlocks miniBlocks;
+    private Loot.MiniLoot miniLoot;
 
     public PluginConfig(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -172,6 +183,14 @@ public final class PluginConfig {
 
     public Minis minis() {
         return minis;
+    }
+
+    public MiniBlocks miniBlocks() {
+        return miniBlocks;
+    }
+
+    public Loot.MiniLoot miniLoot() {
+        return miniLoot;
     }
 
     public Market market() {
@@ -219,6 +238,58 @@ public final class PluginConfig {
 
         // ---- Minis (Phase 4) ----
         this.minis = readMinis(c);
+
+        // ---- Mini trading blocks (Phase 4c) ----
+        this.miniBlocks = new MiniBlocks(
+                blockDef(c, "minis.blocks.vending_machine", Material.BARREL, "&dMini Vending Machine"),
+                blockDef(c, "minis.blocks.display_case", Material.PLAYER_HEAD, "&bMini Display Case"),
+                blockDef(c, "minis.blocks.auction_house", Material.LECTERN, "&6Mini Auction House"));
+
+        // ---- Wild Drops loot (Phase 4c Part C) ----
+        this.miniLoot = readMiniLoot(c);
+    }
+
+    private Loot.MiniLoot readMiniLoot(FileConfiguration c) {
+        List<Loot.LootList> lists = new ArrayList<>();
+        for (Map<?, ?> row : c.getMapList("minis.loot.lists")) {
+            String id = str(row.get("id"), null);
+            if (id == null || id.isBlank()) {
+                continue;
+            }
+            List<Loot.LootEntry> entries = new ArrayList<>();
+            if (row.get("entries") instanceof List<?> es) {
+                for (Object o : es) {
+                    if (o instanceof Map<?, ?> em) {
+                        String mini = str(em.get("mini"), null);
+                        if (mini == null || mini.isBlank()) {
+                            continue;
+                        }
+                        entries.add(new Loot.LootEntry(mini, Math.max(0.0001, number(em.get("weight"), 1))));
+                    }
+                }
+            }
+            lists.add(new Loot.LootList(id, entries));
+        }
+        List<Loot.LootSource> sources = new ArrayList<>();
+        for (Map<?, ?> row : c.getMapList("minis.loot.sources")) {
+            String listId = str(row.get("list"), null);
+            if (listId == null || listId.isBlank()) {
+                continue;
+            }
+            Loot.Trigger t = Loot.Trigger.parse(str(row.get("trigger"), "BLOCK_BREAK"));
+            String match = str(row.get("match"), "*");
+            double chance = row.get("chance_percent") != null
+                    ? number(row.get("chance_percent"), 0)
+                    : number(row.get("chance"), 0);
+            sources.add(new Loot.LootSource(t, match, listId, Math.max(0, chance)));
+        }
+        return new Loot.MiniLoot(lists, sources);
+    }
+
+    private BlockDef blockDef(FileConfiguration c, String path, Material fallback, String defaultName) {
+        Material m = material(c.getString(path + ".material"), fallback, path + ".material");
+        String name = c.getString(path + ".name", defaultName);
+        return new BlockDef(m, name);
     }
 
     private Minis readMinis(FileConfiguration c) {

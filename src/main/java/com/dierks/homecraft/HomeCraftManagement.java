@@ -19,10 +19,19 @@ import com.dierks.homecraft.order.OrderService;
 import com.dierks.homecraft.storage.Database;
 import com.dierks.homecraft.storage.DailySellDao;
 import com.dierks.homecraft.storage.MarketStateDao;
+import com.dierks.homecraft.storage.MiniAuctionDao;
 import com.dierks.homecraft.storage.MiniDao;
+import com.dierks.homecraft.storage.MiniInboxDao;
+import com.dierks.homecraft.storage.MiniListingDao;
 import com.dierks.homecraft.storage.OrderDao;
 import com.dierks.homecraft.storage.PlacedBlockDao;
+import com.dierks.homecraft.storage.PlacedNaturalDao;
 import com.dierks.homecraft.storage.PriceHistoryDao;
+import com.dierks.homecraft.trade.AuctionService;
+import com.dierks.homecraft.trade.InboxListener;
+import com.dierks.homecraft.trade.VendingService;
+import com.dierks.homecraft.trade.WildDropListener;
+import com.dierks.homecraft.trade.WildDropService;
 import com.dierks.homecraft.util.Keys;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -52,8 +61,12 @@ public final class HomeCraftManagement extends JavaPlugin {
     private MiniService miniService;
     private ChatPromptService chatPrompts;
     private HeadLibraryService headLibrary;
+    private VendingService vending;
+    private AuctionService auctions;
+    private WildDropService wildDrops;
     private BukkitTask historyTask;
     private BukkitTask deliveryTask;
+    private BukkitTask auctionTask;
 
     @Override
     public void onEnable() {
@@ -100,12 +113,22 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.chatPrompts = new ChatPromptService(this);
         this.headLibrary = new HeadLibraryService(this);
 
+        // Minis trading + drops (Phase 4c).
+        this.vending = new VendingService(this, new MiniListingDao(database), economy);
+        MiniInboxDao inbox = new MiniInboxDao(database);
+        this.auctions = new AuctionService(this, new MiniAuctionDao(database), inbox, economy);
+        this.wildDrops = new WildDropService(this);
+        PlacedNaturalDao placedNatural = new PlacedNaturalDao(database);
+        scheduleAuctionClose();
+
         getServer().getPluginManager().registerEvents(
                 new CustomBlockListener(this, config, blockService, items, protection), this);
         getServer().getPluginManager().registerEvents(new WorkbenchListener(this, recipeManager), this);
         getServer().getPluginManager().registerEvents(new MenuListener(), this);
         getServer().getPluginManager().registerEvents(new OrderDeliveryListener(orderService), this);
         getServer().getPluginManager().registerEvents(chatPrompts, this);
+        getServer().getPluginManager().registerEvents(new InboxListener(this), this);
+        getServer().getPluginManager().registerEvents(new WildDropListener(this, wildDrops, placedNatural), this);
 
         PluginCommand hcm = getCommand("hcm");
         if (hcm != null) {
@@ -127,6 +150,10 @@ public final class HomeCraftManagement extends JavaPlugin {
             deliveryTask.cancel();
             deliveryTask = null;
         }
+        if (auctionTask != null) {
+            auctionTask.cancel();
+            auctionTask = null;
+        }
         if (recipeManager != null) {
             recipeManager.unregisterRecipes();
         }
@@ -145,6 +172,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         market.reload();
         scheduleHistorySnapshots();
         miniService.reload();
+        if (wildDrops != null) {
+            wildDrops.invalidate();
+        }
     }
 
     /**
@@ -221,6 +251,14 @@ public final class HomeCraftManagement extends JavaPlugin {
         deliveryTask = getServer().getScheduler().runTaskTimer(this, orderService::tick, 20L * 10L, 20L * 20L);
     }
 
+    /** Close expired Mini auctions every 10s (durable — end times survive restarts). */
+    private void scheduleAuctionClose() {
+        if (auctionTask != null) {
+            auctionTask.cancel();
+        }
+        auctionTask = getServer().getScheduler().runTaskTimer(this, auctions::closeDue, 20L * 10L, 20L * 10L);
+    }
+
     public PluginConfig config() {
         return config;
     }
@@ -263,5 +301,17 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public HeadLibraryService heads() {
         return headLibrary;
+    }
+
+    public VendingService vending() {
+        return vending;
+    }
+
+    public AuctionService auctions() {
+        return auctions;
+    }
+
+    public WildDropService wildDrops() {
+        return wildDrops;
     }
 }

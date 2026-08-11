@@ -43,9 +43,36 @@ public final class CustomItems {
         return tagged(def.baseBlock(), def.displayName(), def.lore(), CustomBlockType.PC, def.headTexture());
     }
 
+    /** A Mini Vending Machine item, ready to place. */
+    public ItemStack vendingMachine() {
+        PluginConfig.BlockDef def = config.miniBlocks().vending();
+        return tagged(def.material(), def.name(), List.of("&7Right-click to sell/buy a Mini."),
+                CustomBlockType.MINI_VENDING_MACHINE, null);
+    }
+
+    /** A Mini Display Case item, ready to place. */
+    public ItemStack displayCase() {
+        PluginConfig.BlockDef def = config.miniBlocks().display();
+        return tagged(def.material(), def.name(), List.of("&7Place, then load a Mini to show it off."),
+                CustomBlockType.DISPLAY_CASE, null);
+    }
+
+    /** A Mini Auction House item, ready to place. */
+    public ItemStack auctionHouse() {
+        PluginConfig.BlockDef def = config.miniBlocks().auction();
+        return tagged(def.material(), def.name(), List.of("&7Right-click to browse Mini auctions."),
+                CustomBlockType.AUCTION_HOUSE, null);
+    }
+
     /** Build the item for a given type from current config (used e.g. when dropping on break). */
     public ItemStack of(CustomBlockType type) {
-        return type == CustomBlockType.PC ? pc() : workbench();
+        return switch (type) {
+            case PC -> pc();
+            case MINI_WORKBENCH -> workbench();
+            case MINI_VENDING_MACHINE -> vendingMachine();
+            case DISPLAY_CASE -> displayCase();
+            case AUCTION_HOUSE -> auctionHouse();
+        };
     }
 
     private ItemStack tagged(Material material, String name, List<String> loreLines,

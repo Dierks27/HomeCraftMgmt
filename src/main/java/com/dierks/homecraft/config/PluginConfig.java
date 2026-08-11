@@ -366,7 +366,10 @@ public final class PluginConfig {
                 double price = e.get("price") != null ? number(e.get("price"), style.defaultPrice()) : style.defaultPrice();
                 boolean craftable = e.get("craftable") instanceof Boolean b
                         ? b : Boolean.parseBoolean(String.valueOf(e.get("craftable")));
-                String id = str(e.get("id"), slug(name));
+                // Canonicalize the id one way (slug) whether it's provided or derived
+                // from the name, so a messy config id like "1-up" becomes "1_up" and
+                // matches the item PDC stamp + getHeldMini lookup everywhere.
+                String id = slug(str(e.get("id"), name));
                 if (id.isBlank() || !seen.add(id)) {
                     log.warning("Skipping Mini with empty/duplicate id '" + id + "'.");
                     continue;
@@ -420,7 +423,8 @@ public final class PluginConfig {
     }
 
     private String slug(String name) {
-        return name.toLowerCase().replaceAll("[^a-z0-9]+", "_").replaceAll("^_|_$", "");
+        // One canonical slug across the whole plugin (see MiniIds.slug).
+        return com.dierks.homecraft.mini.MiniIds.slug(name);
     }
 
     private Shipping readShipping(FileConfiguration c) {

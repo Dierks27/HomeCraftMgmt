@@ -124,7 +124,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Text.of("&cUsage: /hcm mini give <id> [player]"));
                     return;
                 }
-                String id = args[2].toLowerCase(Locale.ROOT);
+                String id = com.dierks.homecraft.mini.MiniIds.slug(args[2]);
                 Player target;
                 if (args.length >= 4) {
                     target = Bukkit.getPlayerExact(args[3]);
@@ -161,7 +161,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.of("&cUsage: /hcm mini capturestand <miniId>"));
             return;
         }
-        String id = args[2].toLowerCase(Locale.ROOT);
+        String id = com.dierks.homecraft.mini.MiniIds.slug(args[2]);
         if (plugin.miniService().def(id) == null) {
             sender.sendMessage(Text.of("&cNo such Mini '" + id + "'."));
             return;

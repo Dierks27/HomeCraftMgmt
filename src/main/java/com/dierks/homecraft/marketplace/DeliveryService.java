@@ -24,7 +24,7 @@ public final class DeliveryService {
         static Result fail(String e) {
             return new Result(false, e);
         }
-        static Result ok() {
+        static Result success() {
             return new Result(true, null);
         }
     }
@@ -112,7 +112,7 @@ public final class DeliveryService {
             Map<Integer, ItemStack> leftover = player.getInventory().addItem(item);
             if (leftover.isEmpty()) {
                 dao.updateStatus(deliveryId, DeliveryDao.COLLECTED);
-                return Result.ok();
+                return Result.success();
             }
             // Inventory full — keep the remainder in the Mailbox.
             ItemStack rem = leftover.values().iterator().next();

@@ -138,6 +138,33 @@ public final class MiniService {
         return plugin.config().miniLoot();
     }
 
+    /** The stored posed-armor-stand configuration for a Mini id, or null if none. */
+    public StandData stand(String id) {
+        return plugin.config().miniStands().get(id);
+    }
+
+    /** Persist one armor-stand configuration (captured pose/equipment), then reload live. */
+    public void saveStand(String id, StandData data) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map.Entry<String, StandData> e : plugin.config().miniStands().entrySet()) {
+            if (e.getKey().equals(id)) {
+                continue;
+            }
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", e.getKey());
+            m.putAll(e.getValue().toConfig());
+            out.add(m);
+        }
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", id);
+        m.putAll(data.toConfig());
+        out.add(m);
+        plugin.getConfig().set("minis.stands", out);
+        plugin.saveConfig();
+        plugin.config().load();
+        reload();
+    }
+
     /** Persist a full loot config (lists + sources), reload, and refresh drop caches. */
     public void saveLoot(Loot.MiniLoot loot) {
         List<Map<String, Object>> lists = new ArrayList<>();
@@ -198,6 +225,33 @@ public final class MiniService {
         }
     }
 
+    /** Provenance row for a specific minted copy (for the info card). */
+    public java.util.Optional<MiniDao.Individual> individual(String uid) {
+        try {
+            return uid == null || uid.isBlank() ? java.util.Optional.empty() : dao.individual(uid);
+        } catch (SQLException e) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    /** Ownership/sale trail for a copy (oldest first). */
+    public java.util.List<MiniDao.Sale> salesForUid(String uid) {
+        try {
+            return uid == null || uid.isBlank() ? java.util.List.of() : dao.salesForUid(uid);
+        } catch (SQLException e) {
+            return java.util.List.of();
+        }
+    }
+
+    /** Last sale price for a Mini type (its "market value"), or null if never sold. */
+    public Double lastSalePrice(String miniId) {
+        try {
+            return dao.lastSalePrice(miniId);
+        } catch (SQLException e) {
+            return null;
+        }
+    }
+
     /** Museum display icon (cosmetic; shows live minted/cap + circulation). */
     public ItemStack icon(MiniDef def) {
         MiniDao.Counts c = counts(def.id());
@@ -230,21 +284,67 @@ public final class MiniService {
 
     /** @return the identity of a minted Mini item, or null if the item isn't a tagged Mini. */
     public MiniRef identify(ItemStack item) {
-        if (item == null) {
+        if (item == null || !item.hasItemMeta()) {
             return null;
         }
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) {
+        var pdc = item.getItemMeta().getPersistentDataContainer();
+        // MINI_ID (a String) is the definitive marker — strings are immune to the
+        // numeric-type coercion that can silently shrink a small LONG on Paper's
+        // data-component NBT round-trip, which would make a strict LONG read throw.
+        String miniId = readString(pdc, Keys.MINI_ID);
+        if (miniId == null) {
             return null;
         }
-        var pdc = meta.getPersistentDataContainer();
-        String uid = pdc.get(Keys.MINI_UID, PersistentDataType.STRING);
-        String miniId = pdc.get(Keys.MINI_ID, PersistentDataType.STRING);
-        if (uid == null || miniId == null) {
+        String uid = readString(pdc, Keys.MINI_UID);
+        long mint = readLong(pdc, Keys.MINI_MINT);
+        return new MiniRef(uid == null ? "" : uid, miniId, mint);
+    }
+
+    private String readString(org.bukkit.persistence.PersistentDataContainer pdc,
+                              org.bukkit.NamespacedKey key) {
+        try {
+            return pdc.get(key, PersistentDataType.STRING);
+        } catch (Throwable t) {
             return null;
         }
-        Long mint = pdc.get(Keys.MINI_MINT, PersistentDataType.LONG);
-        return new MiniRef(uid, miniId, mint == null ? 0 : mint);
+    }
+
+    /** Read a whole-number PDC value tolerating any numeric type it may have been stored as. */
+    private long readLong(org.bukkit.persistence.PersistentDataContainer pdc,
+                          org.bukkit.NamespacedKey key) {
+        try {
+            Long l = pdc.get(key, PersistentDataType.LONG);
+            if (l != null) {
+                return l;
+            }
+        } catch (Throwable ignored) {
+            // stored as a narrower numeric type — try those
+        }
+        try {
+            Integer i = pdc.get(key, PersistentDataType.INTEGER);
+            if (i != null) {
+                return i;
+            }
+        } catch (Throwable ignored) {
+            // fall through
+        }
+        try {
+            Short s = pdc.get(key, PersistentDataType.SHORT);
+            if (s != null) {
+                return s;
+            }
+        } catch (Throwable ignored) {
+            // fall through
+        }
+        try {
+            Byte b = pdc.get(key, PersistentDataType.BYTE);
+            if (b != null) {
+                return b;
+            }
+        } catch (Throwable ignored) {
+            // give up — mint number is cosmetic for detection
+        }
+        return 0;
     }
 
     public boolean isMini(ItemStack item) {

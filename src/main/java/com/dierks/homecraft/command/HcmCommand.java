@@ -143,8 +143,37 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                         ? Text.of("&aGave " + id + " #" + r.mintNumber() + " to " + target.getName() + ".")
                         : Text.of("&c" + r.error()));
             }
-            default -> sender.sendMessage(Text.of("&cUsage: /hcm mini <museum|list|give> …"));
+            case "capturestand" -> handleCaptureStand(sender, args);
+            default -> sender.sendMessage(Text.of("&cUsage: /hcm mini <museum|list|give|capturestand> …"));
         }
+    }
+
+    /** Capture the pose + equipment of the armor stand the admin is looking at into a Mini. */
+    private void handleCaptureStand(CommandSender sender, String[] args) {
+        if (denyUnless(sender, "hcm.admin")) {
+            return;
+        }
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Text.of("&cOnly players can capture an armor stand."));
+            return;
+        }
+        if (args.length < 3) {
+            sender.sendMessage(Text.of("&cUsage: /hcm mini capturestand <miniId>"));
+            return;
+        }
+        String id = args[2].toLowerCase(Locale.ROOT);
+        if (plugin.miniService().def(id) == null) {
+            sender.sendMessage(Text.of("&cNo such Mini '" + id + "'."));
+            return;
+        }
+        org.bukkit.entity.Entity target = player.getTargetEntity(6);
+        if (!(target instanceof org.bukkit.entity.ArmorStand stand)) {
+            sender.sendMessage(Text.of("&cLook directly at the armor stand you posed, then run this again."));
+            return;
+        }
+        plugin.miniService().saveStand(id, com.dierks.homecraft.mini.StandData.capture(stand));
+        sender.sendMessage(Text.of("&aCaptured pose + equipment into &f" + id
+                + "&a. Placing that Mini now spawns this stand."));
     }
 
     // ---------------------------------------------------------------------
@@ -352,9 +381,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 addMatches(out, args[0], "market", "mini", "auction");
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("mini")) {
-            addMatches(out, args[1], "museum", "list", "give");
+            addMatches(out, args[1], "museum", "list", "give", "capturestand");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("mini")
-                && args[1].equalsIgnoreCase("give")) {
+                && (args[1].equalsIgnoreCase("give") || args[1].equalsIgnoreCase("capturestand"))) {
             String prefix = args[2].toLowerCase(Locale.ROOT);
             for (com.dierks.homecraft.mini.MiniDef def : plugin.miniService().catalog()) {
                 if (def.id().startsWith(prefix)) {

@@ -57,6 +57,12 @@ public final class DisplayCaseMenu extends Menu {
         } else {
             MiniListingDao.Listing listing = opt.get();
             set(13, decorate(Items.fromBase64(listing.itemB64()), listing), null);
+            set(11, Menus.icon(Material.BOOK, "&5Info card", "&7View this Mini's details"),
+                    e -> new MiniInfoMenu(plugin, player,
+                            new com.dierks.homecraft.mini.MiniService.MiniRef(
+                                    listing.uid(), listing.miniId(), listing.mintNumber()),
+                            Items.fromBase64(listing.itemB64()),
+                            () -> new DisplayCaseMenu(plugin, player, loc, blockOwner).open(player)).open(player));
             if (listing.owner().equals(player.getUniqueId()) || player.hasPermission("hcm.admin")) {
                 set(15, Menus.icon(Material.CHEST, "&aTake it back"), e -> {
                     report(plugin.vending().reclaim(player, loc));

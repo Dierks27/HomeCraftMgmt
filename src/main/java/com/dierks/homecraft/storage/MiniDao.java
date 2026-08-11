@@ -20,6 +20,15 @@ public final class MiniDao {
         }
     }
 
+    /** Per-copy provenance row. */
+    public record Individual(String uid, String miniId, long mintNumber, UUID owner, long mintedAt) {
+    }
+
+    /** One logged secondary-market sale. */
+    public record Sale(String uid, String miniId, double price, UUID seller, UUID buyer,
+                       String venue, long soldAt) {
+    }
+
     private final Database database;
 
     public MiniDao(Database database) {
@@ -79,6 +88,68 @@ public final class MiniDao {
                 ps.executeUpdate();
             }
         }
+    }
+
+    /** @return the provenance row for a minted copy, if known. */
+    public java.util.Optional<Individual> individual(String uid) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT uid, mini_id, mint_number, owner, minted_at FROM mini_individuals WHERE uid = ?")) {
+                ps.setString(1, uid);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) {
+                        return java.util.Optional.empty();
+                    }
+                    String owner = rs.getString("owner");
+                    return java.util.Optional.of(new Individual(rs.getString("uid"), rs.getString("mini_id"),
+                            rs.getLong("mint_number"), owner != null ? UUID.fromString(owner) : null,
+                            rs.getLong("minted_at")));
+                }
+            }
+        }
+    }
+
+    /** Sales history for one copy, oldest first (the ownership trail). */
+    public java.util.List<Sale> salesForUid(String uid) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            java.util.List<Sale> out = new java.util.ArrayList<>();
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT uid, mini_id, price, seller, buyer, venue, sold_at FROM mini_sales "
+                            + "WHERE uid = ? ORDER BY sold_at ASC")) {
+                ps.setString(1, uid);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        out.add(mapSale(rs));
+                    }
+                }
+            }
+            return out;
+        }
+    }
+
+    /** @return the most recent sale price for a Mini type (any copy), or null if never sold. */
+    public Double lastSalePrice(String miniId) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT price FROM mini_sales WHERE mini_id = ? ORDER BY sold_at DESC LIMIT 1")) {
+                ps.setString(1, miniId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next() ? rs.getDouble(1) : null;
+                }
+            }
+        }
+    }
+
+    private Sale mapSale(ResultSet rs) throws SQLException {
+        String seller = rs.getString("seller");
+        String buyer = rs.getString("buyer");
+        return new Sale(rs.getString("uid"), rs.getString("mini_id"), rs.getDouble("price"),
+                seller != null ? UUID.fromString(seller) : null,
+                buyer != null ? UUID.fromString(buyer) : null,
+                rs.getString("venue"), rs.getLong("sold_at"));
     }
 
     /** Transfer provenance ownership of one minted copy (secondary-market sale/auction). */

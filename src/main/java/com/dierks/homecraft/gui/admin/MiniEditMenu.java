@@ -112,6 +112,15 @@ public final class MiniEditMenu extends Menu {
                 "&8(or import from the web instead)"),
                 e -> promptText("Paste the head texture Base64 value:", draft::setTexture));
 
+        if (draft.type() == MiniType.ARMOR_STAND) {
+            boolean captured = draft.id() != null && plugin.miniService().stand(draft.id()) != null;
+            set(25, Menus.icon(Material.ARMOR_STAND, "&eArmor-stand pose",
+                    captured ? "&aCaptured ✓" : "&7Not captured yet",
+                    "&7Pose a real armor stand in the world,",
+                    "&7then run &f/hcm mini capturestand " + (draft.id() == null ? "<id>" : draft.id()),
+                    "&8(save first to get the id)"), null);
+        }
+
         set(45, Menus.icon(Material.ARROW, "&cBack (discard)"), e -> back());
 
         set(49, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&l✓ Save",

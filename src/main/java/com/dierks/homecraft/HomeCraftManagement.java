@@ -64,6 +64,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private VendingService vending;
     private AuctionService auctions;
     private WildDropService wildDrops;
+    private com.dierks.homecraft.trade.StandService stands;
     private BukkitTask historyTask;
     private BukkitTask deliveryTask;
     private BukkitTask auctionTask;
@@ -118,6 +119,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         MiniInboxDao inbox = new MiniInboxDao(database);
         this.auctions = new AuctionService(this, new MiniAuctionDao(database), inbox, economy);
         this.wildDrops = new WildDropService(this);
+        this.stands = new com.dierks.homecraft.trade.StandService(this);
         PlacedNaturalDao placedNatural = new PlacedNaturalDao(database);
         scheduleAuctionClose();
 
@@ -129,6 +131,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(chatPrompts, this);
         getServer().getPluginManager().registerEvents(new InboxListener(this), this);
         getServer().getPluginManager().registerEvents(new WildDropListener(this, wildDrops, placedNatural), this);
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.MiniInteractListener(this), this);
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.ArmorStandListener(this, stands), this);
 
         PluginCommand hcm = getCommand("hcm");
         if (hcm != null) {
@@ -313,5 +317,9 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public WildDropService wildDrops() {
         return wildDrops;
+    }
+
+    public com.dierks.homecraft.trade.StandService stands() {
+        return stands;
     }
 }

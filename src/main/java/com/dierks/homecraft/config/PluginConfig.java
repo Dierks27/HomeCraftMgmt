@@ -7,6 +7,7 @@ import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.mini.MiniType;
 import com.dierks.homecraft.mini.Rarity;
 import com.dierks.homecraft.mini.RarityStyle;
+import com.dierks.homecraft.mini.StandData;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
@@ -151,6 +152,7 @@ public final class PluginConfig {
     private Minis minis;
     private MiniBlocks miniBlocks;
     private Loot.MiniLoot miniLoot;
+    private Map<String, StandData> miniStands;
 
     public PluginConfig(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -191,6 +193,11 @@ public final class PluginConfig {
 
     public Loot.MiniLoot miniLoot() {
         return miniLoot;
+    }
+
+    /** Posed armor-stand configurations keyed by Mini id (Phase 4d). */
+    public Map<String, StandData> miniStands() {
+        return miniStands;
     }
 
     public Market market() {
@@ -247,6 +254,15 @@ public final class PluginConfig {
 
         // ---- Wild Drops loot (Phase 4c Part C) ----
         this.miniLoot = readMiniLoot(c);
+
+        // ---- Posed armor-stand Minis (Phase 4d) ----
+        this.miniStands = new LinkedHashMap<>();
+        for (Map<?, ?> row : c.getMapList("minis.stands")) {
+            String id = str(row.get("id"), null);
+            if (id != null && !id.isBlank()) {
+                this.miniStands.put(id, StandData.fromConfig(row));
+            }
+        }
     }
 
     private Loot.MiniLoot readMiniLoot(FileConfiguration c) {

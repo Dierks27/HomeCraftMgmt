@@ -261,3 +261,15 @@ minis:
     sources: []
     #  - { trigger: BLOCK_BREAK, match: STONE, list: common_blocks, chance_percent: 0.0001 }
     #  - { trigger: MOB_KILL,    match: ZOMBIE, list: common_blocks, chance_percent: 0.01 }
+
+  # ---- Posed armor-stand Minis (Phase 4d). Authored in-game: pose a real armor
+  # stand, then `/hcm mini capturestand <miniId>` while looking at it. Poses are in
+  # degrees; equipment is stored as Base64 items. Empty by default.
+  stands: []
+  #  - id: my_statue
+  #    small: false
+  #    arms: true
+  #    base_plate: true
+  #    invisible: false
+  #    pose: { head: [0,0,0], body: [0,0,0], left_arm: [0,0,0], right_arm: [0,0,0], left_leg: [0,0,0], right_leg: [0,0,0] }
+  #    equipment: { helmet: "", chest: "", legs: "", boots: "", main_hand: "", off_hand: "" }

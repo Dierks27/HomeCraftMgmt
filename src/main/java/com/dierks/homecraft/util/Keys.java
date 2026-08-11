@@ -26,6 +26,11 @@ public final class Keys {
     /** On a mob: spawned artificially (spawner/breeding/egg) — excluded from Wild Drops. */
     public static NamespacedKey MOB_ARTIFICIAL;
 
+    /** On a placed armor-stand Mini entity: the owner UUID (String). */
+    public static NamespacedKey MINI_OWNER;
+    /** On a placed armor-stand Mini entity: the exact minted item to return on reclaim (Base64 String). */
+    public static NamespacedKey MINI_ITEM;
+
     private Keys() {
     }
 
@@ -36,5 +41,7 @@ public final class Keys {
         MINI_UID = new NamespacedKey(plugin, "mini_uid");
         MINI_MINT = new NamespacedKey(plugin, "mini_mint");
         MOB_ARTIFICIAL = new NamespacedKey(plugin, "mob_artificial");
+        MINI_OWNER = new NamespacedKey(plugin, "mini_owner");
+        MINI_ITEM = new NamespacedKey(plugin, "mini_item");
     }
 }

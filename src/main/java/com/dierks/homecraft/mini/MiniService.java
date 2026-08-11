@@ -138,6 +138,33 @@ public final class MiniService {
         return plugin.config().miniLoot();
     }
 
+    /** The stored posed-armor-stand configuration for a Mini id, or null if none. */
+    public StandData stand(String id) {
+        return plugin.config().miniStands().get(id);
+    }
+
+    /** Persist one armor-stand configuration (captured pose/equipment), then reload live. */
+    public void saveStand(String id, StandData data) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map.Entry<String, StandData> e : plugin.config().miniStands().entrySet()) {
+            if (e.getKey().equals(id)) {
+                continue;
+            }
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", e.getKey());
+            m.putAll(e.getValue().toConfig());
+            out.add(m);
+        }
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", id);
+        m.putAll(data.toConfig());
+        out.add(m);
+        plugin.getConfig().set("minis.stands", out);
+        plugin.saveConfig();
+        plugin.config().load();
+        reload();
+    }
+
     /** Persist a full loot config (lists + sources), reload, and refresh drop caches. */
     public void saveLoot(Loot.MiniLoot loot) {
         List<Map<String, Object>> lists = new ArrayList<>();

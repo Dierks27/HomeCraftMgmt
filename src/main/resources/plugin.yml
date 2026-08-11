@@ -29,6 +29,7 @@ commands:
       /hcm reload            - reload config.yml and re-register recipes
       /hcm give <workbench|pc|vending|display|auction> [player]
       /hcm market list|price <item>|buy <item> <qty>|sell <item> <qty>
+      /hcm mini capturestand <miniId>  - capture a posed armor stand into a Mini
     permission: hcm.use
     aliases: [homecraft]
 

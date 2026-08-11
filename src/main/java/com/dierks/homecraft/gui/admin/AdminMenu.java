@@ -62,12 +62,21 @@ public final class AdminMenu extends Menu {
                     refresh();
                 });
 
+        set(20, Menus.icon(Material.FLOWER_BANNER_PATTERN, "&eCategories",
+                "&7Create / rename / remove your own",
+                "&7Mini Type categories."),
+                e -> new CategoriesMenu(plugin, player, this::reopen).open(player));
+
+        set(24, Menus.icon(Material.TRIPWIRE_HOOK, "&5Drops / Loot",
+                "&7Manage Wild-Drop loot lists & sources."),
+                e -> new LootAdminMenu(plugin, player, this::reopen).open(player));
+
         set(22, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
 
-        // Next-pass stub — leaves an obvious home without pretending it works yet.
-        set(26, Menus.icon(Material.GRAY_DYE, "&8Trading & Drops",
-                "&8Vending Machine, Auction House,",
-                "&8Wild Drops — coming in the next pass."), null);
+        // Trading blocks are obtained via /hcm give <vending|display|auction>.
+        set(26, Menus.icon(Material.GRAY_DYE, "&8Armor-stand Minis",
+                "&8The second Mini form (posed stands)",
+                "&8lands in the next micro-pass."), null);
     }
 
     private void reopen() {

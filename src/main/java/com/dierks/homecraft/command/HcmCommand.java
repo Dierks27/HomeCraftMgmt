@@ -60,6 +60,16 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
                 handleGive(sender, args);
             }
+            case "admin" -> {
+                if (denyUnless(sender, "hcm.admin")) {
+                    return true;
+                }
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(Text.of("&cOnly players can open the Admin Studio."));
+                    return true;
+                }
+                new com.dierks.homecraft.gui.admin.AdminMenu(plugin, player).open(player);
+            }
             case "market" -> handleMarket(sender, args);
             case "mini", "minis" -> handleMini(sender, args);
             default -> usage(sender);
@@ -303,6 +313,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
     private void usage(CommandSender sender) {
         sender.sendMessage(Text.of("&6HomeCraft Management"));
         if (sender.hasPermission("hcm.admin")) {
+            sender.sendMessage(Text.of("&e/hcm admin &7- open the Admin Studio (manage & import Minis)"));
             sender.sendMessage(Text.of("&e/hcm reload &7- reload config & recipes"));
             sender.sendMessage(Text.of("&e/hcm give <workbench|pc> [player] &7- get a custom item"));
         }
@@ -324,7 +335,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "reload", "give", "market", "mini");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "mini");
             } else {
                 addMatches(out, args[0], "market", "mini");
             }

@@ -1,15 +1,20 @@
 package com.dierks.homecraft.mini;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.config.MiniCatalogWriter;
 import com.dierks.homecraft.integration.EconomyService;
 import com.dierks.homecraft.storage.MiniDao;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -30,6 +35,7 @@ public final class MiniService {
     private final MiniDao dao;
     private final EconomyService economy;
     private final MiniItems items = new MiniItems();
+    private final MiniCatalogWriter writer;
 
     private Map<String, MiniDef> catalog = new LinkedHashMap<>();
 
@@ -37,6 +43,7 @@ public final class MiniService {
         this.plugin = plugin;
         this.dao = dao;
         this.economy = economy;
+        this.writer = new MiniCatalogWriter(plugin);
     }
 
     /** (Re)build the catalog from config. Mint tallies live in the DB and are untouched. */
@@ -53,8 +60,54 @@ public final class MiniService {
         return catalog.values();
     }
 
+    /** A mutable snapshot of the catalog in order (for the Admin Studio to edit). */
+    public List<MiniDef> catalogList() {
+        return new ArrayList<>(catalog.values());
+    }
+
     public MiniDef def(String id) {
         return catalog.get(id);
+    }
+
+    public boolean idExists(String id) {
+        return catalog.containsKey(id);
+    }
+
+    /** The set of ids currently in use (for unique-id generation on import/add). */
+    public Set<String> ids() {
+        return new HashSet<>(catalog.keySet());
+    }
+
+    /** The admin-defined Type/category list from config (open list). */
+    public List<String> categories() {
+        return plugin.config().minis().categories();
+    }
+
+    /** A blank draft for "Add Mini", pre-filled with COMMON's config defaults. */
+    public MiniDraft blankDraft() {
+        RarityStyle st = style(Rarity.COMMON);
+        String cat = categories().isEmpty() ? "MISC" : categories().get(0);
+        return new MiniDraft(null, "New Mini", "New Series", cat, Rarity.COMMON,
+                MiniType.HEAD, "", st.defaultCap(), st.defaultPrice(), false);
+    }
+
+    /** Reset a draft's cap + price to its rarity's config defaults (smart defaults). */
+    public void applyRarityDefaults(MiniDraft draft) {
+        RarityStyle st = style(draft.rarity());
+        draft.setCap(st.defaultCap());
+        draft.setPrice(st.defaultPrice());
+    }
+
+    /**
+     * Persist a full catalog edit: write it to config.yml, re-parse, and rebuild
+     * the live catalog. Mint tallies in the DB are keyed by id and untouched, so
+     * renaming a Mini's display fields keeps its provenance. Applies immediately —
+     * open menus reflect it on their next refresh.
+     */
+    public void saveCatalog(List<MiniDef> defs) {
+        writer.write(defs);
+        plugin.config().load();
+        reload();
     }
 
     public RarityStyle style(Rarity rarity) {

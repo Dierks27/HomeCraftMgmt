@@ -5,8 +5,8 @@ plugins {
 }
 
 group = 'com.dierks.homecraft'
-version = '0.4.1-phase4.1'
-description = 'HomeCraft Management — Paper plugin (dynamic market, Crate store, Minis)'
+version = '0.5.0-phase4b'
+description = 'HomeCraft Management — Paper plugin (dynamic market, Crate store, Minis + Admin Studio)'
 
 // Target server: Paper 26.2 / Java 25. The toolchain is pinned to 25 so the
 // bytecode matches the live server exactly. If JDK 25 is not installed, Gradle
@@ -46,6 +46,11 @@ dependencies {
     compileOnly('com.github.MilkBowl:VaultAPI:1.7') {
         exclude group: 'org.bukkit', module: 'bukkit'
     }
+
+    // Gson for parsing the web head-library JSON. Provided by the Paper server at
+    // runtime, so compileOnly (never shaded) — this just guarantees the compile
+    // classpath has it regardless of paper-api's transitive graph.
+    compileOnly 'com.google.code.gson:gson:2.11.0'
 
     // Bundled at runtime (shaded) so the plugin needs no external DB server.
     implementation 'org.xerial:sqlite-jdbc:3.50.1.0'

@@ -28,7 +28,7 @@ public final class MuseumMenu extends Menu {
         super(plugin);
         this.player = player;
         this.onBack = onBack;
-        init(54, Text.of("&5Mini Museum &8&l·&r &7Collectibles"));
+        init(54, Text.of(plugin.config().menuTitles().museum()));
     }
 
     @Override
@@ -63,6 +63,7 @@ public final class MuseumMenu extends Menu {
                 refresh();
             });
         }
+        set(47, Menus.balance(plugin, player), null);
         set(49, Menus.icon(Material.BARRIER, "&cBack"), e -> {
             if (onBack != null) {
                 onBack.run();

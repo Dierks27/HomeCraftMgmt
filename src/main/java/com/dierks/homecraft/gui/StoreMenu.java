@@ -29,7 +29,10 @@ public final class StoreMenu extends Menu {
         super(plugin);
         this.player = player;
         PluginConfig.Store store = plugin.config().store();
-        init(54, Text.of("&6Welcome to " + store.name() + " &8· &7" + store.displayUrl()));
+        String title = plugin.config().menuTitles().storeFormat()
+                .replace("{store}", store.name())
+                .replace("{url}", store.displayUrl());
+        init(54, Text.of(title));
     }
 
     @Override
@@ -77,6 +80,7 @@ public final class StoreMenu extends Menu {
                 e -> new MuseumMenu(plugin, player, this::reopen).open(player));
         set(49, Menus.icon(Material.CHEST_MINECART, "&bMy Orders", "&7Track & collect deliveries"),
                 e -> new OrdersMenu(plugin, player, this::reopen).open(player));
+        set(50, Menus.balance(plugin, player), null);
         set(51, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
         if ((page + 1) * PAGE_SIZE < items.size()) {
             set(53, Menus.icon(Material.ARROW, "&eNext »"), e -> {

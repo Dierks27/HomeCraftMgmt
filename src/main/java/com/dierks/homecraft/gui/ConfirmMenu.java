@@ -40,24 +40,26 @@ public final class ConfirmMenu extends Menu {
             set(i, Menus.FILLER, null);
         }
 
-        List<String> confirm = new ArrayList<>();
-        confirm.add("&7Click to confirm this purchase.");
-        confirm.addAll(confirmLore);
-        set(11, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&lConfirm",
-                confirm.toArray(new String[0])), e -> {
-            if (onConfirm != null) {
-                onConfirm.run();
-            }
-        });
-
-        set(13, display, null);
-
-        set(15, Menus.icon(Material.RED_STAINED_GLASS_PANE, "&c&lCancel",
+        // Button order is fixed across every confirm screen: Cancel (✗) on the
+        // LEFT, Confirm (✓) on the RIGHT.
+        set(11, Menus.icon(Material.RED_STAINED_GLASS_PANE, "&c&l✗ Cancel",
                 "&7No charge — go back."), e -> {
             if (onCancel != null) {
                 onCancel.run();
             } else {
                 e.getWhoClicked().closeInventory();
+            }
+        });
+
+        set(13, display, null);
+
+        List<String> confirm = new ArrayList<>();
+        confirm.add("&7Click to confirm this purchase.");
+        confirm.addAll(confirmLore);
+        set(15, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&l✓ Confirm",
+                confirm.toArray(new String[0])), e -> {
+            if (onConfirm != null) {
+                onConfirm.run();
             }
         });
     }

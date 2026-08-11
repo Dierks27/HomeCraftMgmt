@@ -31,7 +31,7 @@ public final class MarketMenu extends Menu {
         super(plugin);
         this.player = player;
         this.onBack = onBack;
-        init(54, Text.of("&1Market — instant buy/sell"));
+        init(54, Text.of(plugin.config().menuTitles().market()));
     }
 
     @Override
@@ -76,6 +76,7 @@ public final class MarketMenu extends Menu {
                 refresh();
             });
         }
+        set(47, Menus.balance(plugin, player), null);
         set(49, Menus.icon(Material.BARRIER, "&cBack"), e -> {
             if (onBack != null) {
                 onBack.run();

@@ -97,6 +97,14 @@ public final class PluginConfig {
     public record Store(String name, String displayUrl) {
     }
 
+    /**
+     * Config-driven GUI titles so no section label is hard-coded (§2.2). The store
+     * title supports {@code {store}} / {@code {url}} tokens, filled from
+     * {@link Store}. Edit these live via the Admin Studio or {@code /hcm reload}.
+     */
+    public record MenuTitles(String admin, String museum, String market, String storeFormat) {
+    }
+
     /** The Minis catalog + rarity styling (Phase 4). */
     public record Minis(String pricingMode, Map<Rarity, RarityStyle> rarityStyles,
                         List<String> categories, List<MiniDef> catalog) {
@@ -130,6 +138,7 @@ public final class PluginConfig {
     private Market market;
     private Shipping shipping;
     private Store store;
+    private MenuTitles menuTitles;
     private Minis minis;
 
     public PluginConfig(HomeCraftManagement plugin) {
@@ -155,6 +164,10 @@ public final class PluginConfig {
 
     public Store store() {
         return store;
+    }
+
+    public MenuTitles menuTitles() {
+        return menuTitles;
     }
 
     public Minis minis() {
@@ -196,6 +209,13 @@ public final class PluginConfig {
         this.store = new Store(
                 c.getString("store.name", "Crate"),
                 c.getString("store.display_url", "www.Crate.com"));
+
+        // ---- Menu titles (Phase 4b — config-driven section labels, §2.2) ----
+        this.menuTitles = new MenuTitles(
+                c.getString("menus.admin_title", "&4Admin Studio"),
+                c.getString("menus.museum_title", "&5Mini Museum &8&l·&r &7Collectibles"),
+                c.getString("menus.market_title", "&1Market — instant buy/sell"),
+                c.getString("menus.store_title", "&6Welcome to {store} &8· &7{url}"));
 
         // ---- Minis (Phase 4) ----
         this.minis = readMinis(c);

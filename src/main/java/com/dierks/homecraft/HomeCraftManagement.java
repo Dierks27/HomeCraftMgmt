@@ -115,7 +115,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.headLibrary = new HeadLibraryService(this);
 
         // Minis trading + drops (Phase 4c).
-        this.vending = new VendingService(this, new MiniListingDao(database), economy);
+        this.vending = new VendingService(this, new MiniListingDao(database),
+                new com.dierks.homecraft.storage.MiniVendingDao(database), economy);
         MiniInboxDao inbox = new MiniInboxDao(database);
         this.auctions = new AuctionService(this, new MiniAuctionDao(database), inbox, economy);
         this.wildDrops = new WildDropService(this);

@@ -197,6 +197,31 @@ public final class Database {
                 z     INTEGER NOT NULL,
                 PRIMARY KEY (world, x, y, z)
             );
+            """,
+            // v11 — Multi-slot Vending Machine (Phase 4e): a machine holds many
+            // Minis, each its own priced listing (no unique-per-location). Existing
+            // single VENDING listings migrate over from mini_listings, which keeps
+            // serving the one-per-block Display Case (kind = DISPLAY).
+            """
+            CREATE TABLE IF NOT EXISTS mini_vending_listings (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                world       TEXT    NOT NULL,
+                x           INTEGER NOT NULL,
+                y           INTEGER NOT NULL,
+                z           INTEGER NOT NULL,
+                owner       TEXT    NOT NULL,
+                uid         TEXT    NOT NULL,
+                mini_id     TEXT    NOT NULL,
+                mint_number INTEGER NOT NULL,
+                price       REAL    NOT NULL,
+                item_b64    TEXT    NOT NULL,
+                listed_at   INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_vending_loc ON mini_vending_listings (world, x, y, z);
+            INSERT INTO mini_vending_listings (world,x,y,z,owner,uid,mini_id,mint_number,price,item_b64,listed_at)
+                SELECT world,x,y,z,owner,uid,mini_id,mint_number,price,item_b64,listed_at
+                FROM mini_listings WHERE kind = 'VENDING';
+            DELETE FROM mini_listings WHERE kind = 'VENDING';
             """
     };
 

@@ -5,8 +5,9 @@ import com.dierks.homecraft.gui.ConfirmMenu;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.MiniDef;
+import com.dierks.homecraft.mini.MiniService;
 import com.dierks.homecraft.storage.MiniDao;
-import com.dierks.homecraft.storage.MiniListingDao;
+import com.dierks.homecraft.storage.MiniVendingDao;
 import com.dierks.homecraft.trade.VendingService;
 import com.dierks.homecraft.util.Items;
 import com.dierks.homecraft.util.Text;
@@ -17,112 +18,121 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /**
- * The Mini Vending Machine GUI: the block owner loads a Mini (held in hand) at
- * their own price; any other player browses the listing and buys it (confirmed).
- * Shows the Mini's series/rarity/Mint #/live circulation at point of sale.
+ * The multi-slot Mini Vending Machine GUI. The block owner stocks several Minis,
+ * each at its own price; anyone browses the grid of what's for sale and clicks
+ * one to buy (confirmed). The owner left-clicks a listing to reprice it and
+ * right-clicks to take it back. Every sale is fully tracked (never QuickShop).
  */
 public final class VendingMenu extends Menu {
+
+    private static final int PAGE_SIZE = 45;
 
     private final Player player;
     private final Location loc;
     private final boolean blockOwner;
+    private int page;
 
     public VendingMenu(HomeCraftManagement plugin, Player player, Location loc, boolean blockOwner) {
         super(plugin);
         this.player = player;
         this.loc = loc;
         this.blockOwner = blockOwner;
-        init(27, Text.of("&dMini Vending Machine"));
+        init(54, Text.of("&dMini Vending Machine"));
     }
 
     @Override
     protected void build() {
-        for (int i = 0; i < 27; i++) {
-            set(i, Menus.FILLER, null);
+        for (int slot = 45; slot < 54; slot++) {
+            set(slot, Menus.FILLER, null);
         }
-        VendingService vending = plugin.vending();
-        Optional<MiniListingDao.Listing> opt = vending.at(loc);
+        List<MiniVendingDao.Listing> listings = plugin.vending().vendingAt(loc);
+        int pages = Math.max(1, (int) Math.ceil(listings.size() / (double) PAGE_SIZE));
+        page = Math.max(0, Math.min(page, pages - 1));
 
-        if (opt.isEmpty()) {
-            buildEmpty();
-            return;
+        if (listings.isEmpty()) {
+            set(22, Menus.icon(Material.BARRIER, "&7Nothing for sale yet",
+                    blockOwner ? "&8Stock a Mini with the button below." : "&8Check back later."), null);
         }
-        MiniListingDao.Listing listing = opt.get();
-        ItemStack mini = Items.fromBase64(listing.itemB64());
-        set(13, decorate(mini, listing), null);
-        set(10, Menus.icon(Material.BOOK, "&5Info card", "&7View this Mini's details"),
-                e -> new MiniInfoMenu(plugin, player,
-                        new com.dierks.homecraft.mini.MiniService.MiniRef(
-                                listing.uid(), listing.miniId(), listing.mintNumber()),
-                        mini, this::reopen).open(player));
 
-        boolean isSeller = listing.owner().equals(player.getUniqueId());
-        if (isSeller) {
-            set(11, Menus.icon(Material.GOLD_INGOT, "&eChange price",
-                    "&7Current: &f" + plugin.economy().format(listing.price())),
-                    e -> plugin.chatPrompts().prompt(player, "Enter a new price:", input -> {
-                        setPrice(vending, input);
-                    }));
-            set(15, Menus.icon(Material.CHEST, "&aUnlist (take it back)"), e -> {
-                report(vending.reclaim(player, loc));
-                reopen();
+        int start = page * PAGE_SIZE;
+        for (int i = 0; i < PAGE_SIZE; i++) {
+            int idx = start + i;
+            if (idx >= listings.size()) {
+                set(i, null, null);
+                continue;
+            }
+            MiniVendingDao.Listing l = listings.get(idx);
+            boolean isSeller = l.owner().equals(player.getUniqueId());
+            set(i, icon(l, isSeller), e -> {
+                if (isSeller || (blockOwner && player.hasPermission("hcm.admin"))) {
+                    if (e.getClick().isRightClick()) {
+                        report(plugin.vending().unlistVending(player, l.id()));
+                        refresh();
+                    } else {
+                        plugin.chatPrompts().prompt(player, "Enter a new price:", input -> {
+                            double p = parse(input);
+                            if (p <= 0) {
+                                player.sendMessage(Text.of("&cEnter a number above 0."));
+                            } else {
+                                report(plugin.vending().setVendingPrice(player, l.id(), p));
+                            }
+                            reopen();
+                        });
+                    }
+                } else {
+                    confirmBuy(l);
+                }
             });
-        } else {
-            set(15, Menus.icon(Material.EMERALD, "&aBuy for " + plugin.economy().format(listing.price()),
-                    "&7Click to review & confirm"), e -> confirmBuy(vending, listing, mini));
         }
-        set(22, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
-    }
 
-    private void buildEmpty() {
+        if (page > 0) {
+            set(45, Menus.icon(Material.ARROW, "&e« Previous"), e -> {
+                page--;
+                refresh();
+            });
+        }
         if (blockOwner) {
-            set(13, Menus.icon(Material.NAME_TAG, "&eList a Mini",
-                    "&7Hold the Mini in your main hand,",
+            set(48, Menus.icon(Material.NAME_TAG, "&aStock a Mini",
+                    "&7Hold a Mini in your main hand,",
                     "&7then click to set a price & list it."),
                     e -> plugin.chatPrompts().prompt(player, "Enter a sale price for the held Mini:", input -> {
                         double price = parse(input);
                         if (price <= 0) {
                             player.sendMessage(Text.of("&cEnter a number above 0."));
-                            reopen();
-                            return;
+                        } else {
+                            report(plugin.vending().addVending(player, loc, price));
                         }
-                        report(plugin.vending().load(player, loc, VendingService.VENDING, price));
                         reopen();
                     }));
-        } else {
-            set(13, Menus.icon(Material.BARRIER, "&7Empty",
-                    "&8The owner hasn't listed a Mini yet."), null);
         }
-        set(22, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
+        set(49, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
+        set(50, Menus.balance(plugin, player), null);
+        if ((page + 1) * PAGE_SIZE < listings.size()) {
+            set(53, Menus.icon(Material.ARROW, "&eNext »"), e -> {
+                page++;
+                refresh();
+            });
+        }
     }
 
-    private void confirmBuy(VendingService vending, MiniListingDao.Listing listing, ItemStack mini) {
+    private void confirmBuy(MiniVendingDao.Listing l) {
+        ItemStack mini = Items.fromBase64(l.itemB64());
         List<String> lore = List.of(
-                "&7Price: &6" + plugin.economy().format(listing.price()),
+                "&7Price: &6" + plugin.economy().format(l.price()),
                 "&7Your balance: &f" + plugin.economy().format(plugin.economy().balance(player)));
         new ConfirmMenu(plugin, "&dBuy this Mini?", mini == null ? Menus.FILLER : mini, lore,
                 () -> {
-                    report(vending.buy(player, loc));
+                    report(plugin.vending().buyVending(player, l.id()));
                     reopen();
                 },
                 this::reopen).open(player);
     }
 
-    private void setPrice(VendingService vending, String input) {
-        double price = parse(input);
-        if (price <= 0) {
-            player.sendMessage(Text.of("&cEnter a number above 0."));
-        } else {
-            report(vending.setPrice(player, loc, price));
-        }
-        reopen();
-    }
-
-    /** Add provenance lore (series/rarity/Mint #/circulation) to the displayed Mini. */
-    private ItemStack decorate(ItemStack mini, MiniListingDao.Listing listing) {
+    /** The listing's rendered Mini + provenance + price + the right action hint. */
+    private ItemStack icon(MiniVendingDao.Listing l, boolean isSeller) {
+        ItemStack mini = Items.fromBase64(l.itemB64());
         if (mini == null) {
             return Menus.icon(Material.BARRIER, "&cUnreadable Mini");
         }
@@ -131,17 +141,20 @@ public final class VendingMenu extends Menu {
         if (meta != null) {
             List<net.kyori.adventure.text.Component> lore = meta.hasLore()
                     ? new ArrayList<>(meta.lore()) : new ArrayList<>();
-            MiniDef def = plugin.miniService().def(listing.miniId());
-            MiniDao.Counts c = plugin.miniService().counts(listing.miniId());
+            MiniDef def = plugin.miniService().def(l.miniId());
+            MiniDao.Counts c = plugin.miniService().counts(l.miniId());
             lore.add(Text.of("&8—"));
             if (def != null) {
                 lore.add(Text.of("&7Series: &f" + def.series()));
                 lore.add(Text.of("&7Rarity: &f" + def.rarity().name()));
-                lore.add(Text.of("&7Mint #&f" + listing.mintNumber()
+                lore.add(Text.of("&7Mint #&f" + l.mintNumber()
                         + (def.uncapped() ? "" : " &7of &f" + def.cap())));
             }
             lore.add(Text.of("&7In circulation: &f" + c.circulation()));
-            lore.add(Text.of("&6Price: &f" + plugin.economy().format(listing.price())));
+            lore.add(Text.of("&6Price: &f" + plugin.economy().format(l.price())));
+            lore.add(Text.of("&8—"));
+            lore.add(isSeller ? Text.of("&eLeft-click&7: reprice  &eRight-click&7: take back")
+                    : Text.of("&aClick to buy"));
             meta.lore(lore);
             icon.setItemMeta(meta);
         }

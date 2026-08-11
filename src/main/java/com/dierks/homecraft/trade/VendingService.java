@@ -4,7 +4,9 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.integration.EconomyService;
 import com.dierks.homecraft.mini.MiniService;
 import com.dierks.homecraft.storage.MiniListingDao;
+import com.dierks.homecraft.storage.MiniVendingDao;
 import com.dierks.homecraft.util.Items;
+import com.dierks.homecraft.util.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
@@ -12,15 +14,15 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
- * The Mini secondary market's fixed-price venue: a Vending Machine sells one Mini
- * at the owner's price; a Display Case shows one as a trophy (no sale). Every
- * transfer moves Vault money to the (possibly offline) seller, hands the exact
- * stored Mini to the buyer, and logs the sale + ownership change — all tracked,
- * never through QuickShop.
+ * The Mini secondary market's fixed-price venue. A Vending Machine holds MANY
+ * Minis — each its own priced listing (buyers browse a grid and click one). A
+ * Display Case shows a single Mini as a trophy (no sale). Every purchase moves
+ * Vault money to the (possibly offline) seller, hands the exact stored Mini to
+ * the buyer, and logs the sale + ownership change — all tracked, never QuickShop.
  */
 public final class VendingService {
 
@@ -38,25 +40,30 @@ public final class VendingService {
     }
 
     private final HomeCraftManagement plugin;
-    private final MiniListingDao dao;
+    private final MiniListingDao displayDao;   // Display Case (one per block)
+    private final MiniVendingDao vendingDao;   // Vending Machine (many per block)
     private final EconomyService economy;
 
-    public VendingService(HomeCraftManagement plugin, MiniListingDao dao, EconomyService economy) {
+    public VendingService(HomeCraftManagement plugin, MiniListingDao displayDao,
+                          MiniVendingDao vendingDao, EconomyService economy) {
         this.plugin = plugin;
-        this.dao = dao;
+        this.displayDao = displayDao;
+        this.vendingDao = vendingDao;
         this.economy = economy;
     }
 
+    // ---- Display Case (single) --------------------------------------------
+
     public Optional<MiniListingDao.Listing> at(Location loc) {
         try {
-            return dao.at(loc);
+            return displayDao.at(loc);
         } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to read Mini listing: " + e.getMessage());
+            plugin.getLogger().severe("Failed to read Mini display: " + e.getMessage());
             return Optional.empty();
         }
     }
 
-    /** Owner loads the Mini in their main hand into the block at {@code loc}. */
+    /** Owner loads the held Mini into a Display Case (kind DISPLAY). */
     public Result load(Player owner, Location loc, String kind, double price) {
         if (at(loc).isPresent()) {
             return Result.fail("This block already holds a Mini.");
@@ -65,129 +72,191 @@ public final class VendingService {
         if (held == null) {
             return Result.fail("Hold the Mini you want to load in your main hand.");
         }
-        MiniService.MiniRef ref = held.ref();
-        if (kind.equals(VENDING) && price <= 0) {
-            return Result.fail("Set a price above 0 first.");
-        }
         ItemStack one = held.item().clone();
         one.setAmount(1);
-        String b64 = Items.toBase64(one);
         try {
-            dao.create(loc, kind, owner.getUniqueId(), ref.uid(), ref.miniId(), ref.mintNumber(),
-                    Math.max(0, price), b64, System.currentTimeMillis());
+            displayDao.create(loc, kind, owner.getUniqueId(), held.ref().uid(), held.ref().miniId(),
+                    held.ref().mintNumber(), Math.max(0, price), Items.toBase64(one), System.currentTimeMillis());
         } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to create Mini listing: " + e.getMessage());
-            return Result.fail("Could not save the listing — try again.");
+            plugin.getLogger().severe("Failed to create display: " + e.getMessage());
+            return Result.fail("Could not save — try again.");
         }
-        held.item().setAmount(held.item().getAmount() - 1); // consume exactly one from hand
+        held.item().setAmount(held.item().getAmount() - 1);
         return Result.success();
     }
 
-    /** Owner reclaims the Mini (unlist / empty a Display Case), returning it to their inventory. */
+    /** Owner empties a Display Case, returning the Mini. */
     public Result reclaim(Player owner, Location loc) {
         Optional<MiniListingDao.Listing> opt = at(loc);
         if (opt.isEmpty()) {
             return Result.fail("Nothing is loaded here.");
         }
-        MiniListingDao.Listing listing = opt.get();
-        if (!listing.owner().equals(owner.getUniqueId()) && !owner.hasPermission("hcm.admin")) {
+        if (!opt.get().owner().equals(owner.getUniqueId()) && !owner.hasPermission("hcm.admin")) {
             return Result.fail("This isn't yours.");
         }
-        ItemStack item = Items.fromBase64(listing.itemB64());
+        ItemStack item = Items.fromBase64(opt.get().itemB64());
         if (item == null) {
             return Result.fail("The stored Mini is unreadable.");
         }
         giveOrDrop(owner, item);
-        delete(loc);
+        try {
+            displayDao.deleteAt(loc);
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to clear display: " + e.getMessage());
+        }
         return Result.success();
     }
 
-    public Result setPrice(Player owner, Location loc, double price) {
-        Optional<MiniListingDao.Listing> opt = at(loc);
-        if (opt.isEmpty() || !opt.get().kind().equals(VENDING)) {
-            return Result.fail("No Vending listing here.");
+    // ---- Vending Machine (many) -------------------------------------------
+
+    public List<MiniVendingDao.Listing> vendingAt(Location loc) {
+        try {
+            return vendingDao.listingsAt(loc);
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to read vending listings: " + e.getMessage());
+            return List.of();
         }
-        if (!opt.get().owner().equals(owner.getUniqueId())) {
+    }
+
+    /** Owner stocks the held Mini as a new priced listing in the machine. */
+    public Result addVending(Player owner, Location loc, double price) {
+        if (price <= 0) {
+            return Result.fail("Set a price above 0 first.");
+        }
+        MiniService.HeldMini held = plugin.miniService().getHeldMini(owner);
+        if (held == null) {
+            return Result.fail("Hold the Mini you want to sell in your main hand.");
+        }
+        ItemStack one = held.item().clone();
+        one.setAmount(1);
+        try {
+            vendingDao.add(loc, owner.getUniqueId(), held.ref().uid(), held.ref().miniId(),
+                    held.ref().mintNumber(), price, Items.toBase64(one), System.currentTimeMillis());
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to add vending listing: " + e.getMessage());
+            return Result.fail("Could not save the listing — try again.");
+        }
+        held.item().setAmount(held.item().getAmount() - 1);
+        return Result.success();
+    }
+
+    public Result setVendingPrice(Player owner, long listingId, double price) {
+        Optional<MiniVendingDao.Listing> opt = vendingById(listingId);
+        if (opt.isEmpty()) {
+            return Result.fail("That listing is gone.");
+        }
+        if (!opt.get().owner().equals(owner.getUniqueId()) && !owner.hasPermission("hcm.admin")) {
             return Result.fail("This isn't yours.");
         }
         if (price <= 0) {
             return Result.fail("Price must be above 0.");
         }
         try {
-            dao.updatePrice(loc, price);
+            vendingDao.updatePrice(listingId, price);
         } catch (SQLException e) {
             return Result.fail("Could not update the price.");
         }
         return Result.success();
     }
 
-    /** A buyer purchases the listed Mini: Vault seller-payment, item transfer, tracked. */
-    public Result buy(Player buyer, Location loc) {
-        Optional<MiniListingDao.Listing> opt = at(loc);
+    /** Owner takes a listing back out of the machine. */
+    public Result unlistVending(Player owner, long listingId) {
+        Optional<MiniVendingDao.Listing> opt = vendingById(listingId);
         if (opt.isEmpty()) {
-            return Result.fail("Nothing is for sale here.");
+            return Result.fail("That listing is gone.");
         }
-        MiniListingDao.Listing listing = opt.get();
-        if (!listing.kind().equals(VENDING)) {
-            return Result.fail("This is a Display Case — not for sale.");
+        MiniVendingDao.Listing l = opt.get();
+        if (!l.owner().equals(owner.getUniqueId()) && !owner.hasPermission("hcm.admin")) {
+            return Result.fail("This isn't yours.");
         }
-        if (listing.owner().equals(buyer.getUniqueId())) {
-            return Result.fail("You can't buy your own listing — unlist it instead.");
+        ItemStack item = Items.fromBase64(l.itemB64());
+        if (item == null) {
+            return Result.fail("The stored Mini is unreadable.");
+        }
+        giveOrDrop(owner, item);
+        removeVending(listingId);
+        return Result.success();
+    }
+
+    /** A buyer purchases one listing: Vault seller-payment, item transfer, tracked. */
+    public Result buyVending(Player buyer, long listingId) {
+        Optional<MiniVendingDao.Listing> opt = vendingById(listingId);
+        if (opt.isEmpty()) {
+            return Result.fail("That listing is gone.");
+        }
+        MiniVendingDao.Listing l = opt.get();
+        if (l.owner().equals(buyer.getUniqueId())) {
+            return Result.fail("You can't buy your own listing — take it back instead.");
         }
         if (!economy.isEnabled()) {
             return Result.fail("The economy is offline.");
         }
-        double price = listing.price();
+        double price = l.price();
         if (!economy.has(buyer, price)) {
             return Result.fail("You can't afford " + economy.format(price) + ".");
         }
-        ItemStack item = Items.fromBase64(listing.itemB64());
+        ItemStack item = Items.fromBase64(l.itemB64());
         if (item == null) {
             return Result.fail("The stored Mini is unreadable — ask the owner to relist.");
         }
-        // Money first: withdraw the buyer, pay the (possibly offline) seller.
         if (!economy.withdraw(buyer, price)) {
             return Result.fail("Payment failed.");
         }
-        OfflinePlayer seller = Bukkit.getOfflinePlayer(listing.owner());
+        OfflinePlayer seller = Bukkit.getOfflinePlayer(l.owner());
         if (!economy.deposit(seller, price)) {
-            // Refund the buyer rather than lose their money if the seller deposit fails.
             economy.deposit(buyer, price);
             return Result.fail("Could not pay the seller — refunded.");
         }
         giveOrDrop(buyer, item);
-        plugin.miniService().transferOwner(listing.uid(), buyer.getUniqueId());
-        plugin.miniService().recordSale(listing.uid(), listing.miniId(), price,
-                listing.owner(), buyer.getUniqueId(), VENDING);
-        delete(loc);
-        // Tell the seller if they're online.
-        Player sellerOnline = Bukkit.getPlayer(listing.owner());
+        plugin.miniService().transferOwner(l.uid(), buyer.getUniqueId());
+        plugin.miniService().recordSale(l.uid(), l.miniId(), price, l.owner(), buyer.getUniqueId(), VENDING);
+        removeVending(listingId);
+        Player sellerOnline = Bukkit.getPlayer(l.owner());
         if (sellerOnline != null) {
-            sellerOnline.sendMessage(com.dierks.homecraft.util.Text.of(
-                    "&aYour Mini sold for &f" + economy.format(price) + "&a."));
+            sellerOnline.sendMessage(Text.of("&aYour Mini sold for &f" + economy.format(price) + "&a."));
         }
         return Result.success();
     }
 
-    /** On block break: hand any loaded Mini to the breaker and clear the listing. */
+    // ---- break handling ---------------------------------------------------
+
+    /** On block break: return every loaded Mini (display + all vending listings) to the breaker. */
     public void onBlockBroken(Location loc, Player breaker) {
-        Optional<MiniListingDao.Listing> opt = at(loc);
-        if (opt.isEmpty()) {
-            return;
+        at(loc).ifPresent(display -> {
+            ItemStack item = Items.fromBase64(display.itemB64());
+            if (item != null) {
+                dropTo(breaker, loc, item);
+            }
+            try {
+                displayDao.deleteAt(loc);
+            } catch (SQLException ignored) {
+                // best effort
+            }
+        });
+        for (MiniVendingDao.Listing l : vendingAt(loc)) {
+            ItemStack item = Items.fromBase64(l.itemB64());
+            if (item != null) {
+                dropTo(breaker, loc, item);
+            }
+            removeVending(l.id());
         }
-        ItemStack item = Items.fromBase64(opt.get().itemB64());
-        if (item != null) {
-            breaker.getInventory().addItem(item).values()
-                    .forEach(drop -> breaker.getWorld().dropItemNaturally(loc.toCenterLocation(), drop));
-        }
-        delete(loc);
     }
 
-    private void delete(Location loc) {
+    // ---- helpers ----------------------------------------------------------
+
+    private Optional<MiniVendingDao.Listing> vendingById(long id) {
         try {
-            dao.deleteAt(loc);
+            return vendingDao.byId(id);
         } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to delete Mini listing: " + e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private void removeVending(long id) {
+        try {
+            vendingDao.remove(id);
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to remove vending listing: " + e.getMessage());
         }
     }
 
@@ -196,8 +265,8 @@ public final class VendingService {
                 .forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
     }
 
-    /** For a UUID owner check without a Player (e.g. block break by someone else). */
-    public boolean isOwner(MiniListingDao.Listing listing, UUID player) {
-        return listing.owner().equals(player);
+    private void dropTo(Player player, Location loc, ItemStack item) {
+        player.getInventory().addItem(item).values()
+                .forEach(drop -> loc.getWorld().dropItemNaturally(loc.toCenterLocation(), drop));
     }
 }

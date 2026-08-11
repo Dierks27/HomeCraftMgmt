@@ -82,11 +82,11 @@ public final class AuctionService {
 
     /** Seller lists the Mini in their main hand for a timed auction. */
     public Result create(Player seller, double startBid, double buyNow, int durationMinutes) {
-        ItemStack held = seller.getInventory().getItemInMainHand();
-        MiniService.MiniRef ref = plugin.miniService().identify(held);
-        if (ref == null) {
+        MiniService.HeldMini held = plugin.miniService().getHeldMini(seller);
+        if (held == null) {
             return Result.fail("Hold the Mini you want to auction in your main hand.");
         }
+        MiniService.MiniRef ref = held.ref();
         if (startBid <= 0) {
             return Result.fail("Starting bid must be above 0.");
         }
@@ -96,13 +96,13 @@ public final class AuctionService {
         if (durationMinutes < 1 || durationMinutes > maxDurationMinutes()) {
             return Result.fail("Duration must be 1–" + maxDurationMinutes() + " minutes.");
         }
-        ItemStack one = held.clone();
+        ItemStack one = held.item().clone();
         one.setAmount(1);
         long now = System.currentTimeMillis();
         try {
             long id = dao.create(ref.uid(), ref.miniId(), ref.mintNumber(), seller.getUniqueId(),
                     startBid, buyNow, Items.toBase64(one), now + durationMinutes * 60_000L, now);
-            held.setAmount(held.getAmount() - 1);
+            held.item().setAmount(held.item().getAmount() - 1);
             return Result.ok(id);
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to create auction: " + e.getMessage());

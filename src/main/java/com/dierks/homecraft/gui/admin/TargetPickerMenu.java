@@ -91,7 +91,10 @@ public final class TargetPickerMenu extends Menu {
         String f = filter.toLowerCase();
         if (blocks) {
             for (Material m : Material.values()) {
-                if (m.isBlock() && !m.isAir() && (f.isBlank() || m.name().toLowerCase().contains(f))) {
+                // isItem() excludes block-only materials (WATER, PISTON_HEAD, …) whose
+                // ItemStack can't be built — including them threw and broke the picker.
+                if (m.isBlock() && m.isItem() && !m.isAir()
+                        && (f.isBlank() || m.name().toLowerCase().contains(f))) {
                     out.add(m.name());
                 }
             }
@@ -114,10 +117,10 @@ public final class TargetPickerMenu extends Menu {
         Material icon;
         if (blocks) {
             Material m = Material.matchMaterial(name);
-            icon = m != null ? m : Material.STONE;
+            icon = (m != null && m.isItem()) ? m : Material.STONE;
         } else {
             Material egg = Material.matchMaterial(name + "_SPAWN_EGG");
-            icon = egg != null ? egg : Material.EGG;
+            icon = (egg != null && egg.isItem()) ? egg : Material.EGG;
         }
         return Menus.icon(icon, "&f" + name, "&7Click to choose");
     }

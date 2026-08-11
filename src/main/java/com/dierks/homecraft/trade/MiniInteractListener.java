@@ -30,12 +30,11 @@ public final class MiniInteractListener implements Listener {
             return;
         }
         Player player = event.getPlayer();
-        ItemStack held = player.getInventory().getItemInMainHand();
-        MiniService.MiniRef ref = plugin.miniService().identify(held);
-        if (ref == null) {
+        MiniService.HeldMini held = plugin.miniService().getHeldMini(player);
+        if (held == null) {
             return;
         }
         event.setCancelled(true);
-        new MiniInfoMenu(plugin, player, ref, held.clone(), null).open(player);
+        new MiniInfoMenu(plugin, player, held.ref(), held.item().clone(), null).open(player);
     }
 }

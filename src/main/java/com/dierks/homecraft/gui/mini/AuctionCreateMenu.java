@@ -36,11 +36,10 @@ public final class AuctionCreateMenu extends Menu {
             set(i, Menus.FILLER, null);
         }
 
-        ItemStack held = player.getInventory().getItemInMainHand();
-        MiniService.MiniRef ref = plugin.miniService().identify(held);
-        set(4, ref == null
+        MiniService.HeldMini held = plugin.miniService().getHeldMini(player);
+        set(4, held == null
                 ? Menus.icon(Material.BARRIER, "&cHold a Mini in your main hand")
-                : held.clone(), null);
+                : held.item().clone(), null);
 
         set(10, Menus.icon(Material.GOLD_INGOT, "&eStarting bid", "&f" + plugin.economy().format(startBid),
                 "&7Click to set"), e -> plugin.chatPrompts().prompt(player, "Enter the starting bid:", input -> {

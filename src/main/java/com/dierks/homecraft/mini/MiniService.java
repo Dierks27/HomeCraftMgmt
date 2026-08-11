@@ -287,10 +287,21 @@ public final class MiniService {
         if (item == null || !item.hasItemMeta()) {
             return null;
         }
-        var pdc = item.getItemMeta().getPersistentDataContainer();
-        // MINI_ID (a String) is the definitive marker — strings are immune to the
-        // numeric-type coercion that can silently shrink a small LONG on Paper's
-        // data-component NBT round-trip, which would make a strict LONG read throw.
+        return refFrom(item.getItemMeta().getPersistentDataContainer());
+    }
+
+    /**
+     * Read a Mini identity from any PersistentDataContainer (item, placed head
+     * block, or armor-stand entity). MINI_ID (a String) is the definitive marker —
+     * strings are immune to the numeric-type coercion that can silently shrink a
+     * small LONG on Paper's NBT round-trip and make a strict LONG read throw.
+     *
+     * @return the identity, or null if the container isn't tagged as a Mini.
+     */
+    public MiniRef refFrom(org.bukkit.persistence.PersistentDataContainer pdc) {
+        if (pdc == null) {
+            return null;
+        }
         String miniId = readString(pdc, Keys.MINI_ID);
         if (miniId == null) {
             return null;
@@ -349,6 +360,23 @@ public final class MiniService {
 
     public boolean isMini(ItemStack item) {
         return identify(item) != null;
+    }
+
+    /** A Mini held in the main hand: the live item stack (mutable) plus its identity. */
+    public record HeldMini(ItemStack item, MiniRef ref) {
+    }
+
+    /**
+     * The single source of truth for "is the player holding a Mini?" — used by the
+     * Vending Machine, Display Case, {@code /hcm auction} Sell, and the info card,
+     * so held-Mini detection can never drift between paths again.
+     *
+     * @return the held Mini (item + identity), or null if the main hand isn't a Mini.
+     */
+    public HeldMini getHeldMini(Player player) {
+        ItemStack held = player.getInventory().getItemInMainHand();
+        MiniRef ref = identify(held);
+        return ref == null ? null : new HeldMini(held, ref);
     }
 
     /** Transfer provenance ownership of a minted copy (secondary-market sale/auction). */

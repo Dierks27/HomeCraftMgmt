@@ -64,14 +64,7 @@ public final class StandService {
     }
 
     public MiniService.MiniRef refOf(Entity entity) {
-        PersistentDataContainer pdc = entity.getPersistentDataContainer();
-        String uid = pdc.get(Keys.MINI_UID, PersistentDataType.STRING);
-        String miniId = pdc.get(Keys.MINI_ID, PersistentDataType.STRING);
-        if (uid == null || miniId == null) {
-            return null;
-        }
-        Long mint = pdc.get(Keys.MINI_MINT, PersistentDataType.LONG);
-        return new MiniService.MiniRef(uid, miniId, mint == null ? 0 : mint);
+        return plugin.miniService().refFrom(entity.getPersistentDataContainer());
     }
 
     public ItemStack storedItem(Entity entity) {

@@ -73,10 +73,13 @@ public final class QuantityMenu extends Menu {
     }
 
     private ItemStack previewIcon() {
-        ItemStack item = new ItemStack(iconMaterial, Math.max(1, Math.min(64, qty)));
+        // Always a single item (amount 1): the stack-count badge caps at 64, so an
+        // order of e.g. 129 would misleadingly render "64". The real quantity is
+        // shown in the display name instead, which has no such cap.
+        ItemStack item = new ItemStack(iconMaterial);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(Text.of("&f" + itemName + " &7x" + qty));
+            meta.displayName(Text.of("&f" + itemName + " &e×" + qty));
             List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
             for (String line : preview.apply(qty)) {
                 lore.add(Text.of(line));

@@ -54,6 +54,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        backfillConfig();
         Keys.init(this);
 
         this.config = new PluginConfig(this);
@@ -129,11 +130,66 @@ public final class HomeCraftManagement extends JavaPlugin {
     /** Reload config.yml, re-register data-driven recipes, and reload the market catalog live. */
     public void reloadAll() {
         reloadConfig();
+        backfillConfig();
         config.load();
         recipeManager.registerRecipes();
         market.reload();
         scheduleHistorySnapshots();
         miniService.reload();
+    }
+
+    /**
+     * Deep-merge any keys present in the bundled default config.yml but missing from
+     * the admin's on-disk config.yml, then save. Bukkit's {@code saveDefaultConfig()}
+     * only writes the file when it's absent — it never adds newly-introduced keys to
+     * an existing file — so a server that upgrades across a version which adds a
+     * section (e.g. {@code minis:}) would otherwise silently run without it.
+     *
+     * <p>Only missing keys are added; every existing value the admin has edited is
+     * preserved untouched. Nested sections are reconstructed leaf-by-leaf and lists
+     * are copied whole. Added keys carry their default comments across where the API
+     * supports it. What was added is logged.
+     */
+    private void backfillConfig() {
+        java.io.InputStream in = getResource("config.yml");
+        if (in == null) {
+            return;
+        }
+        org.bukkit.configuration.file.YamlConfiguration defaults;
+        try (java.io.Reader reader =
+                     new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8)) {
+            defaults = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(reader);
+        } catch (java.io.IOException e) {
+            getLogger().warning("Could not read bundled default config for backfill: " + e.getMessage());
+            return;
+        }
+
+        org.bukkit.configuration.file.FileConfiguration current = getConfig();
+        java.util.List<String> added = new java.util.ArrayList<>();
+        for (String key : defaults.getKeys(true)) {
+            // Skip section nodes themselves; their leaves are handled individually so
+            // a partially-customised section keeps the admin's values and only gains
+            // whatever leaves are missing.
+            if (defaults.isConfigurationSection(key)) {
+                continue;
+            }
+            if (!current.contains(key)) {
+                current.set(key, defaults.get(key));
+                try {
+                    current.setComments(key, defaults.getComments(key));
+                    current.setInlineComments(key, defaults.getInlineComments(key));
+                } catch (Throwable ignored) {
+                    // Comment API unavailable on this server — values still merge fine.
+                }
+                added.add(key);
+            }
+        }
+
+        if (!added.isEmpty()) {
+            saveConfig();
+            getLogger().info("Config backfill: added " + added.size()
+                    + " missing key(s) from defaults: " + String.join(", ", added));
+        }
     }
 
     /** (Re)schedule the periodic price-history snapshot task at the configured cadence. */

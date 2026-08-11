@@ -40,11 +40,16 @@ public final class MiniItems {
         return item;
     }
 
-    /** A cosmetic-only display icon for the Museum (no unique id — not a real Mini). */
-    public ItemStack preview(MiniDef def, RarityStyle style, long minted, long circulation) {
+    /**
+     * A cosmetic-only display icon for the Museum (no unique id — not a real Mini).
+     * {@code priceText} is the pre-formatted price (via the economy) so buyers see
+     * exactly what a mint costs before they ever click.
+     */
+    public ItemStack preview(MiniDef def, RarityStyle style, long minted, long circulation, String priceText) {
         ItemStack item = baseItem(def, style);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
+            boolean free = def.price() <= 0;
             List<Component> lore = new ArrayList<>();
             lore.add(line("Type: ", def.category(), NamedTextColor.GRAY));
             lore.add(line("Series: ", def.series(), NamedTextColor.GRAY));
@@ -52,10 +57,21 @@ public final class MiniItems {
             lore.add(line("Minted: ", minted + (def.uncapped() ? " (uncapped)" : " / " + def.cap()), NamedTextColor.GRAY));
             lore.add(line("In circulation: ", Long.toString(circulation), NamedTextColor.GRAY));
             lore.add(Component.empty());
+            // Price is shown prominently in its own coloured line so it never reads as free.
+            lore.add(Component.text("Price: ", NamedTextColor.GRAY)
+                    .append(Component.text(free ? "Free" : priceText, NamedTextColor.GOLD))
+                    .decoration(TextDecoration.ITALIC, false));
+            lore.add(Component.empty());
             boolean soldOut = !def.uncapped() && minted >= def.cap();
-            lore.add(soldOut
-                    ? Component.text("Minted out — trade only", NamedTextColor.RED).decoration(TextDecoration.ITALIC, false)
-                    : Component.text("Click to mint one", NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
+            Component action;
+            if (soldOut) {
+                action = Component.text("Minted out — trade only", NamedTextColor.RED);
+            } else if (free) {
+                action = Component.text("Click to mint one (free)", NamedTextColor.YELLOW);
+            } else {
+                action = Component.text("Click to buy for " + priceText, NamedTextColor.GREEN);
+            }
+            lore.add(action.decoration(TextDecoration.ITALIC, false));
             meta.lore(lore);
             item.setItemMeta(meta);
         }

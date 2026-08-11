@@ -5,8 +5,8 @@ plugins {
 }
 
 group = 'com.dierks.homecraft'
-version = '0.4.0-phase4'
-description = 'HomeCraft Management — Paper plugin (Phase 1: PC + Mini Workbench)'
+version = '0.4.1-phase4.1'
+description = 'HomeCraft Management — Paper plugin (dynamic market, Crate store, Minis)'
 
 // Target server: Paper 26.2 / Java 25. The toolchain is pinned to 25 so the
 // bytecode matches the live server exactly. If JDK 25 is not installed, Gradle
@@ -32,9 +32,12 @@ repositories {
 }
 
 dependencies {
-    // Paper 26.2 API. Verified coordinate/version (javadocs: 26.2.build.107-stable).
-    // The 'build.+' selector always resolves the latest published 26.2 build.
-    compileOnly 'io.papermc.paper:paper-api:26.2.build.+'
+    // Paper 26.2 API, pinned to a verified-good build for reproducibility. The
+    // previous floating 'build.+' selector always grabbed the newest published
+    // 26.2 build; when that newest jar came down corrupt on CI ("zip END header
+    // not found") the whole compile classpath vanished. Pinning an exact build
+    // removes that flakiness — bump it deliberately when a newer build is wanted.
+    compileOnly 'io.papermc.paper:paper-api:26.2.build.107-stable'
 
     // Vault economy abstraction — provided at runtime by the Vault plugin.
     // Exclude VaultAPI's ancient transitive org.bukkit:bukkit:1.13.1 — it is

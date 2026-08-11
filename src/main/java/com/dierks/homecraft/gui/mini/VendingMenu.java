@@ -53,6 +53,11 @@ public final class VendingMenu extends Menu {
         MiniListingDao.Listing listing = opt.get();
         ItemStack mini = Items.fromBase64(listing.itemB64());
         set(13, decorate(mini, listing), null);
+        set(10, Menus.icon(Material.BOOK, "&5Info card", "&7View this Mini's details"),
+                e -> new MiniInfoMenu(plugin, player,
+                        new com.dierks.homecraft.mini.MiniService.MiniRef(
+                                listing.uid(), listing.miniId(), listing.mintNumber()),
+                        mini, this::reopen).open(player));
 
         boolean isSeller = listing.owner().equals(player.getUniqueId());
         if (isSeller) {

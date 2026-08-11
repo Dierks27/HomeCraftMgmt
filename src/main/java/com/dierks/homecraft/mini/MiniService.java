@@ -198,6 +198,33 @@ public final class MiniService {
         }
     }
 
+    /** Provenance row for a specific minted copy (for the info card). */
+    public java.util.Optional<MiniDao.Individual> individual(String uid) {
+        try {
+            return uid == null || uid.isBlank() ? java.util.Optional.empty() : dao.individual(uid);
+        } catch (SQLException e) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    /** Ownership/sale trail for a copy (oldest first). */
+    public java.util.List<MiniDao.Sale> salesForUid(String uid) {
+        try {
+            return uid == null || uid.isBlank() ? java.util.List.of() : dao.salesForUid(uid);
+        } catch (SQLException e) {
+            return java.util.List.of();
+        }
+    }
+
+    /** Last sale price for a Mini type (its "market value"), or null if never sold. */
+    public Double lastSalePrice(String miniId) {
+        try {
+            return dao.lastSalePrice(miniId);
+        } catch (SQLException e) {
+            return null;
+        }
+    }
+
     /** Museum display icon (cosmetic; shows live minted/cap + circulation). */
     public ItemStack icon(MiniDef def) {
         MiniDao.Counts c = counts(def.id());

@@ -129,6 +129,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(chatPrompts, this);
         getServer().getPluginManager().registerEvents(new InboxListener(this), this);
         getServer().getPluginManager().registerEvents(new WildDropListener(this, wildDrops, placedNatural), this);
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.MiniInteractListener(this), this);
 
         PluginCommand hcm = getCommand("hcm");
         if (hcm != null) {

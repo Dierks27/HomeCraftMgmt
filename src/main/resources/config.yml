@@ -191,11 +191,14 @@ market:
 # (Prime-style). real_hours is the real-time delivery delay and accepts decimals
 # — set it tiny (e.g. 0.02 ≈ 72s) to watch a delivery arrive while testing.
 shipping:
+  # In PERCENTAGE mode every tier charges `percent` of the item total (faster =
+  # higher %). `flat`/`prime_flat` apply ONLY in FLAT mode. A slower tier is also
+  # clamped to never cost more than a faster one.
   mode: PERCENTAGE     # PERCENTAGE | FLAT
   tiers:
-    one_day:   { real_hours: 24, percent: 20, flat: 500 }
-    two_day:   { real_hours: 48, percent: 10, flat: 250, prime_flat: true }
-    three_day: { real_hours: 72, percent: 0,  flat: 0 }   # free tier
+    one_day:   { real_hours: 24, percent: 20, flat: 500 }   # fastest, dearest
+    two_day:   { real_hours: 48, percent: 10, flat: 250 }
+    three_day: { real_hours: 72, percent: 0,  flat: 0 }      # free tier
 
 # ---------------------------------------------------------------------
 #  Phase 4 — Minis (collectible heads & armor stands)

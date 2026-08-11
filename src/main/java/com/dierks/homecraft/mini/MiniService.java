@@ -73,7 +73,7 @@ public final class MiniService {
     /** Museum display icon (cosmetic; shows live minted/cap + circulation). */
     public ItemStack icon(MiniDef def) {
         MiniDao.Counts c = counts(def.id());
-        return items.preview(def, style(def.rarity()), c.minted(), c.circulation());
+        return items.preview(def, style(def.rarity()), c.minted(), c.circulation(), economy.format(def.price()));
     }
 
     /** Buy + mint a Mini for a player (charges the price via Vault, enforces the cap). */

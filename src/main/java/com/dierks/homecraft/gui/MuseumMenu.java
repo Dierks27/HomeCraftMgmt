@@ -88,10 +88,33 @@ public final class MuseumMenu extends Menu {
             player.sendMessage(Text.of("&c" + def.name() + " is minted out — trade only."));
             return;
         }
+        // Free Minis mint immediately (nothing to spend). Paid Minis route through a
+        // confirmation so Vault is never charged on a single accidental click.
+        if (def.price() <= 0) {
+            doMint(def);
+            return;
+        }
+
+        String priceText = plugin.economy().format(def.price());
+        String balanceText = plugin.economy().format(plugin.economy().balance(player));
+        List<String> confirmLore = List.of(
+                "&7Price: &6" + priceText,
+                "&7Your balance: &f" + balanceText);
+        new ConfirmMenu(plugin,
+                "&5Mint " + def.name() + "?",
+                plugin.miniService().icon(def),
+                confirmLore,
+                () -> doMint(def),
+                () -> open(player)
+        ).open(player);
+    }
+
+    /** Perform the actual mint (charge + give) and reopen the Museum. */
+    private void doMint(MiniDef def) {
         MiniService.MintResult r = plugin.miniService().mint(player, def.id());
         player.sendMessage(r.ok()
                 ? Text.of("&aMinted &f" + def.name() + " &7#" + r.mintNumber() + "&a!")
                 : Text.of("&c" + r.error()));
-        refresh();
+        open(player);
     }
 }

@@ -58,6 +58,12 @@ public final class EconomyService {
         return eco != null && eco.has(player, amount);
     }
 
+    /** @return the player's current balance, or 0 if the economy is offline. */
+    public double balance(OfflinePlayer player) {
+        Economy eco = resolve();
+        return eco != null ? eco.getBalance(player) : 0.0;
+    }
+
     /** @return true only if the withdrawal actually succeeded. */
     public boolean withdraw(OfflinePlayer player, double amount) {
         Economy eco = resolve();

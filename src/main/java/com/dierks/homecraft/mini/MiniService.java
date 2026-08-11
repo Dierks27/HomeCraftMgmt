@@ -287,10 +287,21 @@ public final class MiniService {
         if (item == null || !item.hasItemMeta()) {
             return null;
         }
-        var pdc = item.getItemMeta().getPersistentDataContainer();
-        // MINI_ID (a String) is the definitive marker — strings are immune to the
-        // numeric-type coercion that can silently shrink a small LONG on Paper's
-        // data-component NBT round-trip, which would make a strict LONG read throw.
+        return refFrom(item.getItemMeta().getPersistentDataContainer());
+    }
+
+    /**
+     * Read a Mini identity from any PersistentDataContainer (item, placed head
+     * block, or armor-stand entity). MINI_ID (a String) is the definitive marker —
+     * strings are immune to the numeric-type coercion that can silently shrink a
+     * small LONG on Paper's NBT round-trip and make a strict LONG read throw.
+     *
+     * @return the identity, or null if the container isn't tagged as a Mini.
+     */
+    public MiniRef refFrom(org.bukkit.persistence.PersistentDataContainer pdc) {
+        if (pdc == null) {
+            return null;
+        }
         String miniId = readString(pdc, Keys.MINI_ID);
         if (miniId == null) {
             return null;

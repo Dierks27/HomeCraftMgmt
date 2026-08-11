@@ -351,6 +351,23 @@ public final class MiniService {
         return identify(item) != null;
     }
 
+    /** A Mini held in the main hand: the live item stack (mutable) plus its identity. */
+    public record HeldMini(ItemStack item, MiniRef ref) {
+    }
+
+    /**
+     * The single source of truth for "is the player holding a Mini?" — used by the
+     * Vending Machine, Display Case, {@code /hcm auction} Sell, and the info card,
+     * so held-Mini detection can never drift between paths again.
+     *
+     * @return the held Mini (item + identity), or null if the main hand isn't a Mini.
+     */
+    public HeldMini getHeldMini(Player player) {
+        ItemStack held = player.getInventory().getItemInMainHand();
+        MiniRef ref = identify(held);
+        return ref == null ? null : new HeldMini(held, ref);
+    }
+
     /** Transfer provenance ownership of a minted copy (secondary-market sale/auction). */
     public void transferOwner(String uid, java.util.UUID newOwner) {
         try {

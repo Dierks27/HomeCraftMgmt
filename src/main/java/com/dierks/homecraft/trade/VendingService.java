@@ -61,15 +61,15 @@ public final class VendingService {
         if (at(loc).isPresent()) {
             return Result.fail("This block already holds a Mini.");
         }
-        ItemStack held = owner.getInventory().getItemInMainHand();
-        MiniService.MiniRef ref = plugin.miniService().identify(held);
-        if (ref == null) {
+        MiniService.HeldMini held = plugin.miniService().getHeldMini(owner);
+        if (held == null) {
             return Result.fail("Hold the Mini you want to load in your main hand.");
         }
+        MiniService.MiniRef ref = held.ref();
         if (kind.equals(VENDING) && price <= 0) {
             return Result.fail("Set a price above 0 first.");
         }
-        ItemStack one = held.clone();
+        ItemStack one = held.item().clone();
         one.setAmount(1);
         String b64 = Items.toBase64(one);
         try {
@@ -79,7 +79,7 @@ public final class VendingService {
             plugin.getLogger().severe("Failed to create Mini listing: " + e.getMessage());
             return Result.fail("Could not save the listing — try again.");
         }
-        held.setAmount(held.getAmount() - 1); // consume exactly one from hand
+        held.item().setAmount(held.item().getAmount() - 1); // consume exactly one from hand
         return Result.success();
     }
 

@@ -65,6 +65,8 @@ public final class HomeCraftManagement extends JavaPlugin {
     private AuctionService auctions;
     private WildDropService wildDrops;
     private com.dierks.homecraft.trade.StandService stands;
+    private com.dierks.homecraft.marketplace.DeliveryService deliveries;
+    private com.dierks.homecraft.marketplace.PalletService pallets;
     private BukkitTask historyTask;
     private BukkitTask deliveryTask;
     private BukkitTask auctionTask;
@@ -123,6 +125,13 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.stands = new com.dierks.homecraft.trade.StandService(this);
         PlacedNaturalDao placedNatural = new PlacedNaturalDao(database);
         scheduleAuctionClose();
+
+        // Crate Marketplace + Mailbox deliveries (Phase 5).
+        this.deliveries = new com.dierks.homecraft.marketplace.DeliveryService(
+                this, new com.dierks.homecraft.storage.DeliveryDao(database));
+        this.pallets = new com.dierks.homecraft.marketplace.PalletService(
+                this, new com.dierks.homecraft.storage.PalletDao(database), economy, deliveries,
+                new com.dierks.homecraft.marketplace.Categorizer(this));
 
         getServer().getPluginManager().registerEvents(
                 new CustomBlockListener(this, config, blockService, items, protection), this);
@@ -254,7 +263,12 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (deliveryTask != null) {
             deliveryTask.cancel();
         }
-        deliveryTask = getServer().getScheduler().runTaskTimer(this, orderService::tick, 20L * 10L, 20L * 20L);
+        deliveryTask = getServer().getScheduler().runTaskTimer(this, () -> {
+            orderService.tick();
+            if (deliveries != null) {
+                deliveries.tick();
+            }
+        }, 20L * 10L, 20L * 20L);
     }
 
     /** Close expired Mini auctions every 10s (durable — end times survive restarts). */
@@ -323,5 +337,13 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public com.dierks.homecraft.trade.StandService stands() {
         return stands;
+    }
+
+    public com.dierks.homecraft.marketplace.DeliveryService deliveries() {
+        return deliveries;
+    }
+
+    public com.dierks.homecraft.marketplace.PalletService pallets() {
+        return pallets;
     }
 }

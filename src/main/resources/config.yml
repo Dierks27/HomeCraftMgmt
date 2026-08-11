@@ -22,6 +22,26 @@ menus:
   market_title: "&1Market — instant buy/sell"
   store_title: "&6Welcome to {store} &8· &7{url}"
 
+# The Crate Marketplace (Phase 5): player-run Pallets sell ordinary items online;
+# purchases ship to the buyer's Mailbox. (Minis are NOT sold here — they stay on
+# the tracked Vending Machine + Auction House.) Obtain the blocks with
+# /hcm give <mailbox|pallet>.
+marketplace:
+  mailbox_block: { material: BARREL, name: "&eMailbox" }
+  pallet_block:  { material: CHEST,  name: "&6Pallet" }
+  fee:
+    commission_percent: 5.0     # % of each sale burned as a money sink
+    daily_storage_fee: 0.0      # per-Pallet per-day rent (0 = off)
+  require_protected_land: true  # a Pallet only works on claimed Towny/WG land
+  # Auto-sorted by item property + name; override the exceptions here (MATERIAL: Department).
+  departments: [ Blocks, Food, Tools, Weapons, Armor, Redstone, Collectibles, Misc ]
+  category_overrides: {}
+  #  ENDER_PEARL: Misc
+  # Items that can never be listed (spawn eggs are always banned automatically).
+  ban_list: [ BEDROCK, COMMAND_BLOCK, CHAIN_COMMAND_BLOCK, REPEATING_COMMAND_BLOCK,
+              COMMAND_BLOCK_MINECART, BARRIER, STRUCTURE_BLOCK, STRUCTURE_VOID, JIGSAW,
+              LIGHT, DEBUG_STICK, KNOWLEDGE_BOOK ]
+
 crafting:
   # Respect Towny / WorldGuard build permissions when placing/using/breaking
   # HomeCraft custom blocks. If those plugins are absent this is a no-op.

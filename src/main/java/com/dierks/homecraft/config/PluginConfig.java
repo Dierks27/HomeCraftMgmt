@@ -123,6 +123,26 @@ public final class PluginConfig {
     public record MiniBlocks(BlockDef vending, BlockDef display, BlockDef auction) {
     }
 
+    /** The Crate Marketplace config (Phase 5): blocks, fees, departments, ban list. */
+    public record Marketplace(BlockDef mailbox, BlockDef pallet, double commissionPercent,
+                              double dailyStorageFee, List<String> departments,
+                              Map<String, String> categoryOverrides, Set<Material> banList,
+                              boolean requireProtectedLand) {
+
+        /** The department an admin override assigns to a material, or null. */
+        public String override(Material material) {
+            return categoryOverrides.get(material.name());
+        }
+
+        public boolean isBanned(Material material) {
+            return banList.contains(material);
+        }
+
+        public String defaultDepartment() {
+            return departments.isEmpty() ? "Misc" : departments.get(departments.size() - 1);
+        }
+    }
+
     /** Built-in rarity palette + smart defaults; overridable under {@code minis.rarity_styles}. */
     private static final Map<Rarity, RarityStyle> DEFAULT_RARITY_STYLES = new EnumMap<>(Rarity.class);
 
@@ -153,6 +173,7 @@ public final class PluginConfig {
     private MiniBlocks miniBlocks;
     private Loot.MiniLoot miniLoot;
     private Map<String, StandData> miniStands;
+    private Marketplace marketplace;
 
     public PluginConfig(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -189,6 +210,10 @@ public final class PluginConfig {
 
     public MiniBlocks miniBlocks() {
         return miniBlocks;
+    }
+
+    public Marketplace marketplace() {
+        return marketplace;
     }
 
     public Loot.MiniLoot miniLoot() {
@@ -263,6 +288,53 @@ public final class PluginConfig {
                 this.miniStands.put(id, StandData.fromConfig(row));
             }
         }
+
+        // ---- Crate Marketplace (Phase 5) ----
+        this.marketplace = readMarketplace(c);
+    }
+
+    private Marketplace readMarketplace(FileConfiguration c) {
+        BlockDef mailbox = blockDef(c, "marketplace.mailbox_block", Material.BARREL, "&eMailbox");
+        BlockDef pallet = blockDef(c, "marketplace.pallet_block", Material.CHEST, "&6Pallet");
+        double commission = c.getDouble("marketplace.fee.commission_percent", 5.0);
+        double storageFee = c.getDouble("marketplace.fee.daily_storage_fee", 0.0);
+
+        List<String> departments = c.getStringList("marketplace.departments");
+        if (departments.isEmpty()) {
+            departments = List.of("Blocks", "Food", "Tools", "Weapons", "Armor", "Redstone", "Collectibles", "Misc");
+        }
+
+        Map<String, String> overrides = new LinkedHashMap<>();
+        ConfigurationSection ov = c.getConfigurationSection("marketplace.category_overrides");
+        if (ov != null) {
+            for (String key : ov.getKeys(false)) {
+                overrides.put(key.trim().toUpperCase(), ov.getString(key));
+            }
+        }
+
+        Set<Material> banned = new HashSet<>();
+        List<String> banStrings = c.getStringList("marketplace.ban_list");
+        if (banStrings.isEmpty()) {
+            banStrings = List.of("BEDROCK", "COMMAND_BLOCK", "CHAIN_COMMAND_BLOCK", "REPEATING_COMMAND_BLOCK",
+                    "COMMAND_BLOCK_MINECART", "BARRIER", "STRUCTURE_BLOCK", "STRUCTURE_VOID", "JIGSAW",
+                    "LIGHT", "DEBUG_STICK", "KNOWLEDGE_BOOK", "BEDROCK");
+        }
+        for (String s : banStrings) {
+            Material m = Material.matchMaterial(s.trim().toUpperCase());
+            if (m != null) {
+                banned.add(m);
+            }
+        }
+        // Spawn eggs are always banned (can't be listed).
+        for (Material m : Material.values()) {
+            if (m.name().endsWith("_SPAWN_EGG")) {
+                banned.add(m);
+            }
+        }
+
+        boolean requireLand = c.getBoolean("marketplace.require_protected_land", true);
+        return new Marketplace(mailbox, pallet, Math.max(0, commission), Math.max(0, storageFee),
+                departments, overrides, banned, requireLand);
     }
 
     private Loot.MiniLoot readMiniLoot(FileConfiguration c) {

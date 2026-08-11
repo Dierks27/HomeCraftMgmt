@@ -12,5 +12,7 @@ public enum CustomBlockType {
     PC,
     MINI_VENDING_MACHINE,
     DISPLAY_CASE,
-    AUCTION_HOUSE
+    AUCTION_HOUSE,
+    MAILBOX,
+    PALLET
 }

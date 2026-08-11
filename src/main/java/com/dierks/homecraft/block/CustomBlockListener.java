@@ -102,6 +102,10 @@ public final class CustomBlockListener implements Listener {
                 || record.type() == CustomBlockType.DISPLAY_CASE) {
             plugin.vending().onBlockBroken(loc, player);
         }
+        // Return all stock from a broken Pallet.
+        if (record.type() == CustomBlockType.PALLET) {
+            plugin.pallets().onBlockBroken(loc, player);
+        }
 
         blocks.removeAt(loc);
         event.setDropItems(false); // suppress the vanilla base-block drop
@@ -158,6 +162,12 @@ public final class CustomBlockListener implements Listener {
                 new DisplayCaseMenu(plugin, player, clicked.getLocation(), owner).open(player);
             }
             case AUCTION_HOUSE -> new AuctionMenu(plugin, player, null).open(player);
+            case MAILBOX -> new com.dierks.homecraft.gui.MailboxMenu(plugin, player, null).open(player);
+            case PALLET -> {
+                boolean owner = placed.get().owner().equals(player.getUniqueId()) || player.hasPermission("hcm.admin");
+                new com.dierks.homecraft.gui.marketplace.PalletMenu(
+                        plugin, player, clicked.getLocation(), owner).open(player);
+            }
         }
     }
 
@@ -169,6 +179,8 @@ public final class CustomBlockListener implements Listener {
             case MINI_VENDING_MACHINE -> "Mini Vending Machine";
             case DISPLAY_CASE -> "Mini Display Case";
             case AUCTION_HOUSE -> "Mini Auction House";
+            case MAILBOX -> "Mailbox";
+            case PALLET -> "Pallet";
         };
     }
 

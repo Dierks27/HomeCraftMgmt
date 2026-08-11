@@ -192,9 +192,11 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "vending" -> item = plugin.items().vendingMachine();
             case "display" -> item = plugin.items().displayCase();
             case "auction" -> item = plugin.items().auctionHouse();
+            case "mailbox" -> item = plugin.items().mailbox();
+            case "pallet" -> item = plugin.items().pallet();
             default -> {
                 sender.sendMessage(Text.of("&cUnknown item '" + args[1]
-                        + "'. Use workbench, pc, vending, display, or auction."));
+                        + "'. Use workbench, pc, vending, display, auction, mailbox, or pallet."));
                 return;
             }
         }
@@ -391,7 +393,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
-            addMatches(out, args[1], "workbench", "pc", "vending", "display", "auction");
+            addMatches(out, args[1], "workbench", "pc", "vending", "display", "auction", "mailbox", "pallet");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("give")) {
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))) {

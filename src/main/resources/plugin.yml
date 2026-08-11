@@ -25,8 +25,9 @@ commands:
     description: HomeCraft Management admin & utility commands.
     usage: |-
       /hcm admin             - open the Admin Studio (manage & import Minis)
+      /hcm auction           - open the Mini Auction House
       /hcm reload            - reload config.yml and re-register recipes
-      /hcm give <workbench|pc> [player]
+      /hcm give <workbench|pc|vending|display|auction> [player]
       /hcm market list|price <item>|buy <item> <qty>|sell <item> <qty>
     permission: hcm.use
     aliases: [homecraft]

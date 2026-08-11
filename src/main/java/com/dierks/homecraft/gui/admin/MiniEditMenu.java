@@ -54,9 +54,19 @@ public final class MiniEditMenu extends Menu {
                 e -> promptText("Enter the series name:", draft::setSeries));
 
         set(12, Menus.icon(Material.CHEST, "&eType / Category", "&f" + draft.category(),
-                "&7Click to cycle configured types"), e -> {
-            cycleCategory();
-            refresh();
+                "&7Left-click: cycle", "&7Right-click: type a new one"), e -> {
+            if (e.getClick().isRightClick()) {
+                promptText("Type a new category name:", v -> {
+                    String cat = v.trim();
+                    if (!cat.isEmpty()) {
+                        plugin.miniService().addCategory(cat);
+                        draft.setCategory(cat);
+                    }
+                });
+            } else {
+                cycleCategory();
+                refresh();
+            }
         });
 
         set(14, Menus.icon(rarityPane(), "&eRarity", "&f" + draft.rarity().name(),

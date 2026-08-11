@@ -67,9 +67,20 @@ public final class ImportMetadataMenu extends Menu {
                 }));
 
         set(11, Menus.icon(Material.CHEST, "&eType / Category", "&f" + meta.category(),
-                "&7Click to cycle configured types"), e -> {
-            cycleCategory();
-            refresh();
+                "&7Left-click: cycle", "&7Right-click: type a new one"), e -> {
+            if (e.getClick().isRightClick()) {
+                plugin.chatPrompts().prompt(player, "Type a new category name:", v -> {
+                    String cat = v.trim();
+                    if (!cat.isEmpty()) {
+                        plugin.miniService().addCategory(cat);
+                        meta.setCategory(cat);
+                    }
+                    reopen();
+                });
+            } else {
+                cycleCategory();
+                refresh();
+            }
         });
 
         set(12, Menus.icon(plugin.miniService().style(meta.rarity()).pane(), "&eRarity",

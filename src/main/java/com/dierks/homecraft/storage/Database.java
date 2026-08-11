@@ -114,6 +114,89 @@ public final class Database {
                 minted_at   INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_mini_ind_type ON mini_individuals (mini_id);
+            """,
+            // v8 — Mini secondary market (Phase 4c Part A): fixed-price Vending
+            // Machine / Display Case listings keyed by block location, plus a sales
+            // log for provenance + price history. The listed Mini item is stored
+            // verbatim (Base64) so it hands back byte-for-byte.
+            """
+            CREATE TABLE IF NOT EXISTS mini_listings (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                world       TEXT    NOT NULL,
+                x           INTEGER NOT NULL,
+                y           INTEGER NOT NULL,
+                z           INTEGER NOT NULL,
+                kind        TEXT    NOT NULL,
+                owner       TEXT    NOT NULL,
+                uid         TEXT    NOT NULL,
+                mini_id     TEXT    NOT NULL,
+                mint_number INTEGER NOT NULL,
+                price       REAL    NOT NULL,
+                item_b64    TEXT    NOT NULL,
+                listed_at   INTEGER NOT NULL,
+                UNIQUE (world, x, y, z)
+            );
+            CREATE TABLE IF NOT EXISTS mini_sales (
+                id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                uid      TEXT    NOT NULL,
+                mini_id  TEXT    NOT NULL,
+                price    REAL    NOT NULL,
+                seller   TEXT,
+                buyer    TEXT,
+                venue    TEXT    NOT NULL,
+                sold_at  INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_mini_sales_type ON mini_sales (mini_id, sold_at);
+            """,
+            // v9 — Mini Auction House (Phase 4c Part B): timed auctions with a single
+            // escrowed top bid (previous leader auto-refunded on outbid), a durable
+            // end_at so a scheduler can close them after a restart, and a simple
+            // per-player notification queue delivered on login.
+            """
+            CREATE TABLE IF NOT EXISTS mini_auctions (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                uid            TEXT    NOT NULL,
+                mini_id        TEXT    NOT NULL,
+                mint_number    INTEGER NOT NULL,
+                seller         TEXT    NOT NULL,
+                start_bid      REAL    NOT NULL,
+                current_bid    REAL    NOT NULL DEFAULT 0,
+                current_bidder TEXT,
+                buy_now        REAL    NOT NULL DEFAULT 0,
+                item_b64       TEXT    NOT NULL,
+                end_at         INTEGER NOT NULL,
+                status         TEXT    NOT NULL,
+                created_at     INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_auctions_status ON mini_auctions (status, end_at);
+            CREATE TABLE IF NOT EXISTS mini_notifications (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                player     TEXT    NOT NULL,
+                message    TEXT    NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_notify_player ON mini_notifications (player);
+            CREATE TABLE IF NOT EXISTS mini_pending (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                player     TEXT    NOT NULL,
+                item_b64   TEXT    NOT NULL,
+                reason     TEXT    NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_pending_player ON mini_pending (player);
+            """,
+            // v10 — Wild Drops anti-farm ledger (Phase 4c Part C): the coordinates of
+            // player-placed blocks of a drop-eligible material, so place-then-break
+            // (and silk-touch-and-replace) can't cheese a drop. Bounded because only
+            // drop-source materials are recorded.
+            """
+            CREATE TABLE IF NOT EXISTS player_placed (
+                world TEXT    NOT NULL,
+                x     INTEGER NOT NULL,
+                y     INTEGER NOT NULL,
+                z     INTEGER NOT NULL,
+                PRIMARY KEY (world, x, y, z)
+            );
             """
     };
 

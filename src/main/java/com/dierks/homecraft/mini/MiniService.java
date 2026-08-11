@@ -4,8 +4,11 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.MiniCatalogWriter;
 import com.dierks.homecraft.integration.EconomyService;
 import com.dierks.homecraft.storage.MiniDao;
+import com.dierks.homecraft.util.Keys;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -29,6 +32,10 @@ public final class MiniService {
         static MintResult fail(String error) {
             return new MintResult(false, error, 0);
         }
+    }
+
+    /** The identity read from a minted Mini item's PDC (the anti-dupe tag + provenance). */
+    public record MiniRef(String uid, String miniId, long mintNumber) {
     }
 
     private final HomeCraftManagement plugin;
@@ -83,6 +90,34 @@ public final class MiniService {
         return plugin.config().minis().categories();
     }
 
+    /** Persist a fully custom category list (create/rename/remove), then reload live. */
+    public void saveCategories(List<String> categories) {
+        java.util.List<String> cleaned = new ArrayList<>();
+        for (String c : categories) {
+            String v = c == null ? "" : c.trim();
+            if (!v.isEmpty() && !cleaned.contains(v)) {
+                cleaned.add(v);
+            }
+        }
+        plugin.getConfig().set("minis.categories", cleaned);
+        plugin.saveConfig();
+        plugin.config().load();
+        reload();
+    }
+
+    /** Add a new category if absent (used when an admin types a brand-new type). */
+    public void addCategory(String name) {
+        String v = name == null ? "" : name.trim();
+        if (v.isEmpty()) {
+            return;
+        }
+        List<String> cats = new ArrayList<>(categories());
+        if (cats.stream().noneMatch(c -> c.equalsIgnoreCase(v))) {
+            cats.add(v);
+            saveCategories(cats);
+        }
+    }
+
     /** A blank draft for "Add Mini", pre-filled with COMMON's config defaults. */
     public MiniDraft blankDraft() {
         RarityStyle st = style(Rarity.COMMON);
@@ -96,6 +131,46 @@ public final class MiniService {
         RarityStyle st = style(draft.rarity());
         draft.setCap(st.defaultCap());
         draft.setPrice(st.defaultPrice());
+    }
+
+    /** The live Wild-Drops loot config. */
+    public Loot.MiniLoot loot() {
+        return plugin.config().miniLoot();
+    }
+
+    /** Persist a full loot config (lists + sources), reload, and refresh drop caches. */
+    public void saveLoot(Loot.MiniLoot loot) {
+        List<Map<String, Object>> lists = new ArrayList<>();
+        for (Loot.LootList l : loot.lists()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", l.id());
+            List<Map<String, Object>> entries = new ArrayList<>();
+            for (Loot.LootEntry e : l.entries()) {
+                Map<String, Object> em = new LinkedHashMap<>();
+                em.put("mini", e.miniId());
+                em.put("weight", e.weight());
+                entries.add(em);
+            }
+            m.put("entries", entries);
+            lists.add(m);
+        }
+        List<Map<String, Object>> sources = new ArrayList<>();
+        for (Loot.LootSource s : loot.sources()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("trigger", s.trigger().name());
+            m.put("match", s.match());
+            m.put("list", s.listId());
+            m.put("chance_percent", s.chancePercent());
+            sources.add(m);
+        }
+        plugin.getConfig().set("minis.loot.lists", lists);
+        plugin.getConfig().set("minis.loot.sources", sources);
+        plugin.saveConfig();
+        plugin.config().load();
+        reload();
+        if (plugin.wildDrops() != null) {
+            plugin.wildDrops().invalidate();
+        }
     }
 
     /**
@@ -149,6 +224,65 @@ public final class MiniService {
             if (!economy.withdraw(player, def.price())) {
                 return MintResult.fail("Payment failed.");
             }
+        }
+        return mintInternal(player, def);
+    }
+
+    /** @return the identity of a minted Mini item, or null if the item isn't a tagged Mini. */
+    public MiniRef identify(ItemStack item) {
+        if (item == null) {
+            return null;
+        }
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return null;
+        }
+        var pdc = meta.getPersistentDataContainer();
+        String uid = pdc.get(Keys.MINI_UID, PersistentDataType.STRING);
+        String miniId = pdc.get(Keys.MINI_ID, PersistentDataType.STRING);
+        if (uid == null || miniId == null) {
+            return null;
+        }
+        Long mint = pdc.get(Keys.MINI_MINT, PersistentDataType.LONG);
+        return new MiniRef(uid, miniId, mint == null ? 0 : mint);
+    }
+
+    public boolean isMini(ItemStack item) {
+        return identify(item) != null;
+    }
+
+    /** Transfer provenance ownership of a minted copy (secondary-market sale/auction). */
+    public void transferOwner(String uid, java.util.UUID newOwner) {
+        try {
+            dao.updateOwner(uid, newOwner);
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to transfer Mini owner for " + uid + ": " + e.getMessage());
+        }
+    }
+
+    /** Log a secondary-market sale (for provenance + price history). */
+    public void recordSale(String uid, String miniId, double price, java.util.UUID seller,
+                           java.util.UUID buyer, String venue) {
+        try {
+            dao.recordSale(uid, miniId, price, seller, buyer, venue, System.currentTimeMillis());
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to log Mini sale for " + uid + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Wild-drop mint path: no charge, but the cap is enforced (a drop is just
+     * another mint, so it stops at the cap and counts toward circulation).
+     * @return the mint result; not ok if the type is unknown or minted out.
+     */
+    public MintResult mintWild(Player player, String id) {
+        MiniDef def = catalog.get(id);
+        if (def == null) {
+            return MintResult.fail("No such Mini '" + id + "'.");
+        }
+        MiniDao.Counts c = counts(id);
+        if (!def.uncapped() && c.minted() >= def.cap()) {
+            return MintResult.fail(def.name() + " is minted out.");
         }
         return mintInternal(player, def);
     }

@@ -23,6 +23,9 @@ public final class Keys {
     /** On a minted Mini item: its mint number within the type (Long). */
     public static NamespacedKey MINI_MINT;
 
+    /** On a mob: spawned artificially (spawner/breeding/egg) — excluded from Wild Drops. */
+    public static NamespacedKey MOB_ARTIFICIAL;
+
     private Keys() {
     }
 
@@ -32,5 +35,6 @@ public final class Keys {
         MINI_ID = new NamespacedKey(plugin, "mini_id");
         MINI_UID = new NamespacedKey(plugin, "mini_uid");
         MINI_MINT = new NamespacedKey(plugin, "mini_mint");
+        MOB_ARTIFICIAL = new NamespacedKey(plugin, "mob_artificial");
     }
 }

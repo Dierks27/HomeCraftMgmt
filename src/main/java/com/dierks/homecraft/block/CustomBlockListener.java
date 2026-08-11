@@ -3,6 +3,9 @@ package com.dierks.homecraft.block;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.gui.StoreMenu;
+import com.dierks.homecraft.gui.mini.AuctionMenu;
+import com.dierks.homecraft.gui.mini.DisplayCaseMenu;
+import com.dierks.homecraft.gui.mini.VendingMenu;
 import com.dierks.homecraft.crafting.WorkbenchHolder;
 import com.dierks.homecraft.integration.ProtectionService;
 import com.dierks.homecraft.item.CustomItems;
@@ -74,9 +77,7 @@ public final class CustomBlockListener implements Listener {
         }
 
         blocks.recordPlacement(block, type, player.getUniqueId());
-        player.sendMessage(Text.of(type == CustomBlockType.PC
-                ? "&aPlaced a Personal Computer."
-                : "&aPlaced a Mini Workbench."));
+        player.sendMessage(Text.of("&aPlaced a " + friendly(type) + "."));
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -94,6 +95,12 @@ public final class CustomBlockListener implements Listener {
             event.setCancelled(true);
             player.sendMessage(Text.of("&cYou can't break this here."));
             return;
+        }
+
+        // Return any Mini loaded into a Vending Machine / Display Case to the breaker.
+        if (record.type() == CustomBlockType.MINI_VENDING_MACHINE
+                || record.type() == CustomBlockType.DISPLAY_CASE) {
+            plugin.vending().onBlockBroken(loc, player);
         }
 
         blocks.removeAt(loc);
@@ -142,7 +149,27 @@ public final class CustomBlockListener implements Listener {
                 }
                 new StoreMenu(plugin, player).open(player);
             }
+            case MINI_VENDING_MACHINE -> {
+                boolean owner = placed.get().owner().equals(player.getUniqueId()) || player.hasPermission("hcm.admin");
+                new VendingMenu(plugin, player, clicked.getLocation(), owner).open(player);
+            }
+            case DISPLAY_CASE -> {
+                boolean owner = placed.get().owner().equals(player.getUniqueId()) || player.hasPermission("hcm.admin");
+                new DisplayCaseMenu(plugin, player, clicked.getLocation(), owner).open(player);
+            }
+            case AUCTION_HOUSE -> new AuctionMenu(plugin, player, null).open(player);
         }
+    }
+
+    /** Friendly display label for a placed-block type (for the placement message). */
+    private String friendly(CustomBlockType type) {
+        return switch (type) {
+            case PC -> "Personal Computer";
+            case MINI_WORKBENCH -> "Mini Workbench";
+            case MINI_VENDING_MACHINE -> "Mini Vending Machine";
+            case DISPLAY_CASE -> "Mini Display Case";
+            case AUCTION_HOUSE -> "Mini Auction House";
+        };
     }
 
     // Keep custom blocks (and their data) safe from explosions rather than

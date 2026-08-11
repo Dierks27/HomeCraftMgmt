@@ -232,3 +232,32 @@ minis:
       rarity: LEGENDARY
       entries:
         - { name: "Golden Idol", category: SYMBOL, texture: "", cap: 5 }
+
+  # ---- Trading blocks (Phase 4c) — appearance of the placeable custom blocks.
+  # Obtain with /hcm give <vending|display|auction>. The Display Case should stay
+  # a PLAYER_HEAD so it can render the loaded Mini as a trophy.
+  blocks:
+    vending_machine: { material: BARREL,     name: "&dMini Vending Machine" }
+    display_case:    { material: PLAYER_HEAD, name: "&bMini Display Case" }
+    auction_house:   { material: LECTERN,    name: "&6Mini Auction House" }
+
+  # ---- Auction House tuning (Phase 4c).
+  auction:
+    min_increment: 1.0          # smallest raise over the current bid
+    anti_snipe_seconds: 15      # a bid within this window of the end extends the timer
+    max_duration_minutes: 10080 # 7 days
+
+  # ---- Wild Drops (Phase 4c). A loot list is a weighted bag of Mini ids; a source
+  # ties a trigger (BLOCK_BREAK | MOB_KILL | FISHING) + a match (material/entity, or
+  # * for any) to a list with a percentage chance. `chance_percent: 0.0001` means
+  # 0.0001% (one in a million). A drop MINTS a copy, so it respects the cap and
+  # counts toward circulation. Block-break sources must name a material (anti-farm).
+  # Empty by default — nothing drops until you configure it.
+  loot:
+    lists: []
+    #  - id: common_blocks
+    #    entries:
+    #      - { mini: piggy_mini, weight: 10 }
+    sources: []
+    #  - { trigger: BLOCK_BREAK, match: STONE, list: common_blocks, chance_percent: 0.0001 }
+    #  - { trigger: MOB_KILL,    match: ZOMBIE, list: common_blocks, chance_percent: 0.01 }

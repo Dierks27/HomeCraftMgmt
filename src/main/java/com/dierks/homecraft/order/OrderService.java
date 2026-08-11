@@ -48,14 +48,29 @@ public final class OrderService {
         this.economy = economy;
     }
 
-    /** Shipping fee for an item total under a tier (Prime tiers are always flat). */
-    public double shippingCost(double itemTotal, PluginConfig.ShippingTier tier) {
-        if (tier.primeFlat()) {
-            return tier.flat();
-        }
+    /**
+     * Base shipping for a tier: a percentage of the item total in PERCENTAGE mode,
+     * or the flat fee in FLAT mode. A {@code flat}/{@code prime_flat} fee applies
+     * ONLY in FLAT mode — in PERCENTAGE mode every tier uses its {@code percent}.
+     */
+    private double baseShipping(double itemTotal, PluginConfig.ShippingTier tier) {
         return plugin.config().shipping().mode() == PluginConfig.ShippingMode.PERCENTAGE
                 ? itemTotal * tier.percent() / 100.0
                 : tier.flat();
+    }
+
+    /**
+     * Shipping fee for a tier, clamped so a slower tier never costs more than any
+     * faster tier (a safety net against a misconfigured tier table).
+     */
+    public double shippingCost(double itemTotal, PluginConfig.ShippingTier tier) {
+        double cost = baseShipping(itemTotal, tier);
+        for (PluginConfig.ShippingTier faster : plugin.config().shipping().tiers()) {
+            if (faster.realHours() < tier.realHours()) {
+                cost = Math.min(cost, shippingCost(itemTotal, faster));
+            }
+        }
+        return Math.max(0, cost);
     }
 
     public PlaceResult placeOrder(Player player, String itemId, int qty, PluginConfig.ShippingTier tier) {

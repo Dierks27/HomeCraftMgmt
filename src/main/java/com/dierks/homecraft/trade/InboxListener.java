@@ -17,7 +17,11 @@ public final class InboxListener implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         // Slight delay so the player is fully in before we drop items/messages.
-        plugin.getServer().getScheduler().runTaskLater(plugin,
-                () -> plugin.auctions().deliverInbox(event.getPlayer()), 20L);
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            plugin.auctions().deliverInbox(event.getPlayer());
+            if (plugin.deliveries() != null) {
+                plugin.deliveries().notifyOnJoin(event.getPlayer());
+            }
+        }, 20L);
     }
 }

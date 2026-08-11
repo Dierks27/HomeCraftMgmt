@@ -64,6 +64,20 @@ public final class CustomItems {
                 CustomBlockType.AUCTION_HOUSE, null);
     }
 
+    /** A Mailbox item, ready to place. */
+    public ItemStack mailbox() {
+        PluginConfig.BlockDef def = config.marketplace().mailbox();
+        return tagged(def.material(), def.name(), List.of("&7Right-click to collect deliveries."),
+                CustomBlockType.MAILBOX, null);
+    }
+
+    /** A Pallet (sell box) item, ready to place. */
+    public ItemStack pallet() {
+        PluginConfig.BlockDef def = config.marketplace().pallet();
+        return tagged(def.material(), def.name(), List.of("&7Place on your land, load an item,",
+                "&7set a price to sell on the Marketplace."), CustomBlockType.PALLET, null);
+    }
+
     /** Build the item for a given type from current config (used e.g. when dropping on break). */
     public ItemStack of(CustomBlockType type) {
         return switch (type) {
@@ -72,6 +86,8 @@ public final class CustomItems {
             case MINI_VENDING_MACHINE -> vendingMachine();
             case DISPLAY_CASE -> displayCase();
             case AUCTION_HOUSE -> auctionHouse();
+            case MAILBOX -> mailbox();
+            case PALLET -> pallet();
         };
     }
 

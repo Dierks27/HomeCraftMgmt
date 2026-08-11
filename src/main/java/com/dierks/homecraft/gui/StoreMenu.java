@@ -74,12 +74,14 @@ public final class StoreMenu extends Menu {
                 refresh();
             });
         }
+        set(46, Menus.icon(Material.CHEST, "&6Marketplace", "&7Buy items other players list", "&7in their Pallets"),
+                e -> new com.dierks.homecraft.gui.marketplace.MarketplaceMenu(plugin, player, this::reopen).open(player));
         set(47, Menus.icon(Material.EMERALD, "&aInstant Market", "&7Buy/sell now at market price", "&7(no shipping)"),
                 e -> new MarketMenu(plugin, player, this::reopen).open(player));
         set(48, Menus.icon(Material.PLAYER_HEAD, "&5Mini Museum", "&7Browse & collect Minis"),
                 e -> new MuseumMenu(plugin, player, this::reopen).open(player));
-        set(49, Menus.icon(Material.CHEST_MINECART, "&bMy Orders", "&7Track & collect deliveries"),
-                e -> new OrdersMenu(plugin, player, this::reopen).open(player));
+        set(49, Menus.icon(Material.CHEST_MINECART, "&eMailbox", "&7Track & collect all deliveries"),
+                e -> new MailboxMenu(plugin, player, this::reopen).open(player));
         set(50, Menus.balance(plugin, player), null);
         set(51, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
         if ((page + 1) * PAGE_SIZE < items.size()) {

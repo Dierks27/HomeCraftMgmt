@@ -124,7 +124,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Text.of("&cUsage: /hcm mini give <id> [player]"));
                     return;
                 }
-                String id = args[2].toLowerCase(Locale.ROOT);
+                String id = com.dierks.homecraft.mini.MiniIds.slug(args[2]);
                 Player target;
                 if (args.length >= 4) {
                     target = Bukkit.getPlayerExact(args[3]);
@@ -161,7 +161,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.of("&cUsage: /hcm mini capturestand <miniId>"));
             return;
         }
-        String id = args[2].toLowerCase(Locale.ROOT);
+        String id = com.dierks.homecraft.mini.MiniIds.slug(args[2]);
         if (plugin.miniService().def(id) == null) {
             sender.sendMessage(Text.of("&cNo such Mini '" + id + "'."));
             return;
@@ -192,9 +192,11 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "vending" -> item = plugin.items().vendingMachine();
             case "display" -> item = plugin.items().displayCase();
             case "auction" -> item = plugin.items().auctionHouse();
+            case "mailbox" -> item = plugin.items().mailbox();
+            case "pallet" -> item = plugin.items().pallet();
             default -> {
                 sender.sendMessage(Text.of("&cUnknown item '" + args[1]
-                        + "'. Use workbench, pc, vending, display, or auction."));
+                        + "'. Use workbench, pc, vending, display, auction, mailbox, or pallet."));
                 return;
             }
         }
@@ -391,7 +393,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
-            addMatches(out, args[1], "workbench", "pc", "vending", "display", "auction");
+            addMatches(out, args[1], "workbench", "pc", "vending", "display", "auction", "mailbox", "pallet");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("give")) {
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))) {

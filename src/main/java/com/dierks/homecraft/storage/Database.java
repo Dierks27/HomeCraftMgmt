@@ -222,6 +222,44 @@ public final class Database {
                 SELECT world,x,y,z,owner,uid,mini_id,mint_number,price,item_b64,listed_at
                 FROM mini_listings WHERE kind = 'VENDING';
             DELETE FROM mini_listings WHERE kind = 'VENDING';
+            """,
+            // v12 — Mailbox deliveries (Phase 5): a unified queue of items owed to a
+            // player (Marketplace purchases; future web-shop orders). The exact item
+            // is stored verbatim (Base64). Collected at the Mailbox block or the PC.
+            """
+            CREATE TABLE IF NOT EXISTS deliveries (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                player     TEXT    NOT NULL,
+                item_b64   TEXT    NOT NULL,
+                label      TEXT    NOT NULL,
+                source     TEXT    NOT NULL,
+                placed_at  INTEGER NOT NULL,
+                deliver_at INTEGER NOT NULL,
+                status     TEXT    NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_deliveries_player ON deliveries (player, status);
+            CREATE INDEX IF NOT EXISTS idx_deliveries_due ON deliveries (status, deliver_at);
+            """,
+            // v13 — Marketplace Pallets (Phase 5): a player's sell box holds one item
+            // type at a fixed price with a stock count; a listing appears in the Crate
+            // Marketplace and auto-deactivates when it runs dry. One listing per block.
+            """
+            CREATE TABLE IF NOT EXISTS pallet_listings (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                world      TEXT    NOT NULL,
+                x          INTEGER NOT NULL,
+                y          INTEGER NOT NULL,
+                z          INTEGER NOT NULL,
+                owner      TEXT    NOT NULL,
+                item_b64   TEXT    NOT NULL,
+                price      REAL    NOT NULL,
+                stock      INTEGER NOT NULL,
+                department TEXT    NOT NULL,
+                active     INTEGER NOT NULL DEFAULT 1,
+                listed_at  INTEGER NOT NULL,
+                UNIQUE (world, x, y, z)
+            );
+            CREATE INDEX IF NOT EXISTS idx_pallet_active ON pallet_listings (active, department);
             """
     };
 

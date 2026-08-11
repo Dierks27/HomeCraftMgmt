@@ -74,7 +74,7 @@ public final class CheckoutMenu extends Menu {
         player.sendMessage(Text.of("&aOrder placed: &f" + result.order().qty() + " " + item.label()
                 + " &7(" + tier.label() + ", " + money(result.itemCost() + result.shippingCost()) + ")."
                 + " &aArrives in " + Menus.duration(result.order().deliverAt() - System.currentTimeMillis()) + "."));
-        new OrdersMenu(plugin, player, () -> new StoreMenu(plugin, player).open(player)).open(player);
+        new MailboxMenu(plugin, player, () -> new StoreMenu(plugin, player).open(player)).open(player);
     }
 
     private Material shippingIcon(int index) {

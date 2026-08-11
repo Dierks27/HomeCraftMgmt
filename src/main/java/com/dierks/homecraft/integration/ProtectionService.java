@@ -55,6 +55,34 @@ public final class ProtectionService {
         return true;
     }
 
+    /**
+     * @return true if {@code location} is inside claimed/protected land (a Towny
+     * town claim, or a WorldGuard region). Degrades to {@code true} when no
+     * protection plugin is present or a check fails, so a bare test server still
+     * works rather than blocking everything.
+     */
+    public boolean isProtectedLand(Location location) {
+        if (!townyPresent && !worldGuardPresent) {
+            return true;
+        }
+        if (townyPresent) {
+            try {
+                Class<?> apiClass = Class.forName("com.palmergames.bukkit.towny.TownyAPI");
+                Object api = apiClass.getMethod("getInstance").invoke(null);
+                Object wilderness = apiClass.getMethod("isWilderness", Location.class).invoke(api, location);
+                if (Boolean.FALSE.equals(wilderness)) {
+                    return true; // claimed by a town
+                }
+            } catch (Throwable t) {
+                return true; // can't tell — allow
+            }
+        }
+        // Towny present and this is wilderness → not protected (WorldGuard regions
+        // are treated as an add-on; without a reliable region query we don't block
+        // solely on WG here).
+        return townyPresent ? false : true;
+    }
+
     @SuppressWarnings("unchecked")
     private boolean townyAllows(Player player, Location location) {
         try {

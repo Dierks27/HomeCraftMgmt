@@ -32,7 +32,7 @@ public final class VendingService {
             return new Result(false, error);
         }
 
-        static Result ok() {
+        static Result success() {
             return new Result(true, null);
         }
     }
@@ -80,7 +80,7 @@ public final class VendingService {
             return Result.fail("Could not save the listing — try again.");
         }
         held.setAmount(held.getAmount() - 1); // consume exactly one from hand
-        return Result.ok();
+        return Result.success();
     }
 
     /** Owner reclaims the Mini (unlist / empty a Display Case), returning it to their inventory. */
@@ -99,7 +99,7 @@ public final class VendingService {
         }
         giveOrDrop(owner, item);
         delete(loc);
-        return Result.ok();
+        return Result.success();
     }
 
     public Result setPrice(Player owner, Location loc, double price) {
@@ -118,7 +118,7 @@ public final class VendingService {
         } catch (SQLException e) {
             return Result.fail("Could not update the price.");
         }
-        return Result.ok();
+        return Result.success();
     }
 
     /** A buyer purchases the listed Mini: Vault seller-payment, item transfer, tracked. */
@@ -166,7 +166,7 @@ public final class VendingService {
             sellerOnline.sendMessage(com.dierks.homecraft.util.Text.of(
                     "&aYour Mini sold for &f" + economy.format(price) + "&a."));
         }
-        return Result.ok();
+        return Result.success();
     }
 
     /** On block break: hand any loaded Mini to the breaker and clear the listing. */

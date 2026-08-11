@@ -13,6 +13,15 @@ store:
   name: "Crate"
   display_url: "www.Crate.com"
 
+# GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
+# No section label is hard-coded. The store title supports {store} and {url}
+# tokens (filled from store.name / store.display_url above).
+menus:
+  admin_title: "&4Admin Studio"
+  museum_title: "&5Mini Museum &8&l·&r &7Collectibles"
+  market_title: "&1Market — instant buy/sell"
+  store_title: "&6Welcome to {store} &8· &7{url}"
+
 crafting:
   # Respect Towny / WorldGuard build permissions when placing/using/breaking
   # HomeCraft custom blocks. If those plugins are absent this is a no-op.

@@ -1,7 +1,9 @@
 package com.dierks.homecraft.gui;
 
+import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
@@ -14,6 +16,15 @@ public final class Menus {
     public static final ItemStack FILLER = icon(Material.GRAY_STAINED_GLASS_PANE, " ");
 
     private Menus() {
+    }
+
+    /**
+     * A "Your balance: $X" info icon for shopping GUIs. Rebuilt each time the menu
+     * refreshes, so it reflects the player's live Vault balance after every trade.
+     */
+    public static ItemStack balance(HomeCraftManagement plugin, Player player) {
+        String bal = plugin.economy().format(plugin.economy().balance(player));
+        return icon(Material.GOLD_INGOT, "&6Your balance", "&f" + bal);
     }
 
     /** An icon with an '&amp;'-coded name and lore lines. */

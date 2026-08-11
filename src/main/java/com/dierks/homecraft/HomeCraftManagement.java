@@ -7,7 +7,9 @@ import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.crafting.RecipeManager;
 import com.dierks.homecraft.crafting.WorkbenchListener;
 import com.dierks.homecraft.gui.MenuListener;
+import com.dierks.homecraft.input.ChatPromptService;
 import com.dierks.homecraft.integration.EconomyService;
+import com.dierks.homecraft.integration.HeadLibraryService;
 import com.dierks.homecraft.integration.ProtectionService;
 import com.dierks.homecraft.item.CustomItems;
 import com.dierks.homecraft.market.MarketService;
@@ -48,6 +50,8 @@ public final class HomeCraftManagement extends JavaPlugin {
     private MarketService market;
     private OrderService orderService;
     private MiniService miniService;
+    private ChatPromptService chatPrompts;
+    private HeadLibraryService headLibrary;
     private BukkitTask historyTask;
     private BukkitTask deliveryTask;
 
@@ -92,11 +96,16 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.miniService = new MiniService(this, new MiniDao(database), economy);
         this.miniService.reload();
 
+        // Admin Studio chat-input bridge + web head-library (Phase 4b).
+        this.chatPrompts = new ChatPromptService(this);
+        this.headLibrary = new HeadLibraryService(this);
+
         getServer().getPluginManager().registerEvents(
                 new CustomBlockListener(this, config, blockService, items, protection), this);
         getServer().getPluginManager().registerEvents(new WorkbenchListener(this, recipeManager), this);
         getServer().getPluginManager().registerEvents(new MenuListener(), this);
         getServer().getPluginManager().registerEvents(new OrderDeliveryListener(orderService), this);
+        getServer().getPluginManager().registerEvents(chatPrompts, this);
 
         PluginCommand hcm = getCommand("hcm");
         if (hcm != null) {
@@ -246,5 +255,13 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public MiniService miniService() {
         return miniService;
+    }
+
+    public ChatPromptService chatPrompts() {
+        return chatPrompts;
+    }
+
+    public HeadLibraryService heads() {
+        return headLibrary;
     }
 }

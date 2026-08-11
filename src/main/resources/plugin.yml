@@ -24,6 +24,7 @@ commands:
   hcm:
     description: HomeCraft Management admin & utility commands.
     usage: |-
+      /hcm admin             - open the Admin Studio (manage & import Minis)
       /hcm reload            - reload config.yml and re-register recipes
       /hcm give <workbench|pc> [player]
       /hcm market list|price <item>|buy <item> <qty>|sell <item> <qty>

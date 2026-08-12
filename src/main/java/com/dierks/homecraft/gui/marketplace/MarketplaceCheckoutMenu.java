@@ -51,7 +51,7 @@ public final class MarketplaceCheckoutMenu extends Menu {
             double shipping = plugin.orderService().shippingCost(price, tier);
             double total = price + shipping;
             set(TIER_SLOTS[i], Menus.icon(Material.MINECART, "&e" + tier.label(),
-                    "&7Arrives in ~&f" + hours(tier.realHours()),
+                    "&7Arrives in ~&f" + Menus.duration(tier.deliveryMillis()),
                     "&7Item: &f" + plugin.economy().format(price),
                     "&7Shipping: &f" + plugin.economy().format(shipping),
                     "&7Total: &6" + plugin.economy().format(total),
@@ -82,9 +82,5 @@ public final class MarketplaceCheckoutMenu extends Menu {
         } else {
             player.closeInventory();
         }
-    }
-
-    private String hours(double h) {
-        return (h == Math.floor(h) ? Long.toString((long) h) : String.valueOf(h)) + "h";
     }
 }

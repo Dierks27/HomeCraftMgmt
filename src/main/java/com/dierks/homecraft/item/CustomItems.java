@@ -34,48 +34,53 @@ public final class CustomItems {
     /** A Mini Workbench item, ready to place. */
     public ItemStack workbench() {
         PluginConfig.Workbench def = config.workbench();
-        return tagged(def.baseBlock(), def.displayName(), def.lore(), CustomBlockType.MINI_WORKBENCH, null);
+        return tagged(def.baseBlock(), def.displayName(), def.lore(), CustomBlockType.MINI_WORKBENCH,
+                config.skin(CustomBlockType.MINI_WORKBENCH));
     }
 
     /** A PC item, ready to place. Applies the configured head texture when the base is a head. */
     public ItemStack pc() {
         PluginConfig.Pc def = config.pc();
-        return tagged(def.baseBlock(), def.displayName(), def.lore(), CustomBlockType.PC, def.headTexture());
+        // A skins.pc value wins; otherwise fall back to the legacy crafting.pc.head_texture.
+        String skin = config.skin(CustomBlockType.PC);
+        String texture = skin.isBlank() ? def.headTexture() : skin;
+        return tagged(def.baseBlock(), def.displayName(), def.lore(), CustomBlockType.PC, texture);
     }
 
     /** A Mini Vending Machine item, ready to place. */
     public ItemStack vendingMachine() {
         PluginConfig.BlockDef def = config.miniBlocks().vending();
         return tagged(def.material(), def.name(), List.of("&7Right-click to sell/buy a Mini."),
-                CustomBlockType.MINI_VENDING_MACHINE, null);
+                CustomBlockType.MINI_VENDING_MACHINE, config.skin(CustomBlockType.MINI_VENDING_MACHINE));
     }
 
     /** A Mini Display Case item, ready to place. */
     public ItemStack displayCase() {
         PluginConfig.BlockDef def = config.miniBlocks().display();
         return tagged(def.material(), def.name(), List.of("&7Place, then load a Mini to show it off."),
-                CustomBlockType.DISPLAY_CASE, null);
+                CustomBlockType.DISPLAY_CASE, config.skin(CustomBlockType.DISPLAY_CASE));
     }
 
     /** A Mini Auction House item, ready to place. */
     public ItemStack auctionHouse() {
         PluginConfig.BlockDef def = config.miniBlocks().auction();
         return tagged(def.material(), def.name(), List.of("&7Right-click to browse Mini auctions."),
-                CustomBlockType.AUCTION_HOUSE, null);
+                CustomBlockType.AUCTION_HOUSE, config.skin(CustomBlockType.AUCTION_HOUSE));
     }
 
     /** A Mailbox item, ready to place. */
     public ItemStack mailbox() {
         PluginConfig.BlockDef def = config.marketplace().mailbox();
         return tagged(def.material(), def.name(), List.of("&7Right-click to collect deliveries."),
-                CustomBlockType.MAILBOX, null);
+                CustomBlockType.MAILBOX, config.skin(CustomBlockType.MAILBOX));
     }
 
     /** A Pallet (sell box) item, ready to place. */
     public ItemStack pallet() {
         PluginConfig.BlockDef def = config.marketplace().pallet();
         return tagged(def.material(), def.name(), List.of("&7Place on your land, load an item,",
-                "&7set a price to sell on the Marketplace."), CustomBlockType.PALLET, null);
+                "&7set a price to sell on the Marketplace."), CustomBlockType.PALLET,
+                config.skin(CustomBlockType.PALLET));
     }
 
     /** Build the item for a given type from current config (used e.g. when dropping on break). */
@@ -93,6 +98,13 @@ public final class CustomItems {
 
     private ItemStack tagged(Material material, String name, List<String> loreLines,
                              CustomBlockType type, String headTexture) {
+        // A configured skin renders the block as a textured player head regardless of
+        // the base material (you can't paint a head texture onto a barrel/chest). A
+        // blank texture leaves the base material — and appearance — untouched.
+        boolean skinned = headTexture != null && !headTexture.isBlank();
+        if (skinned) {
+            material = Material.PLAYER_HEAD;
+        }
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         if (meta == null) {

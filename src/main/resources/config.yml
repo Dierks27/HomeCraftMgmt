@@ -205,20 +205,24 @@ market:
       initial_stock: 0          # starts empty -> ceiling price, out of stock
       full_stock: 512
 
-# Phase 3 — Amazon Ordering + Shipping
-# mode PERCENTAGE = shipping is percent% of the order's item cost; FLAT = the
-# flat fee. prime_flat forces a flat fee for that tier regardless of order size
-# (Prime-style). real_hours is the real-time delivery delay and accepts decimals
-# — set it tiny (e.g. 0.02 ≈ 72s) to watch a delivery arrive while testing.
+# Phase 3 / 6 — Crate Ordering + Shipping
+# Tiers are FULLY config-driven: add / rename / re-time any number of them and
+# the checkout GUI renders them automatically (fastest → slowest). Each tier's
+# real-time delivery delay is `real_hours` + `real_minutes` combined — use
+# `real_minutes` alone for a sub-hour tier (Express delivers ~5 real minutes
+# after ordering). Both accept decimals. An optional `label:` overrides the
+# auto-generated display name.
 shipping:
   # In PERCENTAGE mode every tier charges `percent` of the item total (faster =
   # higher %). `flat`/`prime_flat` apply ONLY in FLAT mode. A slower tier is also
   # clamped to never cost more than a faster one.
   mode: PERCENTAGE     # PERCENTAGE | FLAT
   tiers:
-    one_day:   { real_hours: 24, percent: 20, flat: 500 }   # fastest, dearest
-    two_day:   { real_hours: 48, percent: 10, flat: 250 }
-    three_day: { real_hours: 72, percent: 0,  flat: 0 }      # free tier
+    express:   { real_minutes: 5, percent: 20 }   # fastest / most expensive
+    one_day:   { real_hours: 1,   percent: 10 }
+    two_day:   { real_hours: 3,   percent: 5  }
+    three_day: { real_hours: 8,   percent: 0  }   # free
+  locker: { enabled: true }
 
 # ---------------------------------------------------------------------
 #  Phase 4 — Minis (collectible heads & armor stands)
@@ -296,3 +300,36 @@ minis:
   #    invisible: false
   #    pose: { head: [0,0,0], body: [0,0,0], left_arm: [0,0,0], right_arm: [0,0,0], left_leg: [0,0,0], right_leg: [0,0,0] }
   #    equipment: { helmet: "", chest: "", legs: "", boots: "", main_hand: "", off_hand: "" }
+
+# ---------------------------------------------------------------------
+#  Phase 6 (Part B) — Block skins (custom head textures)
+#  Every custom block can wear a proper minecraft-heads.com texture instead of
+#  a default Steve head. Paste the head's Base64 `Value` string for a block and
+#  `/hcm reload`; it's applied to the item on give/craft AND to the block when
+#  placed (the placed head keeps the texture natively). A blank value is safe —
+#  the block keeps its normal appearance (no crash, no ugly default swap).
+#  When a value is set, the block is rendered as a PLAYER_HEAD wearing it.
+# ---------------------------------------------------------------------
+skins:
+  pc:            ""   # computer / monitor head
+  workbench:     ""   # crafting-table head
+  vending:       ""   # vending-machine head
+  mailbox:       ""   # mailbox head
+  pallet:        ""   # pallet / shipping-crate head
+  display_case:  ""   # glass display-case head
+
+# ---------------------------------------------------------------------
+#  Phase 6 (Part C) — The Market Web Dashboard
+#  A live, read-only web page for the Crate market, served by the plugin on its
+#  own port (JDK built-in HTTP server — no extra deps). Tunnel the port with a
+#  second Playit tunnel for outside access. Read-only: it exposes market data
+#  only — never balances or internals. Reloadable with /hcm reload (restarts
+#  the server if bind/port/enabled changed).
+# ---------------------------------------------------------------------
+web:
+  dashboard:
+    enabled: true
+    bind: 0.0.0.0
+    port: 8080
+    refresh_seconds: 30
+    title: "Crate Market"

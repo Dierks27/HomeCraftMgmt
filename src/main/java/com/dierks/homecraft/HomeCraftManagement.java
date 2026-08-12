@@ -67,6 +67,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.trade.StandService stands;
     private com.dierks.homecraft.marketplace.DeliveryService deliveries;
     private com.dierks.homecraft.marketplace.PalletService pallets;
+    private com.dierks.homecraft.web.MarketDashboardServer dashboard;
     private BukkitTask historyTask;
     private BukkitTask deliveryTask;
     private BukkitTask auctionTask;
@@ -74,6 +75,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        migrateConfig();
         backfillConfig();
         Keys.init(this);
 
@@ -152,11 +154,19 @@ public final class HomeCraftManagement extends JavaPlugin {
             hcm.setTabCompleter(executor);
         }
 
+        // Market Web Dashboard (Phase 6) — embedded read-only web server.
+        this.dashboard = new com.dierks.homecraft.web.MarketDashboardServer(this);
+        this.dashboard.start();
+
         getLogger().info("HomeCraft Management enabled.");
     }
 
     @Override
     public void onDisable() {
+        if (dashboard != null) {
+            dashboard.stop();
+            dashboard = null;
+        }
         if (historyTask != null) {
             historyTask.cancel();
             historyTask = null;
@@ -181,6 +191,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     /** Reload config.yml, re-register data-driven recipes, and reload the market catalog live. */
     public void reloadAll() {
         reloadConfig();
+        migrateConfig();
         backfillConfig();
         config.load();
         recipeManager.registerRecipes();
@@ -189,6 +200,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         miniService.reload();
         if (wildDrops != null) {
             wildDrops.invalidate();
+        }
+        if (dashboard != null) {
+            dashboard.restart(); // pick up bind/port/enabled/refresh/title changes
         }
     }
 
@@ -204,6 +218,43 @@ public final class HomeCraftManagement extends JavaPlugin {
      * are copied whole. Added keys carry their default comments across where the API
      * supports it. What was added is logged.
      */
+    /**
+     * Targeted, one-time config upgrades that a blind key-backfill can't do (it only
+     * ADDS missing keys, never rewrites changed ones). Runs before {@link #backfillConfig()}.
+     *
+     * <p>Phase 6: the legacy shipping scheme had exactly three whole-hour tiers
+     * (one_day/two_day/three_day at 24/48/72h). The new scheme adds an {@code express}
+     * sub-hour tier and retimes the rest. When the on-disk config predates {@code express},
+     * we replace the whole {@code shipping.tiers} map with the new four-tier scheme
+     * (mode is preserved; admins who already added {@code express} are left untouched).
+     */
+    private void migrateConfig() {
+        org.bukkit.configuration.file.FileConfiguration c = getConfig();
+        boolean changed = false;
+
+        if (c.contains("shipping.tiers") && !c.contains("shipping.tiers.express")) {
+            c.set("shipping.tiers", null);
+            c.set("shipping.tiers.express.real_minutes", 5);
+            c.set("shipping.tiers.express.percent", 20);
+            c.set("shipping.tiers.one_day.real_hours", 1);
+            c.set("shipping.tiers.one_day.percent", 10);
+            c.set("shipping.tiers.two_day.real_hours", 3);
+            c.set("shipping.tiers.two_day.percent", 5);
+            c.set("shipping.tiers.three_day.real_hours", 8);
+            c.set("shipping.tiers.three_day.percent", 0);
+            if (!c.contains("shipping.locker.enabled")) {
+                c.set("shipping.locker.enabled", true);
+            }
+            changed = true;
+            getLogger().info("Config migration: upgraded shipping to the Express tier scheme "
+                    + "(express 5m/20% · one_day 1h/10% · two_day 3h/5% · three_day 8h/free).");
+        }
+
+        if (changed) {
+            saveConfig();
+        }
+    }
+
     private void backfillConfig() {
         java.io.InputStream in = getResource("config.yml");
         if (in == null) {

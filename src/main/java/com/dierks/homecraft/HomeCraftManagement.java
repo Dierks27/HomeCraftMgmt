@@ -59,6 +59,8 @@ public final class HomeCraftManagement extends JavaPlugin {
     private MarketService market;
     private OrderService orderService;
     private MiniService miniService;
+    private com.dierks.homecraft.mini.CardService cardService;
+    private com.dierks.homecraft.mini.PrinterService printerService;
     private ChatPromptService chatPrompts;
     private HeadLibraryService headLibrary;
     private VendingService vending;
@@ -117,6 +119,12 @@ public final class HomeCraftManagement extends JavaPlugin {
         // Minis collectibles (Phase 4).
         this.miniService = new MiniService(this, new MiniDao(database), economy);
         this.miniService.reload();
+
+        // Card & Printer collectible economy (Phase 9): Cards are the acquisition
+        // token; the Printer is the single mint source (graded, cap-aware).
+        com.dierks.homecraft.storage.CardDao cardDao = new com.dierks.homecraft.storage.CardDao(database);
+        this.cardService = new com.dierks.homecraft.mini.CardService(this, cardDao);
+        this.printerService = new com.dierks.homecraft.mini.PrinterService(this, cardDao);
 
         // Admin Studio chat-input bridge + web head-library (Phase 4b).
         this.chatPrompts = new ChatPromptService(this);
@@ -421,6 +429,14 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public MiniService miniService() {
         return miniService;
+    }
+
+    public com.dierks.homecraft.mini.CardService cards() {
+        return cardService;
+    }
+
+    public com.dierks.homecraft.mini.PrinterService printers() {
+        return printerService;
     }
 
     public ChatPromptService chatPrompts() {

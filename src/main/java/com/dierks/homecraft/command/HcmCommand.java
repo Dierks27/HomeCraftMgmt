@@ -78,6 +78,12 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 handleDisplay(sender, args);
             }
             case "mini", "minis" -> handleMini(sender, args);
+            case "printer" -> {
+                if (denyUnless(sender, "hcm.admin")) {
+                    return true;
+                }
+                handlePrinter(sender, args);
+            }
             case "arcade" -> {
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Text.of("&cOnly players can open the Arcade."));
@@ -196,12 +202,22 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
 
     private void handleGive(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(Text.of("&cUsage: /hcm give <workbench|pc> [player]"));
+            sender.sendMessage(Text.of("&cUsage: /hcm give <printer|pc|card|filament|…> [args] [player]"));
+            return;
+        }
+        String kind = args[1].toLowerCase(Locale.ROOT);
+        // Card & filament take an extra argument, so they resolve their own target.
+        if (kind.equals("card")) {
+            handleGiveCard(sender, args);
+            return;
+        }
+        if (kind.equals("filament")) {
+            handleGiveFilament(sender, args);
             return;
         }
         ItemStack item;
-        switch (args[1].toLowerCase(Locale.ROOT)) {
-            case "workbench" -> item = plugin.items().workbench();
+        switch (kind) {
+            case "printer" -> item = plugin.items().printer();
             case "pc" -> item = plugin.items().pc();
             case "vending" -> item = plugin.items().vendingMachine();
             case "display" -> item = plugin.items().displayCase();
@@ -215,7 +231,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "counter", "tokencounter" -> item = plugin.items().of(com.dierks.homecraft.block.CustomBlockType.TOKEN_COUNTER);
             default -> {
                 sender.sendMessage(Text.of("&cUnknown item '" + args[1]
-                        + "'. Use workbench, pc, vending, display, auction, mailbox, or pallet."));
+                        + "'. Use printer, pc, card, filament, vending, display, auction, mailbox, or pallet."));
                 return;
             }
         }
@@ -237,6 +253,94 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         target.getInventory().addItem(item).values()
                 .forEach(drop -> target.getWorld().dropItemNaturally(target.getLocation(), drop));
         sender.sendMessage(Text.of("&aGave " + args[1] + " to " + target.getName() + "."));
+    }
+
+    /** {@code /hcm give card <miniId> [player]} — hand out a sealed Card (admin, ignores cap). */
+    private void handleGiveCard(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage(Text.of("&cUsage: /hcm give card <miniId> [player]"));
+            return;
+        }
+        String id = com.dierks.homecraft.mini.MiniIds.slug(args[2]);
+        Player target = resolveTarget(sender, args, 3, "give card " + id);
+        if (target == null) {
+            return;
+        }
+        var r = plugin.cards().giveAdmin(target, id);
+        sender.sendMessage(r.ok()
+                ? Text.of("&aGave a " + id + " Card to " + target.getName() + ".")
+                : Text.of("&c" + r.error()));
+    }
+
+    /** {@code /hcm give filament <color> <amount> [player]} — hand out printer filament (admin). */
+    private void handleGiveFilament(CommandSender sender, String[] args) {
+        if (args.length < 4) {
+            sender.sendMessage(Text.of("&cUsage: /hcm give filament <color> <amount> [player]"));
+            return;
+        }
+        org.bukkit.DyeColor color;
+        try {
+            color = org.bukkit.DyeColor.valueOf(args[2].toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            sender.sendMessage(Text.of("&cUnknown filament colour '" + args[2] + "'."));
+            return;
+        }
+        int amount = parseQty(sender, args[3]);
+        if (amount <= 0) {
+            return;
+        }
+        Player target = resolveTarget(sender, args, 4, "give filament " + args[2] + " " + amount);
+        if (target == null) {
+            return;
+        }
+        ItemStack fil = plugin.miniService().filamentItems().filament(color, amount);
+        target.getInventory().addItem(fil).values()
+                .forEach(drop -> target.getWorld().dropItemNaturally(target.getLocation(), drop));
+        sender.sendMessage(Text.of("&aGave " + amount + " " + args[2].toLowerCase(Locale.ROOT)
+                + " filament to " + target.getName() + "."));
+    }
+
+    /** Resolve the target player at {@code args[idx]}, defaulting to the sender. */
+    private Player resolveTarget(CommandSender sender, String[] args, int idx, String usageTail) {
+        if (args.length > idx) {
+            Player t = Bukkit.getPlayerExact(args[idx]);
+            if (t == null) {
+                sender.sendMessage(Text.of("&cPlayer '" + args[idx] + "' is not online."));
+            }
+            return t;
+        }
+        if (sender instanceof Player p) {
+            return p;
+        }
+        sender.sendMessage(Text.of("&cSpecify a player: /hcm " + usageTail + " <player>"));
+        return null;
+    }
+
+    /** {@code /hcm printer <public|private>} — flag the printer you're looking at (admin). */
+    private void handlePrinter(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Text.of("&cOnly players can flag a printer."));
+            return;
+        }
+        if (args.length < 2 || !(args[1].equalsIgnoreCase("public") || args[1].equalsIgnoreCase("private"))) {
+            sender.sendMessage(Text.of("&cUsage: /hcm printer <public|private> &7(look at the Printer)"));
+            return;
+        }
+        org.bukkit.block.Block target = player.getTargetBlockExact(6);
+        if (target == null) {
+            sender.sendMessage(Text.of("&cLook at a placed Printer, then run this again."));
+            return;
+        }
+        var placed = plugin.blockService().at(target.getLocation());
+        if (placed.isEmpty() || placed.get().type() != com.dierks.homecraft.block.CustomBlockType.PRINTER) {
+            sender.sendMessage(Text.of("&cThat isn't a Printer. Look directly at one."));
+            return;
+        }
+        boolean makePublic = args[1].equalsIgnoreCase("public");
+        plugin.printers().setPublic(target.getLocation(), makePublic);
+        sender.sendMessage(makePublic
+                ? Text.of("&aThis Printer is now &fpublic &a— free prints (no Shiny).")
+                : Text.of("&aThis Printer is now &fprivate &a— filament + fee, Shiny unlocked."));
     }
 
     // ---------------------------------------------------------------------
@@ -376,7 +480,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         if (sender.hasPermission("hcm.admin")) {
             sender.sendMessage(Text.of("&e/hcm admin &7- open the Admin Studio (manage & import Minis)"));
             sender.sendMessage(Text.of("&e/hcm reload &7- reload config & recipes"));
-            sender.sendMessage(Text.of("&e/hcm give <workbench|pc> [player] &7- get a custom item"));
+            sender.sendMessage(Text.of("&e/hcm give <printer|pc|card <id>|filament <color> <n>> [player]"));
+            sender.sendMessage(Text.of("&e/hcm printer <public|private> &7- flag the Printer you're looking at"));
         }
         sender.sendMessage(Text.of("&e/hcm market list &7- list commodities (buy/sell/stock)"));
         sender.sendMessage(Text.of("&e/hcm market price <item> &7- inspect a commodity"));
@@ -550,7 +655,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "auction", "arcade", "tokens");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "auction", "arcade", "tokens");
             } else {
                 addMatches(out, args[0], "market", "mini", "auction", "arcade", "tokens");
             }
@@ -565,14 +670,32 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
-            addMatches(out, args[1], "workbench", "pc", "vending", "display", "auction", "mailbox", "pallet",
-                    "arcade", "cratemachine", "scratch", "pity", "counter");
+            addMatches(out, args[1], "printer", "pc", "card", "filament", "vending", "display", "auction",
+                    "mailbox", "pallet", "arcade", "cratemachine", "scratch", "pity", "counter");
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("give")
+                && args[1].equalsIgnoreCase("card")) {
+            String prefix = args[2].toLowerCase(Locale.ROOT);
+            for (com.dierks.homecraft.mini.MiniDef def : plugin.miniService().catalog()) {
+                if (def.id().startsWith(prefix)) {
+                    out.add(def.id());
+                }
+            }
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("give")
+                && args[1].equalsIgnoreCase("filament")) {
+            String prefix = args[2].toUpperCase(Locale.ROOT);
+            for (org.bukkit.DyeColor col : org.bukkit.DyeColor.values()) {
+                if (col.name().startsWith(prefix)) {
+                    out.add(col.name().toLowerCase(Locale.ROOT));
+                }
+            }
         } else if (args.length == 3 && args[0].equalsIgnoreCase("give")) {
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))) {
                     out.add(p.getName());
                 }
             }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("printer")) {
+            addMatches(out, args[1], "public", "private");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("tokens")) {
             if (sender.hasPermission("hcm.admin")) {
                 addMatches(out, args[1], "give", "set", "take");

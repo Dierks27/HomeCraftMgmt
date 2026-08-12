@@ -38,6 +38,13 @@ public final class CustomItems {
                 config.skin(CustomBlockType.MINI_WORKBENCH));
     }
 
+    /** A Mini Printer item, ready to place (Phase 9). */
+    public ItemStack printer() {
+        PluginConfig.Printer def = config.printer();
+        return tagged(def.baseBlock(), def.displayName(), def.lore(), CustomBlockType.PRINTER,
+                config.skin(CustomBlockType.PRINTER));
+    }
+
     /** A PC item, ready to place. Applies the configured head texture when the base is a head. */
     public ItemStack pc() {
         PluginConfig.Pc def = config.pc();
@@ -102,6 +109,7 @@ public final class CustomItems {
         return switch (type) {
             case PC -> pc();
             case MINI_WORKBENCH -> workbench();
+            case PRINTER -> printer();
             case MINI_VENDING_MACHINE -> vendingMachine();
             case DISPLAY_CASE -> displayCase();
             case AUCTION_HOUSE -> auctionHouse();

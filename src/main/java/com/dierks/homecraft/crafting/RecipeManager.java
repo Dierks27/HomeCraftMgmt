@@ -7,7 +7,6 @@ import com.dierks.homecraft.util.Keys;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.ShapedRecipe;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -46,42 +45,18 @@ public final class RecipeManager {
     //  Vanilla Workbench bootstrap recipe
     // ---------------------------------------------------------------------
 
-    /** Re-register the Workbench recipe from current config (removing any prior one). */
+    /**
+     * (Re)register data-driven recipes. Phase 9 retires the Mini Workbench: it is no
+     * longer craftable (Minis now come from Cards + a Printer), so any previously
+     * registered Workbench recipe is removed and none is added. Existing placed
+     * benches keep working as a light PC-craft station so placements migrate
+     * gracefully. The PC recipe is still matched inside that craft GUI (see
+     * {@link #matchPc}).
+     */
     public void registerRecipes() {
         unregisterRecipes();
-
-        PluginConfig.Shaped recipe = config.workbench().recipe();
-        if (recipe.isEmpty()) {
-            plugin.getLogger().info("Mini Workbench recipe is empty — not craftable until configured.");
-            return;
-        }
-
-        List<String> shape = recipe.shape();
-        if (shape.size() > 3 || shape.stream().anyMatch(r -> r.length() > 3)) {
-            plugin.getLogger().warning("Workbench recipe shape must be at most 3x3; skipping registration.");
-            return;
-        }
-        for (String row : shape) {
-            for (char ch : row.toCharArray()) {
-                if (ch != ' ' && !recipe.ingredients().containsKey(ch)) {
-                    plugin.getLogger().warning("Workbench recipe symbol '" + ch + "' has no ingredient mapping; skipping.");
-                    return;
-                }
-            }
-        }
-
-        try {
-            ShapedRecipe shaped = new ShapedRecipe(Keys.WORKBENCH_RECIPE, items.workbench());
-            shaped.shape(shape.toArray(new String[0]));
-            for (Map.Entry<Character, Material> e : recipe.ingredients().entrySet()) {
-                shaped.setIngredient(e.getKey(), e.getValue());
-            }
-            Bukkit.addRecipe(shaped);
-            workbenchRecipeRegistered = true;
-            plugin.getLogger().info("Registered Mini Workbench crafting recipe.");
-        } catch (Exception e) {
-            plugin.getLogger().warning("Failed to register Workbench recipe: " + e.getMessage());
-        }
+        plugin.getLogger().info("Mini Workbench is retired (Phase 9) — no longer craftable; "
+                + "print Minis from Cards at a Printer.");
     }
 
     /** Remove our registered recipes (called on reload and disable). */

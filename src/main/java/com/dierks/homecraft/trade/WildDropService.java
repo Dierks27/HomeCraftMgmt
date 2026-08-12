@@ -2,9 +2,6 @@ package com.dierks.homecraft.trade;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.mini.Loot;
-import com.dierks.homecraft.mini.MiniDef;
-import com.dierks.homecraft.mini.MiniService;
-import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 
@@ -84,15 +81,14 @@ public final class WildDropService {
             if (miniId == null) {
                 continue;
             }
-            MiniService.MintResult r = plugin.miniService().mintWild(player, miniId);
+            // Phase 9: wild drops now give a CARD, not a Mini. The player takes the
+            // Card to a Printer to print a graded Mini (the single mint source).
+            var r = plugin.cards().issue(player, miniId);
             if (r.ok()) {
                 dropped++;
-                MiniDef def = plugin.miniService().def(miniId);
-                String name = def != null ? def.name() : miniId;
-                player.sendMessage(Text.of("&d✦ A wild &f" + name + " &dMini dropped! &7(Mint #"
-                        + r.mintNumber() + ")"));
+                plugin.cards().announceDrop(player, miniId);
             }
-            // If minted out, silently skip — the finite promise holds.
+            // If card-capped-out, silently skip — the finite promise holds.
         }
         return dropped;
     }

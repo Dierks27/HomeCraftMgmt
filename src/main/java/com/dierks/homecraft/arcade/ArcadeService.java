@@ -7,7 +7,6 @@ import com.dierks.homecraft.config.PluginConfig.CrateReward;
 import com.dierks.homecraft.config.PluginConfig.PaidTier;
 import com.dierks.homecraft.config.PluginConfig.RewardType;
 import com.dierks.homecraft.mini.MiniDef;
-import com.dierks.homecraft.mini.MiniService;
 import com.dierks.homecraft.mini.Rarity;
 import com.dierks.homecraft.storage.TokenDao;
 import com.dierks.homecraft.util.Text;
@@ -26,13 +25,13 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * The Arcade engine (Phase 8, §3.9): earn tokens by playing (login streaks +
- * playtime), spend them on weighted loot crates (cap-aware Mini prizes minted
- * through the standard pipeline), buy better odds with a Vault fee, exchange
- * tokens for a guaranteed Rare+ via the pity path, and scratch lotto tickets.
+ * playtime), spend them on weighted loot crates (Mini prizes are awarded as Cards,
+ * printed later at a Printer), buy better odds with a Vault fee, exchange tokens for
+ * a guaranteed Rare+ Card via the pity path, and scratch lotto tickets.
  *
- * <p>All currency is in-game (tokens + Vault money) — never real money. Every Mini
- * prize goes through {@link MiniService#mintWild} so anti-dupe, caps, and
- * circulation are preserved.
+ * <p>All currency is in-game (tokens + Vault money) — never real money. Phase 9: Mini
+ * prizes now hand out {@link com.dierks.homecraft.mini.CardService Cards}; minting
+ * stays exclusive to the Printer, preserving anti-dupe, caps, and circulation.
  */
 public final class ArcadeService {
 
@@ -319,14 +318,18 @@ public final class ArcadeService {
                     return Outcome.won(give.clone(), "&f" + r.itemAmount() + "x " + niceName(r.material()));
                 }
                 case MINI -> {
-                    MiniService.MintResult mr = plugin.miniService().mintWild(player, r.miniId());
-                    if (mr.ok()) {
+                    // Phase 9: crates now award a CARD (printed into a graded Mini at a
+                    // Printer), not a finished Mini. Minting stays exclusive to the Printer.
+                    var cr = plugin.cards().issue(player, r.miniId());
+                    if (cr.ok()) {
                         MiniDef def = plugin.miniService().def(r.miniId());
-                        ItemStack ic = def != null ? plugin.miniService().icon(def) : icon(Material.PLAYER_HEAD, "&dMini");
-                        return Outcome.won(ic, (def != null ? "&d" + def.name() : "&da Mini")
-                                + " &7#" + mr.mintNumber());
+                        ItemStack ic = plugin.miniService().cardFor(r.miniId());
+                        if (ic == null) {
+                            ic = icon(Material.PAPER, "&bCard");
+                        }
+                        return Outcome.won(ic, (def != null ? "&b" + def.name() : "&ba") + " Card");
                     }
-                    working.remove(r); // minted out between check and mint — drop and re-roll
+                    working.remove(r); // card-capped out between check and issue — drop and re-roll
                 }
             }
         }
@@ -384,13 +387,17 @@ public final class ArcadeService {
             return Outcome.fail("You need " + cost + " tokens.");
         }
         MiniDef chosen = pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
-        MiniService.MintResult mr = plugin.miniService().mintWild(player, chosen.id());
-        if (!mr.ok()) {
-            grant(id, cost); // refund on the rare race where it just minted out
-            return Outcome.fail(mr.error());
+        // Phase 9: the pity exchange guarantees a Rare+ CARD (printed at a Printer).
+        var cr = plugin.cards().issue(player, chosen.id());
+        if (!cr.ok()) {
+            grant(id, cost); // refund on the rare race where its cards just sold out
+            return Outcome.fail(cr.error());
         }
-        ItemStack ic = plugin.miniService().icon(chosen);
-        return Outcome.won(ic, "&d" + chosen.name() + " &7#" + mr.mintNumber());
+        ItemStack ic = plugin.miniService().cardFor(chosen.id());
+        if (ic == null) {
+            ic = icon(Material.PAPER, "&bCard");
+        }
+        return Outcome.won(ic, "&b" + chosen.name() + " Card");
     }
 
     // ---- lotto / scratch ------------------------------------------------------

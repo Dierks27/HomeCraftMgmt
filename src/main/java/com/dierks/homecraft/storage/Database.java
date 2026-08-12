@@ -319,6 +319,22 @@ public final class Database {
                 unlocked_at  INTEGER NOT NULL,
                 PRIMARY KEY (player, achievement)
             );
+            """,
+
+            // v17 — Phase 9 Cards & Printer. Per-type Card issuance tally (for card
+            // caps) and the set of printers flagged public (free Mall printers).
+            """
+            CREATE TABLE IF NOT EXISTS card_counts (
+                card_id  TEXT    PRIMARY KEY,
+                issued   INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS public_printers (
+                world TEXT    NOT NULL,
+                x     INTEGER NOT NULL,
+                y     INTEGER NOT NULL,
+                z     INTEGER NOT NULL,
+                PRIMARY KEY (world, x, y, z)
+            );
             """
     };
 

@@ -428,7 +428,8 @@ public final class DisplayService {
      * wall); each tile gets a fresh map rendering its window of the shared chart.
      */
     public Result bindMapTv(Player admin, ItemFrame anchor, String itemId, int cols, int rows) {
-        if (plugin.market().item(itemId) == null) {
+        // "*" is the multi-commodity board; otherwise it must be a real commodity.
+        if (!"*".equals(itemId) && plugin.market().item(itemId) == null) {
             return Result.fail("Unknown commodity '" + itemId + "'.");
         }
         cols = Math.max(1, Math.min(8, cols));

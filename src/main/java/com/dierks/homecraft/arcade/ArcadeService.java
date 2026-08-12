@@ -109,6 +109,18 @@ public final class ArcadeService {
         }
     }
 
+    /** Minutes of play until the next playtime token, or -1 if playtime rewards are off. */
+    public int minutesToNextPlaytimeToken(Player player) {
+        PluginConfig.Arcade arc = plugin.config().arcade();
+        if (!arc.playtimeEnabled() || arc.playtimeMinutesPerToken() <= 0) {
+            return -1;
+        }
+        long minutes = player.getStatistic(Statistic.PLAY_ONE_MINUTE) / 20L / 60L;
+        int per = arc.playtimeMinutesPerToken();
+        int into = (int) (minutes % per);
+        return per - into;
+    }
+
     private boolean spend(UUID player, int tokens) {
         try {
             TokenDao.TokenState s = dao.get(player);

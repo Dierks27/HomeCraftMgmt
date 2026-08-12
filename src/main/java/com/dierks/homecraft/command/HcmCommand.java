@@ -209,6 +209,10 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "mailbox" -> item = plugin.items().mailbox();
             case "pallet" -> item = plugin.items().pallet();
             case "arcade" -> item = plugin.items().arcade();
+            case "cratemachine", "crate" -> item = plugin.items().of(com.dierks.homecraft.block.CustomBlockType.CRATE_MACHINE);
+            case "scratch", "scratchbooth" -> item = plugin.items().of(com.dierks.homecraft.block.CustomBlockType.SCRATCH_BOOTH);
+            case "pity", "pitykiosk" -> item = plugin.items().of(com.dierks.homecraft.block.CustomBlockType.PITY_KIOSK);
+            case "counter", "tokencounter" -> item = plugin.items().of(com.dierks.homecraft.block.CustomBlockType.TOKEN_COUNTER);
             default -> {
                 sender.sendMessage(Text.of("&cUnknown item '" + args[1]
                         + "'. Use workbench, pc, vending, display, auction, mailbox, or pallet."));
@@ -561,7 +565,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
-            addMatches(out, args[1], "workbench", "pc", "vending", "display", "auction", "mailbox", "pallet", "arcade");
+            addMatches(out, args[1], "workbench", "pc", "vending", "display", "auction", "mailbox", "pallet",
+                    "arcade", "cratemachine", "scratch", "pity", "counter");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("give")) {
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))) {

@@ -15,5 +15,9 @@ public enum CustomBlockType {
     AUCTION_HOUSE,
     MAILBOX,
     PALLET,
-    ARCADE
+    ARCADE,
+    CRATE_MACHINE,
+    SCRATCH_BOOTH,
+    PITY_KIOSK,
+    TOKEN_COUNTER
 }

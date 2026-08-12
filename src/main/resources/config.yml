@@ -318,6 +318,10 @@ skins:
   pallet:        ""   # pallet / shipping-crate head
   display_case:  ""   # glass display-case head
   arcade:        ""   # arcade-machine head
+  crate_machine: ""   # crate-machine head
+  scratch_booth: ""   # scratch-ticket booth head
+  pity_kiosk:    ""   # pity-exchange kiosk head
+  token_counter: ""   # token-counter head
 
 # ---------------------------------------------------------------------
 #  Phase 6 (Part C) — The Market Web Dashboard
@@ -365,8 +369,16 @@ displays:
 # ---------------------------------------------------------------------
 arcade:
   enabled: true
-  # The placeable Arcade block (skin it via skins.arcade).
+  # The placeable Arcade hub block (skin it via skins.arcade).
   block: { material: JUKEBOX, name: "&5Arcade Machine" }
+  # Individual placeable machines — right-click to play. Each is owned/protected
+  # like the other custom blocks; skin them via skins.crate_machine etc.
+  # Obtain with /hcm give <cratemachine|scratch|pity|counter>.
+  machines:
+    crate:   { material: CHEST,             name: "&6Crate Machine" }
+    scratch: { material: CARTOGRAPHY_TABLE, name: "&aScratch-Ticket Booth" }
+    pity:    { material: ENCHANTING_TABLE,  name: "&bPity Exchange" }
+    counter: { material: LECTERN,           name: "&eToken Counter" }
   tokens:
     login_streak:
       enabled: true

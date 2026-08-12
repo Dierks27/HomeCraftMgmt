@@ -164,6 +164,10 @@ public final class CustomBlockListener implements Listener {
             case AUCTION_HOUSE -> new AuctionMenu(plugin, player, null).open(player);
             case MAILBOX -> new com.dierks.homecraft.gui.MailboxMenu(plugin, player, null).open(player);
             case ARCADE -> new com.dierks.homecraft.gui.arcade.ArcadeMenu(plugin, player).open(player);
+            case CRATE_MACHINE -> com.dierks.homecraft.gui.arcade.CratePickMenu.open(plugin, player);
+            case SCRATCH_BOOTH -> new com.dierks.homecraft.gui.arcade.ScratchMenu(plugin, player).open(player);
+            case PITY_KIOSK -> new com.dierks.homecraft.gui.arcade.PityMenu(plugin, player).open(player);
+            case TOKEN_COUNTER -> new com.dierks.homecraft.gui.arcade.TokenCounterMenu(plugin, player).open(player);
             case PALLET -> {
                 boolean owner = placed.get().owner().equals(player.getUniqueId()) || player.hasPermission("hcm.admin");
                 new com.dierks.homecraft.gui.marketplace.PalletMenu(
@@ -183,6 +187,10 @@ public final class CustomBlockListener implements Listener {
             case MAILBOX -> "Mailbox";
             case PALLET -> "Pallet";
             case ARCADE -> "Arcade Machine";
+            case CRATE_MACHINE -> "Crate Machine";
+            case SCRATCH_BOOTH -> "Scratch-Ticket Booth";
+            case PITY_KIOSK -> "Pity Exchange";
+            case TOKEN_COUNTER -> "Token Counter";
         };
     }
 

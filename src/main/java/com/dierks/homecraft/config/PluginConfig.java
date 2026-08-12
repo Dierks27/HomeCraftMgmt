@@ -144,11 +144,11 @@ public final class PluginConfig {
     public record Lotto(double ticketCost, List<LottoPayout> payouts) {
     }
 
-    /** The whole Arcade config: token sources, crates, pity exchange, lotto, block. */
+    /** The whole Arcade config: token sources, crates, pity exchange, lotto, blocks. */
     public record Arcade(boolean enabled, boolean streakEnabled, List<Integer> streakRewards,
                          boolean playtimeEnabled, int playtimeMinutesPerToken,
                          Map<String, Crate> crates, int pityTokens, Rarity pityRarity, Lotto lotto,
-                         BlockDef block) {
+                         BlockDef block, Map<String, BlockDef> machines) {
 
         /** Tokens awarded on a given consecutive-day streak (last entry repeats). */
         public int streakReward(int streakDay) {
@@ -450,8 +450,15 @@ public final class PluginConfig {
         }
 
         BlockDef block = blockDef(c, "arcade.block", Material.JUKEBOX, "&5Arcade Machine");
+
+        Map<String, BlockDef> machines = new LinkedHashMap<>();
+        machines.put("crate", blockDef(c, "arcade.machines.crate", Material.CHEST, "&6Crate Machine"));
+        machines.put("scratch", blockDef(c, "arcade.machines.scratch", Material.CARTOGRAPHY_TABLE, "&aScratch-Ticket Booth"));
+        machines.put("pity", blockDef(c, "arcade.machines.pity", Material.ENCHANTING_TABLE, "&bPity Exchange"));
+        machines.put("counter", blockDef(c, "arcade.machines.counter", Material.LECTERN, "&eToken Counter"));
+
         return new Arcade(enabled, streakEnabled, streakRewards, ptEnabled, minsPerToken,
-                crates, pityTokens, pityRarity, new Lotto(Math.max(0, ticketCost), payouts), block);
+                crates, pityTokens, pityRarity, new Lotto(Math.max(0, ticketCost), payouts), block, machines);
     }
 
     private CrateReward readReward(Map<?, ?> row) {
@@ -507,6 +514,10 @@ public final class PluginConfig {
         putSkin(map, sec, "mailbox", com.dierks.homecraft.block.CustomBlockType.MAILBOX);
         putSkin(map, sec, "pallet", com.dierks.homecraft.block.CustomBlockType.PALLET);
         putSkin(map, sec, "arcade", com.dierks.homecraft.block.CustomBlockType.ARCADE);
+        putSkin(map, sec, "crate_machine", com.dierks.homecraft.block.CustomBlockType.CRATE_MACHINE);
+        putSkin(map, sec, "scratch_booth", com.dierks.homecraft.block.CustomBlockType.SCRATCH_BOOTH);
+        putSkin(map, sec, "pity_kiosk", com.dierks.homecraft.block.CustomBlockType.PITY_KIOSK);
+        putSkin(map, sec, "token_counter", com.dierks.homecraft.block.CustomBlockType.TOKEN_COUNTER);
         return map;
     }
 

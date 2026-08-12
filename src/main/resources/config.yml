@@ -343,3 +343,10 @@ web:
 # ---------------------------------------------------------------------
 displays:
   refresh_seconds: 20
+  # Holograms pair the floating price/trend text with a floating item, turning the
+  # ticker into a little market kiosk.
+  hologram:
+    item_display: true     # show the floating item alongside the text
+    position: above        # above | below the text
+    spin: true             # slow-spin the floating item
+    item: ""               # override Material (blank = the commodity's own item)

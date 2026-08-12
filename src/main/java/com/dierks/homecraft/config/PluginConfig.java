@@ -107,7 +107,14 @@ public final class PluginConfig {
     }
 
     /** In-game economy displays refresh cadence (Phase 7, §3.8). */
-    public record Displays(int refreshSeconds) {
+    public record Displays(int refreshSeconds, HologramOpts hologram) {
+    }
+
+    /**
+     * Hologram appearance (Phase 8 Part A): pair the text ticker with a floating
+     * {@code ItemDisplay}. {@code itemOverride} null = use the commodity's own item.
+     */
+    public record HologramOpts(boolean itemDisplay, boolean above, boolean spin, Material itemOverride) {
     }
 
     /** Online store branding shown in-game (name + display URL). */
@@ -327,8 +334,15 @@ public final class PluginConfig {
         this.skins = readSkins(c);
         this.webDashboard = readWebDashboard(c);
 
-        // ---- In-game economy displays (Phase 7) ----
-        this.displays = new Displays(Math.max(2, c.getInt("displays.refresh_seconds", 20)));
+        // ---- In-game economy displays (Phase 7 + Phase 8 hologram opts) ----
+        boolean itemDisp = c.getBoolean("displays.hologram.item_display", true);
+        boolean above = !"below".equalsIgnoreCase(c.getString("displays.hologram.position", "above"));
+        boolean spin = c.getBoolean("displays.hologram.spin", true);
+        String holoItem = c.getString("displays.hologram.item", "");
+        Material holoMat = (holoItem == null || holoItem.isBlank())
+                ? null : Material.matchMaterial(holoItem.trim().toUpperCase());
+        this.displays = new Displays(Math.max(2, c.getInt("displays.refresh_seconds", 20)),
+                new HologramOpts(itemDisp, above, spin, holoMat));
     }
 
     private Map<com.dierks.homecraft.block.CustomBlockType, String> readSkins(FileConfiguration c) {

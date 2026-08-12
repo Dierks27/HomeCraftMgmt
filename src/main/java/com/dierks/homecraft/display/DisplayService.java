@@ -1,6 +1,7 @@
 package com.dierks.homecraft.display;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.market.MarketState;
 import com.dierks.homecraft.storage.DisplayDao;
@@ -17,6 +18,7 @@ import org.bukkit.block.Sign;
 import org.bukkit.block.sign.Side;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
@@ -54,12 +56,20 @@ public final class DisplayService {
     private final HomeCraftManagement plugin;
     private final DisplayDao dao;
     private BukkitTask task;
+    private BukkitTask spinTask;
 
-    /** Live hologram text-display entities we manage: display id → entity UUID. */
-    private final Map<Long, UUID> holograms = new HashMap<>();
+    /** A hologram's live entities: the text ticker and (optionally) the floating item. */
+    private record Holo(UUID text, UUID item) {
+    }
+
+    /** Live hologram entities we manage: display id → its entity pair. */
+    private final Map<Long, Holo> holograms = new HashMap<>();
 
     /** Bumped each refresh tick; map-TV renderers repaint only when it changes. */
     private volatile long version;
+
+    /** Advancing spin angle (radians) for floating item displays. */
+    private float spinAngle;
 
     public DisplayService(HomeCraftManagement plugin, DisplayDao dao) {
         this.plugin = plugin;
@@ -72,6 +82,9 @@ public final class DisplayService {
         attachMapTvs(); // re-add renderers to persisted map-TVs (renderers aren't saved)
         long period = Math.max(2, plugin.config().displays().refreshSeconds()) * 20L;
         task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, 40L, period);
+        if (plugin.config().displays().hologram().itemDisplay() && plugin.config().displays().hologram().spin()) {
+            spinTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::spinItems, 20L, 2L);
+        }
     }
 
     /** Monotonic version bumped each refresh; map-TV renderers repaint only when it changes. */
@@ -84,14 +97,26 @@ public final class DisplayService {
             task.cancel();
             task = null;
         }
+        if (spinTask != null) {
+            spinTask.cancel();
+            spinTask = null;
+        }
         // Despawn our (non-persistent) hologram entities so nothing is orphaned.
-        for (UUID uid : holograms.values()) {
-            Entity e = plugin.getServer().getEntity(uid);
-            if (e != null) {
-                e.remove();
-            }
+        for (Holo h : holograms.values()) {
+            despawn(h.text());
+            despawn(h.item());
         }
         holograms.clear();
+    }
+
+    private void despawn(UUID uid) {
+        if (uid == null) {
+            return;
+        }
+        Entity e = plugin.getServer().getEntity(uid);
+        if (e != null) {
+            e.remove();
+        }
     }
 
     /** Re-render every display from the current market snapshot. */
@@ -258,10 +283,12 @@ public final class DisplayService {
     }
 
     private void renderHologram(DisplayDao.Display d) {
-        UUID uid = holograms.get(d.id());
-        Entity ent = uid != null ? plugin.getServer().getEntity(uid) : null;
-        if (ent instanceof TextDisplay td && td.isValid()) {
-            td.text(holoText(d.itemId()));     // cheap in-place update
+        Holo h = holograms.get(d.id());
+        Entity ent = h != null ? plugin.getServer().getEntity(h.text()) : null;
+        boolean itemAlive = h != null && h.item() != null && isAlive(h.item());
+        boolean wantItem = plugin.config().displays().hologram().itemDisplay();
+        if (ent instanceof TextDisplay td && td.isValid() && (!wantItem || itemAlive)) {
+            td.text(holoText(d.itemId()));     // cheap in-place update; item is static
             return;
         }
         // Missing (restart / chunk reload) — respawn if the anchor chunk is loaded.
@@ -269,27 +296,82 @@ public final class DisplayService {
         if (world == null || !world.isChunkLoaded(d.x() >> 4, d.z() >> 4)) {
             return;
         }
+        removeHologramEntity(d.id()); // clear a half-spawned pair before re-spawning
         spawnHologram(world, d);
     }
 
     private void spawnHologram(World world, DisplayDao.Display d) {
-        Location at = new Location(world, d.x() + 0.5, d.y() + 1.2, d.z() + 0.5);
-        TextDisplay td = world.spawn(at, TextDisplay.class, e -> {
+        PluginConfig.HologramOpts opts = plugin.config().displays().hologram();
+        Location textAt = new Location(world, d.x() + 0.5, d.y() + 1.2, d.z() + 0.5);
+        TextDisplay td = world.spawn(textAt, TextDisplay.class, e -> {
             e.text(holoText(d.itemId()));
             e.setBillboard(Display.Billboard.CENTER);
             e.setSeeThrough(true);
             e.setPersistent(false); // we re-spawn from the DB; never saved to chunk data
             e.getPersistentDataContainer().set(Keys.DISPLAY_ID, PersistentDataType.LONG, d.id());
         });
-        holograms.put(d.id(), td.getUniqueId());
+
+        UUID itemUid = null;
+        if (opts.itemDisplay()) {
+            ItemStack shown = holoItem(d.itemId(), opts);
+            if (shown != null) {
+                double dy = opts.above() ? 1.75 : 0.75;
+                Location itemAt = new Location(world, d.x() + 0.5, d.y() + dy, d.z() + 0.5);
+                ItemDisplay id = world.spawn(itemAt, ItemDisplay.class, e -> {
+                    e.setItemStack(shown);
+                    e.setBillboard(opts.spin() ? Display.Billboard.FIXED : Display.Billboard.VERTICAL);
+                    e.setPersistent(false);
+                    e.getPersistentDataContainer().set(Keys.DISPLAY_ID, PersistentDataType.LONG, d.id());
+                });
+                itemUid = id.getUniqueId();
+            }
+        }
+        holograms.put(d.id(), new Holo(td.getUniqueId(), itemUid));
     }
 
     private void removeHologramEntity(long id) {
-        UUID uid = holograms.remove(id);
-        if (uid != null) {
-            Entity e = plugin.getServer().getEntity(uid);
-            if (e != null) {
-                e.remove();
+        Holo h = holograms.remove(id);
+        if (h != null) {
+            despawn(h.text());
+            despawn(h.item());
+        }
+    }
+
+    /** The item shown by a hologram: the config override, else the commodity's own item. */
+    private ItemStack holoItem(String itemId, PluginConfig.HologramOpts opts) {
+        if (opts.itemOverride() != null && opts.itemOverride().isItem()) {
+            return new ItemStack(opts.itemOverride());
+        }
+        MarketItem item = plugin.market().item(itemId);
+        if (item != null && item.material().isItem()) {
+            return new ItemStack(item.material());
+        }
+        return null;
+    }
+
+    private boolean isAlive(UUID uid) {
+        Entity e = uid != null ? plugin.getServer().getEntity(uid) : null;
+        return e != null && e.isValid();
+    }
+
+    /** Slow-spin every floating item display a small step; runs on a fast light timer. */
+    private void spinItems() {
+        if (holograms.isEmpty()) {
+            return;
+        }
+        spinAngle += 0.12f;
+        if (spinAngle > (float) (Math.PI * 2)) {
+            spinAngle -= (float) (Math.PI * 2);
+        }
+        org.joml.AxisAngle4f rot = new org.joml.AxisAngle4f(spinAngle, 0f, 1f, 0f);
+        for (Holo h : holograms.values()) {
+            if (h.item() == null) {
+                continue;
+            }
+            if (plugin.getServer().getEntity(h.item()) instanceof ItemDisplay id && id.isValid()) {
+                org.bukkit.util.Transformation t = id.getTransformation();
+                id.setTransformation(new org.bukkit.util.Transformation(
+                        t.getTranslation(), rot, t.getScale(), t.getRightRotation()));
             }
         }
     }
@@ -329,9 +411,10 @@ public final class DisplayService {
             if ((d.x() >> 4) != chunk.getX() || (d.z() >> 4) != chunk.getZ()) {
                 continue;
             }
-            UUID uid = holograms.get(d.id());
-            Entity ent = uid != null ? plugin.getServer().getEntity(uid) : null;
+            Holo h = holograms.get(d.id());
+            Entity ent = h != null ? plugin.getServer().getEntity(h.text()) : null;
             if (!(ent instanceof TextDisplay td) || !td.isValid()) {
+                removeHologramEntity(d.id());
                 spawnHologram(chunk.getWorld(), d);
             }
         }

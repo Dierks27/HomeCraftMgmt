@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #171c24; --panel2: #1e242e; --line: #2a313c;
+    --text: #e7edf5; --muted: #93a1b3; --up: #33d17a; --down: #ff6b6b;
+    --accent: #f6a821; --chart: #6aa8ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    padding: 20px 24px; border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #131922, #0e1116);
+    position: sticky; top: 0; z-index: 5;
+  }
+  header .brand { font-size: 22px; font-weight: 800; letter-spacing: .3px; }
+  header .brand .mk { color: var(--accent); }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .status { margin-left: auto; color: var(--muted); font-size: 12px; }
+  header .status .dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--up); margin-right: 6px; vertical-align: middle;
+  }
+  main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+  .grid {
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .card .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .card .name { font-weight: 700; font-size: 16px; }
+  .card .price { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 20px; }
+  .chg { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .chg.up { color: var(--up); } .chg.down { color: var(--down); } .chg.flat { color: var(--muted); }
+  .spread { display: flex; gap: 14px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .spread b { color: var(--text); font-weight: 600; }
+  .stockrow { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; }
+  .bar { height: 6px; border-radius: 4px; background: var(--panel2); overflow: hidden; }
+  .bar > span { display: block; height: 100%; background: var(--chart); }
+  .bar.out > span { background: var(--down); }
+  .chartwrap { height: 90px; }
+  .empty { color: var(--muted); text-align: center; padding: 60px 0; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; padding: 24px; }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f4f6fa; --panel: #ffffff; --panel2: #eef1f6; --line: #dfe4ec;
+      --text: #131922; --muted: #5a6675; --chart: #2f6fed;
+    }
+    header { background: linear-gradient(180deg, #ffffff, #f4f6fa); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="mk">Crate</span> <span id="title"></span></div>
+  <div class="sub">live commodities market</div>
+  <div class="status"><span class="dot"></span><span id="status">connecting…</span></div>
+</header>
+<main>
+  <div id="grid" class="grid"></div>
+  <div id="empty" class="empty" style="display:none">No commodities to show yet.</div>
+</main>
+<footer>HomeCraft Management · read-only market dashboard · auto-refreshing</footer>
+
+<script>
+(function () {
+  var charts = {};       // id -> Chart instance
+  var refreshMs = 30000; // updated from the feed
+  var timer = null;
+
+  function money(n) {
+    return "$" + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function chgClass(v) { return v > 0.005 ? "up" : (v < -0.005 ? "down" : "flat"); }
+  function chgText(v) {
+    var s = v > 0 ? "▲ " : (v < 0 ? "▼ " : "· ");
+    return s + Math.abs(v).toFixed(2) + "%";
+  }
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  function cardFor(item) {
+    var card = document.createElement("div");
+    card.className = "card";
+    card.id = "card-" + item.id;
+    var maxPct = item.maxStock > 0 ? Math.max(0, Math.min(100, (item.stock / item.maxStock) * 100)) : 0;
+    var out = item.stock <= 0;
+    card.innerHTML =
+      '<div class="top"><span class="name"></span><span class="price"></span></div>' +
+      '<div class="top"><span class="spread"><span>Buy <b class="buy"></b></span>' +
+        '<span>Sell <b class="sell"></b></span></span><span class="chg"></span></div>' +
+      '<div class="chartwrap"><canvas></canvas></div>' +
+      '<div class="stockrow"><span>Stock</span><span class="stocktxt"></span></div>' +
+      '<div class="bar' + (out ? " out" : "") + '"><span style="width:' + maxPct + '%"></span></div>';
+    return card;
+  }
+
+  function updateCard(card, item) {
+    card.querySelector(".name").textContent = item.name;
+    card.querySelector(".price").textContent = money(item.price);
+    card.querySelector(".buy").textContent = money(item.buy);
+    card.querySelector(".sell").textContent = money(item.sell);
+    var chg = card.querySelector(".chg");
+    chg.textContent = chgText(item.change24h);
+    chg.className = "chg " + chgClass(item.change24h);
+    var out = item.stock <= 0;
+    card.querySelector(".stocktxt").textContent =
+      out ? "OUT OF STOCK" : (item.stock.toLocaleString() + " / " + item.maxStock.toLocaleString());
+    var bar = card.querySelector(".bar");
+    var maxPct = item.maxStock > 0 ? Math.max(0, Math.min(100, (item.stock / item.maxStock) * 100)) : 0;
+    bar.className = "bar" + (out ? " out" : "");
+    bar.querySelector("span").style.width = maxPct + "%";
+    drawChart(card.querySelector("canvas"), item);
+  }
+
+  function drawChart(canvas, item) {
+    var labels = item.history.map(function (h) {
+      var d = new Date(h.t);
+      return d.getHours().toString().padStart(2, "0") + ":" + d.getMinutes().toString().padStart(2, "0");
+    });
+    var data = item.history.map(function (h) { return h.p; });
+    var up = item.change24h >= 0;
+    var color = up ? css("--up") : css("--down");
+    var existing = charts[item.id];
+    if (existing) {
+      existing.data.labels = labels;
+      existing.data.datasets[0].data = data;
+      existing.data.datasets[0].borderColor = color;
+      existing.update("none");
+      return;
+    }
+    charts[item.id] = new Chart(canvas.getContext("2d"), {
+      type: "line",
+      data: { labels: labels, datasets: [{
+        data: data, borderColor: color, borderWidth: 2,
+        pointRadius: 0, tension: 0.25, fill: false
+      }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: { legend: { display: false }, tooltip: {
+          callbacks: { label: function (c) { return money(c.parsed.y); } }
+        } },
+        scales: {
+          x: { display: false },
+          y: { display: true, ticks: { color: css("--muted"), maxTicksLimit: 3,
+                 callback: function (v) { return "$" + v; } },
+               grid: { color: css("--line") } }
+        }
+      }
+    });
+  }
+
+  function render(feed) {
+    document.getElementById("title").textContent = feed.title || "";
+    document.title = (feed.title || "Market");
+    refreshMs = Math.max(2, feed.refreshSeconds || 30) * 1000;
+    var grid = document.getElementById("grid");
+    var items = feed.items || [];
+    document.getElementById("empty").style.display = items.length ? "none" : "block";
+    var seen = {};
+    items.forEach(function (item) {
+      seen[item.id] = true;
+      var card = document.getElementById("card-" + item.id);
+      if (!card) { card = cardFor(item); grid.appendChild(card); }
+      updateCard(card, item);
+    });
+    // Remove cards for items no longer present.
+    Array.prototype.slice.call(grid.children).forEach(function (card) {
+      var id = card.id.replace("card-", "");
+      if (!seen[id]) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } card.remove(); }
+    });
+    var now = new Date();
+    document.getElementById("status").textContent =
+      "updated " + now.getHours().toString().padStart(2, "0") + ":" +
+      now.getMinutes().toString().padStart(2, "0") + ":" + now.getSeconds().toString().padStart(2, "0");
+  }
+
+  function tick() {
+    fetch("/api/market", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (feed) { render(feed); })
+      .catch(function () { document.getElementById("status").textContent = "offline — retrying…"; })
+      .finally(function () {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(tick, refreshMs);
+      });
+  }
+  tick();
+})();
+</script>
+</body>
+</html>

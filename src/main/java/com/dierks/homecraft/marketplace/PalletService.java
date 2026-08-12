@@ -199,7 +199,7 @@ public final class PalletService {
             return Result.fail("Could not update stock — refunded.");
         }
 
-        long deliverAt = System.currentTimeMillis() + (long) (tier.realHours() * 3_600_000L);
+        long deliverAt = System.currentTimeMillis() + tier.deliveryMillis();
         ItemStack one = item.clone();
         one.setAmount(1);
         deliveries.create(buyer.getUniqueId(), one, label(one), "MARKETPLACE", deliverAt);

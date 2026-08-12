@@ -18,7 +18,7 @@ import java.util.List;
  */
 public final class CheckoutMenu extends Menu {
 
-    private static final int[] TIER_SLOTS = {11, 13, 15};
+    private static final int[] TIER_SLOTS = {10, 11, 12, 13, 14, 15, 16};
 
     private final Player player;
     private final MarketItem item;
@@ -48,13 +48,14 @@ public final class CheckoutMenu extends Menu {
         set(4, Menus.icon(item.material(), item.label() + " &7x" + quote.filled(),
                 "&7Item cost: &f" + money(itemTotal)), null);
 
+        // Tiers are config-driven and pre-sorted fastest → slowest; render them all.
         List<PluginConfig.ShippingTier> tiers = plugin.config().shipping().tiers();
         for (int i = 0; i < TIER_SLOTS.length && i < tiers.size(); i++) {
             PluginConfig.ShippingTier tier = tiers.get(i);
             double shipping = orders.shippingCost(itemTotal, tier);
             String shipLabel = shipping <= 0 ? "&aFREE" : "&f" + money(shipping);
-            set(TIER_SLOTS[i], Menus.icon(shippingIcon(i), "&e" + tier.label() + " Shipping",
-                    "&7Arrives in &f" + Menus.duration((long) (tier.realHours() * 3_600_000L)),
+            set(TIER_SLOTS[i], Menus.icon(shippingIcon(i, tiers.size()), "&e" + tier.label() + " Shipping",
+                    "&7Arrives in &f" + Menus.duration(tier.deliveryMillis()),
                     "&7Shipping: " + shipLabel,
                     "&7Total: &f" + money(itemTotal + shipping),
                     "&8—",
@@ -77,12 +78,14 @@ public final class CheckoutMenu extends Menu {
         new MailboxMenu(plugin, player, () -> new StoreMenu(plugin, player).open(player)).open(player);
     }
 
-    private Material shippingIcon(int index) {
-        return switch (index) {
-            case 0 -> Material.LIME_DYE;   // cheapest / slowest
-            case 1 -> Material.YELLOW_DYE;
-            default -> Material.ORANGE_DYE; // fastest / priciest
-        };
+    private Material shippingIcon(int index, int count) {
+        if (index == 0) {
+            return Material.ORANGE_DYE;         // fastest / priciest
+        }
+        if (index >= count - 1) {
+            return Material.LIME_DYE;           // slowest / cheapest / free
+        }
+        return Material.YELLOW_DYE;             // in between
     }
 
     private String money(double amount) {

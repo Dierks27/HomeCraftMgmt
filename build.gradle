@@ -5,8 +5,8 @@ plugins {
 }
 
 group = 'com.dierks.homecraft'
-version = '0.8.0-phase5'
-description = 'HomeCraft Management — Paper plugin (market, Crate store + Marketplace, Minis)'
+version = '0.9.0-phase6'
+description = 'HomeCraft Management — Paper plugin (market, Crate store + Marketplace, Minis, web dashboard)'
 
 // Target server: Paper 26.2 / Java 25. The toolchain is pinned to 25 so the
 // bytecode matches the live server exactly. If JDK 25 is not installed, Gradle

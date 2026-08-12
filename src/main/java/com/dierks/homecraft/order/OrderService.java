@@ -66,7 +66,7 @@ public final class OrderService {
     public double shippingCost(double itemTotal, PluginConfig.ShippingTier tier) {
         double cost = baseShipping(itemTotal, tier);
         for (PluginConfig.ShippingTier faster : plugin.config().shipping().tiers()) {
-            if (faster.realHours() < tier.realHours()) {
+            if (faster.deliveryMillis() < tier.deliveryMillis()) {
                 cost = Math.min(cost, shippingCost(itemTotal, faster));
             }
         }
@@ -104,7 +104,7 @@ public final class OrderService {
         }
 
         long now = System.currentTimeMillis();
-        long deliverAt = now + (long) (tier.realHours() * 3_600_000L);
+        long deliverAt = now + tier.deliveryMillis();
         try {
             Order order = dao.insert(new Order(0, player.getUniqueId(), itemId, purchase.qty(),
                     purchase.amount(), shipping, tier.label(), now, deliverAt, Order.Status.IN_TRANSIT));

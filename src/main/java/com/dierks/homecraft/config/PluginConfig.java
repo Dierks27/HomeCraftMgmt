@@ -84,15 +84,26 @@ public final class PluginConfig {
     public enum ShippingMode {PERCENTAGE, FLAT}
 
     /**
-     * One shipping tier. {@code realHours} is the real-time delivery delay;
-     * {@code primeFlat} forces a flat fee regardless of order size (Prime-style).
+     * One shipping tier. The real-time delivery delay is {@code realHours} +
+     * {@code realMinutes} combined (either may be zero — {@code real_minutes}
+     * alone lets a tier deliver in under an hour). {@code primeFlat} forces a
+     * flat fee regardless of order size (Prime-style).
      */
-    public record ShippingTier(String id, String label, double realHours,
+    public record ShippingTier(String id, String label, double realHours, double realMinutes,
                                double percent, double flat, boolean primeFlat) {
+
+        /** Combined real-time delivery delay in milliseconds (hours + minutes). */
+        public long deliveryMillis() {
+            return (long) (realHours * 3_600_000L + realMinutes * 60_000L);
+        }
     }
 
-    /** Crate shipping config (Phase 3). Tiers ordered cheapest → fastest. */
+    /** Crate shipping config (Phase 3/6). Tiers ordered fastest → slowest. */
     public record Shipping(ShippingMode mode, List<ShippingTier> tiers) {
+    }
+
+    /** The Market Web Dashboard's embedded-server settings (Phase 6, §3.7). */
+    public record WebDashboard(boolean enabled, String bind, int port, int refreshSeconds, String title) {
     }
 
     /** Online store branding shown in-game (name + display URL). */
@@ -174,6 +185,8 @@ public final class PluginConfig {
     private Loot.MiniLoot miniLoot;
     private Map<String, StandData> miniStands;
     private Marketplace marketplace;
+    private Map<com.dierks.homecraft.block.CustomBlockType, String> skins;
+    private WebDashboard webDashboard;
 
     public PluginConfig(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -214,6 +227,15 @@ public final class PluginConfig {
 
     public Marketplace marketplace() {
         return marketplace;
+    }
+
+    /** The Base64 head-texture value configured for a custom block, or "" if none. */
+    public String skin(com.dierks.homecraft.block.CustomBlockType type) {
+        return skins.getOrDefault(type, "");
+    }
+
+    public WebDashboard webDashboard() {
+        return webDashboard;
     }
 
     public Loot.MiniLoot miniLoot() {
@@ -291,6 +313,45 @@ public final class PluginConfig {
 
         // ---- Crate Marketplace (Phase 5) ----
         this.marketplace = readMarketplace(c);
+
+        // ---- Block skins + Web Dashboard (Phase 6) ----
+        this.skins = readSkins(c);
+        this.webDashboard = readWebDashboard(c);
+    }
+
+    private Map<com.dierks.homecraft.block.CustomBlockType, String> readSkins(FileConfiguration c) {
+        Map<com.dierks.homecraft.block.CustomBlockType, String> map =
+                new EnumMap<>(com.dierks.homecraft.block.CustomBlockType.class);
+        ConfigurationSection sec = c.getConfigurationSection("skins");
+        if (sec == null) {
+            return map;
+        }
+        putSkin(map, sec, "pc", com.dierks.homecraft.block.CustomBlockType.PC);
+        putSkin(map, sec, "workbench", com.dierks.homecraft.block.CustomBlockType.MINI_WORKBENCH);
+        putSkin(map, sec, "vending", com.dierks.homecraft.block.CustomBlockType.MINI_VENDING_MACHINE);
+        putSkin(map, sec, "display_case", com.dierks.homecraft.block.CustomBlockType.DISPLAY_CASE);
+        putSkin(map, sec, "auction", com.dierks.homecraft.block.CustomBlockType.AUCTION_HOUSE);
+        putSkin(map, sec, "mailbox", com.dierks.homecraft.block.CustomBlockType.MAILBOX);
+        putSkin(map, sec, "pallet", com.dierks.homecraft.block.CustomBlockType.PALLET);
+        return map;
+    }
+
+    private void putSkin(Map<com.dierks.homecraft.block.CustomBlockType, String> map,
+                         ConfigurationSection sec, String key,
+                         com.dierks.homecraft.block.CustomBlockType type) {
+        String v = sec.getString(key, "");
+        if (v != null && !v.isBlank()) {
+            map.put(type, v.trim());
+        }
+    }
+
+    private WebDashboard readWebDashboard(FileConfiguration c) {
+        return new WebDashboard(
+                c.getBoolean("web.dashboard.enabled", true),
+                c.getString("web.dashboard.bind", "0.0.0.0"),
+                c.getInt("web.dashboard.port", 8080),
+                Math.max(2, c.getInt("web.dashboard.refresh_seconds", 30)),
+                c.getString("web.dashboard.title", "Crate Market"));
     }
 
     private Marketplace readMarketplace(FileConfiguration c) {
@@ -507,21 +568,51 @@ public final class PluginConfig {
             log.warning("Invalid shipping.mode; defaulting to PERCENTAGE.");
             mode = ShippingMode.PERCENTAGE;
         }
+        // Fully config-driven: read every tier defined under shipping.tiers, in any
+        // number, then order them fastest → slowest by their real delivery time.
         List<ShippingTier> tiers = new ArrayList<>();
-        // Ordered cheapest → fastest for display.
-        tiers.add(readTier(c, "three_day", "3-Day", 72));
-        tiers.add(readTier(c, "two_day", "2-Day", 48));
-        tiers.add(readTier(c, "one_day", "1-Day", 24));
+        ConfigurationSection sec = c.getConfigurationSection("shipping.tiers");
+        if (sec != null) {
+            for (String key : sec.getKeys(false)) {
+                tiers.add(readTier(c, key));
+            }
+        }
+        if (tiers.isEmpty()) {
+            // Safety net if the whole tiers map is missing: the four-tier default scheme.
+            tiers.add(new ShippingTier("express", "Express", 0, 5, 20, 0, false));
+            tiers.add(new ShippingTier("one_day", "One Day", 1, 0, 10, 0, false));
+            tiers.add(new ShippingTier("two_day", "Two Day", 3, 0, 5, 0, false));
+            tiers.add(new ShippingTier("three_day", "Three Day", 8, 0, 0, 0, false));
+        }
+        tiers.sort(java.util.Comparator.comparingLong(ShippingTier::deliveryMillis));
         return new Shipping(mode, tiers);
     }
 
-    private ShippingTier readTier(FileConfiguration c, String key, String label, double defaultHours) {
+    private ShippingTier readTier(FileConfiguration c, String key) {
         String base = "shipping.tiers." + key;
-        double hours = c.getDouble(base + ".real_hours", defaultHours);
+        double hours = c.getDouble(base + ".real_hours", 0);
+        double minutes = c.getDouble(base + ".real_minutes", 0);
         double percent = c.getDouble(base + ".percent", 0);
         double flat = c.getDouble(base + ".flat", 0);
         boolean prime = c.getBoolean(base + ".prime_flat", false);
-        return new ShippingTier(key, label, Math.max(0, hours), Math.max(0, percent), Math.max(0, flat), prime);
+        String label = c.getString(base + ".label", prettifyKey(key));
+        return new ShippingTier(key, label, Math.max(0, hours), Math.max(0, minutes),
+                Math.max(0, percent), Math.max(0, flat), prime);
+    }
+
+    /** "one_day" / "two-day" → "One Day"; used as a tier's display label when none is set. */
+    private String prettifyKey(String key) {
+        StringBuilder sb = new StringBuilder();
+        for (String part : key.replace('-', '_').split("_")) {
+            if (part.isEmpty()) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append(' ');
+            }
+            sb.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
+        }
+        return sb.length() == 0 ? key : sb.toString();
     }
 
     private Market readMarket(FileConfiguration c) {

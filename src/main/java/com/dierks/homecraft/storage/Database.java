@@ -260,6 +260,31 @@ public final class Database {
                 UNIQUE (world, x, y, z)
             );
             CREATE INDEX IF NOT EXISTS idx_pallet_active ON pallet_listings (active, department);
+            """,
+
+            // v14 — In-game economy displays (Phase 7): sign boards, holograms, and
+            // map-TVs, each bound to a market commodity and re-rendered from live data
+            // on a timer. `kind` is SIGN | HOLOGRAM | MAPTV; cols/rows size a map-TV
+            // grid (1×1 otherwise); `data` holds kind-specific extra (e.g. the map ids
+            // of a map-TV grid). One display per block position per kind.
+            """
+            CREATE TABLE IF NOT EXISTS displays (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind       TEXT    NOT NULL,
+                world      TEXT    NOT NULL,
+                x          INTEGER NOT NULL,
+                y          INTEGER NOT NULL,
+                z          INTEGER NOT NULL,
+                item_id    TEXT    NOT NULL,
+                cols       INTEGER NOT NULL DEFAULT 1,
+                rows       INTEGER NOT NULL DEFAULT 1,
+                facing     TEXT,
+                data       TEXT,
+                owner      TEXT,
+                created_at INTEGER NOT NULL,
+                UNIQUE (world, x, y, z, kind)
+            );
+            CREATE INDEX IF NOT EXISTS idx_displays_kind ON displays (kind);
             """
     };
 

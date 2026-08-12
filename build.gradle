@@ -29,6 +29,11 @@ repositories {
         // Vault API (com.github.MilkBowl:VaultAPI) is published here.
         url = 'https://jitpack.io'
     }
+    maven {
+        name = 'placeholderapi'
+        // PlaceholderAPI is published only here.
+        url = 'https://repo.extendedclip.com/releases/'
+    }
 }
 
 dependencies {
@@ -51,6 +56,11 @@ dependencies {
     // runtime, so compileOnly (never shaded) — this just guarantees the compile
     // classpath has it regardless of paper-api's transitive graph.
     compileOnly 'com.google.code.gson:gson:2.11.0'
+
+    // PlaceholderAPI — provided at runtime by the PAPI plugin when present. The
+    // expansion is only loaded/registered when PlaceholderAPI is installed, so
+    // this is compileOnly (never shaded) and the plugin soft-depends on it.
+    compileOnly 'me.clip:placeholderapi:2.11.6'
 
     // Bundled at runtime (shaded) so the plugin needs no external DB server.
     implementation 'org.xerial:sqlite-jdbc:3.50.1.0'

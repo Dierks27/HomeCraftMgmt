@@ -68,6 +68,8 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.marketplace.DeliveryService deliveries;
     private com.dierks.homecraft.marketplace.PalletService pallets;
     private com.dierks.homecraft.web.MarketDashboardServer dashboard;
+    private com.dierks.homecraft.integration.HcmPlaceholders placeholders;
+    private com.dierks.homecraft.display.DisplayService displayService;
     private BukkitTask historyTask;
     private BukkitTask deliveryTask;
     private BukkitTask auctionTask;
@@ -135,6 +137,10 @@ public final class HomeCraftManagement extends JavaPlugin {
                 this, new com.dierks.homecraft.storage.PalletDao(database), economy, deliveries,
                 new com.dierks.homecraft.marketplace.Categorizer(this));
 
+        // In-Game Economy Displays (Phase 7) — sign boards, holograms, map-TVs.
+        this.displayService = new com.dierks.homecraft.display.DisplayService(
+                this, new com.dierks.homecraft.storage.DisplayDao(database));
+
         getServer().getPluginManager().registerEvents(
                 new CustomBlockListener(this, config, blockService, items, protection), this);
         getServer().getPluginManager().registerEvents(new WorkbenchListener(this, recipeManager), this);
@@ -146,6 +152,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.MiniInteractListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.MiniHeadListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.ArmorStandListener(this, stands), this);
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.display.DisplayListener(this), this);
 
         PluginCommand hcm = getCommand("hcm");
         if (hcm != null) {
@@ -158,11 +165,40 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.dashboard = new com.dierks.homecraft.web.MarketDashboardServer(this);
         this.dashboard.start();
 
+        // Start the economy-display refresh timer (renders signs + spawns holograms).
+        this.displayService.start();
+
+        // In-Game Economy Displays (Phase 7): the PlaceholderAPI 'hcm' expansion —
+        // only loaded/registered when PlaceholderAPI is installed.
+        if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
+            try {
+                this.placeholders = new com.dierks.homecraft.integration.HcmPlaceholders(this);
+                if (this.placeholders.register()) {
+                    getLogger().info("Registered PlaceholderAPI expansion 'hcm'.");
+                }
+            } catch (Throwable t) {
+                getLogger().warning("Could not register the PlaceholderAPI expansion: " + t.getMessage());
+                this.placeholders = null;
+            }
+        }
+
         getLogger().info("HomeCraft Management enabled.");
     }
 
     @Override
     public void onDisable() {
+        if (displayService != null) {
+            displayService.stop();
+            displayService = null;
+        }
+        if (placeholders != null) {
+            try {
+                placeholders.unregister();
+            } catch (Throwable ignored) {
+                // PAPI may already be gone; nothing to clean up.
+            }
+            placeholders = null;
+        }
         if (dashboard != null) {
             dashboard.stop();
             dashboard = null;
@@ -203,6 +239,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
         if (dashboard != null) {
             dashboard.restart(); // pick up bind/port/enabled/refresh/title changes
+        }
+        if (displayService != null) {
+            displayService.start(); // re-arm the refresh timer at the new cadence
         }
     }
 
@@ -396,5 +435,9 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public com.dierks.homecraft.marketplace.PalletService pallets() {
         return pallets;
+    }
+
+    public com.dierks.homecraft.display.DisplayService displayService() {
+        return displayService;
     }
 }

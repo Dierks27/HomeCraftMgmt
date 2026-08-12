@@ -341,6 +341,30 @@ public final class MarketService {
         }
     }
 
+    /**
+     * Percent change of the current price vs. ~24h ago — the basis of every display's
+     * trend arrow. Compares to the oldest snapshot still within the last 24h (or the
+     * earliest snapshot we have, if all are recent). Returns 0 with no history.
+     */
+    public double change24h(String id) {
+        List<PriceHistoryDao.Snapshot> history = recentHistory(id, 96); // newest-first
+        if (history.isEmpty()) {
+            return 0;
+        }
+        long cutoff = System.currentTimeMillis() - MS_PER_DAY;
+        // history is newest→oldest; the last element still ≥ cutoff is the ~24h-ago base.
+        double base = history.get(history.size() - 1).price(); // earliest available
+        for (PriceHistoryDao.Snapshot s : history) {
+            if (s.recordedAt() >= cutoff) {
+                base = s.price();
+            }
+        }
+        if (base <= 0) {
+            return 0;
+        }
+        return (price(id) - base) / base * 100.0;
+    }
+
     /** Hours (rounded up, min 1) until the UTC daily sell limit resets. */
     public long hoursUntilReset() {
         long now = System.currentTimeMillis();

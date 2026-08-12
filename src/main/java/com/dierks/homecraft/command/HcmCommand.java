@@ -71,6 +71,12 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 new com.dierks.homecraft.gui.admin.AdminMenu(plugin, player).open(player);
             }
             case "market" -> handleMarket(sender, args);
+            case "display", "displays" -> {
+                if (denyUnless(sender, "hcm.admin")) {
+                    return true;
+                }
+                handleDisplay(sender, args);
+            }
             case "mini", "minis" -> handleMini(sender, args);
             case "auction", "auctions" -> {
                 if (!(sender instanceof Player player)) {
@@ -371,6 +377,106 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
     }
 
     // ---------------------------------------------------------------------
+    //  display (admin — bind in-game economy displays, GUI-first)
+    // ---------------------------------------------------------------------
+
+    private void handleDisplay(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Text.of("&cOnly players can bind displays."));
+            return;
+        }
+        String sub = args.length >= 2 ? args[1].toLowerCase(Locale.ROOT) : "";
+        switch (sub) {
+            case "sign" -> bindSignDisplay(player);
+            case "hologram", "holo" -> bindHologramDisplay(player);
+            case "maptv", "map" -> bindMapTvDisplay(player, args);
+            case "remove" -> removeDisplay(player);
+            default -> {
+                player.sendMessage(Text.of("&e/hcm display sign &7- bind the sign you're looking at to a commodity"));
+                player.sendMessage(Text.of("&e/hcm display hologram &7- float a live-price hologram above the block you're looking at"));
+                player.sendMessage(Text.of("&e/hcm display maptv [cols] [rows] &7- render a live chart on the item frame you're looking at (grid tiles right+down)"));
+                player.sendMessage(Text.of("&e/hcm display remove &7- unbind the display block you're looking at"));
+            }
+        }
+    }
+
+    private void bindSignDisplay(Player player) {
+        org.bukkit.block.Block target = player.getTargetBlockExact(6);
+        if (target == null || !(target.getState() instanceof org.bukkit.block.Sign)) {
+            player.sendMessage(Text.of("&cLook at a placed sign, then run &f/hcm display sign&c."));
+            return;
+        }
+        org.bukkit.Location loc = target.getLocation();
+        new com.dierks.homecraft.gui.display.CommodityPickerMenu(plugin, player, "Bind sign → commodity",
+                id -> {
+                    var r = plugin.displayService().bindSign(player, loc, id);
+                    player.sendMessage(r.ok()
+                            ? Text.of("&aSign board bound to &f" + id + "&a — it now shows the live price.")
+                            : Text.of("&c" + r.error()));
+                    player.closeInventory();
+                },
+                player::closeInventory).open(player);
+    }
+
+    private void bindHologramDisplay(Player player) {
+        org.bukkit.block.Block target = player.getTargetBlockExact(6);
+        if (target == null || target.getType().isAir()) {
+            player.sendMessage(Text.of("&cLook at the block you want the hologram to float above, then run &f/hcm display hologram&c."));
+            return;
+        }
+        org.bukkit.Location loc = target.getLocation();
+        new com.dierks.homecraft.gui.display.CommodityPickerMenu(plugin, player, "Bind hologram → commodity",
+                id -> {
+                    var r = plugin.displayService().bindHologram(player, loc, id);
+                    player.sendMessage(r.ok()
+                            ? Text.of("&aHologram floating above the block, showing &f" + id + "&a live.")
+                            : Text.of("&c" + r.error()));
+                    player.closeInventory();
+                },
+                player::closeInventory).open(player);
+    }
+
+    private void bindMapTvDisplay(Player player, String[] args) {
+        org.bukkit.entity.Entity targetEnt = player.getTargetEntity(6);
+        if (!(targetEnt instanceof org.bukkit.entity.ItemFrame frame)) {
+            player.sendMessage(Text.of("&cLook at an item frame on a wall, then run &f/hcm display maptv [cols] [rows]&c."));
+            return;
+        }
+        int cols = parsePositiveArg(args, 2, 1);
+        int rows = parsePositiveArg(args, 3, 1);
+        new com.dierks.homecraft.gui.display.CommodityPickerMenu(plugin, player, "Bind map-TV → commodity",
+                id -> {
+                    var r = plugin.displayService().bindMapTv(player, frame, id, cols, rows);
+                    player.sendMessage(r.ok()
+                            ? Text.of("&aMap-TV bound to &f" + id + "&a — rendering " + r.error() + ".")
+                            : Text.of("&c" + r.error()));
+                    player.closeInventory();
+                },
+                player::closeInventory).open(player);
+    }
+
+    private int parsePositiveArg(String[] args, int idx, int def) {
+        if (args.length <= idx) {
+            return def;
+        }
+        try {
+            return Math.max(1, Integer.parseInt(args[idx]));
+        } catch (NumberFormatException e) {
+            return def;
+        }
+    }
+
+    private void removeDisplay(Player player) {
+        org.bukkit.block.Block target = player.getTargetBlockExact(6);
+        if (target == null) {
+            player.sendMessage(Text.of("&cLook at the display block you want to unbind."));
+            return;
+        }
+        var r = plugin.displayService().removeAny(target.getLocation());
+        player.sendMessage(r.ok() ? Text.of("&aDisplay unbound.") : Text.of("&c" + r.error()));
+    }
+
+    // ---------------------------------------------------------------------
 
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
@@ -378,7 +484,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "mini", "auction");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "auction");
             } else {
                 addMatches(out, args[0], "market", "mini", "auction");
             }
@@ -400,6 +506,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     out.add(p.getName());
                 }
             }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("display")) {
+            addMatches(out, args[1], "sign", "hologram", "maptv", "remove");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("market")) {
             addMatches(out, args[1], "list", "price", "history", "buy", "sell");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("market")

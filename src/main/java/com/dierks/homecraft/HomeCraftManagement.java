@@ -68,6 +68,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.marketplace.DeliveryService deliveries;
     private com.dierks.homecraft.marketplace.PalletService pallets;
     private com.dierks.homecraft.web.MarketDashboardServer dashboard;
+    private com.dierks.homecraft.integration.HcmPlaceholders placeholders;
     private BukkitTask historyTask;
     private BukkitTask deliveryTask;
     private BukkitTask auctionTask;
@@ -158,11 +159,33 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.dashboard = new com.dierks.homecraft.web.MarketDashboardServer(this);
         this.dashboard.start();
 
+        // In-Game Economy Displays (Phase 7): the PlaceholderAPI 'hcm' expansion —
+        // only loaded/registered when PlaceholderAPI is installed.
+        if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
+            try {
+                this.placeholders = new com.dierks.homecraft.integration.HcmPlaceholders(this);
+                if (this.placeholders.register()) {
+                    getLogger().info("Registered PlaceholderAPI expansion 'hcm'.");
+                }
+            } catch (Throwable t) {
+                getLogger().warning("Could not register the PlaceholderAPI expansion: " + t.getMessage());
+                this.placeholders = null;
+            }
+        }
+
         getLogger().info("HomeCraft Management enabled.");
     }
 
     @Override
     public void onDisable() {
+        if (placeholders != null) {
+            try {
+                placeholders.unregister();
+            } catch (Throwable ignored) {
+                // PAPI may already be gone; nothing to clean up.
+            }
+            placeholders = null;
+        }
         if (dashboard != null) {
             dashboard.stop();
             dashboard = null;

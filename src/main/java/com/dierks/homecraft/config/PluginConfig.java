@@ -144,6 +144,10 @@ public final class PluginConfig {
     public record Lotto(double ticketCost, List<LottoPayout> payouts) {
     }
 
+    /** A one-time achievement: a token payout the first time a player hits a milestone. */
+    public record AchievementDef(String id, boolean enabled, int reward, String display, double threshold) {
+    }
+
     /** The whole Arcade config: token sources, crates, pity exchange, lotto, blocks. */
     public record Arcade(boolean enabled, boolean streakEnabled, List<Integer> streakRewards,
                          boolean playtimeEnabled, int playtimeMinutesPerToken,
@@ -243,6 +247,7 @@ public final class PluginConfig {
     private WebDashboard webDashboard;
     private Displays displays;
     private Arcade arcade;
+    private Map<String, AchievementDef> achievements;
 
     public PluginConfig(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -300,6 +305,11 @@ public final class PluginConfig {
 
     public Arcade arcade() {
         return arcade;
+    }
+
+    /** One-time achievement definitions keyed by id (Phase 9). */
+    public Map<String, AchievementDef> achievements() {
+        return achievements;
     }
 
     public Loot.MiniLoot miniLoot() {
@@ -396,6 +406,30 @@ public final class PluginConfig {
 
         // ---- Arcade (Phase 8) ----
         this.arcade = readArcade(c);
+
+        // ---- Achievements (Phase 9) ----
+        this.achievements = readAchievements(c);
+    }
+
+    private Map<String, AchievementDef> readAchievements(FileConfiguration c) {
+        Map<String, AchievementDef> map = new LinkedHashMap<>();
+        // Built-in milestones with sensible defaults; each toggleable/tunable in config.
+        putAchievement(map, c, "first_mini", 3, "First Mini Collected", 0);
+        putAchievement(map, c, "first_sale", 2, "First Market Sale", 0);
+        putAchievement(map, c, "first_pc", 2, "Built Your First PC", 0);
+        putAchievement(map, c, "first_crate", 1, "Opened Your First Crate", 0);
+        putAchievement(map, c, "rich_10k", 5, "Reached $10,000", 10000);
+        return map;
+    }
+
+    private void putAchievement(Map<String, AchievementDef> map, FileConfiguration c, String id,
+                                int defReward, String defDisplay, double defThreshold) {
+        String base = "arcade.achievements." + id;
+        boolean enabled = c.getBoolean(base + ".enabled", true);
+        int reward = Math.max(0, c.getInt(base + ".reward", defReward));
+        String display = c.getString(base + ".display", defDisplay);
+        double threshold = c.getDouble(base + ".threshold", defThreshold);
+        map.put(id, new AchievementDef(id, enabled, reward, display, threshold));
     }
 
     private Arcade readArcade(FileConfiguration c) {

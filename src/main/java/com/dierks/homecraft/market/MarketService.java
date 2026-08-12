@@ -243,6 +243,10 @@ public final class MarketService {
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to record daily sell tally: " + e.getMessage());
         }
+        if (plugin.achievements() != null) {
+            plugin.achievements().tryAward(player, "first_sale");
+            plugin.achievements().checkBalance(player);
+        }
         return new TradeResult(true, null, plan.filled(), plan.total(), state.currentPrice(), state.stock());
     }
 

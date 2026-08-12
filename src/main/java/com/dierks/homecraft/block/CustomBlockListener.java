@@ -78,6 +78,9 @@ public final class CustomBlockListener implements Listener {
 
         blocks.recordPlacement(block, type, player.getUniqueId());
         player.sendMessage(Text.of("&aPlaced a " + friendly(type) + "."));
+        if (type == CustomBlockType.PC && plugin.achievements() != null) {
+            plugin.achievements().tryAward(player, "first_pc");
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)

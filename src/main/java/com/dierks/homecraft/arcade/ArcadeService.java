@@ -225,6 +225,9 @@ public final class ArcadeService {
             }
         }
         grantPlaytime(player, true);
+        if (plugin.achievements() != null) {
+            plugin.achievements().checkBalance(player);
+        }
     }
 
     /** Grant any whole playtime-milestone tokens the player has newly earned. */
@@ -292,7 +295,11 @@ public final class ArcadeService {
             plugin.economy().withdraw(player, tier.costMoney()); // burned money sink
         }
 
-        return grantFromPool(player, pool);
+        Outcome outcome = grantFromPool(player, pool);
+        if (outcome.ok() && plugin.achievements() != null) {
+            plugin.achievements().tryAward(player, "first_crate");
+        }
+        return outcome;
     }
 
     /** Weighted-pick and grant a reward from an already-eligible pool. */

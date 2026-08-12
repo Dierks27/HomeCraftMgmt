@@ -459,6 +459,9 @@ public final class MiniService {
             target.getInventory().addItem(item).values()
                     .forEach(drop -> target.getWorld().dropItemNaturally(target.getLocation(), drop));
             dao.recordIndividual(uid, def.id(), mintNumber, target.getUniqueId(), System.currentTimeMillis());
+            if (plugin.achievements() != null) {
+                plugin.achievements().tryAward(target, "first_mini");
+            }
             return new MintResult(true, null, mintNumber);
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to mint Mini " + def.id() + ": " + e.getMessage());

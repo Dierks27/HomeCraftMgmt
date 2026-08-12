@@ -333,3 +333,13 @@ web:
     port: 8080
     refresh_seconds: 30
     title: "Crate Market"
+
+# ---------------------------------------------------------------------
+#  Phase 7 — In-game economy displays (§3.8)
+#  Sign boards, holograms (text-display entities), and map-TVs bound to a
+#  commodity, re-rendered from the live market on this timer (never per-tick).
+#  Bind them in-game (GUI-first): look at a sign / block / framed map, then run
+#  the matching /hcm display … command and click the commodity from the picker.
+# ---------------------------------------------------------------------
+displays:
+  refresh_seconds: 20

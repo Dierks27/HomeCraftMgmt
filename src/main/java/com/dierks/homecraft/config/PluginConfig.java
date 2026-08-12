@@ -106,6 +106,10 @@ public final class PluginConfig {
     public record WebDashboard(boolean enabled, String bind, int port, int refreshSeconds, String title) {
     }
 
+    /** In-game economy displays refresh cadence (Phase 7, §3.8). */
+    public record Displays(int refreshSeconds) {
+    }
+
     /** Online store branding shown in-game (name + display URL). */
     public record Store(String name, String displayUrl) {
     }
@@ -187,6 +191,7 @@ public final class PluginConfig {
     private Marketplace marketplace;
     private Map<com.dierks.homecraft.block.CustomBlockType, String> skins;
     private WebDashboard webDashboard;
+    private Displays displays;
 
     public PluginConfig(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -236,6 +241,10 @@ public final class PluginConfig {
 
     public WebDashboard webDashboard() {
         return webDashboard;
+    }
+
+    public Displays displays() {
+        return displays;
     }
 
     public Loot.MiniLoot miniLoot() {
@@ -317,6 +326,9 @@ public final class PluginConfig {
         // ---- Block skins + Web Dashboard (Phase 6) ----
         this.skins = readSkins(c);
         this.webDashboard = readWebDashboard(c);
+
+        // ---- In-game economy displays (Phase 7) ----
+        this.displays = new Displays(Math.max(2, c.getInt("displays.refresh_seconds", 20)));
     }
 
     private Map<com.dierks.homecraft.block.CustomBlockType, String> readSkins(FileConfiguration c) {

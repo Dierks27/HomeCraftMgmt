@@ -69,6 +69,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.marketplace.PalletService pallets;
     private com.dierks.homecraft.web.MarketDashboardServer dashboard;
     private com.dierks.homecraft.integration.HcmPlaceholders placeholders;
+    private com.dierks.homecraft.display.DisplayService displayService;
     private BukkitTask historyTask;
     private BukkitTask deliveryTask;
     private BukkitTask auctionTask;
@@ -159,6 +160,11 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.dashboard = new com.dierks.homecraft.web.MarketDashboardServer(this);
         this.dashboard.start();
 
+        // In-Game Economy Displays (Phase 7) — sign boards, holograms, map-TVs.
+        this.displayService = new com.dierks.homecraft.display.DisplayService(
+                this, new com.dierks.homecraft.storage.DisplayDao(database));
+        this.displayService.start();
+
         // In-Game Economy Displays (Phase 7): the PlaceholderAPI 'hcm' expansion —
         // only loaded/registered when PlaceholderAPI is installed.
         if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
@@ -178,6 +184,10 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (displayService != null) {
+            displayService.stop();
+            displayService = null;
+        }
         if (placeholders != null) {
             try {
                 placeholders.unregister();
@@ -226,6 +236,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
         if (dashboard != null) {
             dashboard.restart(); // pick up bind/port/enabled/refresh/title changes
+        }
+        if (displayService != null) {
+            displayService.start(); // re-arm the refresh timer at the new cadence
         }
     }
 
@@ -419,5 +432,9 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public com.dierks.homecraft.marketplace.PalletService pallets() {
         return pallets;
+    }
+
+    public com.dierks.homecraft.display.DisplayService displayService() {
+        return displayService;
     }
 }

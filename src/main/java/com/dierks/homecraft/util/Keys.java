@@ -31,6 +31,9 @@ public final class Keys {
     /** On a placed armor-stand Mini entity: the exact minted item to return on reclaim (Base64 String). */
     public static NamespacedKey MINI_ITEM;
 
+    /** On a hologram (text-display) entity: the owning display's row id (Long). */
+    public static NamespacedKey DISPLAY_ID;
+
     private Keys() {
     }
 
@@ -43,5 +46,6 @@ public final class Keys {
         MOB_ARTIFICIAL = new NamespacedKey(plugin, "mob_artificial");
         MINI_OWNER = new NamespacedKey(plugin, "mini_owner");
         MINI_ITEM = new NamespacedKey(plugin, "mini_item");
+        DISPLAY_ID = new NamespacedKey(plugin, "display_id");
     }
 }

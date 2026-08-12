@@ -388,9 +388,11 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         String sub = args.length >= 2 ? args[1].toLowerCase(Locale.ROOT) : "";
         switch (sub) {
             case "sign" -> bindSignDisplay(player);
+            case "hologram", "holo" -> bindHologramDisplay(player);
             case "remove" -> removeDisplay(player);
             default -> {
                 player.sendMessage(Text.of("&e/hcm display sign &7- bind the sign you're looking at to a commodity"));
+                player.sendMessage(Text.of("&e/hcm display hologram &7- float a live-price hologram above the block you're looking at"));
                 player.sendMessage(Text.of("&e/hcm display remove &7- unbind the display block you're looking at"));
             }
         }
@@ -408,6 +410,24 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     var r = plugin.displayService().bindSign(player, loc, id);
                     player.sendMessage(r.ok()
                             ? Text.of("&aSign board bound to &f" + id + "&a — it now shows the live price.")
+                            : Text.of("&c" + r.error()));
+                    player.closeInventory();
+                },
+                player::closeInventory).open(player);
+    }
+
+    private void bindHologramDisplay(Player player) {
+        org.bukkit.block.Block target = player.getTargetBlockExact(6);
+        if (target == null || target.getType().isAir()) {
+            player.sendMessage(Text.of("&cLook at the block you want the hologram to float above, then run &f/hcm display hologram&c."));
+            return;
+        }
+        org.bukkit.Location loc = target.getLocation();
+        new com.dierks.homecraft.gui.display.CommodityPickerMenu(plugin, player, "Bind hologram → commodity",
+                id -> {
+                    var r = plugin.displayService().bindHologram(player, loc, id);
+                    player.sendMessage(r.ok()
+                            ? Text.of("&aHologram floating above the block, showing &f" + id + "&a live.")
                             : Text.of("&c" + r.error()));
                     player.closeInventory();
                 },

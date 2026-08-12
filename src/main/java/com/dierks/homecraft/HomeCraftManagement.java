@@ -137,6 +137,10 @@ public final class HomeCraftManagement extends JavaPlugin {
                 this, new com.dierks.homecraft.storage.PalletDao(database), economy, deliveries,
                 new com.dierks.homecraft.marketplace.Categorizer(this));
 
+        // In-Game Economy Displays (Phase 7) — sign boards, holograms, map-TVs.
+        this.displayService = new com.dierks.homecraft.display.DisplayService(
+                this, new com.dierks.homecraft.storage.DisplayDao(database));
+
         getServer().getPluginManager().registerEvents(
                 new CustomBlockListener(this, config, blockService, items, protection), this);
         getServer().getPluginManager().registerEvents(new WorkbenchListener(this, recipeManager), this);
@@ -148,6 +152,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.MiniInteractListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.MiniHeadListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.ArmorStandListener(this, stands), this);
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.display.DisplayListener(this), this);
 
         PluginCommand hcm = getCommand("hcm");
         if (hcm != null) {
@@ -160,9 +165,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.dashboard = new com.dierks.homecraft.web.MarketDashboardServer(this);
         this.dashboard.start();
 
-        // In-Game Economy Displays (Phase 7) — sign boards, holograms, map-TVs.
-        this.displayService = new com.dierks.homecraft.display.DisplayService(
-                this, new com.dierks.homecraft.storage.DisplayDao(database));
+        // Start the economy-display refresh timer (renders signs + spawns holograms).
         this.displayService.start();
 
         // In-Game Economy Displays (Phase 7): the PlaceholderAPI 'hcm' expansion —

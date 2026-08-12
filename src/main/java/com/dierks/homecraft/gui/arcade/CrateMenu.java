@@ -67,7 +67,7 @@ public final class CrateMenu extends Menu {
         set(48, Menus.icon(Material.CHEST,
                 "&aOpen — &6" + crate.costTokens() + " token" + (crate.costTokens() == 1 ? "" : "s"),
                 "&7Standard odds shown above.", "&8—", "&eClick to open"),
-                e -> open(null));
+                e -> pull(null));
 
         // Paid-odds tiers (buy a guaranteed rarity floor with Vault money).
         int tierSlot = 50;
@@ -80,13 +80,13 @@ public final class CrateMenu extends Menu {
                     "&6Better odds — " + plugin.economy().format(tier.costMoney()),
                     "&7Guarantees a &d" + tier.floor() + "+ &7Mini.",
                     "&8Money sink — burned.", "&8—", "&eClick to open"),
-                    e -> open(tier));
+                    e -> pull(tier));
         }
 
         set(53, back(), e -> onBack.run());
     }
 
-    private void open(PaidTier tier) {
+    private void pull(PaidTier tier) {
         var r = plugin.arcade().openCrate(player, crateId, tier);
         if (r.ok()) {
             new RevealMenu(plugin, player, r, () -> new CrateMenu(plugin, player, crateId, onBack).open(player))

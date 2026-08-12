@@ -363,7 +363,8 @@ public final class DisplayService {
         if (spinAngle > (float) (Math.PI * 2)) {
             spinAngle -= (float) (Math.PI * 2);
         }
-        org.joml.AxisAngle4f rot = new org.joml.AxisAngle4f(spinAngle, 0f, 1f, 0f);
+        // Transformation uses JOML Quaternionf for its rotations; spin about Y.
+        org.joml.Quaternionf leftRot = new org.joml.Quaternionf().rotationY(spinAngle);
         for (Holo h : holograms.values()) {
             if (h.item() == null) {
                 continue;
@@ -371,7 +372,7 @@ public final class DisplayService {
             if (plugin.getServer().getEntity(h.item()) instanceof ItemDisplay id && id.isValid()) {
                 org.bukkit.util.Transformation t = id.getTransformation();
                 id.setTransformation(new org.bukkit.util.Transformation(
-                        t.getTranslation(), rot, t.getScale(), t.getRightRotation()));
+                        t.getTranslation(), leftRot, t.getScale(), t.getRightRotation()));
             }
         }
     }

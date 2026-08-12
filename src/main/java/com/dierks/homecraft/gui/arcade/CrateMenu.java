@@ -12,6 +12,7 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -45,18 +46,27 @@ public final class CrateMenu extends Menu {
             return;
         }
 
-        double total = 0;
+        // Only show rewards that resolve; an unresolved Mini id is skipped (logged
+        // by the service) so a bad reference never breaks the machine. Published
+        // odds are computed over the rewards that can actually drop right now.
+        List<CrateReward> shown = new ArrayList<>();
+        double dropTotal = 0;
         for (CrateReward r : crate.rewards()) {
-            total += r.weight();
+            if (r.type() == PluginConfig.RewardType.MINI && plugin.miniService().def(r.miniId()) == null) {
+                continue; // unresolved reference — skip
+            }
+            shown.add(r);
+            if (isDroppable(r)) {
+                dropTotal += r.weight();
+            }
         }
 
-        // Published odds — one icon per reward.
         int slot = 0;
-        for (CrateReward r : crate.rewards()) {
+        for (CrateReward r : shown) {
             if (slot > 26) {
                 break;
             }
-            double pct = total > 0 ? r.weight() / total * 100.0 : 0;
+            double pct = (isDroppable(r) && dropTotal > 0) ? r.weight() / dropTotal * 100.0 : 0;
             set(slot++, rewardIcon(r, pct), null);
         }
 
@@ -134,6 +144,17 @@ public final class CrateMenu extends Menu {
                 return Menus.icon(Material.BARRIER, "&cUnknown reward");
             }
         }
+    }
+
+    private boolean isDroppable(CrateReward r) {
+        if (r.type() != PluginConfig.RewardType.MINI) {
+            return true;
+        }
+        MiniDef def = plugin.miniService().def(r.miniId());
+        if (def == null) {
+            return false;
+        }
+        return def.uncapped() || plugin.miniService().counts(def.id()).minted() < def.cap();
     }
 
     private ItemStack back() {

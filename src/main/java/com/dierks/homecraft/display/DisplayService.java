@@ -303,11 +303,15 @@ public final class DisplayService {
     private void spawnHologram(World world, DisplayDao.Display d) {
         PluginConfig.HologramOpts opts = plugin.config().displays().hologram();
         Location textAt = new Location(world, d.x() + 0.5, d.y() + 1.2, d.z() + 0.5);
+        float ts = opts.textScale();
         TextDisplay td = world.spawn(textAt, TextDisplay.class, e -> {
             e.text(holoText(d.itemId()));
             e.setBillboard(Display.Billboard.CENTER);
             e.setSeeThrough(true);
             e.setPersistent(false); // we re-spawn from the DB; never saved to chunk data
+            e.setTransformation(new org.bukkit.util.Transformation(
+                    new org.joml.Vector3f(), new org.joml.Quaternionf(),
+                    new org.joml.Vector3f(ts, ts, ts), new org.joml.Quaternionf()));
             e.getPersistentDataContainer().set(Keys.DISPLAY_ID, PersistentDataType.LONG, d.id());
         });
 
@@ -317,10 +321,14 @@ public final class DisplayService {
             if (shown != null) {
                 double dy = opts.above() ? 1.75 : 0.75;
                 Location itemAt = new Location(world, d.x() + 0.5, d.y() + dy, d.z() + 0.5);
+                float is = opts.itemScale();
                 ItemDisplay id = world.spawn(itemAt, ItemDisplay.class, e -> {
                     e.setItemStack(shown);
                     e.setBillboard(opts.spin() ? Display.Billboard.FIXED : Display.Billboard.VERTICAL);
                     e.setPersistent(false);
+                    e.setTransformation(new org.bukkit.util.Transformation(
+                            new org.joml.Vector3f(), new org.joml.Quaternionf(),
+                            new org.joml.Vector3f(is, is, is), new org.joml.Quaternionf()));
                     e.getPersistentDataContainer().set(Keys.DISPLAY_ID, PersistentDataType.LONG, d.id());
                 });
                 itemUid = id.getUniqueId();

@@ -85,16 +85,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
                 new com.dierks.homecraft.gui.arcade.ArcadeMenu(plugin, player).open(player);
             }
-            case "tokens" -> {
-                if (!(sender instanceof Player player)) {
-                    sender.sendMessage(Text.of("&cOnly players have a token balance."));
-                    return true;
-                }
-                int t = plugin.arcade().balance(player.getUniqueId());
-                int s = plugin.arcade().streak(player.getUniqueId());
-                player.sendMessage(Text.of("&eArcade tokens: &6" + t + " &7(login streak: " + s + " day"
-                        + (s == 1 ? "" : "s") + "). &7Open the Arcade with &f/hcm arcade&7."));
-            }
+            case "tokens" -> handleTokens(sender, args);
             case "auction", "auctions" -> {
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Text.of("&cOnly players can open the Auction House."));
@@ -218,6 +209,10 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "mailbox" -> item = plugin.items().mailbox();
             case "pallet" -> item = plugin.items().pallet();
             case "arcade" -> item = plugin.items().arcade();
+            case "cratemachine", "crate" -> item = plugin.items().of(com.dierks.homecraft.block.CustomBlockType.CRATE_MACHINE);
+            case "scratch", "scratchbooth" -> item = plugin.items().of(com.dierks.homecraft.block.CustomBlockType.SCRATCH_BOOTH);
+            case "pity", "pitykiosk" -> item = plugin.items().of(com.dierks.homecraft.block.CustomBlockType.PITY_KIOSK);
+            case "counter", "tokencounter" -> item = plugin.items().of(com.dierks.homecraft.block.CustomBlockType.TOKEN_COUNTER);
             default -> {
                 sender.sendMessage(Text.of("&cUnknown item '" + args[1]
                         + "'. Use workbench, pc, vending, display, auction, mailbox, or pallet."));
@@ -395,6 +390,48 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
     }
 
     // ---------------------------------------------------------------------
+    //  tokens (player: balance; admin: give/set/take)
+    // ---------------------------------------------------------------------
+
+    private void handleTokens(CommandSender sender, String[] args) {
+        if (args.length >= 2) {
+            String sub = args[1].toLowerCase(Locale.ROOT);
+            if (sub.equals("give") || sub.equals("add") || sub.equals("set") || sub.equals("take")) {
+                if (denyUnless(sender, "hcm.admin")) {
+                    return;
+                }
+                if (args.length < 4) {
+                    sender.sendMessage(Text.of("&cUsage: /hcm tokens " + sub + " <player> <amount>"));
+                    return;
+                }
+                org.bukkit.OfflinePlayer target = Bukkit.getOfflinePlayer(args[2]);
+                int n;
+                try {
+                    n = Integer.parseInt(args[3]);
+                } catch (NumberFormatException e) {
+                    sender.sendMessage(Text.of("&cAmount must be a whole number."));
+                    return;
+                }
+                int bal = switch (sub) {
+                    case "set" -> plugin.arcade().adminSet(target.getUniqueId(), n);
+                    case "take" -> plugin.arcade().adminTake(target.getUniqueId(), n);
+                    default -> plugin.arcade().adminAdd(target.getUniqueId(), n);
+                };
+                sender.sendMessage(Text.of("&aTokens for &f" + args[2] + "&a: now &6" + bal + "&a."));
+                return;
+            }
+        }
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Text.of("&cOnly players have a token balance."));
+            return;
+        }
+        int t = plugin.arcade().balance(player.getUniqueId());
+        int s = plugin.arcade().streak(player.getUniqueId());
+        player.sendMessage(Text.of("&eArcade tokens: &6" + t + " &7(login streak: " + s + " day"
+                + (s == 1 ? "" : "s") + "). &7Play at the Arcade machines or &f/hcm arcade&7."));
+    }
+
+    // ---------------------------------------------------------------------
     //  display (admin — bind in-game economy displays, GUI-first)
     // ---------------------------------------------------------------------
 
@@ -528,8 +565,20 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
-            addMatches(out, args[1], "workbench", "pc", "vending", "display", "auction", "mailbox", "pallet", "arcade");
+            addMatches(out, args[1], "workbench", "pc", "vending", "display", "auction", "mailbox", "pallet",
+                    "arcade", "cratemachine", "scratch", "pity", "counter");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("give")) {
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))) {
+                    out.add(p.getName());
+                }
+            }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("tokens")) {
+            if (sender.hasPermission("hcm.admin")) {
+                addMatches(out, args[1], "give", "set", "take");
+            }
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("tokens")
+                && List.of("give", "add", "set", "take").contains(args[1].toLowerCase(Locale.ROOT))) {
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))) {
                     out.add(p.getName());

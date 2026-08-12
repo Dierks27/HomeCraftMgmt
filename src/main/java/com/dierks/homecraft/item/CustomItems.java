@@ -91,6 +91,12 @@ public final class CustomItems {
                 CustomBlockType.ARCADE, config.skin(CustomBlockType.ARCADE));
     }
 
+    /** An Arcade machine block (crate/scratch/pity/counter). */
+    public ItemStack arcadeMachine(String key, CustomBlockType type, String lore) {
+        PluginConfig.BlockDef def = config.arcade().machines().get(key);
+        return tagged(def.material(), def.name(), List.of(lore), type, config.skin(type));
+    }
+
     /** Build the item for a given type from current config (used e.g. when dropping on break). */
     public ItemStack of(CustomBlockType type) {
         return switch (type) {
@@ -102,6 +108,10 @@ public final class CustomItems {
             case MAILBOX -> mailbox();
             case PALLET -> pallet();
             case ARCADE -> arcade();
+            case CRATE_MACHINE -> arcadeMachine("crate", type, "&7Right-click to open loot crates.");
+            case SCRATCH_BOOTH -> arcadeMachine("scratch", type, "&7Right-click to buy a scratch ticket.");
+            case PITY_KIOSK -> arcadeMachine("pity", type, "&7Right-click: tokens → a guaranteed Rare+ Mini.");
+            case TOKEN_COUNTER -> arcadeMachine("counter", type, "&7Right-click to check your tokens.");
         };
     }
 

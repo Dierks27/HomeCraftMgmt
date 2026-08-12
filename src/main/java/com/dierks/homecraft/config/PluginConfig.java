@@ -115,7 +115,8 @@ public final class PluginConfig {
      * Hologram appearance (Phase 8 Part A): pair the text ticker with a floating
      * {@code ItemDisplay}. {@code itemOverride} null = use the commodity's own item.
      */
-    public record HologramOpts(boolean itemDisplay, boolean above, boolean spin, Material itemOverride) {
+    public record HologramOpts(boolean itemDisplay, boolean above, boolean spin, Material itemOverride,
+                               float itemScale, float textScale) {
     }
 
     // ---- Arcade (Phase 8, §3.9) — all in-game currency, never real money -------
@@ -143,11 +144,24 @@ public final class PluginConfig {
     public record Lotto(double ticketCost, List<LottoPayout> payouts) {
     }
 
-    /** The whole Arcade config: token sources, crates, pity exchange, lotto, block. */
-    public record Arcade(boolean enabled, boolean streakEnabled, int streakRewardPerDay,
+    /** A one-time achievement: a token payout the first time a player hits a milestone. */
+    public record AchievementDef(String id, boolean enabled, int reward, String display, double threshold) {
+    }
+
+    /** The whole Arcade config: token sources, crates, pity exchange, lotto, blocks. */
+    public record Arcade(boolean enabled, boolean streakEnabled, List<Integer> streakRewards,
                          boolean playtimeEnabled, int playtimeMinutesPerToken,
                          Map<String, Crate> crates, int pityTokens, Rarity pityRarity, Lotto lotto,
-                         BlockDef block) {
+                         BlockDef block, Map<String, BlockDef> machines) {
+
+        /** Tokens awarded on a given consecutive-day streak (last entry repeats). */
+        public int streakReward(int streakDay) {
+            if (streakRewards.isEmpty()) {
+                return 0;
+            }
+            int idx = Math.min(Math.max(1, streakDay), streakRewards.size()) - 1;
+            return streakRewards.get(idx);
+        }
     }
 
     /** Online store branding shown in-game (name + display URL). */
@@ -233,6 +247,7 @@ public final class PluginConfig {
     private WebDashboard webDashboard;
     private Displays displays;
     private Arcade arcade;
+    private Map<String, AchievementDef> achievements;
 
     public PluginConfig(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -290,6 +305,11 @@ public final class PluginConfig {
 
     public Arcade arcade() {
         return arcade;
+    }
+
+    /** One-time achievement definitions keyed by id (Phase 9). */
+    public Map<String, AchievementDef> achievements() {
+        return achievements;
     }
 
     public Loot.MiniLoot miniLoot() {
@@ -379,17 +399,50 @@ public final class PluginConfig {
         String holoItem = c.getString("displays.hologram.item", "");
         Material holoMat = (holoItem == null || holoItem.isBlank())
                 ? null : Material.matchMaterial(holoItem.trim().toUpperCase());
+        float itemScale = (float) Math.max(0.05, c.getDouble("displays.hologram.item_scale", 0.3));
+        float textScale = (float) Math.max(0.1, c.getDouble("displays.hologram.text_scale", 1.0));
         this.displays = new Displays(Math.max(2, c.getInt("displays.refresh_seconds", 20)),
-                new HologramOpts(itemDisp, above, spin, holoMat));
+                new HologramOpts(itemDisp, above, spin, holoMat, itemScale, textScale));
 
         // ---- Arcade (Phase 8) ----
         this.arcade = readArcade(c);
+
+        // ---- Achievements (Phase 9) ----
+        this.achievements = readAchievements(c);
+    }
+
+    private Map<String, AchievementDef> readAchievements(FileConfiguration c) {
+        Map<String, AchievementDef> map = new LinkedHashMap<>();
+        // Built-in milestones with sensible defaults; each toggleable/tunable in config.
+        putAchievement(map, c, "first_mini", 3, "First Mini Collected", 0);
+        putAchievement(map, c, "first_sale", 2, "First Market Sale", 0);
+        putAchievement(map, c, "first_pc", 2, "Built Your First PC", 0);
+        putAchievement(map, c, "first_crate", 1, "Opened Your First Crate", 0);
+        putAchievement(map, c, "rich_10k", 5, "Reached $10,000", 10000);
+        return map;
+    }
+
+    private void putAchievement(Map<String, AchievementDef> map, FileConfiguration c, String id,
+                                int defReward, String defDisplay, double defThreshold) {
+        String base = "arcade.achievements." + id;
+        boolean enabled = c.getBoolean(base + ".enabled", true);
+        int reward = Math.max(0, c.getInt(base + ".reward", defReward));
+        String display = c.getString(base + ".display", defDisplay);
+        double threshold = c.getDouble(base + ".threshold", defThreshold);
+        map.put(id, new AchievementDef(id, enabled, reward, display, threshold));
     }
 
     private Arcade readArcade(FileConfiguration c) {
         boolean enabled = c.getBoolean("arcade.enabled", true);
         boolean streakEnabled = c.getBoolean("arcade.tokens.login_streak.enabled", true);
-        int perDay = Math.max(0, c.getInt("arcade.tokens.login_streak.reward_per_day", 1));
+        // Escalating per-consecutive-day reward table (last entry repeats for day N+).
+        List<Integer> streakRewards = new ArrayList<>();
+        for (int v : c.getIntegerList("arcade.tokens.login_streak.rewards")) {
+            streakRewards.add(Math.max(0, v));
+        }
+        if (streakRewards.isEmpty()) {
+            streakRewards.add(Math.max(0, c.getInt("arcade.tokens.login_streak.reward_per_day", 1)));
+        }
         boolean ptEnabled = c.getBoolean("arcade.tokens.playtime.enabled", true);
         int minsPerToken = Math.max(0, c.getInt("arcade.tokens.playtime.minutes_per_token", 60));
 
@@ -431,8 +484,15 @@ public final class PluginConfig {
         }
 
         BlockDef block = blockDef(c, "arcade.block", Material.JUKEBOX, "&5Arcade Machine");
-        return new Arcade(enabled, streakEnabled, perDay, ptEnabled, minsPerToken,
-                crates, pityTokens, pityRarity, new Lotto(Math.max(0, ticketCost), payouts), block);
+
+        Map<String, BlockDef> machines = new LinkedHashMap<>();
+        machines.put("crate", blockDef(c, "arcade.machines.crate", Material.CHEST, "&6Crate Machine"));
+        machines.put("scratch", blockDef(c, "arcade.machines.scratch", Material.CARTOGRAPHY_TABLE, "&aScratch-Ticket Booth"));
+        machines.put("pity", blockDef(c, "arcade.machines.pity", Material.ENCHANTING_TABLE, "&bPity Exchange"));
+        machines.put("counter", blockDef(c, "arcade.machines.counter", Material.LECTERN, "&eToken Counter"));
+
+        return new Arcade(enabled, streakEnabled, streakRewards, ptEnabled, minsPerToken,
+                crates, pityTokens, pityRarity, new Lotto(Math.max(0, ticketCost), payouts), block, machines);
     }
 
     private CrateReward readReward(Map<?, ?> row) {
@@ -488,6 +548,10 @@ public final class PluginConfig {
         putSkin(map, sec, "mailbox", com.dierks.homecraft.block.CustomBlockType.MAILBOX);
         putSkin(map, sec, "pallet", com.dierks.homecraft.block.CustomBlockType.PALLET);
         putSkin(map, sec, "arcade", com.dierks.homecraft.block.CustomBlockType.ARCADE);
+        putSkin(map, sec, "crate_machine", com.dierks.homecraft.block.CustomBlockType.CRATE_MACHINE);
+        putSkin(map, sec, "scratch_booth", com.dierks.homecraft.block.CustomBlockType.SCRATCH_BOOTH);
+        putSkin(map, sec, "pity_kiosk", com.dierks.homecraft.block.CustomBlockType.PITY_KIOSK);
+        putSkin(map, sec, "token_counter", com.dierks.homecraft.block.CustomBlockType.TOKEN_COUNTER);
         return map;
     }
 

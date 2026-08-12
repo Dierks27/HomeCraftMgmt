@@ -71,6 +71,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.integration.HcmPlaceholders placeholders;
     private com.dierks.homecraft.display.DisplayService displayService;
     private com.dierks.homecraft.arcade.ArcadeService arcade;
+    private com.dierks.homecraft.arcade.AchievementService achievements;
     private BukkitTask historyTask;
     private BukkitTask deliveryTask;
     private BukkitTask auctionTask;
@@ -145,6 +146,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         // The Arcade (Phase 8) — tokens, loot crates, pity, lotto.
         this.arcade = new com.dierks.homecraft.arcade.ArcadeService(
                 this, new com.dierks.homecraft.storage.TokenDao(database));
+        this.achievements = new com.dierks.homecraft.arcade.AchievementService(
+                this, new com.dierks.homecraft.storage.AchievementDao(database));
 
         getServer().getPluginManager().registerEvents(
                 new CustomBlockListener(this, config, blockService, items, protection), this);
@@ -157,6 +160,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.MiniInteractListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.MiniHeadListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.ArmorStandListener(this, stands), this);
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.mini.MiniDestructionListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.display.DisplayListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.ArcadeListener(this), this);
 
@@ -457,5 +461,9 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public com.dierks.homecraft.arcade.ArcadeService arcade() {
         return arcade;
+    }
+
+    public com.dierks.homecraft.arcade.AchievementService achievements() {
+        return achievements;
     }
 }

@@ -298,6 +298,27 @@ public final class Database {
                 last_streak_day   INTEGER NOT NULL DEFAULT 0,
                 playtime_tokens   INTEGER NOT NULL DEFAULT 0
             );
+            """,
+
+            // v16 — Phase 9. Retire minted copies on destruction (mint_number kept
+            // forever, circulation decremented); per-player quest progress; and
+            // one-time achievement unlocks. Arcade machines reuse placed_blocks.
+            """
+            ALTER TABLE mini_individuals ADD COLUMN retired_at INTEGER;
+            CREATE TABLE IF NOT EXISTS quest_progress (
+                player     TEXT    NOT NULL,
+                quest_id   TEXT    NOT NULL,
+                period_key TEXT    NOT NULL,
+                progress   INTEGER NOT NULL DEFAULT 0,
+                claimed    INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (player, quest_id, period_key)
+            );
+            CREATE TABLE IF NOT EXISTS achievements_unlocked (
+                player       TEXT    NOT NULL,
+                achievement  TEXT    NOT NULL,
+                unlocked_at  INTEGER NOT NULL,
+                PRIMARY KEY (player, achievement)
+            );
             """
     };
 

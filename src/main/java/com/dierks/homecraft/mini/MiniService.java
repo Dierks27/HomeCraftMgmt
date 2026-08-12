@@ -282,6 +282,33 @@ public final class MiniService {
         return mintInternal(player, def);
     }
 
+    /**
+     * Retire a minted copy on destruction (Phase 9): decrement circulation but keep
+     * the mint number forever — a burned "#3 of 5" means only 4 will ever exist, and
+     * the cap slot is never freed. Safe on any item (no-op for non-Minis), idempotent,
+     * and best-effort (some paths — unloaded chunks, ender chests — can't be tracked).
+     *
+     * @return true if a live copy was actually retired.
+     */
+    public boolean retire(ItemStack item) {
+        MiniRef ref = identify(item);
+        if (ref == null) {
+            return false;
+        }
+        try {
+            boolean retired = dao.retire(ref.uid(), ref.miniId());
+            if (retired) {
+                MiniDao.Counts c = dao.counts(ref.miniId());
+                plugin.getLogger().info("Retired Mini " + ref.miniId() + " #" + ref.mintNumber()
+                        + " on destruction — circulation now " + c.circulation() + ".");
+            }
+            return retired;
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to retire Mini on destruction: " + e.getMessage());
+            return false;
+        }
+    }
+
     /** @return the identity of a minted Mini item, or null if the item isn't a tagged Mini. */
     public MiniRef identify(ItemStack item) {
         if (item == null || !item.hasItemMeta()) {
@@ -432,6 +459,9 @@ public final class MiniService {
             target.getInventory().addItem(item).values()
                     .forEach(drop -> target.getWorld().dropItemNaturally(target.getLocation(), drop));
             dao.recordIndividual(uid, def.id(), mintNumber, target.getUniqueId(), System.currentTimeMillis());
+            if (plugin.achievements() != null) {
+                plugin.achievements().tryAward(target, "first_mini");
+            }
             return new MintResult(true, null, mintNumber);
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to mint Mini " + def.id() + ": " + e.getMessage());

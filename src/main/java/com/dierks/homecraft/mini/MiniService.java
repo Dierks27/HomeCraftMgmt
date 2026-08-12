@@ -42,6 +42,8 @@ public final class MiniService {
     private final MiniDao dao;
     private final EconomyService economy;
     private final MiniItems items = new MiniItems();
+    private final CardItems cardItems = new CardItems();
+    private final FilamentItems filamentItems = new FilamentItems();
     private final MiniCatalogWriter writer;
 
     private Map<String, MiniDef> catalog = new LinkedHashMap<>();
@@ -74,6 +76,80 @@ public final class MiniService {
 
     public MiniDef def(String id) {
         return catalog.get(id);
+    }
+
+    // ---- Cards + filament + graded printing (Phase 9) -------------------------
+
+    public CardItems cardItems() {
+        return cardItems;
+    }
+
+    public FilamentItems filamentItems() {
+        return filamentItems;
+    }
+
+    /** Build a sealed Card item for a Mini type. */
+    public ItemStack cardFor(String id) {
+        MiniDef def = catalog.get(id);
+        if (def == null) {
+            return null;
+        }
+        return cardItems.card(def, plugin.config().minis().cardSpec(def), style(def.rarity()));
+    }
+
+    /** The card spec (cap/grade-odds/filament) for a Mini type. */
+    public CardSpec cardSpec(MiniDef def) {
+        return plugin.config().minis().cardSpec(def);
+    }
+
+    /** Roll a print grade from a card's weighted grade odds. */
+    public Grade rollGrade(CardSpec spec) {
+        double total = 0;
+        for (double w : spec.gradeWeights().values()) {
+            total += w;
+        }
+        if (total <= 0) {
+            return Grade.GRAY;
+        }
+        double roll = java.util.concurrent.ThreadLocalRandom.current().nextDouble() * total;
+        for (Grade g : Grade.values()) {
+            roll -= spec.gradeWeights().getOrDefault(g, 0.0);
+            if (roll <= 0) {
+                return g;
+            }
+        }
+        return Grade.GRAY;
+    }
+
+    /**
+     * The Printer's mint path (Phase 9) — the intended single source of new Minis:
+     * cap-aware, anti-dupe, tracked, stamping the rolled grade + finish. Reuses the
+     * same tally/provenance pipeline as every other mint.
+     */
+    public MintResult mintGraded(Player player, String id, Grade grade, String finish) {
+        MiniDef def = catalog.get(id);
+        if (def == null) {
+            return MintResult.fail("No such Mini '" + id + "'.");
+        }
+        MiniDao.Counts c = counts(id);
+        if (!def.uncapped() && c.minted() >= def.cap()) {
+            return MintResult.fail(def.name() + " is minted out.");
+        }
+        try {
+            long mintNumber = dao.mintNext(def.id());
+            UUID uid = UUID.randomUUID();
+            ItemStack item = items.minted(def, style(def.rarity()), mintNumber, uid, grade, finish);
+            player.getInventory().addItem(item).values()
+                    .forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
+            dao.recordIndividual(uid, def.id(), mintNumber, player.getUniqueId(), System.currentTimeMillis());
+            if (plugin.achievements() != null) {
+                plugin.achievements().tryAward(player, "first_mini");
+            }
+            return new MintResult(true, null, mintNumber);
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to print Mini " + def.id() + ": " + e.getMessage());
+            return MintResult.fail("Printing failed — try again.");
+        }
     }
 
     public boolean idExists(String id) {

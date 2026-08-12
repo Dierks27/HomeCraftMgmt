@@ -143,11 +143,23 @@ public final class CustomBlockListener implements Listener {
 
         switch (type) {
             case MINI_WORKBENCH -> {
+                // The Mini Workbench is retired (Phase 9) — Minis now come from Cards + a
+                // Printer. Existing benches stay usable as a light craft station (the PC
+                // recipe) so placements migrate gracefully rather than becoming dead blocks.
                 if (!player.hasPermission("hcm.workbench.use")) {
                     player.sendMessage(Text.of("&cYou can't use this workbench."));
                     return;
                 }
+                player.sendMessage(Text.of("&7This Workbench is retired — craft a PC here, "
+                        + "and print Minis from Cards at a &bPrinter&7."));
                 WorkbenchHolder.open(player);
+            }
+            case PRINTER -> {
+                if (!player.hasPermission("hcm.printer.use")) {
+                    player.sendMessage(Text.of("&cYou can't use this Printer."));
+                    return;
+                }
+                new com.dierks.homecraft.gui.mini.PrinterMenu(plugin, player, clicked.getLocation()).open(player);
             }
             case PC -> {
                 if (!player.hasPermission("hcm.pc.use")) {
@@ -184,6 +196,7 @@ public final class CustomBlockListener implements Listener {
         return switch (type) {
             case PC -> "Personal Computer";
             case MINI_WORKBENCH -> "Mini Workbench";
+            case PRINTER -> "Mini Printer";
             case MINI_VENDING_MACHINE -> "Mini Vending Machine";
             case DISPLAY_CASE -> "Mini Display Case";
             case AUCTION_HOUSE -> "Mini Auction House";

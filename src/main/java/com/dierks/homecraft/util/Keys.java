@@ -34,6 +34,17 @@ public final class Keys {
     /** On a hologram (text-display) entity: the owning display's row id (Long). */
     public static NamespacedKey DISPLAY_ID;
 
+    /** On a Mini Card item: the catalog id of the Mini it prints (String). */
+    public static NamespacedKey CARD_ID;
+    /** On a filament item: the colour it represents (a DyeColor name, String). */
+    public static NamespacedKey FILAMENT_COLOR;
+    /** On a printed Mini item: its grade (a Grade name, String). */
+    public static NamespacedKey MINI_GRADE;
+    /** On a printed Mini item: its finish (e.g. SHINY), or absent for none (String). */
+    public static NamespacedKey MINI_FINISH;
+    /** On a Museum showcase copy: marks it display-only — excluded from cap/circulation (Byte). */
+    public static NamespacedKey MINI_DISPLAY_ONLY;
+
     private Keys() {
     }
 
@@ -47,5 +58,10 @@ public final class Keys {
         MINI_OWNER = new NamespacedKey(plugin, "mini_owner");
         MINI_ITEM = new NamespacedKey(plugin, "mini_item");
         DISPLAY_ID = new NamespacedKey(plugin, "display_id");
+        CARD_ID = new NamespacedKey(plugin, "card_id");
+        FILAMENT_COLOR = new NamespacedKey(plugin, "filament_color");
+        MINI_GRADE = new NamespacedKey(plugin, "mini_grade");
+        MINI_FINISH = new NamespacedKey(plugin, "mini_finish");
+        MINI_DISPLAY_ONLY = new NamespacedKey(plugin, "mini_display_only");
     }
 }

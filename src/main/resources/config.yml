@@ -76,8 +76,8 @@ crafting:
       #   C: CRAFTING_TABLE
 
   # ---- The PC --------------------------------------------------------
-  # The gate to the Amazon market. Crafted ONLY at the Mini Workbench via
-  # the admin-defined recipe below. EMPTY by default = not craftable yet.
+  # The gate to the Amazon market. Crafted at a Printer (or a legacy Mini
+  # Workbench) via the light craft grid using the "chill", cheap recipe below.
   pc:
     base_block: PLAYER_HEAD
     display_name: "&bPersonal Computer"
@@ -87,26 +87,40 @@ crafting:
     # Optional base64 texture value (minecraft-heads.com style) applied to the
     # head so it looks like a computer/monitor. Leave blank for a plain head.
     head_texture: ""
-    # Workbench recipe. type: SHAPED uses `shape` + `ingredients` (symbol->Material,
+    # Craft-grid recipe. type: SHAPED uses `shape` + `ingredients` (symbol->Material,
     # laid out in the 3x3 grid). type: SHAPELESS uses `ingredients` as a list of
-    # { material, amount }. EMPTY = not craftable.
+    # { material, amount }. The default is a cheap "chill" recipe — edit to taste.
     recipe:
-      type: SHAPED
+      type: SHAPELESS
       shape: []
-      ingredients: {}
-      # Example rare-tier recipe (uncomment to enable):
-      # type: SHAPED
-      # shape:
-      #   - "NGN"
-      #   - "EAS"
-      #   - "NRN"
-      # ingredients:
-      #   N: NETHERITE_INGOT
-      #   G: GLASS_PANE
-      #   E: ECHO_SHARD
-      #   A: AMETHYST_SHARD
-      #   S: NETHER_STAR
-      #   R: REDSTONE_BLOCK
+      ingredients:
+        - material: IRON_INGOT
+          amount: 1
+        - material: REDSTONE
+          amount: 1
+        - material: GLASS_PANE
+          amount: 1
+
+# ---------------------------------------------------------------------
+#  Phase 9 — The Mini Printer (the ONLY place a Mini is minted).
+#  Bring a Card, pay a fee + filament, roll a grade (Gray→Gold), and
+#  print a graded Mini. A printer flagged public (via /hcm printer public)
+#  is FREE — the house covers filament & fee, basic finishes only (no Shiny).
+# ---------------------------------------------------------------------
+printer:
+  # Vanilla base block it is disguised as (tile-entity so it can carry a PDC tag).
+  base_block: SMITHING_TABLE
+  display_name: "&bMini Printer"
+  lore:
+    - "&7Right-click with a Card to print a graded Mini."
+    - "&8HomeCraft Management"
+  # Per-print money fee on a private printer (Vault). 0 = free.
+  fee: 50
+  # The premium Shiny finish (private printers only): extra filament + fee.
+  shiny:
+    filament: MAGENTA   # a DyeColor; the Shiny finish consumes this colour
+    amount: 2           # units of the above filament (0 = no material cost)
+    fee: 25             # extra money on top of the base fee (0 = none)
 
 # ---------------------------------------------------------------------
 #  Phase 2.5 — Finite, conserved commodities market (the "Amazon" side
@@ -312,7 +326,8 @@ minis:
 # ---------------------------------------------------------------------
 skins:
   pc:            ""   # computer / monitor head
-  workbench:     ""   # crafting-table head
+  printer:       ""   # 3D-printer head (Phase 9 Mini Printer)
+  workbench:     ""   # crafting-table head (retired block; legacy placements only)
   vending:       ""   # vending-machine head
   mailbox:       ""   # mailbox head
   pallet:        ""   # pallet / shipping-crate head

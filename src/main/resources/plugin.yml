@@ -48,6 +48,7 @@ permissions:
       hcm.pc.craft: true
       hcm.workbench.place: true
       hcm.workbench.use: true
+      hcm.printer.use: true
       hcm.market.order: true
       hcm.market.limit.bypass: true
       hcm.mini.buy: true
@@ -75,6 +76,9 @@ permissions:
     default: true
   hcm.workbench.use:
     description: Open the crafting GUI of a placed Mini Workbench.
+    default: true
+  hcm.printer.use:
+    description: Use a placed Mini Printer to print Minis from Cards.
     default: true
   hcm.protection.bypass:
     description: Bypass Towny/WorldGuard build checks for HomeCraft custom blocks.

@@ -9,6 +9,7 @@ package com.dierks.homecraft.block;
  */
 public enum CustomBlockType {
     MINI_WORKBENCH,
+    PRINTER,
     PC,
     MINI_VENDING_MACHINE,
     DISPLAY_CASE,

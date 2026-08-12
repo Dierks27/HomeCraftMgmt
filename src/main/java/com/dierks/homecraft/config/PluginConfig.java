@@ -66,6 +66,15 @@ public final class PluginConfig {
     public record Pc(Material baseBlock, String displayName, List<String> lore, String headTexture, PcRecipe recipe) {
     }
 
+    /**
+     * The Mini Printer (Phase 9): its placed-block appearance, the per-print money
+     * {@code fee}, and the Shiny finish material ({@code shinyAmount} of
+     * {@code shinyDye} filament) + optional {@code shinyFee}.
+     */
+    public record Printer(Material baseBlock, String displayName, List<String> lore,
+                          double fee, org.bukkit.DyeColor shinyDye, int shinyAmount, double shinyFee) {
+    }
+
     /** A daily sell allowance (0 = unlimited on that axis). */
     public record RankLimit(String permission, double maxMoneyPerDay, long maxUnitsPerDay) {
     }
@@ -176,11 +185,18 @@ public final class PluginConfig {
     public record MenuTitles(String admin, String museum, String market, String storeFormat) {
     }
 
-    /** The Minis catalog + rarity styling (Phase 4). */
+    /** The Minis catalog + rarity styling (Phase 4) + per-type card specs (Phase 9). */
     public record Minis(String pricingMode, Map<Rarity, RarityStyle> rarityStyles,
-                        List<String> categories, List<MiniDef> catalog) {
+                        List<String> categories, List<MiniDef> catalog,
+                        Map<String, com.dierks.homecraft.mini.CardSpec> cardSpecs) {
         public RarityStyle style(Rarity rarity) {
             return rarityStyles.getOrDefault(rarity, DEFAULT_RARITY_STYLES.get(rarity));
+        }
+
+        /** The card spec for a Mini — its configured one, or a rarity-derived default. */
+        public com.dierks.homecraft.mini.CardSpec cardSpec(MiniDef def) {
+            com.dierks.homecraft.mini.CardSpec s = cardSpecs.get(def.id());
+            return s != null ? s : com.dierks.homecraft.mini.CardSpec.defaultsFor(def.rarity());
         }
     }
 
@@ -234,6 +250,7 @@ public final class PluginConfig {
     private boolean respectTownPerms = true;
     private Workbench workbench;
     private Pc pc;
+    private Printer printer;
     private Market market;
     private Shipping shipping;
     private Store store;
@@ -264,6 +281,10 @@ public final class PluginConfig {
 
     public Pc pc() {
         return pc;
+    }
+
+    public Printer printer() {
+        return printer;
     }
 
     public Shipping shipping() {
@@ -345,6 +366,22 @@ public final class PluginConfig {
         String texture = c.getString("crafting.pc.head_texture", "");
         PcRecipe pcRecipe = readPcRecipe(c, "crafting.pc.recipe");
         this.pc = new Pc(pcBase, pcName, pcLore, texture, pcRecipe);
+
+        // ---- Mini Printer (Phase 9) ----
+        Material prBase = material(c.getString("printer.base_block"), Material.SMITHING_TABLE, "printer.base_block");
+        String prName = c.getString("printer.display_name", "&bMini Printer");
+        List<String> prLore = c.getStringList("printer.lore");
+        if (prLore.isEmpty()) {
+            prLore = List.of("&7Right-click with a Card to print a graded Mini.");
+        }
+        double prFee = Math.max(0, c.getDouble("printer.fee", 50));
+        org.bukkit.DyeColor shinyDye = parseDye(c.getString("printer.shiny.filament", "MAGENTA"));
+        if (shinyDye == null) {
+            shinyDye = org.bukkit.DyeColor.MAGENTA;
+        }
+        int shinyAmt = Math.max(0, c.getInt("printer.shiny.amount", 2));
+        double shinyFee = Math.max(0, c.getDouble("printer.shiny.fee", 0));
+        this.printer = new Printer(prBase, prName, prLore, prFee, shinyDye, shinyAmt, shinyFee);
 
         // ---- Market (Phase 2.5 — finite stock) ----
         this.market = readMarket(c);
@@ -542,6 +579,7 @@ public final class PluginConfig {
         }
         putSkin(map, sec, "pc", com.dierks.homecraft.block.CustomBlockType.PC);
         putSkin(map, sec, "workbench", com.dierks.homecraft.block.CustomBlockType.MINI_WORKBENCH);
+        putSkin(map, sec, "printer", com.dierks.homecraft.block.CustomBlockType.PRINTER);
         putSkin(map, sec, "vending", com.dierks.homecraft.block.CustomBlockType.MINI_VENDING_MACHINE);
         putSkin(map, sec, "display_case", com.dierks.homecraft.block.CustomBlockType.DISPLAY_CASE);
         putSkin(map, sec, "auction", com.dierks.homecraft.block.CustomBlockType.AUCTION_HOUSE);
@@ -694,6 +732,7 @@ public final class PluginConfig {
         }
 
         List<MiniDef> catalog = new ArrayList<>();
+        Map<String, com.dierks.homecraft.mini.CardSpec> cardSpecs = new LinkedHashMap<>();
         Set<String> seen = new HashSet<>();
         for (Map<?, ?> seriesRow : c.getMapList("minis.series")) {
             String seriesName = str(seriesRow.get("name"), "Series");
@@ -727,9 +766,51 @@ public final class PluginConfig {
                     continue;
                 }
                 catalog.add(new MiniDef(id, name, seriesName, category, rarity, type, texture, cap, price, craftable));
+                cardSpecs.put(id, readCardSpec(e.get("card"), rarity));
             }
         }
-        return new Minis(pricingMode, styles, categories, catalog);
+        return new Minis(pricingMode, styles, categories, catalog, cardSpecs);
+    }
+
+    /** Parse a Mini's optional {@code card:} block, or rarity-derive it if absent. */
+    private com.dierks.homecraft.mini.CardSpec readCardSpec(Object raw, Rarity rarity) {
+        com.dierks.homecraft.mini.CardSpec def = com.dierks.homecraft.mini.CardSpec.defaultsFor(rarity);
+        if (!(raw instanceof Map<?, ?> card)) {
+            return def;
+        }
+        long cardCap = card.get("cap") != null ? (long) number(card.get("cap"), -1) : def.cardCap();
+
+        Map<com.dierks.homecraft.mini.Grade, Double> grades =
+                new EnumMap<>(com.dierks.homecraft.mini.Grade.class);
+        if (card.get("grades") instanceof Map<?, ?> gm && !gm.isEmpty()) {
+            for (com.dierks.homecraft.mini.Grade g : com.dierks.homecraft.mini.Grade.values()) {
+                Object w = gm.get(g.name().toLowerCase(Locale.ROOT));
+                grades.put(g, Math.max(0, number(w, 0)));
+            }
+        } else {
+            grades.putAll(def.gradeWeights());
+        }
+
+        Map<org.bukkit.DyeColor, Integer> filament = new EnumMap<>(org.bukkit.DyeColor.class);
+        if (card.get("filament") instanceof Map<?, ?> fm && !fm.isEmpty()) {
+            for (Map.Entry<?, ?> en : fm.entrySet()) {
+                org.bukkit.DyeColor c = parseDye(String.valueOf(en.getKey()));
+                if (c != null) {
+                    filament.put(c, Math.max(0, (int) number(en.getValue(), 0)));
+                }
+            }
+        } else {
+            filament.putAll(def.filament());
+        }
+        return new com.dierks.homecraft.mini.CardSpec(cardCap, grades, filament);
+    }
+
+    private org.bukkit.DyeColor parseDye(String s) {
+        try {
+            return org.bukkit.DyeColor.valueOf(s.trim().toUpperCase(Locale.ROOT));
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private Material paneMaterial(String color, Material fallback) {

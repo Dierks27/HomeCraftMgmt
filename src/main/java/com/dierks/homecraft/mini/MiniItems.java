@@ -25,16 +25,35 @@ import java.util.UUID;
  */
 public final class MiniItems {
 
-    /** A real, minted Mini item given to a player (uniquely tagged). */
+    /** A real, minted Mini item given to a player (uniquely tagged); ungraded (Gray). */
     public ItemStack minted(MiniDef def, RarityStyle style, long mintNumber, UUID uid) {
+        return minted(def, style, mintNumber, uid, Grade.GRAY, null);
+    }
+
+    /**
+     * A real, minted Mini printed at a Printer (Phase 9): the {@code grade} drives the
+     * visual polish (name colour + glint) and a {@code finish} (e.g. SHINY) adds an
+     * extra glint. Still carries the anti-dupe uid + type id + mint number.
+     */
+    public ItemStack minted(MiniDef def, RarityStyle style, long mintNumber, UUID uid, Grade grade, String finish) {
         ItemStack item = baseItem(def, style);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.lore(lore(def, style, mintNumber));
+            boolean shiny = finish != null && finish.equalsIgnoreCase("SHINY");
+            meta.displayName(Component.text(grade.symbol() + " " + def.name(), grade.color())
+                    .decoration(TextDecoration.ITALIC, false));
+            if (grade.glint() || shiny) {
+                meta.setEnchantmentGlintOverride(true);
+            }
+            meta.lore(lore(def, style, mintNumber, grade, shiny));
             var pdc = meta.getPersistentDataContainer();
             pdc.set(Keys.MINI_ID, PersistentDataType.STRING, def.id());
             pdc.set(Keys.MINI_UID, PersistentDataType.STRING, uid.toString());
             pdc.set(Keys.MINI_MINT, PersistentDataType.LONG, mintNumber);
+            pdc.set(Keys.MINI_GRADE, PersistentDataType.STRING, grade.name());
+            if (shiny) {
+                pdc.set(Keys.MINI_FINISH, PersistentDataType.STRING, "SHINY");
+            }
             item.setItemMeta(meta);
         }
         return item;
@@ -113,11 +132,15 @@ public final class MiniItems {
         return item;
     }
 
-    private List<Component> lore(MiniDef def, RarityStyle style, long mintNumber) {
+    private List<Component> lore(MiniDef def, RarityStyle style, long mintNumber, Grade grade, boolean shiny) {
         List<Component> lore = new ArrayList<>();
         lore.add(line("Type: ", def.category(), NamedTextColor.GRAY));
         lore.add(line("Series: ", def.series(), NamedTextColor.GRAY));
         lore.add(line("Rarity: ", def.rarity().name(), style.nameColor()));
+        lore.add(Component.text("Grade: ", NamedTextColor.DARK_GRAY)
+                .append(Component.text(grade.symbol() + " " + grade.display(), grade.color()))
+                .append(shiny ? Component.text("  ✦ Shiny", NamedTextColor.WHITE) : Component.empty())
+                .decoration(TextDecoration.ITALIC, false));
         lore.add(line("Mint #", mintNumber + (def.uncapped() ? "" : " of " + def.cap()), NamedTextColor.GRAY));
         return lore;
     }

@@ -27,9 +27,11 @@ commands:
       /hcm admin             - open the Admin Studio (manage & import Minis)
       /hcm auction           - open the Mini Auction House
       /hcm reload            - reload config.yml and re-register recipes
-      /hcm give <workbench|pc|vending|display|auction|mailbox|pallet> [player]
+      /hcm give <workbench|pc|vending|display|auction|mailbox|pallet|arcade> [player]
       /hcm market list|price <item>|buy <item> <qty>|sell <item> <qty>
       /hcm display sign|hologram|maptv|remove  - bind an in-game economy display
+      /hcm arcade            - open the Arcade (crates, pity, scratch tickets)
+      /hcm tokens            - show your Arcade token balance
       /hcm mini capturestand <miniId>  - capture a posed armor stand into a Mini
     permission: hcm.use
     aliases: [homecraft]

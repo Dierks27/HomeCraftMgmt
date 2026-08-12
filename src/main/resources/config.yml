@@ -317,6 +317,7 @@ skins:
   mailbox:       ""   # mailbox head
   pallet:        ""   # pallet / shipping-crate head
   display_case:  ""   # glass display-case head
+  arcade:        ""   # arcade-machine head
 
 # ---------------------------------------------------------------------
 #  Phase 6 (Part C) — The Market Web Dashboard
@@ -350,3 +351,51 @@ displays:
     position: above        # above | below the text
     spin: true             # slow-spin the floating item
     item: ""               # override Material (blank = the commodity's own item)
+
+# ---------------------------------------------------------------------
+#  Phase 8 — The Arcade (§3.9)
+#  A wholesome arcade loop: earn tokens by PLAYING (login streaks + playtime),
+#  spend them on weighted loot crates (Mini prizes mint cap-aware through the
+#  normal pipeline), buy better odds with a Vault fee, exchange tokens for a
+#  guaranteed Rare+ (pity), or scratch a lotto ticket. ALL in-game currency —
+#  tokens + Vault money, NEVER real money. Reach it with /hcm arcade or a placed
+#  Arcade block (/hcm give arcade). Mini ids below reference the minis: catalog.
+# ---------------------------------------------------------------------
+arcade:
+  enabled: true
+  # The placeable Arcade block (skin it via skins.arcade).
+  block: { material: JUKEBOX, name: "&5Arcade Machine" }
+  tokens:
+    login_streak:
+      enabled: true
+      reward_per_day: 1          # tokens granted the first login each real day
+    playtime:
+      enabled: true
+      minutes_per_token: 60      # a token per hour played (0 = off)
+  # Loot crates: each a token cost + a weighted reward table. type: money | item | mini.
+  # A `mini` reward mints cap-aware and drops out of the table once minted out.
+  crates:
+    starter:
+      display: "&aStarter Crate"
+      cost_tokens: 1
+      rewards:
+        - { type: money, amount: 100,  weight: 50 }
+        - { type: item,  material: DIAMOND, amount: 1, weight: 20 }
+        - { type: item,  material: GOLD_INGOT, amount: 4, weight: 20 }
+        - { type: mini,  mini: piggy_mini, weight: 5 }
+      # Optional paid-odds tiers: a Vault fee that GUARANTEES a Mini at/above `floor`
+      # (a strong money sink). Odds are published in the crate GUI.
+      paid_odds:
+        - { cost_money: 500, floor: RARE }
+  # Pity / guaranteed exchange: spend N tokens for a guaranteed Rare+ Mini.
+  pity:
+    tokens: 3
+    guarantees_rarity: RARE      # COMMON | UNCOMMON | RARE | EPIC | LEGENDARY
+  # Lotto / scratch ticket: pay money for a weighted-random payout (money sink + hype).
+  lotto:
+    ticket_cost_money: 250
+    payouts:
+      - { amount: 0,    weight: 50 }   # a dud
+      - { amount: 100,  weight: 30 }
+      - { amount: 500,  weight: 15 }
+      - { amount: 2000, weight: 5 }

@@ -163,6 +163,7 @@ public final class CustomBlockListener implements Listener {
             }
             case AUCTION_HOUSE -> new AuctionMenu(plugin, player, null).open(player);
             case MAILBOX -> new com.dierks.homecraft.gui.MailboxMenu(plugin, player, null).open(player);
+            case ARCADE -> new com.dierks.homecraft.gui.arcade.ArcadeMenu(plugin, player).open(player);
             case PALLET -> {
                 boolean owner = placed.get().owner().equals(player.getUniqueId()) || player.hasPermission("hcm.admin");
                 new com.dierks.homecraft.gui.marketplace.PalletMenu(
@@ -181,6 +182,7 @@ public final class CustomBlockListener implements Listener {
             case AUCTION_HOUSE -> "Mini Auction House";
             case MAILBOX -> "Mailbox";
             case PALLET -> "Pallet";
+            case ARCADE -> "Arcade Machine";
         };
     }
 

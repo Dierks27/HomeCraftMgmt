@@ -78,6 +78,23 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 handleDisplay(sender, args);
             }
             case "mini", "minis" -> handleMini(sender, args);
+            case "arcade" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(Text.of("&cOnly players can open the Arcade."));
+                    return true;
+                }
+                new com.dierks.homecraft.gui.arcade.ArcadeMenu(plugin, player).open(player);
+            }
+            case "tokens" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(Text.of("&cOnly players have a token balance."));
+                    return true;
+                }
+                int t = plugin.arcade().balance(player.getUniqueId());
+                int s = plugin.arcade().streak(player.getUniqueId());
+                player.sendMessage(Text.of("&eArcade tokens: &6" + t + " &7(login streak: " + s + " day"
+                        + (s == 1 ? "" : "s") + "). &7Open the Arcade with &f/hcm arcade&7."));
+            }
             case "auction", "auctions" -> {
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Text.of("&cOnly players can open the Auction House."));
@@ -200,6 +217,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "auction" -> item = plugin.items().auctionHouse();
             case "mailbox" -> item = plugin.items().mailbox();
             case "pallet" -> item = plugin.items().pallet();
+            case "arcade" -> item = plugin.items().arcade();
             default -> {
                 sender.sendMessage(Text.of("&cUnknown item '" + args[1]
                         + "'. Use workbench, pc, vending, display, auction, mailbox, or pallet."));
@@ -495,9 +513,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "auction");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "auction", "arcade", "tokens");
             } else {
-                addMatches(out, args[0], "market", "mini", "auction");
+                addMatches(out, args[0], "market", "mini", "auction", "arcade", "tokens");
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("mini")) {
             addMatches(out, args[1], "museum", "list", "give", "capturestand");
@@ -510,7 +528,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
-            addMatches(out, args[1], "workbench", "pc", "vending", "display", "auction", "mailbox", "pallet");
+            addMatches(out, args[1], "workbench", "pc", "vending", "display", "auction", "mailbox", "pallet", "arcade");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("give")) {
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))) {

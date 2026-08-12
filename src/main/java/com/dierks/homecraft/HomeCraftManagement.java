@@ -70,6 +70,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.web.MarketDashboardServer dashboard;
     private com.dierks.homecraft.integration.HcmPlaceholders placeholders;
     private com.dierks.homecraft.display.DisplayService displayService;
+    private com.dierks.homecraft.arcade.ArcadeService arcade;
     private BukkitTask historyTask;
     private BukkitTask deliveryTask;
     private BukkitTask auctionTask;
@@ -141,6 +142,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.displayService = new com.dierks.homecraft.display.DisplayService(
                 this, new com.dierks.homecraft.storage.DisplayDao(database));
 
+        // The Arcade (Phase 8) — tokens, loot crates, pity, lotto.
+        this.arcade = new com.dierks.homecraft.arcade.ArcadeService(
+                this, new com.dierks.homecraft.storage.TokenDao(database));
+
         getServer().getPluginManager().registerEvents(
                 new CustomBlockListener(this, config, blockService, items, protection), this);
         getServer().getPluginManager().registerEvents(new WorkbenchListener(this, recipeManager), this);
@@ -153,6 +158,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.MiniHeadListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.ArmorStandListener(this, stands), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.display.DisplayListener(this), this);
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.ArcadeListener(this), this);
 
         PluginCommand hcm = getCommand("hcm");
         if (hcm != null) {
@@ -167,6 +173,7 @@ public final class HomeCraftManagement extends JavaPlugin {
 
         // Start the economy-display refresh timer (renders signs + spawns holograms).
         this.displayService.start();
+        this.arcade.start();
 
         // In-Game Economy Displays (Phase 7): the PlaceholderAPI 'hcm' expansion —
         // only loaded/registered when PlaceholderAPI is installed.
@@ -187,6 +194,10 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (arcade != null) {
+            arcade.stop();
+            arcade = null;
+        }
         if (displayService != null) {
             displayService.stop();
             displayService = null;
@@ -242,6 +253,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
         if (displayService != null) {
             displayService.start(); // re-arm the refresh timer at the new cadence
+        }
+        if (arcade != null) {
+            arcade.start(); // re-arm the playtime task under any new config
         }
     }
 
@@ -439,5 +453,9 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public com.dierks.homecraft.display.DisplayService displayService() {
         return displayService;
+    }
+
+    public com.dierks.homecraft.arcade.ArcadeService arcade() {
+        return arcade;
     }
 }

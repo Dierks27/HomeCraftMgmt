@@ -389,10 +389,12 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         switch (sub) {
             case "sign" -> bindSignDisplay(player);
             case "hologram", "holo" -> bindHologramDisplay(player);
+            case "maptv", "map" -> bindMapTvDisplay(player, args);
             case "remove" -> removeDisplay(player);
             default -> {
                 player.sendMessage(Text.of("&e/hcm display sign &7- bind the sign you're looking at to a commodity"));
                 player.sendMessage(Text.of("&e/hcm display hologram &7- float a live-price hologram above the block you're looking at"));
+                player.sendMessage(Text.of("&e/hcm display maptv [cols] [rows] &7- render a live chart on the item frame you're looking at (grid tiles right+down)"));
                 player.sendMessage(Text.of("&e/hcm display remove &7- unbind the display block you're looking at"));
             }
         }
@@ -432,6 +434,36 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     player.closeInventory();
                 },
                 player::closeInventory).open(player);
+    }
+
+    private void bindMapTvDisplay(Player player, String[] args) {
+        org.bukkit.entity.Entity targetEnt = player.getTargetEntity(6);
+        if (!(targetEnt instanceof org.bukkit.entity.ItemFrame frame)) {
+            player.sendMessage(Text.of("&cLook at an item frame on a wall, then run &f/hcm display maptv [cols] [rows]&c."));
+            return;
+        }
+        int cols = parsePositiveArg(args, 2, 1);
+        int rows = parsePositiveArg(args, 3, 1);
+        new com.dierks.homecraft.gui.display.CommodityPickerMenu(plugin, player, "Bind map-TV → commodity",
+                id -> {
+                    var r = plugin.displayService().bindMapTv(player, frame, id, cols, rows);
+                    player.sendMessage(r.ok()
+                            ? Text.of("&aMap-TV bound to &f" + id + "&a — rendering " + r.error() + ".")
+                            : Text.of("&c" + r.error()));
+                    player.closeInventory();
+                },
+                player::closeInventory).open(player);
+    }
+
+    private int parsePositiveArg(String[] args, int idx, int def) {
+        if (args.length <= idx) {
+            return def;
+        }
+        try {
+            return Math.max(1, Integer.parseInt(args[idx]));
+        } catch (NumberFormatException e) {
+            return def;
+        }
     }
 
     private void removeDisplay(Player player) {

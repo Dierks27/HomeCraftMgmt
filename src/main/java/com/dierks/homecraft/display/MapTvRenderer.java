@@ -82,10 +82,14 @@ public final class MapTvRenderer extends MapRenderer {
         }
         int width = TILE * cols;
         int height = TILE * rows;
-        int plotTop = MARGIN + 26;
+        int headerH = 26;
+        int plotTop = headerH + 2;
         int plotLeft = MARGIN;
         int plotRight = width - MARGIN;
         int plotBottom = height - MARGIN;
+
+        double change = plugin.market().change24h(itemId);
+        double price = plugin.market().price(itemId);
 
         List<Double> prices = priceSeries();
         double min = prices.isEmpty() ? 0 : Collections.min(prices);
@@ -94,8 +98,20 @@ public final class MapTvRenderer extends MapRenderer {
             max = min + Math.max(1, Math.abs(min) * 0.05);
         }
 
-        // Gridlines (faint) across the whole virtual plot.
-        Color grid = new Color(34, 42, 54);
+        // Draw order matches the dashboard: band -> gridlines -> axis labels -> header -> line LAST.
+
+        // 1) Header band on the top row of tiles so the text stands out.
+        if (tileY == 0) {
+            Color band = new Color(24, 30, 44);
+            for (int x = 0; x < TILE; x++) {
+                for (int y = 0; y < headerH; y++) {
+                    canvas.setPixelColor(x, y, band);
+                }
+            }
+        }
+
+        // 2) Gridlines.
+        Color grid = new Color(46, 56, 74);
         for (int g = 0; g <= 3; g++) {
             int vy = plotTop + (int) Math.round((plotBottom - plotTop) * (g / 3.0));
             for (int vx = plotLeft; vx <= plotRight; vx++) {
@@ -109,45 +125,55 @@ public final class MapTvRenderer extends MapRenderer {
             }
         }
 
-        // Header on the top-left tile: name, price, trend.
-        double change = plugin.market().change24h(itemId);
-        if (topLeft()) {
-            canvas.drawText(3, 3, MinecraftFont.Font, S + "f" + safe(item.label(), 19));
-            canvas.drawText(3, 14, MinecraftFont.Font,
-                    S + "e" + safe(plugin.economy().format(plugin.market().price(itemId)), 14)
-                            + "  " + trendCode(change) + asciiArrow(change) + fmtPct(change));
-            drawSwatch(canvas, TILE - 12, 3, item.material());
-        }
-        // Axis min/max labels on the left column of tiles.
+        // 3) Axis min/max labels on the left column of tiles.
         if (tileX == 0) {
             int localTop = plotTop - tileY * TILE;
             int localBottom = plotBottom - tileY * TILE;
             if (localTop >= 0 && localTop < TILE) {
-                canvas.drawText(3, Math.max(0, localTop - 1), MinecraftFont.Font,
-                        S + "7" + safe(plugin.economy().format(max), 12));
+                canvas.drawText(3, Math.max(0, localTop + 1), MinecraftFont.Font,
+                        S + "7" + safe(plugin.economy().format(max), 11));
             }
             if (localBottom - 8 >= 0 && localBottom - 8 < TILE) {
                 canvas.drawText(3, localBottom - 8, MinecraftFont.Font,
-                        S + "7" + safe(plugin.economy().format(min), 12));
+                        S + "7" + safe(plugin.economy().format(min), 11));
             }
         }
 
-        if (prices.size() < 2) {
-            return;
+        // 4) Header text on the top-left tile: name, current price, trend.
+        if (topLeft()) {
+            canvas.drawText(3, 2, MinecraftFont.Font, S + "f" + safe(item.label(), 19));
+            canvas.drawText(3, 13, MinecraftFont.Font,
+                    S + "e" + safe(plugin.economy().format(price), 12)
+                            + " " + trendCode(change) + asciiArrow(change) + fmtPct(change));
+            drawSwatch(canvas, TILE - 11, 2, item.material());
         }
-        Color lineColor = change < -0.05 ? new Color(255, 107, 107) : new Color(120, 230, 140);
-        int n = prices.size();
-        int prevX = -1;
-        int prevY = -1;
-        for (int i = 0; i < n; i++) {
-            int vx = plotLeft + (int) Math.round((double) i / (n - 1) * (plotRight - plotLeft));
-            double norm = (prices.get(i) - min) / (max - min);
-            int vy = plotBottom - (int) Math.round(norm * (plotBottom - plotTop));
-            if (prevX >= 0) {
-                drawVirtualLine(canvas, prevX, prevY, vx, vy, lineColor);
+
+        // 5) Price line LAST, on top — bright green-up / red-down, thick, with a head dot.
+        if (prices.size() >= 2) {
+            Color lineColor = change < -0.05 ? new Color(240, 90, 90) : new Color(90, 225, 120);
+            int n = prices.size();
+            int prevX = -1;
+            int prevY = -1;
+            int lastX = -1;
+            int lastY = -1;
+            for (int i = 0; i < n; i++) {
+                int vx = plotLeft + (int) Math.round((double) i / (n - 1) * (plotRight - plotLeft));
+                double norm = (prices.get(i) - min) / (max - min);
+                int vy = plotBottom - (int) Math.round(norm * (plotBottom - plotTop));
+                if (prevX >= 0) {
+                    drawVirtualLine(canvas, prevX, prevY, vx, vy, lineColor);
+                }
+                prevX = vx;
+                prevY = vy;
+                lastX = vx;
+                lastY = vy;
             }
-            prevX = vx;
-            prevY = vy;
+            Color dot = new Color(255, 255, 255);
+            for (int ox = -1; ox <= 1; ox++) {
+                for (int oy = -1; oy <= 1; oy++) {
+                    plot(canvas, lastX + ox, lastY + oy, dot);
+                }
+            }
         }
     }
 

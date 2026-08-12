@@ -55,6 +55,38 @@ public final class MiniDao {
         }
     }
 
+    /**
+     * Retire a minted copy on destruction: mark the individual retired and bump the
+     * {@code destroyed} tally (lowering circulation) — but the mint_number is kept
+     * forever, so the minted-against-cap slot is never freed. Idempotent: a copy
+     * already retired (or unknown uid with a known copy already gone) is a no-op.
+     *
+     * @return true if this call actually retired a live copy (for logging/feedback).
+     */
+    public boolean retire(String uid, String miniId) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            if (uid != null && !uid.isBlank()) {
+                // Only retire a provenance row that exists and isn't already retired.
+                try (PreparedStatement ps = c.prepareStatement(
+                        "UPDATE mini_individuals SET retired_at = ? WHERE uid = ? AND retired_at IS NULL")) {
+                    ps.setLong(1, System.currentTimeMillis());
+                    ps.setString(2, uid);
+                    if (ps.executeUpdate() == 0) {
+                        return false; // unknown uid or already retired — don't double-count
+                    }
+                }
+            }
+            try (PreparedStatement ps = c.prepareStatement(
+                    "INSERT INTO mini_counts(mini_id, minted, destroyed) VALUES(?, 0, 1) "
+                            + "ON CONFLICT(mini_id) DO UPDATE SET destroyed = destroyed + 1")) {
+                ps.setString(1, miniId);
+                ps.executeUpdate();
+            }
+            return true;
+        }
+    }
+
     /** Atomically bump the minted tally and return the new mint number. */
     public long mintNext(String miniId) throws SQLException {
         Connection c = conn();

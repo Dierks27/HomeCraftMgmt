@@ -282,6 +282,33 @@ public final class MiniService {
         return mintInternal(player, def);
     }
 
+    /**
+     * Retire a minted copy on destruction (Phase 9): decrement circulation but keep
+     * the mint number forever — a burned "#3 of 5" means only 4 will ever exist, and
+     * the cap slot is never freed. Safe on any item (no-op for non-Minis), idempotent,
+     * and best-effort (some paths — unloaded chunks, ender chests — can't be tracked).
+     *
+     * @return true if a live copy was actually retired.
+     */
+    public boolean retire(ItemStack item) {
+        MiniRef ref = identify(item);
+        if (ref == null) {
+            return false;
+        }
+        try {
+            boolean retired = dao.retire(ref.uid(), ref.miniId());
+            if (retired) {
+                MiniDao.Counts c = dao.counts(ref.miniId());
+                plugin.getLogger().info("Retired Mini " + ref.miniId() + " #" + ref.mintNumber()
+                        + " on destruction — circulation now " + c.circulation() + ".");
+            }
+            return retired;
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to retire Mini on destruction: " + e.getMessage());
+            return false;
+        }
+    }
+
     /** @return the identity of a minted Mini item, or null if the item isn't a tagged Mini. */
     public MiniRef identify(ItemStack item) {
         if (item == null || !item.hasItemMeta()) {

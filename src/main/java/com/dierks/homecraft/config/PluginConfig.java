@@ -115,7 +115,8 @@ public final class PluginConfig {
      * Hologram appearance (Phase 8 Part A): pair the text ticker with a floating
      * {@code ItemDisplay}. {@code itemOverride} null = use the commodity's own item.
      */
-    public record HologramOpts(boolean itemDisplay, boolean above, boolean spin, Material itemOverride) {
+    public record HologramOpts(boolean itemDisplay, boolean above, boolean spin, Material itemOverride,
+                               float itemScale, float textScale) {
     }
 
     // ---- Arcade (Phase 8, §3.9) — all in-game currency, never real money -------
@@ -379,8 +380,10 @@ public final class PluginConfig {
         String holoItem = c.getString("displays.hologram.item", "");
         Material holoMat = (holoItem == null || holoItem.isBlank())
                 ? null : Material.matchMaterial(holoItem.trim().toUpperCase());
+        float itemScale = (float) Math.max(0.05, c.getDouble("displays.hologram.item_scale", 0.3));
+        float textScale = (float) Math.max(0.1, c.getDouble("displays.hologram.text_scale", 1.0));
         this.displays = new Displays(Math.max(2, c.getInt("displays.refresh_seconds", 20)),
-                new HologramOpts(itemDisp, above, spin, holoMat));
+                new HologramOpts(itemDisp, above, spin, holoMat, itemScale, textScale));
 
         // ---- Arcade (Phase 8) ----
         this.arcade = readArcade(c);

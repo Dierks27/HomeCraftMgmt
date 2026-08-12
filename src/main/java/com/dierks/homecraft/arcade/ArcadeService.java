@@ -61,6 +61,7 @@ public final class ArcadeService {
         if (!plugin.config().arcade().enabled()) {
             return;
         }
+        validateCrates();
         // Accrue playtime tokens for online players every 5 minutes.
         playtimeTask = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
             for (Player p : plugin.getServer().getOnlinePlayers()) {
@@ -73,6 +74,18 @@ public final class ArcadeService {
         if (playtimeTask != null) {
             playtimeTask.cancel();
             playtimeTask = null;
+        }
+    }
+
+    /** Warn (once, on load) about crate rewards that reference a Mini not in the catalog. */
+    private void validateCrates() {
+        for (Crate crate : plugin.config().arcade().crates().values()) {
+            for (CrateReward r : crate.rewards()) {
+                if (r.type() == RewardType.MINI && plugin.miniService().def(r.miniId()) == null) {
+                    plugin.getLogger().warning("Arcade crate '" + crate.id() + "' references unknown Mini '"
+                            + r.miniId() + "' — that reward is skipped; the crate still works.");
+                }
+            }
         }
     }
 

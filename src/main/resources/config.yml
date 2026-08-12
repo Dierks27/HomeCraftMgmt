@@ -351,6 +351,8 @@ displays:
     position: above        # above | below the text
     spin: true             # slow-spin the floating item
     item: ""               # override Material (blank = the commodity's own item)
+    item_scale: 0.3        # size of the floating item (1.0 = full block; ~0.3 reads well)
+    text_scale: 1.0        # size of the price/trend text
 
 # ---------------------------------------------------------------------
 #  Phase 8 — The Arcade (§3.9)

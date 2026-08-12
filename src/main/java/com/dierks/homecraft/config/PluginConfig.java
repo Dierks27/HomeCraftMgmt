@@ -145,10 +145,19 @@ public final class PluginConfig {
     }
 
     /** The whole Arcade config: token sources, crates, pity exchange, lotto, block. */
-    public record Arcade(boolean enabled, boolean streakEnabled, int streakRewardPerDay,
+    public record Arcade(boolean enabled, boolean streakEnabled, List<Integer> streakRewards,
                          boolean playtimeEnabled, int playtimeMinutesPerToken,
                          Map<String, Crate> crates, int pityTokens, Rarity pityRarity, Lotto lotto,
                          BlockDef block) {
+
+        /** Tokens awarded on a given consecutive-day streak (last entry repeats). */
+        public int streakReward(int streakDay) {
+            if (streakRewards.isEmpty()) {
+                return 0;
+            }
+            int idx = Math.min(Math.max(1, streakDay), streakRewards.size()) - 1;
+            return streakRewards.get(idx);
+        }
     }
 
     /** Online store branding shown in-game (name + display URL). */
@@ -392,7 +401,14 @@ public final class PluginConfig {
     private Arcade readArcade(FileConfiguration c) {
         boolean enabled = c.getBoolean("arcade.enabled", true);
         boolean streakEnabled = c.getBoolean("arcade.tokens.login_streak.enabled", true);
-        int perDay = Math.max(0, c.getInt("arcade.tokens.login_streak.reward_per_day", 1));
+        // Escalating per-consecutive-day reward table (last entry repeats for day N+).
+        List<Integer> streakRewards = new ArrayList<>();
+        for (int v : c.getIntegerList("arcade.tokens.login_streak.rewards")) {
+            streakRewards.add(Math.max(0, v));
+        }
+        if (streakRewards.isEmpty()) {
+            streakRewards.add(Math.max(0, c.getInt("arcade.tokens.login_streak.reward_per_day", 1)));
+        }
         boolean ptEnabled = c.getBoolean("arcade.tokens.playtime.enabled", true);
         int minsPerToken = Math.max(0, c.getInt("arcade.tokens.playtime.minutes_per_token", 60));
 
@@ -434,7 +450,7 @@ public final class PluginConfig {
         }
 
         BlockDef block = blockDef(c, "arcade.block", Material.JUKEBOX, "&5Arcade Machine");
-        return new Arcade(enabled, streakEnabled, perDay, ptEnabled, minsPerToken,
+        return new Arcade(enabled, streakEnabled, streakRewards, ptEnabled, minsPerToken,
                 crates, pityTokens, pityRarity, new Lotto(Math.max(0, ticketCost), payouts), block);
     }
 

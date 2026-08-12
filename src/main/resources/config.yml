@@ -370,7 +370,11 @@ arcade:
   tokens:
     login_streak:
       enabled: true
-      reward_per_day: 1          # tokens granted the first login each real day
+      # Escalating reward by consecutive-day streak (day1, day2, …); the last entry
+      # repeats for longer streaks. One claim per real day. (reward_per_day is a
+      # fallback only when this list is empty.)
+      rewards: [ 1, 1, 2, 2, 3, 3, 5 ]
+      reward_per_day: 1
     playtime:
       enabled: true
       minutes_per_token: 60      # a token per hour played (0 = off)

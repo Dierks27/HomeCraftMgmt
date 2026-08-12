@@ -12,6 +12,7 @@ import com.dierks.homecraft.mini.Rarity;
 import com.dierks.homecraft.storage.TokenDao;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
+import org.bukkit.Sound;
 import org.bukkit.Statistic;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -133,6 +134,61 @@ public final class ArcadeService {
         }
     }
 
+    /** "+N token" feedback: a chat line and a bright pickup sound. */
+    private void feedback(Player player, int tokens, String reason) {
+        if (tokens <= 0) {
+            return;
+        }
+        player.sendMessage(Text.of("&e✦ &a+" + tokens + " token" + (tokens == 1 ? "" : "s")
+                + " &7(" + reason + ")&7. Balance: &6" + balance(player.getUniqueId())));
+        player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.7f, 1.4f);
+    }
+
+    /** Grant tokens to an online player with "+N token" feedback (the general earn path). */
+    public void award(Player player, int tokens, String reason) {
+        if (tokens <= 0) {
+            return;
+        }
+        grant(player.getUniqueId(), tokens);
+        feedback(player, tokens, reason);
+    }
+
+    // ---- admin grants ---------------------------------------------------------
+
+    /** Admin: add tokens to a player (may be offline). Returns the new balance. */
+    public int adminAdd(UUID player, int tokens) {
+        grant(player, tokens);
+        Player online = plugin.getServer().getPlayer(player);
+        if (online != null && tokens > 0) {
+            feedback(online, tokens, "admin grant");
+        }
+        return balance(player);
+    }
+
+    /** Admin: set a player's balance to an exact value. Returns the new balance. */
+    public int adminSet(UUID player, int tokens) {
+        try {
+            TokenDao.TokenState s = dao.get(player);
+            dao.save(new TokenDao.TokenState(player, Math.max(0, tokens), s.streak(),
+                    s.lastStreakDay(), s.playtimeTokens()));
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to set tokens: " + e.getMessage());
+        }
+        return balance(player);
+    }
+
+    /** Admin: take tokens from a player (floored at 0). Returns the new balance. */
+    public int adminTake(UUID player, int tokens) {
+        try {
+            TokenDao.TokenState s = dao.get(player);
+            dao.save(new TokenDao.TokenState(player, Math.max(0, s.tokens() - Math.max(0, tokens)),
+                    s.streak(), s.lastStreakDay(), s.playtimeTokens()));
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to take tokens: " + e.getMessage());
+        }
+        return balance(player);
+    }
+
     // ---- earning: login streak + playtime -------------------------------------
 
     /** On join: award today's streak token (once per real day) and catch up playtime tokens. */
@@ -141,17 +197,16 @@ public final class ArcadeService {
         if (!arc.enabled()) {
             return;
         }
-        if (arc.streakEnabled() && arc.streakRewardPerDay() > 0) {
+        if (arc.streakEnabled()) {
             try {
                 TokenDao.TokenState s = dao.get(player.getUniqueId());
                 long today = System.currentTimeMillis() / MS_PER_DAY;
                 if (today != s.lastStreakDay()) {
                     int streak = (today == s.lastStreakDay() + 1) ? s.streak() + 1 : 1;
-                    dao.save(new TokenDao.TokenState(player.getUniqueId(),
-                            s.tokens() + arc.streakRewardPerDay(), streak, today, s.playtimeTokens()));
-                    player.sendMessage(Text.of("&d✦ Daily streak: &f" + streak + " day"
-                            + (streak == 1 ? "" : "s") + " &7— &a+" + arc.streakRewardPerDay()
-                            + " token" + (arc.streakRewardPerDay() == 1 ? "" : "s") + "&7. Visit the Arcade!"));
+                    int reward = arc.streakReward(streak);
+                    dao.save(new TokenDao.TokenState(player.getUniqueId(), s.tokens() + reward,
+                            streak, today, s.playtimeTokens()));
+                    feedback(player, reward, "day " + streak + " login streak");
                 }
             } catch (SQLException e) {
                 plugin.getLogger().severe("Failed streak grant: " + e.getMessage());
@@ -175,10 +230,7 @@ public final class ArcadeService {
                 int diff = earned - s.playtimeTokens();
                 dao.save(new TokenDao.TokenState(player.getUniqueId(), s.tokens() + diff, s.streak(),
                         s.lastStreakDay(), earned));
-                if (announce || diff > 0) {
-                    player.sendMessage(Text.of("&b✦ Playtime reward: &a+" + diff + " token"
-                            + (diff == 1 ? "" : "s") + "&7 for time played."));
-                }
+                feedback(player, diff, "time played");
             }
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed playtime grant: " + e.getMessage());

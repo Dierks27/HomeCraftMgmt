@@ -32,6 +32,7 @@ commands:
       /hcm display sign|hologram|maptv|remove  - bind an in-game economy display
       /hcm arcade            - open the Arcade (crates, pity, scratch tickets)
       /hcm tokens            - show your Arcade token balance
+      /hcm tokens give|set|take <player> <n>  - admin: adjust tokens
       /hcm mini capturestand <miniId>  - capture a posed armor stand into a Mini
     permission: hcm.use
     aliases: [homecraft]

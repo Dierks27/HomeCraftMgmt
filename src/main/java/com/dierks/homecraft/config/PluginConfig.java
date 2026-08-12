@@ -18,6 +18,7 @@ import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Logger;
@@ -107,7 +108,46 @@ public final class PluginConfig {
     }
 
     /** In-game economy displays refresh cadence (Phase 7, §3.8). */
-    public record Displays(int refreshSeconds) {
+    public record Displays(int refreshSeconds, HologramOpts hologram) {
+    }
+
+    /**
+     * Hologram appearance (Phase 8 Part A): pair the text ticker with a floating
+     * {@code ItemDisplay}. {@code itemOverride} null = use the commodity's own item.
+     */
+    public record HologramOpts(boolean itemDisplay, boolean above, boolean spin, Material itemOverride) {
+    }
+
+    // ---- Arcade (Phase 8, §3.9) — all in-game currency, never real money -------
+
+    public enum RewardType {MONEY, ITEM, MINI}
+
+    /** One weighted reward in a crate's loot table. */
+    public record CrateReward(RewardType type, double amount, Material material, int itemAmount,
+                              String miniId, double weight) {
+    }
+
+    /** An optional paid-odds tier: a Vault fee that guarantees a rarity floor for the pull. */
+    public record PaidTier(double costMoney, Rarity floor) {
+    }
+
+    /** A token-priced loot crate with a weighted reward table (cap-aware Mini prizes). */
+    public record Crate(String id, String display, int costTokens, List<CrateReward> rewards,
+                        List<PaidTier> paidTiers) {
+    }
+
+    /** One weighted payout in the lotto/scratch table. */
+    public record LottoPayout(double amount, double weight) {
+    }
+
+    public record Lotto(double ticketCost, List<LottoPayout> payouts) {
+    }
+
+    /** The whole Arcade config: token sources, crates, pity exchange, lotto, block. */
+    public record Arcade(boolean enabled, boolean streakEnabled, int streakRewardPerDay,
+                         boolean playtimeEnabled, int playtimeMinutesPerToken,
+                         Map<String, Crate> crates, int pityTokens, Rarity pityRarity, Lotto lotto,
+                         BlockDef block) {
     }
 
     /** Online store branding shown in-game (name + display URL). */
@@ -192,6 +232,7 @@ public final class PluginConfig {
     private Map<com.dierks.homecraft.block.CustomBlockType, String> skins;
     private WebDashboard webDashboard;
     private Displays displays;
+    private Arcade arcade;
 
     public PluginConfig(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -245,6 +286,10 @@ public final class PluginConfig {
 
     public Displays displays() {
         return displays;
+    }
+
+    public Arcade arcade() {
+        return arcade;
     }
 
     public Loot.MiniLoot miniLoot() {
@@ -327,8 +372,105 @@ public final class PluginConfig {
         this.skins = readSkins(c);
         this.webDashboard = readWebDashboard(c);
 
-        // ---- In-game economy displays (Phase 7) ----
-        this.displays = new Displays(Math.max(2, c.getInt("displays.refresh_seconds", 20)));
+        // ---- In-game economy displays (Phase 7 + Phase 8 hologram opts) ----
+        boolean itemDisp = c.getBoolean("displays.hologram.item_display", true);
+        boolean above = !"below".equalsIgnoreCase(c.getString("displays.hologram.position", "above"));
+        boolean spin = c.getBoolean("displays.hologram.spin", true);
+        String holoItem = c.getString("displays.hologram.item", "");
+        Material holoMat = (holoItem == null || holoItem.isBlank())
+                ? null : Material.matchMaterial(holoItem.trim().toUpperCase());
+        this.displays = new Displays(Math.max(2, c.getInt("displays.refresh_seconds", 20)),
+                new HologramOpts(itemDisp, above, spin, holoMat));
+
+        // ---- Arcade (Phase 8) ----
+        this.arcade = readArcade(c);
+    }
+
+    private Arcade readArcade(FileConfiguration c) {
+        boolean enabled = c.getBoolean("arcade.enabled", true);
+        boolean streakEnabled = c.getBoolean("arcade.tokens.login_streak.enabled", true);
+        int perDay = Math.max(0, c.getInt("arcade.tokens.login_streak.reward_per_day", 1));
+        boolean ptEnabled = c.getBoolean("arcade.tokens.playtime.enabled", true);
+        int minsPerToken = Math.max(0, c.getInt("arcade.tokens.playtime.minutes_per_token", 60));
+
+        Map<String, Crate> crates = new LinkedHashMap<>();
+        ConfigurationSection cs = c.getConfigurationSection("arcade.crates");
+        if (cs != null) {
+            for (String key : cs.getKeys(false)) {
+                String base = "arcade.crates." + key;
+                String display = c.getString(base + ".display", key);
+                int cost = Math.max(0, c.getInt(base + ".cost_tokens", 1));
+                List<CrateReward> rewards = new ArrayList<>();
+                for (Map<?, ?> row : c.getMapList(base + ".rewards")) {
+                    CrateReward r = readReward(row);
+                    if (r != null) {
+                        rewards.add(r);
+                    }
+                }
+                List<PaidTier> tiers = new ArrayList<>();
+                for (Map<?, ?> row : c.getMapList(base + ".paid_odds")) {
+                    double costMoney = number(row.get("cost_money"), 0);
+                    Rarity floor = parseRarity(str(row.get("floor"), str(row.get("boost_rarity"), "RARE")));
+                    if (costMoney > 0) {
+                        tiers.add(new PaidTier(costMoney, floor));
+                    }
+                }
+                crates.put(key.toLowerCase(Locale.ROOT),
+                        new Crate(key.toLowerCase(Locale.ROOT), display, cost, rewards, tiers));
+            }
+        }
+
+        int pityTokens = Math.max(0, c.getInt("arcade.pity.tokens", 3));
+        Rarity pityRarity = parseRarity(c.getString("arcade.pity.guarantees_rarity", "RARE"));
+
+        double ticketCost = c.getDouble("arcade.lotto.ticket_cost_money", 250);
+        List<LottoPayout> payouts = new ArrayList<>();
+        for (Map<?, ?> row : c.getMapList("arcade.lotto.payouts")) {
+            payouts.add(new LottoPayout(Math.max(0, number(row.get("amount"), 0)),
+                    Math.max(0.0001, number(row.get("weight"), 1))));
+        }
+
+        BlockDef block = blockDef(c, "arcade.block", Material.JUKEBOX, "&5Arcade Machine");
+        return new Arcade(enabled, streakEnabled, perDay, ptEnabled, minsPerToken,
+                crates, pityTokens, pityRarity, new Lotto(Math.max(0, ticketCost), payouts), block);
+    }
+
+    private CrateReward readReward(Map<?, ?> row) {
+        String type = str(row.get("type"), "money").toLowerCase(Locale.ROOT);
+        double weight = Math.max(0.0001, number(row.get("weight"), 1));
+        switch (type) {
+            case "money" -> {
+                return new CrateReward(RewardType.MONEY, Math.max(0, number(row.get("amount"), 0)),
+                        null, 0, null, weight);
+            }
+            case "item" -> {
+                Material m = Material.matchMaterial(str(row.get("material"), "").toUpperCase(Locale.ROOT));
+                if (m == null || !m.isItem()) {
+                    return null;
+                }
+                int amt = (int) number(row.get("amount"), 1);
+                return new CrateReward(RewardType.ITEM, 0, m, Math.max(1, amt), null, weight);
+            }
+            case "mini" -> {
+                String mini = str(row.get("mini"), null);
+                if (mini == null || mini.isBlank()) {
+                    return null;
+                }
+                return new CrateReward(RewardType.MINI, 0, null, 0,
+                        com.dierks.homecraft.mini.MiniIds.slug(mini), weight);
+            }
+            default -> {
+                return null;
+            }
+        }
+    }
+
+    private Rarity parseRarity(String s) {
+        try {
+            return Rarity.valueOf(s.trim().toUpperCase(Locale.ROOT));
+        } catch (Exception e) {
+            return Rarity.RARE;
+        }
     }
 
     private Map<com.dierks.homecraft.block.CustomBlockType, String> readSkins(FileConfiguration c) {
@@ -345,6 +487,7 @@ public final class PluginConfig {
         putSkin(map, sec, "auction", com.dierks.homecraft.block.CustomBlockType.AUCTION_HOUSE);
         putSkin(map, sec, "mailbox", com.dierks.homecraft.block.CustomBlockType.MAILBOX);
         putSkin(map, sec, "pallet", com.dierks.homecraft.block.CustomBlockType.PALLET);
+        putSkin(map, sec, "arcade", com.dierks.homecraft.block.CustomBlockType.ARCADE);
         return map;
     }
 

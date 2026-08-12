@@ -14,5 +14,6 @@ public enum CustomBlockType {
     DISPLAY_CASE,
     AUCTION_HOUSE,
     MAILBOX,
-    PALLET
+    PALLET,
+    ARCADE
 }

@@ -156,7 +156,7 @@ public final class MarketDashboardServer {
             first = false;
             sb.append('{');
             sb.append("\"id\":").append(jsonString(item.id())).append(',');
-            sb.append("\"name\":").append(jsonString(item.label())).append(',');
+            sb.append("\"name\":").append(jsonString(stripLegacy(item.label()))).append(',');
             sb.append("\"material\":").append(jsonString(item.material().name())).append(',');
             sb.append("\"price\":").append(num(price)).append(',');
             sb.append("\"buy\":").append(num(plugin.market().buyPrice(item.id()))).append(',');
@@ -204,6 +204,11 @@ public final class MarketDashboardServer {
     }
 
     // ---- helpers --------------------------------------------------------------
+
+    /** Strip legacy '&'/'§' colour + format codes so web text reads as plain names. */
+    private static String stripLegacy(String s) {
+        return s == null ? "" : s.replaceAll("(?i)[&§][0-9a-fk-or]", "").trim();
+    }
 
     private static String num(double d) {
         if (Double.isNaN(d) || Double.isInfinite(d)) {

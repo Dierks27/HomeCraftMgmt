@@ -83,6 +83,14 @@ public final class CustomItems {
                 config.skin(CustomBlockType.PALLET));
     }
 
+    /** An Arcade machine item, ready to place. */
+    public ItemStack arcade() {
+        PluginConfig.BlockDef def = config.arcade().block();
+        return tagged(def.material(), def.name(), List.of("&7Right-click to open the Arcade.",
+                "&7Spend tokens on crates, pity & scratch tickets."),
+                CustomBlockType.ARCADE, config.skin(CustomBlockType.ARCADE));
+    }
+
     /** Build the item for a given type from current config (used e.g. when dropping on break). */
     public ItemStack of(CustomBlockType type) {
         return switch (type) {
@@ -93,6 +101,7 @@ public final class CustomItems {
             case AUCTION_HOUSE -> auctionHouse();
             case MAILBOX -> mailbox();
             case PALLET -> pallet();
+            case ARCADE -> arcade();
         };
     }
 

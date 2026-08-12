@@ -64,7 +64,7 @@
 </head>
 <body>
 <header>
-  <div class="brand"><span class="mk">Crate</span> <span id="title"></span></div>
+  <div class="brand"><span class="mk" id="brandFirst"></span><span id="title"></span></div>
   <div class="sub">live commodities market</div>
   <div class="status"><span class="dot"></span><span id="status">connecting…</span></div>
 </header>
@@ -162,8 +162,14 @@
   }
 
   function render(feed) {
-    document.getElementById("title").textContent = feed.title || "";
-    document.title = (feed.title || "Market");
+    // Show the configured title once. Accent the first word, plain-text the rest.
+    var fullTitle = feed.title || "Market";
+    var sp = fullTitle.indexOf(" ");
+    var first = sp === -1 ? fullTitle : fullTitle.slice(0, sp);
+    var rest = sp === -1 ? "" : fullTitle.slice(sp); // keeps the leading space
+    document.getElementById("brandFirst").textContent = first;
+    document.getElementById("title").textContent = rest;
+    document.title = fullTitle;
     refreshMs = Math.max(2, feed.refreshSeconds || 30) * 1000;
     var grid = document.getElementById("grid");
     var items = feed.items || [];

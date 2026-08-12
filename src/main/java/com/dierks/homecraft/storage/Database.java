@@ -285,6 +285,19 @@ public final class Database {
                 UNIQUE (world, x, y, z, kind)
             );
             CREATE INDEX IF NOT EXISTS idx_displays_kind ON displays (kind);
+            """,
+
+            // v15 — Arcade (Phase 8): per-player token balance + login-streak state
+            // + playtime-milestone marker. All in-game currency; Mini prizes still go
+            // through the standard mint pipeline (this table holds no prizes, just tokens).
+            """
+            CREATE TABLE IF NOT EXISTS arcade_tokens (
+                player            TEXT    PRIMARY KEY,
+                tokens            INTEGER NOT NULL DEFAULT 0,
+                streak            INTEGER NOT NULL DEFAULT 0,
+                last_streak_day   INTEGER NOT NULL DEFAULT 0,
+                playtime_tokens   INTEGER NOT NULL DEFAULT 0
+            );
             """
     };
 

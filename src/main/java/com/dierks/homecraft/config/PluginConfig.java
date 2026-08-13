@@ -121,12 +121,12 @@ public final class PluginConfig {
     }
 
     /**
-     * Map-TV options (§3.8 follow-up): the dashboard URL a right-click opens in the
-     * browser, and the commodity item pinned to the screen (a floating
-     * {@code ItemDisplay}). {@code showItem}/{@code itemScale}/{@code spin} mirror the
-     * hologram knobs.
+     * Map-TV options (§3.8): the dashboard URL a right-click on a map-TV opens in the
+     * player's browser (deep-linked {@code ?item=<id>}). The board itself is drawn as
+     * text on the map — it never spawns any entity, so there are no item/scale/spin
+     * knobs here (that hologram-on-the-screen experiment was removed as unreliable).
      */
-    public record MapTvOpts(String dashboardUrl, boolean showItem, float itemScale, boolean spin) {
+    public record MapTvOpts(String dashboardUrl) {
     }
 
     /**
@@ -490,12 +490,9 @@ public final class PluginConfig {
         float itemScale = (float) Math.max(0.05, c.getDouble("displays.hologram.item_scale", 0.3));
         float textScale = (float) Math.max(0.1, c.getDouble("displays.hologram.text_scale", 1.0));
         String mapTvUrl = c.getString("displays.maptv.dashboard_url", "http://localhost:8080");
-        boolean mapTvItem = c.getBoolean("displays.maptv.show_item", true);
-        float mapTvScale = (float) Math.max(0.05, c.getDouble("displays.maptv.item_scale", 0.5));
-        boolean mapTvSpin = c.getBoolean("displays.maptv.spin", true);
         this.displays = new Displays(Math.max(2, c.getInt("displays.refresh_seconds", 20)),
                 new HologramOpts(itemDisp, above, spin, holoMat, itemScale, textScale),
-                new MapTvOpts(mapTvUrl, mapTvItem, mapTvScale, mapTvSpin));
+                new MapTvOpts(mapTvUrl));
 
         // ---- Arcade (Phase 8) ----
         this.arcade = readArcade(c);

@@ -395,17 +395,14 @@ displays:
     item: ""               # override Material (blank = the commodity's own item)
     item_scale: 0.3        # size of the floating item (1.0 = full block; ~0.3 reads well)
     text_scale: 1.0        # size of the price/trend text
-  # Map-TV boards: a clean TEXT board (name / big price / ▲▼ trend / stock) painted on
-  # framed maps. The price CHART is not painted in-world — right-click a map-TV to open
-  # the live web-dashboard chart in your browser instead (zero server lag). Set
-  # dashboard_url to your dashboard's public address (e.g. your Playit tunnel URL); the
-  # clicked commodity id is appended as ?item=<id>. The commodity's item floats pinned
-  # to the screen (like the hologram item, but mounted on the board).
+  # Map-TV boards: name + price + trend are drawn as TEXT on the framed map itself
+  # (nothing is spawned into the world — no floating items, no air-holograms). To see
+  # the full price CHART, right-click a map-TV: it opens the live web-dashboard chart
+  # in your browser (zero server lag). Set dashboard_url to your dashboard's public
+  # address (e.g. your Playit tunnel URL); the clicked commodity id is appended as
+  # ?item=<id>.
   maptv:
     dashboard_url: "http://localhost:8080"   # opened on right-click (append your tunnel URL)
-    show_item: true        # show the commodity's item pinned to the board face
-    item_scale: 0.5        # size of that item (1.0 = full block)
-    spin: true             # slow-spin the item (false = static)
 
 # ---------------------------------------------------------------------
 #  Phase 8 — The Arcade (§3.9)

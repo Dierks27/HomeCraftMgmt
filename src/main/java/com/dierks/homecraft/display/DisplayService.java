@@ -65,9 +65,6 @@ public final class DisplayService {
     /** Live hologram entities we manage: display id → its entity pair. */
     private final Map<Long, Holo> holograms = new HashMap<>();
 
-    /** Live map-TV item displays: MAPTV display id → the ItemDisplay entity pinned to it. */
-    private final Map<Long, UUID> mapTvItems = new HashMap<>();
-
     /** Bumped each refresh tick; map-TV renderers repaint only when it changes. */
     private volatile long version;
 
@@ -83,13 +80,17 @@ public final class DisplayService {
     public void start() {
         stop();
         attachMapTvs(); // re-add renderers to persisted map-TVs (renderers aren't saved)
+        // Boot safety: a map-TV never spawns entities (the board is text on the map), so
+        // purge any item/text holograms an older version pinned to a map-TV rather than
+        // letting them strand. Never re-spawns them.
+        int strays = purgeMapTvDisplays();
+        if (strays > 0) {
+            plugin.getLogger().info("Removed " + strays + " orphaned map-TV display "
+                    + (strays == 1 ? "entity" : "entities") + " left by an older version.");
+        }
         long period = Math.max(2, plugin.config().displays().refreshSeconds()) * 20L;
         task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, 40L, period);
-        boolean holoSpin = plugin.config().displays().hologram().itemDisplay()
-                && plugin.config().displays().hologram().spin();
-        boolean mapTvSpin = plugin.config().displays().maptv().showItem()
-                && plugin.config().displays().maptv().spin();
-        if (holoSpin || mapTvSpin) {
+        if (plugin.config().displays().hologram().itemDisplay() && plugin.config().displays().hologram().spin()) {
             spinTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::spinItems, 20L, 2L);
         }
     }
@@ -108,16 +109,12 @@ public final class DisplayService {
             spinTask.cancel();
             spinTask = null;
         }
-        // Despawn our (non-persistent) hologram + map-TV item entities so nothing is orphaned.
+        // Despawn our (non-persistent) hologram entities so nothing is orphaned.
         for (Holo h : holograms.values()) {
             despawn(h.text());
             despawn(h.item());
         }
         holograms.clear();
-        for (UUID uid : mapTvItems.values()) {
-            despawn(uid);
-        }
-        mapTvItems.clear();
     }
 
     private void despawn(UUID uid) {
@@ -145,9 +142,8 @@ public final class DisplayService {
                 switch (d.kind()) {
                     case DisplayDao.SIGN -> renderSign(d);
                     case DisplayDao.HOLOGRAM -> renderHologram(d);
-                    case DisplayDao.MAPTV -> ensureMapTvItem(d);
                     default -> {
-                        // nothing else to tick
+                        // MAPTV renders on the map itself (a MapRenderer) — nothing to tick here.
                     }
                 }
             } catch (Throwable t) {
@@ -200,7 +196,7 @@ public final class DisplayService {
         if (DisplayDao.HOLOGRAM.equals(d.kind())) {
             removeHologramEntity(d.id());
         } else if (DisplayDao.MAPTV.equals(d.kind())) {
-            removeMapTvItem(d.id()); // despawn the pinned commodity item, if any
+            despawnDisplayEntitiesFor(d.id()); // sweep any stray v0.16.1 hologram pinned to it
             for (int id : parseMapIds(d.data())) {
                 if (id >= 0) {
                     MapView view = mapById(id);
@@ -375,9 +371,9 @@ public final class DisplayService {
         return e != null && e.isValid();
     }
 
-    /** Slow-spin every floating item display (holograms + map-TV items) a small step. */
+    /** Slow-spin every floating hologram item display a small step; runs on a fast light timer. */
     private void spinItems() {
-        if (holograms.isEmpty() && mapTvItems.isEmpty()) {
+        if (holograms.isEmpty()) {
             return;
         }
         spinAngle += 0.12f;
@@ -389,11 +385,6 @@ public final class DisplayService {
         for (Holo h : holograms.values()) {
             if (h.item() != null) {
                 spinItem(h.item(), leftRot);
-            }
-        }
-        if (plugin.config().displays().maptv().spin()) {
-            for (UUID uid : mapTvItems.values()) {
-                spinItem(uid, leftRot);
             }
         }
     }
@@ -509,17 +500,6 @@ public final class DisplayService {
             return Result.fail("Could not save the map-TV.");
         }
         version++; // force an immediate first paint
-        // Spawn/refresh the pinned commodity item on the board face now (admin is present,
-        // so the chunk is loaded); a rebind to a new commodity replaces the old item.
-        try {
-            DisplayDao.Display saved = dao.at(DisplayDao.MAPTV, anchorBlock.getLocation()).orElse(null);
-            if (saved != null) {
-                removeMapTvItem(saved.id());
-                ensureMapTvItem(saved);
-            }
-        } catch (SQLException ignored) {
-            // the timer's next tick will spawn it
-        }
         return new Result(true, placed + "/" + (cols * rows) + " tiles");
     }
 
@@ -599,71 +579,60 @@ public final class DisplayService {
         return base + (base.contains("?") ? "&" : "?") + "item=" + itemId;
     }
 
-    // ---- Map-TV pinned item display (Part C) ----------------------------------
+    // ---- Map-TV orphan cleanup ------------------------------------------------
 
-    /** Ensure a map-TV's commodity item display exists (spawn/refresh) or is removed. */
-    private void ensureMapTvItem(DisplayDao.Display d) {
-        if (!plugin.config().displays().maptv().showItem()) {
-            removeMapTvItem(d.id());
-            return;
+    /**
+     * Despawn every map-TV-owned display entity in loaded chunks and return the count
+     * removed. A map-TV never spawns entities — its board is text drawn on the map — so
+     * any {@code ItemDisplay}/{@code TextDisplay} still tagged to a MAPTV binding is a
+     * stray left over from the v0.16.1 rework, and this removes exactly those. Scoped
+     * strictly to our own {@code DISPLAY_ID} tag whose binding is a map-TV, so it can
+     * never touch a hologram (its row is HOLOGRAM), the arcade kiosk, or any other entity.
+     */
+    public int purgeMapTvDisplays() {
+        int removed = 0;
+        for (World world : plugin.getServer().getWorlds()) {
+            for (Entity e : world.getEntities()) {
+                if (isMapTvDisplayEntity(e)) {
+                    e.remove();
+                    removed++;
+                }
+            }
         }
-        World world = plugin.getServer().getWorld(d.world());
-        if (world == null || !world.isChunkLoaded(d.x() >> 4, d.z() >> 4)) {
-            return; // unloaded — spawn when the chunk is back and the timer next fires
-        }
-        UUID uid = mapTvItems.get(d.id());
-        if (uid != null && plugin.getServer().getEntity(uid) instanceof ItemDisplay live && live.isValid()) {
-            return; // already alive
-        }
-        removeMapTvItem(d.id());
-        spawnMapTvItem(world, d);
+        return removed;
     }
 
-    /** Spawn one ItemDisplay of the commodity's item, pinned just in front of the board face. */
-    private void spawnMapTvItem(World world, DisplayDao.Display d) {
-        PluginConfig.MapTvOpts opts = plugin.config().displays().maptv();
-        MarketItem item = plugin.market().item(d.itemId());
-        if (item == null || !item.material().isItem()) {
-            return;
+    /** True if this entity is one of our display entities bound to a MAPTV row (a stray). */
+    private boolean isMapTvDisplayEntity(Entity e) {
+        if (!(e instanceof ItemDisplay) && !(e instanceof TextDisplay)) {
+            return false;
         }
-        BlockFace facing = parseFace(d.facing());
-        int[] right = facing == null ? null : rightStep(facing);
-        int cols = Math.max(1, d.cols());
-        int rows = Math.max(1, d.rows());
-        // Centre horizontally across the wall; sit in the upper area (above the price text).
-        double cx = d.x() + 0.5 + (right != null ? right[0] * (cols - 1) / 2.0 : (cols - 1) / 2.0);
-        double cz = d.z() + 0.5 + (right != null ? right[2] * (cols - 1) / 2.0 : 0);
-        double cy = d.y() + 0.5 - (rows - 1) * 0.30; // the top tile is the anchor; tiles run downward
-        Location at = new Location(world, cx, cy, cz);
-        if (facing != null) {
-            at.add(facing.getDirection().multiply(0.30)); // push just in front of the screen
-        }
-        float sc = opts.itemScale();
-        ItemStack shown = new ItemStack(item.material());
-        ItemDisplay display = world.spawn(at, ItemDisplay.class, e -> {
-            e.setItemStack(shown);
-            e.setBillboard(opts.spin() ? Display.Billboard.FIXED : Display.Billboard.VERTICAL);
-            e.setPersistent(false); // re-spawned from the DB; never saved to chunk data
-            e.setTransformation(new org.bukkit.util.Transformation(
-                    new org.joml.Vector3f(), new org.joml.Quaternionf(),
-                    new org.joml.Vector3f(sc, sc, sc), new org.joml.Quaternionf()));
-            e.getPersistentDataContainer().set(Keys.DISPLAY_ID, PersistentDataType.LONG, d.id());
-        });
-        mapTvItems.put(d.id(), display.getUniqueId());
-    }
-
-    private void removeMapTvItem(long id) {
-        despawn(mapTvItems.remove(id));
-    }
-
-    private BlockFace parseFace(String name) {
-        if (name == null) {
-            return null;
+        Long id = e.getPersistentDataContainer().get(Keys.DISPLAY_ID, PersistentDataType.LONG);
+        if (id == null) {
+            return false; // not one of our tagged displays — leave it alone
         }
         try {
-            return BlockFace.valueOf(name);
-        } catch (IllegalArgumentException e) {
-            return null;
+            // Only a map-TV binding qualifies. A live hologram's row is HOLOGRAM, so it's
+            // never matched; an unknown/deleted binding we also leave, to avoid nuking a
+            // hologram whose row was just removed.
+            return dao.byId(id).map(d -> DisplayDao.MAPTV.equals(d.kind())).orElse(false);
+        } catch (SQLException ex) {
+            return false;
+        }
+    }
+
+    /** Despawn any display entities in loaded chunks tagged to one specific display id. */
+    private void despawnDisplayEntitiesFor(long displayId) {
+        for (World world : plugin.getServer().getWorlds()) {
+            for (Entity e : world.getEntities()) {
+                if (!(e instanceof ItemDisplay) && !(e instanceof TextDisplay)) {
+                    continue;
+                }
+                Long tag = e.getPersistentDataContainer().get(Keys.DISPLAY_ID, PersistentDataType.LONG);
+                if (tag != null && tag == displayId) {
+                    e.remove();
+                }
+            }
         }
     }
 

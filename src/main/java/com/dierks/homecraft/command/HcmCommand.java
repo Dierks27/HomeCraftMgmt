@@ -646,11 +646,13 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "hologram", "holo" -> bindHologramDisplay(player);
             case "maptv", "map" -> bindMapTvDisplay(player, args);
             case "remove" -> removeDisplay(player);
+            case "cleanup" -> cleanupDisplays(player);
             default -> {
                 player.sendMessage(Text.of("&e/hcm display sign &7- bind the sign you're looking at to a commodity"));
                 player.sendMessage(Text.of("&e/hcm display hologram &7- float a live-price hologram above the block you're looking at"));
-                player.sendMessage(Text.of("&e/hcm display maptv [cols] [rows] &7- render a live chart on the item frame you're looking at (grid tiles right+down)"));
+                player.sendMessage(Text.of("&e/hcm display maptv [cols] [rows] &7- render a live price board on the item frame you're looking at (grid tiles right+down)"));
                 player.sendMessage(Text.of("&e/hcm display remove &7- unbind the display block you're looking at"));
+                player.sendMessage(Text.of("&e/hcm display cleanup &7- despawn any stray map-TV holograms left in loaded chunks"));
             }
         }
     }
@@ -731,6 +733,15 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         player.sendMessage(r.ok() ? Text.of("&aDisplay unbound.") : Text.of("&c" + r.error()));
     }
 
+    /** Despawn any stray map-TV display entities (e.g. leftovers from an older version). */
+    private void cleanupDisplays(Player player) {
+        int removed = plugin.displayService().purgeMapTvDisplays();
+        player.sendMessage(removed > 0
+                ? Text.of("&aRemoved &f" + removed + "&a stray map-TV display "
+                        + (removed == 1 ? "entity" : "entities") + " from loaded chunks.")
+                : Text.of("&7No stray map-TV displays found in loaded chunks."));
+    }
+
     // ---------------------------------------------------------------------
 
     @Override
@@ -802,7 +813,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("display")) {
-            addMatches(out, args[1], "sign", "hologram", "maptv", "remove");
+            addMatches(out, args[1], "sign", "hologram", "maptv", "remove", "cleanup");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("market")) {
             addMatches(out, args[1], "list", "price", "history", "buy", "sell");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("market")

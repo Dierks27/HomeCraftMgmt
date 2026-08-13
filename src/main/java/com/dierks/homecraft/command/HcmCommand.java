@@ -686,18 +686,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
     private void bindMapTvDisplay(Player player, String[] args) {
         org.bukkit.entity.Entity targetEnt = player.getTargetEntity(6);
         if (!(targetEnt instanceof org.bukkit.entity.ItemFrame frame)) {
-            player.sendMessage(Text.of("&cLook at an item frame on a wall, then run &f/hcm display maptv [board] [cols] [rows]&c."));
-            return;
-        }
-        boolean boardMode = args.length >= 3 && args[2].equalsIgnoreCase("board");
-        if (boardMode) {
-            // /hcm display maptv board [cols] [rows] — no commodity picker needed.
-            int cols = parsePositiveArg(args, 3, 3);
-            int rows = parsePositiveArg(args, 4, 1);
-            var r = plugin.displayService().bindMapTv(player, frame, "*", cols, rows);
-            player.sendMessage(r.ok()
-                    ? Text.of("&aMarket board bound &a— rendering " + r.error() + ".")
-                    : Text.of("&c" + r.error()));
+            player.sendMessage(Text.of("&cLook at an item frame on a wall, then run &f/hcm display maptv [cols] [rows]&c."));
             return;
         }
         int cols = parsePositiveArg(args, 2, 1);
@@ -806,9 +795,6 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("display")) {
             addMatches(out, args[1], "sign", "hologram", "maptv", "remove");
-        } else if (args.length == 3 && args[0].equalsIgnoreCase("display")
-                && args[1].equalsIgnoreCase("maptv")) {
-            addMatches(out, args[2], "board");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("market")) {
             addMatches(out, args[1], "list", "price", "history", "buy", "sell");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("market")

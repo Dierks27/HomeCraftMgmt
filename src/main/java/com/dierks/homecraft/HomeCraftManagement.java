@@ -61,6 +61,8 @@ public final class HomeCraftManagement extends JavaPlugin {
     private MiniService miniService;
     private com.dierks.homecraft.mini.CardService cardService;
     private com.dierks.homecraft.mini.PrinterService printerService;
+    private com.dierks.homecraft.mini.PackService packService;
+    private com.dierks.homecraft.mini.MiniValue miniValue;
     private ChatPromptService chatPrompts;
     private HeadLibraryService headLibrary;
     private VendingService vending;
@@ -125,6 +127,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         com.dierks.homecraft.storage.CardDao cardDao = new com.dierks.homecraft.storage.CardDao(database);
         this.cardService = new com.dierks.homecraft.mini.CardService(this, cardDao);
         this.printerService = new com.dierks.homecraft.mini.PrinterService(this, cardDao);
+        this.packService = new com.dierks.homecraft.mini.PackService(this);
+        this.miniValue = new com.dierks.homecraft.mini.MiniValue(this);
 
         // Admin Studio chat-input bridge + web head-library (Phase 4b).
         this.chatPrompts = new ChatPromptService(this);
@@ -437,6 +441,14 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public com.dierks.homecraft.mini.PrinterService printers() {
         return printerService;
+    }
+
+    public com.dierks.homecraft.mini.PackService packs() {
+        return packService;
+    }
+
+    public com.dierks.homecraft.mini.MiniValue values() {
+        return miniValue;
     }
 
     public ChatPromptService chatPrompts() {

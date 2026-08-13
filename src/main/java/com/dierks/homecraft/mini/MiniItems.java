@@ -65,6 +65,16 @@ public final class MiniItems {
      * exactly what a mint costs before they ever click.
      */
     public ItemStack preview(MiniDef def, RarityStyle style, long minted, long circulation, String priceText) {
+        return preview(def, style, minted, circulation, priceText, null);
+    }
+
+    /**
+     * Museum appraisal preview (Phase 10, Part F): as {@link #preview(MiniDef, RarityStyle,
+     * long, long, String)} but with a computed {@code valueText} (the Gray→Gold value
+     * range) shown as a value plaque line.
+     */
+    public ItemStack preview(MiniDef def, RarityStyle style, long minted, long circulation,
+                             String priceText, String valueText) {
         ItemStack item = baseItem(def, style);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
@@ -75,6 +85,11 @@ public final class MiniItems {
             lore.add(line("Rarity: ", def.rarity().name(), style.nameColor()));
             lore.add(line("Minted: ", minted + (def.uncapped() ? " (uncapped)" : " / " + def.cap()), NamedTextColor.GRAY));
             lore.add(line("In circulation: ", Long.toString(circulation), NamedTextColor.GRAY));
+            if (valueText != null && !valueText.isBlank()) {
+                lore.add(Component.text("Est. value: ", NamedTextColor.DARK_GRAY)
+                        .append(Component.text(valueText, NamedTextColor.AQUA))
+                        .decoration(TextDecoration.ITALIC, false));
+            }
             lore.add(Component.empty());
             // Price is shown prominently in its own coloured line so it never reads as free.
             lore.add(Component.text("Price: ", NamedTextColor.GRAY)

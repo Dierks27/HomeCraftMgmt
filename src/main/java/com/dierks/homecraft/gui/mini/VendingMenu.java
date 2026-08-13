@@ -97,7 +97,8 @@ public final class VendingMenu extends Menu {
             set(48, Menus.icon(Material.NAME_TAG, "&aStock a Mini",
                     "&7Hold a Mini in your main hand,",
                     "&7then click to set a price & list it."),
-                    e -> plugin.chatPrompts().prompt(player, "Enter a sale price for the held Mini:", input -> {
+                    e -> plugin.chatPrompts().prompt(player, "Enter a sale price for the held Mini"
+                            + floorHint() + ":", input -> {
                         double price = parse(input);
                         if (price <= 0) {
                             player.sendMessage(Text.of("&cEnter a number above 0."));
@@ -171,6 +172,13 @@ public final class VendingMenu extends Menu {
         } catch (NumberFormatException e) {
             return -1;
         }
+    }
+
+    /** A " (suggested floor: $X)" hint from the held Mini's computed value, or "" if none. */
+    private String floorHint() {
+        Double floor = plugin.values() == null ? null
+                : plugin.values().suggestedFloorFor(player.getInventory().getItemInMainHand());
+        return floor == null ? "" : " (suggested floor: " + plugin.economy().format(floor) + ")";
     }
 
     private void reopen() {

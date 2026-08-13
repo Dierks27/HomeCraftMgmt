@@ -92,15 +92,22 @@ public final class MapTvRenderer extends MapRenderer {
         double price = plugin.market().price(itemId);
 
         List<Double> prices = priceSeries();
+        // Guarantee at least two points so a line ALWAYS renders — a brand-new TV with
+        // no price history yet still shows a flat baseline instead of a blank grid.
+        if (prices.size() == 1) {
+            prices = new ArrayList<>(List.of(prices.get(0), prices.get(0)));
+        }
         double min = prices.isEmpty() ? 0 : Collections.min(prices);
         double max = prices.isEmpty() ? 1 : Collections.max(prices);
         if (max - min < 1e-6) {
             max = min + Math.max(1, Math.abs(min) * 0.05);
         }
 
-        // Draw order matches the dashboard: band -> gridlines -> axis labels -> header -> line LAST.
+        // Strict draw order so the price line + text are NEVER hidden by the grid:
+        //   background (render()) -> header band -> gridlines -> axis labels
+        //   -> PRICE LINE -> header/price text LAST, on top of everything.
 
-        // 1) Header band on the top row of tiles so the text stands out.
+        // 1) Header band on the top row of tiles (y 0..headerH — above the plot area).
         if (tileY == 0) {
             Color band = new Color(24, 30, 44);
             for (int x = 0; x < TILE; x++) {
@@ -110,8 +117,8 @@ public final class MapTvRenderer extends MapRenderer {
             }
         }
 
-        // 2) Gridlines.
-        Color grid = new Color(46, 56, 74);
+        // 2) Gridlines — deliberately dim so the bright line always dominates.
+        Color grid = new Color(38, 46, 62);
         for (int g = 0; g <= 3; g++) {
             int vy = plotTop + (int) Math.round((plotBottom - plotTop) * (g / 3.0));
             for (int vx = plotLeft; vx <= plotRight; vx++) {
@@ -125,7 +132,7 @@ public final class MapTvRenderer extends MapRenderer {
             }
         }
 
-        // 3) Axis min/max labels on the left column of tiles.
+        // 3) Axis min/max labels on the left column of tiles (before the line).
         if (tileX == 0) {
             int localTop = plotTop - tileY * TILE;
             int localBottom = plotBottom - tileY * TILE;
@@ -139,16 +146,7 @@ public final class MapTvRenderer extends MapRenderer {
             }
         }
 
-        // 4) Header text on the top-left tile: name, current price, trend.
-        if (topLeft()) {
-            canvas.drawText(3, 2, MinecraftFont.Font, S + "f" + safe(item.label(), 19));
-            canvas.drawText(3, 13, MinecraftFont.Font,
-                    S + "e" + safe(plugin.economy().format(price), 12)
-                            + " " + trendCode(change) + asciiArrow(change) + fmtPct(change));
-            drawSwatch(canvas, TILE - 11, 2, item.material());
-        }
-
-        // 5) Price line LAST, on top — bright green-up / red-down, thick, with a head dot.
+        // 4) Price line ON TOP of the grid — bright green-up / red-down, thick, head dot.
         if (prices.size() >= 2) {
             Color lineColor = change < -0.05 ? new Color(240, 90, 90) : new Color(90, 225, 120);
             int n = prices.size();
@@ -174,6 +172,16 @@ public final class MapTvRenderer extends MapRenderer {
                     plot(canvas, lastX + ox, lastY + oy, dot);
                 }
             }
+        }
+
+        // 5) Header text LAST, on top of everything — name, current price, trend. Sits in
+        //    the header band (y 0..headerH), clear of the plot line below it.
+        if (topLeft()) {
+            canvas.drawText(3, 2, MinecraftFont.Font, S + "f" + safe(item.label(), 19));
+            canvas.drawText(3, 13, MinecraftFont.Font,
+                    S + "e" + safe(plugin.economy().format(price), 12)
+                            + " " + trendCode(change) + asciiArrow(change) + fmtPct(change));
+            drawSwatch(canvas, TILE - 11, 2, item.material());
         }
     }
 

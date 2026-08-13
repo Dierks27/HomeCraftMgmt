@@ -84,6 +84,17 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
                 handlePrinter(sender, args);
             }
+            case "packs", "pack" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(Text.of("&cOnly players can open the pack menus."));
+                    return true;
+                }
+                if (sender.hasPermission("hcm.admin")) {
+                    new com.dierks.homecraft.gui.admin.PacksAdminMenu(plugin, player, null).open(player);
+                } else {
+                    new com.dierks.homecraft.gui.mini.PackShopMenu(plugin, player, null).open(player);
+                }
+            }
             case "arcade" -> {
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Text.of("&cOnly players can open the Arcade."));
@@ -262,6 +273,13 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             return;
         }
         String id = com.dierks.homecraft.mini.MiniIds.slug(args[2]);
+        // Validate against the real catalog up front so a typo can never mint a
+        // "dead" Card that points at a non-existent Mini.
+        if (plugin.miniService().def(id) == null) {
+            sender.sendMessage(Text.of("&cUnknown Mini id '" + id + "'. A Card must match a real Mini."));
+            sender.sendMessage(Text.of("&7Try &f/hcm mini list&7 to see valid ids."));
+            return;
+        }
         Player target = resolveTarget(sender, args, 3, "give card " + id);
         if (target == null) {
             return;
@@ -655,9 +673,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "auction", "arcade", "tokens");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "packs", "auction", "arcade", "tokens");
             } else {
-                addMatches(out, args[0], "market", "mini", "auction", "arcade", "tokens");
+                addMatches(out, args[0], "market", "mini", "packs", "auction", "arcade", "tokens");
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("mini")) {
             addMatches(out, args[1], "museum", "list", "give", "capturestand");

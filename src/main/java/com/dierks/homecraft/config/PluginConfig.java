@@ -251,6 +251,7 @@ public final class PluginConfig {
     private Workbench workbench;
     private Pc pc;
     private Printer printer;
+    private com.dierks.homecraft.mini.Pack.Packs packs;
     private Market market;
     private Shipping shipping;
     private Store store;
@@ -285,6 +286,10 @@ public final class PluginConfig {
 
     public Printer printer() {
         return printer;
+    }
+
+    public com.dierks.homecraft.mini.Pack.Packs packs() {
+        return packs;
     }
 
     public Shipping shipping() {
@@ -382,6 +387,9 @@ public final class PluginConfig {
         int shinyAmt = Math.max(0, c.getInt("printer.shiny.amount", 2));
         double shinyFee = Math.max(0, c.getDouble("printer.shiny.fee", 0));
         this.printer = new Printer(prBase, prName, prLore, prFee, shinyDye, shinyAmt, shinyFee);
+
+        // ---- Card Packs (Phase 10) ----
+        this.packs = readPacks(c);
 
         // ---- Market (Phase 2.5 — finite stock) ----
         this.market = readMarket(c);
@@ -811,6 +819,35 @@ public final class PluginConfig {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /** Parse the {@code packs:} list into the typed Card-Pack model (Phase 10). */
+    private com.dierks.homecraft.mini.Pack.Packs readPacks(FileConfiguration c) {
+        List<com.dierks.homecraft.mini.Pack.PackDef> list = new ArrayList<>();
+        for (Map<?, ?> row : c.getMapList("packs")) {
+            String id = str(row.get("id"), null);
+            if (id == null || id.isBlank()) {
+                continue;
+            }
+            String display = str(row.get("display"), id);
+            double price = Math.max(0, number(row.get("price"), 0));
+            int count = Math.max(1, (int) number(row.get("count"), 3));
+            List<com.dierks.homecraft.mini.Pack.PackEntry> pool = new ArrayList<>();
+            if (row.get("pool") instanceof List<?> pl) {
+                for (Object o : pl) {
+                    if (o instanceof Map<?, ?> em) {
+                        String card = str(em.get("card"), null);
+                        if (card == null || card.isBlank()) {
+                            continue;
+                        }
+                        double weight = Math.max(0, number(em.get("weight"), 1));
+                        pool.add(new com.dierks.homecraft.mini.Pack.PackEntry(card, weight));
+                    }
+                }
+            }
+            list.add(new com.dierks.homecraft.mini.Pack.PackDef(id, display, price, count, pool));
+        }
+        return new com.dierks.homecraft.mini.Pack.Packs(list);
     }
 
     private Material paneMaterial(String color, Material fallback) {

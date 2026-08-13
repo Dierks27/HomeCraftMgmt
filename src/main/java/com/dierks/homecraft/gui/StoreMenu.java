@@ -84,6 +84,9 @@ public final class StoreMenu extends Menu {
                 e -> new MailboxMenu(plugin, player, this::reopen).open(player));
         set(50, Menus.balance(plugin, player), null);
         set(51, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
+        set(52, Menus.icon(Material.PAPER, "&bCard Packs", "&7Buy booster packs of Cards",
+                "&7— open them for random Cards"),
+                e -> new com.dierks.homecraft.gui.mini.PackShopMenu(plugin, player, this::reopen).open(player));
         if ((page + 1) * PAGE_SIZE < items.size()) {
             set(53, Menus.icon(Material.ARROW, "&eNext »"), e -> {
                 page++;

@@ -4,7 +4,9 @@ import com.dierks.homecraft.HomeCraftManagement;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -96,6 +98,61 @@ public final class PackService {
             // capped out (or unknown) — try again with a fresh weighted pick
         }
         return null;
+    }
+
+    // ---- admin authoring (persist to config, reload live) ---------------------
+
+    /** Create or replace a pack by id, then persist + reload. */
+    public void upsert(Pack.PackDef pack) {
+        List<Pack.PackDef> list = new ArrayList<>();
+        boolean replaced = false;
+        for (Pack.PackDef p : packs()) {
+            if (p.id().equalsIgnoreCase(pack.id())) {
+                list.add(pack);
+                replaced = true;
+            } else {
+                list.add(p);
+            }
+        }
+        if (!replaced) {
+            list.add(pack);
+        }
+        save(list);
+    }
+
+    /** Remove a pack by id, then persist + reload. */
+    public void delete(String id) {
+        List<Pack.PackDef> list = new ArrayList<>();
+        for (Pack.PackDef p : packs()) {
+            if (!p.id().equalsIgnoreCase(id)) {
+                list.add(p);
+            }
+        }
+        save(list);
+    }
+
+    /** Serialize the full pack list to config.yml ({@code packs:}) and reload live. */
+    public void save(List<Pack.PackDef> list) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Pack.PackDef p : list) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", p.id());
+            m.put("display", p.displayName());
+            m.put("price", p.price());
+            m.put("count", p.cardCount());
+            List<Map<String, Object>> pool = new ArrayList<>();
+            for (Pack.PackEntry e : p.pool()) {
+                Map<String, Object> em = new LinkedHashMap<>();
+                em.put("card", e.miniId());
+                em.put("weight", e.weight());
+                pool.add(em);
+            }
+            m.put("pool", pool);
+            out.add(m);
+        }
+        plugin.getConfig().set("packs", out);
+        plugin.saveConfig();
+        plugin.config().load();
     }
 
     private String pickWeighted(List<Pack.PackEntry> pool) {

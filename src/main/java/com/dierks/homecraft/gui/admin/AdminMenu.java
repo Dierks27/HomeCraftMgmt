@@ -71,6 +71,12 @@ public final class AdminMenu extends Menu {
                 "&7Manage Wild-Drop loot lists & sources."),
                 e -> new LootAdminMenu(plugin, player, this::reopen).open(player));
 
+        set(25, Menus.icon(Material.PAPER, "&5Card Packs",
+                "&7Build & edit buyable Card packs",
+                "&7(price, count, weighted pool).",
+                "&8" + plugin.packs().packs().size() + " pack(s)"),
+                e -> new PacksAdminMenu(plugin, player, this::reopen).open(player));
+
         set(22, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
 
         // Trading blocks are obtained via /hcm give <vending|display|auction>.

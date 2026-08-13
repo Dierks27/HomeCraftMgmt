@@ -123,6 +123,28 @@ printer:
     fee: 25             # extra money on top of the base fee (0 = none)
 
 # ---------------------------------------------------------------------
+#  Phase 10 — Card Packs (booster packs; a money sink).
+#  Buying a pack charges money and gives N weighted-random CARDS (never
+#  Minis — a Card is printed into a Mini later at the Printer). Build/edit
+#  packs in-game with /hcm packs (or Admin Studio → Card Packs); this list
+#  is kept in sync — no need to edit it by hand.
+#    id       unique key
+#    display  shown name (&-colour codes ok)
+#    price    money per open (Vault)
+#    count    how many cards you get per open
+#    pool     weighted list of cards (card = a Mini id; weight = relative odds)
+# ---------------------------------------------------------------------
+packs:
+  - id: starter
+    display: "Starter Pack"
+    price: 100.0
+    count: 3
+    pool:
+      - { card: piggy_mini,  weight: 50 }
+      - { card: chick_mini,  weight: 45 }
+      - { card: golden_idol, weight: 5 }
+
+# ---------------------------------------------------------------------
 #  Phase 2.5 — Finite, conserved commodities market (the "Amazon" side
 #  ONLY; QuickShop player-shops set their own prices and are untouched).
 #

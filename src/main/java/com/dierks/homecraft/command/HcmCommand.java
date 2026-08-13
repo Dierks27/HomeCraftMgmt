@@ -84,6 +84,17 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
                 handlePrinter(sender, args);
             }
+            case "packs", "pack" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(Text.of("&cOnly players can open the pack menus."));
+                    return true;
+                }
+                if (sender.hasPermission("hcm.admin")) {
+                    new com.dierks.homecraft.gui.admin.PacksAdminMenu(plugin, player, null).open(player);
+                } else {
+                    new com.dierks.homecraft.gui.mini.PackShopMenu(plugin, player, null).open(player);
+                }
+            }
             case "arcade" -> {
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Text.of("&cOnly players can open the Arcade."));
@@ -662,9 +673,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "auction", "arcade", "tokens");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "packs", "auction", "arcade", "tokens");
             } else {
-                addMatches(out, args[0], "market", "mini", "auction", "arcade", "tokens");
+                addMatches(out, args[0], "market", "mini", "packs", "auction", "arcade", "tokens");
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("mini")) {
             addMatches(out, args[1], "museum", "list", "give", "capturestand");

@@ -247,6 +247,10 @@ public final class MarketService {
             plugin.achievements().tryAward(player, "first_sale");
             plugin.achievements().checkBalance(player);
         }
+        if (plugin.quests() != null) {
+            plugin.quests().record(player,
+                    com.dierks.homecraft.config.PluginConfig.QuestType.SELL_MARKET, (long) plan.total());
+        }
         return new TradeResult(true, null, plan.filled(), plan.total(), state.currentPrice(), state.stock());
     }
 

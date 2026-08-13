@@ -2,6 +2,7 @@ package com.dierks.homecraft.display;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.market.MarketItem;
+import com.dierks.homecraft.storage.PriceHistoryDao;
 import org.bukkit.entity.Player;
 import org.bukkit.map.MapCanvas;
 import org.bukkit.map.MapRenderer;
@@ -10,31 +11,26 @@ import org.bukkit.map.MinecraftFont;
 
 import java.awt.Color;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
- * Renders a map-TV (§3.8). Two modes:
- * <ul>
- *   <li><b>chart</b> — a live price-history line chart for one commodity: filled
- *       background, gridlines, min/max axis labels, a bright high-contrast line,
- *       name + price + trend. A {@code cols×rows} grid tiles into one big screen,
- *       each tile rendering its window of the same virtual chart.</li>
- *   <li><b>board</b> — a ticker/leaderboard listing several commodities (price +
- *       trend), paginated across tiles for a wide strip.</li>
- * </ul>
+ * Draws a live price-history chart (plus name + current price) onto a map, for the
+ * Phase 7 map-TV wall (§3.8). One renderer per map/tile; a grid of {@code cols×rows}
+ * framed maps tiles into one big screen — each tile renders its window of the same
+ * virtual chart, so a line flows across the whole wall.
  *
- * <p>Non-contextual (rendered once per tick) and throttled: it repaints only when
- * {@link DisplayService#snapshotVersion()} changes, never every tick.
+ * <p>Non-contextual (rendered once per tick, not per viewer) and throttled: it only
+ * repaints when {@link DisplayService#snapshotVersion()} changes (i.e. once per
+ * refresh interval), never every tick.
  */
 public final class MapTvRenderer extends MapRenderer {
 
     private static final int TILE = 128;
-    private static final int MARGIN = 4;
-    private static final char S = '§'; // section sign — drawText honours colour codes
+    private static final int MARGIN = 3;
 
     private final HomeCraftManagement plugin;
     private final String itemId;
-    private final boolean board;
     private final int tileX;
     private final int tileY;
     private final int cols;
@@ -46,7 +42,6 @@ public final class MapTvRenderer extends MapRenderer {
         super(false); // non-contextual: render() called once per tick with player == null
         this.plugin = plugin;
         this.itemId = itemId;
-        this.board = "*".equals(itemId);
         this.tileX = tileX;
         this.tileY = tileY;
         this.cols = Math.max(1, cols);
@@ -57,150 +52,132 @@ public final class MapTvRenderer extends MapRenderer {
     public void render(MapView view, MapCanvas canvas, Player player) {
         long version = plugin.displayService() != null ? plugin.displayService().snapshotVersion() : 0;
         if (version == appliedVersion) {
-            return;
+            return; // data unchanged since last paint — keep the existing pixels
         }
         appliedVersion = version;
-        fill(canvas, new Color(16, 20, 28));
-        if (board) {
-            renderBoard(canvas);
-        } else {
-            renderChart(canvas);
-        }
-    }
 
-    // ---- single-commodity chart ----------------------------------------------
-
-    /**
-     * A clean TEXT PRICE BOARD (Round 3a) — no chart. Renders the commodity name,
-     * current price, trend arrow + %, and stock, centered and laid out in virtual
-     * space so the same board scales across a tiled wall. Text on a map is reliable;
-     * the old line graph was removed.
-     */
-    private void renderChart(MapCanvas canvas) {
         MarketItem item = plugin.market().item(itemId);
+        Color bg = new Color(18, 22, 30);
+        for (int x = 0; x < TILE; x++) {
+            for (int y = 0; y < TILE; y++) {
+                canvas.setPixelColor(x, y, bg);
+            }
+        }
         if (item == null) {
-            if (topLeft()) {
-                canvas.drawText(4, 4, MinecraftFont.Font, S + "cNo data");
+            if (tileX == 0 && tileY == 0) {
+                canvas.drawText(4, 4, MinecraftFont.Font, "No data");
             }
             return;
         }
+
         int width = TILE * cols;
         int height = TILE * rows;
 
-        double change = plugin.market().change24h(itemId);
-        double price = plugin.market().price(itemId);
-        long stock = plugin.market().state(itemId).stock();
-        char trendC = change > 0.05 ? 'a' : (change < -0.05 ? 'c' : 'f');
+        // Labels live on the top-left tile so they read cleanly across the wall.
+        if (tileX == 0 && tileY == 0) {
+            canvas.drawText(3, 3, MinecraftFont.Font, safe(item.label()));
+            canvas.drawText(3, 13, MinecraftFont.Font,
+                    plugin.economy().format(plugin.market().price(itemId)));
+            double change = plugin.market().change24h(itemId);
+            canvas.drawText(3, 23, MinecraftFont.Font, Trend.arrow(change) + " "
+                    + String.format(java.util.Locale.ROOT, "%.1f%%", Math.abs(change)));
+        }
 
-        String name = safe(item.label(), 20);
-        String priceStr = safe(plugin.economy().format(price), 16);
-        String trendStr = asciiArrow(change) + " " + fmtPct(change);
-        String stockStr = "Stock: " + (stock <= 0 ? "OUT" : Long.toString(stock));
+        List<Double> prices = priceSeries();
+        if (prices.size() < 2) {
+            return;
+        }
+        double min = Collections.min(prices);
+        double max = Collections.max(prices);
+        if (max - min < 1e-6) {
+            max = min + 1; // flat series — avoid divide-by-zero, draw a centred line
+        }
 
-        // Vertical anchors as fractions of the whole (possibly multi-tile) board.
-        drawCentered(canvas, width, (int) (height * 0.14), S + "f" + name, true);
-        drawCentered(canvas, width, (int) (height * 0.36), S + trendC + priceStr, true);
-        drawCentered(canvas, width, (int) (height * 0.60), S + trendC + trendStr, false);
-        drawCentered(canvas, width, (int) (height * 0.80), S + "7" + stockStr, false);
+        int topPad = MARGIN + 24;                 // leave room for the label block
+        int plotLeft = MARGIN;
+        int plotRight = width - MARGIN;
+        int plotTop = topPad;
+        int plotBottom = height - MARGIN;
+        int plotW = plotRight - plotLeft;
+        int plotH = plotBottom - plotTop;
+
+        Color line = new Color(106, 168, 255);
+        int n = prices.size();
+        int prevVx = -1;
+        int prevVy = -1;
+        for (int i = 0; i < n; i++) {
+            int vx = plotLeft + (int) Math.round((double) i / (n - 1) * plotW);
+            double norm = (prices.get(i) - min) / (max - min);
+            int vy = plotBottom - (int) Math.round(norm * plotH);
+            if (prevVx >= 0) {
+                drawVirtualLine(canvas, prevVx, prevVy, vx, vy, line);
+            }
+            prevVx = vx;
+            prevVy = vy;
+        }
     }
 
-    /**
-     * Draw a colour-coded string horizontally centered across the whole board at a
-     * virtual y, on whichever tile it lands on. {@code bold} thickens it by a 1px
-     * re-draw (the map font has no real large size, so this is our emphasis).
-     */
-    private void drawCentered(MapCanvas canvas, int boardWidth, int vy, String text, boolean bold) {
-        String plain = text.replaceAll("(?i)" + S + "[0-9a-fk-or]", "");
-        int w = plain.length() * 6;
-        int vx = Math.max(2, (boardWidth - w) / 2);
-        int lx = vx - tileX * TILE;
-        int ly = vy - tileY * TILE;
-        if (ly <= -8 || ly >= TILE) {
-            return; // this line isn't on this tile
+    /** Newest-last price series over the last window of snapshots. */
+    private List<Double> priceSeries() {
+        List<PriceHistoryDao.Snapshot> hist = plugin.market().recentHistory(itemId, 96); // newest-first
+        List<Double> out = new ArrayList<>(hist.size() + 1);
+        for (int i = hist.size() - 1; i >= 0; i--) {
+            out.add(hist.get(i).price());
         }
-        canvas.drawText(lx, ly, MinecraftFont.Font, text);
-        if (bold) {
-            canvas.drawText(lx + 1, ly, MinecraftFont.Font, text);
-        }
+        out.add(plugin.market().price(itemId)); // pin the live price as the latest point
+        return out;
     }
 
-    // ---- multi-commodity board ------------------------------------------------
-
-    private void renderBoard(MapCanvas canvas) {
-        List<MarketItem> all = new ArrayList<>(plugin.market().catalog());
-        int perTile = 8;
-        int tileIndex = tileY * cols + tileX;
-        int start = tileIndex * perTile;
-        int y = 4;
-        if (tileIndex == 0) {
-            canvas.drawText(3, y, MinecraftFont.Font, S + "6" + S + "lMARKET");
-            y += 13;
-        }
-        for (int r = 0; r < perTile; r++) {
-            int idx = start + r;
-            if (idx >= all.size()) {
+    /** Bresenham line in virtual (whole-wall) space; only pixels in this tile are drawn. */
+    private void drawVirtualLine(MapCanvas canvas, int x0, int y0, int x1, int y1, Color color) {
+        int dx = Math.abs(x1 - x0);
+        int dy = -Math.abs(y1 - y0);
+        int sx = x0 < x1 ? 1 : -1;
+        int sy = y0 < y1 ? 1 : -1;
+        int err = dx + dy;
+        int x = x0;
+        int y = y0;
+        while (true) {
+            plotVirtual(canvas, x, y, color);
+            if (x == x1 && y == y1) {
                 break;
             }
-            MarketItem it = all.get(idx);
-            double change = plugin.market().change24h(it.id());
-            String row = S + "f" + safe(it.label(), 10)
-                    + " " + S + "e" + safe(plugin.economy().format(plugin.market().price(it.id())), 10)
-                    + " " + trendCode(change) + asciiArrow(change);
-            canvas.drawText(3, y, MinecraftFont.Font, row);
-            y += 13;
-            if (y > TILE - 8) {
-                break;
+            int e2 = 2 * err;
+            if (e2 >= dy) {
+                err += dy;
+                x += sx;
+            }
+            if (e2 <= dx) {
+                err += dx;
+                y += sy;
             }
         }
     }
 
-    // ---- drawing helpers ------------------------------------------------------
-
-    private boolean topLeft() {
-        return tileX == 0 && tileY == 0;
-    }
-
-    private void fill(MapCanvas canvas, Color c) {
-        for (int x = 0; x < TILE; x++) {
-            for (int y = 0; y < TILE; y++) {
-                canvas.setPixelColor(x, y, c);
+    /** Plot a virtual-space pixel onto this tile's canvas (thickened by 1 for visibility). */
+    private void plotVirtual(MapCanvas canvas, int vx, int vy, Color color) {
+        int localX = vx - tileX * TILE;
+        int localY = vy - tileY * TILE;
+        for (int ox = 0; ox <= 1; ox++) {
+            for (int oy = 0; oy <= 1; oy++) {
+                int lx = localX + ox;
+                int ly = localY + oy;
+                if (lx >= 0 && lx < TILE && ly >= 0 && ly < TILE) {
+                    canvas.setPixelColor(lx, ly, color);
+                }
             }
         }
     }
 
-    private String trendCode(double change) {
-        if (change > 0.05) {
-            return S + "a";
-        }
-        if (change < -0.05) {
-            return S + "c";
-        }
-        return S + "7";
-    }
-
-    private String asciiArrow(double change) {
-        if (change > 0.05) {
-            return "^";
-        }
-        if (change < -0.05) {
-            return "v";
-        }
-        return "=";
-    }
-
-    private String fmtPct(double change) {
-        return String.format(java.util.Locale.ROOT, "%.1f%%", Math.abs(change));
-    }
-
-    /** Strip colour codes, drop glyphs the map font can't draw, and clamp width. */
-    private static String safe(String label, int max) {
+    private static String safe(String label) {
         String plain = label == null ? "" : label.replaceAll("(?i)&[0-9a-fk-or]", "");
+        // MinecraftFont can only draw characters it has; strip anything unsupported.
         StringBuilder sb = new StringBuilder();
         for (char c : plain.toCharArray()) {
             if (MinecraftFont.Font.isValid(String.valueOf(c))) {
                 sb.append(c);
             }
         }
-        return sb.length() > max ? sb.substring(0, max) : sb.toString();
+        return sb.length() > 19 ? sb.substring(0, 19) : sb.toString();
     }
 }

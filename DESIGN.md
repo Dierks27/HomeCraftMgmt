@@ -277,6 +277,7 @@ Build and test each phase before the next.
 - **Phase 7 — In-Game Displays (§3.8):** map-TVs, holographic tickers, sign boards.
 - **Future — more PC Sites (§2.2):** Towny plots Site, etc.
 - **Phase 8 — Rewards & Arcade (§3.9):** tokens (login streaks/playtime), loot boxes/crates, lotto/scratch tickets, the pity exchange, and the Arcade installation at the Mall. Reuses the drop/rarity/cap tech — mostly content.
+- **Phase 9–11 — Arcade as a place + earning sources (§3.9):** the Arcade is now built from placeable, owned/protected, skinnable **machine blocks** you right-click to play — a **Crate Machine**, **Scratch-Ticket Booth**, **Pity Exchange Kiosk**, and **Token Counter** (the `/hcm arcade` hub stays as an admin/fallback). Token earning now has four sources: login streaks, playtime, **one-time achievements** (first Mini, first sale, first PC, first crate, first pack, $10k), and **daily/weekly quests** (`/hcm quests` — repeatable objectives like "sell $500 to the market", "print a Mini", "open a crate/pack" that pay tokens on completion and reset each day/week). Every earn shows a "+N token" toast. Minting still happens only through the cap-aware Printer pipeline.
 Then: retire DynamicShopGUI now that Phase 3's market GUI is live (server-side removal — not a code task).
 ---
 ## 7. Decisions

@@ -84,6 +84,12 @@ public final class ArcadeMenu extends Menu {
             }
         });
 
+        // Daily / weekly quests.
+        set(31, Menus.icon(Material.WRITABLE_BOOK, "&dQuests",
+                "&7Daily & weekly objectives that pay",
+                "&7out tokens on completion.",
+                "&8—", "&eClick to view"), e -> new QuestsMenu(plugin, player).open(player));
+
         set(49, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
     }
 

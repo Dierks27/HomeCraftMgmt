@@ -78,6 +78,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.display.TvService tvService;
     private com.dierks.homecraft.arcade.ArcadeService arcade;
     private com.dierks.homecraft.arcade.AchievementService achievements;
+    private com.dierks.homecraft.arcade.QuestService quests;
     private BukkitTask historyTask;
     private BukkitTask deliveryTask;
     private BukkitTask auctionTask;
@@ -166,6 +167,10 @@ public final class HomeCraftManagement extends JavaPlugin {
                 this, new com.dierks.homecraft.storage.TokenDao(database));
         this.achievements = new com.dierks.homecraft.arcade.AchievementService(
                 this, new com.dierks.homecraft.storage.AchievementDao(database));
+        // Daily/weekly quests (Phase 11) — repeatable token objectives; no listener,
+        // progress is recorded from the existing market/printer/crate/pack hooks.
+        this.quests = new com.dierks.homecraft.arcade.QuestService(
+                this, new com.dierks.homecraft.storage.QuestDao(database));
 
         getServer().getPluginManager().registerEvents(
                 new CustomBlockListener(this, config, blockService, items, protection), this);
@@ -509,5 +514,9 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public com.dierks.homecraft.arcade.AchievementService achievements() {
         return achievements;
+    }
+
+    public com.dierks.homecraft.arcade.QuestService quests() {
+        return quests;
     }
 }

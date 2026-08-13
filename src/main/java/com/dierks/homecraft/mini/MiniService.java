@@ -145,6 +145,10 @@ public final class MiniService {
             if (plugin.achievements() != null) {
                 plugin.achievements().tryAward(player, "first_mini");
             }
+            if (plugin.quests() != null) {
+                plugin.quests().record(player,
+                        com.dierks.homecraft.config.PluginConfig.QuestType.PRINT_MINI, 1);
+            }
             return new MintResult(true, null, mintNumber);
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to print Mini " + def.id() + ": " + e.getMessage());

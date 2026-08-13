@@ -157,6 +157,34 @@ public final class PluginConfig {
     public record AchievementDef(String id, boolean enabled, int reward, String display, double threshold) {
     }
 
+    // ---- Daily/weekly quests (Phase 11, §3.9) — repeatable token objectives ----
+
+    /** How often a quest resets (its progress window). */
+    public enum QuestPeriod {DAILY, WEEKLY}
+
+    /** The trackable objective a quest counts toward. Each maps to one earn hook. */
+    public enum QuestType {SELL_MARKET, OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH}
+
+    /**
+     * A single quest: reach {@code target} of {@code type} within the {@code period}
+     * to earn {@code reward} tokens (once per period). All in-game currency.
+     */
+    public record Quest(String id, QuestPeriod period, QuestType type, long target, int reward, String display) {
+    }
+
+    /** The whole quest config: on/off plus the daily + weekly objective lists. */
+    public record Quests(boolean enabled, List<Quest> all) {
+        public List<Quest> byPeriod(QuestPeriod p) {
+            List<Quest> out = new ArrayList<>();
+            for (Quest q : all) {
+                if (q.period() == p) {
+                    out.add(q);
+                }
+            }
+            return out;
+        }
+    }
+
     /** The whole Arcade config: token sources, crates, pity exchange, lotto, blocks. */
     public record Arcade(boolean enabled, boolean streakEnabled, List<Integer> streakRewards,
                          boolean playtimeEnabled, int playtimeMinutesPerToken,
@@ -266,6 +294,7 @@ public final class PluginConfig {
     private Displays displays;
     private Arcade arcade;
     private Map<String, AchievementDef> achievements;
+    private Quests quests;
 
     public PluginConfig(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -336,6 +365,11 @@ public final class PluginConfig {
     /** One-time achievement definitions keyed by id (Phase 9). */
     public Map<String, AchievementDef> achievements() {
         return achievements;
+    }
+
+    /** Daily/weekly quest definitions (Phase 11). */
+    public Quests quests() {
+        return quests;
     }
 
     public Loot.MiniLoot miniLoot() {
@@ -454,6 +488,39 @@ public final class PluginConfig {
 
         // ---- Achievements (Phase 9) ----
         this.achievements = readAchievements(c);
+
+        // ---- Daily/weekly quests (Phase 11) ----
+        this.quests = readQuests(c);
+    }
+
+    private Quests readQuests(FileConfiguration c) {
+        boolean enabled = c.getBoolean("arcade.quests.enabled", true);
+        List<Quest> all = new ArrayList<>();
+        readQuestList(c, "arcade.quests.daily", QuestPeriod.DAILY, all);
+        readQuestList(c, "arcade.quests.weekly", QuestPeriod.WEEKLY, all);
+        return new Quests(enabled, all);
+    }
+
+    private void readQuestList(FileConfiguration c, String path, QuestPeriod period, List<Quest> out) {
+        for (Map<?, ?> row : c.getMapList(path)) {
+            String id = str(row.get("id"), "").toLowerCase(Locale.ROOT);
+            QuestType type = parseQuestType(str(row.get("type"), ""));
+            long target = (long) Math.max(1, number(row.get("target"), 1));
+            int reward = (int) Math.max(0, number(row.get("reward"), 1));
+            String display = str(row.get("display"), id);
+            if (id.isBlank() || type == null) {
+                continue; // a mistyped id/type is skipped rather than crashing the load
+            }
+            out.add(new Quest(id, period, type, target, reward, display));
+        }
+    }
+
+    private QuestType parseQuestType(String s) {
+        try {
+            return QuestType.valueOf(s.trim().toUpperCase(Locale.ROOT));
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private Map<String, AchievementDef> readAchievements(FileConfiguration c) {
@@ -463,6 +530,7 @@ public final class PluginConfig {
         putAchievement(map, c, "first_sale", 2, "First Market Sale", 0);
         putAchievement(map, c, "first_pc", 2, "Built Your First PC", 0);
         putAchievement(map, c, "first_crate", 1, "Opened Your First Crate", 0);
+        putAchievement(map, c, "first_pack", 2, "Opened Your First Pack", 0);
         putAchievement(map, c, "rich_10k", 5, "Reached $10,000", 10000);
         return map;
     }

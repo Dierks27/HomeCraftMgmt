@@ -73,10 +73,15 @@ public final class CrateMenu extends Menu {
         int tokens = plugin.arcade().balance(player.getUniqueId());
         set(45, Menus.icon(Material.SUNFLOWER, "&eYour Tokens: &6" + tokens), null);
 
-        // Free (token) open.
-        set(48, Menus.icon(Material.CHEST,
+        // Free (token) open — greyed with a "need N more" note when unaffordable, but
+        // still clickable (the click surfaces the exact shortfall message).
+        boolean afford = tokens >= crate.costTokens();
+        int need = crate.costTokens() - tokens;
+        set(48, Menus.icon(afford ? Material.CHEST : Material.GRAY_STAINED_GLASS_PANE,
                 "&aOpen — &6" + crate.costTokens() + " token" + (crate.costTokens() == 1 ? "" : "s"),
-                "&7Standard odds shown above.", "&8—", "&eClick to open"),
+                "&7Standard odds shown above.", "&8—", afford
+                        ? "&eClick to open"
+                        : "&c✖ Need " + need + " more token" + (need == 1 ? "" : "s")),
                 e -> pull(null));
 
         // Paid-odds tiers (buy a guaranteed rarity floor with Vault money).

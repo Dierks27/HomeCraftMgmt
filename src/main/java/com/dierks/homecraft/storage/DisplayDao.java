@@ -100,6 +100,19 @@ public final class DisplayDao {
         }
     }
 
+    /** The display row with this id, or empty if it's been removed. */
+    public Optional<Display> byId(long id) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement("SELECT * FROM displays WHERE id=?")) {
+                ps.setLong(1, id);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next() ? Optional.of(map(rs)) : Optional.empty();
+                }
+            }
+        }
+    }
+
     public void updateData(long id, String data) throws SQLException {
         Connection c = conn();
         synchronized (c) {

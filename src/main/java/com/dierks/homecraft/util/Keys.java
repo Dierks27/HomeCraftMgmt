@@ -45,6 +45,11 @@ public final class Keys {
     /** On a Museum showcase copy: marks it display-only — excluded from cap/circulation (Byte). */
     public static NamespacedKey MINI_DISPLAY_ONLY;
 
+    /** On a Card Pack item: the pack id it opens (String). */
+    public static NamespacedKey PACK_ID;
+    /** On a Card Binder item: marks it as a binder (Byte). */
+    public static NamespacedKey BINDER_ITEM;
+
     private Keys() {
     }
 
@@ -63,5 +68,7 @@ public final class Keys {
         MINI_GRADE = new NamespacedKey(plugin, "mini_grade");
         MINI_FINISH = new NamespacedKey(plugin, "mini_finish");
         MINI_DISPLAY_ONLY = new NamespacedKey(plugin, "mini_display_only");
+        PACK_ID = new NamespacedKey(plugin, "pack_id");
+        BINDER_ITEM = new NamespacedKey(plugin, "binder_item");
     }
 }

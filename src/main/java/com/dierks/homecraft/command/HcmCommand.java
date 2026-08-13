@@ -226,6 +226,10 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             handleGiveFilament(sender, args);
             return;
         }
+        if (kind.equals("pack")) {
+            handleGivePack(sender, args);
+            return;
+        }
         ItemStack item;
         switch (kind) {
             case "printer" -> item = plugin.items().printer();
@@ -288,6 +292,27 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(r.ok()
                 ? Text.of("&aGave a " + id + " Card to " + target.getName() + ".")
                 : Text.of("&c" + r.error()));
+    }
+
+    /** {@code /hcm give pack <id> [player]} — hand out a sealed Card Pack item (admin). */
+    private void handleGivePack(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage(Text.of("&cUsage: /hcm give pack <id> [player]"));
+            return;
+        }
+        String id = args[2].toLowerCase(Locale.ROOT);
+        ItemStack pack = plugin.packs().packItem(id);
+        if (pack == null) {
+            sender.sendMessage(Text.of("&cUnknown pack '" + id + "'. See &f/hcm packs&c."));
+            return;
+        }
+        Player target = resolveTarget(sender, args, 3, "give pack " + id);
+        if (target == null) {
+            return;
+        }
+        target.getInventory().addItem(pack).values()
+                .forEach(drop -> target.getWorld().dropItemNaturally(target.getLocation(), drop));
+        sender.sendMessage(Text.of("&aGave a " + id + " pack to " + target.getName() + "."));
     }
 
     /** {@code /hcm give filament <color> <amount> [player]} — hand out printer filament (admin). */
@@ -688,8 +713,16 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
-            addMatches(out, args[1], "printer", "pc", "card", "filament", "vending", "display", "auction",
+            addMatches(out, args[1], "printer", "pc", "card", "filament", "pack", "vending", "display", "auction",
                     "mailbox", "pallet", "arcade", "cratemachine", "scratch", "pity", "counter");
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("give")
+                && args[1].equalsIgnoreCase("pack")) {
+            String prefix = args[2].toLowerCase(Locale.ROOT);
+            for (com.dierks.homecraft.mini.Pack.PackDef p : plugin.packs().packs()) {
+                if (p.id().startsWith(prefix)) {
+                    out.add(p.id());
+                }
+            }
         } else if (args.length == 3 && args[0].equalsIgnoreCase("give")
                 && args[1].equalsIgnoreCase("card")) {
             String prefix = args[2].toLowerCase(Locale.ROOT);

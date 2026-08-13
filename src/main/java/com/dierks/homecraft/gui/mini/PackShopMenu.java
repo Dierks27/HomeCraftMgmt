@@ -71,13 +71,14 @@ public final class PackShopMenu extends Menu {
     }
 
     private void buy(Pack.PackDef p) {
-        PackService.OpenResult r = plugin.packs().open(player, p.id());
+        PackService.BuyResult r = plugin.packs().buy(player, p.id());
         if (!r.ok()) {
             player.sendMessage(Text.of("&c" + r.error()));
             refresh();
             return;
         }
-        new PackRevealMenu(plugin, player, p.displayName(), r.cardIds(), this::reopen).open(player);
+        player.sendMessage(Text.of("&aBought a " + p.displayName() + "! &7Right-click it to open."));
+        refresh();
     }
 
     private void reopen() {

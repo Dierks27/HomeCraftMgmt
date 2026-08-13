@@ -170,6 +170,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new InboxListener(this), this);
         getServer().getPluginManager().registerEvents(new WildDropListener(this, wildDrops, placedNatural), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.MiniInteractListener(this), this);
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.PackItemListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.MiniHeadListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.ArmorStandListener(this, stands), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.mini.MiniDestructionListener(this), this);

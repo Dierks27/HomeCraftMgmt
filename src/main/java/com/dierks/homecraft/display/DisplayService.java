@@ -517,6 +517,55 @@ public final class DisplayService {
         }
     }
 
+    // ---- Map-TV interaction: right-click opens the browser chart ---------------
+
+    /** The commodity a map-TV frame is bound to, if this item frame is one of its tiles. */
+    public java.util.Optional<String> mapTvCommodityFor(ItemFrame frame) {
+        if (frame == null) {
+            return java.util.Optional.empty();
+        }
+        ItemStack item = frame.getItem();
+        if (item == null || item.getType() != Material.FILLED_MAP
+                || !(item.getItemMeta() instanceof MapMeta mm) || mm.getMapView() == null) {
+            return java.util.Optional.empty();
+        }
+        int mapId = mm.getMapView().getId();
+        List<DisplayDao.Display> maptvs;
+        try {
+            maptvs = dao.byKind(DisplayDao.MAPTV);
+        } catch (SQLException e) {
+            return java.util.Optional.empty();
+        }
+        for (DisplayDao.Display d : maptvs) {
+            for (int id : parseMapIds(d.data())) {
+                if (id == mapId) {
+                    return java.util.Optional.of(d.itemId());
+                }
+            }
+        }
+        return java.util.Optional.empty();
+    }
+
+    /** Right-click a map-TV: hand the player a clickable link to the live dashboard chart. */
+    public void openMapTvChart(Player player, String itemId) {
+        String url = dashboardUrl(itemId);
+        player.sendMessage(Text.of("&b📺 Opening the live chart…"));
+        player.sendMessage(Text.link("&a&n▶ Click to open the price chart", url));
+    }
+
+    /** The dashboard URL for a commodity: the configured base, deep-linked to the item id. */
+    public String dashboardUrl(String itemId) {
+        String base = plugin.config().displays().maptv().dashboardUrl();
+        if (base == null || base.isBlank()) {
+            base = "http://localhost:" + plugin.config().webDashboard().port();
+        }
+        base = base.trim();
+        if (itemId == null || itemId.isBlank()) {
+            return base;
+        }
+        return base + (base.contains("?") ? "&" : "?") + "item=" + itemId;
+    }
+
     /** The horizontal "right" step (unit x/z delta) for a wall the frame faces; null for floor/ceiling. */
     private int[] rightStep(BlockFace facing) {
         return switch (facing) {

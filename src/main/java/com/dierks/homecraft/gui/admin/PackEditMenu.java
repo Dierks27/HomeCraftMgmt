@@ -3,8 +3,10 @@ package com.dierks.homecraft.gui.admin;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.gui.mini.PackRevealMenu;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.mini.Pack;
+import com.dierks.homecraft.mini.PackService;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -73,6 +75,17 @@ public final class PackEditMenu extends Menu {
         set(6, Menus.icon(Material.PAPER, "&bCards per open: &f" + pack.cardCount(),
                 "&7Left &8+1  &7Right &8-1"), e ->
                 changeCount(e.getClick().isRightClick() ? -1 : 1));
+
+        set(8, Menus.icon(Material.ENDER_EYE, "&dTest Open",
+                "&7Open this pack now (comped — no charge).",
+                "&8For testing without a storefront."), e -> {
+            PackService.OpenResult r = plugin.packs().open(player, packId);
+            if (!r.ok()) {
+                player.sendMessage(Text.of("&c" + r.error()));
+                return;
+            }
+            new PackRevealMenu(plugin, player, pack.displayName(), r.cardIds(), this::reopen).open(player);
+        });
 
         double total = pack.totalWeight();
         List<Pack.PackEntry> pool = pack.pool();

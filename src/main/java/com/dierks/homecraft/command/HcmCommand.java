@@ -84,6 +84,19 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
                 handlePrinter(sender, args);
             }
+            case "tv" -> {
+                if (denyUnless(sender, "hcm.admin")) {
+                    return true;
+                }
+                handleTv(sender, args);
+            }
+            case "binder" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(Text.of("&cOnly players can open a binder."));
+                    return true;
+                }
+                new com.dierks.homecraft.gui.mini.BinderMenu(plugin, player, false).open(player);
+            }
             case "packs", "pack" -> {
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Text.of("&cOnly players can open the pack menus."));
@@ -226,9 +239,15 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             handleGiveFilament(sender, args);
             return;
         }
+        if (kind.equals("pack")) {
+            handleGivePack(sender, args);
+            return;
+        }
         ItemStack item;
         switch (kind) {
             case "printer" -> item = plugin.items().printer();
+            case "tv" -> item = plugin.items().tv();
+            case "binder" -> item = plugin.binder().items().binder();
             case "pc" -> item = plugin.items().pc();
             case "vending" -> item = plugin.items().vendingMachine();
             case "display" -> item = plugin.items().displayCase();
@@ -290,6 +309,27 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 : Text.of("&c" + r.error()));
     }
 
+    /** {@code /hcm give pack <id> [player]} — hand out a sealed Card Pack item (admin). */
+    private void handleGivePack(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage(Text.of("&cUsage: /hcm give pack <id> [player]"));
+            return;
+        }
+        String id = args[2].toLowerCase(Locale.ROOT);
+        ItemStack pack = plugin.packs().packItem(id);
+        if (pack == null) {
+            sender.sendMessage(Text.of("&cUnknown pack '" + id + "'. See &f/hcm packs&c."));
+            return;
+        }
+        Player target = resolveTarget(sender, args, 3, "give pack " + id);
+        if (target == null) {
+            return;
+        }
+        target.getInventory().addItem(pack).values()
+                .forEach(drop -> target.getWorld().dropItemNaturally(target.getLocation(), drop));
+        sender.sendMessage(Text.of("&aGave a " + id + " pack to " + target.getName() + "."));
+    }
+
     /** {@code /hcm give filament <color> <amount> [player]} — hand out printer filament (admin). */
     private void handleGiveFilament(CommandSender sender, String[] args) {
         if (args.length < 4) {
@@ -332,6 +372,35 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         }
         sender.sendMessage(Text.of("&cSpecify a player: /hcm " + usageTail + " <player>"));
         return null;
+    }
+
+    /** {@code /hcm tv seturl <url>} — bind a stream URL to the TV you're looking at (admin). */
+    private void handleTv(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Text.of("&cOnly players can set up a TV."));
+            return;
+        }
+        if (args.length < 3 || !args[1].equalsIgnoreCase("seturl")) {
+            sender.sendMessage(Text.of("&cUsage: /hcm tv seturl <url> &7(look at the TV)"));
+            return;
+        }
+        org.bukkit.block.Block target = player.getTargetBlockExact(6);
+        if (target == null) {
+            sender.sendMessage(Text.of("&cLook at a placed TV, then run this again."));
+            return;
+        }
+        var placed = plugin.blockService().at(target.getLocation());
+        if (placed.isEmpty() || placed.get().type() != com.dierks.homecraft.block.CustomBlockType.TV) {
+            sender.sendMessage(Text.of("&cThat isn't a TV. Look directly at one."));
+            return;
+        }
+        String url = args[2];
+        if (!(url.startsWith("http://") || url.startsWith("https://"))) {
+            sender.sendMessage(Text.of("&cThe URL must start with http:// or https://."));
+            return;
+        }
+        plugin.tvs().setUrl(target.getLocation(), url);
+        sender.sendMessage(Text.of("&aTV stream set: &f" + url));
     }
 
     /** {@code /hcm printer <public|private>} — flag the printer you're looking at (admin). */
@@ -673,9 +742,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "packs", "auction", "arcade", "tokens");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "tv", "packs", "binder", "auction", "arcade", "tokens");
             } else {
-                addMatches(out, args[0], "market", "mini", "packs", "auction", "arcade", "tokens");
+                addMatches(out, args[0], "market", "mini", "packs", "binder", "auction", "arcade", "tokens");
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("mini")) {
             addMatches(out, args[1], "museum", "list", "give", "capturestand");
@@ -688,8 +757,18 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
-            addMatches(out, args[1], "printer", "pc", "card", "filament", "vending", "display", "auction",
+            addMatches(out, args[1], "printer", "tv", "binder", "pc", "card", "filament", "pack", "vending", "display", "auction",
                     "mailbox", "pallet", "arcade", "cratemachine", "scratch", "pity", "counter");
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("tv")) {
+            addMatches(out, args[1], "seturl");
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("give")
+                && args[1].equalsIgnoreCase("pack")) {
+            String prefix = args[2].toLowerCase(Locale.ROOT);
+            for (com.dierks.homecraft.mini.Pack.PackDef p : plugin.packs().packs()) {
+                if (p.id().startsWith(prefix)) {
+                    out.add(p.id());
+                }
+            }
         } else if (args.length == 3 && args[0].equalsIgnoreCase("give")
                 && args[1].equalsIgnoreCase("card")) {
             String prefix = args[2].toLowerCase(Locale.ROOT);

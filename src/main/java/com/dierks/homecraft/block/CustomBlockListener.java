@@ -109,6 +109,10 @@ public final class CustomBlockListener implements Listener {
         if (record.type() == CustomBlockType.PALLET) {
             plugin.pallets().onBlockBroken(loc, player);
         }
+        // Drop the TV's stream-URL binding.
+        if (record.type() == CustomBlockType.TV) {
+            plugin.tvs().clear(loc);
+        }
 
         blocks.removeAt(loc);
         event.setDropItems(false); // suppress the vanilla base-block drop
@@ -188,7 +192,20 @@ public final class CustomBlockListener implements Listener {
                 new com.dierks.homecraft.gui.marketplace.PalletMenu(
                         plugin, player, clicked.getLocation(), owner).open(player);
             }
+            case TV -> openTv(player, clicked.getLocation());
         }
+    }
+
+    /** Right-clicking a TV sends the player a clickable link that opens its stream in the browser. */
+    private void openTv(Player player, Location loc) {
+        String url = plugin.tvs().url(loc);
+        if (url == null || url.isBlank()) {
+            player.sendMessage(Text.of("&7This TV has no stream yet. An admin can set one with "
+                    + "&f/hcm tv seturl <url>&7."));
+            return;
+        }
+        player.sendMessage(Text.of("&b▶ TV stream:"));
+        player.sendMessage(Text.link("&a&n▶ Click here to watch", url));
     }
 
     /** Friendly display label for a placed-block type (for the placement message). */
@@ -207,6 +224,7 @@ public final class CustomBlockListener implements Listener {
             case SCRATCH_BOOTH -> "Scratch-Ticket Booth";
             case PITY_KIOSK -> "Pity Exchange";
             case TOKEN_COUNTER -> "Token Counter";
+            case TV -> "TV";
         };
     }
 

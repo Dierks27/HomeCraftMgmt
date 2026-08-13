@@ -2,7 +2,6 @@ package com.dierks.homecraft.display;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.market.MarketItem;
-import com.dierks.homecraft.storage.PriceHistoryDao;
 import org.bukkit.entity.Player;
 import org.bukkit.map.MapCanvas;
 import org.bukkit.map.MapRenderer;
@@ -11,7 +10,6 @@ import org.bukkit.map.MinecraftFont;
 
 import java.awt.Color;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -72,6 +70,12 @@ public final class MapTvRenderer extends MapRenderer {
 
     // ---- single-commodity chart ----------------------------------------------
 
+    /**
+     * A clean TEXT PRICE BOARD (Round 3a) — no chart. Renders the commodity name,
+     * current price, trend arrow + %, and stock, centered and laid out in virtual
+     * space so the same board scales across a tiled wall. Text on a map is reliable;
+     * the old line graph was removed.
+     */
     private void renderChart(MapCanvas canvas) {
         MarketItem item = plugin.market().item(itemId);
         if (item == null) {
@@ -82,117 +86,42 @@ public final class MapTvRenderer extends MapRenderer {
         }
         int width = TILE * cols;
         int height = TILE * rows;
-        int headerH = 26;
-        int plotTop = headerH + 2;
-        int plotLeft = MARGIN;
-        int plotRight = width - MARGIN;
-        int plotBottom = height - MARGIN;
 
         double change = plugin.market().change24h(itemId);
         double price = plugin.market().price(itemId);
+        long stock = plugin.market().state(itemId).stock();
+        char trendC = change > 0.05 ? 'a' : (change < -0.05 ? 'c' : 'f');
 
-        List<Double> prices = priceSeries();
-        // Guarantee at least two points so a line ALWAYS renders — a brand-new TV with
-        // no price history yet still shows a flat baseline instead of a blank grid.
-        if (prices.size() == 1) {
-            prices = new ArrayList<>(List.of(prices.get(0), prices.get(0)));
-        }
-        double min = prices.isEmpty() ? 0 : Collections.min(prices);
-        double max = prices.isEmpty() ? 1 : Collections.max(prices);
-        if (max - min < 1e-6) {
-            max = min + Math.max(1, Math.abs(min) * 0.05);
-        }
+        String name = safe(item.label(), 20);
+        String priceStr = safe(plugin.economy().format(price), 16);
+        String trendStr = asciiArrow(change) + " " + fmtPct(change);
+        String stockStr = "Stock: " + (stock <= 0 ? "OUT" : Long.toString(stock));
 
-        // Strict draw order so the price line + text are NEVER hidden by the grid:
-        //   background (render()) -> header band -> gridlines -> axis labels
-        //   -> PRICE LINE -> header/price text LAST, on top of everything.
-
-        // 1) Header band on the top row of tiles (y 0..headerH — above the plot area).
-        if (tileY == 0) {
-            Color band = new Color(24, 30, 44);
-            for (int x = 0; x < TILE; x++) {
-                for (int y = 0; y < headerH; y++) {
-                    canvas.setPixelColor(x, y, band);
-                }
-            }
-        }
-
-        // 2) Gridlines — deliberately dim so the bright line always dominates.
-        Color grid = new Color(38, 46, 62);
-        for (int g = 0; g <= 3; g++) {
-            int vy = plotTop + (int) Math.round((plotBottom - plotTop) * (g / 3.0));
-            for (int vx = plotLeft; vx <= plotRight; vx++) {
-                plot(canvas, vx, vy, grid);
-            }
-        }
-        for (int g = 0; g <= 4; g++) {
-            int vx = plotLeft + (int) Math.round((plotRight - plotLeft) * (g / 4.0));
-            for (int vy = plotTop; vy <= plotBottom; vy++) {
-                plot(canvas, vx, vy, grid);
-            }
-        }
-
-        // 3) Axis min/max labels on the left column of tiles (before the line).
-        if (tileX == 0) {
-            int localTop = plotTop - tileY * TILE;
-            int localBottom = plotBottom - tileY * TILE;
-            if (localTop >= 0 && localTop < TILE) {
-                canvas.drawText(3, Math.max(0, localTop + 1), MinecraftFont.Font,
-                        S + "7" + safe(plugin.economy().format(max), 11));
-            }
-            if (localBottom - 8 >= 0 && localBottom - 8 < TILE) {
-                canvas.drawText(3, localBottom - 8, MinecraftFont.Font,
-                        S + "7" + safe(plugin.economy().format(min), 11));
-            }
-        }
-
-        // 4) Price line ON TOP of the grid — bright green-up / red-down, thick, head dot.
-        if (prices.size() >= 2) {
-            Color lineColor = change < -0.05 ? new Color(240, 90, 90) : new Color(90, 225, 120);
-            int n = prices.size();
-            int prevX = -1;
-            int prevY = -1;
-            int lastX = -1;
-            int lastY = -1;
-            for (int i = 0; i < n; i++) {
-                int vx = plotLeft + (int) Math.round((double) i / (n - 1) * (plotRight - plotLeft));
-                double norm = (prices.get(i) - min) / (max - min);
-                int vy = plotBottom - (int) Math.round(norm * (plotBottom - plotTop));
-                if (prevX >= 0) {
-                    drawVirtualLine(canvas, prevX, prevY, vx, vy, lineColor);
-                }
-                prevX = vx;
-                prevY = vy;
-                lastX = vx;
-                lastY = vy;
-            }
-            Color dot = new Color(255, 255, 255);
-            for (int ox = -1; ox <= 1; ox++) {
-                for (int oy = -1; oy <= 1; oy++) {
-                    plot(canvas, lastX + ox, lastY + oy, dot);
-                }
-            }
-        }
-
-        // 5) Header text LAST, on top of everything — name, current price, trend. Sits in
-        //    the header band (y 0..headerH), clear of the plot line below it.
-        if (topLeft()) {
-            canvas.drawText(3, 2, MinecraftFont.Font, S + "f" + safe(item.label(), 19));
-            canvas.drawText(3, 13, MinecraftFont.Font,
-                    S + "e" + safe(plugin.economy().format(price), 12)
-                            + " " + trendCode(change) + asciiArrow(change) + fmtPct(change));
-            drawSwatch(canvas, TILE - 11, 2, item.material());
-        }
+        // Vertical anchors as fractions of the whole (possibly multi-tile) board.
+        drawCentered(canvas, width, (int) (height * 0.14), S + "f" + name, true);
+        drawCentered(canvas, width, (int) (height * 0.36), S + trendC + priceStr, true);
+        drawCentered(canvas, width, (int) (height * 0.60), S + trendC + trendStr, false);
+        drawCentered(canvas, width, (int) (height * 0.80), S + "7" + stockStr, false);
     }
 
-    private List<Double> priceSeries() {
-        List<PriceHistoryDao.Snapshot> hist = plugin.market().recentHistory(itemId, 96); // newest-first
-        List<Double> out = new ArrayList<>(hist.size() + 1);
-        for (int i = hist.size() - 1; i >= 0; i--) {
-            out.add(hist.get(i).price());
+    /**
+     * Draw a colour-coded string horizontally centered across the whole board at a
+     * virtual y, on whichever tile it lands on. {@code bold} thickens it by a 1px
+     * re-draw (the map font has no real large size, so this is our emphasis).
+     */
+    private void drawCentered(MapCanvas canvas, int boardWidth, int vy, String text, boolean bold) {
+        String plain = text.replaceAll("(?i)" + S + "[0-9a-fk-or]", "");
+        int w = plain.length() * 6;
+        int vx = Math.max(2, (boardWidth - w) / 2);
+        int lx = vx - tileX * TILE;
+        int ly = vy - tileY * TILE;
+        if (ly <= -8 || ly >= TILE) {
+            return; // this line isn't on this tile
         }
-        out.add(plugin.market().price(itemId));
-        return out;
+        canvas.drawText(lx, ly, MinecraftFont.Font, text);
+        if (bold) {
+            canvas.drawText(lx + 1, ly, MinecraftFont.Font, text);
+        }
     }
 
     // ---- multi-commodity board ------------------------------------------------
@@ -235,65 +164,6 @@ public final class MapTvRenderer extends MapRenderer {
         for (int x = 0; x < TILE; x++) {
             for (int y = 0; y < TILE; y++) {
                 canvas.setPixelColor(x, y, c);
-            }
-        }
-    }
-
-    /** A small colour chip standing in for the commodity's item icon. */
-    private void drawSwatch(MapCanvas canvas, int x, int y, org.bukkit.Material material) {
-        int h = Math.abs(material.name().hashCode());
-        Color c = new Color(80 + h % 150, 80 + (h / 3) % 150, 80 + (h / 7) % 150);
-        for (int dx = 0; dx < 8; dx++) {
-            for (int dy = 0; dy < 8; dy++) {
-                int px = x + dx;
-                int py = y + dy;
-                if (px >= 0 && px < TILE && py >= 0 && py < TILE) {
-                    boolean border = dx == 0 || dy == 0 || dx == 7 || dy == 7;
-                    canvas.setPixelColor(px, py, border ? new Color(20, 24, 32) : c);
-                }
-            }
-        }
-    }
-
-    private void drawVirtualLine(MapCanvas canvas, int x0, int y0, int x1, int y1, Color color) {
-        int dx = Math.abs(x1 - x0);
-        int dy = -Math.abs(y1 - y0);
-        int sx = x0 < x1 ? 1 : -1;
-        int sy = y0 < y1 ? 1 : -1;
-        int err = dx + dy;
-        int x = x0;
-        int y = y0;
-        while (true) {
-            plotThick(canvas, x, y, color);
-            if (x == x1 && y == y1) {
-                break;
-            }
-            int e2 = 2 * err;
-            if (e2 >= dy) {
-                err += dy;
-                x += sx;
-            }
-            if (e2 <= dx) {
-                err += dx;
-                y += sy;
-            }
-        }
-    }
-
-    /** Plot a single virtual-space pixel onto this tile. */
-    private void plot(MapCanvas canvas, int vx, int vy, Color color) {
-        int lx = vx - tileX * TILE;
-        int ly = vy - tileY * TILE;
-        if (lx >= 0 && lx < TILE && ly >= 0 && ly < TILE) {
-            canvas.setPixelColor(lx, ly, color);
-        }
-    }
-
-    /** Plot a virtual-space pixel thickened by 1 for a bold line. */
-    private void plotThick(MapCanvas canvas, int vx, int vy, Color color) {
-        for (int ox = 0; ox <= 1; ox++) {
-            for (int oy = 0; oy <= 1; oy++) {
-                plot(canvas, vx + ox, vy + oy, color);
             }
         }
     }

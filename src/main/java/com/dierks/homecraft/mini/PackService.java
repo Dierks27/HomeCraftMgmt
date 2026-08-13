@@ -2,6 +2,7 @@ package com.dierks.homecraft.mini;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -24,13 +25,61 @@ public final class PackService {
         }
     }
 
+    /** Result of buying a pack (a sealed pack item is given), or a failure. */
+    public record BuyResult(boolean ok, String error) {
+        static BuyResult fail(String error) {
+            return new BuyResult(false, error);
+        }
+    }
+
     /** How many times a single slot re-rolls past a card-capped-out type before giving up. */
     private static final int REROLL_LIMIT = 8;
 
     private final HomeCraftManagement plugin;
+    private final PackItems packItems = new PackItems();
 
     public PackService(HomeCraftManagement plugin) {
         this.plugin = plugin;
+    }
+
+    public PackItems packItems() {
+        return packItems;
+    }
+
+    /** Build a sealed pack item for a pack id (or null if unknown). */
+    public ItemStack packItem(String packId) {
+        Pack.PackDef def = pack(packId);
+        return def == null ? null : packItems.pack(def, plugin.economy().format(def.price()));
+    }
+
+    /**
+     * Buy a sealed pack: charge the price and give the player the physical pack item
+     * (opened later by right-clicking it). Keeps buying and opening separate so packs
+     * are tradeable and {@code /hcm give pack} works.
+     */
+    public BuyResult buy(Player player, String packId) {
+        Pack.PackDef def = pack(packId);
+        if (def == null) {
+            return BuyResult.fail("That pack doesn't exist.");
+        }
+        if (!def.isValid()) {
+            return BuyResult.fail("That pack has no cards configured yet.");
+        }
+        if (def.price() > 0) {
+            if (!plugin.economy().isEnabled()) {
+                return BuyResult.fail("The economy is offline (no Vault).");
+            }
+            if (!plugin.economy().has(player, def.price())) {
+                return BuyResult.fail("You can't afford " + plugin.economy().format(def.price()) + ".");
+            }
+            if (!plugin.economy().withdraw(player, def.price())) {
+                return BuyResult.fail("Payment failed.");
+            }
+        }
+        ItemStack item = packItems.pack(def, plugin.economy().format(def.price()));
+        player.getInventory().addItem(item).values()
+                .forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
+        return new BuyResult(true, null);
     }
 
     public List<Pack.PackDef> packs() {
@@ -42,10 +91,11 @@ public final class PackService {
     }
 
     /**
-     * Buy and open a pack: charge the price, then roll {@code cardCount} weighted Cards
-     * and issue them (cap-aware). A rolled card that's capped out re-rolls a bounded
-     * number of times so the buyer still gets cards for their money. If the whole pool
-     * is sold out, the purchase is refunded.
+     * Open a pack the player already owns (a pack item or an admin/Test comp): roll
+     * {@code cardCount} weighted Cards and issue them (cap-aware). No charge here —
+     * paying happens in {@link #buy}. A rolled card that's capped out re-rolls a
+     * bounded number of times. Returns a failure only if the whole pool is sold out,
+     * so the caller can hand the pack item back instead of consuming it.
      */
     public OpenResult open(Player player, String packId) {
         Pack.PackDef def = pack(packId);
@@ -55,18 +105,6 @@ public final class PackService {
         if (!def.isValid()) {
             return OpenResult.fail("That pack has no cards configured yet.");
         }
-        if (def.price() > 0) {
-            if (!plugin.economy().isEnabled()) {
-                return OpenResult.fail("The economy is offline (no Vault).");
-            }
-            if (!plugin.economy().has(player, def.price())) {
-                return OpenResult.fail("You can't afford " + plugin.economy().format(def.price()) + ".");
-            }
-            if (!plugin.economy().withdraw(player, def.price())) {
-                return OpenResult.fail("Payment failed.");
-            }
-        }
-
         List<String> awarded = new ArrayList<>();
         for (int slot = 0; slot < def.cardCount(); slot++) {
             String id = rollAndIssue(player, def.pool());
@@ -75,11 +113,7 @@ public final class PackService {
             }
         }
         if (awarded.isEmpty()) {
-            // Everything was capped out — refund so the buyer is never charged for nothing.
-            if (def.price() > 0) {
-                plugin.economy().deposit(player, def.price());
-            }
-            return OpenResult.fail("That pack's cards are all sold out — you were refunded.");
+            return OpenResult.fail("That pack's cards are all sold out.");
         }
         return new OpenResult(true, null, awarded);
     }

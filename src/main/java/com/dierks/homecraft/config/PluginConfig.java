@@ -598,6 +598,7 @@ public final class PluginConfig {
         putSkin(map, sec, "scratch_booth", com.dierks.homecraft.block.CustomBlockType.SCRATCH_BOOTH);
         putSkin(map, sec, "pity_kiosk", com.dierks.homecraft.block.CustomBlockType.PITY_KIOSK);
         putSkin(map, sec, "token_counter", com.dierks.homecraft.block.CustomBlockType.TOKEN_COUNTER);
+        putSkin(map, sec, "tv", com.dierks.homecraft.block.CustomBlockType.TV);
         return map;
     }
 

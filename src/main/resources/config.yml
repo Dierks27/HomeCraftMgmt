@@ -349,6 +349,7 @@ minis:
 skins:
   pc:            ""   # computer / monitor head
   printer:       ""   # 3D-printer head (Phase 9 Mini Printer)
+  tv:            ""   # tv / screen head (Round 3a TV block)
   workbench:     ""   # crafting-table head (retired block; legacy placements only)
   vending:       ""   # vending-machine head
   mailbox:       ""   # mailbox head

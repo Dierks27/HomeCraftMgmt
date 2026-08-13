@@ -168,6 +168,8 @@ The showpiece. Branded **"Minis."** Two Mini types: **decorative heads** and **p
 **Card Packs (booster packs; money sink).** Buyable packs pay money → **N weighted-random Cards** (respecting card caps) with a pack-opening reveal GUI. Pack types are **admin-authored via a GUI pack-builder** (name, price, card count, weighted card pool) — persisted to config, no YAML by hand — and sold in the store (and later the Arcade).
 
 **The PC** is now an easy "chill" recipe (cheap admin-defined ingredients), craftable at a Printer's light craft grid (or a legacy Workbench placement, which is retired but kept usable for graceful migration).
+
+**Card Packs are physical items.** A pack is a sealed booster **item** you buy from the store (PC), get via `/hcm give pack`, or comp-open from the pack-builder's "Test Open"; right-click it to open into the reveal GUI. **The Card Binder** is a single-slot album item (`/hcm give binder`, right-click to open) that stores a player's Cards, supports deposit/withdraw, and doubles as a set tracker (owned cards lit, missing greyed, per-series completion).
 ### 3.6 The Mall — Spawn Market District
 A central **commercial district at spawn.**
 - **Rentable stalls (paid):** rent a Mall stall for money for a prime central spot (holds your QuickShops, Mini Vending Machines, Pallets).
@@ -184,7 +186,8 @@ A **live web page for the economy** — the BlueMap of your market. Shows every 
 - **Build order:** dashboard first (read-only, safe), then layer on auth + buy buttons — same server, same data.
 ### 3.8 In-Game Economy Displays (TVs, Tickers & Boards) (NEW)
 Bring the stock-market feel into the world itself — physical displays in the Mall.
-- **"TV screens" = maps in item frames.** Render live pixels (charts, numbers, scrolling ticker) onto map items via a `MapRenderer`, refreshed on a timer; tile a grid of framed maps into a big-screen chart wall. The premium version of the idea.
+- **"Map-TV" price boards = maps in item frames.** A `MapRenderer` draws live **text** onto map items (refreshed on a timer), tiled into a big-screen wall. *(The single-commodity map-TV renders a clean **text price board** — name + price + trend arrow + stock; the earlier price-history line graph was removed as unreliable. Text on a map is the dependable path.)* A `board` mode lists several commodities as a ticker/leaderboard.
+- **The TV block (§3.11) = a browser stream, not in-world video.** A placeable, owned, skinnable "TV" screen block. An admin binds a stream URL to it (`/hcm tv seturl <url>` — Twitch/YouTube/any http(s)); right-clicking sends the player a **clickable chat link** that opens the stream in their browser with full video + sound and **zero server lag**. We deliberately do not attempt to paint video frames onto a map in-world.
 - **Holographic tickers = floating text.** Expose live values via **PlaceholderAPI** (`%hcm_price_<item>%`, trend arrow) and render them as text-display entities / holograms above market stalls.
 - **Stock board = wall of auto-updating signs** — one row per commodity with price + ▲/▼. Simple, instantly readable.
 - **TAB / scoreboard** — optionally show a price in the tablist/sidebar.

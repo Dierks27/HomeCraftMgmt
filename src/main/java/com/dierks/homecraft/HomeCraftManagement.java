@@ -63,6 +63,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.mini.PrinterService printerService;
     private com.dierks.homecraft.mini.PackService packService;
     private com.dierks.homecraft.mini.MiniValue miniValue;
+    private com.dierks.homecraft.mini.BinderService binderService;
     private ChatPromptService chatPrompts;
     private HeadLibraryService headLibrary;
     private VendingService vending;
@@ -74,6 +75,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.web.MarketDashboardServer dashboard;
     private com.dierks.homecraft.integration.HcmPlaceholders placeholders;
     private com.dierks.homecraft.display.DisplayService displayService;
+    private com.dierks.homecraft.display.TvService tvService;
     private com.dierks.homecraft.arcade.ArcadeService arcade;
     private com.dierks.homecraft.arcade.AchievementService achievements;
     private BukkitTask historyTask;
@@ -129,6 +131,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.printerService = new com.dierks.homecraft.mini.PrinterService(this, cardDao);
         this.packService = new com.dierks.homecraft.mini.PackService(this);
         this.miniValue = new com.dierks.homecraft.mini.MiniValue(this);
+        this.binderService = new com.dierks.homecraft.mini.BinderService(
+                this, new com.dierks.homecraft.storage.BinderDao(database));
 
         // Admin Studio chat-input bridge + web head-library (Phase 4b).
         this.chatPrompts = new ChatPromptService(this);
@@ -154,6 +158,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         // In-Game Economy Displays (Phase 7) — sign boards, holograms, map-TVs.
         this.displayService = new com.dierks.homecraft.display.DisplayService(
                 this, new com.dierks.homecraft.storage.DisplayDao(database));
+        this.tvService = new com.dierks.homecraft.display.TvService(
+                this, new com.dierks.homecraft.storage.TvDao(database));
 
         // The Arcade (Phase 8) — tokens, loot crates, pity, lotto.
         this.arcade = new com.dierks.homecraft.arcade.ArcadeService(
@@ -170,6 +176,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new InboxListener(this), this);
         getServer().getPluginManager().registerEvents(new WildDropListener(this, wildDrops, placedNatural), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.MiniInteractListener(this), this);
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.PackItemListener(this), this);
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.BinderItemListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.MiniHeadListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.ArmorStandListener(this, stands), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.mini.MiniDestructionListener(this), this);
@@ -451,6 +459,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         return miniValue;
     }
 
+    public com.dierks.homecraft.mini.BinderService binder() {
+        return binderService;
+    }
+
     public ChatPromptService chatPrompts() {
         return chatPrompts;
     }
@@ -485,6 +497,10 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public com.dierks.homecraft.display.DisplayService displayService() {
         return displayService;
+    }
+
+    public com.dierks.homecraft.display.TvService tvs() {
+        return tvService;
     }
 
     public com.dierks.homecraft.arcade.ArcadeService arcade() {

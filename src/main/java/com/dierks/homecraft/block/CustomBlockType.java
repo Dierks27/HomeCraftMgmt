@@ -20,5 +20,6 @@ public enum CustomBlockType {
     CRATE_MACHINE,
     SCRATCH_BOOTH,
     PITY_KIOSK,
-    TOKEN_COUNTER
+    TOKEN_COUNTER,
+    TV
 }

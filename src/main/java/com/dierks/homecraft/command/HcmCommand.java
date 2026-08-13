@@ -90,6 +90,13 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
                 handleTv(sender, args);
             }
+            case "binder" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(Text.of("&cOnly players can open a binder."));
+                    return true;
+                }
+                new com.dierks.homecraft.gui.mini.BinderMenu(plugin, player, false).open(player);
+            }
             case "packs", "pack" -> {
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Text.of("&cOnly players can open the pack menus."));
@@ -240,6 +247,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         switch (kind) {
             case "printer" -> item = plugin.items().printer();
             case "tv" -> item = plugin.items().tv();
+            case "binder" -> item = plugin.binder().items().binder();
             case "pc" -> item = plugin.items().pc();
             case "vending" -> item = plugin.items().vendingMachine();
             case "display" -> item = plugin.items().displayCase();
@@ -734,9 +742,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "tv", "packs", "auction", "arcade", "tokens");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "tv", "packs", "binder", "auction", "arcade", "tokens");
             } else {
-                addMatches(out, args[0], "market", "mini", "packs", "auction", "arcade", "tokens");
+                addMatches(out, args[0], "market", "mini", "packs", "binder", "auction", "arcade", "tokens");
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("mini")) {
             addMatches(out, args[1], "museum", "list", "give", "capturestand");
@@ -749,7 +757,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
-            addMatches(out, args[1], "printer", "tv", "pc", "card", "filament", "pack", "vending", "display", "auction",
+            addMatches(out, args[1], "printer", "tv", "binder", "pc", "card", "filament", "pack", "vending", "display", "auction",
                     "mailbox", "pallet", "arcade", "cratemachine", "scratch", "pity", "counter");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("tv")) {
             addMatches(out, args[1], "seturl");

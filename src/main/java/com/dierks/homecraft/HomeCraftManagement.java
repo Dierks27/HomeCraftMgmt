@@ -63,6 +63,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.mini.PrinterService printerService;
     private com.dierks.homecraft.mini.PackService packService;
     private com.dierks.homecraft.mini.MiniValue miniValue;
+    private com.dierks.homecraft.mini.BinderService binderService;
     private ChatPromptService chatPrompts;
     private HeadLibraryService headLibrary;
     private VendingService vending;
@@ -130,6 +131,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.printerService = new com.dierks.homecraft.mini.PrinterService(this, cardDao);
         this.packService = new com.dierks.homecraft.mini.PackService(this);
         this.miniValue = new com.dierks.homecraft.mini.MiniValue(this);
+        this.binderService = new com.dierks.homecraft.mini.BinderService(
+                this, new com.dierks.homecraft.storage.BinderDao(database));
 
         // Admin Studio chat-input bridge + web head-library (Phase 4b).
         this.chatPrompts = new ChatPromptService(this);
@@ -174,6 +177,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new WildDropListener(this, wildDrops, placedNatural), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.MiniInteractListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.PackItemListener(this), this);
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.BinderItemListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.MiniHeadListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.trade.ArmorStandListener(this, stands), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.mini.MiniDestructionListener(this), this);
@@ -453,6 +457,10 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public com.dierks.homecraft.mini.MiniValue values() {
         return miniValue;
+    }
+
+    public com.dierks.homecraft.mini.BinderService binder() {
+        return binderService;
     }
 
     public ChatPromptService chatPrompts() {

@@ -41,8 +41,15 @@ public final class AuctionCreateMenu extends Menu {
                 ? Menus.icon(Material.BARRIER, "&cHold a Mini in your main hand")
                 : held.item().clone(), null);
 
+        Double floor = held != null && plugin.values() != null
+                ? plugin.values().suggestedFloorFor(held.item()) : null;
+        String floorLore = floor != null ? "&7Suggested floor: &b" + plugin.economy().format(floor)
+                : "&8No value estimate";
+        String floorHint = floor != null ? " (suggested floor: " + plugin.economy().format(floor) + ")" : "";
+
         set(10, Menus.icon(Material.GOLD_INGOT, "&eStarting bid", "&f" + plugin.economy().format(startBid),
-                "&7Click to set"), e -> plugin.chatPrompts().prompt(player, "Enter the starting bid:", input -> {
+                floorLore, "&7Click to set"), e -> plugin.chatPrompts().prompt(player,
+                "Enter the starting bid" + floorHint + ":", input -> {
             startBid = Math.max(1, parse(input, startBid));
             reopen();
         }));

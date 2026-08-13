@@ -328,10 +328,16 @@ public final class MiniService {
         }
     }
 
-    /** Museum display icon (cosmetic; shows live minted/cap + circulation). */
+    /** Museum display icon (cosmetic; shows live minted/cap + circulation + value appraisal). */
     public ItemStack icon(MiniDef def) {
         MiniDao.Counts c = counts(def.id());
-        return items.preview(def, style(def.rarity()), c.minted(), c.circulation(), economy.format(def.price()));
+        String valueText = null;
+        if (plugin.values() != null) {
+            double[] range = plugin.values().gradeRange(def);
+            valueText = economy.format(range[0]) + " – " + economy.format(range[1]);
+        }
+        return items.preview(def, style(def.rarity()), c.minted(), c.circulation(),
+                economy.format(def.price()), valueText);
     }
 
     /** Buy + mint a Mini for a player (charges the price via Vault, enforces the cap). */

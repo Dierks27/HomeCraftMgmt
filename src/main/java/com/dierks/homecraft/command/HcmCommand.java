@@ -84,6 +84,12 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
                 handlePrinter(sender, args);
             }
+            case "tv" -> {
+                if (denyUnless(sender, "hcm.admin")) {
+                    return true;
+                }
+                handleTv(sender, args);
+            }
             case "packs", "pack" -> {
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Text.of("&cOnly players can open the pack menus."));
@@ -233,6 +239,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         ItemStack item;
         switch (kind) {
             case "printer" -> item = plugin.items().printer();
+            case "tv" -> item = plugin.items().tv();
             case "pc" -> item = plugin.items().pc();
             case "vending" -> item = plugin.items().vendingMachine();
             case "display" -> item = plugin.items().displayCase();
@@ -357,6 +364,35 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         }
         sender.sendMessage(Text.of("&cSpecify a player: /hcm " + usageTail + " <player>"));
         return null;
+    }
+
+    /** {@code /hcm tv seturl <url>} — bind a stream URL to the TV you're looking at (admin). */
+    private void handleTv(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Text.of("&cOnly players can set up a TV."));
+            return;
+        }
+        if (args.length < 3 || !args[1].equalsIgnoreCase("seturl")) {
+            sender.sendMessage(Text.of("&cUsage: /hcm tv seturl <url> &7(look at the TV)"));
+            return;
+        }
+        org.bukkit.block.Block target = player.getTargetBlockExact(6);
+        if (target == null) {
+            sender.sendMessage(Text.of("&cLook at a placed TV, then run this again."));
+            return;
+        }
+        var placed = plugin.blockService().at(target.getLocation());
+        if (placed.isEmpty() || placed.get().type() != com.dierks.homecraft.block.CustomBlockType.TV) {
+            sender.sendMessage(Text.of("&cThat isn't a TV. Look directly at one."));
+            return;
+        }
+        String url = args[2];
+        if (!(url.startsWith("http://") || url.startsWith("https://"))) {
+            sender.sendMessage(Text.of("&cThe URL must start with http:// or https://."));
+            return;
+        }
+        plugin.tvs().setUrl(target.getLocation(), url);
+        sender.sendMessage(Text.of("&aTV stream set: &f" + url));
     }
 
     /** {@code /hcm printer <public|private>} — flag the printer you're looking at (admin). */
@@ -698,7 +734,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "packs", "auction", "arcade", "tokens");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "tv", "packs", "auction", "arcade", "tokens");
             } else {
                 addMatches(out, args[0], "market", "mini", "packs", "auction", "arcade", "tokens");
             }
@@ -713,8 +749,10 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
-            addMatches(out, args[1], "printer", "pc", "card", "filament", "pack", "vending", "display", "auction",
+            addMatches(out, args[1], "printer", "tv", "pc", "card", "filament", "pack", "vending", "display", "auction",
                     "mailbox", "pallet", "arcade", "cratemachine", "scratch", "pity", "counter");
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("tv")) {
+            addMatches(out, args[1], "seturl");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("give")
                 && args[1].equalsIgnoreCase("pack")) {
             String prefix = args[2].toLowerCase(Locale.ROOT);

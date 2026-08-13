@@ -74,6 +74,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.web.MarketDashboardServer dashboard;
     private com.dierks.homecraft.integration.HcmPlaceholders placeholders;
     private com.dierks.homecraft.display.DisplayService displayService;
+    private com.dierks.homecraft.display.TvService tvService;
     private com.dierks.homecraft.arcade.ArcadeService arcade;
     private com.dierks.homecraft.arcade.AchievementService achievements;
     private BukkitTask historyTask;
@@ -154,6 +155,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         // In-Game Economy Displays (Phase 7) — sign boards, holograms, map-TVs.
         this.displayService = new com.dierks.homecraft.display.DisplayService(
                 this, new com.dierks.homecraft.storage.DisplayDao(database));
+        this.tvService = new com.dierks.homecraft.display.TvService(
+                this, new com.dierks.homecraft.storage.TvDao(database));
 
         // The Arcade (Phase 8) — tokens, loot crates, pity, lotto.
         this.arcade = new com.dierks.homecraft.arcade.ArcadeService(
@@ -486,6 +489,10 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public com.dierks.homecraft.display.DisplayService displayService() {
         return displayService;
+    }
+
+    public com.dierks.homecraft.display.TvService tvs() {
+        return tvService;
     }
 
     public com.dierks.homecraft.arcade.ArcadeService arcade() {

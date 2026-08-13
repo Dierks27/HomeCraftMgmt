@@ -335,6 +335,25 @@ public final class Database {
                 z     INTEGER NOT NULL,
                 PRIMARY KEY (world, x, y, z)
             );
+            """,
+
+            // v18 — Round 3a. Per-TV-block stream URL, and the per-player Card Binder
+            // (how many of each Card a player has stored in their binder).
+            """
+            CREATE TABLE IF NOT EXISTS tv_urls (
+                world TEXT    NOT NULL,
+                x     INTEGER NOT NULL,
+                y     INTEGER NOT NULL,
+                z     INTEGER NOT NULL,
+                url   TEXT    NOT NULL,
+                PRIMARY KEY (world, x, y, z)
+            );
+            CREATE TABLE IF NOT EXISTS binder_cards (
+                player  TEXT    NOT NULL,
+                card_id TEXT    NOT NULL,
+                count   INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (player, card_id)
+            );
             """
     };
 

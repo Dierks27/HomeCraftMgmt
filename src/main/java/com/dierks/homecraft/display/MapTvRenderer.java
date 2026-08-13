@@ -2,7 +2,6 @@ package com.dierks.homecraft.display;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.market.MarketItem;
-import com.dierks.homecraft.storage.PriceHistoryDao;
 import org.bukkit.entity.Player;
 import org.bukkit.map.MapCanvas;
 import org.bukkit.map.MapRenderer;
@@ -11,7 +10,6 @@ import org.bukkit.map.MinecraftFont;
 
 import java.awt.Color;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -166,65 +164,6 @@ public final class MapTvRenderer extends MapRenderer {
         for (int x = 0; x < TILE; x++) {
             for (int y = 0; y < TILE; y++) {
                 canvas.setPixelColor(x, y, c);
-            }
-        }
-    }
-
-    /** A small colour chip standing in for the commodity's item icon. */
-    private void drawSwatch(MapCanvas canvas, int x, int y, org.bukkit.Material material) {
-        int h = Math.abs(material.name().hashCode());
-        Color c = new Color(80 + h % 150, 80 + (h / 3) % 150, 80 + (h / 7) % 150);
-        for (int dx = 0; dx < 8; dx++) {
-            for (int dy = 0; dy < 8; dy++) {
-                int px = x + dx;
-                int py = y + dy;
-                if (px >= 0 && px < TILE && py >= 0 && py < TILE) {
-                    boolean border = dx == 0 || dy == 0 || dx == 7 || dy == 7;
-                    canvas.setPixelColor(px, py, border ? new Color(20, 24, 32) : c);
-                }
-            }
-        }
-    }
-
-    private void drawVirtualLine(MapCanvas canvas, int x0, int y0, int x1, int y1, Color color) {
-        int dx = Math.abs(x1 - x0);
-        int dy = -Math.abs(y1 - y0);
-        int sx = x0 < x1 ? 1 : -1;
-        int sy = y0 < y1 ? 1 : -1;
-        int err = dx + dy;
-        int x = x0;
-        int y = y0;
-        while (true) {
-            plotThick(canvas, x, y, color);
-            if (x == x1 && y == y1) {
-                break;
-            }
-            int e2 = 2 * err;
-            if (e2 >= dy) {
-                err += dy;
-                x += sx;
-            }
-            if (e2 <= dx) {
-                err += dx;
-                y += sy;
-            }
-        }
-    }
-
-    /** Plot a single virtual-space pixel onto this tile. */
-    private void plot(MapCanvas canvas, int vx, int vy, Color color) {
-        int lx = vx - tileX * TILE;
-        int ly = vy - tileY * TILE;
-        if (lx >= 0 && lx < TILE && ly >= 0 && ly < TILE) {
-            canvas.setPixelColor(lx, ly, color);
-        }
-    }
-
-    /** Plot a virtual-space pixel thickened by 1 for a bold line. */
-    private void plotThick(MapCanvas canvas, int vx, int vy, Color color) {
-        for (int ox = 0; ox <= 1; ox++) {
-            for (int oy = 0; oy <= 1; oy++) {
-                plot(canvas, vx + ox, vy + oy, color);
             }
         }
     }

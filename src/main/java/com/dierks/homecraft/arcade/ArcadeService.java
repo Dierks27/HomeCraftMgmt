@@ -298,6 +298,9 @@ public final class ArcadeService {
         if (outcome.ok() && plugin.achievements() != null) {
             plugin.achievements().tryAward(player, "first_crate");
         }
+        if (outcome.ok() && plugin.quests() != null) {
+            plugin.quests().record(player, PluginConfig.QuestType.OPEN_CRATE, 1);
+        }
         return outcome;
     }
 
@@ -411,6 +414,9 @@ public final class ArcadeService {
             return Outcome.fail("A ticket costs " + plugin.economy().format(l.ticketCost()) + ".");
         }
         plugin.economy().withdraw(player, l.ticketCost()); // money sink
+        if (plugin.quests() != null) {
+            plugin.quests().record(player, PluginConfig.QuestType.SCRATCH, 1);
+        }
         double total = 0;
         for (PluginConfig.LottoPayout p : l.payouts()) {
             total += p.weight();

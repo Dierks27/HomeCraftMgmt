@@ -454,7 +454,27 @@ arcade:
     first_sale:  { enabled: true, reward: 2, display: "First Market Sale" }
     first_pc:    { enabled: true, reward: 2, display: "Built Your First PC" }
     first_crate: { enabled: true, reward: 1, display: "Opened Your First Crate" }
+    first_pack:  { enabled: true, reward: 2, display: "Opened Your First Pack" }
     rich_10k:    { enabled: true, reward: 5, display: "Reached $10,000", threshold: 10000 }
+  # Daily/weekly quests: repeatable token objectives that reset each day/week. A quest
+  # pays out once per period the moment its progress hits `target`. Each row:
+  #   id      - unique key (used to track progress; keep stable)
+  #   type    - what to count: SELL_MARKET (money sold), OPEN_CRATE, PRINT_MINI,
+  #             OPEN_PACK, SCRATCH (tickets scratched)
+  #   target  - amount to reach (money for SELL_MARKET; a count for the others)
+  #   reward  - tokens granted on completion
+  #   display - the label shown on the Quests board (/hcm quests)
+  # Add/remove freely; a mistyped type/id is skipped, not fatal. All in-game currency.
+  quests:
+    enabled: true
+    daily:
+      - { id: sell_daily,  type: SELL_MARKET, target: 500,  reward: 2, display: "Sell $500 to the Market" }
+      - { id: crate_daily, type: OPEN_CRATE,  target: 1,    reward: 1, display: "Open a Loot Crate" }
+      - { id: print_daily, type: PRINT_MINI,  target: 1,    reward: 2, display: "Print a Mini at a Printer" }
+    weekly:
+      - { id: sell_weekly,  type: SELL_MARKET, target: 5000, reward: 8, display: "Sell $5,000 to the Market" }
+      - { id: crate_weekly, type: OPEN_CRATE,  target: 10,   reward: 6, display: "Open 10 Loot Crates" }
+      - { id: pack_weekly,  type: OPEN_PACK,   target: 3,    reward: 6, display: "Open 3 Card Packs" }
   # Lotto / scratch ticket: pay money for a weighted-random payout (money sink + hype).
   lotto:
     ticket_cost_money: 250

@@ -116,6 +116,13 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 new com.dierks.homecraft.gui.arcade.ArcadeMenu(plugin, player).open(player);
             }
             case "tokens" -> handleTokens(sender, args);
+            case "quests", "quest" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(Text.of("&cOnly players can open the Quests board."));
+                    return true;
+                }
+                new com.dierks.homecraft.gui.arcade.QuestsMenu(plugin, player).open(player);
+            }
             case "auction", "auctions" -> {
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Text.of("&cOnly players can open the Auction House."));
@@ -261,7 +268,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "counter", "tokencounter" -> item = plugin.items().of(com.dierks.homecraft.block.CustomBlockType.TOKEN_COUNTER);
             default -> {
                 sender.sendMessage(Text.of("&cUnknown item '" + args[1]
-                        + "'. Use printer, pc, card, filament, vending, display, auction, mailbox, or pallet."));
+                        + "'. Use printer, pc, card, filament, vending, display, auction, mailbox, pallet, "
+                        + "arcade, cratemachine, scratch, pity, or counter."));
                 return;
             }
         }
@@ -731,7 +739,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "tv", "packs", "binder", "auction", "arcade", "tokens");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "tv", "packs", "binder", "auction", "arcade", "tokens", "quests");
             } else {
                 addMatches(out, args[0], "market", "mini", "packs", "binder", "auction", "arcade", "tokens");
             }

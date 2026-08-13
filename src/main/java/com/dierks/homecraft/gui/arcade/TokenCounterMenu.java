@@ -45,9 +45,10 @@ public final class TokenCounterMenu extends Menu {
                         : "&7Playtime rewards are off",
                 "&8Just keep playing — tokens accrue."), null);
 
-        set(15, Menus.icon(Material.CHEST, "&6Spend at the Arcade",
-                "&7Crate Machine, Scratch Booth, Pity Exchange.",
-                "&7Right-click those machines to play."), null);
+        set(15, Menus.icon(Material.WRITABLE_BOOK, "&dDaily & Weekly Quests",
+                "&7Finish objectives to earn tokens.",
+                "&8—", "&eClick to view your quests"),
+                e -> new QuestsMenu(plugin, player).open(player));
 
         set(22, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
     }

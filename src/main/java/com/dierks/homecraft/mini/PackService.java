@@ -115,6 +115,13 @@ public final class PackService {
         if (awarded.isEmpty()) {
             return OpenResult.fail("That pack's cards are all sold out.");
         }
+        if (plugin.achievements() != null) {
+            plugin.achievements().tryAward(player, "first_pack");
+        }
+        if (plugin.quests() != null) {
+            plugin.quests().record(player,
+                    com.dierks.homecraft.config.PluginConfig.QuestType.OPEN_PACK, 1);
+        }
         return new OpenResult(true, null, awarded);
     }
 

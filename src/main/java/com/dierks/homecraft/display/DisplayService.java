@@ -65,6 +65,9 @@ public final class DisplayService {
     /** Live hologram entities we manage: display id → its entity pair. */
     private final Map<Long, Holo> holograms = new HashMap<>();
 
+    /** Live map-TV item displays: MAPTV display id → the ItemDisplay entity pinned to it. */
+    private final Map<Long, UUID> mapTvItems = new HashMap<>();
+
     /** Bumped each refresh tick; map-TV renderers repaint only when it changes. */
     private volatile long version;
 
@@ -82,7 +85,11 @@ public final class DisplayService {
         attachMapTvs(); // re-add renderers to persisted map-TVs (renderers aren't saved)
         long period = Math.max(2, plugin.config().displays().refreshSeconds()) * 20L;
         task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, 40L, period);
-        if (plugin.config().displays().hologram().itemDisplay() && plugin.config().displays().hologram().spin()) {
+        boolean holoSpin = plugin.config().displays().hologram().itemDisplay()
+                && plugin.config().displays().hologram().spin();
+        boolean mapTvSpin = plugin.config().displays().maptv().showItem()
+                && plugin.config().displays().maptv().spin();
+        if (holoSpin || mapTvSpin) {
             spinTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::spinItems, 20L, 2L);
         }
     }
@@ -101,12 +108,16 @@ public final class DisplayService {
             spinTask.cancel();
             spinTask = null;
         }
-        // Despawn our (non-persistent) hologram entities so nothing is orphaned.
+        // Despawn our (non-persistent) hologram + map-TV item entities so nothing is orphaned.
         for (Holo h : holograms.values()) {
             despawn(h.text());
             despawn(h.item());
         }
         holograms.clear();
+        for (UUID uid : mapTvItems.values()) {
+            despawn(uid);
+        }
+        mapTvItems.clear();
     }
 
     private void despawn(UUID uid) {
@@ -134,8 +145,9 @@ public final class DisplayService {
                 switch (d.kind()) {
                     case DisplayDao.SIGN -> renderSign(d);
                     case DisplayDao.HOLOGRAM -> renderHologram(d);
+                    case DisplayDao.MAPTV -> ensureMapTvItem(d);
                     default -> {
-                        // MAPTV handled in Part D.
+                        // nothing else to tick
                     }
                 }
             } catch (Throwable t) {
@@ -188,6 +200,7 @@ public final class DisplayService {
         if (DisplayDao.HOLOGRAM.equals(d.kind())) {
             removeHologramEntity(d.id());
         } else if (DisplayDao.MAPTV.equals(d.kind())) {
+            removeMapTvItem(d.id()); // despawn the pinned commodity item, if any
             for (int id : parseMapIds(d.data())) {
                 if (id >= 0) {
                     MapView view = mapById(id);
@@ -362,9 +375,9 @@ public final class DisplayService {
         return e != null && e.isValid();
     }
 
-    /** Slow-spin every floating item display a small step; runs on a fast light timer. */
+    /** Slow-spin every floating item display (holograms + map-TV items) a small step. */
     private void spinItems() {
-        if (holograms.isEmpty()) {
+        if (holograms.isEmpty() && mapTvItems.isEmpty()) {
             return;
         }
         spinAngle += 0.12f;
@@ -374,14 +387,23 @@ public final class DisplayService {
         // Transformation uses JOML Quaternionf for its rotations; spin about Y.
         org.joml.Quaternionf leftRot = new org.joml.Quaternionf().rotationY(spinAngle);
         for (Holo h : holograms.values()) {
-            if (h.item() == null) {
-                continue;
+            if (h.item() != null) {
+                spinItem(h.item(), leftRot);
             }
-            if (plugin.getServer().getEntity(h.item()) instanceof ItemDisplay id && id.isValid()) {
-                org.bukkit.util.Transformation t = id.getTransformation();
-                id.setTransformation(new org.bukkit.util.Transformation(
-                        t.getTranslation(), leftRot, t.getScale(), t.getRightRotation()));
+        }
+        if (plugin.config().displays().maptv().spin()) {
+            for (UUID uid : mapTvItems.values()) {
+                spinItem(uid, leftRot);
             }
+        }
+    }
+
+    /** Apply the current spin rotation to one ItemDisplay (no-op if it's gone). */
+    private void spinItem(UUID uid, org.joml.Quaternionf leftRot) {
+        if (plugin.getServer().getEntity(uid) instanceof ItemDisplay id && id.isValid()) {
+            org.bukkit.util.Transformation t = id.getTransformation();
+            id.setTransformation(new org.bukkit.util.Transformation(
+                    t.getTranslation(), leftRot, t.getScale(), t.getRightRotation()));
         }
     }
 
@@ -487,6 +509,17 @@ public final class DisplayService {
             return Result.fail("Could not save the map-TV.");
         }
         version++; // force an immediate first paint
+        // Spawn/refresh the pinned commodity item on the board face now (admin is present,
+        // so the chunk is loaded); a rebind to a new commodity replaces the old item.
+        try {
+            DisplayDao.Display saved = dao.at(DisplayDao.MAPTV, anchorBlock.getLocation()).orElse(null);
+            if (saved != null) {
+                removeMapTvItem(saved.id());
+                ensureMapTvItem(saved);
+            }
+        } catch (SQLException ignored) {
+            // the timer's next tick will spawn it
+        }
         return new Result(true, placed + "/" + (cols * rows) + " tiles");
     }
 
@@ -564,6 +597,74 @@ public final class DisplayService {
             return base;
         }
         return base + (base.contains("?") ? "&" : "?") + "item=" + itemId;
+    }
+
+    // ---- Map-TV pinned item display (Part C) ----------------------------------
+
+    /** Ensure a map-TV's commodity item display exists (spawn/refresh) or is removed. */
+    private void ensureMapTvItem(DisplayDao.Display d) {
+        if (!plugin.config().displays().maptv().showItem()) {
+            removeMapTvItem(d.id());
+            return;
+        }
+        World world = plugin.getServer().getWorld(d.world());
+        if (world == null || !world.isChunkLoaded(d.x() >> 4, d.z() >> 4)) {
+            return; // unloaded — spawn when the chunk is back and the timer next fires
+        }
+        UUID uid = mapTvItems.get(d.id());
+        if (uid != null && plugin.getServer().getEntity(uid) instanceof ItemDisplay live && live.isValid()) {
+            return; // already alive
+        }
+        removeMapTvItem(d.id());
+        spawnMapTvItem(world, d);
+    }
+
+    /** Spawn one ItemDisplay of the commodity's item, pinned just in front of the board face. */
+    private void spawnMapTvItem(World world, DisplayDao.Display d) {
+        PluginConfig.MapTvOpts opts = plugin.config().displays().maptv();
+        MarketItem item = plugin.market().item(d.itemId());
+        if (item == null || !item.material().isItem()) {
+            return;
+        }
+        BlockFace facing = parseFace(d.facing());
+        int[] right = facing == null ? null : rightStep(facing);
+        int cols = Math.max(1, d.cols());
+        int rows = Math.max(1, d.rows());
+        // Centre horizontally across the wall; sit in the upper area (above the price text).
+        double cx = d.x() + 0.5 + (right != null ? right[0] * (cols - 1) / 2.0 : (cols - 1) / 2.0);
+        double cz = d.z() + 0.5 + (right != null ? right[2] * (cols - 1) / 2.0 : 0);
+        double cy = d.y() + 0.5 - (rows - 1) * 0.30; // the top tile is the anchor; tiles run downward
+        Location at = new Location(world, cx, cy, cz);
+        if (facing != null) {
+            at.add(facing.getDirection().multiply(0.30)); // push just in front of the screen
+        }
+        float sc = opts.itemScale();
+        ItemStack shown = new ItemStack(item.material());
+        ItemDisplay display = world.spawn(at, ItemDisplay.class, e -> {
+            e.setItemStack(shown);
+            e.setBillboard(opts.spin() ? Display.Billboard.FIXED : Display.Billboard.VERTICAL);
+            e.setPersistent(false); // re-spawned from the DB; never saved to chunk data
+            e.setTransformation(new org.bukkit.util.Transformation(
+                    new org.joml.Vector3f(), new org.joml.Quaternionf(),
+                    new org.joml.Vector3f(sc, sc, sc), new org.joml.Quaternionf()));
+            e.getPersistentDataContainer().set(Keys.DISPLAY_ID, PersistentDataType.LONG, d.id());
+        });
+        mapTvItems.put(d.id(), display.getUniqueId());
+    }
+
+    private void removeMapTvItem(long id) {
+        despawn(mapTvItems.remove(id));
+    }
+
+    private BlockFace parseFace(String name) {
+        if (name == null) {
+            return null;
+        }
+        try {
+            return BlockFace.valueOf(name);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     /** The horizontal "right" step (unit x/z delta) for a wall the frame faces; null for floor/ceiling. */

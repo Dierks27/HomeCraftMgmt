@@ -59,10 +59,20 @@ public final class PrinterMenu extends Menu {
         String id = plugin.miniService().cardItems().cardIdOf(held);
         MiniDef def = id == null ? null : plugin.miniService().def(id);
 
-        if (def == null) {
+        if (id == null) {
             set(13, Menus.icon(Material.MAP, "&eHold a Card",
                     "&7Put a Mini Card in your main hand,",
                     "&7then reopen the Printer to print it."), null);
+            set(22, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
+            return;
+        }
+        if (def == null) {
+            // The held item IS a Card, but its Mini id isn't in the catalog anymore
+            // (renamed/removed). Say so clearly instead of a silent dead slot.
+            set(13, Menus.icon(Material.MAP, "&cUnknown Mini: &f" + id,
+                    "&7This Card points to a Mini that no",
+                    "&7longer exists in the catalog.",
+                    "&8Ask an admin to fix or remove it."), null);
             set(22, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
             return;
         }
@@ -121,8 +131,13 @@ public final class PrinterMenu extends Menu {
                     "&cYou're missing filament or the fee."), null);
         }
 
-        // Shiny (private printer only).
-        if (!isPublic) {
+        // Shiny finish. On a public (Mall) printer it's locked — shown as a clear
+        // greyed slot ("private printers only"), never a bare red barrier.
+        if (isPublic) {
+            set(24, Menus.icon(Material.GRAY_STAINED_GLASS_PANE, "&7🔒 Shiny",
+                    "&7Private printers only.",
+                    "&8Set up your own Printer to print Shiny."), null);
+        } else {
             boolean shinyOk = canAfford && cfg.shinyAmount() >= 0
                     && (cfg.shinyAmount() == 0 || filaments.count(player, cfg.shinyDye()) >= cfg.shinyAmount())
                     && (cfg.shinyFee() <= 0 || (plugin.economy().isEnabled()

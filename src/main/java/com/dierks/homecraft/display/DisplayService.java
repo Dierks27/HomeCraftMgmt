@@ -7,10 +7,8 @@ import com.dierks.homecraft.market.MarketState;
 import com.dierks.homecraft.storage.DisplayDao;
 import com.dierks.homecraft.util.Keys;
 import com.dierks.homecraft.util.Text;
-import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -19,18 +17,13 @@ import org.bukkit.block.sign.Side;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.ItemDisplay;
-import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.MapMeta;
-import org.bukkit.map.MapRenderer;
-import org.bukkit.map.MapView;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,7 +58,10 @@ public final class DisplayService {
     /** Live hologram entities we manage: display id → its entity pair. */
     private final Map<Long, Holo> holograms = new HashMap<>();
 
-    /** Bumped each refresh tick; map-TV renderers repaint only when it changes. */
+    /** Live TV price panels: display id → its single {@code TextDisplay} entity. */
+    private final Map<Long, UUID> tvPanels = new HashMap<>();
+
+    /** Bumped each refresh tick. */
     private volatile long version;
 
     /** Advancing spin angle (radians) for floating item displays. */
@@ -79,14 +75,13 @@ public final class DisplayService {
     /** Start the refresh timer. Renders immediately, then every configured interval. */
     public void start() {
         stop();
-        attachMapTvs(); // re-add renderers to persisted map-TVs (renderers aren't saved)
-        // Boot safety: a map-TV never spawns entities (the board is text on the map), so
-        // purge any item/text holograms an older version pinned to a map-TV rather than
-        // letting them strand. Never re-spawns them.
-        int strays = purgeMapTvDisplays();
+        // Boot safety: wipe any display entities left in loaded chunks (e.g. leaked items
+        // from an older map-TV rework) before the tick re-spawns the ones still bound in
+        // the DB. Nothing stale ever resurrects on load or chunk reload.
+        int strays = purgeOwnedDisplays();
         if (strays > 0) {
-            plugin.getLogger().info("Removed " + strays + " orphaned map-TV display "
-                    + (strays == 1 ? "entity" : "entities") + " left by an older version.");
+            plugin.getLogger().info("Cleared " + strays + " stale display "
+                    + (strays == 1 ? "entity" : "entities") + " on start.");
         }
         long period = Math.max(2, plugin.config().displays().refreshSeconds()) * 20L;
         task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, 40L, period);
@@ -109,12 +104,16 @@ public final class DisplayService {
             spinTask.cancel();
             spinTask = null;
         }
-        // Despawn our (non-persistent) hologram entities so nothing is orphaned.
+        // Despawn our (non-persistent) hologram + TV-panel entities so nothing is orphaned.
         for (Holo h : holograms.values()) {
             despawn(h.text());
             despawn(h.item());
         }
         holograms.clear();
+        for (UUID uid : tvPanels.values()) {
+            despawn(uid);
+        }
+        tvPanels.clear();
     }
 
     private void despawn(UUID uid) {
@@ -142,8 +141,9 @@ public final class DisplayService {
                 switch (d.kind()) {
                     case DisplayDao.SIGN -> renderSign(d);
                     case DisplayDao.HOLOGRAM -> renderHologram(d);
+                    case DisplayDao.TV -> renderTvPanel(d);
                     default -> {
-                        // MAPTV renders on the map itself (a MapRenderer) — nothing to tick here.
+                        // Legacy MAPTV rows (retired) have no renderer/entity — nothing to tick.
                     }
                 }
             } catch (Throwable t) {
@@ -176,7 +176,7 @@ public final class DisplayService {
     /** Remove any economy display (sign/hologram/map-TV) anchored at a block. */
     public Result removeAny(Location loc) {
         boolean removed = false;
-        for (String kind : new String[] {DisplayDao.SIGN, DisplayDao.HOLOGRAM, DisplayDao.MAPTV}) {
+        for (String kind : new String[] {DisplayDao.SIGN, DisplayDao.HOLOGRAM, DisplayDao.MAPTV, DisplayDao.TV}) {
             try {
                 var existing = dao.at(kind, loc);
                 if (existing.isPresent()) {
@@ -195,16 +195,13 @@ public final class DisplayService {
     private void onRemoved(DisplayDao.Display d) {
         if (DisplayDao.HOLOGRAM.equals(d.kind())) {
             removeHologramEntity(d.id());
+        } else if (DisplayDao.TV.equals(d.kind())) {
+            removeTvPanel(d.id());
+            despawnDisplayEntitiesFor(d.id()); // and sweep any untracked stray with this id
         } else if (DisplayDao.MAPTV.equals(d.kind())) {
-            despawnDisplayEntitiesFor(d.id()); // sweep any stray v0.16.1 hologram pinned to it
-            for (int id : parseMapIds(d.data())) {
-                if (id >= 0) {
-                    MapView view = mapById(id);
-                    if (view != null) {
-                        clearRenderers(view);
-                    }
-                }
-            }
+            // Legacy map-TV (retired): no map renderer of ours remains, just despawn any
+            // associated display entity so a stray from an older version is never orphaned.
+            despawnDisplayEntitiesFor(d.id());
         }
     }
 
@@ -413,212 +410,217 @@ public final class DisplayService {
     }
 
     /**
-     * Respawn any holograms anchored in a freshly-loaded chunk (called from the
-     * chunk-load listener) so they reappear immediately rather than on the next tick.
+     * Respawn any holograms and TV panels anchored in a freshly-loaded chunk (called from
+     * the chunk-load listener) so they reappear immediately rather than on the next tick.
      */
     public void onChunkLoad(Chunk chunk) {
-        if (holograms.isEmpty() && chunk == null) {
+        if (chunk == null) {
             return;
         }
-        List<DisplayDao.Display> holos;
         try {
-            holos = dao.byKind(DisplayDao.HOLOGRAM);
+            for (DisplayDao.Display d : dao.byKind(DisplayDao.HOLOGRAM)) {
+                if (inChunk(d, chunk)) {
+                    Holo h = holograms.get(d.id());
+                    Entity ent = h != null ? plugin.getServer().getEntity(h.text()) : null;
+                    if (!(ent instanceof TextDisplay td) || !td.isValid()) {
+                        removeHologramEntity(d.id());
+                        spawnHologram(chunk.getWorld(), d);
+                    }
+                }
+            }
+            for (DisplayDao.Display d : dao.byKind(DisplayDao.TV)) {
+                if (inChunk(d, chunk)) {
+                    renderTvPanel(d); // spawn if missing, else a no-op cheap text refresh
+                }
+            }
         } catch (SQLException e) {
-            return;
-        }
-        for (DisplayDao.Display d : holos) {
-            if (!d.world().equals(chunk.getWorld().getName())) {
-                continue;
-            }
-            if ((d.x() >> 4) != chunk.getX() || (d.z() >> 4) != chunk.getZ()) {
-                continue;
-            }
-            Holo h = holograms.get(d.id());
-            Entity ent = h != null ? plugin.getServer().getEntity(h.text()) : null;
-            if (!(ent instanceof TextDisplay td) || !td.isValid()) {
-                removeHologramEntity(d.id());
-                spawnHologram(chunk.getWorld(), d);
-            }
+            plugin.getLogger().warning("Failed to restore displays on chunk load: " + e.getMessage());
         }
     }
 
-    // ---- Map-TV chart wall ----------------------------------------------------
+    private boolean inChunk(DisplayDao.Display d, Chunk chunk) {
+        return d.world().equals(chunk.getWorld().getName())
+                && (d.x() >> 4) == chunk.getX() && (d.z() >> 4) == chunk.getZ();
+    }
+
+    // ---- TV price panel (flat wall-mounted TextDisplay) -----------------------
 
     /**
-     * Build a map-TV bound to a commodity on the item frame the admin is looking at.
-     * A {@code cols×rows} grid tiles across neighbouring frames (right + down on the
-     * wall); each tile gets a fresh map rendering its window of the shared chart.
+     * Bind a flat "TV" price panel to the wall block {@code wall} on its {@code face},
+     * showing {@code itemId}. One placement = exactly one tracked {@code TextDisplay};
+     * a rebind at the same block replaces it. Never spawns an ItemDisplay or a map.
      */
-    public Result bindMapTv(Player admin, ItemFrame anchor, String itemId, int cols, int rows) {
+    public Result bindTvPanel(Player admin, Block wall, BlockFace face, String itemId, float scale) {
         if (plugin.market().item(itemId) == null) {
             return Result.fail("Unknown commodity '" + itemId + "'.");
         }
-        cols = Math.max(1, Math.min(8, cols));
-        rows = Math.max(1, Math.min(8, rows));
-        BlockFace facing = anchor.getFacing();
-        int[] right = rightStep(facing);
-        if (right == null && (cols > 1 || rows > 1)) {
-            return Result.fail("A grid needs the map on a vertical wall (N/S/E/W). Try a 1x1.");
+        if (face != BlockFace.NORTH && face != BlockFace.SOUTH
+                && face != BlockFace.EAST && face != BlockFace.WEST) {
+            return Result.fail("Look at a vertical wall face (N/S/E/W) to mount the panel.");
         }
-        World world = anchor.getWorld();
-        Block anchorBlock = anchor.getLocation().getBlock();
-
-        int placed = 0;
-        int[] mapIds = new int[cols * rows];
-        java.util.Arrays.fill(mapIds, -1);
-        for (int gy = 0; gy < rows; gy++) {
-            for (int gx = 0; gx < cols; gx++) {
-                int bx = anchorBlock.getX() + (right != null ? right[0] * gx : gx);
-                int by = anchorBlock.getY() - gy;
-                int bz = anchorBlock.getZ() + (right != null ? right[2] * gx : 0);
-                ItemFrame frame = frameAt(world, bx, by, bz, facing);
-                if (frame == null) {
-                    continue; // no frame here — leave that tile blank
-                }
-                MapView view = Bukkit.createMap(world);
-                clearRenderers(view);
-                view.setTrackingPosition(false);
-                view.addRenderer(new MapTvRenderer(plugin, itemId, gx, gy, cols, rows));
-                ItemStack map = new ItemStack(Material.FILLED_MAP);
-                if (map.getItemMeta() instanceof MapMeta mm) {
-                    mm.setMapView(view);
-                    map.setItemMeta(mm);
-                }
-                frame.setItem(map, false);
-                mapIds[gy * cols + gx] = view.getId();
-                placed++;
-            }
-        }
-        if (placed == 0) {
-            return Result.fail("Look at a framed spot on the wall first (need at least one item frame).");
-        }
-
+        scale = clampScale(scale);
+        Location loc = wall.getLocation();
         try {
-            dao.upsert(DisplayDao.MAPTV, anchorBlock.getLocation(), itemId, cols, rows,
-                    facing.name(), joinMapIds(mapIds), admin.getUniqueId(), System.currentTimeMillis());
+            dao.upsert(DisplayDao.TV, loc, itemId, 1, 1, face.name(), String.valueOf(scale),
+                    admin.getUniqueId(), System.currentTimeMillis());
         } catch (SQLException e) {
-            return Result.fail("Could not save the map-TV.");
+            return Result.fail("Could not save the TV panel.");
         }
-        version++; // force an immediate first paint
-        return new Result(true, placed + "/" + (cols * rows) + " tiles");
+        // Re-read for the authoritative row id (getGeneratedKeys is unreliable on upsert).
+        DisplayDao.Display d;
+        try {
+            d = dao.at(DisplayDao.TV, loc).orElse(null);
+        } catch (SQLException e) {
+            return Result.fail("Could not save the TV panel.");
+        }
+        if (d == null) {
+            return Result.fail("Could not save the TV panel.");
+        }
+        removeTvPanel(d.id());
+        despawnDisplayEntitiesFor(d.id()); // clear any prior panel/stray at this binding
+        if (wall.getWorld() != null) {
+            spawnTvPanel(wall.getWorld(), d);
+        }
+        return Result.okay();
     }
 
-    /** Re-attach renderers to every persisted map-TV's maps (renderers aren't saved to disk). */
-    private void attachMapTvs() {
-        List<DisplayDao.Display> maptvs;
-        try {
-            maptvs = dao.byKind(DisplayDao.MAPTV);
-        } catch (SQLException e) {
+    /** Spawn/refresh the single panel for a TV row (respawns if missing, else updates text). */
+    private void renderTvPanel(DisplayDao.Display d) {
+        UUID uid = tvPanels.get(d.id());
+        Entity ent = uid != null ? plugin.getServer().getEntity(uid) : null;
+        if (ent instanceof TextDisplay td && td.isValid()) {
+            td.text(panelText(d.itemId())); // cheap in-place live update
             return;
         }
-        for (DisplayDao.Display d : maptvs) {
-            int[] ids = parseMapIds(d.data());
-            for (int idx = 0; idx < ids.length; idx++) {
-                if (ids[idx] < 0) {
-                    continue;
-                }
-                MapView view = mapById(ids[idx]);
-                if (view == null) {
-                    continue;
-                }
-                int gx = d.cols() > 0 ? idx % d.cols() : 0;
-                int gy = d.cols() > 0 ? idx / d.cols() : 0;
-                clearRenderers(view);
-                view.setTrackingPosition(false);
-                view.addRenderer(new MapTvRenderer(plugin, d.itemId(), gx, gy, d.cols(), d.rows()));
-            }
+        World world = plugin.getServer().getWorld(d.world());
+        if (world == null || !world.isChunkLoaded(d.x() >> 4, d.z() >> 4)) {
+            return; // unloaded — spawns when the chunk is back and the timer next fires
         }
+        removeTvPanel(d.id()); // clear stale tracking before a fresh spawn (no duplicates)
+        spawnTvPanel(world, d);
     }
 
-    // ---- Map-TV interaction: right-click opens the browser chart ---------------
+    /** Spawn one flat {@code TextDisplay} against the wall face, dark-backed and scaled up. */
+    private void spawnTvPanel(World world, DisplayDao.Display d) {
+        BlockFace face = parseFace(d.facing());
+        if (face == null) {
+            face = BlockFace.NORTH;
+        }
+        float scale = parseScale(d.data());
+        float yaw = yawForFace(face);
+        // Centre of the wall block, nudged just off the face so it lies flat on the wall.
+        Location at = new Location(world, d.x() + 0.5, d.y() + 0.5, d.z() + 0.5);
+        at.add(face.getDirection().multiply(0.51));
+        at.setYaw(yaw);
+        at.setPitch(0f);
+        TextDisplay td = world.spawn(at, TextDisplay.class, e -> {
+            e.text(panelText(d.itemId()));
+            e.setBillboard(Display.Billboard.FIXED);   // stays flat on the wall, never rotates
+            e.setRotation(yaw, 0f);
+            e.setAlignment(TextDisplay.TextAlignment.CENTER);
+            e.setLineWidth(220);
+            e.setSeeThrough(false);
+            e.setBackgroundColor(org.bukkit.Color.fromARGB(215, 8, 10, 14)); // dark opaque screen
+            e.setPersistent(false); // re-spawned from the DB; never saved to chunk data
+            e.setTransformation(new org.bukkit.util.Transformation(
+                    new org.joml.Vector3f(), new org.joml.Quaternionf(),
+                    new org.joml.Vector3f(scale, scale, scale), new org.joml.Quaternionf()));
+            e.getPersistentDataContainer().set(Keys.DISPLAY_ID, PersistentDataType.LONG, d.id());
+        });
+        tvPanels.put(d.id(), td.getUniqueId());
+    }
 
-    /** The commodity a map-TV frame is bound to, if this item frame is one of its tiles. */
-    public java.util.Optional<String> mapTvCommodityFor(ItemFrame frame) {
-        if (frame == null) {
-            return java.util.Optional.empty();
+    private void removeTvPanel(long id) {
+        despawn(tvPanels.remove(id));
+    }
+
+    /** The panel's screen content: commodity name, big price, trend arrow, and stock. */
+    private net.kyori.adventure.text.Component panelText(String itemId) {
+        MarketItem item = plugin.market().item(itemId);
+        MarketState state = plugin.market().state(itemId);
+        if (item == null || state == null) {
+            return Text.of("&cUnknown commodity");
         }
-        ItemStack item = frame.getItem();
-        if (item == null || item.getType() != Material.FILLED_MAP
-                || !(item.getItemMeta() instanceof MapMeta mm) || mm.getMapView() == null) {
-            return java.util.Optional.empty();
+        double change = plugin.market().change24h(itemId);
+        String price = plugin.economy().format(plugin.market().price(itemId));
+        return Text.of("&f&l" + stripCodes(item.label())
+                + "\n&e&l" + price
+                + "\n" + Trend.color(change) + Trend.label(change)
+                + "\n&7Stock: &f" + state.stock());
+    }
+
+    private BlockFace parseFace(String name) {
+        if (name == null) {
+            return null;
         }
-        int mapId = mm.getMapView().getId();
-        List<DisplayDao.Display> maptvs;
         try {
-            maptvs = dao.byKind(DisplayDao.MAPTV);
-        } catch (SQLException e) {
-            return java.util.Optional.empty();
+            return BlockFace.valueOf(name);
+        } catch (IllegalArgumentException e) {
+            return null;
         }
-        for (DisplayDao.Display d : maptvs) {
-            for (int id : parseMapIds(d.data())) {
-                if (id == mapId) {
-                    return java.util.Optional.of(d.itemId());
-                }
-            }
-        }
-        return java.util.Optional.empty();
     }
 
-    /** Right-click a map-TV: hand the player a clickable link to the live dashboard chart. */
-    public void openMapTvChart(Player player, String itemId) {
-        String url = dashboardUrl(itemId);
-        player.sendMessage(Text.of("&b📺 Opening the live chart…"));
-        player.sendMessage(Text.link("&a&n▶ Click to open the price chart", url));
+    /** The map/entity yaw whose facing points out along a wall face (text reads from that side). */
+    private float yawForFace(BlockFace face) {
+        return switch (face) {
+            case SOUTH -> 0f;
+            case WEST -> 90f;
+            case NORTH -> 180f;
+            case EAST -> 270f;
+            default -> 0f;
+        };
     }
 
-    /** The dashboard URL for a commodity: the configured base, deep-linked to the item id. */
-    public String dashboardUrl(String itemId) {
-        String base = plugin.config().displays().maptv().dashboardUrl();
-        if (base == null || base.isBlank()) {
-            base = "http://localhost:" + plugin.config().webDashboard().port();
+    private float parseScale(String data) {
+        float def = (float) plugin.config().displays().tv().scale();
+        if (data == null || data.isBlank()) {
+            return def;
         }
-        base = base.trim();
-        if (itemId == null || itemId.isBlank()) {
-            return base;
+        try {
+            return clampScale(Float.parseFloat(data.trim()));
+        } catch (NumberFormatException e) {
+            return def;
         }
-        return base + (base.contains("?") ? "&" : "?") + "item=" + itemId;
     }
 
-    // ---- Map-TV orphan cleanup ------------------------------------------------
+    private float clampScale(float scale) {
+        return Math.max(0.5f, Math.min(12f, scale));
+    }
+
+    private static String stripCodes(String s) {
+        return s == null ? "" : s.replaceAll("(?i)[&§][0-9a-fk-or]", "");
+    }
+
+    // ---- Owned-display cleanup ------------------------------------------------
 
     /**
-     * Despawn every map-TV-owned display entity in loaded chunks and return the count
-     * removed. A map-TV never spawns entities — its board is text drawn on the map — so
-     * any {@code ItemDisplay}/{@code TextDisplay} still tagged to a MAPTV binding is a
-     * stray left over from the v0.16.1 rework, and this removes exactly those. Scoped
-     * strictly to our own {@code DISPLAY_ID} tag whose binding is a map-TV, so it can
-     * never touch a hologram (its row is HOLOGRAM), the arcade kiosk, or any other entity.
+     * Despawn <b>every</b> display entity this plugin owns in loaded chunks — text
+     * panels, holograms, and any leaked/stranded {@code ItemDisplay}/{@code TextDisplay}
+     * (e.g. the spinning items a past map-TV rework left behind) — and clear our live
+     * tracking. Scoped strictly to our own {@code DISPLAY_ID} PDC tag, so it can never
+     * touch the arcade kiosk or any unrelated entity. Still-bound displays are re-spawned
+     * from the DB on the next refresh tick; true orphans (no binding) simply stay gone.
+     * Returns the count removed.
      */
-    public int purgeMapTvDisplays() {
+    public int purgeOwnedDisplays() {
         int removed = 0;
         for (World world : plugin.getServer().getWorlds()) {
             for (Entity e : world.getEntities()) {
-                if (isMapTvDisplayEntity(e)) {
+                if (isOwnedDisplayEntity(e)) {
                     e.remove();
                     removed++;
                 }
             }
         }
+        holograms.clear(); // drop stale tracking; the tick re-spawns anything still bound
+        tvPanels.clear();
         return removed;
     }
 
-    /** True if this entity is one of our display entities bound to a MAPTV row (a stray). */
-    private boolean isMapTvDisplayEntity(Entity e) {
-        if (!(e instanceof ItemDisplay) && !(e instanceof TextDisplay)) {
-            return false;
-        }
-        Long id = e.getPersistentDataContainer().get(Keys.DISPLAY_ID, PersistentDataType.LONG);
-        if (id == null) {
-            return false; // not one of our tagged displays — leave it alone
-        }
-        try {
-            // Only a map-TV binding qualifies. A live hologram's row is HOLOGRAM, so it's
-            // never matched; an unknown/deleted binding we also leave, to avoid nuking a
-            // hologram whose row was just removed.
-            return dao.byId(id).map(d -> DisplayDao.MAPTV.equals(d.kind())).orElse(false);
-        } catch (SQLException ex) {
-            return false;
-        }
+    /** True if this entity carries our {@code DISPLAY_ID} tag (i.e. a plugin-owned display). */
+    private boolean isOwnedDisplayEntity(Entity e) {
+        return (e instanceof ItemDisplay || e instanceof TextDisplay)
+                && e.getPersistentDataContainer().has(Keys.DISPLAY_ID, PersistentDataType.LONG);
     }
 
     /** Despawn any display entities in loaded chunks tagged to one specific display id. */
@@ -636,63 +638,4 @@ public final class DisplayService {
         }
     }
 
-    /** The horizontal "right" step (unit x/z delta) for a wall the frame faces; null for floor/ceiling. */
-    private int[] rightStep(BlockFace facing) {
-        return switch (facing) {
-            case NORTH, SOUTH -> new int[] {1, 0, 0};  // wall runs east–west
-            case EAST, WEST -> new int[] {0, 0, 1};     // wall runs north–south
-            default -> null;                            // UP/DOWN (floor/ceiling): single tile only
-        };
-    }
-
-    private ItemFrame frameAt(World world, int bx, int by, int bz, BlockFace facing) {
-        Location center = new Location(world, bx + 0.5, by + 0.5, bz + 0.5);
-        for (Entity e : world.getNearbyEntities(center, 0.6, 0.6, 0.6)) {
-            if (e instanceof ItemFrame frame && frame.getFacing() == facing) {
-                Block b = frame.getLocation().getBlock();
-                if (b.getX() == bx && b.getY() == by && b.getZ() == bz) {
-                    return frame;
-                }
-            }
-        }
-        return null;
-    }
-
-    private void clearRenderers(MapView view) {
-        for (MapRenderer r : new ArrayList<>(view.getRenderers())) {
-            view.removeRenderer(r);
-        }
-    }
-
-    @SuppressWarnings("deprecation")
-    private MapView mapById(int id) {
-        return Bukkit.getMap(id);
-    }
-
-    private String joinMapIds(int[] ids) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < ids.length; i++) {
-            if (i > 0) {
-                sb.append(',');
-            }
-            sb.append(ids[i]);
-        }
-        return sb.toString();
-    }
-
-    private int[] parseMapIds(String data) {
-        if (data == null || data.isBlank()) {
-            return new int[0];
-        }
-        String[] parts = data.split(",");
-        int[] out = new int[parts.length];
-        for (int i = 0; i < parts.length; i++) {
-            try {
-                out[i] = Integer.parseInt(parts[i].trim());
-            } catch (NumberFormatException e) {
-                out[i] = -1;
-            }
-        }
-        return out;
-    }
 }

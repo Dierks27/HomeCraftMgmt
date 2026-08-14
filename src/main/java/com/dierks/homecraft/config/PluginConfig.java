@@ -117,16 +117,11 @@ public final class PluginConfig {
     }
 
     /** In-game economy displays refresh cadence (Phase 7, §3.8). */
-    public record Displays(int refreshSeconds, HologramOpts hologram, MapTvOpts maptv) {
+    public record Displays(int refreshSeconds, HologramOpts hologram, TvOpts tv) {
     }
 
-    /**
-     * Map-TV options (§3.8): the dashboard URL a right-click on a map-TV opens in the
-     * player's browser (deep-linked {@code ?item=<id>}). The board itself is drawn as
-     * text on the map — it never spawns any entity, so there are no item/scale/spin
-     * knobs here (that hologram-on-the-screen experiment was removed as unreliable).
-     */
-    public record MapTvOpts(String dashboardUrl) {
+    /** TV price-panel options (§3.8): the wall-mounted {@code TextDisplay} panel size. */
+    public record TvOpts(float scale) {
     }
 
     /**
@@ -489,10 +484,10 @@ public final class PluginConfig {
                 ? null : Material.matchMaterial(holoItem.trim().toUpperCase());
         float itemScale = (float) Math.max(0.05, c.getDouble("displays.hologram.item_scale", 0.3));
         float textScale = (float) Math.max(0.1, c.getDouble("displays.hologram.text_scale", 1.0));
-        String mapTvUrl = c.getString("displays.maptv.dashboard_url", "http://localhost:8080");
+        float tvScale = (float) Math.max(0.5, Math.min(12.0, c.getDouble("displays.tv.scale", 3.0)));
         this.displays = new Displays(Math.max(2, c.getInt("displays.refresh_seconds", 20)),
                 new HologramOpts(itemDisp, above, spin, holoMat, itemScale, textScale),
-                new MapTvOpts(mapTvUrl));
+                new TvOpts(tvScale));
 
         // ---- Arcade (Phase 8) ----
         this.arcade = readArcade(c);
@@ -677,7 +672,6 @@ public final class PluginConfig {
         putSkin(map, sec, "scratch_booth", com.dierks.homecraft.block.CustomBlockType.SCRATCH_BOOTH);
         putSkin(map, sec, "pity_kiosk", com.dierks.homecraft.block.CustomBlockType.PITY_KIOSK);
         putSkin(map, sec, "token_counter", com.dierks.homecraft.block.CustomBlockType.TOKEN_COUNTER);
-        putSkin(map, sec, "tv", com.dierks.homecraft.block.CustomBlockType.TV);
         return map;
     }
 

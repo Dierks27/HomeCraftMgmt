@@ -75,13 +75,6 @@ public final class CustomItems {
                 CustomBlockType.AUCTION_HOUSE, config.skin(CustomBlockType.AUCTION_HOUSE));
     }
 
-    /** A TV screen item, ready to place (Round 3a). */
-    public ItemStack tv() {
-        return tagged(Material.PLAYER_HEAD, "&bTV", List.of("&7Place it, then bind a stream:",
-                "&7&o/hcm tv seturl <url>", "&7Right-click to open the stream in your browser."),
-                CustomBlockType.TV, config.skin(CustomBlockType.TV));
-    }
-
     /** A Mailbox item, ready to place. */
     public ItemStack mailbox() {
         PluginConfig.BlockDef def = config.marketplace().mailbox();
@@ -127,7 +120,6 @@ public final class CustomItems {
             case SCRATCH_BOOTH -> arcadeMachine("scratch", type, "&7Right-click to buy a scratch ticket.");
             case PITY_KIOSK -> arcadeMachine("pity", type, "&7Right-click: tokens → a guaranteed Rare+ Mini.");
             case TOKEN_COUNTER -> arcadeMachine("counter", type, "&7Right-click to check your tokens.");
-            case TV -> tv();
         };
     }
 

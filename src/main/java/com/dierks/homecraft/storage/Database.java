@@ -337,17 +337,10 @@ public final class Database {
             );
             """,
 
-            // v18 — Round 3a. Per-TV-block stream URL, and the per-player Card Binder
-            // (how many of each Card a player has stored in their binder).
+            // v18 — Round 3a. The per-player Card Binder (how many of each Card a player
+            // has stored in their binder). (The TV block was retired; its tv_urls table
+            // is no longer created — any leftover table on an old DB is harmless.)
             """
-            CREATE TABLE IF NOT EXISTS tv_urls (
-                world TEXT    NOT NULL,
-                x     INTEGER NOT NULL,
-                y     INTEGER NOT NULL,
-                z     INTEGER NOT NULL,
-                url   TEXT    NOT NULL,
-                PRIMARY KEY (world, x, y, z)
-            );
             CREATE TABLE IF NOT EXISTS binder_cards (
                 player  TEXT    NOT NULL,
                 card_id TEXT    NOT NULL,

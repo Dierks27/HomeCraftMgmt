@@ -84,12 +84,6 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
                 handlePrinter(sender, args);
             }
-            case "tv" -> {
-                if (denyUnless(sender, "hcm.admin")) {
-                    return true;
-                }
-                handleTv(sender, args);
-            }
             case "binder" -> {
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Text.of("&cOnly players can open a binder."));
@@ -253,7 +247,6 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         ItemStack item;
         switch (kind) {
             case "printer" -> item = plugin.items().printer();
-            case "tv" -> item = plugin.items().tv();
             case "binder" -> item = plugin.binder().items().binder();
             case "pc" -> item = plugin.items().pc();
             case "vending" -> item = plugin.items().vendingMachine();
@@ -380,35 +373,6 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         }
         sender.sendMessage(Text.of("&cSpecify a player: /hcm " + usageTail + " <player>"));
         return null;
-    }
-
-    /** {@code /hcm tv seturl <url>} — bind a stream URL to the TV you're looking at (admin). */
-    private void handleTv(CommandSender sender, String[] args) {
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage(Text.of("&cOnly players can set up a TV."));
-            return;
-        }
-        if (args.length < 3 || !args[1].equalsIgnoreCase("seturl")) {
-            sender.sendMessage(Text.of("&cUsage: /hcm tv seturl <url> &7(look at the TV)"));
-            return;
-        }
-        org.bukkit.block.Block target = player.getTargetBlockExact(6);
-        if (target == null) {
-            sender.sendMessage(Text.of("&cLook at a placed TV, then run this again."));
-            return;
-        }
-        var placed = plugin.blockService().at(target.getLocation());
-        if (placed.isEmpty() || placed.get().type() != com.dierks.homecraft.block.CustomBlockType.TV) {
-            sender.sendMessage(Text.of("&cThat isn't a TV. Look directly at one."));
-            return;
-        }
-        String url = args[2];
-        if (!(url.startsWith("http://") || url.startsWith("https://"))) {
-            sender.sendMessage(Text.of("&cThe URL must start with http:// or https://."));
-            return;
-        }
-        plugin.tvs().setUrl(target.getLocation(), url);
-        sender.sendMessage(Text.of("&aTV stream set: &f" + url));
     }
 
     /** {@code /hcm printer <public|private>} — flag the printer you're looking at (admin). */
@@ -644,15 +608,15 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         switch (sub) {
             case "sign" -> bindSignDisplay(player);
             case "hologram", "holo" -> bindHologramDisplay(player);
-            case "maptv", "map" -> bindMapTvDisplay(player, args);
+            case "tv" -> bindTvPanelDisplay(player, args);
             case "remove" -> removeDisplay(player);
             case "cleanup" -> cleanupDisplays(player);
             default -> {
                 player.sendMessage(Text.of("&e/hcm display sign &7- bind the sign you're looking at to a commodity"));
                 player.sendMessage(Text.of("&e/hcm display hologram &7- float a live-price hologram above the block you're looking at"));
-                player.sendMessage(Text.of("&e/hcm display maptv [cols] [rows] &7- render a live price board on the item frame you're looking at (grid tiles right+down)"));
+                player.sendMessage(Text.of("&e/hcm display tv [commodity] [scale] &7- mount a flat price-screen panel on the wall you're looking at"));
                 player.sendMessage(Text.of("&e/hcm display remove &7- unbind the display block you're looking at"));
-                player.sendMessage(Text.of("&e/hcm display cleanup &7- despawn any stray map-TV holograms left in loaded chunks"));
+                player.sendMessage(Text.of("&e/hcm display cleanup &7- despawn every plugin-owned display entity in loaded chunks (wipes strays)"));
             }
         }
     }
@@ -693,36 +657,6 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 player::closeInventory).open(player);
     }
 
-    private void bindMapTvDisplay(Player player, String[] args) {
-        org.bukkit.entity.Entity targetEnt = player.getTargetEntity(6);
-        if (!(targetEnt instanceof org.bukkit.entity.ItemFrame frame)) {
-            player.sendMessage(Text.of("&cLook at an item frame on a wall, then run &f/hcm display maptv [cols] [rows]&c."));
-            return;
-        }
-        int cols = parsePositiveArg(args, 2, 1);
-        int rows = parsePositiveArg(args, 3, 1);
-        new com.dierks.homecraft.gui.display.CommodityPickerMenu(plugin, player, "Bind map-TV → commodity",
-                id -> {
-                    var r = plugin.displayService().bindMapTv(player, frame, id, cols, rows);
-                    player.sendMessage(r.ok()
-                            ? Text.of("&aMap-TV bound to &f" + id + "&a — rendering " + r.error() + ".")
-                            : Text.of("&c" + r.error()));
-                    player.closeInventory();
-                },
-                player::closeInventory).open(player);
-    }
-
-    private int parsePositiveArg(String[] args, int idx, int def) {
-        if (args.length <= idx) {
-            return def;
-        }
-        try {
-            return Math.max(1, Integer.parseInt(args[idx]));
-        } catch (NumberFormatException e) {
-            return def;
-        }
-    }
-
     private void removeDisplay(Player player) {
         org.bukkit.block.Block target = player.getTargetBlockExact(6);
         if (target == null) {
@@ -733,13 +667,51 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         player.sendMessage(r.ok() ? Text.of("&aDisplay unbound.") : Text.of("&c" + r.error()));
     }
 
-    /** Despawn any stray map-TV display entities (e.g. leftovers from an older version). */
+    /** {@code /hcm display tv [commodity] [scale]} — mount a flat price-panel on the wall. */
+    private void bindTvPanelDisplay(Player player, String[] args) {
+        org.bukkit.util.RayTraceResult ray = player.rayTraceBlocks(6);
+        if (ray == null || ray.getHitBlock() == null || ray.getHitBlockFace() == null) {
+            player.sendMessage(Text.of("&cLook at a wall, then run &f/hcm display tv [commodity] [scale]&c."));
+            return;
+        }
+        org.bukkit.block.Block wall = ray.getHitBlock();
+        org.bukkit.block.BlockFace face = ray.getHitBlockFace();
+        float scale = plugin.config().displays().tv().scale();
+        if (args.length >= 4) {
+            try {
+                scale = Float.parseFloat(args[3]);
+            } catch (NumberFormatException e) {
+                player.sendMessage(Text.of("&cScale must be a number (e.g. 3.0). Using the default."));
+            }
+        }
+        final float panelScale = scale;
+        if (args.length >= 3) {
+            reportTvBind(player, plugin.displayService().bindTvPanel(player, wall, face, args[2], panelScale), args[2]);
+            return;
+        }
+        // No commodity argument → pick one from the GUI (mounts on the wall we captured above).
+        new com.dierks.homecraft.gui.display.CommodityPickerMenu(plugin, player, "Bind TV panel → commodity",
+                id -> {
+                    reportTvBind(player, plugin.displayService().bindTvPanel(player, wall, face, id, panelScale), id);
+                    player.closeInventory();
+                },
+                player::closeInventory).open(player);
+    }
+
+    private void reportTvBind(Player player, com.dierks.homecraft.display.DisplayService.Result r, String id) {
+        player.sendMessage(r.ok()
+                ? Text.of("&aTV price panel mounted on the wall, showing &f" + id + "&a live.")
+                : Text.of("&c" + r.error()));
+    }
+
+    /** Despawn every plugin-owned display entity in loaded chunks (wipes stray/leaked holograms). */
     private void cleanupDisplays(Player player) {
-        int removed = plugin.displayService().purgeMapTvDisplays();
+        int removed = plugin.displayService().purgeOwnedDisplays();
         player.sendMessage(removed > 0
-                ? Text.of("&aRemoved &f" + removed + "&a stray map-TV display "
-                        + (removed == 1 ? "entity" : "entities") + " from loaded chunks.")
-                : Text.of("&7No stray map-TV displays found in loaded chunks."));
+                ? Text.of("&aRemoved &f" + removed + "&a display "
+                        + (removed == 1 ? "entity" : "entities") + " from loaded chunks. "
+                        + "&7Live panels/holograms respawn on the next refresh.")
+                : Text.of("&7No plugin-owned display entities found in loaded chunks."));
     }
 
     // ---------------------------------------------------------------------
@@ -750,7 +722,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "tv", "packs", "binder", "auction", "arcade", "tokens", "quests");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "packs", "binder", "auction", "arcade", "tokens", "quests");
             } else {
                 addMatches(out, args[0], "market", "mini", "packs", "binder", "auction", "arcade", "tokens");
             }
@@ -765,10 +737,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
-            addMatches(out, args[1], "printer", "tv", "binder", "pc", "card", "filament", "pack", "vending", "display", "auction",
+            addMatches(out, args[1], "printer", "binder", "pc", "card", "filament", "pack", "vending", "display", "auction",
                     "mailbox", "pallet", "arcade", "cratemachine", "scratch", "pity", "counter");
-        } else if (args.length == 2 && args[0].equalsIgnoreCase("tv")) {
-            addMatches(out, args[1], "seturl");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("give")
                 && args[1].equalsIgnoreCase("pack")) {
             String prefix = args[2].toLowerCase(Locale.ROOT);
@@ -813,7 +783,14 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("display")) {
-            addMatches(out, args[1], "sign", "hologram", "maptv", "remove", "cleanup");
+            addMatches(out, args[1], "sign", "hologram", "tv", "remove", "cleanup");
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("display") && args[1].equalsIgnoreCase("tv")) {
+            String prefix = args[2].toLowerCase(Locale.ROOT);
+            for (MarketItem item : plugin.market().catalog()) {
+                if (item.id().startsWith(prefix)) {
+                    out.add(item.id());
+                }
+            }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("market")) {
             addMatches(out, args[1], "list", "price", "history", "buy", "sell");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("market")

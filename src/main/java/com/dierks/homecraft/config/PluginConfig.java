@@ -117,7 +117,11 @@ public final class PluginConfig {
     }
 
     /** In-game economy displays refresh cadence (Phase 7, §3.8). */
-    public record Displays(int refreshSeconds, HologramOpts hologram) {
+    public record Displays(int refreshSeconds, HologramOpts hologram, TvOpts tv) {
+    }
+
+    /** TV price-panel options (§3.8): the wall-mounted {@code TextDisplay} panel size. */
+    public record TvOpts(float scale) {
     }
 
     /**
@@ -480,8 +484,10 @@ public final class PluginConfig {
                 ? null : Material.matchMaterial(holoItem.trim().toUpperCase());
         float itemScale = (float) Math.max(0.05, c.getDouble("displays.hologram.item_scale", 0.3));
         float textScale = (float) Math.max(0.1, c.getDouble("displays.hologram.text_scale", 1.0));
+        float tvScale = (float) Math.max(0.5, Math.min(12.0, c.getDouble("displays.tv.scale", 3.0)));
         this.displays = new Displays(Math.max(2, c.getInt("displays.refresh_seconds", 20)),
-                new HologramOpts(itemDisp, above, spin, holoMat, itemScale, textScale));
+                new HologramOpts(itemDisp, above, spin, holoMat, itemScale, textScale),
+                new TvOpts(tvScale));
 
         // ---- Arcade (Phase 8) ----
         this.arcade = readArcade(c);

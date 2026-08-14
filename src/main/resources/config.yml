@@ -394,6 +394,12 @@ displays:
     item: ""               # override Material (blank = the commodity's own item)
     item_scale: 0.3        # size of the floating item (1.0 = full block; ~0.3 reads well)
     text_scale: 1.0        # size of the price/trend text
+  # TV price panels: a flat, wall-mounted TextDisplay "screen" bound to a commodity via
+  # /hcm display tv <commodity> [scale]. Same content as a sign board (name / price /
+  # trend / stock) but big, dark-backed and crisp — no floating items, no maps. It
+  # live-updates on the refresh cadence above.
+  tv:
+    scale: 3.0             # panel size on the wall (the command's [scale] overrides per-panel)
 
 # ---------------------------------------------------------------------
 #  Phase 8 — The Arcade (§3.9)

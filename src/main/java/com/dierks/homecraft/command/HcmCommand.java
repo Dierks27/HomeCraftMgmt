@@ -608,11 +608,13 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         switch (sub) {
             case "sign" -> bindSignDisplay(player);
             case "hologram", "holo" -> bindHologramDisplay(player);
+            case "tv" -> bindTvPanelDisplay(player, args);
             case "remove" -> removeDisplay(player);
             case "cleanup" -> cleanupDisplays(player);
             default -> {
                 player.sendMessage(Text.of("&e/hcm display sign &7- bind the sign you're looking at to a commodity"));
                 player.sendMessage(Text.of("&e/hcm display hologram &7- float a live-price hologram above the block you're looking at"));
+                player.sendMessage(Text.of("&e/hcm display tv [commodity] [scale] &7- mount a flat price-screen panel on the wall you're looking at"));
                 player.sendMessage(Text.of("&e/hcm display remove &7- unbind the display block you're looking at"));
                 player.sendMessage(Text.of("&e/hcm display cleanup &7- despawn every plugin-owned display entity in loaded chunks (wipes strays)"));
             }
@@ -663,6 +665,43 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         }
         var r = plugin.displayService().removeAny(target.getLocation());
         player.sendMessage(r.ok() ? Text.of("&aDisplay unbound.") : Text.of("&c" + r.error()));
+    }
+
+    /** {@code /hcm display tv [commodity] [scale]} — mount a flat price-panel on the wall. */
+    private void bindTvPanelDisplay(Player player, String[] args) {
+        org.bukkit.util.RayTraceResult ray = player.rayTraceBlocks(6);
+        if (ray == null || ray.getHitBlock() == null || ray.getHitBlockFace() == null) {
+            player.sendMessage(Text.of("&cLook at a wall, then run &f/hcm display tv [commodity] [scale]&c."));
+            return;
+        }
+        org.bukkit.block.Block wall = ray.getHitBlock();
+        org.bukkit.block.BlockFace face = ray.getHitBlockFace();
+        float scale = plugin.config().displays().tv().scale();
+        if (args.length >= 4) {
+            try {
+                scale = Float.parseFloat(args[3]);
+            } catch (NumberFormatException e) {
+                player.sendMessage(Text.of("&cScale must be a number (e.g. 3.0). Using the default."));
+            }
+        }
+        final float panelScale = scale;
+        if (args.length >= 3) {
+            reportTvBind(player, plugin.displayService().bindTvPanel(player, wall, face, args[2], panelScale), args[2]);
+            return;
+        }
+        // No commodity argument → pick one from the GUI (mounts on the wall we captured above).
+        new com.dierks.homecraft.gui.display.CommodityPickerMenu(plugin, player, "Bind TV panel → commodity",
+                id -> {
+                    reportTvBind(player, plugin.displayService().bindTvPanel(player, wall, face, id, panelScale), id);
+                    player.closeInventory();
+                },
+                player::closeInventory).open(player);
+    }
+
+    private void reportTvBind(Player player, com.dierks.homecraft.display.DisplayService.Result r, String id) {
+        player.sendMessage(r.ok()
+                ? Text.of("&aTV price panel mounted on the wall, showing &f" + id + "&a live.")
+                : Text.of("&c" + r.error()));
     }
 
     /** Despawn every plugin-owned display entity in loaded chunks (wipes stray/leaked holograms). */
@@ -744,7 +783,14 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("display")) {
-            addMatches(out, args[1], "sign", "hologram", "remove", "cleanup");
+            addMatches(out, args[1], "sign", "hologram", "tv", "remove", "cleanup");
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("display") && args[1].equalsIgnoreCase("tv")) {
+            String prefix = args[2].toLowerCase(Locale.ROOT);
+            for (MarketItem item : plugin.market().catalog()) {
+                if (item.id().startsWith(prefix)) {
+                    out.add(item.id());
+                }
+            }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("market")) {
             addMatches(out, args[1], "list", "price", "history", "buy", "sell");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("market")

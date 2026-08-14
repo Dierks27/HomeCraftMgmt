@@ -22,7 +22,10 @@ public final class DisplayDao {
 
     public static final String SIGN = "SIGN";
     public static final String HOLOGRAM = "HOLOGRAM";
+    /** Legacy: the retired map-on-item-frame board. Kept so old rows stay removable. */
     public static final String MAPTV = "MAPTV";
+    /** A flat, wall-mounted {@code TextDisplay} price panel (facing = wall face, data = scale). */
+    public static final String TV = "TV";
 
     public record Display(long id, String kind, String world, int x, int y, int z, String itemId,
                           int cols, int rows, String facing, String data, UUID owner, long createdAt) {

@@ -7,30 +7,22 @@ import com.dierks.homecraft.market.MarketState;
 import com.dierks.homecraft.storage.DisplayDao;
 import com.dierks.homecraft.util.Keys;
 import com.dierks.homecraft.util.Text;
-import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
 import org.bukkit.block.Sign;
 import org.bukkit.block.sign.Side;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.ItemDisplay;
-import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.MapMeta;
-import org.bukkit.map.MapRenderer;
-import org.bukkit.map.MapView;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -79,7 +71,6 @@ public final class DisplayService {
     /** Start the refresh timer. Renders immediately, then every configured interval. */
     public void start() {
         stop();
-        attachMapTvs(); // re-add renderers to persisted map-TVs (renderers aren't saved)
         // Boot safety: wipe any display entities left in loaded chunks (e.g. leaked items
         // from an older map-TV rework) before the tick re-spawns the ones still bound in
         // the DB. Nothing stale ever resurrects on load or chunk reload.
@@ -143,7 +134,7 @@ public final class DisplayService {
                     case DisplayDao.SIGN -> renderSign(d);
                     case DisplayDao.HOLOGRAM -> renderHologram(d);
                     default -> {
-                        // MAPTV renders on the map itself (a MapRenderer) — nothing to tick here.
+                        // Legacy MAPTV rows (retired) have no renderer/entity — nothing to tick.
                     }
                 }
             } catch (Throwable t) {
@@ -196,15 +187,9 @@ public final class DisplayService {
         if (DisplayDao.HOLOGRAM.equals(d.kind())) {
             removeHologramEntity(d.id());
         } else if (DisplayDao.MAPTV.equals(d.kind())) {
-            despawnDisplayEntitiesFor(d.id()); // sweep any stray v0.16.1 hologram pinned to it
-            for (int id : parseMapIds(d.data())) {
-                if (id >= 0) {
-                    MapView view = mapById(id);
-                    if (view != null) {
-                        clearRenderers(view);
-                    }
-                }
-            }
+            // Legacy map-TV (retired): no map renderer of ours remains, just despawn any
+            // associated display entity so a stray from an older version is never orphaned.
+            despawnDisplayEntitiesFor(d.id());
         }
     }
 
@@ -442,143 +427,6 @@ public final class DisplayService {
         }
     }
 
-    // ---- Map-TV chart wall ----------------------------------------------------
-
-    /**
-     * Build a map-TV bound to a commodity on the item frame the admin is looking at.
-     * A {@code cols×rows} grid tiles across neighbouring frames (right + down on the
-     * wall); each tile gets a fresh map rendering its window of the shared chart.
-     */
-    public Result bindMapTv(Player admin, ItemFrame anchor, String itemId, int cols, int rows) {
-        if (plugin.market().item(itemId) == null) {
-            return Result.fail("Unknown commodity '" + itemId + "'.");
-        }
-        cols = Math.max(1, Math.min(8, cols));
-        rows = Math.max(1, Math.min(8, rows));
-        BlockFace facing = anchor.getFacing();
-        int[] right = rightStep(facing);
-        if (right == null && (cols > 1 || rows > 1)) {
-            return Result.fail("A grid needs the map on a vertical wall (N/S/E/W). Try a 1x1.");
-        }
-        World world = anchor.getWorld();
-        Block anchorBlock = anchor.getLocation().getBlock();
-
-        int placed = 0;
-        int[] mapIds = new int[cols * rows];
-        java.util.Arrays.fill(mapIds, -1);
-        for (int gy = 0; gy < rows; gy++) {
-            for (int gx = 0; gx < cols; gx++) {
-                int bx = anchorBlock.getX() + (right != null ? right[0] * gx : gx);
-                int by = anchorBlock.getY() - gy;
-                int bz = anchorBlock.getZ() + (right != null ? right[2] * gx : 0);
-                ItemFrame frame = frameAt(world, bx, by, bz, facing);
-                if (frame == null) {
-                    continue; // no frame here — leave that tile blank
-                }
-                MapView view = Bukkit.createMap(world);
-                clearRenderers(view);
-                view.setTrackingPosition(false);
-                view.addRenderer(new MapTvRenderer(plugin, itemId, gx, gy, cols, rows));
-                ItemStack map = new ItemStack(Material.FILLED_MAP);
-                if (map.getItemMeta() instanceof MapMeta mm) {
-                    mm.setMapView(view);
-                    map.setItemMeta(mm);
-                }
-                frame.setItem(map, false);
-                mapIds[gy * cols + gx] = view.getId();
-                placed++;
-            }
-        }
-        if (placed == 0) {
-            return Result.fail("Look at a framed spot on the wall first (need at least one item frame).");
-        }
-
-        try {
-            dao.upsert(DisplayDao.MAPTV, anchorBlock.getLocation(), itemId, cols, rows,
-                    facing.name(), joinMapIds(mapIds), admin.getUniqueId(), System.currentTimeMillis());
-        } catch (SQLException e) {
-            return Result.fail("Could not save the map-TV.");
-        }
-        version++; // force an immediate first paint
-        return new Result(true, placed + "/" + (cols * rows) + " tiles");
-    }
-
-    /** Re-attach renderers to every persisted map-TV's maps (renderers aren't saved to disk). */
-    private void attachMapTvs() {
-        List<DisplayDao.Display> maptvs;
-        try {
-            maptvs = dao.byKind(DisplayDao.MAPTV);
-        } catch (SQLException e) {
-            return;
-        }
-        for (DisplayDao.Display d : maptvs) {
-            int[] ids = parseMapIds(d.data());
-            for (int idx = 0; idx < ids.length; idx++) {
-                if (ids[idx] < 0) {
-                    continue;
-                }
-                MapView view = mapById(ids[idx]);
-                if (view == null) {
-                    continue;
-                }
-                int gx = d.cols() > 0 ? idx % d.cols() : 0;
-                int gy = d.cols() > 0 ? idx / d.cols() : 0;
-                clearRenderers(view);
-                view.setTrackingPosition(false);
-                view.addRenderer(new MapTvRenderer(plugin, d.itemId(), gx, gy, d.cols(), d.rows()));
-            }
-        }
-    }
-
-    // ---- Map-TV interaction: right-click opens the browser chart ---------------
-
-    /** The commodity a map-TV frame is bound to, if this item frame is one of its tiles. */
-    public java.util.Optional<String> mapTvCommodityFor(ItemFrame frame) {
-        if (frame == null) {
-            return java.util.Optional.empty();
-        }
-        ItemStack item = frame.getItem();
-        if (item == null || item.getType() != Material.FILLED_MAP
-                || !(item.getItemMeta() instanceof MapMeta mm) || mm.getMapView() == null) {
-            return java.util.Optional.empty();
-        }
-        int mapId = mm.getMapView().getId();
-        List<DisplayDao.Display> maptvs;
-        try {
-            maptvs = dao.byKind(DisplayDao.MAPTV);
-        } catch (SQLException e) {
-            return java.util.Optional.empty();
-        }
-        for (DisplayDao.Display d : maptvs) {
-            for (int id : parseMapIds(d.data())) {
-                if (id == mapId) {
-                    return java.util.Optional.of(d.itemId());
-                }
-            }
-        }
-        return java.util.Optional.empty();
-    }
-
-    /** Right-click a map-TV: hand the player a clickable link to the live dashboard chart. */
-    public void openMapTvChart(Player player, String itemId) {
-        String url = dashboardUrl(itemId);
-        player.sendMessage(Text.of("&b📺 Opening the live chart…"));
-        player.sendMessage(Text.link("&a&n▶ Click to open the price chart", url));
-    }
-
-    /** The dashboard URL for a commodity: the configured base, deep-linked to the item id. */
-    public String dashboardUrl(String itemId) {
-        String base = plugin.config().displays().maptv().dashboardUrl();
-        if (base == null || base.isBlank()) {
-            base = "http://localhost:" + plugin.config().webDashboard().port();
-        }
-        base = base.trim();
-        if (itemId == null || itemId.isBlank()) {
-            return base;
-        }
-        return base + (base.contains("?") ? "&" : "?") + "item=" + itemId;
-    }
-
     // ---- Owned-display cleanup ------------------------------------------------
 
     /**
@@ -625,63 +473,4 @@ public final class DisplayService {
         }
     }
 
-    /** The horizontal "right" step (unit x/z delta) for a wall the frame faces; null for floor/ceiling. */
-    private int[] rightStep(BlockFace facing) {
-        return switch (facing) {
-            case NORTH, SOUTH -> new int[] {1, 0, 0};  // wall runs east–west
-            case EAST, WEST -> new int[] {0, 0, 1};     // wall runs north–south
-            default -> null;                            // UP/DOWN (floor/ceiling): single tile only
-        };
-    }
-
-    private ItemFrame frameAt(World world, int bx, int by, int bz, BlockFace facing) {
-        Location center = new Location(world, bx + 0.5, by + 0.5, bz + 0.5);
-        for (Entity e : world.getNearbyEntities(center, 0.6, 0.6, 0.6)) {
-            if (e instanceof ItemFrame frame && frame.getFacing() == facing) {
-                Block b = frame.getLocation().getBlock();
-                if (b.getX() == bx && b.getY() == by && b.getZ() == bz) {
-                    return frame;
-                }
-            }
-        }
-        return null;
-    }
-
-    private void clearRenderers(MapView view) {
-        for (MapRenderer r : new ArrayList<>(view.getRenderers())) {
-            view.removeRenderer(r);
-        }
-    }
-
-    @SuppressWarnings("deprecation")
-    private MapView mapById(int id) {
-        return Bukkit.getMap(id);
-    }
-
-    private String joinMapIds(int[] ids) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < ids.length; i++) {
-            if (i > 0) {
-                sb.append(',');
-            }
-            sb.append(ids[i]);
-        }
-        return sb.toString();
-    }
-
-    private int[] parseMapIds(String data) {
-        if (data == null || data.isBlank()) {
-            return new int[0];
-        }
-        String[] parts = data.split(",");
-        int[] out = new int[parts.length];
-        for (int i = 0; i < parts.length; i++) {
-            try {
-                out[i] = Integer.parseInt(parts[i].trim());
-            } catch (NumberFormatException e) {
-                out[i] = -1;
-            }
-        }
-        return out;
-    }
 }

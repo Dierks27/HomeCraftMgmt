@@ -80,13 +80,13 @@ public final class DisplayService {
     public void start() {
         stop();
         attachMapTvs(); // re-add renderers to persisted map-TVs (renderers aren't saved)
-        // Boot safety: a map-TV never spawns entities (the board is text on the map), so
-        // purge any item/text holograms an older version pinned to a map-TV rather than
-        // letting them strand. Never re-spawns them.
-        int strays = purgeMapTvDisplays();
+        // Boot safety: wipe any display entities left in loaded chunks (e.g. leaked items
+        // from an older map-TV rework) before the tick re-spawns the ones still bound in
+        // the DB. Nothing stale ever resurrects on load or chunk reload.
+        int strays = purgeOwnedDisplays();
         if (strays > 0) {
-            plugin.getLogger().info("Removed " + strays + " orphaned map-TV display "
-                    + (strays == 1 ? "entity" : "entities") + " left by an older version.");
+            plugin.getLogger().info("Cleared " + strays + " stale display "
+                    + (strays == 1 ? "entity" : "entities") + " on start.");
         }
         long period = Math.max(2, plugin.config().displays().refreshSeconds()) * 20L;
         task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, 40L, period);
@@ -579,46 +579,35 @@ public final class DisplayService {
         return base + (base.contains("?") ? "&" : "?") + "item=" + itemId;
     }
 
-    // ---- Map-TV orphan cleanup ------------------------------------------------
+    // ---- Owned-display cleanup ------------------------------------------------
 
     /**
-     * Despawn every map-TV-owned display entity in loaded chunks and return the count
-     * removed. A map-TV never spawns entities — its board is text drawn on the map — so
-     * any {@code ItemDisplay}/{@code TextDisplay} still tagged to a MAPTV binding is a
-     * stray left over from the v0.16.1 rework, and this removes exactly those. Scoped
-     * strictly to our own {@code DISPLAY_ID} tag whose binding is a map-TV, so it can
-     * never touch a hologram (its row is HOLOGRAM), the arcade kiosk, or any other entity.
+     * Despawn <b>every</b> display entity this plugin owns in loaded chunks — text
+     * panels, holograms, and any leaked/stranded {@code ItemDisplay}/{@code TextDisplay}
+     * (e.g. the spinning items a past map-TV rework left behind) — and clear our live
+     * tracking. Scoped strictly to our own {@code DISPLAY_ID} PDC tag, so it can never
+     * touch the arcade kiosk or any unrelated entity. Still-bound displays are re-spawned
+     * from the DB on the next refresh tick; true orphans (no binding) simply stay gone.
+     * Returns the count removed.
      */
-    public int purgeMapTvDisplays() {
+    public int purgeOwnedDisplays() {
         int removed = 0;
         for (World world : plugin.getServer().getWorlds()) {
             for (Entity e : world.getEntities()) {
-                if (isMapTvDisplayEntity(e)) {
+                if (isOwnedDisplayEntity(e)) {
                     e.remove();
                     removed++;
                 }
             }
         }
+        holograms.clear(); // drop stale tracking; the tick re-spawns anything still bound
         return removed;
     }
 
-    /** True if this entity is one of our display entities bound to a MAPTV row (a stray). */
-    private boolean isMapTvDisplayEntity(Entity e) {
-        if (!(e instanceof ItemDisplay) && !(e instanceof TextDisplay)) {
-            return false;
-        }
-        Long id = e.getPersistentDataContainer().get(Keys.DISPLAY_ID, PersistentDataType.LONG);
-        if (id == null) {
-            return false; // not one of our tagged displays — leave it alone
-        }
-        try {
-            // Only a map-TV binding qualifies. A live hologram's row is HOLOGRAM, so it's
-            // never matched; an unknown/deleted binding we also leave, to avoid nuking a
-            // hologram whose row was just removed.
-            return dao.byId(id).map(d -> DisplayDao.MAPTV.equals(d.kind())).orElse(false);
-        } catch (SQLException ex) {
-            return false;
-        }
+    /** True if this entity carries our {@code DISPLAY_ID} tag (i.e. a plugin-owned display). */
+    private boolean isOwnedDisplayEntity(Entity e) {
+        return (e instanceof ItemDisplay || e instanceof TextDisplay)
+                && e.getPersistentDataContainer().has(Keys.DISPLAY_ID, PersistentDataType.LONG);
     }
 
     /** Despawn any display entities in loaded chunks tagged to one specific display id. */

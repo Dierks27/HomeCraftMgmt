@@ -652,7 +652,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 player.sendMessage(Text.of("&e/hcm display hologram &7- float a live-price hologram above the block you're looking at"));
                 player.sendMessage(Text.of("&e/hcm display maptv [cols] [rows] &7- render a live price board on the item frame you're looking at (grid tiles right+down)"));
                 player.sendMessage(Text.of("&e/hcm display remove &7- unbind the display block you're looking at"));
-                player.sendMessage(Text.of("&e/hcm display cleanup &7- despawn any stray map-TV holograms left in loaded chunks"));
+                player.sendMessage(Text.of("&e/hcm display cleanup &7- despawn every plugin-owned display entity in loaded chunks (wipes strays)"));
             }
         }
     }
@@ -733,13 +733,14 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         player.sendMessage(r.ok() ? Text.of("&aDisplay unbound.") : Text.of("&c" + r.error()));
     }
 
-    /** Despawn any stray map-TV display entities (e.g. leftovers from an older version). */
+    /** Despawn every plugin-owned display entity in loaded chunks (wipes stray/leaked holograms). */
     private void cleanupDisplays(Player player) {
-        int removed = plugin.displayService().purgeMapTvDisplays();
+        int removed = plugin.displayService().purgeOwnedDisplays();
         player.sendMessage(removed > 0
-                ? Text.of("&aRemoved &f" + removed + "&a stray map-TV display "
-                        + (removed == 1 ? "entity" : "entities") + " from loaded chunks.")
-                : Text.of("&7No stray map-TV displays found in loaded chunks."));
+                ? Text.of("&aRemoved &f" + removed + "&a display "
+                        + (removed == 1 ? "entity" : "entities") + " from loaded chunks. "
+                        + "&7Live panels/holograms respawn on the next refresh.")
+                : Text.of("&7No plugin-owned display entities found in loaded chunks."));
     }
 
     // ---------------------------------------------------------------------

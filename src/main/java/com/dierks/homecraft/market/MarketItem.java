@@ -14,9 +14,15 @@ import org.bukkit.Material;
  *
  * <p>These prices are the online-market side ONLY — QuickShop / player shops set
  * their own prices and are never touched here.
+ *
+ * <p>{@code maxDailySell} / {@code maxDailyBuy} are optional per-player, per-item,
+ * per-day unit caps (0 = no per-item cap). They apply <em>on top of</em> the global
+ * {@code sell_limits} / {@code buy_limits} — the tighter of the two wins — so rare
+ * commodities can be protected while commons stay high-volume.
  */
 public record MarketItem(String id, Material material, String displayName,
-                         double floor, double ceiling, long initialStock, long fullStock) {
+                         double floor, double ceiling, long initialStock, long fullStock,
+                         long maxDailySell, long maxDailyBuy) {
 
     /** Player-facing label (falls back to the material name). */
     public String label() {

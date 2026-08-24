@@ -347,6 +347,20 @@ public final class Database {
                 count   INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (player, card_id)
             );
+            """,
+
+            // v19 — per-player daily BUY tallies (anti-drain buy limit), mirroring
+            // market_daily_sells. day = UTC epoch-day; one row per player/day/item.
+            """
+            CREATE TABLE IF NOT EXISTS market_daily_buys (
+                player_uuid TEXT    NOT NULL,
+                day         INTEGER NOT NULL,
+                item_id     TEXT    NOT NULL,
+                units       INTEGER NOT NULL,
+                money       REAL    NOT NULL,
+                PRIMARY KEY (player_uuid, day, item_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_daily_buys_day ON market_daily_buys (player_uuid, day);
             """
     };
 

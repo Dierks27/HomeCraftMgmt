@@ -112,7 +112,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         // Finite-stock market engine (Phase 2.5).
         this.economy = new EconomyService(this);
         this.market = new MarketService(this, new MarketStateDao(database),
-                new DailySellDao(database), new PriceHistoryDao(database), economy);
+                new DailySellDao(database), new com.dierks.homecraft.storage.DailyBuyDao(database),
+                new PriceHistoryDao(database), economy);
         this.market.reload();
         scheduleHistorySnapshots();
 

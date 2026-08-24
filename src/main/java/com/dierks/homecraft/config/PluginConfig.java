@@ -1072,6 +1072,16 @@ public final class PluginConfig {
             if (fullStock < 1) {
                 fullStock = 1; // avoid divide-by-zero in the pricing curve
             }
+            // Hard rule: stock must NEVER start at (or above) full_stock. full_stock is the
+            // denominator of the price curve, not a target — the market has to keep room for
+            // players to sell into, or the item lands on the floor with nowhere left to go.
+            if (initialStock >= fullStock) {
+                long clamped = Math.min((long) (fullStock * 0.85), fullStock - 1);
+                log.warning("market.catalog[" + id + "] initial_stock (" + initialStock
+                        + ") >= full_stock (" + fullStock + "); clamping to " + clamped
+                        + " — the market must always have room to sell into.");
+                initialStock = Math.max(0L, clamped);
+            }
             // Optional per-player, per-item, per-day unit caps (0 = none). Enforced on top
             // of the global sell_limits/buy_limits — the tighter cap wins.
             long maxDailySell = Math.max(0L, (long) number(row.get("max_daily_sell"), 0));

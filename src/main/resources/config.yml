@@ -210,6 +210,7 @@ market:
   #   floor         lowest price (reached when stock is at/above full_stock)
   #   ceiling       highest price (reached at zero stock; also = out of stock)
   #   initial_stock starting units the market holds (sets the starting price)
+  #                 MUST be strictly LESS than full_stock — see the hard rule below
   #   full_stock    units at which price hits the floor (default: default_full_stock)
   #   max_daily_sell optional per-player, per-item, per-day SELL cap (0/omitted = none)
   #   max_daily_buy  optional per-player, per-item, per-day BUY cap  (0/omitted = none)
@@ -220,14 +221,28 @@ market:
   # none) on commons.
   # Staples seed with generous stock (cheap & available from day one); ores can
   # start at 0 → pinned at ceiling and UNBUYABLE until players sell some in.
-  # Edit + /hcm reload: existing stock/price is preserved; new items seed fresh.
+  #
+  # HARD RULE — stock must never reach full_stock. full_stock is the DENOMINATOR of
+  # the price curve, not a target to hit: the market has to keep room for players to
+  # sell into, or an item lands on the floor with nowhere left to go. So:
+  #   * initial_stock >= full_stock is clamped to full_stock * 0.85 with a warning.
+  #   * /hcm market setstock refuses to seat stock at/above full_stock (caps at -1).
+  #   * A player CAN still sell stock up to full_stock — the item then sits at floor
+  #     price and further sells earn almost nothing. That's the market's own signal
+  #     saying "we're saturated, go sell something else."
+  #
+  # Edit + /hcm reload: existing stock/price is preserved on purpose, so changing
+  # initial_stock/full_stock alone will NOT move an item that already exists; new items
+  # seed fresh. To apply a NEW economy design to items already in the database, run
+  # `/hcm market resetstock all` (or `<item>`) — that reseeds stock from config AND
+  # snaps every price back onto the curve instead of letting inertia glide there.
   catalog:
     - id: cobblestone
       material: COBBLESTONE
       display_name: "&7Cobblestone"
       floor: 0.10
       ceiling: 5.0
-      initial_stock: 20000
+      initial_stock: 17000    # MUST stay < full_stock (85% here) — see the rule above
       full_stock: 20000
       max_daily_sell: 400     # common — high volume allowed (~2% of full_stock)
       max_daily_buy: 800      # ~4% of full_stock

@@ -76,6 +76,9 @@ Not a shop with an infinite vending machine — a **real commodities market** wi
 - **Daily per-player sell limit (anti-whale):** cap money and/or units a player can sell/day; resets daily (UTC); per-player persistent; optional per-rank ceiling (most generous wins); shared `hcm.market.limit.bypass`; GUI shows "resets in Xh."
 - **Daily per-player buy limit (anti-drain / anti-cornering) ✅:** the sell-side mirror — caps money spent and/or units bought per UTC day (own `buy_limits` config + separate SQLite tally), so no one drains a commodity the moment it's stocked. Same rank-escalation + shared bypass; also applies to Crate/Amazon store orders.
 - **Per-item daily caps ✅:** each catalog entry may set `max_daily_sell` / `max_daily_buy` (per-player, per-item, per-day unit caps) that stack **on top of** the global limits — the tighter wins — so rare items are tightly controlled while commons stay high-volume. Rule of thumb: sell ≈ 2% / buy ≈ 4% of `full_stock`.
+- **Prices are hard-clamped to `floor`/`ceiling` ✅:** every stored, displayed, and quoted price is clamped to the item's band. Inertia may smooth price *within* the band, **never outside it**. On `/hcm reload` any price cached under an older config (different floor/ceiling) is snapped back into range and written through — otherwise the glide would interpolate from an illegal price indefinitely.
+- **Stock must never reach `full_stock` ✅:** `full_stock` is the *denominator of the price curve*, not a target to hit — the market always keeps room for players to sell into. `initial_stock >= full_stock` is clamped to 85% with a warning; `setstock` caps at `full_stock - 1`. A player *may* still sell stock all the way up, at which point the item sits at floor price and further sells earn almost nothing — the market's own "we're saturated" signal.
+- **Admin stock management ✅:** `/hcm reload` preserves existing stock by design, so a new economy design needs `/hcm market resetstock <item|all>` — it reseeds stock from config **and** snaps price onto the curve (a stock-only reset would leave inertia holding the old price). `/hcm market setstock <item> <amount>` fine-tunes one item. Both write SQLite + in-memory state immediately.
 **Curated & lean on purpose.** The house commodity list is a **deliberately small** set of core resources (ores, staples) — NOT every item in the game. Everything else is sold player-to-player via the **Crate Marketplace (§3.2b)**, which avoids turning farmable items (bread, etc.) into house-money faucets. Rule of thumb: **raw/limited stuff → house market; farmable/crafted/long-tail stuff → the Marketplace.**
 **Scope:** these dynamic prices are the **Crate house-market side ONLY.** QuickShop sets its own prices and is untouched. This market **replaces DynamicShopGUI entirely.**
 ### 3.2 Crate — Ordering & Shipping
@@ -338,7 +341,7 @@ Register a `PlaceholderExpansion` (identifier `hcm`) exposing e.g. `%hcm_price_<
 - `hcm.admin`
 - `hcm.pc.use`, `hcm.pc.craft`
 - `hcm.workbench.place`, `hcm.workbench.use`
-- `hcm.market.order`, `hcm.market.use`
+- `hcm.market.order`; `hcm.market.list` (op — full catalog dump) / `hcm.market.price` (all — one item + `/hcm balance`), both children of the back-compat parent `hcm.use`
 - `hcm.marketplace.sell` (place/use a Pallet), `hcm.marketplace.buy`
 - `hcm.mini.buy`, `hcm.mini.sell`, `hcm.mini.craft`
 - `hcm.vending.create`, `hcm.auction.list`, `hcm.auction.bid`

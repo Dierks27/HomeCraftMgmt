@@ -75,7 +75,7 @@ public final class PluginConfig {
                           double fee, org.bukkit.DyeColor shinyDye, int shinyAmount, double shinyFee) {
     }
 
-    /** A daily sell allowance (0 = unlimited on that axis). */
+    /** A daily trade allowance (0 = unlimited on that axis). */
     public record RankLimit(String permission, double maxMoneyPerDay, long maxUnitsPerDay) {
     }
 
@@ -84,9 +84,14 @@ public final class PluginConfig {
                              String bypassPermission, List<RankLimit> ranks) {
     }
 
+    /** Anti-drain daily buy limits — the sell-side mirror, same shape and semantics. */
+    public record BuyLimits(boolean enabled, double maxMoneyPerDay, long maxUnitsPerDay,
+                            String bypassPermission, List<RankLimit> ranks) {
+    }
+
     /** The finite-stock market tuning + catalog (Phase 2.5). */
     public record Market(double elasticity, double inertia, double spread,
-                         List<MarketItem> catalog, SellLimits sellLimits,
+                         List<MarketItem> catalog, SellLimits sellLimits, BuyLimits buyLimits,
                          int priceHistoryIntervalMinutes) {
     }
 
@@ -1067,10 +1072,16 @@ public final class PluginConfig {
             if (fullStock < 1) {
                 fullStock = 1; // avoid divide-by-zero in the pricing curve
             }
+            // Optional per-player, per-item, per-day unit caps (0 = none). Enforced on top
+            // of the global sell_limits/buy_limits — the tighter cap wins.
+            long maxDailySell = Math.max(0L, (long) number(row.get("max_daily_sell"), 0));
+            long maxDailyBuy = Math.max(0L, (long) number(row.get("max_daily_buy"), 0));
 
-            catalog.add(new MarketItem(id, material, displayName, floor, ceiling, initialStock, fullStock));
+            catalog.add(new MarketItem(id, material, displayName, floor, ceiling, initialStock, fullStock,
+                    maxDailySell, maxDailyBuy));
         }
-        return new Market(elasticity, inertia, spread, catalog, readSellLimits(c), Math.max(1, historyMinutes));
+        return new Market(elasticity, inertia, spread, catalog,
+                readSellLimits(c), readBuyLimits(c), Math.max(1, historyMinutes));
     }
 
     private SellLimits readSellLimits(FileConfiguration c) {
@@ -1091,6 +1102,26 @@ public final class PluginConfig {
                     (long) number(row.get("max_units_per_day"), 0)));
         }
         return new SellLimits(enabled, maxMoney, maxUnits, bypass, ranks);
+    }
+
+    private BuyLimits readBuyLimits(FileConfiguration c) {
+        boolean enabled = c.getBoolean("market.buy_limits.enabled", true);
+        double maxMoney = c.getDouble("market.buy_limits.max_money_per_day", 0);
+        long maxUnits = c.getLong("market.buy_limits.max_units_per_day", 0);
+        String bypass = c.getString("market.buy_limits.bypass_permission", "hcm.market.limit.bypass");
+
+        List<RankLimit> ranks = new ArrayList<>();
+        for (Map<?, ?> row : c.getMapList("market.buy_limits.ranks")) {
+            Object perm = row.get("permission");
+            if (perm == null || String.valueOf(perm).isBlank()) {
+                continue;
+            }
+            ranks.add(new RankLimit(
+                    String.valueOf(perm),
+                    number(row.get("max_money_per_day"), 0),
+                    (long) number(row.get("max_units_per_day"), 0)));
+        }
+        return new BuyLimits(enabled, maxMoney, maxUnits, bypass, ranks);
     }
 
     private double number(Object value, double fallback) {

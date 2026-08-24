@@ -168,8 +168,9 @@ market:
   # their own full_stock.
   default_full_stock: 1024
 
-  # Daily per-player sell limit (anti-whale): caps how much a player can sell
-  # to the market per UTC day. Resets daily; tracked in SQLite.
+  # Daily per-player SELL limit (anti-whale): caps how much a player can sell
+  # to the market per UTC day. Resets daily; tracked in SQLite. Per-item
+  # `max_daily_sell` overrides in the catalog stack ON TOP of this (tighter wins).
   sell_limits:
     enabled: true
     max_money_per_day: 100000   # 0 = unlimited money/day
@@ -177,6 +178,22 @@ market:
     bypass_permission: "hcm.market.limit.bypass"
     # Optional higher ceilings per LuckPerms-managed permission node. The most
     # generous node the player holds wins. Grant these via LuckPerms.
+    ranks:
+      - permission: "hcm.market.limit.vip"
+        max_money_per_day: 250000
+        max_units_per_day: 0
+
+  # Daily per-player BUY limit (anti-drain / anti-hoard): the sell-side mirror —
+  # caps how much a player can buy from the market per UTC day so no one drains a
+  # commodity's supply the moment it's stocked. Same shape and semantics as
+  # sell_limits; the shared bypass permission skips both. Per-item `max_daily_buy`
+  # overrides in the catalog stack ON TOP of this (tighter wins). Tracked separately
+  # in SQLite; resets at UTC midnight. Also applies to Crate/Amazon store orders.
+  buy_limits:
+    enabled: true
+    max_money_per_day: 100000   # 0 = unlimited money/day
+    max_units_per_day: 0        # 0 = unlimited units/day (counted per item)
+    bypass_permission: "hcm.market.limit.bypass"
     ranks:
       - permission: "hcm.market.limit.vip"
         max_money_per_day: 250000
@@ -194,6 +211,13 @@ market:
   #   ceiling       highest price (reached at zero stock; also = out of stock)
   #   initial_stock starting units the market holds (sets the starting price)
   #   full_stock    units at which price hits the floor (default: default_full_stock)
+  #   max_daily_sell optional per-player, per-item, per-day SELL cap (0/omitted = none)
+  #   max_daily_buy  optional per-player, per-item, per-day BUY cap  (0/omitted = none)
+  # Per-item caps stack ON TOP of the global sell_limits/buy_limits (tighter wins) and
+  # are skipped by the bypass permission. Rule of thumb: max_daily_sell ~= 2% of
+  # full_stock, max_daily_buy ~= 4% of full_stock, so no single player can move a
+  # price more than a few percent per day. Set tight caps on rare items, high (or
+  # none) on commons.
   # Staples seed with generous stock (cheap & available from day one); ores can
   # start at 0 → pinned at ceiling and UNBUYABLE until players sell some in.
   # Edit + /hcm reload: existing stock/price is preserved; new items seed fresh.
@@ -205,6 +229,8 @@ market:
       ceiling: 5.0
       initial_stock: 20000
       full_stock: 20000
+      max_daily_sell: 400     # common — high volume allowed (~2% of full_stock)
+      max_daily_buy: 800      # ~4% of full_stock
     - id: oak_log
       material: OAK_LOG
       display_name: "&6Oak Log"
@@ -240,6 +266,8 @@ market:
       ceiling: 400.0
       initial_stock: 0          # starts empty -> ceiling price, out of stock
       full_stock: 512
+      max_daily_sell: 10        # rare — tight cap protects supply (~2% of full_stock)
+      max_daily_buy: 20         # ~4% of full_stock — prevents hoarding
 
 # Phase 3 / 6 — Crate Ordering + Shipping
 # Tiers are FULLY config-driven: add / rename / re-time any number of them and

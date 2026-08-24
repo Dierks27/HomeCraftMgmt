@@ -60,7 +60,7 @@ permissions:
     description: Buy from and sell to the dynamic market.
     default: true
   hcm.market.limit.bypass:
-    description: Exempt from the daily per-player sell limit.
+    description: Exempt from the daily per-player buy AND sell limits (and per-item caps).
     default: op
   hcm.mini.buy:
     description: Mint/buy Minis at the Museum.

@@ -3,6 +3,7 @@ package com.dierks.homecraft.market;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.integration.EconomyService;
+import com.dierks.homecraft.storage.DailyBuyDao;
 import com.dierks.homecraft.storage.DailySellDao;
 import com.dierks.homecraft.storage.MarketStateDao;
 import com.dierks.homecraft.storage.PriceHistoryDao;
@@ -35,8 +36,13 @@ public final class MarketService {
         }
     }
 
-    /** Resolved daily allowance for a specific player (0 on an axis = unlimited). */
-    private record Limits(boolean enforced, double maxMoney, long maxUnits) {
+    /**
+     * Resolved daily allowance for a specific player. {@code subject} is true when the
+     * player is under the limit system at all (enabled and not bypassed) — even if both
+     * global axes are 0/unlimited, because a per-item cap can still apply. 0 on an axis
+     * means unlimited on that axis.
+     */
+    private record Limits(boolean subject, double maxMoney, long maxUnits) {
         static final Limits UNLIMITED = new Limits(false, 0, 0);
     }
 
@@ -45,6 +51,7 @@ public final class MarketService {
     private final HomeCraftManagement plugin;
     private final MarketStateDao stateDao;
     private final DailySellDao dailyDao;
+    private final DailyBuyDao buyDao;
     private final PriceHistoryDao historyDao;
     private final EconomyService economy;
 
@@ -53,10 +60,12 @@ public final class MarketService {
     private PricingEngine engine = new PricingEngine(1.0, 0.2, 0.10);
 
     public MarketService(HomeCraftManagement plugin, MarketStateDao stateDao,
-                         DailySellDao dailyDao, PriceHistoryDao historyDao, EconomyService economy) {
+                         DailySellDao dailyDao, DailyBuyDao buyDao, PriceHistoryDao historyDao,
+                         EconomyService economy) {
         this.plugin = plugin;
         this.stateDao = stateDao;
         this.dailyDao = dailyDao;
+        this.buyDao = buyDao;
         this.historyDao = historyDao;
         this.economy = economy;
     }
@@ -155,11 +164,43 @@ public final class MarketService {
             return TradeResult.fail(item.label() + " is out of stock.");
         }
 
-        // Integrate the price across the order: each unit costs a little more as
-        // stock drops, so the total is the area under the rising price curve.
-        Plan plan = simulateBuy(item, state.currentPrice(), state.stock(), qty);
+        // Resolve the daily anti-drain allowance (money spent + units) for this player,
+        // combining the global buy cap with this item's optional per-item buy cap.
+        Limits limits = resolveBuyLimits(player);
+        boolean enforced = limits.subject();
+        double remainingMoney = 0;
+        long remainingUnits = 0;
+        long unitCap = 0;
+        if (enforced) {
+            long day = epochDay();
+            try {
+                unitCap = tighter(limits.maxUnits(), item.maxDailyBuy());
+                if (unitCap > 0) {
+                    long bought = buyDao.unitsBought(player.getUniqueId(), day, id);
+                    remainingUnits = unitCap - bought;
+                    if (remainingUnits <= 0) {
+                        return TradeResult.fail(unitsCappedMessage(true, bought, unitCap, item));
+                    }
+                }
+                if (limits.maxMoney() > 0) {
+                    remainingMoney = limits.maxMoney() - buyDao.moneySpent(player.getUniqueId(), day);
+                    if (remainingMoney <= 0) {
+                        return TradeResult.fail(moneyCappedMessage(true));
+                    }
+                }
+            } catch (SQLException e) {
+                plugin.getLogger().severe("Failed to read daily buy tally: " + e.getMessage());
+                enforced = false;
+            }
+        }
+
+        // Integrate the price across the order: each unit costs a little more as stock
+        // drops, so the total is the area under the rising price curve — stopping at
+        // whatever the daily buy limit allows.
+        Plan plan = simulateBuy(item, state.currentPrice(), state.stock(), qty,
+                enforced, limits.maxMoney(), remainingMoney, unitCap, remainingUnits);
         if (plan.filled() <= 0) {
-            return TradeResult.fail(item.label() + " is out of stock.");
+            return TradeResult.fail(enforced ? moneyCappedMessage(true) : item.label() + " is out of stock.");
         }
         if (!economy.has(player, plan.total())) {
             return TradeResult.fail("You can't afford " + economy.format(plan.total())
@@ -175,6 +216,12 @@ public final class MarketService {
         }
 
         commit(state, plan);   // BUY SUBTRACTS from market stock; price ends where the order ended
+
+        try {
+            buyDao.record(player.getUniqueId(), epochDay(), id, plan.filled(), plan.total());
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to record daily buy tally: " + e.getMessage());
+        }
         return new TradeResult(true, null, plan.filled(), plan.total(), state.currentPrice(), state.stock());
     }
 
@@ -193,24 +240,28 @@ public final class MarketService {
             return TradeResult.fail("You have no " + item.label() + " to sell.");
         }
 
-        // Resolve the daily anti-whale allowance (money + units) for this player.
-        Limits limits = resolveLimits(player);
-        boolean enforced = limits.enforced();
+        // Resolve the daily anti-whale allowance (money + units) for this player,
+        // combining the global sell cap with this item's optional per-item sell cap.
+        Limits limits = resolveSellLimits(player);
+        boolean enforced = limits.subject();
         double remainingMoney = 0;
         long remainingUnits = 0;
+        long unitCap = 0;
         if (enforced) {
             long day = epochDay();
             try {
-                if (limits.maxUnits() > 0) {
-                    remainingUnits = limits.maxUnits() - dailyDao.unitsSold(player.getUniqueId(), day, id);
+                unitCap = tighter(limits.maxUnits(), item.maxDailySell());
+                if (unitCap > 0) {
+                    long sold = dailyDao.unitsSold(player.getUniqueId(), day, id);
+                    remainingUnits = unitCap - sold;
                     if (remainingUnits <= 0) {
-                        return TradeResult.fail(limitReachedMessage());
+                        return TradeResult.fail(unitsCappedMessage(false, sold, unitCap, item));
                     }
                 }
                 if (limits.maxMoney() > 0) {
                     remainingMoney = limits.maxMoney() - dailyDao.moneyEarned(player.getUniqueId(), day);
                     if (remainingMoney <= 0) {
-                        return TradeResult.fail(limitReachedMessage());
+                        return TradeResult.fail(moneyCappedMessage(false));
                     }
                 }
             } catch (SQLException e) {
@@ -222,9 +273,9 @@ public final class MarketService {
         // Integrate the price across the order (earn a little less per unit as
         // stock rises), stopping at whatever the daily limit allows.
         Plan plan = simulateSell(item, state.currentPrice(), state.stock(),
-                Math.min(qty, have), enforced, limits.maxMoney(), remainingMoney, limits.maxUnits(), remainingUnits);
+                Math.min(qty, have), enforced, limits.maxMoney(), remainingMoney, unitCap, remainingUnits);
         if (plan.filled() <= 0) {
-            return TradeResult.fail(enforced ? limitReachedMessage()
+            return TradeResult.fail(enforced ? moneyCappedMessage(false)
                     : "You have no " + item.label() + " to sell.");
         }
 
@@ -265,7 +316,7 @@ public final class MarketService {
         if (item == null || state == null) {
             return new Plan(0, 0, Double.NaN, 0);
         }
-        return simulateBuy(item, state.currentPrice(), state.stock(), qty);
+        return simulateBuy(item, state.currentPrice(), state.stock(), qty, false, 0, 0, 0, 0);
     }
 
     /** Preview the proceeds of selling up to {@code qty} (ignoring daily limits) for GUIs. */
@@ -278,14 +329,23 @@ public final class MarketService {
         return simulateSell(item, state.currentPrice(), state.stock(), qty, false, 0, 0, 0, 0);
     }
 
-    private Plan simulateBuy(MarketItem item, double startPrice, long startStock, int want) {
+    private Plan simulateBuy(MarketItem item, double startPrice, long startStock, int want,
+                            boolean limited, double maxMoney, double remainingMoney,
+                            long maxUnits, long remainingUnits) {
         long stock = startStock;
         double price = startPrice;
         double total = 0;
         int filled = 0;
         int cap = (int) Math.max(0, Math.min(want, stock));
+        if (limited && maxUnits > 0) {
+            cap = (int) Math.min(cap, remainingUnits);
+        }
         for (; filled < cap; filled++) {
-            total += engine.buyPrice(price);
+            double unit = engine.buyPrice(price);
+            if (limited && maxMoney > 0 && total + unit > remainingMoney) {
+                break; // this unit would exceed the daily spend cap
+            }
+            total += unit;
             stock -= 1;
             price = engine.nextPrice(item, price, stock);
         }
@@ -390,26 +450,39 @@ public final class MarketService {
         }
     }
 
-    private Limits resolveLimits(Player player) {
+    private Limits resolveSellLimits(Player player) {
         PluginConfig.SellLimits cfg = plugin.config().market().sellLimits();
-        if (!cfg.enabled()) {
+        return resolveLimits(player, cfg.enabled(), cfg.bypassPermission(),
+                cfg.maxMoneyPerDay(), cfg.maxUnitsPerDay(), cfg.ranks());
+    }
+
+    private Limits resolveBuyLimits(Player player) {
+        PluginConfig.BuyLimits cfg = plugin.config().market().buyLimits();
+        return resolveLimits(player, cfg.enabled(), cfg.bypassPermission(),
+                cfg.maxMoneyPerDay(), cfg.maxUnitsPerDay(), cfg.ranks());
+    }
+
+    /**
+     * Resolve a player's daily allowance from a limits config. Returns {@code subject=false}
+     * only when the limit system is disabled or the player holds the bypass permission;
+     * otherwise {@code subject=true} even if both global axes are unlimited, so an
+     * item's per-item cap can still be applied by the caller. The most generous rank wins.
+     */
+    private Limits resolveLimits(Player player, boolean enabled, String bypass,
+                                double baseMoney, long baseUnits, List<PluginConfig.RankLimit> ranks) {
+        if (!enabled) {
             return Limits.UNLIMITED;
         }
-        if (cfg.bypassPermission() != null && !cfg.bypassPermission().isBlank()
-                && player.hasPermission(cfg.bypassPermission())) {
+        if (bypass != null && !bypass.isBlank() && player.hasPermission(bypass)) {
             return Limits.UNLIMITED;
         }
-        double maxMoney = cfg.maxMoneyPerDay();
-        long maxUnits = cfg.maxUnitsPerDay();
-        for (PluginConfig.RankLimit rank : cfg.ranks()) {
+        double maxMoney = baseMoney;
+        long maxUnits = baseUnits;
+        for (PluginConfig.RankLimit rank : ranks) {
             if (player.hasPermission(rank.permission())) {
                 maxMoney = moreGenerous(maxMoney, rank.maxMoneyPerDay());
                 maxUnits = moreGenerous(maxUnits, rank.maxUnitsPerDay());
             }
-        }
-        // Both axes unlimited ⇒ nothing to enforce.
-        if (maxMoney <= 0 && maxUnits <= 0) {
-            return Limits.UNLIMITED;
         }
         return new Limits(true, maxMoney, maxUnits);
     }
@@ -429,8 +502,27 @@ public final class MarketService {
         return Math.max(a, b);
     }
 
-    private String limitReachedMessage() {
-        return "Daily sell limit reached — resets in ~" + hoursUntilReset() + "h.";
+    /** The stricter of two unit caps (0 = unlimited); 0 only when both are unlimited. */
+    private static long tighter(long a, long b) {
+        if (a <= 0) {
+            return Math.max(b, 0);
+        }
+        if (b <= 0) {
+            return a;
+        }
+        return Math.min(a, b);
+    }
+
+    /** "You've bought/sold N/CAP <Item> today (daily limit) — resets in ~Xh." */
+    private String unitsCappedMessage(boolean buy, long done, long cap, MarketItem item) {
+        return "You've " + (buy ? "bought" : "sold") + " " + done + "/" + cap + " " + item.label()
+                + " &7today (daily limit) — resets in ~" + hoursUntilReset() + "h.";
+    }
+
+    /** The money-axis daily cap message (spending for buys, earning for sells). */
+    private String moneyCappedMessage(boolean buy) {
+        return "Daily " + (buy ? "spending" : "earning") + " limit reached — resets in ~"
+                + hoursUntilReset() + "h.";
     }
 
     private long epochDay() {

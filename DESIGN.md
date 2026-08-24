@@ -73,8 +73,9 @@ Not a shop with an infinite vending machine — a **real commodities market** wi
 **Market rules & safeguards:**
 - **Cash is effectively infinite; only *item* stock is finite.** The market is the money faucet *and* sink; only inventory can run dry.
 - **Buy/sell spread (margin):** buy price sits slightly above sell price (configurable). *(Confirmed live: mid $0.30 → buy $0.31.)*
-- **Daily per-player sell limit (anti-whale):** cap money and/or units a player can sell/day; resets daily; per-player persistent; optional per-rank ceiling; GUI shows "resets in Xh."
-- *(Optional — DECISION):* a **daily buy limit / anti-cornering** cap. **Recommendation: launch WITHOUT it; add only if hoarding becomes a real problem.**
+- **Daily per-player sell limit (anti-whale):** cap money and/or units a player can sell/day; resets daily (UTC); per-player persistent; optional per-rank ceiling (most generous wins); shared `hcm.market.limit.bypass`; GUI shows "resets in Xh."
+- **Daily per-player buy limit (anti-drain / anti-cornering) ✅:** the sell-side mirror — caps money spent and/or units bought per UTC day (own `buy_limits` config + separate SQLite tally), so no one drains a commodity the moment it's stocked. Same rank-escalation + shared bypass; also applies to Crate/Amazon store orders.
+- **Per-item daily caps ✅:** each catalog entry may set `max_daily_sell` / `max_daily_buy` (per-player, per-item, per-day unit caps) that stack **on top of** the global limits — the tighter wins — so rare items are tightly controlled while commons stay high-volume. Rule of thumb: sell ≈ 2% / buy ≈ 4% of `full_stock`.
 **Curated & lean on purpose.** The house commodity list is a **deliberately small** set of core resources (ores, staples) — NOT every item in the game. Everything else is sold player-to-player via the **Crate Marketplace (§3.2b)**, which avoids turning farmable items (bread, etc.) into house-money faucets. Rule of thumb: **raw/limited stuff → house market; farmable/crafted/long-tail stuff → the Marketplace.**
 **Scope:** these dynamic prices are the **Crate house-market side ONLY.** QuickShop sets its own prices and is untouched. This market **replaces DynamicShopGUI entirely.**
 ### 3.2 Crate — Ordering & Shipping
@@ -258,7 +259,7 @@ SQLite via JDBC. Tables:
 - **Marketplace:** Pallet locations + owners; listings (item, price, qty, seller); accrued fees.
 - **Minis:** per-type minted count + circulation; per-individual unique ID, current owner, provenance/price history; Vending Machine listings; Auction House listings + escrowed bids + close times.
 - **Custom blocks:** placed PC / Mini Workbench / Vending Machine / Display Case / **Pallet** locations + owners.
-- **Daily limits:** per-player sell (and optional buy) counters, reset daily.
+- **Daily limits:** per-player sell + buy counters (per-item too), reset daily (UTC).
 Everything survives restarts. **Back up the DB before every migration (see §11).**
 ---
 ## 6. Phased Build Plan (for Claude Code)
@@ -288,11 +289,10 @@ Then: retire DynamicShopGUI now that Phase 3's market GUI is live (server-side r
 - **PC = a browser; features are Sites** (Crate now; Towny plots + dashboard later).
 - **Minis** are sellable (Collectibles department) via Vending Machine (fixed) + Auction House (bidding).
 - **Marketplace fee = small % commission** (default), optional per-Pallet daily storage fee.
-- **Pricing:** finite-stock, **elasticity scaled to each item's range**, **integrated bulk pricing**, buy/sell spread, daily sell limit.
+- **Pricing:** finite-stock, **elasticity scaled to each item's range**, **integrated bulk pricing**, buy/sell spread, daily sell + buy limits with per-item caps.
 - Minis: configurable mint caps, fixed/escalating pricing, per-entry craftable flag, custom Mini Workbench, admin-defined empty-by-default recipes.
 - Shipping: real 1/2/3-day at 20% / 10% / free (percentage default; flat/Prime available).
 **Still open:**
-- **Daily buy limit / anti-cornering** — *rec: launch without it.*
 - **Marketplace pricing** — seller-set fixed price (rec) vs. optional dynamic drift.
 - **PC protection** — respect Towny/WG perms (rec: yes).
 - **Series concepts & rarity names** — creative call (ongoing).

@@ -110,6 +110,17 @@ vending machine. The market holds a real **stock** count per commodity:
   unbuyable until players sell some in.
 - **Daily per-player sell limit** (anti-whale): caps money and/or units sold per
   UTC day; resets daily; bypass with `hcm.market.limit.bypass` or raise per rank.
+- **Daily per-player buy limit** (anti-drain): the sell-side mirror, so no one
+  drains a commodity the moment it's stocked. Same shape, same bypass node.
+- **Per-item daily caps:** each catalog entry may set `max_daily_sell` /
+  `max_daily_buy`, enforced per-player-per-item-per-day **on top of** the global
+  caps — the tighter one wins. Rare items stay tight while commons run high volume.
+- **Stock never reaches `full_stock`:** that value is the price curve's
+  denominator, not a target — the market always keeps room to sell into.
+  `initial_stock >= full_stock` is clamped to 85% with a warning.
+- **Prices are hard-clamped to `floor`/`ceiling`** everywhere — stored, displayed,
+  and quoted. Inertia may smooth price *within* the band, never outside it, and a
+  price cached under an older config is snapped back into range on reload.
 - **Price history** is snapshotted periodically (for the Phase 5 dashboard).
 
 Amazon side only; QuickShop is untouched. Money flows through **Vault** (cash is
@@ -123,6 +134,9 @@ these commands drive the engine:
 | `/hcm market history <item>` | Recent price/stock snapshots. |
 | `/hcm market buy <item> <qty>` | Pay via Vault, receive items, stock −N (price rises). |
 | `/hcm market sell <item> <qty>` | Hand over items, paid via Vault, stock +N (price falls). |
+| `/hcm market resetstock <item\|all>` | **(admin)** Reseed stock from config's `initial_stock` **and** snap price onto the curve — the intended way to apply a new economy design. `all` asks for confirmation. |
+| `/hcm market setstock <item> <amount>` | **(admin)** Set one item's stock (capped below `full_stock`), price recalculated. |
+| `/hcm balance` | Your Vault money and Arcade tokens in one place. |
 
 **Requires Vault + an economy plugin** (EssentialsX). Without one, buy/sell are
 refused with a clear message (everything else still works).
@@ -208,8 +222,11 @@ armor-stand spawning, and the checkmark web-import.
 | Node | Default | Grants |
 |---|---|---|
 | `hcm.admin` | op | All admin commands (`/hcm …`) + all child nodes |
-| `hcm.use` | all | Run `/hcm` (view market list/prices) |
+| `hcm.use` | op | Parent node granting both market view nodes below (back-compat) |
+| `hcm.market.list` | op | `/hcm market list` — dump the FULL catalog (players use the PC GUI) |
+| `hcm.market.price` | all | `/hcm market price\|history <item>` + `/hcm balance` |
 | `hcm.market.order` | all | Buy from / sell to the dynamic market |
+| `hcm.market.limit.bypass` | op | Exempt from daily buy/sell limits AND per-item caps |
 | `hcm.pc.use` | all | Open the Amazon GUI on a placed PC |
 | `hcm.pc.craft` | all | Craft the PC at a Workbench |
 | `hcm.workbench.place` | all | Place a Mini Workbench |

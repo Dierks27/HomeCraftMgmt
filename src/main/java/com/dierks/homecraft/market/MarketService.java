@@ -94,24 +94,57 @@ public final class MarketService {
         }
 
         long now = System.currentTimeMillis();
+        int rebounded = 0;
         Map<String, MarketState> newStates = new LinkedHashMap<>();
         for (MarketItem item : catalog.values()) {
             MarketState state = loaded.get(item.id());
             if (state == null) {
-                state = new MarketState(item.id(), 0, item.initialStock(), now);
+                state = new MarketState(item.id(), 0, seedStock(item), now);
                 state.setCurrentPrice(engine.targetPrice(item, state.stock()));
                 persist(state);
             } else if (!state.isSeeded()) {
                 // Row carried forward from Phase 2 (sentinel stock = -1): seed it.
-                state.setStock(item.initialStock());
+                state.setStock(seedStock(item));
                 state.setCurrentPrice(engine.targetPrice(item, state.stock()));
                 state.setUpdatedAt(now);
                 persist(state);
+            } else if (rebound(item, state)) {
+                // The admin moved floor/ceiling under a price cached from the OLD config.
+                // Snap it back inside the new band and write it through — otherwise inertia
+                // would glide from an illegal price forever (a $400 cache under a $96
+                // ceiling never converges, it just decays toward it while showing 4x).
+                state.setUpdatedAt(now);
+                persist(state);
+                rebounded++;
             }
             newStates.put(item.id(), state);
         }
         this.states = newStates;
-        plugin.getLogger().info("Market engine loaded " + catalog.size() + " commodity(ies).");
+        plugin.getLogger().info("Market engine loaded " + catalog.size() + " commodity(ies)."
+                + (rebounded > 0 ? " Clamped " + rebounded + " price(s) back inside the configured floor/ceiling." : ""));
+    }
+
+    /** Starting stock for a fresh/unseeded item, held strictly below {@code full_stock}. */
+    private static long seedStock(MarketItem item) {
+        return Math.min(item.initialStock(), maxStock(item));
+    }
+
+    /**
+     * Force a state's cached mid price inside its item's current floor/ceiling.
+     * A non-finite price (corrupt row) is rebuilt from the stock curve instead.
+     *
+     * @return true if the price actually moved (caller should persist).
+     */
+    private boolean rebound(MarketItem item, MarketState state) {
+        double current = state.currentPrice();
+        double fixed = Double.isFinite(current)
+                ? PricingEngine.clamp(current, item.floor(), item.ceiling())
+                : engine.targetPrice(item, state.stock());
+        if (fixed == current) {
+            return false;
+        }
+        state.setCurrentPrice(fixed);
+        return true;
     }
 
     public Collection<MarketItem> catalog() {
@@ -126,18 +159,45 @@ public final class MarketService {
         return states.get(id);
     }
 
-    /** Current mid price. */
+    /**
+     * Current mid price, always inside the configured floor/ceiling. The stored value
+     * is clamped on reload, but we clamp on read too so a stale cache can never be
+     * displayed (or charged) outside the band the admin configured.
+     */
     public double price(String id) {
         MarketState state = states.get(id);
-        return state != null ? state.currentPrice() : Double.NaN;
+        if (state == null) {
+            return Double.NaN;
+        }
+        MarketItem item = catalog.get(id);
+        return item == null ? state.currentPrice()
+                : PricingEngine.clamp(state.currentPrice(), item.floor(), item.ceiling());
     }
 
+    /** Ask price — clamped to the band, so a player never pays above the ceiling. */
     public double buyPrice(String id) {
-        return engine.buyPrice(price(id));
+        return ask(catalog.get(id), price(id));
     }
 
+    /** Bid price — clamped to the band, so the market never pays below the floor. */
     public double sellPrice(String id) {
-        return engine.sellPrice(price(id));
+        return bid(catalog.get(id), price(id));
+    }
+
+    /**
+     * The spread-adjusted ask, held inside the item's band. floor/ceiling are a hard
+     * contract on every price a player ever sees or pays — the spread widens the mid
+     * within the band, it never pushes a quote outside it.
+     */
+    private double ask(MarketItem item, double mid) {
+        double price = engine.buyPrice(mid);
+        return item == null ? price : PricingEngine.clamp(price, item.floor(), item.ceiling());
+    }
+
+    /** The spread-adjusted bid, held inside the item's band. Mirrors {@link #ask}. */
+    private double bid(MarketItem item, double mid) {
+        double price = engine.sellPrice(mid);
+        return item == null ? price : PricingEngine.clamp(price, item.floor(), item.ceiling());
     }
 
     // ---------------------------------------------------------------------
@@ -215,7 +275,7 @@ public final class MarketService {
             leftover.values().forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
         }
 
-        commit(state, plan);   // BUY SUBTRACTS from market stock; price ends where the order ended
+        commit(item, state, plan);   // BUY SUBTRACTS from market stock; price ends where the order ended
 
         try {
             buyDao.record(player.getUniqueId(), epochDay(), id, plan.filled(), plan.total());
@@ -287,7 +347,7 @@ public final class MarketService {
             return TradeResult.fail("Payout failed — your items were returned.");
         }
 
-        commit(state, plan);   // SELL ADDS to market stock
+        commit(item, state, plan);   // SELL ADDS to market stock
 
         try {
             dailyDao.record(player.getUniqueId(), epochDay(), id, plan.filled(), plan.total());
@@ -333,7 +393,7 @@ public final class MarketService {
                             boolean limited, double maxMoney, double remainingMoney,
                             long maxUnits, long remainingUnits) {
         long stock = startStock;
-        double price = startPrice;
+        double price = PricingEngine.clamp(startPrice, item.floor(), item.ceiling());
         double total = 0;
         int filled = 0;
         int cap = (int) Math.max(0, Math.min(want, stock));
@@ -341,7 +401,7 @@ public final class MarketService {
             cap = (int) Math.min(cap, remainingUnits);
         }
         for (; filled < cap; filled++) {
-            double unit = engine.buyPrice(price);
+            double unit = ask(item, price);
             if (limited && maxMoney > 0 && total + unit > remainingMoney) {
                 break; // this unit would exceed the daily spend cap
             }
@@ -356,7 +416,7 @@ public final class MarketService {
                              boolean limited, double maxMoney, double remainingMoney,
                              long maxUnits, long remainingUnits) {
         long stock = startStock;
-        double price = startPrice;
+        double price = PricingEngine.clamp(startPrice, item.floor(), item.ceiling());
         double total = 0;
         int filled = 0;
         int cap = Math.max(0, want);
@@ -364,7 +424,7 @@ public final class MarketService {
             cap = (int) Math.min(cap, remainingUnits);
         }
         for (; filled < cap; filled++) {
-            double unit = Math.max(0.0, engine.sellPrice(price));
+            double unit = Math.max(0.0, bid(item, price));
             if (limited && maxMoney > 0 && total + unit > remainingMoney) {
                 break; // this unit would exceed the daily earning cap
             }
@@ -375,12 +435,91 @@ public final class MarketService {
         return new Plan(filled, total, price, stock);
     }
 
-    /** Apply a plan's resulting stock + price to the state and persist. */
-    private void commit(MarketState state, Plan plan) {
+    /** Apply a plan's resulting stock + price to the state and persist (price re-clamped). */
+    private void commit(MarketItem item, MarketState state, Plan plan) {
         state.setStock(plan.endStock());
-        state.setCurrentPrice(plan.endPrice());
+        state.setCurrentPrice(PricingEngine.clamp(plan.endPrice(), item.floor(), item.ceiling()));
         state.setUpdatedAt(System.currentTimeMillis());
         persist(state);
+    }
+
+    // ---------------------------------------------------------------------
+    //  Admin stock management — apply a new economy design to a live database
+    // ---------------------------------------------------------------------
+
+    /** Outcome of an admin stock write. {@code capped} = the request was clamped below full_stock. */
+    public record StockResult(boolean ok, String error, long stock, double price, boolean capped) {
+        static StockResult fail(String error) {
+            return new StockResult(false, error, 0, 0, false);
+        }
+    }
+
+    /**
+     * The highest stock an item may actually hold: one unit below {@code full_stock}.
+     *
+     * <p>{@code full_stock} is the <em>denominator of the price curve</em>, not a target to
+     * reach — the market must always keep room for players to sell into, or an item silently
+     * becomes sell-only-at-floor with no headroom at all.
+     */
+    public static long maxStock(MarketItem item) {
+        return Math.max(0L, item.fullStock() - 1);
+    }
+
+    /**
+     * Reset one commodity to its configured {@code initial_stock} <em>and</em> recompute its
+     * price from the curve at that stock level.
+     *
+     * <p>Resetting stock alone is not enough: the inertia system would keep the old cached
+     * price and only glide toward the new curve, so a redesigned item would show a stale
+     * price for hours. A reset means <b>stock → curve price → both written through</b>.
+     */
+    public StockResult resetStock(String id) {
+        MarketItem item = catalog.get(id);
+        MarketState state = states.get(id);
+        if (item == null || state == null) {
+            return StockResult.fail("No market item '" + id + "'.");
+        }
+        long stock = Math.min(item.initialStock(), maxStock(item));
+        state.setStock(stock);
+        state.setCurrentPrice(engine.targetPrice(item, stock));   // snap, don't glide
+        state.setUpdatedAt(System.currentTimeMillis());
+        persist(state);
+        return new StockResult(true, null, state.stock(), state.currentPrice(),
+                stock < item.initialStock());
+    }
+
+    /** Reset every commodity to its configured initial stock + curve price. @return items reset. */
+    public int resetAllStock() {
+        int count = 0;
+        for (MarketItem item : catalog.values()) {
+            if (resetStock(item.id()).ok()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Manually set one commodity's stock, snapping its price to the curve for that level.
+     * Refuses to seat stock at or above {@code full_stock} — the request is capped at
+     * {@code full_stock - 1} and reported back as {@code capped}.
+     */
+    public StockResult setStock(String id, long amount) {
+        MarketItem item = catalog.get(id);
+        MarketState state = states.get(id);
+        if (item == null || state == null) {
+            return StockResult.fail("No market item '" + id + "'.");
+        }
+        if (amount < 0) {
+            return StockResult.fail("Stock cannot be negative.");
+        }
+        long cap = maxStock(item);
+        long stock = Math.min(amount, cap);
+        state.setStock(stock);
+        state.setCurrentPrice(engine.targetPrice(item, stock));
+        state.setUpdatedAt(System.currentTimeMillis());
+        persist(state);
+        return new StockResult(true, null, state.stock(), state.currentPrice(), stock < amount);
     }
 
     /** Record a price/stock snapshot for every commodity (periodic history). */

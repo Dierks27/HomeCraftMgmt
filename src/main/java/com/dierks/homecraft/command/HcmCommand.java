@@ -15,24 +15,37 @@ import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * {@code /hcm} — admin & utility commands.
  * <ul>
  *   <li>{@code /hcm reload} — reload config.yml + recipes + market catalog. (admin)</li>
  *   <li>{@code /hcm give <workbench|pc> [player]} — hand out a custom item. (admin)</li>
- *   <li>{@code /hcm market list} — list catalog + live prices.</li>
- *   <li>{@code /hcm market price <item>} — inspect one item.</li>
+ *   <li>{@code /hcm market list} — list catalog + live prices. (hcm.market.list, op-only)</li>
+ *   <li>{@code /hcm market price|history <item>} — inspect one item. (hcm.market.price, all)</li>
  *   <li>{@code /hcm market buy|sell <item> <qty>} — trade against the engine. (hcm.market.order)</li>
+ *   <li>{@code /hcm market resetstock <item|all>} — reseed stock + price from config. (admin)</li>
+ *   <li>{@code /hcm market setstock <item> <amount>} — set one item's stock. (admin)</li>
+ *   <li>{@code /hcm balance} — Vault money + Arcade tokens together. (hcm.market.price)</li>
  * </ul>
+ *
+ * <p>Each subcommand checks its own permission — the command node itself is ungated, so
+ * splitting {@code hcm.use} into {@code hcm.market.list} / {@code hcm.market.price} can
+ * hide the full catalog dump from players without also locking them out of {@code /hcm}.
  */
 public final class HcmCommand implements CommandExecutor, TabCompleter {
 
     private static final int MAX_QTY = 4096;
+    /** How long a {@code resetstock all} confirmation stays armed. */
+    private static final long RESET_CONFIRM_WINDOW_MS = 10_000L;
 
     private final HomeCraftManagement plugin;
+    /** Sender name → when they armed a {@code resetstock all}. */
+    private final Map<String, Long> resetConfirmations = new HashMap<>();
 
     public HcmCommand(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -109,6 +122,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
                 new com.dierks.homecraft.gui.arcade.ArcadeMenu(plugin, player).open(player);
             }
+            case "balance", "bal", "wallet" -> handleBalance(sender);
             case "tokens" -> handleTokens(sender, args);
             case "quests", "quest" -> {
                 if (!(sender instanceof Player player)) {
@@ -408,10 +422,20 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
 
     private void handleMarket(CommandSender sender, String[] args) {
         MarketService market = plugin.market();
+        // Bare `/hcm market` used to mean "list". Now that the full catalog dump is
+        // op-only, show a player what they CAN do instead of denying them outright.
+        if (args.length < 2 && !sender.hasPermission("hcm.market.list")) {
+            marketUsage(sender);
+            return;
+        }
         String sub = args.length >= 2 ? args[1].toLowerCase(Locale.ROOT) : "list";
 
         switch (sub) {
             case "list" -> {
+                // Dumping all 263 commodities is an admin/console view; players browse in the PC GUI.
+                if (denyUnless(sender, "hcm.market.list")) {
+                    return;
+                }
                 if (market.catalog().isEmpty()) {
                     sender.sendMessage(Text.of("&7The market catalog is empty."));
                     return;
@@ -426,6 +450,10 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
             case "price" -> {
+                // Checking one item is a player convenience — no PC block needed.
+                if (denyUnless(sender, "hcm.market.price")) {
+                    return;
+                }
                 if (args.length < 3) {
                     sender.sendMessage(Text.of("&cUsage: /hcm market price <item>"));
                     return;
@@ -442,11 +470,14 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                         + " &7/ full &f" + item.fullStock()));
                 sender.sendMessage(Text.of("&7  buy: &a" + plugin.economy().format(market.buyPrice(item.id()))
                         + " &7 sell: &c" + plugin.economy().format(market.sellPrice(item.id()))
-                        + " &7 mid: &f" + plugin.economy().format(state.currentPrice())));
+                        + " &7 mid: &f" + plugin.economy().format(market.price(item.id()))));
                 sender.sendMessage(Text.of("&7  floor: &f" + plugin.economy().format(item.floor())
                         + " &7 ceiling: &f" + plugin.economy().format(item.ceiling())));
             }
             case "history" -> {
+                if (denyUnless(sender, "hcm.market.price")) {
+                    return;
+                }
                 if (args.length < 3) {
                     sender.sendMessage(Text.of("&cUsage: /hcm market history <item>"));
                     return;
@@ -471,8 +502,130 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             }
             case "buy" -> handleTrade(sender, args, true);
             case "sell" -> handleTrade(sender, args, false);
-            default -> sender.sendMessage(Text.of("&cUsage: /hcm market <list|price|history|buy|sell> …"));
+            case "resetstock" -> handleResetStock(sender, args);
+            case "setstock" -> handleSetStock(sender, args);
+            default -> marketUsage(sender);
         }
+    }
+
+    /** The market subcommands this particular sender is actually allowed to run. */
+    private void marketUsage(CommandSender sender) {
+        List<String> subs = new ArrayList<>();
+        if (sender.hasPermission("hcm.market.list")) {
+            subs.add("list");
+        }
+        if (sender.hasPermission("hcm.market.price")) {
+            subs.add("price <item>");
+            subs.add("history <item>");
+        }
+        if (sender.hasPermission("hcm.market.order")) {
+            subs.add("buy|sell <item> <qty>");
+        }
+        if (sender.hasPermission("hcm.admin")) {
+            subs.add("resetstock <item|all>");
+            subs.add("setstock <item> <amount>");
+        }
+        if (subs.isEmpty()) {
+            sender.sendMessage(Text.of("&cYou don't have permission."));
+            return;
+        }
+        sender.sendMessage(Text.of("&cUsage: &e/hcm market &7" + String.join(" &7| &7", subs)));
+    }
+
+    /**
+     * {@code /hcm market resetstock <item|all>} — reseed stock from config's
+     * {@code initial_stock} and snap the price back onto the curve. This is the intended
+     * way to apply a new economy design: editing the catalog and reloading preserves
+     * existing stock by design, so redesigned items would otherwise keep old prices.
+     *
+     * <p>{@code all} is destructive across the whole catalog, so it is confirm-gated.
+     */
+    private void handleResetStock(CommandSender sender, String[] args) {
+        if (denyUnless(sender, "hcm.admin")) {
+            return;
+        }
+        MarketService market = plugin.market();
+        if (args.length < 3) {
+            sender.sendMessage(Text.of("&cUsage: /hcm market resetstock <item|all>"));
+            return;
+        }
+        String target = args[2].toLowerCase(Locale.ROOT);
+
+        if (target.equals("all")) {
+            int size = market.catalog().size();
+            if (!confirmed(sender)) {
+                sender.sendMessage(Text.of("&eThis will reset stock for &f" + size + " &eitem(s) to their config "
+                        + "&finitial_stock&e, recalculating every price from the curve."));
+                sender.sendMessage(Text.of("&eType the command again within &f"
+                        + (RESET_CONFIRM_WINDOW_MS / 1000) + "s &eto confirm."));
+                return;
+            }
+            int reset = market.resetAllStock();
+            sender.sendMessage(Text.of("&aReset stock + price for &f" + reset + " &acommodity(ies) from config."));
+            return;
+        }
+
+        MarketService.StockResult result = market.resetStock(target);
+        if (!result.ok()) {
+            sender.sendMessage(Text.of("&c" + result.error()));
+            return;
+        }
+        sender.sendMessage(Text.of("&aReset &f" + target + " &7→ stock &f" + result.stock()
+                + " &7mid &f" + plugin.economy().format(result.price())
+                + (result.capped() ? " &8(initial_stock capped below full_stock)" : "")));
+    }
+
+    /** {@code /hcm market setstock <item> <amount>} — fine-tune one item without a full reset. */
+    private void handleSetStock(CommandSender sender, String[] args) {
+        if (denyUnless(sender, "hcm.admin")) {
+            return;
+        }
+        if (args.length < 4) {
+            sender.sendMessage(Text.of("&cUsage: /hcm market setstock <item> <amount>"));
+            return;
+        }
+        String id = args[2].toLowerCase(Locale.ROOT);
+        long amount;
+        try {
+            amount = Long.parseLong(args[3]);
+        } catch (NumberFormatException e) {
+            sender.sendMessage(Text.of("&cStock must be a whole number."));
+            return;
+        }
+        if (amount < 0) {
+            sender.sendMessage(Text.of("&cStock cannot be negative."));
+            return;
+        }
+
+        MarketService market = plugin.market();
+        MarketItem item = market.item(id);
+        MarketService.StockResult result = market.setStock(id, amount);
+        if (!result.ok()) {
+            sender.sendMessage(Text.of("&c" + result.error()));
+            return;
+        }
+        if (result.capped() && item != null) {
+            sender.sendMessage(Text.of("&eStock must stay below &ffull_stock &e(" + item.fullStock()
+                    + ") so the market always has room to sell into — capped at &f" + result.stock() + "&e."));
+        }
+        sender.sendMessage(Text.of("&aSet &f" + id + " &7→ stock &f" + result.stock()
+                + " &7mid &f" + plugin.economy().format(result.price())));
+    }
+
+    /**
+     * Two-step confirmation for {@code resetstock all}: the first call arms, a second call
+     * from the same sender within {@link #RESET_CONFIRM_WINDOW_MS} executes.
+     */
+    private boolean confirmed(CommandSender sender) {
+        String key = sender.getName();
+        long now = System.currentTimeMillis();
+        Long armed = resetConfirmations.get(key);
+        if (armed != null && now - armed <= RESET_CONFIRM_WINDOW_MS) {
+            resetConfirmations.remove(key);
+            return true;
+        }
+        resetConfirmations.put(key, now);
+        return false;
     }
 
     private void handleTrade(CommandSender sender, String[] args, boolean buy) {
@@ -542,15 +695,49 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.of("&e/hcm give <printer|pc|card <id>|filament <color> <n>> [player]"));
             sender.sendMessage(Text.of("&e/hcm printer <public|private> &7- flag the Printer you're looking at"));
         }
-        sender.sendMessage(Text.of("&e/hcm market list &7- list commodities (buy/sell/stock)"));
-        sender.sendMessage(Text.of("&e/hcm market price <item> &7- inspect a commodity"));
-        sender.sendMessage(Text.of("&e/hcm market history <item> &7- recent price snapshots"));
-        sender.sendMessage(Text.of("&e/hcm market buy|sell <item> <qty> &7- trade"));
+        if (sender.hasPermission("hcm.admin")) {
+            sender.sendMessage(Text.of("&e/hcm market resetstock <item|all> &7- reseed stock+price from config"));
+            sender.sendMessage(Text.of("&e/hcm market setstock <item> <amount> &7- set one item's stock"));
+        }
+        if (sender.hasPermission("hcm.market.list")) {
+            sender.sendMessage(Text.of("&e/hcm market list &7- list commodities (buy/sell/stock)"));
+        }
+        if (sender.hasPermission("hcm.market.price")) {
+            sender.sendMessage(Text.of("&e/hcm market price <item> &7- inspect a commodity"));
+            sender.sendMessage(Text.of("&e/hcm market history <item> &7- recent price snapshots"));
+            sender.sendMessage(Text.of("&e/hcm balance &7- your money and Arcade tokens"));
+        }
+        if (sender.hasPermission("hcm.market.order")) {
+            sender.sendMessage(Text.of("&e/hcm market buy|sell <item> <qty> &7- trade"));
+        }
         sender.sendMessage(Text.of("&e/hcm mini museum &7- open the Mini Museum"));
         sender.sendMessage(Text.of("&e/hcm auction &7- open the Mini Auction House"));
         if (sender.hasPermission("hcm.admin")) {
             sender.sendMessage(Text.of("&e/hcm mini list|give <id> [player] &7- admin Minis"));
         }
+    }
+
+    // ---------------------------------------------------------------------
+    //  balance (combined wallet: Vault money + Arcade tokens)
+    // ---------------------------------------------------------------------
+
+    /**
+     * {@code /hcm balance} — money and tokens in one place. Essentials' {@code /balance}
+     * only knows about Vault; tokens live in HCM, so a player otherwise has to check two
+     * commands to see what they can actually spend.
+     */
+    private void handleBalance(CommandSender sender) {
+        if (denyUnless(sender, "hcm.market.price")) {
+            return;
+        }
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Text.of("&cOnly players have a balance."));
+            return;
+        }
+        player.sendMessage(plugin.economy().isEnabled()
+                ? Text.of("&7Balance: &a" + plugin.economy().format(plugin.economy().balance(player)))
+                : Text.of("&7Balance: &cunavailable &7(no Vault economy)"));
+        player.sendMessage(Text.of("&7Tokens: &6" + plugin.arcade().balance(player.getUniqueId())));
     }
 
     // ---------------------------------------------------------------------
@@ -722,9 +909,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "packs", "binder", "auction", "arcade", "tokens", "quests");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests");
             } else {
-                addMatches(out, args[0], "market", "mini", "packs", "binder", "auction", "arcade", "tokens");
+                addMatches(out, args[0], "market", "mini", "packs", "binder", "auction", "arcade", "balance", "tokens");
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("mini")) {
             addMatches(out, args[1], "museum", "list", "give", "capturestand");
@@ -793,9 +980,16 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("market")) {
             addMatches(out, args[1], "list", "price", "history", "buy", "sell");
+            if (sender.hasPermission("hcm.admin")) {
+                addMatches(out, args[1], "resetstock", "setstock");
+            }
         } else if (args.length == 3 && args[0].equalsIgnoreCase("market")
-                && List.of("price", "history", "buy", "sell").contains(args[1].toLowerCase(Locale.ROOT))) {
+                && List.of("price", "history", "buy", "sell", "resetstock", "setstock")
+                        .contains(args[1].toLowerCase(Locale.ROOT))) {
             String prefix = args[2].toLowerCase(Locale.ROOT);
+            if (args[1].equalsIgnoreCase("resetstock")) {
+                addMatches(out, prefix, "all");
+            }
             for (MarketItem item : plugin.market().catalog()) {
                 if (item.id().startsWith(prefix)) {
                     out.add(item.id());

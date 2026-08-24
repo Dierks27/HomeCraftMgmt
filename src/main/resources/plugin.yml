@@ -30,12 +30,17 @@ commands:
       /hcm give <workbench|pc|vending|display|auction|mailbox|pallet|arcade> [player]
       /hcm give <cratemachine|scratch|pity|counter> [player]  - Arcade machines
       /hcm market list|price <item>|buy <item> <qty>|sell <item> <qty>
+      /hcm market resetstock <item|all>  - admin: reseed stock+price from config
+      /hcm market setstock <item> <amount>  - admin: set one item's stock
+      /hcm balance           - your money and Arcade tokens in one place
       /hcm display sign|hologram|maptv|remove  - bind an in-game economy display
       /hcm arcade            - open the Arcade (crates, pity, scratch tickets)
       /hcm tokens            - show your Arcade token balance
       /hcm tokens give|set|take <player> <n>  - admin: adjust tokens
       /hcm mini capturestand <miniId>  - capture a posed armor stand into a Mini
-    permission: hcm.use
+    # NOTE: deliberately NOT gated on a single node — every subcommand checks its own
+    # permission (hcm.admin, hcm.market.list, hcm.market.price, hcm.market.order, …), so
+    # a player who may check a price can still do so without being handed the whole CLI.
     aliases: [homecraft]
 
 permissions:
@@ -44,6 +49,8 @@ permissions:
     default: op
     children:
       hcm.use: true
+      hcm.market.list: true
+      hcm.market.price: true
       hcm.pc.use: true
       hcm.pc.craft: true
       hcm.workbench.place: true
@@ -54,7 +61,22 @@ permissions:
       hcm.mini.buy: true
       hcm.protection.bypass: true
   hcm.use:
-    description: Run the /hcm command (view market list/prices).
+    description: >-
+      Parent node granting both market view commands (list AND single-item price).
+      Kept for backwards compatibility — grant it to give an admin the full view.
+    default: op
+    children:
+      hcm.market.list: true
+      hcm.market.price: true
+  hcm.market.list:
+    description: >-
+      Dump the FULL market catalog with every price and stock level via
+      /hcm market list. Op-only: regular players browse the catalog in the PC GUI.
+    default: op
+  hcm.market.price:
+    description: >-
+      Check a single commodity's price and history (/hcm market price|history) and
+      view your own balance (/hcm balance). Available to everyone — no PC needed.
     default: true
   hcm.market.order:
     description: Buy from and sell to the dynamic market.

@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.dierks.homecraft'
-version = '0.17.0-buy-limits'
+version = '0.18.0-market-admin'
 description = 'HomeCraft Management — Paper plugin (market, Crate store + Marketplace, Minis, web dashboard, in-game displays, Arcade)'
 
 // Target server: Paper 26.2 / Java 25. The toolchain is pinned to 25 so the

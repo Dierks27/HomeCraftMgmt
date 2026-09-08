@@ -64,6 +64,17 @@ public final class PluginConfig {
         }
     }
 
+    /**
+     * The filament recipe template ({@code recipes.filament}): one SHAPED recipe per
+     * DyeColor, where the {@code <dye>} ingredient becomes that colour's dye and the
+     * result is {@code output} filament of that colour.
+     */
+    public record FilamentRecipe(boolean enabled, List<String> shape, Map<Character, String> ingredients, int output) {
+        public boolean isEmpty() {
+            return !enabled || shape == null || shape.isEmpty();
+        }
+    }
+
     /** The PC's craft-grid recipe: shaped or shapeless, empty until an admin fills it. */
     public record PcRecipe(RecipeType type,
                            List<String> shape,
@@ -88,7 +99,8 @@ public final class PluginConfig {
      * {@code shinyDye} filament) + optional {@code shinyFee}.
      */
     public record Printer(Material baseBlock, String displayName, List<String> lore,
-                          double fee, org.bukkit.DyeColor shinyDye, int shinyAmount, double shinyFee) {
+                          double fee, org.bukkit.DyeColor shinyDye, int shinyAmount, double shinyFee,
+                          double publicFee) {
     }
 
     /** A daily trade allowance (0 = unlimited on that axis). */
@@ -155,15 +167,21 @@ public final class PluginConfig {
 
     // ---- Arcade (Phase 8, §3.9) — all in-game currency, never real money -------
 
-    public enum RewardType {MONEY, ITEM, MINI}
+    /**
+     * What a crate may pay out. Tokens never become money: {@code money} and sellable
+     * {@code item} rewards are rejected at config load (§11, two-currency rule).
+     */
+    public enum RewardType {CARD, MINI, PACK, FILAMENT, TOKENS}
 
     /**
-     * One weighted reward in a crate's loot table. A MINI reward names a fixed
+     * One weighted reward in a crate's loot table. CARD and MINI name a fixed
      * {@code miniId} <em>or</em> a {@code tag} pool (every Mini carrying that tag,
-     * weighted by rarity); it mints a graded Mini directly.
+     * weighted by rarity) — both issue that Mini's <b>Card</b>. PACK gives a sealed
+     * pack ({@code packId}); FILAMENT gives {@code amount} filament of {@code color}
+     * (null = random); TOKENS grants {@code amount} tokens.
      */
-    public record CrateReward(RewardType type, double amount, Material material, int itemAmount,
-                              String miniId, double weight, String tag) {
+    public record CrateReward(RewardType type, String miniId, String tag, String packId, int amount,
+                              org.bukkit.DyeColor color, double weight) {
         public boolean usesTag() {
             return tag != null && !tag.isBlank();
         }
@@ -188,7 +206,8 @@ public final class PluginConfig {
 
     /** All rarity effects + the shared knobs (radius, cadence, Mint chime, Shiny ring, wild hologram text). */
     public record MiniEffects(Map<Rarity, MiniEffect> byRarity, double radius, int tickInterval,
-                              String mintSound, String shinyParticle, String wildHologramText) {
+                              String mintSound, String shinyParticle, String wildHologramText,
+                              double caseItemScale, double caseItemHeight) {
         public MiniEffect of(Rarity rarity) {
             return byRarity.getOrDefault(rarity, MiniEffect.NONE);
         }
@@ -270,6 +289,22 @@ public final class PluginConfig {
 
     /** Online store branding shown in-game (name + display URL). */
     public record Store(String name, String displayUrl) {
+    }
+
+    /** The per-world economy sandbox (§11 #1): where money/tokens may move, and whether to log refusals. */
+    public record Worlds(List<String> economyEnabled, boolean logBlockedAttempts) {
+    }
+
+    /** SQLite backup schedule (§11 #6). */
+    public record Backups(boolean enabled, double intervalHours, int keep) {
+    }
+
+    /** Shop presentation: glow outline on shop displays (per block type), the listing hologram, and peek. */
+    public record Shops(boolean glowEnabled, double glowRadius, Map<String, String> glowColors,
+                        boolean hologramEnabled, int hologramLines, double peekRange) {
+        public String glowColor(String blockKey) {
+            return glowColors.getOrDefault(blockKey, "white");
+        }
     }
 
     /**
@@ -356,6 +391,9 @@ public final class PluginConfig {
     private Loot.MiniLoot miniLoot;
     private MiniEffects miniEffects;
     private Announce announce;
+    private Worlds worlds = new Worlds(List.of(), true);
+    private Backups backups = new Backups(true, 24, 14);
+    private Shops shops = new Shops(true, 16, Map.of(), true, 3, 6);
     private Map<String, StandData> miniStands;
     private Marketplace marketplace;
     private Map<com.dierks.homecraft.block.CustomBlockType, String> skins;
@@ -363,6 +401,7 @@ public final class PluginConfig {
     private Map<String, String> namedSkins = new LinkedHashMap<>();
     /** Every data-driven block recipe, keyed by config key (pc, printer, …, mailbox.<variant>). */
     private Map<String, BlockRecipe> recipes = new LinkedHashMap<>();
+    private FilamentRecipe filamentRecipe = new FilamentRecipe(false, List.of(), Map.of(), 3);
     private WebDashboard webDashboard;
     private Displays displays;
     private Arcade arcade;
@@ -431,6 +470,20 @@ public final class PluginConfig {
         return namedSkins.getOrDefault(key, "");
     }
 
+    /** The head texture for a Display Case pedestal style ("" = none → plain base block). */
+    public String displayCaseSkin(com.dierks.homecraft.block.DisplayCaseVariant variant) {
+        return skinNamed("display_case." + variant.key());
+    }
+
+    /** "&b{variant} Display Case" → "&bRoyal Display Case" (a name without the token keeps its text). */
+    public String displayCaseName(com.dierks.homecraft.block.DisplayCaseVariant variant) {
+        String name = miniBlocks.display().name();
+        if (name == null || name.isBlank()) {
+            name = "&b{variant} Display Case";
+        }
+        return name.contains("{variant}") ? name.replace("{variant}", variant.label()) : name;
+    }
+
     /** The head texture for a Mailbox colour variant ("" = none → plain base block). */
     public String mailboxSkin(com.dierks.homecraft.block.MailboxVariant variant) {
         return skinNamed("mailbox." + variant.key());
@@ -460,6 +513,11 @@ public final class PluginConfig {
     /** All data-driven block recipes (see {@code recipes:} in config.yml), keyed by config key. */
     public Map<String, BlockRecipe> recipes() {
         return recipes;
+    }
+
+    /** The per-colour filament recipe template ({@code recipes.filament}). */
+    public FilamentRecipe filamentRecipe() {
+        return filamentRecipe;
     }
 
     public WebDashboard webDashboard() {
@@ -496,6 +554,21 @@ public final class PluginConfig {
     /** Server-wide Mini announcements (Phase 12). */
     public Announce announce() {
         return announce;
+    }
+
+    /** The economy world sandbox (§11 #1). */
+    public Worlds worlds() {
+        return worlds;
+    }
+
+    /** Backup schedule (§11 #6). */
+    public Backups backups() {
+        return backups;
+    }
+
+    /** Shop glow / hologram / peek presentation. */
+    public Shops shops() {
+        return shops;
     }
 
     /** Posed armor-stand configurations keyed by Mini id (Phase 4d). */
@@ -542,14 +615,15 @@ public final class PluginConfig {
         if (prLore.isEmpty()) {
             prLore = List.of("&7Right-click with a Card to print a graded Mini.");
         }
-        double prFee = Math.max(0, c.getDouble("printer.fee", 50));
+        double prFee = Math.max(0, c.getDouble("printer.fee", 0));
+        double prPublicFee = Math.max(0, c.getDouble("printer.public_fee", 150));
         org.bukkit.DyeColor shinyDye = parseDye(c.getString("printer.shiny.filament", "MAGENTA"));
         if (shinyDye == null) {
             shinyDye = org.bukkit.DyeColor.MAGENTA;
         }
         int shinyAmt = Math.max(0, c.getInt("printer.shiny.amount", 2));
         double shinyFee = Math.max(0, c.getDouble("printer.shiny.fee", 0));
-        this.printer = new Printer(prBase, prName, prLore, prFee, shinyDye, shinyAmt, shinyFee);
+        this.printer = new Printer(prBase, prName, prLore, prFee, shinyDye, shinyAmt, shinyFee, prPublicFee);
 
         // ---- Card Packs (Phase 10) ----
         this.packs = readPacks(c);
@@ -588,6 +662,30 @@ public final class PluginConfig {
         readGrades(c);
         this.miniEffects = readMiniEffects(c);
         this.announce = readAnnounce(c);
+
+        // ---- Safety (Phase 13): economy world sandbox, backups, shop presentation ----
+        List<String> enabledWorlds = new ArrayList<>();
+        for (String w : c.getStringList("worlds.economy_enabled")) {
+            if (w != null && !w.isBlank()) {
+                enabledWorlds.add(w.trim());
+            }
+        }
+        this.worlds = new Worlds(enabledWorlds, c.getBoolean("worlds.log_blocked_attempts", true));
+        this.backups = new Backups(c.getBoolean("backups.enabled", true),
+                Math.max(0, c.getDouble("backups.interval_hours", 24)),
+                Math.max(0, c.getInt("backups.keep", 14)));
+        Map<String, String> glowColors = new LinkedHashMap<>();
+        ConfigurationSection gc = c.getConfigurationSection("shops.glow.color");
+        if (gc != null) {
+            for (String key : gc.getKeys(false)) {
+                glowColors.put(key.toLowerCase(Locale.ROOT), gc.getString(key, "white"));
+            }
+        }
+        this.shops = new Shops(c.getBoolean("shops.glow.enabled", true),
+                Math.max(2, c.getDouble("shops.glow.radius", 16)), glowColors,
+                c.getBoolean("shops.hologram.enabled", true),
+                Math.max(0, c.getInt("shops.hologram.lines", 3)),
+                Math.max(1, c.getDouble("shops.peek.range", 6)));
 
         // ---- Posed armor-stand Minis (Phase 4d) ----
         this.miniStands = new LinkedHashMap<>();
@@ -722,7 +820,7 @@ public final class PluginConfig {
             }
         }
 
-        int pityTokens = Math.max(0, c.getInt("arcade.pity.tokens", 3));
+        int pityTokens = Math.max(0, c.getInt("arcade.pity.tokens", 25));
         Rarity pityRarity = parseRarity(c.getString("arcade.pity.guarantees_rarity", "RARE"));
 
         double ticketCost = c.getDouble("arcade.lotto.ticket_cost_money", 250);
@@ -745,34 +843,46 @@ public final class PluginConfig {
     }
 
     private CrateReward readReward(Map<?, ?> row) {
-        String type = str(row.get("type"), "money").toLowerCase(Locale.ROOT);
+        String type = str(row.get("type"), "").toLowerCase(Locale.ROOT);
         double weight = Math.max(0.0001, number(row.get("weight"), 1));
         switch (type) {
-            case "money" -> {
-                return new CrateReward(RewardType.MONEY, Math.max(0, number(row.get("amount"), 0)),
-                        null, 0, null, weight, null);
+            case "money", "item" -> {
+                log.warning("Arcade crate reward of type '" + type + "' is not allowed — tokens must never "
+                        + "become money or sellable items (§11). Use card, mini, pack, filament or tokens. Skipped.");
+                return null;
             }
-            case "item" -> {
-                Material m = Material.matchMaterial(str(row.get("material"), "").toUpperCase(Locale.ROOT));
-                if (m == null || !m.isItem()) {
-                    return null;
-                }
-                int amt = (int) number(row.get("amount"), 1);
-                return new CrateReward(RewardType.ITEM, 0, m, Math.max(1, amt), null, weight, null);
-            }
-            case "mini" -> {
-                String mini = str(row.get("mini"), null);
+            case "card", "mini" -> {
+                String mini = str(row.get("mini"), str(row.get("card"), null));
                 String tag = str(row.get("tag"), null);
                 boolean hasMini = mini != null && !mini.isBlank();
                 boolean hasTag = tag != null && !tag.isBlank();
                 if (!hasMini && !hasTag) {
+                    log.warning("Arcade crate '" + type + "' reward needs a mini: id or a tag: — skipped.");
                     return null;
                 }
-                return new CrateReward(RewardType.MINI, 0, null, 0,
-                        hasMini ? com.dierks.homecraft.mini.MiniIds.slug(mini) : null, weight,
-                        hasTag ? tag.trim().toLowerCase(Locale.ROOT) : null);
+                return new CrateReward(type.equals("mini") ? RewardType.MINI : RewardType.CARD,
+                        hasMini ? com.dierks.homecraft.mini.MiniIds.slug(mini) : null,
+                        hasTag ? tag.trim().toLowerCase(Locale.ROOT) : null, null, 1, null, weight);
+            }
+            case "pack" -> {
+                String pack = str(row.get("pack"), null);
+                if (pack == null || pack.isBlank()) {
+                    log.warning("Arcade crate 'pack' reward needs a pack: id — skipped.");
+                    return null;
+                }
+                return new CrateReward(RewardType.PACK, null, null, pack.trim(), 1, null, weight);
+            }
+            case "filament" -> {
+                int amt = Math.max(1, (int) number(row.get("amount"), 1));
+                org.bukkit.DyeColor color = parseDye(str(row.get("color"), null));
+                return new CrateReward(RewardType.FILAMENT, null, null, null, amt, color, weight);
+            }
+            case "tokens" -> {
+                int amt = Math.max(1, (int) number(row.get("amount"), 1));
+                return new CrateReward(RewardType.TOKENS, null, null, null, amt, null, weight);
             }
             default -> {
+                log.warning("Arcade crate reward has unknown type '" + type + "' — skipped.");
                 return null;
             }
         }
@@ -789,8 +899,10 @@ public final class PluginConfig {
     private Map<com.dierks.homecraft.block.CustomBlockType, String> readSkins(FileConfiguration c) {
         Map<com.dierks.homecraft.block.CustomBlockType, String> map =
                 new EnumMap<>(com.dierks.homecraft.block.CustomBlockType.class);
+        Map<String, String> namedSkinsEarly = new LinkedHashMap<>();
         ConfigurationSection sec = c.getConfigurationSection("skins");
         if (sec == null) {
+            this.namedSkins = namedSkinsEarly;
             return map;
         }
         putSkin(map, sec, "pc", com.dierks.homecraft.block.CustomBlockType.PC);
@@ -799,7 +911,25 @@ public final class PluginConfig {
         // Two-tall Vending Machine: the lower head IS the block (legacy key: vending).
         putSkin(map, sec, sec.contains("vending_lower") ? "vending_lower" : "vending",
                 com.dierks.homecraft.block.CustomBlockType.MINI_VENDING_MACHINE);
-        putSkin(map, sec, "display_case", com.dierks.homecraft.block.CustomBlockType.DISPLAY_CASE);
+        // Display Case pedestal styles: a per-variant map (legacy single string = plain).
+        ConfigurationSection dc = sec.getConfigurationSection("display_case");
+        if (dc != null) {
+            for (com.dierks.homecraft.block.DisplayCaseVariant v : com.dierks.homecraft.block.DisplayCaseVariant.values()) {
+                String val = dc.getString(v.key(), "");
+                if (val != null && !val.isBlank()) {
+                    namedSkinsEarly.put("display_case." + v.key(), val.trim());
+                }
+            }
+        } else {
+            String legacy = sec.getString("display_case", "");
+            if (legacy != null && !legacy.isBlank()) {
+                namedSkinsEarly.put("display_case.plain", legacy.trim());
+            }
+        }
+        String plainCase = namedSkinsEarly.get("display_case.plain");
+        if (plainCase != null) {
+            map.put(com.dierks.homecraft.block.CustomBlockType.DISPLAY_CASE, plainCase);
+        }
         putSkin(map, sec, "auction", com.dierks.homecraft.block.CustomBlockType.AUCTION_HOUSE);
         // Two-state Pallet: the item + an empty placed Pallet wear pallet_empty (legacy key: pallet).
         putSkin(map, sec, sec.contains("pallet_empty") ? "pallet_empty" : "pallet",
@@ -812,7 +942,7 @@ public final class PluginConfig {
 
         // Named slots: the Pallet's loaded state, the Vending Machine's top half, and
         // one skin per Mailbox colour. A legacy single-string `mailbox:` counts as wood.
-        Map<String, String> named = new LinkedHashMap<>();
+        Map<String, String> named = new LinkedHashMap<>(namedSkinsEarly);
         putNamed(named, sec, "pallet_used");
         putNamed(named, sec, "vending_upper");
         ConfigurationSection mb = sec.getConfigurationSection("mailbox");
@@ -862,6 +992,10 @@ public final class PluginConfig {
             if (entry == null) {
                 continue;
             }
+            if (key.equalsIgnoreCase("filament")) {
+                this.filamentRecipe = readFilamentRecipe(entry);
+                continue;
+            }
             if (entry.contains("shape")) {
                 out.put(key, readBlockRecipe(c, key, "recipes." + key));
             } else {
@@ -874,6 +1008,23 @@ public final class PluginConfig {
             }
         }
         return out;
+    }
+
+    /** {@code recipes.filament}: shape + symbol map kept as raw names (one is the {@code <dye>} placeholder). */
+    private FilamentRecipe readFilamentRecipe(ConfigurationSection sec) {
+        boolean enabled = sec.getBoolean("enabled", true);
+        List<String> shape = new ArrayList<>(sec.getStringList("shape"));
+        Map<Character, String> ing = new LinkedHashMap<>();
+        ConfigurationSection is = sec.getConfigurationSection("ingredients");
+        if (is != null) {
+            for (String k : is.getKeys(false)) {
+                if (!k.isEmpty()) {
+                    ing.put(k.charAt(0), is.getString(k, ""));
+                }
+            }
+        }
+        int output = Math.max(1, sec.getInt("output", 3));
+        return new FilamentRecipe(enabled, shape, ing, output);
     }
 
     private BlockRecipe readBlockRecipe(FileConfiguration c, String key, String path) {
@@ -1084,7 +1235,7 @@ public final class PluginConfig {
         defaults.put(Rarity.COMMON, MiniEffect.NONE);
         defaults.put(Rarity.UNCOMMON, MiniEffect.NONE);
         defaults.put(Rarity.RARE, new MiniEffect("END_ROD", 2, 40, 0.3, true, "aqua", true, 7,
-                false, 0, false, null, null));
+                true, 20, false, null, null));
         defaults.put(Rarity.EPIC, new MiniEffect("ENCHANT", 6, 20, 0.4, true, "light_purple", true, 7,
                 true, 20, false, null, null));
         defaults.put(Rarity.LEGENDARY, new MiniEffect("SOUL_FIRE_FLAME", 3, 30, 0.4, true, "gold", true, 12,
@@ -1130,7 +1281,9 @@ public final class PluginConfig {
                 Math.max(1, c.getInt("minis.effects.tick_interval", 10)),
                 c.getString("minis.effects.mint_sound", "BLOCK_AMETHYST_BLOCK_CHIME"),
                 c.getString("minis.effects.shiny_particle", "GLOW"),
-                c.getString("minis.effects.wild_hologram_text", "&dA wild Mini!"));
+                c.getString("minis.effects.wild_hologram_text", "&dA wild Mini!"),
+                Math.max(0.1, c.getDouble("minis.effects.case_item_scale", 0.6)),
+                Math.max(0.0, c.getDouble("minis.effects.case_item_height", 0.9)));
     }
 
     private Announce readAnnounce(FileConfiguration c) {
@@ -1279,6 +1432,9 @@ public final class PluginConfig {
     }
 
     private org.bukkit.DyeColor parseDye(String s) {
+        if (s == null || s.isBlank()) {
+            return null;
+        }
         try {
             return org.bukkit.DyeColor.valueOf(s.trim().toUpperCase(Locale.ROOT));
         } catch (Exception e) {

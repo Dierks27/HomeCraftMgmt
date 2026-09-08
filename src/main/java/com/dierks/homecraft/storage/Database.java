@@ -382,11 +382,27 @@ public final class Database {
                 UNIQUE (world, x, y, z)
             );
             CREATE INDEX IF NOT EXISTS idx_mini_spawns_expires ON mini_spawns (expires_at);
+            """,
+
+            // v21 — Mini heads placed as plain blocks: registry for effects + a guarantee
+            // that the exact copy is dropped back on any kind of destruction.
+            """
+            CREATE TABLE IF NOT EXISTS placed_minis (
+                world     TEXT    NOT NULL,
+                x         INTEGER NOT NULL,
+                y         INTEGER NOT NULL,
+                z         INTEGER NOT NULL,
+                uid       TEXT    NOT NULL,
+                mini_id   TEXT    NOT NULL,
+                placed_at INTEGER NOT NULL,
+                UNIQUE (world, x, y, z)
+            );
             """
     };
 
     private final HomeCraftManagement plugin;
     private Connection connection;
+    private File dbFile;
 
     public Database(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -410,11 +426,17 @@ public final class Database {
             throw new SQLException("Could not create data folder: " + dir);
         }
         File dbFile = new File(dir, "homecraft.db");
+        this.dbFile = dbFile;
         this.connection = DriverManager.getConnection("jdbc:sqlite:" + dbFile.getAbsolutePath());
         try (Statement st = connection.createStatement()) {
             st.execute("PRAGMA foreign_keys = ON");
         }
         migrate();
+    }
+
+    /** The on-disk database file. */
+    public File file() {
+        return dbFile;
     }
 
     private void migrate() throws SQLException {
@@ -423,6 +445,10 @@ public final class Database {
                 st.execute("CREATE TABLE IF NOT EXISTS hcm_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
             }
             int current = schemaVersion();
+            if (current < MIGRATIONS.length && current > 0) {
+                // A schema change is about to run: keep a copy of the file first (§11 #6).
+                BackupService.preMigrationCopy(plugin, dbFile);
+            }
             for (int v = current + 1; v <= MIGRATIONS.length; v++) {
                 plugin.getLogger().info("Applying database migration v" + v + "…");
                 try (Statement st = connection.createStatement()) {

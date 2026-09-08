@@ -120,6 +120,9 @@ public final class VendingService {
 
     /** Owner stocks the held Mini as a new priced listing in the machine. */
     public Result addVending(Player owner, Location loc, double price) {
+        if (!plugin.sandbox().check(owner, "vending listing")) {
+            return Result.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
         if (price <= 0) {
             return Result.fail("Set a price above 0 first.");
         }
@@ -137,7 +140,19 @@ public final class VendingService {
             return Result.fail("Could not save the listing — try again.");
         }
         held.item().setAmount(held.item().getAmount() - 1);
+        shopsRefresh(loc);
         return Result.success();
+    }
+
+    private void shopsRefresh(Location loc) {
+        if (plugin.shops() != null && loc != null) {
+            plugin.shops().refresh(loc);
+        }
+    }
+
+    private void shopsRefresh(long listingId) {
+        vendingById(listingId).ifPresent(l -> shopsRefresh(new org.bukkit.Location(
+                org.bukkit.Bukkit.getWorld(l.world()), l.x(), l.y(), l.z())));
     }
 
     public Result setVendingPrice(Player owner, long listingId, double price) {
@@ -156,6 +171,7 @@ public final class VendingService {
         } catch (SQLException e) {
             return Result.fail("Could not update the price.");
         }
+        shopsRefresh(listingId);
         return Result.success();
     }
 
@@ -174,12 +190,16 @@ public final class VendingService {
             return Result.fail("The stored Mini is unreadable.");
         }
         giveOrDrop(owner, item);
+        shopsRefresh(listingId);
         removeVending(listingId);
         return Result.success();
     }
 
     /** A buyer purchases one listing: Vault seller-payment, item transfer, tracked. */
     public Result buyVending(Player buyer, long listingId) {
+        if (!plugin.sandbox().check(buyer, "vending purchase")) {
+            return Result.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
         Optional<MiniVendingDao.Listing> opt = vendingById(listingId);
         if (opt.isEmpty()) {
             return Result.fail("That listing is gone.");
@@ -211,6 +231,7 @@ public final class VendingService {
         plugin.miniService().transferOwner(l.uid(), buyer.getUniqueId());
         plugin.miniService().recordSale(l.uid(), l.miniId(), price, l.owner(), buyer.getUniqueId(), VENDING);
         removeVending(listingId);
+        shopsRefresh(new org.bukkit.Location(org.bukkit.Bukkit.getWorld(l.world()), l.x(), l.y(), l.z()));
         Player sellerOnline = Bukkit.getPlayer(l.owner());
         if (sellerOnline != null) {
             sellerOnline.sendMessage(Text.of("&aYour Mini sold for &f" + economy.format(price) + "&a."));

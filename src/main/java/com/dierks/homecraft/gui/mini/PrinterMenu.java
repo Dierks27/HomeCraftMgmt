@@ -39,7 +39,7 @@ public final class PrinterMenu extends Menu {
         this.player = player;
         this.printer = printer;
         this.isPublic = plugin.printers().isPublic(printer);
-        init(27, Text.of(isPublic ? "&bMini Printer &8· &aPublic (free)" : "&bMini Printer"));
+        init(27, Text.of(isPublic ? "&bMini Printer &8· &aPublic" : "&bMini Printer &8· &7Private"));
     }
 
     @Override
@@ -94,10 +94,16 @@ public final class PrinterMenu extends Menu {
         // Filament + fee requirements (or free on a public printer).
         boolean canAfford;
         if (isPublic) {
-            set(14, Menus.icon(Material.EMERALD_BLOCK, "&aPublic Printer",
-                    "&7The house covers filament & fee.",
-                    "&7Basic finishes only — no Shiny."), null);
-            canAfford = true;
+            double fee = cfg.publicFee();
+            boolean feeOk = fee <= 0 || (plugin.economy().isEnabled() && plugin.economy().has(player, fee));
+            set(14, Menus.icon(feeOk ? Material.EMERALD_BLOCK : Material.REDSTONE_BLOCK, "&aPublic Printer",
+                    (feeOk ? "&a✔ " : "&c✗ ") + "Print fee: " + (fee <= 0 ? "&aFree" : "&6" + plugin.economy().format(fee)),
+                    "&7The house covers the filament.",
+                    "&7Basic finishes only — no Shiny.",
+                    "",
+                    "&8Your own Printer prints for " + (cfg.fee() <= 0 ? "free" : plugin.economy().format(cfg.fee()))
+                            + " + filament."), null);
+            canAfford = feeOk;
         } else {
             List<String> req = new ArrayList<>();
             boolean haveAll = true;
@@ -123,12 +129,16 @@ public final class PrinterMenu extends Menu {
 
         // Print button.
         if (canAfford) {
+            String cost = isPublic
+                    ? (cfg.publicFee() <= 0 ? "&7Cost: &afree" : "&7Cost: &6" + plugin.economy().format(cfg.publicFee()))
+                    : "&7Cost: &f" + plugin.miniService().cardItems().filamentCost(spec)
+                            + (cfg.fee() > 0 ? " &7+ &6" + plugin.economy().format(cfg.fee()) : "");
             set(20, Menus.icon(Material.LIME_CONCRETE, "&a&lPRINT",
-                    "&7Roll the grade and print your Mini."),
+                    "&7Roll the grade and print your Mini.", cost),
                     e -> doPrint(false));
         } else {
             set(20, Menus.icon(Material.GRAY_CONCRETE, "&7Print",
-                    "&cYou're missing filament or the fee."), null);
+                    isPublic ? "&cYou can't afford the print fee." : "&cYou're missing filament or the fee."), null);
         }
 
         // Shiny finish. On a public (Mall) printer it's locked — shown as a clear

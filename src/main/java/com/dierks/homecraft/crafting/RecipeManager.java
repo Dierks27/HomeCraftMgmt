@@ -81,6 +81,7 @@ public final class RecipeManager {
             try {
                 ShapedRecipe recipe = new ShapedRecipe(key, result);
                 recipe.shape(def.shape().toArray(new String[0]));
+                brand(recipe);
                 for (Map.Entry<Character, RecipeChoice> e : def.ingredients().entrySet()) {
                     if (usesSymbol(def.shape(), e.getKey())) {
                         recipe.setIngredient(e.getKey(), e.getValue());
@@ -96,6 +97,7 @@ public final class RecipeManager {
                 plugin.getLogger().warning("Recipe '" + def.key() + "' is invalid: " + ex.getMessage());
             }
         }
+        added += registerFilament();
         plugin.getLogger().info("Registered " + added + " block recipe(s)"
                 + (skipped.isEmpty() ? "" : " (empty/disabled: " + String.join(", ", skipped) + ")")
                 + ". Mini Workbench is retired — no recipe.");
@@ -110,6 +112,58 @@ public final class RecipeManager {
                 unlockFor(p);
             }
         }
+    }
+
+    /**
+     * One recipe per DyeColor from the {@code recipes.filament} template: the
+     * {@code <dye>} symbol becomes that colour's dye and the result is N filament of
+     * the colour. Returns how many registered.
+     */
+    private int registerFilament() {
+        PluginConfig.FilamentRecipe def = config.filamentRecipe();
+        if (def == null || def.isEmpty()) {
+            return 0;
+        }
+        int added = 0;
+        for (org.bukkit.DyeColor color : org.bukkit.DyeColor.values()) {
+            ItemStack result = new com.dierks.homecraft.mini.FilamentItems().filament(color, def.output());
+            NamespacedKey key = new NamespacedKey(plugin, "filament_" + color.name().toLowerCase(Locale.ROOT));
+            try {
+                ShapedRecipe recipe = new ShapedRecipe(key, result);
+                recipe.shape(def.shape().toArray(new String[0]));
+                brand(recipe);
+                boolean ok = true;
+                for (Map.Entry<Character, String> e : def.ingredients().entrySet()) {
+                    if (!usesSymbol(def.shape(), e.getKey())) {
+                        continue;
+                    }
+                    String raw = e.getValue() == null ? "" : e.getValue().trim();
+                    Material m;
+                    if (raw.equalsIgnoreCase("<dye>") || raw.equalsIgnoreCase("dye")) {
+                        m = Material.matchMaterial(color.name() + "_DYE");
+                    } else {
+                        m = Material.matchMaterial(raw.toUpperCase(Locale.ROOT));
+                    }
+                    if (m == null) {
+                        plugin.getLogger().warning("Filament recipe: unknown ingredient '" + raw + "' for symbol '"
+                                + e.getKey() + "' — filament recipes disabled.");
+                        ok = false;
+                        break;
+                    }
+                    recipe.setIngredient(e.getKey(), new RecipeChoice.MaterialChoice(m));
+                }
+                if (!ok) {
+                    return added;
+                }
+                if (Bukkit.addRecipe(recipe)) {
+                    registered.add(key);
+                    added++;
+                }
+            } catch (RuntimeException ex) {
+                plugin.getLogger().warning("Filament recipe for " + color + " is invalid: " + ex.getMessage());
+            }
+        }
+        return added;
     }
 
     /** Remove our registered recipes (called on reload and disable). */
@@ -139,6 +193,19 @@ public final class RecipeManager {
     /** The keys currently registered (read-only view). */
     public List<NamespacedKey> registeredKeys() {
         return List.copyOf(registered);
+    }
+
+    /**
+     * Group + category so recipe-sync bridges (JEIServerProxy) and the vanilla book file
+     * ours under one visible "homecraft" group instead of dropping them as unknown.
+     */
+    private static void brand(ShapedRecipe recipe) {
+        try {
+            recipe.setGroup("homecraft");
+            recipe.setCategory(org.bukkit.inventory.recipe.CraftingBookCategory.MISC);
+        } catch (Throwable ignored) {
+            // older API without categories — the recipe still registers
+        }
     }
 
     /** "mailbox.light_blue" → "mailbox_light_blue" (NamespacedKey-safe). */

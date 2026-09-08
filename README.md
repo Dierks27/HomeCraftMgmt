@@ -78,6 +78,33 @@ point Gradle at it, or upgrade the wrapper:
    Mailbox — its colour intact) and its record is removed. Restart the server →
    placements persist (SQLite).
 
+### Economy safety (0.21)
+
+- **World sandbox.** The economy runs only in `worlds.economy_enabled` (your main
+  world is written there on first start). Elsewhere nothing moves money or
+  tokens and HomeCraft blocks can't be placed; refusals are logged. **Pair it
+  with Multiverse-Inventories:** put the creative world in its own inventory
+  group (e.g. `plugins/Multiverse-Inventories/groups.yml` → a `creative` group
+  containing only that world, with `share: [all]`) so no item, Card or Mini can
+  ride an inventory from creative into the survival world. The sandbox stops
+  money moving in creative; the inventory group stops free items reaching the
+  world where money moves.
+- **Backups.** A copy of `homecraft.db` lands in `backups/` before any schema
+  migration; a daily online backup runs on its own (`backups.interval_hours`,
+  `backups.keep`); `/hcm backup now` writes one at will. Restore = stop the
+  server, copy a backup over `plugins/HomeCraftManagement/homecraft.db`, start.
+- **Two-currency rule.** Tokens never become money: crates pay Cards, packs,
+  filament or tokens only (a `money`/`item` reward is rejected with a warning),
+  pity costs 25 tokens, and the starter/premium packs, per-item daily caps and
+  $5k/day limits are the new defaults (applied to an existing config once).
+- **Printers.** A public printer charges `printer.public_fee` ($150) and the
+  house covers filament, no Shiny; your own printer consumes your filament
+  (`printer.fee`, default $0) and unlocks Shiny. Filament crafts from
+  string + a dye + a slime ball (3 per craft, one recipe per colour).
+- **JEI.** Recipes carry the `homecraft` group and load before JEIServerProxy
+  so its join-time sync sees them. If a recipe still doesn't show in JEI, the
+  result item's custom head/PDC is the likely reason on the proxy side.
+
 ### Recipes, skins and block variants (0.19)
 
 - **Recipes** live under `recipes:` in `config.yml` — one SHAPED 3×3 entry per

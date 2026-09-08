@@ -24,9 +24,10 @@ import java.util.Map;
  * Mini through the standard cap-aware, anti-dupe mint pipeline
  * ({@link MiniService#mintGraded}). The Card is consumed per print (no print cap).
  *
- * <p>A printer flagged <b>public</b> (a Mall printer) prints for free — the house
- * covers filament and the fee, and only basic finishes are available (no Shiny). A
- * private/home printer charges filament + fee and unlocks the Shiny finish.
+ * <p>A printer flagged <b>public</b> (a Mall printer) charges a flat money fee
+ * ({@code printer.public_fee}) and the house covers the filament; only basic finishes
+ * are available (no Shiny). A private/home printer charges {@code printer.fee} (0 by
+ * default) plus the player's own filament and unlocks the Shiny finish.
  */
 public final class PrinterService {
 
@@ -64,12 +65,16 @@ public final class PrinterService {
     }
 
     /**
-     * Try to print the held card. On a public printer this is free (Shiny is refused);
-     * on a private printer it consumes the card's filament + the fee, plus the Shiny
-     * finish material when {@code shiny} is requested. Everything is validated before
-     * anything is consumed, so a failure leaves the player's items untouched.
+     * Try to print the held card. On a public printer a flat money fee is charged and
+     * the house covers filament (Shiny is refused); on a private printer the card's
+     * filament + {@code printer.fee} are consumed, plus the Shiny finish material when
+     * {@code shiny} is requested. Everything is validated before anything is consumed,
+     * so a failure leaves the player's items untouched.
      */
     public PrintResult print(Player player, Location printer, ItemStack card, boolean shiny) {
+        if (!plugin.sandbox().check(player, "printer use")) {
+            return PrintResult.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
         String id = plugin.miniService().cardItems().cardIdOf(card);
         if (id == null) {
             return PrintResult.fail("Hold a Card in your main hand to print.");
@@ -84,13 +89,25 @@ public final class PrinterService {
             return PrintResult.fail(def.name() + " is minted out — no more can be printed.");
         }
 
-        boolean free = isPublic(printer);
-        boolean wantShiny = shiny && !free; // public printers offer basic finishes only
+        boolean isPublic = isPublic(printer);
+        boolean wantShiny = shiny && !isPublic; // public printers offer basic finishes only
         CardSpec spec = plugin.miniService().cardSpec(def);
         PluginConfig.Printer cfg = plugin.config().printer();
         var filaments = plugin.miniService().filamentItems();
 
-        if (!free) {
+        if (isPublic) {
+            // PUBLIC: a flat money fee, the house covers the filament, no Shiny.
+            double fee = cfg.publicFee();
+            if (fee > 0) {
+                if (!plugin.economy().isEnabled()) {
+                    return PrintResult.fail("The economy is offline — can't charge the print fee.");
+                }
+                if (!plugin.economy().has(player, fee)) {
+                    return PrintResult.fail("A public print costs " + plugin.economy().format(fee) + ".");
+                }
+                plugin.economy().withdraw(player, fee);
+            }
+        } else {
             // 1) Filament: enough of every required colour?
             for (Map.Entry<DyeColor, Integer> e : spec.filament().entrySet()) {
                 int need = e.getValue() == null ? 0 : e.getValue();

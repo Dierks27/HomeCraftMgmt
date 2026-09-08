@@ -82,6 +82,9 @@ public final class AuctionService {
 
     /** Seller lists the Mini in their main hand for a timed auction. */
     public Result create(Player seller, double startBid, double buyNow, int durationMinutes) {
+        if (!plugin.sandbox().check(seller, "auction listing")) {
+            return Result.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
         MiniService.HeldMini held = plugin.miniService().getHeldMini(seller);
         if (held == null) {
             return Result.fail("Hold the Mini you want to auction in your main hand.");
@@ -111,6 +114,9 @@ public final class AuctionService {
     }
 
     public Result bid(Player bidder, long id, double amount) {
+        if (!plugin.sandbox().check(bidder, "auction bid")) {
+            return Result.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
         Optional<MiniAuctionDao.Auction> opt = byId(id);
         if (opt.isEmpty() || !opt.get().status().equals(MiniAuctionDao.ACTIVE)) {
             return Result.fail("That auction isn't active.");
@@ -153,6 +159,9 @@ public final class AuctionService {
     }
 
     public Result buyNow(Player buyer, long id) {
+        if (!plugin.sandbox().check(buyer, "auction buy-now")) {
+            return Result.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
         Optional<MiniAuctionDao.Auction> opt = byId(id);
         if (opt.isEmpty() || !opt.get().status().equals(MiniAuctionDao.ACTIVE)) {
             return Result.fail("That auction isn't active.");

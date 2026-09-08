@@ -74,7 +74,7 @@ import java.util.UUID;
 public final class MiniEffectsService implements Listener {
 
     /** What kind of placed Mini an entry is (decides geometry and which extras apply). */
-    public enum Kind { DISPLAY_CASE, STAND, WILD_SPAWN }
+    public enum Kind { DISPLAY_CASE, STAND, WILD_SPAWN, PLACED_HEAD }
 
     private static final BlockFace[] LIGHT_CANDIDATES = {
             BlockFace.UP, BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.DOWN};
@@ -208,6 +208,15 @@ public final class MiniEffectsService implements Listener {
         register(blockKey(loc), Kind.WILD_SPAWN, loc, item, cfg().wildHologramText(), null, justPlaced);
     }
 
+    /**
+     * A Mini head placed as a plain block: the rarity effects (particles, light, Mint
+     * chime, Shiny ring, place burst) minus the rotating ItemDisplay and minus the
+     * permanent hologram — its name shows only while a player looks at it.
+     */
+    public void registerPlacedHead(Location loc, ItemStack item, boolean justPlaced) {
+        register(blockKey(loc), Kind.PLACED_HEAD, loc, item, null, null, justPlaced);
+    }
+
     /** A posed armor-stand Mini. */
     public void registerStand(ArmorStand stand, boolean justPlaced) {
         if (stand == null || plugin.stands() == null) {
@@ -326,8 +335,10 @@ public final class MiniEffectsService implements Listener {
             }
             PluginConfig.MiniEffect fx = cfg.of(p.def.rarity());
             p.ticks += interval;
-            boolean wantsDisplay = p.kind == Kind.DISPLAY_CASE && (fx.rotate() || fx.fullBright());
-            if (fx.hologram() || p.hologramText != null) {
+            // A Display Case always shows its Mini as a floating ItemDisplay (static for
+            // Common/Uncommon, rotating for Rare+, full-bright for Legendary per config).
+            boolean wantsDisplay = p.kind == Kind.DISPLAY_CASE;
+            if ((fx.hologram() && p.kind != Kind.PLACED_HEAD) || p.hologramText != null) {
                 ensureHologram(p, fx, base, wantsDisplay);
             }
             if (wantsDisplay) {
@@ -375,7 +386,8 @@ public final class MiniEffectsService implements Listener {
             }
             p.hologramId = null;
         }
-        double dy = p.kind == Kind.STAND ? 2.3 : (aboveDisplay ? 2.0 : 1.45);
+        double dy = p.kind == Kind.STAND ? 2.3
+                : (aboveDisplay ? cfg().caseItemHeight() + 0.75 + cfg().caseItemScale() * 0.5 : 1.45);
         Component text = p.hologramText != null
                 ? Text.of(p.hologramText)
                 : Component.text(p.def.name() + " " + p.grade.symbol(),
@@ -408,8 +420,9 @@ public final class MiniEffectsService implements Listener {
             }
         }
         if (display == null) {
+            float scale = (float) cfg().caseItemScale();
             try {
-                display = p.world.spawn(base.clone().add(0, 1.15, 0), ItemDisplay.class, d -> {
+                display = p.world.spawn(base.clone().add(0, cfg().caseItemHeight(), 0), ItemDisplay.class, d -> {
                     d.setItemStack(p.item.clone());
                     d.setBillboard(Display.Billboard.FIXED);
                     if (fx.fullBright()) {
@@ -418,7 +431,7 @@ public final class MiniEffectsService implements Listener {
                     d.setInterpolationDelay(0);
                     d.setInterpolationDuration(Math.max(1, interval));
                     d.setTransformation(new Transformation(new Vector3f(0f, 0f, 0f), new Quaternionf(),
-                            new Vector3f(0.6f, 0.6f, 0.6f), new Quaternionf()));
+                            new Vector3f(scale, scale, scale), new Quaternionf()));
                     d.setPersistent(false);
                     d.getPersistentDataContainer().set(Keys.EFFECT_ENTITY, PersistentDataType.BYTE, (byte) 1);
                 });

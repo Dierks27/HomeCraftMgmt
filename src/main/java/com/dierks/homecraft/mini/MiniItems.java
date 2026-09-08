@@ -1,16 +1,12 @@
 package com.dierks.homecraft.mini;
 
-import com.destroystokyo.paper.profile.PlayerProfile;
-import com.destroystokyo.paper.profile.ProfileProperty;
 import com.dierks.homecraft.util.Keys;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 
@@ -29,7 +25,14 @@ import java.util.UUID;
 public final class MiniItems {
 
     /** Render revision stamped on every minted Mini; bump when the name/lore layout changes. */
-    public static final int RENDER_VERSION = 2;
+    public static final int RENDER_VERSION = 3;
+
+    /**
+     * Set by the startup self-test when {@code enchantment_glint_override} does not
+     * survive a meta round-trip on this server: glint is then also produced by a
+     * hidden enchantment, which every client renders.
+     */
+    public static volatile boolean glintFallback = false;
 
     /** A real, minted Mini item given to a player (uniquely tagged); Standard grade. */
     public ItemStack minted(MiniDef def, RarityStyle style, long mintNumber, UUID uid) {
@@ -120,9 +123,7 @@ public final class MiniItems {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text(def.name(), style.nameColor()).decoration(TextDecoration.ITALIC, false));
-            if (style.glint()) {
-                meta.setEnchantmentGlintOverride(true);
-            }
+            applyGlint(meta, style.glint());
             List<Component> lore = new ArrayList<>();
             lore.add(line("Type: ", def.category(), NamedTextColor.GRAY));
             lore.add(line("Series: ", def.series(), NamedTextColor.GRAY));
@@ -166,29 +167,33 @@ public final class MiniItems {
     private void render(ItemMeta meta, MiniDef def, RarityStyle style, long mintNumber, Grade grade, boolean shiny) {
         meta.displayName(Component.text(def.name() + " " + grade.symbol(), style.nameColor())
                 .decoration(TextDecoration.ITALIC, false));
-        meta.setEnchantmentGlintOverride(style.glint() || shiny ? Boolean.TRUE : null);
         meta.lore(lore(def, style, mintNumber, grade, shiny));
+        applyGlint(meta, style.glint() || shiny);
     }
 
-    private ItemStack baseItem(MiniDef def) {
-        Material material = def.type() == MiniType.ARMOR_STAND ? Material.ARMOR_STAND : Material.PLAYER_HEAD;
-        ItemStack item = new ItemStack(material);
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) {
-            return item;
+    /** Glint from the rarity palette (or Shiny): the component override, plus the hidden-enchant fallback when needed. */
+    public static void applyGlint(ItemMeta meta, boolean glint) {
+        try {
+            meta.setEnchantmentGlintOverride(glint ? Boolean.TRUE : null);
+        } catch (Throwable ignored) {
+            // API without the override — the fallback below still glints
         }
-        if (material == Material.PLAYER_HEAD && meta instanceof SkullMeta skull
-                && def.texture() != null && !def.texture().isBlank()) {
+        if (glint && glintFallback) {
             try {
-                PlayerProfile profile = Bukkit.createProfile(UUID.randomUUID());
-                profile.setProperty(new ProfileProperty("textures", def.texture()));
-                skull.setPlayerProfile(profile);
-            } catch (Throwable t) {
-                Bukkit.getLogger().warning("[HomeCraft] Failed to apply Mini texture for " + def.id() + ": " + t.getMessage());
+                meta.addEnchant(org.bukkit.enchantments.Enchantment.UNBREAKING, 1, true);
+                meta.addItemFlags(org.bukkit.inventory.ItemFlag.HIDE_ENCHANTS);
+            } catch (Throwable ignored) {
+                // cosmetic
             }
         }
-        item.setItemMeta(meta);
-        return item;
+    }
+
+    /** Pass one: the bare form (a textured head, or an armor stand item) with the profile committed. */
+    private ItemStack baseItem(MiniDef def) {
+        if (def.type() == MiniType.ARMOR_STAND) {
+            return new ItemStack(Material.ARMOR_STAND);
+        }
+        return com.dierks.homecraft.util.Heads.base(def.texture());
     }
 
     private List<Component> lore(MiniDef def, RarityStyle style, long mintNumber, Grade grade, boolean shiny) {

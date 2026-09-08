@@ -222,6 +222,9 @@ public final class VendingService {
 
     /** On block break: return every loaded Mini (display + all vending listings) to the breaker. */
     public void onBlockBroken(Location loc, Player breaker) {
+        if (plugin.effects() != null) {
+            plugin.effects().unregisterBlock(loc);
+        }
         at(loc).ifPresent(display -> {
             ItemStack item = Items.fromBase64(display.itemB64());
             if (item != null) {

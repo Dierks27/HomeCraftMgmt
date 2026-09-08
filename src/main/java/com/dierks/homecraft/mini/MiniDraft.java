@@ -18,6 +18,7 @@ public final class MiniDraft {
     private long cap;
     private double price;
     private boolean craftable;
+    private java.util.List<String> tags = new java.util.ArrayList<>();
 
     public MiniDraft(String id, String name, String series, String category, Rarity rarity,
                      MiniType type, String texture, long cap, double price, boolean craftable) {
@@ -34,15 +35,46 @@ public final class MiniDraft {
     }
 
     public static MiniDraft from(MiniDef def) {
-        return new MiniDraft(def.id(), def.name(), def.series(), def.category(), def.rarity(),
+        MiniDraft d = new MiniDraft(def.id(), def.name(), def.series(), def.category(), def.rarity(),
                 def.type(), def.texture(), def.cap(), def.price(), def.craftable());
+        d.setTags(def.tags());
+        return d;
     }
 
     /** Convert to an immutable {@link MiniDef}, deriving the id from the name if unset. */
     public MiniDef toDef() {
         String finalId = (id == null || id.isBlank()) ? MiniIds.slug(name) : id;
         return new MiniDef(finalId, name, series, category, rarity, type,
-                texture == null ? "" : texture, cap, price, craftable);
+                texture == null ? "" : texture, cap, price, craftable, tags);
+    }
+
+    /** Drop tags (lower-case, de-duplicated). */
+    public java.util.List<String> tags() {
+        return tags;
+    }
+
+    public void setTags(java.util.List<String> tags) {
+        java.util.List<String> cleaned = new java.util.ArrayList<>();
+        if (tags != null) {
+            for (String t : tags) {
+                String v = t == null ? "" : t.trim().toLowerCase(java.util.Locale.ROOT);
+                if (!v.isEmpty() && !cleaned.contains(v)) {
+                    cleaned.add(v);
+                }
+            }
+        }
+        this.tags = cleaned;
+    }
+
+    /** Parse "mining, fish, zombie" into tags. */
+    public void setTagsFromText(String text) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        if (text != null) {
+            for (String part : text.split("[,\\s]+")) {
+                out.add(part);
+            }
+        }
+        setTags(out);
     }
 
     public String id() {

@@ -318,17 +318,91 @@ minis:
   # The catalog. Each entry inherits its series' rarity unless it sets its own;
   # cap/price default from the rarity palette. `texture` is a Base64 head value
   # (from minecraft-heads.com's "Value" field) — leave blank for a plain head.
-  # `id` is optional (auto-derived from the name if omitted).
+  # `id` is optional (auto-derived from the name if omitted). `tags: [mining, fish]`
+  # puts the Mini into those wild-drop tag pools (see loot: below) — an untagged Mini
+  # never drops from a tag pool. Optional per-entry `card:` sets card cap / grade odds
+  # (standard / graded / mint) / filament; otherwise they derive from the rarity.
   series:
     - name: "Starter Critters"
       rarity: COMMON
       entries:
-        - { name: "Piggy Mini",  category: ANIMAL, texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYTlhOTIxMmQzNmMwY2E3ZjA1MzczNzZmYWI1Yjg0ZWNiN2FmNjZjZjY3NTRlN2I4N2Q4YjFhMDhkOWQ1NDAyYiJ9fX0=" }
-        - { name: "Chick Mini",  category: ANIMAL, texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzAzMWE5ODI2NTUyOGMwNDAxMjEzNTJkNWRhYTc4ODFhMjI1YjIyNGQ3ZDVlYmRmNjUyNzliYTgzODQ2OTZmYSJ9fX0=" }
+        - { name: "Piggy Mini",  category: ANIMAL, tags: [mining, zombie], texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYTlhOTIxMmQzNmMwY2E3ZjA1MzczNzZmYWI1Yjg0ZWNiN2FmNjZjZjY3NTRlN2I4N2Q4YjFhMDhkOWQ1NDAyYiJ9fX0=" }
+        - { name: "Chick Mini",  category: ANIMAL, tags: [mining, fish], texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzAzMWE5ODI2NTUyOGMwNDAxMjEzNTJkNWRhYTc4ODFhMjI1YjIyNGQ3ZDVlYmRmNjUyNzliYTgzODQ2OTZmYSJ9fX0=" }
     - name: "Legendary Relics"
       rarity: LEGENDARY
       entries:
-        - { name: "Golden Idol", category: SYMBOL, texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMWU1YmY2MDM2Mzg2YjJlYjAwZmMyZTYzNWU1NzViNzRlMmI1YTBjNjljYmI1MzY5MWFlZGZkYjZhMGMzNjAwOSJ9fX0=", cap: 5 }
+        - { name: "Golden Idol", category: SYMBOL, tags: [mining], texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMWU1YmY2MDM2Mzg2YjJlYjAwZmMyZTYzNWU1NzViNzRlMmI1YTBjNjljYmI1MzY5MWFlZGZkYjZhMGMzNjAwOSJ9fX0=", cap: 5 }
+
+  # ---- Grades (Phase 12). Rarity owns a Mini's colour + glint; the GRADE owns the
+  # stars: a star suffix on the name ("Chick Mini ★★") and a lore line, never a
+  # competing colour. Three grades, rolled at the Printer (and by wild drops / crates)
+  # from the Mini's card odds. Names, symbols and value multipliers are yours to edit.
+  # Old copies printed under the retired five-grade ladder migrate on sight:
+  # Gray/Green → STANDARD, Blue/Purple → GRADED, Gold → MINT.
+  grades:
+    STANDARD: { name: "Standard", symbol: "☆",   multiplier: 1.0 }
+    GRADED:   { name: "Graded",   symbol: "★★",  multiplier: 2.5 }
+    MINT:     { name: "Mint",     symbol: "★★★", multiplier: 6.0 }
+
+  # ---- World effects (Phase 12) for PLACED Minis — Display Case trophies, posed
+  # armor-stand Minis, and natural wild spawns — by rarity. One repeating task serves
+  # every placed Mini, skipping any with no player within `radius` blocks and any in
+  # an unloaded chunk. Everything is torn down on removal / chunk unload / disable and
+  # rebuilt from the datastore on load, so nothing leaks after a crash.
+  #   particle:  type (a Particle name or none), count, interval_ticks, offset
+  #   hologram:  a floating name (TextDisplay) in `color` (a named colour or #hex)
+  #   light:     a hidden LIGHT block in the nearest air neighbour at `level`
+  #   rotate:    a slowly turning ItemDisplay above a case (`degrees_per_second`);
+  #              armor-stand Minis turn in place instead
+  #   full_bright: the ItemDisplay ignores world light (Legendary)
+  #   place_sound / place_particle: played once when the Mini is placed
+  # Grade MINT copies play `mint_sound` on print and on place; Shiny copies add a ring
+  # of `shiny_particle` on top of their rarity effect.
+  effects:
+    radius: 16              # only Minis with a player this close get effects
+    tick_interval: 10       # task cadence in ticks (particles use their own interval)
+    mint_sound: BLOCK_AMETHYST_BLOCK_CHIME
+    shiny_particle: GLOW
+    wild_hologram_text: "&dA wild Mini!"
+    COMMON: {}
+    UNCOMMON: {}
+    RARE:
+      particle: { type: END_ROD, count: 2, interval_ticks: 40, offset: 0.3 }
+      hologram: { enabled: true, color: aqua }
+      light:    { enabled: true, level: 7 }
+      rotate:   { enabled: false, degrees_per_second: 20 }
+      full_bright: false
+    EPIC:
+      particle: { type: ENCHANT, count: 6, interval_ticks: 20, offset: 0.4 }
+      hologram: { enabled: true, color: light_purple }
+      light:    { enabled: true, level: 7 }
+      rotate:   { enabled: true, degrees_per_second: 20 }
+      full_bright: false
+    LEGENDARY:
+      particle: { type: SOUL_FIRE_FLAME, count: 3, interval_ticks: 30, offset: 0.4 }
+      hologram: { enabled: true, color: gold }
+      light:    { enabled: true, level: 12 }
+      rotate:   { enabled: true, degrees_per_second: 20 }
+      full_bright: true
+      place_sound: ITEM_TOTEM_USE
+      place_particle: TOTEM_OF_UNDYING
+
+  # ---- Announcements (Phase 12). One server-wide line when a Mini is FOUND (wild
+  # drop, natural spawn, crate — never the Printer or a pack); the [name] is a hover
+  # card showing the item's full tooltip and click-runs /hcm museum <id>. A SPAWN HINT
+  # when a natural spawn lands ("A <Rarity> Mini has spawned within 100 blocks of a
+  # player!") — never coordinates, never who — and a "slipped away" line if it
+  # despawns untouched. Every broadcast plays `sound` to everyone. `min_rarity` and
+  # `per_rarity` silence chat for tiers you don't want announced.
+  announce:
+    enabled: true
+    found: true
+    spawn_hint: true
+    slipped_away: true
+    min_rarity: COMMON      # COMMON | UNCOMMON | RARE | EPIC | LEGENDARY
+    hint_radius_text: "within 100 blocks of a player"
+    sound: ENTITY_EXPERIENCE_ORB_PICKUP
+    per_rarity: { COMMON: true, UNCOMMON: true, RARE: true, EPIC: true, LEGENDARY: true }
 
   # ---- Trading blocks (Phase 4c) — appearance of the placeable custom blocks.
   # Obtain with /hcm give <vending|display|auction>. The Display Case should stay
@@ -344,20 +418,40 @@ minis:
     anti_snipe_seconds: 15      # a bid within this window of the end extends the timer
     max_duration_minutes: 10080 # 7 days
 
-  # ---- Wild Drops (Phase 4c). A loot list is a weighted bag of Mini ids; a source
-  # ties a trigger (BLOCK_BREAK | MOB_KILL | FISHING) + a match (material/entity, or
-  # * for any) to a list with a percentage chance. `chance_percent: 0.0001` means
-  # 0.0001% (one in a million). A drop MINTS a copy, so it respects the cap and
-  # counts toward circulation. Block-break sources must name a material (anti-farm).
-  # Empty by default — nothing drops until you configure it.
+  # ---- Wild Drops (Phase 4c / 12). A source ties a trigger (BLOCK_BREAK | MOB_KILL |
+  # FISHING | NATURAL_SPAWN) + a match (material / entity, or * for any) to a POOL with
+  # a percentage chance — `chance_percent: 0.02` means 0.02% (about one per 5,000
+  # rolls). The pool is either `list: <id>` (a weighted bag of Mini ids, below) or
+  # `tag: <name>` (every catalog Mini carrying that tag, weighted by rarity via
+  # rarity_weights; untagged Minis never drop). A drop MINTS a finished Mini — grade
+  # rolled from the Mini's Printer odds (or the source's `grades:` override) and a
+  # Shiny roll at shiny_percent (or the source's `shiny_percent`) — so it respects the
+  # cap, counts toward circulation, and is announced. Block-break sources must name a
+  # material (anti-farm). NATURAL_SPAWN sources fire every natural.interval_ticks for
+  # each online player and place the Mini as a head 24–48 blocks away instead of
+  # handing it over. Empty by default — nothing drops until you configure it.
   loot:
+    # Tag-pool odds by rarity (relative weights).
+    rarity_weights: { LEGENDARY: 1, EPIC: 4, RARE: 15, UNCOMMON: 40, COMMON: 100 }
+    # Chance (%) that a found Mini is Shiny; sources may override with shiny_percent.
+    shiny_percent: 5
+    # Natural spawns: cadence, lifetime before it slips away, and distance from a player.
+    natural:
+      interval_ticks: 12000   # 10 minutes
+      despawn_minutes: 10
+      min_distance: 24
+      max_distance: 48
     lists: []
     #  - id: common_blocks
     #    entries:
     #      - { mini: piggy_mini, weight: 10 }
     sources: []
-    #  - { trigger: BLOCK_BREAK, match: STONE, list: common_blocks, chance_percent: 0.0001 }
-    #  - { trigger: MOB_KILL,    match: ZOMBIE, list: common_blocks, chance_percent: 0.01 }
+    # Example sources (uncomment to enable — the shipped Minis carry these tags):
+    #  - { trigger: BLOCK_BREAK,   match: STONE,  tag: mining, chance_percent: 0.02 }   # ~1 per 5,000 stone
+    #  - { trigger: MOB_KILL,      match: ZOMBIE, tag: zombie, chance_percent: 1 }
+    #  - { trigger: FISHING,       match: "*",    tag: fish,   chance_percent: 0.5 }
+    #  - { trigger: NATURAL_SPAWN, match: "*",    tag: mining, chance_percent: 3 }      # 3% per 10-minute tick, per player
+    # Per-source overrides: grades: { standard: 60, graded: 30, mint: 10 } and shiny_percent: 10
 
   # ---- Posed armor-stand Minis (Phase 4d). Authored in-game: pose a real armor
   # stand, then `/hcm mini capturestand <miniId>` while looking at it. Poses are in
@@ -545,7 +639,9 @@ arcade:
       enabled: true
       minutes_per_token: 60      # a token per hour played (0 = off)
   # Loot crates: each a token cost + a weighted reward table. type: money | item | mini.
-  # A `mini` reward mints cap-aware and drops out of the table once minted out.
+  # A `mini` reward mints a finished, graded Mini (announced server-wide) — name a
+  # fixed `mini:` id, or `tag:` a pool (rarity-weighted). It drops out of the table
+  # once everything it could give is minted out.
   crates:
     starter:
       display: "&aStarter Crate"
@@ -555,6 +651,7 @@ arcade:
         - { type: item,  material: DIAMOND, amount: 1, weight: 20 }
         - { type: item,  material: GOLD_INGOT, amount: 4, weight: 20 }
         - { type: mini,  mini: piggy_mini, weight: 5 }
+        # - { type: mini,  tag: mining, weight: 3 }   # a random tagged Mini instead of a fixed one
       # Optional paid-odds tiers: a Vault fee that GUARANTEES a Mini at/above `floor`
       # (a strong money sink). Odds are published in the crate GUI.
       paid_odds:

@@ -52,6 +52,7 @@ public final class MiniCatalogWriter {
                 m.put("cap", def.cap());
                 m.put("price", def.price());
                 m.put("craftable", def.craftable());
+                m.put("tags", new ArrayList<>(def.tags()));
                 entries.add(m);
             }
             seriesMap.put("entries", entries);

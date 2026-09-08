@@ -69,6 +69,9 @@ public final class HomeCraftManagement extends JavaPlugin {
     private VendingService vending;
     private AuctionService auctions;
     private WildDropService wildDrops;
+    private com.dierks.homecraft.mini.AnnounceService announce;
+    private com.dierks.homecraft.effects.MiniEffectsService effects;
+    private com.dierks.homecraft.trade.NaturalSpawnService naturalSpawns;
     private com.dierks.homecraft.trade.StandService stands;
     private com.dierks.homecraft.marketplace.DeliveryService deliveries;
     private com.dierks.homecraft.marketplace.PalletService pallets;
@@ -146,6 +149,11 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.auctions = new AuctionService(this, new MiniAuctionDao(database), inbox, economy);
         this.wildDrops = new WildDropService(this);
         this.stands = new com.dierks.homecraft.trade.StandService(this);
+        // Mini presentation (Phase 12): announcements, world effects, natural spawns.
+        this.announce = new com.dierks.homecraft.mini.AnnounceService(this);
+        this.effects = new com.dierks.homecraft.effects.MiniEffectsService(this);
+        this.naturalSpawns = new com.dierks.homecraft.trade.NaturalSpawnService(
+                this, new com.dierks.homecraft.storage.MiniSpawnDao(database));
         PlacedNaturalDao placedNatural = new PlacedNaturalDao(database);
         scheduleAuctionClose();
 
@@ -188,6 +196,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.mini.MiniDestructionListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.display.DisplayListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.ArcadeListener(this), this);
+        getServer().getPluginManager().registerEvents(effects, this);
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.mini.MiniRenderListener(this), this);
 
         PluginCommand hcm = getCommand("hcm");
         if (hcm != null) {
@@ -208,6 +218,14 @@ public final class HomeCraftManagement extends JavaPlugin {
         // upper head (or log the ones that are blocked). Runs once the worlds are up.
         getServer().getScheduler().runTask(this, blockService::migrateVendingUppers);
 
+        // Placed-Mini effects + natural spawns rebuild from the datastore once the worlds
+        // are up, so nothing leaks after a crash and every trophy lights up on start.
+        getServer().getScheduler().runTask(this, () -> {
+            effects.rebuild();
+            naturalSpawns.rebuild();
+            naturalSpawns.start();
+        });
+
         // In-Game Economy Displays (Phase 7): the PlaceholderAPI 'hcm' expansion —
         // only loaded/registered when PlaceholderAPI is installed.
         if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
@@ -227,6 +245,14 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (naturalSpawns != null) {
+            naturalSpawns.stop();
+            naturalSpawns = null;
+        }
+        if (effects != null) {
+            effects.stop(); // removes every hologram/display/light we own
+            effects = null;
+        }
         if (arcade != null) {
             arcade.stop();
             arcade = null;
@@ -280,6 +306,12 @@ public final class HomeCraftManagement extends JavaPlugin {
         miniService.reload();
         if (wildDrops != null) {
             wildDrops.invalidate();
+        }
+        if (effects != null) {
+            effects.start(); // re-arm at the new cadence; the registry is kept
+        }
+        if (naturalSpawns != null) {
+            naturalSpawns.start(); // re-arm the spawn/expiry timers under the new config
         }
         if (dashboard != null) {
             dashboard.restart(); // pick up bind/port/enabled/refresh/title changes
@@ -526,6 +558,21 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public AuctionService auctions() {
         return auctions;
+    }
+
+    /** Server-wide Mini announcements (found broadcasts, spawn hints). */
+    public com.dierks.homecraft.mini.AnnounceService announce() {
+        return announce;
+    }
+
+    /** World effects for placed Minis (holograms, particles, light, rotation). */
+    public com.dierks.homecraft.effects.MiniEffectsService effects() {
+        return effects;
+    }
+
+    /** Naturally spawned wild Minis (the NATURAL_SPAWN trigger). */
+    public com.dierks.homecraft.trade.NaturalSpawnService naturalSpawns() {
+        return naturalSpawns;
     }
 
     public WildDropService wildDrops() {

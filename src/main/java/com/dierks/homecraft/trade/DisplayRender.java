@@ -43,5 +43,8 @@ public final class DisplayRender {
         } catch (Throwable ignored) {
             // A bad/absent profile shouldn't break the block.
         }
+        if (plugin.effects() != null) {
+            plugin.effects().refreshBlock(loc, true);
+        }
     }
 }

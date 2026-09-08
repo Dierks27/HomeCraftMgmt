@@ -1,14 +1,17 @@
 package com.dierks.homecraft.mini;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * The Wild-Drops loot model. A {@link LootList} is a weighted bag of Mini ids; a
- * {@link LootSource} ties a world trigger (block break / mob kill / fishing) and
- * a match (material or entity, {@code *} = any) to a list with a drop chance. A
- * Mini can appear in many lists — edit it once, it updates everywhere.
+ * {@link LootSource} ties a world trigger (block break / mob kill / fishing /
+ * natural spawn) and a match (material or entity, {@code *} = any) to either a
+ * list <em>or</em> a tag pool (every Mini carrying that tag, weighted by rarity)
+ * with a drop chance. Each source may override the grade odds and Shiny chance.
  */
 public final class Loot {
 
@@ -19,7 +22,8 @@ public final class Loot {
     public enum Trigger {
         BLOCK_BREAK,
         MOB_KILL,
-        FISHING;
+        FISHING,
+        NATURAL_SPAWN;
 
         public static Trigger parse(String s) {
             if (s == null) {
@@ -31,6 +35,16 @@ public final class Loot {
                 return BLOCK_BREAK;
             }
         }
+
+        /** The "found a Mini while …" verb for the found-broadcast. */
+        public String verb() {
+            return switch (this) {
+                case BLOCK_BREAK -> "while mining";
+                case MOB_KILL -> "while fighting";
+                case FISHING -> "while fishing";
+                case NATURAL_SPAWN -> "while exploring";
+            };
+        }
     }
 
     /** One weighted reference to a Mini within a list. */
@@ -41,15 +55,61 @@ public final class Loot {
     public record LootList(String id, List<LootEntry> entries) {
     }
 
-    /** A trigger→list binding with a percentage chance (e.g. 0.0001 = 0.0001%). */
-    public record LootSource(Trigger trigger, String match, String listId, double chancePercent) {
+    /**
+     * A trigger → pool binding with a percentage chance (e.g. 0.0001 = 0.0001%).
+     * Exactly one of {@code listId} / {@code tag} is set. {@code gradeWeights} (may be
+     * null = use the Mini's Printer odds) and {@code shinyPercent} (null = the global
+     * {@code minis.loot.shiny_percent}) are optional per-source overrides.
+     */
+    public record LootSource(Trigger trigger, String match, String listId, String tag, double chancePercent,
+                             Map<Grade, Double> gradeWeights, Double shinyPercent) {
+
+        /** List-backed source with default grade/shiny odds (the pre-tag constructor). */
+        public LootSource(Trigger trigger, String match, String listId, double chancePercent) {
+            this(trigger, match, listId, null, chancePercent, null, null);
+        }
+
         public boolean matches(String key) {
             return match == null || match.equals("*") || match.equalsIgnoreCase(key);
         }
+
+        public boolean usesTag() {
+            return tag != null && !tag.isBlank();
+        }
+
+        /** "list:<id>" or "tag:<name>" — for admin screens and logs. */
+        public String poolLabel() {
+            return usesTag() ? "tag:" + tag : "list:" + listId;
+        }
     }
 
-    /** The full loot config: lists + sources. */
-    public record MiniLoot(List<LootList> lists, List<LootSource> sources) {
+    /** Natural-spawn tuning: cadence, lifetime, and how far from a player a Mini lands. */
+    public record Natural(int intervalTicks, int despawnMinutes, int minDistance, int maxDistance) {
+    }
+
+    /** The full loot config: lists + sources + tag-pool rarity weights + Shiny odds + natural spawns. */
+    public record MiniLoot(List<LootList> lists, List<LootSource> sources, Map<Rarity, Double> rarityWeights,
+                           double shinyPercent, Natural natural) {
+
+        /** Lists + sources with the built-in defaults for everything else (older call sites). */
+        public MiniLoot(List<LootList> lists, List<LootSource> sources) {
+            this(lists, sources, defaultRarityWeights(), 5.0, new Natural(12000, 10, 24, 48));
+        }
+
+        public static Map<Rarity, Double> defaultRarityWeights() {
+            Map<Rarity, Double> m = new EnumMap<>(Rarity.class);
+            m.put(Rarity.LEGENDARY, 1.0);
+            m.put(Rarity.EPIC, 4.0);
+            m.put(Rarity.RARE, 15.0);
+            m.put(Rarity.UNCOMMON, 40.0);
+            m.put(Rarity.COMMON, 100.0);
+            return m;
+        }
+
+        public double rarityWeight(Rarity rarity) {
+            Double w = rarityWeights == null ? null : rarityWeights.get(rarity);
+            return w == null ? defaultRarityWeights().getOrDefault(rarity, 1.0) : Math.max(0, w);
+        }
 
         public LootList listById(String id) {
             for (LootList l : lists) {

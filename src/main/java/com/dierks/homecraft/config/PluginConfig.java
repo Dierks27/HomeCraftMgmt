@@ -157,9 +157,51 @@ public final class PluginConfig {
 
     public enum RewardType {MONEY, ITEM, MINI}
 
-    /** One weighted reward in a crate's loot table. */
+    /**
+     * One weighted reward in a crate's loot table. A MINI reward names a fixed
+     * {@code miniId} <em>or</em> a {@code tag} pool (every Mini carrying that tag,
+     * weighted by rarity); it mints a graded Mini directly.
+     */
     public record CrateReward(RewardType type, double amount, Material material, int itemAmount,
-                              String miniId, double weight) {
+                              String miniId, double weight, String tag) {
+        public boolean usesTag() {
+            return tag != null && !tag.isBlank();
+        }
+    }
+
+    // ---- Mini presentation: world effects + announcements ------------------------
+
+    /**
+     * World effects for placed Minis of one rarity (Display Case trophies, armor-stand
+     * Minis, wild spawns). Any field may be off; {@code particle}/{@code placeSound}/
+     * {@code placeParticle} are registry names (null = none).
+     */
+    public record MiniEffect(String particle, int particleCount, int particleInterval, double particleOffset,
+                             boolean hologram, String hologramColor,
+                             boolean light, int lightLevel,
+                             boolean rotate, double degreesPerSecond,
+                             boolean fullBright, String placeSound, String placeParticle) {
+
+        public static final MiniEffect NONE = new MiniEffect(null, 0, 0, 0, false, "white", false, 0,
+                false, 0, false, null, null);
+    }
+
+    /** All rarity effects + the shared knobs (radius, cadence, Mint chime, Shiny ring, wild hologram text). */
+    public record MiniEffects(Map<Rarity, MiniEffect> byRarity, double radius, int tickInterval,
+                              String mintSound, String shinyParticle, String wildHologramText) {
+        public MiniEffect of(Rarity rarity) {
+            return byRarity.getOrDefault(rarity, MiniEffect.NONE);
+        }
+    }
+
+    /** Server-wide Mini announcements (found broadcasts, natural-spawn hints) and their gates. */
+    public record Announce(boolean enabled, boolean found, boolean spawnHint, boolean slippedAway,
+                           Rarity minRarity, String hintRadiusText, String sound,
+                           Map<Rarity, Boolean> perRarity) {
+        /** Whether a broadcast about this rarity is allowed at all. */
+        public boolean allows(Rarity rarity) {
+            return enabled && rarity.ordinal() >= minRarity.ordinal() && perRarity.getOrDefault(rarity, true);
+        }
     }
 
     /** An optional paid-odds tier: a Vault fee that guarantees a rarity floor for the pull. */
@@ -312,6 +354,8 @@ public final class PluginConfig {
     private Minis minis;
     private MiniBlocks miniBlocks;
     private Loot.MiniLoot miniLoot;
+    private MiniEffects miniEffects;
+    private Announce announce;
     private Map<String, StandData> miniStands;
     private Marketplace marketplace;
     private Map<com.dierks.homecraft.block.CustomBlockType, String> skins;
@@ -444,6 +488,16 @@ public final class PluginConfig {
         return miniLoot;
     }
 
+    /** World effects for placed Minis, by rarity (Phase 12). */
+    public MiniEffects miniEffects() {
+        return miniEffects;
+    }
+
+    /** Server-wide Mini announcements (Phase 12). */
+    public Announce announce() {
+        return announce;
+    }
+
     /** Posed armor-stand configurations keyed by Mini id (Phase 4d). */
     public Map<String, StandData> miniStands() {
         return miniStands;
@@ -529,6 +583,11 @@ public final class PluginConfig {
 
         // ---- Wild Drops loot (Phase 4c Part C) ----
         this.miniLoot = readMiniLoot(c);
+
+        // ---- Mini presentation (Phase 12): grade names/stars, world effects, announcements ----
+        readGrades(c);
+        this.miniEffects = readMiniEffects(c);
+        this.announce = readAnnounce(c);
 
         // ---- Posed armor-stand Minis (Phase 4d) ----
         this.miniStands = new LinkedHashMap<>();
@@ -691,7 +750,7 @@ public final class PluginConfig {
         switch (type) {
             case "money" -> {
                 return new CrateReward(RewardType.MONEY, Math.max(0, number(row.get("amount"), 0)),
-                        null, 0, null, weight);
+                        null, 0, null, weight, null);
             }
             case "item" -> {
                 Material m = Material.matchMaterial(str(row.get("material"), "").toUpperCase(Locale.ROOT));
@@ -699,15 +758,19 @@ public final class PluginConfig {
                     return null;
                 }
                 int amt = (int) number(row.get("amount"), 1);
-                return new CrateReward(RewardType.ITEM, 0, m, Math.max(1, amt), null, weight);
+                return new CrateReward(RewardType.ITEM, 0, m, Math.max(1, amt), null, weight, null);
             }
             case "mini" -> {
                 String mini = str(row.get("mini"), null);
-                if (mini == null || mini.isBlank()) {
+                String tag = str(row.get("tag"), null);
+                boolean hasMini = mini != null && !mini.isBlank();
+                boolean hasTag = tag != null && !tag.isBlank();
+                if (!hasMini && !hasTag) {
                     return null;
                 }
                 return new CrateReward(RewardType.MINI, 0, null, 0,
-                        com.dierks.homecraft.mini.MiniIds.slug(mini), weight);
+                        hasMini ? com.dierks.homecraft.mini.MiniIds.slug(mini) : null, weight,
+                        hasTag ? tag.trim().toLowerCase(Locale.ROOT) : null);
             }
             default -> {
                 return null;
@@ -926,7 +989,10 @@ public final class PluginConfig {
         List<Loot.LootSource> sources = new ArrayList<>();
         for (Map<?, ?> row : c.getMapList("minis.loot.sources")) {
             String listId = str(row.get("list"), null);
-            if (listId == null || listId.isBlank()) {
+            String tag = str(row.get("tag"), null);
+            boolean hasList = listId != null && !listId.isBlank();
+            boolean hasTag = tag != null && !tag.isBlank();
+            if (!hasList && !hasTag) {
                 continue;
             }
             Loot.Trigger t = Loot.Trigger.parse(str(row.get("trigger"), "BLOCK_BREAK"));
@@ -934,9 +1000,163 @@ public final class PluginConfig {
             double chance = row.get("chance_percent") != null
                     ? number(row.get("chance_percent"), 0)
                     : number(row.get("chance"), 0);
-            sources.add(new Loot.LootSource(t, match, listId, Math.max(0, chance)));
+            Map<com.dierks.homecraft.mini.Grade, Double> grades = null;
+            if (row.get("grades") instanceof Map<?, ?> gm && !gm.isEmpty()) {
+                grades = new EnumMap<>(com.dierks.homecraft.mini.Grade.class);
+                for (Map.Entry<?, ?> en : gm.entrySet()) {
+                    com.dierks.homecraft.mini.Grade g = com.dierks.homecraft.mini.Grade.parse(String.valueOf(en.getKey()));
+                    grades.merge(g, Math.max(0, number(en.getValue(), 0)), Double::sum);
+                }
+            }
+            Double shiny = row.get("shiny_percent") != null ? Math.max(0, number(row.get("shiny_percent"), 0)) : null;
+            sources.add(new Loot.LootSource(t, match, hasList ? listId : null,
+                    hasTag ? tag.trim().toLowerCase(Locale.ROOT) : null, Math.max(0, chance), grades, shiny));
         }
-        return new Loot.MiniLoot(lists, sources);
+
+        Map<Rarity, Double> rarityWeights = Loot.MiniLoot.defaultRarityWeights();
+        ConfigurationSection rw = c.getConfigurationSection("minis.loot.rarity_weights");
+        if (rw != null) {
+            for (String key : rw.getKeys(false)) {
+                try {
+                    rarityWeights.put(Rarity.valueOf(key.trim().toUpperCase(Locale.ROOT)), Math.max(0, rw.getDouble(key)));
+                } catch (IllegalArgumentException ex) {
+                    log.warning("Unknown rarity '" + key + "' in minis.loot.rarity_weights — ignored.");
+                }
+            }
+        }
+        double shinyPercent = Math.max(0, c.getDouble("minis.loot.shiny_percent", 5.0));
+        Loot.Natural natural = new Loot.Natural(
+                Math.max(200, c.getInt("minis.loot.natural.interval_ticks", 12000)),
+                Math.max(1, c.getInt("minis.loot.natural.despawn_minutes", 10)),
+                Math.max(4, c.getInt("minis.loot.natural.min_distance", 24)),
+                Math.max(8, c.getInt("minis.loot.natural.max_distance", 48)));
+        return new Loot.MiniLoot(lists, sources, rarityWeights, shinyPercent, natural);
+    }
+
+    /** {@code tags: [a, b]} or {@code tags: "a, b"} → lower-case, de-duplicated list. */
+    private List<String> readTags(Object raw) {
+        List<String> out = new ArrayList<>();
+        if (raw instanceof List<?> list) {
+            for (Object o : list) {
+                addTag(out, o == null ? "" : String.valueOf(o));
+            }
+        } else if (raw != null) {
+            for (String part : String.valueOf(raw).split("[,\\s]+")) {
+                addTag(out, part);
+            }
+        }
+        return out;
+    }
+
+    private void addTag(List<String> out, String raw) {
+        String v = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+        if (!v.isEmpty() && !out.contains(v)) {
+            out.add(v);
+        }
+    }
+
+    /** {@code minis.grades.<GRADE>: { name, symbol, multiplier }} → applied to the Grade enum. */
+    private void readGrades(FileConfiguration c) {
+        Map<com.dierks.homecraft.mini.Grade, com.dierks.homecraft.mini.Grade.Style> styles =
+                new EnumMap<>(com.dierks.homecraft.mini.Grade.class);
+        ConfigurationSection sec = c.getConfigurationSection("minis.grades");
+        if (sec != null) {
+            for (com.dierks.homecraft.mini.Grade g : com.dierks.homecraft.mini.Grade.values()) {
+                ConfigurationSection gs = sec.getConfigurationSection(g.name());
+                if (gs == null) {
+                    gs = sec.getConfigurationSection(g.name().toLowerCase(Locale.ROOT));
+                }
+                if (gs == null) {
+                    continue;
+                }
+                styles.put(g, new com.dierks.homecraft.mini.Grade.Style(
+                        gs.getString("name", g.display()),
+                        gs.getString("symbol", g.symbol()),
+                        gs.getDouble("multiplier", g.valueMultiplier())));
+            }
+        }
+        com.dierks.homecraft.mini.Grade.configure(styles);
+    }
+
+    /** Built-in per-rarity effect defaults, overridable leaf-by-leaf under {@code minis.effects.<RARITY>}. */
+    private MiniEffects readMiniEffects(FileConfiguration c) {
+        Map<Rarity, MiniEffect> defaults = new EnumMap<>(Rarity.class);
+        defaults.put(Rarity.COMMON, MiniEffect.NONE);
+        defaults.put(Rarity.UNCOMMON, MiniEffect.NONE);
+        defaults.put(Rarity.RARE, new MiniEffect("END_ROD", 2, 40, 0.3, true, "aqua", true, 7,
+                false, 0, false, null, null));
+        defaults.put(Rarity.EPIC, new MiniEffect("ENCHANT", 6, 20, 0.4, true, "light_purple", true, 7,
+                true, 20, false, null, null));
+        defaults.put(Rarity.LEGENDARY, new MiniEffect("SOUL_FIRE_FLAME", 3, 30, 0.4, true, "gold", true, 12,
+                true, 20, true, "ITEM_TOTEM_USE", "TOTEM_OF_UNDYING"));
+
+        Map<Rarity, MiniEffect> out = new EnumMap<>(Rarity.class);
+        for (Rarity r : Rarity.values()) {
+            MiniEffect d = defaults.get(r);
+            ConfigurationSection sec = c.getConfigurationSection("minis.effects." + r.name());
+            if (sec == null) {
+                out.put(r, d);
+                continue;
+            }
+            ConfigurationSection particle = sec.getConfigurationSection("particle");
+            ConfigurationSection holo = sec.getConfigurationSection("hologram");
+            ConfigurationSection light = sec.getConfigurationSection("light");
+            ConfigurationSection rotate = sec.getConfigurationSection("rotate");
+            String particleType = particle != null ? particle.getString("type", d.particle()) : d.particle();
+            if (particleType != null && (particleType.isBlank() || particleType.equalsIgnoreCase("none"))) {
+                particleType = null;
+            }
+            String placeSound = blankToNull(sec.getString("place_sound", d.placeSound()));
+            String placeParticle = blankToNull(sec.getString("place_particle", d.placeParticle()));
+            out.put(r, new MiniEffect(
+                    particleType == null ? null : particleType.trim().toUpperCase(Locale.ROOT),
+                    particle != null ? Math.max(0, particle.getInt("count", d.particleCount())) : d.particleCount(),
+                    particle != null ? Math.max(1, particle.getInt("interval_ticks", Math.max(1, d.particleInterval())))
+                            : d.particleInterval(),
+                    particle != null ? Math.max(0, particle.getDouble("offset", d.particleOffset())) : d.particleOffset(),
+                    holo != null ? holo.getBoolean("enabled", d.hologram()) : d.hologram(),
+                    holo != null ? holo.getString("color", d.hologramColor()) : d.hologramColor(),
+                    light != null ? light.getBoolean("enabled", d.light()) : d.light(),
+                    light != null ? Math.max(0, Math.min(15, light.getInt("level", d.lightLevel()))) : d.lightLevel(),
+                    rotate != null ? rotate.getBoolean("enabled", d.rotate()) : d.rotate(),
+                    rotate != null ? Math.max(0, rotate.getDouble("degrees_per_second", d.degreesPerSecond()))
+                            : d.degreesPerSecond(),
+                    sec.getBoolean("full_bright", d.fullBright()),
+                    placeSound == null ? null : placeSound.trim().toUpperCase(Locale.ROOT),
+                    placeParticle == null ? null : placeParticle.trim().toUpperCase(Locale.ROOT)));
+        }
+        return new MiniEffects(out,
+                Math.max(2, c.getDouble("minis.effects.radius", 16)),
+                Math.max(1, c.getInt("minis.effects.tick_interval", 10)),
+                c.getString("minis.effects.mint_sound", "BLOCK_AMETHYST_BLOCK_CHIME"),
+                c.getString("minis.effects.shiny_particle", "GLOW"),
+                c.getString("minis.effects.wild_hologram_text", "&dA wild Mini!"));
+    }
+
+    private Announce readAnnounce(FileConfiguration c) {
+        Map<Rarity, Boolean> per = new EnumMap<>(Rarity.class);
+        for (Rarity r : Rarity.values()) {
+            per.put(r, c.getBoolean("minis.announce.per_rarity." + r.name(), true));
+        }
+        Rarity min;
+        try {
+            min = Rarity.valueOf(c.getString("minis.announce.min_rarity", "COMMON").trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            min = Rarity.COMMON;
+        }
+        return new Announce(
+                c.getBoolean("minis.announce.enabled", true),
+                c.getBoolean("minis.announce.found", true),
+                c.getBoolean("minis.announce.spawn_hint", true),
+                c.getBoolean("minis.announce.slipped_away", true),
+                min,
+                c.getString("minis.announce.hint_radius_text", "within 100 blocks of a player"),
+                c.getString("minis.announce.sound", "ENTITY_EXPERIENCE_ORB_PICKUP"),
+                per);
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() || s.equalsIgnoreCase("none") ? null : s;
     }
 
     private BlockDef blockDef(FileConfiguration c, String path, Material fallback, String defaultName) {
@@ -1012,7 +1232,8 @@ public final class PluginConfig {
                     log.warning("Skipping Mini with empty/duplicate id '" + id + "'.");
                     continue;
                 }
-                catalog.add(new MiniDef(id, name, seriesName, category, rarity, type, texture, cap, price, craftable));
+                List<String> tags = readTags(e.get("tags"));
+                catalog.add(new MiniDef(id, name, seriesName, category, rarity, type, texture, cap, price, craftable, tags));
                 cardSpecs.put(id, readCardSpec(e.get("card"), rarity));
             }
         }
@@ -1030,9 +1251,14 @@ public final class PluginConfig {
         Map<com.dierks.homecraft.mini.Grade, Double> grades =
                 new EnumMap<>(com.dierks.homecraft.mini.Grade.class);
         if (card.get("grades") instanceof Map<?, ?> gm && !gm.isEmpty()) {
+            // Keys are the grade names (standard/graded/mint); the retired five-grade
+            // keys (gray…gold) fold onto their successors so old configs still load.
             for (com.dierks.homecraft.mini.Grade g : com.dierks.homecraft.mini.Grade.values()) {
-                Object w = gm.get(g.name().toLowerCase(Locale.ROOT));
-                grades.put(g, Math.max(0, number(w, 0)));
+                grades.put(g, 0.0);
+            }
+            for (Map.Entry<?, ?> en : gm.entrySet()) {
+                com.dierks.homecraft.mini.Grade g = com.dierks.homecraft.mini.Grade.parse(String.valueOf(en.getKey()));
+                grades.merge(g, Math.max(0, number(en.getValue(), 0)), Double::sum);
             }
         } else {
             grades.putAll(def.gradeWeights());

@@ -34,7 +34,7 @@ public final class StandService {
     public ArmorStand spawn(Location loc, float yaw, MiniService.MiniRef ref, UUID owner, ItemStack oneItem) {
         StandData data = plugin.miniService().stand(ref.miniId());
         String itemB64 = Items.toBase64(oneItem);
-        return loc.getWorld().spawn(loc, ArmorStand.class, stand -> {
+        ArmorStand spawned = loc.getWorld().spawn(loc, ArmorStand.class, stand -> {
             stand.setRotation(yaw, 0f);
             stand.setPersistent(true);
             if (data != null) {
@@ -47,6 +47,10 @@ public final class StandService {
             pdc.set(Keys.MINI_OWNER, PersistentDataType.STRING, owner.toString());
             pdc.set(Keys.MINI_ITEM, PersistentDataType.STRING, itemB64);
         });
+        if (plugin.effects() != null) {
+            plugin.effects().registerStand(spawned, true);
+        }
+        return spawned;
     }
 
     public boolean isMiniStand(Entity entity) {
@@ -73,6 +77,9 @@ public final class StandService {
 
     /** Remove the stand and return the exact minted Mini to the reclaimer. */
     public void reclaim(ArmorStand stand, Player to) {
+        if (plugin.effects() != null) {
+            plugin.effects().unregisterStand(stand.getUniqueId());
+        }
         ItemStack item = storedItem(stand);
         if (item != null) {
             to.getInventory().addItem(item).values()

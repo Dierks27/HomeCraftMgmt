@@ -7,7 +7,7 @@ import org.bukkit.persistence.PersistentDataType;
 
 /**
  * Computed collectible value (Phase 10, Part F). A printed Mini's value is
- * {@code base(rarity) × grade_mult × finish_mult × scarcity_factor}, blended with
+ * {@code base(rarity) × grade_mult (Standard/Graded/Mint) × finish_mult × scarcity_factor}, blended with
  * real market data (last sale) when available. A Card's value is a simpler
  * sealed-collectible figure from its rarity and what it can print. Used for info
  * tooltips and as the suggested floor in Vending/Auction listings.
@@ -74,11 +74,11 @@ public final class MiniValue {
         return Math.max(1, base(def) * 0.5 * scarcity(def));
     }
 
-    /** The Gray→Gold value range for a Mini type (for the Museum appraisal plaque). */
+    /** The Standard→Mint value range for a Mini type (for the Museum appraisal plaque). */
     public double[] gradeRange(MiniDef def) {
         return new double[] {
-                miniValue(def, Grade.GRAY, false).computed(),
-                miniValue(def, Grade.GOLD, false).computed()
+                miniValue(def, Grade.lowest(), false).computed(),
+                miniValue(def, Grade.highest(), false).computed()
         };
     }
 

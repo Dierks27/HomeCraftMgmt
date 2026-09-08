@@ -55,6 +55,13 @@ public final class Keys {
     /** On the auto-placed upper head of a two-tall Vending Machine: marks it a companion (Byte). */
     public static NamespacedKey VENDING_UPPER;
 
+    /** On a minted Mini item: the render revision it was last drawn with (Integer). */
+    public static NamespacedKey MINI_RENDER;
+    /** On an effect entity (hologram / item display) we spawned: marks it ours + disposable (Byte). */
+    public static NamespacedKey EFFECT_ENTITY;
+    /** On a naturally spawned wild-Mini head block: marks it claimable (Byte). */
+    public static NamespacedKey WILD_SPAWN;
+
     private Keys() {
     }
 
@@ -77,5 +84,8 @@ public final class Keys {
         BINDER_ITEM = new NamespacedKey(plugin, "binder_item");
         MAILBOX_VARIANT = new NamespacedKey(plugin, "mailbox_variant");
         VENDING_UPPER = new NamespacedKey(plugin, "vending_upper");
+        MINI_RENDER = new NamespacedKey(plugin, "mini_render");
+        EFFECT_ENTITY = new NamespacedKey(plugin, "effect_entity");
+        WILD_SPAWN = new NamespacedKey(plugin, "wild_spawn");
     }
 }

@@ -27,7 +27,9 @@ menus:
 # the tracked Vending Machine + Auction House.) Obtain the blocks with
 # /hcm give <mailbox|pallet>.
 marketplace:
-  mailbox_block: { material: BARREL, name: "&eMailbox" }
+  # The Mailbox comes in colour variants (see skins.mailbox + recipes.mailbox);
+  # {variant} in the name becomes the colour, e.g. "Blue Mailbox".
+  mailbox_block: { material: BARREL, name: "&e{variant} Mailbox" }
   pallet_block:  { material: CHEST,  name: "&6Pallet" }
   fee:
     commission_percent: 5.0     # % of each sale burned as a money sink
@@ -76,30 +78,19 @@ crafting:
       #   C: CRAFTING_TABLE
 
   # ---- The PC --------------------------------------------------------
-  # The gate to the Amazon market. Crafted at a Printer (or a legacy Mini
-  # Workbench) via the light craft grid using the "chill", cheap recipe below.
+  # The gate to the Crate market. Crafted at any crafting table (vanilla recipe,
+  # see `recipes.pc` below) or in a Printer's / legacy Workbench's craft grid.
   pc:
     base_block: PLAYER_HEAD
     display_name: "&bPersonal Computer"
     lore:
       - "&7Right-click to open the Amazon store."
       - "&8HomeCraft Management"
-    # Optional base64 texture value (minecraft-heads.com style) applied to the
-    # head so it looks like a computer/monitor. Leave blank for a plain head.
-    head_texture: ""
-    # Craft-grid recipe. type: SHAPED uses `shape` + `ingredients` (symbol->Material,
-    # laid out in the 3x3 grid). type: SHAPELESS uses `ingredients` as a list of
-    # { material, amount }. The default is a cheap "chill" recipe — edit to taste.
-    recipe:
-      type: SHAPELESS
-      shape: []
-      ingredients:
-        - material: IRON_INGOT
-          amount: 1
-        - material: REDSTONE
-          amount: 1
-        - material: GLASS_PANE
-          amount: 1
+    # Legacy computer/monitor head texture. `skins.pc` (below) wins when set; this
+    # is only the fallback when that is blank. Kept in sync with skins.pc.
+    head_texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMTQxZWFhNDA2NWUwYjVkMTVmOTA3OGEzZGMyZTZkMzQ0OWUxMjdkN2JjZjFhNmJiM2JmZGNlOGUzYjg4MjYzNiJ9fX0="
+    # The PC recipe now lives under `recipes.pc` (below) with every other
+    # craftable block — one data-driven loader, registered as vanilla recipes.
 
 # ---------------------------------------------------------------------
 #  Phase 9 — The Mini Printer (the ONLY place a Mini is minted).
@@ -332,12 +323,12 @@ minis:
     - name: "Starter Critters"
       rarity: COMMON
       entries:
-        - { name: "Piggy Mini",  category: ANIMAL, texture: "" }
-        - { name: "Chick Mini",  category: ANIMAL, texture: "" }
+        - { name: "Piggy Mini",  category: ANIMAL, texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYTlhOTIxMmQzNmMwY2E3ZjA1MzczNzZmYWI1Yjg0ZWNiN2FmNjZjZjY3NTRlN2I4N2Q4YjFhMDhkOWQ1NDAyYiJ9fX0=" }
+        - { name: "Chick Mini",  category: ANIMAL, texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzAzMWE5ODI2NTUyOGMwNDAxMjEzNTJkNWRhYTc4ODFhMjI1YjIyNGQ3ZDVlYmRmNjUyNzliYTgzODQ2OTZmYSJ9fX0=" }
     - name: "Legendary Relics"
       rarity: LEGENDARY
       entries:
-        - { name: "Golden Idol", category: SYMBOL, texture: "", cap: 5 }
+        - { name: "Golden Idol", category: SYMBOL, texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMWU1YmY2MDM2Mzg2YjJlYjAwZmMyZTYzNWU1NzViNzRlMmI1YTBjNjljYmI1MzY5MWFlZGZkYjZhMGMzNjAwOSJ9fX0=", cap: 5 }
 
   # ---- Trading blocks (Phase 4c) — appearance of the placeable custom blocks.
   # Obtain with /hcm give <vending|display|auction>. The Display Case should stay
@@ -388,20 +379,97 @@ minis:
 #  placed (the placed head keeps the texture natively). A blank value is safe —
 #  the block keeps its normal appearance (no crash, no ugly default swap).
 #  When a value is set, the block is rendered as a PLAYER_HEAD wearing it.
+#
+#  Two-state / multi-part blocks:
+#    pallet_empty / pallet_used  — a placed Pallet wears `pallet_empty` with no
+#                                  listing and swaps to `pallet_used` the moment
+#                                  one is loaded (back again when it's cleared).
+#                                  The item in hand always uses pallet_empty.
+#    vending_lower / vending_upper — the Vending Machine is TWO blocks tall: the
+#                                  lower head is the real block; the upper head is
+#                                  placed automatically above it (needs air).
+#    mailbox.<variant>           — one texture per Mailbox colour variant
+#                                  (wood, light_blue, black, white, purple, blue,
+#                                  orange, yellow). /hcm give mailbox [variant].
 # ---------------------------------------------------------------------
 skins:
-  pc:            ""   # computer / monitor head
-  printer:       ""   # 3D-printer head (Phase 9 Mini Printer)
+  pc:            "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMTQxZWFhNDA2NWUwYjVkMTVmOTA3OGEzZGMyZTZkMzQ0OWUxMjdkN2JjZjFhNmJiM2JmZGNlOGUzYjg4MjYzNiJ9fX0="   # computer / monitor head
+  printer:       "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMzNhMjA4M2MwYTMwNjJiMzhiYjdjNWI1ZGJlYTk5NDgzNGRjYmEwZTQ1MDA5YTdmYzA1YTA4MzNjMjlhMzk3In19fQ=="   # 3D-printer head (Phase 9 Mini Printer)
   workbench:     ""   # crafting-table head (retired block; legacy placements only)
-  vending:       ""   # vending-machine head
-  mailbox:       ""   # mailbox head
-  pallet:        ""   # pallet / shipping-crate head
+  vending_lower: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZTE5MzQyZjZjYzk4NDFjNmIwYjU4ZGFmYTY0NzgxZTIwNjQxOGZiOGQyNTlmNmY0MjAwMDc1OTZhZDU5YzkwYiJ9fX0="   # vending-machine head (bottom half — the real block)
+  vending_upper: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMjRhMzdlMGMxMjNmNGUxYTdlYjNjY2UxN2MxMjE0M2Y5M2MwYzdjZThjZTYyZDJmZjg2YTdjZTNhMDc5ZjQ3MyJ9fX0="   # vending-machine head (top half — auto-placed)
+  mailbox:
+    wood:       "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMzQ1ZmQxNzRmMjUwMzdiN2Y5ZWNhNzMzY2ZkMDQ2YThiNjM1MTEyMDI2NDg1MzcwNWJjYWE1YjYzZTE3YzE3In19fQ=="
+    light_blue: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvM2ZhM2Y2ZjlmNTBhYzY3ZGI5OGI2OGExNWZkMDU5MDE1Mjg4MzZhMThjNzBmYjM5MmFhODlmNGI2MDgzNzY2YiJ9fX0="
+    black:      "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZWIxNTJhMDQ5MDU4YTliZGQ1NjJmNTQxNGIxMzhjZDUzNWJmMDEyZjdjYzRiMzg3MTIzMjhhOWZmMGJhOWQ2YiJ9fX0="
+    white:      "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNGFmNTBmMTcyYTUxMGZhNjBiMmFmMGNiYjg0ZjM3MTUzNmM5NjVlYTU1MDg4MTI1M2Y3ZWNkMjY0MDc5NjllYiJ9fX0="
+    purple:     "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOTU4NWU2ODg4YzE5OTE4ZWE3ZGUxYmY2Y2E4ZGRlYTVlYjgzM2E4M2U4NWM0NmQ0ZTdlZjc3MzllMmY2In19fQ=="
+    blue:       "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOTVkOWI2ZDQ3ZTk3MzYyZjljNGJiY2Y5ZTJhN2FiMzEyMzgzZGU2ZTYzNTQ5Y2YwNWUyY2UzYjEzYmMxMTMyMCJ9fX0="
+    orange:     "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZDk2MDEyNjI5ODgzOTI5MjdmOWU1ZWUxMmJlZGQ1YmE5ZjRjMDE3OTc2ODFmMTUzNTI5Y2Q0M2UyMzQ4OGU0In19fQ=="
+    yellow:     "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOTI4MWMwMTUzOWM3YzgzYjc0MjdmYzBiMTgwYjNkYzg4NGExNDM4ZDZiZWU0OGNlY2NmYmVmNzkxZmNhYyJ9fX0="
+  pallet_empty:  "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYzVkMTQ3ZGM4MmZjNTNkMzZjMjQwYjJkZmQyMmQ0NjE0NWYyY2M0NzlmNTEyZWM3ZTY1ZjJjNDdjMThmNWI3NyJ9fX0="   # pallet head — nothing loaded
+  pallet_used:   "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZGM4OGJmMDVhOWE4N2YyZjJmNDNjYmZiNzgwMTQ3YTRhNDRjZjRkNTVjZTAxMWY3N2M4MWUwMDhlMmMwN2VmMCJ9fX0="   # pallet head — a listing is loaded
   display_case:  ""   # glass display-case head
-  arcade:        ""   # arcade-machine head
+  auction:       ""   # auction-house head
+  arcade:        "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNDA0NjRmYmNlMmE5NzEwY2Q0MGVlMzcxYWFjNmE4ZjIzNWMxYWY4MjI4YjQyMGIzMmQ0YzU5NmI0MDA2NWZlMiJ9fX0="   # arcade-machine head
   crate_machine: ""   # crate-machine head
   scratch_booth: ""   # scratch-ticket booth head
   pity_kiosk:    ""   # pity-exchange kiosk head
   token_counter: ""   # token-counter head
+
+# ---------------------------------------------------------------------
+#  Recipes — every craftable HomeCraft block, data-driven and reloadable.
+#  All SHAPED 3x3, registered as normal (vanilla) recipes under the plugin's
+#  namespace, so they craft at any crafting table and show in the recipe book
+#  (unlocked for every player on join — click-to-fill works). `/hcm reload`
+#  re-registers them live. Symbols map to a Material, or to an item TAG with a
+#  leading `#` (e.g. `#planks`, `#wooden_slabs`, `#wooden_fences` = any of them).
+#  Space = empty cell. An empty `shape: []` disables that recipe.
+#  The Mini Workbench is retired and deliberately has no recipe.
+#  The PC recipe here is also what the Printer's craft grid matches.
+# ---------------------------------------------------------------------
+recipes:
+  pc:
+    shape: ["GGG", "CKC", "IQI"]
+    ingredients: { G: GLASS_PANE, C: COPPER_BLOCK, K: COMPARATOR, I: IRON_BLOCK, Q: QUARTZ_BLOCK }
+  printer:
+    shape: ["IHI", "CSC", "PAP"]
+    ingredients: { I: IRON_INGOT, H: HOPPER, C: COPPER_BLOCK, S: SMITHING_TABLE, P: PISTON, A: AMETHYST_BLOCK }
+  vending:
+    shape: ["IGI", "GEG", "IDI"]
+    ingredients: { I: IRON_INGOT, G: GLASS, E: EMERALD_BLOCK, D: DISPENSER }
+  pallet:
+    shape: ["SSS", "TBT", "SSS"]
+    ingredients: { S: "#wooden_slabs", T: STICK, B: BARREL }
+  arcade:
+    shape: ["GNG", "CJC", "RER"]
+    ingredients: { G: TINTED_GLASS, N: NOTE_BLOCK, C: COPPER_BLOCK, J: JUKEBOX, R: REDSTONE_BLOCK, E: EMERALD_BLOCK }
+  # One Mailbox recipe per colour variant: X = that colour's dye (wood = any planks).
+  mailbox:
+    wood:
+      shape: ["XIX", "ICI", " F "]
+      ingredients: { X: "#planks", I: IRON_INGOT, C: CHEST, F: "#wooden_fences" }
+    light_blue:
+      shape: ["XIX", "ICI", " F "]
+      ingredients: { X: LIGHT_BLUE_DYE, I: IRON_INGOT, C: CHEST, F: "#wooden_fences" }
+    black:
+      shape: ["XIX", "ICI", " F "]
+      ingredients: { X: BLACK_DYE, I: IRON_INGOT, C: CHEST, F: "#wooden_fences" }
+    white:
+      shape: ["XIX", "ICI", " F "]
+      ingredients: { X: WHITE_DYE, I: IRON_INGOT, C: CHEST, F: "#wooden_fences" }
+    purple:
+      shape: ["XIX", "ICI", " F "]
+      ingredients: { X: PURPLE_DYE, I: IRON_INGOT, C: CHEST, F: "#wooden_fences" }
+    blue:
+      shape: ["XIX", "ICI", " F "]
+      ingredients: { X: BLUE_DYE, I: IRON_INGOT, C: CHEST, F: "#wooden_fences" }
+    orange:
+      shape: ["XIX", "ICI", " F "]
+      ingredients: { X: ORANGE_DYE, I: IRON_INGOT, C: CHEST, F: "#wooden_fences" }
+    yellow:
+      shape: ["XIX", "ICI", " F "]
+      ingredients: { X: YELLOW_DYE, I: IRON_INGOT, C: CHEST, F: "#wooden_fences" }
 
 # ---------------------------------------------------------------------
 #  Phase 6 (Part C) — The Market Web Dashboard
@@ -457,9 +525,9 @@ arcade:
   enabled: true
   # The placeable Arcade hub block (skin it via skins.arcade).
   block: { material: JUKEBOX, name: "&5Arcade Machine" }
-  # Individual placeable machines — right-click to play. Each is owned/protected
-  # like the other custom blocks; skin them via skins.crate_machine etc.
-  # Obtain with /hcm give <cratemachine|scratch|pity|counter>.
+  # Individual machine blocks (crate/scratch/pity/counter) are RETIRED: the Arcade
+  # hub block is the only obtainable machine now. Any already-placed machines keep
+  # working (these entries still style them) but they are no longer given/crafted.
   machines:
     crate:   { material: CHEST,             name: "&6Crate Machine" }
     scratch: { material: CARTOGRAPHY_TABLE, name: "&aScratch-Ticket Booth" }

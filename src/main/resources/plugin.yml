@@ -27,8 +27,8 @@ commands:
       /hcm admin             - open the Admin Studio (manage & import Minis)
       /hcm auction           - open the Mini Auction House
       /hcm reload            - reload config.yml and re-register recipes
-      /hcm give <workbench|pc|vending|display|auction|mailbox|pallet|arcade> [player]
-      /hcm give <cratemachine|scratch|pity|counter> [player]  - Arcade machines
+      /hcm give <printer|pc|vending|display|mailbox [variant]|pallet|arcade> [player]
+      /hcm give <card <id>|pack <id>|binder|filament <color> <n>> [player]
       /hcm market list|price <item>|buy <item> <qty>|sell <item> <qty>
       /hcm market resetstock <item|all>  - admin: reseed stock+price from config
       /hcm market setstock <item> <amount>  - admin: set one item's stock

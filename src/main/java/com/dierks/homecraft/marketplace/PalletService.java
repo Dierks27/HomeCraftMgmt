@@ -1,6 +1,8 @@
 package com.dierks.homecraft.marketplace;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.block.BlockSkins;
+import com.dierks.homecraft.block.CustomBlockType;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.integration.EconomyService;
 import com.dierks.homecraft.storage.PalletDao;
@@ -109,7 +111,21 @@ public final class PalletService {
             return Result.fail("Could not save the listing — try again.");
         }
         held.setAmount(0); // consumed the whole held stack into the pallet
+        refreshSkin(loc);
         return new Result(true, null, 0);
+    }
+
+    /**
+     * Two visual states: a placed Pallet wears {@code skins.pallet_empty} with no
+     * listing and {@code skins.pallet_used} once one is loaded. Applied to the placed
+     * head the same way the Display Case trophy is (no-op if the base isn't a head).
+     */
+    public void refreshSkin(Location loc) {
+        String empty = plugin.config().skin(CustomBlockType.PALLET);
+        String used = plugin.config().skinNamed("pallet_used");
+        boolean loaded = at(loc).isPresent();
+        String texture = loaded && !used.isBlank() ? used : empty;
+        BlockSkins.apply(loc.getBlock(), texture);
     }
 
     public Result setPrice(Player owner, Location loc, double price) {
@@ -142,6 +158,7 @@ public final class PalletService {
         }
         returnStock(owner, opt.get());
         deleteAt(loc);
+        refreshSkin(loc);
         return new Result(true, null, 0);
     }
 

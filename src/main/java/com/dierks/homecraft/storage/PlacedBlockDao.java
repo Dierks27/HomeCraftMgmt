@@ -7,6 +7,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -63,6 +65,24 @@ public final class PlacedBlockDao {
                     }
                     return Optional.of(map(rs));
                 }
+            }
+        }
+    }
+
+    /** Every placement of one type (e.g. all Vending Machines) — for load-time migrations. */
+    public List<PlacedBlock> findByType(CustomBlockType type) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT world, x, y, z, type, owner, created_at FROM placed_blocks WHERE type = ?")) {
+                ps.setString(1, type.name());
+                List<PlacedBlock> out = new ArrayList<>();
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        out.add(map(rs));
+                    }
+                }
+                return out;
             }
         }
     }

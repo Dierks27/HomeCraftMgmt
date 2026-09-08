@@ -173,6 +173,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(
                 new CustomBlockListener(this, config, blockService, items, protection), this);
         getServer().getPluginManager().registerEvents(new WorkbenchListener(this, recipeManager), this);
+        getServer().getPluginManager().registerEvents(
+                new com.dierks.homecraft.crafting.RecipeBookListener(recipeManager), this);
         getServer().getPluginManager().registerEvents(new MenuListener(), this);
         getServer().getPluginManager().registerEvents(new OrderDeliveryListener(orderService), this);
         getServer().getPluginManager().registerEvents(chatPrompts, this);
@@ -201,6 +203,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         // Start the economy-display refresh timer (renders signs + spawns holograms).
         this.displayService.start();
         this.arcade.start();
+
+        // Vending Machines are two blocks tall: give every already-placed one its
+        // upper head (or log the ones that are blocked). Runs once the worlds are up.
+        getServer().getScheduler().runTask(this, blockService::migrateVendingUppers);
 
         // In-Game Economy Displays (Phase 7): the PlaceholderAPI 'hcm' expansion —
         // only loaded/registered when PlaceholderAPI is installed.
@@ -328,6 +334,46 @@ public final class HomeCraftManagement extends JavaPlugin {
             changed = true;
             getLogger().info("Config migration: upgraded shipping to the Express tier scheme "
                     + "(express 5m/20% · one_day 1h/10% · two_day 3h/5% · three_day 8h/free).");
+        }
+
+        // Skins & recipes rework: two-state Pallet, two-tall Vending Machine, Mailbox
+        // colour variants, and the PC recipe moving into the shared `recipes:` section.
+        // Each step only fires when the on-disk file still has the old shape, so an
+        // admin's custom values are carried over rather than dropped.
+        if (c.contains("skins.pallet") && !c.contains("skins.pallet_empty")) {
+            c.set("skins.pallet_empty", c.getString("skins.pallet", ""));
+            c.set("skins.pallet", null);
+            changed = true;
+            getLogger().info("Config migration: skins.pallet → skins.pallet_empty (pallet_used added from defaults).");
+        }
+        if (c.contains("skins.vending") && !c.contains("skins.vending_lower")) {
+            c.set("skins.vending_lower", c.getString("skins.vending", ""));
+            c.set("skins.vending", null);
+            changed = true;
+            getLogger().info("Config migration: skins.vending → skins.vending_lower (vending_upper added from defaults).");
+        }
+        if (c.contains("skins.mailbox") && !c.isConfigurationSection("skins.mailbox")) {
+            String legacy = c.getString("skins.mailbox", "");
+            c.set("skins.mailbox", null);
+            if (legacy != null && !legacy.isBlank()) {
+                c.set("skins.mailbox.wood", legacy);
+            }
+            changed = true;
+            getLogger().info("Config migration: skins.mailbox is now a per-variant map (old value kept as wood).");
+        }
+        if (c.contains("crafting.pc.recipe") && !c.contains("recipes.pc")) {
+            c.set("crafting.pc.recipe", null);
+            changed = true;
+            getLogger().info("Config migration: the PC recipe now lives under recipes.pc (added from defaults) "
+                    + "alongside every other craftable block; the old crafting.pc.recipe was dropped.");
+        }
+        if (c.contains("skins.pc") && c.contains("crafting.pc.head_texture")) {
+            String skin = c.getString("skins.pc", "");
+            String legacy = c.getString("crafting.pc.head_texture", "");
+            if (skin != null && !skin.isBlank() && (legacy == null || legacy.isBlank())) {
+                c.set("crafting.pc.head_texture", skin);
+                changed = true;
+            }
         }
 
         if (changed) {

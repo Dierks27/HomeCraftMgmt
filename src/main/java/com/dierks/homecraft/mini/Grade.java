@@ -1,65 +1,116 @@
 package com.dierks.homecraft.mini;
 
-import net.kyori.adventure.text.format.NamedTextColor;
+import java.util.EnumMap;
+import java.util.Locale;
+import java.util.Map;
 
 /**
- * The print-grade ladder (Phase 9): a printed Mini's polish tier, rolled at the
- * Printer from the card's published odds. Grade drives the Mini's name colour +
- * glint and its value multiplier (§3.5 / Part F).
+ * The print-grade ladder: a Mini's polish tier, rolled at the Printer (or by a
+ * wild drop / crate) from the published odds. Three grades — STANDARD (☆),
+ * GRADED (★★), MINT (★★★). Grade owns the <b>stars</b> and the value multiplier;
+ * rarity owns the name colour and glint (a grade never competes for colour).
  *
- * <p>Gray → Green → Blue → Purple → Gold, ascending.
+ * <p>Names, symbols and multipliers are config data ({@code minis.grades}) applied
+ * through {@link #configure} on every load; the built-in values are the defaults.
+ * Legacy five-grade names (Gray/Green → STANDARD, Blue/Purple → GRADED, Gold →
+ * MINT) parse transparently so existing items migrate on read.
  */
 public enum Grade {
-    GRAY("⬜", "Gray", NamedTextColor.GRAY, false, 1.0),
-    GREEN("🟩", "Green", NamedTextColor.GREEN, false, 1.6),
-    BLUE("🟦", "Blue", NamedTextColor.AQUA, true, 2.6),
-    PURPLE("🟪", "Purple", NamedTextColor.LIGHT_PURPLE, true, 4.2),
-    GOLD("🟨", "Gold", NamedTextColor.GOLD, true, 8.0);
+    STANDARD("Standard", "☆", 1.0),
+    GRADED("Graded", "★★", 2.5),
+    MINT("Mint", "★★★", 6.0);
 
-    private final String symbol;
-    private final String display;
-    private final NamedTextColor color;
-    private final boolean glint;
-    private final double valueMultiplier;
+    /** Config-overridable presentation of a grade. */
+    public record Style(String display, String symbol, double valueMultiplier) {
+    }
 
-    Grade(String symbol, String display, NamedTextColor color, boolean glint, double valueMultiplier) {
-        this.symbol = symbol;
-        this.display = display;
-        this.color = color;
-        this.glint = glint;
-        this.valueMultiplier = valueMultiplier;
+    private static volatile Map<Grade, Style> styles = new EnumMap<>(Grade.class);
+
+    private final String defaultDisplay;
+    private final String defaultSymbol;
+    private final double defaultMultiplier;
+
+    Grade(String defaultDisplay, String defaultSymbol, double defaultMultiplier) {
+        this.defaultDisplay = defaultDisplay;
+        this.defaultSymbol = defaultSymbol;
+        this.defaultMultiplier = defaultMultiplier;
+    }
+
+    /** Apply config overrides (missing grades keep their built-in defaults). */
+    public static void configure(Map<Grade, Style> overrides) {
+        Map<Grade, Style> next = new EnumMap<>(Grade.class);
+        if (overrides != null) {
+            next.putAll(overrides);
+        }
+        styles = next;
     }
 
     public String symbol() {
-        return symbol;
+        Style s = styles.get(this);
+        return s != null && s.symbol() != null && !s.symbol().isBlank() ? s.symbol() : defaultSymbol;
     }
 
     public String display() {
-        return display;
-    }
-
-    public NamedTextColor color() {
-        return color;
-    }
-
-    /** Whether a printed Mini of this grade carries an enchant glint. */
-    public boolean glint() {
-        return glint;
+        Style s = styles.get(this);
+        return s != null && s.display() != null && !s.display().isBlank() ? s.display() : defaultDisplay;
     }
 
     public double valueMultiplier() {
-        return valueMultiplier;
+        Style s = styles.get(this);
+        return s != null && s.valueMultiplier() > 0 ? s.valueMultiplier() : defaultMultiplier;
     }
 
-    /** Tolerant parse (case-insensitive); defaults to GRAY on anything unknown. */
+    /** The lowest grade (the floor of every odds table). */
+    public static Grade lowest() {
+        return STANDARD;
+    }
+
+    /** The highest grade. */
+    public static Grade highest() {
+        return MINT;
+    }
+
+    /**
+     * Tolerant parse: enum names and config display names (case-insensitive), plus
+     * the legacy five-grade names. Anything unknown (or null) reads as STANDARD.
+     */
     public static Grade parse(String s) {
         if (s == null) {
-            return GRAY;
+            return STANDARD;
         }
-        try {
-            return valueOf(s.trim().toUpperCase(java.util.Locale.ROOT));
-        } catch (IllegalArgumentException e) {
-            return GRAY;
+        String k = s.trim().toUpperCase(Locale.ROOT);
+        if (k.isEmpty()) {
+            return STANDARD;
         }
+        switch (k) {
+            case "GRAY", "GREY", "GREEN" -> {
+                return STANDARD;
+            }
+            case "BLUE", "PURPLE" -> {
+                return GRADED;
+            }
+            case "GOLD" -> {
+                return MINT;
+            }
+            default -> {
+                // fall through to enum / display-name matching
+            }
+        }
+        for (Grade g : values()) {
+            if (g.name().equals(k) || g.display().toUpperCase(Locale.ROOT).equals(k)) {
+                return g;
+            }
+        }
+        return STANDARD;
+    }
+
+    /** True if the raw stored name is one of the retired five-grade names (needs a re-render). */
+    public static boolean isLegacyName(String s) {
+        if (s == null) {
+            return false;
+        }
+        String k = s.trim().toUpperCase(Locale.ROOT);
+        return k.equals("GRAY") || k.equals("GREY") || k.equals("GREEN") || k.equals("BLUE")
+                || k.equals("PURPLE") || k.equals("GOLD");
     }
 }

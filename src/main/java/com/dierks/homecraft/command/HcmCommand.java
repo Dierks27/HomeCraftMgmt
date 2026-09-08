@@ -131,6 +131,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
                 new com.dierks.homecraft.gui.arcade.QuestsMenu(plugin, player).open(player);
             }
+            case "museum" -> handleMuseum(sender, args);
             case "auction", "auctions" -> {
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Text.of("&cOnly players can open the Auction House."));
@@ -205,6 +206,24 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "capturestand" -> handleCaptureStand(sender, args);
             default -> sender.sendMessage(Text.of("&cUsage: /hcm mini <museum|list|give|capturestand> …"));
         }
+    }
+
+    /** {@code /hcm museum [id]} — open the browse-only Museum, optionally straight onto one Mini's card. */
+    private void handleMuseum(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Text.of("&cOnly players can open the Museum."));
+            return;
+        }
+        if (args.length >= 2 && !args[1].isBlank()) {
+            String id = com.dierks.homecraft.mini.MiniIds.slug(args[1]);
+            if (plugin.miniService().def(id) == null) {
+                sender.sendMessage(Text.of("&cNo Mini called '" + args[1] + "'."));
+                return;
+            }
+            com.dierks.homecraft.gui.MuseumMenu.openFor(plugin, player, id);
+            return;
+        }
+        new com.dierks.homecraft.gui.MuseumMenu(plugin, player, null).open(player);
     }
 
     /** Capture the pose + equipment of the armor stand the admin is looking at into a Mini. */
@@ -751,7 +770,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         if (sender.hasPermission("hcm.market.order")) {
             sender.sendMessage(Text.of("&e/hcm market buy|sell <item> <qty> &7- trade"));
         }
-        sender.sendMessage(Text.of("&e/hcm mini museum &7- open the Mini Museum"));
+        sender.sendMessage(Text.of("&e/hcm museum [id] &7- browse the Mini Museum"));
         sender.sendMessage(Text.of("&e/hcm auction &7- open the Mini Auction House"));
         if (sender.hasPermission("hcm.admin")) {
             sender.sendMessage(Text.of("&e/hcm mini list|give <id> [player] &7- admin Minis"));
@@ -950,9 +969,16 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests");
             } else {
-                addMatches(out, args[0], "market", "mini", "packs", "binder", "auction", "arcade", "balance", "tokens");
+                addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "balance", "tokens");
+            }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("museum")) {
+            String prefix = args[1].toLowerCase(Locale.ROOT);
+            for (com.dierks.homecraft.mini.MiniDef def : plugin.miniService().catalog()) {
+                if (def.id().startsWith(prefix)) {
+                    out.add(def.id());
+                }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("mini")) {
             addMatches(out, args[1], "museum", "list", "give", "capturestand");

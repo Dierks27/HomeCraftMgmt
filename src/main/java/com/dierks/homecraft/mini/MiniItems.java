@@ -11,6 +11,7 @@ import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 
 import java.util.ArrayList;
@@ -18,35 +19,34 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Builds Mini items: textured heads styled by rarity (name colour, glint), with
- * a full provenance tooltip. A minted Mini carries a unique per-copy id in its
- * PDC (the anti-dupe tag) plus its type id and mint number; a preview icon is a
- * cosmetic-only version for the Museum GUI.
+ * Builds Mini items: textured heads styled by <b>rarity</b> (name colour + glint
+ * always come from the rarity palette), with the <b>grade</b> shown as a star
+ * suffix on the name and in lore — never as a competing colour. Shiny is an
+ * independent finish (extra glint + "✦ Shiny"). A minted Mini carries a unique
+ * per-copy id in its PDC (the anti-dupe tag) plus its type id, mint number, grade
+ * and finish; a preview icon is a cosmetic-only version for the Museum GUI.
  */
 public final class MiniItems {
 
-    /** A real, minted Mini item given to a player (uniquely tagged); ungraded (Gray). */
+    /** Render revision stamped on every minted Mini; bump when the name/lore layout changes. */
+    public static final int RENDER_VERSION = 2;
+
+    /** A real, minted Mini item given to a player (uniquely tagged); Standard grade. */
     public ItemStack minted(MiniDef def, RarityStyle style, long mintNumber, UUID uid) {
-        return minted(def, style, mintNumber, uid, Grade.GRAY, null);
+        return minted(def, style, mintNumber, uid, Grade.STANDARD, null);
     }
 
     /**
-     * A real, minted Mini printed at a Printer (Phase 9): the {@code grade} drives the
-     * visual polish (name colour + glint) and a {@code finish} (e.g. SHINY) adds an
-     * extra glint. Still carries the anti-dupe uid + type id + mint number.
+     * A real, minted Mini: the {@code grade} adds its star suffix and a lore line, a
+     * {@code finish} (e.g. SHINY) adds an extra glint. Still carries the anti-dupe
+     * uid + type id + mint number.
      */
     public ItemStack minted(MiniDef def, RarityStyle style, long mintNumber, UUID uid, Grade grade, String finish) {
-        ItemStack item = baseItem(def, style);
+        ItemStack item = baseItem(def);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            boolean shiny = finish != null && finish.equalsIgnoreCase("SHINY");
-            meta.displayName(Component.text(grade.symbol() + " " + def.name(), grade.color())
-                    .decoration(TextDecoration.ITALIC, false));
-            if (grade.glint() || shiny) {
-                meta.setEnchantmentGlintOverride(true);
-            }
-            meta.lore(lore(def, style, mintNumber, grade, shiny));
-            var pdc = meta.getPersistentDataContainer();
+            boolean shiny = isShiny(finish);
+            PersistentDataContainer pdc = meta.getPersistentDataContainer();
             pdc.set(Keys.MINI_ID, PersistentDataType.STRING, def.id());
             pdc.set(Keys.MINI_UID, PersistentDataType.STRING, uid.toString());
             pdc.set(Keys.MINI_MINT, PersistentDataType.LONG, mintNumber);
@@ -54,31 +54,75 @@ public final class MiniItems {
             if (shiny) {
                 pdc.set(Keys.MINI_FINISH, PersistentDataType.STRING, "SHINY");
             }
+            pdc.set(Keys.MINI_RENDER, PersistentDataType.INTEGER, RENDER_VERSION);
+            render(meta, def, style, mintNumber, grade, shiny);
             item.setItemMeta(meta);
         }
         return item;
     }
 
     /**
-     * A cosmetic-only display icon for the Museum (no unique id — not a real Mini).
-     * {@code priceText} is the pre-formatted price (via the economy) so buyers see
-     * exactly what a mint costs before they ever click.
+     * Re-draw an existing Mini's name/lore/glint from its PDC — migrates items minted
+     * under the retired five-grade ladder (Gray…Gold → Standard/Graded/Mint) and any
+     * older render layout. Mutates {@code item} in place.
+     *
+     * @return true if the item was re-rendered.
      */
-    public ItemStack preview(MiniDef def, RarityStyle style, long minted, long circulation, String priceText) {
-        return preview(def, style, minted, circulation, priceText, null);
+    public boolean refresh(ItemStack item, MiniDef def, RarityStyle style) {
+        if (item == null || !item.hasItemMeta() || def == null) {
+            return false;
+        }
+        ItemMeta meta = item.getItemMeta();
+        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+        Integer version = null;
+        try {
+            version = pdc.get(Keys.MINI_RENDER, PersistentDataType.INTEGER);
+        } catch (Throwable ignored) {
+            // absent or stored oddly — treat as legacy
+        }
+        String rawGrade = pdc.get(Keys.MINI_GRADE, PersistentDataType.STRING);
+        if (version != null && version >= RENDER_VERSION && !Grade.isLegacyName(rawGrade)) {
+            return false;
+        }
+        Grade grade = Grade.parse(rawGrade);
+        boolean shiny = isShiny(pdc.get(Keys.MINI_FINISH, PersistentDataType.STRING));
+        long mint = readMint(pdc);
+        pdc.set(Keys.MINI_GRADE, PersistentDataType.STRING, grade.name());
+        pdc.set(Keys.MINI_RENDER, PersistentDataType.INTEGER, RENDER_VERSION);
+        render(meta, def, style, mint, grade, shiny);
+        item.setItemMeta(meta);
+        return true;
+    }
+
+    /** The grade a minted item carries (legacy names mapped); STANDARD for anything unknown. */
+    public Grade gradeOf(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) {
+            return Grade.STANDARD;
+        }
+        return Grade.parse(item.getItemMeta().getPersistentDataContainer()
+                .get(Keys.MINI_GRADE, PersistentDataType.STRING));
+    }
+
+    /** True if the minted item carries the Shiny finish. */
+    public boolean isShiny(ItemStack item) {
+        return item != null && item.hasItemMeta()
+                && isShiny(item.getItemMeta().getPersistentDataContainer()
+                .get(Keys.MINI_FINISH, PersistentDataType.STRING));
     }
 
     /**
-     * Museum appraisal preview (Phase 10, Part F): as {@link #preview(MiniDef, RarityStyle,
-     * long, long, String)} but with a computed {@code valueText} (the Gray→Gold value
-     * range) shown as a value plaque line.
+     * A cosmetic-only Museum icon (no unique id — not a real Mini): live minted/cap,
+     * circulation and the Standard→Mint value appraisal. The Museum is browse-only, so
+     * the action line points at the Printer rather than a purchase.
      */
-    public ItemStack preview(MiniDef def, RarityStyle style, long minted, long circulation,
-                             String priceText, String valueText) {
-        ItemStack item = baseItem(def, style);
+    public ItemStack preview(MiniDef def, RarityStyle style, long minted, long circulation, String valueText) {
+        ItemStack item = baseItem(def);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            boolean free = def.price() <= 0;
+            meta.displayName(Component.text(def.name(), style.nameColor()).decoration(TextDecoration.ITALIC, false));
+            if (style.glint()) {
+                meta.setEnchantmentGlintOverride(true);
+            }
             List<Component> lore = new ArrayList<>();
             lore.add(line("Type: ", def.category(), NamedTextColor.GRAY));
             lore.add(line("Series: ", def.series(), NamedTextColor.GRAY));
@@ -90,22 +134,16 @@ public final class MiniItems {
                         .append(Component.text(valueText, NamedTextColor.AQUA))
                         .decoration(TextDecoration.ITALIC, false));
             }
-            lore.add(Component.empty());
-            // Price is shown prominently in its own coloured line so it never reads as free.
-            lore.add(Component.text("Price: ", NamedTextColor.GRAY)
-                    .append(Component.text(free ? "Free" : priceText, NamedTextColor.GOLD))
-                    .decoration(TextDecoration.ITALIC, false));
+            if (!def.tags().isEmpty()) {
+                lore.add(line("Drops from: ", String.join(", ", def.tags()), NamedTextColor.GRAY));
+            }
             lore.add(Component.empty());
             boolean soldOut = !def.uncapped() && minted >= def.cap();
-            Component action;
-            if (soldOut) {
-                action = Component.text("Minted out — trade only", NamedTextColor.RED);
-            } else if (free) {
-                action = Component.text("Click to mint one (free)", NamedTextColor.YELLOW);
-            } else {
-                action = Component.text("Click to buy for " + priceText, NamedTextColor.GREEN);
-            }
-            lore.add(action.decoration(TextDecoration.ITALIC, false));
+            lore.add((soldOut
+                    ? Component.text("Minted out — trade only", NamedTextColor.RED)
+                    : Component.text("Printed from a Card at a Printer", NamedTextColor.YELLOW))
+                    .decoration(TextDecoration.ITALIC, false));
+            lore.add(Component.text("Click for details", NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false));
             meta.lore(lore);
             item.setItemMeta(meta);
         }
@@ -122,16 +160,22 @@ public final class MiniItems {
                 : meta.getPersistentDataContainer().get(Keys.MINI_ID, PersistentDataType.STRING);
     }
 
-    private ItemStack baseItem(MiniDef def, RarityStyle style) {
+    // ---- rendering ---------------------------------------------------------
+
+    /** Name (rarity colour + grade stars), glint (rarity, or Shiny), and the provenance lore. */
+    private void render(ItemMeta meta, MiniDef def, RarityStyle style, long mintNumber, Grade grade, boolean shiny) {
+        meta.displayName(Component.text(def.name() + " " + grade.symbol(), style.nameColor())
+                .decoration(TextDecoration.ITALIC, false));
+        meta.setEnchantmentGlintOverride(style.glint() || shiny ? Boolean.TRUE : null);
+        meta.lore(lore(def, style, mintNumber, grade, shiny));
+    }
+
+    private ItemStack baseItem(MiniDef def) {
         Material material = def.type() == MiniType.ARMOR_STAND ? Material.ARMOR_STAND : Material.PLAYER_HEAD;
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         if (meta == null) {
             return item;
-        }
-        meta.displayName(Component.text(def.name(), style.nameColor()).decoration(TextDecoration.ITALIC, false));
-        if (style.glint()) {
-            meta.setEnchantmentGlintOverride(true);
         }
         if (material == Material.PLAYER_HEAD && meta instanceof SkullMeta skull
                 && def.texture() != null && !def.texture().isBlank()) {
@@ -153,7 +197,7 @@ public final class MiniItems {
         lore.add(line("Series: ", def.series(), NamedTextColor.GRAY));
         lore.add(line("Rarity: ", def.rarity().name(), style.nameColor()));
         lore.add(Component.text("Grade: ", NamedTextColor.DARK_GRAY)
-                .append(Component.text(grade.symbol() + " " + grade.display(), grade.color()))
+                .append(Component.text(grade.symbol() + " " + grade.display(), NamedTextColor.WHITE))
                 .append(shiny ? Component.text("  ✦ Shiny", NamedTextColor.WHITE) : Component.empty())
                 .decoration(TextDecoration.ITALIC, false));
         lore.add(line("Mint #", mintNumber + (def.uncapped() ? "" : " of " + def.cap()), NamedTextColor.GRAY));
@@ -164,5 +208,29 @@ public final class MiniItems {
         return Component.text(label, NamedTextColor.DARK_GRAY)
                 .append(Component.text(value, valueColor))
                 .decoration(TextDecoration.ITALIC, false);
+    }
+
+    private static boolean isShiny(String finish) {
+        return finish != null && finish.equalsIgnoreCase("SHINY");
+    }
+
+    private static long readMint(PersistentDataContainer pdc) {
+        try {
+            Long l = pdc.get(Keys.MINI_MINT, PersistentDataType.LONG);
+            if (l != null) {
+                return l;
+            }
+        } catch (Throwable ignored) {
+            // narrower numeric type — try int
+        }
+        try {
+            Integer i = pdc.get(Keys.MINI_MINT, PersistentDataType.INTEGER);
+            if (i != null) {
+                return i;
+            }
+        } catch (Throwable ignored) {
+            // give up
+        }
+        return 0;
     }
 }

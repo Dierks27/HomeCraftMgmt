@@ -25,13 +25,12 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * The Arcade engine (Phase 8, §3.9): earn tokens by playing (login streaks +
- * playtime), spend them on weighted loot crates (Mini prizes are awarded as Cards,
- * printed later at a Printer), buy better odds with a Vault fee, exchange tokens for
+ * playtime), spend them on weighted loot crates (a Mini prize mints a finished,
+ * graded Mini — from a fixed id or a rarity-weighted tag pool — cap-aware, tracked
+ * and announced server-wide), buy better odds with a Vault fee, exchange tokens for
  * a guaranteed Rare+ Card via the pity path, and scratch lotto tickets.
  *
- * <p>All currency is in-game (tokens + Vault money) — never real money. Phase 9: Mini
- * prizes now hand out {@link com.dierks.homecraft.mini.CardService Cards}; minting
- * stays exclusive to the Printer, preserving anti-dupe, caps, and circulation.
+ * <p>All currency is in-game (tokens + Vault money) — never real money.
  */
 public final class ArcadeService {
 
@@ -81,7 +80,7 @@ public final class ArcadeService {
     private void validateCrates() {
         for (Crate crate : plugin.config().arcade().crates().values()) {
             for (CrateReward r : crate.rewards()) {
-                if (r.type() == RewardType.MINI && plugin.miniService().def(r.miniId()) == null) {
+                if (r.type() == RewardType.MINI && !r.usesTag() && plugin.miniService().def(r.miniId()) == null) {
                     plugin.getLogger().warning("Arcade crate '" + crate.id() + "' references unknown Mini '"
                             + r.miniId() + "' — that reward is skipped; the crate still works.");
                 }
@@ -294,7 +293,7 @@ public final class ArcadeService {
             plugin.economy().withdraw(player, tier.costMoney()); // burned money sink
         }
 
-        Outcome outcome = grantFromPool(player, pool);
+        Outcome outcome = grantFromPool(player, pool, tier);
         if (outcome.ok() && plugin.achievements() != null) {
             plugin.achievements().tryAward(player, "first_crate");
         }
@@ -305,7 +304,7 @@ public final class ArcadeService {
     }
 
     /** Weighted-pick and grant a reward from an already-eligible pool. */
-    private Outcome grantFromPool(Player player, List<CrateReward> pool) {
+    private Outcome grantFromPool(Player player, List<CrateReward> pool, PaidTier tier) {
         List<CrateReward> working = new ArrayList<>(pool);
         while (!working.isEmpty()) {
             CrateReward r = weightedPick(working);
@@ -321,18 +320,23 @@ public final class ArcadeService {
                     return Outcome.won(give.clone(), "&f" + r.itemAmount() + "x " + niceName(r.material()));
                 }
                 case MINI -> {
-                    // Phase 9: crates now award a CARD (printed into a graded Mini at a
-                    // Printer), not a finished Mini. Minting stays exclusive to the Printer.
-                    var cr = plugin.cards().issue(player, r.miniId());
-                    if (cr.ok()) {
-                        MiniDef def = plugin.miniService().def(r.miniId());
-                        ItemStack ic = plugin.miniService().cardFor(r.miniId());
-                        if (ic == null) {
-                            ic = icon(Material.PAPER, "&bCard");
+                    // A crate mints a finished, graded Mini straight to the player (cap-aware,
+                    // tracked, announced) — from a fixed id or a rarity-weighted tag pool.
+                    MiniDef def = r.usesTag()
+                            ? plugin.miniService().pickByRarity(tagPool(r.tag(), tier))
+                            : plugin.miniService().def(r.miniId());
+                    if (def != null && !mintedOut(def)) {
+                        var spec = plugin.miniService().cardSpec(def);
+                        var grade = plugin.miniService().rollGrade(spec);
+                        boolean shiny = plugin.miniService().rollShiny(plugin.config().miniLoot().shinyPercent());
+                        var m = plugin.miniService().mintFound(player, def.id(), grade, shiny);
+                        if (m.ok()) {
+                            plugin.announce().found(player, def, m.item(), "in a crate");
+                            return Outcome.won(m.item().clone(), "&b" + def.name() + " " + grade.symbol()
+                                    + (shiny ? " &f✦Shiny" : ""));
                         }
-                        return Outcome.won(ic, (def != null ? "&b" + def.name() : "&ba") + " Card");
                     }
-                    working.remove(r); // card-capped out between check and issue — drop and re-roll
+                    working.remove(r); // minted out between check and mint — drop and re-roll
                 }
             }
         }
@@ -345,6 +349,12 @@ public final class ArcadeService {
         List<CrateReward> out = new ArrayList<>();
         for (CrateReward r : crate.rewards()) {
             if (r.type() == RewardType.MINI) {
+                if (r.usesTag()) {
+                    if (!tagPool(r.tag(), tier).isEmpty()) {
+                        out.add(r);
+                    }
+                    continue;
+                }
                 MiniDef def = plugin.miniService().def(r.miniId());
                 if (def == null || mintedOut(def)) {
                     continue;
@@ -358,6 +368,15 @@ public final class ArcadeService {
             }
         }
         return out;
+    }
+
+    /** The mintable Minis carrying a tag, filtered by a paid tier's rarity floor. */
+    private List<MiniDef> tagPool(String tag, PaidTier tier) {
+        List<MiniDef> pool = plugin.miniService().poolFromTag(tag);
+        if (tier != null) {
+            pool.removeIf(d -> d.rarity().ordinal() < tier.floor().ordinal());
+        }
+        return pool;
     }
 
     private boolean mintedOut(MiniDef def) {

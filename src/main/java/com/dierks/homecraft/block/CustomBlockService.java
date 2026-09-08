@@ -83,6 +83,16 @@ public final class CustomBlockService {
         }
     }
 
+    /** Every recorded placement of one type (for load-time rebuilds); empty on a DB error. */
+    public List<PlacedBlock> findByType(CustomBlockType type) {
+        try {
+            return dao.findByType(type);
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to list placed " + type + " blocks: " + e.getMessage());
+            return List.of();
+        }
+    }
+
     /** Remove the placement record at this location. */
     public void removeAt(Location location) {
         try {

@@ -212,20 +212,35 @@ Rarity-tiered collectible heads (and, later, posed armor stands), all
 - **Catalog** = hand-picked `series` → `entries` (name, `category`/Type,
   optional `texture` Base64 head value, `cap`, `price`, `craftable`). Entries
   inherit their series' rarity and the palette defaults unless overridden.
-- **Minting** is the single source of truth: buying at the Museum, or an admin
+- **Minting** is the single source of truth: printing a Card, finding one in the wild / a crate / a natural spawn, or an admin
   give, **mints** a uniquely-tagged copy — a per-copy UUID in the item's PDC
   (anti-dupe), the type id, and the **Mint #N**. Caps are enforced; circulation
   is tracked (`minted − destroyed`).
-- **Museum & Shop GUI** — a button on the PC store (or `/hcm mini museum`):
-  browse every Mini with live **minted/cap** + **circulation**, click to mint one
-  (paid via Vault); minted-out Minis show as trade-only.
+- **Museum GUI (browse-only)** — a button on the PC store (or `/hcm museum [id]`):
+  browse every Mini with live **minted/cap**, **circulation** and the
+  **Standard→Mint value appraisal**; click one for its detail card (who holds
+  live copies, how to get one). Nothing is minted or bought here — Cards → Printer,
+  wild drops, natural spawns and Arcade crates are the only mint paths.
+- **Grades** are three stars on the name — ☆ Standard, ★★ Graded, ★★★ Mint
+  (`minis.grades`) — rolled from the Mini's card odds at the Printer or when found.
+  Rarity owns the colour and glint; the grade never competes for colour. Shiny is
+  an independent finish. Copies from the old five-grade ladder migrate on sight.
+- **Placed Minis glow** (`minis.effects`): a Display Case trophy, armor-stand Mini
+  or natural spawn gets per-rarity particles, a name hologram, a hidden light,
+  and (Epic+) a slowly rotating display; Legendary is full-bright with a totem
+  burst on placement. Everything is cleaned up on break/unload/disable.
+- **Wild drops** use **tag pools** (`tags:` on a Mini, `tag:` on a source), roll
+  grade + Shiny, and mint the finished Mini straight to the finder with a server
+  broadcast (hover the name for its tooltip; click to open it in the Museum).
+  **NATURAL_SPAWN** sources place a claimable Mini head 24–48 blocks from a player
+  with a "spawned near a player" hint; untouched, it slips away after a timeout.
 
 **Admin/testing:** `/hcm mini list`, `/hcm mini give <id> [player]`,
-`/hcm mini museum`.
+`/hcm museum`.
 
-**Verify:** `/hcm reload` → `/hcm mini list` shows the example Minis → open the
-Museum (PC → Mini Museum) → mint one → check the item's tooltip (Type/Series/
-Rarity/Mint #) and that the count went up; a capped Legendary stops at its cap.
+**Verify:** `/hcm reload` → `/hcm mini list` shows the example Minis → `/hcm mini
+give golden_idol` → check the item's tooltip (Type/Series/Rarity/Grade/Mint #);
+load it into a Display Case and watch its effects; a capped Legendary stops at its cap.
 
 *Deferred to follow-ups:* Vending Machine, Auction House, wild-drops, posed
 armor-stand spawning, and the checkmark web-import.

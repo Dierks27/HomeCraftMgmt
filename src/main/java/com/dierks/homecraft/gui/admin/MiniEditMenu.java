@@ -112,6 +112,14 @@ public final class MiniEditMenu extends Menu {
                 "&8(or import from the web instead)"),
                 e -> promptText("Paste the head texture Base64 value:", draft::setTexture));
 
+        String tagText = draft.tags().isEmpty() ? "&7None (never drops from a tag pool)" : "&f" + String.join(", ", draft.tags());
+        set(24, Menus.icon(Material.LEAD, "&eDrop tags", tagText,
+                "&7Click to set (comma-separated)",
+                "&8Loot sources with tag: <name> draw",
+                "&8from every Mini carrying that tag"),
+                e -> promptText("Enter drop tags, comma-separated (or 'none'):",
+                        v -> draft.setTagsFromText(v.trim().equalsIgnoreCase("none") ? "" : v)));
+
         if (draft.type() == MiniType.ARMOR_STAND) {
             boolean captured = draft.id() != null && plugin.miniService().stand(draft.id()) != null;
             set(25, Menus.icon(Material.ARMOR_STAND, "&eArmor-stand pose",

@@ -209,7 +209,11 @@ public final class PrinterService {
                 Location top = base.clone().add(0, 0.9, 0);
                 world.spawnParticle(Particle.FIREWORK, top, 30, 0.3, 0.3, 0.3, 0.08);
                 world.playSound(top, shiny ? Sound.UI_TOAST_CHALLENGE_COMPLETE : Sound.ENTITY_PLAYER_LEVELUP,
-                        0.8f, grade == Grade.GOLD ? 1.3f : 1.0f);
+                        0.8f, grade == Grade.MINT ? 1.3f : 1.0f);
+                if (grade == Grade.MINT) {
+                    // A Mint print gets the amethyst chime (also played when it's placed).
+                    plugin.effects().playMintChime(top);
+                }
                 if (disp != null && disp.isValid()) {
                     disp.remove();
                 }

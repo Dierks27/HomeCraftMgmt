@@ -361,6 +361,27 @@ public final class Database {
                 PRIMARY KEY (player_uuid, day, item_id)
             );
             CREATE INDEX IF NOT EXISTS idx_daily_buys_day ON market_daily_buys (player_uuid, day);
+            """,
+
+            // v20 — Natural wild-Mini spawns: a minted head placed in the world that a
+            // player claims by touching it, or that despawns (retiring the copy) after
+            // its lifetime. Persisted so lifetimes survive restarts and nothing leaks.
+            """
+            CREATE TABLE IF NOT EXISTS mini_spawns (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                world       TEXT    NOT NULL,
+                x           INTEGER NOT NULL,
+                y           INTEGER NOT NULL,
+                z           INTEGER NOT NULL,
+                mini_id     TEXT    NOT NULL,
+                uid         TEXT    NOT NULL,
+                mint_number INTEGER NOT NULL,
+                item_b64    TEXT    NOT NULL,
+                spawned_at  INTEGER NOT NULL,
+                expires_at  INTEGER NOT NULL,
+                UNIQUE (world, x, y, z)
+            );
+            CREATE INDEX IF NOT EXISTS idx_mini_spawns_expires ON mini_spawns (expires_at);
             """
     };
 

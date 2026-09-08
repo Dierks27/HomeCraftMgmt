@@ -1,9 +1,9 @@
 package com.dierks.homecraft.gui;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.gui.mini.MiniDetailMenu;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.mini.MiniService;
-import com.dierks.homecraft.storage.MiniDao;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -12,9 +12,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The Mini Museum &amp; Shop: browse every collectible with its rarity styling,
- * live minted/cap and circulation, and click to mint one (buy at its price via
- * Vault). Minted-out Minis show as trade-only.
+ * The Mini Museum — <b>browse-only</b>: every collectible with its rarity styling,
+ * live minted/cap, circulation and value appraisal. Click one for its detail card
+ * (who owns it, how to get one). Nothing is minted or bought here; Cards → Printer,
+ * wild drops, natural spawns and crates are the only mint paths.
  */
 public final class MuseumMenu extends Menu {
 
@@ -29,6 +30,21 @@ public final class MuseumMenu extends Menu {
         this.player = player;
         this.onBack = onBack;
         init(54, Text.of(plugin.config().menuTitles().museum()));
+    }
+
+    /** Open the Museum on the page holding {@code focusId} and pop that Mini's detail card. */
+    public static void openFor(HomeCraftManagement plugin, Player player, String focusId) {
+        MuseumMenu menu = new MuseumMenu(plugin, player, null);
+        List<MiniDef> list = new ArrayList<>(plugin.miniService().catalog());
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).id().equals(focusId)) {
+                menu.page = i / PAGE_SIZE;
+                MiniDef def = list.get(i);
+                new MiniDetailMenu(plugin, player, def, () -> menu.open(player)).open(player);
+                return;
+            }
+        }
+        menu.open(player);
     }
 
     @Override
@@ -54,7 +70,7 @@ public final class MuseumMenu extends Menu {
                 continue;
             }
             MiniDef def = list.get(idx);
-            set(i, minis.icon(def), e -> mint(def));
+            set(i, minis.icon(def), e -> new MiniDetailMenu(plugin, player, def, () -> open(player)).open(player));
         }
 
         if (page > 0) {
@@ -63,7 +79,10 @@ public final class MuseumMenu extends Menu {
                 refresh();
             });
         }
-        set(47, Menus.balance(plugin, player), null);
+        set(47, Menus.icon(Material.BOOK, "&dBrowse only",
+                "&7Minis are printed from Cards at a Printer,",
+                "&7or found in the wild, in crates, and as",
+                "&7natural spawns. Click a Mini for details."), null);
         set(49, Menus.icon(Material.BARRIER, "&cBack"), e -> {
             if (onBack != null) {
                 onBack.run();
@@ -77,45 +96,5 @@ public final class MuseumMenu extends Menu {
                 refresh();
             });
         }
-    }
-
-    private void mint(MiniDef def) {
-        if (!player.hasPermission("hcm.mini.buy")) {
-            player.sendMessage(Text.of("&cYou can't buy Minis."));
-            return;
-        }
-        MiniDao.Counts c = plugin.miniService().counts(def.id());
-        if (!def.uncapped() && c.minted() >= def.cap()) {
-            player.sendMessage(Text.of("&c" + def.name() + " is minted out — trade only."));
-            return;
-        }
-        // Free Minis mint immediately (nothing to spend). Paid Minis route through a
-        // confirmation so Vault is never charged on a single accidental click.
-        if (def.price() <= 0) {
-            doMint(def);
-            return;
-        }
-
-        String priceText = plugin.economy().format(def.price());
-        String balanceText = plugin.economy().format(plugin.economy().balance(player));
-        List<String> confirmLore = List.of(
-                "&7Price: &6" + priceText,
-                "&7Your balance: &f" + balanceText);
-        new ConfirmMenu(plugin,
-                "&5Mint " + def.name() + "?",
-                plugin.miniService().icon(def),
-                confirmLore,
-                () -> doMint(def),
-                () -> open(player)
-        ).open(player);
-    }
-
-    /** Perform the actual mint (charge + give) and reopen the Museum. */
-    private void doMint(MiniDef def) {
-        MiniService.MintResult r = plugin.miniService().mint(player, def.id());
-        player.sendMessage(r.ok()
-                ? Text.of("&aMinted &f" + def.name() + " &7#" + r.mintNumber() + "&a!")
-                : Text.of("&c" + r.error()));
-        open(player);
     }
 }

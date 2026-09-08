@@ -37,6 +37,7 @@ commands:
       /hcm arcade            - open the Arcade (crates, pity, scratch tickets)
       /hcm tokens            - show your Arcade token balance
       /hcm tokens give|set|take <player> <n>  - admin: adjust tokens
+      /hcm museum [id]       - browse the Mini Museum (browse-only; click a Mini for details)
       /hcm mini capturestand <miniId>  - capture a posed armor stand into a Mini
     # NOTE: deliberately NOT gated on a single node — every subcommand checks its own
     # permission (hcm.admin, hcm.market.list, hcm.market.price, hcm.market.order, …), so
@@ -58,7 +59,6 @@ permissions:
       hcm.printer.use: true
       hcm.market.order: true
       hcm.market.limit.bypass: true
-      hcm.mini.buy: true
       hcm.protection.bypass: true
   hcm.use:
     description: >-
@@ -84,9 +84,6 @@ permissions:
   hcm.market.limit.bypass:
     description: Exempt from the daily per-player buy AND sell limits (and per-item caps).
     default: op
-  hcm.mini.buy:
-    description: Mint/buy Minis at the Museum.
-    default: true
   hcm.pc.use:
     description: Open the Amazon store by right-clicking a placed PC.
     default: true

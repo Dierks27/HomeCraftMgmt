@@ -22,9 +22,10 @@ import java.util.UUID;
 
 /**
  * The Minis engine: owns the config-driven catalog and is the single source of
- * truth for minting. Every copy — bought, admin-given, or (later) crafted/dropped
- * — flows through {@link #mint}/{@link #giveAdmin} so mint counts and per-copy
- * provenance stay honest and caps are enforced.
+ * truth for minting. Every copy — printed from a Card, found in the wild / a crate,
+ * spawned naturally, or admin-given — flows through {@link #mintGraded} /
+ * {@link #mintItem} / {@link #giveAdmin} so mint counts and per-copy provenance
+ * stay honest and caps are enforced. The Museum is browse-only (no money mint).
  */
 public final class MiniService {
 
@@ -104,21 +105,169 @@ public final class MiniService {
 
     /** Roll a print grade from a card's weighted grade odds. */
     public Grade rollGrade(CardSpec spec) {
+        return rollGrade(spec.gradeWeights());
+    }
+
+    /** Roll a grade from any weight table (a source override, or the Mini's Printer odds). */
+    public Grade rollGrade(Map<Grade, Double> weights) {
+        if (weights == null || weights.isEmpty()) {
+            return Grade.STANDARD;
+        }
         double total = 0;
-        for (double w : spec.gradeWeights().values()) {
-            total += w;
+        for (double w : weights.values()) {
+            total += Math.max(0, w);
         }
         if (total <= 0) {
-            return Grade.GRAY;
+            return Grade.STANDARD;
         }
         double roll = java.util.concurrent.ThreadLocalRandom.current().nextDouble() * total;
         for (Grade g : Grade.values()) {
-            roll -= spec.gradeWeights().getOrDefault(g, 0.0);
+            roll -= Math.max(0, weights.getOrDefault(g, 0.0));
             if (roll <= 0) {
                 return g;
             }
         }
-        return Grade.GRAY;
+        return Grade.STANDARD;
+    }
+
+    /** Roll the Shiny finish at {@code percent}% (0–100). */
+    public boolean rollShiny(double percent) {
+        return percent > 0 && java.util.concurrent.ThreadLocalRandom.current().nextDouble() * 100.0 < percent;
+    }
+
+    /** True if a type has reached its mint cap. */
+    public boolean mintedOut(MiniDef def) {
+        return !def.uncapped() && counts(def.id()).minted() >= def.cap();
+    }
+
+    /**
+     * Every mintable Mini carrying {@code tag} (case-insensitive). Untagged Minis never
+     * appear in a tag pool; minted-out types are excluded so the pool is always live.
+     */
+    public List<MiniDef> poolFromTag(String tag) {
+        List<MiniDef> out = new ArrayList<>();
+        if (tag == null || tag.isBlank()) {
+            return out;
+        }
+        for (MiniDef def : catalog.values()) {
+            if (def.hasTag(tag) && !mintedOut(def)) {
+                out.add(def);
+            }
+        }
+        return out;
+    }
+
+    /** Weighted pick from a pool by rarity ({@code minis.loot.rarity_weights}); null on an empty pool. */
+    public MiniDef pickByRarity(List<MiniDef> pool) {
+        if (pool == null || pool.isEmpty()) {
+            return null;
+        }
+        Loot.MiniLoot lt = loot();
+        double total = 0;
+        for (MiniDef d : pool) {
+            total += lt.rarityWeight(d.rarity());
+        }
+        if (total <= 0) {
+            return pool.get(java.util.concurrent.ThreadLocalRandom.current().nextInt(pool.size()));
+        }
+        double r = java.util.concurrent.ThreadLocalRandom.current().nextDouble() * total;
+        for (MiniDef d : pool) {
+            r -= lt.rarityWeight(d.rarity());
+            if (r <= 0) {
+                return d;
+            }
+        }
+        return pool.get(pool.size() - 1);
+    }
+
+    /** A freshly minted copy: the tracked item, its uid and mint number. */
+    public record Minted(boolean ok, String error, long mintNumber, String uid, ItemStack item) {
+        static Minted fail(String error) {
+            return new Minted(false, error, 0, null, null);
+        }
+    }
+
+    /**
+     * Mint one graded copy without handing it to anyone: cap-aware, anti-dupe, tallied,
+     * with the provenance row owned by {@code owner} (null = the world, e.g. a natural
+     * spawn that nobody has claimed yet). Every mint path ends here or in
+     * {@link #mintGraded}; both share the same tally + provenance pipeline.
+     */
+    public Minted mintItem(MiniDef def, Grade grade, boolean shiny, UUID owner) {
+        if (def == null) {
+            return Minted.fail("No such Mini.");
+        }
+        if (mintedOut(def)) {
+            return Minted.fail(def.name() + " is minted out.");
+        }
+        try {
+            long mintNumber = dao.mintNext(def.id());
+            UUID uid = UUID.randomUUID();
+            ItemStack item = items.minted(def, style(def.rarity()), mintNumber, uid,
+                    grade == null ? Grade.STANDARD : grade, shiny ? "SHINY" : null);
+            dao.recordIndividual(uid, def.id(), mintNumber, owner, System.currentTimeMillis());
+            return new Minted(true, null, mintNumber, uid.toString(), item);
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to mint Mini " + def.id() + ": " + e.getMessage());
+            return Minted.fail("Minting failed — try again.");
+        }
+    }
+
+    /**
+     * The "found it" mint path (wild drops, crates): a graded, possibly Shiny copy handed
+     * straight to the finder. Same cap/tally/provenance as the Printer; no print quest.
+     */
+    public Minted mintFound(Player player, String id, Grade grade, boolean shiny) {
+        MiniDef def = catalog.get(id);
+        if (def == null) {
+            return Minted.fail("No such Mini '" + id + "'.");
+        }
+        Minted m = mintItem(def, grade, shiny, player.getUniqueId());
+        if (!m.ok()) {
+            return m;
+        }
+        player.getInventory().addItem(m.item().clone()).values()
+                .forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
+        if (plugin.achievements() != null) {
+            plugin.achievements().tryAward(player, "first_mini");
+        }
+        return m;
+    }
+
+    /**
+     * Re-render a Mini item minted under an older layout (the retired five-grade
+     * ladder, or a pre-stars name). Safe on any item; mutates in place.
+     *
+     * @return true if the item was re-drawn.
+     */
+    public boolean refreshLegacy(ItemStack item) {
+        MiniRef ref = identify(item);
+        if (ref == null) {
+            return false;
+        }
+        MiniDef def = catalog.get(ref.miniId());
+        if (def == null) {
+            return false;
+        }
+        return items.refresh(item, def, style(def.rarity()));
+    }
+
+    /** Current holders of live copies of a type (the Museum's "who owns it"). */
+    public List<MiniDao.OwnerCount> owners(String id, int limit) {
+        try {
+            return dao.owners(id, limit);
+        } catch (SQLException e) {
+            return List.of();
+        }
+    }
+
+    /** The grade + Shiny finish a minted item carries (for effects and announcements). */
+    public Grade gradeOf(ItemStack item) {
+        return items.gradeOf(item);
+    }
+
+    public boolean isShiny(ItemStack item) {
+        return items.isShiny(item);
     }
 
     /**
@@ -266,8 +415,22 @@ public final class MiniService {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("trigger", s.trigger().name());
             m.put("match", s.match());
-            m.put("list", s.listId());
+            if (s.usesTag()) {
+                m.put("tag", s.tag());
+            } else {
+                m.put("list", s.listId());
+            }
             m.put("chance_percent", s.chancePercent());
+            if (s.gradeWeights() != null && !s.gradeWeights().isEmpty()) {
+                Map<String, Object> gm = new LinkedHashMap<>();
+                for (Map.Entry<Grade, Double> ge : s.gradeWeights().entrySet()) {
+                    gm.put(ge.getKey().name().toLowerCase(java.util.Locale.ROOT), ge.getValue());
+                }
+                m.put("grades", gm);
+            }
+            if (s.shinyPercent() != null) {
+                m.put("shiny_percent", s.shinyPercent());
+            }
             sources.add(m);
         }
         plugin.getConfig().set("minis.loot.lists", lists);
@@ -340,32 +503,7 @@ public final class MiniService {
             double[] range = plugin.values().gradeRange(def);
             valueText = economy.format(range[0]) + " – " + economy.format(range[1]);
         }
-        return items.preview(def, style(def.rarity()), c.minted(), c.circulation(),
-                economy.format(def.price()), valueText);
-    }
-
-    /** Buy + mint a Mini for a player (charges the price via Vault, enforces the cap). */
-    public MintResult mint(Player player, String id) {
-        MiniDef def = catalog.get(id);
-        if (def == null) {
-            return MintResult.fail("No such Mini '" + id + "'.");
-        }
-        MiniDao.Counts c = counts(id);
-        if (!def.uncapped() && c.minted() >= def.cap()) {
-            return MintResult.fail(def.name() + " is minted out (" + def.cap() + "/" + def.cap() + ").");
-        }
-        if (!economy.isEnabled()) {
-            return MintResult.fail("The economy is offline (no Vault).");
-        }
-        if (def.price() > 0) {
-            if (!economy.has(player, def.price())) {
-                return MintResult.fail("You can't afford " + economy.format(def.price()) + ".");
-            }
-            if (!economy.withdraw(player, def.price())) {
-                return MintResult.fail("Payment failed.");
-            }
-        }
-        return mintInternal(player, def);
+        return items.preview(def, style(def.rarity()), c.minted(), c.circulation(), valueText);
     }
 
     /**

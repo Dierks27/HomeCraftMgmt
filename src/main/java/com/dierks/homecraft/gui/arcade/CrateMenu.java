@@ -124,6 +124,12 @@ public final class CrateMenu extends Menu {
                         "&7Item reward", odds);
             }
             case MINI -> {
+                if (r.usesTag()) {
+                    int pool = plugin.miniService().poolFromTag(r.tag()).size();
+                    return Menus.icon(Material.PLAYER_HEAD, "&dRandom Mini &7(tag: " + r.tag() + ")",
+                            "&7A rarity-weighted pick from every", "&7Mini tagged &f" + r.tag(),
+                            "&7Available now: &f" + pool, odds);
+                }
                 MiniDef def = plugin.miniService().def(r.miniId());
                 boolean out = def != null && !def.uncapped()
                         && plugin.miniService().counts(def.id()).minted() >= def.cap();
@@ -154,6 +160,9 @@ public final class CrateMenu extends Menu {
     private boolean isDroppable(CrateReward r) {
         if (r.type() != PluginConfig.RewardType.MINI) {
             return true;
+        }
+        if (r.usesTag()) {
+            return !plugin.miniService().poolFromTag(r.tag()).isEmpty();
         }
         MiniDef def = plugin.miniService().def(r.miniId());
         if (def == null) {

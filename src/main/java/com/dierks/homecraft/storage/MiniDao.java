@@ -24,6 +24,10 @@ public final class MiniDao {
     public record Individual(String uid, String miniId, long mintNumber, UUID owner, long mintedAt) {
     }
 
+    /** How many live copies of a type one player holds (for the Museum's "who owns it"). */
+    public record OwnerCount(UUID owner, long count) {
+    }
+
     /** One logged secondary-market sale. */
     public record Sale(String uid, String miniId, double price, UUID seller, UUID buyer,
                        String venue, long soldAt) {
@@ -119,6 +123,31 @@ public final class MiniDao {
                 ps.setLong(5, mintedAt);
                 ps.executeUpdate();
             }
+        }
+    }
+
+    /** Current holders of live (non-retired) copies of a type, most copies first. */
+    public java.util.List<OwnerCount> owners(String miniId, int limit) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            java.util.List<OwnerCount> out = new java.util.ArrayList<>();
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT owner, COUNT(*) AS n FROM mini_individuals WHERE mini_id = ? AND retired_at IS NULL "
+                            + "AND owner IS NOT NULL GROUP BY owner ORDER BY n DESC LIMIT ?")) {
+                ps.setString(1, miniId);
+                ps.setInt(2, Math.max(1, limit));
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        String owner = rs.getString("owner");
+                        try {
+                            out.add(new OwnerCount(UUID.fromString(owner), rs.getLong("n")));
+                        } catch (IllegalArgumentException ignored) {
+                            // malformed owner id — skip the row
+                        }
+                    }
+                }
+            }
+            return out;
         }
     }
 

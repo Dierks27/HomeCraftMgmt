@@ -1,7 +1,11 @@
 package com.dierks.homecraft.trade;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.mini.Grade;
 import com.dierks.homecraft.mini.Loot;
+import com.dierks.homecraft.mini.MiniDef;
+import com.dierks.homecraft.mini.MiniService;
+import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 
@@ -12,9 +16,11 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Rolls Wild-Drop loot: on a matching trigger it rolls each bound source's tiny
- * chance and, on a hit, mints a weighted-random Mini through the standard mint
- * pipeline — so drops respect the cap (stop when minted out) and count toward
- * circulation. Minting stays the single source of truth; a drop is just another
+ * chance and, on a hit, picks a Mini from the source's pool (a weighted list, or a
+ * tag pool weighted by rarity), rolls a grade + Shiny using the Printer's odds (or
+ * the source's override), and mints the finished Mini through the standard mint
+ * pipeline — so drops respect the cap, count toward circulation, and announce
+ * themselves. Minting stays the single source of truth; a drop is just another
  * mint path.
  */
 public final class WildDropService {
@@ -73,41 +79,73 @@ public final class WildDropService {
             if (roll >= source.chancePercent()) {
                 continue;
             }
-            Loot.LootList list = loot.listById(source.listId());
-            if (list == null || list.entries().isEmpty()) {
+            MiniDef def = pick(source);
+            if (def == null) {
+                continue; // empty pool, or everything in it is minted out — the finite promise holds
+            }
+            Grade grade = rollGrade(source, def);
+            boolean shiny = rollShiny(source);
+            MiniService.Minted m = plugin.miniService().mintFound(player, def.id(), grade, shiny);
+            if (!m.ok()) {
                 continue;
             }
-            String miniId = pickWeighted(list);
-            if (miniId == null) {
-                continue;
-            }
-            // Phase 9: wild drops now give a CARD, not a Mini. The player takes the
-            // Card to a Printer to print a graded Mini (the single mint source).
-            var r = plugin.cards().issue(player, miniId);
-            if (r.ok()) {
-                dropped++;
-                plugin.cards().announceDrop(player, miniId);
-            }
-            // If card-capped-out, silently skip — the finite promise holds.
+            dropped++;
+            player.sendMessage(Text.of("&b✦ You found a &f" + def.name() + " " + grade.symbol()
+                    + (shiny ? " &f✦Shiny" : "") + " &b" + trigger.verb() + "! &7(Mint #" + m.mintNumber() + ")"));
+            plugin.announce().found(player, def, m.item(), trigger.verb());
         }
         return dropped;
     }
 
-    private String pickWeighted(Loot.LootList list) {
+    /** Pick a mintable Mini from a source's pool (list or tag); null if nothing is available. */
+    public MiniDef pick(Loot.LootSource source) {
+        MiniService minis = plugin.miniService();
+        if (source.usesTag()) {
+            return minis.pickByRarity(minis.poolFromTag(source.tag()));
+        }
+        Loot.LootList list = plugin.config().miniLoot().listById(source.listId());
+        if (list == null || list.entries().isEmpty()) {
+            return null;
+        }
+        // Weighted pick over the entries that can still mint.
         double total = 0;
         for (Loot.LootEntry e : list.entries()) {
-            total += Math.max(0, e.weight());
+            MiniDef d = minis.def(e.miniId());
+            if (d != null && !minis.mintedOut(d)) {
+                total += Math.max(0, e.weight());
+            }
         }
         if (total <= 0) {
             return null;
         }
         double r = ThreadLocalRandom.current().nextDouble() * total;
+        MiniDef last = null;
         for (Loot.LootEntry e : list.entries()) {
+            MiniDef d = minis.def(e.miniId());
+            if (d == null || minis.mintedOut(d)) {
+                continue;
+            }
+            last = d;
             r -= Math.max(0, e.weight());
             if (r <= 0) {
-                return e.miniId();
+                return d;
             }
         }
-        return list.entries().get(list.entries().size() - 1).miniId();
+        return last;
+    }
+
+    /** The source's grade override if set, else the Mini's own Printer odds. */
+    public Grade rollGrade(Loot.LootSource source, MiniDef def) {
+        MiniService minis = plugin.miniService();
+        if (source.gradeWeights() != null && !source.gradeWeights().isEmpty()) {
+            return minis.rollGrade(source.gradeWeights());
+        }
+        return minis.rollGrade(minis.cardSpec(def));
+    }
+
+    /** The source's Shiny chance if set, else the global {@code minis.loot.shiny_percent}. */
+    public boolean rollShiny(Loot.LootSource source) {
+        double pct = source.shinyPercent() != null ? source.shinyPercent() : plugin.config().miniLoot().shinyPercent();
+        return plugin.miniService().rollShiny(pct);
     }
 }

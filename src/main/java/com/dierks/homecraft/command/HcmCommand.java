@@ -132,6 +132,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 new com.dierks.homecraft.gui.arcade.QuestsMenu(plugin, player).open(player);
             }
             case "museum" -> handleMuseum(sender, args);
+            case "backup" -> handleBackup(sender, args);
             case "auction", "auctions" -> {
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Text.of("&cOnly players can open the Auction House."));
@@ -281,6 +282,10 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             handleGiveMailbox(sender, args);
             return;
         }
+        if (kind.equals("display")) {
+            handleGiveDisplay(sender, args);
+            return;
+        }
         // The Auction House and the individual Arcade machines (crate/scratch/pity/counter)
         // are no longer given out: auctions are reached via /hcm auction, the Arcade via
         // its hub block. Already-placed machines keep working.
@@ -290,7 +295,6 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "binder" -> item = plugin.binder().items().binder();
             case "pc" -> item = plugin.items().pc();
             case "vending" -> item = plugin.items().vendingMachine();
-            case "display" -> item = plugin.items().displayCase();
             case "pallet" -> item = plugin.items().pallet();
             case "arcade" -> item = plugin.items().arcade();
             default -> {
@@ -346,6 +350,49 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         target.getInventory().addItem(item).values()
                 .forEach(drop -> target.getWorld().dropItemNaturally(target.getLocation(), drop));
         sender.sendMessage(Text.of("&aGave a " + variant.label() + " Mailbox to " + target.getName() + "."));
+    }
+
+    /** {@code /hcm give display [variant] [player]} — a Display Case in a pedestal style (default plain). */
+    private void handleGiveDisplay(CommandSender sender, String[] args) {
+        com.dierks.homecraft.block.DisplayCaseVariant variant = com.dierks.homecraft.block.DisplayCaseVariant.PLAIN;
+        int targetIdx = 2;
+        if (args.length >= 3) {
+            com.dierks.homecraft.block.DisplayCaseVariant parsed = com.dierks.homecraft.block.DisplayCaseVariant.parse(args[2]);
+            if (parsed != null) {
+                variant = parsed;
+                targetIdx = 3;
+            } else if (Bukkit.getPlayerExact(args[2]) == null) {
+                sender.sendMessage(Text.of("&cUnknown Display Case style '" + args[2] + "'. Use plain or royal."));
+                return;
+            }
+        }
+        Player target = resolveTarget(sender, args, targetIdx, "give display " + variant.key());
+        if (target == null) {
+            return;
+        }
+        ItemStack item = plugin.items().displayCase(variant);
+        target.getInventory().addItem(item).values()
+                .forEach(drop -> target.getWorld().dropItemNaturally(target.getLocation(), drop));
+        sender.sendMessage(Text.of("&aGave a " + variant.label() + " Display Case to " + target.getName() + "."));
+    }
+
+    /** {@code /hcm backup now} — write a SQLite backup immediately (hcm.admin). */
+    private void handleBackup(CommandSender sender, String[] args) {
+        if (denyUnless(sender, "hcm.admin")) {
+            return;
+        }
+        if (args.length < 2 || !args[1].equalsIgnoreCase("now")) {
+            sender.sendMessage(Text.of("&cUsage: /hcm backup now"));
+            return;
+        }
+        java.io.File out = plugin.backups().backupNow("manual");
+        if (out == null) {
+            sender.sendMessage(Text.of("&cBackup failed — see the console."));
+            return;
+        }
+        sender.sendMessage(Text.of("&aBackup written: &f" + out.getName() + " &7("
+                + com.dierks.homecraft.storage.BackupService.human(out.length()) + ") in "
+                + out.getParentFile().getName() + "/"));
     }
 
     private String mailboxVariantList() {
@@ -751,7 +798,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         if (sender.hasPermission("hcm.admin")) {
             sender.sendMessage(Text.of("&e/hcm admin &7- open the Admin Studio (manage & import Minis)"));
             sender.sendMessage(Text.of("&e/hcm reload &7- reload config & recipes"));
-            sender.sendMessage(Text.of("&e/hcm give <printer|pc|vending|display|mailbox [variant]|pallet|arcade> [player]"));
+            sender.sendMessage(Text.of("&e/hcm give <printer|pc|vending|display [plain|royal]|mailbox [variant]|pallet|arcade> [player]"));
+            sender.sendMessage(Text.of("&e/hcm backup now &7- write a database backup"));
             sender.sendMessage(Text.of("&e/hcm give <card <id>|pack <id>|binder|filament <color> <n>> [player]"));
             sender.sendMessage(Text.of("&e/hcm printer <public|private> &7- flag the Printer you're looking at"));
         }
@@ -969,7 +1017,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "backup");
             } else {
                 addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "balance", "tokens");
             }
@@ -1037,6 +1085,19 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     out.add(col.name().toLowerCase(Locale.ROOT));
                 }
             }
+        } else if (args.length == 4 && args[0].equalsIgnoreCase("give")
+                && args[1].equalsIgnoreCase("filament")) {
+            addMatches(out, args[3], "1", "3", "8", "16", "64");
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("give")
+                && args[1].equalsIgnoreCase("display")) {
+            addMatches(out, args[2], "plain", "royal");
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))) {
+                    out.add(p.getName());
+                }
+            }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("backup")) {
+            addMatches(out, args[1], "now");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("give")) {
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))) {

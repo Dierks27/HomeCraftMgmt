@@ -212,6 +212,9 @@ public final class MarketService {
     }
 
     private TradeResult executeBuy(Player player, String id, int qty, boolean deliverNow) {
+        if (!plugin.sandbox().check(player, "market buy " + id)) {
+            return TradeResult.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
         MarketItem item = catalog.get(id);
         if (item == null) {
             return TradeResult.fail("No market item '" + id + "'.");
@@ -286,6 +289,9 @@ public final class MarketService {
     }
 
     public TradeResult sell(Player player, String id, int qty) {
+        if (!plugin.sandbox().check(player, "market sell " + id)) {
+            return TradeResult.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
         MarketItem item = catalog.get(id);
         if (item == null) {
             return TradeResult.fail("No market item '" + id + "'.");

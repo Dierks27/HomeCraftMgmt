@@ -1,23 +1,19 @@
 package com.dierks.homecraft.item;
 
-import com.destroystokyo.paper.profile.PlayerProfile;
-import com.destroystokyo.paper.profile.ProfileProperty;
 import com.dierks.homecraft.block.CustomBlockType;
+import com.dierks.homecraft.block.DisplayCaseVariant;
 import com.dierks.homecraft.block.MailboxVariant;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.util.Keys;
 import com.dierks.homecraft.util.Text;
 import net.kyori.adventure.text.Component;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.persistence.PersistentDataType;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * Builds the tagged custom-block items (Mini Workbench, PC). Identity travels
@@ -62,11 +58,39 @@ public final class CustomItems {
                 CustomBlockType.MINI_VENDING_MACHINE, config.skin(CustomBlockType.MINI_VENDING_MACHINE));
     }
 
-    /** A Mini Display Case item, ready to place. */
+    /** A plain Mini Display Case item, ready to place (the default pedestal style). */
     public ItemStack displayCase() {
+        return displayCase(DisplayCaseVariant.PLAIN);
+    }
+
+    /**
+     * A Display Case of a pedestal style: named "&lt;Style&gt; Display Case", skinned with
+     * {@code skins.display_case.<variant>}, carrying the variant in PDC so placement (and
+     * the drop on break) keep the style. The case keeps this skin empty or loaded.
+     */
+    public ItemStack displayCase(DisplayCaseVariant variant) {
         PluginConfig.BlockDef def = config.miniBlocks().display();
-        return tagged(def.material(), def.name(), List.of("&7Place, then load a Mini to show it off."),
-                CustomBlockType.DISPLAY_CASE, config.skin(CustomBlockType.DISPLAY_CASE));
+        ItemStack item = tagged(def.material(), config.displayCaseName(variant),
+                List.of("&7Place, then load a Mini to show it off.", "&8The Mini floats above the pedestal."),
+                CustomBlockType.DISPLAY_CASE, config.displayCaseSkin(variant));
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.getPersistentDataContainer().set(Keys.DISPLAY_VARIANT, PersistentDataType.STRING, variant.name());
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    /** @return the Display Case style an item carries (plain when untagged), or null if it isn't a case. */
+    public DisplayCaseVariant displayCaseVariant(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) {
+            return null;
+        }
+        var pdc = item.getItemMeta().getPersistentDataContainer();
+        if (!CustomBlockType.DISPLAY_CASE.name().equals(pdc.get(Keys.CUSTOM_BLOCK_TYPE, PersistentDataType.STRING))) {
+            return null;
+        }
+        return DisplayCaseVariant.parseOrPlain(pdc.get(Keys.DISPLAY_VARIANT, PersistentDataType.STRING));
     }
 
     /** A Mini Auction House item, ready to place. */
@@ -147,6 +171,10 @@ public final class CustomItems {
             MailboxVariant v = MailboxVariant.parse(key.substring("mailbox.".length()));
             return v == null ? null : mailbox(v);
         }
+        if (key.startsWith("display_case.")) {
+            DisplayCaseVariant v = DisplayCaseVariant.parse(key.substring("display_case.".length()));
+            return v == null ? null : displayCase(v);
+        }
         return switch (key) {
             case "pc" -> pc();
             case "printer" -> printer();
@@ -182,10 +210,9 @@ public final class CustomItems {
         // the base material (you can't paint a head texture onto a barrel/chest). A
         // blank texture leaves the base material — and appearance — untouched.
         boolean skinned = headTexture != null && !headTexture.isBlank();
-        if (skinned) {
-            material = Material.PLAYER_HEAD;
-        }
-        ItemStack item = new ItemStack(material);
+        // Pass one commits the profile on its own; pass two (below) writes name/lore/PDC
+        // on a fresh meta — see Heads#base for why the order matters on the live API.
+        ItemStack item = skinned ? com.dierks.homecraft.util.Heads.base(headTexture) : new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         if (meta == null) {
             return item; // should not happen for these materials
@@ -202,19 +229,6 @@ public final class CustomItems {
         }
 
         meta.getPersistentDataContainer().set(Keys.CUSTOM_BLOCK_TYPE, PersistentDataType.STRING, type.name());
-
-        if (material == Material.PLAYER_HEAD && meta instanceof SkullMeta skull
-                && headTexture != null && !headTexture.isBlank()) {
-            try {
-                PlayerProfile profile = Bukkit.createProfile(UUID.randomUUID());
-                profile.setProperty(new ProfileProperty("textures", headTexture));
-                skull.setPlayerProfile(profile);
-            } catch (Throwable t) {
-                // Bad texture value shouldn't stop the item from existing.
-                Bukkit.getLogger().warning("[HomeCraft] Failed to apply PC head texture: " + t.getMessage());
-            }
-        }
-
         item.setItemMeta(meta);
         return item;
     }

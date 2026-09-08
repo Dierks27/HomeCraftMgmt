@@ -70,6 +70,9 @@ public final class PalletService {
 
     /** Owner loads the held item into the Pallet (new listing or restock). */
     public Result stock(Player owner, Location loc, double price) {
+        if (!plugin.sandbox().check(owner, "marketplace listing")) {
+            return Result.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
         PluginConfig.Marketplace mp = plugin.config().marketplace();
         if (mp.requireProtectedLand() && !plugin.protection().isProtectedLand(loc)) {
             return Result.fail("A Pallet only works on claimed/protected land.");
@@ -172,6 +175,9 @@ public final class PalletService {
 
     /** A buyer purchases one unit from a listing; it ships to their Mailbox. */
     public Result buy(Player buyer, long listingId, PluginConfig.ShippingTier tier) {
+        if (!plugin.sandbox().check(buyer, "marketplace purchase")) {
+            return Result.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
         Optional<PalletDao.Listing> opt;
         try {
             opt = dao.byId(listingId);

@@ -115,19 +115,26 @@ public final class CrateMenu extends Menu {
     private ItemStack rewardIcon(CrateReward r, double pct) {
         String odds = "&7Chance: &f" + String.format(java.util.Locale.ROOT, "%.1f%%", pct);
         switch (r.type()) {
-            case MONEY -> {
-                return Menus.icon(Material.GOLD_INGOT, "&6" + plugin.economy().format(r.amount()),
-                        "&7Cash reward", odds);
+            case PACK -> {
+                var def = plugin.packs().pack(r.packId());
+                return Menus.icon(Material.PAPER, "&d" + (def != null ? def.displayName() : r.packId()),
+                        "&7A sealed Card Pack", odds);
             }
-            case ITEM -> {
-                return Menus.icon(r.material(), "&f" + r.itemAmount() + "x " + niceName(r.material()),
-                        "&7Item reward", odds);
+            case FILAMENT -> {
+                return Menus.icon(r.color() != null
+                                ? plugin.miniService().filamentItems().baseMaterial(r.color()) : Material.WHITE_DYE,
+                        "&f" + r.amount() + "x " + (r.color() != null ? niceName(r.color()) + " " : "Random ") + "Filament",
+                        "&7Printer filament", odds);
             }
-            case MINI -> {
+            case TOKENS -> {
+                return Menus.icon(Material.SUNFLOWER, "&e+" + r.amount() + " token" + (r.amount() == 1 ? "" : "s"),
+                        "&7Arcade tokens", odds);
+            }
+            case CARD, MINI -> {
                 if (r.usesTag()) {
                     int pool = plugin.miniService().poolFromTag(r.tag()).size();
-                    return Menus.icon(Material.PLAYER_HEAD, "&dRandom Mini &7(tag: " + r.tag() + ")",
-                            "&7A rarity-weighted pick from every", "&7Mini tagged &f" + r.tag(),
+                    return Menus.icon(Material.PLAYER_HEAD, "&bRandom Card &7(tag: " + r.tag() + ")",
+                            "&7A rarity-weighted Card from every", "&7Mini tagged &f" + r.tag(),
                             "&7Available now: &f" + pool, odds);
                 }
                 MiniDef def = plugin.miniService().def(r.miniId());
@@ -136,7 +143,10 @@ public final class CrateMenu extends Menu {
                 if (def == null) {
                     return Menus.icon(Material.PLAYER_HEAD, "&dMini &7(" + r.miniId() + ")", odds);
                 }
-                ItemStack ic = plugin.miniService().icon(def);
+                ItemStack ic = plugin.miniService().cardFor(def.id());
+                if (ic == null) {
+                    ic = plugin.miniService().icon(def);
+                }
                 var meta = ic.getItemMeta();
                 if (meta != null) {
                     java.util.List<net.kyori.adventure.text.Component> lore = meta.hasLore()
@@ -158,7 +168,7 @@ public final class CrateMenu extends Menu {
     }
 
     private boolean isDroppable(CrateReward r) {
-        if (r.type() != PluginConfig.RewardType.MINI) {
+        if (r.type() != PluginConfig.RewardType.MINI && r.type() != PluginConfig.RewardType.CARD) {
             return true;
         }
         if (r.usesTag()) {
@@ -173,6 +183,11 @@ public final class CrateMenu extends Menu {
 
     private ItemStack back() {
         return Menus.icon(Material.ARROW, "&cBack to Arcade");
+    }
+
+    private String niceName(org.bukkit.DyeColor color) {
+        String n = color.name().toLowerCase().replace('_', ' ');
+        return Character.toUpperCase(n.charAt(0)) + n.substring(1);
     }
 
     private String niceName(Material material) {

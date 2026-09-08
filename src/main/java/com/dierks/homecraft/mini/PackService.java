@@ -58,6 +58,9 @@ public final class PackService {
      * are tradeable and {@code /hcm give pack} works.
      */
     public BuyResult buy(Player player, String packId) {
+        if (!plugin.sandbox().check(player, "pack purchase " + packId)) {
+            return BuyResult.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
         Pack.PackDef def = pack(packId);
         if (def == null) {
             return BuyResult.fail("That pack doesn't exist.");

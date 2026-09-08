@@ -131,6 +131,44 @@ public final class CustomBlockService {
         return MailboxVariant.WOOD;
     }
 
+    // ---- Display Case pedestal styles -------------------------------------------
+
+    public void tagDisplayVariant(Block block, DisplayCaseVariant variant) {
+        BlockState state = block.getState();
+        if (state instanceof TileState tile) {
+            tile.getPersistentDataContainer().set(Keys.DISPLAY_VARIANT, PersistentDataType.STRING, variant.name());
+            tile.update(true, false);
+        }
+    }
+
+    public DisplayCaseVariant displayVariantAt(Block block) {
+        BlockState state = block.getState();
+        if (state instanceof TileState tile) {
+            return DisplayCaseVariant.parseOrPlain(
+                    tile.getPersistentDataContainer().get(Keys.DISPLAY_VARIANT, PersistentDataType.STRING));
+        }
+        return DisplayCaseVariant.PLAIN;
+    }
+
+    /**
+     * Give every Display Case in a loaded chunk its pedestal skin (loaded or not). Cases
+     * placed before the pedestal change still wear the Mini's texture on the block;
+     * this puts the pedestal back and lets the ItemDisplay show the Mini instead.
+     */
+    public int reskinDisplayCases() {
+        int done = 0;
+        for (PlacedBlock pb : findByType(CustomBlockType.DISPLAY_CASE)) {
+            World w = plugin.getServer().getWorld(pb.world());
+            if (w == null || !w.isChunkLoaded(pb.x() >> 4, pb.z() >> 4)) {
+                continue;
+            }
+            Block b = w.getBlockAt(pb.x(), pb.y(), pb.z());
+            BlockSkins.apply(b, plugin.config().displayCaseSkin(displayVariantAt(b)));
+            done++;
+        }
+        return done;
+    }
+
     // ---- Two-tall Vending Machine --------------------------------------------
 
     /** True if this block is the auto-placed upper head of a Vending Machine. */

@@ -125,6 +125,9 @@ public final class NaturalSpawnService {
             if (gm != GameMode.SURVIVAL && gm != GameMode.ADVENTURE) {
                 continue;
             }
+            if (!plugin.sandbox().allowed(player.getWorld())) {
+                continue;
+            }
             for (Loot.LootSource source : sources) {
                 if (source.chancePercent() <= 0
                         || ThreadLocalRandom.current().nextDouble() * 100.0 >= source.chancePercent()) {

@@ -252,6 +252,16 @@ public final class MiniService {
         return items.refresh(item, def, style(def.rarity()));
     }
 
+    /**
+     * Re-render an existing copy from its stored identity (uid / mint / grade / finish)
+     * — used when a placed head loses its stored item. Touches no tally and records
+     * nothing: it is the same copy, never a fresh mint.
+     */
+    public ItemStack rebuild(MiniDef def, long mintNumber, UUID uid, Grade grade, boolean shiny) {
+        return items.minted(def, style(def.rarity()), mintNumber, uid, grade == null ? Grade.STANDARD : grade,
+                shiny ? "SHINY" : null);
+    }
+
     /** Current holders of live copies of a type (the Museum's "who owns it"). */
     public List<MiniDao.OwnerCount> owners(String id, int limit) {
         try {

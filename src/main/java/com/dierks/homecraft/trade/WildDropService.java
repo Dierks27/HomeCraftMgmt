@@ -65,6 +65,9 @@ public final class WildDropService {
      * mint the winners to {@code player}. Returns the number of Minis dropped.
      */
     public int roll(Player player, Loot.Trigger trigger, String key) {
+        if (!plugin.sandbox().allowed(player.getWorld())) {
+            return 0; // silent: a chat line per broken block would be spam
+        }
         Loot.MiniLoot loot = plugin.config().miniLoot();
         List<Loot.LootSource> sources = loot.sourcesFor(trigger);
         if (sources.isEmpty()) {

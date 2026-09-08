@@ -3,8 +3,8 @@ package com.dierks.homecraft.trade;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.mini.MiniInfoMenu;
 import com.dierks.homecraft.mini.MiniService;
-import com.dierks.homecraft.util.Items;
 import com.dierks.homecraft.util.Keys;
+import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
@@ -16,18 +16,27 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.block.BlockFromToEvent;
+import org.bukkit.event.block.BlockPistonExtendEvent;
+import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * Makes a plain Mini head placed as a block a first-class placed Mini: on
- * placement the block records the Mini's identity + exact item in its skull PDC;
- * right-clicking it opens the public info card; breaking it returns the exact
- * Mini (not a plain head). Armor-stand and Display-Case Minis are handled
- * elsewhere — this covers the "just placed the head" case.
+ * Makes a Mini head placed as a block a first-class placed Mini: on placement the
+ * block records the Mini's full identity (id, uid, mint, grade, finish, owner, exact
+ * item) and joins the placed-Mini registry so its effects run; right-clicking opens
+ * the public info card; breaking it (by hand, explosion, piston or water) always
+ * returns the exact copy — never a plain head, never a fresh mint. Towny/WorldGuard
+ * are respected on break. Wild spawns are claimed by touching them instead.
  */
 public final class MiniHeadListener implements Listener {
 
@@ -47,23 +56,13 @@ public final class MiniHeadListener implements Listener {
         if (plugin.blockService().itemType(item) != null) {
             return;
         }
-        MiniService.MiniRef ref = plugin.miniService().identify(item);
-        if (ref == null) {
+        if (plugin.miniService().identify(item) == null) {
             return;
         }
-        BlockState state = event.getBlockPlaced().getState();
-        if (!(state instanceof Skull skull)) {
+        if (!(event.getBlockPlaced().getState() instanceof Skull)) {
             return;
         }
-        ItemStack one = item.clone();
-        one.setAmount(1);
-        var pdc = skull.getPersistentDataContainer();
-        pdc.set(Keys.MINI_ID, PersistentDataType.STRING, ref.miniId());
-        pdc.set(Keys.MINI_UID, PersistentDataType.STRING, ref.uid());
-        pdc.set(Keys.MINI_MINT, PersistentDataType.LONG, ref.mintNumber());
-        pdc.set(Keys.MINI_OWNER, PersistentDataType.STRING, event.getPlayer().getUniqueId().toString());
-        pdc.set(Keys.MINI_ITEM, PersistentDataType.STRING, Items.toBase64(one));
-        skull.update(true, false);
+        plugin.placedMinis().onPlaced(event.getBlockPlaced(), item, event.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -87,8 +86,7 @@ public final class MiniHeadListener implements Listener {
             plugin.naturalSpawns().claim(player, clicked, true);
             return;
         }
-        ItemStack display = Items.fromBase64(
-                skull.getPersistentDataContainer().get(Keys.MINI_ITEM, PersistentDataType.STRING));
+        ItemStack display = plugin.placedMinis().itemAt(clicked);
         new MiniInfoMenu(plugin, player, ref, display, null).open(player);
     }
 
@@ -102,15 +100,81 @@ public final class MiniHeadListener implements Listener {
         if (plugin.miniService().refFrom(pdc) == null) {
             return;
         }
-        // Return the exact minted Mini instead of a plain head.
-        event.setDropItems(false);
+        event.setDropItems(false); // never a plain head
         if (plugin.naturalSpawns() != null && plugin.naturalSpawns().isWild(event.getBlock())) {
             plugin.naturalSpawns().claim(event.getPlayer(), event.getBlock(), false);
             return;
         }
-        ItemStack item = Items.fromBase64(pdc.get(Keys.MINI_ITEM, PersistentDataType.STRING));
-        if (item != null) {
-            event.getBlock().getWorld().dropItemNaturally(event.getBlock().getLocation().toCenterLocation(), item);
+        if (!plugin.placedMinis().mayBreak(event.getPlayer(), event.getBlock())) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage(Text.of("&cYou can't take that Mini here."));
+            return;
         }
+        // Return the exact minted copy (the block is removed by the event itself).
+        plugin.placedMinis().dropAndForget(event.getBlock(), false);
+    }
+
+    // ---- destruction that isn't a player break: the copy still comes back --------
+
+    @EventHandler(ignoreCancelled = true)
+    public void onEntityExplode(EntityExplodeEvent event) {
+        dropAll(event.blockList());
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onBlockExplode(BlockExplodeEvent event) {
+        dropAll(event.blockList());
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onPistonExtend(BlockPistonExtendEvent event) {
+        List<Block> heads = new ArrayList<>();
+        for (Block b : event.getBlocks()) {
+            if (plugin.placedMinis().isPlacedMini(b)) {
+                heads.add(b);
+            }
+        }
+        for (Block b : heads) {
+            plugin.placedMinis().dropAndForget(b, true);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onPistonRetract(BlockPistonRetractEvent event) {
+        List<Block> heads = new ArrayList<>();
+        for (Block b : event.getBlocks()) {
+            if (plugin.placedMinis().isPlacedMini(b)) {
+                heads.add(b);
+            }
+        }
+        for (Block b : heads) {
+            plugin.placedMinis().dropAndForget(b, true);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onFlow(BlockFromToEvent event) {
+        Block to = event.getToBlock();
+        if (plugin.placedMinis().isPlacedMini(to)) {
+            plugin.placedMinis().dropAndForget(to, true);
+        }
+    }
+
+    private void dropAll(List<Block> blocks) {
+        List<Block> heads = new ArrayList<>();
+        for (Block b : blocks) {
+            if (plugin.placedMinis().isPlacedMini(b) && !isWild(b)) {
+                heads.add(b);
+            }
+        }
+        for (Block b : heads) {
+            blocks.remove(b); // we clear it ourselves so the exact copy drops, not a plain head
+            plugin.placedMinis().dropAndForget(b, true);
+        }
+    }
+
+    private boolean isWild(Block b) {
+        return b.getState() instanceof Skull s
+                && s.getPersistentDataContainer().has(Keys.WILD_SPAWN, PersistentDataType.BYTE);
     }
 }

@@ -25,10 +25,10 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * The Arcade engine (Phase 8, §3.9): earn tokens by playing (login streaks +
- * playtime), spend them on weighted loot crates (a Mini prize mints a finished,
- * graded Mini — from a fixed id or a rarity-weighted tag pool — cap-aware, tracked
- * and announced server-wide), buy better odds with a Vault fee, exchange tokens for
- * a guaranteed Rare+ Card via the pity path, and scratch lotto tickets.
+ * playtime), spend them on weighted loot crates (Cards, packs, filament or more
+ * tokens — never money or sellable items, so tokens can never become money), buy
+ * better odds with a Vault fee, exchange tokens for a guaranteed Rare+ Card via the
+ * pity path, and scratch lotto tickets.
  *
  * <p>All currency is in-game (tokens + Vault money) — never real money.
  */
@@ -80,9 +80,14 @@ public final class ArcadeService {
     private void validateCrates() {
         for (Crate crate : plugin.config().arcade().crates().values()) {
             for (CrateReward r : crate.rewards()) {
-                if (r.type() == RewardType.MINI && !r.usesTag() && plugin.miniService().def(r.miniId()) == null) {
+                if ((r.type() == RewardType.MINI || r.type() == RewardType.CARD) && !r.usesTag()
+                        && plugin.miniService().def(r.miniId()) == null) {
                     plugin.getLogger().warning("Arcade crate '" + crate.id() + "' references unknown Mini '"
                             + r.miniId() + "' — that reward is skipped; the crate still works.");
+                }
+                if (r.type() == RewardType.PACK && plugin.packs() != null && plugin.packs().pack(r.packId()) == null) {
+                    plugin.getLogger().warning("Arcade crate '" + crate.id() + "' references unknown pack '"
+                            + r.packId() + "' — that reward is skipped; the crate still works.");
                 }
             }
         }
@@ -159,6 +164,10 @@ public final class ArcadeService {
         if (tokens <= 0) {
             return;
         }
+        if (!plugin.sandbox().allowed(player.getWorld())) {
+            plugin.sandbox().log(player, "token earn (" + reason + ")");
+            return;
+        }
         grant(player.getUniqueId(), tokens);
         feedback(player, tokens, reason);
     }
@@ -207,6 +216,10 @@ public final class ArcadeService {
         if (!arc.enabled()) {
             return;
         }
+        if (!plugin.sandbox().allowed(player.getWorld())) {
+            plugin.sandbox().log(player, "login-streak / playtime tokens");
+            return;
+        }
         if (arc.streakEnabled()) {
             try {
                 TokenDao.TokenState s = dao.get(player.getUniqueId());
@@ -232,6 +245,9 @@ public final class ArcadeService {
     private void grantPlaytime(Player player, boolean announce) {
         PluginConfig.Arcade arc = plugin.config().arcade();
         if (!arc.enabled() || !arc.playtimeEnabled() || arc.playtimeMinutesPerToken() <= 0) {
+            return;
+        }
+        if (!plugin.sandbox().allowed(player.getWorld())) {
             return;
         }
         try {
@@ -262,6 +278,9 @@ public final class ArcadeService {
      * is guaranteed available, so a player is never charged for nothing.
      */
     public Outcome openCrate(Player player, String crateId, PaidTier tier) {
+        if (!plugin.sandbox().check(player, "crate open " + crateId)) {
+            return Outcome.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
         PluginConfig.Arcade arc = plugin.config().arcade();
         Crate crate = arc.crates().get(crateId);
         if (crate == null) {
@@ -309,34 +328,44 @@ public final class ArcadeService {
         while (!working.isEmpty()) {
             CrateReward r = weightedPick(working);
             switch (r.type()) {
-                case MONEY -> {
-                    plugin.economy().deposit(player, r.amount());
-                    return Outcome.won(icon(Material.GOLD_INGOT, "&6" + plugin.economy().format(r.amount())),
-                            "&6" + plugin.economy().format(r.amount()) + " &7cash");
-                }
-                case ITEM -> {
-                    ItemStack give = new ItemStack(r.material(), r.itemAmount());
-                    giveOrDrop(player, give);
-                    return Outcome.won(give.clone(), "&f" + r.itemAmount() + "x " + niceName(r.material()));
-                }
-                case MINI -> {
-                    // A crate mints a finished, graded Mini straight to the player (cap-aware,
-                    // tracked, announced) — from a fixed id or a rarity-weighted tag pool.
+                case CARD, MINI -> {
+                    // A crate hands out the Mini's CARD (printed into a graded Mini at a
+                    // Printer) — from a fixed id or a rarity-weighted tag pool. Tokens never
+                    // become a finished Mini directly, let alone money.
                     MiniDef def = r.usesTag()
                             ? plugin.miniService().pickByRarity(tagPool(r.tag(), tier))
                             : plugin.miniService().def(r.miniId());
                     if (def != null && !mintedOut(def)) {
-                        var spec = plugin.miniService().cardSpec(def);
-                        var grade = plugin.miniService().rollGrade(spec);
-                        boolean shiny = plugin.miniService().rollShiny(plugin.config().miniLoot().shinyPercent());
-                        var m = plugin.miniService().mintFound(player, def.id(), grade, shiny);
-                        if (m.ok()) {
-                            plugin.announce().found(player, def, m.item(), "in a crate");
-                            return Outcome.won(m.item().clone(), "&b" + def.name() + " " + grade.symbol()
-                                    + (shiny ? " &f✦Shiny" : ""));
+                        var cr = plugin.cards().issue(player, def.id());
+                        if (cr.ok()) {
+                            ItemStack ic = plugin.miniService().cardFor(def.id());
+                            return Outcome.won(ic != null ? ic : icon(Material.PAPER, "&bCard"),
+                                    "&b" + def.name() + " Card");
                         }
                     }
-                    working.remove(r); // minted out between check and mint — drop and re-roll
+                    working.remove(r); // capped out between check and issue — drop and re-roll
+                }
+                case PACK -> {
+                    ItemStack pack = plugin.packs() != null ? plugin.packs().packItem(r.packId()) : null;
+                    if (pack == null) {
+                        working.remove(r);
+                        continue;
+                    }
+                    giveOrDrop(player, pack);
+                    var def = plugin.packs().pack(r.packId());
+                    return Outcome.won(pack.clone(), "&d" + (def != null ? def.displayName() : r.packId()) + " &7pack");
+                }
+                case FILAMENT -> {
+                    org.bukkit.DyeColor color = r.color() != null ? r.color()
+                            : org.bukkit.DyeColor.values()[ThreadLocalRandom.current().nextInt(org.bukkit.DyeColor.values().length)];
+                    ItemStack fil = plugin.miniService().filamentItems().filament(color, r.amount());
+                    giveOrDrop(player, fil);
+                    return Outcome.won(fil.clone(), "&f" + r.amount() + "x " + niceName(color) + " Filament");
+                }
+                case TOKENS -> {
+                    award(player, r.amount(), "crate prize");
+                    return Outcome.won(icon(Material.SUNFLOWER, "&e+" + r.amount() + " tokens"),
+                            "&e" + r.amount() + " token" + (r.amount() == 1 ? "" : "s"));
                 }
             }
         }
@@ -344,11 +373,11 @@ public final class ArcadeService {
         return Outcome.won(icon(Material.GRAY_DYE, "&7Better luck next time"), "&7no prize");
     }
 
-    /** Rewards that can actually pay out now: mintable Minis (and, unpaid, money/item too). */
+    /** Rewards that can actually pay out now: issuable Cards (and, unpaid, packs/filament/tokens too). */
     private List<CrateReward> eligiblePool(Crate crate, PaidTier tier) {
         List<CrateReward> out = new ArrayList<>();
         for (CrateReward r : crate.rewards()) {
-            if (r.type() == RewardType.MINI) {
+            if (r.type() == RewardType.MINI || r.type() == RewardType.CARD) {
                 if (r.usesTag()) {
                     if (!tagPool(r.tag(), tier).isEmpty()) {
                         out.add(r);
@@ -364,7 +393,10 @@ public final class ArcadeService {
                 }
                 out.add(r);
             } else if (tier == null) {
-                out.add(r); // money/item only count when not paying for guaranteed rarity
+                if (r.type() == RewardType.PACK && (plugin.packs() == null || plugin.packs().pack(r.packId()) == null)) {
+                    continue;
+                }
+                out.add(r); // packs/filament/tokens only count when not paying for guaranteed rarity
             }
         }
         return out;
@@ -387,6 +419,9 @@ public final class ArcadeService {
 
     /** Spend the configured tokens for a guaranteed Rare+ (config floor) Mini. */
     public Outcome pity(Player player) {
+        if (!plugin.sandbox().check(player, "pity exchange")) {
+            return Outcome.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
         PluginConfig.Arcade arc = plugin.config().arcade();
         int cost = arc.pityTokens();
         if (cost <= 0) {
@@ -425,6 +460,9 @@ public final class ArcadeService {
     // ---- lotto / scratch ------------------------------------------------------
 
     public Outcome scratch(Player player) {
+        if (!plugin.sandbox().check(player, "scratch ticket")) {
+            return Outcome.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
         PluginConfig.Lotto l = plugin.config().arcade().lotto();
         if (l.payouts().isEmpty()) {
             return Outcome.fail("The lotto has no payouts configured.");
@@ -487,6 +525,11 @@ public final class ArcadeService {
             it.setItemMeta(meta);
         }
         return it;
+    }
+
+    private String niceName(org.bukkit.DyeColor color) {
+        String n = color.name().toLowerCase().replace('_', ' ');
+        return Character.toUpperCase(n.charAt(0)) + n.substring(1);
     }
 
     private String niceName(Material material) {

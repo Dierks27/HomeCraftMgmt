@@ -62,6 +62,13 @@ public final class Keys {
     /** On a naturally spawned wild-Mini head block: marks it claimable (Byte). */
     public static NamespacedKey WILD_SPAWN;
 
+    /** On a Display Case item / placed tile: its pedestal style (a DisplayCaseVariant name, String). */
+    public static NamespacedKey DISPLAY_VARIANT;
+    /** On a shop display entity (vending upper head, glow shell, hologram): the anchoring block "world:x:y:z" (String). */
+    public static NamespacedKey SHOP_ANCHOR;
+    /** On a per-player peek hologram entity: the viewer's UUID (String). */
+    public static NamespacedKey PEEK_VIEWER;
+
     private Keys() {
     }
 
@@ -87,5 +94,8 @@ public final class Keys {
         MINI_RENDER = new NamespacedKey(plugin, "mini_render");
         EFFECT_ENTITY = new NamespacedKey(plugin, "effect_entity");
         WILD_SPAWN = new NamespacedKey(plugin, "wild_spawn");
+        DISPLAY_VARIANT = new NamespacedKey(plugin, "display_variant");
+        SHOP_ANCHOR = new NamespacedKey(plugin, "shop_anchor");
+        PEEK_VIEWER = new NamespacedKey(plugin, "peek_viewer");
     }
 }

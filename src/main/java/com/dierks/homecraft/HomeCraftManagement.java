@@ -70,6 +70,10 @@ public final class HomeCraftManagement extends JavaPlugin {
     private AuctionService auctions;
     private WildDropService wildDrops;
     private com.dierks.homecraft.mini.AnnounceService announce;
+    private com.dierks.homecraft.integration.EconomySandbox sandbox;
+    private com.dierks.homecraft.storage.BackupService backups;
+    private com.dierks.homecraft.trade.ShopDisplayService shops;
+    private com.dierks.homecraft.trade.PlacedMiniService placedMinis;
     private com.dierks.homecraft.effects.MiniEffectsService effects;
     private com.dierks.homecraft.trade.NaturalSpawnService naturalSpawns;
     private com.dierks.homecraft.trade.StandService stands;
@@ -94,6 +98,7 @@ public final class HomeCraftManagement extends JavaPlugin {
 
         this.config = new PluginConfig(this);
         this.config.load();
+        this.sandbox = new com.dierks.homecraft.integration.EconomySandbox(this); // §11 #1 — needed before any service
 
         this.database = new Database(this);
         try {
@@ -105,6 +110,8 @@ public final class HomeCraftManagement extends JavaPlugin {
             return;
         }
 
+        this.backups = new com.dierks.homecraft.storage.BackupService(this, database); // §11 #6
+        this.backups.start();
         PlacedBlockDao placedBlockDao = new PlacedBlockDao(database);
         this.protection = new ProtectionService(this);
         this.items = new CustomItems(config);
@@ -154,6 +161,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.effects = new com.dierks.homecraft.effects.MiniEffectsService(this);
         this.naturalSpawns = new com.dierks.homecraft.trade.NaturalSpawnService(
                 this, new com.dierks.homecraft.storage.MiniSpawnDao(database));
+        this.shops = new com.dierks.homecraft.trade.ShopDisplayService(this);
+        this.placedMinis = new com.dierks.homecraft.trade.PlacedMiniService(
+                this, new com.dierks.homecraft.storage.PlacedMiniDao(database));
         PlacedNaturalDao placedNatural = new PlacedNaturalDao(database);
         scheduleAuctionClose();
 
@@ -197,6 +207,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.display.DisplayListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.ArcadeListener(this), this);
         getServer().getPluginManager().registerEvents(effects, this);
+        getServer().getPluginManager().registerEvents(shops, this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.mini.MiniRenderListener(this), this);
 
         PluginCommand hcm = getCommand("hcm");
@@ -214,16 +225,29 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.displayService.start();
         this.arcade.start();
 
-        // Vending Machines are two blocks tall: give every already-placed one its
-        // upper head (or log the ones that are blocked). Runs once the worlds are up.
-        getServer().getScheduler().runTask(this, blockService::migrateVendingUppers);
+        // Item-builder self-test on the live API (Card lore/PDC + Legendary glint).
+        com.dierks.homecraft.mini.ItemSelfTest.run(this);
 
-        // Placed-Mini effects + natural spawns rebuild from the datastore once the worlds
-        // are up, so nothing leaks after a crash and every trophy lights up on start.
+        // Once the worlds are up: rebuild placed-Mini effects, natural spawns, placed
+        // heads and shop displays from the datastore (nothing leaks after a crash),
+        // put pedestal skins back on Display Cases, and re-skin Pallets.
         getServer().getScheduler().runTask(this, () -> {
+            int cases = blockService.reskinDisplayCases();
+            if (cases > 0) {
+                getLogger().info("Display Cases: re-applied the pedestal skin on " + cases + " case(s).");
+            }
             effects.rebuild();
             naturalSpawns.rebuild();
             naturalSpawns.start();
+            placedMinis.rebuild();
+            placedMinis.start();
+            shops.rebuild();
+            for (com.dierks.homecraft.storage.PlacedBlock pb : blockService.findByType(com.dierks.homecraft.block.CustomBlockType.PALLET)) {
+                org.bukkit.World w = getServer().getWorld(pb.world());
+                if (w != null && w.isChunkLoaded(pb.x() >> 4, pb.z() >> 4)) {
+                    pallets.refreshSkin(new org.bukkit.Location(w, pb.x(), pb.y(), pb.z()));
+                }
+            }
         });
 
         // In-Game Economy Displays (Phase 7): the PlaceholderAPI 'hcm' expansion —
@@ -245,6 +269,18 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (shops != null) {
+            shops.stop();
+            shops = null;
+        }
+        if (placedMinis != null) {
+            placedMinis.stop();
+            placedMinis = null;
+        }
+        if (backups != null) {
+            backups.stop();
+            backups = null;
+        }
         if (naturalSpawns != null) {
             naturalSpawns.stop();
             naturalSpawns = null;
@@ -312,6 +348,12 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
         if (naturalSpawns != null) {
             naturalSpawns.start(); // re-arm the spawn/expiry timers under the new config
+        }
+        if (backups != null) {
+            backups.start();
+        }
+        if (shops != null) {
+            shops.start();
         }
         if (dashboard != null) {
             dashboard.restart(); // pick up bind/port/enabled/refresh/title changes
@@ -399,6 +441,34 @@ public final class HomeCraftManagement extends JavaPlugin {
             getLogger().info("Config migration: the PC recipe now lives under recipes.pc (added from defaults) "
                     + "alongside every other craftable block; the old crafting.pc.recipe was dropped.");
         }
+        // Economy world sandbox: default to the server's main world on first run, written
+        // into the file so the admin can see (and extend) it.
+        if (!c.contains("worlds.economy_enabled")) {
+            String main = getServer().getWorlds().isEmpty() ? "world" : getServer().getWorlds().get(0).getName();
+            c.set("worlds.economy_enabled", java.util.List.of(main));
+            changed = true;
+            getLogger().info("Config migration: worlds.economy_enabled = [" + main + "] (the economy runs only there).");
+        }
+
+        // Display Case skins became a per-style map (plain / royal).
+        if (c.contains("skins.display_case") && !c.isConfigurationSection("skins.display_case")) {
+            String legacy = c.getString("skins.display_case", "");
+            c.set("skins.display_case", null);
+            if (legacy != null && !legacy.isBlank()) {
+                c.set("skins.display_case.plain", legacy);
+            }
+            changed = true;
+        }
+
+        // Economy rebalance (pass 3): applied once to a live file, tracked by config_revision.
+        if (c.getInt("config_revision", 0) < 3) {
+            applyEconomyRebalance(c);
+            c.set("config_revision", 3);
+            changed = true;
+            getLogger().info("Config migration: economy rebalance applied (daily caps, $5k limits, 8% commission, "
+                    + "token-only crates, pity 25, packs, printer fees).");
+        }
+
         if (c.contains("skins.pc") && c.contains("crafting.pc.head_texture")) {
             String skin = c.getString("skins.pc", "");
             String legacy = c.getString("crafting.pc.head_texture", "");
@@ -411,6 +481,86 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (changed) {
             saveConfig();
         }
+    }
+
+    /**
+     * The pass-3 economy numbers, written onto the live config so an upgraded server
+     * gets them too (the blind backfill only adds missing keys). Every value here is
+     * mirrored by the bundled config.yml defaults.
+     */
+    private void applyEconomyRebalance(org.bukkit.configuration.file.FileConfiguration c) {
+        // Per-item daily caps (~2% sell / ~4% buy of full_stock).
+        java.util.Map<String, int[]> caps = new java.util.LinkedHashMap<>();
+        caps.put("oak_log", new int[] {160, 320});
+        caps.put("wheat", new int[] {120, 240});
+        caps.put("iron_ingot", new int[] {40, 80});
+        caps.put("gold_ingot", new int[] {20, 40});
+        java.util.List<java.util.Map<?, ?>> catalog = c.getMapList("market.catalog");
+        java.util.List<java.util.Map<String, Object>> rewritten = new java.util.ArrayList<>();
+        for (java.util.Map<?, ?> row : catalog) {
+            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+            for (java.util.Map.Entry<?, ?> e : row.entrySet()) {
+                m.put(String.valueOf(e.getKey()), e.getValue());
+            }
+            int[] cap = caps.get(String.valueOf(m.get("id")));
+            if (cap != null) {
+                m.put("max_daily_sell", cap[0]);
+                m.put("max_daily_buy", cap[1]);
+            }
+            rewritten.add(m);
+        }
+        if (!rewritten.isEmpty()) {
+            c.set("market.catalog", rewritten);
+        }
+        c.set("market.sell_limits.max_money_per_day", 5000);
+        c.set("market.buy_limits.max_money_per_day", 5000);
+        for (String side : new String[] {"sell_limits", "buy_limits"}) {
+            java.util.List<java.util.Map<?, ?>> ranks = c.getMapList("market." + side + ".ranks");
+            java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+            for (java.util.Map<?, ?> row : ranks) {
+                java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                for (java.util.Map.Entry<?, ?> e : row.entrySet()) {
+                    m.put(String.valueOf(e.getKey()), e.getValue());
+                }
+                if ("hcm.market.limit.vip".equals(String.valueOf(m.get("permission")))) {
+                    m.put("max_money_per_day", 12500);
+                }
+                out.add(m);
+            }
+            if (!out.isEmpty()) {
+                c.set("market." + side + ".ranks", out);
+            }
+        }
+        c.set("marketplace.fee.commission_percent", 8.0);
+
+        // Tokens never become money: the starter crate is rewritten to card/filament/pack/mini.
+        c.set("arcade.crates.starter.rewards", java.util.List.of(
+                map("type", "card", "tag", "starter", "weight", 40),
+                map("type", "filament", "amount", 3, "weight", 30),
+                map("type", "pack", "pack", "starter", "weight", 20),
+                map("type", "mini", "tag", "starter", "weight", 10)));
+        c.set("arcade.crates.starter.paid_odds", java.util.List.of(map("cost_money", 750, "floor", "RARE")));
+        c.set("arcade.pity.tokens", 25);
+
+        // Packs: starter 250 (no Legendary), premium 750.
+        c.set("packs", java.util.List.of(
+                map("id", "starter", "display", "Starter Pack", "price", 250.0, "count", 3,
+                        "pool", java.util.List.of(map("card", "piggy_mini", "weight", 50), map("card", "chick_mini", "weight", 50))),
+                map("id", "premium", "display", "Premium Pack", "price", 750.0, "count", 3,
+                        "pool", java.util.List.of(map("card", "piggy_mini", "weight", 45), map("card", "chick_mini", "weight", 45),
+                                map("card", "golden_idol", "weight", 1)))));
+
+        // Printer: public printers charge money, private ones consume filament.
+        c.set("printer.fee", 0);
+        c.set("printer.public_fee", 150);
+    }
+
+    private static java.util.Map<String, Object> map(Object... kv) {
+        java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+        for (int i = 0; i + 1 < kv.length; i += 2) {
+            m.put(String.valueOf(kv[i]), kv[i + 1]);
+        }
+        return m;
     }
 
     private void backfillConfig() {
@@ -558,6 +708,26 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public AuctionService auctions() {
         return auctions;
+    }
+
+    /** The per-world economy sandbox (§11 #1). */
+    public com.dierks.homecraft.integration.EconomySandbox sandbox() {
+        return sandbox;
+    }
+
+    /** SQLite backups (§11 #6). */
+    public com.dierks.homecraft.storage.BackupService backups() {
+        return backups;
+    }
+
+    /** Shop displays: the vending upper half, glow, hologram and peek. */
+    public com.dierks.homecraft.trade.ShopDisplayService shops() {
+        return shops;
+    }
+
+    /** Mini heads placed as plain blocks (registry, look-at hologram, guaranteed drop). */
+    public com.dierks.homecraft.trade.PlacedMiniService placedMinis() {
+        return placedMinis;
     }
 
     /** Server-wide Mini announcements (found broadcasts, spawn hints). */

@@ -1,24 +1,19 @@
 package com.dierks.homecraft.mini;
 
-import com.destroystokyo.paper.profile.PlayerProfile;
-import com.destroystokyo.paper.profile.ProfileProperty;
 import com.dierks.homecraft.util.Keys;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
-import org.bukkit.Bukkit;
 import org.bukkit.DyeColor;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.persistence.PersistentDataType;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Builds Mini <b>Cards</b> (Phase 9, §3.5): the collectible you find/buy and take
@@ -28,9 +23,13 @@ import java.util.UUID;
  */
 public final class CardItems {
 
-    /** A sealed Card for a Mini type. */
+    /**
+     * A sealed Card for a Mini type. The head texture is committed first (see
+     * {@link com.dierks.homecraft.util.Heads#base}); name, lore and the CARD_ID tag are
+     * written on a fresh meta afterwards so none of them are lost on the live API.
+     */
     public ItemStack card(MiniDef def, CardSpec spec, RarityStyle style) {
-        ItemStack item = new ItemStack(Material.PLAYER_HEAD);
+        ItemStack item = com.dierks.homecraft.util.Heads.base(def.texture());
         ItemMeta meta = item.getItemMeta();
         if (meta == null) {
             return item;
@@ -50,16 +49,6 @@ public final class CardItems {
         lore.add(Component.text("Sealed card — print it at a Printer.", NamedTextColor.YELLOW)
                 .decoration(TextDecoration.ITALIC, false));
         meta.lore(lore);
-
-        if (meta instanceof SkullMeta skull && def.texture() != null && !def.texture().isBlank()) {
-            try {
-                PlayerProfile profile = Bukkit.createProfile(UUID.randomUUID());
-                profile.setProperty(new ProfileProperty("textures", def.texture()));
-                skull.setPlayerProfile(profile);
-            } catch (Throwable t) {
-                Bukkit.getLogger().warning("[HomeCraft] Failed to apply card texture for " + def.id() + ": " + t.getMessage());
-            }
-        }
         meta.getPersistentDataContainer().set(Keys.CARD_ID, PersistentDataType.STRING, def.id());
         item.setItemMeta(meta);
         return item;

@@ -10,6 +10,11 @@ website: https://github.com/Dierks27/HomeCraftMgmt
 # unsupported/legacy, bump it to the newest token that server accepts.
 api-version: '1.21'
 
+# Recipe-sync bridges snapshot the recipe list when THEY enable; loading before
+# them guarantees HomeCraft's recipes are registered by then (JEI visibility).
+loadbefore:
+  - JEIServerProxy
+
 # All integrations are OPTIONAL. We load after them when present and degrade
 # gracefully when absent (see integration.ProtectionService). We never hard-depend.
 softdepend:
@@ -27,12 +32,13 @@ commands:
       /hcm admin             - open the Admin Studio (manage & import Minis)
       /hcm auction           - open the Mini Auction House
       /hcm reload            - reload config.yml and re-register recipes
-      /hcm give <printer|pc|vending|display|mailbox [variant]|pallet|arcade> [player]
+      /hcm give <printer|pc|vending|display [plain|royal]|mailbox [variant]|pallet|arcade> [player]
       /hcm give <card <id>|pack <id>|binder|filament <color> <n>> [player]
       /hcm market list|price <item>|buy <item> <qty>|sell <item> <qty>
       /hcm market resetstock <item|all>  - admin: reseed stock+price from config
       /hcm market setstock <item> <amount>  - admin: set one item's stock
       /hcm balance           - your money and Arcade tokens in one place
+      /hcm backup now        - admin: write a database backup
       /hcm display sign|hologram|maptv|remove  - bind an in-game economy display
       /hcm arcade            - open the Arcade (crates, pity, scratch tickets)
       /hcm tokens            - show your Arcade token balance

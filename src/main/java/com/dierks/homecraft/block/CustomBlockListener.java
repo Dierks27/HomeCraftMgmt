@@ -72,6 +72,11 @@ public final class CustomBlockListener implements Listener {
             return;
         }
 
+        if (!plugin.sandbox().check(player, "place " + type.name().toLowerCase(java.util.Locale.ROOT))) {
+            event.setCancelled(true);
+            return;
+        }
+
         if (config.respectTownPerms() && !protection.canBuild(player, block.getLocation())) {
             event.setCancelled(true);
             player.sendMessage(Text.of("&cYou can't build here."));
@@ -95,12 +100,16 @@ public final class CustomBlockListener implements Listener {
         }
 
         blocks.recordPlacement(block, type, player.getUniqueId());
-        if (type == CustomBlockType.MINI_VENDING_MACHINE) {
-            blocks.placeVendingUpper(block);
+        if (type == CustomBlockType.MINI_VENDING_MACHINE && plugin.shops() != null) {
+            plugin.shops().register(block.getLocation()); // the upper half is a floating display
         }
         if (type == CustomBlockType.MAILBOX) {
             MailboxVariant variant = items.mailboxVariant(inHand);
             blocks.tagMailboxVariant(block, variant == null ? MailboxVariant.WOOD : variant);
+        }
+        if (type == CustomBlockType.DISPLAY_CASE) {
+            DisplayCaseVariant variant = items.displayCaseVariant(inHand);
+            blocks.tagDisplayVariant(block, variant == null ? DisplayCaseVariant.PLAIN : variant);
         }
         player.sendMessage(Text.of("&aPlaced a " + friendly(type) + "."));
         if (type == CustomBlockType.PC && plugin.achievements() != null) {
@@ -143,16 +152,21 @@ public final class CustomBlockListener implements Listener {
             plugin.pallets().onBlockBroken(loc, player);
         }
 
-        // The item to drop is resolved BEFORE the tile goes away (the Mailbox variant lives on it).
-        ItemStack drop = record.type() == CustomBlockType.MAILBOX
-                ? items.mailbox(blocks.mailboxVariantAt(base))
-                : items.of(record.type());
+        // The item to drop is resolved BEFORE the tile goes away (variants live on it).
+        ItemStack drop = switch (record.type()) {
+            case MAILBOX -> items.mailbox(blocks.mailboxVariantAt(base));
+            case DISPLAY_CASE -> items.displayCase(blocks.displayVariantAt(base));
+            default -> items.of(record.type());
+        };
 
         blocks.removeAt(loc);
         event.setDropItems(false); // suppress the vanilla base-block drop
         if (record.type() == CustomBlockType.MINI_VENDING_MACHINE) {
             // Remove the other half too — exactly one vending item drops either way.
-            blocks.removeVendingUpper(base);
+            blocks.removeVendingUpper(base); // legacy upper head block, if one is still there
+            if (plugin.shops() != null) {
+                plugin.shops().unregister(loc); // the floating display + glow + hologram
+            }
             if (lowerOfUpper.isPresent()) {
                 base.setType(Material.AIR, false);
             }
@@ -182,6 +196,10 @@ public final class CustomBlockListener implements Listener {
 
         Player player = event.getPlayer();
         CustomBlockType type = placed.get().type();
+
+        if (!plugin.sandbox().check(player, "use " + type.name().toLowerCase(java.util.Locale.ROOT))) {
+            return; // "the economy is disabled in this world" — the block stays, its GUI doesn't open
+        }
 
         if (config.respectTownPerms() && !protection.canBuild(player, clicked.getLocation())) {
             player.sendMessage(Text.of("&cYou can't use this here."));

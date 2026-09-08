@@ -74,6 +74,9 @@ public final class OrderService {
     }
 
     public PlaceResult placeOrder(Player player, String itemId, int qty, PluginConfig.ShippingTier tier) {
+        if (!plugin.sandbox().check(player, "store order " + itemId)) {
+            return PlaceResult.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
         if (!economy.isEnabled()) {
             return PlaceResult.fail("The market is offline (no Vault economy).");
         }

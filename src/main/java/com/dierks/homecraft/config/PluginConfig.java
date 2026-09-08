@@ -1310,7 +1310,7 @@ public final class PluginConfig {
 
     private Shaped readShaped(FileConfiguration c, String path) {
         List<String> shape = c.getStringList(path + ".shape");
-        Map<Character, Material> ing = readSymbolMap(c, path + ".ingredients");
+        Map<Character, RecipeChoice> ing = readSymbolMap(c, path + ".ingredients");
         return new Shaped(shape, ing);
     }
 
@@ -1323,7 +1323,7 @@ public final class PluginConfig {
             type = RecipeType.SHAPED;
         }
         List<String> shape = c.getStringList(path + ".shape");
-        Map<Character, Material> ing = readSymbolMap(c, path + ".ingredients");
+        Map<Character, RecipeChoice> ing = readSymbolMap(c, path + ".ingredients");
 
         List<Ingredient> shapeless = new ArrayList<>();
         for (Map<?, ?> row : c.getMapList(path + ".ingredients")) {

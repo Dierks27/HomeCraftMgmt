@@ -50,6 +50,11 @@ public final class Keys {
     /** On a Card Binder item: marks it as a binder (Byte). */
     public static NamespacedKey BINDER_ITEM;
 
+    /** On a Mailbox item / placed Mailbox tile: its colour variant (a MailboxVariant name, String). */
+    public static NamespacedKey MAILBOX_VARIANT;
+    /** On the auto-placed upper head of a two-tall Vending Machine: marks it a companion (Byte). */
+    public static NamespacedKey VENDING_UPPER;
+
     private Keys() {
     }
 
@@ -70,5 +75,7 @@ public final class Keys {
         MINI_DISPLAY_ONLY = new NamespacedKey(plugin, "mini_display_only");
         PACK_ID = new NamespacedKey(plugin, "pack_id");
         BINDER_ITEM = new NamespacedKey(plugin, "binder_item");
+        MAILBOX_VARIANT = new NamespacedKey(plugin, "mailbox_variant");
+        VENDING_UPPER = new NamespacedKey(plugin, "vending_upper");
     }
 }

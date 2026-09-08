@@ -22,8 +22,8 @@ A Minecraft **Paper** plugin. See [`DESIGN.md`](DESIGN.md) for the full spec and
 | **Config** | `config.yml` matching the design schema. The `crafting` section is fully wired; `market`/`shipping`/`minis` are stubs. `/hcm reload` re-reads it live. |
 | **Persistence** | SQLite (JDBC) with a clean DAO layer and a forward-only migration framework. Phase 1 table: placed custom-block locations + owner. |
 | **Mini Workbench** | A placeable custom block (tagged vanilla `CRAFTER`). Right-click opens a custom crafting GUI. Placement + owner persisted. |
-| **The PC** | A custom item **crafted at the Mini Workbench** via an admin-defined, **empty-by-default** recipe. Placeable; right-click opens a placeholder **Amazon** GUI (real market is Phase 3). |
-| **Recipes** | Fully **data-driven and reloadable** — nothing hardcoded. Workbench recipe (vanilla, bootstrap) and PC recipe (Workbench-GUI) both live in `config.yml`. |
+| **The PC** | A custom item crafted at any crafting table (vanilla recipe under `recipes.pc`, also matched in a Printer's craft grid). Placeable; right-click opens the **Crate** store. |
+| **Recipes** | Fully **data-driven and reloadable** — nothing hardcoded. Every craftable block (PC, Printer, Vending Machine, Pallet, Arcade, eight Mailbox colours) has a vanilla SHAPED recipe under `recipes:` in `config.yml`; the retired Workbench has none. |
 | **Protection** | Towny + WorldGuard build-permission checks for place/use/break, via reflection so they stay optional soft-depends and degrade gracefully. |
 | **Finite-Stock Market** (Phase 2.5) | Real conserved stock per commodity (sell adds, buy subtracts, floored at 0), out-of-stock enforcement, scarcity pricing (empty→ceiling, full→floor) with buy/sell spread, per-item starting stock, daily anti-whale sell limit, and a price-history log — all persisted to SQLite, Vault-backed. Commands: `/hcm market list|price|history|buy|sell`. |
 
@@ -71,26 +71,41 @@ point Gradle at it, or upgrade the wrapper:
 
 ## Testing in-game
 
-1. **Get the items** (admin): `/hcm give workbench` and `/hcm give pc`.
-2. **Place the Workbench**, right-click it → the **Mini Workbench** GUI opens
-   (3×3 input grid + result slot).
-3. **Define a PC recipe** in `config.yml` under `crafting.pc.recipe` (see the
-   commented example), then `/hcm reload`.
-4. In the Workbench GUI, lay the ingredients into the grid → the **PC** appears
-   in the result slot → click it to craft.
-5. **Place the PC**, right-click it → the placeholder **Amazon** GUI opens.
-6. Break either block → it drops the correct custom item and its record is
-   removed. Restart the server → placements persist (SQLite).
+1. **Get the items** (admin): `/hcm give pc`, `/hcm give printer`, or just craft
+   them — every block's recipe is in the vanilla recipe book from the moment you join.
+2. **Place the PC**, right-click it → the **Crate** store opens.
+3. Break the block → it drops the correct custom item (skin, tags and — for a
+   Mailbox — its colour intact) and its record is removed. Restart the server →
+   placements persist (SQLite).
 
-### Making the blocks craftable in survival
+### Recipes, skins and block variants (0.19)
 
-Both recipes ship **empty** (nothing is craftable until you fill them in):
-
-- **Mini Workbench** — a normal crafting-table recipe. Fill
-  `crafting.workbench.recipe.shape` + `.ingredients`.
-- **PC** — crafted only at the Workbench. Fill `crafting.pc.recipe`.
-
-Edit `config.yml`, run `/hcm reload`, done — no restart needed.
+- **Recipes** live under `recipes:` in `config.yml` — one SHAPED 3×3 entry per
+  craftable block (`pc`, `printer`, `vending`, `pallet`, `arcade`, and
+  `mailbox.<variant>` × 8). They register as normal vanilla recipes under the
+  plugin's namespace, unlock in every player's recipe book on join (click-to-fill
+  works), and re-register live on `/hcm reload`. An ingredient is a Material or a
+  `#tag` (`#planks`, `#wooden_slabs`, `#wooden_fences` = any item of that tag).
+  Set `shape: []` to disable one. The Mini Workbench is retired and has no recipe.
+- **Skins** (`skins:`) are Base64 head values; every block now ships with one.
+  Blank = the block keeps its plain base material.
+- **Pallet** — two visual states: `skins.pallet_empty` while nothing is loaded,
+  `skins.pallet_used` the moment a listing is stocked (and back when it's cleared).
+- **Vending Machine** — **two blocks tall**: the lower head (`skins.vending_lower`)
+  is the real block; the upper head (`skins.vending_upper`) is placed automatically
+  (the space above must be air or placement is refused). Right-click either half
+  to open it; break either half and the whole machine drops as one item. Machines
+  placed before 0.19 get their upper head on the first start (blocked ones are
+  logged with coordinates).
+- **Mailbox** — eight colour variants (`wood`, `light_blue`, `black`, `white`,
+  `purple`, `blue`, `orange`, `yellow`): `/hcm give mailbox [variant] [player]`
+  (defaults to wood), one recipe each (the colour's dye; planks for wood), skins
+  under `skins.mailbox.<variant>`, named e.g. "Blue Mailbox". Mailboxes placed
+  before 0.19 read as wood.
+- **Arcade** — hub only. `/hcm give arcade` (or craft it); the Crate Machine,
+  Scratch-Ticket Booth, Pity Exchange and Token Counter blocks, and
+  `/hcm give auction`, are no longer handed out (already-placed ones keep working;
+  auctions are reached with `/hcm auction`).
 
 ---
 
@@ -243,7 +258,7 @@ src/main/java/com/dierks/homecraft/
   block/                       custom-block type, service, listeners
   command/                     /hcm
   config/                      typed config.yml view
-  crafting/                    Workbench GUI + data-driven recipe matching
+  crafting/                    data-driven vanilla recipes + recipe-book unlock + craft-grid matching
   gui/                         Amazon placeholder GUI (Phase 3 stub)
   integration/                 Towny + WorldGuard protection, Vault economy
   item/                        tagged custom items

@@ -3,6 +3,7 @@ package com.dierks.homecraft.item;
 import com.destroystokyo.paper.profile.PlayerProfile;
 import com.destroystokyo.paper.profile.ProfileProperty;
 import com.dierks.homecraft.block.CustomBlockType;
+import com.dierks.homecraft.block.MailboxVariant;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.util.Keys;
 import com.dierks.homecraft.util.Text;
@@ -54,7 +55,7 @@ public final class CustomItems {
         return tagged(def.baseBlock(), def.displayName(), def.lore(), CustomBlockType.PC, texture);
     }
 
-    /** A Mini Vending Machine item, ready to place. */
+    /** A Mini Vending Machine item, ready to place (the lower half; the upper head is auto-placed). */
     public ItemStack vendingMachine() {
         PluginConfig.BlockDef def = config.miniBlocks().vending();
         return tagged(def.material(), def.name(), List.of("&7Right-click to sell/buy a Mini."),
@@ -75,14 +76,43 @@ public final class CustomItems {
                 CustomBlockType.AUCTION_HOUSE, config.skin(CustomBlockType.AUCTION_HOUSE));
     }
 
-    /** A Mailbox item, ready to place. */
+    /** A wood Mailbox item, ready to place (the default variant). */
     public ItemStack mailbox() {
-        PluginConfig.BlockDef def = config.marketplace().mailbox();
-        return tagged(def.material(), def.name(), List.of("&7Right-click to collect deliveries."),
-                CustomBlockType.MAILBOX, config.skin(CustomBlockType.MAILBOX));
+        return mailbox(MailboxVariant.WOOD);
     }
 
-    /** A Pallet (sell box) item, ready to place. */
+    /**
+     * A Mailbox item of a colour variant: named "&lt;Colour&gt; Mailbox", skinned with
+     * {@code skins.mailbox.<variant>}, and carrying the variant in PDC so placement
+     * (and the drop on break) keep the colour.
+     */
+    public ItemStack mailbox(MailboxVariant variant) {
+        PluginConfig.BlockDef def = config.marketplace().mailbox();
+        ItemStack item = tagged(def.material(), config.mailboxName(variant),
+                List.of("&7Right-click to collect deliveries."),
+                CustomBlockType.MAILBOX, config.mailboxSkin(variant));
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.getPersistentDataContainer().set(Keys.MAILBOX_VARIANT, PersistentDataType.STRING, variant.name());
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    /** @return the Mailbox variant an item carries (wood when untagged), or null if it isn't a Mailbox. */
+    public MailboxVariant mailboxVariant(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) {
+            return null;
+        }
+        var pdc = item.getItemMeta().getPersistentDataContainer();
+        String type = pdc.get(Keys.CUSTOM_BLOCK_TYPE, PersistentDataType.STRING);
+        if (!CustomBlockType.MAILBOX.name().equals(type)) {
+            return null;
+        }
+        return MailboxVariant.parseOrWood(pdc.get(Keys.MAILBOX_VARIANT, PersistentDataType.STRING));
+    }
+
+    /** A Pallet (sell box) item, ready to place. Always wears the empty-pallet skin. */
     public ItemStack pallet() {
         PluginConfig.BlockDef def = config.marketplace().pallet();
         return tagged(def.material(), def.name(), List.of("&7Place on your land, load an item,",
@@ -102,6 +132,29 @@ public final class CustomItems {
     public ItemStack arcadeMachine(String key, CustomBlockType type, String lore) {
         PluginConfig.BlockDef def = config.arcade().machines().get(key);
         return tagged(def.material(), def.name(), List.of(lore), type, config.skin(type));
+    }
+
+    /**
+     * The item to hand out for a recipe key from the {@code recipes:} section
+     * ({@code pc}, {@code printer}, {@code vending}, {@code pallet}, {@code arcade},
+     * {@code mailbox.<variant>}), or null if the key isn't craftable.
+     */
+    public ItemStack forRecipeKey(String key) {
+        if (key == null) {
+            return null;
+        }
+        if (key.startsWith("mailbox.")) {
+            MailboxVariant v = MailboxVariant.parse(key.substring("mailbox.".length()));
+            return v == null ? null : mailbox(v);
+        }
+        return switch (key) {
+            case "pc" -> pc();
+            case "printer" -> printer();
+            case "vending" -> vendingMachine();
+            case "pallet" -> pallet();
+            case "arcade" -> arcade();
+            default -> null;
+        };
     }
 
     /** Build the item for a given type from current config (used e.g. when dropping on break). */

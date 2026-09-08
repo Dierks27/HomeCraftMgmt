@@ -1,9 +1,11 @@
-# HomeCraft Management — Plugin Design Specification (v12)
+# HomeCraft Management — Plugin Design Specification (v13)
 > **Purpose of this document:** the build spec for a custom Paper plugin. It is written to be handed to Claude Code (or any implementer) as the source of truth. Design decisions still open are marked **[DECISION]** with a recommended default.
 >
 > **v11 changelog:** Rebranded the online store from "Amazon" to **Crate** (`[www.Crate.craft](https://www.Crate.craft)`), with **Rush** (fast shipping), the **Pallet** (player seller box) and the **Locker** (delivery holding). Added the **Crate Marketplace** (universal player-to-player selling — *everything* is sellable, incl. Minis), **auto-categorization into departments** using the game's own item categories, an **admin ban list**, and the **PC-as-a-browser / "Sites"** architecture. Added **in-game economy displays** (TVs/tickers/boards) and a consolidated **Economy Risks & Safeguards** section. Recorded the **Phase 2.5.1 pricing fix** (proportional elasticity + integrated bulk pricing). Marked Phases 2.5 and 3 done.
 >
-> **v12 changelog (this session):** Shipped **Phase 3.1** (on-screen rebrand to Crate; config-driven `store.name`/`store.display_url`) and **Phase 4 core** (Minis catalog, minting, Museum & Shop, per-copy UUID anti-dupe, caps + circulation; migration v7). Recorded the decided **web-login model** (username+password, hashed, Minecraft-UUID-anchored, no email), the **config-everything** principle, and the **`[www.Crate.com](https://www.Crate.com)`** in-game display choice. Phase-4 follow-ups (Vending Machine, Auction House, Wild Drops, armor-stand spawning, web-import) and the GUI x600 quantity fix remain open.
+> **v13 changelog (skins & recipes):** Every catalog item and custom block now ships with a **head texture** (`skins.*`, Mini `texture` fields). The **Pallet** has two visual states (`pallet_empty` / `pallet_used`, swapped live as listings come and go). The **Vending Machine is two blocks tall** (`vending_lower` is the real block; `vending_upper` is auto-placed and acts as one block for use/break/protection; existing machines are migrated on load). The **Mailbox comes in eight colour variants** (`skins.mailbox.<variant>`, PDC-tagged, one recipe each; old placements read as wood). **Every craftable block has a data-driven, reloadable vanilla SHAPED recipe** under `recipes:` (tag ingredients like `#planks` supported; unlocked in the recipe book on join). The **Arcade is hub-only**: the four machine blocks and `/hcm give auction` are no longer handed out (placed ones keep working).
+>
+> **v12 changelog:** Shipped **Phase 3.1** (on-screen rebrand to Crate; config-driven `store.name`/`store.display_url`) and **Phase 4 core** (Minis catalog, minting, Museum & Shop, per-copy UUID anti-dupe, caps + circulation; migration v7). Recorded the decided **web-login model** (username+password, hashed, Minecraft-UUID-anchored, no email), the **config-everything** principle, and the **`[www.Crate.com](https://www.Crate.com)`** in-game display choice. Phase-4 follow-ups (Vending Machine, Auction House, Wild Drops, armor-stand spawning, web-import) and the GUI x600 quantity fix remain open.
 ---
 ## 1. Vision & Core Economic Loop
 The plugin creates a deliberate tension between ways to get goods — mirroring real life:
@@ -114,7 +116,8 @@ Crate is not just the house store — it's a **universal marketplace** where pla
 ### 3.3 The PC
 - A **custom item crafted from rare parts** at the Mini Workbench — a milestone. **Recipe is admin-defined and editable** (empty by default). Rare-tier ingredients to consider: Netherite, Redstone, Glass Panes, Amethyst/Echo Shard, capstone rare (Nether Star / Heart of the Sea).
 - **Placeable** as a block; **right-click** opens the **PC Site launcher** (§2.2) — currently launches `[www.Crate.craft](https://www.Crate.craft)`; future Sites appear here.
-- Represented by a computer-textured custom head/block. *(Cosmetic TODO: give it a proper computer/monitor head texture instead of a Steve head.)*
+- Represented by a computer-textured custom head/block (`skins.pc`; `crafting.pc.head_texture` mirrors it as the legacy fallback).
+- **Recipe:** a vanilla SHAPED 3x3 recipe under `recipes.pc` (glass panes / copper + comparator / iron + quartz), also matched by a Printer's craft grid. Every craftable HomeCraft block follows the same pattern — see §4.
 - It is the **gate** to all online commerce — no PC, no Crate.
 - **[DECISION]** Respect Towny/WorldGuard build perms so only owners/residents place & use in claimed land. **(Rec: yes.)**
 ### 3.4 Collectibles System — "Minis" (Heads & Armor Stands)
@@ -202,6 +205,7 @@ A wholesome **arcade** loop that rewards showing up and playing — **all earned
 - **Pity / guaranteed exchange (anti-frustration):** spend **N tokens (e.g., 3) for a guaranteed Rare+** instead of gambling — so a bad-luck streak never fully burns you. (Your idea — and it's genuinely good design.)
 - **Lotto / scratch tickets:** glinty ticket items with randomized payouts — a money sink + hype.
 - **Physical home — the Arcade at the Mall:** a dedicated installation (an **anchor tenant** alongside the Museum & Auction House) where players redeem tokens, open crates, and scratch tickets — a destination that makes a big pull an *event*. *(Framed as an Arcade, not a casino: earned tokens, not real money.)*
+- **Hub only (v13):** the Arcade is a single placeable, craftable **Arcade Machine** hub block (`/hcm give arcade`, `recipes.arcade`, skinned via `skins.arcade`) whose GUI holds crates, pity, scratch tickets and the token counter. The separate Crate Machine / Scratch-Ticket Booth / Pity Exchange / Token Counter blocks are **retired**: they are no longer given, crafted or listed, but any already placed keep working (their `CustomBlockType`s and handlers stay in code).
 - **Config:** token sources/amounts, per-crate weighted loot tables (cap-aware), pity threshold, cooldowns.
 Leans entirely on tech we're already building (drop-roll weighting, rarity/glint, mint-cap enforcement) — so it's mostly *content* on top of existing systems.
 ---
@@ -234,9 +238,19 @@ marketplace:                  # the Pallet/Crate player-to-player market
 worlds:
   economy_enabled_worlds: [ world, resource ]   # sandbox: NO market/marketplace in creative (§11)
 crafting:
-  workbench_recipe: [ ... ]
-  pc_recipe: [ ... ]          # empty = not craftable yet
-  respect_town_perms: true
+  respect_town_perms: true    # the Workbench is retired (no recipe); the PC recipe lives under recipes:
+recipes:                      # every craftable block: vanilla SHAPED 3x3, reloadable, recipe-book unlocked
+  pc:      { shape: ["GGG","CKC","IQI"], ingredients: { G: GLASS_PANE, C: COPPER_BLOCK, K: COMPARATOR, I: IRON_BLOCK, Q: QUARTZ_BLOCK } }
+  printer: { shape: ["IHI","CSC","PAP"], ingredients: { … } }
+  vending: { … }   # two-tall block
+  pallet:  { shape: ["SSS","TBT","SSS"], ingredients: { S: "#wooden_slabs", T: STICK, B: BARREL } }   # "#tag" = any item of the tag
+  arcade:  { … }
+  mailbox: { wood: { … X: "#planks" … }, light_blue: { … X: LIGHT_BLUE_DYE … }, black: …, white: …, purple: …, blue: …, orange: …, yellow: … }
+skins:                        # Base64 head values; blank = the block's plain base material
+  pc: "…", printer: "…", arcade: "…"
+  pallet_empty: "…", pallet_used: "…"          # a placed Pallet swaps as listings come/go
+  vending_lower: "…", vending_upper: "…"       # the Vending Machine is two heads tall
+  mailbox: { wood: "…", light_blue: "…", black: "…", white: "…", purple: "…", blue: "…", orange: "…", yellow: "…" }
 minis:
   pricing_mode: ESCALATING    # FIXED | ESCALATING (overridable per series)
   rarity_styles:              # assign the TIER; color + defaults follow (edit palette once)
@@ -280,7 +294,7 @@ Build and test each phase before the next.
 - **Phase 7 — In-Game Displays (§3.8):** wall-mounted `TextDisplay` price panels, holographic tickers, sign boards.
 - **Future — more PC Sites (§2.2):** Towny plots Site, etc.
 - **Phase 8 — Rewards & Arcade (§3.9):** tokens (login streaks/playtime), loot boxes/crates, lotto/scratch tickets, the pity exchange, and the Arcade installation at the Mall. Reuses the drop/rarity/cap tech — mostly content.
-- **Phase 9–11 — Arcade as a place + earning sources (§3.9):** the Arcade is now built from placeable, owned/protected, skinnable **machine blocks** you right-click to play — a **Crate Machine**, **Scratch-Ticket Booth**, **Pity Exchange Kiosk**, and **Token Counter** (the `/hcm arcade` hub stays as an admin/fallback). Token earning now has four sources: login streaks, playtime, **one-time achievements** (first Mini, first sale, first PC, first crate, first pack, $10k), and **daily/weekly quests** (`/hcm quests` — repeatable objectives like "sell $500 to the market", "print a Mini", "open a crate/pack" that pay tokens on completion and reset each day/week). Every earn shows a "+N token" toast. Minting still happens only through the cap-aware Printer pipeline.
+- **Phase 9–11 — Arcade as a place + earning sources (§3.9):** the Arcade was built from placeable, owned/protected, skinnable **machine blocks** you right-click to play — a **Crate Machine**, **Scratch-Ticket Booth**, **Pity Exchange Kiosk**, and **Token Counter**. *(v13: these are retired in favour of the single Arcade hub block — see §3.9; placed ones keep working.)* Token earning now has four sources: login streaks, playtime, **one-time achievements** (first Mini, first sale, first PC, first crate, first pack, $10k), and **daily/weekly quests** (`/hcm quests` — repeatable objectives like "sell $500 to the market", "print a Mini", "open a crate/pack" that pay tokens on completion and reset each day/week). Every earn shows a "+N token" toast. Minting still happens only through the cap-aware Printer pipeline.
 Then: retire DynamicShopGUI now that Phase 3's market GUI is live (server-side removal — not a code task).
 ---
 ## 7. Decisions
@@ -334,6 +348,8 @@ Register a `PlaceholderExpansion` (identifier `hcm`) exposing e.g. `%hcm_price_<
 ## 10. Commands & Permission Nodes
 **Commands (most interaction is block/GUI-based, admin commands aside):**
 - `/hcm reload`, `/hcm admin …` (curate Minis, caps/prices/series, give items, Mall anchor, manage departments/ban list), `/hcm market …` (admin/test buy/sell/price/list/history).
+- `/hcm give <printer|pc|vending|display|mailbox [variant]|pallet|arcade> [player]` and `/hcm give <card <id>|pack <id>|binder|filament <color> <n>> [player]` (admin). The Mailbox variant is one of `wood` (default), `light_blue`, `black`, `white`, `purple`, `blue`, `orange`, `yellow`. **Not given out any more:** the Auction House block (use `/hcm auction`) and the four Arcade machine blocks (the Arcade hub covers them).
+- `/hcm auction` — the Mini Auction House (the only way to reach it).
 - `/minis` (or Mall block) — Museum & Shop.
 - PC / Workbench / Vending Machine / Auction House / **Pallet** interaction = **right-click the block**.
 - Avoid colliding with existing commands (e.g. QuickShop's `/qs finditem`).

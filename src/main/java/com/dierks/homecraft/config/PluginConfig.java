@@ -9,8 +9,12 @@ import com.dierks.homecraft.mini.Rarity;
 import com.dierks.homecraft.mini.RarityStyle;
 import com.dierks.homecraft.mini.StandData;
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Tag;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.inventory.RecipeChoice;
 import org.bukkit.configuration.file.FileConfiguration;
 
 import java.util.ArrayList;
@@ -42,16 +46,28 @@ public final class PluginConfig {
     }
 
     /** A vanilla-style shaped recipe (used for the bootstrap Workbench recipe). */
-    public record Shaped(List<String> shape, Map<Character, Material> ingredients) {
+    public record Shaped(List<String> shape, Map<Character, RecipeChoice> ingredients) {
         public boolean isEmpty() {
             return shape == null || shape.isEmpty();
         }
     }
 
-    /** The PC's Workbench recipe: shaped or shapeless, empty until an admin fills it. */
+    /**
+     * One data-driven block recipe from the {@code recipes:} section: SHAPED, up to
+     * 3x3, symbols mapped to a {@link RecipeChoice} (a Material, or any item of a
+     * {@code #tag}). {@code key} is the config key ({@code pc}, {@code printer},
+     * {@code mailbox.blue}, …) and doubles as the recipe's namespaced-key stem.
+     */
+    public record BlockRecipe(String key, List<String> shape, Map<Character, RecipeChoice> ingredients) {
+        public boolean isEmpty() {
+            return shape == null || shape.isEmpty();
+        }
+    }
+
+    /** The PC's craft-grid recipe: shaped or shapeless, empty until an admin fills it. */
     public record PcRecipe(RecipeType type,
                            List<String> shape,
-                           Map<Character, Material> ingredients,
+                           Map<Character, RecipeChoice> ingredients,
                            List<Ingredient> shapeless) {
         public boolean isEmpty() {
             return type == RecipeType.SHAPED
@@ -299,6 +315,10 @@ public final class PluginConfig {
     private Map<String, StandData> miniStands;
     private Marketplace marketplace;
     private Map<com.dierks.homecraft.block.CustomBlockType, String> skins;
+    /** Extra skin slots that aren't 1:1 with a block type (pallet_used, vending_upper, mailbox.<variant>). */
+    private Map<String, String> namedSkins = new LinkedHashMap<>();
+    /** Every data-driven block recipe, keyed by config key (pc, printer, …, mailbox.<variant>). */
+    private Map<String, BlockRecipe> recipes = new LinkedHashMap<>();
     private WebDashboard webDashboard;
     private Displays displays;
     private Arcade arcade;
@@ -359,6 +379,45 @@ public final class PluginConfig {
         return skins.getOrDefault(type, "");
     }
 
+    /**
+     * A named skin slot that isn't a block type of its own: {@code pallet_used},
+     * {@code vending_upper}, or {@code mailbox.<variant>}. "" if unset.
+     */
+    public String skinNamed(String key) {
+        return namedSkins.getOrDefault(key, "");
+    }
+
+    /** The head texture for a Mailbox colour variant ("" = none → plain base block). */
+    public String mailboxSkin(com.dierks.homecraft.block.MailboxVariant variant) {
+        return skinNamed("mailbox." + variant.key());
+    }
+
+    /**
+     * The Mailbox display name for a variant: the configured name with {@code {variant}}
+     * replaced by the colour label ("&e{variant} Mailbox" → "&eBlue Mailbox"). A name
+     * without the token (pre-variant configs) gets the label inserted after any leading
+     * colour codes, so "&eMailbox" still reads "&eBlue Mailbox".
+     */
+    public String mailboxName(com.dierks.homecraft.block.MailboxVariant variant) {
+        String name = marketplace.mailbox().name();
+        if (name == null || name.isBlank()) {
+            name = "&e{variant} Mailbox";
+        }
+        if (name.contains("{variant}")) {
+            return name.replace("{variant}", variant.label());
+        }
+        int i = 0;
+        while (i + 1 < name.length() && name.charAt(i) == '&') {
+            i += 2;
+        }
+        return name.substring(0, i) + variant.label() + " " + name.substring(i);
+    }
+
+    /** All data-driven block recipes (see {@code recipes:} in config.yml), keyed by config key. */
+    public Map<String, BlockRecipe> recipes() {
+        return recipes;
+    }
+
     public WebDashboard webDashboard() {
         return webDashboard;
     }
@@ -412,7 +471,14 @@ public final class PluginConfig {
         String pcName = c.getString("crafting.pc.display_name", "&bPersonal Computer");
         List<String> pcLore = c.getStringList("crafting.pc.lore");
         String texture = c.getString("crafting.pc.head_texture", "");
-        PcRecipe pcRecipe = readPcRecipe(c, "crafting.pc.recipe");
+        // ---- Block recipes (recipes: section) — the PC's craft-grid recipe is the same
+        // entry that is registered as its vanilla recipe; the legacy crafting.pc.recipe
+        // is only honoured when recipes.pc is absent (pre-migration configs).
+        this.recipes = readRecipes(c);
+        BlockRecipe pcBlock = recipes.get("pc");
+        PcRecipe pcRecipe = pcBlock != null
+                ? new PcRecipe(RecipeType.SHAPED, pcBlock.shape(), pcBlock.ingredients(), List.of())
+                : readPcRecipe(c, "crafting.pc.recipe");
         this.pc = new Pc(pcBase, pcName, pcLore, texture, pcRecipe);
 
         // ---- Mini Printer (Phase 9) ----
@@ -667,17 +733,111 @@ public final class PluginConfig {
         putSkin(map, sec, "pc", com.dierks.homecraft.block.CustomBlockType.PC);
         putSkin(map, sec, "workbench", com.dierks.homecraft.block.CustomBlockType.MINI_WORKBENCH);
         putSkin(map, sec, "printer", com.dierks.homecraft.block.CustomBlockType.PRINTER);
-        putSkin(map, sec, "vending", com.dierks.homecraft.block.CustomBlockType.MINI_VENDING_MACHINE);
+        // Two-tall Vending Machine: the lower head IS the block (legacy key: vending).
+        putSkin(map, sec, sec.contains("vending_lower") ? "vending_lower" : "vending",
+                com.dierks.homecraft.block.CustomBlockType.MINI_VENDING_MACHINE);
         putSkin(map, sec, "display_case", com.dierks.homecraft.block.CustomBlockType.DISPLAY_CASE);
         putSkin(map, sec, "auction", com.dierks.homecraft.block.CustomBlockType.AUCTION_HOUSE);
-        putSkin(map, sec, "mailbox", com.dierks.homecraft.block.CustomBlockType.MAILBOX);
-        putSkin(map, sec, "pallet", com.dierks.homecraft.block.CustomBlockType.PALLET);
+        // Two-state Pallet: the item + an empty placed Pallet wear pallet_empty (legacy key: pallet).
+        putSkin(map, sec, sec.contains("pallet_empty") ? "pallet_empty" : "pallet",
+                com.dierks.homecraft.block.CustomBlockType.PALLET);
         putSkin(map, sec, "arcade", com.dierks.homecraft.block.CustomBlockType.ARCADE);
         putSkin(map, sec, "crate_machine", com.dierks.homecraft.block.CustomBlockType.CRATE_MACHINE);
         putSkin(map, sec, "scratch_booth", com.dierks.homecraft.block.CustomBlockType.SCRATCH_BOOTH);
         putSkin(map, sec, "pity_kiosk", com.dierks.homecraft.block.CustomBlockType.PITY_KIOSK);
         putSkin(map, sec, "token_counter", com.dierks.homecraft.block.CustomBlockType.TOKEN_COUNTER);
+
+        // Named slots: the Pallet's loaded state, the Vending Machine's top half, and
+        // one skin per Mailbox colour. A legacy single-string `mailbox:` counts as wood.
+        Map<String, String> named = new LinkedHashMap<>();
+        putNamed(named, sec, "pallet_used");
+        putNamed(named, sec, "vending_upper");
+        ConfigurationSection mb = sec.getConfigurationSection("mailbox");
+        if (mb != null) {
+            for (com.dierks.homecraft.block.MailboxVariant v : com.dierks.homecraft.block.MailboxVariant.values()) {
+                String val = mb.getString(v.key(), "");
+                if (val != null && !val.isBlank()) {
+                    named.put("mailbox." + v.key(), val.trim());
+                }
+            }
+        } else {
+            String legacy = sec.getString("mailbox", "");
+            if (legacy != null && !legacy.isBlank()) {
+                named.put("mailbox.wood", legacy.trim());
+            }
+        }
+        // The base MAILBOX skin slot is the wood variant (used by items.of(MAILBOX)).
+        String wood = named.get("mailbox.wood");
+        if (wood != null) {
+            map.put(com.dierks.homecraft.block.CustomBlockType.MAILBOX, wood);
+        }
+        this.namedSkins = named;
         return map;
+    }
+
+    private void putNamed(Map<String, String> map, ConfigurationSection sec, String key) {
+        String v = sec.getString(key, "");
+        if (v != null && !v.isBlank()) {
+            map.put(key, v.trim());
+        }
+    }
+
+    /**
+     * Read the {@code recipes:} section: a flat entry ({@code pc:}) has {@code shape}
+     * directly; a grouped entry ({@code mailbox:}) holds one sub-entry per variant,
+     * keyed {@code mailbox.<variant>}. Entries with an empty shape are kept (so the
+     * loader can report them) but never registered.
+     */
+    private Map<String, BlockRecipe> readRecipes(FileConfiguration c) {
+        Map<String, BlockRecipe> out = new LinkedHashMap<>();
+        ConfigurationSection sec = c.getConfigurationSection("recipes");
+        if (sec == null) {
+            return out;
+        }
+        for (String key : sec.getKeys(false)) {
+            ConfigurationSection entry = sec.getConfigurationSection(key);
+            if (entry == null) {
+                continue;
+            }
+            if (entry.contains("shape")) {
+                out.put(key, readBlockRecipe(c, key, "recipes." + key));
+            } else {
+                for (String sub : entry.getKeys(false)) {
+                    if (entry.getConfigurationSection(sub) != null) {
+                        String full = key + "." + sub;
+                        out.put(full, readBlockRecipe(c, full, "recipes." + full));
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    private BlockRecipe readBlockRecipe(FileConfiguration c, String key, String path) {
+        List<String> shape = new ArrayList<>(c.getStringList(path + ".shape"));
+        if (shape.size() > 3) {
+            log.warning("Recipe " + path + " has more than 3 rows; extra rows ignored.");
+            shape = new ArrayList<>(shape.subList(0, 3));
+        }
+        for (int i = 0; i < shape.size(); i++) {
+            String row = shape.get(i);
+            if (row.length() > 3) {
+                log.warning("Recipe " + path + " row " + (i + 1) + " is wider than 3; truncated.");
+                shape.set(i, row.substring(0, 3));
+            }
+        }
+        Map<Character, RecipeChoice> ing = readSymbolMap(c, path + ".ingredients");
+        // Every non-space symbol in the shape must resolve, or the recipe is disabled.
+        for (String row : shape) {
+            for (char sym : row.toCharArray()) {
+                if (sym != ' ' && !ing.containsKey(sym)) {
+                    log.warning("Recipe " + path + " uses symbol '" + sym
+                            + "' with no ingredient; recipe disabled.");
+                    return new BlockRecipe(key, List.of(), Map.of());
+                }
+            }
+        }
+        return new BlockRecipe(key, List.copyOf(shape), ing);
     }
 
     private void putSkin(Map<com.dierks.homecraft.block.CustomBlockType, String> map,
@@ -1150,7 +1310,7 @@ public final class PluginConfig {
 
     private Shaped readShaped(FileConfiguration c, String path) {
         List<String> shape = c.getStringList(path + ".shape");
-        Map<Character, Material> ing = readSymbolMap(c, path + ".ingredients");
+        Map<Character, RecipeChoice> ing = readSymbolMap(c, path + ".ingredients");
         return new Shaped(shape, ing);
     }
 
@@ -1163,7 +1323,7 @@ public final class PluginConfig {
             type = RecipeType.SHAPED;
         }
         List<String> shape = c.getStringList(path + ".shape");
-        Map<Character, Material> ing = readSymbolMap(c, path + ".ingredients");
+        Map<Character, RecipeChoice> ing = readSymbolMap(c, path + ".ingredients");
 
         List<Ingredient> shapeless = new ArrayList<>();
         for (Map<?, ?> row : c.getMapList(path + ".ingredients")) {
@@ -1182,9 +1342,12 @@ public final class PluginConfig {
         return new PcRecipe(type, shape, ing, shapeless);
     }
 
-    /** Reads an {@code ingredients} section shaped like {@code A: IRON_INGOT} into a char->Material map. */
-    private Map<Character, Material> readSymbolMap(FileConfiguration c, String path) {
-        Map<Character, Material> out = new LinkedHashMap<>();
+    /**
+     * Reads an {@code ingredients} section shaped like {@code A: IRON_INGOT} (or
+     * {@code A: "#planks"} for any item of a tag) into a char -> {@link RecipeChoice} map.
+     */
+    private Map<Character, RecipeChoice> readSymbolMap(FileConfiguration c, String path) {
+        Map<Character, RecipeChoice> out = new LinkedHashMap<>();
         ConfigurationSection sec = c.getConfigurationSection(path);
         if (sec == null) {
             return out;
@@ -1193,12 +1356,46 @@ public final class PluginConfig {
             if (key.isEmpty()) {
                 continue;
             }
-            Material m = material(sec.getString(key), null, path + "." + key);
-            if (m != null) {
-                out.put(key.charAt(0), m);
+            RecipeChoice choice = ingredientChoice(sec.getString(key), path + "." + key);
+            if (choice != null) {
+                out.put(key.charAt(0), choice);
             }
         }
         return out;
+    }
+
+    /** A Material name → exact-material choice; {@code #tag} → any item in that tag; null if unknown. */
+    private RecipeChoice ingredientChoice(String raw, String where) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String v = raw.trim();
+        if (v.startsWith("#")) {
+            String tagName = v.substring(1).trim().toLowerCase(Locale.ROOT);
+            NamespacedKey key = tagName.contains(":") ? NamespacedKey.fromString(tagName)
+                    : NamespacedKey.minecraft(tagName);
+            Tag<Material> tag = key == null ? null : Bukkit.getTag(Tag.REGISTRY_ITEMS, key, Material.class);
+            if (tag == null && key != null) {
+                tag = Bukkit.getTag(Tag.REGISTRY_BLOCKS, key, Material.class);
+            }
+            if (tag == null) {
+                log.warning("Unknown item tag '" + v + "' at " + where + "; ingredient skipped.");
+                return null;
+            }
+            List<Material> items = new ArrayList<>();
+            for (Material m : tag.getValues()) {
+                if (m.isItem()) {
+                    items.add(m);
+                }
+            }
+            if (items.isEmpty()) {
+                log.warning("Item tag '" + v + "' at " + where + " holds no items; ingredient skipped.");
+                return null;
+            }
+            return new RecipeChoice.MaterialChoice(items);
+        }
+        Material m = material(v, null, where);
+        return m == null ? null : new RecipeChoice.MaterialChoice(m);
     }
 
     private Material material(String name, Material fallback, String where) {

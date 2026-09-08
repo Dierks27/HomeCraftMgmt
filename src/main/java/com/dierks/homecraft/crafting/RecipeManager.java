@@ -6,22 +6,30 @@ import com.dierks.homecraft.item.CustomItems;
 import com.dierks.homecraft.util.Keys;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.RecipeChoice;
+import org.bukkit.inventory.ShapedRecipe;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
  * Owns all data-driven, reloadable recipes:
  * <ul>
- *   <li>The <b>Mini Workbench</b> bootstrap recipe — a normal (vanilla) shaped
- *       recipe, since you need a way to obtain a bench before you have one.</li>
- *   <li>The <b>PC</b> recipe — matched inside the Workbench GUI so we can enforce
- *       our own rules (and, later, mint caps). Never a vanilla recipe.</li>
+ *   <li>Every <b>craftable block</b> from the {@code recipes:} section (PC, Printer,
+ *       Vending Machine, Pallet, Arcade, one Mailbox per colour) — registered as
+ *       normal (vanilla) shaped recipes under the plugin's namespace so they craft
+ *       at any crafting table and show in the recipe book.</li>
+ *   <li>The <b>PC</b> recipe is additionally matched inside the Printer / legacy
+ *       Workbench craft grid ({@link #matchPc}) — same config entry, same result.</li>
  * </ul>
- * Both are empty by default and re-read on {@code /hcm reload}.
+ * The retired Mini Workbench has no recipe. Everything re-registers on {@code /hcm reload}.
  */
 public final class RecipeManager {
 
@@ -34,6 +42,8 @@ public final class RecipeManager {
     private final CustomItems items;
 
     private boolean workbenchRecipeRegistered = false;
+    /** Keys of the vanilla recipes currently registered (for unregister + recipe-book unlock). */
+    private final List<NamespacedKey> registered = new ArrayList<>();
 
     public RecipeManager(HomeCraftManagement plugin, PluginConfig config, CustomItems items) {
         this.plugin = plugin;
@@ -46,17 +56,60 @@ public final class RecipeManager {
     // ---------------------------------------------------------------------
 
     /**
-     * (Re)register data-driven recipes. Phase 9 retires the Mini Workbench: it is no
-     * longer craftable (Minis now come from Cards + a Printer), so any previously
-     * registered Workbench recipe is removed and none is added. Existing placed
-     * benches keep working as a light PC-craft station so placements migrate
-     * gracefully. The PC recipe is still matched inside that craft GUI (see
-     * {@link #matchPc}).
+     * (Re)register every data-driven block recipe as a vanilla shaped recipe. The
+     * Mini Workbench stays retired (no recipe). Each entry's result is the fully
+     * built custom item — skin, PDC type tag and (for Mailboxes) variant included —
+     * so a crafted block is indistinguishable from a {@code /hcm give} one. After a
+     * reload the server's recipe list is pushed to online players and the new
+     * recipes are unlocked in their recipe books.
      */
     public void registerRecipes() {
         unregisterRecipes();
-        plugin.getLogger().info("Mini Workbench is retired (Phase 9) — no longer craftable; "
-                + "print Minis from Cards at a Printer.");
+        int added = 0;
+        List<String> skipped = new ArrayList<>();
+        for (PluginConfig.BlockRecipe def : config.recipes().values()) {
+            if (def.isEmpty()) {
+                skipped.add(def.key());
+                continue;
+            }
+            ItemStack result = items.forRecipeKey(def.key());
+            if (result == null) {
+                plugin.getLogger().warning("Recipe '" + def.key() + "' has no matching block — ignored.");
+                continue;
+            }
+            NamespacedKey key = new NamespacedKey(plugin, recipeKeyName(def.key()));
+            try {
+                ShapedRecipe recipe = new ShapedRecipe(key, result);
+                recipe.shape(def.shape().toArray(new String[0]));
+                for (Map.Entry<Character, RecipeChoice> e : def.ingredients().entrySet()) {
+                    if (usesSymbol(def.shape(), e.getKey())) {
+                        recipe.setIngredient(e.getKey(), e.getValue());
+                    }
+                }
+                if (Bukkit.addRecipe(recipe)) {
+                    registered.add(key);
+                    added++;
+                } else {
+                    plugin.getLogger().warning("Recipe '" + def.key() + "' was rejected by the server.");
+                }
+            } catch (RuntimeException ex) {
+                plugin.getLogger().warning("Recipe '" + def.key() + "' is invalid: " + ex.getMessage());
+            }
+        }
+        plugin.getLogger().info("Registered " + added + " block recipe(s)"
+                + (skipped.isEmpty() ? "" : " (empty/disabled: " + String.join(", ", skipped) + ")")
+                + ". Mini Workbench is retired — no recipe.");
+        // Reload path: push the new recipe set to connected clients + unlock it for them.
+        if (!Bukkit.getOnlinePlayers().isEmpty()) {
+            try {
+                Bukkit.updateRecipes();
+            } catch (Throwable ignored) {
+                // Older API without a resend hook — clients pick recipes up on relog.
+            }
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                unlockFor(p);
+            }
+        }
     }
 
     /** Remove our registered recipes (called on reload and disable). */
@@ -65,6 +118,41 @@ public final class RecipeManager {
             Bukkit.removeRecipe(Keys.WORKBENCH_RECIPE);
             workbenchRecipeRegistered = false;
         }
+        for (NamespacedKey key : registered) {
+            Bukkit.removeRecipe(key);
+        }
+        registered.clear();
+    }
+
+    /** Discover every registered HomeCraft recipe in a player's recipe book (idempotent). */
+    public void unlockFor(Player player) {
+        if (registered.isEmpty()) {
+            return;
+        }
+        try {
+            player.discoverRecipes(new ArrayList<>(registered));
+        } catch (Throwable t) {
+            plugin.getLogger().fine("Could not unlock recipes for " + player.getName() + ": " + t.getMessage());
+        }
+    }
+
+    /** The keys currently registered (read-only view). */
+    public List<NamespacedKey> registeredKeys() {
+        return List.copyOf(registered);
+    }
+
+    /** "mailbox.light_blue" → "mailbox_light_blue" (NamespacedKey-safe). */
+    private static String recipeKeyName(String configKey) {
+        return configKey.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9/._-]", "_").replace('.', '_');
+    }
+
+    private static boolean usesSymbol(List<String> shape, char sym) {
+        for (String row : shape) {
+            if (row.indexOf(sym) >= 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ---------------------------------------------------------------------
@@ -137,8 +225,9 @@ public final class RecipeManager {
                         return null; // extra item where pattern is empty
                     }
                 } else {
-                    Material required = recipe.ingredients().get(sym);
-                    if (required == null || cell == null || cell.getType() != required) {
+                    RecipeChoice required = recipe.ingredients().get(sym);
+                    if (required == null || cell == null || cell.getType() == Material.AIR
+                            || !required.test(cell)) {
                         return null;
                     }
                     consume[gi] = 1;

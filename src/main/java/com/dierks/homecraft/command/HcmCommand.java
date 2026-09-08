@@ -24,7 +24,7 @@ import java.util.Map;
  * {@code /hcm} — admin & utility commands.
  * <ul>
  *   <li>{@code /hcm reload} — reload config.yml + recipes + market catalog. (admin)</li>
- *   <li>{@code /hcm give <workbench|pc> [player]} — hand out a custom item. (admin)</li>
+ *   <li>{@code /hcm give <printer|pc|vending|display|mailbox [variant]|pallet|arcade|…> [player]} — hand out a custom item. (admin)</li>
  *   <li>{@code /hcm market list} — list catalog + live prices. (hcm.market.list, op-only)</li>
  *   <li>{@code /hcm market price|history <item>} — inspect one item. (hcm.market.price, all)</li>
  *   <li>{@code /hcm market buy|sell <item> <qty>} — trade against the engine. (hcm.market.order)</li>
@@ -258,6 +258,13 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             handleGivePack(sender, args);
             return;
         }
+        if (kind.equals("mailbox")) {
+            handleGiveMailbox(sender, args);
+            return;
+        }
+        // The Auction House and the individual Arcade machines (crate/scratch/pity/counter)
+        // are no longer given out: auctions are reached via /hcm auction, the Arcade via
+        // its hub block. Already-placed machines keep working.
         ItemStack item;
         switch (kind) {
             case "printer" -> item = plugin.items().printer();
@@ -265,18 +272,12 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "pc" -> item = plugin.items().pc();
             case "vending" -> item = plugin.items().vendingMachine();
             case "display" -> item = plugin.items().displayCase();
-            case "auction" -> item = plugin.items().auctionHouse();
-            case "mailbox" -> item = plugin.items().mailbox();
             case "pallet" -> item = plugin.items().pallet();
             case "arcade" -> item = plugin.items().arcade();
-            case "cratemachine", "crate" -> item = plugin.items().of(com.dierks.homecraft.block.CustomBlockType.CRATE_MACHINE);
-            case "scratch", "scratchbooth" -> item = plugin.items().of(com.dierks.homecraft.block.CustomBlockType.SCRATCH_BOOTH);
-            case "pity", "pitykiosk" -> item = plugin.items().of(com.dierks.homecraft.block.CustomBlockType.PITY_KIOSK);
-            case "counter", "tokencounter" -> item = plugin.items().of(com.dierks.homecraft.block.CustomBlockType.TOKEN_COUNTER);
             default -> {
                 sender.sendMessage(Text.of("&cUnknown item '" + args[1]
-                        + "'. Use printer, pc, card, filament, vending, display, auction, mailbox, pallet, "
-                        + "arcade, cratemachine, scratch, pity, or counter."));
+                        + "'. Use printer, pc, card, filament, pack, binder, vending, display, "
+                        + "mailbox [variant], pallet, or arcade."));
                 return;
             }
         }
@@ -298,6 +299,45 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         target.getInventory().addItem(item).values()
                 .forEach(drop -> target.getWorld().dropItemNaturally(target.getLocation(), drop));
         sender.sendMessage(Text.of("&aGave " + args[1] + " to " + target.getName() + "."));
+    }
+
+    /**
+     * {@code /hcm give mailbox [variant] [player]} — hand out a Mailbox. The variant is
+     * optional (defaults to wood); {@code /hcm give mailbox <player>} still works.
+     */
+    private void handleGiveMailbox(CommandSender sender, String[] args) {
+        com.dierks.homecraft.block.MailboxVariant variant = com.dierks.homecraft.block.MailboxVariant.WOOD;
+        int targetIdx = 2;
+        if (args.length >= 3) {
+            com.dierks.homecraft.block.MailboxVariant parsed = com.dierks.homecraft.block.MailboxVariant.parse(args[2]);
+            if (parsed != null) {
+                variant = parsed;
+                targetIdx = 3;
+            } else if (Bukkit.getPlayerExact(args[2]) == null) {
+                sender.sendMessage(Text.of("&cUnknown Mailbox variant '" + args[2] + "'. Use one of: "
+                        + mailboxVariantList() + "."));
+                return;
+            }
+        }
+        Player target = resolveTarget(sender, args, targetIdx, "give mailbox " + variant.key());
+        if (target == null) {
+            return;
+        }
+        ItemStack item = plugin.items().mailbox(variant);
+        target.getInventory().addItem(item).values()
+                .forEach(drop -> target.getWorld().dropItemNaturally(target.getLocation(), drop));
+        sender.sendMessage(Text.of("&aGave a " + variant.label() + " Mailbox to " + target.getName() + "."));
+    }
+
+    private String mailboxVariantList() {
+        StringBuilder sb = new StringBuilder();
+        for (com.dierks.homecraft.block.MailboxVariant v : com.dierks.homecraft.block.MailboxVariant.values()) {
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(v.key());
+        }
+        return sb.toString();
     }
 
     /** {@code /hcm give card <miniId> [player]} — hand out a sealed Card (admin, ignores cap). */
@@ -692,7 +732,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         if (sender.hasPermission("hcm.admin")) {
             sender.sendMessage(Text.of("&e/hcm admin &7- open the Admin Studio (manage & import Minis)"));
             sender.sendMessage(Text.of("&e/hcm reload &7- reload config & recipes"));
-            sender.sendMessage(Text.of("&e/hcm give <printer|pc|card <id>|filament <color> <n>> [player]"));
+            sender.sendMessage(Text.of("&e/hcm give <printer|pc|vending|display|mailbox [variant]|pallet|arcade> [player]"));
+            sender.sendMessage(Text.of("&e/hcm give <card <id>|pack <id>|binder|filament <color> <n>> [player]"));
             sender.sendMessage(Text.of("&e/hcm printer <public|private> &7- flag the Printer you're looking at"));
         }
         if (sender.hasPermission("hcm.admin")) {
@@ -924,8 +965,28 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
-            addMatches(out, args[1], "printer", "binder", "pc", "card", "filament", "pack", "vending", "display", "auction",
-                    "mailbox", "pallet", "arcade", "cratemachine", "scratch", "pity", "counter");
+            addMatches(out, args[1], "printer", "binder", "pc", "card", "filament", "pack", "vending", "display",
+                    "mailbox", "pallet", "arcade");
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("give")
+                && args[1].equalsIgnoreCase("mailbox")) {
+            String prefix = args[2].toLowerCase(Locale.ROOT);
+            for (com.dierks.homecraft.block.MailboxVariant v : com.dierks.homecraft.block.MailboxVariant.values()) {
+                if (v.key().startsWith(prefix)) {
+                    out.add(v.key());
+                }
+            }
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase(Locale.ROOT).startsWith(prefix)) {
+                    out.add(p.getName());
+                }
+            }
+        } else if (args.length == 4 && args[0].equalsIgnoreCase("give")
+                && args[1].equalsIgnoreCase("mailbox")) {
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[3].toLowerCase(Locale.ROOT))) {
+                    out.add(p.getName());
+                }
+            }
         } else if (args.length == 3 && args[0].equalsIgnoreCase("give")
                 && args[1].equalsIgnoreCase("pack")) {
             String prefix = args[2].toLowerCase(Locale.ROOT);

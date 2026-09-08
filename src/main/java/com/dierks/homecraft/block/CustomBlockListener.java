@@ -12,7 +12,9 @@ import com.dierks.homecraft.item.CustomItems;
 import com.dierks.homecraft.storage.PlacedBlock;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
@@ -76,7 +78,30 @@ public final class CustomBlockListener implements Listener {
             return;
         }
 
+        // A Vending Machine is two blocks tall: the head above is placed automatically,
+        // so the space must be free (and buildable) or the placement is refused.
+        if (type == CustomBlockType.MINI_VENDING_MACHINE) {
+            Block above = block.getRelative(BlockFace.UP);
+            if (above.getY() >= block.getWorld().getMaxHeight() || !above.getType().isAir()) {
+                event.setCancelled(true);
+                player.sendMessage(Text.of("&cA Vending Machine is two blocks tall — the block above must be empty."));
+                return;
+            }
+            if (config.respectTownPerms() && !protection.canBuild(player, above.getLocation())) {
+                event.setCancelled(true);
+                player.sendMessage(Text.of("&cYou can't build here (the space above is protected)."));
+                return;
+            }
+        }
+
         blocks.recordPlacement(block, type, player.getUniqueId());
+        if (type == CustomBlockType.MINI_VENDING_MACHINE) {
+            blocks.placeVendingUpper(block);
+        }
+        if (type == CustomBlockType.MAILBOX) {
+            MailboxVariant variant = items.mailboxVariant(inHand);
+            blocks.tagMailboxVariant(block, variant == null ? MailboxVariant.WOOD : variant);
+        }
         player.sendMessage(Text.of("&aPlaced a " + friendly(type) + "."));
         if (type == CustomBlockType.PC && plugin.achievements() != null) {
             plugin.achievements().tryAward(player, "first_pc");
@@ -85,9 +110,17 @@ public final class CustomBlockListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBreak(BlockBreakEvent event) {
-        Location loc = event.getBlock().getLocation();
+        Block broken = event.getBlock();
+        // Breaking the upper head of a Vending Machine breaks the whole machine.
+        Optional<Block> lowerOfUpper = blocks.vendingLowerOf(broken);
+        Block base = lowerOfUpper.orElse(broken);
+        Location loc = base.getLocation();
         Optional<PlacedBlock> placed = blocks.at(loc);
         if (placed.isEmpty()) {
+            if (lowerOfUpper.isEmpty() && blocks.isVendingUpper(broken)) {
+                // Orphaned companion head (its machine is gone) — never drop a head item.
+                event.setDropItems(false);
+            }
             return;
         }
         Player player = event.getPlayer();
@@ -110,9 +143,21 @@ public final class CustomBlockListener implements Listener {
             plugin.pallets().onBlockBroken(loc, player);
         }
 
+        // The item to drop is resolved BEFORE the tile goes away (the Mailbox variant lives on it).
+        ItemStack drop = record.type() == CustomBlockType.MAILBOX
+                ? items.mailbox(blocks.mailboxVariantAt(base))
+                : items.of(record.type());
+
         blocks.removeAt(loc);
         event.setDropItems(false); // suppress the vanilla base-block drop
-        loc.getWorld().dropItemNaturally(loc.toCenterLocation(), items.of(record.type()));
+        if (record.type() == CustomBlockType.MINI_VENDING_MACHINE) {
+            // Remove the other half too — exactly one vending item drops either way.
+            blocks.removeVendingUpper(base);
+            if (lowerOfUpper.isPresent()) {
+                base.setType(Material.AIR, false);
+            }
+        }
+        loc.getWorld().dropItemNaturally(loc.toCenterLocation(), drop);
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -120,10 +165,12 @@ public final class CustomBlockListener implements Listener {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getHand() != EquipmentSlot.HAND) {
             return;
         }
-        Block clicked = event.getClickedBlock();
-        if (clicked == null) {
+        Block clickedRaw = event.getClickedBlock();
+        if (clickedRaw == null) {
             return;
         }
+        // Right-clicking the upper head of a Vending Machine acts on the machine below.
+        Block clicked = blocks.vendingLowerOf(clickedRaw).orElse(clickedRaw);
         Optional<PlacedBlock> placed = blocks.at(clicked.getLocation());
         if (placed.isEmpty()) {
             return;
@@ -214,11 +261,15 @@ public final class CustomBlockListener implements Listener {
     // leaving an orphaned DB row for a block that no longer exists.
     @EventHandler(ignoreCancelled = true)
     public void onEntityExplode(EntityExplodeEvent event) {
-        event.blockList().removeIf(b -> blocks.at(b.getLocation()).isPresent());
+        event.blockList().removeIf(this::isProtectedBlock);
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onBlockExplode(BlockExplodeEvent event) {
-        event.blockList().removeIf(b -> blocks.at(b.getLocation()).isPresent());
+        event.blockList().removeIf(this::isProtectedBlock);
+    }
+
+    private boolean isProtectedBlock(Block b) {
+        return blocks.at(b.getLocation()).isPresent() || blocks.vendingLowerOf(b).isPresent();
     }
 }

@@ -42,6 +42,12 @@ public final class AdminMenu extends Menu {
                 e -> new MiniEditMenu(plugin, player,
                         plugin.miniService().blankDraft(), false, this::reopen).open(player));
 
+        set(12, Menus.icon(Material.EMERALD, "&aMarket Catalog",
+                "&7Add, edit, or remove the finite-stock",
+                "&7commodities the market trades.",
+                "&8" + plugin.market().catalog().size() + " commodity(ies)"),
+                e -> new MarketAdminMenu(plugin, player, this::reopen).open(player));
+
         set(13, Menus.icon(Material.COMPASS, "&bImport from Web",
                 "&7Search minecraft-heads.com, pick",
                 "&7heads, and import with textures",

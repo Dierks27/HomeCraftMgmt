@@ -93,6 +93,27 @@ public final class OrderDao {
         }
     }
 
+    /**
+     * How many orders for {@code itemId} are paid but not yet collected (IN_TRANSIT or
+     * READY). Removing such a commodity from the catalog strands them: the buyer was
+     * charged when the order was placed, and collect() then refuses forever with "no
+     * longer available".
+     */
+    public int countPending(String itemId) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT COUNT(*) FROM market_orders WHERE item_id = ? AND status IN (?,?)")) {
+                ps.setString(1, itemId);
+                ps.setString(2, Order.Status.IN_TRANSIT.name());
+                ps.setString(3, Order.Status.READY.name());
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next() ? rs.getInt(1) : 0;
+                }
+            }
+        }
+    }
+
     public void updateStatus(long id, Order.Status status) throws SQLException {
         Connection c = conn();
         synchronized (c) {

@@ -119,6 +119,19 @@ public final class OrderService {
     }
 
     /** Flip any due in-transit orders to READY and notify online owners. */
+    /**
+     * Paid-but-uncollected orders for one commodity, or 0 if the count fails. Used by the
+     * admin catalog GUI to refuse a removal that would strand them.
+     */
+    public int pendingFor(String itemId) {
+        try {
+            return dao.countPending(itemId);
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Could not count pending orders for '" + itemId + "': " + e.getMessage());
+            return 0;
+        }
+    }
+
     public void tick() {
         try {
             for (Order order : dao.findDue(System.currentTimeMillis())) {

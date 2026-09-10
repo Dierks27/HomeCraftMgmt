@@ -1103,7 +1103,7 @@ public final class PluginConfig {
 
         List<String> departments = c.getStringList("marketplace.departments");
         if (departments.isEmpty()) {
-            departments = List.of("Blocks", "Food", "Tools", "Weapons", "Armor", "Redstone", "Collectibles", "Misc");
+            departments = List.of("Blocks", "Materials", "Food", "Tools", "Combat", "Redstone", "Collectibles", "Misc");
         }
 
         Map<String, String> overrides = new LinkedHashMap<>();

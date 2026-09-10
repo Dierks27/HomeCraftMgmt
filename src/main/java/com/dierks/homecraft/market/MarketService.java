@@ -149,6 +149,18 @@ public final class MarketService {
             sb.append(' ').append(e.getKey()).append('=').append(e.getValue());
         }
         plugin.getLogger().info(sb.toString());
+
+        // Mirrors Departments.MAX_TABS: the tab row is nine slots and "All" takes the first,
+        // so a ninth department still sells but never gets a tab. Say so at load rather than
+        // leaving an admin to notice their new department is unreachable.
+        java.util.List<String> configured = plugin.config().marketplace().departments();
+        if (configured.size() > 8) {
+            plugin.getLogger().warning("marketplace.departments lists " + configured.size()
+                    + " departments; the Store/Market tab row fits 8 beside \"All\". "
+                    + String.join(", ", configured.subList(8, configured.size()))
+                    + " will have no tab — their items still sell and still show under \"All\". "
+                    + "Merge or drop a department to bring them back.");
+        }
     }
 
     /** Starting stock for a fresh/unseeded item, held strictly below {@code full_stock}. */

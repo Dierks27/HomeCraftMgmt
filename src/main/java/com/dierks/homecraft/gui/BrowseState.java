@@ -98,8 +98,6 @@ public final class BrowseState implements Listener {
         public String department;
         public Sort sort;
         public int page;
-        /** First department shown in the tab row when they do not all fit at once. */
-        public int tabOffset;
 
         Shop(String department, Sort sort) {
             this.department = department;

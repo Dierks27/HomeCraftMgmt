@@ -15,15 +15,31 @@ class CategorizerTest {
 
     @Test
     void specificBeatsGeneral() {
-        // A diamond sword is a weapon before a diamond is a material; a redstone block is
+        // A diamond sword is Combat before a diamond is a material; a redstone block is
         // Redstone before "_BLOCK" makes it a Block. Order in byName() is load-bearing.
-        assertEquals("Weapons", Categorizer.byName("DIAMOND_SWORD"));
+        assertEquals("Combat", Categorizer.byName("DIAMOND_SWORD"));
         assertEquals("Materials", Categorizer.byName("DIAMOND"));
         assertEquals("Blocks", Categorizer.byName("DIAMOND_BLOCK"));
         assertEquals("Redstone", Categorizer.byName("REDSTONE_BLOCK"));
         assertEquals("Redstone", Categorizer.byName("REDSTONE"));
-        assertEquals("Armor", Categorizer.byName("DIAMOND_HELMET"));
+        assertEquals("Combat", Categorizer.byName("DIAMOND_HELMET"));
         assertEquals("Tools", Categorizer.byName("DIAMOND_PICKAXE"));
+    }
+
+    @Test
+    void weaponsAndArmorShareOneCombatDepartment() {
+        // Eight departments is the ceiling — the tab row is nine slots and "All" takes the
+        // first — so gear is one tab. Both families have to reach it.
+        for (String gear : java.util.List.of("NETHERITE_SWORD", "BOW", "CROSSBOW", "TRIDENT",
+                "ARROW", "SPECTRAL_ARROW", "MACE", "TNT",
+                "IRON_CHESTPLATE", "LEATHER_BOOTS", "SHIELD", "ELYTRA", "TURTLE_HELMET",
+                "DIAMOND_HORSE_ARMOR", "WOLF_ARMOR")) {
+            assertEquals("Combat", Categorizer.byName(gear), gear);
+        }
+        // A pickaxe ends in AXE but not _AXE, so it stays a Tool — the rule that lets a
+        // battle-axe be Combat must not swallow the mining tools with it.
+        assertEquals("Combat", Categorizer.byName("IRON_AXE"));
+        assertEquals("Tools", Categorizer.byName("IRON_PICKAXE"));
     }
 
     @Test

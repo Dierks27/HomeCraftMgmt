@@ -57,7 +57,8 @@ public final class HomeCraftManagement extends JavaPlugin {
      * would migrate itself on its very first boot.
      *
      * <p>3 = the pass-3 economy rebalance. 4 = the two per-item daily caps pass 3 missed.
-     * 5 = the Materials department the Store/Market tabs sort into.
+     * 5 = the department set the Store/Market tabs sort into — Materials added, Weapons and
+     * Armor folded into Combat.
      */
     static final int CONFIG_REVISION = 5;
 
@@ -551,6 +552,13 @@ public final class HomeCraftManagement extends JavaPlugin {
             }
         }
         if (from < 5) {
+            // Merge first, then add: the tab row holds eight departments and no more, so
+            // Materials only fits once Weapons and Armor have become one.
+            if (mergeDepartments(c, java.util.List.of("Weapons", "Armor"), "Combat")) {
+                log.add("Config migration: Weapons + Armor → Combat. The Store/Market tab row "
+                        + "is nine slots and \"All\" takes the first, so eight departments is the "
+                        + "ceiling and Materials needed the room.");
+            }
             if (addDepartment(c, "Materials", "Blocks")) {
                 log.add("Config migration: added the Materials department (ingots, gems and "
                         + "crafting stock) — it is a Store/Market tab, so an existing "
@@ -686,6 +694,81 @@ public final class HomeCraftManagement extends JavaPlugin {
             c.set("market.catalog", rewritten);
         }
         return filled;
+    }
+
+    /**
+     * Revision 5: fold several departments into one, standing where the first of them stood.
+     *
+     * <p>The Store/Market tab row is nine slots and "All" takes the first, so eight
+     * departments is a hard ceiling — Weapons and Armor become Combat to make room for
+     * Materials. A department beyond the ceiling is not lost (its items still sell, and
+     * still show under "All"), but it gets no tab, which is worse than one honest merge.
+     *
+     * <p>Admin overrides naming a folded department are retargeted with it: an override
+     * pointing at a department that is no longer in the list falls through to the catch-all,
+     * which would quietly move exactly the items the admin took the trouble to place by hand.
+     *
+     * @return false when the file names none of them, or has no list to edit
+     */
+    static boolean mergeDepartments(org.bukkit.configuration.file.FileConfiguration c,
+                                    java.util.List<String> from, String into) {
+        if (!(c.get("marketplace.departments", null) instanceof java.util.List<?> raw) || raw.isEmpty()) {
+            return false; // absent — the backfill supplies the shipped list, Combat included
+        }
+        java.util.List<String> departments = new java.util.ArrayList<>();
+        for (Object o : raw) {
+            departments.add(String.valueOf(o));
+        }
+        // Already there? Then the folded names simply drop out, rather than a second copy
+        // of the merged department appearing further up the list.
+        boolean placed = containsIgnoreCase(departments, into);
+        java.util.List<String> merged = new java.util.ArrayList<>();
+        boolean changed = false;
+        for (String d : departments) {
+            if (containsIgnoreCase(from, d)) {
+                changed = true;
+                if (!placed) {
+                    merged.add(into);
+                    placed = true;
+                }
+                continue;
+            }
+            merged.add(d);
+        }
+        if (!changed) {
+            return false;
+        }
+        c.set("marketplace.departments", merged);
+        retargetOverrides(c, from, into);
+        return true;
+    }
+
+    /** Point {@code marketplace.category_overrides} entries at the merged department. */
+    private static void retargetOverrides(org.bukkit.configuration.file.FileConfiguration c,
+                                          java.util.List<String> from, String into) {
+        if (!(c.get("marketplace.category_overrides", null)
+                instanceof org.bukkit.configuration.ConfigurationSection sec)) {
+            return;
+        }
+        java.util.List<String> stale = new java.util.ArrayList<>();
+        for (String key : sec.getKeys(false)) {
+            Object value = sec.get(key, null);
+            if (value != null && containsIgnoreCase(from, String.valueOf(value))) {
+                stale.add(key);
+            }
+        }
+        for (String key : stale) {
+            sec.set(key, into); // collected first — do not edit the section mid-iteration
+        }
+    }
+
+    private static boolean containsIgnoreCase(java.util.List<String> haystack, String needle) {
+        for (String s : haystack) {
+            if (s.equalsIgnoreCase(needle)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

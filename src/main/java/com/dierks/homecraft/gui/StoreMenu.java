@@ -82,31 +82,33 @@ public final class StoreMenu extends Menu {
                 refresh();
             });
         }
-        // The balance readout lost its own slot to the Sort toggle; it rides here, on the
-        // tile where money is actually spent.
-        set(46, Menus.icon(Material.EMERALD, "&aInstant Market",
-                "&7Buy and sell now at market price — no shipping.",
-                "&8Your balance: &a" + money(plugin.economy().balance(player))),
+        // Nine slots, and the Store is the hub: balance, the five destinations and Sort fill
+        // them between the page arrows. No Close tile — Esc shuts any inventory, and the
+        // balance readout earns the slot more than a second way to do what Esc already does.
+        set(46, Menus.icon(Material.GOLD_INGOT, "&6Your balance",
+                "&f" + money(plugin.economy().balance(player)),
+                "&8—",
+                "&8Press Esc to close the store."), null);
+        set(47, Menus.icon(Material.EMERALD, "&aInstant Market",
+                "&7Buy and sell now at market price — no shipping."),
                 e -> new MarketMenu(plugin, player, this::reopen).open(player));
-        set(47, Menus.icon(Material.CHEST, "&6Marketplace",
+        set(48, Menus.icon(Material.CHEST, "&6Marketplace",
                 "&7Browse what other players list in their Pallets."),
                 e -> new com.dierks.homecraft.gui.marketplace.MarketplaceMenu(plugin, player, this::reopen).open(player));
-        set(48, Menus.icon(Material.PAPER, "&bCard Packs",
+        set(49, Menus.icon(Material.PAPER, "&bCard Packs",
                 "&7Buy booster packs and open them for Cards."),
                 e -> new com.dierks.homecraft.gui.mini.PackShopMenu(plugin, player, this::reopen).open(player));
-        set(49, Menus.icon(Material.PLAYER_HEAD, "&5Mini Museum",
+        set(50, Menus.icon(Material.PLAYER_HEAD, "&5Mini Museum",
                 "&7Browse every collectible and what you have."),
                 e -> new MuseumMenu(plugin, player, this::reopen).open(player));
-        set(50, Menus.icon(Material.CHEST_MINECART, "&eMailbox & Orders",
+        set(51, Menus.icon(Material.CHEST_MINECART, "&eMailbox & Orders",
                 "&7Track deliveries and collect what has arrived."),
                 e -> new MailboxMenu(plugin, player, this::reopen).open(player));
-        set(51, Departments.sortButton(state.sort), e -> {
+        set(52, Departments.sortButton(state.sort), e -> {
             state.sort = state.sort.next();
             state.page = 0;
             refresh();
         });
-        set(52, Menus.icon(Material.BARRIER, "&cClose",
-                "&7Shut the store."), e -> e.getWhoClicked().closeInventory());
         if ((state.page + 1) * Departments.PAGE_SIZE < items.size()) {
             set(53, Menus.icon(Material.ARROW, "&eNext »",
                     "&8Page " + (state.page + 1) + " of " + pages), e -> {

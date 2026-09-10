@@ -54,15 +54,14 @@ public final class Categorizer {
      * Classify from the material name alone, or null when the name does not decide.
      *
      * <p>Order matters and is deliberately specific-before-general: {@code DIAMOND_SWORD}
-     * is a weapon before {@code DIAMOND} is a material, and {@code REDSTONE} is Redstone
+     * is Combat before {@code DIAMOND} is a material, and {@code REDSTONE} is Redstone
      * before it is a Material.
      */
     static String byName(String n) {
-        if (isArmor(n)) {
-            return "Armor";
-        }
-        if (isWeapon(n)) {
-            return "Weapons";
+        // Armour and weapons share one department: the tab row holds "All" plus eight
+        // departments and no more, so gear is one tab rather than two.
+        if (isArmor(n) || isWeapon(n)) {
+            return "Combat";
         }
         if (isTool(n)) {
             return "Tools";

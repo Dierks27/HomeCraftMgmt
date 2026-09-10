@@ -21,17 +21,23 @@ import java.util.Map;
  * {@value #PAGE_SIZE}-slot grid, row 5 is navigation. Items are classified by the same
  * {@link Categorizer} the Marketplace uses for Pallet listings, so one material lands in
  * the same department wherever a player meets it.
+ *
+ * <p>{@value #MAX_TABS} departments is the ceiling, because the row is nine slots and "All"
+ * takes the first. The shipped {@code marketplace.departments} is sized to it exactly —
+ * Weapons and Armor are one Combat tab for this reason — and {@code MarketService} warns at
+ * load if an admin's list runs past it. No rotating "more »" control: a tab you have to hunt
+ * for by cycling is barely better than the flat grid the tabs replaced.
  */
 final class Departments {
 
     static final String ALL = "All";
-    /** Row 0. Slot 0 is always "All"; the rest window over the departments. */
+    /** Row 0. Slot 0 is always "All", so slots 1–8 are the departments. */
     static final int TAB_ROW = 9;
+    /** How many departments the tab row holds beside "All" — the hard ceiling. */
+    static final int MAX_TABS = TAB_ROW - 1;
     /** Rows 1–4 — the item grid. */
     static final int GRID_START = 9;
     static final int PAGE_SIZE = 36;
-    /** Departments visible at once when they do not all fit beside "All". */
-    private static final int TAB_WINDOW = 7;
 
     private Departments() {
     }
@@ -97,21 +103,49 @@ final class Departments {
     }
 
     /**
-     * Paint row 0: "All" at slot 0, then a window of departments. When they do not all fit,
-     * slot 8 becomes "More »" and cycles the window rather than hiding a department for good.
+     * The departments to show as tabs: everything holding stock, capped at {@link #MAX_TABS}
+     * so the row never needs a rotating "more »" control. The shipped list is sized to fit
+     * exactly; only an admin who adds a department of their own can overflow it, and then it
+     * is the trailing ones that drop out — which is why {@code Misc}, the classifier's
+     * catch-all, is last in the shipped list and the tail is reachable from "All" regardless.
      *
-     * @param onChange run after the selection or window changes, to redraw the menu
+     * <p>The selected department is always included, even when it has emptied or sits past
+     * the cap: a tab the player is standing on must not vanish under them, or they cannot
+     * see what they are filtered to.
+     */
+    static List<String> tabs(HomeCraftManagement plugin, String selected) {
+        List<String> depts = new ArrayList<>(present(plugin));
+        boolean all = selected == null || ALL.equalsIgnoreCase(selected);
+        if (!all && !containsIgnoreCase(depts, selected)) {
+            depts.add(selected);
+        }
+        if (depts.size() <= MAX_TABS) {
+            return depts;
+        }
+        List<String> capped = new ArrayList<>(depts.subList(0, MAX_TABS));
+        if (!all && !containsIgnoreCase(capped, selected)) {
+            capped.set(MAX_TABS - 1, selected); // never hide the tab in use
+        }
+        return capped;
+    }
+
+    private static boolean containsIgnoreCase(List<String> haystack, String needle) {
+        for (String s : haystack) {
+            if (s.equalsIgnoreCase(needle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Paint row 0: "All" at slot 0, then one tab per department in slots 1–8.
+     *
+     * @param onChange run after the selection changes, to redraw the menu
      */
     static void paintTabs(Menu menu, HomeCraftManagement plugin, BrowseState.Shop state, Runnable onChange) {
-        List<String> depts = present(plugin);
+        List<String> depts = tabs(plugin, state.department);
         Map<String, Integer> counts = counts(plugin);
-
-        // A department the player has selected but which has since emptied stays offered,
-        // otherwise their tab would silently vanish under them.
-        if (!ALL.equalsIgnoreCase(state.department) && !depts.contains(state.department)) {
-            depts = new ArrayList<>(depts);
-            depts.add(state.department);
-        }
 
         int total = plugin.market().catalog().size();
         menu.set(0, tab(ALL, total, ALL.equalsIgnoreCase(state.department)), e -> {
@@ -120,35 +154,17 @@ final class Departments {
             onChange.run();
         });
 
-        boolean windowed = depts.size() > TAB_ROW - 1;
-        int visible = windowed ? TAB_WINDOW : depts.size();
-        if (windowed) {
-            state.tabOffset = ((state.tabOffset % depts.size()) + depts.size()) % depts.size();
-        } else {
-            state.tabOffset = 0;
-        }
-
-        for (int i = 0; i < TAB_ROW - 1; i++) {
+        for (int i = 0; i < MAX_TABS; i++) {
             int slot = 1 + i;
-            if (i >= visible) {
+            if (i >= depts.size()) {
                 menu.set(slot, Menus.FILLER, null);
                 continue;
             }
-            String dept = depts.get((state.tabOffset + i) % depts.size());
+            String dept = depts.get(i);
             boolean selected = dept.equalsIgnoreCase(state.department);
             menu.set(slot, tab(dept, counts.getOrDefault(dept, 0), selected), e -> {
                 state.department = dept;
                 state.page = 0;
-                onChange.run();
-            });
-        }
-
-        if (windowed) {
-            List<String> all = depts;
-            menu.set(8, Menus.icon(Material.SPECTRAL_ARROW, "&bMore departments »",
-                    "&7" + all.size() + " in total — click to",
-                    "&7bring the rest into view."), e -> {
-                state.tabOffset += TAB_WINDOW;
                 onChange.run();
             });
         }

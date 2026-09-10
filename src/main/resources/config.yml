@@ -87,8 +87,11 @@ marketplace:
   # Also the department tabs in the Store and instant Market, so one item sits in the
   # same place wherever a player meets it. Misc (the LAST entry) catches anything the
   # classifier cannot place — watch the "Market departments:" line at startup for a Misc
-  # that is growing, and add a category_overrides entry or a new department here.
-  departments: [ Blocks, Materials, Food, Tools, Weapons, Armor, Redstone, Collectibles, Misc ]
+  # that is growing, and add a category_overrides entry here.
+  # EIGHT is the ceiling: the tab row is nine slots and "All" takes the first. A ninth
+  # department is still sold and still shows under "All", but it gets no tab of its own,
+  # so trim or merge before adding. (Weapons + Armor are one Combat tab for this reason.)
+  departments: [ Blocks, Materials, Food, Tools, Combat, Redstone, Collectibles, Misc ]
   category_overrides: {}
   #  ENDER_PEARL: Misc
   # Items that can never be listed (spawn eggs are always banned automatically).

@@ -338,8 +338,7 @@ public final class MiniService {
                 cleaned.add(v);
             }
         }
-        plugin.getConfig().set("minis.categories", cleaned);
-        plugin.saveConfig();
+        plugin.writeConfig("minis.categories", cleaned);
         plugin.config().load();
         reload();
     }
@@ -398,8 +397,7 @@ public final class MiniService {
         m.put("id", id);
         m.putAll(data.toConfig());
         out.add(m);
-        plugin.getConfig().set("minis.stands", out);
-        plugin.saveConfig();
+        plugin.writeConfig("minis.stands", out);
         plugin.config().load();
         reload();
     }
@@ -443,9 +441,10 @@ public final class MiniService {
             }
             sources.add(m);
         }
-        plugin.getConfig().set("minis.loot.lists", lists);
-        plugin.getConfig().set("minis.loot.sources", sources);
-        plugin.saveConfig();
+        Map<String, Object> lootValues = new LinkedHashMap<>();
+        lootValues.put("minis.loot.lists", lists);
+        lootValues.put("minis.loot.sources", sources);
+        plugin.writeConfig(lootValues);
         plugin.config().load();
         reload();
         if (plugin.wildDrops() != null) {

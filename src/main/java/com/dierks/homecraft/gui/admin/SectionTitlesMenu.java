@@ -69,8 +69,10 @@ public final class SectionTitlesMenu extends Menu {
 
     private void prompt(String path, String question) {
         plugin.chatPrompts().prompt(player, question, input -> {
-            plugin.getConfig().set(path, input);
-            plugin.saveConfig();
+            if (!plugin.writeConfig(path, input)) {
+                player.sendMessage(Text.of("&cCould not write config.yml — see the console."));
+                return;
+            }
             plugin.config().load();
             player.sendMessage(Text.of("&aUpdated. &7(" + path + ")"));
             new SectionTitlesMenu(plugin, player, onBack).open(player);

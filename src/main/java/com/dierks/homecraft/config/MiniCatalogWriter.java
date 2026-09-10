@@ -2,7 +2,6 @@ package com.dierks.homecraft.config;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.mini.MiniDef;
-import org.bukkit.configuration.file.FileConfiguration;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -59,8 +58,6 @@ public final class MiniCatalogWriter {
             series.add(seriesMap);
         }
 
-        FileConfiguration c = plugin.getConfig();
-        c.set("minis.series", series);
-        plugin.saveConfig();
+        plugin.writeConfig("minis.series", series);
     }
 }

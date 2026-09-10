@@ -92,6 +92,8 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.arcade.ArcadeService arcade;
     private com.dierks.homecraft.arcade.AchievementService achievements;
     private com.dierks.homecraft.arcade.QuestService quests;
+    /** Set once a pre-migration copy of config.yml is taken this start / {@code /hcm reload}. */
+    private boolean configSnapshotTaken;
     private BukkitTask historyTask;
     private BukkitTask deliveryTask;
     private BukkitTask auctionTask;
@@ -99,8 +101,9 @@ public final class HomeCraftManagement extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        migrateConfig();
-        backfillConfig();
+        if (migrateConfig()) {
+            backfillConfig();
+        }
         Keys.init(this);
 
         this.config = new PluginConfig(this);
@@ -340,8 +343,10 @@ public final class HomeCraftManagement extends JavaPlugin {
     /** Reload config.yml, re-register data-driven recipes, and reload the market catalog live. */
     public void reloadAll() {
         reloadConfig();
-        migrateConfig();
-        backfillConfig();
+        configSnapshotTaken = false;
+        if (migrateConfig()) {
+            backfillConfig();
+        }
         config.load();
         recipeManager.registerRecipes();
         market.reload();
@@ -392,19 +397,24 @@ public final class HomeCraftManagement extends JavaPlugin {
      * therefore loads {@code plugins/HomeCraftManagement/config.yml} into a defaults-free
      * {@link org.bukkit.configuration.file.YamlConfiguration}, decides and writes against
      * that, saves it, and only then calls {@code reloadConfig()} so the live view catches up.
+     *
+     * @return false only when the file could not be read or the upgrade could not be
+     *         persisted — the caller must then skip {@link #backfillConfig()} too, because
+     *         backfilling an unmigrated file writes leaves (e.g. {@code shipping.tiers.express.*})
+     *         that make the migration's own guard see the new shape and never fire again.
      */
-    private void migrateConfig() {
+    private boolean migrateConfig() {
         java.io.File file = configFile();
         org.bukkit.configuration.file.YamlConfiguration onDisk = loadOnDisk(file);
         if (onDisk == null) {
-            return;
+            return false;
         }
         String mainWorld = getServer().getWorlds().isEmpty()
                 ? "world" : getServer().getWorlds().get(0).getName();
 
         java.util.List<String> log = migrateConfig(onDisk, mainWorld);
         if (log.isEmpty()) {
-            return;
+            return true;
         }
         // These upgrades rewrite whole sections (shipping.tiers is replaced outright), and
         // because the defaults bug kept them dormant they may all fire at once on the first
@@ -412,12 +422,15 @@ public final class HomeCraftManagement extends JavaPlugin {
         // database's own pre-migration snapshots.
         snapshotConfig(file);
         if (!saveTo(onDisk, file, "migrated")) {
-            return;
+            getLogger().severe("Skipping the config backfill as well, so config.yml is not left "
+                    + "half-upgraded. Fix whatever stopped the write and restart.");
+            return false;
         }
         for (String line : log) {
             getLogger().info(line);
         }
         reloadConfig();
+        return true;
     }
 
     /**
@@ -638,6 +651,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (added.isEmpty()) {
             return;
         }
+        // The bigger of the two rewrites, and the one that has never run: it can add
+        // hundreds of keys and reflows the whole file through Bukkit's YAML emitter.
+        snapshotConfig(file);
         if (!saveTo(onDisk, file, "backfilled")) {
             return;
         }
@@ -650,6 +666,12 @@ public final class HomeCraftManagement extends JavaPlugin {
      * Copy every leaf the bundled resource ships that is missing from {@code current},
      * carrying its comments across, and return the keys added in file order.
      * Package-private so it can be unit-tested without a server.
+     *
+     * <p>This is a LEAF merge, not a full deep merge: a default that is an empty map
+     * (there are a handful, e.g. {@code marketplace.category_overrides}) is a section with no
+     * leaves and is deliberately never created, since an absent section and an empty one mean
+     * the same thing to every reader. Do not "fix" that — it would stamp empty blocks into
+     * every admin's file.
      *
      * @param current  the on-disk config.yml, loaded WITHOUT defaults attached
      * @param defaults the bundled config.yml resource
@@ -754,9 +776,13 @@ public final class HomeCraftManagement extends JavaPlugin {
         return onDisk;
     }
 
-    /** Copy config.yml into {@code backups/} before a migration rewrites parts of it. */
+    /**
+     * Copy config.yml into {@code backups/} before the first pass that rewrites it — at most
+     * one copy per start or {@code /hcm reload}, so migrate and backfill together leave a
+     * single snapshot of what the admin had.
+     */
     private void snapshotConfig(java.io.File file) {
-        if (!file.isFile()) {
+        if (configSnapshotTaken || !file.isFile()) {
             return;
         }
         java.io.File dir = new java.io.File(getDataFolder(), "backups");
@@ -770,6 +796,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         try {
             java.nio.file.Files.copy(file.toPath(), out.toPath(),
                     java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            configSnapshotTaken = true;
             getLogger().info("Config backup (pre-migration): " + out.getAbsolutePath());
         } catch (java.io.IOException e) {
             getLogger().warning("Could not back up config.yml before migrating: " + e.getMessage());
@@ -795,9 +822,12 @@ public final class HomeCraftManagement extends JavaPlugin {
      * and {@code getInt(path)}, all of which route through it. (The two-argument getters —
      * {@code getString(path, def)}, {@code getInt(path, def)} — already ignore defaults.)
      *
-     * <p>It also avoids a side effect: {@code get(path)}'s path walk goes through
-     * {@code getConfigurationSection()}, which MATERIALISES a real empty section whenever
-     * the segment exists only in the defaults.
+     * <p>Only the ANSWER is guaranteed defaults-free: the final segment resolves as
+     * {@code map.get(key)} falling back to the {@code null} we pass. The intermediate path
+     * walk still goes through the single-argument {@code getConfigurationSection()}, which
+     * MATERIALISES a real empty section for a segment that exists only in the defaults. That
+     * side effect is why the callers must pass a defaults-free view rather than
+     * {@code getConfig()} — this helper alone would not prevent it.
      */
     private static boolean has(org.bukkit.configuration.ConfigurationSection c, String path) {
         return c.get(path, null) != null;

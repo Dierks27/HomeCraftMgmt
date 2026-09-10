@@ -152,7 +152,15 @@ class ConfigMigrationTest {
         assertTrue(onDisk.contains("config_revision", true));
     }
 
-    /** A brand-new install already holds the whole bundled file: nothing to do, nothing logged. */
+    /**
+     * A brand-new install already holds the whole bundled file: nothing to do, nothing logged.
+     *
+     * <p>This holds because {@code saveDefaultConfig()} copies the jar resource verbatim and
+     * that resource already satisfies every migration guard. The invariant it depends on most
+     * silently is {@code config_revision}, pinned separately below — bump
+     * {@link HomeCraftManagement#CONFIG_REVISION} without bumping the YAML and every fresh
+     * install would snapshot, rewrite and log a migration on its first boot.
+     */
     @Test
     void aFreshInstallIsANoOp() throws Exception {
         YamlConfiguration onDisk = bundled();
@@ -161,6 +169,52 @@ class ConfigMigrationTest {
                 "saveDefaultConfig() just wrote this file — migration must not touch it");
         assertEquals(List.of(), HomeCraftManagement.backfillConfig(onDisk, bundled()),
                 "a fresh install must not log a backfill line");
+    }
+
+    /** The Java gate and the shipped YAML must agree, or first boot migrates itself. */
+    @Test
+    void theBundledRevisionMatchesTheCodeGate() throws Exception {
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, bundled().getInt("config_revision"),
+                "bump config_revision in src/main/resources/config.yml alongside CONFIG_REVISION");
+    }
+
+    /**
+     * The rebalance writes hard-coded numbers that are supposed to mirror the bundled file.
+     * If the two drift, a server whose config.yml lacks a section silently ends up with
+     * values the shipped defaults contradict. Run the rebalance over the bundled config and
+     * every value it touches must already be what the file says.
+     */
+    @Test
+    void theRebalanceNumbersMatchTheBundledDefaults() throws Exception {
+        YamlConfiguration shipped = bundled();
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", HomeCraftManagement.CONFIG_REVISION - 1);
+
+        assertFalse(HomeCraftManagement.migrateConfig(onDisk, "world").isEmpty(),
+                "lowering the revision must re-run the rebalance");
+
+        for (String key : List.of(
+                "market.sell_limits.max_money_per_day",
+                "market.buy_limits.max_money_per_day",
+                "marketplace.fee.commission_percent",
+                "printer.fee",
+                "printer.public_fee",
+                "arcade.pity.tokens")) {
+            assertEquals(shipped.get(key), onDisk.get(key),
+                    key + " has drifted from src/main/resources/config.yml");
+        }
+        for (String key : List.of(
+                "market.catalog",
+                "market.sell_limits.ranks",
+                "market.buy_limits.ranks",
+                "packs",
+                "arcade.crates.starter.rewards",
+                "arcade.crates.starter.paid_odds")) {
+            assertEquals(shipped.getMapList(key), onDisk.getMapList(key),
+                    key + " has drifted from src/main/resources/config.yml — the hard-coded "
+                            + "numbers in applyEconomyRebalance and the shipped file must agree, "
+                            + "or a server missing this section ends up contradicting the defaults");
+        }
     }
 
     /** Every value the admin edited survives; only missing keys are added. */

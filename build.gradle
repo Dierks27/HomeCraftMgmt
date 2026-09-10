@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.dierks.homecraft'
-version = '0.21.0-economy-safety'
+version = '0.21.1-config-backfill-fix'
 description = 'HomeCraft Management — Paper plugin (market, Crate store + Marketplace, Minis, web dashboard, in-game displays, Arcade)'
 
 // Target server: Paper 26.2 / Java 25. The toolchain is pinned to 25 so the
@@ -64,6 +64,15 @@ dependencies {
 
     // Bundled at runtime (shaded) so the plugin needs no external DB server.
     implementation 'org.xerial:sqlite-jdbc:3.50.1.0'
+
+    // ---- tests -------------------------------------------------------------
+    // The config migration/backfill is exercised against the real Bukkit
+    // configuration API (YamlConfiguration is plain Java — no server is started),
+    // so paper-api has to be on the TEST classpath as well as compileOnly.
+    testImplementation 'io.papermc.paper:paper-api:26.2.build.107-stable'
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 def targetJavaVersion = 25
@@ -79,6 +88,16 @@ processResources {
     filteringCharset = 'UTF-8'
     filesMatching('plugin.yml') {
         expand(props)
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    // Log every test, so the CI transcript proves the regression tests actually ran —
+    // a silently-undiscovered suite would let this fix go green without being checked.
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat = 'full'
     }
 }
 

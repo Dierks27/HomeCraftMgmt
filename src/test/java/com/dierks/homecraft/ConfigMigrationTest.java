@@ -34,6 +34,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ConfigMigrationTest {
 
     /**
+     * Departments the Store/Market tab row can show beside "All" — mirrors
+     * {@code Departments.MAX_TABS}, which is package-private to the gui package.
+     */
+    private static final int TAB_CEILING = 8;
+
+    /**
      * The bundled config.yml — the very resource the plugin backfills from at runtime.
      *
      * <p>Loaded with the throwing {@code load(Reader)} rather than
@@ -365,6 +371,118 @@ class ConfigMigrationTest {
             }
         }
         throw new AssertionError("no market.catalog row with id " + id);
+    }
+
+    /**
+     * A department added to the shipped defaults cannot reach an existing server through the
+     * backfill — every server already has a departments list, and the backfill only adds keys
+     * that are missing entirely. Revision 5 inserts it, or everything the classifier routes
+     * there silently lands in Misc.
+     */
+    @Test
+    void aLegacyDepartmentListGainsMaterials() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 4);
+        onDisk.set("marketplace.departments", List.of(
+                "Blocks", "Food", "Tools", "Weapons", "Armor", "Redstone", "Collectibles", "Misc"));
+
+        assertFalse(HomeCraftManagement.migrateConfig(onDisk, "world").isEmpty());
+
+        List<String> depts = onDisk.getStringList("marketplace.departments");
+        assertEquals(List.of("Blocks", "Materials", "Food", "Tools", "Combat",
+                "Redstone", "Collectibles", "Misc"), depts);
+        assertEquals("Materials", depts.get(1), "inserted after Blocks, not appended");
+        assertEquals("Misc", depts.get(depts.size() - 1),
+                "the catch-all must stay last — the classifier falls back to it");
+        assertEquals(TAB_CEILING, depts.size(),
+                "the tab row is nine slots and \"All\" takes the first");
+    }
+
+    /**
+     * Weapons + Armor → Combat, standing where Weapons stood. Adding Materials without this
+     * would take the list to nine, and the ninth department gets no tab at all.
+     */
+    @Test
+    void weaponsAndArmorFoldIntoCombat() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 4);
+        onDisk.set("marketplace.departments", List.of(
+                "Blocks", "Food", "Tools", "Weapons", "Armor", "Redstone", "Collectibles", "Misc"));
+
+        assertTrue(HomeCraftManagement.mergeDepartments(onDisk, List.of("Weapons", "Armor"), "Combat"));
+
+        assertEquals(List.of("Blocks", "Food", "Tools", "Combat", "Redstone", "Collectibles", "Misc"),
+                onDisk.getStringList("marketplace.departments"));
+    }
+
+    /** An admin override pointing at a folded department follows it, rather than falling to Misc. */
+    @Test
+    void overridesFollowTheMergedDepartment() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 4);
+        onDisk.set("marketplace.departments", List.of(
+                "Blocks", "Food", "Tools", "Weapons", "Armor", "Redstone", "Collectibles", "Misc"));
+        onDisk.set("marketplace.category_overrides.FLINT", "Weapons");
+        onDisk.set("marketplace.category_overrides.SHIELD", "Armor");
+        onDisk.set("marketplace.category_overrides.ENDER_PEARL", "Misc");
+
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals("Combat", onDisk.getString("marketplace.category_overrides.FLINT"));
+        assertEquals("Combat", onDisk.getString("marketplace.category_overrides.SHIELD"));
+        assertEquals("Misc", onDisk.getString("marketplace.category_overrides.ENDER_PEARL"),
+                "an override naming a department that survived is not touched");
+    }
+
+    /** A list already carrying Combat loses the folded names without gaining a second Combat. */
+    @Test
+    void mergingIntoADepartmentThatIsAlreadyThereDoesNotDuplicateIt() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("marketplace.departments", List.of(
+                "Blocks", "Combat", "Food", "Weapons", "Armor", "Misc"));
+
+        assertTrue(HomeCraftManagement.mergeDepartments(onDisk, List.of("Weapons", "Armor"), "Combat"));
+
+        assertEquals(List.of("Blocks", "Combat", "Food", "Misc"),
+                onDisk.getStringList("marketplace.departments"));
+    }
+
+    /** Nothing to fold: the list is left byte-for-byte as the admin has it. */
+    @Test
+    void mergingLeavesAListWithoutThoseDepartmentsAlone() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        List<String> before = onDisk.getStringList("marketplace.departments");
+
+        assertFalse(HomeCraftManagement.mergeDepartments(onDisk, List.of("Weapons", "Armor"), "Combat"));
+
+        assertEquals(before, onDisk.getStringList("marketplace.departments"));
+    }
+
+    /**
+     * The shipped list has to fit the tab row. The Store and Market paint "All" into slot 0
+     * and one department per slot after it, so a ninth shipped department would be sold but
+     * unreachable from a tab — which is exactly the flat-grid problem the tabs exist to fix.
+     */
+    @Test
+    void theShippedDepartmentListFitsTheTabRow() throws Exception {
+        List<String> depts = bundled().getStringList("marketplace.departments");
+        assertTrue(depts.size() <= TAB_CEILING,
+                "marketplace.departments must fit the tab row, was " + depts);
+        assertEquals("Misc", depts.get(depts.size() - 1),
+                "the classifier's catch-all has to be last");
+    }
+
+    /** A list that already names it is left exactly as the admin ordered it. */
+    @Test
+    void aDepartmentListThatAlreadyHasItIsLeftAlone() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 4);
+        List<String> before = onDisk.getStringList("marketplace.departments");
+
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals(before, onDisk.getStringList("marketplace.departments"));
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"));
     }
 
     /** Backfilled keys keep the bundled file's comments, and new sections keep their header. */

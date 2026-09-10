@@ -397,6 +397,15 @@ public final class Database {
                 placed_at INTEGER NOT NULL,
                 UNIQUE (world, x, y, z)
             );
+            """,
+
+            // v22 — Weapons and Armor merged into one Combat department. The Store and
+            // Market tab rows hold "All" plus eight departments and no more, and Materials
+            // needed the ninth slot. A listing keeps the department it was filed under, so
+            // without this an existing Pallet listing would be reachable only from "All".
+            """
+            UPDATE pallet_listings SET department = 'Combat'
+             WHERE department IN ('Weapons', 'Armor')
             """
     };
 

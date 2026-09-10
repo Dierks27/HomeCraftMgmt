@@ -262,6 +262,19 @@ public final class MiniService {
                 shiny ? "SHINY" : null);
     }
 
+    /**
+     * Which Minis this player holds a live copy of. Empty (never null) when the lookup
+     * fails, so the Museum degrades to "0 collected" rather than failing to open.
+     */
+    public java.util.Set<String> ownedIds(java.util.UUID owner) {
+        try {
+            return dao.ownedIds(owner);
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Could not read owned Minis: " + e.getMessage());
+            return java.util.Set.of();
+        }
+    }
+
     /** Current holders of live copies of a type (the Museum's "who owns it"). */
     public List<MiniDao.OwnerCount> owners(String id, int limit) {
         try {

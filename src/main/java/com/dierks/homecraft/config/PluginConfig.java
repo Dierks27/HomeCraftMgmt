@@ -315,6 +315,19 @@ public final class PluginConfig {
     public record MenuTitles(String admin, String museum, String market, String storeFormat) {
     }
 
+    /**
+     * Where the browsing menus start before a player touches anything. Stored as raw
+     * strings so config stays independent of the GUI enums; each menu parses its own with
+     * a safe fallback, so a typo in config.yml degrades to the default rather than failing
+     * to open a menu.
+     *
+     * @param storeDepartment the department tab selected first ("All", or a department name)
+     * @param storeSort       NAME | PRICE_UP | PRICE_DOWN | STOCK
+     * @param museumView      SERIES | RARITY | TYPE
+     */
+    public record MenuDefaults(String storeDepartment, String storeSort, String museumView) {
+    }
+
     /** The Minis catalog + rarity styling (Phase 4) + per-type card specs (Phase 9). */
     public record Minis(String pricingMode, Map<Rarity, RarityStyle> rarityStyles,
                         List<String> categories, List<MiniDef> catalog,
@@ -386,6 +399,7 @@ public final class PluginConfig {
     private Shipping shipping;
     private Store store;
     private MenuTitles menuTitles;
+    private MenuDefaults menuDefaults;
     private Minis minis;
     private MiniBlocks miniBlocks;
     private Loot.MiniLoot miniLoot;
@@ -443,6 +457,10 @@ public final class PluginConfig {
 
     public MenuTitles menuTitles() {
         return menuTitles;
+    }
+
+    public MenuDefaults menuDefaults() {
+        return menuDefaults;
     }
 
     public Minis minis() {
@@ -645,6 +663,11 @@ public final class PluginConfig {
                 c.getString("menus.museum_title", "&5Mini Museum &8&l·&r &7Collectibles"),
                 c.getString("menus.market_title", "&1Market — instant buy/sell"),
                 c.getString("menus.store_title", "&6Welcome to {store} &8· &7{url}"));
+
+        this.menuDefaults = new MenuDefaults(
+                c.getString("menus.store.default_department", "All"),
+                c.getString("menus.store.default_sort", "NAME"),
+                c.getString("menus.museum.default_view", "SERIES"));
 
         // ---- Minis (Phase 4) ----
         this.minis = readMinis(c);
@@ -1080,7 +1103,7 @@ public final class PluginConfig {
 
         List<String> departments = c.getStringList("marketplace.departments");
         if (departments.isEmpty()) {
-            departments = List.of("Blocks", "Food", "Tools", "Weapons", "Armor", "Redstone", "Collectibles", "Misc");
+            departments = List.of("Blocks", "Materials", "Food", "Tools", "Combat", "Redstone", "Collectibles", "Misc");
         }
 
         Map<String, String> overrides = new LinkedHashMap<>();

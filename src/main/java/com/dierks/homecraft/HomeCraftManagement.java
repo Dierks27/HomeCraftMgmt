@@ -49,6 +49,13 @@ import java.sql.SQLException;
  */
 public final class HomeCraftManagement extends JavaPlugin {
 
+    /**
+     * The config schema revision this build ships. {@code migrateConfig} applies the
+     * one-time economy rebalance to any on-disk file below it and stamps this value in.
+     * Kept in sync with {@code config_revision} in the bundled config.yml.
+     */
+    static final int CONFIG_REVISION = 3;
+
     private PluginConfig config;
     private Database database;
     private CustomItems items;
@@ -367,18 +374,6 @@ public final class HomeCraftManagement extends JavaPlugin {
     }
 
     /**
-     * Deep-merge any keys present in the bundled default config.yml but missing from
-     * the admin's on-disk config.yml, then save. Bukkit's {@code saveDefaultConfig()}
-     * only writes the file when it's absent — it never adds newly-introduced keys to
-     * an existing file — so a server that upgrades across a version which adds a
-     * section (e.g. {@code minis:}) would otherwise silently run without it.
-     *
-     * <p>Only missing keys are added; every existing value the admin has edited is
-     * preserved untouched. Nested sections are reconstructed leaf-by-leaf and lists
-     * are copied whole. Added keys carry their default comments across where the API
-     * supports it. What was added is logged.
-     */
-    /**
      * Targeted, one-time config upgrades that a blind key-backfill can't do (it only
      * ADDS missing keys, never rewrites changed ones). Runs before {@link #backfillConfig()}.
      *
@@ -387,12 +382,60 @@ public final class HomeCraftManagement extends JavaPlugin {
      * sub-hour tier and retimes the rest. When the on-disk config predates {@code express},
      * we replace the whole {@code shipping.tiers} map with the new four-tier scheme
      * (mode is preserved; admins who already added {@code express} are left untouched).
+     *
+     * <p><b>This reads the FILE, never {@link #getConfig()}.</b> {@code reloadConfig()}
+     * attaches the jar's bundled config.yml to {@code getConfig()} as DEFAULTS, and
+     * {@code ConfigurationSection.contains(path)} answers out of those defaults — so every
+     * "is this key on disk?" question asked of {@code getConfig()} came back {@code true}
+     * for anything the jar ships, and this method could never fire (0.21.0 shipped
+     * {@code worlds:}/{@code backups:}/{@code shops:} that no server ever received). It
+     * therefore loads {@code plugins/HomeCraftManagement/config.yml} into a defaults-free
+     * {@link org.bukkit.configuration.file.YamlConfiguration}, decides and writes against
+     * that, saves it, and only then calls {@code reloadConfig()} so the live view catches up.
      */
     private void migrateConfig() {
-        org.bukkit.configuration.file.FileConfiguration c = getConfig();
-        boolean changed = false;
+        java.io.File file = configFile();
+        org.bukkit.configuration.file.YamlConfiguration onDisk = loadOnDisk(file);
+        if (onDisk == null) {
+            return;
+        }
+        String mainWorld = getServer().getWorlds().isEmpty()
+                ? "world" : getServer().getWorlds().get(0).getName();
 
-        if (c.contains("shipping.tiers") && !c.contains("shipping.tiers.express")) {
+        java.util.List<String> log = migrateConfig(onDisk, mainWorld);
+        if (log.isEmpty()) {
+            return;
+        }
+        // These upgrades rewrite whole sections (shipping.tiers is replaced outright), and
+        // because the defaults bug kept them dormant they may all fire at once on the first
+        // start after this build. Keep the admin a copy of what they had, next to the
+        // database's own pre-migration snapshots.
+        snapshotConfig(file);
+        if (!saveTo(onDisk, file, "migrated")) {
+            return;
+        }
+        for (String line : log) {
+            getLogger().info(line);
+        }
+        reloadConfig();
+    }
+
+    /**
+     * The migration itself, run against a config that carries NO defaults — every check
+     * below is a question about what is physically in the admin's file.
+     *
+     * <p>Returns one log line per upgrade applied; an empty list means nothing changed and
+     * the caller need not write the file. Package-private so it can be unit-tested with a
+     * plain {@link org.bukkit.configuration.file.YamlConfiguration} and no server.
+     *
+     * @param c         the on-disk config.yml, loaded WITHOUT defaults attached
+     * @param mainWorld the server's main world, seeded into {@code worlds.economy_enabled}
+     */
+    static java.util.List<String> migrateConfig(
+            org.bukkit.configuration.file.FileConfiguration c, String mainWorld) {
+        java.util.List<String> log = new java.util.ArrayList<>();
+
+        if (has(c, "shipping.tiers") && !has(c, "shipping.tiers.express")) {
             c.set("shipping.tiers", null);
             c.set("shipping.tiers.express.real_minutes", 5);
             c.set("shipping.tiers.express.percent", 20);
@@ -402,11 +445,10 @@ public final class HomeCraftManagement extends JavaPlugin {
             c.set("shipping.tiers.two_day.percent", 5);
             c.set("shipping.tiers.three_day.real_hours", 8);
             c.set("shipping.tiers.three_day.percent", 0);
-            if (!c.contains("shipping.locker.enabled")) {
+            if (!has(c, "shipping.locker.enabled")) {
                 c.set("shipping.locker.enabled", true);
             }
-            changed = true;
-            getLogger().info("Config migration: upgraded shipping to the Express tier scheme "
+            log.add("Config migration: upgraded shipping to the Express tier scheme "
                     + "(express 5m/20% · one_day 1h/10% · two_day 3h/5% · three_day 8h/free).");
         }
 
@@ -414,88 +456,80 @@ public final class HomeCraftManagement extends JavaPlugin {
         // colour variants, and the PC recipe moving into the shared `recipes:` section.
         // Each step only fires when the on-disk file still has the old shape, so an
         // admin's custom values are carried over rather than dropped.
-        if (c.contains("skins.pallet") && !c.contains("skins.pallet_empty")) {
-            c.set("skins.pallet_empty", c.getString("skins.pallet", ""));
+        if (has(c, "skins.pallet") && !has(c, "skins.pallet_empty")) {
+            c.set("skins.pallet_empty", str(c, "skins.pallet"));
             c.set("skins.pallet", null);
-            changed = true;
-            getLogger().info("Config migration: skins.pallet → skins.pallet_empty (pallet_used added from defaults).");
+            log.add("Config migration: skins.pallet → skins.pallet_empty (pallet_used added from defaults).");
         }
-        if (c.contains("skins.vending") && !c.contains("skins.vending_lower")) {
-            c.set("skins.vending_lower", c.getString("skins.vending", ""));
+        if (has(c, "skins.vending") && !has(c, "skins.vending_lower")) {
+            c.set("skins.vending_lower", str(c, "skins.vending"));
             c.set("skins.vending", null);
-            changed = true;
-            getLogger().info("Config migration: skins.vending → skins.vending_lower (vending_upper added from defaults).");
+            log.add("Config migration: skins.vending → skins.vending_lower (vending_upper added from defaults).");
         }
-        if (c.contains("skins.mailbox") && !c.isConfigurationSection("skins.mailbox")) {
-            String legacy = c.getString("skins.mailbox", "");
+        if (has(c, "skins.mailbox") && !hasSection(c, "skins.mailbox")) {
+            String legacy = str(c, "skins.mailbox");
             c.set("skins.mailbox", null);
-            if (legacy != null && !legacy.isBlank()) {
+            if (!legacy.isBlank()) {
                 c.set("skins.mailbox.wood", legacy);
             }
-            changed = true;
-            getLogger().info("Config migration: skins.mailbox is now a per-variant map (old value kept as wood).");
+            log.add("Config migration: skins.mailbox is now a per-variant map (old value kept as wood).");
         }
-        if (c.contains("crafting.pc.recipe") && !c.contains("recipes.pc")) {
+        if (has(c, "crafting.pc.recipe") && !has(c, "recipes.pc")) {
             c.set("crafting.pc.recipe", null);
-            changed = true;
-            getLogger().info("Config migration: the PC recipe now lives under recipes.pc (added from defaults) "
+            log.add("Config migration: the PC recipe now lives under recipes.pc (added from defaults) "
                     + "alongside every other craftable block; the old crafting.pc.recipe was dropped.");
         }
         // Economy world sandbox: default to the server's main world on first run, written
         // into the file so the admin can see (and extend) it.
-        if (!c.contains("worlds.economy_enabled")) {
-            String main = getServer().getWorlds().isEmpty() ? "world" : getServer().getWorlds().get(0).getName();
-            c.set("worlds.economy_enabled", java.util.List.of(main));
-            changed = true;
-            getLogger().info("Config migration: worlds.economy_enabled = [" + main + "] (the economy runs only there).");
+        if (!has(c, "worlds.economy_enabled")) {
+            c.set("worlds.economy_enabled", java.util.List.of(mainWorld));
+            log.add("Config migration: worlds.economy_enabled = [" + mainWorld + "] (the economy runs only there).");
         }
 
         // Display Case skins became a per-style map (plain / royal).
-        if (c.contains("skins.display_case") && !c.isConfigurationSection("skins.display_case")) {
-            String legacy = c.getString("skins.display_case", "");
+        if (has(c, "skins.display_case") && !hasSection(c, "skins.display_case")) {
+            String legacy = str(c, "skins.display_case");
             c.set("skins.display_case", null);
-            if (legacy != null && !legacy.isBlank()) {
+            if (!legacy.isBlank()) {
                 c.set("skins.display_case.plain", legacy);
             }
-            changed = true;
+            log.add("Config migration: skins.display_case is now a per-style map (old value kept as plain).");
         }
 
         // Economy rebalance (pass 3): applied once to a live file, tracked by config_revision.
-        if (c.getInt("config_revision", 0) < 3) {
+        if (revision(c) < CONFIG_REVISION) {
             applyEconomyRebalance(c);
-            c.set("config_revision", 3);
-            changed = true;
-            getLogger().info("Config migration: economy rebalance applied (daily caps, $5k limits, 8% commission, "
+            c.set("config_revision", CONFIG_REVISION);
+            log.add("Config migration: economy rebalance applied (daily caps, $5k limits, 8% commission, "
                     + "token-only crates, pity 25, packs, printer fees).");
         }
 
-        if (c.contains("skins.pc") && c.contains("crafting.pc.head_texture")) {
-            String skin = c.getString("skins.pc", "");
-            String legacy = c.getString("crafting.pc.head_texture", "");
-            if (skin != null && !skin.isBlank() && (legacy == null || legacy.isBlank())) {
+        if (has(c, "skins.pc") && has(c, "crafting.pc.head_texture")) {
+            String skin = str(c, "skins.pc");
+            String legacy = str(c, "crafting.pc.head_texture");
+            if (!skin.isBlank() && legacy.isBlank()) {
                 c.set("crafting.pc.head_texture", skin);
-                changed = true;
+                log.add("Config migration: crafting.pc.head_texture seeded from skins.pc.");
             }
         }
 
-        if (changed) {
-            saveConfig();
-        }
+        return log;
     }
 
     /**
      * The pass-3 economy numbers, written onto the live config so an upgraded server
      * gets them too (the blind backfill only adds missing keys). Every value here is
-     * mirrored by the bundled config.yml defaults.
+     * mirrored by the bundled config.yml defaults, so a key that is absent from the
+     * admin's file is simply left to {@link #backfillConfig()}, which runs next.
      */
-    private void applyEconomyRebalance(org.bukkit.configuration.file.FileConfiguration c) {
+    private static void applyEconomyRebalance(org.bukkit.configuration.file.FileConfiguration c) {
         // Per-item daily caps (~2% sell / ~4% buy of full_stock).
         java.util.Map<String, int[]> caps = new java.util.LinkedHashMap<>();
         caps.put("oak_log", new int[] {160, 320});
         caps.put("wheat", new int[] {120, 240});
         caps.put("iron_ingot", new int[] {40, 80});
         caps.put("gold_ingot", new int[] {20, 40});
-        java.util.List<java.util.Map<?, ?>> catalog = c.getMapList("market.catalog");
+        java.util.List<java.util.Map<?, ?>> catalog = mapList(c, "market.catalog");
         java.util.List<java.util.Map<String, Object>> rewritten = new java.util.ArrayList<>();
         for (java.util.Map<?, ?> row : catalog) {
             java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
@@ -515,7 +549,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         c.set("market.sell_limits.max_money_per_day", 5000);
         c.set("market.buy_limits.max_money_per_day", 5000);
         for (String side : new String[] {"sell_limits", "buy_limits"}) {
-            java.util.List<java.util.Map<?, ?>> ranks = c.getMapList("market." + side + ".ranks");
+            java.util.List<java.util.Map<?, ?>> ranks = mapList(c, "market." + side + ".ranks");
             java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
             for (java.util.Map<?, ?> row : ranks) {
                 java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
@@ -563,6 +597,23 @@ public final class HomeCraftManagement extends JavaPlugin {
         return m;
     }
 
+    /**
+     * Deep-merge any keys present in the bundled default config.yml but missing from
+     * the admin's on-disk config.yml, then save. Bukkit's {@code saveDefaultConfig()}
+     * only writes the file when it's absent — it never adds newly-introduced keys to
+     * an existing file — so a server that upgrades across a version which adds a
+     * section (e.g. {@code minis:}) would otherwise silently run without it.
+     *
+     * <p>Only missing keys are added; every existing value the admin has edited is
+     * preserved untouched. Nested sections are reconstructed leaf-by-leaf and lists
+     * are copied whole. Added keys carry their default comments across where the API
+     * supports it. What was added is logged.
+     *
+     * <p>Like {@link #migrateConfig()} this compares against the FILE, not
+     * {@link #getConfig()}: the jar's defaults are attached to {@code getConfig()}, so
+     * {@code contains()} there is true for every key the jar ships and the merge below
+     * had nothing left to add — it was a no-op for the entire life of the plugin.
+     */
     private void backfillConfig() {
         java.io.InputStream in = getResource("config.yml");
         if (in == null) {
@@ -577,8 +628,37 @@ public final class HomeCraftManagement extends JavaPlugin {
             return;
         }
 
-        org.bukkit.configuration.file.FileConfiguration current = getConfig();
+        java.io.File file = configFile();
+        org.bukkit.configuration.file.YamlConfiguration onDisk = loadOnDisk(file);
+        if (onDisk == null) {
+            return;
+        }
+
+        java.util.List<String> added = backfillConfig(onDisk, defaults);
+        if (added.isEmpty()) {
+            return;
+        }
+        if (!saveTo(onDisk, file, "backfilled")) {
+            return;
+        }
+        getLogger().info("Config backfill: added " + added.size()
+                + " missing key(s) from defaults: " + String.join(", ", added));
+        reloadConfig();
+    }
+
+    /**
+     * Copy every leaf the bundled resource ships that is missing from {@code current},
+     * carrying its comments across, and return the keys added in file order.
+     * Package-private so it can be unit-tested without a server.
+     *
+     * @param current  the on-disk config.yml, loaded WITHOUT defaults attached
+     * @param defaults the bundled config.yml resource
+     */
+    static java.util.List<String> backfillConfig(
+            org.bukkit.configuration.file.FileConfiguration current,
+            org.bukkit.configuration.file.FileConfiguration defaults) {
         java.util.List<String> added = new java.util.ArrayList<>();
+        java.util.Set<String> touchedSections = new java.util.LinkedHashSet<>();
         for (String key : defaults.getKeys(true)) {
             // Skip section nodes themselves; their leaves are handled individually so
             // a partially-customised section keeps the admin's values and only gains
@@ -586,23 +666,176 @@ public final class HomeCraftManagement extends JavaPlugin {
             if (defaults.isConfigurationSection(key)) {
                 continue;
             }
-            if (!current.contains(key)) {
-                current.set(key, defaults.get(key));
-                try {
-                    current.setComments(key, defaults.getComments(key));
-                    current.setInlineComments(key, defaults.getInlineComments(key));
-                } catch (Throwable ignored) {
-                    // Comment API unavailable on this server — values still merge fine.
-                }
-                added.add(key);
+            if (has(current, key)) {
+                continue;
             }
+            Object value = defaults.get(key);
+            if (value == null) {
+                continue; // a bare `key:` in the defaults — set(key, null) would only delete
+            }
+            current.set(key, value);
+            copyComments(defaults, current, key);
+            added.add(key);
+            ancestorsOf(key, touchedSections);
         }
 
-        if (!added.isEmpty()) {
-            saveConfig();
-            getLogger().info("Config backfill: added " + added.size()
-                    + " missing key(s) from defaults: " + String.join(", ", added));
+        // A section that exists only because we just wrote leaves into it has no header
+        // comment of its own — give it the explanatory block the bundled file ships with,
+        // so a freshly-backfilled `worlds:` / `backups:` / `shops:` reads like the rest of
+        // the file. A section the admin already commented is never overwritten.
+        for (String section : touchedSections) {
+            if (hasSection(current, section) && commentsOf(current, section).isEmpty()) {
+                copyComments(defaults, current, section);
+            }
         }
+        return added;
+    }
+
+    /**
+     * Collect every parent path of {@code key} ("a.b.c" → "a", "a.b") into {@code out}.
+     * Assumes the default '.' path separator, as every literal path in this class does.
+     */
+    private static void ancestorsOf(String key, java.util.Set<String> out) {
+        int dot = key.indexOf('.');
+        while (dot >= 0) {
+            out.add(key.substring(0, dot));
+            dot = key.indexOf('.', dot + 1);
+        }
+    }
+
+    /** Carry a key's block + inline comments from the bundled defaults onto the live file. */
+    private static void copyComments(org.bukkit.configuration.ConfigurationSection from,
+                                     org.bukkit.configuration.ConfigurationSection to, String key) {
+        try {
+            to.setComments(key, from.getComments(key));
+            to.setInlineComments(key, from.getInlineComments(key));
+        } catch (Throwable ignored) {
+            // Comment API unavailable on this server — values still merge fine.
+        }
+    }
+
+    /** A key's block comments, or an empty list on a server that predates the comment API. */
+    private static java.util.List<String> commentsOf(
+            org.bukkit.configuration.ConfigurationSection c, String key) {
+        try {
+            return c.getComments(key);
+        } catch (Throwable ignored) {
+            return java.util.List.of();
+        }
+    }
+
+    /** The admin's own config.yml inside the plugin's data folder. */
+    private java.io.File configFile() {
+        return new java.io.File(getDataFolder(), "config.yml");
+    }
+
+    /**
+     * The admin's config.yml as a defaults-free view, or {@code null} when it cannot be
+     * parsed. A file with a YAML error must NOT come back as an empty config: migration
+     * and backfill would then believe every key is missing and rewrite the whole thing on
+     * top of a typo the admin could otherwise just correct.
+     * {@link org.bukkit.configuration.file.YamlConfiguration#loadConfiguration(java.io.File)}
+     * does exactly that — it swallows the parse error and hands back an empty config — so
+     * this uses the throwing form and refuses to touch a file it could not read.
+     */
+    private org.bukkit.configuration.file.YamlConfiguration loadOnDisk(java.io.File file) {
+        org.bukkit.configuration.file.YamlConfiguration onDisk =
+                new org.bukkit.configuration.file.YamlConfiguration();
+        try {
+            onDisk.load(file);
+        } catch (java.io.FileNotFoundException e) {
+            // No file yet (saveDefaultConfig() could not write one) — an empty view is right.
+        } catch (java.io.IOException | org.bukkit.configuration.InvalidConfigurationException e) {
+            getLogger().severe("config.yml could not be read (" + e.getMessage()
+                    + ") — leaving it exactly as it is. Fix the YAML and restart; "
+                    + "no keys were migrated or backfilled.");
+            return null;
+        }
+        return onDisk;
+    }
+
+    /** Copy config.yml into {@code backups/} before a migration rewrites parts of it. */
+    private void snapshotConfig(java.io.File file) {
+        if (!file.isFile()) {
+            return;
+        }
+        java.io.File dir = new java.io.File(getDataFolder(), "backups");
+        if (!dir.isDirectory() && !dir.mkdirs()) {
+            getLogger().warning("Could not create the backups folder: " + dir);
+            return;
+        }
+        String stamp = java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+        java.io.File out = new java.io.File(dir, "config-" + stamp + "-pre-migration.yml");
+        try {
+            java.nio.file.Files.copy(file.toPath(), out.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            getLogger().info("Config backup (pre-migration): " + out.getAbsolutePath());
+        } catch (java.io.IOException e) {
+            getLogger().warning("Could not back up config.yml before migrating: " + e.getMessage());
+        }
+    }
+
+    /** Write {@code c} to {@code file}; false (with a warning logged) if the write fails. */
+    private boolean saveTo(org.bukkit.configuration.file.FileConfiguration c, java.io.File file, String what) {
+        try {
+            c.save(file);
+            return true;
+        } catch (java.io.IOException e) {
+            getLogger().warning("Could not write the " + what + " config.yml: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * {@code contains()} that can never be answered by attached defaults — the only honest
+     * way to ask "is this key physically in the file?". {@code get(path, null)} skips the
+     * default lookup that the single-argument {@code get(path)} performs, and with it
+     * {@code contains(path)}, {@code isConfigurationSection(path)}, {@code getMapList(path)}
+     * and {@code getInt(path)}, all of which route through it. (The two-argument getters —
+     * {@code getString(path, def)}, {@code getInt(path, def)} — already ignore defaults.)
+     *
+     * <p>It also avoids a side effect: {@code get(path)}'s path walk goes through
+     * {@code getConfigurationSection()}, which MATERIALISES a real empty section whenever
+     * the segment exists only in the defaults.
+     */
+    private static boolean has(org.bukkit.configuration.ConfigurationSection c, String path) {
+        return c.get(path, null) != null;
+    }
+
+    /** {@code isConfigurationSection()} that can never be answered by attached defaults. */
+    private static boolean hasSection(org.bukkit.configuration.ConfigurationSection c, String path) {
+        return c.get(path, null) instanceof org.bukkit.configuration.ConfigurationSection;
+    }
+
+    /** {@code getString()} that never falls back to attached defaults; "" when absent. */
+    private static String str(org.bukkit.configuration.ConfigurationSection c, String path) {
+        Object v = c.get(path, null);
+        return v == null ? "" : String.valueOf(v);
+    }
+
+    /** {@code getMapList()} that never falls back to attached defaults. */
+    private static java.util.List<java.util.Map<?, ?>> mapList(
+            org.bukkit.configuration.ConfigurationSection c, String path) {
+        java.util.List<java.util.Map<?, ?>> out = new java.util.ArrayList<>();
+        if (c.get(path, null) instanceof java.util.List<?> list) {
+            for (Object o : list) {
+                if (o instanceof java.util.Map<?, ?> m) {
+                    out.add(m);
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * {@code config_revision} exactly as written on disk — 0 when the key is absent, and
+     * never the jar's value. (Reads the same defaults-free view as every other decision
+     * here; the old {@code getInt("config_revision", 0)} happened to be defaults-immune,
+     * but it was the odd one out and there is no reason to keep two rules.)
+     */
+    private static int revision(org.bukkit.configuration.file.FileConfiguration c) {
+        return c.get("config_revision", null) instanceof Number n ? n.intValue() : 0;
     }
 
     /** (Re)schedule the periodic price-history snapshot task at the configured cadence. */

@@ -691,6 +691,12 @@ public final class HomeCraftManagement extends JavaPlugin {
             if (has(current, key)) {
                 continue;
             }
+            if ("config_revision".equals(key)) {
+                // The plugin's own bookkeeping, not a setting: it is the gate that says the
+                // rebalance has been applied, so only the migration that actually applies it
+                // may write it. Backfilling it blind could satisfy the gate for work never done.
+                continue;
+            }
             Object value = defaults.get(key);
             if (value == null) {
                 continue; // a bare `key:` in the defaults — set(key, null) would only delete

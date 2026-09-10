@@ -56,8 +56,14 @@ class MarketDraftTest {
         }
     }
 
+    /**
+     * Note what is NOT checked here: {@code Material.isItem()} resolves through Bukkit's
+     * item-type registry and throws without a running server, so it cannot live in
+     * {@code problems()}. {@code MaterialPickerMenu} only ever offers isItem() materials,
+     * which is where that guard belongs. {@code isAir()} is a plain switch and is safe.
+     */
     @Test
-    void aMaterialMustBePickedAndMustBeARealItem() {
+    void aMaterialMustBePickedAndMustNotBeAir() {
         MarketDraft d = valid();
         d.setMaterial(null);
         assertFalse(d.problems(Set.of()).isEmpty(), "an unset material blocks saving");

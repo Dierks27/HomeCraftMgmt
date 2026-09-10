@@ -159,10 +159,14 @@ public final class MarketDraft {
 
         if (material == null) {
             out.add("&cPick a material.");
-        } else if (!material.isItem() || material.isAir()) {
-            // The parser accepts these; trading one hands the buyer nothing after charging them.
+        } else if (material.isAir()) {
+            // The parser accepts air; trading it hands the buyer nothing after charging them.
             out.add("&c" + material.name() + " is not a real item.");
         }
+        // The broader "is this actually an item?" test is Material.isItem(), which resolves
+        // through Bukkit's item-type registry and therefore needs a running server. It is
+        // enforced where a material is chosen — MaterialPickerMenu only ever offers
+        // isItem() materials — so this method stays pure and unit-testable.
 
         if (floor <= 0) {
             out.add("&cFloor must be above 0.");

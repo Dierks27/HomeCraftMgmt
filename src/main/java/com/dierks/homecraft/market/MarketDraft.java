@@ -133,6 +133,20 @@ public final class MarketDraft {
         this.maxDailyBuy = v;
     }
 
+    /**
+     * Air, by enum identity rather than {@link Material#isAir()}.
+     *
+     * <p>On Paper 26.2 the {@code Material} predicates are registry-backed —
+     * {@code isAir()} routes through {@code asBlockType()} and {@code isItem()} through
+     * {@code asItemType()}, both of which initialise {@code org.bukkit.Registry} and throw
+     * {@code IllegalStateException: No RegistryAccess implementation found} with no server
+     * running. Comparing the constants touches no registry, so this stays usable from a
+     * unit test. Only enum identity and {@code name()} are safe on Material here.
+     */
+    private static boolean isAir(Material m) {
+        return m == Material.AIR || m == Material.CAVE_AIR || m == Material.VOID_AIR;
+    }
+
     /** '&'-coded label for icons; never touches a null material. */
     public String label() {
         if (displayName != null && !displayName.isBlank()) {
@@ -159,14 +173,14 @@ public final class MarketDraft {
 
         if (material == null) {
             out.add("&cPick a material.");
-        } else if (material.isAir()) {
+        } else if (isAir(material)) {
             // The parser accepts air; trading it hands the buyer nothing after charging them.
             out.add("&c" + material.name() + " is not a real item.");
         }
-        // The broader "is this actually an item?" test is Material.isItem(), which resolves
-        // through Bukkit's item-type registry and therefore needs a running server. It is
-        // enforced where a material is chosen — MaterialPickerMenu only ever offers
-        // isItem() materials — so this method stays pure and unit-testable.
+        // The broader "is this actually an item?" test is Material.isItem(), which needs a
+        // running server (see isAir below). It is enforced where a material is chosen —
+        // MaterialPickerMenu only ever offers isItem() materials — so this method stays
+        // pure and unit-testable.
 
         if (floor <= 0) {
             out.add("&cFloor must be above 0.");

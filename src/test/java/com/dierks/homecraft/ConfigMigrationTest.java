@@ -140,7 +140,8 @@ class ConfigMigrationTest {
         // made all answer out of the jar.
         assertTrue(onDisk.contains("worlds.economy_enabled"), "defaults answer contains()");
         assertFalse(onDisk.contains("worlds.economy_enabled", true), "…but it is not in the file");
-        assertEquals(3, onDisk.getInt("config_revision"), "defaults answer getInt() as well");
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"),
+                "defaults answer getInt() as well — this reads the jar, not the file");
         assertFalse(onDisk.isSet("config_revision"), "…though the file carries no such key");
 
         HomeCraftManagement.migrateConfig(onDisk, "world");

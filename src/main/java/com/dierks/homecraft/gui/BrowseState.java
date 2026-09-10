@@ -156,9 +156,29 @@ public final class BrowseState implements Listener {
 
     private Shop newShop() {
         PluginConfig.MenuDefaults d = plugin.config().menuDefaults();
-        String dept = d.storeDepartment() == null || d.storeDepartment().isBlank()
-                ? Departments.ALL : d.storeDepartment().trim();
-        return new Shop(dept, Sort.of(d.storeSort()));
+        return new Shop(defaultDepartment(d.storeDepartment()), Sort.of(d.storeSort()));
+    }
+
+    /**
+     * The configured opening tab, or "All" when it names nothing in
+     * {@code marketplace.departments}. A department is typed by hand and the classifier
+     * never produces one that is not in the list, so a stale or misspelt name would filter
+     * every item out — greeting each player with an empty store rather than the whole store.
+     */
+    private String defaultDepartment(String configured) {
+        if (configured == null || configured.isBlank()) {
+            return Departments.ALL;
+        }
+        String dept = configured.trim();
+        if (Departments.ALL.equalsIgnoreCase(dept)) {
+            return Departments.ALL;
+        }
+        for (String known : plugin.config().marketplace().departments()) {
+            if (known.equalsIgnoreCase(dept)) {
+                return known;
+            }
+        }
+        return Departments.ALL;
     }
 
     @EventHandler

@@ -8,22 +8,24 @@ import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The Amazon Store GUI — opened by right-clicking a placed PC. Browse the live
- * catalog (paginated), then click an item to choose a quantity and a shipping
- * tier at checkout. Also links to the instant Market and to "My Orders". Buying
- * pulls from the finite market stock and moves price (integrated).
+ * The Amazon Store GUI — opened by right-clicking a placed PC. Click an item to choose a
+ * quantity and a shipping tier at checkout. Buying pulls from the finite market stock and
+ * moves price (integrated).
+ *
+ * <p>Laid out as row 0 = department tabs, rows 1–4 = the item grid, row 5 = navigation.
+ * Items are classified by the same {@link com.dierks.homecraft.marketplace.Categorizer}
+ * that sorts Pallet listings, so a material sits in the same department everywhere. The
+ * selected department, page and sort live in {@link BrowseState}, so stepping into checkout
+ * and back returns to the same view rather than page 1 of "All".
  */
 public final class StoreMenu extends Menu {
 
-    private static final int PAGE_SIZE = 45;
     private static final int MAX_QTY = 2304;
 
     private final Player player;
-    private int page;
 
     public StoreMenu(HomeCraftManagement plugin, Player player) {
         super(plugin);
@@ -38,24 +40,30 @@ public final class StoreMenu extends Menu {
     @Override
     protected void build() {
         MarketService market = plugin.market();
-        List<MarketItem> items = new ArrayList<>(market.catalog());
-        page = Math.max(0, Math.min(page, Math.max(0, (int) Math.ceil(items.size() / (double) PAGE_SIZE) - 1)));
+        BrowseState.Shop state = plugin.browseState().store(player);
+        List<MarketItem> items = Departments.view(plugin, state.department, state.sort);
+
+        int pages = Math.max(1, (int) Math.ceil(items.size() / (double) Departments.PAGE_SIZE));
+        state.page = Math.max(0, Math.min(state.page, pages - 1));
+
+        Departments.paintTabs(this, plugin, state, this::refresh);
 
         for (int slot = 45; slot < 54; slot++) {
             set(slot, Menus.FILLER, null);
         }
 
-        int start = page * PAGE_SIZE;
-        for (int i = 0; i < PAGE_SIZE; i++) {
+        int start = state.page * Departments.PAGE_SIZE;
+        for (int i = 0; i < Departments.PAGE_SIZE; i++) {
+            int slot = Departments.GRID_START + i;
             int idx = start + i;
             if (idx >= items.size()) {
-                set(i, null, null);
+                set(slot, null, null);
                 continue;
             }
             MarketItem item = items.get(idx);
-            long stock = market.state(item.id()).stock();
+            long stock = Departments.stock(market, item.id());
             boolean out = stock <= 0;
-            set(i, Menus.icon(item.material(), item.label(),
+            set(slot, Menus.icon(item.material(), item.label(),
                     "&7Buy: &a" + money(market.buyPrice(item.id())) + "&7/ea",
                     "&7Stock: " + (out ? "&cOUT OF STOCK" : "&f" + stock),
                     "&8—",
@@ -68,28 +76,41 @@ public final class StoreMenu extends Menu {
             });
         }
 
-        if (page > 0) {
+        if (state.page > 0) {
             set(45, Menus.icon(Material.ARROW, "&e« Previous"), e -> {
-                page--;
+                state.page--;
                 refresh();
             });
         }
-        set(46, Menus.icon(Material.CHEST, "&6Marketplace", "&7Buy items other players list", "&7in their Pallets"),
-                e -> new com.dierks.homecraft.gui.marketplace.MarketplaceMenu(plugin, player, this::reopen).open(player));
-        set(47, Menus.icon(Material.EMERALD, "&aInstant Market", "&7Buy/sell now at market price", "&7(no shipping)"),
+        // The balance readout lost its own slot to the Sort toggle; it rides here, on the
+        // tile where money is actually spent.
+        set(46, Menus.icon(Material.EMERALD, "&aInstant Market",
+                "&7Buy and sell now at market price — no shipping.",
+                "&8Your balance: &a" + money(plugin.economy().balance(player))),
                 e -> new MarketMenu(plugin, player, this::reopen).open(player));
-        set(48, Menus.icon(Material.PLAYER_HEAD, "&5Mini Museum", "&7Browse & collect Minis"),
-                e -> new MuseumMenu(plugin, player, this::reopen).open(player));
-        set(49, Menus.icon(Material.CHEST_MINECART, "&eMailbox", "&7Track & collect all deliveries"),
-                e -> new MailboxMenu(plugin, player, this::reopen).open(player));
-        set(50, Menus.balance(plugin, player), null);
-        set(51, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
-        set(52, Menus.icon(Material.PAPER, "&bCard Packs", "&7Buy booster packs of Cards",
-                "&7— open them for random Cards"),
+        set(47, Menus.icon(Material.CHEST, "&6Marketplace",
+                "&7Browse what other players list in their Pallets."),
+                e -> new com.dierks.homecraft.gui.marketplace.MarketplaceMenu(plugin, player, this::reopen).open(player));
+        set(48, Menus.icon(Material.PAPER, "&bCard Packs",
+                "&7Buy booster packs and open them for Cards."),
                 e -> new com.dierks.homecraft.gui.mini.PackShopMenu(plugin, player, this::reopen).open(player));
-        if ((page + 1) * PAGE_SIZE < items.size()) {
-            set(53, Menus.icon(Material.ARROW, "&eNext »"), e -> {
-                page++;
+        set(49, Menus.icon(Material.PLAYER_HEAD, "&5Mini Museum",
+                "&7Browse every collectible and what you have."),
+                e -> new MuseumMenu(plugin, player, this::reopen).open(player));
+        set(50, Menus.icon(Material.CHEST_MINECART, "&eMailbox & Orders",
+                "&7Track deliveries and collect what has arrived."),
+                e -> new MailboxMenu(plugin, player, this::reopen).open(player));
+        set(51, Departments.sortButton(state.sort), e -> {
+            state.sort = state.sort.next();
+            state.page = 0;
+            refresh();
+        });
+        set(52, Menus.icon(Material.BARRIER, "&cClose",
+                "&7Shut the store."), e -> e.getWhoClicked().closeInventory());
+        if ((state.page + 1) * Departments.PAGE_SIZE < items.size()) {
+            set(53, Menus.icon(Material.ARROW, "&eNext »",
+                    "&8Page " + (state.page + 1) + " of " + pages), e -> {
+                state.page++;
                 refresh();
             });
         }
@@ -97,7 +118,7 @@ public final class StoreMenu extends Menu {
 
     private void openOrderQuantity(MarketItem item) {
         MarketService market = plugin.market();
-        long stock = market.state(item.id()).stock();
+        long stock = Departments.stock(market, item.id());
         if (stock <= 0) {
             player.sendMessage(Text.of("&c" + item.label() + " &cis out of stock."));
             return;

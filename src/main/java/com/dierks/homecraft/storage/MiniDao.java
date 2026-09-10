@@ -126,6 +126,29 @@ public final class MiniDao {
         }
     }
 
+    /**
+     * The distinct Mini types this player currently holds a live copy of — the Museum's
+     * "x of N collected". One query for the whole catalog: asking per Mini would be a
+     * query per row on every menu build.
+     */
+    public java.util.Set<String> ownedIds(UUID owner) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            java.util.Set<String> out = new java.util.HashSet<>();
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT DISTINCT mini_id FROM mini_individuals "
+                            + "WHERE owner = ? AND retired_at IS NULL")) {
+                ps.setString(1, owner.toString());
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        out.add(rs.getString("mini_id"));
+                    }
+                }
+            }
+            return out;
+        }
+    }
+
     /** Current holders of live (non-retired) copies of a type, most copies first. */
     public java.util.List<OwnerCount> owners(String miniId, int limit) throws SQLException {
         Connection c = conn();

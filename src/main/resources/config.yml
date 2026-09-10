@@ -49,7 +49,7 @@ shops:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 4
+config_revision: 5
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -59,6 +59,16 @@ menus:
   museum_title: "&5Mini Museum &8&l·&r &7Collectibles"
   market_title: "&1Market — instant buy/sell"
   store_title: "&6Welcome to {store} &8· &7{url}"
+  # Where the browsing menus start before a player touches anything. Each player's
+  # choices are then remembered for the rest of their session (not saved to disk).
+  store:
+    # The department tab selected first: All, or any name from marketplace.departments.
+    default_department: All
+    # NAME | PRICE_UP | PRICE_DOWN | STOCK
+    default_sort: NAME
+  museum:
+    # How the Museum groups Minis: SERIES | RARITY | TYPE
+    default_view: SERIES
 
 # The Crate Marketplace (Phase 5): player-run Pallets sell ordinary items online;
 # purchases ship to the buyer's Mailbox. (Minis are NOT sold here — they stay on
@@ -74,7 +84,11 @@ marketplace:
     daily_storage_fee: 0.0      # per-Pallet per-day rent (0 = off)
   require_protected_land: true  # a Pallet only works on claimed Towny/WG land
   # Auto-sorted by item property + name; override the exceptions here (MATERIAL: Department).
-  departments: [ Blocks, Food, Tools, Weapons, Armor, Redstone, Collectibles, Misc ]
+  # Also the department tabs in the Store and instant Market, so one item sits in the
+  # same place wherever a player meets it. Misc (the LAST entry) catches anything the
+  # classifier cannot place — watch the "Market departments:" line at startup for a Misc
+  # that is growing, and add a category_overrides entry or a new department here.
+  departments: [ Blocks, Materials, Food, Tools, Weapons, Armor, Redstone, Collectibles, Misc ]
   category_overrides: {}
   #  ENDER_PEARL: Misc
   # Items that can never be listed (spawn eggs are always banned automatically).

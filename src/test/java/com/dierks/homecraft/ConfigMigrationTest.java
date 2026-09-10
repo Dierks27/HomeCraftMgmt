@@ -367,6 +367,42 @@ class ConfigMigrationTest {
         throw new AssertionError("no market.catalog row with id " + id);
     }
 
+    /**
+     * A department added to the shipped defaults cannot reach an existing server through the
+     * backfill — every server already has a departments list, and the backfill only adds keys
+     * that are missing entirely. Revision 5 inserts it, or everything the classifier routes
+     * there silently lands in Misc.
+     */
+    @Test
+    void aLegacyDepartmentListGainsMaterials() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 4);
+        onDisk.set("marketplace.departments", List.of(
+                "Blocks", "Food", "Tools", "Weapons", "Armor", "Redstone", "Collectibles", "Misc"));
+
+        assertFalse(HomeCraftManagement.migrateConfig(onDisk, "world").isEmpty());
+
+        List<String> depts = onDisk.getStringList("marketplace.departments");
+        assertTrue(depts.contains("Materials"), depts.toString());
+        assertEquals("Materials", depts.get(1), "inserted after Blocks, not appended");
+        assertEquals("Misc", depts.get(depts.size() - 1),
+                "the catch-all must stay last — the classifier falls back to it");
+        assertEquals(9, depts.size());
+    }
+
+    /** A list that already names it is left exactly as the admin ordered it. */
+    @Test
+    void aDepartmentListThatAlreadyHasItIsLeftAlone() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 4);
+        List<String> before = onDisk.getStringList("marketplace.departments");
+
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals(before, onDisk.getStringList("marketplace.departments"));
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"));
+    }
+
     /** Backfilled keys keep the bundled file's comments, and new sections keep their header. */
     @Test
     void backfilledKeysCarryTheirComments() throws Exception {

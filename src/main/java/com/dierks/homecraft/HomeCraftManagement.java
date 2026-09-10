@@ -57,8 +57,9 @@ public final class HomeCraftManagement extends JavaPlugin {
      * would migrate itself on its very first boot.
      *
      * <p>3 = the pass-3 economy rebalance. 4 = the two per-item daily caps pass 3 missed.
+     * 5 = the Materials department the Store/Market tabs sort into.
      */
-    static final int CONFIG_REVISION = 4;
+    static final int CONFIG_REVISION = 5;
 
     /**
      * Per-item daily caps (~2% sell / ~4% buy of {@code full_stock}), mirroring the
@@ -92,6 +93,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.mini.MiniValue miniValue;
     private com.dierks.homecraft.mini.BinderService binderService;
     private ChatPromptService chatPrompts;
+    private com.dierks.homecraft.gui.BrowseState browseState;
     private HeadLibraryService headLibrary;
     private VendingService vending;
     private AuctionService auctions;
@@ -177,6 +179,7 @@ public final class HomeCraftManagement extends JavaPlugin {
 
         // Admin Studio chat-input bridge + web head-library (Phase 4b).
         this.chatPrompts = new ChatPromptService(this);
+        this.browseState = new com.dierks.homecraft.gui.BrowseState(this);
         this.headLibrary = new HeadLibraryService(this);
 
         // Minis trading + drops (Phase 4c).
@@ -224,6 +227,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(
                 new com.dierks.homecraft.crafting.RecipeBookListener(recipeManager), this);
         getServer().getPluginManager().registerEvents(new MenuListener(), this);
+        getServer().getPluginManager().registerEvents(browseState, this);
         getServer().getPluginManager().registerEvents(new OrderDeliveryListener(orderService), this);
         getServer().getPluginManager().registerEvents(chatPrompts, this);
         getServer().getPluginManager().registerEvents(new InboxListener(this), this);
@@ -546,6 +550,13 @@ public final class HomeCraftManagement extends JavaPlugin {
                         + " — pass 3 capped only four of the six catalog rows.");
             }
         }
+        if (from < 5) {
+            if (addDepartment(c, "Materials", "Blocks")) {
+                log.add("Config migration: added the Materials department (ingots, gems and "
+                        + "crafting stock) — it is a Store/Market tab, so an existing "
+                        + "departments list has to gain it or those items fall into Misc.");
+            }
+        }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);
             log.add("Config migration: config_revision " + from + " → " + CONFIG_REVISION + ".");
@@ -675,6 +686,44 @@ public final class HomeCraftManagement extends JavaPlugin {
             c.set("market.catalog", rewritten);
         }
         return filled;
+    }
+
+    /**
+     * Revision 5: insert a department into {@code marketplace.departments} if the admin's
+     * list lacks it. The blind backfill cannot do this — it only adds keys that are
+     * missing entirely, and every server already has a departments list — so a department
+     * added to the shipped defaults would never reach an existing file, and everything the
+     * classifier routed to it would land in Misc instead.
+     *
+     * <p>Inserted after {@code after} so the tab order stays sensible, and never at the
+     * end: the LAST entry is the catch-all the classifier falls back to.
+     *
+     * @return false when the list already has it, or has no list to edit
+     */
+    private static boolean addDepartment(org.bukkit.configuration.file.FileConfiguration c,
+                                         String department, String after) {
+        if (!(c.get("marketplace.departments", null) instanceof java.util.List<?> raw) || raw.isEmpty()) {
+            return false; // absent — the backfill supplies the shipped list, Materials included
+        }
+        java.util.List<String> departments = new java.util.ArrayList<>();
+        for (Object o : raw) {
+            departments.add(String.valueOf(o));
+        }
+        for (String d : departments) {
+            if (d.equalsIgnoreCase(department)) {
+                return false;
+            }
+        }
+        int at = departments.size() - 1; // before the catch-all
+        for (int i = 0; i < departments.size(); i++) {
+            if (departments.get(i).equalsIgnoreCase(after)) {
+                at = i + 1;
+                break;
+            }
+        }
+        departments.add(Math.min(at, departments.size()), department);
+        c.set("marketplace.departments", departments);
+        return true;
     }
 
     private static java.util.Map<String, Object> map(Object... kv) {
@@ -1099,6 +1148,11 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public com.dierks.homecraft.mini.BinderService binder() {
         return binderService;
+    }
+
+    /** Per-player, per-session browsing state for the Store, Market and Museum menus. */
+    public com.dierks.homecraft.gui.BrowseState browseState() {
+        return browseState;
     }
 
     public ChatPromptService chatPrompts() {

@@ -3,13 +3,11 @@ package com.dierks.homecraft.gui;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.market.MarketService;
-import com.dierks.homecraft.market.MarketState;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -20,12 +18,10 @@ import java.util.List;
  */
 public final class MarketMenu extends Menu {
 
-    private static final int PAGE_SIZE = 45;
     private static final int MAX_QTY = 2304;
 
     private final Player player;
     private final Runnable onBack;
-    private int page;
 
     public MarketMenu(HomeCraftManagement plugin, Player player, Runnable onBack) {
         super(plugin);
@@ -37,25 +33,28 @@ public final class MarketMenu extends Menu {
     @Override
     protected void build() {
         MarketService market = plugin.market();
-        List<MarketItem> items = new ArrayList<>(market.catalog());
-        int pages = Math.max(1, (int) Math.ceil(items.size() / (double) PAGE_SIZE));
-        page = Math.max(0, Math.min(page, pages - 1));
+        BrowseState.Shop state = plugin.browseState().market(player);
+        List<MarketItem> items = Departments.view(plugin, state.department, state.sort);
+        int pages = Math.max(1, (int) Math.ceil(items.size() / (double) Departments.PAGE_SIZE));
+        state.page = Math.max(0, Math.min(state.page, pages - 1));
+
+        Departments.paintTabs(this, plugin, state, this::refresh);
 
         for (int slot = 45; slot < 54; slot++) {
             set(slot, Menus.FILLER, null);
         }
 
-        int start = page * PAGE_SIZE;
-        for (int i = 0; i < PAGE_SIZE; i++) {
+        int start = state.page * Departments.PAGE_SIZE;
+        for (int i = 0; i < Departments.PAGE_SIZE; i++) {
+            int slot = Departments.GRID_START + i;
             int idx = start + i;
             if (idx >= items.size()) {
-                set(i, null, null);
+                set(slot, null, null);
                 continue;
             }
             MarketItem item = items.get(idx);
-            MarketState st = market.state(item.id());
-            long stock = st.stock();
-            set(i, Menus.icon(item.material(), item.label(),
+            long stock = Departments.stock(market, item.id());
+            set(slot, Menus.icon(item.material(), item.label(),
                     "&7Buy: &a" + money(market.buyPrice(item.id())),
                     "&7Sell: &c" + money(market.sellPrice(item.id())),
                     "&7Stock: " + (stock <= 0 ? "&cOUT OF STOCK" : "&f" + stock),
@@ -70,9 +69,9 @@ public final class MarketMenu extends Menu {
             });
         }
 
-        if (page > 0) {
+        if (state.page > 0) {
             set(45, Menus.icon(Material.ARROW, "&e« Previous"), e -> {
-                page--;
+                state.page--;
                 refresh();
             });
         }
@@ -84,9 +83,15 @@ public final class MarketMenu extends Menu {
                 e.getWhoClicked().closeInventory();
             }
         });
-        if ((page + 1) * PAGE_SIZE < items.size()) {
-            set(53, Menus.icon(Material.ARROW, "&eNext »"), e -> {
-                page++;
+        set(51, Departments.sortButton(state.sort), e -> {
+            state.sort = state.sort.next();
+            state.page = 0;
+            refresh();
+        });
+        if ((state.page + 1) * Departments.PAGE_SIZE < items.size()) {
+            set(53, Menus.icon(Material.ARROW, "&eNext »",
+                    "&8Page " + (state.page + 1) + " of " + pages), e -> {
+                state.page++;
                 refresh();
             });
         }
@@ -145,6 +150,8 @@ public final class MarketMenu extends Menu {
     }
 
     private void reopen() {
+        // The department/page/sort ride in BrowseState, so a fresh instance lands back on
+        // the same view the player left.
         new MarketMenu(plugin, player, onBack).open(player);
     }
 

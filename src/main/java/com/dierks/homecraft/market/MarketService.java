@@ -122,6 +122,33 @@ public final class MarketService {
         this.states = newStates;
         plugin.getLogger().info("Market engine loaded " + catalog.size() + " commodity(ies)."
                 + (rebounded > 0 ? " Clamped " + rebounded + " price(s) back inside the configured floor/ceiling." : ""));
+        logDepartments();
+    }
+
+    /**
+     * Log how the catalog splits across the department tabs the Store and Market browse by.
+     * A department showing 0, or Misc swallowing a large share, means the classifier needs a
+     * rule (or the admin an override) — with a few hundred commodities that is otherwise
+     * invisible until someone opens a tab and finds it empty.
+     */
+    private void logDepartments() {
+        if (catalog.isEmpty()) {
+            return;
+        }
+        com.dierks.homecraft.marketplace.Categorizer cat =
+                new com.dierks.homecraft.marketplace.Categorizer(plugin);
+        java.util.Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+        for (String dept : plugin.config().marketplace().departments()) {
+            counts.put(dept, 0);
+        }
+        for (MarketItem item : catalog.values()) {
+            counts.merge(cat.department(item.material()), 1, Integer::sum);
+        }
+        StringBuilder sb = new StringBuilder("Market departments:");
+        for (java.util.Map.Entry<String, Integer> e : counts.entrySet()) {
+            sb.append(' ').append(e.getKey()).append('=').append(e.getValue());
+        }
+        plugin.getLogger().info(sb.toString());
     }
 
     /** Starting stock for a fresh/unseeded item, held strictly below {@code full_stock}. */

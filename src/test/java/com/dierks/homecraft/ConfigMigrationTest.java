@@ -31,12 +31,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ConfigMigrationTest {
 
-    /** The bundled config.yml — the very resource the plugin backfills from at runtime. */
-    private static YamlConfiguration bundled() throws IOException {
+    /**
+     * The bundled config.yml — the very resource the plugin backfills from at runtime.
+     *
+     * <p>Loaded with the throwing {@code load(Reader)} rather than
+     * {@code YamlConfiguration.loadConfiguration(Reader)}: the static factory swallows a
+     * parse error and reports it through {@code Bukkit.getLogger()}, which NPEs with no
+     * server running. A YAML mistake in the bundled file should fail here with the line
+     * number, not as a NullPointerException from inside Bukkit.
+     */
+    private static YamlConfiguration bundled() throws IOException, InvalidConfigurationException {
         try (InputStream in = ConfigMigrationTest.class.getResourceAsStream("/config.yml")) {
             assertNotNull(in, "the bundled config.yml is missing from the test classpath");
             try (Reader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
-                return YamlConfiguration.loadConfiguration(reader);
+                YamlConfiguration defaults = new YamlConfiguration();
+                defaults.load(reader);
+                return defaults;
             }
         }
     }
@@ -93,7 +103,7 @@ class ConfigMigrationTest {
     }
 
     @Test
-    void migrationAndBackfillWriteEverySectionTheFileIsMissing() throws IOException {
+    void migrationAndBackfillWriteEverySectionTheFileIsMissing() throws Exception {
         YamlConfiguration onDisk = legacyOnDisk();
 
         List<String> migrated = HomeCraftManagement.migrateConfig(onDisk, "world");
@@ -120,7 +130,7 @@ class ConfigMigrationTest {
      * exactly what {@code reloadConfig()} does — and the pass must still write the keys.
      */
     @Test
-    void jarDefaultsCannotShadowTheFile() throws IOException {
+    void jarDefaultsCannotShadowTheFile() throws Exception {
         YamlConfiguration defaults = bundled();
         YamlConfiguration onDisk = legacyOnDisk();
         onDisk.setDefaults(defaults);
@@ -144,7 +154,7 @@ class ConfigMigrationTest {
 
     /** A brand-new install already holds the whole bundled file: nothing to do, nothing logged. */
     @Test
-    void aFreshInstallIsANoOp() throws IOException {
+    void aFreshInstallIsANoOp() throws Exception {
         YamlConfiguration onDisk = bundled();
 
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"),
@@ -155,7 +165,7 @@ class ConfigMigrationTest {
 
     /** Every value the admin edited survives; only missing keys are added. */
     @Test
-    void adminEditsSurvive() throws IOException {
+    void adminEditsSurvive() throws Exception {
         YamlConfiguration onDisk = legacyOnDisk();
         onDisk.set("worlds.economy_enabled", List.of("survival", "resource"));
         onDisk.set("shops.glow.radius", 4);
@@ -212,7 +222,7 @@ class ConfigMigrationTest {
 
     /** Backfilled keys keep the bundled file's comments, and new sections keep their header. */
     @Test
-    void backfilledKeysCarryTheirComments() throws IOException {
+    void backfilledKeysCarryTheirComments() throws Exception {
         YamlConfiguration onDisk = legacyOnDisk();
 
         HomeCraftManagement.migrateConfig(onDisk, "world");
@@ -244,7 +254,7 @@ class ConfigMigrationTest {
      * {@code worlds} key at all. The fix has to fill it in either way.
      */
     @Test
-    void emptySectionsLeftBehindByTheBugAreFilledIn() throws IOException {
+    void emptySectionsLeftBehindByTheBugAreFilledIn() throws Exception {
         YamlConfiguration onDisk = legacyOnDisk();
         onDisk.createSection("worlds");
         onDisk.createSection("backups");
@@ -262,7 +272,7 @@ class ConfigMigrationTest {
 
     /** A section the admin already annotated is never re-commented from the jar. */
     @Test
-    void anAdminsOwnSectionCommentIsKept() throws IOException {
+    void anAdminsOwnSectionCommentIsKept() throws Exception {
         YamlConfiguration onDisk = legacyOnDisk();
         onDisk.set("shops.glow.enabled", false);
         onDisk.setComments("shops", List.of(" my own notes about shops"));

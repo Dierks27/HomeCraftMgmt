@@ -147,6 +147,33 @@ public final class MarketService {
         return true;
     }
 
+    /**
+     * Write one catalog row to config.yml and bring the live catalog and state back into
+     * sync. Mirrors {@code MiniService.saveCatalog}: the config write, the PluginConfig
+     * re-parse, and the service rebuild are all three required, in that order.
+     *
+     * @return false when config.yml could not be read or written — NOTHING changed, and the
+     *         caller must not report success
+     */
+    public boolean saveCatalogRow(MarketDraft draft) {
+        if (!new com.dierks.homecraft.config.MarketCatalogWriter(plugin).upsert(draft)) {
+            return false;
+        }
+        plugin.config().load();
+        reload();
+        return true;
+    }
+
+    /** Remove one catalog row from config.yml and rebuild. Same false semantics. */
+    public boolean removeCatalogRow(String id) {
+        if (!new com.dierks.homecraft.config.MarketCatalogWriter(plugin).remove(id)) {
+            return false;
+        }
+        plugin.config().load();
+        reload();
+        return true;
+    }
+
     public Collection<MarketItem> catalog() {
         return catalog.values();
     }

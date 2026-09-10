@@ -20,15 +20,28 @@ public final class ConfirmMenu extends Menu {
     private final String title;
     private final ItemStack display;
     private final List<String> confirmLore;
+    private final String confirmHeadline;
     private final Runnable onConfirm;
     private final Runnable onCancel;
 
     public ConfirmMenu(HomeCraftManagement plugin, String title, ItemStack display,
                        List<String> confirmLore, Runnable onConfirm, Runnable onCancel) {
+        this(plugin, title, display, confirmLore, "&7Click to confirm this purchase.",
+                onConfirm, onCancel);
+    }
+
+    /**
+     * As above, but with the confirm button's leading line supplied by the caller — a
+     * removal screen is not a purchase and must not claim to be one.
+     */
+    public ConfirmMenu(HomeCraftManagement plugin, String title, ItemStack display,
+                       List<String> confirmLore, String confirmHeadline,
+                       Runnable onConfirm, Runnable onCancel) {
         super(plugin);
         this.title = title;
         this.display = display;
         this.confirmLore = confirmLore == null ? List.of() : confirmLore;
+        this.confirmHeadline = confirmHeadline == null ? "&7Click to confirm." : confirmHeadline;
         this.onConfirm = onConfirm;
         this.onCancel = onCancel;
         init(27, Text.of(title));
@@ -54,7 +67,7 @@ public final class ConfirmMenu extends Menu {
         set(13, display, null);
 
         List<String> confirm = new ArrayList<>();
-        confirm.add("&7Click to confirm this purchase.");
+        confirm.add(confirmHeadline);
         confirm.addAll(confirmLore);
         set(15, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&l✓ Confirm",
                 confirm.toArray(new String[0])), e -> {

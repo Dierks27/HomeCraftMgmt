@@ -927,6 +927,30 @@ public final class HomeCraftManagement extends JavaPlugin {
         return true;
     }
 
+    /**
+     * The {@code market.catalog} rows exactly as they sit in config.yml, defaults-free:
+     * each a MUTABLE copy, in file order, including rows {@link PluginConfig} rejects and
+     * keys it does not model.
+     *
+     * <p>{@code null} — not an empty list — when config.yml could not be read. A caller
+     * must abort on null rather than write a catalog over a file it failed to parse.
+     */
+    public java.util.List<java.util.Map<String, Object>> readCatalogRows() {
+        org.bukkit.configuration.file.YamlConfiguration onDisk = loadOnDisk(configFile());
+        if (onDisk == null) {
+            return null;
+        }
+        java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+        for (java.util.Map<?, ?> row : mapList(onDisk, "market.catalog")) {
+            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+            for (java.util.Map.Entry<?, ?> e : row.entrySet()) {
+                m.put(String.valueOf(e.getKey()), e.getValue());
+            }
+            out.add(m);
+        }
+        return out;
+    }
+
     /** Single-key form of {@link #writeConfig(java.util.Map)}. */
     public boolean writeConfig(String path, Object value) {
         java.util.Map<String, Object> one = new java.util.LinkedHashMap<>();

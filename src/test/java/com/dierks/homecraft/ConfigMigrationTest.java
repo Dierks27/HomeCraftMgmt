@@ -9,6 +9,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -117,7 +119,6 @@ class ConfigMigrationTest {
         assertTrue(onDisk.getBoolean("backups.enabled"));
         assertTrue(onDisk.isSet("shops.glow.enabled"), "shops.glow.enabled must reach the file");
         assertTrue(onDisk.getBoolean("shops.glow.enabled"));
-        assertEquals(3, onDisk.getInt("config_revision"));
         assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"));
 
         // The economy sandbox reads this list; before the fix it was never written and
@@ -188,10 +189,10 @@ class ConfigMigrationTest {
     void theRebalanceNumbersMatchTheBundledDefaults() throws Exception {
         YamlConfiguration shipped = bundled();
         YamlConfiguration onDisk = bundled();
-        onDisk.set("config_revision", HomeCraftManagement.CONFIG_REVISION - 1);
+        onDisk.set("config_revision", 0); // below every revision step, so the rebalance runs
 
         assertFalse(HomeCraftManagement.migrateConfig(onDisk, "world").isEmpty(),
-                "lowering the revision must re-run the rebalance");
+                "a revision-0 file must run the rebalance");
 
         for (String key : List.of(
                 "market.sell_limits.max_money_per_day",
@@ -272,6 +273,97 @@ class ConfigMigrationTest {
 
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"),
                 "a second pass must be a no-op — the revision gate is stamped");
+    }
+
+    /**
+     * Pass 3 kept its caps list inline and it drifted from the shipped catalog: it carried
+     * four of the six rows, so every server that upgraded through it has cobblestone and
+     * diamond uncapped. Revision 4 gives every shipped row the caps the bundled file says
+     * it should have.
+     */
+    @Test
+    void everyShippedCatalogRowEndsUpCapped() throws Exception {
+        YamlConfiguration shipped = bundled();
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("market.catalog", withoutCaps(shipped));
+        onDisk.set("config_revision", 3); // already past the pass-3 gate, as a live server is
+
+        assertFalse(HomeCraftManagement.migrateConfig(onDisk, "world").isEmpty(),
+                "a revision-3 file still owes the missing caps");
+
+        assertEquals(shipped.getMapList("market.catalog"), onDisk.getMapList("market.catalog"),
+                "every shipped row must end up carrying the shipped caps");
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"));
+    }
+
+    /**
+     * Bumping the revision must NOT drag a server back through the pass-3 rebalance, which
+     * rewrites whole sections — the caps step fills gaps and touches nothing else.
+     */
+    @Test
+    void theCapsStepLeavesTunedValuesAlone() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("market.catalog", withoutCaps(bundled()));
+        onDisk.set("config_revision", 3);
+        onDisk.set("market.sell_limits.max_money_per_day", 250);
+        onDisk.set("marketplace.fee.commission_percent", 2.5);
+        onDisk.set("printer.public_fee", 999);
+        onDisk.set("arcade.pity.tokens", 60);
+        onDisk.set("packs", List.of(Map.of("id", "custom", "price", 42.0)));
+
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals(250, onDisk.getInt("market.sell_limits.max_money_per_day"),
+                "revision 4 must not re-run the pass-3 rebalance");
+        assertEquals(2.5, onDisk.getDouble("marketplace.fee.commission_percent"));
+        assertEquals(999, onDisk.getInt("printer.public_fee"));
+        assertEquals(60, onDisk.getInt("arcade.pity.tokens"));
+        assertEquals("custom", onDisk.getMapList("packs").get(0).get("id"), "packs must survive");
+
+        // …while the step it IS meant to do still happened.
+        assertEquals(10, intAt(rowFor(onDisk, "diamond"), "max_daily_sell"));
+        assertEquals(20, intAt(rowFor(onDisk, "diamond"), "max_daily_buy"));
+    }
+
+    /** A cap the admin set themselves — a deliberate 0 included — is never overwritten. */
+    @Test
+    void anAdminsOwnCapIsKept() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        List<Map<String, Object>> rows = withoutCaps(bundled());
+        for (Map<String, Object> row : rows) {
+            if ("diamond".equals(row.get("id"))) {
+                row.put("max_daily_sell", 0);
+            }
+        }
+        onDisk.set("market.catalog", rows);
+        onDisk.set("config_revision", 3);
+
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals(0, intAt(rowFor(onDisk, "diamond"), "max_daily_sell"), "their 0 stands");
+        assertEquals(20, intAt(rowFor(onDisk, "diamond"), "max_daily_buy"), "the gap is still filled");
+    }
+
+    /** The shipped catalog with every daily cap stripped — a pass-3-era file. */
+    private static List<Map<String, Object>> withoutCaps(YamlConfiguration shipped) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Map<?, ?> row : shipped.getMapList("market.catalog")) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            row.forEach((k, v) -> m.put(String.valueOf(k), v));
+            m.remove("max_daily_sell");
+            m.remove("max_daily_buy");
+            rows.add(m);
+        }
+        return rows;
+    }
+
+    private static Map<?, ?> rowFor(YamlConfiguration c, String id) {
+        for (Map<?, ?> row : c.getMapList("market.catalog")) {
+            if (id.equals(row.get("id"))) {
+                return row;
+            }
+        }
+        throw new AssertionError("no market.catalog row with id " + id);
     }
 
     /** Backfilled keys keep the bundled file's comments, and new sections keep their header. */

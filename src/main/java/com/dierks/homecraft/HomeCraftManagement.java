@@ -50,11 +50,31 @@ import java.sql.SQLException;
 public final class HomeCraftManagement extends JavaPlugin {
 
     /**
-     * The config schema revision this build ships. {@code migrateConfig} applies the
-     * one-time economy rebalance to any on-disk file below it and stamps this value in.
-     * Kept in sync with {@code config_revision} in the bundled config.yml.
+     * The config schema revision this build ships. {@code migrateConfig} runs every
+     * revision step an on-disk file is below, in order, and stamps this value in.
+     * Kept in sync with {@code config_revision} in the bundled config.yml — the two are
+     * pinned together by a test, because a fresh install whose file says less than this
+     * would migrate itself on its very first boot.
+     *
+     * <p>3 = the pass-3 economy rebalance. 4 = the two per-item daily caps pass 3 missed.
      */
-    static final int CONFIG_REVISION = 3;
+    static final int CONFIG_REVISION = 4;
+
+    /**
+     * Per-item daily caps (~2% sell / ~4% buy of {@code full_stock}), mirroring the
+     * {@code market.catalog} the plugin ships. Single source of truth on purpose: pass 3
+     * kept its own list inline and it drifted — it carried four of these six, so every
+     * server that upgraded through it was left with cobblestone and diamond uncapped,
+     * contradicting the shipped defaults. Revision 4 repairs that. Add a row here and to
+     * the bundled config.yml together.
+     */
+    private static final java.util.Map<String, int[]> DAILY_CAPS = java.util.Map.of(
+            "cobblestone", new int[] {400, 800},
+            "oak_log", new int[] {160, 320},
+            "wheat", new int[] {120, 240},
+            "iron_ingot", new int[] {40, 80},
+            "gold_ingot", new int[] {20, 40},
+            "diamond", new int[] {10, 20});
 
     private PluginConfig config;
     private Database database;
@@ -509,12 +529,26 @@ public final class HomeCraftManagement extends JavaPlugin {
             log.add("Config migration: skins.display_case is now a per-style map (old value kept as plain).");
         }
 
-        // Economy rebalance (pass 3): applied once to a live file, tracked by config_revision.
-        if (revision(c) < CONFIG_REVISION) {
+        // Revision steps, applied once to a live file and tracked by config_revision. Each is
+        // gated on the revision the file arrived with, so a server already past one is not
+        // dragged back through it — that matters because the pass-3 block below rewrites
+        // whole sections and would undo anything the admin has tuned since.
+        int from = revision(c);
+        if (from < 3) {
             applyEconomyRebalance(c);
-            c.set("config_revision", CONFIG_REVISION);
             log.add("Config migration: economy rebalance applied (daily caps, $5k limits, 8% commission, "
                     + "token-only crates, pity 25, packs, printer fees).");
+        }
+        if (from < 4) {
+            java.util.List<String> filled = fillMissingDailyCaps(c);
+            if (!filled.isEmpty()) {
+                log.add("Config migration: per-item daily caps filled in for " + String.join(", ", filled)
+                        + " — pass 3 capped only four of the six catalog rows.");
+            }
+        }
+        if (from < CONFIG_REVISION) {
+            c.set("config_revision", CONFIG_REVISION);
+            log.add("Config migration: config_revision " + from + " → " + CONFIG_REVISION + ".");
         }
 
         if (has(c, "skins.pc") && has(c, "crafting.pc.head_texture")) {
@@ -536,12 +570,7 @@ public final class HomeCraftManagement extends JavaPlugin {
      * admin's file is simply left to {@link #backfillConfig()}, which runs next.
      */
     private static void applyEconomyRebalance(org.bukkit.configuration.file.FileConfiguration c) {
-        // Per-item daily caps (~2% sell / ~4% buy of full_stock).
-        java.util.Map<String, int[]> caps = new java.util.LinkedHashMap<>();
-        caps.put("oak_log", new int[] {160, 320});
-        caps.put("wheat", new int[] {120, 240});
-        caps.put("iron_ingot", new int[] {40, 80});
-        caps.put("gold_ingot", new int[] {20, 40});
+        // Per-item daily caps (~2% sell / ~4% buy of full_stock), from DAILY_CAPS.
         java.util.List<java.util.Map<?, ?>> catalog = mapList(c, "market.catalog");
         java.util.List<java.util.Map<String, Object>> rewritten = new java.util.ArrayList<>();
         for (java.util.Map<?, ?> row : catalog) {
@@ -549,7 +578,7 @@ public final class HomeCraftManagement extends JavaPlugin {
             for (java.util.Map.Entry<?, ?> e : row.entrySet()) {
                 m.put(String.valueOf(e.getKey()), e.getValue());
             }
-            int[] cap = caps.get(String.valueOf(m.get("id")));
+            int[] cap = DAILY_CAPS.get(String.valueOf(m.get("id")));
             if (cap != null) {
                 m.put("max_daily_sell", cap[0]);
                 m.put("max_daily_buy", cap[1]);
@@ -600,6 +629,52 @@ public final class HomeCraftManagement extends JavaPlugin {
         // Printer: public printers charge money, private ones consume filament.
         c.set("printer.fee", 0);
         c.set("printer.public_fee", 150);
+    }
+
+    /**
+     * Revision 4: give every catalog row the daily caps {@link #DAILY_CAPS} says it should
+     * have, but only where the row does not already carry one. Pass 3's inline caps list
+     * held four of the six shipped rows, so cobblestone and diamond came out of it uncapped
+     * on every upgraded server — diamond most importantly, where the shipped comment is
+     * "rare — tight cap protects supply ... prevents hoarding".
+     *
+     * <p>Deliberately narrow: it fills gaps and changes nothing else, so bumping the
+     * revision does not re-run {@link #applyEconomyRebalance} over an admin's tuned file.
+     * A cap the admin has set themselves — including a deliberate 0 — is left alone.
+     *
+     * @return the {@code <id>.<key>} paths filled in, empty when there was nothing to do
+     */
+    private static java.util.List<String> fillMissingDailyCaps(
+            org.bukkit.configuration.file.FileConfiguration c) {
+        java.util.List<java.util.Map<?, ?>> catalog = mapList(c, "market.catalog");
+        if (catalog.isEmpty()) {
+            return java.util.List.of(); // no catalog on disk — the backfill supplies the shipped one
+        }
+        java.util.List<String> filled = new java.util.ArrayList<>();
+        java.util.List<java.util.Map<String, Object>> rewritten = new java.util.ArrayList<>();
+        for (java.util.Map<?, ?> row : catalog) {
+            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+            for (java.util.Map.Entry<?, ?> e : row.entrySet()) {
+                m.put(String.valueOf(e.getKey()), e.getValue());
+            }
+            String id = String.valueOf(m.get("id"));
+            int[] cap = DAILY_CAPS.get(id);
+            if (cap != null) {
+                if (!(m.get("max_daily_sell") instanceof Number)) {
+                    m.put("max_daily_sell", cap[0]);
+                    filled.add(id + ".max_daily_sell");
+                }
+                if (!(m.get("max_daily_buy") instanceof Number)) {
+                    m.put("max_daily_buy", cap[1]);
+                    filled.add(id + ".max_daily_buy");
+                }
+            }
+            rewritten.add(m);
+        }
+        if (!filled.isEmpty()) {
+            c.set("market.catalog", rewritten);
+        }
+        return filled;
     }
 
     private static java.util.Map<String, Object> map(Object... kv) {

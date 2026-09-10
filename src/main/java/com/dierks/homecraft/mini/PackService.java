@@ -194,8 +194,7 @@ public final class PackService {
             m.put("pool", pool);
             out.add(m);
         }
-        plugin.getConfig().set("packs", out);
-        plugin.saveConfig();
+        plugin.writeConfig("packs", out);
         plugin.config().load();
     }
 

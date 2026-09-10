@@ -896,6 +896,45 @@ public final class HomeCraftManagement extends JavaPlugin {
     }
 
     /**
+     * Write values into the admin's config.yml ON DISK, then refresh the live view.
+     *
+     * <p>Use this for anything the plugin persists at runtime, never
+     * {@code getConfig().set(...)} followed by {@code saveConfig()}. {@code saveConfig()}
+     * serialises the tree loaded at the last startup or {@code /hcm reload} and writes that
+     * snapshot over config.yml — so it silently discards every hand edit made to the file
+     * since. An admin who adds {@code market.catalog} rows while the server is up and then
+     * touches anything in Admin Studio loses the lot, with nothing in the log to say so.
+     *
+     * <p>Reading the file first means a save only ever changes the keys asked for. A
+     * {@code null} value removes its key, exactly as {@code set} does.
+     *
+     * @param values paths to write, applied in iteration order
+     * @return false when the file could not be read or written — nothing was changed
+     */
+    public boolean writeConfig(java.util.Map<String, Object> values) {
+        java.io.File file = configFile();
+        org.bukkit.configuration.file.YamlConfiguration onDisk = loadOnDisk(file);
+        if (onDisk == null) {
+            return false;
+        }
+        for (java.util.Map.Entry<String, Object> entry : values.entrySet()) {
+            onDisk.set(entry.getKey(), entry.getValue());
+        }
+        if (!saveTo(onDisk, file, "updated")) {
+            return false;
+        }
+        reloadConfig();
+        return true;
+    }
+
+    /** Single-key form of {@link #writeConfig(java.util.Map)}. */
+    public boolean writeConfig(String path, Object value) {
+        java.util.Map<String, Object> one = new java.util.LinkedHashMap<>();
+        one.put(path, value);
+        return writeConfig(one);
+    }
+
+    /**
      * {@code contains()} that can never be answered by attached defaults — the only honest
      * way to ask "is this key physically in the file?". {@code get(path, null)} skips the
      * default lookup that the single-argument {@code get(path)} performs, and with it

@@ -62,6 +62,18 @@ public final class Menus {
         return item;
     }
 
+    /**
+     * Put a number on the icon as its stack count.
+     *
+     * <p>The only text an inventory tile shows without a hover. Useful when a row of otherwise
+     * identical buttons differ by a magnitude — three red panes are three red panes until one of
+     * them says 64.
+     */
+    public static ItemStack count(ItemStack item, int amount) {
+        item.setAmount(Math.max(1, Math.min(64, amount)));
+        return item;
+    }
+
     /** Format a real-time remaining duration (ms) as e.g. "1d 3h", "2h 5m", "45s". */
     public static String duration(long millis) {
         if (millis <= 0) {

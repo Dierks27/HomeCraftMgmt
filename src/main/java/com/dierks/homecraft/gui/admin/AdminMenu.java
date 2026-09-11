@@ -86,7 +86,7 @@ public final class AdminMenu extends Menu {
         set(22, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
 
         // Trading blocks are obtained via /hcm give <vending|display|auction>.
-        set(26, Menus.icon(Material.GRAY_DYE, "&8Armor-stand Minis",
+        set(26, Menus.icon(Material.ARMOR_STAND, "&8Armor-stand Minis",
                 "&8The second Mini form (posed stands)",
                 "&8lands in the next micro-pass."), null);
     }

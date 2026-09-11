@@ -170,7 +170,9 @@ public final class MarketEditMenu extends Menu {
         } else {
             List<String> lore = new ArrayList<>(problems);
             lore.add("&8Fix these to save.");
-            set(49, Menus.icon(Material.GRAY_DYE, "&8Save (not ready)", lore.toArray(new String[0])), null);
+            // RED_DYE, not GRAY_DYE: slot 49 sits on a background of grey pane filler, and the
+            // reasons it cannot save are hover-only, so the button itself has to say "blocked".
+            set(49, Menus.icon(Material.RED_DYE, "&8Save (not ready)", lore.toArray(new String[0])), null);
         }
         set(53, Menus.icon(Material.BARRIER, "&cBack"), e -> back());
     }

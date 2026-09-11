@@ -52,15 +52,18 @@ public final class QuantityMenu extends Menu {
             set(i, Menus.FILLER, null);
         }
 
-        set(10, Menus.icon(Material.RED_STAINED_GLASS_PANE, "&c-64"), e -> changeQty(-64));
-        set(11, Menus.icon(Material.RED_STAINED_GLASS_PANE, "&c-16"), e -> changeQty(-16));
-        set(12, Menus.icon(Material.RED_STAINED_GLASS_PANE, "&c-1"), e -> changeQty(-1));
+        // The step size rides on the button as its stack count. Three identical red panes are
+        // three identical red panes until one of them says 64 — and this menu decides how much
+        // of something a player is about to buy.
+        set(10, Menus.count(Menus.icon(Material.RED_STAINED_GLASS_PANE, "&c-64"), 64), e -> changeQty(-64));
+        set(11, Menus.count(Menus.icon(Material.RED_STAINED_GLASS_PANE, "&c-16"), 16), e -> changeQty(-16));
+        set(12, Menus.count(Menus.icon(Material.RED_STAINED_GLASS_PANE, "&c-1"), 1), e -> changeQty(-1));
 
         set(13, previewIcon(), null);
 
-        set(14, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a+1"), e -> changeQty(1));
-        set(15, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a+16"), e -> changeQty(16));
-        set(16, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a+64"), e -> changeQty(64));
+        set(14, Menus.count(Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a+1"), 1), e -> changeQty(1));
+        set(15, Menus.count(Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a+16"), 16), e -> changeQty(16));
+        set(16, Menus.count(Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a+64"), 64), e -> changeQty(64));
 
         set(21, Menus.icon(Material.EMERALD_BLOCK, "&aConfirm", "&7Quantity: &f" + qty), e -> onConfirm.accept(qty));
         set(23, Menus.icon(Material.BARRIER, "&cBack"), e -> {

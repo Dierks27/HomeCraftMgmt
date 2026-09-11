@@ -123,7 +123,11 @@ public final class VendingMenu extends Menu {
         List<String> lore = List.of(
                 "&7Price: &6" + plugin.economy().format(l.price()),
                 "&7Your balance: &f" + plugin.economy().format(plugin.economy().balance(player)));
-        new ConfirmMenu(plugin, "&dBuy this Mini?", mini == null ? Menus.FILLER : mini, lore,
+        // Not Menus.FILLER: ConfirmMenu pads itself with that pane, so an undecodable Mini turned
+        // the thing being bought into invisible padding — a price confirmed against nothing.
+        new ConfirmMenu(plugin, "&dBuy this Mini?",
+                mini == null ? Menus.icon(Material.BARRIER, "&cUnreadable Mini",
+                        "&7This listing's item could not be read.") : mini, lore,
                 () -> {
                     report(plugin.vending().buyVending(player, l.id()));
                     reopen();

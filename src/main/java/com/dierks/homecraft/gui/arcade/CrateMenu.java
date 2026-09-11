@@ -73,15 +73,18 @@ public final class CrateMenu extends Menu {
         int tokens = plugin.arcade().balance(player.getUniqueId());
         set(45, Menus.icon(Material.SUNFLOWER, "&eYour Tokens: &6" + tokens), null);
 
-        // Free (token) open — greyed with a "need N more" note when unaffordable, but
-        // still clickable (the click surfaces the exact shortfall message).
+        // Free (token) open — no glint and a "need N more" note when unaffordable, but still
+        // clickable (the click surfaces the exact shortfall message).
         boolean afford = tokens >= crate.costTokens();
         int need = crate.costTokens() - tokens;
-        set(48, Menus.icon(afford ? Material.CHEST : Material.GRAY_STAINED_GLASS_PANE,
+        // Always a chest, glinting only when you can afford it. It used to degrade to the filler
+        // pane — inside the row this menu fills with that same pane — so the one control on the
+        // screen vanished for exactly the player who needed to read why.
+        set(48, Menus.glint(Menus.icon(Material.CHEST,
                 "&aOpen — &6" + crate.costTokens() + " token" + (crate.costTokens() == 1 ? "" : "s"),
                 "&7Standard odds shown above.", "&8—", afford
                         ? "&eClick to open"
-                        : "&c✖ Need " + need + " more token" + (need == 1 ? "" : "s")),
+                        : "&c✖ Need " + need + " more token" + (need == 1 ? "" : "s")), afford),
                 e -> pull(null));
 
         // Paid-odds tiers (buy a guaranteed rarity floor with Vault money).
@@ -121,8 +124,10 @@ public final class CrateMenu extends Menu {
                         "&7A sealed Card Pack", odds);
             }
             case FILAMENT -> {
+                // A random-colour filament gets a neutral icon, not a white dye — on a published
+                // odds list, "Random Filament" must not look like the white one.
                 return Menus.icon(r.color() != null
-                                ? plugin.miniService().filamentItems().baseMaterial(r.color()) : Material.WHITE_DYE,
+                                ? plugin.miniService().filamentItems().baseMaterial(r.color()) : Material.NETHER_STAR,
                         "&f" + r.amount() + "x " + (r.color() != null ? niceName(r.color()) + " " : "Random ") + "Filament",
                         "&7Printer filament", odds);
             }

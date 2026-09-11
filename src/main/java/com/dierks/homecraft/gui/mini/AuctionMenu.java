@@ -119,8 +119,10 @@ public final class AuctionMenu extends Menu {
             set(31, Menus.icon(Material.DIAMOND, "&bBuy It Now",
                     "&7" + plugin.economy().format(a.buyNow())), e -> {
                 ItemStack mini = Items.fromBase64(a.itemB64());
+                // Same reason as VendingMenu: the filler pane is padding, not a product.
                 new ConfirmMenu(plugin, "&bBuy now for " + plugin.economy().format(a.buyNow()) + "?",
-                        mini == null ? Menus.FILLER : mini,
+                        mini == null ? Menus.icon(Material.BARRIER, "&cUnreadable Mini",
+                                "&7This auction's item could not be read.") : mini,
                         List.of("&7Your balance: &f" + plugin.economy().format(plugin.economy().balance(player))),
                         () -> {
                             AuctionService.Result r = plugin.auctions().buyNow(player, a.id());

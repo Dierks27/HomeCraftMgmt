@@ -209,7 +209,10 @@ public final class MuseumMenu extends Menu {
             state.page = 0;
             refresh();
         });
-        set(48, Menus.icon(state.ownedOnly ? Material.LIME_DYE : Material.GRAY_DYE,
+        // RED_DYE, not GRAY_DYE, for the off state: slot 48 sits in a row filled with the grey
+        // pane filler, and a grey dye on it is the dimmest thing on screen — for the default
+        // state of a filter most players will never know is there.
+        set(48, Menus.icon(state.ownedOnly ? Material.LIME_DYE : Material.RED_DYE,
                 (state.ownedOnly ? "&aOwned only: ON" : "&7Owned only: OFF"),
                 "&7Show only Minis you hold a copy of."), e -> {
             state.ownedOnly = !state.ownedOnly;
@@ -236,11 +239,19 @@ public final class MuseumMenu extends Menu {
         }
     }
 
-    /** A group header: the rarity's pane, the group name, and the player's progress. */
+    /**
+     * A group header: the rarity's pane, the group name, and the player's progress.
+     *
+     * <p>The rarity is named in the lore as well as worn as a colour. The pane alone is the kind
+     * of single-channel signal that fails quietly — it fails for anyone who cannot separate those
+     * hues, and it failed outright while Common shipped as a light-grey pane the same colour as
+     * the slot behind it.
+     */
     private ItemStack headerIcon(Row row) {
         Material pane = plugin.miniService().style(row.headerRarity()).pane();
         boolean complete = row.total() > 0 && row.owned() >= row.total();
         return Menus.icon(pane, "&f&l" + row.header(),
+                "&8" + BrowseState.pretty(row.headerRarity().name()),
                 (complete ? "&a" : "&7") + row.owned() + " of " + row.total() + " collected",
                 complete ? "&a✓ Complete" : "&8Keep collecting");
     }

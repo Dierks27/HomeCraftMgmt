@@ -22,6 +22,9 @@ import java.util.Map;
  * {@link Categorizer} the Marketplace uses for Pallet listings, so one material lands in
  * the same department wherever a player meets it.
  *
+ * <p>Each tab wears its department's own icon ({@link DepartmentIcons}), which the Crate
+ * Marketplace's tab row shares, and the selected one shimmers.
+ *
  * <p>{@value #MAX_TABS} departments is the ceiling, because the row is nine slots and "All"
  * takes the first. The shipped {@code marketplace.departments} is sized to it exactly —
  * Weapons and Armor are one Combat tab for this reason — and {@code MarketService} warns at
@@ -170,12 +173,19 @@ final class Departments {
         }
     }
 
-    /** One tab: a lime pane when selected, grey otherwise. */
+    /**
+     * One tab: the department's own icon, shimmering when it is the one being shown.
+     *
+     * <p>The icon must carry the meaning on its own. This row used to be a lime pane for the
+     * selected department and a light-grey pane for the rest, and light grey is the colour of the
+     * slot behind it — seven of the eight tabs were invisible, and the names that would have
+     * identified them only appear on hover.
+     */
     private static org.bukkit.inventory.ItemStack tab(String name, int count, boolean selected) {
-        return Menus.icon(selected ? Material.LIME_STAINED_GLASS_PANE : Material.LIGHT_GRAY_STAINED_GLASS_PANE,
-                (selected ? "&a&l" : "&7") + name,
-                "&8" + count + " item(s)",
-                selected ? "&aShowing this department" : "&eClick to view");
+        return Menus.glint(Menus.icon(DepartmentIcons.of(name),
+                (selected ? "&a&l" : "&f") + name,
+                "&7" + count + " item(s)",
+                selected ? "&aShowing this department" : "&eClick to view"), selected);
     }
 
     /** The sort toggle for the bottom row. */

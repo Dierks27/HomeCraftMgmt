@@ -49,7 +49,7 @@ shops:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 5
+config_revision: 6
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -384,7 +384,9 @@ minis:
     EPIC:      { pane: PURPLE,     name_color: light_purple, glint: true,  default_cap: 20,  default_price: 15000 }
     RARE:      { pane: BLUE,       name_color: aqua,         glint: false, default_cap: 100, default_price: 4000 }
     UNCOMMON:  { pane: GREEN,      name_color: green,        glint: false, default_cap: 500, default_price: 800 }
-    COMMON:    { pane: LIGHT_GRAY, name_color: gray,         glint: false, default_cap: -1,  default_price: 150 }
+    # WHITE, not LIGHT_GRAY: a light-grey pane is the colour of the slot behind it and reads
+    # as an empty tile. Same reason the Store's department tabs are items rather than panes.
+    COMMON:    { pane: WHITE,      name_color: gray,         glint: false, default_cap: -1,  default_price: 150 }
 
   # Your "Type" list (the subject) — open/editable, used for browsing/filtering.
   categories: [ ANIMAL, FOOD, LETTER, SYMBOL, CHARACTER, VEHICLE, HOLIDAY, MISC ]

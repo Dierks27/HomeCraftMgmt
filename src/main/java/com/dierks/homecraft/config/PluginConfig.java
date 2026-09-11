@@ -383,8 +383,11 @@ public final class PluginConfig {
                 new RarityStyle(Material.BLUE_STAINED_GLASS_PANE, NamedTextColor.AQUA, false, 100, 4000));
         DEFAULT_RARITY_STYLES.put(Rarity.UNCOMMON,
                 new RarityStyle(Material.GREEN_STAINED_GLASS_PANE, NamedTextColor.GREEN, false, 500, 800));
+        // WHITE, not LIGHT_GRAY: a light-grey pane is the colour of the inventory slot behind it,
+        // so a Common tile — every Common Museum header, and the Rarity button on a fresh Mini —
+        // rendered as an empty slot.
         DEFAULT_RARITY_STYLES.put(Rarity.COMMON,
-                new RarityStyle(Material.LIGHT_GRAY_STAINED_GLASS_PANE, NamedTextColor.GRAY, false, -1, 150));
+                new RarityStyle(Material.WHITE_STAINED_GLASS_PANE, NamedTextColor.GRAY, false, -1, 150));
     }
 
     private final HomeCraftManagement plugin;

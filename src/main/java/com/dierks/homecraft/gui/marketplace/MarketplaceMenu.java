@@ -1,6 +1,7 @@
 package com.dierks.homecraft.gui.marketplace;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.gui.DepartmentIcons;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.storage.PalletDao;
@@ -86,7 +87,7 @@ public final class MarketplaceMenu extends Menu {
     }
 
     private void buildTabs() {
-        set(0, tab(Material.NETHER_STAR, "All", department == null), e -> {
+        set(0, tab("All", department == null), e -> {
             department = null;
             page = 0;
             refresh();
@@ -94,7 +95,7 @@ public final class MarketplaceMenu extends Menu {
         List<String> depts = plugin.config().marketplace().departments();
         for (int i = 0; i < depts.size() && i < 8; i++) {
             String d = depts.get(i);
-            set(1 + i, tab(Material.BOOKSHELF, d, d.equals(department)), e -> {
+            set(1 + i, tab(d, d.equals(department)), e -> {
                 department = d;
                 page = 0;
                 refresh();
@@ -102,9 +103,15 @@ public final class MarketplaceMenu extends Menu {
         }
     }
 
-    private ItemStack tab(Material mat, String name, boolean active) {
-        return Menus.icon(active ? Material.ENCHANTED_BOOK : mat,
-                (active ? "&a» " : "&e") + name, active ? "&8showing" : "&7Click to view");
+    /**
+     * One department tab, wearing the same icon the Store and instant Market give that department.
+     * Every tab used to be the same bookshelf, so telling them apart meant hovering each one in
+     * turn; and the active tab swapped material, which moved the row's shape under the player.
+     */
+    private ItemStack tab(String name, boolean active) {
+        return Menus.glint(Menus.icon(DepartmentIcons.of(name),
+                (active ? "&a&l» " : "&f") + name,
+                active ? "&ashowing" : "&7Click to view"), active);
     }
 
     private ItemStack listingIcon(PalletDao.Listing l) {

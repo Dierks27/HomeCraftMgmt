@@ -45,6 +45,23 @@ public final class Menus {
         return item;
     }
 
+    /**
+     * Force the enchantment shimmer on or off.
+     *
+     * <p>Always pass an explicit value rather than leaving the override unset. Some materials
+     * glint on their own — {@link Material#NETHER_STAR} and {@link Material#ENCHANTED_BOOK} among
+     * them — so an unset override would leave such a tile shimmering permanently, and a glint used
+     * to mean "selected" would be telling a lie on the one tab that is always on screen.
+     */
+    public static ItemStack glint(ItemStack item, boolean on) {
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setEnchantmentGlintOverride(on);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
     /** Format a real-time remaining duration (ms) as e.g. "1d 3h", "2h 5m", "45s". */
     public static String duration(long millis) {
         if (millis <= 0) {

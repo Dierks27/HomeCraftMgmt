@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.arcade.ArcadeService;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -25,6 +26,21 @@ public final class RevealMenu extends Menu {
         this.outcome = outcome;
         this.onBack = onBack;
         init(27, Text.of("&5You won!"));
+    }
+
+    /**
+     * The fanfare rides on open, not on build.
+     *
+     * <p>build() also runs on every refresh, and a menu that plays a sound when it merely repaints
+     * would chime at a player for as long as they left it open. This screen is where a crate pull,
+     * a pity redemption and a scratch ticket all land, and it was silent — while PackRevealMenu two
+     * files over plays a note per card and a fanfare at the end. The arcade's actual payoff was its
+     * quietest moment.
+     */
+    @Override
+    public void open(Player viewer) {
+        super.open(viewer);
+        Sounds.won(player);
     }
 
     @Override

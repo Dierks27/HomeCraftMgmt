@@ -64,7 +64,7 @@ public final class StoreMenu extends Menu {
             long stock = Departments.stock(market, item.id());
             boolean out = stock <= 0;
             set(slot, Menus.icon(item.material(), item.label(),
-                    "&7Buy: &6" + money(market.buyPrice(item.id())) + "&7/ea",
+                    "&aBuy: &6" + money(market.buyPrice(item.id())) + "&7/ea",
                     "&7Stock: " + (out ? "&cOUT OF STOCK" : "&f" + stock),
                     "&8—",
                     out ? "&cUnavailable" : "&eClick to order"), e -> {

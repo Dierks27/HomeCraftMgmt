@@ -5,6 +5,7 @@ import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.market.MarketService;
 import com.dierks.homecraft.order.OrderService;
+import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -68,10 +69,12 @@ public final class CheckoutMenu extends Menu {
     private void placeOrder(PluginConfig.ShippingTier tier) {
         OrderService.PlaceResult result = plugin.orderService().placeOrder(player, item.id(), qty, tier);
         if (!result.ok()) {
+            Sounds.refused(player);
             player.sendMessage(Text.of("&c" + result.error()));
             refresh();
             return;
         }
+        Sounds.paid(player);
         player.sendMessage(Text.of("&aOrder placed: &f" + result.order().qty() + " " + item.label()
                 + " &7(" + tier.label() + ", " + money(result.itemCost() + result.shippingCost()) + ")."
                 + " &aArrives in " + Menus.duration(result.order().deliverAt() - System.currentTimeMillis()) + "."));

@@ -7,6 +7,7 @@ import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.marketplace.PalletService;
 import com.dierks.homecraft.storage.PalletDao;
 import com.dierks.homecraft.util.Items;
+import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -74,12 +75,14 @@ public final class MarketplaceCheckoutMenu extends Menu {
         // charge a higher one the seller set while this menu was open.
         PalletService.Result r = plugin.pallets().buy(player, listing.id(), listing.price(), tier);
         if (r.ok()) {
+            Sounds.paid(player);
             player.sendMessage(Text.of("&aBought for &f"
                     + plugin.economy().format(listing.price()
                             + plugin.orderService().shippingCost(listing.price(), tier))
                     + "&a! Ships to your Mailbox — arrives in ~"
                     + Menus.duration(r.deliverAt() - System.currentTimeMillis()) + "."));
         } else {
+            Sounds.refused(player);
             player.sendMessage(Text.of("&c" + r.error()));
         }
         if (onBack != null) {

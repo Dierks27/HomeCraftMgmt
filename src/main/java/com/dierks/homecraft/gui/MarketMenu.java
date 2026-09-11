@@ -3,6 +3,7 @@ package com.dierks.homecraft.gui;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.market.MarketService;
+import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -55,12 +56,12 @@ public final class MarketMenu extends Menu {
             MarketItem item = items.get(idx);
             long stock = Departments.stock(market, item.id());
             set(slot, Menus.icon(item.material(), item.label(),
-                    "&7Buy: &6" + money(market.buyPrice(item.id())),
-                    "&7Sell: &6" + money(market.sellPrice(item.id())),
+                    "&aBuy: &6" + money(market.buyPrice(item.id())),
+                    "&bSell: &6" + money(market.sellPrice(item.id())),
                     "&7Stock: " + (stock <= 0 ? "&cOUT OF STOCK" : "&f" + stock),
                     "&8—",
-                    "&eLeft-click &7to buy",
-                    "&eRight-click &7to sell"), e -> {
+                    "&eLeft-click &ato buy",
+                    "&eRight-click &bto sell"), e -> {
                 if (e.getClick().isRightClick()) {
                     openSell(item);
                 } else {
@@ -109,12 +110,17 @@ public final class MarketMenu extends Menu {
                 qty -> {
                     MarketService.Plan plan = market.quoteBuy(item.id(), qty);
                     return List.of(
-                            "&7Total cost: &6" + money(plan.total()),
+                            "&aTotal cost: &6" + money(plan.total()),
                             "&7Stock after: &f" + plan.endStock(),
                             "&7New price: &6" + money(plan.endPrice()));
                 },
                 qty -> {
                     MarketService.TradeResult r = market.buy(player, item.id(), qty);
+                    if (r.ok()) {
+                        Sounds.paid(player);
+                    } else {
+                        Sounds.refused(player);
+                    }
                     player.sendMessage(r.ok()
                             ? Text.of("&aBought &f" + r.qty() + " &afor &6" + money(r.amount()))
                             : Text.of("&c" + r.error()));
@@ -135,12 +141,17 @@ public final class MarketMenu extends Menu {
                 qty -> {
                     MarketService.Plan plan = market.quoteSell(item.id(), qty);
                     return List.of(
-                            "&7You receive: &6" + money(plan.total()),
+                            "&bYou receive: &6" + money(plan.total()),
                             "&7Stock after: &f" + plan.endStock(),
                             "&7New price: &6" + money(plan.endPrice()));
                 },
                 qty -> {
                     MarketService.TradeResult r = market.sell(player, item.id(), qty);
+                    if (r.ok()) {
+                        Sounds.received(player);
+                    } else {
+                        Sounds.refused(player);
+                    }
                     player.sendMessage(r.ok()
                             ? Text.of("&aSold &f" + r.qty() + " &afor &a+" + money(r.amount()))
                             : Text.of("&c" + r.error()));

@@ -61,7 +61,7 @@ public final class BinderMenu extends Menu {
                     : "&7No loose Cards in your inventory to deposit."));
             refresh();
         });
-        set(49, Menus.icon(album ? Material.CHEST : Material.KNOWLEDGE_BOOK,
+        set(47, Menus.icon(album ? Material.CHEST : Material.KNOWLEDGE_BOOK,
                 album ? "&eView: Album" : "&eView: Binder",
                 "&7Click to switch to " + (album ? "your owned cards." : "the full set album.")), e -> {
             album = !album;
@@ -73,7 +73,7 @@ public final class BinderMenu extends Menu {
         set(50, Menus.icon(Material.NETHER_STAR, "&6Collection",
                 "&7Unique cards: &f" + uniqueOwned + " / " + total,
                 "&7Total cards held: &f" + owned.values().stream().mapToInt(Integer::intValue).sum()), null);
-        set(51, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
+        set(49, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
     }
 
     private void buildOwned(Map<String, Integer> owned) {

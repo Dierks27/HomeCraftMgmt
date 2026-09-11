@@ -71,7 +71,7 @@ public final class CrateMenu extends Menu {
         }
 
         int tokens = plugin.arcade().balance(player.getUniqueId());
-        set(45, Menus.icon(Material.SUNFLOWER, "&eYour Tokens: &6" + tokens), null);
+        set(46, Menus.icon(Material.SUNFLOWER, "&eYour Tokens: &6" + tokens), null);
 
         // Free (token) open — no glint and a "need N more" note when unaffordable, but still
         // clickable (the click surfaces the exact shortfall message).
@@ -101,7 +101,7 @@ public final class CrateMenu extends Menu {
                     e -> pull(tier));
         }
 
-        set(53, back(), e -> onBack.run());
+        set(49, back(), e -> onBack.run());
     }
 
     private void pull(PaidTier tier) {
@@ -187,7 +187,7 @@ public final class CrateMenu extends Menu {
     }
 
     private ItemStack back() {
-        return Menus.icon(Material.ARROW, "&cBack to Arcade");
+        return Menus.icon(Material.BARRIER, "&cBack to Arcade");
     }
 
     private String niceName(org.bukkit.DyeColor color) {

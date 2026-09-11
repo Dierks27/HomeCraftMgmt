@@ -141,7 +141,7 @@ public final class AuctionMenu extends Menu {
             });
         }
 
-        set(49, Menus.icon(Material.ARROW, "&cBack to auctions"), e -> {
+        set(49, Menus.icon(Material.BARRIER, "&cBack to auctions"), e -> {
             focusId = null;
             refresh();
         });

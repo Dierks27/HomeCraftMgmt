@@ -61,7 +61,7 @@ public final class MarketplaceCheckoutMenu extends Menu {
         }
 
         set(18, Menus.balance(plugin, player), null);
-        set(22, Menus.icon(Material.ARROW, "&cBack"), e -> {
+        set(22, Menus.icon(Material.BARRIER, "&cBack"), e -> {
             if (onBack != null) {
                 onBack.run();
             } else {

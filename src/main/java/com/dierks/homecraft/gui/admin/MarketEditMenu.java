@@ -164,17 +164,19 @@ public final class MarketEditMenu extends Menu {
         // ---- save / back -------------------------------------------------------
         List<String> problems = draft.problems(otherIds());
         if (problems.isEmpty()) {
-            set(49, Menus.icon(Material.LIME_DYE, "&a&lSave",
+            set(47, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&l✓ Save",
                     "&7Writes it to config.yml and",
                     "&7reloads the market."), e -> save());
         } else {
             List<String> lore = new ArrayList<>(problems);
             lore.add("&8Fix these to save.");
-            // RED_DYE, not GRAY_DYE: slot 49 sits on a background of grey pane filler, and the
+            // A red pane, not a grey dye: this sits on a background of grey pane filler, and the
             // reasons it cannot save are hover-only, so the button itself has to say "blocked".
-            set(49, Menus.icon(Material.RED_DYE, "&8Save (not ready)", lore.toArray(new String[0])), null);
+            // Same shape as the ready state so only the colour moves.
+            set(47, Menus.icon(Material.RED_STAINED_GLASS_PANE, "&8Save (not ready)",
+                    lore.toArray(new String[0])), null);
         }
-        set(53, Menus.icon(Material.BARRIER, "&cBack"), e -> back());
+        set(49, Menus.icon(Material.BARRIER, "&cBack"), e -> back());
     }
 
     private void save() {

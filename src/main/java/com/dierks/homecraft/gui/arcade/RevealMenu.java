@@ -50,7 +50,7 @@ public final class RevealMenu extends Menu {
         }
         ItemStack icon = outcome.icon() != null ? outcome.icon() : Menus.icon(Material.PAPER, "&7Prize");
         set(13, icon, null);
-        set(22, Menus.icon(Material.ARROW, "&aBack to Arcade"), e -> {
+        set(22, Menus.icon(Material.BARRIER, "&aBack to Arcade"), e -> {
             if (onBack != null) {
                 onBack.run();
             } else {

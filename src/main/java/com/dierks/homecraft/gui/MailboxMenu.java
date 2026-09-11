@@ -71,7 +71,7 @@ public final class MailboxMenu extends Menu {
                 refresh();
             });
         }
-        set(49, Menus.icon(Material.ARROW, "&cBack"), e -> {
+        set(49, Menus.icon(Material.BARRIER, "&cBack"), e -> {
             if (onBack != null) {
                 onBack.run();
             } else {

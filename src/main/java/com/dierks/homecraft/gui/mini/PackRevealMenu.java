@@ -56,7 +56,7 @@ public final class PackRevealMenu extends Menu {
             set(26, Menus.icon(Material.CHEST, "&7+" + (cardIds.size() - SLOTS.length) + " more",
                     "&8In your inventory."), null);
         }
-        set(22, Menus.icon(Material.ARROW, "&aCollect"), e -> {
+        set(22, Menus.glint(Menus.icon(Material.LIME_CONCRETE, "&a&lCOLLECT"), true), e -> {
             if (task != null) {
                 task.cancel();
             }

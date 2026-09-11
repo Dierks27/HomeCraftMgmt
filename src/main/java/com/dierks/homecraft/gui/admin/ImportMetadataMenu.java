@@ -118,17 +118,17 @@ public final class ImportMetadataMenu extends Menu {
             refresh();
         });
 
-        set(45, Menus.icon(Material.ARROW, "&cBack (keep selection)"), e -> {
+        set(47, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&l✓ Import (" + heads.size() + ")",
+                "&7Adds them to the catalog with",
+                "&7textures pulled automatically."), e -> doImport());
+
+        set(49, Menus.icon(Material.BARRIER, "&cBack (keep selection)"), e -> {
             if (onBack != null) {
                 onBack.run();
             } else {
                 e.getWhoClicked().closeInventory();
             }
         });
-
-        set(49, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&l✓ Import (" + heads.size() + ")",
-                "&7Adds them to the catalog with",
-                "&7textures pulled automatically."), e -> doImport());
     }
 
     private void doImport() {

@@ -7,6 +7,7 @@ import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.marketplace.PalletService;
 import com.dierks.homecraft.storage.PalletDao;
 import com.dierks.homecraft.util.Items;
+import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -52,15 +53,15 @@ public final class MarketplaceCheckoutMenu extends Menu {
             double total = price + shipping;
             set(TIER_SLOTS[i], Menus.icon(Material.MINECART, "&e" + tier.label(),
                     "&7Arrives in ~&f" + Menus.duration(tier.deliveryMillis()),
-                    "&7Item: &f" + plugin.economy().format(price),
-                    "&7Shipping: &f" + plugin.economy().format(shipping),
+                    "&7Item: &6" + plugin.economy().format(price),
+                    "&7Shipping: &6" + plugin.economy().format(shipping),
                     "&7Total: &6" + plugin.economy().format(total),
                     "&8—",
                     "&aClick to buy → ships to your Mailbox"), e -> buy(tier));
         }
 
         set(18, Menus.balance(plugin, player), null);
-        set(22, Menus.icon(Material.ARROW, "&cBack"), e -> {
+        set(22, Menus.icon(Material.BARRIER, "&cBack"), e -> {
             if (onBack != null) {
                 onBack.run();
             } else {
@@ -70,11 +71,18 @@ public final class MarketplaceCheckoutMenu extends Menu {
     }
 
     private void buy(PluginConfig.ShippingTier tier) {
-        PalletService.Result r = plugin.pallets().buy(player, listing.id(), tier);
+        // Hand the price this screen quoted to the service, so it can refuse rather than silently
+        // charge a higher one the seller set while this menu was open.
+        PalletService.Result r = plugin.pallets().buy(player, listing.id(), listing.price(), tier);
         if (r.ok()) {
-            player.sendMessage(Text.of("&aBought! Ships to your Mailbox — arrives in ~"
+            Sounds.paid(player);
+            player.sendMessage(Text.of("&aBought for &f"
+                    + plugin.economy().format(listing.price()
+                            + plugin.orderService().shippingCost(listing.price(), tier))
+                    + "&a! Ships to your Mailbox — arrives in ~"
                     + Menus.duration(r.deliverAt() - System.currentTimeMillis()) + "."));
         } else {
+            Sounds.refused(player);
             player.sendMessage(Text.of("&c" + r.error()));
         }
         if (onBack != null) {

@@ -121,7 +121,7 @@ public final class PrinterMenu extends Menu {
             double fee = cfg.fee();
             boolean feeOk = fee <= 0 || (plugin.economy().isEnabled() && plugin.economy().has(player, fee));
             req.add("");
-            req.add((feeOk ? "&a✔ " : "&c✗ ") + "Fee: " + (fee <= 0 ? "&aFree" : plugin.economy().format(fee)));
+            req.add((feeOk ? "&a✔ " : "&c✗ ") + "Fee: " + (fee <= 0 ? "&aFree" : "&6" + plugin.economy().format(fee)));
             canAfford = haveAll && feeOk;
             set(14, Menus.icon(canAfford ? Material.LIME_DYE : Material.RED_DYE,
                     "&bFilament & Fee", req.toArray(new String[0])), null);
@@ -137,16 +137,21 @@ public final class PrinterMenu extends Menu {
                     "&7Roll the grade and print your Mini.", cost),
                     e -> doPrint(false));
         } else {
-            set(20, Menus.icon(Material.GRAY_CONCRETE, "&7Print",
+            // REDSTONE_BLOCK, not GRAY_CONCRETE: grey concrete is the colour of the slot, so the
+            // menu's primary action was the hardest thing on screen to find. Red also matches the
+            // can't-afford signal this file already uses above.
+            set(20, Menus.icon(Material.REDSTONE_BLOCK, "&7Print",
                     isPublic ? "&cYou can't afford the print fee." : "&cYou're missing filament or the fee."), null);
         }
 
         // Shiny finish. On a public (Mall) printer it's locked — shown as a clear
         // greyed slot ("private printers only"), never a bare red barrier.
+        // Every Shiny state is the same star; the glint is what says you can press it. The locked
+        // state used to be the filler pane on a filler background, which said nothing at all.
         if (isPublic) {
-            set(24, Menus.icon(Material.GRAY_STAINED_GLASS_PANE, "&7🔒 Shiny",
+            set(24, Menus.glint(Menus.icon(Material.NETHER_STAR, "&7✖ Shiny",
                     "&7Private printers only.",
-                    "&8Set up your own Printer to print Shiny."), null);
+                    "&8Set up your own Printer to print Shiny."), false), null);
         } else {
             boolean shinyOk = canAfford && cfg.shinyAmount() >= 0
                     && (cfg.shinyAmount() == 0 || filaments.count(player, cfg.shinyDye()) >= cfg.shinyAmount())
@@ -156,12 +161,12 @@ public final class PrinterMenu extends Menu {
                     ? cfg.shinyAmount() + " " + pretty(cfg.shinyDye().name()) + " Filament" : "no material")
                     + (cfg.shinyFee() > 0 ? " + " + plugin.economy().format(cfg.shinyFee()) : "");
             if (shinyOk) {
-                set(24, Menus.icon(Material.NETHER_STAR, "&f✦ &lPRINT SHINY",
-                        "&7A premium glint + sparkle aura.", shinyCost),
+                set(24, Menus.glint(Menus.icon(Material.NETHER_STAR, "&f✦ &lPRINT SHINY",
+                        "&7A premium glint + sparkle aura.", shinyCost), true),
                         e -> doPrint(true));
             } else {
-                set(24, Menus.icon(Material.GRAY_DYE, "&8✦ Print Shiny",
-                        "&cCan't afford the Shiny finish.", shinyCost), null);
+                set(24, Menus.glint(Menus.icon(Material.NETHER_STAR, "&8✦ Print Shiny",
+                        "&cCan't afford the Shiny finish.", shinyCost), false), null);
             }
         }
 

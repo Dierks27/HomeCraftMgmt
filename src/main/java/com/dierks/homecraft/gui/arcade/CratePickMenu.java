@@ -57,14 +57,15 @@ public final class CratePickMenu extends Menu {
             PluginConfig.Crate crate = plugin.config().arcade().crates().get(id);
             boolean afford = tokens >= crate.costTokens();
             int need = crate.costTokens() - tokens;
-            // Crates always render (never hidden). When unaffordable they're greyed with
-            // a clear "need N more tokens" note, but stay clickable so odds are viewable.
-            set(slot++, Menus.icon(afford ? Material.CHEST : Material.GRAY_STAINED_GLASS_PANE,
+            // Crates always render (never hidden) and stay clickable so the odds are viewable.
+            // Unaffordable ones simply lose the glint and say how many tokens are missing —
+            // they used to become the filler pane, one row above a row of actual filler.
+            set(slot++, Menus.glint(Menus.icon(Material.CHEST,
                     crate.display(),
                     "&7Cost: &6" + crate.costTokens() + " token" + (crate.costTokens() == 1 ? "" : "s"),
                     "&8—", afford
                             ? "&eClick to view odds & open"
-                            : "&c✖ Need " + need + " more token" + (need == 1 ? "" : "s")),
+                            : "&c✖ Need " + need + " more token" + (need == 1 ? "" : "s")), afford),
                     e -> new CrateMenu(plugin, player, id,
                             () -> new CratePickMenu(plugin, player).open(player)).open(player));
         }

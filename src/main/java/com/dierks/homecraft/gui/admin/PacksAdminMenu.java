@@ -35,7 +35,7 @@ public final class PacksAdminMenu extends Menu {
         for (int i = 45; i < 54; i++) {
             set(i, Menus.FILLER, null);
         }
-        set(45, Menus.icon(Material.BOOK, "&eCard Packs",
+        set(50, Menus.icon(Material.BOOK, "&eCard Packs",
                 "&7Buyable booster packs of Cards.",
                 "&eLeft-click&7 a pack to edit it.",
                 "&cRight-click&7 a pack to remove it."), null);
@@ -60,7 +60,7 @@ public final class PacksAdminMenu extends Menu {
                 e -> plugin.chatPrompts().prompt(player, "New pack name (e.g. Starter Pack):", input -> {
                     createPack(input);
                 }));
-        set(53, Menus.icon(Material.BARRIER, "&cBack"), e -> {
+        set(49, Menus.icon(Material.BARRIER, "&cBack"), e -> {
             if (onBack != null) {
                 onBack.run();
             } else {

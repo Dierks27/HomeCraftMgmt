@@ -77,11 +77,11 @@ public final class LootAdminMenu extends Menu {
             });
         }
 
-        set(45, Menus.icon(Material.LIME_DYE, "&a+ New loot list", "&7Type a name for the new list"),
+        set(47, Menus.icon(Material.LIME_DYE, "&a+ New loot list", "&7Type a name for the new list"),
                 e -> plugin.chatPrompts().prompt(player, "New loot list name (e.g. common_blocks):", input -> {
                     addList(input.trim());
                 }));
-        set(46, Menus.icon(Material.LIME_DYE, "&a+ New drop source", "&7Build it by clicking — no typing"),
+        set(48, Menus.icon(Material.LIME_DYE, "&a+ New drop source", "&7Build it by clicking — no typing"),
                 e -> new SourceCreateMenu(plugin, player, this::reopen).open(player));
         set(49, Menus.icon(Material.BARRIER, "&cBack"), e -> {
             if (onBack != null) {

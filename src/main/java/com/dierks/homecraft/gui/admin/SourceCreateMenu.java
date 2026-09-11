@@ -76,14 +76,16 @@ public final class SourceCreateMenu extends Menu {
                 e -> cycleList());
 
         // Chance steppers.
-        set(19, Menus.icon(Material.RED_STAINED_GLASS_PANE, "&c÷10"), e -> setChance(chance / 10));
-        set(20, Menus.icon(Material.RED_STAINED_GLASS_PANE, "&c-0.01"), e -> setChance(chance - 0.01));
-        set(21, Menus.icon(Material.RED_STAINED_GLASS_PANE, "&c-0.0001"), e -> setChance(chance - 0.0001));
+        // Stack count ranks the step magnitude, so the outermost button is visibly the biggest
+        // jump — six identical panes otherwise, on a control that sets a drop chance.
+        set(19, Menus.count(Menus.icon(Material.RED_STAINED_GLASS_PANE, "&c÷10"), 3), e -> setChance(chance / 10));
+        set(20, Menus.count(Menus.icon(Material.RED_STAINED_GLASS_PANE, "&c-0.01"), 2), e -> setChance(chance - 0.01));
+        set(21, Menus.count(Menus.icon(Material.RED_STAINED_GLASS_PANE, "&c-0.0001"), 1), e -> setChance(chance - 0.0001));
         set(22, Menus.icon(Material.PAPER, "&eChance: &f" + plain(chance) + "%",
                 "&8= " + plain(chance / 100.0) + " probability"), null);
-        set(23, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a+0.0001"), e -> setChance(chance + 0.0001));
-        set(24, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a+0.01"), e -> setChance(chance + 0.01));
-        set(25, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a×10"), e -> setChance(chance * 10));
+        set(23, Menus.count(Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a+0.0001"), 1), e -> setChance(chance + 0.0001));
+        set(24, Menus.count(Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a+0.01"), 2), e -> setChance(chance + 0.01));
+        set(25, Menus.count(Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a×10"), 3), e -> setChance(chance * 10));
 
         set(39, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&l✓ Create source",
                 "&7trigger + target → list @ chance"), e -> create());

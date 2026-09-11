@@ -13,7 +13,6 @@ import org.bukkit.inventory.ItemStack;
 
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Amazon ordering + real-time shipping. Placing an order charges the item cost
@@ -89,12 +88,12 @@ public final class OrderService {
             return PlaceResult.fail(item.label() + " is out of stock.");
         }
         double itemTotal = quote.total();
-        double shipping = shippingCost(itemTotal, tier);
-        double total = itemTotal + shipping;
+        double quotedShipping = shippingCost(itemTotal, tier);
+        double total = itemTotal + quotedShipping;
 
         if (!economy.has(player, total)) {
             return PlaceResult.fail("You can't afford " + economy.format(total)
-                    + " (" + economy.format(itemTotal) + " + " + economy.format(shipping) + " shipping).");
+                    + " (" + economy.format(itemTotal) + " + " + economy.format(quotedShipping) + " shipping).");
         }
 
         // Charge the item cost + consume stock (goods delivered later, not now).
@@ -102,8 +101,21 @@ public final class OrderService {
         if (!purchase.ok()) {
             return PlaceResult.fail(purchase.error());
         }
-        if (shipping > 0 && !economy.withdraw(player, shipping)) {
+
+        // Freight is billed on what was actually bought, NOT on the quote. quoteBuy is
+        // deliberately limit-blind, while the purchase that follows applies the per-item and
+        // per-day buy caps and is allowed to fill short without failing — so on PERCENTAGE
+        // shipping an order trimmed by the daily cap would otherwise pay freight on goods it
+        // never received. The quote still sizes the affordability check above, which is the
+        // conservative direction.
+        double shipping = shippingCost(purchase.amount(), tier);
+        boolean shippingPaid = shipping <= 0 || economy.withdraw(player, shipping);
+        if (!shippingPaid) {
             plugin.getLogger().warning("Shipping fee withdraw failed after purchase for " + player.getName());
+        }
+        if (purchase.qty() < quote.filled()) {
+            player.sendMessage(Text.of("&eYour daily buy limit trimmed this order to &f" + purchase.qty()
+                    + "&e — you were charged for that amount, shipping included."));
         }
 
         long now = System.currentTimeMillis();
@@ -113,8 +125,12 @@ public final class OrderService {
                     purchase.amount(), shipping, tier.label(), now, deliverAt, Order.Status.IN_TRANSIT));
             return new PlaceResult(true, null, order, purchase.amount(), shipping);
         } catch (SQLException e) {
+            // The player has already paid at this point and the goods are only ever handed over
+            // from the order row, so a row that cannot be written means money for nothing. Refund
+            // exactly what was taken — the shipping withdraw above is allowed to fail on its own.
             plugin.getLogger().severe("Failed to persist order: " + e.getMessage());
-            return PlaceResult.fail("Order could not be saved.");
+            economy.deposit(player, purchase.amount() + (shippingPaid ? shipping : 0));
+            return PlaceResult.fail("Order could not be saved — refunded.");
         }
     }
 
@@ -149,6 +165,26 @@ public final class OrderService {
         }
     }
 
+    /**
+     * How many of {@code stack} the player's own inventory could still take.
+     *
+     * <p>Counted, not attempted. {@link org.bukkit.inventory.Inventory#addItem} fills whatever it
+     * can and hands back the remainder, so "try it and see" has already half-delivered the order
+     * by the time it tells you there was no room — and half-delivering is the thing being fixed.
+     */
+    private int freeSpaceFor(Player player, ItemStack stack) {
+        int max = stack.getMaxStackSize();
+        int space = 0;
+        for (ItemStack slot : player.getInventory().getStorageContents()) {
+            if (slot == null || slot.getType() == org.bukkit.Material.AIR) {
+                space += max;
+            } else if (slot.isSimilar(stack)) {
+                space += Math.max(0, max - slot.getAmount());
+            }
+        }
+        return space;
+    }
+
     /** A player's active orders (in transit + ready), soonest first. */
     public List<Order> ordersFor(OfflinePlayer player) {
         try {
@@ -175,8 +211,17 @@ public final class OrderService {
             if (item == null) {
                 return CollectResult.fail("That item is no longer available.");
             }
-            Map<Integer, ItemStack> leftover = player.getInventory().addItem(new ItemStack(item.material(), order.qty()));
-            leftover.values().forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
+            // All or nothing. The Mailbox's promise is that nothing drops, and an order can be
+            // 2304 items — far more than a full inventory holds. This used to add what fitted,
+            // throw the rest on the floor, and mark the order COLLECTED regardless, which is a
+            // one-way door: the row is closed forever and the goods are lying in the grass, or
+            // gone, having already been paid for.
+            ItemStack payload = new ItemStack(item.material(), order.qty());
+            if (freeSpaceFor(player, payload) < order.qty()) {
+                return CollectResult.fail("Your inventory is full — make room and collect again. "
+                        + "Your order is safe in the Mailbox.");
+            }
+            player.getInventory().addItem(payload);
             dao.updateStatus(order.id(), Order.Status.COLLECTED);
             return new CollectResult(true, null, order);
         } catch (SQLException e) {

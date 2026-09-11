@@ -58,9 +58,10 @@ public final class HomeCraftManagement extends JavaPlugin {
      *
      * <p>3 = the pass-3 economy rebalance. 4 = the two per-item daily caps pass 3 missed.
      * 5 = the department set the Store/Market tabs sort into — Materials added, Weapons and
-     * Armor folded into Combat.
+     * Armor folded into Combat. 6 = the Common rarity icon, which shipped as a light-grey pane
+     * and rendered as an empty slot.
      */
-    static final int CONFIG_REVISION = 5;
+    static final int CONFIG_REVISION = 6;
 
     /**
      * Per-item daily caps (~2% sell / ~4% buy of {@code full_stock}), mirroring the
@@ -565,6 +566,13 @@ public final class HomeCraftManagement extends JavaPlugin {
                         + "departments list has to gain it or those items fall into Misc.");
             }
         }
+        if (from < 6) {
+            if (replaceShippedDefault(c, "minis.rarity_styles.COMMON.pane", "LIGHT_GRAY", "WHITE")) {
+                log.add("Config migration: the COMMON rarity icon is WHITE instead of LIGHT_GRAY — "
+                        + "a light-grey pane is the colour of the inventory slot behind it, so every "
+                        + "Common Museum header rendered as an empty tile.");
+            }
+        }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);
             log.add("Config migration: config_revision " + from + " → " + CONFIG_REVISION + ".");
@@ -694,6 +702,25 @@ public final class HomeCraftManagement extends JavaPlugin {
             c.set("market.catalog", rewritten);
         }
         return filled;
+    }
+
+    /**
+     * Replace a config value, but only while it is still the one this plugin shipped.
+     *
+     * <p>Used when a default turns out to be wrong rather than merely old. An admin who has chosen
+     * their own value has chosen it deliberately and keeps it; everyone still carrying ours gets
+     * the correction. Comparison is case-insensitive because these are hand-typed names.
+     *
+     * @return false when the key is absent, or holds something the admin picked
+     */
+    static boolean replaceShippedDefault(org.bukkit.configuration.file.FileConfiguration c,
+                                         String path, String shipped, String corrected) {
+        Object current = c.get(path, null);
+        if (current == null || !shipped.equalsIgnoreCase(String.valueOf(current).trim())) {
+            return false;
+        }
+        c.set(path, corrected);
+        return true;
     }
 
     /**

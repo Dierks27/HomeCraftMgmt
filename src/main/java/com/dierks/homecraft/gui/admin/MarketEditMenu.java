@@ -92,12 +92,12 @@ public final class MarketEditMenu extends Menu {
                 prompt("Display name (or 'none'):", v -> draft.setDisplayName(v)));
 
         // ---- price band --------------------------------------------------------
-        set(14, Menus.icon(Material.GOLD_NUGGET, "&eFloor: &f" + plugin.economy().format(draft.floor()),
+        set(14, Menus.icon(Material.GOLD_NUGGET, "&eFloor: &6" + plugin.economy().format(draft.floor()),
                 "&7Price when the market is FULL.",
                 "&eClick to set."), e ->
                 promptDouble("Floor price:", v -> draft.setFloor(v)));
 
-        set(15, Menus.icon(Material.GOLD_INGOT, "&eCeiling: &f" + plugin.economy().format(draft.ceiling()),
+        set(15, Menus.icon(Material.GOLD_INGOT, "&eCeiling: &6" + plugin.economy().format(draft.ceiling()),
                 "&7Price when stock hits 0.",
                 "&7Must be above the floor.",
                 "&eClick to set."), e ->
@@ -164,15 +164,19 @@ public final class MarketEditMenu extends Menu {
         // ---- save / back -------------------------------------------------------
         List<String> problems = draft.problems(otherIds());
         if (problems.isEmpty()) {
-            set(49, Menus.icon(Material.LIME_DYE, "&a&lSave",
+            set(47, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&l✓ Save",
                     "&7Writes it to config.yml and",
                     "&7reloads the market."), e -> save());
         } else {
             List<String> lore = new ArrayList<>(problems);
             lore.add("&8Fix these to save.");
-            set(49, Menus.icon(Material.GRAY_DYE, "&8Save (not ready)", lore.toArray(new String[0])), null);
+            // A red pane, not a grey dye: this sits on a background of grey pane filler, and the
+            // reasons it cannot save are hover-only, so the button itself has to say "blocked".
+            // Same shape as the ready state so only the colour moves.
+            set(47, Menus.icon(Material.RED_STAINED_GLASS_PANE, "&8Save (not ready)",
+                    lore.toArray(new String[0])), null);
         }
-        set(53, Menus.icon(Material.BARRIER, "&cBack"), e -> back());
+        set(49, Menus.icon(Material.BARRIER, "&cBack"), e -> back());
     }
 
     private void save() {

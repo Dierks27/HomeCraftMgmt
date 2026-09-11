@@ -43,11 +43,11 @@ public final class AuctionCreateMenu extends Menu {
 
         Double floor = held != null && plugin.values() != null
                 ? plugin.values().suggestedFloorFor(held.item()) : null;
-        String floorLore = floor != null ? "&7Suggested floor: &b" + plugin.economy().format(floor)
+        String floorLore = floor != null ? "&7Suggested floor: &6" + plugin.economy().format(floor)
                 : "&8No value estimate";
         String floorHint = floor != null ? " (suggested floor: " + plugin.economy().format(floor) + ")" : "";
 
-        set(10, Menus.icon(Material.GOLD_INGOT, "&eStarting bid", "&f" + plugin.economy().format(startBid),
+        set(10, Menus.icon(Material.GOLD_INGOT, "&eStarting bid", "&6" + plugin.economy().format(startBid),
                 floorLore, "&7Click to set"), e -> plugin.chatPrompts().prompt(player,
                 "Enter the starting bid" + floorHint + ":", input -> {
             startBid = Math.max(1, parse(input, startBid));
@@ -60,7 +60,7 @@ public final class AuctionCreateMenu extends Menu {
             reopen();
         }));
 
-        set(14, Menus.icon(Material.DIAMOND, "&eBuy-It-Now", buyNow > 0 ? "&f" + plugin.economy().format(buyNow) : "&8off",
+        set(14, Menus.icon(Material.DIAMOND, "&eBuy-It-Now", buyNow > 0 ? "&6" + plugin.economy().format(buyNow) : "&8off",
                 "&7Click to set (0 = off)"), e -> plugin.chatPrompts().prompt(player, "Enter a Buy-It-Now price (0 = off):", input -> {
             buyNow = Math.max(0, parse(input, buyNow));
             reopen();

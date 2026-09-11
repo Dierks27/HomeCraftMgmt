@@ -370,7 +370,9 @@ public final class ArcadeService {
             }
         }
         // Everything left was a minted-out Mini; hand back a small consolation of nothing.
-        return Outcome.won(icon(Material.GRAY_DYE, "&7Better luck next time"), "&7no prize");
+        // A grey dye on the reveal screen's grey pane background was an invisible outcome; the
+        // barrier is blunt but honest, and the player can see that the pull resolved.
+        return Outcome.won(icon(Material.BARRIER, "&7Better luck next time"), "&7no prize");
     }
 
     /** Rewards that can actually pay out now: issuable Cards (and, unpaid, packs/filament/tokens too). */
@@ -492,7 +494,7 @@ public final class ArcadeService {
             return Outcome.won(icon(Material.EMERALD, "&a" + plugin.economy().format(amount)),
                     "&aWON " + plugin.economy().format(amount) + "&7!");
         }
-        return Outcome.won(icon(Material.GRAY_DYE, "&7No win"), "&7no win — try again");
+        return Outcome.won(icon(Material.BARRIER, "&7No win"), "&7no win — try again");
     }
 
     // ---- helpers --------------------------------------------------------------

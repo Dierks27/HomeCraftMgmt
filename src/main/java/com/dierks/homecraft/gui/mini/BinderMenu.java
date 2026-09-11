@@ -61,7 +61,7 @@ public final class BinderMenu extends Menu {
                     : "&7No loose Cards in your inventory to deposit."));
             refresh();
         });
-        set(49, Menus.icon(album ? Material.CHEST : Material.KNOWLEDGE_BOOK,
+        set(47, Menus.icon(album ? Material.CHEST : Material.KNOWLEDGE_BOOK,
                 album ? "&eView: Album" : "&eView: Binder",
                 "&7Click to switch to " + (album ? "your owned cards." : "the full set album.")), e -> {
             album = !album;
@@ -73,11 +73,20 @@ public final class BinderMenu extends Menu {
         set(50, Menus.icon(Material.NETHER_STAR, "&6Collection",
                 "&7Unique cards: &f" + uniqueOwned + " / " + total,
                 "&7Total cards held: &f" + owned.values().stream().mapToInt(Integer::intValue).sum()), null);
-        set(51, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
+        set(49, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
     }
 
     private void buildOwned(Map<String, Integer> owned) {
         List<Map.Entry<String, Integer>> entries = new ArrayList<>(owned.entrySet());
+        // Every other paged menu has this branch; without it a player holding no Cards got 45
+        // empty slots and four floating buttons, which reads as "failed to load", not "empty".
+        if (entries.isEmpty()) {
+            set(22, Menus.icon(Material.KNOWLEDGE_BOOK, "&fYour binder is empty",
+                    "&7Cards come from packs, the printer",
+                    "&7and the arcade.",
+                    "&8—",
+                    "&eOpen a Card Pack to start a collection."), null);
+        }
         int from = page * PAGE_SIZE;
         for (int i = 0; i < PAGE_SIZE; i++) {
             int idx = from + i;

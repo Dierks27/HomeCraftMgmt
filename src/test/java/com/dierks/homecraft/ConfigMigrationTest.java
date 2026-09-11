@@ -17,6 +17,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -483,6 +484,56 @@ class ConfigMigrationTest {
 
         assertEquals(before, onDisk.getStringList("marketplace.departments"));
         assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"));
+    }
+
+    /**
+     * Revision 6: the Common rarity shipped as a light-grey pane — the colour of the inventory
+     * slot behind it — so every Common Museum header rendered as an empty tile. The backfill
+     * cannot repair that: the key is present on every server, just holding the wrong value.
+     */
+    @Test
+    void theCommonRarityIconIsCorrectedFromLightGray() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 5);
+        onDisk.set("minis.rarity_styles.COMMON.pane", "LIGHT_GRAY");
+
+        assertFalse(HomeCraftManagement.migrateConfig(onDisk, "world").isEmpty());
+
+        assertEquals("WHITE", onDisk.getString("minis.rarity_styles.COMMON.pane"));
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"));
+    }
+
+    /** A value the admin chose is theirs, even when ours turned out to be wrong. */
+    @Test
+    void aCustomisedRarityIconIsLeftAlone() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 5);
+        onDisk.set("minis.rarity_styles.COMMON.pane", "ORANGE");
+
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals("ORANGE", onDisk.getString("minis.rarity_styles.COMMON.pane"));
+    }
+
+    /** replaceShippedDefault only fires on an exact (case-insensitive) match of what we shipped. */
+    @Test
+    void replacingAShippedDefaultIsExactAndIdempotent() throws Exception {
+        YamlConfiguration c = bundled();
+
+        c.set("minis.rarity_styles.COMMON.pane", "  light_gray  ");
+        assertTrue(HomeCraftManagement.replaceShippedDefault(
+                c, "minis.rarity_styles.COMMON.pane", "LIGHT_GRAY", "WHITE"),
+                "casing and stray spaces should not hide a value we shipped");
+        assertEquals("WHITE", c.getString("minis.rarity_styles.COMMON.pane"));
+
+        // Already corrected — a second run must be a no-op, not a second rewrite.
+        assertFalse(HomeCraftManagement.replaceShippedDefault(
+                c, "minis.rarity_styles.COMMON.pane", "LIGHT_GRAY", "WHITE"));
+
+        // Absent key: nothing to correct, and nothing created.
+        assertFalse(HomeCraftManagement.replaceShippedDefault(
+                c, "minis.rarity_styles.NOPE.pane", "LIGHT_GRAY", "WHITE"));
+        assertNull(c.get("minis.rarity_styles.NOPE.pane", null));
     }
 
     /** Backfilled keys keep the bundled file's comments, and new sections keep their header. */

@@ -65,7 +65,7 @@ public final class PackEditMenu extends Menu {
                     rename(input);
                 }));
 
-        set(4, Menus.icon(Material.GOLD_INGOT, "&6Price: &f" + plugin.economy().format(pack.price()),
+        set(4, Menus.icon(Material.GOLD_INGOT, "&7Price: &6" + plugin.economy().format(pack.price()),
                 "&7Left &8+10  &7Right &8-10",
                 "&7Shift-left &8+100  &7Shift-right &8-100"), e -> {
             double step = e.isShiftClick() ? 100 : 10;
@@ -107,7 +107,7 @@ public final class PackEditMenu extends Menu {
                     changeEntry(miniId, 1, false);
                     reopen();
                 }, this::reopen).open(player));
-        set(53, Menus.icon(Material.BARRIER, "&cBack"), e -> back());
+        set(49, Menus.icon(Material.BARRIER, "&cBack"), e -> back());
     }
 
     private ItemStack entryIcon(Pack.PackEntry entry, double total) {

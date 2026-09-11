@@ -23,8 +23,20 @@ public final class Menus {
      * refreshes, so it reflects the player's live Vault balance after every trade.
      */
     public static ItemStack balance(HomeCraftManagement plugin, Player player) {
-        String bal = plugin.economy().format(plugin.economy().balance(player));
-        return icon(Material.GOLD_INGOT, "&6Your balance", "&f" + bal);
+        return icon(Material.GOLD_INGOT, "&6Your balance", money(plugin, plugin.economy().balance(player)));
+    }
+
+    /**
+     * A money figure, in the one colour money is allowed to be.
+     *
+     * <p>Gold means "this is an amount of money" and nothing else; the LABEL carries which way it
+     * is flowing ("&amp;7You pay: ", "&amp;7You get: "). Prices used to be green in the Store, red in the
+     * Market, white at checkout, aqua in the auction house and gold in the Marketplace — and the
+     * red one was the sell price, painted the same colour as OUT OF STOCK and every error, which
+     * told a child that the number making her richer was a kind of breakage.
+     */
+    public static String money(HomeCraftManagement plugin, double amount) {
+        return "&6" + plugin.economy().format(amount);
     }
 
     /** An icon with an '&amp;'-coded name and lore lines. */
@@ -42,6 +54,35 @@ public final class Menus {
             }
             item.setItemMeta(meta);
         }
+        return item;
+    }
+
+    /**
+     * Force the enchantment shimmer on or off.
+     *
+     * <p>Always pass an explicit value rather than leaving the override unset. Some materials
+     * glint on their own — {@link Material#NETHER_STAR} and {@link Material#ENCHANTED_BOOK} among
+     * them — so an unset override would leave such a tile shimmering permanently, and a glint used
+     * to mean "selected" would be telling a lie on the one tab that is always on screen.
+     */
+    public static ItemStack glint(ItemStack item, boolean on) {
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setEnchantmentGlintOverride(on);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    /**
+     * Put a number on the icon as its stack count.
+     *
+     * <p>The only text an inventory tile shows without a hover. Useful when a row of otherwise
+     * identical buttons differ by a magnitude — three red panes are three red panes until one of
+     * them says 64.
+     */
+    public static ItemStack count(ItemStack item, int amount) {
+        item.setAmount(Math.max(1, Math.min(64, amount)));
         return item;
     }
 

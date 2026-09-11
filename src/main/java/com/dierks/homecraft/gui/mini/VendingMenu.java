@@ -53,7 +53,7 @@ public final class VendingMenu extends Menu {
 
         if (listings.isEmpty()) {
             set(22, Menus.icon(Material.BARRIER, "&7Nothing for sale yet",
-                    blockOwner ? "&8Stock a Mini with the button below." : "&8Check back later."), null);
+                    blockOwner ? "&eStock a Mini with the button below." : "&7Check back later."), null);
         }
 
         int start = page * PAGE_SIZE;
@@ -122,8 +122,12 @@ public final class VendingMenu extends Menu {
         ItemStack mini = Items.fromBase64(l.itemB64());
         List<String> lore = List.of(
                 "&7Price: &6" + plugin.economy().format(l.price()),
-                "&7Your balance: &f" + plugin.economy().format(plugin.economy().balance(player)));
-        new ConfirmMenu(plugin, "&dBuy this Mini?", mini == null ? Menus.FILLER : mini, lore,
+                "&7Your balance: &6" + plugin.economy().format(plugin.economy().balance(player)));
+        // Not Menus.FILLER: ConfirmMenu pads itself with that pane, so an undecodable Mini turned
+        // the thing being bought into invisible padding — a price confirmed against nothing.
+        new ConfirmMenu(plugin, "&dBuy this Mini?",
+                mini == null ? Menus.icon(Material.BARRIER, "&cUnreadable Mini",
+                        "&7This listing's item could not be read.") : mini, lore,
                 () -> {
                     report(plugin.vending().buyVending(player, l.id()));
                     reopen();
@@ -152,7 +156,7 @@ public final class VendingMenu extends Menu {
                         + (def.uncapped() ? "" : " &7of &f" + def.cap())));
             }
             lore.add(Text.of("&7In circulation: &f" + c.circulation()));
-            lore.add(Text.of("&6Price: &f" + plugin.economy().format(l.price())));
+            lore.add(Text.of("&7Price: &6" + plugin.economy().format(l.price())));
             lore.add(Text.of("&8—"));
             lore.add(isSeller ? Text.of("&eLeft-click&7: reprice  &eRight-click&7: take back")
                     : Text.of("&aClick to buy"));

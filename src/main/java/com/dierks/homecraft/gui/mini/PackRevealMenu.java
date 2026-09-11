@@ -47,14 +47,16 @@ public final class PackRevealMenu extends Menu {
         }
         int shown = Math.min(cardIds.size(), SLOTS.length);
         for (int i = 0; i < shown; i++) {
-            set(SLOTS[i], Menus.icon(Material.GRAY_STAINED_GLASS_PANE, "&7? ? ?",
+            // A face-down card, not the filler pane: this menu fills all 27 slots with that pane
+            // seven lines up, so the pending cards were invisible until the flip.
+            set(SLOTS[i], Menus.icon(Material.PAPER, "&7? ? ?",
                     "&8A mystery Card…"), null);
         }
         if (cardIds.size() > SLOTS.length) {
             set(26, Menus.icon(Material.CHEST, "&7+" + (cardIds.size() - SLOTS.length) + " more",
                     "&8In your inventory."), null);
         }
-        set(22, Menus.icon(Material.ARROW, "&aCollect"), e -> {
+        set(22, Menus.glint(Menus.icon(Material.LIME_CONCRETE, "&a&lCOLLECT"), true), e -> {
             if (task != null) {
                 task.cancel();
             }

@@ -26,7 +26,7 @@ public final class BinderItems {
         if (meta == null) {
             return item;
         }
-        meta.displayName(Component.text("📕 Card Binder", NamedTextColor.LIGHT_PURPLE)
+        meta.displayName(Component.text("❒ Card Binder", NamedTextColor.LIGHT_PURPLE)
                 .decoration(TextDecoration.ITALIC, false));
         meta.lore(List.of(
                 line("Stores your Cards in one place.", NamedTextColor.GRAY),

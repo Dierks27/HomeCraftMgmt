@@ -5,6 +5,7 @@ import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.market.MarketService;
 import com.dierks.homecraft.order.OrderService;
+import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -46,18 +47,18 @@ public final class CheckoutMenu extends Menu {
         double itemTotal = quote.total();
 
         set(4, Menus.icon(item.material(), item.label() + " &7x" + quote.filled(),
-                "&7Item cost: &f" + money(itemTotal)), null);
+                "&7Item cost: &6" + money(itemTotal)), null);
 
         // Tiers are config-driven and pre-sorted fastest → slowest; render them all.
         List<PluginConfig.ShippingTier> tiers = plugin.config().shipping().tiers();
         for (int i = 0; i < TIER_SLOTS.length && i < tiers.size(); i++) {
             PluginConfig.ShippingTier tier = tiers.get(i);
             double shipping = orders.shippingCost(itemTotal, tier);
-            String shipLabel = shipping <= 0 ? "&aFREE" : "&f" + money(shipping);
+            String shipLabel = shipping <= 0 ? "&aFREE" : "&6" + money(shipping);
             set(TIER_SLOTS[i], Menus.icon(shippingIcon(i, tiers.size()), "&e" + tier.label() + " Shipping",
                     "&7Arrives in &f" + Menus.duration(tier.deliveryMillis()),
                     "&7Shipping: " + shipLabel,
-                    "&7Total: &f" + money(itemTotal + shipping),
+                    "&7Total: &6" + money(itemTotal + shipping),
                     "&8—",
                     "&eClick to order"), e -> placeOrder(tier));
         }
@@ -68,10 +69,12 @@ public final class CheckoutMenu extends Menu {
     private void placeOrder(PluginConfig.ShippingTier tier) {
         OrderService.PlaceResult result = plugin.orderService().placeOrder(player, item.id(), qty, tier);
         if (!result.ok()) {
+            Sounds.refused(player);
             player.sendMessage(Text.of("&c" + result.error()));
             refresh();
             return;
         }
+        Sounds.paid(player);
         player.sendMessage(Text.of("&aOrder placed: &f" + result.order().qty() + " " + item.label()
                 + " &7(" + tier.label() + ", " + money(result.itemCost() + result.shippingCost()) + ")."
                 + " &aArrives in " + Menus.duration(result.order().deliverAt() - System.currentTimeMillis()) + "."));

@@ -286,6 +286,7 @@ public final class ShopDisplayService implements Listener {
                 d.setShadowed(true);
                 d.setSeeThrough(false);
                 d.setBackgroundColor(Color.fromARGB(0x40000000));
+                d.setBrightness(new Display.Brightness(15, 15)); // signage is lit, not ambient
                 d.setPersistent(false);
                 d.getPersistentDataContainer().set(Keys.SHOP_ANCHOR, PersistentDataType.STRING, anchor);
             });

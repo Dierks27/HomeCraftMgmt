@@ -7,6 +7,7 @@ import com.dierks.homecraft.order.Order;
 import com.dierks.homecraft.order.OrderService;
 import com.dierks.homecraft.storage.DeliveryDao;
 import com.dierks.homecraft.util.Items;
+import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -52,7 +53,7 @@ public final class MailboxMenu extends Menu {
 
         if (renders.isEmpty()) {
             set(22, Menus.icon(Material.PAPER, "&7No deliveries",
-                    "&8Store orders & Marketplace buys arrive here."), null);
+                    "&7Store orders & Marketplace buys arrive here."), null);
         }
         int start = page * PAGE_SIZE;
         for (int i = 0; i < PAGE_SIZE; i++) {
@@ -70,7 +71,7 @@ public final class MailboxMenu extends Menu {
                 refresh();
             });
         }
-        set(49, Menus.icon(Material.ARROW, "&cBack"), e -> {
+        set(49, Menus.icon(Material.BARRIER, "&cBack"), e -> {
             if (onBack != null) {
                 onBack.run();
             } else {
@@ -98,6 +99,11 @@ public final class MailboxMenu extends Menu {
                     set(s, Menus.icon(icon, "&a" + label + " &7x" + order.qty(),
                             "&7Store order · " + order.tier(), "&aReady!", "&eClick to collect"), e -> {
                         OrderService.CollectResult r = orders.collect(player, order.id());
+                        if (r.ok()) {
+                            Sounds.collected(player);
+                        } else {
+                            Sounds.refused(player);
+                        }
                         player.sendMessage(r.ok() ? Text.of("&aCollected &f" + order.qty() + " " + label + "&a.")
                                 : Text.of("&c" + r.error()));
                         refresh();
@@ -129,6 +135,11 @@ public final class MailboxMenu extends Menu {
                 }
                 set(s, disp, ready ? e -> {
                     DeliveryService.Result r = deliveries.collect(player, d.id());
+                    if (r.ok()) {
+                        Sounds.collected(player);
+                    } else {
+                        Sounds.refused(player);
+                    }
                     player.sendMessage(r.ok() ? Text.of("&aCollected &f" + d.label() + "&a.")
                             : Text.of("&c" + r.error()));
                     refresh();

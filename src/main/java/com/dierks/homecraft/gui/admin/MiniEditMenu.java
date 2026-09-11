@@ -94,7 +94,7 @@ public final class MiniEditMenu extends Menu {
                 e -> promptText("Enter a mint cap number, or 'unlimited':", this::setCap));
 
         set(20, Menus.icon(Material.GOLD_INGOT, "&ePrice",
-                "&f" + plugin.economy().format(Math.max(0, draft.price())),
+                "&6" + plugin.economy().format(Math.max(0, draft.price())),
                 "&7Click to set the mint price"),
                 e -> promptText("Enter the mint price (a number):", this::setPrice));
 
@@ -129,16 +129,19 @@ public final class MiniEditMenu extends Menu {
                     "&8(save first to get the id)"), null);
         }
 
-        set(45, Menus.icon(Material.ARROW, "&cBack (discard)"), e -> back());
-
-        set(49, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&l✓ Save",
+        // Row 5 grammar: 45/53 are paging and nothing else, 49 is the way out, 46-48 are this
+        // screen's own actions. Delete used to sit on 53 — the slot that means "next page" in the
+        // list this editor is opened from, so a hand that had learned it deleted a Mini instead.
+        set(47, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&l✓ Save",
                 "&7Write to config + reload live"), e -> save());
 
         if (existing) {
-            set(53, Menus.icon(Material.RED_STAINED_GLASS_PANE, "&c&l✗ Delete",
+            set(52, Menus.icon(Material.RED_STAINED_GLASS_PANE, "&c&l✗ Delete",
                     "&7Remove this Mini from the catalog",
                     "&8Mint history in the DB is kept"), e -> delete());
         }
+
+        set(49, Menus.icon(Material.BARRIER, "&cBack (discard)"), e -> back());
     }
 
     // ---- field editors ----------------------------------------------------

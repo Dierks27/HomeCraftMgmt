@@ -68,7 +68,7 @@ public final class OrdersMenu extends Menu {
             }
         }
 
-        set(49, Menus.icon(Material.ARROW, "&eBack"), e -> {
+        set(49, Menus.icon(Material.BARRIER, "&eBack"), e -> {
             if (onBack != null) {
                 onBack.run();
             } else {

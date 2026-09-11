@@ -77,7 +77,7 @@ public final class PalletMenu extends Menu {
                         reopen();
                     }));
             set(11, Menus.icon(Material.GOLD_INGOT, "&eChange price",
-                    "&7Current: &f" + plugin.economy().format(l.price())),
+                    "&7Current: &6" + plugin.economy().format(l.price())),
                     e -> plugin.chatPrompts().prompt(player, "Enter a new price:", input -> {
                         double p = parse(input);
                         if (p <= 0) {

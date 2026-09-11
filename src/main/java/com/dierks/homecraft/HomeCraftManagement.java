@@ -59,9 +59,10 @@ public final class HomeCraftManagement extends JavaPlugin {
      * <p>3 = the pass-3 economy rebalance. 4 = the two per-item daily caps pass 3 missed.
      * 5 = the department set the Store/Market tabs sort into — Materials added, Weapons and
      * Armor folded into Combat. 6 = the Common rarity icon, which shipped as a light-grey pane
-     * and rendered as an empty slot.
+     * and rendered as an empty slot. 7 = wild Mini spawns — rarer, much further out, a find
+     * window measured in minutes — plus the grade stars, for a file an editor has flattened.
      */
-    static final int CONFIG_REVISION = 6;
+    static final int CONFIG_REVISION = 7;
 
     /**
      * Per-item daily caps (~2% sell / ~4% buy of {@code full_stock}), mirroring the
@@ -573,6 +574,38 @@ public final class HomeCraftManagement extends JavaPlugin {
                         + "Common Museum header rendered as an empty tile.");
             }
         }
+        if (from < 7) {
+            // Two Minis in three hours, both inside 100 blocks, found in seconds. The chance
+            // that produced that is the admin's own and is left alone; what moves here are the
+            // numbers we shipped, which were all pulling the same way.
+            if (replaceShippedInt(c, "minis.loot.natural.interval_ticks", 12000, 24000)) {
+                log.add("Config migration: natural spawns roll every 20 minutes instead of 10.");
+            }
+            if (replaceShippedInt(c, "minis.loot.natural.despawn_minutes", 10, 3)) {
+                log.add("Config migration: a wild Mini now slips away after 3 minutes, not 10 — "
+                        + "and the spawn hint says so, because a timed hunt nobody is told the "
+                        + "length of is just a Mini that vanishes.");
+            }
+            boolean near = replaceShippedInt(c, "minis.loot.natural.min_distance", 24, 96);
+            near |= replaceShippedInt(c, "minis.loot.natural.max_distance", 48, 128);
+            if (near) {
+                log.add("Config migration: wild Minis land 96–128 blocks out instead of 24–48. "
+                        + "Keep max_distance inside your view-distance (10 chunks = 160 blocks by "
+                        + "default) — a spot is only usable in a loaded chunk.");
+            }
+            if (replaceShippedDefault(c, "minis.announce.hint_radius_text",
+                    "within 100 blocks of a player", "within %blocks% blocks of a player")) {
+                log.add("Config migration: the spawn hint reads its distance from "
+                        + "minis.loot.natural.max_distance. It had been claiming 100 blocks while "
+                        + "the spawn band was 24–48, and a hint that is wrong about the only fact "
+                        + "it carries is worse than no hint.");
+            }
+            for (String grade : repairGradeSymbols(c)) {
+                log.add("Config migration: minis.grades." + grade + ".symbol was \"?\" — the stars "
+                        + "had been flattened by an editor saving config.yml as ANSI instead of "
+                        + "UTF-8, so every Mini showed as \"Creeper ?\". Restored.");
+            }
+        }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);
             log.add("Config migration: config_revision " + from + " → " + CONFIG_REVISION + ".");
@@ -721,6 +754,56 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
         c.set(path, corrected);
         return true;
+    }
+
+    /**
+     * {@link #replaceShippedDefault} for a number.
+     *
+     * <p>Separate because the String version writes a String: {@code getInt} on a value that
+     * is {@code "24000"} rather than {@code 24000} returns the default instead, so a migration
+     * that looked like it worked would silently leave the old behaviour running.
+     *
+     * @return false when the key is absent, is not a number, or holds something the admin picked
+     */
+    static boolean replaceShippedInt(org.bukkit.configuration.file.FileConfiguration c,
+                                     String path, int shipped, int corrected) {
+        if (!(c.get(path, null) instanceof Number n) || n.intValue() != shipped) {
+            return false;
+        }
+        c.set(path, corrected);
+        return true;
+    }
+
+    /**
+     * Put the grade stars back after an editor has flattened them.
+     *
+     * <p>☆ and ★ are UTF-8; save config.yml from an editor set to ANSI/Windows-1252 and every
+     * character it cannot represent is written out as the byte {@code '?'}. The file still
+     * parses, nothing errors, and every Mini in the game renders as "Creeper ?" with no way to
+     * see why from in-game. It is a plausible thing for anyone to do once while editing a lore
+     * line, and a miserable thing to diagnose.
+     *
+     * <p>Only a symbol that is question marks and nothing else is touched. Nobody chooses that
+     * deliberately, so there is no admin preference to overwrite — and a symbol merely different
+     * from ours is left alone exactly as {@link #replaceShippedDefault} would leave it.
+     *
+     * @return the grades repaired, for the migration log
+     */
+    static java.util.List<String> repairGradeSymbols(org.bukkit.configuration.file.FileConfiguration c) {
+        java.util.List<String> fixed = new java.util.ArrayList<>();
+        for (com.dierks.homecraft.mini.Grade g : com.dierks.homecraft.mini.Grade.values()) {
+            for (String key : java.util.List.of(g.name(), g.name().toLowerCase(java.util.Locale.ROOT))) {
+                String path = "minis.grades." + key + ".symbol";
+                Object current = c.get(path, null);
+                if (current != null && com.dierks.homecraft.mini.Grade.isMangledSymbol(String.valueOf(current))) {
+                    // g.symbol() is the built-in: Grade already refuses to serve a mangled
+                    // override, so this reads the default rather than the wreckage.
+                    c.set(path, g.symbol());
+                    fixed.add(key);
+                }
+            }
+        }
+        return fixed;
     }
 
     /**

@@ -204,9 +204,16 @@ public final class PluginConfig {
                 false, 0, false, null, null);
     }
 
-    /** All rarity effects + the shared knobs (radius, cadence, Mint chime, Shiny ring, wild hologram text). */
+    /**
+     * All rarity effects + the shared knobs (radius, cadence, Mint chime, Shiny ring, wild
+     * hologram text and how close you must be to read it).
+     *
+     * <p>{@code wildHologramRange} is deliberately much tighter than {@code radius}: a wild
+     * Mini's label is a confirmation of what you have found, not a pointer to where it is.
+     */
     public record MiniEffects(Map<Rarity, MiniEffect> byRarity, double radius, int tickInterval,
                               String mintSound, String shinyParticle, String wildHologramText,
+                              double wildHologramRange,
                               double caseItemScale, double caseItemHeight) {
         public MiniEffect of(Rarity rarity) {
             return byRarity.getOrDefault(rarity, MiniEffect.NONE);
@@ -1202,11 +1209,15 @@ public final class PluginConfig {
             }
         }
         double shinyPercent = Math.max(0, c.getDouble("minis.loot.shiny_percent", 5.0));
+        int minDistance = Math.max(4, c.getInt("minis.loot.natural.min_distance", 96));
         Loot.Natural natural = new Loot.Natural(
-                Math.max(200, c.getInt("minis.loot.natural.interval_ticks", 12000)),
-                Math.max(1, c.getInt("minis.loot.natural.despawn_minutes", 10)),
-                Math.max(4, c.getInt("minis.loot.natural.min_distance", 24)),
-                Math.max(8, c.getInt("minis.loot.natural.max_distance", 48)));
+                Math.max(200, c.getInt("minis.loot.natural.interval_ticks", 24000)),
+                Math.max(1, c.getInt("minis.loot.natural.despawn_minutes", 3)),
+                minDistance,
+                // A max below the min would make every band empty and no Mini would ever land.
+                Math.max(minDistance + 8, c.getInt("minis.loot.natural.max_distance", 128)),
+                Math.max(0, c.getInt("minis.loot.natural.player_cooldown_minutes", 120)),
+                Math.max(0, c.getInt("minis.loot.natural.max_live", 2)));
         return new Loot.MiniLoot(lists, sources, rarityWeights, shinyPercent, natural);
     }
 
@@ -1246,9 +1257,20 @@ public final class PluginConfig {
                 if (gs == null) {
                     continue;
                 }
+                String symbol = gs.getString("symbol", g.symbol());
+                if (com.dierks.homecraft.mini.Grade.isMangledSymbol(symbol)) {
+                    // '?' is what ☆ becomes when config.yml is saved back as ANSI instead of
+                    // UTF-8, so every Mini renders as "Creeper ?". Grade falls back to the
+                    // built-in star; say why, because nothing in-game can show the cause.
+                    log.warning("minis.grades." + g.name() + ".symbol is \"" + symbol
+                            + "\" — that is a UTF-8 character your editor could not save. Re-save "
+                            + "config.yml as UTF-8 (or let the config migration restore the stars). "
+                            + "Using the built-in " + g.symbol() + " until then.");
+                    symbol = null;
+                }
                 styles.put(g, new com.dierks.homecraft.mini.Grade.Style(
                         gs.getString("name", g.display()),
-                        gs.getString("symbol", g.symbol()),
+                        symbol,
                         gs.getDouble("multiplier", g.valueMultiplier())));
             }
         }
@@ -1308,6 +1330,7 @@ public final class PluginConfig {
                 c.getString("minis.effects.mint_sound", "BLOCK_AMETHYST_BLOCK_CHIME"),
                 c.getString("minis.effects.shiny_particle", "GLOW"),
                 c.getString("minis.effects.wild_hologram_text", "&dA wild Mini!"),
+                Math.max(0.0, c.getDouble("minis.effects.wild_hologram_range", 8.0)),
                 Math.max(0.1, c.getDouble("minis.effects.case_item_scale", 0.6)),
                 Math.max(0.0, c.getDouble("minis.effects.case_item_height", 0.9)));
     }
@@ -1329,7 +1352,7 @@ public final class PluginConfig {
                 c.getBoolean("minis.announce.spawn_hint", true),
                 c.getBoolean("minis.announce.slipped_away", true),
                 min,
-                c.getString("minis.announce.hint_radius_text", "within 100 blocks of a player"),
+                c.getString("minis.announce.hint_radius_text", "within %blocks% blocks of a player"),
                 c.getString("minis.announce.sound", "ENTITY_EXPERIENCE_ORB_PICKUP"),
                 per);
     }

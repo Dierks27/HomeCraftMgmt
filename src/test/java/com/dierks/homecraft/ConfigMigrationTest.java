@@ -1,5 +1,6 @@
 package com.dierks.homecraft;
 
+import com.dierks.homecraft.mini.Grade;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -598,5 +600,154 @@ class ConfigMigrationTest {
         assertEquals(List.of(" my own notes about shops"), onDisk.getComments("shops"));
         assertFalse(onDisk.getBoolean("shops.glow.enabled"), "and their value stands");
         assertTrue(onDisk.isSet("shops.hologram.enabled"), "while the missing leaves still land");
+    }
+
+    // ---- revision 7: wild Mini spawns, and the stars an editor ate ----------------
+
+    /**
+     * Revision 7: three hours of play produced two wild Minis, both inside 100 blocks, both
+     * found in seconds. Every shipped number was pulling the same way, so all four move
+     * together — a rarer roll, a far longer walk, and a find window short enough to be a hunt.
+     */
+    @Test
+    void theNaturalSpawnDefaultsAreRetuned() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 6);
+        onDisk.set("minis.loot.natural.interval_ticks", 12000);
+        onDisk.set("minis.loot.natural.despawn_minutes", 10);
+        onDisk.set("minis.loot.natural.min_distance", 24);
+        onDisk.set("minis.loot.natural.max_distance", 48);
+
+        assertFalse(HomeCraftManagement.migrateConfig(onDisk, "world").isEmpty());
+
+        assertEquals(24000, onDisk.getInt("minis.loot.natural.interval_ticks"));
+        assertEquals(3, onDisk.getInt("minis.loot.natural.despawn_minutes"));
+        assertEquals(96, onDisk.getInt("minis.loot.natural.min_distance"));
+        assertEquals(128, onDisk.getInt("minis.loot.natural.max_distance"));
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"));
+    }
+
+    /** Numbers the admin has already tuned are theirs, exactly as a tuned String would be. */
+    @Test
+    void tunedNaturalSpawnNumbersAreLeftAlone() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 6);
+        onDisk.set("minis.loot.natural.interval_ticks", 6000);
+        onDisk.set("minis.loot.natural.despawn_minutes", 15);
+        onDisk.set("minis.loot.natural.min_distance", 24);   // still ours
+        onDisk.set("minis.loot.natural.max_distance", 60);
+
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals(6000, onDisk.getInt("minis.loot.natural.interval_ticks"));
+        assertEquals(15, onDisk.getInt("minis.loot.natural.despawn_minutes"));
+        assertEquals(96, onDisk.getInt("minis.loot.natural.min_distance"), "ours moves");
+        assertEquals(60, onDisk.getInt("minis.loot.natural.max_distance"), "theirs does not");
+    }
+
+    /**
+     * The whole point of a numeric replaceShippedDefault. The String version writes a String,
+     * and {@code getInt} on {@code "24000"} returns the DEFAULT rather than the value — so a
+     * migration using it would look like it had worked while the old cadence kept running.
+     */
+    @Test
+    void replacingAShippedNumberLeavesANumberBehind() throws Exception {
+        YamlConfiguration c = bundled();
+        c.set("minis.loot.natural.interval_ticks", 12000);
+
+        assertTrue(HomeCraftManagement.replaceShippedInt(c, "minis.loot.natural.interval_ticks", 12000, 24000));
+        assertInstanceOf(Number.class, c.get("minis.loot.natural.interval_ticks"),
+                "written as a String, getInt would silently fall back to its default");
+        assertEquals(24000, c.getInt("minis.loot.natural.interval_ticks", -1));
+
+        // Idempotent, and it never invents a key.
+        assertFalse(HomeCraftManagement.replaceShippedInt(c, "minis.loot.natural.interval_ticks", 12000, 24000));
+        assertFalse(HomeCraftManagement.replaceShippedInt(c, "minis.loot.natural.nope", 1, 2));
+        assertNull(c.get("minis.loot.natural.nope", null));
+
+        // A value that is not a number at all is not ours to touch.
+        c.set("minis.loot.natural.despawn_minutes", "ten");
+        assertFalse(HomeCraftManagement.replaceShippedInt(c, "minis.loot.natural.despawn_minutes", 10, 3));
+        assertEquals("ten", c.getString("minis.loot.natural.despawn_minutes"));
+    }
+
+    /**
+     * The hint had been claiming "within 100 blocks" while the spawn band was 24–48, and it
+     * would have gone on being wrong at 96–128. It reads the distance now instead of stating it.
+     */
+    @Test
+    void theSpawnHintStopsStatingADistanceItCannotKnow() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 6);
+        onDisk.set("minis.announce.hint_radius_text", "within 100 blocks of a player");
+
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals("within %blocks% blocks of a player",
+                onDisk.getString("minis.announce.hint_radius_text"));
+    }
+
+    /**
+     * "Creeper ?" — ☆ saved back by an editor set to ANSI instead of UTF-8. The file still
+     * parses and nothing errors; every Mini in the game just loses its star, with no way to
+     * see why from in-game.
+     */
+    @Test
+    void gradeStarsFlattenedByANonUtf8SaveAreRestored() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 6);
+        onDisk.set("minis.grades.STANDARD.symbol", "?");
+        onDisk.set("minis.grades.GRADED.symbol", "??");
+        onDisk.set("minis.grades.MINT.symbol", "???");
+
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals(Grade.STANDARD.symbol(), onDisk.getString("minis.grades.STANDARD.symbol"));
+        assertEquals(Grade.GRADED.symbol(), onDisk.getString("minis.grades.GRADED.symbol"));
+        assertEquals(Grade.MINT.symbol(), onDisk.getString("minis.grades.MINT.symbol"));
+    }
+
+    /** A symbol the admin chose is theirs — including one that merely differs from ours. */
+    @Test
+    void aChosenGradeSymbolIsNotRepaired() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 6);
+        onDisk.set("minis.grades.STANDARD.symbol", "?!");   // has a real character in it
+        onDisk.set("minis.grades.GRADED.symbol", "++");
+
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals("?!", onDisk.getString("minis.grades.STANDARD.symbol"));
+        assertEquals("++", onDisk.getString("minis.grades.GRADED.symbol"));
+    }
+
+    /**
+     * A wild Mini's label must stay much tighter than the general effects radius.
+     *
+     * <p>Sixteen blocks is the right distance to start particles on a trophy someone has put
+     * on a shelf, and far too generous for a hunt: a TextDisplay is legible from hundreds of
+     * blocks, so a label lit at that range points at the prize instead of naming it. The two
+     * look like they want to be one number, which is exactly why they must not become one.
+     */
+    @Test
+    void theWildLabelIsReadOnlyFromCloseUp() throws Exception {
+        YamlConfiguration bundled = bundled();
+        double range = bundled.getDouble("minis.effects.wild_hologram_range", -1);
+        double radius = bundled.getDouble("minis.effects.radius", -1);
+
+        assertTrue(range > 0, "the shipped label should be reachable, not switched off");
+        assertTrue(range <= radius / 2,
+                "wild_hologram_range (" + range + ") must stay well inside effects.radius ("
+                        + radius + ") — at the same distance the label becomes a pointer");
+    }
+
+    /** Lowercase grade keys parse at load, so the repair has to find them too. */
+    @Test
+    void lowercaseGradeKeysAreRepairedAsWell() throws Exception {
+        YamlConfiguration c = bundled();
+        c.set("minis.grades.standard.symbol", "?");
+
+        assertEquals(List.of("standard"), HomeCraftManagement.repairGradeSymbols(c));
+        assertEquals(Grade.STANDARD.symbol(), c.getString("minis.grades.standard.symbol"));
     }
 }

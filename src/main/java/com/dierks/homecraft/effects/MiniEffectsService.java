@@ -203,7 +203,11 @@ public final class MiniEffectsService implements Listener {
         register(key, Kind.DISPLAY_CASE, loc, item, null, null, justPlaced);
     }
 
-    /** A naturally spawned wild-Mini head: its rarity effects plus the "A wild Mini!" hologram. */
+    /**
+     * A naturally spawned wild-Mini head: its rarity effects, plus the "A wild Mini!" label —
+     * which, unlike every other hologram here, appears only within {@code wild_hologram_range}
+     * and is removed again when you leave. See {@link #wildLabel}.
+     */
     public void registerWild(Location loc, ItemStack item, boolean justPlaced) {
         register(blockKey(loc), Kind.WILD_SPAWN, loc, item, cfg().wildHologramText(), null, justPlaced);
     }
@@ -330,6 +334,9 @@ public final class MiniEffectsService implements Listener {
                 stand = s;
             }
             Location base = baseLoc(p);
+            if (p.kind == Kind.WILD_SPAWN) {
+                wildLabel(p, cfg, base);
+            }
             if (!playerNear(p, base, r2)) {
                 continue;
             }
@@ -338,7 +345,8 @@ public final class MiniEffectsService implements Listener {
             // A Display Case always shows its Mini as a floating ItemDisplay (static for
             // Common/Uncommon, rotating for Rare+, full-bright for Legendary per config).
             boolean wantsDisplay = p.kind == Kind.DISPLAY_CASE;
-            if ((fx.hologram() && p.kind != Kind.PLACED_HEAD) || p.hologramText != null) {
+            if (p.kind != Kind.WILD_SPAWN
+                    && ((fx.hologram() && p.kind != Kind.PLACED_HEAD) || p.hologramText != null)) {
                 ensureHologram(p, fx, base, wantsDisplay);
             }
             if (wantsDisplay) {
@@ -356,6 +364,32 @@ public final class MiniEffectsService implements Listener {
             }
             ensureLight(p, fx);
         }
+    }
+
+    /**
+     * The "A wild Mini!" label, shown only while somebody is standing more or less on top of
+     * the head — and taken away again the moment they are not.
+     *
+     * <p>It used to be handled by the shared hologram path, which creates but never removes:
+     * one pass within {@code effects.radius} lit the sign, and it then stayed lit for the rest
+     * of the spawn's life. A TextDisplay is legible from hundreds of blocks, so a label meant
+     * to say "this head is the prize" became a floating marker saying "the prize is over here"
+     * — the one thing a hunt cannot have.
+     *
+     * <p>So this is the removal half, and the range is its own knob rather than
+     * {@code effects.radius}: sixteen blocks is the right distance to start particles for a
+     * trophy on a shelf and far too generous to admit you have found something.
+     * {@code wild_hologram_range: 0} turns the label off outright.
+     */
+    private void wildLabel(Placed p, PluginConfig.MiniEffects cfg, Location base) {
+        double range = cfg.wildHologramRange();
+        boolean wanted = range > 0 && p.hologramText != null && !p.hologramText.isBlank();
+        if (wanted && playerNear(p, base, range * range)) {
+            ensureHologram(p, cfg.of(p.def.rarity()), base, false);
+            return;
+        }
+        removeEntity(p.hologramId);
+        p.hologramId = null;
     }
 
     private boolean playerNear(Placed p, Location base, double r2) {

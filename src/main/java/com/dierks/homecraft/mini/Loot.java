@@ -83,8 +83,19 @@ public final class Loot {
         }
     }
 
-    /** Natural-spawn tuning: cadence, lifetime, and how far from a player a Mini lands. */
-    public record Natural(int intervalTicks, int despawnMinutes, int minDistance, int maxDistance) {
+    /**
+     * Natural-spawn tuning: cadence, lifetime, how far from a player a Mini lands, and the
+     * two throttles that cap how often one shows up at all.
+     *
+     * <p>{@code playerCooldownMinutes} is the throttle that actually governs the feel of it.
+     * The per-source {@code chance_percent} is a roll per player per tick, so the rate an
+     * admin ends up with is a product of three numbers and is nobody's idea of tunable; the
+     * cooldown says the thing you mean instead — "a player finds at most one wild Mini every
+     * two hours" — and holds no matter what the chance is set to. {@code maxLive} is the
+     * other end of the same idea: a ceiling on unclaimed Minis standing in the world.
+     */
+    public record Natural(int intervalTicks, int despawnMinutes, int minDistance, int maxDistance,
+                          int playerCooldownMinutes, int maxLive) {
     }
 
     /** The full loot config: lists + sources + tag-pool rarity weights + Shiny odds + natural spawns. */
@@ -93,7 +104,7 @@ public final class Loot {
 
         /** Lists + sources with the built-in defaults for everything else (older call sites). */
         public MiniLoot(List<LootList> lists, List<LootSource> sources) {
-            this(lists, sources, defaultRarityWeights(), 5.0, new Natural(12000, 10, 24, 48));
+            this(lists, sources, defaultRarityWeights(), 5.0, new Natural(24000, 3, 96, 128, 120, 2));
         }
 
         public static Map<Rarity, Double> defaultRarityWeights() {

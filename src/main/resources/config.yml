@@ -49,7 +49,7 @@ shops:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 6
+config_revision: 7
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -468,8 +468,9 @@ minis:
   # ---- Announcements (Phase 12). One server-wide line when a Mini is FOUND (wild
   # drop, natural spawn, crate — never the Printer or a pack); the [name] is a hover
   # card showing the item's full tooltip and click-runs /hcm museum <id>. A SPAWN HINT
-  # when a natural spawn lands ("A <Rarity> Mini has spawned within 100 blocks of a
-  # player!") — never coordinates, never who — and a "slipped away" line if it
+  # when a natural spawn lands ("A <Rarity> Mini has spawned within 128 blocks of a
+  # player! You have 3 minutes to find it!") — never coordinates, never who, and both
+  # numbers read from minis.loot.natural so they cannot drift — and a "slipped away" line if it
   # despawns untouched. Every broadcast plays `sound` to everyone. `min_rarity` and
   # `per_rarity` silence chat for tiers you don't want announced.
   announce:
@@ -478,7 +479,7 @@ minis:
     spawn_hint: true
     slipped_away: true
     min_rarity: COMMON      # COMMON | UNCOMMON | RARE | EPIC | LEGENDARY
-    hint_radius_text: "within 100 blocks of a player"
+    hint_radius_text: "within %blocks% blocks of a player"   # %blocks% = natural.max_distance
     sound: ENTITY_EXPERIENCE_ORB_PICKUP
     per_rarity: { COMMON: true, UNCOMMON: true, RARE: true, EPIC: true, LEGENDARY: true }
 
@@ -506,19 +507,29 @@ minis:
   # Shiny roll at shiny_percent (or the source's `shiny_percent`) — so it respects the
   # cap, counts toward circulation, and is announced. Block-break sources must name a
   # material (anti-farm). NATURAL_SPAWN sources fire every natural.interval_ticks for
-  # each online player and place the Mini as a head 24–48 blocks away instead of
-  # handing it over. Empty by default — nothing drops until you configure it.
+  # each online player and place the Mini as a head min_distance–max_distance blocks
+  # away instead of handing it over. Empty by default — nothing drops until you configure it.
   loot:
     # Tag-pool odds by rarity (relative weights).
     rarity_weights: { LEGENDARY: 1, EPIC: 4, RARE: 15, UNCOMMON: 40, COMMON: 100 }
     # Chance (%) that a found Mini is Shiny; sources may override with shiny_percent.
     shiny_percent: 5
     # Natural spawns: cadence, lifetime before it slips away, and distance from a player.
+    # `chance_percent` on a NATURAL_SPAWN source is rolled once PER PLAYER PER TICK, so it
+    # is not a rate on its own — with several people online the Minis-per-hour climbs with
+    # the player count. The two throttles below say the thing you actually mean and hold
+    # whatever the chance is: player_cooldown_minutes is how often ONE player can be
+    # targeted, max_live is how many unclaimed Minis may stand in the world at once.
+    # max_distance has a ceiling the plugin cannot see: a spot is only usable in a LOADED
+    # chunk, so anything past your server.properties view-distance (10 chunks = 160 blocks
+    # by default) silently finds nowhere to stand and no Mini ever spawns.
     natural:
-      interval_ticks: 12000   # 10 minutes
-      despawn_minutes: 10
-      min_distance: 24
-      max_distance: 48
+      interval_ticks: 24000          # 20 minutes
+      despawn_minutes: 3             # the find window, announced in the spawn hint
+      min_distance: 96
+      max_distance: 128
+      player_cooldown_minutes: 120   # 0 disables; forgotten on restart
+      max_live: 2                    # 0 = no ceiling
     lists: []
     #  - id: common_blocks
     #    entries:
@@ -528,7 +539,7 @@ minis:
     #  - { trigger: BLOCK_BREAK,   match: STONE,  tag: mining, chance_percent: 0.02 }   # ~1 per 5,000 stone
     #  - { trigger: MOB_KILL,      match: ZOMBIE, tag: zombie, chance_percent: 1 }
     #  - { trigger: FISHING,       match: "*",    tag: fish,   chance_percent: 0.5 }
-    #  - { trigger: NATURAL_SPAWN, match: "*",    tag: mining, chance_percent: 3 }      # 3% per 10-minute tick, per player
+    #  - { trigger: NATURAL_SPAWN, match: "*",    tag: mining, chance_percent: 3 }      # 3% per 20-minute tick, PER PLAYER
     # Per-source overrides: grades: { standard: 60, graded: 30, mint: 10 } and shiny_percent: 10
 
   # ---- Posed armor-stand Minis (Phase 4d). Authored in-game: pose a real armor

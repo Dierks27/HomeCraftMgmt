@@ -40,11 +40,23 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * The NATURAL_SPAWN trigger: every {@code minis.loot.natural.interval_ticks}, for each
  * online player, each NATURAL_SPAWN loot source rolls its chance; on a hit a Mini is
- * minted (unowned, cap-aware) and placed as a head on a random surface spot 24–48
- * blocks away that the player could build on. Touching or breaking it hands the
- * exact copy to the finder (with the found-broadcast); untouched, it despawns after
- * {@code despawn_minutes} and the copy is retired. Spawns persist in
- * {@code mini_spawns} so lifetimes survive restarts and nothing leaks.
+ * minted (unowned, cap-aware) and placed as a head on a random surface spot
+ * {@code min_distance}–{@code max_distance} blocks away that the player could build on.
+ * Touching or breaking it hands the exact copy to the finder (with the found-broadcast);
+ * untouched, it despawns after {@code despawn_minutes} and the copy is retired. Spawns
+ * persist in {@code mini_spawns} so lifetimes survive restarts and nothing leaks.
+ *
+ * <p>Two throttles sit in front of the roll, because {@code chance_percent} alone cannot
+ * express a rate: it fires once per player per tick, so the Minis-per-hour a server
+ * actually sees is that chance times the cadence times the number of people online.
+ * {@code player_cooldown_minutes} caps how often one player is targeted and
+ * {@code max_live} caps how many unclaimed Minis stand in the world at once; both hold
+ * whatever the chance is set to. The cooldown lives in memory only — a restart forgives
+ * it, which is the harmless direction to be wrong in.
+ *
+ * <p>Distance has a ceiling the config cannot see: a spot is only usable in a loaded
+ * chunk, so a {@code max_distance} past the server's view-distance (10 chunks = 160
+ * blocks by default) quietly finds nothing and no Mini ever spawns.
  */
 public final class NaturalSpawnService {
 
@@ -53,6 +65,8 @@ public final class NaturalSpawnService {
     private final HomeCraftManagement plugin;
     private final MiniSpawnDao dao;
     private final Map<String, MiniSpawnDao.Spawn> live = new HashMap<>();
+    /** Player → the moment they are eligible for another wild spawn. Memory-only, on purpose. */
+    private final Map<java.util.UUID, Long> cooldowns = new HashMap<>();
     private BukkitTask spawnTask;
     private BukkitTask expireTask;
 
@@ -69,7 +83,10 @@ public final class NaturalSpawnService {
         Loot.Natural n = plugin.config().miniLoot().natural();
         long interval = Math.max(200, n.intervalTicks());
         spawnTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::spawnTick, interval, interval);
-        expireTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::expireTick, 200L, 200L);
+        // 2s, not 10s. The find window is three minutes now, and a ten-second beat means
+        // a Mini can stand there for up to ten seconds past its time — a twentieth of the
+        // hunt, handed out at random. The loop walks a map max_live keeps to single digits.
+        expireTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::expireTick, 40L, 40L);
     }
 
     public void stop() {
@@ -120,12 +137,23 @@ public final class NaturalSpawnService {
         if (sources.isEmpty()) {
             return;
         }
+        Loot.Natural n = loot.natural();
+        long now = System.currentTimeMillis();
         for (Player player : Bukkit.getOnlinePlayers()) {
+            // Re-checked per player rather than once: the ceiling is on Minis standing in the
+            // world, and this loop is what puts them there.
+            if (n.maxLive() > 0 && live.size() >= n.maxLive()) {
+                return;
+            }
             GameMode gm = player.getGameMode();
             if (gm != GameMode.SURVIVAL && gm != GameMode.ADVENTURE) {
                 continue;
             }
             if (!plugin.sandbox().allowed(player.getWorld())) {
+                continue;
+            }
+            Long eligibleAt = cooldowns.get(player.getUniqueId());
+            if (eligibleAt != null && eligibleAt > now) {
                 continue;
             }
             for (Loot.LootSource source : sources) {
@@ -134,6 +162,11 @@ public final class NaturalSpawnService {
                     continue;
                 }
                 if (spawnFor(player, source)) {
+                    // Started only by a Mini that actually landed: a roll that hit but found
+                    // no ground to stand on has cost the player nothing and owes them nothing.
+                    if (n.playerCooldownMinutes() > 0) {
+                        cooldowns.put(player.getUniqueId(), now + n.playerCooldownMinutes() * 60_000L);
+                    }
                     break; // at most one spawn per player per tick
                 }
             }
@@ -178,11 +211,15 @@ public final class NaturalSpawnService {
      * A random surface spot {@code minDistance}–{@code maxDistance} blocks from the player:
      * solid ground, two air blocks above, no liquid, not a custom block, and (when town
      * perms are respected) somewhere the player is allowed to build.
+     *
+     * <p>Twenty-four attempts rather than sixteen: the band is far enough out now that ocean,
+     * a lake or a forest canopy can eat a long run of candidates, and a band that quietly
+     * fails is indistinguishable from spawns being switched off.
      */
     private Location findSpot(Player player, Loot.Natural n) {
         World world = player.getWorld();
         Location origin = player.getLocation();
-        for (int attempt = 0; attempt < 16; attempt++) {
+        for (int attempt = 0; attempt < 24; attempt++) {
             double angle = ThreadLocalRandom.current().nextDouble() * Math.PI * 2;
             double dist = n.minDistance() + ThreadLocalRandom.current().nextDouble() * (n.maxDistance() - n.minDistance());
             int x = origin.getBlockX() + (int) Math.round(Math.cos(angle) * dist);
@@ -318,6 +355,7 @@ public final class NaturalSpawnService {
 
     private void expireTick() {
         long now = System.currentTimeMillis();
+        cooldowns.values().removeIf(until -> until <= now);
         for (MiniSpawnDao.Spawn s : new ArrayList<>(live.values())) {
             if (s.expiresAt() > now) {
                 continue;

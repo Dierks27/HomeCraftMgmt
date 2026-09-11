@@ -55,16 +55,32 @@ public final class AnnounceService {
         broadcast(msg);
     }
 
-    /** "A &lt;Rarity&gt; Mini has spawned within 100 blocks of a player! Good luck!" — no coordinates, no names. */
+    /**
+     * "A &lt;Rarity&gt; Mini has spawned within 128 blocks of a player — 3 minutes to find it!"
+     * — no coordinates, no names.
+     *
+     * <p>Both numbers are read from {@code minis.loot.natural} rather than written into the
+     * sentence. {@code hint_radius_text} used to say "within 100 blocks" while the spawn band
+     * was 24–48, and a hint that is wrong about the only fact it carries is worse than no
+     * hint; {@code %blocks%} cannot drift. The find window is announced for the same reason —
+     * a timed hunt nobody is told the length of is just a Mini that vanishes.
+     */
     public void spawnHint(Rarity rarity) {
         PluginConfig.Announce a = plugin.config().announce();
         if (a == null || !a.spawnHint() || !a.allows(rarity)) {
             return;
         }
+        Loot.Natural n = plugin.config().miniLoot().natural();
+        // hint_radius_text is admin-owned and may be emptied; the sentence still has to read.
+        String where = a.hintRadiusText() == null ? "somewhere out there"
+                : a.hintRadiusText().replace("%blocks%", String.valueOf(n.maxDistance()));
+        int minutes = n.despawnMinutes();
+        String window = minutes <= 0 ? " Good luck!"
+                : " You have " + minutes + (minutes == 1 ? " minute" : " minutes") + " to find it!";
         RarityStyle style = plugin.miniService().style(rarity);
         Component msg = Component.text("A ", NamedTextColor.LIGHT_PURPLE)
                 .append(Component.text(pretty(rarity.name()), style.nameColor()))
-                .append(Component.text(" Mini has spawned " + a.hintRadiusText() + "! Good luck!",
+                .append(Component.text(" Mini has spawned " + where + "!" + window,
                         NamedTextColor.LIGHT_PURPLE));
         broadcast(msg);
     }

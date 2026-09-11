@@ -47,7 +47,34 @@ public enum Grade {
 
     public String symbol() {
         Style s = styles.get(this);
-        return s != null && s.symbol() != null && !s.symbol().isBlank() ? s.symbol() : defaultSymbol;
+        return s != null && usable(s.symbol()) ? s.symbol() : defaultSymbol;
+    }
+
+    /**
+     * True when a configured symbol is something we can actually show.
+     *
+     * <p>The one rejection worth making is a symbol that is nothing but question marks.
+     * That is not a choice anybody types; it is what a UTF-8 file looks like after an
+     * editor saves it back as ANSI/Windows-1252 — every character it cannot represent
+     * becomes the byte {@code '?'}. The stars go in as ☆ and come out as "?", so a Mini
+     * renders as "Creeper ?" and the cause is invisible from in-game.
+     *
+     * <p>Falling back to the built-in star costs an admin nothing (a deliberate symbol is
+     * never all question marks) and turns a permanently broken name into a cosmetic
+     * no-op while they fix the file — which {@code HomeCraftManagement.repairGradeSymbols}
+     * also offers to do for them.
+     */
+    static boolean usable(String symbol) {
+        return symbol != null && !symbol.isBlank() && !isMangledSymbol(symbol);
+    }
+
+    /** True if {@code symbol} is the wreckage of a non-UTF-8 save: question marks and nothing else. */
+    public static boolean isMangledSymbol(String symbol) {
+        if (symbol == null) {
+            return false;
+        }
+        String s = symbol.trim();
+        return !s.isEmpty() && s.chars().allMatch(ch -> ch == '?');
     }
 
     public String display() {

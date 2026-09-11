@@ -55,8 +55,8 @@ public final class MarketMenu extends Menu {
             MarketItem item = items.get(idx);
             long stock = Departments.stock(market, item.id());
             set(slot, Menus.icon(item.material(), item.label(),
-                    "&7Buy: &a" + money(market.buyPrice(item.id())),
-                    "&7Sell: &c" + money(market.sellPrice(item.id())),
+                    "&7Buy: &6" + money(market.buyPrice(item.id())),
+                    "&7Sell: &6" + money(market.sellPrice(item.id())),
                     "&7Stock: " + (stock <= 0 ? "&cOUT OF STOCK" : "&f" + stock),
                     "&8—",
                     "&eLeft-click &7to buy",
@@ -109,14 +109,14 @@ public final class MarketMenu extends Menu {
                 qty -> {
                     MarketService.Plan plan = market.quoteBuy(item.id(), qty);
                     return List.of(
-                            "&7Total cost: &f" + money(plan.total()),
+                            "&7Total cost: &6" + money(plan.total()),
                             "&7Stock after: &f" + plan.endStock(),
-                            "&7New price: &f" + money(plan.endPrice()));
+                            "&7New price: &6" + money(plan.endPrice()));
                 },
                 qty -> {
                     MarketService.TradeResult r = market.buy(player, item.id(), qty);
                     player.sendMessage(r.ok()
-                            ? Text.of("&aBought &f" + r.qty() + " &afor &f" + money(r.amount()))
+                            ? Text.of("&aBought &f" + r.qty() + " &afor &6" + money(r.amount()))
                             : Text.of("&c" + r.error()));
                     reopen();
                 },
@@ -135,9 +135,9 @@ public final class MarketMenu extends Menu {
                 qty -> {
                     MarketService.Plan plan = market.quoteSell(item.id(), qty);
                     return List.of(
-                            "&7You receive: &a" + money(plan.total()),
+                            "&7You receive: &6" + money(plan.total()),
                             "&7Stock after: &f" + plan.endStock(),
-                            "&7New price: &f" + money(plan.endPrice()));
+                            "&7New price: &6" + money(plan.endPrice()));
                 },
                 qty -> {
                     MarketService.TradeResult r = market.sell(player, item.id(), qty);

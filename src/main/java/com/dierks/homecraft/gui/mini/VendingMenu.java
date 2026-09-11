@@ -122,7 +122,7 @@ public final class VendingMenu extends Menu {
         ItemStack mini = Items.fromBase64(l.itemB64());
         List<String> lore = List.of(
                 "&7Price: &6" + plugin.economy().format(l.price()),
-                "&7Your balance: &f" + plugin.economy().format(plugin.economy().balance(player)));
+                "&7Your balance: &6" + plugin.economy().format(plugin.economy().balance(player)));
         // Not Menus.FILLER: ConfirmMenu pads itself with that pane, so an undecodable Mini turned
         // the thing being bought into invisible padding — a price confirmed against nothing.
         new ConfirmMenu(plugin, "&dBuy this Mini?",
@@ -156,7 +156,7 @@ public final class VendingMenu extends Menu {
                         + (def.uncapped() ? "" : " &7of &f" + def.cap())));
             }
             lore.add(Text.of("&7In circulation: &f" + c.circulation()));
-            lore.add(Text.of("&6Price: &f" + plugin.economy().format(l.price())));
+            lore.add(Text.of("&7Price: &6" + plugin.economy().format(l.price())));
             lore.add(Text.of("&8—"));
             lore.add(isSeller ? Text.of("&eLeft-click&7: reprice  &eRight-click&7: take back")
                     : Text.of("&aClick to buy"));

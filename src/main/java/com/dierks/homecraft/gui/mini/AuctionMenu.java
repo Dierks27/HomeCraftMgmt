@@ -102,7 +102,7 @@ public final class AuctionMenu extends Menu {
         set(13, detailIcon(a), null);
 
         set(29, Menus.icon(Material.EMERALD, "&aPlace a bid",
-                "&7Minimum: &f" + plugin.economy().format(a.hasBid()
+                "&7Minimum: &6" + plugin.economy().format(a.hasBid()
                         ? a.currentBid() + 1 : a.startBid())),
                 e -> plugin.chatPrompts().prompt(player, "Enter your bid amount:", input -> {
                     double amount = parse(input);
@@ -117,13 +117,13 @@ public final class AuctionMenu extends Menu {
 
         if (a.buyNow() > 0) {
             set(31, Menus.icon(Material.DIAMOND, "&bBuy It Now",
-                    "&7" + plugin.economy().format(a.buyNow())), e -> {
+                    "&6" + plugin.economy().format(a.buyNow())), e -> {
                 ItemStack mini = Items.fromBase64(a.itemB64());
                 // Same reason as VendingMenu: the filler pane is padding, not a product.
                 new ConfirmMenu(plugin, "&bBuy now for " + plugin.economy().format(a.buyNow()) + "?",
                         mini == null ? Menus.icon(Material.BARRIER, "&cUnreadable Mini",
                                 "&7This auction's item could not be read.") : mini,
-                        List.of("&7Your balance: &f" + plugin.economy().format(plugin.economy().balance(player))),
+                        List.of("&7Your balance: &6" + plugin.economy().format(plugin.economy().balance(player))),
                         () -> {
                             AuctionService.Result r = plugin.auctions().buyNow(player, a.id());
                             player.sendMessage(r.ok() ? Text.of("&aBought!") : Text.of("&c" + r.error()));
@@ -151,9 +151,9 @@ public final class AuctionMenu extends Menu {
         ItemStack icon = miniOr(a);
         addLore(icon,
                 "&8—",
-                "&7Current: &f" + (a.hasBid() ? plugin.economy().format(a.currentBid()) : "no bids"),
-                "&7Start: &f" + plugin.economy().format(a.startBid()),
-                a.buyNow() > 0 ? "&7Buy now: &b" + plugin.economy().format(a.buyNow()) : "&8no buy-now",
+                "&7Current: " + (a.hasBid() ? "&6" + plugin.economy().format(a.currentBid()) : "&7no bids"),
+                "&7Start: &6" + plugin.economy().format(a.startBid()),
+                a.buyNow() > 0 ? "&7Buy now: &6" + plugin.economy().format(a.buyNow()) : "&8no buy-now",
                 "&7Ends in: &f" + Menus.duration(a.endAt() - System.currentTimeMillis()),
                 "&eClick to view");
         return icon;
@@ -165,9 +165,9 @@ public final class AuctionMenu extends Menu {
         addLore(icon,
                 "&8—",
                 "&7Seller: &f" + nameOf(a.seller()),
-                "&7Current bid: &f" + (a.hasBid() ? plugin.economy().format(a.currentBid()) : "none"),
+                "&7Current bid: " + (a.hasBid() ? "&6" + plugin.economy().format(a.currentBid()) : "&7none"),
                 "&7Top bidder: &f" + leader,
-                a.buyNow() > 0 ? "&7Buy now: &b" + plugin.economy().format(a.buyNow()) : "&8no buy-now",
+                a.buyNow() > 0 ? "&7Buy now: &6" + plugin.economy().format(a.buyNow()) : "&8no buy-now",
                 "&7Ends in: &f" + Menus.duration(a.endAt() - System.currentTimeMillis()));
         return icon;
     }

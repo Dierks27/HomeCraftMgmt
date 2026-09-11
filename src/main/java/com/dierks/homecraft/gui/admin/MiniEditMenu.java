@@ -94,7 +94,7 @@ public final class MiniEditMenu extends Menu {
                 e -> promptText("Enter a mint cap number, or 'unlimited':", this::setCap));
 
         set(20, Menus.icon(Material.GOLD_INGOT, "&ePrice",
-                "&f" + plugin.economy().format(Math.max(0, draft.price())),
+                "&6" + plugin.economy().format(Math.max(0, draft.price())),
                 "&7Click to set the mint price"),
                 e -> promptText("Enter the mint price (a number):", this::setPrice));
 

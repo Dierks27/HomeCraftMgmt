@@ -121,7 +121,7 @@ public final class PrinterMenu extends Menu {
             double fee = cfg.fee();
             boolean feeOk = fee <= 0 || (plugin.economy().isEnabled() && plugin.economy().has(player, fee));
             req.add("");
-            req.add((feeOk ? "&a✔ " : "&c✗ ") + "Fee: " + (fee <= 0 ? "&aFree" : plugin.economy().format(fee)));
+            req.add((feeOk ? "&a✔ " : "&c✗ ") + "Fee: " + (fee <= 0 ? "&aFree" : "&6" + plugin.economy().format(fee)));
             canAfford = haveAll && feeOk;
             set(14, Menus.icon(canAfford ? Material.LIME_DYE : Material.RED_DYE,
                     "&bFilament & Fee", req.toArray(new String[0])), null);

@@ -52,8 +52,8 @@ public final class MarketplaceCheckoutMenu extends Menu {
             double total = price + shipping;
             set(TIER_SLOTS[i], Menus.icon(Material.MINECART, "&e" + tier.label(),
                     "&7Arrives in ~&f" + Menus.duration(tier.deliveryMillis()),
-                    "&7Item: &f" + plugin.economy().format(price),
-                    "&7Shipping: &f" + plugin.economy().format(shipping),
+                    "&7Item: &6" + plugin.economy().format(price),
+                    "&7Shipping: &6" + plugin.economy().format(shipping),
                     "&7Total: &6" + plugin.economy().format(total),
                     "&8—",
                     "&aClick to buy → ships to your Mailbox"), e -> buy(tier));

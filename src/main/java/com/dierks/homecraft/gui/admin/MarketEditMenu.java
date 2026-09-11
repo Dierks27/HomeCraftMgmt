@@ -92,12 +92,12 @@ public final class MarketEditMenu extends Menu {
                 prompt("Display name (or 'none'):", v -> draft.setDisplayName(v)));
 
         // ---- price band --------------------------------------------------------
-        set(14, Menus.icon(Material.GOLD_NUGGET, "&eFloor: &f" + plugin.economy().format(draft.floor()),
+        set(14, Menus.icon(Material.GOLD_NUGGET, "&eFloor: &6" + plugin.economy().format(draft.floor()),
                 "&7Price when the market is FULL.",
                 "&eClick to set."), e ->
                 promptDouble("Floor price:", v -> draft.setFloor(v)));
 
-        set(15, Menus.icon(Material.GOLD_INGOT, "&eCeiling: &f" + plugin.economy().format(draft.ceiling()),
+        set(15, Menus.icon(Material.GOLD_INGOT, "&eCeiling: &6" + plugin.economy().format(draft.ceiling()),
                 "&7Price when stock hits 0.",
                 "&7Must be above the floor.",
                 "&eClick to set."), e ->

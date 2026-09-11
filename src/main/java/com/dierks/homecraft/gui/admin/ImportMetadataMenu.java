@@ -54,7 +54,7 @@ public final class ImportMetadataMenu extends Menu {
         preview.add("&7Type: &f" + meta.category());
         preview.add("&7Rarity: &f" + meta.rarity().name());
         preview.add("&7Cap: &f" + (meta.uncapped() ? "Unlimited" : Long.toString(meta.cap())));
-        preview.add("&7Price: &f" + plugin.economy().format(Math.max(0, meta.price())));
+        preview.add("&7Price: &6" + plugin.economy().format(Math.max(0, meta.price())));
         preview.add("&8Applies to all " + heads.size() + " selected");
         String sampleTexture = heads.isEmpty() ? "" : heads.get(0).texture();
         String sampleName = heads.isEmpty() ? "Preview" : heads.get(0).name();
@@ -107,7 +107,7 @@ public final class ImportMetadataMenu extends Menu {
                 e -> plugin.chatPrompts().prompt(player, "Enter a mint cap number, or 'unlimited':", this::setCapThenReopen));
 
         set(20, Menus.icon(Material.GOLD_INGOT, "&ePrice",
-                "&f" + plugin.economy().format(Math.max(0, meta.price())),
+                "&6" + plugin.economy().format(Math.max(0, meta.price())),
                 "&7Click to set the mint price"),
                 e -> plugin.chatPrompts().prompt(player, "Enter the mint price (a number):", this::setPriceThenReopen));
 

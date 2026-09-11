@@ -58,7 +58,7 @@ public final class CommodityPickerMenu extends Menu {
             MarketItem item = items.get(idx);
             double change = plugin.market().change24h(item.id());
             set(i, Menus.icon(item.material(), item.label(),
-                    "&7Price: &a" + plugin.economy().format(plugin.market().price(item.id())),
+                    "&7Price: &6" + plugin.economy().format(plugin.market().price(item.id())),
                     "&7Trend: " + Trend.color(change) + Trend.label(change),
                     "&8—",
                     "&eClick to bind this display"), e -> onPick.accept(item.id()));

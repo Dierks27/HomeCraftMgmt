@@ -64,7 +64,7 @@ public final class StoreMenu extends Menu {
             long stock = Departments.stock(market, item.id());
             boolean out = stock <= 0;
             set(slot, Menus.icon(item.material(), item.label(),
-                    "&7Buy: &a" + money(market.buyPrice(item.id())) + "&7/ea",
+                    "&7Buy: &6" + money(market.buyPrice(item.id())) + "&7/ea",
                     "&7Stock: " + (out ? "&cOUT OF STOCK" : "&f" + stock),
                     "&8—",
                     out ? "&cUnavailable" : "&eClick to order"), e -> {
@@ -86,7 +86,7 @@ public final class StoreMenu extends Menu {
         // them between the page arrows. No Close tile — Esc shuts any inventory, and the
         // balance readout earns the slot more than a second way to do what Esc already does.
         set(46, Menus.icon(Material.GOLD_INGOT, "&6Your balance",
-                "&f" + money(plugin.economy().balance(player)),
+                "&6" + money(plugin.economy().balance(player)),
                 "&8—",
                 "&8Press Esc to close the store."), null);
         set(47, Menus.icon(Material.EMERALD, "&aInstant Market",
@@ -130,7 +130,7 @@ public final class StoreMenu extends Menu {
                 qty -> {
                     MarketService.Plan plan = market.quoteBuy(item.id(), qty);
                     return List.of(
-                            "&7Item cost: &f" + money(plan.total()),
+                            "&7Item cost: &6" + money(plan.total()),
                             "&8+ shipping chosen at checkout");
                 },
                 qty -> new CheckoutMenu(plugin, player, item, qty, this::reopen).open(player),

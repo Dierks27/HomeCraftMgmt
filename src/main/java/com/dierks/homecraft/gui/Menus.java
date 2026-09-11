@@ -23,8 +23,20 @@ public final class Menus {
      * refreshes, so it reflects the player's live Vault balance after every trade.
      */
     public static ItemStack balance(HomeCraftManagement plugin, Player player) {
-        String bal = plugin.economy().format(plugin.economy().balance(player));
-        return icon(Material.GOLD_INGOT, "&6Your balance", "&f" + bal);
+        return icon(Material.GOLD_INGOT, "&6Your balance", money(plugin, plugin.economy().balance(player)));
+    }
+
+    /**
+     * A money figure, in the one colour money is allowed to be.
+     *
+     * <p>Gold means "this is an amount of money" and nothing else; the LABEL carries which way it
+     * is flowing ("&amp;7You pay: ", "&amp;7You get: "). Prices used to be green in the Store, red in the
+     * Market, white at checkout, aqua in the auction house and gold in the Marketplace — and the
+     * red one was the sell price, painted the same colour as OUT OF STOCK and every error, which
+     * told a child that the number making her richer was a kind of breakage.
+     */
+    public static String money(HomeCraftManagement plugin, double amount) {
+        return "&6" + plugin.economy().format(amount);
     }
 
     /** An icon with an '&amp;'-coded name and lore lines. */

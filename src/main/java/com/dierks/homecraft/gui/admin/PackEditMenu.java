@@ -65,7 +65,7 @@ public final class PackEditMenu extends Menu {
                     rename(input);
                 }));
 
-        set(4, Menus.icon(Material.GOLD_INGOT, "&6Price: &f" + plugin.economy().format(pack.price()),
+        set(4, Menus.icon(Material.GOLD_INGOT, "&7Price: &6" + plugin.economy().format(pack.price()),
                 "&7Left &8+10  &7Right &8-10",
                 "&7Shift-left &8+100  &7Shift-right &8-100"), e -> {
             double step = e.isShiftClick() ? 100 : 10;

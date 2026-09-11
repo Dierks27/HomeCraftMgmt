@@ -70,9 +70,14 @@ public final class MarketplaceCheckoutMenu extends Menu {
     }
 
     private void buy(PluginConfig.ShippingTier tier) {
-        PalletService.Result r = plugin.pallets().buy(player, listing.id(), tier);
+        // Hand the price this screen quoted to the service, so it can refuse rather than silently
+        // charge a higher one the seller set while this menu was open.
+        PalletService.Result r = plugin.pallets().buy(player, listing.id(), listing.price(), tier);
         if (r.ok()) {
-            player.sendMessage(Text.of("&aBought! Ships to your Mailbox — arrives in ~"
+            player.sendMessage(Text.of("&aBought for &f"
+                    + plugin.economy().format(listing.price()
+                            + plugin.orderService().shippingCost(listing.price(), tier))
+                    + "&a! Ships to your Mailbox — arrives in ~"
                     + Menus.duration(r.deliverAt() - System.currentTimeMillis()) + "."));
         } else {
             player.sendMessage(Text.of("&c" + r.error()));

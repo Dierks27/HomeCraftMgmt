@@ -99,7 +99,10 @@ public final class PalletService {
                     return Result.fail("This Pallet already holds a different item — take it back first.");
                 }
                 double newPrice = price > 0 ? price : existing.get().price();
-                dao.upsert(loc, owner.getUniqueId(), existing.get().itemB64(), newPrice,
+                // The EXISTING owner, not whoever is restocking. An admin can open "Stock more"
+                // on someone else's Pallet, and passing the caller here quietly re-homed the
+                // listing — every later sale would have paid the restocker instead of the seller.
+                dao.upsert(loc, existing.get().owner(), existing.get().itemB64(), newPrice,
                         existing.get().stock() + amount, existing.get().department(), System.currentTimeMillis());
             } else {
                 if (price <= 0) {
@@ -174,7 +177,13 @@ public final class PalletService {
     }
 
     /** A buyer purchases one unit from a listing; it ships to their Mailbox. */
-    public Result buy(Player buyer, long listingId, PluginConfig.ShippingTier tier) {
+    /**
+     * Buy one unit of a listing.
+     *
+     * @param quotedPrice the unit price the buyer was shown, so a seller repricing mid-checkout
+     *                    cannot charge more than that; 0 skips the check
+     */
+    public Result buy(Player buyer, long listingId, double quotedPrice, PluginConfig.ShippingTier tier) {
         if (!plugin.sandbox().check(buyer, "marketplace purchase")) {
             return Result.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
         }
@@ -190,6 +199,14 @@ public final class PalletService {
         PalletDao.Listing l = opt.get();
         if (l.owner().equals(buyer.getUniqueId())) {
             return Result.fail("You can't buy your own listing.");
+        }
+        // The checkout screen was painted from an earlier read of this row, and the seller can
+        // reprice at their Pallet in between. Being charged MORE than the figure on screen is the
+        // harm, so refuse that and send them back for a fresh quote; a price that has fallen is
+        // simply honoured at the lower number. Callers passing 0 opt out of the check.
+        if (quotedPrice > 0 && l.price() > quotedPrice + 0.0001) {
+            return Result.fail("The price just changed to " + economy.format(l.price())
+                    + " — reopen the listing.");
         }
         if (!economy.isEnabled()) {
             return Result.fail("The economy is offline.");

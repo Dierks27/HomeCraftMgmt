@@ -89,12 +89,12 @@ public final class OrderService {
             return PlaceResult.fail(item.label() + " is out of stock.");
         }
         double itemTotal = quote.total();
-        double shipping = shippingCost(itemTotal, tier);
-        double total = itemTotal + shipping;
+        double quotedShipping = shippingCost(itemTotal, tier);
+        double total = itemTotal + quotedShipping;
 
         if (!economy.has(player, total)) {
             return PlaceResult.fail("You can't afford " + economy.format(total)
-                    + " (" + economy.format(itemTotal) + " + " + economy.format(shipping) + " shipping).");
+                    + " (" + economy.format(itemTotal) + " + " + economy.format(quotedShipping) + " shipping).");
         }
 
         // Charge the item cost + consume stock (goods delivered later, not now).
@@ -102,8 +102,21 @@ public final class OrderService {
         if (!purchase.ok()) {
             return PlaceResult.fail(purchase.error());
         }
-        if (shipping > 0 && !economy.withdraw(player, shipping)) {
+
+        // Freight is billed on what was actually bought, NOT on the quote. quoteBuy is
+        // deliberately limit-blind, while the purchase that follows applies the per-item and
+        // per-day buy caps and is allowed to fill short without failing — so on PERCENTAGE
+        // shipping an order trimmed by the daily cap would otherwise pay freight on goods it
+        // never received. The quote still sizes the affordability check above, which is the
+        // conservative direction.
+        double shipping = shippingCost(purchase.amount(), tier);
+        boolean shippingPaid = shipping <= 0 || economy.withdraw(player, shipping);
+        if (!shippingPaid) {
             plugin.getLogger().warning("Shipping fee withdraw failed after purchase for " + player.getName());
+        }
+        if (purchase.qty() < quote.filled()) {
+            player.sendMessage(Text.of("&eYour daily buy limit trimmed this order to &f" + purchase.qty()
+                    + "&e — you were charged for that amount, shipping included."));
         }
 
         long now = System.currentTimeMillis();
@@ -113,8 +126,12 @@ public final class OrderService {
                     purchase.amount(), shipping, tier.label(), now, deliverAt, Order.Status.IN_TRANSIT));
             return new PlaceResult(true, null, order, purchase.amount(), shipping);
         } catch (SQLException e) {
+            // The player has already paid at this point and the goods are only ever handed over
+            // from the order row, so a row that cannot be written means money for nothing. Refund
+            // exactly what was taken — the shipping withdraw above is allowed to fail on its own.
             plugin.getLogger().severe("Failed to persist order: " + e.getMessage());
-            return PlaceResult.fail("Order could not be saved.");
+            economy.deposit(player, purchase.amount() + (shippingPaid ? shipping : 0));
+            return PlaceResult.fail("Order could not be saved — refunded.");
         }
     }
 

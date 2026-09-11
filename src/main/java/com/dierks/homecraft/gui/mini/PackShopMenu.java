@@ -36,8 +36,10 @@ public final class PackShopMenu extends Menu {
         }
         List<Pack.PackDef> packs = plugin.packs().packs();
         if (packs.isEmpty()) {
-            set(22, Menus.icon(Material.BARRIER, "&7No packs available",
-                    "&8An admin can build packs with &f/hcm packs&8."), null);
+            // PAPER, not BARRIER: an empty shelf is not an error, and the red cross is the
+            // plugin's refusal icon everywhere else.
+            set(22, Menus.icon(Material.PAPER, "&7No packs available",
+                    "&7An admin can build packs with &f/hcm packs&7."), null);
         }
         int slot = 0;
         for (Pack.PackDef p : packs) {

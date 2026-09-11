@@ -139,7 +139,7 @@ crafting:
     base_block: PLAYER_HEAD
     display_name: "&bPersonal Computer"
     lore:
-      - "&7Right-click to open the Amazon store."
+      - "&7Right-click to open the store."
       - "&8HomeCraft Management"
     # Legacy computer/monitor head texture. `skins.pc` (below) wins when set; this
     # is only the fallback when that is blank. Kept in sync with skins.pc.
@@ -202,7 +202,7 @@ packs:
       - { card: golden_idol, weight: 1 }    # ≈1.1% per card
 
 # ---------------------------------------------------------------------
-#  Phase 2.5 — Finite, conserved commodities market (the "Amazon" side
+#  Phase 2.5 — Finite, conserved commodities market (the storefront side
 #  ONLY; QuickShop player-shops set their own prices and are untouched).
 #
 #  The market holds a REAL, finite stock per commodity. Selling ADDS to
@@ -245,7 +245,7 @@ market:
   # commodity's supply the moment it's stocked. Same shape and semantics as
   # sell_limits; the shared bypass permission skips both. Per-item `max_daily_buy`
   # overrides in the catalog stack ON TOP of this (tighter wins). Tracked separately
-  # in SQLite; resets at UTC midnight. Also applies to Crate/Amazon store orders.
+  # in SQLite; resets at UTC midnight. Also applies to Crate store orders.
   buy_limits:
     enabled: true
     max_money_per_day: 5000     # 0 = unlimited money/day

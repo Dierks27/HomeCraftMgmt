@@ -58,7 +58,7 @@ public final class AuctionMenu extends Menu {
 
         if (list.isEmpty()) {
             set(22, Menus.icon(Material.PAPER, "&7No active auctions",
-                    "&8Hold a Mini and click 'Sell a Mini'."), null);
+                    "&eHold a Mini, then click 'Sell a Mini' below."), null);
         }
         int start = page * PAGE_SIZE;
         for (int i = 0; i < PAGE_SIZE; i++) {

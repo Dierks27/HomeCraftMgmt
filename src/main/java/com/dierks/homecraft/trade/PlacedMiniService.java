@@ -327,6 +327,7 @@ public final class PlacedMiniService {
                 d.setShadowed(true);
                 d.setSeeThrough(false);
                 d.setBackgroundColor(Color.fromARGB(0x60000000));
+                d.setBrightness(new org.bukkit.entity.Display.Brightness(15, 15));
                 d.setPersistent(false);
                 d.setVisibleByDefault(false);
                 d.getPersistentDataContainer().set(Keys.EFFECT_ENTITY, PersistentDataType.BYTE, (byte) 1);

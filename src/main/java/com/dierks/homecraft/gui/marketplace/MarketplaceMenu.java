@@ -51,7 +51,7 @@ public final class MarketplaceMenu extends Menu {
 
         if (listings.isEmpty()) {
             set(22, Menus.icon(Material.PAPER, "&7Nothing listed here",
-                    "&8Check another department, or list something in a Pallet."), null);
+                    "&7Check another department, or list something in a Pallet."), null);
         }
         int start = page * GRID_SIZE;
         for (int i = 0; i < GRID_SIZE; i++) {

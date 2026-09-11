@@ -53,7 +53,7 @@ public final class VendingMenu extends Menu {
 
         if (listings.isEmpty()) {
             set(22, Menus.icon(Material.BARRIER, "&7Nothing for sale yet",
-                    blockOwner ? "&8Stock a Mini with the button below." : "&8Check back later."), null);
+                    blockOwner ? "&eStock a Mini with the button below." : "&7Check back later."), null);
         }
 
         int start = page * PAGE_SIZE;

@@ -36,7 +36,7 @@ public final class QuestsMenu extends Menu {
         int tokens = plugin.arcade().balance(player.getUniqueId());
         set(4, Menus.icon(Material.SUNFLOWER, "&eYour Tokens: &6" + tokens,
                 "&7Finish quests to earn tokens.",
-                "&8They reset on their own — check back!"), null);
+                "&7They reset on their own — check back!"), null);
 
         if (quests == null || !quests.enabled() || quests.all().isEmpty()) {
             set(22, Menus.icon(Material.BARRIER, "&cNo quests available",

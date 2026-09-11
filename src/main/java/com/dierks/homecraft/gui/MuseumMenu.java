@@ -170,8 +170,8 @@ public final class MuseumMenu extends Menu {
         if (rows.isEmpty()) {
             set(22, Menus.icon(Material.PAPER, "&7Nothing to show",
                     state.ownedOnly || state.rarity != null
-                            ? "&8No Mini matches the current filters."
-                            : "&8Add some under 'minis:' in config.yml."), null);
+                            ? "&7No Mini matches the current filters."
+                            : "&7Add some under 'minis:' in config.yml."), null);
         }
 
         int start = state.page * PAGE_SIZE;

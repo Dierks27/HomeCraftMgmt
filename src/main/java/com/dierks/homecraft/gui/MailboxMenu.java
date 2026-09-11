@@ -52,7 +52,7 @@ public final class MailboxMenu extends Menu {
 
         if (renders.isEmpty()) {
             set(22, Menus.icon(Material.PAPER, "&7No deliveries",
-                    "&8Store orders & Marketplace buys arrive here."), null);
+                    "&7Store orders & Marketplace buys arrive here."), null);
         }
         int start = page * PAGE_SIZE;
         for (int i = 0; i < PAGE_SIZE; i++) {

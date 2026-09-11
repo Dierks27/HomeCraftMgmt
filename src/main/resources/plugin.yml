@@ -91,7 +91,7 @@ permissions:
     description: Exempt from the daily per-player buy AND sell limits (and per-item caps).
     default: op
   hcm.pc.use:
-    description: Open the Amazon store by right-clicking a placed PC.
+    description: Open the store by right-clicking a placed PC.
     default: true
   hcm.pc.craft:
     description: Craft the PC at a Mini Workbench.

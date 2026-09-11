@@ -400,6 +400,7 @@ public final class MiniEffectsService implements Listener {
                 d.setShadowed(true);
                 d.setSeeThrough(false);
                 d.setBackgroundColor(Color.fromARGB(0x40000000));
+                d.setBrightness(new Display.Brightness(15, 15)); // signage is lit, not ambient
                 d.setPersistent(false);
                 d.getPersistentDataContainer().set(Keys.EFFECT_ENTITY, PersistentDataType.BYTE, (byte) 1);
             });

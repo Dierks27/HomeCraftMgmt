@@ -314,6 +314,7 @@ public final class DisplayService {
             e.text(holoText(d.itemId()));
             e.setBillboard(Display.Billboard.CENTER);
             e.setSeeThrough(true);
+            e.setBrightness(new Display.Brightness(15, 15)); // a price board reads after dark
             e.setPersistent(false); // we re-spawn from the DB; never saved to chunk data
             e.setTransformation(new org.bukkit.util.Transformation(
                     new org.joml.Vector3f(), new org.joml.Quaternionf(),
@@ -521,6 +522,9 @@ public final class DisplayService {
             e.setLineWidth(220);
             e.setSeeThrough(false);
             e.setBackgroundColor(org.bukkit.Color.fromARGB(215, 8, 10, 14)); // dark opaque screen
+            // A screen emits its own light. Without this the TV painted bright text onto a
+            // near-opaque dark panel and then let the night dim both together.
+            e.setBrightness(new Display.Brightness(15, 15));
             e.setPersistent(false); // re-spawned from the DB; never saved to chunk data
             e.setTransformation(new org.bukkit.util.Transformation(
                     new org.joml.Vector3f(), new org.joml.Quaternionf(),

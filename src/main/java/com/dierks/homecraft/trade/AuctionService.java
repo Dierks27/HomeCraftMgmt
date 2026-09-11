@@ -40,6 +40,15 @@ public final class AuctionService {
 
     private final HomeCraftManagement plugin;
     private final MiniAuctionDao dao;
+    /**
+     * Auctions already settled by this server run.
+     *
+     * <p>{@link #close} can fail to write CLOSED, and the sweep below runs every ten seconds off a
+     * query for rows that are still ACTIVE and past their end — so a failed status write would
+     * hand the seller a second payment and mint a second copy of a capped Mini, on a loop. The
+     * money could be clawed back; a duplicated mint number could not.
+     */
+    private final java.util.Set<Long> settled = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final MiniInboxDao inbox;
     private final EconomyService economy;
 
@@ -138,22 +147,35 @@ public final class AuctionService {
         if (!economy.withdraw(bidder, amount)) {
             return Result.fail("Payment failed.");
         }
-        // Refund the previous leader (money — safe even if they're offline).
+        try {
+            dao.updateBid(id, amount, bidder.getUniqueId());
+        } catch (SQLException e) {
+            economy.deposit(bidder, amount); // roll back the hold on a write failure
+            return Result.fail("Could not record the bid — refunded.");
+        }
+
+        // Only now that the row names the new bidder is it safe to release the previous leader's
+        // escrow. Refunding first meant a failed write left the row still naming them as top
+        // bidder with their money already handed back — and the ten-second close sweep would
+        // later pay the seller out of a bid nobody was holding, minting that money and giving
+        // away a capped Mini for nothing. Doing it in this order leaves the catch above with
+        // exactly one move to undo, which is the one it undoes.
         if (a.hasBid()) {
             economy.deposit(Bukkit.getOfflinePlayer(a.currentBidder()), a.currentBid());
             notify(a.currentBidder(), "&eYou were outbid on a Mini auction (#" + id + ").");
         }
-        try {
-            dao.updateBid(id, amount, bidder.getUniqueId());
-            // Anti-snipe: a late bid extends the timer.
-            long now = System.currentTimeMillis();
-            long snipe = antiSnipeMs();
-            if (snipe > 0 && a.endAt() - now <= snipe) {
+
+        // Anti-snipe extension, in its own try: the bid is already committed and paid for, and an
+        // auction ending fifteen seconds early is not worth rolling that back over.
+        long now = System.currentTimeMillis();
+        long snipe = antiSnipeMs();
+        if (snipe > 0 && a.endAt() - now <= snipe) {
+            try {
                 dao.extendEnd(id, now + snipe);
+            } catch (SQLException e) {
+                plugin.getLogger().warning("Anti-snipe extension failed for auction " + id
+                        + " (the bid itself stands): " + e.getMessage());
             }
-        } catch (SQLException e) {
-            economy.deposit(bidder, amount); // roll back the hold on a write failure
-            return Result.fail("Could not record the bid — refunded.");
         }
         return Result.ok(id);
     }
@@ -222,6 +244,9 @@ public final class AuctionService {
                 notify(a.currentBidder(), "&aYou won a Mini auction (#" + a.id() + ") for &f"
                         + economy.format(a.currentBid()) + "&a! Delivered.");
             } else {
+                if (!settled.add(a.id())) {
+                    continue; // its CLOSED write did not stick; do not return the Mini twice
+                }
                 ItemStack item = Items.fromBase64(a.itemB64());
                 if (item != null) {
                     deliver(a.seller(), item);
@@ -234,6 +259,11 @@ public final class AuctionService {
 
     /** Finalize a won/bought auction: pay the seller, hand the winner the Mini, track it. */
     private void settle(MiniAuctionDao.Auction a, UUID winner, double price) {
+        if (!settled.add(a.id())) {
+            plugin.getLogger().warning("Auction " + a.id() + " is already settled this run but is "
+                    + "still ACTIVE in the database — refusing to pay or deliver it a second time.");
+            return;
+        }
         economy.deposit(Bukkit.getOfflinePlayer(a.seller()), price);
         ItemStack item = Items.fromBase64(a.itemB64());
         if (item != null) {

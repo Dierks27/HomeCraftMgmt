@@ -13,7 +13,6 @@ import org.bukkit.inventory.ItemStack;
 
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Amazon ordering + real-time shipping. Placing an order charges the item cost
@@ -166,6 +165,26 @@ public final class OrderService {
         }
     }
 
+    /**
+     * How many of {@code stack} the player's own inventory could still take.
+     *
+     * <p>Counted, not attempted. {@link org.bukkit.inventory.Inventory#addItem} fills whatever it
+     * can and hands back the remainder, so "try it and see" has already half-delivered the order
+     * by the time it tells you there was no room — and half-delivering is the thing being fixed.
+     */
+    private int freeSpaceFor(Player player, ItemStack stack) {
+        int max = stack.getMaxStackSize();
+        int space = 0;
+        for (ItemStack slot : player.getInventory().getStorageContents()) {
+            if (slot == null || slot.getType() == org.bukkit.Material.AIR) {
+                space += max;
+            } else if (slot.isSimilar(stack)) {
+                space += Math.max(0, max - slot.getAmount());
+            }
+        }
+        return space;
+    }
+
     /** A player's active orders (in transit + ready), soonest first. */
     public List<Order> ordersFor(OfflinePlayer player) {
         try {
@@ -192,8 +211,17 @@ public final class OrderService {
             if (item == null) {
                 return CollectResult.fail("That item is no longer available.");
             }
-            Map<Integer, ItemStack> leftover = player.getInventory().addItem(new ItemStack(item.material(), order.qty()));
-            leftover.values().forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
+            // All or nothing. The Mailbox's promise is that nothing drops, and an order can be
+            // 2304 items — far more than a full inventory holds. This used to add what fitted,
+            // throw the rest on the floor, and mark the order COLLECTED regardless, which is a
+            // one-way door: the row is closed forever and the goods are lying in the grass, or
+            // gone, having already been paid for.
+            ItemStack payload = new ItemStack(item.material(), order.qty());
+            if (freeSpaceFor(player, payload) < order.qty()) {
+                return CollectResult.fail("Your inventory is full — make room and collect again. "
+                        + "Your order is safe in the Mailbox.");
+            }
+            player.getInventory().addItem(payload);
             dao.updateStatus(order.id(), Order.Status.COLLECTED);
             return new CollectResult(true, null, order);
         } catch (SQLException e) {

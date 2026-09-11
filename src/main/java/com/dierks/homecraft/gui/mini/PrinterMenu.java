@@ -149,7 +149,7 @@ public final class PrinterMenu extends Menu {
         // Every Shiny state is the same star; the glint is what says you can press it. The locked
         // state used to be the filler pane on a filler background, which said nothing at all.
         if (isPublic) {
-            set(24, Menus.glint(Menus.icon(Material.NETHER_STAR, "&7🔒 Shiny",
+            set(24, Menus.glint(Menus.icon(Material.NETHER_STAR, "&7✖ Shiny",
                     "&7Private printers only.",
                     "&8Set up your own Printer to print Shiny."), false), null);
         } else {

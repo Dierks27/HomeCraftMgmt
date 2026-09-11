@@ -10,6 +10,7 @@ import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -34,6 +35,11 @@ public final class MuseumMenu extends Menu {
 
     private final Player player;
     private final Runnable onBack;
+    /**
+     * The ids this viewer owns, read once per build by {@link #rows} and reused by the grid.
+     * One lookup for the whole catalog — asking per Mini would be a query per tile, 45 a page.
+     */
+    private Set<String> owned = Set.of();
 
     public MuseumMenu(HomeCraftManagement plugin, Player player, Runnable onBack) {
         super(plugin);
@@ -83,7 +89,7 @@ public final class MuseumMenu extends Menu {
     /** The filtered, grouped, header-interleaved list the grid pages over. */
     private List<Row> rows(BrowseState.Museum state) {
         MiniService minis = plugin.miniService();
-        Set<String> owned = minis.ownedIds(player.getUniqueId());
+        this.owned = minis.ownedIds(player.getUniqueId());
 
         List<MiniDef> kept = new ArrayList<>();
         for (MiniDef def : minis.catalogList()) {
@@ -186,7 +192,7 @@ public final class MuseumMenu extends Menu {
                 set(i, headerIcon(row), null);
             } else {
                 MiniDef def = row.def();
-                set(i, minis.icon(def), e ->
+                set(i, ownershipIcon(minis, def), e ->
                         new MiniDetailMenu(plugin, player, def, () -> open(player)).open(player));
             }
         }
@@ -250,9 +256,39 @@ public final class MuseumMenu extends Menu {
     private ItemStack headerIcon(Row row) {
         Material pane = plugin.miniService().style(row.headerRarity()).pane();
         boolean complete = row.total() > 0 && row.owned() >= row.total();
-        return Menus.icon(pane, "&f&l" + row.header(),
+        ItemStack icon = Menus.icon(pane, "&f&l" + row.header(),
                 "&8" + BrowseState.pretty(row.headerRarity().name()),
                 (complete ? "&a" : "&7") + row.owned() + " of " + row.total() + " collected",
-                complete ? "&a✓ Complete" : "&8Keep collecting");
+                complete ? "&a✓ Complete" : "&7Keep collecting");
+        // How many of this group are collected, as the stack count — progress readable without
+        // hovering every header in turn.
+        return row.owned() > 0 ? Menus.count(icon, row.owned()) : icon;
+    }
+
+    /**
+     * A Mini in the grid, marked with whether the viewer has one.
+     *
+     * <p>A tile shows three things without a hover: its sprite, its stack count and its glint.
+     * The sprite is fixed by the Mini and most Minis are held one at a time, so the glint is the
+     * only channel left — and in THIS grid it is spent on ownership rather than rarity. That is a
+     * deliberate trade: the rarity still sits in the coloured header above the group and in the
+     * Mini's own name colour, whereas "have I got this one" had nowhere else to live, which is why
+     * a completionist's Museum looked exactly like a brand-new player's.
+     *
+     * <p>Unowned Minis are never hidden or silhouetted. The Museum's job is to show a child what
+     * there is to chase.
+     */
+    private ItemStack ownershipIcon(MiniService minis, MiniDef def) {
+        ItemStack icon = minis.icon(def);
+        boolean have = owned.contains(def.id());
+        ItemMeta meta = icon.getItemMeta();
+        if (meta != null) {
+            List<net.kyori.adventure.text.Component> lore =
+                    meta.lore() == null ? new ArrayList<>() : new ArrayList<>(meta.lore());
+            lore.add(Text.of(have ? "&a✓ Collected" : "&7✖ Not collected yet"));
+            meta.lore(lore);
+            icon.setItemMeta(meta);
+        }
+        return Menus.glint(icon, have);
     }
 }

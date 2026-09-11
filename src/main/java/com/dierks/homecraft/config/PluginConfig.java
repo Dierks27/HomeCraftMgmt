@@ -204,9 +204,16 @@ public final class PluginConfig {
                 false, 0, false, null, null);
     }
 
-    /** All rarity effects + the shared knobs (radius, cadence, Mint chime, Shiny ring, wild hologram text). */
+    /**
+     * All rarity effects + the shared knobs (radius, cadence, Mint chime, Shiny ring, wild
+     * hologram text and how close you must be to read it).
+     *
+     * <p>{@code wildHologramRange} is deliberately much tighter than {@code radius}: a wild
+     * Mini's label is a confirmation of what you have found, not a pointer to where it is.
+     */
     public record MiniEffects(Map<Rarity, MiniEffect> byRarity, double radius, int tickInterval,
                               String mintSound, String shinyParticle, String wildHologramText,
+                              double wildHologramRange,
                               double caseItemScale, double caseItemHeight) {
         public MiniEffect of(Rarity rarity) {
             return byRarity.getOrDefault(rarity, MiniEffect.NONE);
@@ -1323,6 +1330,7 @@ public final class PluginConfig {
                 c.getString("minis.effects.mint_sound", "BLOCK_AMETHYST_BLOCK_CHIME"),
                 c.getString("minis.effects.shiny_particle", "GLOW"),
                 c.getString("minis.effects.wild_hologram_text", "&dA wild Mini!"),
+                Math.max(0.0, c.getDouble("minis.effects.wild_hologram_range", 8.0)),
                 Math.max(0.1, c.getDouble("minis.effects.case_item_scale", 0.6)),
                 Math.max(0.0, c.getDouble("minis.effects.case_item_height", 0.9)));
     }

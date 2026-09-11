@@ -434,12 +434,18 @@ minis:
   #   place_sound / place_particle: played once when the Mini is placed
   # Grade MINT copies play `mint_sound` on print and on place; Shiny copies add a ring
   # of `shiny_particle` on top of their rarity effect.
+  # A WILD spawn's label is the exception to `radius`: it has its own, much tighter
+  # `wild_hologram_range`, and unlike every other effect it is REMOVED again when you walk
+  # away. A TextDisplay is legible from hundreds of blocks, so a label that stayed lit after
+  # one pass stopped saying "this head is the prize" and started saying "the prize is over
+  # here" — which is the one thing a timed hunt cannot have. Set it to 0 for no label at all.
   effects:
     radius: 16              # only Minis with a player this close get effects
     tick_interval: 10       # task cadence in ticks (particles use their own interval)
     mint_sound: BLOCK_AMETHYST_BLOCK_CHIME
     shiny_particle: GLOW
     wild_hologram_text: "&dA wild Mini!"
+    wild_hologram_range: 8  # how close you must be to read it; 0 = never show it
     case_item_scale: 0.6    # size of the Mini floating above a Display Case
     case_item_height: 0.9   # how high above the case block it floats
     COMMON: {}

@@ -721,6 +721,26 @@ class ConfigMigrationTest {
         assertEquals("++", onDisk.getString("minis.grades.GRADED.symbol"));
     }
 
+    /**
+     * A wild Mini's label must stay much tighter than the general effects radius.
+     *
+     * <p>Sixteen blocks is the right distance to start particles on a trophy someone has put
+     * on a shelf, and far too generous for a hunt: a TextDisplay is legible from hundreds of
+     * blocks, so a label lit at that range points at the prize instead of naming it. The two
+     * look like they want to be one number, which is exactly why they must not become one.
+     */
+    @Test
+    void theWildLabelIsReadOnlyFromCloseUp() throws Exception {
+        YamlConfiguration bundled = bundled();
+        double range = bundled.getDouble("minis.effects.wild_hologram_range", -1);
+        double radius = bundled.getDouble("minis.effects.radius", -1);
+
+        assertTrue(range > 0, "the shipped label should be reachable, not switched off");
+        assertTrue(range <= radius / 2,
+                "wild_hologram_range (" + range + ") must stay well inside effects.radius ("
+                        + radius + ") — at the same distance the label becomes a pointer");
+    }
+
     /** Lowercase grade keys parse at load, so the repair has to find them too. */
     @Test
     void lowercaseGradeKeysAreRepairedAsWell() throws Exception {

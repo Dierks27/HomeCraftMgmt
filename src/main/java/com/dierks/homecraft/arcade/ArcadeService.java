@@ -446,6 +446,79 @@ public final class ArcadeService {
         return !def.uncapped() && plugin.miniService().counts(def.id()).minted() >= def.cap();
     }
 
+    // ---- prize counter --------------------------------------------------------
+
+    /**
+     * Buy a Prize Counter row: a <b>known-outcome</b> token purchase (filament, a HomeCraft
+     * block, a sealed pack). Unlike a crate this is a price rather than a pull, which is the
+     * point — it gives tokens a floor value instead of only an expected one.
+     *
+     * <p>The item is built <i>before</i> anything is charged, so a prize that cannot be
+     * produced right now costs nothing. Nothing here is sellable to the house, so §11 #9
+     * holds: filament is craftable-but-unsellable, packs only ever become Cards, and a
+     * HomeCraft block is a tool, not a market good.
+     *
+     * @param color the buyer's colour choice for a prize that lets them pick; ignored otherwise
+     */
+    public Outcome buyPrize(Player player, String prizeId, org.bukkit.DyeColor color) {
+        if (!plugin.sandbox().check(player, "prize purchase " + prizeId)) {
+            return Outcome.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
+        PluginConfig.Prize prize = plugin.config().arcade().prize(prizeId);
+        if (prize == null) {
+            return Outcome.fail("No such prize.");
+        }
+        UUID id = player.getUniqueId();
+        if (balance(id) < prize.costTokens()) {
+            return Outcome.fail("You need " + prize.costTokens() + " tokens (you have "
+                    + balance(id) + ").");
+        }
+
+        ItemStack item;
+        String label;
+        switch (prize.type()) {
+            case FILAMENT -> {
+                org.bukkit.DyeColor dye = prize.color() != null ? prize.color() : color;
+                if (dye == null) {
+                    return Outcome.fail("Pick a filament colour first.");
+                }
+                item = plugin.miniService().filamentItems().filament(dye, prize.amount());
+                label = "&f" + prize.amount() + "x " + niceName(dye) + " Filament";
+            }
+            case BLOCK -> {
+                com.dierks.homecraft.block.CustomBlockType type;
+                try {
+                    type = com.dierks.homecraft.block.CustomBlockType.valueOf(prize.blockKey());
+                } catch (IllegalArgumentException e) {
+                    return Outcome.fail("That prize is misconfigured — tell an admin.");
+                }
+                item = plugin.items().of(type);
+                if (item == null) {
+                    return Outcome.fail("That prize is unavailable right now — nothing charged.");
+                }
+                label = prize.display();
+            }
+            case PACK -> {
+                item = plugin.packs() != null ? plugin.packs().packItem(prize.packId()) : null;
+                if (item == null) {
+                    return Outcome.fail("That pack no longer exists — nothing charged.");
+                }
+                label = prize.display();
+            }
+            default -> {
+                return Outcome.fail("That prize is misconfigured — tell an admin.");
+            }
+        }
+
+        // Only now is anything taken: the prize is in hand and cannot fail to appear.
+        if (!spend(id, prize.costTokens())) {
+            return Outcome.fail("You need " + prize.costTokens() + " tokens.");
+        }
+        giveOrDrop(player, item);
+        player.playSound(player.getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.8f, 1.2f);
+        return Outcome.won(item.clone(), label);
+    }
+
     // ---- pity exchange --------------------------------------------------------
 
     /** Spend the configured tokens for a guaranteed Rare+ (config floor) Mini. */

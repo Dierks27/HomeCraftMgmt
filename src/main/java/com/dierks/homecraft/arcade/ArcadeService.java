@@ -442,10 +442,18 @@ public final class ArcadeService {
         if (pool.isEmpty()) {
             return Outcome.fail("No " + arc.pityRarity() + "+ Mini is available right now.");
         }
+        // Weight the pick by rarity, exactly as crates and wild drops do. Picking
+        // uniformly made every tier above the floor equally likely, so a Legendary came
+        // up as often as a Rare — on a catalog whose only Rare+ entry is Legendary, a
+        // fixed token price bought a guaranteed Legendary every time. The floor
+        // guarantees Rare-or-better; it was never meant to flatten what sits above it.
+        MiniDef chosen = plugin.miniService().pickByRarity(pool);
+        if (chosen == null) {
+            return Outcome.fail("No " + arc.pityRarity() + "+ Mini is available right now.");
+        }
         if (!spend(id, cost)) {
             return Outcome.fail("You need " + cost + " tokens.");
         }
-        MiniDef chosen = pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
         // Phase 9: the pity exchange guarantees a Rare+ CARD (printed at a Printer).
         var cr = plugin.cards().issue(player, chosen.id());
         if (!cr.ok()) {

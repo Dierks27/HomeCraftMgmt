@@ -57,7 +57,8 @@ public final class FilamentColorMenu extends Menu {
                     "&8—", "&eClick to buy"), e -> buy(color));
         }
 
-        set(40, Menus.icon(Material.ARROW, "&eBack"), e -> back.run());
+        // Same grammar as every other back tile: a barrier leaves, an arrow pages.
+        set(40, Menus.icon(Material.BARRIER, "&cBack"), e -> back.run());
     }
 
     private void buy(DyeColor color) {

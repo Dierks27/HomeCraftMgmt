@@ -71,8 +71,11 @@ public final class PrizeCounterMenu extends Menu {
             });
         }
 
+        // Slot 49 is the way out and it is never an arrow — an arrow there reads as a page
+        // step, which is the confusion NavAnchorTest pins. The barrier is the house grammar
+        // for "leave this screen" in every other menu.
         if (back != null) {
-            set(49, Menus.icon(Material.ARROW, "&eBack to the Arcade"), e -> back.run());
+            set(49, Menus.icon(Material.BARRIER, "&cBack to the Arcade"), e -> back.run());
         } else {
             set(49, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
         }

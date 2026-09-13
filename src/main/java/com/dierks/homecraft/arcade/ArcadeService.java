@@ -159,17 +159,46 @@ public final class ArcadeService {
         player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.7f, 1.4f);
     }
 
-    /** Grant tokens to an online player with "+N token" feedback (the general earn path). */
-    public void award(Player player, int tokens, String reason) {
-        if (tokens <= 0) {
-            return;
+    /**
+     * True if {@code player} can be paid tokens right now — i.e. the world sandbox
+     * (§11 #1) permits earning here. Refusals are logged like every other blocked
+     * economy action.
+     *
+     * <p><b>Check this before committing anything irreversible.</b> {@link #award}
+     * refuses <i>silently</i> outside an economy-enabled world, so a caller that marks
+     * a quest claimed or unlocks a one-time achievement and only then calls
+     * {@code award} spends the progression and pays nothing. That costs a day on a
+     * daily quest and is permanent on an achievement, which by definition never fires
+     * again. Callers that commit first must gate on this instead.
+     */
+    public boolean canEarn(Player player, String reason) {
+        if (player == null) {
+            return false;
         }
         if (!plugin.sandbox().allowed(player.getWorld())) {
             plugin.sandbox().log(player, "token earn (" + reason + ")");
-            return;
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Grant tokens to an online player with "+N token" feedback (the general earn path).
+     *
+     * @return true if the tokens were actually paid; false if the world sandbox refused
+     *         (or there was nothing to pay), so a caller can avoid spending progression
+     *         on a payout that never landed — see {@link #canEarn}.
+     */
+    public boolean award(Player player, int tokens, String reason) {
+        if (tokens <= 0) {
+            return false;
+        }
+        if (!canEarn(player, reason)) {
+            return false;
         }
         grant(player.getUniqueId(), tokens);
         feedback(player, tokens, reason);
+        return true;
     }
 
     // ---- admin grants ---------------------------------------------------------

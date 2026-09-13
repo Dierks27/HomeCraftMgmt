@@ -10,7 +10,13 @@ import com.dierks.homecraft.util.Text;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 
+import org.bukkit.scheduler.BukkitTask;
+
 import java.sql.SQLException;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.temporal.TemporalAdjusters;
 import java.util.UUID;
 
 /**
@@ -25,14 +31,96 @@ import java.util.UUID;
  */
 public final class QuestService {
 
-    private static final long MS_PER_DAY = 86_400_000L;
+    /** How often statistic-backed quests are re-read for online players. */
+    private static final long POLL_SECONDS = 30L;
 
     private final HomeCraftManagement plugin;
     private final QuestDao dao;
+    private BukkitTask pollTask;
 
     public QuestService(HomeCraftManagement plugin, QuestDao dao) {
         this.plugin = plugin;
         this.dao = dao;
+    }
+
+    /**
+     * Begin polling statistic-backed quests. Pushed quests need nothing here — their gameplay
+     * hooks already call {@link #record}. If no configured quest is statistic-backed, no task
+     * is started at all.
+     */
+    public void start() {
+        stop();
+        Quests quests = plugin.config().quests();
+        if (quests == null || !quests.enabled() || quests.all().stream().noneMatch(q -> QuestStats.isPulled(q.type()))) {
+            return;
+        }
+        pollTask = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
+            for (Player p : plugin.getServer().getOnlinePlayers()) {
+                pollStats(p);
+            }
+        }, 20L * 10L, 20L * POLL_SECONDS);
+    }
+
+    public void stop() {
+        if (pollTask != null) {
+            pollTask.cancel();
+            pollTask = null;
+        }
+    }
+
+    /**
+     * Read every statistic-backed quest for one player and bank what they have done since the
+     * last poll.
+     *
+     * <p>Progress accumulates from the difference between polls rather than from a fixed start,
+     * which is what makes the sandbox (§11 #1) work here: time in a world the economy is
+     * disabled in steps the watermark forward without crediting anything, so a creative-world
+     * detour neither counts nor retroactively counts when the player walks back.
+     */
+    private void pollStats(Player player) {
+        Quests quests = plugin.config().quests();
+        if (quests == null || !quests.enabled()) {
+            return;
+        }
+        boolean counts = plugin.sandbox().allowed(player.getWorld());
+        UUID id = player.getUniqueId();
+        for (Quest q : quests.all()) {
+            if (!QuestStats.isPulled(q.type())) {
+                continue;
+            }
+            try {
+                String period = periodKey(q.period());
+                QuestDao.Progress row = dao.get(id, q.id(), period);
+                if (row.claimed()) {
+                    continue;
+                }
+                long current = QuestStats.read(player, q.type());
+                if (!row.hasMark()) {
+                    // First sighting this period: there is no earlier total to measure from, so
+                    // set the watermark and credit nothing. Without this, a player's whole
+                    // lifetime of fishing would complete a daily the moment it opened.
+                    dao.advanceStat(id, q.id(), period, current, 0);
+                    continue;
+                }
+                long delta = Math.max(0, current - row.statMark());
+                int credit = counts ? (int) Math.min(Integer.MAX_VALUE, delta) : 0;
+                if (delta == 0 && row.progress() < q.target()) {
+                    continue; // nothing moved; skip the write entirely
+                }
+                int progress = dao.advanceStat(id, q.id(), period, current, credit);
+                if (progress >= q.target()) {
+                    if (q.reward() > 0 && (plugin.arcade() == null
+                            || !plugin.arcade().canEarn(player, "quest " + q.id()))) {
+                        continue;
+                    }
+                    if (dao.markClaimed(id, q.id(), period)) {
+                        complete(player, q);
+                    }
+                }
+            } catch (SQLException e) {
+                plugin.getLogger().severe("Failed to poll quest '" + q.id() + "': " + e.getMessage());
+            }
+        }
     }
 
     /**
@@ -111,16 +199,32 @@ public final class QuestService {
 
     /** Milliseconds until this period rolls over (for a "resets in …" countdown). */
     public long msToReset(QuestPeriod period) {
-        long now = System.currentTimeMillis();
-        long day = now / MS_PER_DAY;
-        return period == QuestPeriod.WEEKLY
-                ? ((day / 7) + 1) * 7 * MS_PER_DAY - now
-                : (day + 1) * MS_PER_DAY - now;
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        LocalDate next = period == QuestPeriod.WEEKLY
+                ? today.with(TemporalAdjusters.next(weekStartsOn()))
+                : today.plusDays(1);
+        return next.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() - System.currentTimeMillis();
     }
 
-    /** The reset-window key for a period: {@code d<epochDay>} or {@code w<epochWeek>}. */
+    /**
+     * The reset-window key for a period: {@code d<epochDay>}, or {@code w<epochDay of the week's
+     * first day>}.
+     *
+     * <p>The weekly key used to be {@code epochDay / 7}, which looks like a week and is one —
+     * but it starts on a <b>Thursday</b>, because epoch day 0 was 1 January 1970 and that was a
+     * Thursday. Nobody would choose that, and nobody noticed. Keying on the actual first day of
+     * the configured week makes the rollover a date you can name.
+     */
     private String periodKey(QuestPeriod period) {
-        long day = System.currentTimeMillis() / MS_PER_DAY;
-        return period == QuestPeriod.WEEKLY ? "w" + (day / 7) : "d" + day;
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        return period == QuestPeriod.WEEKLY
+                ? "w" + today.with(TemporalAdjusters.previousOrSame(weekStartsOn())).toEpochDay()
+                : "d" + today.toEpochDay();
+    }
+
+    private DayOfWeek weekStartsOn() {
+        Quests quests = plugin.config().quests();
+        return quests == null || quests.weekStartsOn() == null
+                ? DayOfWeek.MONDAY : quests.weekStartsOn();
     }
 }

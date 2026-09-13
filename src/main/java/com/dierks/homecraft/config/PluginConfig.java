@@ -256,7 +256,21 @@ public final class PluginConfig {
     public enum QuestPeriod {DAILY, WEEKLY}
 
     /** The trackable objective a quest counts toward. Each maps to one earn hook. */
-    public enum QuestType {SELL_MARKET, OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH}
+    /**
+     * The trackable objective a quest counts toward.
+     *
+     * <p>Two kinds, and the difference is where the number comes from. The first five are
+     * <b>pushed</b>: a gameplay hook already in the code calls {@code QuestService.record}
+     * when the thing happens. The rest are <b>pulled</b> from vanilla statistics, snapshotted
+     * at the start of a period and diffed since — see {@code QuestStats}. Pulling is what
+     * lets a verb like "walk somewhere" be a quest without a listener on every move.
+     */
+    public enum QuestType {
+        // Pushed by existing gameplay hooks.
+        SELL_MARKET, OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH,
+        // Pulled from vanilla statistics.
+        CATCH_FISH, KILL_HOSTILES, BREED_ANIMALS, TRADE_VILLAGER, TRAVEL_ON_FOOT
+    }
 
     /**
      * A single quest: reach {@code target} of {@code type} within the {@code period}
@@ -265,8 +279,15 @@ public final class PluginConfig {
     public record Quest(String id, QuestPeriod period, QuestType type, long target, int reward, String display) {
     }
 
-    /** The whole quest config: on/off plus the daily + weekly objective lists. */
-    public record Quests(boolean enabled, List<Quest> all) {
+    /**
+     * The whole quest config: on/off, the day a week rolls over on, and the daily + weekly
+     * objective lists.
+     *
+     * <p>{@code weekStartsOn} exists because the obvious implementation is wrong in a way
+     * nobody notices until they look: keying a week as {@code epochDay / 7} rolls over on a
+     * <b>Thursday</b>, since epoch day 0 was 1 January 1970 and that was a Thursday.
+     */
+    public record Quests(boolean enabled, java.time.DayOfWeek weekStartsOn, List<Quest> all) {
         public List<Quest> byPeriod(QuestPeriod p) {
             List<Quest> out = new ArrayList<>();
             for (Quest q : all) {
@@ -797,10 +818,25 @@ public final class PluginConfig {
 
     private Quests readQuests(FileConfiguration c) {
         boolean enabled = c.getBoolean("arcade.quests.enabled", true);
+        java.time.DayOfWeek weekStart = parseDayOfWeek(c.getString("arcade.quests.week_starts", "MONDAY"));
         List<Quest> all = new ArrayList<>();
         readQuestList(c, "arcade.quests.daily", QuestPeriod.DAILY, all);
         readQuestList(c, "arcade.quests.weekly", QuestPeriod.WEEKLY, all);
-        return new Quests(enabled, all);
+        return new Quests(enabled, weekStart, all);
+    }
+
+    /** {@code arcade.quests.week_starts}; anything unrecognised falls back to Monday. */
+    private java.time.DayOfWeek parseDayOfWeek(String s) {
+        if (s == null || s.isBlank()) {
+            return java.time.DayOfWeek.MONDAY;
+        }
+        try {
+            return java.time.DayOfWeek.valueOf(s.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            log.warning("arcade.quests.week_starts is '" + s + "', which is not a day name — "
+                    + "using MONDAY. Valid: MONDAY … SUNDAY.");
+            return java.time.DayOfWeek.MONDAY;
+        }
     }
 
     private void readQuestList(FileConfiguration c, String path, QuestPeriod period, List<Quest> out) {

@@ -56,6 +56,31 @@ public final class ProtectionService {
     }
 
     /**
+     * @return true if {@code location} belongs to somebody other than {@code player}, asking
+     * Towny and WorldGuard directly.
+     *
+     * <p>Differs from {@link #canBuild} in the one way that matters for anything the plugin
+     * places <i>on the player's behalf</i>: <b>it does not honour the op / bypass shortcut</b>.
+     * {@code canBuild} answers "may this player build here", and for an op that is always yes —
+     * which is the right answer for a player swinging a pickaxe and the wrong one for choosing
+     * where to drop a Courier building, since an admin would silently get delivery sites inside
+     * other people's towns. This asks the question the placement actually cares about: does this
+     * land belong to someone else.
+     *
+     * <p>Degrades to "not claimed" when no protection plugin is installed, so a bare test server
+     * still generates deliveries instead of rejecting every candidate.
+     */
+    public boolean claimedByOthers(Player player, Location location) {
+        if (townyPresent && !townyAllows(player, location)) {
+            return true;
+        }
+        if (worldGuardPresent && !worldGuardAllows(player, location)) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * @return true if {@code location} is inside claimed/protected land (a Towny
      * town claim, or a WorldGuard region). Degrades to {@code true} when no
      * protection plugin is present or a check fails, so a bare test server still

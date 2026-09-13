@@ -69,6 +69,9 @@ public final class Keys {
     /** On a per-player peek hologram entity: the viewer's UUID (String). */
     public static NamespacedKey PEEK_VIEWER;
 
+    /** On a Courier delivery villager: the id of the job it is the recipient for (Long). */
+    public static NamespacedKey COURIER_JOB;
+
     private Keys() {
     }
 
@@ -93,6 +96,7 @@ public final class Keys {
         VENDING_UPPER = new NamespacedKey(plugin, "vending_upper");
         MINI_RENDER = new NamespacedKey(plugin, "mini_render");
         EFFECT_ENTITY = new NamespacedKey(plugin, "effect_entity");
+        COURIER_JOB = new NamespacedKey(plugin, "courier_job");
         WILD_SPAWN = new NamespacedKey(plugin, "wild_spawn");
         DISPLAY_VARIANT = new NamespacedKey(plugin, "display_variant");
         SHOP_ANCHOR = new NamespacedKey(plugin, "shop_anchor");

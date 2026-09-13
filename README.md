@@ -306,12 +306,39 @@ collapsing.
 - **Dropping a run doesn't spend the slot.** Runs expire after 60 minutes and the
   band comes back either way. All of it is off in an economy-disabled world.
 
+**The destination.** As you get near the drop-off, a small house appears with a
+villager outside it — right-click them to hand the crate over. The houses are
+vanilla village buildings picked to match the biome, so there's nothing extra to
+install, and every structure key is checked once at startup (Mojang renames them
+between versions; anything missing is dropped with a warning naming it).
+
+When the run ends — delivered, expired, abandoned, or the server stopping — **the
+field goes back exactly as it was**, from a snapshot taken before the first block
+moved. That snapshot lives in the plugin's own database, so this needs no
+WorldEdit, survives restarts, and tidies up after a crash on the next start. You
+can't mine the house, the chests in it are emptied (a village-loot faucet is
+exactly what §3.1 refuses), and a spot that already has someone's chest in it is
+rejected rather than built on.
+
+**Handing in at the PC still works** if the house doesn't appear for any reason, so
+nobody ends up stranded 1,800 blocks out because a structure failed to place.
+
 Everything is tunable under `courier:` in `config.yml` — including turning it off
-(`courier.enabled: false`, which also hides the Site from the PC).
+(`courier.enabled: false`, which also hides the Site from the PC) and turning just
+the buildings off (`courier.building.enabled: false`, which leaves deliveries
+working and hands in at the PC).
+
+Commissioned house builds drop into `courier.buildings` as `.nbt` files in
+`plugins/HomeCraftManagement/buildings/` — a config edit, not a code change. A
+non-empty list replaces the vanilla set rather than adding to it.
 
 **Verify:** `/hcm courier` → take a local run → walk to the coordinates it gives
-you → **Hand it over** within 10 blocks. Try the same run in a creative world and
-it should refuse; fly it with elytra and the fee should be visibly smaller.
+you → the house should already be there when it comes into view → right-click the
+villager → **Hand over the crate**. Walk away and come back after the linger and
+the field should be bare again. Try the same run in a creative world and it should
+refuse; fly it with elytra and the fee should be visibly smaller. To check the
+cleanup path properly: take a run, walk out to it, then abandon it from the job
+board and watch the house go.
 
 ---
 
@@ -342,7 +369,8 @@ src/main/java/com/dierks/homecraft/
   block/                       custom-block type, service, listeners
   command/                     /hcm
   config/                      typed config.yml view
-  courier/                     delivery jobs, waypoints, travel-statistic blending
+  courier/                     delivery jobs, waypoints, travel-statistic blending,
+                               building placement + snapshot/restore
   crafting/                    data-driven vanilla recipes + recipe-book unlock + craft-grid matching
   gui/                         Amazon placeholder GUI (Phase 3 stub)
   integration/                 Towny + WorldGuard protection, Vault economy

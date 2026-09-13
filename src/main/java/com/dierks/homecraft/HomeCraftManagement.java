@@ -225,11 +225,16 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.quests = new com.dierks.homecraft.arcade.QuestService(
                 this, new com.dierks.homecraft.storage.QuestDao(database));
 
-        // Courier (Phase 1) — paid delivery runs. Economy only: no world changes, and the
-        // job board is a Site on the PC rather than a block.
+        // Courier — paid delivery runs, and the building at the far end of one. The
+        // BuildingService owns every block it places and is the only thing that removes them,
+        // so it is constructed with the service that decides when a delivery is over.
         this.courier = new com.dierks.homecraft.courier.CourierService(
-                this, new com.dierks.homecraft.storage.CourierDao(database));
+                this, new com.dierks.homecraft.storage.CourierDao(database),
+                new com.dierks.homecraft.courier.BuildingService(
+                        this, new com.dierks.homecraft.storage.CourierSiteDao(database)));
 
+        getServer().getPluginManager().registerEvents(
+                new com.dierks.homecraft.courier.CourierListener(this), this);
         getServer().getPluginManager().registerEvents(
                 new CustomBlockListener(this, config, blockService, items, protection), this);
         getServer().getPluginManager().registerEvents(new WorkbenchListener(this, recipeManager), this);

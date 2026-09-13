@@ -117,6 +117,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.arcade.ArcadeService arcade;
     private com.dierks.homecraft.arcade.AchievementService achievements;
     private com.dierks.homecraft.arcade.QuestService quests;
+    private com.dierks.homecraft.courier.CourierService courier;
     /** Set once a pre-migration copy of config.yml is taken this start / {@code /hcm reload}. */
     private boolean configSnapshotTaken;
     private BukkitTask historyTask;
@@ -224,6 +225,11 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.quests = new com.dierks.homecraft.arcade.QuestService(
                 this, new com.dierks.homecraft.storage.QuestDao(database));
 
+        // Courier (Phase 1) — paid delivery runs. Economy only: no world changes, and the
+        // job board is a Site on the PC rather than a block.
+        this.courier = new com.dierks.homecraft.courier.CourierService(
+                this, new com.dierks.homecraft.storage.CourierDao(database));
+
         getServer().getPluginManager().registerEvents(
                 new CustomBlockListener(this, config, blockService, items, protection), this);
         getServer().getPluginManager().registerEvents(new WorkbenchListener(this, recipeManager), this);
@@ -262,6 +268,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.displayService.start();
         this.arcade.start();
         this.quests.start(); // poll statistic-backed quests (fish, distance, kills…)
+        this.courier.start(); // sweep abandoned delivery runs
 
         // Item-builder self-test on the live API (Card lore/PDC + Legendary glint).
         com.dierks.homecraft.mini.ItemSelfTest.run(this);
@@ -334,6 +341,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (quests != null) {
             quests.stop();
             quests = null;
+        }
+        if (courier != null) {
+            courier.stop();
+            courier = null;
         }
         if (displayService != null) {
             displayService.stop();
@@ -408,6 +419,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (arcade != null) {
             arcade.start(); // re-arm the playtime task under any new config
             quests.start(); // re-arm the quest stat poll under any new config
+        }
+        if (courier != null) {
+            courier.start(); // re-arm the courier expiry sweep under any new config
         }
     }
 
@@ -1540,5 +1554,9 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public com.dierks.homecraft.arcade.QuestService quests() {
         return quests;
+    }
+
+    public com.dierks.homecraft.courier.CourierService courier() {
+        return courier;
     }
 }

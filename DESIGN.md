@@ -3,6 +3,8 @@
 >
 > **v11 changelog:** Rebranded the online store from "Amazon" to **Crate** (`[www.Crate.craft](https://www.Crate.craft)`), with **Rush** (fast shipping), the **Pallet** (player seller box) and the **Locker** (delivery holding). Added the **Crate Marketplace** (universal player-to-player selling — *everything* is sellable, incl. Minis), **auto-categorization into departments** using the game's own item categories, an **admin ban list**, and the **PC-as-a-browser / "Sites"** architecture. Added **in-game economy displays** (TVs/tickers/boards) and a consolidated **Economy Risks & Safeguards** section. Recorded the **Phase 2.5.1 pricing fix** (proportional elasticity + integrated bulk pricing). Marked Phases 2.5 and 3 done.
 >
+> **v16 changelog (the Courier):** A new **Deliveries Site** on the PC (§3.10). Take a crate to a rolled waypoint and get paid a **travel fee** for the distance, scaled by **how you actually travelled** — read from the same vanilla movement statistics the quest verbs use, snapshotted at accept and **blended by the fraction of centimetres in each group**, so walking the route four times pays exactly what walking it once pays. Creative flight pays **nothing**; an arrival with less than 70% of the distance tracked pays **20%**, which is the anti-teleport floor. Three distance bands with per-UTC-day caps (2 / 2 / 1). A **trade run** carries market cargo to the drop-off and sells it there **at the live rate** — only the fee half is new money (§3.1). **No market price, stock level, daily limit, shipping tier or catalog entry was touched**; the courier adds a money *faucet* sized under mining and nothing else. Schema v24 adds `courier_jobs`; `courier:` is new config with no migration step — an absent key falls back to the shipped defaults.
+>
 > **v16 changelog (the PC is a browser):** The PC's root screen is now the **Site launcher** §2.2 always specified, instead of opening the Store directly. The Store had become the hub by accident and its nav row was full at nine slots, so the Courier module would have had to displace something to land. Card Packs moves to the launcher; the Store's slot 49 becomes an ordinary Back now that it is one Site rather than the root. `menus.pc_title` names the launcher.\n>\n> **v16 changelog (quest verbs):** Quests are **mostly verbs** now — catch fish, travel on foot, defeat hostiles, breed animals, trade with villagers — read from **vanilla statistics** by a single 30s poll rather than a listener each, banking the difference between polls so nothing earned before the period counts and time in an economy-disabled world is skipped. **Selling drops from 40% of quest reward value to 13%** and is no longer the largest line in either period. **Weekly rollover moves to Monday** (`arcade.quests.week_starts`) from the Thursday that `epochDay / 7` produced by accident. `config_revision` 9; schema v23 adds the watermark column. A quest pool an admin has edited is left alone.\n>\n> **v16 changelog (token sinks):** Added the **Prize Counter** (`arcade.prizes`) — fixed-price, known-outcome token purchases in the Arcade hub, so tokens have a floor value and a non-gambling way to spend. The **Starter Crate moves from 1 token to 5**: against roughly 16 tokens earned in an active evening a one-token pull is not a sink, and a balance that can only grow is what that produced. `config_revision` 8 migrates both, seeding the counter for existing servers and lifting the crate price only where it is still the shipped 1.\n>\n> **v16 changelog (spec reconciliation):** **§3.9 now says what the code does.** It was written in the Phase 8 era and never revised when v15 landed the two-currency rule, so for two releases it claimed crates pay cash and items (rejected at config load since v15), that a `mini` crate reward mints a finished Mini (it issues a **Card**), and that pity costs about 3 tokens (it is `arcade.pity.tokens`, 25). A spec section that contradicts the code does not just mislead a reader — briefs written from it inherit the errors, which is exactly what happened. **Where §3.9 and §11 #9 disagreed, §11 #9 was right**, and §3.9 now matches it. Also reconciled: §3.2's GUI-first rule ("`/hcm …` commands are admin-only") against §10, which deliberately designs `/hcm auction` and `/hcm museum [id]` as **player** routes — the rule is about *market* commands, and the player-facing openers are gated by their own nodes (`hcm.auction.list`, `hcm.museum.use`, `hcm.arcade.use`, `hcm.quests.use`, all default-true) rather than removed.
 >
 > **v15 changelog (economy safety):** **Per-world economy sandbox** (`worlds.economy_enabled`, main world by default; refusals logged) closes §11 #1. **SQLite backups** (§11 #6): a copy before every schema migration, a daily online-API backup with pruning, `/hcm backup now`. **Economy rebalance:** per-item daily caps (~2% sell / ~4% buy), $5k/day limits ($12.5k VIP), 8% commission, pity 25, starter pack 250 (no Legendary) + a 750 premium pack, public printers charge $150 and cover filament while private ones consume filament (fee 0) and unlock Shiny, a string+dye+slime filament recipe per colour. **Two-currency rule (§11 #9): tokens never become money** — crates pay only cards, packs, filament or tokens, enforced at config load; crate Mini prizes are Cards again (wild drops / natural spawns still mint the graded Mini). Presentation: Display Cases keep a pedestal skin (plain / royal by recipe) and float the Mini above as an ItemDisplay; any placed Mini head gets its rarity effects, a look-at hologram and a guaranteed drop-back; the Vending Machine's upper half is a flush ItemDisplay with a nearby-only glow, a listing hologram and an action-bar peek. Fixed the live-API Card lore/PDC loss (head profile committed before decoration) with a startup self-test.
@@ -39,6 +41,7 @@ One plugin, five modules:
 The PC is not just "the store" — it is the server's **computer/browser**, and each feature is a **Site** you open on it. This is the spine the whole project hangs on: every future feature has an obvious home — it's just a new Site.
 - **`[www.Crate.craft](https://www.Crate.craft)`** — the store + Marketplace (Phase 3 / 5). *Live-ish now.*
 - **Towny Site** *(future)* — browse every plot/town listed for sale in the world: location, price, town, jump-to-map. Towny already exposes this data.
+- **Courier (§3.10)** — the delivery job board. *Live in v16.*
 - **Economy Dashboard Site** *(future, §3.7)* — the live stock-market view, in-game.
 - Later: mail, a town directory, etc.
 **Implementation note (built in v16):** the PC's root menu **is** a **Site launcher** — a grid of Sites, and nothing else. It opened the Store directly until v16, and the Store's nine-slot navigation row had become the de-facto hub; with every slot taken, the next Site had nowhere to go. Adding a Site is now adding a row to `SiteLauncherMenu.sites()`, with nothing rearranged to make room. Each Site wears the same icon wherever a player meets it, and the Store's slot 49 went back to being an ordinary way out once it stopped being the root screen. The launcher's title is config-driven (`menus.pc_title`). Each Site is a loosely-coupled GUI module. The store header is **config-driven** (`store.name`, `store.display_url`) and changeable live with `/hcm reload`. **In-game it currently displays `[www.Crate.com](https://www.Crate.com)`** (Dierks's call) — it's **non-clickable display text**, not a real link. Note: `.com` is a live TLD (so `crate.com` could be a real site a curious kid types in), whereas the doc's default **`.craft`** can't resolve to anything — the strict kid-safe option. Since it's display-only, either works; it's a preference, not a bug.
@@ -227,6 +230,83 @@ A wholesome **arcade** loop that rewards showing up and playing — **all earned
 - **Config:** token sources/amounts, per-crate weighted loot tables (cap-aware), pity threshold, cooldowns.
 Leans entirely on tech we're already building (drop-roll weighting, rarity/glint, mint-cap enforcement) — so it's mostly *content* on top of existing systems.
 ---
+### 3.10 The Courier — Deliveries (NEW)
+
+A **Site on the PC** (§2.2) that pays players to move things around the map. It exists because §3.1's
+market is a *finite, conserved* exchange: selling into it moves stock and moves the price, so it cannot
+be the only way a kid earns money without either the price collapsing or the catalog growing into a
+faucet — which §3.1 explicitly refuses. The Courier is the deliberate alternative: **effort in the
+world, paid in money, with nothing produced and nothing sold.**
+
+**The loop.** Open the board, pick a distance band, take a run. A **waypoint** is rolled then and there
+— a random bearing and distance, resolved to the highest solid block, rejected and re-rolled if it is
+liquid, an ocean biome, or land the player has no build rights to (up to `waypoint.max_rerolls`; after
+that the run is simply not offered, because a drop-off in the middle of an ocean is worse than a short
+board). Walk there, click **Hand it over** within `turn_in_radius` blocks, get paid. One run at a time,
+per player.
+
+**What it pays.** `fee = (base + per_block × distance) × travel_multiplier`. Distance is the
+**horizontal straight line** from where the job was accepted to the waypoint, **clamped to
+`[min_distance, max_distance]`** and **locked at acceptance** — so going the long way round, or picking
+a fight on the way, earns nothing extra and the fee cannot be re-priced by anything that happens en
+route. At the shipped `base: 4.0` / `per_block: 0.012`, the five daily runs at their band midpoints come
+to **about $93 on foot** — a day's honest income that sits *below* what the same time spent mining and
+selling returns, which is the point: the Courier is a floor under a slow day, not a better grind.
+
+**The travel multiplier is the mechanism.** Every movement statistic is snapshotted when the job is
+accepted and diffed at turn-in, then **blended by the fraction of centimetres moved in each group** —
+never by a total, and never by whichever vehicle was touched last. That distinction is what makes it
+un-gameable in both directions: a player who walks the route once and one who walks it four times both
+score **1.00**, so padding the trip is worthless, and someone who rides half and walks half lands
+**between** the two multipliers rather than at the better one. Vanilla's accounting is mutually
+exclusive — exactly one counter increments per tick — so the fractions are a real partition and cannot
+sum to more than the distance covered. `FALL_ONE_CM` is deliberately in **no** group (falling is not
+travelling) and the denominator is the grouped statistics only, so an ungrouped counter can never
+dilute a multiplier.
+
+| Group | Statistics | Shipped |
+|---|---|---|
+| `foot` | WALK / SPRINT / CROUCH / SWIM / WALK_ON_WATER / WALK_UNDER_WATER / CLIMB | **1.00** |
+| `mount` | HORSE / STRIDER / PIG / NAUTILUS | 0.85 |
+| `boat` | BOAT | 0.80 |
+| `ghast` | HAPPY_GHAST | 0.70 |
+| `rail` | MINECART | 0.65 |
+| `elytra` | AVIATE | 0.45 |
+| `creative` | FLY | **0.00** |
+
+**A Nautilus is grouped with the mounts, not the boats.** It reads as water travel, but the API says
+otherwise: `AbstractNautilus` is `Tameable, InventoryHolder, Vehicle` with an
+`ArmoredSaddledMountInventory` — a saddled, armoured, tameable mount like a Strider, and priced like
+one. It is one line of config if that call turns out to feel wrong in play. `HAPPY_GHAST_ONE_CM` and
+`NAUTILUS_ONE_CM` are resolved **by name** rather than referenced directly, because the pinned API may
+predate them: a server without one simply does not count it, and neither case needs a code change.
+
+**Anti-teleport.** If total tracked movement comes to less than `anti_teleport.floor` (70%) of the
+locked distance, the travel fee pays `anti_teleport.payout` (20%) instead. Cargo on a trade run still
+pays in full, because that half is a real sale. **A zero blend is 0.00, not 1.00** — a player who
+arrives having moved nothing is not handed the on-foot rate by default. It is logged at `FINE` and
+never called out in chat: a nether-portal shortcut is not cheating, it is just not walking it, and the
+smaller number is the whole message.
+
+**Trade runs.** Right-click a band with market cargo in hand and the run carries it: the stack is
+quoted at acceptance, and at the drop-off it is **sold through the market for real** — stock moves +N,
+daily sell limits apply, commission applies, exactly as if it had been sold at home. It is paid at the
+**live** rate, **not the locked quote**. The quote is recorded on the job row and shown on the board
+for reference only. Paying the locked figure would mint the difference, and **only the travel fee is
+meant to be new money**. A trade run refuses at turn-in if the cargo is no longer in the inventory.
+
+**Caps and expiry.** Three bands — `local` 200–600 (2/day), `regional` 600–1800 (2/day), `long_haul`
+1800–4000 (1/day) — keyed by **UTC epoch-day at read time**, the house pattern (§8: no scheduler).
+Runs expire after `expire_minutes` (60); a sweep closes stale ones every minute so the band slot comes
+back. **Abandoning does not spend the slot** — the day's count is ACTIVE + DELIVERED, so dropping a run
+you can't finish costs nothing but the walk. Every accept and every turn-in goes through the economy
+sandbox (§11 #1): there is no courier money in a creative world.
+
+**Phase 1 scope.** Economy only. No depot buildings, no villagers, no cargo the player has to physically
+carry for a plain courier run, and turn-in is proximity to the waypoint. Phase 2 replaces the waypoint
+with a **placed depot block** and gives the crate a real item.
+
+---
 ## 4. Configuration Schema (sketch)
 ```yaml
 store:
@@ -253,6 +333,16 @@ marketplace:                  # the Pallet/Crate player-to-player market
   departments: [ BLOCKS, FOOD, TOOLS, WEAPONS, ARMOR, REDSTONE, COLLECTIBLES, MISC ]
   category_overrides:         # relocate the few that auto-sort wrong
     HONEYCOMB: MISC
+courier:                      # the Deliveries Site (§3.10) — a money faucet, not a market
+  payout: { base: 4.0, per_block: 0.012, min_distance: 200, max_distance: 4000 }
+  travel:  { foot: 1.00, mount: 0.85, boat: 0.80, ghast: 0.70, rail: 0.65, elytra: 0.45, creative: 0.00 }
+  anti_teleport: { floor: 0.70, payout: 0.20 }   # <70% of the distance tracked pays 20%
+  bands:
+    local:     { min: 200,  max: 600,  per_day: 2 }
+    regional:  { min: 600,  max: 1800, per_day: 2 }
+    long_haul: { min: 1800, max: 4000, per_day: 1 }
+  expire_minutes: 60
+  turn_in_radius: 10
 worlds:
   economy_enabled_worlds: [ world, resource ]   # sandbox: NO market/marketplace in creative (§11)
 crafting:
@@ -294,6 +384,7 @@ SQLite via JDBC. Tables:
 - **Marketplace:** Pallet locations + owners; listings (item, price, qty, seller); accrued fees.
 - **Minis:** per-type minted count + circulation; per-individual unique ID, current owner, provenance/price history; Vending Machine listings; Auction House listings + escrowed bids + close times.
 - **Custom blocks:** placed PC / Mini Workbench / Vending Machine / Display Case / **Pallet** locations + owners.
+- **Courier (§3.10):** one row per job — player, type, state, band, accepted-at world/coords, waypoint coords, the **locked** distance, trade-run cargo + quoted value, the movement-statistic **snapshot** taken at acceptance, the UTC epoch-day it counts against, and its expiry. Daily band caps are counted from these rows; there is no separate tally table.
 - **Daily limits:** per-player sell + buy counters (per-item too), reset daily (UTC).
 Everything survives restarts. **Back up the DB before every migration (see §11).**
 ---
@@ -310,6 +401,7 @@ Build and test each phase before the next.
 - **Phase 5 — The Crate Marketplace:** Pallets, universal listings (everything sellable), **departments + auto-categorization + ban list**, fees, Minis in Collectibles. *(Can be pulled earlier if "sell anything" is wanted before Minis.)*
 - **Phase 6 — Market Web Dashboard (§3.7):** the live stock-market website. *(Extension: a **transactional web shop** — secure `/crate web` login + buy-from-browser, delivering to the Locker — builds on this same embedded server.)*
 - **Phase 7 — In-Game Displays (§3.8):** wall-mounted `TextDisplay` price panels, holographic tickers, sign boards.
+- **Courier — Deliveries Site (§3.10) ✅ Phase 1 done (v16):** job board, three distance bands with daily caps, rolled waypoints, the statistic-blended travel multiplier, the anti-teleport floor, and trade runs that sell cargo into the market at the live rate. *Phase 2: a placed depot block instead of a waypoint, and a real crate item.*
 - **Future — more PC Sites (§2.2):** Towny plots Site, etc.
 - **Phase 8 — Rewards & Arcade (§3.9):** tokens (login streaks/playtime), loot boxes/crates, lotto/scratch tickets, the pity exchange, and the Arcade installation at the Mall. Reuses the drop/rarity/cap tech — mostly content.
 - **Phase 9–11 — Arcade as a place + earning sources (§3.9):** the Arcade was built from placeable, owned/protected, skinnable **machine blocks** you right-click to play — a **Crate Machine**, **Scratch-Ticket Booth**, **Pity Exchange Kiosk**, and **Token Counter**. *(v13: these are retired in favour of the single Arcade hub block — see §3.9; placed ones keep working.)* Token earning now has four sources: login streaks, playtime, **one-time achievements** (first Mini, first sale, first PC, first crate, first pack, $10k), and **daily/weekly quests** (`/hcm quests` — repeatable objectives like "sell $500 to the market", "print a Mini", "open a crate/pack" that pay tokens on completion and reset each day/week). Every earn shows a "+N token" toast. Minting still happens only through the cap-aware Printer pipeline.
@@ -369,6 +461,7 @@ Register a `PlaceholderExpansion` (identifier `hcm`) exposing e.g. `%hcm_price_<
 - `/hcm give <printer|pc|vending|display|mailbox [variant]|pallet|arcade> [player]` and `/hcm give <card <id>|pack <id>|binder|filament <color> <n>> [player]` (admin). The Mailbox variant is one of `wood` (default), `light_blue`, `black`, `white`, `purple`, `blue`, `orange`, `yellow`. **Not given out any more:** the Auction House block (use `/hcm auction`) and the four Arcade machine blocks (the Arcade hub covers them).
 - `/hcm auction` — the Mini Auction House (the only way to reach it).
 - `/hcm museum [id]` — the browse-only Mini Museum; with an id, straight onto that Mini's detail card (the click target of found-broadcasts).
+- `/hcm courier` — the Courier job board (§3.10). Also a Site on the PC.
 - `/minis` (or Mall block) — Museum & Shop.
 - PC / Workbench / Vending Machine / Auction House / **Pallet** interaction = **right-click the block**.
 - Avoid colliding with existing commands (e.g. QuickShop's `/qs finditem`).
@@ -380,7 +473,7 @@ Register a `PlaceholderExpansion` (identifier `hcm`) exposing e.g. `%hcm_price_<
 - `hcm.marketplace.sell` (place/use a Pallet), `hcm.marketplace.buy`
 - `hcm.mini.sell`, `hcm.mini.craft` (`hcm.mini.buy` retired with the browse-only Museum)
 - `hcm.vending.create`, `hcm.auction.list`, `hcm.auction.bid`
-- **Player-facing openers (all `default: true`, v16):** `hcm.auction.list` (`/hcm auction`), `hcm.museum.use` (`/hcm museum [id]`), `hcm.arcade.use` (`/hcm arcade`), `hcm.quests.use` (`/hcm quests`). These four subcommands open a read-only or token-only GUI and are the documented player route (§3.2); the nodes exist so an admin can withdraw one without removing the feature, not because they are restricted by default.
+- **Player-facing openers (all `default: true`, v16):** `hcm.auction.list` (`/hcm auction`), `hcm.museum.use` (`/hcm museum [id]`), `hcm.arcade.use` (`/hcm arcade`), `hcm.quests.use` (`/hcm quests`), `hcm.courier.use` (`/hcm courier`). These subcommands open a player-facing GUI — read-only, token-only, or (the Courier) earn-only — and are the documented player route (§3.2); the nodes exist so an admin can withdraw one without removing the feature, not because they are restricted by default.
 - `hcm.mall.rent` (or delegate to Towny)
 - `hcm.market.limit.bypass`
 ---

@@ -30,6 +30,16 @@ public final class AchievementService {
         if (def == null || !def.enabled() || player == null) {
             return;
         }
+        // An unlock fires exactly once per player, ever, and the token payout can be
+        // refused by the world sandbox (§11 #1) without saying so. Unlocking first would
+        // spend the only chance at this reward and pay nothing — unrecoverable, unlike a
+        // daily quest. So refuse to unlock where it cannot pay; the achievement fires
+        // next time its trigger runs in an economy-enabled world. A reward of 0 is
+        // presentation-only and unlocks anywhere.
+        if (def.reward() > 0
+                && (plugin.arcade() == null || !plugin.arcade().canEarn(player, "achievement " + key))) {
+            return;
+        }
         try {
             if (dao.unlock(player.getUniqueId(), key, System.currentTimeMillis())) {
                 player.sendMessage(Text.of("&6★ Achievement unlocked: &e" + def.display() + "&6!"));

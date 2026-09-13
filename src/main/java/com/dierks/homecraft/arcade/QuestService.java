@@ -60,7 +60,19 @@ public final class QuestService {
                     continue; // already earned this period — don't even bump progress
                 }
                 int progress = dao.addProgress(id, q.id(), period, delta);
-                if (progress >= q.target() && dao.markClaimed(id, q.id(), period)) {
+                if (progress < q.target()) {
+                    continue;
+                }
+                // The claim is one-way, and the token payout can be refused by the world
+                // sandbox (§11 #1) without saying so. Claiming first would burn the quest
+                // for the period and pay nothing, so refuse to claim where it cannot pay.
+                // Progress is already banked, so the quest claims on the next qualifying
+                // action in a world where the reward actually lands.
+                if (q.reward() > 0
+                        && (plugin.arcade() == null || !plugin.arcade().canEarn(player, "quest " + q.id()))) {
+                    continue;
+                }
+                if (dao.markClaimed(id, q.id(), period)) {
                     complete(player, q);
                 }
             } catch (SQLException e) {

@@ -836,9 +836,24 @@ public final class PluginConfig {
                 List<CrateReward> rewards = new ArrayList<>();
                 for (Map<?, ?> row : c.getMapList(base + ".rewards")) {
                     CrateReward r = readReward(row);
-                    if (r != null) {
-                        rewards.add(r);
+                    if (r == null) {
+                        continue;
                     }
+                    // A crate is a token SINK. A `tokens` reward paying back at least what the
+                    // crate costs makes opening it free or profitable, so the balance can only
+                    // grow and every other sink is undercut — and nothing in the roll loop
+                    // would ever report it. Cheaper than the cost is a deliberate partial
+                    // refund and stays allowed; at-or-above it is refused here, not silently
+                    // honoured, because there is no configuration in which it is intended.
+                    if (r.type() == RewardType.TOKENS && r.amount() >= cost) {
+                        log.warning("Arcade crate '" + key + "' has a tokens reward of " + r.amount()
+                                + " but only costs " + cost + " token" + (cost == 1 ? "" : "s")
+                                + " — that pays for itself, so the crate would be a token faucet "
+                                + "rather than a sink. Skipped; lower the reward below the cost "
+                                + "(or raise cost_tokens) to keep it.");
+                        continue;
+                    }
+                    rewards.add(r);
                 }
                 List<PaidTier> tiers = new ArrayList<>();
                 for (Map<?, ?> row : c.getMapList(base + ".paid_odds")) {

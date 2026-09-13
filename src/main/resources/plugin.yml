@@ -126,3 +126,8 @@ permissions:
   hcm.quests.use:
     description: Open the daily/weekly Quests board (/hcm quests).
     default: true
+  hcm.courier.use:
+    description: >-
+      Take and hand in Courier delivery runs. The board is a Site on the PC; the
+      /hcm courier subcommand is admin/testing only.
+    default: true

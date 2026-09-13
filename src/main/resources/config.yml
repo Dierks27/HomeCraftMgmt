@@ -205,6 +205,75 @@ packs:
       - { card: golden_idol, weight: 1 }    # ≈1.1% per card
 
 # ---------------------------------------------------------------------
+#  Courier — paid delivery runs (Phase 1: economy only, no world changes).
+#
+#  A player takes a job from the Courier Site on the PC, travels to a waypoint,
+#  and is paid on DISTANCE and TRAVEL METHOD. The payout locks at acceptance, so
+#  running in circles earns nothing.
+#
+#  Why it pays what it pays: per §3.1 material enters the house market ONLY when
+#  players mine and sell it in. If deliveries paid as well as mining, mining stops
+#  and the market starves. So a full day of runs sits meaningfully BELOW a mining
+#  session per minute and is still worth doing — five jobs at band midpoints, all
+#  on foot, is about $93 against a ~$150 mining day for slightly more wall-clock
+#  time. Do not raise these without re-checking that relationship.
+# ---------------------------------------------------------------------
+courier:
+  enabled: true
+  # travel_fee = (base + per_block * distance) * travel_multiplier
+  # distance is the horizontal straight line from where the job was accepted to
+  # the waypoint, clamped to [min_distance, max_distance].
+  payout:
+    base: 4.0
+    per_block: 0.012
+    min_distance: 200
+    max_distance: 4000
+  # How much of the fee each way of travelling is worth. Vanilla movement
+  # statistics are snapshotted at accept and diffed at turn-in, then blended by the
+  # FRACTION of centimetres moved in each group — never a total. A player who runs
+  # the route once and one who runs it four times both score 1.00.
+  #   foot     WALK / SPRINT / CROUCH / SWIM / WALK_ON_WATER / WALK_UNDER_WATER / CLIMB
+  #   mount    HORSE / STRIDER / PIG / NAUTILUS  (a Nautilus is a tameable saddled
+  #            mount like a Strider, not a boat — hence 0.85 rather than 0.80)
+  #   boat     BOAT
+  #   rail     MINECART
+  #   elytra   AVIATE
+  #   ghast    HAPPY_GHAST — it flies, so it removes more effort than a horse, but
+  #            it is slow and a real investment to get one
+  #   creative FLY (creative flight earns nothing)
+  travel:
+    foot: 1.00
+    mount: 0.85
+    boat: 0.80
+    ghast: 0.70
+    rail: 0.65
+    elytra: 0.45
+    creative: 0.00
+  # Anti-teleport: if total tracked movement comes to less than `floor` of the
+  # locked straight-line distance, the travel fee pays `payout` instead. Cargo value
+  # on a trade run still pays in full. Logged at debug, never called out in chat —
+  # the smaller number is the message.
+  anti_teleport:
+    floor: 0.70
+    payout: 0.20
+  # Distance bands and how many of each a player may run per UTC day. Keyed by
+  # epoch-day at read time like every other daily tally here — no scheduler.
+  bands:
+    local:     { min: 200,  max: 600,  per_day: 2 }
+    regional:  { min: 600,  max: 1800, per_day: 2 }
+    long_haul: { min: 1800, max: 4000, per_day: 1 }
+  # An accepted job left unfinished this long is abandoned and its slot returned.
+  expire_minutes: 60
+  # How close to the waypoint counts as arriving. Phase 2 replaces this with a villager.
+  turn_in_radius: 10
+  # Waypoint generation: a random bearing and distance from the player, resolved to
+  # the highest solid block. A spot is rejected if it is liquid, in an ocean biome,
+  # or on Towny/WorldGuard claimed land; after `max_rerolls` the job is not offered
+  # rather than placed somewhere unreachable.
+  waypoint:
+    max_rerolls: 20
+
+# ---------------------------------------------------------------------
 #  Phase 2.5 — Finite, conserved commodities market (the storefront side
 #  ONLY; QuickShop player-shops set their own prices and are untouched).
 #

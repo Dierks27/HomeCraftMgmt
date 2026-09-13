@@ -137,6 +137,22 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
                 new com.dierks.homecraft.gui.arcade.QuestsMenu(plugin, player).open(player);
             }
+            case "courier" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(Text.of("&cOnly players can open the courier board."));
+                    return true;
+                }
+                if (denyUnless(sender, "hcm.courier.use")) {
+                    return true;
+                }
+                if (!plugin.config().courier().enabled()) {
+                    sender.sendMessage(Text.of("&cThe courier board is closed."));
+                    return true;
+                }
+                // Admin/testing route. The player-facing way in is the Courier Site on the PC
+                // (§3.2, §2.2) — this exists so a run can be driven without walking to one.
+                new com.dierks.homecraft.gui.courier.JobBoardMenu(plugin, player, null).open(player);
+            }
             case "museum" -> handleMuseum(sender, args);
             case "backup" -> handleBackup(sender, args);
             case "auction", "auctions" -> {
@@ -1034,9 +1050,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "backup");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "backup");
             } else {
-                addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "balance", "tokens");
+                addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "balance", "tokens", "courier");
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("museum")) {
             String prefix = args[1].toLowerCase(Locale.ROOT);

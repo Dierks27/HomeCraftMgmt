@@ -416,6 +416,38 @@ public final class Database {
             // instead of banked. -1 means "never observed", distinguishable from a genuine 0.
             """
             ALTER TABLE quest_progress ADD COLUMN stat_mark INTEGER NOT NULL DEFAULT -1;
+            """,
+
+            // v24 — Courier jobs (Phase 1). Everything that decides a payout is locked at
+            // acceptance and stored here, so a restart mid-run cannot change what the job is
+            // worth: the clamped distance, the cargo's value at the time, and the player's
+            // movement counters as they stood. `day` is the UTC epoch-day of acceptance,
+            // keyed the same way as market_daily_sells so the per-band cap needs no scheduler.
+            """
+            CREATE TABLE IF NOT EXISTS courier_jobs (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                player        TEXT    NOT NULL,
+                type          TEXT    NOT NULL,
+                state         TEXT    NOT NULL,
+                band          TEXT    NOT NULL,
+                world         TEXT    NOT NULL,
+                accept_x      INTEGER NOT NULL,
+                accept_y      INTEGER NOT NULL,
+                accept_z      INTEGER NOT NULL,
+                way_x         INTEGER NOT NULL,
+                way_y         INTEGER NOT NULL,
+                way_z         INTEGER NOT NULL,
+                distance      INTEGER NOT NULL,
+                cargo_material TEXT,
+                cargo_amount  INTEGER NOT NULL DEFAULT 0,
+                cargo_value   REAL    NOT NULL DEFAULT 0,
+                stat_snapshot TEXT    NOT NULL,
+                day           INTEGER NOT NULL,
+                accepted_at   INTEGER NOT NULL,
+                expires_at    INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_courier_active ON courier_jobs (player, state);
+            CREATE INDEX IF NOT EXISTS idx_courier_daily ON courier_jobs (player, day, band, state);
             """
     };
 

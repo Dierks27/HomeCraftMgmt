@@ -350,6 +350,35 @@ public final class PluginConfig {
         }
     }
 
+    /** One distance bracket: the range a job is drawn from and how many a player gets per day. */
+    public record CourierBand(int min, int max, int perDay) {
+    }
+
+    /**
+     * The Courier module (Phase 1): paid delivery runs.
+     *
+     * <p>The payout shape is {@code (base + perBlock * distance) * travelMultiplier}, with the
+     * distance clamped and locked at acceptance. The numbers are set against the house market's
+     * stock faucet rather than against a percentage: per §3.1 material enters the market only
+     * when players mine and sell it in, so if deliveries paid as well as mining, mining stops
+     * and the market starves. A full day of runs is deliberately the worse deal per minute.
+     *
+     * @param travel          per-{@link com.dierks.homecraft.courier.TravelLedger.TravelGroup} weights
+     * @param teleportFloor   fraction of the locked distance that must actually be travelled
+     * @param teleportPayout  what the travel fee pays when it is not
+     */
+    public record Courier(boolean enabled, double base, double perBlock,
+                          int minDistance, int maxDistance,
+                          Map<com.dierks.homecraft.courier.TravelLedger.TravelGroup, Double> travel,
+                          double teleportFloor, double teleportPayout,
+                          Map<com.dierks.homecraft.courier.CourierJob.Band, CourierBand> bands,
+                          int expireMinutes, int turnInRadius, int maxRerolls) {
+
+        public CourierBand band(com.dierks.homecraft.courier.CourierJob.Band b) {
+            return bands.get(b);
+        }
+    }
+
     /** Online store branding shown in-game (name + display URL). */
     public record Store(String name, String displayUrl) {
     }
@@ -488,6 +517,7 @@ public final class PluginConfig {
     private Arcade arcade;
     private Map<String, AchievementDef> achievements;
     private Quests quests;
+    private Courier courier;
 
     public PluginConfig(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -625,6 +655,11 @@ public final class PluginConfig {
     /** Daily/weekly quest definitions (Phase 11). */
     public Quests quests() {
         return quests;
+    }
+
+    /** The Courier module: paid delivery runs. */
+    public Courier courier() {
+        return courier;
     }
 
     public Loot.MiniLoot miniLoot() {
@@ -816,6 +851,55 @@ public final class PluginConfig {
 
         // ---- Daily/weekly quests (Phase 11) ----
         this.quests = readQuests(c);
+        this.courier = readCourier(c);
+    }
+
+    private Courier readCourier(FileConfiguration c) {
+        boolean enabled = c.getBoolean("courier.enabled", true);
+        // Floored at zero: a negative rate would be a job that charges you to run it.
+        double base = Math.max(0.0, c.getDouble("courier.payout.base", 4.0));
+        double perBlock = Math.max(0.0, c.getDouble("courier.payout.per_block", 0.012));
+        int minD = Math.max(1, c.getInt("courier.payout.min_distance", 200));
+        int maxD = Math.max(minD + 1, c.getInt("courier.payout.max_distance", 4000));
+
+        Map<com.dierks.homecraft.courier.TravelLedger.TravelGroup, Double> travel =
+                new java.util.EnumMap<>(com.dierks.homecraft.courier.TravelLedger.TravelGroup.class);
+        for (var g : com.dierks.homecraft.courier.TravelLedger.TravelGroup.values()) {
+            // Clamped to [0, 1]: a multiplier above 1 would pay more than walking, which is the
+            // one thing the whole travel table exists to prevent.
+            double v = c.getDouble("courier.travel." + g.configKey(), defaultTravel(g));
+            travel.put(g, Math.max(0.0, Math.min(1.0, v)));
+        }
+
+        double floor = Math.max(0.0, Math.min(1.0, c.getDouble("courier.anti_teleport.floor", 0.70)));
+        double reduced = Math.max(0.0, Math.min(1.0, c.getDouble("courier.anti_teleport.payout", 0.20)));
+
+        Map<com.dierks.homecraft.courier.CourierJob.Band, CourierBand> bands =
+                new java.util.EnumMap<>(com.dierks.homecraft.courier.CourierJob.Band.class);
+        for (var b : com.dierks.homecraft.courier.CourierJob.Band.values()) {
+            String path = "courier.bands." + b.configKey();
+            int bmin = Math.max(minD, c.getInt(path + ".min", minD));
+            int bmax = Math.max(bmin + 1, c.getInt(path + ".max", maxD));
+            int perDay = Math.max(0, c.getInt(path + ".per_day", 1));
+            bands.put(b, new CourierBand(Math.min(bmin, maxD), Math.min(bmax, maxD), perDay));
+        }
+
+        return new Courier(enabled, base, perBlock, minD, maxD, travel, floor, reduced, bands,
+                Math.max(1, c.getInt("courier.expire_minutes", 60)),
+                Math.max(1, c.getInt("courier.turn_in_radius", 10)),
+                Math.max(1, c.getInt("courier.waypoint.max_rerolls", 20)));
+    }
+
+    private static double defaultTravel(com.dierks.homecraft.courier.TravelLedger.TravelGroup g) {
+        return switch (g) {
+            case FOOT -> 1.00;
+            case MOUNT -> 0.85;
+            case BOAT -> 0.80;
+            case GHAST -> 0.70;
+            case RAIL -> 0.65;
+            case ELYTRA -> 0.45;
+            case CREATIVE -> 0.00;
+        };
     }
 
     private Quests readQuests(FileConfiguration c) {

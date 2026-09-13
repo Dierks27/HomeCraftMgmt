@@ -274,6 +274,47 @@ armor-stand spawning, and the checkmark web-import.
 
 ---
 
+## Courier — Deliveries (v16)
+
+A **Site on the PC** (also `/hcm courier`) that pays you to move things around the
+map. It is money *earned by travelling*, not by selling — the market is a
+finite-stock exchange, so it cannot be the only way to earn without the price
+collapsing.
+
+- **Take a run** from one of three distance bands — **local** 200–600 blocks
+  (2/day), **regional** 600–1800 (2/day), **long haul** 1800–4000 (1/day). A
+  waypoint is rolled when you accept: random bearing, resolved to solid ground,
+  re-rolled off water, ocean biomes and land you can't build on. One run at a
+  time, per player.
+- **Get paid** `(base + per_block × distance) × travel_multiplier`. The distance
+  is the straight line, clamped to the band and **locked at acceptance**, so the
+  scenic route earns nothing extra. Five runs at their midpoints on foot come to
+  **about $93** a day.
+- **How you travel is most of the fee.** Vanilla movement statistics are
+  snapshotted when you accept and blended by the **fraction of distance** in each
+  group at turn-in — so walking the route once and walking it four times both
+  score **1.00**, and riding half of it lands you between the two rates.
+  Shipped: `foot` 1.00, `mount` 0.85 (horse/strider/pig/nautilus), `boat` 0.80,
+  `ghast` 0.70, `rail` 0.65, `elytra` 0.45, **`creative` 0.00**.
+- **Anti-teleport:** arrive with less than 70% of the distance actually tracked
+  and the travel fee pays 20%. Logged at `FINE`, never announced — a portal
+  shortcut isn't cheating, it just isn't walking.
+- **Trade runs:** right-click a band holding something the market buys and the
+  run carries it. At the drop-off it is **sold into the market for real** — stock
+  moves, daily limits and commission apply — at the **live** rate, not the quote
+  shown when you accepted. Only the travel fee is new money.
+- **Dropping a run doesn't spend the slot.** Runs expire after 60 minutes and the
+  band comes back either way. All of it is off in an economy-disabled world.
+
+Everything is tunable under `courier:` in `config.yml` — including turning it off
+(`courier.enabled: false`, which also hides the Site from the PC).
+
+**Verify:** `/hcm courier` → take a local run → walk to the coordinates it gives
+you → **Hand it over** within 10 blocks. Try the same run in a creative world and
+it should refuse; fly it with elytra and the fee should be visibly smaller.
+
+---
+
 ## Permissions
 
 | Node | Default | Grants |
@@ -288,6 +329,7 @@ armor-stand spawning, and the checkmark web-import.
 | `hcm.pc.craft` | all | Craft the PC at a Workbench |
 | `hcm.workbench.place` | all | Place a Mini Workbench |
 | `hcm.workbench.use` | all | Open a placed Workbench's GUI |
+| `hcm.courier.use` | all | `/hcm courier` and the Courier Site on the PC |
 | `hcm.protection.bypass` | op | Bypass Towny/WorldGuard checks for our blocks |
 
 ---
@@ -300,6 +342,7 @@ src/main/java/com/dierks/homecraft/
   block/                       custom-block type, service, listeners
   command/                     /hcm
   config/                      typed config.yml view
+  courier/                     delivery jobs, waypoints, travel-statistic blending
   crafting/                    data-driven vanilla recipes + recipe-book unlock + craft-grid matching
   gui/                         Amazon placeholder GUI (Phase 3 stub)
   integration/                 Towny + WorldGuard protection, Vault economy

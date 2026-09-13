@@ -95,9 +95,12 @@ public final class StoreMenu extends Menu {
         set(48, Menus.icon(Material.CHEST, "&6Marketplace",
                 "&7Browse what other players list in their Pallets."),
                 e -> new com.dierks.homecraft.gui.marketplace.MarketplaceMenu(plugin, player, this::reopen).open(player));
-        set(49, Menus.icon(Material.PAPER, "&bCard Packs",
-                "&7Buy booster packs and open them for Cards."),
-                e -> new com.dierks.homecraft.gui.mini.PackShopMenu(plugin, player, this::reopen).open(player));
+        // The Store used to be the PC's root screen, which is why slot 49 carried a
+        // destination rather than an exit. The Site launcher is the root now, so 49 goes
+        // back to being what it is everywhere else: the way out. Card Packs moved to the
+        // launcher, which is where every Site-to-Site jump belongs.
+        set(49, Menus.icon(Material.BARRIER, "&cBack to the PC"),
+                e -> com.dierks.homecraft.gui.SiteLauncherMenu.open(plugin, player));
         set(50, Menus.icon(Material.PLAYER_HEAD, "&5Mini Museum",
                 "&7Browse every collectible and what you have."),
                 e -> new MuseumMenu(plugin, player, this::reopen).open(player));

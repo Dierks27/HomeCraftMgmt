@@ -47,7 +47,7 @@ class DepartmentIconsTest {
             Material.GOLD_INGOT,               // the balance tile
             Material.EMERALD,                  // Store -> Instant Market
             Material.CHEST,                    // Store -> Marketplace
-            Material.PAPER,                    // Store -> Card Packs, Marketplace empty state
+            Material.PAPER,                    // Marketplace empty state (Card Packs moved to the PC launcher)
             Material.PLAYER_HEAD,              // Store -> Mini Museum
             Material.CHEST_MINECART,           // Store -> Mailbox & Orders
             Material.HOPPER,                   // the Sort toggle

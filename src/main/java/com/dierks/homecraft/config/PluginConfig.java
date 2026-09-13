@@ -375,7 +375,8 @@ public final class PluginConfig {
      * title supports {@code {store}} / {@code {url}} tokens, filled from
      * {@link Store}. Edit these live via the Admin Studio or {@code /hcm reload}.
      */
-    public record MenuTitles(String admin, String museum, String market, String storeFormat) {
+    public record MenuTitles(String admin, String museum, String market, String storeFormat,
+                             String pcFormat) {
     }
 
     /**
@@ -728,7 +729,8 @@ public final class PluginConfig {
                 c.getString("menus.admin_title", "&4Admin Studio"),
                 c.getString("menus.museum_title", "&5Mini Museum &8&l·&r &7Collectibles"),
                 c.getString("menus.market_title", "&1Market — instant buy/sell"),
-                c.getString("menus.store_title", "&6Welcome to {store} &8· &7{url}"));
+                c.getString("menus.store_title", "&6Welcome to {store} &8· &7{url}"),
+                c.getString("menus.pc_title", "&9PC &8· &7{url}"));
 
         this.menuDefaults = new MenuDefaults(
                 c.getString("menus.store.default_department", "All"),

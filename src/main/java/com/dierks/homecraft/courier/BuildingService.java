@@ -56,6 +56,15 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public final class BuildingService {
 
+    /**
+     * How far around the waypoint's chunk to load before touching the world.
+     *
+     * <p>Two is enough for the widest region the module builds: a box of roughly twice the
+     * largest template's span plus padding, centred anywhere inside a chunk, reaches at most two
+     * chunks out.
+     */
+    private static final int CHUNK_RADIUS = 2;
+
     /** Structure keys that resolved at startup, grouped by the family they belong to. */
     private final Map<BuildingTemplate.BiomeGroup, List<BuildingTemplate>> usable =
             new LinkedHashMap<>();
@@ -68,11 +77,14 @@ public final class BuildingService {
 
     private final HomeCraftManagement plugin;
     private final CourierSiteDao dao;
+    private final com.dierks.homecraft.storage.TrackedGroundDao ground;
     private boolean templatesChecked;
 
-    public BuildingService(HomeCraftManagement plugin, CourierSiteDao dao) {
+    public BuildingService(HomeCraftManagement plugin, CourierSiteDao dao,
+                           com.dierks.homecraft.storage.TrackedGroundDao ground) {
         this.plugin = plugin;
         this.dao = dao;
+        this.ground = ground;
     }
 
     // ---- lifecycle ------------------------------------------------------------
@@ -271,20 +283,33 @@ public final class BuildingService {
         }
 
         World world = way.getWorld();
-        world.getChunkAtAsync(way.getBlockX() >> 4, way.getBlockZ() >> 4, true)
-                .thenAccept(chunk -> plugin.getServer().getScheduler().runTask(plugin, () -> {
-                    try {
-                        done.complete(build(job, way));
-                    } catch (Exception e) {
-                        plugin.getLogger().warning("Courier site placement failed for job "
-                                + job.id() + ": " + e);
-                        done.complete(false);
-                    }
-                }))
-                .exceptionally(t -> {
-                    plugin.getServer().getScheduler().runTask(plugin, () -> done.complete(false));
-                    return null;
-                });
+        // Every chunk the region can touch, not just the waypoint's. The snapshot reads a box
+        // wider than one chunk, and reading a block in an unloaded chunk loads it — on the main
+        // thread, one at a time, which is the very thing the async placement exists to avoid.
+        int radius = CHUNK_RADIUS;
+        int cx = way.getBlockX() >> 4;
+        int cz = way.getBlockZ() >> 4;
+        List<CompletableFuture<Chunk>> loads = new ArrayList<>();
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dz = -radius; dz <= radius; dz++) {
+                loads.add(world.getChunkAtAsync(cx + dx, cz + dz, true));
+            }
+        }
+        CompletableFuture.allOf(loads.toArray(new CompletableFuture[0]))
+                .whenComplete((ignored, error) -> plugin.getServer().getScheduler()
+                        .runTask(plugin, () -> {
+                            if (error != null) {
+                                done.complete(false);
+                                return;
+                            }
+                            try {
+                                done.complete(build(job, way));
+                            } catch (Exception e) {
+                                plugin.getLogger().warning("Courier site placement failed for job "
+                                        + job.id() + ": " + e);
+                                done.complete(false);
+                            }
+                        }));
         return done;
     }
 
@@ -332,9 +357,11 @@ public final class BuildingService {
         if (overlapsStandingSite(world.getName(), originX, originZ, originX + side, originZ + side)) {
             return false;
         }
-        // Block data alone cannot carry a chest's contents, so a region holding one is a
-        // region we must not touch — somebody's unclaimed storage is still somebody's.
-        if (BuildingSnapshot.hasContainers(world, originX, originY, originZ, side, height, side)) {
+        String blocked = regionBlocked(world, originX, originY, originZ, side, height, side);
+        if (blocked != null) {
+            plugin.getLogger().fine(() -> "Courier job " + job.id() + ": no building at x "
+                    + way.getBlockX() + ", z " + way.getBlockZ() + " — " + blocked
+                    + " is in the way. The run hands in at the PC.");
             return false;
         }
 
@@ -398,6 +425,120 @@ public final class BuildingService {
             restoreNow(site);
             return false;
         }
+    }
+
+    /**
+     * Everything in this region that a block snapshot could not put back, described.
+     *
+     * <p>Three kinds of thing, one rule: <b>a snapshot restores block data and nothing else.</b>
+     * Anything whose value lives somewhere other than block data has to be refused rather than
+     * built over, because the restore that makes the rest of this module safe simply does not
+     * reach it.
+     *
+     * <ul>
+     *   <li><b>Blocks with contents</b> — a chest is not recoverable from its block data.</li>
+     *   <li><b>Entities that were placed</b> — item frames, armour stands, chest minecarts,
+     *       boats, displays. These are not in the snapshot at all, so anything that destroys
+     *       one during the job destroys it for good. Living mobs are ignored: they wander, and
+     *       refusing a field because a cow walked through it would refuse most fields.</li>
+     *   <li><b>Anything HomeCraft has recorded here</b> — a placed PC, Workbench, Pallet, or
+     *       worst of all a placed <b>Mini</b>, which is a numbered and capped collectible that
+     *       cannot be re-minted if the window goes wrong.</li>
+     * </ul>
+     */
+    private String regionBlocked(World world, int ox, int oy, int oz,
+                                 int sizeX, int sizeY, int sizeZ) {
+        String feature = BuildingSnapshot.blockingFeature(world, ox, oy, oz, sizeX, sizeY, sizeZ,
+                config().avoidBlocks());
+        if (feature != null) {
+            return feature;
+        }
+        String entity = placedEntityIn(world, ox, oy, oz, sizeX, sizeY, sizeZ);
+        if (entity != null) {
+            return entity;
+        }
+        return trackedGroundIn(world.getName(), ox, oy, oz, sizeX, sizeY, sizeZ);
+    }
+
+    /** A placed (non-wandering) entity in the region, described, or null. */
+    private String placedEntityIn(World world, int ox, int oy, int oz,
+                                  int sizeX, int sizeY, int sizeZ) {
+        try {
+            org.bukkit.util.BoundingBox box = org.bukkit.util.BoundingBox.of(
+                    new Location(world, ox, oy, oz),
+                    new Location(world, ox + sizeX, oy + sizeY, oz + sizeZ));
+            for (Entity entity : world.getNearbyEntities(box)) {
+                if (isPlacement(entity)) {
+                    return entity.getType().name().toLowerCase(java.util.Locale.ROOT)
+                            .replace('_', ' ');
+                }
+            }
+        } catch (RuntimeException e) {
+            // A world that will not answer is not a reason to build on top of something.
+            return "an area that could not be checked";
+        }
+        return null;
+    }
+
+    /**
+     * True for entities somebody put there, false for anything that walked there.
+     *
+     * <p>An armour stand is a {@code LivingEntity} in Bukkit despite being furniture, which is
+     * why it is named before the mob exemption rather than after it. A horse is both a
+     * {@code Vehicle} and an {@code InventoryHolder}, and is deliberately <i>not</i> caught:
+     * it will have wandered off long before the delivery ends.
+     */
+    private boolean isPlacement(Entity entity) {
+        if (entity instanceof org.bukkit.entity.ArmorStand
+                || entity instanceof org.bukkit.entity.Hanging
+                || entity instanceof org.bukkit.entity.Display
+                || entity instanceof org.bukkit.entity.EnderCrystal) {
+            return true;
+        }
+        if (entity instanceof org.bukkit.entity.LivingEntity) {
+            return false; // mobs wander; they are not somebody's placement
+        }
+        return entity instanceof org.bukkit.entity.Vehicle
+                || entity instanceof org.bukkit.inventory.InventoryHolder;
+    }
+
+    /** Anything the plugin has recorded at these coordinates, described, or null. */
+    private String trackedGroundIn(String world, int ox, int oy, int oz,
+                                   int sizeX, int sizeY, int sizeZ) {
+        try {
+            return ground.firstIn(world, ox, oy, oz,
+                    ox + sizeX - 1, oy + sizeY - 1, oz + sizeZ - 1);
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Could not check tracked ground for a courier site: "
+                    + e.getMessage());
+            // Cannot tell means do not build. The thing this protects is a minted Mini.
+            return "ground that could not be checked";
+        }
+    }
+
+    /**
+     * The cheap half of {@link #regionBlocked}, for choosing a waypoint.
+     *
+     * <p>Runs before a job exists, so a bad spot is <b>rerolled</b> rather than becoming a
+     * delivery that quietly arrives at an empty field. Only the two checks that are cheap
+     * enough to run per candidate — the database query and the entity sweep — and deliberately
+     * not the block scan, which is thousands of reads and is done once, properly, at placement.
+     */
+    public String groundUnsuitable(Location at, int radius) {
+        World world = at.getWorld();
+        if (world == null) {
+            return "no world";
+        }
+        int side = radius * 2 + 1;
+        int oy = Math.max(world.getMinHeight(), at.getBlockY() - radius);
+        int height = Math.min(world.getMaxHeight() - oy, side);
+        String entity = placedEntityIn(world, at.getBlockX() - radius, oy, at.getBlockZ() - radius,
+                side, height, side);
+        if (entity != null) {
+            return entity;
+        }
+        return trackedGroundIn(world.getName(), at.getBlockX() - radius, oy, at.getBlockZ() - radius,
+                side, height, side);
     }
 
     /**

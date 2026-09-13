@@ -367,7 +367,8 @@ public final class PluginConfig {
      */
     public record CourierBuilding(boolean enabled, int placeAtBlocks, int maxSlope,
                                   int regionPadding, int foundationDepth, int lingerSeconds,
-                                  String recipientName, List<BuildingTemplate> buildings) {
+                                  String recipientName, java.util.Set<Material> avoidBlocks,
+                                  int waypointScanRadius, List<BuildingTemplate> buildings) {
     }
 
     /**
@@ -955,7 +956,35 @@ public final class PluginConfig {
                 Math.max(0, c.getInt("courier.building.foundation_depth", 3)),
                 Math.max(0, c.getInt("courier.building.linger_seconds", 45)),
                 c.getString("courier.building.recipient_name", "Courier Recipient"),
+                readAvoidBlocks(c),
+                Math.max(1, c.getInt("courier.building.waypoint_scan_radius", 14)),
                 List.copyOf(buildings));
+    }
+
+    /**
+     * Block types a delivery site refuses to be built over.
+     *
+     * <p>Not a safety net for anything the plugin tracks itself — those are checked against the
+     * database. This is for things only the world knows about: a player head out in a field is
+     * either somebody's decoration or a death-storage grave, and neither should spend an hour
+     * behind a wall.
+     */
+    private java.util.Set<Material> readAvoidBlocks(FileConfiguration c) {
+        java.util.Set<Material> out = java.util.EnumSet.noneOf(Material.class);
+        List<String> names = c.getStringList("courier.building.avoid_blocks");
+        if (names.isEmpty()) {
+            names = List.of("PLAYER_HEAD", "PLAYER_WALL_HEAD");
+        }
+        for (String name : names) {
+            Material material = Material.matchMaterial(String.valueOf(name).trim());
+            if (material == null) {
+                plugin.getLogger().warning("courier.building.avoid_blocks: unknown material '"
+                        + name + "' — ignoring it.");
+            } else {
+                out.add(material);
+            }
+        }
+        return java.util.Set.copyOf(out);
     }
 
     private static String str(Object o) {

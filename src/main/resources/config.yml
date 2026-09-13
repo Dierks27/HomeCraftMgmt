@@ -303,6 +303,30 @@ courier:
     # out from under the player as they turn around.
     linger_seconds: 45
     recipient_name: "Courier Recipient"
+    # A site refuses to be built over anything a block snapshot could not put back.
+    # Three kinds, all checked before the first block moves:
+    #   * blocks with contents  — a chest is not recoverable from its block data
+    #   * entities somebody placed — item frames, armour stands, chest minecarts,
+    #     boats, displays. These are not in the snapshot at all, so anything that
+    #     destroys one during the job destroys it for good. Wandering mobs are
+    #     ignored; refusing a field because a cow walked through it would refuse
+    #     most fields.
+    #   * anything HomeCraft already tracks here — a placed PC, Workbench, Pallet
+    #     or, worst of all, a placed Mini, which is a numbered and capped
+    #     collectible that cannot be re-minted if the window goes wrong.
+    # Below is the fourth kind: block types only the world knows about. A player
+    # head out in a field is either somebody's decoration or a death-storage grave
+    # (GravesX and similar), and neither should spend an hour behind a wall.
+    # Chest-based and armour-stand-based graves are already caught by the two
+    # checks above. Leave empty to get this default back.
+    avoid_blocks: [ PLAYER_HEAD, PLAYER_WALL_HEAD ]
+    # How far around a candidate waypoint to look for the two CHEAP refusals (the
+    # tracked-placement query and the entity sweep) while a job is still being
+    # rolled. Catching it here rerolls onto a different field; catching it later
+    # leaves a job the player still has to walk that arrives at nothing. The full
+    # block scan is thousands of reads, so it runs once at placement, not per
+    # candidate.
+    waypoint_scan_radius: 14
   # The buildings that may be placed. LEAVE THIS EMPTY to use the shipped table of
   # vanilla village houses — Mojang already maintains a correct-looking small house
   # per biome and it costs nothing to ship. Every key is resolved once at startup and

@@ -316,9 +316,19 @@ When the run ends — delivered, expired, abandoned, or the server stopping — 
 field goes back exactly as it was**, from a snapshot taken before the first block
 moved. That snapshot lives in the plugin's own database, so this needs no
 WorldEdit, survives restarts, and tidies up after a crash on the next start. You
-can't mine the house, the chests in it are emptied (a village-loot faucet is
-exactly what §3.1 refuses), and a spot that already has someone's chest in it is
-rejected rather than built on.
+can't mine the house, and the chests in it are emptied — a village-loot faucet is
+exactly what §3.1 refuses.
+
+A site also refuses to be built over anything the snapshot couldn't put back:
+a chest or other container, a **placed entity** (item frame, armour stand, chest
+minecart, boat, display — none of which are in a block snapshot at all), anything
+HomeCraft already tracks there (a placed PC, Pallet, or worst of all a placed
+**Mini**, which is a numbered collectible that can't be re-minted), and any block
+in `avoid_blocks` — player heads by default, so a GravesX death-storage grave
+doesn't end up behind a wall. Wandering mobs don't count; a cow walking through
+shouldn't cost you a field. The cheap half of that check runs while the waypoint
+is being picked, so a bad spot gets rerolled instead of becoming a delivery that
+arrives at nothing.
 
 **Handing in at the PC still works** if the house doesn't appear for any reason, so
 nobody ends up stranded 1,800 blocks out because a structure failed to place.

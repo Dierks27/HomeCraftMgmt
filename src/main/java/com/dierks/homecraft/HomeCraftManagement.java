@@ -231,7 +231,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.courier = new com.dierks.homecraft.courier.CourierService(
                 this, new com.dierks.homecraft.storage.CourierDao(database),
                 new com.dierks.homecraft.courier.BuildingService(
-                        this, new com.dierks.homecraft.storage.CourierSiteDao(database)));
+                        this, new com.dierks.homecraft.storage.CourierSiteDao(database),
+                        new com.dierks.homecraft.storage.TrackedGroundDao(database)));
 
         getServer().getPluginManager().registerEvents(
                 new com.dierks.homecraft.courier.CourierListener(this), this);

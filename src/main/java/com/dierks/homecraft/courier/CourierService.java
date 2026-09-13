@@ -66,7 +66,7 @@ public final class CourierService {
         this.plugin = plugin;
         this.dao = dao;
         this.buildings = buildings;
-        this.waypoints = new WaypointService(plugin);
+        this.waypoints = new WaypointService(plugin, buildings);
     }
 
     public BuildingService buildings() {

@@ -3,7 +3,7 @@
 >
 > **v11 changelog:** Rebranded the online store from "Amazon" to **Crate** (`[www.Crate.craft](https://www.Crate.craft)`), with **Rush** (fast shipping), the **Pallet** (player seller box) and the **Locker** (delivery holding). Added the **Crate Marketplace** (universal player-to-player selling — *everything* is sellable, incl. Minis), **auto-categorization into departments** using the game's own item categories, an **admin ban list**, and the **PC-as-a-browser / "Sites"** architecture. Added **in-game economy displays** (TVs/tickers/boards) and a consolidated **Economy Risks & Safeguards** section. Recorded the **Phase 2.5.1 pricing fix** (proportional elasticity + integrated bulk pricing). Marked Phases 2.5 and 3 done.
 >
-> **v17 changelog (the Courier's destination):** A delivery now **arrives somewhere**. A vanilla village house is placed at the waypoint as the player approaches, with a **villager** outside it to hand the crate to, and the field is **restored exactly as it was** when the run ends — from a palette-and-indices snapshot taken before the first block changed and held in SQLite, so the module needs **no WorldEdit dependency** and cleans up after a crash on its own. Also fixes two Phase 1 faults found while building it: **waypoint generation ran on the main thread**, loading and generating chunks up to four thousand blocks out (up to `max_rerolls` times per click) despite a code comment claiming otherwise — it is asynchronous now, and `accept` returns a future; and the waypoint claim check used `canBuild`, which **short-circuits to "yes" for ops**, so an admin could be sent to deliver into somebody else's town. Schema v25 adds `courier_sites`. `config_revision` stays 9 — the new `courier.building` keys arrive through the leaf backfill.
+> **v17 changelog (the Courier's destination):** A delivery now **arrives somewhere**. A vanilla village house is placed at the waypoint as the player approaches, with a **villager** outside it to hand the crate to, and the field is **restored exactly as it was** when the run ends — from a palette-and-indices snapshot taken before the first block changed and held in SQLite, so the module needs **no WorldEdit dependency** and cleans up after a crash on its own. Also fixes two Phase 1 faults found while building it: **waypoint generation ran on the main thread**, loading and generating chunks up to four thousand blocks out (up to `max_rerolls` times per click) despite a code comment claiming otherwise — it is asynchronous now, and `accept` returns a future; the waypoint claim check used `canBuild`, which **short-circuits to "yes" for ops**, so an admin could be sent to deliver into somebody else's town; and the region scan only loaded the waypoint's own chunk, so reading the rest of the box would have loaded its neighbours one at a time on the main thread — the very thing the async placement exists to avoid. Schema v25 adds `courier_sites`. `config_revision` stays 9 — the new `courier.building` keys arrive through the leaf backfill.
 >
 > **v16 changelog (the Courier):** A new **Deliveries Site** on the PC (§3.10). Take a crate to a rolled waypoint and get paid a **travel fee** for the distance, scaled by **how you actually travelled** — read from the same vanilla movement statistics the quest verbs use, snapshotted at accept and **blended by the fraction of centimetres in each group**, so walking the route four times pays exactly what walking it once pays. Creative flight pays **nothing**; an arrival with less than 70% of the distance tracked pays **20%**, which is the anti-teleport floor. Three distance bands with per-UTC-day caps (2 / 2 / 1). A **trade run** carries market cargo to the drop-off and sells it there **at the live rate** — only the fee half is new money (§3.1). **No market price, stock level, daily limit, shipping tier or catalog entry was touched**; the courier adds a money *faucet* sized under mining and nothing else. Schema v24 adds `courier_jobs`; `courier:` is new config with no migration step — an absent key falls back to the shipped defaults.
 >
@@ -337,9 +337,31 @@ the plugin that knows how to remove it is the one outcome this is built to make 
 because mining it would hand out free blocks the restore then deletes and because every changed block
 is one the snapshot no longer describes. And it is not **loot**: village templates ship chests carrying
 loot tables, and a building that reappears at the end of every run would turn that into a per-delivery
-item faucet, which §3.1 refuses, so the furniture stays and the contents do not. A candidate region that
-*already* holds a container is rejected outright — block data cannot carry a chest's contents, so the
-only safe answer to somebody's unclaimed storage is to build somewhere else.
+**item faucet** in an economy whose whole premise is that material enters only when somebody mines it —
+so the furniture stays and the contents do not.
+
+*What a site refuses to be built over.* One rule, four cases: **a snapshot restores block data and
+nothing else**, so anything whose value lives elsewhere has to be refused rather than built over,
+because the restore that makes the rest of this safe does not reach it.
+- **Blocks with contents.** A chest is not recoverable from its block data. Somebody's unclaimed
+  storage is still somebody's.
+- **Entities that were placed.** Item frames, armour stands, chest minecarts, boats, displays. These are
+  not in the snapshot *at all*, so anything that destroys one during the job destroys it for good.
+  Wandering mobs are ignored — refusing a field because a cow walked through it would refuse most
+  fields — which is why the test names armour stands before it exempts living entities, and why a horse
+  (a `Vehicle` *and* an `InventoryHolder`) is deliberately not caught.
+- **Anything HomeCraft already tracks there.** One query across the six tables that key on
+  `(world, x, y, z)`. The case that matters is a **placed Mini**: a numbered, capped, uniquely-minted
+  collectible. The snapshot would dutifully restore the head; it would not restore the owner's access
+  during the job, and a failure in that window loses a copy that cannot be re-minted.
+- **Block types only the world knows about** (`building.avoid_blocks`, player heads by default) — a head
+  in a field is either a decoration or a death-storage grave, and neither should spend an hour behind a
+  wall. Chest- and armour-stand-based graves are already caught by the two cases above.
+
+The cheap half of that — the tracked-placement query and the entity sweep — also runs **while the
+waypoint is being rolled**, so a bad spot is rerolled onto a different field rather than becoming a job
+the player walks to and finds empty. The full block scan is thousands of reads, so it runs once, at
+placement, where it is also the last word: an hour is long enough for somebody to put a chest down.
 
 *The villager is a fixture, not a mob.* No AI, invulnerable, silent, persistent, profession matched to
 the biome family, PDC-tagged with the job id. Right-click opens the hand-over and **never a trade

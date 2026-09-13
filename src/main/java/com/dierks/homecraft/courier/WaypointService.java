@@ -28,9 +28,11 @@ import java.util.concurrent.ThreadLocalRandom;
 public final class WaypointService {
 
     private final HomeCraftManagement plugin;
+    private final BuildingService buildings;
 
-    public WaypointService(HomeCraftManagement plugin) {
+    public WaypointService(HomeCraftManagement plugin, BuildingService buildings) {
         this.plugin = plugin;
+        this.buildings = buildings;
     }
 
     /**
@@ -116,7 +118,37 @@ public final class WaypointService {
         if (isOcean(loc)) {
             return false;
         }
-        return !claimed(player, loc);
+        if (claimed(player, loc)) {
+            return false;
+        }
+        return !occupied(loc);
+    }
+
+    /**
+     * True if something is already here that a delivery building must not be built over.
+     *
+     * <p>Checked at <b>waypoint</b> time, not just at placement time, and that difference is the
+     * point: rejecting here rerolls onto a different field, whereas rejecting at placement leaves
+     * a job the player still has to walk that quietly arrives at nothing. Only the cheap half of
+     * the check runs per candidate — the tracked-placement query and the entity sweep — since the
+     * full block scan is thousands of reads and is done once, properly, before the snapshot.
+     *
+     * <p>A spot that passes here can still be refused later; an hour is long enough for somebody
+     * to put a chest down.
+     */
+    private boolean occupied(Location loc) {
+        try {
+            int radius = plugin.config().courier().building().waypointScanRadius();
+            String reason = buildings.groundUnsuitable(loc, radius);
+            if (reason != null) {
+                plugin.getLogger().fine(() -> "Courier waypoint rejected at x " + loc.getBlockX()
+                        + ", z " + loc.getBlockZ() + " — " + reason + " is already there.");
+                return true;
+            }
+            return false;
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     private boolean isOcean(Location loc) {

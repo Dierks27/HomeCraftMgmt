@@ -161,25 +161,41 @@ public final class BuildingSnapshot {
     }
 
     /**
-     * True if anything in the region holds an inventory.
+     * The first thing in the region that makes it unsafe to build on, described — or null if the
+     * ground is clear.
      *
-     * <p>Checked <b>before</b> a site is committed to. Block data alone cannot carry a chest's
-     * contents, so the only safe answer to "there is a chest here" is to put the building
-     * somewhere else.
+     * <p>Checked <b>before</b> a site is committed to, and the reasoning is the same for every
+     * case it catches: a block snapshot restores <i>block data</i> and nothing else. It cannot
+     * carry a chest's contents, so a region holding one must not be touched — somebody's
+     * unclaimed storage is still somebody's. And {@code avoid} names block types that are
+     * usually a marker for something the plugin cannot see: a player head out in a field is
+     * either a decoration or a death-storage grave (GravesX and friends), and burying either
+     * behind a wall for the length of a delivery is not worth the reroll it costs to move.
+     *
+     * <p>Returns a description rather than a boolean so a server that keeps refusing to build
+     * somewhere can say why.
      */
-    public static boolean hasContainers(World world, int originX, int originY, int originZ,
-                                        int sizeX, int sizeY, int sizeZ) {
+    public static String blockingFeature(World world, int originX, int originY, int originZ,
+                                         int sizeX, int sizeY, int sizeZ,
+                                         java.util.Set<org.bukkit.Material> avoid) {
         for (int y = 0; y < sizeY; y++) {
             for (int z = 0; z < sizeZ; z++) {
                 for (int x = 0; x < sizeX; x++) {
                     Block block = world.getBlockAt(originX + x, originY + y, originZ + z);
-                    if (!block.getType().isAir() && block.getState() instanceof Container) {
-                        return true;
+                    if (block.getType().isAir()) {
+                        continue;
+                    }
+                    if (avoid.contains(block.getType())) {
+                        return block.getType().name().toLowerCase(java.util.Locale.ROOT)
+                                .replace('_', ' ');
+                    }
+                    if (block.getState() instanceof Container) {
+                        return "a container";
                     }
                 }
             }
         }
-        return false;
+        return null;
     }
 
     /**

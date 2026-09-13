@@ -1,6 +1,7 @@
 package com.dierks.homecraft.config;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.courier.BuildingTemplate;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.mini.Loot;
 import com.dierks.homecraft.mini.MiniDef;
@@ -355,6 +356,22 @@ public final class PluginConfig {
     }
 
     /**
+     * The Courier's destination (Phase 2): the building at the far end of a delivery.
+     *
+     * @param placeAtBlocks how close the player must get before the site goes up. Kept well
+     *                      beyond a normal view distance so the building streams in with the
+     *                      terrain instead of appearing in front of the player
+     * @param maxSlope      the y-spread the footprint may have before the waypoint is rerolled
+     * @param regionPadding blocks of margin around the building in the snapshotted region
+     * @param lingerSeconds how long the building stays after a successful hand-over
+     */
+    public record CourierBuilding(boolean enabled, int placeAtBlocks, int maxSlope,
+                                  int regionPadding, int foundationDepth, int lingerSeconds,
+                                  String recipientName, java.util.Set<Material> avoidBlocks,
+                                  int waypointScanRadius, List<BuildingTemplate> buildings) {
+    }
+
+    /**
      * The Courier module (Phase 1): paid delivery runs.
      *
      * <p>The payout shape is {@code (base + perBlock * distance) * travelMultiplier}, with the
@@ -372,7 +389,8 @@ public final class PluginConfig {
                           Map<com.dierks.homecraft.courier.TravelLedger.TravelGroup, Double> travel,
                           double teleportFloor, double teleportPayout,
                           Map<com.dierks.homecraft.courier.CourierJob.Band, CourierBand> bands,
-                          int expireMinutes, int turnInRadius, int maxRerolls) {
+                          int expireMinutes, int turnInRadius, int maxRerolls,
+                          CourierBuilding building) {
 
         public CourierBand band(com.dierks.homecraft.courier.CourierJob.Band b) {
             return bands.get(b);
@@ -887,7 +905,94 @@ public final class PluginConfig {
         return new Courier(enabled, base, perBlock, minD, maxD, travel, floor, reduced, bands,
                 Math.max(1, c.getInt("courier.expire_minutes", 60)),
                 Math.max(1, c.getInt("courier.turn_in_radius", 10)),
-                Math.max(1, c.getInt("courier.waypoint.max_rerolls", 20)));
+                Math.max(1, c.getInt("courier.waypoint.max_rerolls", 20)),
+                readCourierBuilding(c));
+    }
+
+    /**
+     * The delivery-site settings, and the table of buildings that may be placed.
+     *
+     * <p>An empty or absent {@code courier.buildings} list means the shipped vanilla village
+     * houses. A non-empty list <b>replaces</b> them rather than adding to them, so a server
+     * with commissioned builds gets only those — which is the whole point of commissioning
+     * them, and stops a bespoke house turning up one delivery in twenty.
+     */
+    private CourierBuilding readCourierBuilding(FileConfiguration c) {
+        List<BuildingTemplate> buildings = new java.util.ArrayList<>();
+        List<Map<?, ?>> rows = c.getMapList("courier.buildings");
+        for (Map<?, ?> row : rows) {
+            String file = str(row.get("file"));
+            String key = str(row.get("key"));
+            if (file == null && key == null) {
+                continue;
+            }
+            int weight = row.get("weight") instanceof Number n ? Math.max(1, n.intValue()) : 1;
+            List<BuildingTemplate.BiomeGroup> groups = new java.util.ArrayList<>();
+            if (row.get("biomes") instanceof List<?> list) {
+                for (Object entry : list) {
+                    try {
+                        groups.add(BuildingTemplate.BiomeGroup.valueOf(
+                                String.valueOf(entry).trim().toUpperCase(java.util.Locale.ROOT)));
+                    } catch (IllegalArgumentException e) {
+                        plugin.getLogger().warning("courier.buildings: unknown biome group '"
+                                + entry + "' — ignoring it.");
+                    }
+                }
+            }
+            buildings.add(new BuildingTemplate(
+                    file != null ? BuildingTemplate.Source.CUSTOM : BuildingTemplate.Source.VANILLA,
+                    file != null ? file : key,
+                    weight, List.copyOf(groups)));
+        }
+        if (buildings.isEmpty()) {
+            buildings = BuildingTemplate.shipped();
+        }
+
+        return new CourierBuilding(
+                c.getBoolean("courier.building.enabled", true),
+                Math.max(32, c.getInt("courier.building.place_at_blocks", 220)),
+                Math.max(0, c.getInt("courier.building.max_slope", 3)),
+                Math.max(1, c.getInt("courier.building.region_padding", 4)),
+                Math.max(0, c.getInt("courier.building.foundation_depth", 3)),
+                Math.max(0, c.getInt("courier.building.linger_seconds", 45)),
+                c.getString("courier.building.recipient_name", "Courier Recipient"),
+                readAvoidBlocks(c),
+                Math.max(1, c.getInt("courier.building.waypoint_scan_radius", 14)),
+                List.copyOf(buildings));
+    }
+
+    /**
+     * Block types a delivery site refuses to be built over.
+     *
+     * <p>Not a safety net for anything the plugin tracks itself — those are checked against the
+     * database. This is for things only the world knows about: a player head out in a field is
+     * either somebody's decoration or a death-storage grave, and neither should spend an hour
+     * behind a wall.
+     */
+    private java.util.Set<Material> readAvoidBlocks(FileConfiguration c) {
+        java.util.Set<Material> out = java.util.EnumSet.noneOf(Material.class);
+        List<String> names = c.getStringList("courier.building.avoid_blocks");
+        if (names.isEmpty()) {
+            names = List.of("PLAYER_HEAD", "PLAYER_WALL_HEAD");
+        }
+        for (String name : names) {
+            Material material = Material.matchMaterial(String.valueOf(name).trim());
+            if (material == null) {
+                plugin.getLogger().warning("courier.building.avoid_blocks: unknown material '"
+                        + name + "' — ignoring it.");
+            } else {
+                out.add(material);
+            }
+        }
+        return java.util.Set.copyOf(out);
+    }
+
+    private static String str(Object o) {
+        if (o == null) {
+            return null;
+        }
+        String s = String.valueOf(o).trim();
+        return s.isEmpty() ? null : s;
     }
 
     private static double defaultTravel(com.dierks.homecraft.courier.TravelLedger.TravelGroup g) {

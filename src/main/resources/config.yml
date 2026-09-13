@@ -264,7 +264,9 @@ courier:
     long_haul: { min: 1800, max: 4000, per_day: 1 }
   # An accepted job left unfinished this long is abandoned and its slot returned.
   expire_minutes: 60
-  # How close to the waypoint counts as arriving. Phase 2 replaces this with a villager.
+  # How close to the waypoint counts as arriving. This is the fallback route — the
+  # normal way to finish is the villager at the delivery building — and it stays
+  # enabled on purpose so a failed placement never strands anyone 1,800 blocks out.
   turn_in_radius: 10
   # Waypoint generation: a random bearing and distance from the player, resolved to
   # the highest solid block. A spot is rejected if it is liquid, in an ocean biome,
@@ -272,6 +274,77 @@ courier:
   # rather than placed somewhere unreachable.
   waypoint:
     max_rerolls: 20
+  # ---- The destination (Phase 2) --------------------------------------
+  # A small house appears at the waypoint with a villager outside it. Right-click
+  # the villager to hand the cargo over. When the run ends — delivered, expired,
+  # abandoned, or the plugin shutting down — the field is put back exactly as it
+  # was from a snapshot taken before the first block changed.
+  building:
+    enabled: true
+    # How close the player must get before the site is built. NOT the ~100 blocks
+    # that reads naturally: a server view-distance of 10 chunks is 160 blocks, so a
+    # house placed at 100 would materialise in front of the player. At 220 it is
+    # comfortably outside any normal view distance and streams in with the terrain.
+    # A job accepted closer than this places immediately, before the player looks.
+    place_at_blocks: 220
+    # Reject rather than flatten: if the ground under the footprint varies by more
+    # than this many blocks, the waypoint is rerolled. Terraforming somebody's
+    # hillside cannot be undone by putting blocks back; picking a new field can.
+    max_slope: 3
+    # Margin around the building included in the snapshot, in blocks. The captured
+    # region is deliberately larger than the house — Bukkit does not specify which
+    # corner a structure rotation pivots around, so the box is sized to contain it
+    # whichever way it turns. A box of air costs almost nothing once compressed.
+    region_padding: 4
+    # Filled beneath the house so it never floats on a slope. Must be < region_padding
+    # or the fill would fall outside the snapshot and survive the restore.
+    foundation_depth: 3
+    # How long the building stays after a successful hand-over, so it does not vanish
+    # out from under the player as they turn around.
+    linger_seconds: 45
+    recipient_name: "Courier Recipient"
+    # A site refuses to be built over anything a block snapshot could not put back.
+    # Three kinds, all checked before the first block moves:
+    #   * blocks with contents  — a chest is not recoverable from its block data
+    #   * entities somebody placed — item frames, armour stands, chest minecarts,
+    #     boats, displays. These are not in the snapshot at all, so anything that
+    #     destroys one during the job destroys it for good. Wandering mobs are
+    #     ignored; refusing a field because a cow walked through it would refuse
+    #     most fields.
+    #   * anything HomeCraft already tracks here — a placed PC, Workbench, Pallet
+    #     or, worst of all, a placed Mini, which is a numbered and capped
+    #     collectible that cannot be re-minted if the window goes wrong.
+    # Below is the fourth kind: block types only the world knows about. A player
+    # head out in a field is either somebody's decoration or a death-storage grave
+    # (GravesX and similar), and neither should spend an hour behind a wall.
+    # Chest-based and armour-stand-based graves are already caught by the two
+    # checks above. Leave empty to get this default back.
+    avoid_blocks: [ PLAYER_HEAD, PLAYER_WALL_HEAD ]
+    # How far around a candidate waypoint to look for the two CHEAP refusals (the
+    # tracked-placement query and the entity sweep) while a job is still being
+    # rolled. Catching it here rerolls onto a different field; catching it later
+    # leaves a job the player still has to walk that arrives at nothing. The full
+    # block scan is thousands of reads, so it runs once at placement, not per
+    # candidate.
+    waypoint_scan_radius: 14
+  # The buildings that may be placed. LEAVE THIS EMPTY to use the shipped table of
+  # vanilla village houses — Mojang already maintains a correct-looking small house
+  # per biome and it costs nothing to ship. Every key is resolved once at startup and
+  # any that no longer exists is dropped with a warning naming it, because Mojang
+  # renames these between versions.
+  #
+  # A non-empty list REPLACES the shipped table rather than adding to it, so a server
+  # with commissioned builds gets only those.
+  #   key        a structure key, e.g. village/plains/houses/plains_small_house_2
+  #   file       an .nbt in plugins/HomeCraftManagement/buildings/ (use instead of key)
+  #   weight     relative pick chance within a biome group (default 1)
+  #   biomes     PLAINS | DESERT | SAVANNA | TAIGA | SNOWY — omit for "any"
+  # There is no footprint setting: the structure is loaded before it is placed and
+  # reports its own size, so a hand-written one could only ever be wrong.
+  # Example, once a build has been commissioned:
+  #   buildings:
+  #     - { file: cottage.nbt, weight: 3, biomes: [PLAINS, TAIGA] }
+  buildings: []
 
 # ---------------------------------------------------------------------
 #  Phase 2.5 — Finite, conserved commodities market (the storefront side

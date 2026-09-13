@@ -448,6 +448,36 @@ public final class Database {
             );
             CREATE INDEX IF NOT EXISTS idx_courier_active ON courier_jobs (player, state);
             CREATE INDEX IF NOT EXISTS idx_courier_daily ON courier_jobs (player, day, band, state);
+            """,
+
+            // v25 — Courier delivery sites (Phase 2). One row per placed building, holding
+            // everything needed to put the field back exactly as it was: the region's origin
+            // and size, and `snapshot`, a GZIPped palette+indices blob of the ORIGINAL blocks
+            // taken before the first one was changed. The row outlives the job on purpose —
+            // it is deleted only once the restore has actually run, so a crash mid-delivery
+            // leaves a record to sweep on the next enable rather than a house on the map.
+            """
+            CREATE TABLE IF NOT EXISTS courier_sites (
+                job_id      INTEGER PRIMARY KEY,
+                world       TEXT    NOT NULL,
+                origin_x    INTEGER NOT NULL,
+                origin_y    INTEGER NOT NULL,
+                origin_z    INTEGER NOT NULL,
+                size_x      INTEGER NOT NULL,
+                size_y      INTEGER NOT NULL,
+                size_z      INTEGER NOT NULL,
+                template    TEXT    NOT NULL,
+                rotation    TEXT    NOT NULL,
+                door_x      INTEGER NOT NULL,
+                door_y      INTEGER NOT NULL,
+                door_z      INTEGER NOT NULL,
+                villager    TEXT,
+                state       TEXT    NOT NULL,
+                snapshot    BLOB    NOT NULL,
+                placed_at   INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_courier_sites_state ON courier_sites (state);
+            CREATE INDEX IF NOT EXISTS idx_courier_sites_chunk ON courier_sites (world, origin_x, origin_z);
             """
     };
 

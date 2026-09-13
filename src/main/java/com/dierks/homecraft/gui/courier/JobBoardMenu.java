@@ -83,14 +83,19 @@ public final class JobBoardMenu extends Menu {
                     "&eRight-click &7— trade run (sells what you hold)"), e -> {
                 boolean trade = e.isRightClick();
                 ItemStack held = player.getInventory().getItemInMainHand();
-                var r = courier.accept(player, band,
-                        trade ? CourierJob.Type.TRADE_RUN : CourierJob.Type.COURIER, held);
-                if (!r.ok()) {
-                    player.sendMessage(Text.of("&c" + r.error()));
-                } else {
-                    announce(r.job());
-                }
-                refresh();
+                // Finding a drop-off means generating terrain that may be four thousand
+                // blocks away, so the board says what it is doing and answers when it knows.
+                player.closeInventory();
+                player.sendMessage(Text.of("&7Finding you a drop-off…"));
+                courier.accept(player, band,
+                        trade ? CourierJob.Type.TRADE_RUN : CourierJob.Type.COURIER, held)
+                        .thenAccept(r -> {
+                            if (!r.ok()) {
+                                player.sendMessage(Text.of("&c" + r.error()));
+                            } else {
+                                announce(r.job());
+                            }
+                        });
             });
         }
     }
@@ -145,7 +150,7 @@ public final class JobBoardMenu extends Menu {
     private void announce(CourierJob job) {
         player.sendMessage(Text.of("&a✔ Run accepted: &f" + plugin.courier().describe(job)));
         player.sendMessage(Text.of("&7Head for &fx " + job.wayX() + ", z " + job.wayZ()
-                + "&7 and hand it over there."));
+                + "&7. Someone will be waiting for it."));
     }
 
     /** What the run actually paid, and — when it matters — why it was less. */

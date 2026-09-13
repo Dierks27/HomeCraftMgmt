@@ -1,7 +1,9 @@
-# HomeCraft Management — Plugin Design Specification (v16)
+# HomeCraft Management — Plugin Design Specification (v17)
 > **Purpose of this document:** the build spec for a custom Paper plugin. It is written to be handed to Claude Code (or any implementer) as the source of truth. Design decisions still open are marked **[DECISION]** with a recommended default.
 >
 > **v11 changelog:** Rebranded the online store from "Amazon" to **Crate** (`[www.Crate.craft](https://www.Crate.craft)`), with **Rush** (fast shipping), the **Pallet** (player seller box) and the **Locker** (delivery holding). Added the **Crate Marketplace** (universal player-to-player selling — *everything* is sellable, incl. Minis), **auto-categorization into departments** using the game's own item categories, an **admin ban list**, and the **PC-as-a-browser / "Sites"** architecture. Added **in-game economy displays** (TVs/tickers/boards) and a consolidated **Economy Risks & Safeguards** section. Recorded the **Phase 2.5.1 pricing fix** (proportional elasticity + integrated bulk pricing). Marked Phases 2.5 and 3 done.
+>
+> **v17 changelog (the Courier's destination):** A delivery now **arrives somewhere**. A vanilla village house is placed at the waypoint as the player approaches, with a **villager** outside it to hand the crate to, and the field is **restored exactly as it was** when the run ends — from a palette-and-indices snapshot taken before the first block changed and held in SQLite, so the module needs **no WorldEdit dependency** and cleans up after a crash on its own. Also fixes two Phase 1 faults found while building it: **waypoint generation ran on the main thread**, loading and generating chunks up to four thousand blocks out (up to `max_rerolls` times per click) despite a code comment claiming otherwise — it is asynchronous now, and `accept` returns a future; the waypoint claim check used `canBuild`, which **short-circuits to "yes" for ops**, so an admin could be sent to deliver into somebody else's town; and the region scan only loaded the waypoint's own chunk, so reading the rest of the box would have loaded its neighbours one at a time on the main thread — the very thing the async placement exists to avoid. Schema v25 adds `courier_sites`. `config_revision` stays 9 — the new `courier.building` keys arrive through the leaf backfill.
 >
 > **v16 changelog (the Courier):** A new **Deliveries Site** on the PC (§3.10). Take a crate to a rolled waypoint and get paid a **travel fee** for the distance, scaled by **how you actually travelled** — read from the same vanilla movement statistics the quest verbs use, snapshotted at accept and **blended by the fraction of centimetres in each group**, so walking the route four times pays exactly what walking it once pays. Creative flight pays **nothing**; an arrival with less than 70% of the distance tracked pays **20%**, which is the anti-teleport floor. Three distance bands with per-UTC-day caps (2 / 2 / 1). A **trade run** carries market cargo to the drop-off and sells it there **at the live rate** — only the fee half is new money (§3.1). **No market price, stock level, daily limit, shipping tier or catalog entry was touched**; the courier adds a money *faucet* sized under mining and nothing else. Schema v24 adds `courier_jobs`; `courier:` is new config with no migration step — an absent key falls back to the shipped defaults.
 >
@@ -302,9 +304,76 @@ back. **Abandoning does not spend the slot** — the day's count is ACTIVE + DEL
 you can't finish costs nothing but the walk. Every accept and every turn-in goes through the economy
 sandbox (§11 #1): there is no courier money in a creative world.
 
-**Phase 1 scope.** Economy only. No depot buildings, no villagers, no cargo the player has to physically
-carry for a plain courier run, and turn-in is proximity to the waypoint. Phase 2 replaces the waypoint
-with a **placed depot block** and gives the crate a real item.
+**The destination (Phase 2).** A delivery now arrives somewhere rather than at a coordinate. Once the
+player is within `building.place_at_blocks` of the waypoint a **small house** goes up with a
+**villager** outside it; right-click them to hand the crate over. When the run ends — delivered,
+expired, abandoned, or the plugin shutting down — **the field is put back exactly as it was.**
+
+*Houses are vanilla.* Mojang already maintains a correct-looking small village house per biome, so the
+shipped table names those structure keys rather than shipping schematics: `village/<family>/houses/…`
+across plains, desert, savanna, taiga and snowy, with everything unmapped (jungle, swamp, mangrove)
+falling to plains. **Every key is resolved once at startup** and any that no longer exists is dropped
+with a warning naming it, because Mojang renames these between versions and the alternative is a
+delivery that fails after the player has walked eighteen hundred blocks. Rotation is random from the
+four quarter-turns — free variety, no extra assets.
+
+*Placement rejects rather than flattens.* If the ground under the footprint varies by more than
+`max_slope`, the waypoint is rerolled. Terraforming somebody's hillside cannot be undone by putting
+blocks back; picking a different field can. A shallow gap under the house is closed by a foundation
+layer of the local surface material, filled only downward under blocks the structure placed and only
+inside the snapshotted region, so every block it adds is one the restore takes away.
+
+*The undo record is the whole design.* Before the first block changes, the region is captured as a
+**palette-plus-indices blob, GZIPped, into SQLite** (`courier_sites`) — a 28×28×16 box of mostly air
+compresses to almost nothing, which is why this needs **no WorldEdit dependency**: the undo record
+lives in the same database, the same transaction and the same backup as the job it belongs to. The row
+is deleted **only once the restore has actually run**. A restore that cannot run right now — the usual
+case, because a player who gives up walks home and the chunk unloads behind them — is parked as
+`RESTORE_PENDING` and picked up by the next `ChunkLoadEvent` for that region, or failing that by the
+**sweep on the next plugin enable**, which is the first thing the module does. A house that outlives
+the plugin that knows how to remove it is the one outcome this is built to make impossible.
+
+*Two things the building is not.* It is not **salvage** — edits inside a standing site are refused, both
+because mining it would hand out free blocks the restore then deletes and because every changed block
+is one the snapshot no longer describes. And it is not **loot**: village templates ship chests carrying
+loot tables, and a building that reappears at the end of every run would turn that into a per-delivery
+**item faucet** in an economy whose whole premise is that material enters only when somebody mines it —
+so the furniture stays and the contents do not.
+
+*What a site refuses to be built over.* One rule, four cases: **a snapshot restores block data and
+nothing else**, so anything whose value lives elsewhere has to be refused rather than built over,
+because the restore that makes the rest of this safe does not reach it.
+- **Blocks with contents.** A chest is not recoverable from its block data. Somebody's unclaimed
+  storage is still somebody's.
+- **Entities that were placed.** Item frames, armour stands, chest minecarts, boats, displays. These are
+  not in the snapshot *at all*, so anything that destroys one during the job destroys it for good.
+  Wandering mobs are ignored — refusing a field because a cow walked through it would refuse most
+  fields — which is why the test names armour stands before it exempts living entities, and why a horse
+  (a `Vehicle` *and* an `InventoryHolder`) is deliberately not caught.
+- **Anything HomeCraft already tracks there.** One query across the six tables that key on
+  `(world, x, y, z)`. The case that matters is a **placed Mini**: a numbered, capped, uniquely-minted
+  collectible. The snapshot would dutifully restore the head; it would not restore the owner's access
+  during the job, and a failure in that window loses a copy that cannot be re-minted.
+- **Block types only the world knows about** (`building.avoid_blocks`, player heads by default) — a head
+  in a field is either a decoration or a death-storage grave, and neither should spend an hour behind a
+  wall. Chest- and armour-stand-based graves are already caught by the two cases above.
+
+The cheap half of that — the tracked-placement query and the entity sweep — also runs **while the
+waypoint is being rolled**, so a bad spot is rerolled onto a different field rather than becoming a job
+the player walks to and finds empty. The full block scan is thousands of reads, so it runs once, at
+placement, where it is also the last word: an hour is long enough for somebody to put a chest down.
+
+*The villager is a fixture, not a mob.* No AI, invulnerable, silent, persistent, profession matched to
+the biome family, PDC-tagged with the job id. Right-click opens the hand-over and **never a trade
+window** — a courier villager with vanilla trades would be an emerald pipeline no part of this economy
+accounts for. Anyone else who clicks them gets a line of flavour text.
+
+*The PC hand-in never goes away.* If placement fails for any reason — no template resolved, no flat
+ground, a claim appeared since the waypoint was chosen — the run is still completable from the job
+board at the drop-off. Nobody gets stranded four thousand blocks from home because a structure did not
+paste.
+
+**Still Phase 1 in scope:** a plain courier run carries no physical crate item.
 
 ---
 ## 4. Configuration Schema (sketch)
@@ -384,6 +453,7 @@ SQLite via JDBC. Tables:
 - **Marketplace:** Pallet locations + owners; listings (item, price, qty, seller); accrued fees.
 - **Minis:** per-type minted count + circulation; per-individual unique ID, current owner, provenance/price history; Vending Machine listings; Auction House listings + escrowed bids + close times.
 - **Custom blocks:** placed PC / Mini Workbench / Vending Machine / Display Case / **Pallet** locations + owners.
+- **Courier sites (§3.10):** one row per placed delivery building — the region's origin and size, the template and rotation, the doorstep, the recipient villager's id, and `snapshot`, a GZIPped blob of the **original** blocks. Written before the first block changes and deleted only once the restore has run.
 - **Courier (§3.10):** one row per job — player, type, state, band, accepted-at world/coords, waypoint coords, the **locked** distance, trade-run cargo + quoted value, the movement-statistic **snapshot** taken at acceptance, the UTC epoch-day it counts against, and its expiry. Daily band caps are counted from these rows; there is no separate tally table.
 - **Daily limits:** per-player sell + buy counters (per-item too), reset daily (UTC).
 Everything survives restarts. **Back up the DB before every migration (see §11).**
@@ -401,7 +471,7 @@ Build and test each phase before the next.
 - **Phase 5 — The Crate Marketplace:** Pallets, universal listings (everything sellable), **departments + auto-categorization + ban list**, fees, Minis in Collectibles. *(Can be pulled earlier if "sell anything" is wanted before Minis.)*
 - **Phase 6 — Market Web Dashboard (§3.7):** the live stock-market website. *(Extension: a **transactional web shop** — secure `/crate web` login + buy-from-browser, delivering to the Locker — builds on this same embedded server.)*
 - **Phase 7 — In-Game Displays (§3.8):** wall-mounted `TextDisplay` price panels, holographic tickers, sign boards.
-- **Courier — Deliveries Site (§3.10) ✅ Phase 1 done (v16):** job board, three distance bands with daily caps, rolled waypoints, the statistic-blended travel multiplier, the anti-teleport floor, and trade runs that sell cargo into the market at the live rate. *Phase 2: a placed depot block instead of a waypoint, and a real crate item.*
+- **Courier — Deliveries Site (§3.10) ✅ Phases 1 and 2 done (v16–v17):** job board, three distance bands with daily caps, rolled waypoints, the statistic-blended travel multiplier, the anti-teleport floor, trade runs that sell cargo into the market at the live rate — and a **vanilla village house with a villager** at the far end, placed on approach and restored from a snapshot when the run ends. *Still open: a real crate item for plain courier runs, and the complete-a-delivery quest verb this unblocks.*
 - **Future — more PC Sites (§2.2):** Towny plots Site, etc.
 - **Phase 8 — Rewards & Arcade (§3.9):** tokens (login streaks/playtime), loot boxes/crates, lotto/scratch tickets, the pity exchange, and the Arcade installation at the Mall. Reuses the drop/rarity/cap tech — mostly content.
 - **Phase 9–11 — Arcade as a place + earning sources (§3.9):** the Arcade was built from placeable, owned/protected, skinnable **machine blocks** you right-click to play — a **Crate Machine**, **Scratch-Ticket Booth**, **Pity Exchange Kiosk**, and **Token Counter**. *(v13: these are retired in favour of the single Arcade hub block — see §3.9; placed ones keep working.)* Token earning now has four sources: login streaks, playtime, **one-time achievements** (first Mini, first sale, first PC, first crate, first pack, $10k), and **daily/weekly quests** (`/hcm quests` — repeatable objectives like "sell $500 to the market", "print a Mini", "open a crate/pack" that pay tokens on completion and reset each day/week). Every earn shows a "+N token" toast. Minting still happens only through the cap-aware Printer pipeline.

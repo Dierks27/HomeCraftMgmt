@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.storage.CourierDao;
+import com.dierks.homecraft.util.Text;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
@@ -14,6 +15,11 @@ import org.bukkit.scheduler.BukkitTask;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The Courier engine: accept a run, travel, hand it over, get paid.
@@ -40,12 +46,31 @@ public final class CourierService {
     private final HomeCraftManagement plugin;
     private final CourierDao dao;
     private final WaypointService waypoints;
-    private BukkitTask sweeper;
+    private final BuildingService buildings;
 
-    public CourierService(HomeCraftManagement plugin, CourierDao dao) {
+    /**
+     * Live jobs by player, so the approach check can run every second without a query.
+     *
+     * <p>A cache, not a second source of truth: every write still goes through the DAO, and a
+     * miss here just falls back to reading the row.
+     */
+    private final Map<UUID, CourierJob> live = new ConcurrentHashMap<>();
+
+    /** Players with a waypoint search in flight, so a fast second click cannot take two runs. */
+    private final Set<UUID> searching = ConcurrentHashMap.newKeySet();
+
+    private BukkitTask sweeper;
+    private BukkitTask approach;
+
+    public CourierService(HomeCraftManagement plugin, CourierDao dao, BuildingService buildings) {
         this.plugin = plugin;
         this.dao = dao;
-        this.waypoints = new WaypointService(plugin);
+        this.buildings = buildings;
+        this.waypoints = new WaypointService(plugin, buildings);
+    }
+
+    public BuildingService buildings() {
+        return buildings;
     }
 
     public void start() {
@@ -53,15 +78,35 @@ public final class CourierService {
         if (!plugin.config().courier().enabled()) {
             return;
         }
-        // Close out runs nobody finished. Jobs carry their own deadline, so this only has to
-        // run often enough that a band slot comes back in reasonable time — not on any tick.
+        buildings.start();
+
+        // Close out runs nobody finished, and take down the buildings they left behind. Jobs
+        // carry their own deadline, so this only has to run often enough that a band slot
+        // comes back in reasonable time — not on any tick.
         sweeper = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
             try {
-                dao.expireStale(System.currentTimeMillis());
+                if (dao.expireStale(System.currentTimeMillis()) > 0) {
+                    live.values().removeIf(j -> j.expired(System.currentTimeMillis()));
+                }
+                buildings.sweep();
             } catch (SQLException e) {
                 plugin.getLogger().warning("Courier expiry sweep failed: " + e.getMessage());
             }
         }, 20L * 60L, 20L * 60L);
+
+        // The approach check. Cheap by construction: it walks only players who have a live
+        // job, compares two numbers, and does nothing at all until someone is close enough.
+        approach = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
+            if (live.isEmpty()) {
+                return;
+            }
+            for (Player player : plugin.getServer().getOnlinePlayers()) {
+                CourierJob job = live.get(player.getUniqueId());
+                if (job != null) {
+                    considerPlacement(player, job);
+                }
+            }
+        }, 40L, 20L);
     }
 
     public void stop() {
@@ -69,6 +114,61 @@ public final class CourierService {
             sweeper.cancel();
             sweeper = null;
         }
+        if (approach != null) {
+            approach.cancel();
+            approach = null;
+        }
+        // Buildings come down before the plugin does. A house that outlives the plugin that
+        // knows how to remove it is the one outcome this module must never produce.
+        buildings.stop();
+        live.clear();
+        searching.clear();
+    }
+
+    /**
+     * Build the delivery site once the player is near enough for it to stream in with the
+     * terrain rather than appear in front of them.
+     *
+     * <p>Horizontal distance only — a player on a mountain directly above the drop-off has
+     * arrived for every purpose that matters here.
+     */
+    private void considerPlacement(Player player, CourierJob job) {
+        if (!buildingsEnabled() || buildings.hasSite(job.id())) {
+            return;
+        }
+        Location way = job.waypoint();
+        if (way == null || player.getWorld() != way.getWorld()) {
+            return;
+        }
+        double dx = player.getLocation().getX() - way.getX();
+        double dz = player.getLocation().getZ() - way.getZ();
+        int trigger = plugin.config().courier().building().placeAtBlocks();
+        if (dx * dx + dz * dz > (double) trigger * trigger) {
+            return;
+        }
+        buildings.placeFor(job).thenAccept(placed -> {
+            if (placed && player.isOnline()) {
+                player.sendMessage(Text.of("&7Someone is expecting you at &fx " + job.wayX()
+                        + ", z " + job.wayZ() + "&7."));
+            }
+        });
+    }
+
+    private boolean buildingsEnabled() {
+        return plugin.config().courier().building().enabled();
+    }
+
+    /** Re-seed the live cache for a player who just joined mid-run. */
+    public void onJoin(Player player) {
+        CourierJob job = active(player);
+        if (job != null) {
+            live.put(player.getUniqueId(), job);
+        }
+    }
+
+    public void onQuit(Player player) {
+        live.remove(player.getUniqueId());
+        searching.remove(player.getUniqueId());
     }
 
     /** The player's live job, or null. */
@@ -77,6 +177,8 @@ public final class CourierService {
             CourierJob job = dao.active(player.getUniqueId());
             if (job != null && job.expired(System.currentTimeMillis())) {
                 dao.finish(job.id(), CourierJob.State.EXPIRED);
+                live.remove(player.getUniqueId());
+                scheduleRelease(job.id(), 0);
                 return null;
             }
             return job;
@@ -113,25 +215,32 @@ public final class CourierService {
      * Take a run. The waypoint is rolled now, not when the board was drawn, so the distance
      * the player is paid for is the one actually generated for them.
      *
+     * <p>Asynchronous, and the future always completes on the main thread. The cheap
+     * validation below still runs immediately, but finding a drop-off means looking at terrain
+     * up to four thousand blocks away that usually has to be generated first — see
+     * {@link WaypointService}. Everything that decides the payout is still locked at the moment
+     * the job row is written.
+     *
      * @param cargo for a trade run, the stack being carried; ignored for a courier run
      */
-    public Result accept(Player player, CourierJob.Band band, CourierJob.Type type, ItemStack cargo) {
+    public CompletableFuture<Result> accept(Player player, CourierJob.Band band,
+                                            CourierJob.Type type, ItemStack cargo) {
         PluginConfig.Courier cfg = plugin.config().courier();
         if (!cfg.enabled()) {
-            return Result.fail("The courier board is closed.");
+            return failed("The courier board is closed.");
         }
         if (!plugin.sandbox().check(player, "courier accept")) {
-            return Result.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+            return failed(com.dierks.homecraft.integration.EconomySandbox.reason());
         }
         if (active(player) != null) {
-            return Result.fail("You already have a run on. Finish or abandon it first.");
+            return failed("You already have a run on. Finish or abandon it first.");
         }
         PluginConfig.CourierBand b = cfg.band(band);
         if (b == null || b.perDay() <= 0) {
-            return Result.fail("That band is not being offered.");
+            return failed("That band is not being offered.");
         }
         if (remaining(player, band) <= 0) {
-            return Result.fail("You have used all your " + band.display().toLowerCase()
+            return failed("You have used all your " + band.display().toLowerCase()
                     + " runs for today.");
         }
 
@@ -140,39 +249,78 @@ public final class CourierService {
         double quote = 0;
         if (type == CourierJob.Type.TRADE_RUN) {
             if (cargo == null || cargo.getType().isAir()) {
-                return Result.fail("Hold the cargo you want to run in your main hand.");
+                return failed("Hold the cargo you want to run in your main hand.");
             }
             MarketItem item = marketItemFor(cargo.getType());
             if (item == null) {
-                return Result.fail(pretty(cargo.getType()) + " is not something the market buys.");
+                return failed(pretty(cargo.getType()) + " is not something the market buys.");
             }
             cargoId = item.id();
             cargoAmount = cargo.getAmount();
             quote = plugin.market().quoteSell(cargoId, cargoAmount).total();
         }
 
-        Location from = player.getLocation();
-        Location way = waypoints.find(player, from, b.min(), b.max());
-        if (way == null) {
-            return Result.fail("No usable drop-off out that way right now — try again.");
-        }
-        int distance = clampedDistance(cfg, from, way);
-        long now = System.currentTimeMillis();
+        final String lockedCargoId = cargoId;
+        final int lockedCargoAmount = cargoAmount;
+        final double lockedQuote = quote;
+        final Location from = player.getLocation();
 
-        CourierJob job = new CourierJob(0, player.getUniqueId(), type, CourierJob.State.ACTIVE, band,
-                from.getWorld().getName(),
-                from.getBlockX(), from.getBlockY(), from.getBlockZ(),
-                way.getBlockX(), way.getBlockY(), way.getBlockZ(),
-                distance, cargoId, cargoAmount, quote,
-                TravelLedger.encode(TravelLedger.snapshot(player)),
-                today(), now, now + cfg.expireMinutes() * 60_000L);
-        try {
-            job = dao.insert(job);
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to write courier job: " + e.getMessage());
-            return Result.fail("Could not take that run — try again.");
+        // Reserve the slot for the length of the search. Without this a player can click
+        // three bands while the first is still looking and end up with three runs, because
+        // the "you already have a run on" check reads a row that has not been written yet.
+        if (!searching.add(player.getUniqueId())) {
+            return failed("Still finding you a drop-off — hold on.");
         }
-        return new Result(true, null, job, 0, 0, 0, false);
+
+        return waypoints.find(player, from, b.min(), b.max())
+                .thenApply(way -> {
+                    searching.remove(player.getUniqueId());
+                    if (way == null) {
+                        return Result.fail("No usable drop-off out that way right now — try again.");
+                    }
+                    // Re-check: the search took time, and the player may have taken a run,
+                    // logged off, or used up the band in another window meanwhile.
+                    if (!player.isOnline()) {
+                        return Result.fail("You went offline before a drop-off was found.");
+                    }
+                    if (active(player) != null) {
+                        return Result.fail("You already have a run on.");
+                    }
+                    if (remaining(player, band) <= 0) {
+                        return Result.fail("You have used all your "
+                                + band.display().toLowerCase() + " runs for today.");
+                    }
+
+                    int distance = clampedDistance(cfg, from, way);
+                    long now = System.currentTimeMillis();
+                    CourierJob job = new CourierJob(0, player.getUniqueId(), type,
+                            CourierJob.State.ACTIVE, band, from.getWorld().getName(),
+                            from.getBlockX(), from.getBlockY(), from.getBlockZ(),
+                            way.getBlockX(), way.getBlockY(), way.getBlockZ(),
+                            distance, lockedCargoId, lockedCargoAmount, lockedQuote,
+                            TravelLedger.encode(TravelLedger.snapshot(player)),
+                            today(), now, now + cfg.expireMinutes() * 60_000L);
+                    try {
+                        job = dao.insert(job);
+                    } catch (SQLException e) {
+                        plugin.getLogger().severe("Failed to write courier job: " + e.getMessage());
+                        return Result.fail("Could not take that run — try again.");
+                    }
+                    live.put(player.getUniqueId(), job);
+                    // A short run can start inside the placement radius. Build it now, before
+                    // the player turns to look, rather than letting it appear in front of them.
+                    considerPlacement(player, job);
+                    return new Result(true, null, job, 0, 0, 0, false);
+                })
+                .exceptionally(t -> {
+                    searching.remove(player.getUniqueId());
+                    plugin.getLogger().warning("Courier waypoint search failed: " + t);
+                    return Result.fail("Could not find a drop-off — try again.");
+                });
+    }
+
+    private CompletableFuture<Result> failed(String reason) {
+        return CompletableFuture.completedFuture(Result.fail(reason));
     }
 
     /**
@@ -192,7 +340,7 @@ public final class CourierService {
         if (way == null || player.getWorld() != way.getWorld()) {
             return Result.fail("You are not at the drop-off.");
         }
-        if (player.getLocation().distance(way) > cfg.turnInRadius()) {
+        if (!arrived(player, job, cfg)) {
             return Result.fail("You are not at the drop-off yet.");
         }
 
@@ -240,7 +388,52 @@ public final class CourierService {
             plugin.economy().deposit(player, fee);
         }
         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.7f, 1.2f);
+        live.remove(player.getUniqueId());
+        // Let the building stand a moment. Taking it down on the same tick as the payout would
+        // delete the ground under the player's feet while they are still reading the message.
+        scheduleRelease(job.id(),
+                plugin.config().courier().building().lingerSeconds());
         return new Result(true, null, job, fee, cargoPaid, blend.multiplier(), shortfall);
+    }
+
+    /**
+     * True if the player is close enough to hand the crate over.
+     *
+     * <p>Two things worth knowing here. Distance is measured <b>horizontally</b>, because the
+     * drop-off is a place on the map and not a height — a three-dimensional check failed a
+     * player standing on the roof of the house they had just walked to. And when a building
+     * has gone up, <b>the door counts as well as the waypoint</b>: rotation can put the front
+     * step further from the waypoint than {@code turn_in_radius}, which would have left the
+     * villager refusing a crate from someone standing directly in front of them.
+     */
+    private boolean arrived(Player player, CourierJob job, PluginConfig.Courier cfg) {
+        double radius = cfg.turnInRadius();
+        double limit = radius * radius;
+        Location at = player.getLocation();
+        if (within(at, job.wayX(), job.wayZ(), limit)) {
+            return true;
+        }
+        DeliverySite site = buildings.siteFor(job.id());
+        return site != null && within(at, site.doorX(), site.doorZ(), limit);
+    }
+
+    private boolean within(Location at, int x, int z, double limit) {
+        double dx = at.getX() - (x + 0.5);
+        double dz = at.getZ() - (z + 0.5);
+        return dx * dx + dz * dz <= limit;
+    }
+
+    /** Take a delivery site down, now or after a delay. */
+    private void scheduleRelease(long jobId, int afterSeconds) {
+        if (!buildingsEnabled() || !buildings.hasSite(jobId)) {
+            return;
+        }
+        if (afterSeconds <= 0) {
+            buildings.release(jobId);
+            return;
+        }
+        plugin.getServer().getScheduler().runTaskLater(plugin,
+                () -> buildings.release(jobId), 20L * afterSeconds);
     }
 
     /** Give up on the run. The band slot comes back — an abandoned job is not a spent one. */
@@ -254,6 +447,9 @@ public final class CourierService {
         } catch (SQLException e) {
             return Result.fail("Could not drop that run — try again.");
         }
+        live.remove(player.getUniqueId());
+        // Dropped on purpose, so there is nobody standing there to disturb: take it down now.
+        scheduleRelease(job.id(), 0);
         return new Result(true, null, job, 0, 0, 0, false);
     }
 

@@ -62,7 +62,7 @@ public final class HomeCraftManagement extends JavaPlugin {
      * and rendered as an empty slot. 7 = wild Mini spawns — rarer, much further out, a find
      * window measured in minutes — plus the grade stars, for a file an editor has flattened.
      */
-    static final int CONFIG_REVISION = 7;
+    static final int CONFIG_REVISION = 8;
 
     /**
      * Per-item daily caps (~2% sell / ~4% buy of {@code full_stock}), mirroring the
@@ -461,6 +461,30 @@ public final class HomeCraftManagement extends JavaPlugin {
     }
 
     /**
+     * The Prize Counter rows a pre-revision-8 config is seeded with. Written out here rather
+     * than backfilled from the bundled file because a list of maps is one value, not a tree of
+     * leaves: the backfill would either miss it or flatten an admin's own rows.
+     */
+    private static java.util.List<java.util.Map<String, Object>> defaultPrizeRows() {
+        java.util.List<java.util.Map<String, Object>> rows = new java.util.ArrayList<>();
+        rows.add(prizeRow("filament_bundle", "&fFilament Bundle", 6, "filament", "amount", 8));
+        rows.add(prizeRow("display_case", "&bDisplay Case", 25, "block", "block", "display_case"));
+        rows.add(prizeRow("starter_pack", "&dStarter Pack", 30, "pack", "pack", "starter"));
+        return rows;
+    }
+
+    private static java.util.Map<String, Object> prizeRow(String id, String display, int cost,
+                                                          String type, String extraKey, Object extraValue) {
+        java.util.Map<String, Object> row = new java.util.LinkedHashMap<>();
+        row.put("id", id);
+        row.put("display", display);
+        row.put("cost_tokens", cost);
+        row.put("type", type);
+        row.put(extraKey, extraValue);
+        return row;
+    }
+
+    /**
      * The migration itself, run against a config that carries NO defaults — every check
      * below is a question about what is physically in the admin's file.
      *
@@ -604,6 +628,22 @@ public final class HomeCraftManagement extends JavaPlugin {
                 log.add("Config migration: minis.grades." + grade + ".symbol was \"?\" — the stars "
                         + "had been flattened by an editor saving config.yml as ANSI instead of "
                         + "UTF-8, so every Mini showed as \"Creeper ?\". Restored.");
+            }
+        }
+        if (from < 8) {
+            // The token economy had two sinks: a crate at 1 token and the 25-token pity
+            // exchange. Against ~16 tokens earned in an active evening, a 1-token pull is
+            // not a sink at all, so balances could only grow — which is exactly what the
+            // live server showed. Both halves of the fix land here.
+            if (replaceShippedInt(c, "arcade.crates.starter.cost_tokens", 1, 5)) {
+                log.add("Config migration: the Starter Crate costs 5 tokens, not 1. A pull "
+                        + "priced below a single evening's earnings cannot drain anything.");
+            }
+            if (!has(c, "arcade.prizes")) {
+                c.set("arcade.prizes", defaultPrizeRows());
+                log.add("Config migration: added the Prize Counter (arcade.prizes) — fixed-price "
+                        + "token purchases with a known outcome, so tokens have a floor value and "
+                        + "not only an expected one. Edit or remove the rows freely.");
             }
         }
         if (from < CONFIG_REVISION) {

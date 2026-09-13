@@ -49,7 +49,7 @@ shops:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 7
+config_revision: 8
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -762,7 +762,9 @@ arcade:
   crates:
     starter:
       display: "&aStarter Crate"
-      cost_tokens: 1
+      # A crate priced at 1 token against ~16 earned in an evening is not a sink —
+      # it is a free pull, and a balance that only grows is what that produces.
+      cost_tokens: 5
       rewards:
         - { type: card,     tag: starter, weight: 40 }
         - { type: filament, amount: 3,    weight: 30 }
@@ -772,6 +774,28 @@ arcade:
       # (a strong money sink). Odds are published in the crate GUI.
       paid_odds:
         - { cost_money: 750, floor: RARE }
+  # ---- The Prize Counter (§3.9): KNOWN-OUTCOME token purchases.
+  # A crate is a pull; a prize is a price. You see exactly what you get before you
+  # spend, which gives tokens a floor value instead of only an expected one — and
+  # gives a player who does not enjoy gambling somewhere to spend what they earned.
+  # Nothing here is sellable to the house, so the two-currency rule (§11 #9) holds:
+  # filament is craftable-but-unsellable, a pack only ever becomes Cards, and a
+  # HomeCraft block is a tool rather than a market good.
+  #   id           unique key (keep it stable)
+  #   display      shown name (&-colour codes ok)
+  #   cost_tokens  the price; must be > 0 or the row is skipped
+  #   type         filament | block | pack
+  #   amount       filament: units handed over (default 8)
+  #   color        filament: a DyeColor — OMIT IT to let the buyer pick at purchase,
+  #                which is usually what you want, since a Card names the colours it
+  #                needs and a bundle of the wrong dye is worth nothing.
+  #   block        block: display_case | pallet | vending | mailbox | printer | pc | arcade
+  #   pack         pack: an id from `packs:`
+  # A row naming something unknown is skipped with a warning; the counter still opens.
+  prizes:
+    - { id: filament_bundle, display: "&fFilament Bundle", cost_tokens: 6,  type: filament, amount: 8 }
+    - { id: display_case,    display: "&bDisplay Case",    cost_tokens: 25, type: block, block: display_case }
+    - { id: starter_pack,    display: "&dStarter Pack",    cost_tokens: 30, type: pack,  pack: starter }
   # Pity / guaranteed exchange: spend N tokens for a guaranteed Rare+ Mini.
   pity:
     tokens: 25

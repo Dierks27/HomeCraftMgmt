@@ -278,11 +278,46 @@ public final class PluginConfig {
         }
     }
 
-    /** The whole Arcade config: token sources, crates, pity exchange, lotto, blocks. */
+    /** What a Prize Counter row hands over. Never money, never a market good (§11 #9). */
+    public enum PrizeType {FILAMENT, BLOCK, PACK}
+
+    /**
+     * One Prize Counter row: a <b>known-outcome</b> token purchase. A crate is a pull and a
+     * prize is a price — you see exactly what you get before you spend, which is what gives
+     * tokens a floor value instead of only an expected one.
+     *
+     * @param amount   FILAMENT: units handed over
+     * @param color    FILAMENT: the colour, or null to let the buyer choose at purchase
+     * @param blockKey BLOCK: a {@link com.dierks.homecraft.block.CustomBlockType} name
+     * @param packId   PACK: an id from {@code packs:}
+     */
+    public record Prize(String id, String display, int costTokens, PrizeType type,
+                        int amount, org.bukkit.DyeColor color, String blockKey, String packId) {
+        /** True if the buyer picks the filament colour at purchase time. */
+        public boolean choosesColor() {
+            return type == PrizeType.FILAMENT && color == null;
+        }
+    }
+
+    /** The whole Arcade config: token sources, crates, prizes, pity exchange, lotto, blocks. */
     public record Arcade(boolean enabled, boolean streakEnabled, List<Integer> streakRewards,
                          boolean playtimeEnabled, int playtimeMinutesPerToken,
-                         Map<String, Crate> crates, int pityTokens, Rarity pityRarity, Lotto lotto,
+                         Map<String, Crate> crates, List<Prize> prizes,
+                         int pityTokens, Rarity pityRarity, Lotto lotto,
                          BlockDef block, Map<String, BlockDef> machines) {
+
+        /** One prize by id, or null. */
+        public Prize prize(String id) {
+            if (id == null) {
+                return null;
+            }
+            for (Prize p : prizes) {
+                if (p.id().equalsIgnoreCase(id)) {
+                    return p;
+                }
+            }
+            return null;
+        }
 
         /** Tokens awarded on a given consecutive-day streak (last entry repeats). */
         public int streakReward(int streakDay) {
@@ -868,6 +903,14 @@ public final class PluginConfig {
             }
         }
 
+        List<Prize> prizes = new ArrayList<>();
+        for (Map<?, ?> row : c.getMapList("arcade.prizes")) {
+            Prize prize = readPrize(row);
+            if (prize != null) {
+                prizes.add(prize);
+            }
+        }
+
         int pityTokens = Math.max(0, c.getInt("arcade.pity.tokens", 25));
         Rarity pityRarity = parseRarity(c.getString("arcade.pity.guarantees_rarity", "RARE"));
 
@@ -887,7 +930,80 @@ public final class PluginConfig {
         machines.put("counter", blockDef(c, "arcade.machines.counter", Material.LECTERN, "&eToken Counter"));
 
         return new Arcade(enabled, streakEnabled, streakRewards, ptEnabled, minsPerToken,
-                crates, pityTokens, pityRarity, new Lotto(Math.max(0, ticketCost), payouts), block, machines);
+                crates, prizes, pityTokens, pityRarity,
+                new Lotto(Math.max(0, ticketCost), payouts), block, machines);
+    }
+
+    /**
+     * Read one Prize Counter row. A row that names something that does not exist is skipped
+     * with a warning rather than failing the load — the same convention the crate table uses,
+     * so one bad row never costs an admin the whole Arcade.
+     */
+    private Prize readPrize(Map<?, ?> row) {
+        String id = str(row.get("id"), null);
+        if (id == null || id.isBlank()) {
+            log.warning("Arcade prize row has no id: — skipped.");
+            return null;
+        }
+        id = id.trim();
+        String display = str(row.get("display"), id);
+        int cost = (int) number(row.get("cost_tokens"), 0);
+        if (cost <= 0) {
+            log.warning("Arcade prize '" + id + "' costs " + cost + " tokens — a prize must cost "
+                    + "something to be a sink. Skipped.");
+            return null;
+        }
+        String type = str(row.get("type"), "").toLowerCase(Locale.ROOT);
+        switch (type) {
+            case "filament" -> {
+                int amount = Math.max(1, (int) number(row.get("amount"), 8));
+                return new Prize(id, display, cost, PrizeType.FILAMENT, amount,
+                        parseDye(str(row.get("color"), null)), null, null);
+            }
+            case "block" -> {
+                String key = str(row.get("block"), null);
+                com.dierks.homecraft.block.CustomBlockType bt = parseBlockType(key);
+                if (bt == null) {
+                    log.warning("Arcade prize '" + id + "' names unknown block '" + key
+                            + "' — skipped. Valid: display_case, pallet, vending, mailbox, printer, pc, arcade.");
+                    return null;
+                }
+                return new Prize(id, display, cost, PrizeType.BLOCK, 1, null, bt.name(), null);
+            }
+            case "pack" -> {
+                String pack = str(row.get("pack"), null);
+                if (pack == null || pack.isBlank()) {
+                    log.warning("Arcade prize '" + id + "' needs a pack: id — skipped.");
+                    return null;
+                }
+                return new Prize(id, display, cost, PrizeType.PACK, 1, null, null, pack.trim());
+            }
+            default -> {
+                log.warning("Arcade prize '" + id + "' has unknown type '" + type
+                        + "' — skipped. Use filament, block or pack.");
+                return null;
+            }
+        }
+    }
+
+    /** A {@code block:} name from a prize row, tolerant of the short names the GUI uses. */
+    private com.dierks.homecraft.block.CustomBlockType parseBlockType(String key) {
+        if (key == null || key.isBlank()) {
+            return null;
+        }
+        String k = key.trim().toUpperCase(Locale.ROOT);
+        switch (k) {
+            case "VENDING" -> k = "MINI_VENDING_MACHINE";
+            case "WORKBENCH" -> k = "MINI_WORKBENCH";
+            default -> {
+                // already an enum name
+            }
+        }
+        try {
+            return com.dierks.homecraft.block.CustomBlockType.valueOf(k);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private CrateReward readReward(Map<?, ?> row) {

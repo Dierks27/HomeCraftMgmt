@@ -84,6 +84,16 @@ public final class ArcadeMenu extends Menu {
             }
         });
 
+        // The Prize Counter — the known-outcome half. Sits opposite the pity exchange so
+        // the two ways to spend tokens (a price, a pull) read as a pair.
+        if (!arc.prizes().isEmpty()) {
+            set(27, Menus.icon(Material.ITEM_FRAME, "&6Prize Counter",
+                    "&7Trade tokens for something you",
+                    "&7choose — no odds, no surprises.",
+                    "&8—", "&eClick to browse"),
+                    e -> new PrizeCounterMenu(plugin, player, this::reopen).open(player));
+        }
+
         // Daily / weekly quests.
         set(31, Menus.icon(Material.WRITABLE_BOOK, "&dQuests",
                 "&7Daily & weekly objectives that pay",

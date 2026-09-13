@@ -62,7 +62,7 @@ public final class HomeCraftManagement extends JavaPlugin {
      * and rendered as an empty slot. 7 = wild Mini spawns — rarer, much further out, a find
      * window measured in minutes — plus the grade stars, for a file an editor has flattened.
      */
-    static final int CONFIG_REVISION = 8;
+    static final int CONFIG_REVISION = 9;
 
     /**
      * Per-item daily caps (~2% sell / ~4% buy of {@code full_stock}), mirroring the
@@ -261,6 +261,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         // Start the economy-display refresh timer (renders signs + spawns holograms).
         this.displayService.start();
         this.arcade.start();
+        this.quests.start(); // poll statistic-backed quests (fish, distance, kills…)
 
         // Item-builder self-test on the live API (Card lore/PDC + Legendary glint).
         com.dierks.homecraft.mini.ItemSelfTest.run(this);
@@ -329,6 +330,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (arcade != null) {
             arcade.stop();
             arcade = null;
+        }
+        if (quests != null) {
+            quests.stop();
+            quests = null;
         }
         if (displayService != null) {
             displayService.stop();
@@ -402,6 +407,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
         if (arcade != null) {
             arcade.start(); // re-arm the playtime task under any new config
+            quests.start(); // re-arm the quest stat poll under any new config
         }
     }
 
@@ -458,6 +464,49 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
         reloadConfig();
         return true;
+    }
+
+    /** The {@code id} of every row in a quest list, for deciding whether it is still ours. */
+    private static java.util.Set<String> questIds(org.bukkit.configuration.file.FileConfiguration c,
+                                                  String path) {
+        java.util.Set<String> ids = new java.util.HashSet<>();
+        for (java.util.Map<?, ?> row : mapList(c, path)) {
+            Object id = row.get("id");
+            if (id != null) {
+                ids.add(String.valueOf(id).toLowerCase(java.util.Locale.ROOT));
+            }
+        }
+        return ids;
+    }
+
+    private static java.util.List<java.util.Map<String, Object>> defaultDailyQuests() {
+        java.util.List<java.util.Map<String, Object>> rows = new java.util.ArrayList<>();
+        rows.add(questRow("fish_daily", "CATCH_FISH", 8, 3, "Catch 8 fish"));
+        rows.add(questRow("walk_daily", "TRAVEL_ON_FOOT", 800, 3, "Travel 800 blocks on foot"));
+        rows.add(questRow("print_daily", "PRINT_MINI", 1, 2, "Print a Mini at a Printer"));
+        rows.add(questRow("sell_daily", "SELL_MARKET", 300, 1, "Sell $300 to the Market"));
+        return rows;
+    }
+
+    private static java.util.List<java.util.Map<String, Object>> defaultWeeklyQuests() {
+        java.util.List<java.util.Map<String, Object>> rows = new java.util.ArrayList<>();
+        rows.add(questRow("hostiles_weekly", "KILL_HOSTILES", 120, 12, "Defeat 120 hostile mobs"));
+        rows.add(questRow("breed_weekly", "BREED_ANIMALS", 12, 8, "Breed 12 animals"));
+        rows.add(questRow("trade_weekly", "TRADE_VILLAGER", 15, 7, "Trade with villagers 15 times"));
+        rows.add(questRow("pack_weekly", "OPEN_PACK", 3, 6, "Open 3 Card Packs"));
+        rows.add(questRow("sell_weekly", "SELL_MARKET", 2000, 5, "Sell $2,000 to the Market"));
+        return rows;
+    }
+
+    private static java.util.Map<String, Object> questRow(String id, String type, int target,
+                                                          int reward, String display) {
+        java.util.Map<String, Object> row = new java.util.LinkedHashMap<>();
+        row.put("id", id);
+        row.put("type", type);
+        row.put("target", target);
+        row.put("reward", reward);
+        row.put("display", display);
+        return row;
     }
 
     /**
@@ -644,6 +693,28 @@ public final class HomeCraftManagement extends JavaPlugin {
                 log.add("Config migration: added the Prize Counter (arcade.prizes) — fixed-price "
                         + "token purchases with a known outcome, so tokens have a floor value and "
                         + "not only an expected one. Edit or remove the rows freely.");
+            }
+        }
+        if (from < 9) {
+            if (!has(c, "arcade.quests.week_starts")) {
+                c.set("arcade.quests.week_starts", "MONDAY");
+                log.add("Config migration: weekly quests roll over on MONDAY. They had been "
+                        + "keyed as epochDay / 7, which is a real seven-day window but starts on "
+                        + "a THURSDAY — epoch day 0 was 1 January 1970, and that was a Thursday. "
+                        + "This week's weekly progress resets once as the key changes shape.");
+            }
+            // Only swap a quest pool that is still the one we shipped. An admin who has
+            // written their own objectives has made a decision, and two sell quests are a
+            // smaller problem than overwriting it.
+            if (questIds(c, "arcade.quests.daily").equals(java.util.Set.of("sell_daily", "crate_daily", "print_daily"))
+                    && questIds(c, "arcade.quests.weekly").equals(java.util.Set.of("sell_weekly", "crate_weekly", "pack_weekly"))) {
+                c.set("arcade.quests.daily", defaultDailyQuests());
+                c.set("arcade.quests.weekly", defaultWeeklyQuests());
+                log.add("Config migration: the quest pool is mostly verbs now. Selling to the "
+                        + "market was 40% of the token reward on offer and the biggest single "
+                        + "line in both periods; it is 13% and the smallest. The new objectives "
+                        + "(fish, distance on foot, hostiles, breeding, villager trades) are read "
+                        + "from vanilla statistics, so they need no new listener.");
             }
         }
         if (from < CONFIG_REVISION) {

@@ -19,8 +19,19 @@ import java.util.UUID;
  */
 public final class QuestDao {
 
-    /** A player's standing on one quest in one period: how far, and whether paid out. */
-    public record Progress(int progress, boolean claimed) {
+    /**
+     * A player's standing on one quest in one period.
+     *
+     * @param statMark for a statistic-backed quest, the lifetime total last observed — a moving
+     *                 watermark, not a fixed start. Progress accumulates from the difference
+     *                 between polls, so a stretch the economy sandbox excludes can be stepped
+     *                 over rather than banked. -1 means never observed.
+     */
+    public record Progress(int progress, boolean claimed, long statMark) {
+        /** True once a statistic-backed quest has a total to measure the next poll against. */
+        public boolean hasMark() {
+            return statMark >= 0;
+        }
     }
 
     private final Database database;
@@ -38,16 +49,17 @@ public final class QuestDao {
         Connection c = conn();
         synchronized (c) {
             try (PreparedStatement ps = c.prepareStatement(
-                    "SELECT progress, claimed FROM quest_progress "
+                    "SELECT progress, claimed, stat_mark FROM quest_progress "
                             + "WHERE player=? AND quest_id=? AND period_key=?")) {
                 ps.setString(1, player.toString());
                 ps.setString(2, questId);
                 ps.setString(3, periodKey);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
-                        return new Progress(rs.getInt("progress"), rs.getInt("claimed") != 0);
+                        return new Progress(rs.getInt("progress"), rs.getInt("claimed") != 0,
+                                rs.getLong("stat_mark"));
                     }
-                    return new Progress(0, false);
+                    return new Progress(0, false, -1);
                 }
             }
         }
@@ -66,6 +78,34 @@ public final class QuestDao {
                 ps.setString(2, questId);
                 ps.setString(3, periodKey);
                 ps.setInt(4, Math.max(0, delta));
+                ps.executeUpdate();
+            }
+            return get(player, questId, periodKey).progress();
+        }
+    }
+
+    /**
+     * Move a statistic-backed quest's watermark to {@code mark} and add {@code delta} to its
+     * progress, in one write. Pass {@code delta == 0} to step the watermark without crediting
+     * anything — which is both how a quest starts (no prior total to measure from) and how a
+     * stretch in an economy-disabled world is skipped.
+     *
+     * @return the progress now stored
+     */
+    public int advanceStat(UUID player, String questId, String periodKey, long mark, int delta)
+            throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "INSERT INTO quest_progress(player, quest_id, period_key, progress, claimed, stat_mark) "
+                            + "VALUES(?,?,?,?,0,?) "
+                            + "ON CONFLICT(player, quest_id, period_key) DO UPDATE SET "
+                            + "progress = progress + excluded.progress, stat_mark = excluded.stat_mark")) {
+                ps.setString(1, player.toString());
+                ps.setString(2, questId);
+                ps.setString(3, periodKey);
+                ps.setInt(4, Math.max(0, delta));
+                ps.setLong(5, Math.max(0, mark));
                 ps.executeUpdate();
             }
             return get(player, questId, periodKey).progress();

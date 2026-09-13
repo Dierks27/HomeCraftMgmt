@@ -406,6 +406,16 @@ public final class Database {
             """
             UPDATE pallet_listings SET department = 'Combat'
              WHERE department IN ('Weapons', 'Armor')
+            """,
+
+            // v23 — statistic-backed quests. A quest like "walk 500 blocks" is read from the
+            // player's lifetime vanilla statistic rather than pushed by a listener, so it has
+            // to remember the last total it saw. Progress is then accumulated from the
+            // difference each poll rather than diffed from a fixed start, which is what lets
+            // a stretch spent in a world the economy is disabled in (§11 #1) be skipped
+            // instead of banked. -1 means "never observed", distinguishable from a genuine 0.
+            """
+            ALTER TABLE quest_progress ADD COLUMN stat_mark INTEGER NOT NULL DEFAULT -1;
             """
     };
 

@@ -120,6 +120,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Text.of("&cOnly players can open the Arcade."));
                     return true;
                 }
+                if (denyUnless(sender, "hcm.arcade.use")) {
+                    return true;
+                }
                 new com.dierks.homecraft.gui.arcade.ArcadeMenu(plugin, player).open(player);
             }
             case "balance", "bal", "wallet" -> handleBalance(sender);
@@ -129,6 +132,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Text.of("&cOnly players can open the Quests board."));
                     return true;
                 }
+                if (denyUnless(sender, "hcm.quests.use")) {
+                    return true;
+                }
                 new com.dierks.homecraft.gui.arcade.QuestsMenu(plugin, player).open(player);
             }
             case "museum" -> handleMuseum(sender, args);
@@ -136,6 +142,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "auction", "auctions" -> {
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Text.of("&cOnly players can open the Auction House."));
+                    return true;
+                }
+                if (denyUnless(sender, "hcm.auction.list")) {
                     return true;
                 }
                 new com.dierks.homecraft.gui.mini.AuctionMenu(plugin, player, null).open(player);
@@ -157,6 +166,11 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "museum" -> {
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Text.of("&cOnly players can open the Museum."));
+                    return;
+                }
+                // Same node as /hcm museum — this is the same door, and a bare `/hcm mini`
+                // defaults here, so leaving it open would make hcm.museum.use unenforceable.
+                if (denyUnless(sender, "hcm.museum.use")) {
                     return;
                 }
                 new com.dierks.homecraft.gui.MuseumMenu(plugin, player, null).open(player);
@@ -213,6 +227,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
     private void handleMuseum(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(Text.of("&cOnly players can open the Museum."));
+            return;
+        }
+        if (denyUnless(sender, "hcm.museum.use")) {
             return;
         }
         if (args.length >= 2 && !args[1].isBlank()) {

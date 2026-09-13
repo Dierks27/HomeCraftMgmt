@@ -108,3 +108,21 @@ permissions:
   hcm.protection.bypass:
     description: Bypass Towny/WorldGuard build checks for HomeCraft custom blocks.
     default: op
+  # The player-facing /hcm openers (DESIGN.md §10). Each opens a read-only or
+  # token-only GUI and is the documented player route to that feature — /hcm auction
+  # is the ONLY way to reach the Auction House, and /hcm museum is the click target of
+  # every found-broadcast. They default to true: the nodes exist so an admin can
+  # withdraw one without removing the feature. Nothing that moves money or market
+  # stock is reachable through them; that is what §3.2's GUI-first rule protects.
+  hcm.auction.list:
+    description: Open the Mini Auction House (/hcm auction).
+    default: true
+  hcm.museum.use:
+    description: Browse the Mini Museum (/hcm museum [id]).
+    default: true
+  hcm.arcade.use:
+    description: Open the Arcade — crates, pity and scratch tickets (/hcm arcade).
+    default: true
+  hcm.quests.use:
+    description: Open the daily/weekly Quests board (/hcm quests).
+    default: true

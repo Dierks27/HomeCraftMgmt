@@ -59,6 +59,9 @@ menus:
   museum_title: "&5Mini Museum &8&l·&r &7Collectibles"
   market_title: "&1Market — instant buy/sell"
   store_title: "&6Welcome to {store} &8· &7{url}"
+  # The PC's root screen — the Site launcher (§2.2). The PC is a browser and each
+  # feature is a Site you open on it; this is the address bar, not a shop front.
+  pc_title: "&9PC &8· &7{url}"
   # Where the browsing menus start before a player touches anything. Each player's
   # choices are then remembered for the rest of their session (not saved to disk).
   store:

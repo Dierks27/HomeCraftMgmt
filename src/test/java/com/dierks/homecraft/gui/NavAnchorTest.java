@@ -31,9 +31,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>49 is never a page arrow, so an exit can never be confused with a page step.</li>
  * </ul>
  *
- * <p>It does not assert that 49 always holds an exit. The Store is a root screen with no exit tile
- * at all — Esc closes it, and the slot carries a destination instead. That is a deliberate
- * exception, not drift, and a test that forbade it would be a test people learn to work around.
+ * <p>It does not assert that 49 always holds an exit, because a root screen legitimately has
+ * nowhere to go back to — Esc closes it, and the slot can carry something else. The Store used to
+ * be that root screen and kept a destination there; since the PC opens the Site launcher (§2.2)
+ * the Store is one Site among several and its 49 is an ordinary way out. The launcher is the root
+ * now, and it has no exit tile at all.
  *
  * <p>Registry-free: this reads source text, so it needs no server and no Bukkit call.
  */

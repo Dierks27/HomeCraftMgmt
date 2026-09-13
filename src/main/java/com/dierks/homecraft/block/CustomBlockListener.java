@@ -231,7 +231,9 @@ public final class CustomBlockListener implements Listener {
                     player.sendMessage(Text.of("&cYou can't use this PC."));
                     return;
                 }
-                new StoreMenu(plugin, player).open(player);
+                // The PC is a browser, and its root screen is the Site launcher (§2.2) —
+                // not the store. The store is one Site on it.
+                com.dierks.homecraft.gui.SiteLauncherMenu.open(plugin, player);
             }
             case MINI_VENDING_MACHINE -> {
                 boolean owner = placed.get().owner().equals(player.getUniqueId()) || player.hasPermission("hcm.admin");

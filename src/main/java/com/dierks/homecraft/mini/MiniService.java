@@ -23,9 +23,9 @@ import java.util.UUID;
 /**
  * The Minis engine: owns the config-driven catalog and is the single source of
  * truth for minting. Every copy — printed from a Card, found in the wild / a crate,
- * spawned naturally, or admin-given — flows through {@link #mintGraded} /
- * {@link #mintItem} / {@link #giveAdmin} so mint counts and per-copy provenance
- * stay honest and caps are enforced. The Museum is browse-only (no money mint).
+ * spawned naturally, or admin-given — is created by {@link #mintItem} and nowhere
+ * else, so mint counts and per-copy provenance stay honest and the cap is enforced
+ * on every path without exception. The Museum is browse-only (no money mint).
  */
 public final class MiniService {
 
@@ -188,12 +188,17 @@ public final class MiniService {
     }
 
     /**
-     * Mint one graded copy without handing it to anyone: cap-aware, anti-dupe, tallied,
-     * with the provenance row owned by {@code owner} (null = the world, e.g. a natural
-     * spawn that nobody has claimed yet). Every mint path ends here or in
-     * {@link #mintGraded}; both share the same tally + provenance pipeline.
+     * <b>The mint.</b> Every Mini that exists is created here and nowhere else: the cap is
+     * enforced, the copy gets its unique anti-dupe uid, the tally advances and the
+     * provenance row is written under {@code owner} (null = the world, e.g. a natural
+     * spawn nobody has claimed yet). The copy is not handed to anyone — callers that give
+     * it out go through {@link #mintAndGive}.
+     *
+     * <p>Keeping this the only {@code mintNext} + {@code recordIndividual} pair is what
+     * makes the finite-mint promise in §11 #3 checkable: the published "minted X / cap" in
+     * the Museum is true because there is one place that could make it false.
      */
-    public Minted mintItem(MiniDef def, Grade grade, boolean shiny, UUID owner) {
+    public Minted mintItem(MiniDef def, Grade grade, String finish, UUID owner) {
         if (def == null) {
             return Minted.fail("No such Mini.");
         }
@@ -204,13 +209,36 @@ public final class MiniService {
             long mintNumber = dao.mintNext(def.id());
             UUID uid = UUID.randomUUID();
             ItemStack item = items.minted(def, style(def.rarity()), mintNumber, uid,
-                    grade == null ? Grade.STANDARD : grade, shiny ? "SHINY" : null);
+                    grade == null ? Grade.STANDARD : grade, finish);
             dao.recordIndividual(uid, def.id(), mintNumber, owner, System.currentTimeMillis());
             return new Minted(true, null, mintNumber, uid.toString(), item);
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to mint Mini " + def.id() + ": " + e.getMessage());
             return Minted.fail("Minting failed — try again.");
         }
+    }
+
+    /** {@link #mintItem} for callers holding a Shiny flag rather than a finish name. */
+    public Minted mintItem(MiniDef def, Grade grade, boolean shiny, UUID owner) {
+        return mintItem(def, grade, shiny ? "SHINY" : null, owner);
+    }
+
+    /**
+     * Mint through {@link #mintItem} and hand the copy to {@code player} (overflow drops at
+     * their feet), firing the first-Mini achievement. The shared tail of every mint path
+     * that produces a Mini for somebody.
+     */
+    private Minted mintAndGive(Player player, MiniDef def, Grade grade, String finish) {
+        Minted m = mintItem(def, grade, finish, player.getUniqueId());
+        if (!m.ok()) {
+            return m;
+        }
+        player.getInventory().addItem(m.item().clone()).values()
+                .forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
+        if (plugin.achievements() != null) {
+            plugin.achievements().tryAward(player, "first_mini");
+        }
+        return m;
     }
 
     /**
@@ -222,16 +250,7 @@ public final class MiniService {
         if (def == null) {
             return Minted.fail("No such Mini '" + id + "'.");
         }
-        Minted m = mintItem(def, grade, shiny, player.getUniqueId());
-        if (!m.ok()) {
-            return m;
-        }
-        player.getInventory().addItem(m.item().clone()).values()
-                .forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
-        if (plugin.achievements() != null) {
-            plugin.achievements().tryAward(player, "first_mini");
-        }
-        return m;
+        return mintAndGive(player, def, grade, shiny ? "SHINY" : null);
     }
 
     /**
@@ -303,29 +322,17 @@ public final class MiniService {
         if (def == null) {
             return MintResult.fail("No such Mini '" + id + "'.");
         }
-        MiniDao.Counts c = counts(id);
-        if (!def.uncapped() && c.minted() >= def.cap()) {
-            return MintResult.fail(def.name() + " is minted out.");
+        Minted m = mintAndGive(player, def, grade, finish);
+        if (!m.ok()) {
+            return MintResult.fail(m.error());
         }
-        try {
-            long mintNumber = dao.mintNext(def.id());
-            UUID uid = UUID.randomUUID();
-            ItemStack item = items.minted(def, style(def.rarity()), mintNumber, uid, grade, finish);
-            player.getInventory().addItem(item).values()
-                    .forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
-            dao.recordIndividual(uid, def.id(), mintNumber, player.getUniqueId(), System.currentTimeMillis());
-            if (plugin.achievements() != null) {
-                plugin.achievements().tryAward(player, "first_mini");
-            }
-            if (plugin.quests() != null) {
-                plugin.quests().record(player,
-                        com.dierks.homecraft.config.PluginConfig.QuestType.PRINT_MINI, 1);
-            }
-            return new MintResult(true, null, mintNumber);
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to print Mini " + def.id() + ": " + e.getMessage());
-            return MintResult.fail("Printing failed — try again.");
+        // The only thing that makes a print different from a find: it counts toward the
+        // "print a Mini" quest. Finding one in the wild must not.
+        if (plugin.quests() != null) {
+            plugin.quests().record(player,
+                    com.dierks.homecraft.config.PluginConfig.QuestType.PRINT_MINI, 1);
         }
+        return new MintResult(true, null, m.mintNumber());
     }
 
     public boolean idExists(String id) {
@@ -676,42 +683,23 @@ public final class MiniService {
      * another mint, so it stops at the cap and counts toward circulation).
      * @return the mint result; not ok if the type is unknown or minted out.
      */
-    public MintResult mintWild(Player player, String id) {
-        MiniDef def = catalog.get(id);
-        if (def == null) {
-            return MintResult.fail("No such Mini '" + id + "'.");
-        }
-        MiniDao.Counts c = counts(id);
-        if (!def.uncapped() && c.minted() >= def.cap()) {
-            return MintResult.fail(def.name() + " is minted out.");
-        }
-        return mintInternal(player, def);
-    }
-
-    /** Admin: mint + give a Mini with no charge and no cap check. */
+    /**
+     * Admin: mint + give a Standard copy with no charge. <b>The cap still applies</b> —
+     * an admin give is a mint like any other, and a path that could exceed the cap would
+     * make the Museum's published "minted X / cap" a lie and quietly break the finite
+     * promise §11 #3 rests on. To mint more of something that is minted out, raise its
+     * cap in the catalog: that is a visible, reversible decision, which silently
+     * overshooting the number is not.
+     */
     public MintResult giveAdmin(Player target, String id) {
         MiniDef def = catalog.get(id);
         if (def == null) {
             return MintResult.fail("No such Mini '" + id + "'.");
         }
-        return mintInternal(target, def);
-    }
-
-    private MintResult mintInternal(Player target, MiniDef def) {
-        try {
-            long mintNumber = dao.mintNext(def.id());
-            UUID uid = UUID.randomUUID();
-            ItemStack item = items.minted(def, style(def.rarity()), mintNumber, uid);
-            target.getInventory().addItem(item).values()
-                    .forEach(drop -> target.getWorld().dropItemNaturally(target.getLocation(), drop));
-            dao.recordIndividual(uid, def.id(), mintNumber, target.getUniqueId(), System.currentTimeMillis());
-            if (plugin.achievements() != null) {
-                plugin.achievements().tryAward(target, "first_mini");
-            }
-            return new MintResult(true, null, mintNumber);
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to mint Mini " + def.id() + ": " + e.getMessage());
-            return MintResult.fail("Minting failed — try again.");
-        }
+        Minted m = mintAndGive(target, def, Grade.STANDARD, null);
+        return m.ok()
+                ? new MintResult(true, null, m.mintNumber())
+                : MintResult.fail(m.error() + (mintedOut(def)
+                        ? " Raise its cap in the catalog to mint more." : ""));
     }
 }

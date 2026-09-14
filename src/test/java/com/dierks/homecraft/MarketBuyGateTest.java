@@ -45,25 +45,18 @@ class MarketBuyGateTest {
     }
 
     /**
-     * One permission node, read by its LITERAL name.
+     * One field of one permission node.
      *
-     * <p>Not {@code get("permissions.hcm.market.buy.default")}: a permission node's name
-     * contains dots, and Bukkit treats a dot as a path separator — so that would go looking
-     * for a section {@code hcm} containing {@code market} containing {@code buy} and find
-     * nothing. {@code getValues(false)} hands back the literal keys instead, which is the only
-     * way to read a plugin.yml permission block without the name being torn apart.
+     * <p>The dotted path is correct here, and for a reason worth writing down: a permission
+     * node's NAME contains dots, and Bukkit's YAML loader calls {@code createSection(key)} for
+     * every mapping it reads — which splits on the path separator. So {@code hcm.market.buy}
+     * does not survive as one literal key; by the time the file is loaded it is a real nested
+     * section {@code hcm} → {@code market} → {@code buy}. Reading it back with the dotted path
+     * works <i>because</i> of that split, not despite it, and looking for the literal key
+     * finds nothing.
      */
     private static Object node(YamlConfiguration yml, String permission, String field) {
-        var perms = yml.getConfigurationSection("permissions");
-        assertNotNull(perms, "plugin.yml declares no permissions at all");
-        Object declared = perms.getValues(false).get(permission);
-        if (declared instanceof org.bukkit.configuration.ConfigurationSection section) {
-            return section.getValues(false).get(field);
-        }
-        if (declared instanceof java.util.Map<?, ?> map) {
-            return map.get(field);
-        }
-        return null;
+        return yml.get("permissions." + permission + "." + field);
     }
 
     /** The node exists and is op-only. If this ever reads "true", the shipping tiers are dead. */
@@ -87,6 +80,8 @@ class MarketBuyGateTest {
     @Test
     void sellingStaysOpenAndItsDescriptionDoesNotPromiseBuying() throws Exception {
         YamlConfiguration yml = pluginYml();
+        assertNotNull(node(yml, "hcm.market.order", "default"),
+                "hcm.market.order is not declared at all");
 
         assertEquals("true", String.valueOf(node(yml, "hcm.market.order", "default")),
                 "selling needs no shipping — the player is the one delivering — so it stays "

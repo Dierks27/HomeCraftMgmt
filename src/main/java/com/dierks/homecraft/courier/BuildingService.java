@@ -508,7 +508,7 @@ public final class BuildingService {
 
         // The undo record goes in BEFORE the first block moves. If the server dies between
         // this line and the next, the sweep on the following enable puts the field back.
-        DeliverySite site = new DeliverySite(job.id(), world.getName(),
+        DeliverySite site = new DeliverySite(job.id(), job.player(), world.getName(),
                 originX, originY, originZ, sizeX, height, sizeZ,
                 template.key(), rotation,
                 way.getBlockX(), baseY, way.getBlockZ(),
@@ -555,7 +555,7 @@ public final class BuildingService {
             }
 
             Villager villager = spawnRecipient(job, door, way, group);
-            site = new DeliverySite(job.id(), world.getName(),
+            site = new DeliverySite(job.id(), job.player(), world.getName(),
                     originX, originY, originZ, sizeX, height, sizeZ,
                     template.key(), rotation,
                     door.getBlockX(), door.getBlockY(), door.getBlockZ(),
@@ -595,7 +595,7 @@ public final class BuildingService {
     private String regionBlocked(World world, int ox, int oy, int oz,
                                  int sizeX, int sizeY, int sizeZ) {
         String feature = BuildingSnapshot.blockingFeature(world, ox, oy, oz, sizeX, sizeY, sizeZ,
-                config().avoidBlocks());
+                config().avoidBlocks(), config().rejectBuiltBlocks());
         if (feature != null) {
             return feature;
         }
@@ -691,6 +691,21 @@ public final class BuildingService {
             return terrain;
         }
 
+        // Somebody's build, claimed or not. This belongs at WAYPOINT time rather than only at
+        // placement, and for the same reason terrain does: a base does not appear during an
+        // hour-long delivery, so a field that is already somebody's should cost a reroll now
+        // instead of a four-thousand-block walk to a house that refuses to appear.
+        //
+        // Claim checks cannot cover this. Towny only knows about CLAIMED land, and the thing a
+        // player is most likely to have out in the wild is the base they never claimed.
+        if (cfg.rejectBuiltBlocks()) {
+            String built = builtStructureNear(world, at.getBlockX(), at.getBlockZ(),
+                    cfg.terrainCheckRadius(), centre.y());
+            if (built != null) {
+                return built;
+            }
+        }
+
         // The box for the remaining checks hangs off the real ground, not off the location's
         // own Y. That Y used to be canopy height, which put this whole scan up in the air —
         // so the tracked-Mini and placed-entity checks, the two things this method exists for,
@@ -706,6 +721,38 @@ public final class BuildingService {
         return trackedGroundIn(world.getName(), at.getBlockX() - radius, oy, at.getBlockZ() - radius,
                 side, height, side);
     }
+
+    /**
+     * Evidence of building within the terrain box, or null if the field is wild.
+     *
+     * <p>Bounded deliberately. The full region scan at placement walks the whole capture box,
+     * which is fine once — but this one runs per candidate waypoint, up to {@code max_rerolls}
+     * times, so it covers the same square the terrain check already does and only the band a
+     * building would occupy: a little below the surface, to catch a floor, and head-height
+     * above it. A cellar three storeys down goes unnoticed, and that is the right trade.
+     */
+    private String builtStructureNear(World world, int centreX, int centreZ, int radius,
+                                      int groundY) {
+        int top = Math.min(world.getMaxHeight() - 1, groundY + BUILT_SCAN_ABOVE);
+        int floor = Math.max(world.getMinHeight(), groundY - BUILT_SCAN_BELOW);
+        for (int x = centreX - radius; x <= centreX + radius; x++) {
+            for (int z = centreZ - radius; z <= centreZ + radius; z++) {
+                for (int y = floor; y <= top; y++) {
+                    Material type = world.getBlockAt(x, y, z).getType();
+                    if (Built.isBuilt(type)) {
+                        return "somebody has built here ("
+                                + type.name().toLowerCase(java.util.Locale.ROOT)
+                                        .replace('_', ' ') + ")";
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** How far above and below the surface the waypoint-time build scan looks. */
+    private static final int BUILT_SCAN_ABOVE = 8;
+    private static final int BUILT_SCAN_BELOW = 2;
 
     /**
      * Why this footprint cannot be built on, or null if it can.
@@ -910,11 +957,23 @@ public final class BuildingService {
      *       that outstays its welcome. This one defers even past the backstop.</li>
      *   <li><b>Not before {@code linger_seconds}</b>, so it does not vanish in the same breath
      *       as the payout.</li>
-     *   <li>Then: once nobody is within {@code restore_distance} — the house is out of sight,
-     *       so it simply is not there when they next look — or once
-     *       {@code max_linger_seconds} has passed, which covers somebody logging off on the
-     *       doorstep.</li>
+     *   <li>Then: once <b>the player whose delivery this was</b> is further than
+     *       {@code restore_distance} — the house is out of their sight, so it simply is not
+     *       there when they next look — or once {@code max_linger_seconds} has passed, which
+     *       covers somebody logging off on the doorstep.</li>
      * </ol>
+     *
+     * <p><b>Which player each rule means is the whole of it.</b> The distance rule is about
+     * one person not watching their delivery vanish, so it asks about that person and nobody
+     * else; measuring against anyone online let a neighbour quietly going about their own
+     * business hold a house standing on somebody else's run, for as long as they stayed put.
+     * The footprint rule is a safety rule — restoring logs into occupied space suffocates
+     * whoever is standing there — so it asks about <b>everyone</b>, and it does not care whose
+     * delivery put the blocks overhead.
+     *
+     * <p>A player who logs off is not within any distance, so a disconnect restores the site
+     * on the next tick, subject only to the footprint gate. That falls out of asking about the
+     * right player rather than needing a path of its own.
      */
     private boolean readyToRestore(DeliverySite site, long now) {
         PluginConfig.CourierBuilding cfg = config();
@@ -932,7 +991,7 @@ public final class BuildingService {
         if (since >= 1000L * cfg.maxLingerSeconds()) {
             return true;
         }
-        return !playerWithin(world, site, cfg.restoreDistance());
+        return !delivererWithin(world, site, cfg.restoreDistance());
     }
 
     /** True if any player is standing in the site's footprint, with a block of margin. */
@@ -951,18 +1010,36 @@ public final class BuildingService {
         return false;
     }
 
-    private boolean playerWithin(World world, DeliverySite site, int blocks) {
+    /**
+     * True if the player this delivery belongs to is still near enough to watch it go.
+     *
+     * <p>Only them. Offline counts as far away, which is what makes a disconnect restore the
+     * site promptly instead of leaving a house up until the backstop.
+     *
+     * <p>A site with no recorded owner — a row written before the column existed — falls back
+     * to asking about anybody, which is the behaviour this replaced: less precise, never less
+     * safe, and it drains away as those deliveries finish.
+     */
+    private boolean delivererWithin(World world, DeliverySite site, int blocks) {
         double cx = site.originX() + site.sizeX() / 2.0;
         double cz = site.originZ() + site.sizeZ() / 2.0;
         double limit = (double) blocks * blocks;
-        for (Player player : world.getPlayers()) {
-            double dx = player.getLocation().getX() - cx;
-            double dz = player.getLocation().getZ() - cz;
-            if (dx * dx + dz * dz <= limit) {
-                return true;
+        if (site.player() == null) {
+            for (Player player : world.getPlayers()) {
+                if (near(player, cx, cz, limit)) {
+                    return true;
+                }
             }
+            return false;
         }
-        return false;
+        Player owner = plugin.getServer().getPlayer(site.player());
+        return owner != null && owner.getWorld() == world && near(owner, cx, cz, limit);
+    }
+
+    private static boolean near(Player player, double cx, double cz, double limit) {
+        double dx = player.getLocation().getX() - cx;
+        double dz = player.getLocation().getZ() - cz;
+        return dx * dx + dz * dz <= limit;
     }
 
     /**

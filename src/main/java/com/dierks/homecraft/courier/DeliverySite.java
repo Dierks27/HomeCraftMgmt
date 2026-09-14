@@ -17,9 +17,12 @@ import java.util.UUID;
  * @param snapshot the ORIGINAL blocks of {@code origin..origin+size}, taken before the first
  *                 one was changed — see {@link BuildingSnapshot} for the encoding
  * @param door     the standing position outside the front door, where the villager waits
+ * @param player   who is running this delivery, or null on a row written before the column
+ *                 existed. The restore measures distance against THIS player and nobody else:
+ *                 a neighbour two towns over has no business holding somebody's house up.
  */
 public record DeliverySite(
-        long jobId, String world,
+        long jobId, UUID player, String world,
         int originX, int originY, int originZ,
         int sizeX, int sizeY, int sizeZ,
         String template, StructureRotation rotation,
@@ -144,7 +147,7 @@ public record DeliverySite(
     }
 
     public DeliverySite withState(State next) {
-        return new DeliverySite(jobId, world, originX, originY, originZ, sizeX, sizeY, sizeZ,
+        return new DeliverySite(jobId, player, world, originX, originY, originZ, sizeX, sizeY, sizeZ,
                 template, rotation, doorX, doorY, doorZ, villager, next, snapshot, placedAt);
     }
 }

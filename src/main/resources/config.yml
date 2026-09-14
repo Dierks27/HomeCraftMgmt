@@ -365,6 +365,19 @@ courier:
     # change no restore undoes. The caps stop one delivery in a dark forest asking to
     # snapshot half a chunk; when they bite, whatever falls outside the region is left
     # standing rather than cleared.
+    # Refuse a spot where somebody has already built — planks, a crafting table, a
+    # bed, a pane of glass. None of those fall out of terrain generation on their
+    # own, so finding one means the field is already someone's.
+    #
+    # This is the only check that catches an UNCLAIMED build. The waypoint refuses
+    # claimed land, but Towny only knows about claims, and the thing a player is
+    # most likely to have out in the wild is the base they never got round to
+    # claiming. To every other check, that base is empty ground.
+    #
+    # It also rejects near villages, shipwrecks, mineshafts and ruins, which use
+    # the same materials. That is deliberate: dropping a delivery house into the
+    # middle of a village is its own kind of wrong, and a reroll costs nothing.
+    reject_built_blocks: true
     clear_trees: true
     max_clear_blocks: 3000
     max_region_side: 64

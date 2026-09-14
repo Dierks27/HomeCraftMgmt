@@ -177,7 +177,8 @@ public final class BuildingSnapshot {
      */
     public static String blockingFeature(World world, int originX, int originY, int originZ,
                                          int sizeX, int sizeY, int sizeZ,
-                                         java.util.Set<org.bukkit.Material> avoid) {
+                                         java.util.Set<org.bukkit.Material> avoid,
+                                         boolean rejectBuilt) {
         for (int y = 0; y < sizeY; y++) {
             for (int z = 0; z < sizeZ; z++) {
                 for (int x = 0; x < sizeX; x++) {
@@ -191,6 +192,13 @@ public final class BuildingSnapshot {
                     }
                     if (block.getState() instanceof Container) {
                         return "a container";
+                    }
+                    // Free: this loop is already here for the container check, so noticing
+                    // that somebody has built on the spot costs nothing extra.
+                    if (rejectBuilt && com.dierks.homecraft.courier.Built.isBuilt(block.getType())) {
+                        return "somebody has built here ("
+                                + block.getType().name().toLowerCase(java.util.Locale.ROOT)
+                                        .replace('_', ' ') + ")";
                     }
                 }
             }

@@ -372,6 +372,7 @@ public final class PluginConfig {
                                   int groundScanDepth, int maxLiquidPercent,
                                   int restoreDistance, int maxLingerSeconds,
                                   boolean clearTrees, int maxClearBlocks, int maxRegionSide,
+                                  boolean rejectBuiltBlocks,
                                   List<BuildingTemplate> buildings) {
     }
 
@@ -977,6 +978,7 @@ public final class PluginConfig {
                 c.getBoolean("courier.building.clear_trees", true),
                 Math.max(0, c.getInt("courier.building.max_clear_blocks", 3000)),
                 Math.max(16, c.getInt("courier.building.max_region_side", 64)),
+                c.getBoolean("courier.building.reject_built_blocks", true),
                 List.copyOf(buildings));
     }
 

@@ -68,6 +68,37 @@ public record DeliverySite(
         return (Math.max(sizeX, sizeZ) + Math.max(0, padding)) * 2 + 1;
     }
 
+    /**
+     * Grow one axis of the capture box so it also covers {@code [otherMin, otherMax]}, add
+     * padding, and clamp the result to {@code maxSize}.
+     *
+     * <p>The box has to contain <b>everything the placement touches</b>, not just the building:
+     * clearing a tree whose canopy falls outside the captured region would leave blocks that no
+     * restore ever puts back. So when the clearing is a flood-fill of whole trees, the box grows
+     * to bound it.
+     *
+     * <p>The clamp is the safety valve, not a nicety: a fill in a dark forest could otherwise
+     * ask for an enormous snapshot. When it bites, the caller must <b>drop the blocks that fall
+     * outside</b> rather than clear them — a few leaves left floating for the length of a
+     * delivery is a cosmetic problem, and a block changed outside the snapshot is a permanent
+     * one.
+     *
+     * @return {@code {min, size}} for the axis
+     */
+    public static int[] unionAxis(int min, int max, int otherMin, int otherMax,
+                                  int padding, int maxSize) {
+        int lo = Math.min(min, otherMin) - Math.max(0, padding);
+        int hi = Math.max(max, otherMax) + Math.max(0, padding);
+        int size = hi - lo + 1;
+        if (maxSize > 0 && size > maxSize) {
+            // Keep the middle: the building sits there, and it is the part that must be covered.
+            int centre = (lo + hi) / 2;
+            lo = centre - maxSize / 2;
+            size = maxSize;
+        }
+        return new int[] {lo, size};
+    }
+
     /** The minimum corner of that box, given where the structure will be placed. */
     public static int captureOrigin(int placementOrigin, int side) {
         return placementOrigin - side / 2;

@@ -10,6 +10,8 @@ import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.Sound;
+import org.bukkit.entity.Player;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -65,6 +67,11 @@ public final class BuildingService {
      */
     private static final int CHUNK_RADIUS = 2;
 
+    /** One ambient noise every this many presence ticks, so it is occasional, not constant. */
+    private static final int AMBIENT_EVERY = 40;
+
+    private int ambient;
+
     /** Structure keys that resolved at startup, grouped by the family they belong to. */
     private final Map<BuildingTemplate.BiomeGroup, List<BuildingTemplate>> usable =
             new LinkedHashMap<>();
@@ -91,8 +98,15 @@ public final class BuildingService {
     /** Jobs whose site was refused, so a hopeless placement is attempted once and not 3,600 times. */
     private final Set<Long> refused = new HashSet<>();
 
-    /** Job id → the moment its site may be swept away, so a delivery's linger is honoured. */
-    private final Map<Long, Long> deferredUntil = new HashMap<>();
+    /**
+     * Job id → when its delivery ended, for sites waiting to be taken away.
+     *
+     * <p>A site is not removed on a clock. It is removed when the player has <b>left</b> — see
+     * {@link #readyToRestore}. A timer can always fire while somebody is standing in the
+     * doorway, which is exactly what it did: the house evaporated the instant the payout
+     * landed, mid-conversation with the villager.
+     */
+    private final Map<Long, Long> finishedAt = new HashMap<>();
 
     private final HomeCraftManagement plugin;
     private final CourierSiteDao dao;
@@ -119,7 +133,7 @@ public final class BuildingService {
         pending.clear();
         placing.clear();
         refused.clear();
-        deferredUntil.clear();
+        finishedAt.clear();
         if (!config().enabled()) {
             // Clear the template table too. Leaving it loaded meant turning buildings off with
             // /hcm reload left a ready-to-place set behind that nothing would ever consult
@@ -164,8 +178,7 @@ public final class BuildingService {
             // A just-delivered job is already non-ACTIVE, so without this the 60-second sweep
             // beat the linger timer and pulled the house out from under a player still reading
             // their payout message.
-            Long hold = deferredUntil.get(site.jobId());
-            if (hold != null && hold > now) {
+            if (!readyToRestore(site, now)) {
                 continue;
             }
             if (restoreNow(site)) {
@@ -415,30 +428,78 @@ public final class BuildingService {
                 way.getBlockZ() - sz / 2);
 
         int pad = cfg.regionPadding();
-        int side = DeliverySite.captureSide(sx, sz, pad);
-        int originX = DeliverySite.captureOrigin(at.getBlockX(), side);
-        int originZ = DeliverySite.captureOrigin(at.getBlockZ(), side);
-        int originY = Math.max(world.getMinHeight(), baseY - pad);
-        int height = Math.min(world.getMaxHeight() - originY, sy + pad * 2);
 
-        if (overlapsStandingSite(world.getName(), originX, originZ, originX + side, originZ + side)) {
+        // The structure's own reach: a rotation pivots about `at` and can send it into any of
+        // the four quadrants around that point, up to `span` in each direction.
+        int structureSide = DeliverySite.captureSide(sx, sz, pad);
+        int reachMinX = at.getBlockX() - span;
+        int reachMaxX = at.getBlockX() + span;
+        int reachMinZ = at.getBlockZ() - span;
+        int reachMaxZ = at.getBlockZ() + span;
+
+        // Whole trees rooted in the building's footprint, found BEFORE anything is captured so
+        // the box can be grown to bound them. Cutting a trunk at a fixed height was what left
+        // canopy hanging in the sky — and worse, orphaned leaves outside the region decay,
+        // which is a change no restore undoes.
+        List<int[]> growth = growthToClear(world, at, span, baseY, cfg);
+        int growMinX = reachMinX;
+        int growMaxX = reachMaxX;
+        int growMinZ = reachMinZ;
+        int growMaxZ = reachMaxZ;
+        int growMinY = baseY;
+        int growMaxY = baseY + sy;
+        for (int[] block : growth) {
+            growMinX = Math.min(growMinX, block[0]);
+            growMaxX = Math.max(growMaxX, block[0]);
+            growMinY = Math.min(growMinY, block[1]);
+            growMaxY = Math.max(growMaxY, block[1]);
+            growMinZ = Math.min(growMinZ, block[2]);
+            growMaxZ = Math.max(growMaxZ, block[2]);
+        }
+
+        int[] axisX = DeliverySite.unionAxis(reachMinX, reachMaxX, growMinX, growMaxX,
+                pad, cfg.maxRegionSide());
+        int[] axisZ = DeliverySite.unionAxis(reachMinZ, reachMaxZ, growMinZ, growMaxZ,
+                pad, cfg.maxRegionSide());
+        int originX = axisX[0];
+        int sizeX = Math.max(structureSide, axisX[1]);
+        int originZ = axisZ[0];
+        int sizeZ = Math.max(structureSide, axisZ[1]);
+
+        int originY = Math.max(world.getMinHeight(), Math.min(baseY, growMinY) - pad);
+        int topY = Math.min(world.getMaxHeight() - 1, Math.max(baseY + sy, growMaxY) + pad);
+        int height = Math.max(1, topY - originY + 1);
+
+        // Anything the fill reached that the clamp then excluded is left standing. A few leaves
+        // hanging for the length of a delivery is cosmetic; a block changed outside the
+        // snapshot is permanent.
+        int wanted = growth.size();
+        growth.removeIf(b -> b[0] < originX || b[0] >= originX + sizeX
+                || b[1] < originY || b[1] >= originY + height
+                || b[2] < originZ || b[2] >= originZ + sizeZ);
+        if (growth.size() < wanted) {
+            plugin.getLogger().fine(() -> "Courier job " + job.id() + ": "
+                    + (wanted - growth.size()) + " of " + wanted + " tree blocks fall outside "
+                    + "the captured region and were left standing.");
+        }
+
+        if (overlapsStandingSite(world.getName(), originX, originZ,
+                originX + sizeX, originZ + sizeZ)) {
+            refuse(job, way, "another delivery is already standing there");
             return false;
         }
-        String blocked = regionBlocked(world, originX, originY, originZ, side, height, side);
+        String blocked = regionBlocked(world, originX, originY, originZ, sizeX, height, sizeZ);
         if (blocked != null) {
-            plugin.getLogger().fine(() -> "Courier job " + job.id() + ": no building at x "
-                    + way.getBlockX() + ", z " + way.getBlockZ() + " — " + blocked
-                    + " is in the way. The run hands in at the PC.");
+            refuse(job, way, blocked + " is in the way");
             return false;
         }
 
         byte[] snapshot;
         try {
             snapshot = BuildingSnapshot.capture(world, originX, originY, originZ,
-                    side, height, side);
+                    sizeX, height, sizeZ);
         } catch (Exception e) {
-            plugin.getLogger().warning("Courier site snapshot failed for job " + job.id()
-                    + ": " + e);
+            refuse(job, way, "the region could not be captured (" + e + ")");
             return false;
         }
 
@@ -448,7 +509,7 @@ public final class BuildingService {
         // The undo record goes in BEFORE the first block moves. If the server dies between
         // this line and the next, the sweep on the following enable puts the field back.
         DeliverySite site = new DeliverySite(job.id(), world.getName(),
-                originX, originY, originZ, side, height, side,
+                originX, originY, originZ, sizeX, height, sizeZ,
                 template.key(), rotation,
                 way.getBlockX(), baseY, way.getBlockZ(),
                 null, DeliverySite.State.PLACED, snapshot, System.currentTimeMillis());
@@ -459,21 +520,33 @@ public final class BuildingService {
             // Snapshot first, then clear, then place. The trees have to be inside the captured
             // region or the restore cannot put them back — which is why this runs after the
             // capture above and is bounded by that same region.
-            clearGrowth(world, originX, originY, originZ, side, height, side, baseY, sy + 2);
+            for (int[] block : growth) {
+                world.getBlockAt(block[0], block[1], block[2]).setType(Material.AIR, false);
+            }
 
             // includeEntities false: the template's own villagers are not ours and would not
             // be tagged, tracked, or cleaned up.
             structure.place(at, false, rotation, Mirror.NONE, -1, 1.0f, new Random());
 
-            foundation(world, originX, originY, originZ, side, height, side, baseY,
+            // Village templates are worldgen pieces: they carry JIGSAW blocks that the assembly
+            // process normally consumes and replaces. Structure.place does no such processing,
+            // so every one survives into the world — one was standing in a wall beside a front
+            // door on the first real delivery.
+            stripWorldgenMarkers(world, originX, originY, originZ, sizeX, height, sizeZ);
+
+            foundation(world, originX, originY, originZ, sizeX, height, sizeZ, baseY,
                     cfg.foundationDepth());
             // Village templates ship chests carrying loot tables. A building that reappears at
             // the end of every run would turn that into a per-delivery item faucet, which §3.1
             // refuses, so the furniture stays and the contents do not.
-            BuildingSnapshot.clearContainers(world, originX, originY, originZ, side, height, side);
+            BuildingSnapshot.clearContainers(world, originX, originY, originZ,
+                    sizeX, height, sizeZ);
 
-            Location door = findDoor(world, originX, originY, originZ, side, height, side,
-                    at.getBlockX(), at.getBlockZ());
+            // The WAYPOINT, not `at`. `at` is the structure's minimum corner, so measuring
+            // "which side of the door is outward" from it inverted the test for about half of
+            // all door orientations and spawned the recipient indoors.
+            Location door = findDoor(world, originX, originY, originZ, sizeX, height, sizeZ,
+                    way.getBlockX(), way.getBlockZ());
             if (door == null) {
                 // Outside the structure, not at the waypoint: the waypoint is the middle of
                 // the footprint, so falling back to it spawned the recipient inside the house
@@ -481,9 +554,9 @@ public final class BuildingService {
                 door = outsideSpot(world, at, sx, sz, baseY, way);
             }
 
-            Villager villager = spawnRecipient(job, door, group);
+            Villager villager = spawnRecipient(job, door, way, group);
             site = new DeliverySite(job.id(), world.getName(),
-                    originX, originY, originZ, side, height, side,
+                    originX, originY, originZ, sizeX, height, sizeZ,
                     template.key(), rotation,
                     door.getBlockX(), door.getBlockY(), door.getBlockZ(),
                     villager == null ? null : villager.getUniqueId(),
@@ -690,26 +763,107 @@ public final class BuildingService {
     }
 
     /**
-     * Take out whatever is growing where the house goes.
+     * Every block of every tree rooted where the house is going.
      *
-     * <p>Only clutter — leaves, trunks, undergrowth — and only inside the snapshotted region,
-     * so every block removed is one the restore puts back. Real terrain is left alone: this
-     * clears a wood, it does not level a hill.
+     * <p>A flood fill rather than a cut at a fixed height, because slicing a trunk leaves its
+     * canopy hanging in the sky — which looked wrong walking up to the first real delivery, and
+     * is worse than it looks: orphaned leaves <b>decay</b>, and decay happens whether or not the
+     * block was inside the captured region. A restore cannot put back what Minecraft deleted on
+     * its own, so half a tree is a slow permanent change to the map.
+     *
+     * <p>Seeded from the whole area the structure could occupy under any rotation, and spread
+     * through connected logs and leaves. Diagonals count: vanilla canopies attach cornerwise to
+     * their trunk, and a six-way fill leaves the corners behind.
+     *
+     * <p>Capped. A dark forest is one connected canopy for a very long way, and the cap is what
+     * stops one delivery asking to snapshot a hundred-block region. Hitting it is not a failure —
+     * the caller keeps whatever fits inside the box and leaves the rest standing.
      */
-    private void clearGrowth(World world, int ox, int oy, int oz, int sizeX, int sizeY, int sizeZ,
-                             int baseY, int clearHeight) {
-        int from = Math.max(oy, baseY);
-        int to = Math.min(oy + sizeY - 1, baseY + clearHeight);
-        for (int y = from; y <= to; y++) {
+    private List<int[]> growthToClear(World world, Location at, int span, int baseY,
+                                      PluginConfig.CourierBuilding cfg) {
+        List<int[]> found = new ArrayList<>();
+        if (!cfg.clearTrees()) {
+            return found;
+        }
+        int max = cfg.maxClearBlocks();
+        Set<Long> seen = new HashSet<>();
+        java.util.ArrayDeque<int[]> queue = new java.util.ArrayDeque<>();
+
+        int top = Math.min(world.getMaxHeight() - 1, baseY + cfg.maxRegionSide());
+        for (int x = at.getBlockX() - span; x <= at.getBlockX() + span; x++) {
+            for (int z = at.getBlockZ() - span; z <= at.getBlockZ() + span; z++) {
+                for (int y = baseY; y <= top; y++) {
+                    if (isGrowth(world, x, y, z) && seen.add(pack(x, y, z))) {
+                        queue.add(new int[] {x, y, z});
+                    }
+                }
+            }
+        }
+
+        while (!queue.isEmpty() && found.size() < max) {
+            int[] block = queue.poll();
+            found.add(block);
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        if (dx == 0 && dy == 0 && dz == 0) {
+                            continue;
+                        }
+                        int x = block[0] + dx;
+                        int y = block[1] + dy;
+                        int z = block[2] + dz;
+                        if (y < world.getMinHeight() || y >= world.getMaxHeight()) {
+                            continue;
+                        }
+                        if (isGrowth(world, x, y, z) && seen.add(pack(x, y, z))) {
+                            queue.add(new int[] {x, y, z});
+                        }
+                    }
+                }
+            }
+        }
+        if (found.size() >= max) {
+            plugin.getLogger().fine(() -> "Courier: tree clearing hit the "
+                    + max + "-block cap; the rest is left standing.");
+        }
+        return found;
+    }
+
+    /** True for a tree part — a log or a leaf — as opposed to ground cover or terrain. */
+    private boolean isGrowth(World world, int x, int y, int z) {
+        Material type = world.getBlockAt(x, y, z).getType();
+        if (type.isAir()) {
+            return false;
+        }
+        return Ground.isClutter(type);
+    }
+
+    private static long pack(int x, int y, int z) {
+        return ((long) (x & 0x3FFFFFF) << 38) | ((long) (y & 0xFFF) << 26) | (z & 0x3FFFFFF);
+    }
+
+    /**
+     * Remove the worldgen scaffolding a raw template placement leaves behind.
+     *
+     * <p>Village pieces are assembled by the jigsaw generator, which consumes each
+     * {@code JIGSAW} block and replaces it with the final state recorded inside it.
+     * {@code Structure.place} runs none of that, so the markers survive as real, visible,
+     * op-interactable blocks — one was standing beside a front door on the first delivery.
+     *
+     * <p>They become air. <b>Bukkit exposes no way to read the recorded final state</b> —
+     * {@code org.bukkit.block.Jigsaw} is an empty marker interface with no accessor — so the
+     * "proper" substitution is not reachable through the API. For the village connectors these
+     * templates carry, air is what the generator would have left anyway.
+     */
+    private void stripWorldgenMarkers(World world, int ox, int oy, int oz,
+                                      int sizeX, int sizeY, int sizeZ) {
+        for (int y = oy; y < oy + sizeY; y++) {
             for (int x = ox; x < ox + sizeX; x++) {
                 for (int z = oz; z < oz + sizeZ; z++) {
-                    Block block = world.getBlockAt(x, y, z);
-                    Material type = block.getType();
-                    if (type.isAir() || block.isLiquid()) {
-                        continue;
-                    }
-                    if (Ground.isClutter(type)) {
-                        block.setType(Material.AIR, false);
+                    Material type = world.getBlockAt(x, y, z).getType();
+                    if (type == Material.JIGSAW || type == Material.STRUCTURE_BLOCK
+                            || type == Material.STRUCTURE_VOID) {
+                        world.getBlockAt(x, y, z).setType(Material.AIR, false);
                     }
                 }
             }
@@ -740,9 +894,99 @@ public final class BuildingService {
         return refused.contains(jobId);
     }
 
-    /** Hold a site against the expiry sweep until {@code until}, so a linger is honoured. */
-    public void holdUntil(long jobId, long until) {
-        deferredUntil.put(jobId, until);
+    /** Note that a delivery has ended, starting the clock the restore policy reads. */
+    public void finished(long jobId) {
+        finishedAt.putIfAbsent(jobId, System.currentTimeMillis());
+    }
+
+    /**
+     * Whether this site can be taken away yet.
+     *
+     * <p>Three rules, in order of how much they matter:
+     *
+     * <ol>
+     *   <li><b>Never while somebody is inside it.</b> Restoring spruce logs into the space a
+     *       player is standing in suffocates them, and that is a far worse bug than a house
+     *       that outstays its welcome. This one defers even past the backstop.</li>
+     *   <li><b>Not before {@code linger_seconds}</b>, so it does not vanish in the same breath
+     *       as the payout.</li>
+     *   <li>Then: once nobody is within {@code restore_distance} — the house is out of sight,
+     *       so it simply is not there when they next look — or once
+     *       {@code max_linger_seconds} has passed, which covers somebody logging off on the
+     *       doorstep.</li>
+     * </ol>
+     */
+    private boolean readyToRestore(DeliverySite site, long now) {
+        PluginConfig.CourierBuilding cfg = config();
+        World world = site.bukkitWorld();
+        if (world == null) {
+            return true; // no world, no blocks, nothing to be standing in
+        }
+        if (playerInside(world, site)) {
+            return false;
+        }
+        long since = now - finishedAt.getOrDefault(site.jobId(), 0L);
+        if (since < 1000L * cfg.lingerSeconds()) {
+            return false;
+        }
+        if (since >= 1000L * cfg.maxLingerSeconds()) {
+            return true;
+        }
+        return !playerWithin(world, site, cfg.restoreDistance());
+    }
+
+    /** True if any player is standing in the site's footprint, with a block of margin. */
+    private boolean playerInside(World world, DeliverySite site) {
+        for (Player player : world.getPlayers()) {
+            Location at = player.getLocation();
+            if (at.getBlockX() >= site.originX() - 1
+                    && at.getBlockX() <= site.originX() + site.sizeX()
+                    && at.getBlockZ() >= site.originZ() - 1
+                    && at.getBlockZ() <= site.originZ() + site.sizeZ()
+                    && at.getBlockY() >= site.originY() - 2
+                    && at.getBlockY() <= site.originY() + site.sizeY() + 2) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean playerWithin(World world, DeliverySite site, int blocks) {
+        double cx = site.originX() + site.sizeX() / 2.0;
+        double cz = site.originZ() + site.sizeZ() / 2.0;
+        double limit = (double) blocks * blocks;
+        for (Player player : world.getPlayers()) {
+            double dx = player.getLocation().getX() - cx;
+            double dz = player.getLocation().getZ() - cz;
+            if (dx * dx + dz * dz <= limit) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Take away every site whose delivery has ended and whose player has moved on.
+     *
+     * <p>Runs on the same one-second tick as the approach check, because "they have left" is an
+     * event rather than a deadline — waiting for the sixty-second sweep would leave the house
+     * standing long after anybody could see it.
+     */
+    public void tickRestores() {
+        if (finishedAt.isEmpty()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        for (Long jobId : new ArrayList<>(finishedAt.keySet())) {
+            DeliverySite site = standing.get(jobId);
+            if (site == null) {
+                finishedAt.remove(jobId);
+                continue;
+            }
+            if (readyToRestore(site, now) && !restoreNow(site)) {
+                park(site);
+            }
+        }
     }
 
     /**
@@ -882,20 +1126,38 @@ public final class BuildingService {
     }
 
     /**
+     * The yaw that looks from {@code from} towards {@code to}, in Minecraft's convention
+     * (0 = south / +Z, 90 = west / -X).
+     */
+    private static float outwardYaw(Location from, Location to) {
+        double dx = to.getX() - from.getX();
+        double dz = to.getZ() - from.getZ();
+        if (dx == 0 && dz == 0) {
+            return 0f;
+        }
+        return (float) Math.toDegrees(Math.atan2(-dx, dz));
+    }
+
+    /**
      * The person expecting the crate.
      *
      * <p>No AI, invulnerable, silent and persistent: this is a fixture of the delivery, not a
      * mob. Without {@code setAI(false)} it would wander off the spot the player was sent to;
      * without {@code setPersistent(true)} it would despawn while they were still walking.
      */
-    private Villager spawnRecipient(CourierJob job, Location at,
+    private Villager spawnRecipient(CourierJob job, Location at, Location centre,
                                     BuildingTemplate.BiomeGroup group) {
         try {
             World world = at.getWorld();
             if (world == null) {
                 return null;
             }
-            Villager villager = world.spawn(at, Villager.class, v -> {
+            // Face away from the building, which is to say towards whoever walks up. Spawning
+            // at the default yaw left the recipient staring into their own wall.
+            Location spawn = at.clone();
+            spawn.setYaw(outwardYaw(centre, at));
+            spawn.setPitch(0f);
+            Villager villager = world.spawn(spawn, Villager.class, v -> {
                 v.setAI(false);
                 v.setInvulnerable(true);
                 v.setSilent(true);
@@ -916,12 +1178,76 @@ public final class BuildingService {
                 v.getPersistentDataContainer().set(Keys.MOB_ARTIFICIAL, PersistentDataType.BYTE,
                         (byte) 1);
             });
+            villager.setRotation(spawn.getYaw(), 0f);
             dao.setVillager(job.id(), villager.getUniqueId());
             return villager;
         } catch (Exception e) {
             plugin.getLogger().warning("Could not spawn the courier recipient for job "
                     + job.id() + ": " + e);
             return null;
+        }
+    }
+
+    /**
+     * Turn the recipient to watch a nearby player, and let them make a noise now and then.
+     *
+     * <p>{@code setAI(false)} is what keeps them planted on the doorstep, but it also makes them
+     * completely inert — they read as a prop rather than a person. Rotation still works with the
+     * AI off, so this is the cheap half of being alive: look at whoever is close, and every so
+     * often say something. It runs only for sites that have somebody standing near them, which
+     * on this server is at most one.
+     */
+    public void tickPresence() {
+        if (standing.isEmpty()) {
+            return;
+        }
+        for (DeliverySite site : standing.values()) {
+            if (site.villager() == null) {
+                continue;
+            }
+            Entity entity = Bukkit.getEntity(site.villager());
+            if (!(entity instanceof Villager villager) || !villager.isValid()) {
+                continue;
+            }
+            Player nearest = null;
+            double best = Double.MAX_VALUE;
+            for (Player player : villager.getWorld().getPlayers()) {
+                double distance = player.getLocation().distanceSquared(villager.getLocation());
+                if (distance < best) {
+                    best = distance;
+                    nearest = player;
+                }
+            }
+            if (nearest == null || best > 12 * 12) {
+                continue;
+            }
+            double dx = nearest.getLocation().getX() - villager.getLocation().getX();
+            double dz = nearest.getLocation().getZ() - villager.getLocation().getZ();
+            if (dx * dx + dz * dz > 0.01) {
+                villager.setRotation((float) Math.toDegrees(Math.atan2(-dx, dz)), 0f);
+            }
+            // setSilent(true) stops the villager making its own noise; the plugin can still
+            // play one, which keeps it occasional and deliberate rather than constant.
+            if (best < 6 * 6 && ambient++ % AMBIENT_EVERY == 0) {
+                villager.getWorld().playSound(villager.getLocation(),
+                        Sound.ENTITY_VILLAGER_AMBIENT, 0.6f, 1.0f);
+            }
+        }
+    }
+
+    /** Acknowledge a delivery, out loud, where the player is standing. */
+    public void celebrate(long jobId) {
+        DeliverySite site = standing.get(jobId);
+        if (site == null || site.villager() == null) {
+            return;
+        }
+        Entity entity = Bukkit.getEntity(site.villager());
+        if (entity == null) {
+            return;
+        }
+        entity.getWorld().playSound(entity.getLocation(), Sound.ENTITY_VILLAGER_YES, 1.0f, 1.0f);
+        if (entity instanceof Villager villager) {
+            villager.playEffect(org.bukkit.EntityEffect.VILLAGER_HAPPY);
         }
     }
 
@@ -938,7 +1264,8 @@ public final class BuildingService {
         if (site == null) {
             return;
         }
-        if (!restoreNow(site)) {
+        finished(jobId);
+        if (readyToRestore(site, System.currentTimeMillis()) && !restoreNow(site)) {
             park(site);
         }
     }
@@ -988,7 +1315,7 @@ public final class BuildingService {
 
     /** Drop the record — only ever called once the blocks are genuinely back. */
     private void forget(long jobId) {
-        deferredUntil.remove(jobId);
+        finishedAt.remove(jobId);
         refused.remove(jobId);
         DeliverySite site = standing.remove(jobId);
         if (site != null) {

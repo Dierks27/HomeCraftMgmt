@@ -29,7 +29,7 @@ public final class SiteLauncherMenu extends Menu {
     /**
      * Where the Site tiles sit: the middle two rows, centred.
      *
-     * <p>Each Site wears the icon it already wears everywhere else — Instant Market is an
+     * <p>Each Site wears the icon it already wears everywhere else — Sell to Crate is an
      * emerald here and in the Store, the Museum is a player head in both — because an item
      * that means one thing in one menu and another thing next door is the defect
      * {@code DepartmentIconsTest} exists to catch. The store's own compass is the one new
@@ -80,8 +80,8 @@ public final class SiteLauncherMenu extends Menu {
         out.add(new Site(Material.COMPASS, "&6" + store.name(),
                 "Browse the catalogue and order with shipping.",
                 p -> new StoreMenu(plugin, p).open(p)));
-        out.add(new Site(Material.EMERALD, "&aInstant Market",
-                "Buy and sell now at market price — no shipping.",
+        out.add(new Site(Material.EMERALD, "&aSell to Crate",
+                "Crate buys your goods at the live price, paid now.",
                 p -> new MarketMenu(plugin, p, this::reopen).open(p)));
         out.add(new Site(Material.CHEST, "&6Marketplace",
                 "What other players list in their Pallets.",

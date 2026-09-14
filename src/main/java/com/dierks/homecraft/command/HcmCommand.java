@@ -27,7 +27,10 @@ import java.util.Map;
  *   <li>{@code /hcm give <printer|pc|vending|display|mailbox [variant]|pallet|arcade|…> [player]} — hand out a custom item. (admin)</li>
  *   <li>{@code /hcm market list} — list catalog + live prices. (hcm.market.list, op-only)</li>
  *   <li>{@code /hcm market price|history <item>} — inspect one item. (hcm.market.price, all)</li>
- *   <li>{@code /hcm market buy|sell <item> <qty>} — trade against the engine. (hcm.market.order)</li>
+ *   <li>{@code /hcm market sell <item> <qty>} — sell into the engine. (hcm.market.order)</li>
+ *   <li>{@code /hcm market buy <item> <qty>} — admin only (hcm.market.buy). Players order at
+ *       the store, where shipping is charged; this command pays no shipping and waits for
+ *       nothing, so leaving it open to everyone made every shipping tier pointless.</li>
  *   <li>{@code /hcm market resetstock <item|all>} — reseed stock + price from config. (admin)</li>
  *   <li>{@code /hcm market setstock <item> <amount>} — set one item's stock. (admin)</li>
  *   <li>{@code /hcm balance} — Vault money + Arcade tokens together. (hcm.market.price)</li>
@@ -658,7 +661,10 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             subs.add("history <item>");
         }
         if (sender.hasPermission("hcm.market.order")) {
-            subs.add("buy|sell <item> <qty>");
+            subs.add("sell <item> <qty>");
+        }
+        if (sender.hasPermission("hcm.market.buy")) {
+            subs.add("buy <item> <qty>");
         }
         if (sender.hasPermission("hcm.admin")) {
             subs.add("resetstock <item|all>");
@@ -771,6 +777,15 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         if (denyUnless(sender, "hcm.market.order")) {
             return;
         }
+        // Buying from the house market has to go through the store, where shipping is
+        // charged and waited for. This command bypassed both — and it was reachable by
+        // everyone, because hcm.market.order defaults to true and /hcm has no gate of its
+        // own. Closing the GUI button alone would have moved the hole, not shut it.
+        if (buy && !sender.hasPermission("hcm.market.buy")) {
+            sender.sendMessage(Text.of("&cOrders are placed at the store, not from a command."));
+            sender.sendMessage(Text.of("&7Right-click a PC and pick a shipping speed."));
+            return;
+        }
         if (!(sender instanceof Player player)) {
             sender.sendMessage(Text.of("&cOnly players can trade on the market."));
             return;
@@ -849,7 +864,10 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.of("&e/hcm balance &7- your money and Arcade tokens"));
         }
         if (sender.hasPermission("hcm.market.order")) {
-            sender.sendMessage(Text.of("&e/hcm market buy|sell <item> <qty> &7- trade"));
+            sender.sendMessage(Text.of("&e/hcm market sell <item> <qty> &7- sell into the market"));
+        }
+        if (sender.hasPermission("hcm.market.buy")) {
+            sender.sendMessage(Text.of("&e/hcm market buy <item> <qty> &7- admin buy, no shipping"));
         }
         sender.sendMessage(Text.of("&e/hcm museum [id] &7- browse the Mini Museum"));
         sender.sendMessage(Text.of("&e/hcm auction &7- open the Mini Auction House"));
@@ -1160,7 +1178,10 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("market")) {
-            addMatches(out, args[1], "list", "price", "history", "buy", "sell");
+            addMatches(out, args[1], "list", "price", "history", "sell");
+            if (sender.hasPermission("hcm.market.buy")) {
+                addMatches(out, args[1], "buy");
+            }
             if (sender.hasPermission("hcm.admin")) {
                 addMatches(out, args[1], "resetstock", "setstock");
             }

@@ -62,7 +62,7 @@ public final class HomeCraftManagement extends JavaPlugin {
      * and rendered as an empty slot. 7 = wild Mini spawns — rarer, much further out, a find
      * window measured in minutes — plus the grade stars, for a file an editor has flattened.
      */
-    static final int CONFIG_REVISION = 9;
+    static final int CONFIG_REVISION = 10;
 
     /**
      * Per-item daily caps (~2% sell / ~4% buy of {@code full_stock}), mirroring the
@@ -736,6 +736,20 @@ public final class HomeCraftManagement extends JavaPlugin {
                         + "line in both periods; it is 13% and the smallest. The new objectives "
                         + "(fish, distance on foot, hostiles, breeding, villager trades) are read "
                         + "from vanilla statistics, so they need no new listener.");
+            }
+        }
+        if (from < 10) {
+            // The screen stopped buying, so a title promising "instant buy/sell" now describes
+            // something that does not exist. This is exactly what the blind backfill cannot do:
+            // it only ADDS missing keys, so an existing config.yml would have kept the old
+            // sentence forever. An admin who wrote their own title keeps it.
+            if (replaceShippedDefault(c, "menus.market_title",
+                    "&1Market — instant buy/sell", "&1Sell to Crate")) {
+                log.add("Config migration: the market screen is called Sell to Crate and only "
+                        + "sells. Buying there was instant and free of shipping, so no player "
+                        + "would ever pick a shipping tier — which made the tiers, the Locker "
+                        + "and in-transit orders content that existed and was never used. "
+                        + "Selling needs no shipping because you are the one delivering.");
             }
         }
         if (from < CONFIG_REVISION) {

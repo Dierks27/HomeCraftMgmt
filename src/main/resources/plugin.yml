@@ -64,6 +64,7 @@ permissions:
       hcm.workbench.use: true
       hcm.printer.use: true
       hcm.market.order: true
+      hcm.market.buy: true
       hcm.market.limit.bypass: true
       hcm.protection.bypass: true
   hcm.use:
@@ -85,8 +86,17 @@ permissions:
       view your own balance (/hcm balance). Available to everyone — no PC needed.
     default: true
   hcm.market.order:
-    description: Buy from and sell to the dynamic market.
+    description: >-
+      Sell into the dynamic market (/hcm market sell). Selling needs no shipping —
+      you are the one delivering the goods — so this stays open to everyone.
     default: true
+  hcm.market.buy:
+    description: >-
+      Buy from the dynamic market by command (/hcm market buy), with NO shipping cost
+      and NO wait. Op-only, and it has to stay that way: players order at the store,
+      where a shipping tier is chosen and paid for. A command that skips both makes
+      every tier — and the Locker, and in-transit orders — pointless.
+    default: op
   hcm.market.limit.bypass:
     description: Exempt from the daily per-player buy AND sell limits (and per-item caps).
     default: op

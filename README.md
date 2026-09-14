@@ -75,6 +75,47 @@ point Gradle at it, or upgrade the wrapper:
 
 ---
 
+## Releases, and rolling one back
+
+Pushing to `main` cuts a release tagged from `project.version` in `build.gradle`,
+with the shaded jar attached. The version bump lives in its **own release PR**,
+never in the feature PR — so the sequence is: merge the feature, then merge a
+one-line release PR that bumps the version. A release that already exists is
+never rewritten; to publish again, bump the version.
+
+### Rolling back is not just swapping the jar
+
+**Database migrations here are forward-only. There are no down-migrations.** A
+newer jar upgrades the schema on first start and nothing brings it back down. So
+rolling back is a two-part procedure and **both halves are required**:
+
+1. **Restore the pre-migration copy of the database.** One is taken
+   automatically immediately before any migration runs — see `BackupService`.
+   Without this you are pointing an old jar at a newer schema.
+2. **Run the jar that matches that schema** — the release you are rolling back
+   *to*, not the one you are rolling back *from*.
+
+Check which you have before trusting a downloaded jar:
+
+```bash
+unzip -p HomeCraftManagement-<version>.jar plugin.yml | grep '^version'
+```
+
+> **Releases before `v0.28.0` may have the wrong jar attached.** Until the
+> release workflow was fixed, every push to `main` re-uploaded its build over
+> whichever release `project.version` still named — so a *feature* merge
+> replaced the **previous** release's jar with newer code, while the tag,
+> target and notes stayed correct. `v0.26.2` and `v0.27.0` have since been
+> rebuilt from their tags and are correct. For anything older, **the source at
+> each tag is right and only the attached binary may be wrong** — build from
+> the tag rather than trusting the download:
+>
+> ```bash
+> git checkout v0.24.0-wild-spawns && ./gradlew build
+> ```
+
+---
+
 ## Testing in-game
 
 1. **Get the items** (admin): `/hcm give pc`, `/hcm give printer`, or just craft

@@ -59,8 +59,29 @@ jobs:
             --title "$GITHUB_REF_NAME" --generate-notes \
           || gh release upload "$GITHUB_REF_NAME" build/libs/*.jar --clobber
 
-      # On every push to main, publish/refresh a versioned Release with the jar,
-      # so a downloadable build always tracks main without needing a tag push.
+      # On a push to main that carries a NEW project.version, cut the release for
+      # it. A version already released is left completely alone.
+      #
+      # It used to `--clobber` instead, to keep a downloadable build always
+      # tracking main without a tag push. That quietly corrupted the release
+      # history. The version bump lives in its own release PR, so a FEATURE
+      # merge reaches main while project.version still names the PREVIOUS
+      # release — and clobbering replaced that release's jar with the newer
+      # build. The tag, target and notes stayed correct while the binary behind
+      # them moved on, so v0.27.0's download was the v0.28.0 code carrying
+      # `version: '0.27.0-the-crate'` in its own plugin.yml.
+      #
+      # That is worse than a mislabel, because migrations here are forward-only
+      # with no down-migrations. Rolling back means restoring the pre-migration
+      # database copy AND running the matching jar — and the "matching" jar
+      # would have applied the very migration being rolled back, to the
+      # database just restored. The one recovery procedure there is did not
+      # work as written.
+      #
+      # The mid-window build is not lost: every run uploads the jar as an
+      # Actions artifact. If a downloadable main build is ever wanted again,
+      # give it a separate rolling `dev` prerelease tag that may clobber
+      # freely, and leave version tags written exactly once.
       - name: Publish Release from main
         if: github.ref == 'refs/heads/main'
         env:
@@ -70,7 +91,8 @@ jobs:
           VER=$(basename "$JAR" .jar | sed 's/^HomeCraftManagement-//')
           TAG="v$VER"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$JAR" --clobber
+            echo "$TAG is already released — leaving its jar untouched."
+            echo "Bump project.version in build.gradle to cut a new release."
           else
             gh release create "$TAG" "$JAR" --title "$TAG" \
               --generate-notes --target "$GITHUB_SHA"

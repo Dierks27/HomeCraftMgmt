@@ -365,10 +365,12 @@ public final class PluginConfig {
      * @param regionPadding blocks of margin around the building in the snapshotted region
      * @param lingerSeconds how long the building stays after a successful hand-over
      */
-    public record CourierBuilding(boolean enabled, int placeAtBlocks, int maxSlope,
+    public record CourierBuilding(boolean enabled, boolean debug, int placeAtBlocks, int maxSlope,
                                   int regionPadding, int foundationDepth, int lingerSeconds,
                                   String recipientName, java.util.Set<Material> avoidBlocks,
-                                  int waypointScanRadius, List<BuildingTemplate> buildings) {
+                                  int waypointScanRadius, int terrainCheckRadius,
+                                  int groundScanDepth, int maxLiquidPercent,
+                                  List<BuildingTemplate> buildings) {
     }
 
     /**
@@ -950,6 +952,7 @@ public final class PluginConfig {
 
         return new CourierBuilding(
                 c.getBoolean("courier.building.enabled", true),
+                c.getBoolean("courier.building.debug", true),
                 Math.max(32, c.getInt("courier.building.place_at_blocks", 220)),
                 Math.max(0, c.getInt("courier.building.max_slope", 3)),
                 Math.max(1, c.getInt("courier.building.region_padding", 4)),
@@ -958,6 +961,9 @@ public final class PluginConfig {
                 c.getString("courier.building.recipient_name", "Courier Recipient"),
                 readAvoidBlocks(c),
                 Math.max(1, c.getInt("courier.building.waypoint_scan_radius", 14)),
+                Math.max(1, c.getInt("courier.building.terrain_check_radius", 6)),
+                Math.max(4, c.getInt("courier.building.ground_scan_depth", 32)),
+                Math.max(0, Math.min(100, c.getInt("courier.building.max_liquid_percent", 10))),
                 List.copyOf(buildings));
     }
 

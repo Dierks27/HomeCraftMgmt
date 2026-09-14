@@ -48,6 +48,31 @@ public record DeliverySite(
         }
     }
 
+    /**
+     * The side of the capture box that is guaranteed to contain a structure under any rotation.
+     *
+     * <p>Bukkit does not specify which corner a structure rotation pivots around, so the
+     * structure can end up in any of the four quadrants around its placement origin, reaching at
+     * most {@code max(sizeX, sizeZ)} in each direction. A box of that span plus the padding, on
+     * each side of the placement origin, therefore contains every rotation.
+     *
+     * <p>The subtlety that bit once: this must be centred on the <b>placement origin</b>, not on
+     * the waypoint. The two differ by half the structure, and centring on the waypoint let a
+     * template of 11 or wider overflow the captured region — and a block outside the snapshot is
+     * never restored, so it stays in somebody's world for good.
+     */
+    public static int captureSide(int sizeX, int sizeZ, int padding) {
+        // Odd, so the box is exactly symmetric about the placement origin. An even side is one
+        // block short on the positive edge — which at padding 0 puts the far corner of the
+        // structure outside the region that gets restored.
+        return (Math.max(sizeX, sizeZ) + Math.max(0, padding)) * 2 + 1;
+    }
+
+    /** The minimum corner of that box, given where the structure will be placed. */
+    public static int captureOrigin(int placementOrigin, int side) {
+        return placementOrigin - side / 2;
+    }
+
     /** The world this site sits in, or null if an admin has removed it. */
     public World bukkitWorld() {
         return Bukkit.getWorld(world);

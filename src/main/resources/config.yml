@@ -281,6 +281,11 @@ courier:
   # was from a snapshot taken before the first block changed.
   building:
     enabled: true
+    # Log every refusal to place a building at INFO, with the job, the coordinates and the
+    # reason. On by default because the alternative — which is what 0.26.0 shipped — is a
+    # delivery that quietly arrives at an empty field with nothing anywhere to explain why.
+    # Set false once the numbers below are tuned; refusals then drop to FINE.
+    debug: true
     # How close the player must get before the site is built. NOT the ~100 blocks
     # that reads naturally: a server view-distance of 10 chunks is 160 blocks, so a
     # house placed at 100 would materialise in front of the player. At 220 it is
@@ -291,6 +296,16 @@ courier:
     # than this many blocks, the waypoint is rerolled. Terraforming somebody's
     # hillside cannot be undone by putting blocks back; picking a new field can.
     max_slope: 3
+    # Trees are cleared, not refused. Ground level is found by looking DOWN through leaves,
+    # trunks and undergrowth to real terrain, so a wood is a buildable field and only genuine
+    # relief rejects it. How far down to look before giving up:
+    ground_scan_depth: 32
+    # How much of the footprint may be water before the spot is refused. A shoreline is a fine
+    # place for a delivery; a lake is not.
+    max_liquid_percent: 10
+    # Radius of the flatness test, in blocks — roughly half the largest house. This runs while
+    # the waypoint is being chosen, so broken ground costs a reroll rather than a walk.
+    terrain_check_radius: 6
     # Margin around the building included in the snapshot, in blocks. The captured
     # region is deliberately larger than the house — Bukkit does not specify which
     # corner a structure rotation pivots around, so the box is sized to contain it

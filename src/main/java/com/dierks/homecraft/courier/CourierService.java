@@ -80,6 +80,13 @@ public final class CourierService {
         }
         buildings.start();
 
+        // Re-seed the live cache for everyone already online. start() runs on /hcm reload as
+        // well as on enable, and stop() clears the cache — so without this a reload silently
+        // stopped the approach check for every delivery in flight until its player relogged.
+        for (Player online : plugin.getServer().getOnlinePlayers()) {
+            onJoin(online);
+        }
+
         // Close out runs nobody finished, and take down the buildings they left behind. Jobs
         // carry their own deadline, so this only has to run often enough that a band slot
         // comes back in reasonable time — not on any tick.
@@ -147,9 +154,18 @@ public final class CourierService {
             return;
         }
         buildings.placeFor(job).thenAccept(placed -> {
-            if (placed && player.isOnline()) {
+            if (!player.isOnline()) {
+                return;
+            }
+            if (placed) {
                 player.sendMessage(Text.of("&7Someone is expecting you at &fx " + job.wayX()
                         + ", z " + job.wayZ() + "&7."));
+            } else if (buildings.wasRefused(job.id())) {
+                // The promise was made at accept; the thing that decides whether it is true
+                // runs 220 blocks later. If it turns out false, say so rather than letting the
+                // player walk the rest of the way to an empty field.
+                player.sendMessage(Text.of("&7No one could be found to take this one — "
+                        + "hand it in at the PC instead."));
             }
         });
     }
@@ -391,8 +407,12 @@ public final class CourierService {
         live.remove(player.getUniqueId());
         // Let the building stand a moment. Taking it down on the same tick as the payout would
         // delete the ground under the player's feet while they are still reading the message.
-        scheduleRelease(job.id(),
-                plugin.config().courier().building().lingerSeconds());
+        int linger = plugin.config().courier().building().lingerSeconds();
+        // Tell the expiry sweep to leave it alone until then. Without this the 60-second sweep
+        // reached it first — a delivered job is no longer ACTIVE, which is exactly what the
+        // sweep looks for — and the house vanished within a second of the payout.
+        buildings.holdUntil(job.id(), System.currentTimeMillis() + 1000L * linger);
+        scheduleRelease(job.id(), linger);
         return new Result(true, null, job, fee, cargoPaid, blend.multiplier(), shortfall);
     }
 

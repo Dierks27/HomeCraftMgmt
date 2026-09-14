@@ -39,8 +39,8 @@ public final class CourierSiteDao {
             try (PreparedStatement ps = c.prepareStatement(
                     "INSERT OR REPLACE INTO courier_sites(job_id,world,origin_x,origin_y,origin_z,"
                             + "size_x,size_y,size_z,template,rotation,door_x,door_y,door_z,"
-                            + "villager,state,snapshot,placed_at) "
-                            + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
+                            + "villager,state,snapshot,placed_at,player) "
+                            + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
                 ps.setLong(1, site.jobId());
                 ps.setString(2, site.world());
                 ps.setInt(3, site.originX());
@@ -58,6 +58,7 @@ public final class CourierSiteDao {
                 ps.setString(15, site.state().name());
                 ps.setBytes(16, site.snapshot());
                 ps.setLong(17, site.placedAt());
+                ps.setString(18, site.player() == null ? null : site.player().toString());
                 ps.executeUpdate();
             }
         }
@@ -176,8 +177,21 @@ public final class CourierSiteDao {
                 // an unreadable id just means we fall back to scanning the region for the mob
             }
         }
+        // Null for rows written before the column existed, and for a site whose owner could
+        // not be parsed. Either way the restore falls back to measuring against anybody, which
+        // is the old behaviour — safe, just less precise.
+        UUID owner = null;
+        String player = rs.getString("player");
+        if (player != null && !player.isBlank()) {
+            try {
+                owner = UUID.fromString(player);
+            } catch (IllegalArgumentException ignored) {
+                // fall through to null
+            }
+        }
         return new DeliverySite(
                 rs.getLong("job_id"),
+                owner,
                 rs.getString("world"),
                 rs.getInt("origin_x"), rs.getInt("origin_y"), rs.getInt("origin_z"),
                 rs.getInt("size_x"), rs.getInt("size_y"), rs.getInt("size_z"),

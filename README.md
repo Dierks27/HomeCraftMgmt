@@ -409,6 +409,18 @@ stay open, so you can work it off. Pay it down at the PC, in part or in full.
 keeps the fee fair: a creeper four thousand blocks out costs you money, not the
 whole delivery. Same price either way, so there's no clever choice to make.
 
+**It won't build on your stuff.** The waypoint refuses claimed land, but claims only
+cover what someone bothered to claim — so the footprint is also checked for
+*evidence* of building: planks, a crafting table, a bed, glass. None of those
+generate on their own, so finding one means the field is already somebody's,
+claimed or not. It also steers clear of villages, shipwrecks and ruins, which use
+the same materials. `reject_built_blocks: false` turns it off.
+
+**The house comes down when *you* walk away** — the player who took the run, not
+whoever happens to be online. It never comes down while *anyone* is standing in the
+footprint, though, because that rule is about not burying someone in spruce logs and
+it doesn't matter whose delivery it was. Log off and it restores right away.
+
 **Handing in at the PC still works** if the house doesn't appear for any reason, so
 nobody ends up stranded 1,800 blocks out because a structure failed to place.
 

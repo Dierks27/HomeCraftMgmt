@@ -499,6 +499,19 @@ public final class Database {
                 since  INTEGER NOT NULL
             );
             ALTER TABLE courier_jobs ADD COLUMN package_settled INTEGER NOT NULL DEFAULT 1;
+            """,
+
+            // v27 — whose delivery a site belongs to. The restore waits for the player to walk
+            // away, and "the player" has to mean the one who made the delivery: measuring
+            // against ANYONE online let a neighbour going about their own business hold a house
+            // standing on somebody else's run. Staying inside the footprint is the exception and
+            // stays everyone's, because that rule is about not suffocating whoever is standing
+            // there, and it does not matter whose delivery put the blocks above them.
+            //
+            // Null on rows written before this, which read as "no particular player" and fall
+            // back to the old any-player behaviour rather than restoring under somebody.
+            """
+            ALTER TABLE courier_sites ADD COLUMN player TEXT;
             """
     };
 

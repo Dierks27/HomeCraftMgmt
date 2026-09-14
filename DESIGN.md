@@ -1,7 +1,9 @@
-# HomeCraft Management — Plugin Design Specification (v17)
+# HomeCraft Management — Plugin Design Specification (v17.1)
 > **Purpose of this document:** the build spec for a custom Paper plugin. It is written to be handed to Claude Code (or any implementer) as the source of truth. Design decisions still open are marked **[DECISION]** with a recommended default.
 >
 > **v11 changelog:** Rebranded the online store from "Amazon" to **Crate** (`[www.Crate.craft](https://www.Crate.craft)`), with **Rush** (fast shipping), the **Pallet** (player seller box) and the **Locker** (delivery holding). Added the **Crate Marketplace** (universal player-to-player selling — *everything* is sellable, incl. Minis), **auto-categorization into departments** using the game's own item categories, an **admin ban list**, and the **PC-as-a-browser / "Sites"** architecture. Added **in-game economy displays** (TVs/tickers/boards) and a consolidated **Economy Risks & Safeguards** section. Recorded the **Phase 2.5.1 pricing fix** (proportional elasticity + integrated bulk pricing). Marked Phases 2.5 and 3 done.
+>
+> **v17.1 changelog (the Courier finds the ground):** A delivery into any forest silently built nothing. Ground level was read from `MOTION_BLOCKING`, which counts leaves — so a flat wood measured as a ten-block cliff against `max_slope: 3` and placement refused, with **no log line at any level** to say so. The refusal is now found by walking down through canopy and undergrowth to real terrain, the growth is cleared inside the captured region rather than the field being rejected for having trees on it, and **every refusal names itself** (`building.debug`). Five more defects found in the same pass and fixed here: the waypoint itself was recorded at **canopy height** (leaves report `isSolid()`), which aimed the placed-Mini and placed-entity safety scans at empty sky in exactly the forests where they mattered; `placeFor` had **no in-flight guard**, so a slow chunk load let a second placement snapshot a field that already had a house on it and overwrite the real undo record; the refusal was **retried every second** for the rest of the run, 25 chunk loads and an NBT reparse each time; the 60-second expiry sweep **beat `linger_seconds`** and pulled the house out from under the player; and the capture box was centred on the waypoint rather than the placement origin, so a template 11 wide **overflowed the snapshot** — and a block outside it is never restored. Schema unchanged; `config_revision` stays 9.
 >
 > **v17 changelog (the Courier's destination):** A delivery now **arrives somewhere**. A vanilla village house is placed at the waypoint as the player approaches, with a **villager** outside it to hand the crate to, and the field is **restored exactly as it was** when the run ends — from a palette-and-indices snapshot taken before the first block changed and held in SQLite, so the module needs **no WorldEdit dependency** and cleans up after a crash on its own. Also fixes two Phase 1 faults found while building it: **waypoint generation ran on the main thread**, loading and generating chunks up to four thousand blocks out (up to `max_rerolls` times per click) despite a code comment claiming otherwise — it is asynchronous now, and `accept` returns a future; the waypoint claim check used `canBuild`, which **short-circuits to "yes" for ops**, so an admin could be sent to deliver into somebody else's town; and the region scan only loaded the waypoint's own chunk, so reading the rest of the box would have loaded its neighbours one at a time on the main thread — the very thing the async placement exists to avoid. Schema v25 adds `courier_sites`. `config_revision` stays 9 — the new `courier.building` keys arrive through the leaf backfill.
 >
@@ -317,11 +319,30 @@ with a warning naming it, because Mojang renames these between versions and the 
 delivery that fails after the player has walked eighteen hundred blocks. Rotation is random from the
 four quarter-turns — free variety, no extra assets.
 
-*Placement rejects rather than flattens.* If the ground under the footprint varies by more than
-`max_slope`, the waypoint is rerolled. Terraforming somebody's hillside cannot be undone by putting
-blocks back; picking a different field can. A shallow gap under the house is closed by a foundation
+*Trees are cleared; hills are refused.* Ground level is found by looking **down** through leaves,
+trunks and undergrowth to real terrain (`Ground`), not by reading a heightmap — **every heightmap
+Minecraft keeps answers a different question**. `MOTION_BLOCKING`, which is what `getHighestBlockYAt`
+returns by default, is "the highest block that blocks motion or holds a fluid", so in a wood it
+reports the canopy and beside a lake the water surface. `OCEAN_FLOOR` is no better: its predicate is
+`blocksMotion()`, which leaves satisfy. `MOTION_BLOCKING_NO_LEAVES` drops the leaves and still stops
+on a trunk. There is no heightmap that means "the ground", so the walk down is the only honest answer
+— and it is also the only thing that can tell "a tree is in the way" (clear it) from "this is a lake"
+(deliver elsewhere), which look identical from above and need opposite answers.
+
+Real relief still refuses: ground varying by more than `max_slope` across the footprint, or a
+footprint more than `max_liquid_percent` water, is rerolled. Terraforming somebody's hillside cannot
+be undone by putting blocks back; picking a different field can. Vanilla puts villages in forests
+constantly, so a wood is a buildable field — the growth inside the region is cleared before placement
+and restored with everything else afterwards. A shallow gap under the house is closed by a foundation
 layer of the local surface material, filled only downward under blocks the structure placed and only
-inside the snapshotted region, so every block it adds is one the restore takes away.
+inside the snapshotted region.
+
+*The terrain test runs while the waypoint is chosen*, not only at placement. Terrain does not change
+during a delivery — a canopy will not grow in an hour — so a field that cannot be built on costs a
+reroll rather than a walk. Only the container scan stays at placement, because somebody really can
+put a chest down in the meantime. When placement is refused anyway, it is refused **once**, logged
+with the reason (`building.debug`), and the player is told at the waypoint rather than left to find
+an empty field.
 
 *The undo record is the whole design.* Before the first block changes, the region is captured as a
 **palette-plus-indices blob, GZIPped, into SQLite** (`courier_sites`) — a 28×28×16 box of mostly air
@@ -362,6 +383,12 @@ The cheap half of that — the tracked-placement query and the entity sweep — 
 waypoint is being rolled**, so a bad spot is rerolled onto a different field rather than becoming a job
 the player walks to and finds empty. The full block scan is thousands of reads, so it runs once, at
 placement, where it is also the last word: an hour is long enough for somebody to put a chest down.
+
+*The capture box is centred on where the building is put*, not on the waypoint — the two differ by
+half the structure. Since Bukkit does not say which corner a rotation pivots around, the structure can
+land in any quadrant around its placement origin, so the box is sized `(span + padding) × 2 + 1` about
+that origin, which provably contains every rotation. `CaptureBoxTest` pins it: a block outside the
+snapshot is captured by nothing and restored by nothing, so it stays in the world for good.
 
 *The villager is a fixture, not a mob.* No AI, invulnerable, silent, persistent, profession matched to
 the biome family, PDC-tagged with the job id. Right-click opens the hand-over and **never a trade

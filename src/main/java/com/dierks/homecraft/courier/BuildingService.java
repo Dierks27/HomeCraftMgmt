@@ -75,6 +75,25 @@ public final class BuildingService {
     /** Chunk key → job ids waiting for that chunk to load so their restore can run. */
     private final Map<Long, Set<Long>> pending = new HashMap<>();
 
+    /**
+     * Jobs with a placement in flight.
+     *
+     * <p>{@code standing} cannot do this job: it is only populated after the chunk batch
+     * resolves, which for ungenerated terrain is the normal case and takes far longer than the
+     * one second between approach checks. Without a reservation a second placement starts while
+     * the first is still loading, and both reach {@code build()} — the second then snapshots a
+     * field that <b>already has a house on it</b> and {@code INSERT OR REPLACE} overwrites the
+     * real undo record. The restore would then faithfully put the first house back, for good.
+     * That is the one outcome in this class that permanently damages a player's world.
+     */
+    private final Set<Long> placing = new HashSet<>();
+
+    /** Jobs whose site was refused, so a hopeless placement is attempted once and not 3,600 times. */
+    private final Set<Long> refused = new HashSet<>();
+
+    /** Job id → the moment its site may be swept away, so a delivery's linger is honoured. */
+    private final Map<Long, Long> deferredUntil = new HashMap<>();
+
     private final HomeCraftManagement plugin;
     private final CourierSiteDao dao;
     private final com.dierks.homecraft.storage.TrackedGroundDao ground;
@@ -98,7 +117,15 @@ public final class BuildingService {
     public void start() {
         standing.clear();
         pending.clear();
+        placing.clear();
+        refused.clear();
+        deferredUntil.clear();
         if (!config().enabled()) {
+            // Clear the template table too. Leaving it loaded meant turning buildings off with
+            // /hcm reload left a ready-to-place set behind that nothing would ever consult
+            // again but which reported itself as ready.
+            usable.clear();
+            templatesChecked = false;
             return;
         }
         validateTemplates();
@@ -132,7 +159,15 @@ public final class BuildingService {
             return;
         }
         int done = 0;
+        long now = System.currentTimeMillis();
         for (DeliverySite site : owing) {
+            // A just-delivered job is already non-ACTIVE, so without this the 60-second sweep
+            // beat the linger timer and pulled the house out from under a player still reading
+            // their payout message.
+            Long hold = deferredUntil.get(site.jobId());
+            if (hold != null && hold > now) {
+                continue;
+            }
             if (restoreNow(site)) {
                 done++;
             } else {
@@ -270,6 +305,14 @@ public final class BuildingService {
             done.complete(true);
             return done;
         }
+        if (refused.contains(job.id())) {
+            done.complete(false);
+            return done;
+        }
+        if (!placing.add(job.id())) {
+            done.complete(false); // already loading chunks for this job
+            return done;
+        }
         Location way = job.waypoint();
         if (way == null || way.getWorld() == null) {
             done.complete(false);
@@ -298,16 +341,23 @@ public final class BuildingService {
         CompletableFuture.allOf(loads.toArray(new CompletableFuture[0]))
                 .whenComplete((ignored, error) -> plugin.getServer().getScheduler()
                         .runTask(plugin, () -> {
-                            if (error != null) {
-                                done.complete(false);
-                                return;
-                            }
                             try {
-                                done.complete(build(job, way));
+                                if (error != null) {
+                                    refuse(job, way, "the chunks there could not be loaded ("
+                                            + error + ")");
+                                    done.complete(false);
+                                    return;
+                                }
+                                boolean built = build(job, way);
+                                if (!built) {
+                                    refused.add(job.id());
+                                }
+                                done.complete(built);
                             } catch (Exception e) {
-                                plugin.getLogger().warning("Courier site placement failed for job "
-                                        + job.id() + ": " + e);
+                                refuse(job, way, "placement threw " + e);
                                 done.complete(false);
+                            } finally {
+                                placing.remove(job.id());
                             }
                         }));
         return done;
@@ -335,22 +385,39 @@ public final class BuildingService {
         int sz = Math.max(1, size.getBlockZ());
         int span = Math.max(sx, sz);
 
-        // Ground level under the waypoint, re-read now the chunk is really here.
-        int baseY = world.getHighestBlockYAt(way.getBlockX(), way.getBlockZ()) + 1;
+        // Real ground under the waypoint, found by looking through the canopy rather than
+        // measuring it — see Ground.
+        Ground.Column centre = Ground.solid(world, way.getBlockX(), way.getBlockZ(),
+                cfg.groundScanDepth());
+        if (!centre.isGround()) {
+            refuse(job, way, centre.kind() == Ground.Kind.LIQUID
+                    ? "the drop-off is on water" : "no solid ground under the drop-off");
+            return false;
+        }
+        int baseY = centre.y() + 1;
 
-        if (!groundIsBuildable(world, way.getBlockX(), way.getBlockZ(), span + 2,
-                baseY, cfg.maxSlope())) {
+        String terrain = groundIsBuildable(world, way.getBlockX(), way.getBlockZ(), span + 2,
+                centre.y(), cfg);
+        if (terrain != null) {
+            refuse(job, way, terrain);
             return false;
         }
 
-        // The snapshot box is deliberately larger than the house. Bukkit does not specify
-        // which corner a rotation pivots around, so a box of twice the span centred on the
-        // waypoint is the only size that is certainly big enough whichever way it turns out —
-        // and a box of air gzips down to almost nothing, so the generosity is close to free.
+        // Where the structure will actually be put. Everything below is sized around THIS
+        // point rather than the waypoint, and that distinction is load-bearing: Bukkit does not
+        // say which corner a rotation pivots around, so the structure can occupy any of the
+        // four quadrants around its placement origin, reaching at most `span` in each
+        // direction. A box of `span + pad` around the placement origin therefore contains it
+        // whichever way it turns. The previous version centred the box on the WAYPOINT, which
+        // is offset from the origin by half the structure — so a template of 11 or wider
+        // overflowed the captured region, and any block outside the snapshot is never restored.
+        Location at = new Location(world, way.getBlockX() - sx / 2, baseY,
+                way.getBlockZ() - sz / 2);
+
         int pad = cfg.regionPadding();
-        int side = span * 2 + pad * 2;
-        int originX = way.getBlockX() - side / 2;
-        int originZ = way.getBlockZ() - side / 2;
+        int side = DeliverySite.captureSide(sx, sz, pad);
+        int originX = DeliverySite.captureOrigin(at.getBlockX(), side);
+        int originZ = DeliverySite.captureOrigin(at.getBlockZ(), side);
         int originY = Math.max(world.getMinHeight(), baseY - pad);
         int height = Math.min(world.getMaxHeight() - originY, sy + pad * 2);
 
@@ -389,8 +456,11 @@ public final class BuildingService {
         standing.put(job.id(), site);
 
         try {
-            Location at = new Location(world, way.getBlockX() - sx / 2, baseY,
-                    way.getBlockZ() - sz / 2);
+            // Snapshot first, then clear, then place. The trees have to be inside the captured
+            // region or the restore cannot put them back — which is why this runs after the
+            // capture above and is bounded by that same region.
+            clearGrowth(world, originX, originY, originZ, side, height, side, baseY, sy + 2);
+
             // includeEntities false: the template's own villagers are not ours and would not
             // be tagged, tracked, or cleaned up.
             structure.place(at, false, rotation, Mirror.NONE, -1, 1.0f, new Random());
@@ -403,9 +473,12 @@ public final class BuildingService {
             BuildingSnapshot.clearContainers(world, originX, originY, originZ, side, height, side);
 
             Location door = findDoor(world, originX, originY, originZ, side, height, side,
-                    way.getBlockX(), way.getBlockZ());
+                    at.getBlockX(), at.getBlockZ());
             if (door == null) {
-                door = new Location(world, way.getBlockX() + 0.5, baseY, way.getBlockZ() + 0.5);
+                // Outside the structure, not at the waypoint: the waypoint is the middle of
+                // the footprint, so falling back to it spawned the recipient inside the house
+                // they are supposed to be standing in front of.
+                door = outsideSpot(world, at, sx, sz, baseY, way);
             }
 
             Villager villager = spawnRecipient(job, door, group);
@@ -529,8 +602,28 @@ public final class BuildingService {
         if (world == null) {
             return "no world";
         }
+        PluginConfig.CourierBuilding cfg = config();
+
+        // Terrain first, and it is checked HERE rather than only at placement because terrain
+        // does not change during a delivery. A canopy will not grow in an hour, so a field that
+        // cannot be built on should cost a reroll now, not a walk to an empty field later.
+        Ground.Column centre = Ground.solid(world, at.getBlockX(), at.getBlockZ(),
+                cfg.groundScanDepth());
+        if (!centre.isGround()) {
+            return centre.kind() == Ground.Kind.LIQUID ? "water" : "no solid ground";
+        }
+        String terrain = groundIsBuildable(world, at.getBlockX(), at.getBlockZ(),
+                cfg.terrainCheckRadius() * 2 + 1, centre.y(), cfg);
+        if (terrain != null) {
+            return terrain;
+        }
+
+        // The box for the remaining checks hangs off the real ground, not off the location's
+        // own Y. That Y used to be canopy height, which put this whole scan up in the air —
+        // so the tracked-Mini and placed-entity checks, the two things this method exists for,
+        // were searching empty sky in exactly the forests where they mattered.
         int side = radius * 2 + 1;
-        int oy = Math.max(world.getMinHeight(), at.getBlockY() - radius);
+        int oy = Math.max(world.getMinHeight(), centre.y() - radius);
         int height = Math.min(world.getMaxHeight() - oy, side);
         String entity = placedEntityIn(world, at.getBlockX() - radius, oy, at.getBlockZ() - radius,
                 side, height, side);
@@ -542,32 +635,114 @@ public final class BuildingService {
     }
 
     /**
-     * True if the ground across the footprint is flat enough to build on.
+     * Why this footprint cannot be built on, or null if it can.
      *
-     * <p>Rejecting is cheaper than flattening. A delivery that lands on a cliff can simply be
-     * rolled again; a plugin that terraforms somebody's hillside to make room cannot be undone
-     * by putting blocks back.
+     * <p>Returns a reason rather than a boolean so the refusal can say what it was — a silent
+     * {@code return false} here is what made a delivery arrive at an empty field with nothing
+     * in the log to explain it.
+     *
+     * <p>Rejecting is still cheaper than flattening: a delivery that lands on a cliff can be
+     * rolled again, but a plugin that terraforms somebody's hillside cannot undo it by putting
+     * blocks back. Trees are the exception and always were — they are cleared, not refused,
+     * because vanilla puts villages in forests constantly and a wood is not a cliff.
      */
-    private boolean groundIsBuildable(World world, int centreX, int centreZ, int side,
-                                      int baseY, int maxSlope) {
+    private String groundIsBuildable(World world, int centreX, int centreZ, int side,
+                                     int centreGroundY, PluginConfig.CourierBuilding cfg) {
         int half = side / 2;
         int min = Integer.MAX_VALUE;
         int max = Integer.MIN_VALUE;
+        int liquid = 0;
+        int columns = 0;
         for (int x = centreX - half; x <= centreX + half; x++) {
             for (int z = centreZ - half; z <= centreZ + half; z++) {
-                int y = world.getHighestBlockYAt(x, z);
-                Block ground = world.getBlockAt(x, y, z);
-                if (ground.isLiquid()) {
-                    return false;
+                columns++;
+                Ground.Column column = Ground.solid(world, x, z, cfg.groundScanDepth());
+                if (column.kind() == Ground.Kind.LIQUID) {
+                    liquid++;
+                    continue;
                 }
-                min = Math.min(min, y);
-                max = Math.max(max, y);
-                if (max - min > maxSlope) {
-                    return false;
+                if (!column.isGround()) {
+                    return "no solid ground at x " + x + ", z " + z;
+                }
+                min = Math.min(min, column.y());
+                max = Math.max(max, column.y());
+            }
+        }
+        // A shoreline is a good place for a delivery; a lake is not. Counting rather than
+        // refusing on the first wet column is the difference between the two.
+        int allowed = Math.max(0, columns * cfg.maxLiquidPercent() / 100);
+        if (liquid > allowed) {
+            return liquid + " of " + columns + " columns are water (at most " + allowed
+                    + " allowed)";
+        }
+        if (min > max) {
+            return "the whole footprint is water";
+        }
+        if (max - min > cfg.maxSlope()) {
+            return "ground varies by " + (max - min) + " blocks across the footprint (max "
+                    + cfg.maxSlope() + ")";
+        }
+        if (Math.abs(centreGroundY - max) > cfg.maxSlope()) {
+            return "the drop-off sits " + Math.abs(centreGroundY - max)
+                    + " blocks off the surrounding ground";
+        }
+        return null;
+    }
+
+    /**
+     * Take out whatever is growing where the house goes.
+     *
+     * <p>Only clutter — leaves, trunks, undergrowth — and only inside the snapshotted region,
+     * so every block removed is one the restore puts back. Real terrain is left alone: this
+     * clears a wood, it does not level a hill.
+     */
+    private void clearGrowth(World world, int ox, int oy, int oz, int sizeX, int sizeY, int sizeZ,
+                             int baseY, int clearHeight) {
+        int from = Math.max(oy, baseY);
+        int to = Math.min(oy + sizeY - 1, baseY + clearHeight);
+        for (int y = from; y <= to; y++) {
+            for (int x = ox; x < ox + sizeX; x++) {
+                for (int z = oz; z < oz + sizeZ; z++) {
+                    Block block = world.getBlockAt(x, y, z);
+                    Material type = block.getType();
+                    if (type.isAir() || block.isLiquid()) {
+                        continue;
+                    }
+                    if (Ground.isClutter(type)) {
+                        block.setType(Material.AIR, false);
+                    }
                 }
             }
         }
-        return Math.abs(baseY - 1 - max) <= maxSlope;
+    }
+
+    /**
+     * Say why a delivery has no building, once, where somebody will see it.
+     *
+     * <p>At INFO while {@code building.debug} is on, because the alternative — which is what
+     * shipped — is a refusal that leaves no trace anywhere at any log level, and a player who
+     * walked 460 blocks to an empty field with nothing to explain it.
+     */
+    private void refuse(CourierJob job, Location way, String reason) {
+        refused.add(job.id());
+        String line = "Courier job " + job.id() + ": no building at x " + way.getBlockX()
+                + ", z " + way.getBlockZ() + " in " + job.world() + " — " + reason
+                + ". The run hands in at the PC.";
+        if (config().debug()) {
+            plugin.getLogger().info(line);
+        } else {
+            plugin.getLogger().fine(() -> line);
+        }
+    }
+
+    /** True if this job has been refused a building, so nothing retries it. */
+    public boolean wasRefused(long jobId) {
+        return refused.contains(jobId);
+    }
+
+    /** Hold a site against the expiry sweep until {@code until}, so a linger is honoured. */
+    public void holdUntil(long jobId, long until) {
+        deferredUntil.put(jobId, until);
     }
 
     /**
@@ -642,6 +817,35 @@ public final class BuildingService {
             }
         }
         return null;
+    }
+
+    /**
+     * Somewhere to stand clear of the building, for when no door could be found.
+     *
+     * <p>Walks outwards from the structure until it finds open ground. The old fallback was the
+     * waypoint itself, which is the centre of the footprint — so a template whose door the scan
+     * could not identify put the recipient inside its own walls.
+     */
+    private Location outsideSpot(World world, Location at, int sx, int sz, int baseY,
+                                 Location way) {
+        int span = Math.max(sx, sz);
+        int[][] bearings = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}};
+        for (int step = span / 2 + 1; step <= span + 3; step++) {
+            for (int[] bearing : bearings) {
+                int x = at.getBlockX() + sx / 2 + bearing[0] * step;
+                int z = at.getBlockZ() + sz / 2 + bearing[1] * step;
+                Ground.Column column = Ground.solid(world, x, z, config().groundScanDepth());
+                if (!column.isGround()) {
+                    continue;
+                }
+                Block feet = world.getBlockAt(x, column.y() + 1, z);
+                Block head = world.getBlockAt(x, column.y() + 2, z);
+                if (feet.getType().isAir() && head.getType().isAir()) {
+                    return new Location(world, x + 0.5, column.y() + 1, z + 0.5);
+                }
+            }
+        }
+        return new Location(world, way.getBlockX() + 0.5, baseY, way.getBlockZ() + 0.5);
     }
 
     /**
@@ -784,6 +988,8 @@ public final class BuildingService {
 
     /** Drop the record — only ever called once the blocks are genuinely back. */
     private void forget(long jobId) {
+        deferredUntil.remove(jobId);
+        refused.remove(jobId);
         DeliverySite site = standing.remove(jobId);
         if (site != null) {
             for (long chunk : site.chunks()) {

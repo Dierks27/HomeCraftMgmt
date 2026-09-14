@@ -312,6 +312,12 @@ vanilla village buildings picked to match the biome, so there's nothing extra to
 install, and every structure key is checked once at startup (Mojang renames them
 between versions; anything missing is dropped with a warning naming it).
 
+Forests are fine — the trees inside the footprint are cleared and put back
+afterwards. Only real relief (or a lake) makes it pick a different field, and it
+works that out while choosing the waypoint, so a bad spot costs a reroll instead
+of a walk. If it does refuse, it says so in the console and tells you at the
+drop-off rather than leaving you to find an empty field.
+
 When the run ends — delivered, expired, abandoned, or the server stopping — **the
 field goes back exactly as it was**, from a snapshot taken before the first block
 moved. That snapshot lives in the plugin's own database, so this needs no

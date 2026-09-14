@@ -347,6 +347,21 @@ moment the delivery ends however it ends. One belonging to a finished job is
 removed on sight. It drops on death by default — the grave is how you get it back
 — and `package.keep_on_death` makes it kinder for the younger players.
 
+**Losing it costs money.** The fee is what the run would have paid on foot, times
+`package.loss_multiplier` (1.0 out of the box), so a lost crate cancels the run
+out — you walked it for nothing. It's charged when a run ends *without the crate
+coming back*, never just for failing the run: come back with it in your bag and
+you've only lost the payout. Log out to dodge it and it settles on your next join
+instead, which is the point.
+
+Can't pay it all? The rest becomes **debt**, and debt closes the courier board and
+nothing else — the market, the shops, your Pallets and every other way of earning
+stay open, so you can work it off. Pay it down at the PC, in part or in full.
+
+**You can buy a replacement** at any PC for exactly the same amount, which is what
+keeps the fee fair: a creeper four thousand blocks out costs you money, not the
+whole delivery. Same price either way, so there's no clever choice to make.
+
 **Handing in at the PC still works** if the house doesn't appear for any reason, so
 nobody ends up stranded 1,800 blocks out because a structure failed to place.
 

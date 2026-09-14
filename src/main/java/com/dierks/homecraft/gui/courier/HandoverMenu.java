@@ -61,14 +61,21 @@ public final class HandoverMenu extends Menu {
                 || com.dierks.homecraft.courier.CourierPackage.carried(player, job.id());
 
         if (needsCrate) {
+            // The "no crate" case names the way out. Somebody standing at the doorstep
+            // without the parcel has already had the bad surprise; leaving them to guess
+            // whether the run is salvageable is the avoidable part.
+            double cost = courier.lossFee(job);
             set(20, Menus.icon(inHand ? Material.LIME_DYE
                             : carried ? Material.YELLOW_DYE : Material.GRAY_DYE,
-                    inHand ? "&aCrate in hand" : carried ? "&eCrate in your bag" : "&7No crate",
+                    inHand ? "&aCrate in hand" : carried ? "&eCrate in your bag" : "&cNo crate",
                     inHand ? "&7Ready to hand over."
                             : carried ? "&7Hold it out to them first."
                             : "&7You are not carrying this delivery.",
                     "&8—",
-                    "&8They want it handed over, not described."), null);
+                    carried ? "&8They want it handed over, not described."
+                            : "&8A replacement costs " + plugin.economy().format(cost),
+                    carried ? "" : "&8at any PC. Ending the run without",
+                    carried ? "" : "&8one costs the same."), null);
         }
 
         set(22, Menus.icon(inHand ? Material.LIME_DYE : Material.GRAY_DYE,

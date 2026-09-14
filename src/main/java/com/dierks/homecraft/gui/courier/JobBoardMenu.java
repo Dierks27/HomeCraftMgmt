@@ -58,6 +58,31 @@ public final class JobBoardMenu extends Menu {
                 "&8Walking pays most. Flying pays least.",
                 "&8Creative flight pays nothing."), null);
 
+        // An unpaid crate closes the board — and only the board. It is shown here rather than
+        // hidden behind a failed click, with the amount and the way to clear it in one tile,
+        // because a debt you cannot see is indistinguishable from the plugin being broken.
+        double owed = courier.debt(player);
+        if (owed > 0) {
+            double balance = plugin.economy().balance(player);
+            boolean canPay = balance > 0;
+            set(22, Menus.icon(Material.REDSTONE, "&cYou owe " + plugin.economy().format(owed),
+                    "&7A crate you took never arrived.",
+                    "&7No new runs until it is paid.",
+                    "&8—",
+                    "&8Everything else stays open —",
+                    "&8the market, the shops, your Pallets.",
+                    "&8—",
+                    canPay ? "&ePay what you can &7— " + plugin.economy().format(
+                            Math.min(owed, balance))
+                            : "&8You have nothing to pay with."), canPay ? e -> {
+                var r = courier.payDebt(player, Math.min(owed, plugin.economy().balance(player)));
+                if (!r.ok()) {
+                    player.sendMessage(Text.of("&c" + r.error()));
+                }
+                refresh();
+            } : null);
+        }
+
         CourierJob.Band[] bands = CourierJob.Band.values();
         for (int i = 0; i < BAND_SLOTS.length && i < bands.length; i++) {
             CourierJob.Band band = bands[i];
@@ -65,6 +90,12 @@ public final class JobBoardMenu extends Menu {
             double[] range = courier.estimate(band);
             var cfg = plugin.config().courier().band(band);
             if (cfg == null) {
+                continue;
+            }
+            if (owed > 0) {
+                set(BAND_SLOTS[i], Menus.icon(Material.GRAY_DYE, "&8" + band.display(),
+                        "&8" + cfg.min() + "–" + cfg.max() + " blocks",
+                        "&8—", "&8Settle up first."), null);
                 continue;
             }
             if (left <= 0) {
@@ -126,14 +157,7 @@ public final class JobBoardMenu extends Menu {
 
         if (plugin.config().courier().packageEnabled()
                 && job.type() == CourierJob.Type.COURIER) {
-            boolean carried = com.dierks.homecraft.courier.CourierPackage
-                    .carried(player, job.id());
-            set(20, Menus.icon(carried ? Material.CHEST : Material.GRAY_DYE,
-                    carried ? "&6Crate" : "&7Crate missing",
-                    carried ? "&7You are carrying it." : "&7It is not in your bag.",
-                    "&8—",
-                    carried ? "&8Hand it to them in person."
-                            : "&8Check where you died, or a chest at home."), null);
+            crateTile(courier, job);
         }
 
         set(22, Menus.icon(Material.LIME_DYE, "&aHand it over",
@@ -178,6 +202,44 @@ public final class JobBoardMenu extends Menu {
             player.sendMessage(Text.of("&7Most of that distance was not travelled, "
                     + "so the fee was reduced."));
         }
+    }
+
+    /**
+     * The crate: whether you have it, what losing it costs, and how to replace it.
+     *
+     * <p>The replacement is on this screen rather than being something you have to know about,
+     * because the moment a player needs it is the moment they have just discovered the crate
+     * is gone — and the alternative is a four-thousand-block walk that cannot be finished.
+     * The price is the same as the loss fee, so there is no cheaper way out of either.
+     */
+    private void crateTile(CourierService courier, CourierJob job) {
+        boolean carried = com.dierks.homecraft.courier.CourierPackage.carried(player, job.id());
+        double cost = courier.lossFee(job);
+        if (carried) {
+            set(20, Menus.icon(Material.CHEST, "&6Crate",
+                    "&7You are carrying it.",
+                    "&8—",
+                    "&8Hand it to them in person.",
+                    cost > 0 ? "&8Losing it costs " + plugin.economy().format(cost) + "."
+                            : "&8Losing it costs nothing."), null);
+            return;
+        }
+        boolean affordable = cost <= 0 || plugin.economy().has(player, cost);
+        set(20, Menus.icon(affordable ? Material.HOPPER : Material.GRAY_DYE,
+                "&cCrate missing",
+                "&7It is not in your bag.",
+                "&8—",
+                "&8Check where you died, or a chest at home.",
+                "&8—",
+                "&7Replacement: &6" + plugin.economy().format(cost),
+                affordable ? "&eClick to buy one"
+                        : "&8You cannot afford one right now."), affordable ? e -> {
+            var r = courier.buyReplacement(player);
+            if (!r.ok()) {
+                player.sendMessage(Text.of("&c" + r.error()));
+            }
+            refresh();
+        } : null);
     }
 
     private Material icon(CourierJob.Band band) {

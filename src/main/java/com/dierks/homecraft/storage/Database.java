@@ -478,6 +478,27 @@ public final class Database {
             );
             CREATE INDEX IF NOT EXISTS idx_courier_sites_state ON courier_sites (state);
             CREATE INDEX IF NOT EXISTS idx_courier_sites_chunk ON courier_sites (world, origin_x, origin_z);
+            """,
+
+            // v26 — the crate's loss fee and the debt it can leave behind. A package is
+            // worthless, so the fee is not compensation for an item — it is what stops the
+            // crate being something you can shrug off, and it is the only reason carrying it
+            // is a responsibility rather than a decoration.
+            //
+            // `package_settled` is the piece that makes it honest when somebody logs off. A
+            // run that closes without a hand-over cannot be settled there and then if nobody
+            // is there to look in, so it is marked 0 and settled on their next join — where
+            // the answer is simply whether the crate came back with them. Without it, logging
+            // out would be a way to lose the crate for free, which is both trivial to find
+            // and the exact behaviour the fee exists to discourage. Existing rows default to
+            // 1: nothing owed, nothing to check.
+            """
+            CREATE TABLE IF NOT EXISTS courier_debt (
+                player TEXT PRIMARY KEY,
+                amount REAL    NOT NULL DEFAULT 0,
+                since  INTEGER NOT NULL
+            );
+            ALTER TABLE courier_jobs ADD COLUMN package_settled INTEGER NOT NULL DEFAULT 1;
             """
     };
 

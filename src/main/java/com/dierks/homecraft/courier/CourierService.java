@@ -45,6 +45,7 @@ public final class CourierService {
 
     private final HomeCraftManagement plugin;
     private final CourierDao dao;
+    private final com.dierks.homecraft.storage.CourierDebtDao debts;
     private final WaypointService waypoints;
     private final BuildingService buildings;
 
@@ -63,9 +64,12 @@ public final class CourierService {
     private BukkitTask approach;
     private BukkitTask presence;
 
-    public CourierService(HomeCraftManagement plugin, CourierDao dao, BuildingService buildings) {
+    public CourierService(HomeCraftManagement plugin, CourierDao dao,
+                          com.dierks.homecraft.storage.CourierDebtDao debts,
+                          BuildingService buildings) {
         this.plugin = plugin;
         this.dao = dao;
+        this.debts = debts;
         this.buildings = buildings;
         this.waypoints = new WaypointService(plugin, buildings);
     }
@@ -102,7 +106,7 @@ public final class CourierService {
                     for (Player online : plugin.getServer().getOnlinePlayers()) {
                         CourierJob job = live.get(online.getUniqueId());
                         if (job != null && job.expired(now)) {
-                            CourierPackage.destroy(online, job.id());
+                            closeAndSettle(online, job);
                         }
                     }
                     live.values().removeIf(j -> j.expired(now));
@@ -204,6 +208,10 @@ public final class CourierService {
         if (job != null) {
             live.put(player.getUniqueId(), job);
         }
+        // Runs that ended while they were away, settled now that there is somebody to ask
+        // whether the crate came back. Before the orphan sweep, and that order matters: the
+        // sweep destroys exactly the crates the settlement needs to see.
+        settleUnsettled(player);
         // A package outlives its job only when something went wrong between the payout and the
         // cleanup — a crash, most likely. Anything not belonging to the run they are on now is
         // removed on sight, which is also the backstop for any route that forgets to tidy up.
@@ -226,7 +234,9 @@ public final class CourierService {
             if (job != null && job.expired(System.currentTimeMillis())) {
                 dao.finish(job.id(), CourierJob.State.EXPIRED);
                 live.remove(player.getUniqueId());
-                CourierPackage.destroy(player, job.id());
+                // Settle rather than simply destroy: the player is right here, so whether the
+                // crate came back can be answered now instead of being deferred to a join.
+                closeAndSettle(player, job);
                 buildings.finished(job.id());
                 return null;
             }
@@ -283,6 +293,15 @@ public final class CourierService {
         }
         if (active(player) != null) {
             return failed("You already have a run on. Finish or abandon it first.");
+        }
+        // A crate you never brought back closes the board, and nothing else. The market, the
+        // Marketplace, the shops and every other way of earning stay open — otherwise a debt
+        // incurred by a ten-year-old losing a parcel would lock them out of the economy with
+        // no way to work it off, which is the opposite of a consequence.
+        double owing = debt(player);
+        if (owing > 0) {
+            return failed("You owe " + plugin.economy().format(owing)
+                    + " for a crate that never arrived. Pay it at the PC first.");
         }
         PluginConfig.CourierBand b = cfg.band(band);
         if (b == null || b.perDay() <= 0) {
@@ -517,9 +536,232 @@ public final class CourierService {
             return Result.fail("Could not drop that run — try again.");
         }
         live.remove(player.getUniqueId());
-        CourierPackage.destroy(player, job.id());
+        // Giving the run back with the crate in hand costs nothing; giving it back without
+        // one is the same loss as any other. Dropping a run is not itself a chargeable event.
+        closeAndSettle(player, job);
         buildings.finished(job.id());
         return new Result(true, null, job, 0, 0, 0, false);
+    }
+
+    // ---- the crate: losing it, owing for it, replacing it ---------------------
+
+    /**
+     * What losing this run's crate costs — and what a replacement sells for.
+     *
+     * <p>Derived from what the run would have paid <b>on foot</b>, so at the shipped
+     * multiplier of 1.0 a lost crate cancels the run out: you walked it for nothing. That is
+     * the whole design in one number. It is deliberately not the actual payout, which depends
+     * on how the player travelled and is not known until they arrive — a price you cannot see
+     * until after you have lost the thing is not a deterrent, it is a surprise.
+     *
+     * <p>Uses the job's <b>locked</b> distance, so the figure quoted on the board when the run
+     * was taken is the figure charged at the end of it.
+     */
+    public double lossFee(CourierJob job) {
+        PluginConfig.Courier cfg = plugin.config().courier();
+        if (job == null || job.type() != CourierJob.Type.COURIER || !cfg.packageEnabled()) {
+            return 0;
+        }
+        return round(fee(cfg, job.lockedDistance(), 1.0) * cfg.packageLossMultiplier());
+    }
+
+    /** What this player owes for crates that did not come back. */
+    public double debt(Player player) {
+        try {
+            return debts.owed(player.getUniqueId());
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to read courier debt: " + e.getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * Pay off as much of the debt as the player can afford, or as much as they asked for.
+     *
+     * <p>Partial payment is allowed on purpose. A debt you can only clear in one go is a debt
+     * that traps somebody below the threshold indefinitely, and the point of this number is
+     * that it can be worked off.
+     */
+    public Result payDebt(Player player, double amount) {
+        if (!plugin.sandbox().check(player, "courier debt")) {
+            return Result.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
+        double owed = debt(player);
+        if (owed <= 0) {
+            return Result.fail("You do not owe anything.");
+        }
+        double pay = round(Math.min(owed, Math.max(0, amount)));
+        if (pay <= 0) {
+            return Result.fail("Nothing to pay.");
+        }
+        if (!plugin.economy().has(player, pay)) {
+            return Result.fail("You cannot afford " + plugin.economy().format(pay) + ".");
+        }
+        if (!plugin.economy().withdraw(player, pay)) {
+            return Result.fail("Could not take that payment — try again.");
+        }
+        try {
+            double left = debts.subtract(player.getUniqueId(), pay);
+            player.sendMessage(Text.of(left <= 0
+                    ? "&aPaid off. The courier board is open to you again."
+                    : "&7Paid &6" + plugin.economy().format(pay) + "&7. Still owing &c"
+                            + plugin.economy().format(left) + "&7."));
+            return new Result(true, null, null, 0, 0, 0, false);
+        } catch (SQLException e) {
+            // The money is already gone, so put it back rather than charge for nothing.
+            plugin.economy().deposit(player, pay);
+            plugin.getLogger().severe("Failed to reduce courier debt: " + e.getMessage());
+            return Result.fail("Could not record that payment — nothing was charged.");
+        }
+    }
+
+    /**
+     * Buy a fresh crate for the run in progress.
+     *
+     * <p>The escape hatch that keeps the loss fee fair. Without it, a crate lost to a creeper
+     * four thousand blocks out ends the run and charges for the privilege, with nothing the
+     * player can do about it; with it, the loss costs money and the delivery goes on. The
+     * price is the loss fee, so replacing a crate and losing one come to the same thing —
+     * there is no cheaper way out and no reason to prefer either.
+     */
+    public Result buyReplacement(Player player) {
+        PluginConfig.Courier cfg = plugin.config().courier();
+        if (!plugin.sandbox().check(player, "courier replacement")) {
+            return Result.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
+        }
+        if (!cfg.packageEnabled()) {
+            return Result.fail("Deliveries do not use a crate.");
+        }
+        CourierJob job = active(player);
+        if (job == null) {
+            return Result.fail("You have no run on.");
+        }
+        if (job.type() != CourierJob.Type.COURIER) {
+            return Result.fail("A trade run carries your own goods, not a crate.");
+        }
+        // Never two crates for one job: the hand-over takes one and the other would be an
+        // orphan with a live job's id on it, which is the one thing the sweep cannot catch.
+        if (CourierPackage.carried(player, job.id())) {
+            return Result.fail("You already have this run's crate.");
+        }
+        double cost = lossFee(job);
+        if (cost > 0) {
+            if (!plugin.economy().has(player, cost)) {
+                return Result.fail("A replacement costs " + plugin.economy().format(cost)
+                        + " and you cannot afford it.");
+            }
+            if (!plugin.economy().withdraw(player, cost)) {
+                return Result.fail("Could not take that payment — try again.");
+            }
+        }
+        CourierPackage.give(plugin, player, job);
+        player.sendMessage(Text.of("&7A replacement crate, &6" + plugin.economy().format(cost)
+                + "&7. Try not to lose this one."));
+        return new Result(true, null, job, 0, 0, 0, false);
+    }
+
+    /**
+     * Account for a run's crate now, with the player in front of us.
+     *
+     * <p>Two outcomes and no others: the crate is here, so it is destroyed and nothing is
+     * owed; or it is not, so the fee is charged. Note what is <b>not</b> a fee — failing the
+     * run. A player who walks back with the crate still in their bag has lost the payout and
+     * that is the whole of it. The fee is for the crate, not for the failure.
+     */
+    private void settle(Player player, long jobId, int distance) {
+        PluginConfig.Courier cfg = plugin.config().courier();
+        try {
+            // Claimed, not simply marked. Several routes can reach one job — the expiry sweep,
+            // a menu noticing the deadline has passed, the join sweep — and this charges money,
+            // so exactly one of them may do the work.
+            if (!dao.claimSettlement(jobId)) {
+                return;
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to claim courier settlement: " + e.getMessage());
+            return;
+        }
+        if (CourierPackage.destroy(player, jobId) > 0 || !cfg.packageEnabled()) {
+            return;
+        }
+        double owed = round(fee(cfg, distance, 1.0) * cfg.packageLossMultiplier());
+        if (owed <= 0) {
+            return;
+        }
+        charge(player, owed);
+    }
+
+    /**
+     * Open a run's crate to settlement, then settle it while the player is here.
+     *
+     * <p>Two steps because they answer to different things: a run closes whether or not
+     * anybody is present, and the crate can only be looked for when somebody is. Pairing them
+     * is just the common case — the player is standing right there.
+     */
+    private void closeAndSettle(Player player, CourierJob job) {
+        try {
+            dao.markUnsettled(job.id());
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to open courier settlement: " + e.getMessage());
+        }
+        settle(player, job.id(), job.lockedDistance());
+    }
+
+    /**
+     * Take the fee, and record whatever could not be taken as debt.
+     *
+     * <p>Deducting what they have and owing the rest, rather than all-or-nothing: a fee that
+     * simply fails when somebody is broke is not a consequence, and one that drives a balance
+     * negative is a different bug in an economy where nothing else can.
+     */
+    private void charge(Player player, double owed) {
+        // No Vault, no fee and — crucially — no debt. Banking a charge nobody can ever pay
+        // would leave the courier board shut on a server that simply has no money in it.
+        if (!plugin.economy().isEnabled()) {
+            return;
+        }
+        double paid = 0;
+        double balance = Math.max(0, plugin.economy().balance(player));
+        double take = round(Math.min(owed, balance));
+        if (take > 0 && plugin.economy().withdraw(player, take)) {
+            paid = take;
+        }
+        double short_ = round(owed - paid);
+        if (short_ > 0) {
+            try {
+                debts.add(player.getUniqueId(), short_, System.currentTimeMillis());
+            } catch (SQLException e) {
+                plugin.getLogger().severe("Failed to record courier debt: " + e.getMessage());
+            }
+        }
+        player.sendMessage(Text.of("&cThe crate never arrived. &7Charged &6"
+                + plugin.economy().format(paid) + "&7."
+                + (short_ > 0 ? " &cOwing " + plugin.economy().format(short_)
+                        + " &7— the courier board is closed to you until it is paid." : "")));
+        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.7f, 1.0f);
+    }
+
+    /**
+     * Settle every run that ended while this player was away.
+     *
+     * <p>Run on join, which is the first moment the question can be answered: whether the
+     * crate came back is a question about their inventory, and there was nobody to ask. This
+     * is also what stops logging out being a way to lose a crate for free — the cheapest and
+     * most obvious dodge there is, and the one the fee exists to discourage.
+     */
+    private void settleUnsettled(Player player) {
+        try {
+            for (CourierDao.Unsettled row : dao.unsettled(player.getUniqueId())) {
+                settle(player, row.jobId(), row.distance());
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to settle courier crates: " + e.getMessage());
+        }
+    }
+
+    /** Money is money: never quote or charge a fraction of a cent. */
+    private static double round(double amount) {
+        return Math.round(amount * 100.0) / 100.0;
     }
 
     // ---- helpers --------------------------------------------------------------

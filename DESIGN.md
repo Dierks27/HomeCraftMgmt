@@ -1,7 +1,9 @@
-# HomeCraft Management — Plugin Design Specification (v17.2)
+# HomeCraft Management — Plugin Design Specification (v17.3)
 > **Purpose of this document:** the build spec for a custom Paper plugin. It is written to be handed to Claude Code (or any implementer) as the source of truth. Design decisions still open are marked **[DECISION]** with a recommended default.
 >
 > **v11 changelog:** Rebranded the online store from "Amazon" to **Crate** (`[www.Crate.craft](https://www.Crate.craft)`), with **Rush** (fast shipping), the **Pallet** (player seller box) and the **Locker** (delivery holding). Added the **Crate Marketplace** (universal player-to-player selling — *everything* is sellable, incl. Minis), **auto-categorization into departments** using the game's own item categories, an **admin ban list**, and the **PC-as-a-browser / "Sites"** architecture. Added **in-game economy displays** (TVs/tickers/boards) and a consolidated **Economy Risks & Safeguards** section. Recorded the **Phase 2.5.1 pricing fix** (proportional elasticity + integrated bulk pricing). Marked Phases 2.5 and 3 done.
+>
+> **v17.3 changelog (the package):** A courier run now hands you a **crate** to carry, and the recipient wants it **in your hand**. It is worth nothing and is built to stay that way: unplaceable, unwearable, unstackable, unlistable, never cargo for a second job, and destroyed the moment the delivery ends by any route — with an orphan sweep as the backstop for anything that forgets. **Unwearable is done in the item** via its `equippable` component rather than by catching equip events, because a player head is a helmet and there are a dozen ways to put a hat on. **The rejection audit turned out small**: the market catalog does not buy heads, Auction and Vending demand a Mini reference, and the Printer consumes a Card, so all of those refuse a crate structurally — the Marketplace Pallet is the one genuinely open surface and is where the explicit guard lives. No schema change; `config_revision` stays 9.
 >
 > **v17.2 changelog (what the first real delivery found):** The house appears, the villager works, the payout is right and the woods come back — the five things wrong were what you notice standing there. **Jigsaw blocks survived placement**: village templates are worldgen pieces whose `JIGSAW` markers the assembly process normally consumes, and `Structure.place` does not, so one stood in a wall beside a front door. **The recipient spawned indoors and facing a wall** — the outward-side test was fed the structure's minimum corner instead of its centre, a regression from v17.1's re-centred capture box, and the spawn set no yaw. They now face outward, turn to watch a nearby player, and speak on hand-over. **Trees were cut at a fixed height**, leaving canopy in the sky; clearing is a flood fill of whole trees now and the captured region grows to bound it, because orphaned leaves *decay* and decay is a change no restore undoes. **The field came back while the player was still standing in it** — `linger_seconds` worked exactly as written, and a timer is the wrong shape: the restore now waits for the player to leave and never fires while somebody is inside the footprint. No schema change; `config_revision` stays 9.
 >
@@ -430,7 +432,42 @@ ground, a claim appeared since the waypoint was chosen — the run is still comp
 board at the drop-off. Nobody gets stranded four thousand blocks from home because a structure did not
 paste.
 
-**Still Phase 1 in scope:** a plain courier run carries no physical crate item.
+**The package.** A courier run hands you a **crate** to carry — a player head, textured per band so
+it reads as the size of the trip — and the recipient wants it **in your hand**, not merely owned.
+Trade runs get none: their cargo is the player's own goods, which is the point of that kind of run.
+
+*It is worth nothing and must stay worth nothing.* Anything that survives its job is an item you can
+mint on demand by taking Courier work, in an economy whose premise is that material enters only when
+somebody mines it. So it is **unplaceable, unwearable, unstackable, unlistable**, cannot become cargo
+for a second job, and is **destroyed the moment the delivery ends by any route** — handed over,
+abandoned, expired, or the job gone entirely. A crate whose job is over is removed on sight, which is
+also the backstop for any path that forgets to tidy up.
+
+*Kept strictly apart from Minis.* A package is a player head; so is a Mini. They are told apart by
+their PDC keys and never by looking like a head — a Mini by the `MINI_*` family, a package by
+`hcm:courier_package` and nothing else. So a package is never minted, never given a serial, never in
+the Museum, never counted in circulation, appraised or auctionable: every one of those paths asks for
+a Mini reference, and a package has none.
+
+*Unwearable is done in the item, not in events.* A player head is a helmet, and there are a great many
+ways to put a hat on — the armour slot, shift-click, the hotbar swap key, right-clicking in the air, a
+dispenser, an armour stand. The crate's own `equippable` component moves its slot off the head, which
+disables all of them at once, wherever the item ends up. The armour-slot click is guarded as a second
+line, because that component is a newer API than the plugin's floor and `PlayerArmorChangeEvent`
+cannot be cancelled.
+
+*Where it had to be refused, and where it did not.* The audit is smaller than it looks: the market
+catalog does not buy player heads, the Auction and Vending House both demand a Mini reference, and the
+Printer consumes a Card — so those reject a crate structurally, without a line of code. The genuinely
+open surface is the **Marketplace Pallet**, which accepts an arbitrary held stack, and that is where
+the explicit refusal lives, alongside the one for trade-run cargo.
+
+*Death drops it, by default.* The grave is the recovery path and losing it for good is a real
+consequence rather than a bug. `package.keep_on_death` exists because this is a family server.
+
+**Still open:** the loss fee and the courier debt that goes with it, and buying a replacement at the
+PC. Without them, losing the crate means the run simply cannot be completed — which is a consequence,
+just not a priced one.
 
 ---
 ## 4. Configuration Schema (sketch)

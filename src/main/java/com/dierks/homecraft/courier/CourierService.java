@@ -94,7 +94,18 @@ public final class CourierService {
         sweeper = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
             try {
                 if (dao.expireStale(System.currentTimeMillis()) > 0) {
-                    live.values().removeIf(j -> j.expired(System.currentTimeMillis()));
+                    long now = System.currentTimeMillis();
+                    // Take the crate back on the same pass that closes the run. Without this
+                    // the job is over but the package is still in the bag until the player
+                    // next logs in, which is the one window where it could be carried into
+                    // something else.
+                    for (Player online : plugin.getServer().getOnlinePlayers()) {
+                        CourierJob job = live.get(online.getUniqueId());
+                        if (job != null && job.expired(now)) {
+                            CourierPackage.destroy(online, job.id());
+                        }
+                    }
+                    live.values().removeIf(j -> j.expired(now));
                 }
                 buildings.sweep();
             } catch (SQLException e) {
@@ -187,11 +198,19 @@ public final class CourierService {
         return plugin.config().courier().building().enabled();
     }
 
-    /** Re-seed the live cache for a player who just joined mid-run. */
+    /** Re-seed the live cache for a player who just joined mid-run, and tidy up after crashes. */
     public void onJoin(Player player) {
         CourierJob job = active(player);
         if (job != null) {
             live.put(player.getUniqueId(), job);
+        }
+        // A package outlives its job only when something went wrong between the payout and the
+        // cleanup — a crash, most likely. Anything not belonging to the run they are on now is
+        // removed on sight, which is also the backstop for any route that forgets to tidy up.
+        int orphans = CourierPackage.destroyOrphans(player, job == null ? null : job.id());
+        if (orphans > 0) {
+            plugin.getLogger().fine(() -> "Removed " + orphans + " stale courier package(s) from "
+                    + player.getName() + ".");
         }
     }
 
@@ -207,6 +226,7 @@ public final class CourierService {
             if (job != null && job.expired(System.currentTimeMillis())) {
                 dao.finish(job.id(), CourierJob.State.EXPIRED);
                 live.remove(player.getUniqueId());
+                CourierPackage.destroy(player, job.id());
                 buildings.finished(job.id());
                 return null;
             }
@@ -280,6 +300,11 @@ public final class CourierService {
             if (cargo == null || cargo.getType().isAir()) {
                 return failed("Hold the cargo you want to run in your main hand.");
             }
+            // The market catalog does not buy player heads, so this is already impossible — but
+            // a catalog is config, and a crate must never become cargo for a second job.
+            if (CourierPackage.is(cargo)) {
+                return failed("A delivery crate is not cargo.");
+            }
             MarketItem item = marketItemFor(cargo.getType());
             if (item == null) {
                 return failed(pretty(cargo.getType()) + " is not something the market buys.");
@@ -336,6 +361,11 @@ public final class CourierService {
                         return Result.fail("Could not take that run — try again.");
                     }
                     live.put(player.getUniqueId(), job);
+                    // A courier run carries a crate. A trade run carries the player's own goods,
+                    // which are the point of it, so it gets no package.
+                    if (type == CourierJob.Type.COURIER && cfg.packageEnabled()) {
+                        CourierPackage.give(plugin, player, job);
+                    }
                     // A short run can start inside the placement radius. Build it now, before
                     // the player turns to look, rather than letting it appear in front of them.
                     considerPlacement(player, job);
@@ -357,6 +387,15 @@ public final class CourierService {
      * depends on how they got there.
      */
     public Result turnIn(Player player) {
+        return turnIn(player, false);
+    }
+
+    /**
+     * @param inHand true for the hand-over to the recipient, which wants the crate presented
+     *               rather than merely owned; false for the PC fallback, which accepts it from
+     *               anywhere because that route exists for when something has already gone wrong
+     */
+    public Result turnIn(Player player, boolean inHand) {
         PluginConfig.Courier cfg = plugin.config().courier();
         if (!plugin.sandbox().check(player, "courier turn-in")) {
             return Result.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
@@ -371,6 +410,16 @@ public final class CourierService {
         }
         if (!arrived(player, job, cfg)) {
             return Result.fail("You are not at the drop-off yet.");
+        }
+        if (cfg.packageEnabled() && job.type() == CourierJob.Type.COURIER) {
+            if (inHand && !CourierPackage.inHand(player, job.id())) {
+                return CourierPackage.carried(player, job.id())
+                        ? Result.fail("Hold the crate out to them — it is in your bag.")
+                        : Result.fail("You do not have the crate for this run.");
+            }
+            if (!inHand && !CourierPackage.carried(player, job.id())) {
+                return Result.fail("You do not have the crate for this run.");
+            }
         }
 
         // The travel multiplier, blended by how far they moved under each kind of power.
@@ -418,6 +467,7 @@ public final class CourierService {
         }
         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.7f, 1.2f);
         live.remove(player.getUniqueId());
+        CourierPackage.destroy(player, job.id());
         // Let the building stand a moment. Taking it down on the same tick as the payout would
         // delete the ground under the player's feet while they are still reading the message.
         // Not a timer. The house comes down once the player has actually walked away — a clock
@@ -467,6 +517,7 @@ public final class CourierService {
             return Result.fail("Could not drop that run — try again.");
         }
         live.remove(player.getUniqueId());
+        CourierPackage.destroy(player, job.id());
         buildings.finished(job.id());
         return new Result(true, null, job, 0, 0, 0, false);
     }

@@ -79,7 +79,7 @@ public final class JobBoardMenu extends Menu {
                             + " &7– &6" + plugin.economy().format(range[1]),
                     "&7Runs left today: &f" + left,
                     "&8—",
-                    "&eLeft-click &7— courier run (free crate)",
+                    "&eLeft-click &7— courier run (you carry their crate)",
                     "&eRight-click &7— trade run (sells what you hold)"), e -> {
                 boolean trade = e.isRightClick();
                 ItemStack held = player.getInventory().getItemInMainHand();
@@ -122,6 +122,18 @@ public final class JobBoardMenu extends Menu {
                     "&8—",
                     "&8Sold into the market when you arrive,",
                     "&8at the price it is worth then."), null);
+        }
+
+        if (plugin.config().courier().packageEnabled()
+                && job.type() == CourierJob.Type.COURIER) {
+            boolean carried = com.dierks.homecraft.courier.CourierPackage
+                    .carried(player, job.id());
+            set(20, Menus.icon(carried ? Material.CHEST : Material.GRAY_DYE,
+                    carried ? "&6Crate" : "&7Crate missing",
+                    carried ? "&7You are carrying it." : "&7It is not in your bag.",
+                    "&8—",
+                    carried ? "&8Hand it to them in person."
+                            : "&8Check where you died, or a chest at home."), null);
         }
 
         set(22, Menus.icon(Material.LIME_DYE, "&aHand it over",

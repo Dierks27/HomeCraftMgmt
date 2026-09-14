@@ -72,6 +72,16 @@ public final class Keys {
     /** On a Courier delivery villager: the id of the job it is the recipient for (Long). */
     public static NamespacedKey COURIER_JOB;
 
+    /**
+     * On a Courier package item: the id of the job it belongs to (Long).
+     *
+     * <p>Deliberately its own key rather than anything in the Mini family. A package is a
+     * player head and so is a Mini, and confusing the two would be very hard to trace — so
+     * nothing that looks for a Mini can ever match a package, and nothing that looks for a
+     * package can ever match a Mini.
+     */
+    public static NamespacedKey COURIER_PACKAGE;
+
     private Keys() {
     }
 
@@ -97,6 +107,7 @@ public final class Keys {
         MINI_RENDER = new NamespacedKey(plugin, "mini_render");
         EFFECT_ENTITY = new NamespacedKey(plugin, "effect_entity");
         COURIER_JOB = new NamespacedKey(plugin, "courier_job");
+        COURIER_PACKAGE = new NamespacedKey(plugin, "courier_package");
         WILD_SPAWN = new NamespacedKey(plugin, "wild_spawn");
         DISPLAY_VARIANT = new NamespacedKey(plugin, "display_variant");
         SHOP_ANCHOR = new NamespacedKey(plugin, "shop_anchor");

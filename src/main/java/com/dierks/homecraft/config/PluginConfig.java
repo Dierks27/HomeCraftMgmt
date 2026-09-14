@@ -394,6 +394,7 @@ public final class PluginConfig {
                           double teleportFloor, double teleportPayout,
                           Map<com.dierks.homecraft.courier.CourierJob.Band, CourierBand> bands,
                           int expireMinutes, int turnInRadius, int maxRerolls,
+                          boolean packageEnabled, String packageName, boolean packageKeepOnDeath,
                           CourierBuilding building) {
 
         public CourierBand band(com.dierks.homecraft.courier.CourierJob.Band b) {
@@ -910,6 +911,9 @@ public final class PluginConfig {
                 Math.max(1, c.getInt("courier.expire_minutes", 60)),
                 Math.max(1, c.getInt("courier.turn_in_radius", 10)),
                 Math.max(1, c.getInt("courier.waypoint.max_rerolls", 20)),
+                c.getBoolean("courier.package.enabled", true),
+                c.getString("courier.package.name", "&6Delivery Crate"),
+                c.getBoolean("courier.package.keep_on_death", false),
                 readCourierBuilding(c));
     }
 

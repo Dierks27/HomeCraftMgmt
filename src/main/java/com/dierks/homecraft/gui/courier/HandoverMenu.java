@@ -53,10 +53,31 @@ public final class HandoverMenu extends Menu {
                     "&8at the price it is worth now."), null);
         }
 
-        set(22, Menus.icon(Material.LIME_DYE, "&aHand over the crate",
-                "&7They have been expecting this.",
+        boolean needsCrate = plugin.config().courier().packageEnabled()
+                && job.type() == CourierJob.Type.COURIER;
+        boolean inHand = !needsCrate
+                || com.dierks.homecraft.courier.CourierPackage.inHand(player, job.id());
+        boolean carried = !needsCrate
+                || com.dierks.homecraft.courier.CourierPackage.carried(player, job.id());
+
+        if (needsCrate) {
+            set(20, Menus.icon(inHand ? Material.LIME_DYE
+                            : carried ? Material.YELLOW_DYE : Material.GRAY_DYE,
+                    inHand ? "&aCrate in hand" : carried ? "&eCrate in your bag" : "&7No crate",
+                    inHand ? "&7Ready to hand over."
+                            : carried ? "&7Hold it out to them first."
+                            : "&7You are not carrying this delivery.",
+                    "&8—",
+                    "&8They want it handed over, not described."), null);
+        }
+
+        set(22, Menus.icon(inHand ? Material.LIME_DYE : Material.GRAY_DYE,
+                inHand ? "&aHand over the crate" : "&7Hand over the crate",
+                inHand ? "&7They have been expecting this."
+                        : carried ? "&7Put the crate in your hand first."
+                        : "&7You do not have their crate.",
                 "&8—", "&eClick to deliver"), e -> {
-            CourierService.Result r = courier.turnIn(player);
+            CourierService.Result r = courier.turnIn(player, true);
             if (!r.ok()) {
                 player.sendMessage(Text.of("&c" + r.error()));
                 refresh();

@@ -337,6 +337,16 @@ shouldn't cost you a field. The cheap half of that check runs while the waypoint
 is being picked, so a bad spot gets rerolled instead of becoming a delivery that
 arrives at nothing.
 
+**You carry a crate.** A courier run hands you one — a head textured for the band —
+and the recipient wants it **in your hand**, not just in your bag. Trade runs don't
+get one; their cargo is your own goods.
+
+The crate is worth nothing and stays that way: you can't place it, wear it, stack
+it, list it on a Pallet or run it as cargo for another job, and it's destroyed the
+moment the delivery ends however it ends. One belonging to a finished job is
+removed on sight. It drops on death by default — the grave is how you get it back
+— and `package.keep_on_death` makes it kinder for the younger players.
+
 **Handing in at the PC still works** if the house doesn't appear for any reason, so
 nobody ends up stranded 1,800 blocks out because a structure failed to place.
 

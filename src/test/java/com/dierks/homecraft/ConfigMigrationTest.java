@@ -517,6 +517,36 @@ class ConfigMigrationTest {
         assertEquals("ORANGE", onDisk.getString("minis.rarity_styles.COMMON.pane"));
     }
 
+    /**
+     * The market screen stopped buying, so its title had to stop promising it.
+     *
+     * <p>The blind backfill cannot do this — it only ADDS missing keys — so without a
+     * migration every existing server would keep a title advertising a feature that is gone.
+     */
+    @Test
+    void theMarketTitleStopsPromisingSomethingItNoLongerDoes() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 9);
+        onDisk.set("menus.market_title", "&1Market — instant buy/sell");
+
+        assertFalse(HomeCraftManagement.migrateConfig(onDisk, "world").isEmpty());
+
+        assertEquals("&1Sell to Crate", onDisk.getString("menus.market_title"));
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"));
+    }
+
+    /** A title the admin wrote is theirs, whatever the screen beneath it now does. */
+    @Test
+    void anAdminsOwnMarketTitleIsLeftAlone() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 9);
+        onDisk.set("menus.market_title", "&aDierks Trading Post");
+
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals("&aDierks Trading Post", onDisk.getString("menus.market_title"));
+    }
+
     /** replaceShippedDefault only fires on an exact (case-insensitive) match of what we shipped. */
     @Test
     void replacingAShippedDefaultIsExactAndIdempotent() throws Exception {

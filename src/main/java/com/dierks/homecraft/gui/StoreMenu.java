@@ -89,8 +89,14 @@ public final class StoreMenu extends Menu {
                 "&6" + money(plugin.economy().balance(player)),
                 "&8—",
                 "&8Press Esc to close the store."), null);
-        set(47, Menus.icon(Material.EMERALD, "&aInstant Market",
-                "&7Buy and sell now at market price — no shipping."),
+        // Not a branded destination — the thing you do. You sell to Crate; Crate ships to
+        // you. Naming it after a place invited the question of why you cannot also buy there.
+        set(47, Menus.icon(Material.EMERALD, "&aSell to Crate",
+                "&7Crate buys your goods at the live price.",
+                "&7Paid on the spot — you delivered them.",
+                "&8—",
+                "&8Every sale raises Crate's stock,",
+                "&8which is what moves the price."),
                 e -> new MarketMenu(plugin, player, this::reopen).open(player));
         set(48, Menus.icon(Material.CHEST, "&6Marketplace",
                 "&7Browse what other players list in their Pallets."),

@@ -788,7 +788,7 @@ public final class PluginConfig {
         this.menuTitles = new MenuTitles(
                 c.getString("menus.admin_title", "&4Admin Studio"),
                 c.getString("menus.museum_title", "&5Mini Museum &8&l·&r &7Collectibles"),
-                c.getString("menus.market_title", "&1Market — instant buy/sell"),
+                c.getString("menus.market_title", "&1Sell to Crate"),
                 c.getString("menus.store_title", "&6Welcome to {store} &8· &7{url}"),
                 c.getString("menus.pc_title", "&9PC &8· &7{url}"));
 

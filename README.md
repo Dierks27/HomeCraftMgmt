@@ -262,8 +262,16 @@ inventories; `/hcm …` stays admin/testing only.
   **delivers after the real-time delay** and is **collected at the PC** under
   **My Orders** (in-transit countdown → ready-to-collect). Orders persist and
   deliver on schedule across restarts.
-- **Instant Market GUI** (a button in the store): click to **buy/sell now** at
-  the live price against the same finite stock — no shipping, no commands.
+- **Sell to Crate** (a button in the store): click to **sell now** at the live
+  price against the same finite stock. Instant because you are the one delivering
+  the goods — there is nothing to ship. Every sale **raises Crate's stock**, which
+  is what moves the price.
+
+  It is sell-only on purpose. It used to buy as well, at the live price with no
+  shipping and no wait, and nothing would ever have made a player pick a shipping
+  tier over that — which left the tiers, the Locker and in-transit orders as
+  content that existed and was never used. Buying goes through the store, where
+  Express already covers "I want it now" at about five minutes for a fifth more.
 
 **Verify (needs Vault + EssentialsX):**
 1. Craft/`/hcm give pc`, place it, right-click → the **Amazon Store** opens.
@@ -271,7 +279,9 @@ inventories; `/hcm …` stays admin/testing only.
 3. Set a tier's `real_hours` low (e.g. `0.02`), reload, place an order → it lands
    in **My Orders** as *in transit*, then flips to **ready**; click to collect.
 4. Restart mid-transit → the order still delivers on schedule.
-5. Open **Instant Market** → left-click buy / right-click sell; stock & price move.
+5. Open **Sell to Crate** → click an item to sell; stock rises and the price drops.
+6. As a non-op, run `/hcm market buy cobblestone 1` → refused, and pointed at the
+   store. Selling by command still works.
 
 ---
 
@@ -451,7 +461,8 @@ board and watch the house go.
 | `hcm.use` | op | Parent node granting both market view nodes below (back-compat) |
 | `hcm.market.list` | op | `/hcm market list` — dump the FULL catalog (players use the PC GUI) |
 | `hcm.market.price` | all | `/hcm market price\|history <item>` + `/hcm balance` |
-| `hcm.market.order` | all | Buy from / sell to the dynamic market |
+| `hcm.market.order` | all | **Sell** to the dynamic market (`/hcm market sell`). Selling needs no shipping — you deliver the goods — so everyone has it |
+| `hcm.market.buy` | op | **Buy** by command (`/hcm market buy`), with no shipping and no wait. Op-only, and it has to stay that way: a free instant buy makes every shipping tier pointless. Players order at the store |
 | `hcm.market.limit.bypass` | op | Exempt from daily buy/sell limits AND per-item caps |
 | `hcm.pc.use` | all | Open the Amazon GUI on a placed PC |
 | `hcm.pc.craft` | all | Craft the PC at a Workbench |

@@ -5,12 +5,18 @@ A Minecraft **Paper** plugin. See [`DESIGN.md`](DESIGN.md) for the full spec and
 
 - **Target server:** Paper **26.2**, Java **25**
 - **Build:** Gradle (toolchain pinned to Java 25), shaded runnable jar
-- **Status:** **Phase 4** — Phase 1 (skeleton + PC + Mini Workbench), the
-  **finite-stock commodities market** (2.5 + proportional/integrated pricing in
-  2.5.1), the **Crate storefronts** (PC-gated store with real-time shipping +
-  instant Market GUI), and the **Minis collectibles** core (config catalog,
-  rarity styling, minting + provenance, Museum & Shop GUI). Vending Machine /
-  Auction House / wild-drops and the Marketplace/dashboard are follow-ups.
+- **Latest release:** [`v0.27.0-the-crate`](https://github.com/Dierks27/HomeCraftMgmt/releases/latest)
+- **Status:** the plugin is well past the numbered phases. Shipped and in use:
+  the **PC and its Sites**, the **finite-stock commodities market**, the **Crate
+  storefronts** (store, Marketplace, Pallets, Locker, real-time shipping), the
+  **Minis collectibles** line end to end (catalog, minting, provenance, Museum,
+  Vending Machine, Auction House, wild spawns, the Mini Printer), the **Arcade**
+  (achievements, daily/weekly quests, Prize Counter), the **web dashboard**, the
+  **in-game displays**, and the **Courier** — paid delivery runs with a placed
+  village house and a villager recipient at the far end.
+
+  *Still open:* the Courier's Fragile/Perishable cargo modifiers, a
+  complete-a-delivery quest verb, and Marketplace search + sort.
 
 ---
 

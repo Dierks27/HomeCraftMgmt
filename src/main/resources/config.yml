@@ -274,6 +274,27 @@ courier:
   # rather than placed somewhere unreachable.
   waypoint:
     max_rerolls: 20
+  # ---- The package ----------------------------------------------------
+  # A courier run hands you a crate to carry. Trade runs do not get one — the
+  # cargo IS the player's own goods, which is the point of that kind of run.
+  #
+  # The crate is worth nothing and must stay worth nothing: anything that survives
+  # its job is an item you could mint on demand by taking Courier work, in an
+  # economy whose premise is that material only enters when somebody mines it. So
+  # it cannot be placed, worn, stacked, listed on a Pallet, or carried into another
+  # job, and it is destroyed the moment the delivery ends by any route. A crate
+  # belonging to a job that is over is removed on sight.
+  #
+  # It is a player head, and so is a Mini — they are told apart by their PDC keys
+  # and never by looking like a head, so nothing that handles Minis can ever pick
+  # one up by mistake.
+  package:
+    enabled: true
+    name: "&6Delivery Crate"
+    # Dropped on death by default: the grave is the recovery path, and losing it is
+    # a real consequence rather than a bug. Turn this on to be kinder to the
+    # younger players.
+    keep_on_death: false
   # ---- The destination (Phase 2) --------------------------------------
   # A small house appears at the waypoint with a villager outside it. Right-click
   # the villager to hand the cargo over. When the run ends — delivered, expired,
@@ -760,6 +781,13 @@ minis:
 #                                  orange, yellow). /hcm give mailbox [variant].
 # ---------------------------------------------------------------------
 skins:
+  # The delivery crate, one texture per distance band — a parcel for a local hop,
+  # a crate for a long haul, so the item reads as the size of the trip. Blank is a
+  # plain head, which is perfectly serviceable until you have textures for these.
+  courier_package:
+    local:     ""
+    regional:  ""
+    long_haul: ""
   pc:            "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMTQxZWFhNDA2NWUwYjVkMTVmOTA3OGEzZGMyZTZkMzQ0OWUxMjdkN2JjZjFhNmJiM2JmZGNlOGUzYjg4MjYzNiJ9fX0="   # computer / monitor head
   printer:       "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMzNhMjA4M2MwYTMwNjJiMzhiYjdjNWI1ZGJlYTk5NDgzNGRjYmEwZTQ1MDA5YTdmYzA1YTA4MzNjMjlhMzk3In19fQ=="   # 3D-printer head (Phase 9 Mini Printer)
   workbench:     ""   # crafting-table head (retired block; legacy placements only)

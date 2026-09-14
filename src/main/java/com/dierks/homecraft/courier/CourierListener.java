@@ -12,10 +12,13 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.persistence.PersistentDataType;
 
@@ -113,6 +116,93 @@ public final class CourierListener implements Listener {
         }
         player.sendMessage(Text.of("&7That belongs to the delivery. It will be gone shortly."));
         return true;
+    }
+
+    // ---- the package ----------------------------------------------------------
+
+    /**
+     * A crate is cargo, not a building block.
+     *
+     * <p>It is a player head, so without this it can be set down as one — and a placed head is a
+     * block somebody can break for a free head, which is the item faucet this whole design is
+     * trying not to be.
+     */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onPackagePlace(BlockPlaceEvent event) {
+        if (CourierPackage.is(event.getItemInHand())) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage(Text.of("&7The crate stays with you until it is "
+                    + "delivered."));
+        }
+    }
+
+    /**
+     * The crate is not a hat.
+     *
+     * <p>The item carries an {@code equippable} component that moves it off the head slot, which
+     * is the real fix and covers every route at once. This is the second line: the component is
+     * a newer API than the plugin's floor, and {@code PlayerArmorChangeEvent} cannot be
+     * cancelled, so the armour slot is also guarded here where it still can be.
+     */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onPackageEquip(InventoryClickEvent event) {
+        if (event.getSlotType() != InventoryType.SlotType.ARMOR) {
+            return;
+        }
+        // Only ever refuse putting one ON. Refusing what is already in the slot would lock a
+        // crate to somebody's head forever if one ever got there — the exact opposite of the
+        // point, and unrecoverable without an admin.
+        if (CourierPackage.is(event.getCursor()) || CourierPackage.is(swapped(event))) {
+            event.setCancelled(true);
+        }
+    }
+
+    /** The item the number-key swap would put into the clicked slot, if any. */
+    private org.bukkit.inventory.ItemStack swapped(InventoryClickEvent event) {
+        int button = event.getHotbarButton();
+        if (button < 0 || !(event.getWhoClicked() instanceof Player player)) {
+            return null;
+        }
+        return player.getInventory().getItem(button);
+    }
+
+    /**
+     * Whether the crate survives death.
+     *
+     * <p>Dropping it is the default, and deliberately so: the grave is the recovery path, and
+     * losing it for good is a real consequence rather than a bug. {@code keep_on_death} exists
+     * because this is a family server and the younger players should not lose a delivery to a
+     * creeper they never saw.
+     */
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    public void onDeath(PlayerDeathEvent event) {
+        if (!plugin.config().courier().packageKeepOnDeath()) {
+            return;
+        }
+        java.util.List<org.bukkit.inventory.ItemStack> kept = new java.util.ArrayList<>();
+        event.getDrops().removeIf(drop -> {
+            if (CourierPackage.is(drop)) {
+                kept.add(drop.clone());
+                return true;
+            }
+            return false;
+        });
+        if (kept.isEmpty()) {
+            return;
+        }
+        // Handed back on respawn rather than now: the inventory is being emptied around us.
+        Player player = event.getEntity();
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            if (!player.isOnline()) {
+                return;
+            }
+            for (org.bukkit.inventory.ItemStack item : kept) {
+                for (org.bukkit.inventory.ItemStack leftover
+                        : player.getInventory().addItem(item).values()) {
+                    player.getWorld().dropItemNaturally(player.getLocation(), leftover);
+                }
+            }
+        }, 20L);
     }
 
     // ---- deferred restores ----------------------------------------------------

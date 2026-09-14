@@ -84,6 +84,12 @@ public final class PalletService {
         if (plugin.miniService().isMini(held)) {
             return Result.fail("Minis are sold at the Vending Machine / Auction House, not Pallets.");
         }
+        // A delivery crate is worth nothing and must stay worth nothing: anything that survives
+        // its job is an item you can mint on demand by taking Courier work. This is the one
+        // listing surface that accepts an arbitrary stack, so it is the one that has to say no.
+        if (com.dierks.homecraft.courier.CourierPackage.is(held)) {
+            return Result.fail("A delivery crate is not yours to sell.");
+        }
         if (mp.isBanned(held.getType())) {
             return Result.fail("That item can't be listed on the Marketplace.");
         }

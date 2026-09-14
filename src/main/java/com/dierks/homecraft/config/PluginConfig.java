@@ -395,6 +395,7 @@ public final class PluginConfig {
                           Map<com.dierks.homecraft.courier.CourierJob.Band, CourierBand> bands,
                           int expireMinutes, int turnInRadius, int maxRerolls,
                           boolean packageEnabled, String packageName, boolean packageKeepOnDeath,
+                          double packageLossMultiplier,
                           CourierBuilding building) {
 
         public CourierBand band(com.dierks.homecraft.courier.CourierJob.Band b) {
@@ -914,6 +915,7 @@ public final class PluginConfig {
                 c.getBoolean("courier.package.enabled", true),
                 c.getString("courier.package.name", "&6Delivery Crate"),
                 c.getBoolean("courier.package.keep_on_death", false),
+                Math.max(0, c.getDouble("courier.package.loss_multiplier", 1.0)),
                 readCourierBuilding(c));
     }
 

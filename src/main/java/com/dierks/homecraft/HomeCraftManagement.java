@@ -230,6 +230,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         // so it is constructed with the service that decides when a delivery is over.
         this.courier = new com.dierks.homecraft.courier.CourierService(
                 this, new com.dierks.homecraft.storage.CourierDao(database),
+                new com.dierks.homecraft.storage.CourierDebtDao(database),
                 new com.dierks.homecraft.courier.BuildingService(
                         this, new com.dierks.homecraft.storage.CourierSiteDao(database),
                         new com.dierks.homecraft.storage.TrackedGroundDao(database)));

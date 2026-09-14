@@ -121,16 +121,95 @@ public final class CourierDao {
         }
     }
 
-    /** Expire every ACTIVE job past its deadline. Returns how many were closed. */
+    /**
+     * Expire every ACTIVE job past its deadline. Returns how many were closed.
+     *
+     * <p>A courier run closed this way is also marked unsettled, because it ended without a
+     * hand-over and nobody has yet looked to see whether the crate came back. Most of these
+     * belong to players who are offline — that is usually why the run ran out — so the check
+     * happens on their next join. Trade runs carry no crate and settle as they close.
+     */
     public int expireStale(long now) throws SQLException {
         Connection c = conn();
         synchronized (c) {
             try (PreparedStatement ps = c.prepareStatement(
-                    "UPDATE courier_jobs SET state='EXPIRED' WHERE state='ACTIVE' AND expires_at <= ?")) {
+                    "UPDATE courier_jobs SET state='EXPIRED', "
+                            + "package_settled = CASE WHEN type='COURIER' THEN 0 ELSE 1 END "
+                            + "WHERE state='ACTIVE' AND expires_at <= ?")) {
                 ps.setLong(1, now);
                 return ps.executeUpdate();
             }
         }
+    }
+
+    /**
+     * Mark a closed courier run as still owing a crate check.
+     *
+     * <p>Called on every route a run ends by without the crate being handed over. Settling is
+     * a separate step because it needs the player's inventory in front of it, and the player
+     * is not always there when the run ends.
+     */
+    public void markUnsettled(long id) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE courier_jobs SET package_settled=0 WHERE id=? AND type='COURIER'")) {
+                ps.setLong(1, id);
+                ps.executeUpdate();
+            }
+        }
+    }
+
+    /**
+     * Claim the right to settle a run's crate, exactly once.
+     *
+     * <p>The same guard {@link #finish} uses, and for the same reason: settlement charges
+     * money, and several routes can reach it for one job — the expiry sweep, a menu opening
+     * and noticing the deadline has passed, and the join sweep. Whichever gets here first
+     * flips the flag and does the work; the rest get false and do nothing. Making this a
+     * conditional update rather than a read-then-write is what makes that true rather than
+     * merely likely.
+     *
+     * @return true for the caller that actually claimed it
+     */
+    public boolean claimSettlement(long id) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE courier_jobs SET package_settled=1 "
+                            + "WHERE id=? AND package_settled=0")) {
+                ps.setLong(1, id);
+                return ps.executeUpdate() > 0;
+            }
+        }
+    }
+
+    /** A closed courier run whose crate has not been accounted for yet. */
+    public record Unsettled(long jobId, int distance) {
+    }
+
+    /**
+     * Every closed courier run of this player's that still owes a crate check, oldest first.
+     *
+     * <p>Ordinarily empty or one row. More than one means several runs ran out while they were
+     * away, and each is its own crate and its own fee.
+     */
+    public java.util.List<Unsettled> unsettled(UUID player) throws SQLException {
+        java.util.List<Unsettled> out = new java.util.ArrayList<>();
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT id, distance FROM courier_jobs WHERE player=? AND type='COURIER' "
+                            + "AND package_settled=0 AND state<>'ACTIVE' ORDER BY id")) {
+                ps.setString(1, player.toString());
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        out.add(new Unsettled(rs.getLong("id"), rs.getInt("distance")));
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     private CourierJob read(ResultSet rs) throws SQLException {

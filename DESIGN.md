@@ -1,7 +1,9 @@
-# HomeCraft Management — Plugin Design Specification (v17.3)
+# HomeCraft Management — Plugin Design Specification (v17.4)
 > **Purpose of this document:** the build spec for a custom Paper plugin. It is written to be handed to Claude Code (or any implementer) as the source of truth. Design decisions still open are marked **[DECISION]** with a recommended default.
 >
 > **v11 changelog:** Rebranded the online store from "Amazon" to **Crate** (`[www.Crate.craft](https://www.Crate.craft)`), with **Rush** (fast shipping), the **Pallet** (player seller box) and the **Locker** (delivery holding). Added the **Crate Marketplace** (universal player-to-player selling — *everything* is sellable, incl. Minis), **auto-categorization into departments** using the game's own item categories, an **admin ban list**, and the **PC-as-a-browser / "Sites"** architecture. Added **in-game economy displays** (TVs/tickers/boards) and a consolidated **Economy Risks & Safeguards** section. Recorded the **Phase 2.5.1 pricing fix** (proportional elasticity + integrated bulk pricing). Marked Phases 2.5 and 3 done.
+>
+> **v17.4 changelog (what the crate costs):** The crate now has a **price for losing it**, which is the only thing that makes carrying one a responsibility rather than a decoration. The fee is what the run would have paid **on foot** × `package.loss_multiplier` (1.0 shipped), so a lost crate cancels the run out: you walked it for nothing. It is charged when a run ends **without the crate coming back** — never merely for failing the run, since a player who returns with it in their bag has already lost the payout and that is the whole of it. What cannot be paid becomes **debt**, which closes the courier board and *nothing else*: the market, the shops, the Marketplace and every other way of earning stay open, because a debt that locks a child out of the economy with no way to work it off is the opposite of a consequence. The same figure **buys a replacement at any PC**, which is what keeps the fee fair — without it a creeper four thousand blocks out ends the run and charges for the privilege. Settlement is **deferred across a logout** (`courier_jobs.package_settled`), because otherwise logging off would be a free way to lose a crate — the cheapest and most discoverable dodge there is. Schema **v26** (`courier_debt`, plus the settled flag); `config_revision` stays 9.
 >
 > **v17.3 changelog (the package):** A courier run now hands you a **crate** to carry, and the recipient wants it **in your hand**. It is worth nothing and is built to stay that way: unplaceable, unwearable, unstackable, unlistable, never cargo for a second job, and destroyed the moment the delivery ends by any route — with an orphan sweep as the backstop for anything that forgets. **Unwearable is done in the item** via its `equippable` component rather than by catching equip events, because a player head is a helmet and there are a dozen ways to put a hat on. **The rejection audit turned out small**: the market catalog does not buy heads, Auction and Vending demand a Mini reference, and the Printer consumes a Card, so all of those refuse a crate structurally — the Marketplace Pallet is the one genuinely open surface and is where the explicit guard lives. No schema change; `config_revision` stays 9.
 >
@@ -465,9 +467,42 @@ the explicit refusal lives, alongside the one for trade-run cargo.
 *Death drops it, by default.* The grave is the recovery path and losing it for good is a real
 consequence rather than a bug. `package.keep_on_death` exists because this is a family server.
 
-**Still open:** the loss fee and the courier debt that goes with it, and buying a replacement at the
-PC. Without them, losing the crate means the run simply cannot be completed — which is a consequence,
-just not a priced one.
+**What losing it costs.** A crate is worth nothing, so the fee is not compensation for an item —
+it is the only reason carrying one is a responsibility. It is **what the run would have paid on
+foot** × `package.loss_multiplier`, which at the shipped 1.0 means a lost crate cancels the run
+out. Deliberately *not* the actual payout: that depends on how the player travelled and is not
+known until they arrive, and a price you cannot see until after you have lost the thing is a
+surprise rather than a deterrent. It uses the job's **locked** distance, so the figure implied by
+the board when the run was taken is the figure charged at the end of it.
+
+*Charged for the crate, never for the failure.* The fee lands when a run ends **without the crate
+coming back** — abandoned, expired, or closed any other way. A player who walks back with it still
+in their bag has lost the payout, and that is the entire consequence. Handing it over is of course
+free.
+
+*Debt, and what it does and does not close.* What cannot be paid becomes debt, clamped at zero —
+there is no credit with the courier office, and a negative number would turn paying one off into
+banking against the next. It closes **the courier board and nothing else**. The market, the
+Marketplace, the shops, the Pallets and every other way of earning stay open, because a debt that
+locks a ten-year-old out of the economy with no way to work it off is the opposite of a
+consequence. It is paid down at the PC, in part or in full; partial payment matters, since a debt
+clearable only in one go traps somebody below the threshold indefinitely.
+
+*A replacement, at the same price.* Bought at any PC for exactly the loss fee, which is what makes
+the fee fair rather than merely punitive: without it a crate lost to a creeper four thousand blocks
+out ends the run **and** charges for it, with nothing the player can do. Pricing the replacement
+identically means there is no cheaper way out and no reason to prefer losing one over replacing it.
+Never two crates for one job — the hand-over takes one, and the second would be an orphan wearing a
+live job's id, the one case the stale-crate sweep cannot catch.
+
+*Settled across a logout.* A run that ends with nobody there to look in cannot be settled on the
+spot, so it is marked unsettled and resolved on the player's **next join** — where the question is
+simply whether the crate came back with them. Without that, logging out would be a free way to lose
+a crate: the cheapest and most obvious dodge, and precisely the behaviour the fee exists to
+discourage. The check runs *before* the stale-crate sweep, because the sweep destroys exactly the
+crates the settlement needs to see.
+
+**Still open:** the Fragile and Perishable cargo modifiers, stubbed disabled in config.
 
 ---
 ## 4. Configuration Schema (sketch)
@@ -565,7 +600,7 @@ Build and test each phase before the next.
 - **Phase 5 — The Crate Marketplace:** Pallets, universal listings (everything sellable), **departments + auto-categorization + ban list**, fees, Minis in Collectibles. *(Can be pulled earlier if "sell anything" is wanted before Minis.)*
 - **Phase 6 — Market Web Dashboard (§3.7):** the live stock-market website. *(Extension: a **transactional web shop** — secure `/crate web` login + buy-from-browser, delivering to the Locker — builds on this same embedded server.)*
 - **Phase 7 — In-Game Displays (§3.8):** wall-mounted `TextDisplay` price panels, holographic tickers, sign boards.
-- **Courier — Deliveries Site (§3.10) ✅ Phases 1 and 2 done (v16–v17):** job board, three distance bands with daily caps, rolled waypoints, the statistic-blended travel multiplier, the anti-teleport floor, trade runs that sell cargo into the market at the live rate — and a **vanilla village house with a villager** at the far end, placed on approach and restored from a snapshot when the run ends. *Still open: a real crate item for plain courier runs, and the complete-a-delivery quest verb this unblocks.*
+- **Courier — Deliveries Site (§3.10) ✅ Phases 1 and 2 done (v16–v17):** job board, three distance bands with daily caps, rolled waypoints, the statistic-blended travel multiplier, the anti-teleport floor, trade runs that sell cargo into the market at the live rate — and a **vanilla village house with a villager** at the far end, placed on approach and restored from a snapshot when the run ends. *The crate landed in v17.3 and was priced in v17.4 — carried in hand, destroyed at the end of every run, with a loss fee, courier debt and a PC-bought replacement. Still open: the complete-a-delivery quest verb this unblocks, and the Fragile/Perishable cargo modifiers.*
 - **Future — more PC Sites (§2.2):** Towny plots Site, etc.
 - **Phase 8 — Rewards & Arcade (§3.9):** tokens (login streaks/playtime), loot boxes/crates, lotto/scratch tickets, the pity exchange, and the Arcade installation at the Mall. Reuses the drop/rarity/cap tech — mostly content.
 - **Phase 9–11 — Arcade as a place + earning sources (§3.9):** the Arcade was built from placeable, owned/protected, skinnable **machine blocks** you right-click to play — a **Crate Machine**, **Scratch-Ticket Booth**, **Pity Exchange Kiosk**, and **Token Counter**. *(v13: these are retired in favour of the single Arcade hub block — see §3.9; placed ones keep working.)* Token earning now has four sources: login streaks, playtime, **one-time achievements** (first Mini, first sale, first PC, first crate, first pack, $10k), and **daily/weekly quests** (`/hcm quests` — repeatable objectives like "sell $500 to the market", "print a Mini", "open a crate/pack" that pay tokens on completion and reset each day/week). Every earn shows a "+N token" toast. Minting still happens only through the cap-aware Printer pipeline.

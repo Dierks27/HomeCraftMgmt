@@ -295,6 +295,18 @@ courier:
     # a real consequence rather than a bug. Turn this on to be kinder to the
     # younger players.
     keep_on_death: false
+    # What losing the crate costs, as a multiple of what the run would have paid on
+    # foot. At 1.0 a lost crate cancels the run out: you walked it for nothing.
+    #
+    # The crate is worthless, so this is not compensation for an item — it is the
+    # only reason carrying one is a responsibility rather than a decoration. It is
+    # charged when the run ends WITHOUT the crate coming back, never merely for
+    # failing the run, and the same figure buys a replacement at any PC so a lost
+    # crate does not strand a delivery.
+    #
+    # What cannot be paid becomes debt, which blocks the courier board (and nothing
+    # else) until it is cleared. Set to 0 to turn the fee and the debt off entirely.
+    loss_multiplier: 1.0
   # ---- The destination (Phase 2) --------------------------------------
   # A small house appears at the waypoint with a villager outside it. Right-click
   # the villager to hand the cargo over. When the run ends — delivered, expired,

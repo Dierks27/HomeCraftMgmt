@@ -314,9 +314,27 @@ courier:
     # Filled beneath the house so it never floats on a slope. Must be < region_padding
     # or the fill would fall outside the snapshot and survive the restore.
     foundation_depth: 3
-    # How long the building stays after a successful hand-over, so it does not vanish
-    # out from under the player as they turn around.
-    linger_seconds: 45
+    # When the building comes down. NOT a timer: a clock can always run out while the
+    # player is standing in the doorway, which is exactly what it did — the field
+    # snapped back in the same breath as the payout. The rules, in order:
+    #   1. NEVER while a player is inside the footprint. Restoring logs into the space
+    #      someone occupies suffocates them. This one defers even past the backstop.
+    #   2. Not before `linger_seconds`, so it does not vanish as you are being paid.
+    #   3. Then once nobody is within `restore_distance` — it is out of sight, so it
+    #      simply is not there next time you look — or once `max_linger_seconds` has
+    #      passed, which covers somebody logging off on the doorstep.
+    linger_seconds: 8
+    restore_distance: 120
+    max_linger_seconds: 600
+    # Trees rooted where the house goes are cleared as WHOLE trees — a flood fill through
+    # connected logs and leaves — and the captured region grows to bound them. Cutting at
+    # a fixed height left canopy hanging in the sky, and orphaned leaves DECAY, which is a
+    # change no restore undoes. The caps stop one delivery in a dark forest asking to
+    # snapshot half a chunk; when they bite, whatever falls outside the region is left
+    # standing rather than cleared.
+    clear_trees: true
+    max_clear_blocks: 3000
+    max_region_side: 64
     recipient_name: "Courier Recipient"
     # A site refuses to be built over anything a block snapshot could not put back.
     # Three kinds, all checked before the first block moves:

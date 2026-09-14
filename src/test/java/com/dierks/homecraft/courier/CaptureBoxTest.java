@@ -61,6 +61,51 @@ class CaptureBoxTest {
     }
 
     /**
+     * Growing the box around a tree must never shrink what it covers.
+     *
+     * <p>The capture box grows to bound the whole trees being cleared, and this is the rule that
+     * keeps that safe: unless the clamp bites, the result contains both the building's reach and
+     * everything the flood fill wants to remove. When the clamp <i>does</i> bite, the box stays
+     * within its limit — and the caller is then required to drop the blocks that fall outside
+     * rather than clear them, because a block changed outside the snapshot is never restored.
+     */
+    @Test
+    void growingTheBoxAroundTreesStillContainsTheBuilding() {
+        int[][] reaches = {{-11, 11}, {0, 9}, {-5, 31}};
+        int[][] fills = {{-11, 11}, {-30, 30}, {-4, 60}, {-100, 100}};
+        int[] paddings = {0, 4, 8};
+        int[] limits = {0, 32, 64};
+
+        for (int[] reach : reaches) {
+            for (int[] fill : fills) {
+                for (int padding : paddings) {
+                    for (int limit : limits) {
+                        int[] box = DeliverySite.unionAxis(reach[0], reach[1], fill[0], fill[1],
+                                padding, limit);
+                        int min = box[0];
+                        int size = box[1];
+                        int max = min + size - 1;
+
+                        if (limit > 0) {
+                            assertTrue(size <= limit, () -> "the clamp must hold: size " + size
+                                    + " exceeds the limit " + limit);
+                        }
+                        boolean clamped = limit > 0 && size == limit;
+                        if (!clamped) {
+                            int wantMin = Math.min(reach[0], fill[0]);
+                            int wantMax = Math.max(reach[1], fill[1]);
+                            assertTrue(min <= wantMin && wantMax <= max, () -> String.format(
+                                    "box [%d, %d] fails to contain reach [%d, %d] and fill "
+                                            + "[%d, %d] at padding %d", min, max, reach[0],
+                                    reach[1], fill[0], fill[1], padding));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * The box is centred on where the structure is PUT, not on the waypoint.
      *
      * <p>Pinned separately because it is the specific mistake that was made: the two points

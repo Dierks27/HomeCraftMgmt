@@ -370,6 +370,8 @@ public final class PluginConfig {
                                   String recipientName, java.util.Set<Material> avoidBlocks,
                                   int waypointScanRadius, int terrainCheckRadius,
                                   int groundScanDepth, int maxLiquidPercent,
+                                  int restoreDistance, int maxLingerSeconds,
+                                  boolean clearTrees, int maxClearBlocks, int maxRegionSide,
                                   List<BuildingTemplate> buildings) {
     }
 
@@ -964,6 +966,11 @@ public final class PluginConfig {
                 Math.max(1, c.getInt("courier.building.terrain_check_radius", 6)),
                 Math.max(4, c.getInt("courier.building.ground_scan_depth", 32)),
                 Math.max(0, Math.min(100, c.getInt("courier.building.max_liquid_percent", 10))),
+                Math.max(16, c.getInt("courier.building.restore_distance", 120)),
+                Math.max(1, c.getInt("courier.building.max_linger_seconds", 600)),
+                c.getBoolean("courier.building.clear_trees", true),
+                Math.max(0, c.getInt("courier.building.max_clear_blocks", 3000)),
+                Math.max(16, c.getInt("courier.building.max_region_side", 64)),
                 List.copyOf(buildings));
     }
 

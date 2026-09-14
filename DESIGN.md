@@ -1,7 +1,9 @@
-# HomeCraft Management — Plugin Design Specification (v17.1)
+# HomeCraft Management — Plugin Design Specification (v17.2)
 > **Purpose of this document:** the build spec for a custom Paper plugin. It is written to be handed to Claude Code (or any implementer) as the source of truth. Design decisions still open are marked **[DECISION]** with a recommended default.
 >
 > **v11 changelog:** Rebranded the online store from "Amazon" to **Crate** (`[www.Crate.craft](https://www.Crate.craft)`), with **Rush** (fast shipping), the **Pallet** (player seller box) and the **Locker** (delivery holding). Added the **Crate Marketplace** (universal player-to-player selling — *everything* is sellable, incl. Minis), **auto-categorization into departments** using the game's own item categories, an **admin ban list**, and the **PC-as-a-browser / "Sites"** architecture. Added **in-game economy displays** (TVs/tickers/boards) and a consolidated **Economy Risks & Safeguards** section. Recorded the **Phase 2.5.1 pricing fix** (proportional elasticity + integrated bulk pricing). Marked Phases 2.5 and 3 done.
+>
+> **v17.2 changelog (what the first real delivery found):** The house appears, the villager works, the payout is right and the woods come back — the five things wrong were what you notice standing there. **Jigsaw blocks survived placement**: village templates are worldgen pieces whose `JIGSAW` markers the assembly process normally consumes, and `Structure.place` does not, so one stood in a wall beside a front door. **The recipient spawned indoors and facing a wall** — the outward-side test was fed the structure's minimum corner instead of its centre, a regression from v17.1's re-centred capture box, and the spawn set no yaw. They now face outward, turn to watch a nearby player, and speak on hand-over. **Trees were cut at a fixed height**, leaving canopy in the sky; clearing is a flood fill of whole trees now and the captured region grows to bound it, because orphaned leaves *decay* and decay is a change no restore undoes. **The field came back while the player was still standing in it** — `linger_seconds` worked exactly as written, and a timer is the wrong shape: the restore now waits for the player to leave and never fires while somebody is inside the footprint. No schema change; `config_revision` stays 9.
 >
 > **v17.1 changelog (the Courier finds the ground):** A delivery into any forest silently built nothing. Ground level was read from `MOTION_BLOCKING`, which counts leaves — so a flat wood measured as a ten-block cliff against `max_slope: 3` and placement refused, with **no log line at any level** to say so. The refusal is now found by walking down through canopy and undergrowth to real terrain, the growth is cleared inside the captured region rather than the field being rejected for having trees on it, and **every refusal names itself** (`building.debug`). Five more defects found in the same pass and fixed here: the waypoint itself was recorded at **canopy height** (leaves report `isSolid()`), which aimed the placed-Mini and placed-entity safety scans at empty sky in exactly the forests where they mattered; `placeFor` had **no in-flight guard**, so a slow chunk load let a second placement snapshot a field that already had a house on it and overwrite the real undo record; the refusal was **retried every second** for the rest of the run, 25 chunk loads and an NBT reparse each time; the 60-second expiry sweep **beat `linger_seconds`** and pulled the house out from under the player; and the capture box was centred on the waypoint rather than the placement origin, so a template 11 wide **overflowed the snapshot** — and a block outside it is never restored. Schema unchanged; `config_revision` stays 9.
 >
@@ -329,6 +331,15 @@ on a trunk. There is no heightmap that means "the ground", so the walk down is t
 — and it is also the only thing that can tell "a tree is in the way" (clear it) from "this is a lake"
 (deliver elsewhere), which look identical from above and need opposite answers.
 
+Whole trees, not slices. The clearing is a **flood fill** through connected logs and leaves from
+everything rooted in the building's footprint, and **the captured region grows to bound it**
+(`DeliverySite.unionAxis`). Cutting at a fixed height left canopy hanging in the sky, and that is
+worse than it looks: orphaned leaves **decay**, decay happens whether or not the block was inside
+the region, and a restore cannot put back what Minecraft deleted on its own. Caps (`max_clear_blocks`,
+`max_region_side`) stop one delivery in a dark forest asking to snapshot half a chunk; when a cap
+bites, whatever falls outside the region is **left standing rather than cleared**, because a few
+leaves hanging for an hour is cosmetic and a block changed outside the snapshot is permanent.
+
 Real relief still refuses: ground varying by more than `max_slope` across the footprint, or a
 footprint more than `max_liquid_percent` water, is rerolled. Terraforming somebody's hillside cannot
 be undone by putting blocks back; picking a different field can. Vanilla puts villages in forests
@@ -394,6 +405,25 @@ snapshot is captured by nothing and restored by nothing, so it stays in the worl
 the biome family, PDC-tagged with the job id. Right-click opens the hand-over and **never a trade
 window** — a courier villager with vanilla trades would be an emerald pipeline no part of this economy
 accounts for. Anyone else who clicks them gets a line of flavour text.
+
+They spawn **facing away from the building**, which is to say towards whoever walks up, and rotation
+still works with the AI off — so they turn to watch a nearby player, make an occasional noise, and say
+something on hand-over. That is the cheap half of being alive; without it they read as a prop.
+
+*Worldgen scaffolding is stripped after placement.* Village pieces are assembled by the jigsaw
+generator, which consumes each `JIGSAW` block and replaces it with a recorded final state.
+`Structure.place` runs none of that, so the markers survive as real, visible, op-interactable blocks —
+one stood beside a front door on the first live delivery. They become air: **Bukkit exposes no way to
+read the recorded final state** (`org.bukkit.block.Jigsaw` is an empty marker interface), and for the
+village connectors these templates carry, air is what the generator would have left anyway.
+
+*The building comes down when the player leaves, not on a clock.* Three rules, in order of how much
+they matter: **never while somebody is inside the footprint** — restoring logs into the space a player
+occupies suffocates them, and that defers even past the backstop; not before `linger_seconds`, so it
+does not vanish in the same breath as the payout; then once nobody is within `restore_distance` (it is
+out of sight, so it simply is not there next time they look) or `max_linger_seconds` has elapsed, which
+covers somebody logging off on the doorstep. A timer alone was tried and is wrong by construction: it
+can always run out while the player is standing in the doorway, which is what it did.
 
 *The PC hand-in never goes away.* If placement fails for any reason — no template resolved, no flat
 ground, a claim appeared since the waypoint was chosen — the run is still completable from the job

@@ -61,6 +61,7 @@ public final class CourierService {
 
     private BukkitTask sweeper;
     private BukkitTask approach;
+    private BukkitTask presence;
 
     public CourierService(HomeCraftManagement plugin, CourierDao dao, BuildingService buildings) {
         this.plugin = plugin;
@@ -114,6 +115,14 @@ public final class CourierService {
                 }
             }
         }, 40L, 20L);
+
+        // The recipient looks at whoever is near, and a finished site comes down once they
+        // have gone. Both are "has something changed near a delivery" questions, so they run
+        // faster than the approach check and do nothing at all when there is no site standing.
+        presence = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
+            buildings.tickPresence();
+            buildings.tickRestores();
+        }, 20L, 5L);
     }
 
     public void stop() {
@@ -124,6 +133,10 @@ public final class CourierService {
         if (approach != null) {
             approach.cancel();
             approach = null;
+        }
+        if (presence != null) {
+            presence.cancel();
+            presence = null;
         }
         // Buildings come down before the plugin does. A house that outlives the plugin that
         // knows how to remove it is the one outcome this module must never produce.
@@ -194,7 +207,7 @@ public final class CourierService {
             if (job != null && job.expired(System.currentTimeMillis())) {
                 dao.finish(job.id(), CourierJob.State.EXPIRED);
                 live.remove(player.getUniqueId());
-                scheduleRelease(job.id(), 0);
+                buildings.finished(job.id());
                 return null;
             }
             return job;
@@ -407,12 +420,11 @@ public final class CourierService {
         live.remove(player.getUniqueId());
         // Let the building stand a moment. Taking it down on the same tick as the payout would
         // delete the ground under the player's feet while they are still reading the message.
-        int linger = plugin.config().courier().building().lingerSeconds();
-        // Tell the expiry sweep to leave it alone until then. Without this the 60-second sweep
-        // reached it first — a delivered job is no longer ACTIVE, which is exactly what the
-        // sweep looks for — and the house vanished within a second of the payout.
-        buildings.holdUntil(job.id(), System.currentTimeMillis() + 1000L * linger);
-        scheduleRelease(job.id(), linger);
+        // Not a timer. The house comes down once the player has actually walked away — a clock
+        // can always run out while somebody is standing in the doorway, which is what happened:
+        // the field snapped back in the same breath as the payout.
+        buildings.celebrate(job.id());
+        buildings.finished(job.id());
         return new Result(true, null, job, fee, cargoPaid, blend.multiplier(), shortfall);
     }
 
@@ -443,19 +455,6 @@ public final class CourierService {
         return dx * dx + dz * dz <= limit;
     }
 
-    /** Take a delivery site down, now or after a delay. */
-    private void scheduleRelease(long jobId, int afterSeconds) {
-        if (!buildingsEnabled() || !buildings.hasSite(jobId)) {
-            return;
-        }
-        if (afterSeconds <= 0) {
-            buildings.release(jobId);
-            return;
-        }
-        plugin.getServer().getScheduler().runTaskLater(plugin,
-                () -> buildings.release(jobId), 20L * afterSeconds);
-    }
-
     /** Give up on the run. The band slot comes back — an abandoned job is not a spent one. */
     public Result abandon(Player player) {
         CourierJob job = active(player);
@@ -468,8 +467,7 @@ public final class CourierService {
             return Result.fail("Could not drop that run — try again.");
         }
         live.remove(player.getUniqueId());
-        // Dropped on purpose, so there is nobody standing there to disturb: take it down now.
-        scheduleRelease(job.id(), 0);
+        buildings.finished(job.id());
         return new Result(true, null, job, 0, 0, 0, false);
     }
 

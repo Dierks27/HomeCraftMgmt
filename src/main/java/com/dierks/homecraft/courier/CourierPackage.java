@@ -43,11 +43,12 @@ public final class CourierPackage {
      * Build the crate for a job.
      *
      * <p>The texture varies by band — a parcel for a local hop, a crate for a long haul — so the
-     * item reads as the size of the trip. A blank texture is a plain head, which is what an
-     * unconfigured server gets and is perfectly serviceable.
+     * item reads as the size of the trip. A band with no texture of its own borrows another
+     * band's rather than falling back to a blank head: a blank head is Steve's face, and a
+     * courier carries this item in hand for the entire delivery.
      */
     public static ItemStack create(HomeCraftManagement plugin, CourierJob job) {
-        String texture = plugin.config().skinNamed("courier_package." + job.band().configKey());
+        String texture = plugin.config().courierPackageSkin(job.band());
         ItemStack item = Heads.base(texture);
         ItemMeta meta = item.getItemMeta();
         if (meta == null) {

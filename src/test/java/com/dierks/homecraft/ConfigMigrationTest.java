@@ -771,6 +771,62 @@ class ConfigMigrationTest {
                         + radius + ") — at the same distance the label becomes a pointer");
     }
 
+    /**
+     * A courier's crate stops being Steve's head on an upgraded server.
+     *
+     * <p>{@code skins.courier_package} shipped with three blank values for three releases, and a
+     * blank head texture is a default player head. The textures landed in the bundled file
+     * later — but the backfill only adds keys that are MISSING, and an upgraded config.yml
+     * already has all three, holding "". Without this revision step, every server that
+     * upgraded would keep handing its couriers a severed Steve head to carry for the whole
+     * delivery, and nothing in the file would ever look wrong.
+     */
+    @Test
+    void blankCourierCrateSkinsAreFilledIn() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 10);
+        onDisk.set("skins.courier_package.local", "");
+        onDisk.set("skins.courier_package.regional", "");
+        onDisk.set("skins.courier_package.long_haul", "");
+
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        for (Map.Entry<String, String> band : HomeCraftManagement.COURIER_PACKAGE_SKINS.entrySet()) {
+            assertEquals(band.getValue(),
+                    onDisk.getString("skins.courier_package." + band.getKey()),
+                    band.getKey() + " is still blank — that is a Steve head in the courier's hand");
+        }
+    }
+
+    /** A texture the admin chose is theirs; only an empty value is replaced. */
+    @Test
+    void anAdminsOwnCrateSkinIsLeftAlone() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 10);
+        onDisk.set("skins.courier_package.local", "my-own-crate");
+        onDisk.set("skins.courier_package.regional", "");
+
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals("my-own-crate", onDisk.getString("skins.courier_package.local"));
+        assertEquals(HomeCraftManagement.COURIER_PACKAGE_SKINS.get("regional"),
+                onDisk.getString("skins.courier_package.regional"));
+    }
+
+    /**
+     * The migration's hard-coded crate textures must be the ones the bundled file ships, or a
+     * fresh install and an upgraded server end up carrying different parcels.
+     */
+    @Test
+    void theCrateTexturesMatchTheBundledDefaults() throws Exception {
+        YamlConfiguration shipped = bundled();
+        for (Map.Entry<String, String> band : HomeCraftManagement.COURIER_PACKAGE_SKINS.entrySet()) {
+            assertEquals(shipped.getString("skins.courier_package." + band.getKey()), band.getValue(),
+                    "skins.courier_package." + band.getKey() + " has drifted from "
+                            + "src/main/resources/config.yml");
+        }
+    }
+
     /** Lowercase grade keys parse at load, so the repair has to find them too. */
     @Test
     void lowercaseGradeKeysAreRepairedAsWell() throws Exception {

@@ -604,10 +604,34 @@ public final class PluginConfig {
 
     /**
      * A named skin slot that isn't a block type of its own: {@code pallet_used},
-     * {@code vending_upper}, or {@code mailbox.<variant>}. "" if unset.
+     * {@code vending_upper}, {@code mailbox.<variant>}, or
+     * {@code courier_package.<band>}. "" if unset.
      */
     public String skinNamed(String key) {
         return namedSkins.getOrDefault(key, "");
+    }
+
+    /**
+     * The delivery crate texture for a job's distance band.
+     *
+     * <p>Falls back to whatever band <em>is</em> textured rather than to a blank value, because
+     * blank means a default player head — which is a Steve face staring out of the hotbar for
+     * the whole walk, and reads as a bug rather than as a parcel. A crate of the wrong size is a
+     * far better answer than a stranger's head. "" only when no band is configured at all.
+     */
+    public String courierPackageSkin(com.dierks.homecraft.courier.CourierJob.Band band) {
+        String own = skinNamed("courier_package." + band.configKey());
+        if (!own.isBlank()) {
+            return own;
+        }
+        for (com.dierks.homecraft.courier.CourierJob.Band other
+                : com.dierks.homecraft.courier.CourierJob.Band.values()) {
+            String texture = skinNamed("courier_package." + other.configKey());
+            if (!texture.isBlank()) {
+                return texture;
+            }
+        }
+        return "";
     }
 
     /** The head texture for a Display Case pedestal style ("" = none → plain base block). */
@@ -1371,6 +1395,7 @@ public final class PluginConfig {
                 named.put("mailbox.wood", legacy.trim());
             }
         }
+        named.putAll(readCourierPackageSkins(sec));
         // The base MAILBOX skin slot is the wood variant (used by items.of(MAILBOX)).
         String wood = named.get("mailbox.wood");
         if (wood != null) {
@@ -1378,6 +1403,43 @@ public final class PluginConfig {
         }
         this.namedSkins = named;
         return map;
+    }
+
+    /**
+     * The courier crate textures, one per distance band, as {@code courier_package.<band>}.
+     *
+     * <p>Its own method, and package-visible, because it is the slot that was silently missed:
+     * config.yml shipped three crate textures under {@code skins.courier_package}, nothing here
+     * ever read them, and so every package handed to a courier was a blank head — Steve's face,
+     * carried the whole delivery. A test pins the section to the loader now.
+     *
+     * <p>A single string in place of the section ({@code courier_package: "<value>"}) textures
+     * every band with it, matching how a legacy {@code mailbox:} counts as wood.
+     */
+    static Map<String, String> readCourierPackageSkins(ConfigurationSection skins) {
+        Map<String, String> named = new LinkedHashMap<>();
+        if (skins == null) {
+            return named;
+        }
+        ConfigurationSection sec = skins.getConfigurationSection("courier_package");
+        if (sec != null) {
+            for (com.dierks.homecraft.courier.CourierJob.Band band
+                    : com.dierks.homecraft.courier.CourierJob.Band.values()) {
+                String val = sec.getString(band.configKey(), "");
+                if (val != null && !val.isBlank()) {
+                    named.put("courier_package." + band.configKey(), val.trim());
+                }
+            }
+            return named;
+        }
+        String legacy = skins.getString("courier_package", "");
+        if (legacy != null && !legacy.isBlank()) {
+            for (com.dierks.homecraft.courier.CourierJob.Band band
+                    : com.dierks.homecraft.courier.CourierJob.Band.values()) {
+                named.put("courier_package." + band.configKey(), legacy.trim());
+            }
+        }
+        return named;
     }
 
     private void putNamed(Map<String, String> map, ConfigurationSection sec, String key) {

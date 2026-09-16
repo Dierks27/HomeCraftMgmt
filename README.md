@@ -163,6 +163,9 @@ unzip -p HomeCraftManagement-<version>.jar plugin.yml | grep '^version'
   Set `shape: []` to disable one. The Mini Workbench is retired and has no recipe.
 - **Skins** (`skins:`) are Base64 head values; every block now ships with one.
   Blank = the block keeps its plain base material.
+- **Courier crate** — one skin per distance band under
+  `skins.courier_package.<local|regional|long_haul>`, so the package reads as the
+  size of the trip. A single string in place of the map textures every band.
 - **Pallet** — two visual states: `skins.pallet_empty` while nothing is loaded,
   `skins.pallet_used` the moment a listing is stocked (and back when it's cleared).
 - **Vending Machine** — **two blocks tall**: the lower head (`skins.vending_lower`)
@@ -394,9 +397,14 @@ shouldn't cost you a field. The cheap half of that check runs while the waypoint
 is being picked, so a bad spot gets rerolled instead of becoming a delivery that
 arrives at nothing.
 
-**You carry a crate.** A courier run hands you one — a head textured for the band —
-and the recipient wants it **in your hand**, not just in your bag. Trade runs don't
-get one; their cargo is your own goods.
+**You carry a crate.** A courier run hands you one — a head textured for the band
+(`skins.courier_package.<local|regional|long_haul>`) — and the recipient wants it
+**in your hand**, not just in your bag. Trade runs don't get one; their cargo is your
+own goods. A band you leave blank borrows another band's texture rather than showing
+a plain head, because a plain player head is Steve's and you carry this thing for the
+whole delivery. A config.yml that still has these three skins blank (they shipped
+empty for three releases) has them filled in from the defaults on first start; a
+texture you chose yourself is left alone.
 
 The crate is worth nothing and stays that way: you can't place it, wear it, stack
 it, list it on a Pallet or run it as cargo for another job, and it's destroyed the

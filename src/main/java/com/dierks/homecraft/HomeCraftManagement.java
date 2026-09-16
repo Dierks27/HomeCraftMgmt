@@ -61,8 +61,10 @@ public final class HomeCraftManagement extends JavaPlugin {
      * Armor folded into Combat. 6 = the Common rarity icon, which shipped as a light-grey pane
      * and rendered as an empty slot. 7 = wild Mini spawns — rarer, much further out, a find
      * window measured in minutes — plus the grade stars, for a file an editor has flattened.
+     * 11 = the courier crate's head textures, which shipped blank and so handed every courier
+     * a default Steve head to carry.
      */
-    static final int CONFIG_REVISION = 10;
+    static final int CONFIG_REVISION = 11;
 
     /**
      * Per-item daily caps (~2% sell / ~4% buy of {@code full_stock}), mirroring the
@@ -79,6 +81,28 @@ public final class HomeCraftManagement extends JavaPlugin {
             "iron_ingot", new int[] {40, 80},
             "gold_ingot", new int[] {20, 40},
             "diamond", new int[] {10, 20});
+
+    /**
+     * The courier crate head textures, mirroring {@code skins.courier_package} in the bundled
+     * config.yml — a parcel, a box and a crate, one per distance band.
+     *
+     * <p>Held here because the crate shipped BLANK for three releases and a blank skin is a
+     * default player head: every delivery was made carrying Steve's severed head, which is a
+     * strange thing to hand a child. The textures arrived in the bundled file afterwards, but
+     * the backfill only adds keys that are MISSING — an upgraded server already has these three
+     * keys, holding "", so it would have kept the Steve head forever. Revision 11 fills them in.
+     * A texture an admin has chosen is left alone; only an empty value is replaced. Keep in sync
+     * with the bundled config.yml — a test pins the two together.
+     */
+    static final java.util.Map<String, String> COURIER_PACKAGE_SKINS = courierPackageSkins();
+
+    private static java.util.Map<String, String> courierPackageSkins() {
+        java.util.Map<String, String> skins = new java.util.LinkedHashMap<>();
+        skins.put("local", "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZjY4MjRjM2ZkMTZkNTljNDM5MzdiNTNmZTE0N2ViYWNiZjgxNzgyZjVmMjVkOTAzNTBlYWJhODYxNGU1ZDU3YiJ9fX0=");
+        skins.put("regional", "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvODcyZjUwZjlkMzYyMzMyMWE1NjQ5Y2E5NWU5ZTUzYTgyNDBjYzgxY2ZhZWI0MWEyODc2NjdkMWNjNWQ1MTM5NiJ9fX0=");
+        skins.put("long_haul", "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzhjMTA3ZTA3YTJiNGQ0OWRiNWY5YTk4MmExY2VmOTJiM2MyOWVkZjMyOTdmYjQ3MTQyYjU1NzZjZmQ4OTYwYiJ9fX0=");
+        return java.util.Collections.unmodifiableMap(skins);
+    }
 
     private PluginConfig config;
     private Database database;
@@ -750,6 +774,26 @@ public final class HomeCraftManagement extends JavaPlugin {
                         + "would ever pick a shipping tier — which made the tiers, the Locker "
                         + "and in-transit orders content that existed and was never used. "
                         + "Selling needs no shipping because you are the one delivering.");
+            }
+        }
+        if (from < 11) {
+            // The crate a courier carries. It shipped blank for three releases, and a blank
+            // head texture is a DEFAULT player head — so the parcel handed out at the job
+            // board was Steve's face, held in hand for the length of every delivery. The
+            // textures reached the bundled config afterwards, but these keys already exist on
+            // an upgraded server (holding ""), and the backfill only adds keys that are
+            // missing — so nothing would ever have replaced them.
+            java.util.List<String> crates = new java.util.ArrayList<>();
+            for (java.util.Map.Entry<String, String> band : COURIER_PACKAGE_SKINS.entrySet()) {
+                if (replaceShippedDefault(c, "skins.courier_package." + band.getKey(), "",
+                        band.getValue())) {
+                    crates.add(band.getKey());
+                }
+            }
+            if (!crates.isEmpty()) {
+                log.add("Config migration: the courier crate now looks like a parcel instead of a "
+                        + "default player head (" + String.join(", ", crates) + "). A blank skin is "
+                        + "Steve's head, and the package is carried in hand for the whole delivery.");
             }
         }
         if (from < CONFIG_REVISION) {

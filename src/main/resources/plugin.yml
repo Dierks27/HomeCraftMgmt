@@ -42,7 +42,7 @@ commands:
       /hcm balance           - your money and Arcade tokens in one place
       /hcm backup now        - admin: write a database backup
       /hcm display sign|hologram|maptv|remove  - bind an in-game economy display
-      /hcm arcade            - open the Arcade (crates, pity, scratch tickets)
+      /hcm arcade            - open the Arcade hub
       /hcm arcade odds       - admin: Scratch Ticket RTP and each crate's value
       /hcm trail [name|off]  - turn your particle trail on or off
       /hcm achievements      - your achievements

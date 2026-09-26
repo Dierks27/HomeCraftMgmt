@@ -40,9 +40,9 @@ public final class QuestsMenu extends Menu {
         }
         Quests quests = plugin.config().quests();
         int tokens = plugin.tokens().balance(player.getUniqueId());
-        set(4, Menus.icon(Material.SUNFLOWER, "&eYour Tokens: &6" + tokens,
+        set(4, Menus.icon(Material.SUNFLOWER, "&eYou have &6" + tokens + " tokens",
                 "&7Finish quests to earn tokens.",
-                "&7They reset on their own — check back!"), null);
+                "&7New ones every day and every week!"), null);
 
         if (quests == null || !quests.enabled() || quests.all().isEmpty()) {
             set(22, Menus.icon(Material.BARRIER, "&cNo quests right now",
@@ -51,8 +51,26 @@ public final class QuestsMenu extends Menu {
             return;
         }
 
-        renderRow(quests.byPeriod(QuestPeriod.DAILY), QuestPeriod.DAILY, 9, "&eDaily Quests");
-        renderRow(quests.byPeriod(QuestPeriod.WEEKLY), QuestPeriod.WEEKLY, 27, "&bWeekly Quests");
+        // Each player's own draw from the pools, not the whole pool.
+        renderRow(plugin.quests().assigned(player.getUniqueId(), QuestPeriod.DAILY), QuestPeriod.DAILY, 9,
+                "&eToday's Quests");
+        renderRow(plugin.quests().assigned(player.getUniqueId(), QuestPeriod.WEEKLY), QuestPeriod.WEEKLY, 27,
+                "&bThis Week's Quests");
+
+        // Swap a daily you don't like (a Prize Counter row, so it has a price and a daily limit).
+        for (var prize : plugin.config().arcade().prizes()) {
+            if (prize.type() == com.dierks.homecraft.config.PluginConfig.PrizeType.QUEST_REROLL
+                    && plugin.prizes().visible(prize)) {
+                String left = plugin.prizes().limitText(player.getUniqueId(), prize);
+                set(22, Menus.icon(Material.WRITABLE_BOOK, "&eSwap a quest &7- &6" + prize.costTokens() + " tokens",
+                        "&7Don't like one of today's quests?",
+                        "&7Swap it for a different one.",
+                        left != null ? "&e" + left : "&8—"),
+                        e -> new QuestRerollMenu(plugin, player, prize,
+                                () -> new QuestsMenu(plugin, player, back).open(player)).open(player));
+                break;
+            }
+        }
 
         exit();
     }

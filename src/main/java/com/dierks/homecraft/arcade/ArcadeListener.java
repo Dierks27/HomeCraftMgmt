@@ -22,5 +22,8 @@ public final class ArcadeListener implements Listener {
         if (plugin.tokens() != null) {
             plugin.tokens().onJoin(event.getPlayer());
         }
+        if (plugin.quests() != null) {
+            plugin.quests().onJoin(event.getPlayer()); // deal today's and this week's quests
+        }
     }
 }

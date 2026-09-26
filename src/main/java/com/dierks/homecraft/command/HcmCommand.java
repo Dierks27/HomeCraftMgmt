@@ -119,6 +119,14 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
             case "arcade" -> {
+                if (args.length >= 2 && args[1].equalsIgnoreCase("odds")) {
+                    if (!denyUnless(sender, "hcm.admin")) {
+                        for (String line : plugin.arcade().oddsReport()) {
+                            sender.sendMessage(Text.of(line));
+                        }
+                    }
+                    return true;
+                }
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Text.of("&cOnly players can open the Arcade."));
                     return true;
@@ -129,6 +137,23 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 new com.dierks.homecraft.gui.arcade.ArcadeMenu(plugin, player).open(player);
             }
             case "balance", "bal", "wallet" -> handleBalance(sender);
+            case "trail", "trails" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(Text.of("&cOnly players have trails."));
+                    return true;
+                }
+                if (args.length >= 2 && !args[1].equalsIgnoreCase("toggle")) {
+                    if (args[1].equalsIgnoreCase("off")) {
+                        var cur = plugin.trails().current(player);
+                        player.sendMessage(Text.of(cur == null ? "&7Your trail is already off."
+                                : plugin.trails().toggle(player)));
+                    } else {
+                        player.sendMessage(Text.of(plugin.trails().select(player, args[1])));
+                    }
+                } else {
+                    player.sendMessage(Text.of(plugin.trails().toggle(player)));
+                }
+            }
             case "tokens" -> handleTokens(sender, args);
             case "quests", "quest" -> {
                 if (!(sender instanceof Player player)) {
@@ -337,7 +362,10 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     }
                 }
                 Player target;
-                if (args.length > next) {
+                // Naming a player puts it right by them. With no name it lands the way a natural
+                // roll of yours would, so an armed Mini Lure (or the next-target override) wins.
+                boolean asRoll = args.length <= next;
+                if (!asRoll) {
                     target = Bukkit.getPlayerExact(args[next]);
                     if (target == null) {
                         sender.sendMessage(Text.of("&cPlayer '" + args[next] + "' is not online."));
@@ -349,9 +377,11 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Text.of("&cUsage: /hcm hunt spawn [rarity] <player>"));
                     return;
                 }
-                String err = hunt.forceSpawn(rarity, target);
+                String err = hunt.forceSpawn(rarity, target, asRoll);
                 sender.sendMessage(err == null
-                        ? Text.of("&aA wild Mini appeared near " + target.getName() + ". &7/hcm hunt status for where.")
+                        ? Text.of(asRoll ? "&aA wild Mini appeared (as a natural roll — a Mini Lure wins). "
+                                + "&7/hcm hunt status for where."
+                                : "&aA wild Mini appeared near " + target.getName() + ". &7/hcm hunt status for where.")
                         : Text.of("&c" + err));
             }
             case "clear" -> {
@@ -996,6 +1026,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.of("&e/hcm give <card <id>|pack <id>|binder|filament <color> <n>> [player]"));
             sender.sendMessage(Text.of("&e/hcm printer <public|private> &7- flag the Printer you're looking at"));
             sender.sendMessage(Text.of("&e/hcm tokens give|set|take <player> <n> &7- adjust tokens"));
+            sender.sendMessage(Text.of("&e/hcm arcade odds &7- Scratch Ticket RTP and each crate's value"));
             sender.sendMessage(Text.of("&e/hcm tokens audit [days] [player] &7- tokens earned/spent by source"));
             sender.sendMessage(Text.of("&e/hcm tokens history <player> [n] &7- a player's last token changes"));
         }
@@ -1018,6 +1049,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.of("&e/hcm market buy <item> <qty> &7- admin buy, no shipping"));
         }
         sender.sendMessage(Text.of("&e/hcm museum [id] &7- browse the Mini Museum"));
+        sender.sendMessage(Text.of("&e/hcm trail [name|off] &7- turn your trail on or off"));
         sender.sendMessage(Text.of("&e/hcm auction &7- open the Mini Auction House"));
         if (sender.hasPermission("hcm.admin")) {
             sender.sendMessage(Text.of("&e/hcm mini list|give <id> [player] &7- admin Minis"));
@@ -1370,9 +1402,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "backup", "hunt");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "backup", "hunt", "trail");
             } else {
-                addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "balance", "tokens", "courier");
+                addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "balance", "tokens", "courier", "trail");
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("museum")) {
             String prefix = args[1].toLowerCase(Locale.ROOT);
@@ -1470,6 +1502,13 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))) {
                     out.add(p.getName());
                 }
+            }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("arcade") && sender.hasPermission("hcm.admin")) {
+            addMatches(out, args[1], "odds");
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("trail") && sender instanceof Player tp) {
+            addMatches(out, args[1], "off");
+            for (var o : plugin.trails().owned(tp)) {
+                addMatches(out, args[1], o.prize().id());
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("backup")) {
             addMatches(out, args[1], "now");

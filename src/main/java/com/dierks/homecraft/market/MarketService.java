@@ -369,7 +369,9 @@ public final class MarketService {
 
         int have = countMaterial(player, item.material());
         if (have <= 0) {
-            return TradeResult.fail("You have no " + item.label() + " to sell.");
+            // Holding only Arcade prizes made of this material is a different answer from holding none.
+            return TradeResult.fail(holdsPrizeOf(player, item.material())
+                    ? com.dierks.homecraft.util.TokenPrizes.REFUSAL : "You have no " + item.label() + " to sell.");
         }
 
         // Resolve the daily anti-whale allowance (money + units) for this player,
@@ -740,15 +742,27 @@ public final class MarketService {
         return System.currentTimeMillis() / MS_PER_DAY;
     }
 
-    /** Count matching items across the player's 36 storage slots (by type; ignores name/enchants). */
+    /**
+     * Count matching items across the player's 36 storage slots (by type; ignores name/enchants),
+     * leaving out Arcade prizes: a Speed Boost made of sugar is not sugar the market can buy.
+     */
     private int countMaterial(Player player, Material material) {
         int count = 0;
         for (ItemStack stack : player.getInventory().getStorageContents()) {
-            if (stack != null && stack.getType() == material) {
+            if (stack != null && stack.getType() == material && !com.dierks.homecraft.util.TokenPrizes.carries(stack)) {
                 count += stack.getAmount();
             }
         }
         return count;
+    }
+
+    private static boolean holdsPrizeOf(Player player, Material material) {
+        for (ItemStack stack : player.getInventory().getStorageContents()) {
+            if (stack != null && stack.getType() == material && com.dierks.homecraft.util.TokenPrizes.carries(stack)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Remove exactly {@code qty} of {@code material} from storage. Mirrors {@link #countMaterial}. */
@@ -757,7 +771,7 @@ public final class MarketService {
         ItemStack[] contents = player.getInventory().getStorageContents();
         for (int i = 0; i < contents.length && remaining > 0; i++) {
             ItemStack stack = contents[i];
-            if (stack == null || stack.getType() != material) {
+            if (stack == null || stack.getType() != material || com.dierks.homecraft.util.TokenPrizes.carries(stack)) {
                 continue;
             }
             int amount = stack.getAmount();

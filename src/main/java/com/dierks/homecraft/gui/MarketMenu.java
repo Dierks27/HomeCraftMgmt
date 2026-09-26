@@ -158,7 +158,7 @@ public final class MarketMenu extends Menu {
     private int countHeld(Material material) {
         int count = 0;
         for (ItemStack stack : player.getInventory().getStorageContents()) {
-            if (stack != null && stack.getType() == material) {
+            if (stack != null && stack.getType() == material && !com.dierks.homecraft.util.TokenPrizes.carries(stack)) {
                 count += stack.getAmount();
             }
         }

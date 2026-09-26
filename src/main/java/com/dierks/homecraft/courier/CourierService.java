@@ -324,6 +324,10 @@ public final class CourierService {
             if (CourierPackage.is(cargo)) {
                 return failed("A delivery crate is not cargo.");
             }
+            // Cargo is sold to the market at the far end, for dollars. A token prize is never cargo.
+            if (com.dierks.homecraft.util.TokenPrizes.carries(cargo)) {
+                return failed(com.dierks.homecraft.util.TokenPrizes.REFUSAL);
+            }
             MarketItem item = marketItemFor(cargo.getType());
             if (item == null) {
                 return failed(pretty(cargo.getType()) + " is not something the market buys.");
@@ -494,6 +498,12 @@ public final class CourierService {
         // the field snapped back in the same breath as the payout.
         buildings.celebrate(job.id());
         buildings.finished(job.id());
+        if (plugin.quests() != null) {
+            plugin.quests().record(player, PluginConfig.QuestType.COMPLETE_DELIVERY, 1);
+        }
+        if (plugin.achievements() != null) {
+            plugin.achievements().increment(player, "deliveries", 1);
+        }
         return new Result(true, null, job, fee, cargoPaid, blend.multiplier(), shortfall);
     }
 
@@ -796,7 +806,8 @@ public final class CourierService {
         }
         int have = 0;
         for (ItemStack stack : player.getInventory().getContents()) {
-            if (stack != null && stack.getType() == item.material()) {
+            if (stack != null && stack.getType() == item.material()
+                    && !com.dierks.homecraft.util.TokenPrizes.carries(stack)) {
                 have += stack.getAmount();
             }
         }

@@ -219,8 +219,12 @@ class ConfigMigrationTest {
                 "market.sell_limits.ranks",
                 "market.buy_limits.ranks",
                 "packs",
-                "arcade.crates.starter.rewards",
-                "arcade.crates.starter.paid_odds")) {
+                "arcade.crates.arcade_crate.rewards",
+                "arcade.prizes",
+                "arcade.lotto.payouts",
+                "arcade.quests.daily_pool",
+                "arcade.quests.weekly_pool",
+                "arcade.achievements")) {
             assertEquals(shipped.getMapList(key), onDisk.getMapList(key),
                     key + " has drifted from src/main/resources/config.yml — the hard-coded "
                             + "numbers in applyEconomyRebalance and the shipped file must agree, "
@@ -267,7 +271,7 @@ class ConfigMigrationTest {
         assertEquals(5000, onDisk.getInt("market.sell_limits.max_money_per_day"));
         assertEquals(5000, onDisk.getInt("market.buy_limits.max_money_per_day"));
         assertEquals(150, onDisk.getInt("printer.public_fee"));
-        assertEquals(25, onDisk.getInt("arcade.pity.tokens"));
+        assertEquals(150, onDisk.getInt("arcade.pity.tokens"), "25 from pass 3, then 150 from revision 14");
 
         // The admin's own catalog rows are kept — they only gain the new per-item caps.
         List<Map<?, ?>> catalog = onDisk.getMapList("market.catalog");
@@ -846,6 +850,8 @@ class ConfigMigrationTest {
     private static YamlConfiguration rev11Quests() throws Exception {
         YamlConfiguration onDisk = bundled();
         onDisk.set("config_revision", 11);
+        onDisk.set("arcade.quests.daily_pool", null); // a rev-11 file has only the old lists
+        onDisk.set("arcade.quests.weekly_pool", null);
         onDisk.set("arcade.quests.daily", List.of(
                 quest("fish_daily", "CATCH_FISH", 8, 3, "Catch 8 fish"),
                 quest("walk_daily", "TRAVEL_ON_FOOT", 800, 3, "Travel 800 blocks on foot"),
@@ -884,14 +890,27 @@ class ConfigMigrationTest {
 
         List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
 
-        assertEquals(List.of("fish_daily", "walk_daily"), ids(onDisk, "arcade.quests.daily"));
-        assertEquals(List.of("hostiles_weekly", "breed_weekly", "trade_weekly"), ids(onDisk, "arcade.quests.weekly"));
-        assertEquals(4, log.stream().filter(l -> l.contains("removed the")).count(), "one line per quest: " + log);
-        assertTrue(log.stream().noneMatch(l -> l.startsWith(HomeCraftManagement.WARN)), "nothing to warn about");
+        assertEquals(4, log.stream().filter(l -> l.contains("removed the") && l.contains("quest")).count(),
+                "one line per quest: " + log);
+        assertTrue(log.stream().noneMatch(l -> l.startsWith(HomeCraftManagement.WARN)), "nothing to warn about: " + log);
         assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"));
-        assertEquals(ids(bundled(), "arcade.quests.daily"), ids(onDisk, "arcade.quests.daily"),
+        // What is left is exactly what rev 12 shipped, so revision 14 swaps in the v2 pools.
+        assertEquals(ids(bundled(), "arcade.quests.daily_pool"), ids(onDisk, "arcade.quests.daily_pool"),
                 "an upgraded server ends up with the pool a fresh install ships");
-        assertEquals(ids(bundled(), "arcade.quests.weekly"), ids(onDisk, "arcade.quests.weekly"));
+        assertEquals(ids(bundled(), "arcade.quests.weekly_pool"), ids(onDisk, "arcade.quests.weekly_pool"));
+        assertFalse(onDisk.contains("arcade.quests.daily"), "the old key is gone");
+        assertFalse(onDisk.contains("arcade.quests.weekly"));
+    }
+
+    /** Revision 12 on its own: the rows go from the list they are in. */
+    @Test
+    void revisionTwelveRemovesOnlyTheShippedPushRows() throws Exception {
+        YamlConfiguration onDisk = rev11Quests();
+
+        List<String> log = HomeCraftManagement.retireShippedQuests(onDisk, "arcade.quests.daily");
+
+        assertEquals(List.of("fish_daily", "walk_daily"), ids(onDisk, "arcade.quests.daily"));
+        assertEquals(2, log.size(), "print_daily and sell_daily: " + log);
     }
 
     @Test
@@ -913,10 +932,14 @@ class ConfigMigrationTest {
 
         List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
 
-        assertEquals(List.of("fish_daily", "walk_daily", "print_daily"), ids(onDisk, "arcade.quests.daily"));
+        assertEquals(List.of("fish_daily", "walk_daily", "print_daily"), ids(onDisk, "arcade.quests.daily_pool"),
+                "an admin-edited list becomes the pool as it is");
         assertTrue(log.stream().anyMatch(l -> l.startsWith(HomeCraftManagement.WARN) && l.contains("print_daily")
                         && l.contains("arcade.quests.daily")),
                 "the kept row is named in a warning: " + log);
+        assertTrue(log.stream().anyMatch(l -> l.startsWith(HomeCraftManagement.WARN)
+                        && l.contains("arcade.quests.daily_pool")),
+                "and so is the list that became a pool: " + log);
     }
 
     @Test
@@ -928,7 +951,7 @@ class ConfigMigrationTest {
 
         HomeCraftManagement.migrateConfig(onDisk, "world");
 
-        assertEquals(List.of("crate_daily"), ids(onDisk, "arcade.quests.daily"),
+        assertEquals(List.of("crate_daily"), ids(onDisk, "arcade.quests.daily_pool"),
                 "the 0.x sell_daily was also ours; a quest the brief does not name stays");
     }
 
@@ -940,7 +963,7 @@ class ConfigMigrationTest {
 
         HomeCraftManagement.migrateConfig(onDisk, "world");
 
-        assertEquals(List.of("mine_daily"), ids(onDisk, "arcade.quests.daily"));
+        assertEquals(List.of("mine_daily"), ids(onDisk, "arcade.quests.daily_pool"));
     }
 
     @Test
@@ -1028,5 +1051,213 @@ class ConfigMigrationTest {
         assertTrue(added.contains("minis.loot.natural.beam.height"), "added: " + added);
         assertTrue(added.contains("minis.loot.natural.hints"), "added: " + added);
         assertEquals(4, onDisk.getMapList("minis.loot.natural.hints").size());
+    }
+
+    // ---- revision 14: the token economy ---------------------------------------------
+
+    /** The Arcade block exactly as 0.30.1 shipped it, on a live rev-13 server. */
+    private static YamlConfiguration rev13Arcade() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 13);
+        onDisk.set("arcade", null);
+        YamlConfiguration old = yaml("""
+                arcade:
+                  enabled: true
+                  block: { material: JUKEBOX, name: "&5Arcade Machine" }
+                  tokens:
+                    login_streak:
+                      enabled: true
+                      rewards: [ 1, 1, 2, 2, 3, 3, 5 ]
+                      reward_per_day: 1
+                    playtime:
+                      enabled: true
+                      minutes_per_token: 60
+                  crates:
+                    starter:
+                      display: "&aStarter Crate"
+                      cost_tokens: 5
+                      rewards:
+                        - { type: card,     tag: starter, weight: 40 }
+                        - { type: filament, amount: 3,    weight: 30 }
+                        - { type: pack,     pack: starter, weight: 20 }
+                        - { type: mini,     tag: starter, weight: 10 }
+                      paid_odds:
+                        - { cost_money: 750, floor: RARE }
+                  prizes:
+                    - { id: filament_bundle, display: "&fFilament Bundle", cost_tokens: 6,  type: filament, amount: 8 }
+                    - { id: display_case,    display: "&bDisplay Case",    cost_tokens: 25, type: block, block: display_case }
+                    - { id: starter_pack,    display: "&dStarter Pack",    cost_tokens: 30, type: pack,  pack: starter }
+                  pity:
+                    tokens: 25
+                    guarantees_rarity: RARE
+                  achievements:
+                    first_mini:  { enabled: true, reward: 3, display: "First Mini Collected" }
+                    first_sale:  { enabled: true, reward: 2, display: "First Market Sale" }
+                    first_pc:    { enabled: true, reward: 2, display: "Built Your First PC" }
+                    first_crate: { enabled: true, reward: 1, display: "Opened Your First Crate" }
+                    first_pack:  { enabled: true, reward: 2, display: "Opened Your First Pack" }
+                    rich_10k:    { enabled: true, reward: 5, display: "Reached $10,000", threshold: 10000 }
+                  quests:
+                    enabled: true
+                    week_starts: MONDAY
+                    daily:
+                      - { id: fish_daily,   type: CATCH_FISH,     target: 8,   reward: 3, display: "Catch 8 fish" }
+                      - { id: walk_daily,   type: TRAVEL_ON_FOOT, target: 800, reward: 3, display: "Travel 800 blocks on foot" }
+                    weekly:
+                      - { id: hostiles_weekly, type: KILL_HOSTILES,  target: 120, reward: 12, display: "Defeat 120 hostile mobs" }
+                      - { id: breed_weekly,    type: BREED_ANIMALS,  target: 12,  reward: 8,  display: "Breed 12 animals" }
+                      - { id: trade_weekly,    type: TRADE_VILLAGER, target: 15,  reward: 7,  display: "Trade with villagers 15 times" }
+                  lotto:
+                    ticket_cost_money: 250
+                    payouts:
+                      - { amount: 0,    weight: 50 }
+                      - { amount: 100,  weight: 30 }
+                      - { amount: 500,  weight: 15 }
+                      - { amount: 2000, weight: 5 }
+                """);
+        for (String key : old.getKeys(true)) {
+            if (!old.isConfigurationSection(key)) {
+                onDisk.set(key, old.get(key));
+            }
+        }
+        return onDisk;
+    }
+
+    /**
+     * An untouched 0.30.1 Arcade upgrades to exactly what a fresh install ships: after the
+     * migration and the backfill, every Arcade value on disk is the bundled one.
+     */
+    @Test
+    void theShippedArcadeBecomesTheTokenEconomy() throws Exception {
+        YamlConfiguration shipped = bundled();
+        YamlConfiguration onDisk = rev13Arcade();
+
+        List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
+        HomeCraftManagement.backfillConfig(onDisk, shipped);
+
+        assertTrue(log.stream().noneMatch(l -> l.startsWith(HomeCraftManagement.WARN)),
+                "nothing was edited, so nothing to warn about: " + log);
+        for (String key : shipped.getConfigurationSection("arcade").getKeys(true)) {
+            String path = "arcade." + key;
+            if (shipped.isConfigurationSection(path)) {
+                continue;
+            }
+            assertEquals(shipped.get(path), onDisk.get(path), path + " differs from a fresh install");
+        }
+        assertFalse(onDisk.contains("arcade.crates.starter"), "the shipped Starter Crate is replaced");
+        assertFalse(onDisk.contains("arcade.lotto.ticket_cost_money"), "no money in the Arcade");
+        assertFalse(onDisk.contains("arcade.quests.daily"));
+        assertFalse(onDisk.contains("arcade.quests.weekly"));
+        assertTrue(onDisk.isList("arcade.achievements"));
+        assertTrue(log.stream().anyMatch(l -> l.contains("$2000 ×5")), "the old ticket table is logged: " + log);
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"), "a second pass is a no-op");
+    }
+
+    @Test
+    void anAdminsArcadeEditsAreKeptWithWarnings() throws Exception {
+        YamlConfiguration onDisk = rev13Arcade();
+        onDisk.set("arcade.crates.starter.cost_tokens", 7);                // their own price
+        onDisk.set("arcade.crates.vip.display", "VIP Crate");
+        onDisk.set("arcade.crates.vip.cost_tokens", 20);
+        onDisk.set("arcade.crates.vip.rewards", List.of(Map.of("type", "filament", "amount", 5, "weight", 1)));
+        onDisk.set("arcade.crates.vip.paid_odds", List.of(Map.of("cost_money", 900, "floor", "EPIC")));
+        List<Map<String, Object>> prizes = new ArrayList<>();
+        for (Map<?, ?> row : onDisk.getMapList("arcade.prizes")) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            row.forEach((k, v) -> m.put(String.valueOf(k), v));
+            if ("filament_bundle".equals(m.get("id"))) {
+                m.put("cost_tokens", 4);
+            }
+            prizes.add(m);
+        }
+        prizes.add(new LinkedHashMap<>(Map.of("id", "my_case", "cost_tokens", 9, "type", "block",
+                "block", "display_case")));
+        onDisk.set("arcade.prizes", prizes);
+        onDisk.set("arcade.pity.tokens", 60);
+        onDisk.set("arcade.tokens.login_streak.rewards", List.of(1, 2, 3));
+        onDisk.set("arcade.lotto.ticket_cost_money", 500);
+        onDisk.set("arcade.achievements.first_mini.reward", 9);
+        onDisk.set("arcade.achievements.first_sale.enabled", false);
+        onDisk.set("arcade.achievements.rich_10k.threshold", 50000);
+
+        List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        // Crates: theirs stay, minus the money.
+        assertEquals(7, onDisk.getInt("arcade.crates.starter.cost_tokens"));
+        assertFalse(onDisk.contains("arcade.crates.starter.paid_odds"));
+        assertFalse(onDisk.contains("arcade.crates.vip.paid_odds"));
+        assertEquals(20, onDisk.getInt("arcade.crates.vip.cost_tokens"));
+        assertTrue(onDisk.contains("arcade.crates.arcade_crate.rewards"), "the new crate is added beside them");
+        assertWarns(log, "arcade.crates.starter.paid_odds");
+        assertWarns(log, "arcade.crates.vip.paid_odds");
+
+        // Prizes: their rows stay, the shipped ones move, the new ones are added.
+        Map<String, Map<?, ?>> byId = new LinkedHashMap<>();
+        for (Map<?, ?> row : onDisk.getMapList("arcade.prizes")) {
+            byId.put(String.valueOf(row.get("id")), row);
+        }
+        assertEquals(4, intAt(byId.get("filament_bundle"), "cost_tokens"), "their price is kept");
+        assertEquals(9, intAt(byId.get("my_case"), "cost_tokens"));
+        assertEquals(10, intAt(byId.get("display_case"), "cost_tokens"), "ours moves to the new price");
+        assertEquals("MINIS", byId.get("display_case").get("tab"));
+        assertFalse(byId.containsKey("starter_pack"), "the shipped pack row goes");
+        assertTrue(byId.keySet().containsAll(ids(bundled(), "arcade.prizes").stream()
+                .filter(id -> !id.equals("filament_bundle")).toList()), "every new row is added: " + byId.keySet());
+        assertWarns(log, "filament_bundle");
+
+        // Numbers they chose.
+        assertEquals(60, onDisk.getInt("arcade.pity.tokens"));
+        assertWarns(log, "arcade.pity.tokens");
+        assertEquals(List.of(1, 2, 3), onDisk.getIntegerList("arcade.tokens.login_streak.rewards"));
+        assertWarns(log, "arcade.tokens.login_streak.rewards");
+
+        // The Scratch Ticket cannot keep dollars, whoever set them — but it says so.
+        assertFalse(onDisk.contains("arcade.lotto.ticket_cost_money"));
+        assertEquals(bundled().getMapList("arcade.lotto.payouts"), onDisk.getMapList("arcade.lotto.payouts"));
+        assertTrue(log.stream().anyMatch(l -> l.startsWith(HomeCraftManagement.WARN) && l.contains("$500")),
+                "their ticket price is in the log: " + log);
+
+        // Achievements: the list, with their settings carried over.
+        Map<String, Map<?, ?>> ach = new LinkedHashMap<>();
+        for (Map<?, ?> row : onDisk.getMapList("arcade.achievements")) {
+            ach.put(String.valueOf(row.get("id")), row);
+        }
+        assertEquals(26, ach.size());
+        assertEquals(9, intAt(ach.get("first_mini"), "reward"), "their reward is kept");
+        assertEquals(10, intAt(ach.get("first_pc"), "reward"), "ours is rescaled");
+        assertEquals(Boolean.FALSE, ach.get("first_sale").get("enabled"));
+        assertEquals(50000, intAt(ach.get("rich_10k"), "target"));
+        assertEquals(50, intAt(ach.get("rich_10k"), "reward"), "the reward was still ours");
+        assertWarns(log, "first_mini");
+        assertWarns(log, "rich_10k");
+    }
+
+    private static void assertWarns(List<String> log, String what) {
+        assertTrue(log.stream().anyMatch(l -> l.startsWith(HomeCraftManagement.WARN) && l.contains(what)),
+                what + " should be named in a warning: " + log);
+    }
+
+    /** A rev-13 file whose quest lists are already pools is left with the pools. */
+    @Test
+    void aFileAlreadyOnPoolsKeepsThem() throws Exception {
+        YamlConfiguration onDisk = rev13Arcade();
+        onDisk.set("arcade.quests.daily_pool", List.of(quest("x_daily", "CATCH_FISH", 1, 1, "Fish")));
+
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals(List.of("x_daily"), ids(onDisk, "arcade.quests.daily_pool"));
+        assertFalse(onDisk.contains("arcade.quests.daily"));
+    }
+
+    /** The draw sizes a pool needs reach an upgraded file. */
+    @Test
+    void theDrawSizesReachAnUpgradedFile() throws Exception {
+        YamlConfiguration onDisk = rev13Arcade();
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+        List<String> added = HomeCraftManagement.backfillConfig(onDisk, bundled());
+        assertTrue(added.contains("arcade.quests.daily_draw"), "added: " + added);
+        assertTrue(added.contains("arcade.pity.per_week"), "added: " + added);
+        assertTrue(added.contains("arcade.trade_in.LEGENDARY"), "added: " + added);
+        assertEquals(3, onDisk.getInt("arcade.quests.daily_draw"));
     }
 }

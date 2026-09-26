@@ -2,7 +2,9 @@ package com.dierks.homecraft.gui;
 
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 
 /**
@@ -18,8 +20,19 @@ public final class MenuListener implements Listener {
             return;
         }
         event.setCancelled(true);
+        if (menu.handlesRawClicks()) {
+            menu.onRawClick(event);
+            return;
+        }
         if (event.getClickedInventory() == event.getView().getTopInventory()) {
             menu.handleClick(event);
+        }
+    }
+
+    @EventHandler
+    public void onClose(InventoryCloseEvent event) {
+        if (event.getInventory().getHolder() instanceof Menu menu && event.getPlayer() instanceof Player player) {
+            menu.onClose(player);
         }
     }
 

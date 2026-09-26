@@ -84,6 +84,10 @@ public final class PalletService {
         if (plugin.miniService().isMini(held)) {
             return Result.fail("Minis are sold at the Vending Machine / Auction House, not Pallets.");
         }
+        // Tokens never become dollars: nothing bought or won with tokens is listed (§11 #9).
+        if (com.dierks.homecraft.util.TokenPrizes.carries(held)) {
+            return Result.fail(com.dierks.homecraft.util.TokenPrizes.REFUSAL);
+        }
         // A delivery crate is worth nothing and must stay worth nothing: anything that survives
         // its job is an item you can mint on demand by taking Courier work. This is the one
         // listing surface that accepts an arbitrary stack, so it is the one that has to say no.

@@ -164,7 +164,8 @@ public final class HuntService {
             return w == null ? null : new Location(w, x, y, z);
         }
 
-        String key() {
+        /** Stable identity for this hunt while it lives (its block position). */
+        public String key() {
             return HuntService.key(world, x, y, z);
         }
     }
@@ -303,6 +304,19 @@ public final class HuntService {
     /** Every live wild spawn, oldest first. */
     public Collection<Hunt> live() {
         return Collections.unmodifiableCollection(new ArrayList<>(live.values()));
+    }
+
+    /** A live hunt by its {@link Hunt#key()}, or null once it has been caught or has escaped. */
+    public Hunt byKey(String key) {
+        return key == null ? null : live.get(key);
+    }
+
+    /** Distance in blocks from a player to a hunt (any world counts as far away). */
+    public double distanceTo(Player player, Hunt h) {
+        if (!h.world.equals(player.getWorld().getName())) {
+            return Double.MAX_VALUE;
+        }
+        return distance(player.getLocation(), h);
     }
 
     /** Live spawns of one Mini — the cap slots they are holding. */
@@ -491,9 +505,11 @@ public final class HuntService {
      * already holding a slot) and {@code max_live}; ignores the chance roll and cooldowns.
      *
      * @param rarity only this rarity, or null for a rarity-weighted pick across every Mini
+     * @param asRoll  land it the way a natural roll by {@code target} would — near the admin's
+     *                next-target override or an armed Mini Lure first — instead of right at them
      * @return null on success, else why not
      */
-    public String forceSpawn(Rarity rarity, Player target) {
+    public String forceSpawn(Rarity rarity, Player target, boolean asRoll) {
         Loot.Natural n = natural();
         if (n.maxLive() > 0 && live.size() >= n.maxLive()) {
             return "A hunt is already running (max_live " + n.maxLive() + "). /hcm hunt clear first.";
@@ -511,6 +527,10 @@ public final class HuntService {
         }
         Grade grade = minis.rollGrade(minis.cardSpec(def));
         String finish = minis.rollShiny(plugin.config().miniLoot().shinyPercent()) ? "SHINY" : null;
+        if (asRoll) {
+            return spawnForRoll(target, def, grade, finish) ? null : "Found no ground to put it on (tried "
+                    + SPOT_ATTEMPTS + " spots " + n.minDistance() + "–" + n.maxDistance() + " blocks out).";
+        }
         Hunt h = spawn(target, def, grade, finish);
         return h == null ? "Found no ground to put it on near " + target.getName()
                 + " (tried " + SPOT_ATTEMPTS + " spots " + n.minDistance() + "–" + n.maxDistance() + " blocks out)." : null;
@@ -739,6 +759,12 @@ public final class HuntService {
         plugin.announce().found(player, def, m.item(), Loot.Trigger.NATURAL_SPAWN.verb());
         if (plugin.quests() != null) {
             plugin.quests().record(player, PluginConfig.QuestType.FIND_WILD_MINI, 1);
+        }
+        if (plugin.achievements() != null) {
+            plugin.achievements().increment(player, "wild_finds", 1);
+            if (def.rarity().ordinal() >= Rarity.RARE.ordinal()) {
+                plugin.achievements().increment(player, "rare_wild_finds", 1);
+            }
         }
         try {
             player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.8f, 1.4f);

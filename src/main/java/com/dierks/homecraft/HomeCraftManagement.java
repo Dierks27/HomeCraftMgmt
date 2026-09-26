@@ -64,8 +64,10 @@ public final class HomeCraftManagement extends JavaPlugin {
      * 11 = the courier crate's head textures, which shipped blank and so handed every courier
      * a default Steve head to carry. 12 = the four quests that pushed Mini output (print, packs,
      * selling) leave the shipped pool. 13 = the wild hunt retune: closer, longer, one at a time.
+     * 14 = the token economy: no money in the Arcade, Prize Counter tabs, quest pools, and the
+     * achievements list.
      */
-    static final int CONFIG_REVISION = 13;
+    static final int CONFIG_REVISION = 14;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -165,6 +167,9 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.integration.HcmPlaceholders placeholders;
     private com.dierks.homecraft.display.DisplayService displayService;
     private com.dierks.homecraft.arcade.TokenService tokens;
+    private com.dierks.homecraft.arcade.PrizeService prizes;
+    private com.dierks.homecraft.arcade.TrailService trails;
+    private com.dierks.homecraft.arcade.RadarService radar;
     private com.dierks.homecraft.arcade.ArcadeService arcade;
     private com.dierks.homecraft.arcade.AchievementService achievements;
     private com.dierks.homecraft.arcade.QuestService quests;
@@ -273,6 +278,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.tokens = new com.dierks.homecraft.arcade.TokenService(
                 this, new com.dierks.homecraft.storage.TokenDao(database));
         this.arcade = new com.dierks.homecraft.arcade.ArcadeService(this);
+        com.dierks.homecraft.storage.PrizeDao prizeDao = new com.dierks.homecraft.storage.PrizeDao(database);
+        this.prizes = new com.dierks.homecraft.arcade.PrizeService(this, prizeDao);
+        this.trails = new com.dierks.homecraft.arcade.TrailService(this, prizeDao);
+        this.radar = new com.dierks.homecraft.arcade.RadarService(this);
         this.achievements = new com.dierks.homecraft.arcade.AchievementService(
                 this, new com.dierks.homecraft.storage.AchievementDao(database));
         // Daily/weekly quests (Phase 11) — repeatable token objectives; no listener,
@@ -312,6 +321,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.display.DisplayListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.ArcadeListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.hunt.HuntListener(this), this);
+        getServer().getPluginManager().registerEvents(trails, this);
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.PrizeItemListener(this), this);
+        getServer().getPluginManager().registerEvents(
+                new com.dierks.homecraft.arcade.QuestListener(this, placedNatural), this);
         getServer().getPluginManager().registerEvents(effects, this);
         getServer().getPluginManager().registerEvents(shops, this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.mini.MiniRenderListener(this), this);
@@ -331,6 +344,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.displayService.start();
         this.tokens.start(); // the five-minute streak + playtime tick
         this.arcade.start();
+        this.radar.start(); // the Mini Radar's two-second ping
         this.quests.start(); // poll statistic-backed quests (fish, distance, kills…)
         this.courier.start(); // sweep abandoned delivery runs
 
@@ -378,6 +392,18 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        // Paper skips a disabled plugin's listeners, so MenuListener never sees the close events
+        // that follow a shutdown. A menu holding a player's items (the Card trade-in tray) must
+        // hand them back now, while the player's inventory is still going to be saved.
+        for (org.bukkit.entity.Player p : getServer().getOnlinePlayers()) {
+            try {
+                if (p.getOpenInventory().getTopInventory().getHolder(false) instanceof com.dierks.homecraft.gui.Menu menu) {
+                    menu.closeNow(p);
+                }
+            } catch (RuntimeException e) {
+                getLogger().warning("Could not close " + p.getName() + "'s menu on shutdown: " + e.getMessage());
+            }
+        }
         if (shops != null) {
             shops.stop();
             shops = null;
@@ -401,6 +427,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (tokens != null) {
             tokens.stop();
             tokens = null;
+        }
+        if (radar != null) {
+            radar.stop();
+            radar = null;
         }
         if (arcade != null) {
             arcade.stop();
@@ -859,6 +889,12 @@ public final class HomeCraftManagement extends JavaPlugin {
             retune(c, n + "despawn_minutes", 3, 5, log);
             retune(c, n + "max_live", 2, 1, log);
             retune(c, n + "player_cooldown_minutes", 120, 90, log);
+        }
+        if (from < 14) {
+            // The token economy: the Arcade stops taking or paying dollars, the Prize Counter
+            // gets tabs and real prizes, quests are drawn per player from a pool, and the
+            // achievements become a list. See ArcadeConfigMigration.
+            ArcadeConfigMigration.apply(c, log);
         }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);
@@ -1750,6 +1786,21 @@ public final class HomeCraftManagement extends JavaPlugin {
     /** Arcade token balances, the login streak, playtime and the ledger. */
     public com.dierks.homecraft.arcade.TokenService tokens() {
         return tokens;
+    }
+
+    /** The Prize Counter: fixed-price token purchases, limits, and giving prizes. */
+    public com.dierks.homecraft.arcade.PrizeService prizes() {
+        return prizes;
+    }
+
+    /** Particle trails bought with tokens. */
+    public com.dierks.homecraft.arcade.TrailService trails() {
+        return trails;
+    }
+
+    /** The Mini Radar (hunt gear). */
+    public com.dierks.homecraft.arcade.RadarService radar() {
+        return radar;
     }
 
     /** Which day and week it is where the players live ({@code clock.time_zone}). */

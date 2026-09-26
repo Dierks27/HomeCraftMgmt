@@ -288,7 +288,7 @@ public final class TokenService {
         claimStreak(player);
         grantPlaytime(player);
         if (plugin.achievements() != null) {
-            plugin.achievements().checkBalance(player);
+            plugin.achievements().sweep(player);
         }
     }
 
@@ -302,6 +302,9 @@ public final class TokenService {
         }
         claimStreak(player);
         grantPlaytime(player);
+        if (plugin.achievements() != null) {
+            plugin.achievements().sweep(player); // statistics, balance, collection: nothing pushes those
+        }
     }
 
     /**
@@ -354,6 +357,9 @@ public final class TokenService {
                 player.sendMessage(Text.of("&e✦ &a+" + reward + " token" + (reward == 1 ? "" : "s")
                         + " &7(day " + d.streak() + " login streak)&7. You have &6" + after + "&7."));
                 player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.7f, 1.4f);
+            }
+            if (after != TokenDao.REFUSED && plugin.achievements() != null) {
+                plugin.achievements().checkStreak(player, d.streak());
             }
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed streak grant: " + e.getMessage());

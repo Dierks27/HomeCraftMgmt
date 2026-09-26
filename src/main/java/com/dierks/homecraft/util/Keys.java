@@ -67,6 +67,22 @@ public final class Keys {
      */
     public static NamespacedKey WILD_GRADE;
     public static NamespacedKey WILD_FINISH;
+    /**
+     * {@code hcm:token_prize} — on everything bought or won with tokens (bar Cards, packs,
+     * filament and HomeCraft blocks). Holds the prize id. Every money surface refuses an item
+     * carrying it: tokens never become dollars (§11 #9).
+     */
+    public static NamespacedKey TOKEN_PRIZE;
+    /** On a token-prize item: what it does when used (BOOST, RADAR, LURE, FIREWORK, HAT, TROPHY). */
+    public static NamespacedKey PRIZE_KIND;
+    /** On a boost item: the potion effect key, its amplifier and minutes. */
+    public static NamespacedKey BOOST_EFFECT;
+    public static NamespacedKey BOOST_AMPLIFIER;
+    public static NamespacedKey BOOST_MINUTES;
+    /** On a placed hat or trophy head: the exact item, so breaking it gives back the same prize. */
+    public static NamespacedKey PRIZE_ITEM;
+    /** On a Firework Show rocket: marks it harmless. */
+    public static NamespacedKey FIREWORK_SHOW;
 
     /** On a Display Case item / placed tile: its pedestal style (a DisplayCaseVariant name, String). */
     public static NamespacedKey DISPLAY_VARIANT;
@@ -116,6 +132,13 @@ public final class Keys {
         COURIER_PACKAGE = new NamespacedKey(plugin, "courier_package");
         WILD_SPAWN = new NamespacedKey(plugin, "wild_spawn");
         WILD_GRADE = new NamespacedKey(plugin, "wild_grade");
+        TOKEN_PRIZE = java.util.Objects.requireNonNull(NamespacedKey.fromString("hcm:token_prize"));
+        PRIZE_KIND = new NamespacedKey(plugin, "prize_kind");
+        BOOST_EFFECT = new NamespacedKey(plugin, "boost_effect");
+        BOOST_AMPLIFIER = new NamespacedKey(plugin, "boost_amplifier");
+        BOOST_MINUTES = new NamespacedKey(plugin, "boost_minutes");
+        PRIZE_ITEM = new NamespacedKey(plugin, "prize_item");
+        FIREWORK_SHOW = new NamespacedKey(plugin, "firework_show");
         WILD_FINISH = new NamespacedKey(plugin, "wild_finish");
         DISPLAY_VARIANT = new NamespacedKey(plugin, "display_variant");
         SHOP_ANCHOR = new NamespacedKey(plugin, "shop_anchor");

@@ -3,7 +3,6 @@ package com.dierks.homecraft.gui.arcade;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.config.PluginConfig.CrateReward;
-import com.dierks.homecraft.config.PluginConfig.PaidTier;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.mini.MiniDef;
@@ -16,9 +15,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A single crate: its reward table with <b>published odds</b> (§3.9), plus a free
- * token-priced open and any paid-odds fee tiers that guarantee a rarity floor.
- * Opening pulls a weighted reward (cap-aware Mini prizes) and shows the reveal.
+ * A single crate: its reward table with <b>published odds</b> (§3.9) and a token-priced open.
+ * Opening pulls a weighted reward (cap-aware Card prizes) and shows the reveal. There is no
+ * dollar "better odds" tier any more — the Arcade never takes dollars.
  */
 public final class CrateMenu extends Menu {
 
@@ -71,42 +70,24 @@ public final class CrateMenu extends Menu {
         }
 
         int tokens = plugin.tokens().balance(player.getUniqueId());
-        set(46, Menus.icon(Material.SUNFLOWER, "&eYour Tokens: &6" + tokens), null);
+        set(46, Menus.icon(Material.SUNFLOWER, "&eYou have &6" + tokens + " tokens"), null);
 
-        // Free (token) open — no glint and a "need N more" note when unaffordable, but still
-        // clickable (the click surfaces the exact shortfall message).
+        // Always a chest, glinting only when you can afford it — never faded into the filler row,
+        // so the one control on the screen stays readable for exactly the player who needs it.
         boolean afford = tokens >= crate.costTokens();
         int need = crate.costTokens() - tokens;
-        // Always a chest, glinting only when you can afford it. It used to degrade to the filler
-        // pane — inside the row this menu fills with that same pane — so the one control on the
-        // screen vanished for exactly the player who needed to read why.
         set(48, Menus.glint(Menus.icon(Material.CHEST,
-                "&aOpen — &6" + crate.costTokens() + " token" + (crate.costTokens() == 1 ? "" : "s"),
-                "&7Standard odds shown above.", "&8—", afford
+                "&aOpen it &7- &6" + crate.costTokens() + " tokens",
+                "&7The chances are shown above.", "&8—", afford
                         ? "&eClick to open"
-                        : "&c✖ Need " + need + " more token" + (need == 1 ? "" : "s")), afford),
-                e -> pull(null));
-
-        // Paid-odds tiers (buy a guaranteed rarity floor with Vault money).
-        int tierSlot = 50;
-        List<PaidTier> tiers = crate.paidTiers();
-        for (PaidTier tier : tiers) {
-            if (tierSlot > 52) {
-                break;
-            }
-            set(tierSlot++, Menus.icon(Material.GOLD_INGOT,
-                    "&6Better odds — " + plugin.economy().format(tier.costMoney()),
-                    "&7Always gives " + tier.floor().article() + " "
-                            + plugin.miniService().rarityFloorText(tier.floor()) + " &7Card.",
-                    "&8—", "&eClick to open"),
-                    e -> pull(tier));
-        }
+                        : "&cNeed " + need + " more tokens"), afford),
+                e -> pull());
 
         set(49, back(), e -> onBack.run());
     }
 
-    private void pull(PaidTier tier) {
-        var r = plugin.arcade().openCrate(player, crateId, tier);
+    private void pull() {
+        var r = plugin.arcade().openCrate(player, crateId);
         if (r.ok()) {
             new RevealMenu(plugin, player, r, () -> new CrateMenu(plugin, player, crateId, onBack).open(player))
                     .open(player);
@@ -136,9 +117,34 @@ public final class CrateMenu extends Menu {
                 return Menus.icon(Material.SUNFLOWER, "&e+" + r.amount() + " token" + (r.amount() == 1 ? "" : "s"),
                         "&7Arcade tokens", odds);
             }
+            case PRIZE, TRAIL -> {
+                var ps = plugin.arcade().prizesFor(r);
+                if (ps.size() == 1) {
+                    var p = ps.get(0);
+                    return Menus.icon(p.icon().material(), p.display()
+                            + (r.type() == PluginConfig.RewardType.TRAIL ? " &7(" + r.days() + (r.days() == 1 ? " day)" : " days)") : ""),
+                            odds);
+                }
+                List<String> lore = new ArrayList<>();
+                lore.add("&7One of:");
+                for (var p : ps) {
+                    lore.add("&f " + p.display());
+                }
+                lore.add(odds);
+                return Menus.icon(ps.isEmpty() ? Material.CHEST : ps.get(0).icon().material(),
+                        r.type() == PluginConfig.RewardType.TRAIL
+                                ? "&dA trail &7(" + r.days() + (r.days() == 1 ? " day)" : " days)") : "&dA prize",
+                        lore.toArray(new String[0]));
+            }
             case CARD, MINI -> {
                 if (r.usesTag()) {
-                    int pool = plugin.cards().issuable(plugin.miniService().poolFromTag(r.tag())).size();
+                    int pool = plugin.arcade().tagPool(r.tag()).size();
+                    if ("*".equals(r.tag())) {
+                        return Menus.glint(Menus.icon(Material.NETHER_STAR, "&d&lAny Mini's Card!",
+                                "&7The big prize: a Card for any Mini.",
+                                "&7Rarer Minis are harder to get.",
+                                "&7Minis you can still get: &f" + pool, odds), true);
+                    }
                     return Menus.icon(Material.PLAYER_HEAD, "&bRandom Card",
                             "&7A Card for one of the", "&f" + niceName(r.tag()) + " &7Minis.",
                             "&7Rarer Minis are harder to get.",
@@ -174,13 +180,7 @@ public final class CrateMenu extends Menu {
     }
 
     private boolean isDroppable(CrateReward r) {
-        if (r.type() != PluginConfig.RewardType.MINI && r.type() != PluginConfig.RewardType.CARD) {
-            return true;
-        }
-        if (r.usesTag()) {
-            return !plugin.cards().issuable(plugin.miniService().poolFromTag(r.tag())).isEmpty();
-        }
-        return plugin.cards().canIssue(plugin.miniService().def(r.miniId()));
+        return plugin.arcade().droppable(r);
     }
 
     private ItemStack back() {

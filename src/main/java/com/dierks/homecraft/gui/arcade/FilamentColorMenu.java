@@ -62,7 +62,7 @@ public final class FilamentColorMenu extends Menu {
     }
 
     private void buy(DyeColor color) {
-        var r = plugin.arcade().buyPrize(player, prize.id(), color);
+        var r = plugin.prizes().buy(player, prize, color);
         if (!r.ok()) {
             player.sendMessage(Text.of("&c" + r.error()));
         } else {

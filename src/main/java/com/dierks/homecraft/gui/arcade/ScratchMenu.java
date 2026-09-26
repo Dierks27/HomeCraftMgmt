@@ -9,8 +9,8 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 
 /**
- * The Scratch-Ticket booth: buy a ticket for Vault money and scratch it for a
- * weighted-random payout (Phase 9). Right-clicking a placed booth opens this.
+ * The Scratch-Ticket booth: buy a ticket for tokens and scratch it for a weighted-random token
+ * payout or the jackpot (§3.9). Right-clicking a placed booth opens this.
  */
 public final class ScratchMenu extends Menu {
 
@@ -28,16 +28,12 @@ public final class ScratchMenu extends Menu {
             set(i, i >= 18 ? Menus.FILLER : null, null);
         }
         PluginConfig.Lotto lotto = plugin.config().arcade().lotto();
-        double best = 0;
-        for (PluginConfig.LottoPayout p : lotto.payouts()) {
-            best = Math.max(best, p.amount());
-        }
-        set(4, Menus.icon(Material.PAPER, "&aScratch Ticket",
-                "&7Cost: &6" + plugin.economy().format(lotto.ticketCost()),
-                "&7Top prize: &6" + plugin.economy().format(best),
+        int tokens = plugin.tokens().balance(player.getUniqueId());
+        set(4, Menus.icon(Material.PAPER, "&aScratch Ticket &7- &6" + lotto.ticketTokens() + " tokens",
+                "&7Jackpot now: &6" + plugin.arcade().pot() + " tokens",
                 "&8Scratch it and see what you win!"), null);
-        set(13, Menus.icon(Material.SHEARS, "&eBuy & Scratch",
-                "&7Balance: &6" + plugin.economy().format(plugin.economy().balance(player)),
+        set(13, Menus.icon(Material.SHEARS, "&eJackpot &6" + plugin.arcade().pot() + " &e- Scratch!",
+                "&7You have &6" + tokens + " tokens&7.",
                 "&8—", "&aClick to scratch"), e -> {
             var r = plugin.arcade().scratch(player);
             if (r.ok()) {

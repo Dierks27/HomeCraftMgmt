@@ -257,7 +257,7 @@ public final class MiniService {
         player.getInventory().addItem(m.item().clone()).values()
                 .forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
         if (plugin.achievements() != null) {
-            plugin.achievements().tryAward(player, "first_mini");
+            plugin.achievements().onMint(player, m.item(), origin == Origin.PRINTER);
         }
         return m;
     }

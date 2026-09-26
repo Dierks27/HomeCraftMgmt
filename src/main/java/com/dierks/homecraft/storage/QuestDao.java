@@ -130,4 +130,82 @@ public final class QuestDao {
             }
         }
     }
+
+    // ---- draws (quests v2) ----------------------------------------------------------
+
+    /** The player's drawn quest ids for one period, by slot; empty if nothing is drawn yet. */
+    public java.util.List<String> assignments(UUID player, String periodKey) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            java.util.List<String> out = new java.util.ArrayList<>();
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT quest_id FROM quest_assignments WHERE player=? AND period_key=? ORDER BY slot")) {
+                ps.setString(1, player.toString());
+                ps.setString(2, periodKey);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        out.add(rs.getString(1));
+                    }
+                }
+            }
+            return out;
+        }
+    }
+
+    /**
+     * Store a fresh draw, unless one already exists (a second caller racing the first keeps the
+     * first draw).
+     *
+     * @return the draw now stored
+     */
+    public java.util.List<String> assign(UUID player, String periodKey, java.util.List<String> questIds)
+            throws SQLException {
+        return database.transaction(c -> {
+            java.util.List<String> existing = assignments(player, periodKey);
+            if (!existing.isEmpty()) {
+                return existing;
+            }
+            try (PreparedStatement ps = c.prepareStatement(
+                    "INSERT INTO quest_assignments(player, period_key, slot, quest_id) VALUES(?,?,?,?)")) {
+                for (int i = 0; i < questIds.size(); i++) {
+                    ps.setString(1, player.toString());
+                    ps.setString(2, periodKey);
+                    ps.setInt(3, i);
+                    ps.setString(4, questIds.get(i));
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+            }
+            return new java.util.ArrayList<>(questIds);
+        });
+    }
+
+    /** Swap the quest in one slot of a draw (Quest Reroll). */
+    public boolean replace(UUID player, String periodKey, String oldId, String newId) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE quest_assignments SET quest_id=? WHERE player=? AND period_key=? AND quest_id=?")) {
+                ps.setString(1, newId);
+                ps.setString(2, player.toString());
+                ps.setString(3, periodKey);
+                ps.setString(4, oldId);
+                return ps.executeUpdate() > 0;
+            }
+        }
+    }
+
+    /** Record a biome entered in a quest period; true the first time this period. */
+    public boolean addPeriodBiome(UUID player, String periodKey, String biome) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "INSERT OR IGNORE INTO quest_biomes(player, period_key, biome) VALUES(?,?,?)")) {
+                ps.setString(1, player.toString());
+                ps.setString(2, periodKey);
+                ps.setString(3, biome);
+                return ps.executeUpdate() > 0;
+            }
+        }
+    }
 }

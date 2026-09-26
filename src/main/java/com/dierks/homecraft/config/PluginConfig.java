@@ -172,17 +172,25 @@ public final class PluginConfig {
      * What a crate may pay out. Tokens never become money: {@code money} and sellable
      * {@code item} rewards are rejected at config load (§11, two-currency rule).
      */
-    public enum RewardType {CARD, MINI, PACK, FILAMENT, TOKENS}
+    public enum RewardType {CARD, MINI, PACK, FILAMENT, TOKENS, PRIZE, TRAIL}
 
     /**
      * One weighted reward in a crate's loot table. CARD and MINI name a fixed
      * {@code miniId} <em>or</em> a {@code tag} pool (every Mini carrying that tag,
-     * weighted by rarity) — both issue that Mini's <b>Card</b>. PACK gives a sealed
-     * pack ({@code packId}); FILAMENT gives {@code amount} filament of {@code color}
-     * (null = random); TOKENS grants {@code amount} tokens.
+     * weighted by rarity; {@code "*"} = every Mini) — both issue that Mini's <b>Card</b>.
+     * PACK gives a sealed pack ({@code packId}); FILAMENT gives {@code amount} filament of
+     * {@code color} (null = random); TOKENS grants {@code amount} tokens. PRIZE grants one of
+     * {@code prizeIds} (picked at random among those that can be given) as if bought — free,
+     * and ignoring its limit. TRAIL grants a random trail (or one of {@code prizeIds}) for
+     * {@code days}.
      */
     public record CrateReward(RewardType type, String miniId, String tag, String packId, int amount,
-                              org.bukkit.DyeColor color, double weight) {
+                              org.bukkit.DyeColor color, double weight, List<String> prizeIds, int days) {
+        public CrateReward(RewardType type, String miniId, String tag, String packId, int amount,
+                           org.bukkit.DyeColor color, double weight) {
+            this(type, miniId, tag, packId, amount, color, weight, List.of(), 0);
+        }
+
         public boolean usesTag() {
             return tag != null && !tag.isBlank();
         }
@@ -231,24 +239,64 @@ public final class PluginConfig {
         }
     }
 
-    /** An optional paid-odds tier: a Vault fee that guarantees a rarity floor for the pull. */
-    public record PaidTier(double costMoney, Rarity floor) {
+    /**
+     * A token-priced loot crate with a weighted reward table (cap-aware Card prizes). The old
+     * paid-odds tier — a dollar fee for a guaranteed rarity — is gone: it duplicated the pity
+     * exchange, and no Arcade path takes or pays dollars any more.
+     */
+    public record Crate(String id, String display, int costTokens, List<CrateReward> rewards) {
     }
 
-    /** A token-priced loot crate with a weighted reward table (cap-aware Mini prizes). */
-    public record Crate(String id, String display, int costTokens, List<CrateReward> rewards,
-                        List<PaidTier> paidTiers) {
+    /**
+     * One weighted result on the Scratch Ticket: {@code tokens} back, or the {@code jackpot}.
+     */
+    public record LottoPayout(int tokens, boolean jackpot, double weight) {
     }
 
-    /** One weighted payout in the lotto/scratch table. */
-    public record LottoPayout(double amount, double weight) {
+    /**
+     * The Scratch Ticket's progressive pot: starts at {@code seed}, grows {@code perTicket} with
+     * every ticket sold, never past {@code cap}, and goes back to {@code seed} when won.
+     */
+    public record Jackpot(int seed, int perTicket, int cap) {
     }
 
-    public record Lotto(double ticketCost, List<LottoPayout> payouts) {
+    /** The token Scratch Ticket (it cost and paid dollars until this rework). */
+    public record Lotto(int ticketTokens, List<LottoPayout> payouts, Jackpot jackpot) {
     }
 
-    /** A one-time achievement: a token payout the first time a player hits a milestone. */
-    public record AchievementDef(String id, boolean enabled, int reward, String display, double threshold) {
+    /** What an achievement measures. */
+    public enum AchievementType {
+        /** A first-time moment, fired by the code where it happens (first PC, first print…). */
+        EVENT,
+        /** A lifetime vanilla statistic, or one of the pulled quest measures. */
+        STAT,
+        /** A plugin counter: wild finds, quests finished, deliveries, crates, jackpots, biomes. */
+        COUNTER,
+        /** Distinct Minis currently owned. */
+        COLLECTION,
+        /** Print a Mini of a grade. */
+        GRADE,
+        /** Own a Mini with a finish (Shiny). */
+        FINISH,
+        /** A login streak of N days. */
+        STREAK,
+        /** A money balance of at least N. */
+        BALANCE
+    }
+
+    /**
+     * A one-time achievement: a token payout the first time a player reaches it.
+     *
+     * @param key    what it measures, by type: a counter name (COUNTER), a statistic or pulled
+     *               quest type (STAT), a grade (GRADE) or a finish (FINISH); unused otherwise
+     * @param target how much of it (a count, days, or money); 1 for a first-time event
+     */
+    public record AchievementDef(String id, String group, AchievementType type, String key, double target,
+                                 boolean enabled, int reward, String display) {
+        /** The old map-shaped achievement (id, enabled, reward, display, threshold). */
+        public double threshold() {
+            return target;
+        }
     }
 
     // ---- Daily/weekly quests (Phase 11, §3.9) — repeatable token objectives ----
@@ -267,8 +315,9 @@ public final class PluginConfig {
      * lets a verb like "walk somewhere" be a quest without a listener on every move.
      */
     public enum QuestType {
-        // Pushed by existing gameplay hooks.
+        // Pushed by gameplay hooks.
         SELL_MARKET, OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH, FIND_WILD_MINI,
+        PLANT_CROPS, HARVEST_CROPS, COOK_FOOD, SMELT_ORE, MINE_BLOCKS, VISIT_BIOMES, COMPLETE_DELIVERY,
         // Pulled from vanilla statistics.
         CATCH_FISH, KILL_HOSTILES, BREED_ANIMALS, TRADE_VILLAGER, TRAVEL_ON_FOOT
     }
@@ -288,7 +337,9 @@ public final class PluginConfig {
      * nobody notices until they look: keying a week as {@code epochDay / 7} rolls over on a
      * <b>Thursday</b>, since epoch day 0 was 1 January 1970 and that was a Thursday.
      */
-    public record Quests(boolean enabled, java.time.DayOfWeek weekStartsOn, List<Quest> all) {
+    public record Quests(boolean enabled, java.time.DayOfWeek weekStartsOn, List<Quest> all,
+                         int dailyDraw, int weeklyDraw) {
+        /** The whole pool for a period (what a draw is taken from). */
         public List<Quest> byPeriod(QuestPeriod p) {
             List<Quest> out = new ArrayList<>();
             for (Quest q : all) {
@@ -298,23 +349,84 @@ public final class PluginConfig {
             }
             return out;
         }
+
+        /** How many quests each player draws from a period's pool. */
+        public int draw(QuestPeriod p) {
+            return p == QuestPeriod.WEEKLY ? weeklyDraw : dailyDraw;
+        }
+
+        /** One quest by id in a period's pool, or null. */
+        public Quest byId(QuestPeriod p, String id) {
+            for (Quest q : all) {
+                if (q.period() == p && q.id().equalsIgnoreCase(id)) {
+                    return q;
+                }
+            }
+            return null;
+        }
+    }
+
+    /** The Prize Counter's tabs, in the order they appear. */
+    public enum PrizeTab {
+        BOOSTS("Boosts"), HUNT("Hunt Gear"), COSMETICS("Cosmetics"), PERKS("Perks"),
+        TROPHIES("Trophies"), MINIS("Minis");
+
+        private final String label;
+
+        PrizeTab(String label) {
+            this.label = label;
+        }
+
+        public String label() {
+            return label;
+        }
     }
 
     /** What a Prize Counter row hands over. Never money, never a market good (§11 #9). */
-    public enum PrizeType {FILAMENT, BLOCK, PACK}
+    public enum PrizeType {
+        BOOST, RADAR, LURE, FIREWORK, TRAIL, HAT, COMMAND, TROPHY,
+        FILAMENT, BLOCK, PACK, PITY, TRADE_IN, QUEST_REROLL
+    }
+
+    /** How often a limit resets: per local day, per local week, or never. */
+    public enum LimitPer {DAY, WEEK, LIFETIME}
+
+    /** "At most {@code count} per {@code per}". */
+    public record PrizeLimit(LimitPer per, int count) {
+    }
+
+    /**
+     * A GUI icon: a head texture, and the plain material every Bedrock player sees instead (and
+     * every Java player too, while the texture is blank).
+     */
+    public record Icon(String texture, Material material) {
+        public boolean hasTexture() {
+            return texture != null && !texture.isBlank();
+        }
+    }
 
     /**
      * One Prize Counter row: a <b>known-outcome</b> token purchase. A crate is a pull and a
      * prize is a price — you see exactly what you get before you spend, which is what gives
      * tokens a floor value instead of only an expected one.
      *
-     * @param amount   FILAMENT: units handed over
-     * @param color    FILAMENT: the colour, or null to let the buyer choose at purchase
-     * @param blockKey BLOCK: a {@link com.dierks.homecraft.block.CustomBlockType} name
-     * @param packId   PACK: an id from {@code packs:}
+     * <p>Type-specific fields are zero/null where they do not apply:
+     * <ul>
+     *   <li>BOOST: {@code effect} (a potion effect key), {@code amplifier}, {@code minutes}</li>
+     *   <li>TRAIL: {@code particle}, {@code days}</li>
+     *   <li>HAT / TROPHY: {@code texture} (a HAT with none is hidden)</li>
+     *   <li>COMMAND: {@code commands} (console, {@code %player%} / {@code %uuid%}),
+     *       {@code requiresPlugins}, {@code ownedIfPermission}, {@code requiresPrize}</li>
+     *   <li>FILAMENT: {@code amount}, {@code color} (null = the buyer picks)</li>
+     *   <li>BLOCK: {@code blockKey}; PACK: {@code packId}</li>
+     * </ul>
      */
-    public record Prize(String id, String display, int costTokens, PrizeType type,
-                        int amount, org.bukkit.DyeColor color, String blockKey, String packId) {
+    public record Prize(String id, PrizeTab tab, String display, List<String> description, int costTokens,
+                        Icon icon, PrizeType type, boolean enabled, PrizeLimit limit,
+                        int amount, org.bukkit.DyeColor color, String blockKey, String packId,
+                        String effect, int amplifier, int minutes, String particle, int days, String texture,
+                        List<String> commands, List<String> requiresPlugins, String ownedIfPermission,
+                        String requiresPrize) {
         /** True if the buyer picks the filament colour at purchase time. */
         public boolean choosesColor() {
             return type == PrizeType.FILAMENT && color == null;
@@ -325,8 +437,25 @@ public final class PluginConfig {
     public record Arcade(boolean enabled, boolean streakEnabled, List<Integer> streakRewards,
                          boolean playtimeEnabled, int playtimeMinutesPerToken,
                          Map<String, Crate> crates, List<Prize> prizes,
-                         int pityTokens, Rarity pityRarity, Lotto lotto,
+                         int pityTokens, Rarity pityRarity, int pityPerWeek, Lotto lotto,
+                         Map<Rarity, Integer> tradeIn,
                          BlockDef block, Map<String, BlockDef> machines) {
+
+        /** Every prize on one tab, in config order. */
+        public List<Prize> prizes(PrizeTab tab) {
+            List<Prize> out = new ArrayList<>();
+            for (Prize p : prizes) {
+                if (p.tab() == tab) {
+                    out.add(p);
+                }
+            }
+            return out;
+        }
+
+        /** Tokens a Card of this rarity trades in for (0 = not accepted). */
+        public int tradeInValue(Rarity rarity) {
+            return tradeIn.getOrDefault(rarity, 0);
+        }
 
         /** One prize by id, or null. */
         public Prize prize(String id) {
@@ -1063,13 +1192,23 @@ public final class PluginConfig {
         };
     }
 
+    /**
+     * Quests v2: a pool per period ({@code daily_pool} / {@code weekly_pool}) that each player
+     * draws {@code daily_draw} / {@code weekly_draw} from. The pre-pool {@code daily} /
+     * {@code weekly} lists are read as pools when the new keys are absent, so an unmigrated file
+     * still works.
+     */
     private Quests readQuests(FileConfiguration c) {
         boolean enabled = c.getBoolean("arcade.quests.enabled", true);
         java.time.DayOfWeek weekStart = parseDayOfWeek(c.getString("arcade.quests.week_starts", "MONDAY"));
         List<Quest> all = new ArrayList<>();
-        readQuestList(c, "arcade.quests.daily", QuestPeriod.DAILY, all);
-        readQuestList(c, "arcade.quests.weekly", QuestPeriod.WEEKLY, all);
-        return new Quests(enabled, weekStart, all);
+        readQuestList(c, c.isList("arcade.quests.daily_pool") ? "arcade.quests.daily_pool" : "arcade.quests.daily",
+                QuestPeriod.DAILY, all);
+        readQuestList(c, c.isList("arcade.quests.weekly_pool") ? "arcade.quests.weekly_pool" : "arcade.quests.weekly",
+                QuestPeriod.WEEKLY, all);
+        int dailyDraw = Math.max(0, c.getInt("arcade.quests.daily_draw", 3));
+        int weeklyDraw = Math.max(0, c.getInt("arcade.quests.weekly_draw", 2));
+        return new Quests(enabled, weekStart, all, dailyDraw, weeklyDraw);
     }
 
     /** {@code arcade.quests.week_starts}; anything unrecognised falls back to Monday. */
@@ -1108,26 +1247,78 @@ public final class PluginConfig {
         }
     }
 
+    /**
+     * Achievements v2: {@code arcade.achievements} is a LIST of rows (id, group, type, what it
+     * measures, target, reward, display, enabled), in the order the Achievements screen shows
+     * them. The old map shape (six hard-coded ids) is still read, so an unmigrated file keeps
+     * working; the config migration turns it into the list.
+     */
     private Map<String, AchievementDef> readAchievements(FileConfiguration c) {
         Map<String, AchievementDef> map = new LinkedHashMap<>();
-        // Built-in milestones with sensible defaults; each toggleable/tunable in config.
-        putAchievement(map, c, "first_mini", 3, "First Mini Collected", 0);
-        putAchievement(map, c, "first_sale", 2, "First Market Sale", 0);
-        putAchievement(map, c, "first_pc", 2, "Built Your First PC", 0);
-        putAchievement(map, c, "first_crate", 1, "Opened Your First Crate", 0);
-        putAchievement(map, c, "first_pack", 2, "Opened Your First Pack", 0);
-        putAchievement(map, c, "rich_10k", 5, "Reached $10,000", 10000);
+        if (c.isList("arcade.achievements")) {
+            for (Map<?, ?> row : c.getMapList("arcade.achievements")) {
+                AchievementDef def = readAchievement(row);
+                if (def != null) {
+                    map.put(def.id(), def);
+                }
+            }
+            return map;
+        }
+        // Legacy map shape.
+        putLegacyAchievement(map, c, "first_mini", 3, "First Mini Collected", 0);
+        putLegacyAchievement(map, c, "first_sale", 2, "First Market Sale", 0);
+        putLegacyAchievement(map, c, "first_pc", 2, "Built Your First PC", 0);
+        putLegacyAchievement(map, c, "first_crate", 1, "Opened Your First Crate", 0);
+        putLegacyAchievement(map, c, "first_pack", 2, "Opened Your First Pack", 0);
+        putLegacyAchievement(map, c, "rich_10k", 5, "Reached $10,000", 10000);
         return map;
     }
 
-    private void putAchievement(Map<String, AchievementDef> map, FileConfiguration c, String id,
-                                int defReward, String defDisplay, double defThreshold) {
+    private void putLegacyAchievement(Map<String, AchievementDef> map, FileConfiguration c, String id,
+                                      int defReward, String defDisplay, double defThreshold) {
         String base = "arcade.achievements." + id;
         boolean enabled = c.getBoolean(base + ".enabled", true);
         int reward = Math.max(0, c.getInt(base + ".reward", defReward));
         String display = c.getString(base + ".display", defDisplay);
         double threshold = c.getDouble(base + ".threshold", defThreshold);
-        map.put(id, new AchievementDef(id, enabled, reward, display, threshold));
+        AchievementType type = threshold > 0 ? AchievementType.BALANCE : AchievementType.EVENT;
+        map.put(id, new AchievementDef(id, "Getting Started", type, null, threshold > 0 ? threshold : 1,
+                enabled, reward, display));
+    }
+
+    private AchievementDef readAchievement(Map<?, ?> row) {
+        String id = str(row.get("id"), "").trim().toLowerCase(Locale.ROOT);
+        if (id.isBlank()) {
+            log.warning("An arcade.achievements row has no id — skipped.");
+            return null;
+        }
+        AchievementType type;
+        try {
+            type = AchievementType.valueOf(str(row.get("type"), "EVENT").trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            log.warning("Achievement '" + id + "' has unknown type '" + row.get("type") + "' — skipped. Use EVENT, "
+                    + "STAT, COUNTER, COLLECTION, GRADE, FINISH, STREAK or BALANCE.");
+            return null;
+        }
+        String key = switch (type) {
+            case COUNTER -> str(row.get("counter"), null);
+            case STAT -> str(row.get("stat"), null);
+            case GRADE -> str(row.get("grade"), "MINT");
+            case FINISH -> str(row.get("finish"), "SHINY");
+            default -> null;
+        };
+        if ((type == AchievementType.COUNTER || type == AchievementType.STAT) && (key == null || key.isBlank())) {
+            log.warning("Achievement '" + id + "' is a " + type + " but names no "
+                    + (type == AchievementType.COUNTER ? "counter" : "stat") + " — skipped.");
+            return null;
+        }
+        double target = Math.max(1, number(row.get("target"), row.get("threshold") != null
+                ? number(row.get("threshold"), 1) : 1));
+        boolean enabled = !(row.get("enabled") instanceof Boolean b) || b;
+        int reward = (int) Math.max(0, number(row.get("reward"), 0));
+        String display = str(row.get("display"), id);
+        String group = str(row.get("group"), "Other");
+        return new AchievementDef(id, group, type, key == null ? null : key.trim(), target, enabled, reward, display);
     }
 
     private Arcade readArcade(FileConfiguration c) {
@@ -1173,35 +1364,55 @@ public final class PluginConfig {
                     }
                     rewards.add(r);
                 }
-                List<PaidTier> tiers = new ArrayList<>();
-                for (Map<?, ?> row : c.getMapList(base + ".paid_odds")) {
-                    double costMoney = number(row.get("cost_money"), 0);
-                    Rarity floor = parseRarity(str(row.get("floor"), str(row.get("boost_rarity"), "RARE")));
-                    if (costMoney > 0) {
-                        tiers.add(new PaidTier(costMoney, floor));
-                    }
+                if (c.contains(base + ".paid_odds")) {
+                    log.warning("Arcade crate '" + key + "' still has paid_odds — ignored. The Arcade no "
+                            + "longer takes dollars; the config migration removes the key.");
                 }
                 crates.put(key.toLowerCase(Locale.ROOT),
-                        new Crate(key.toLowerCase(Locale.ROOT), display, cost, rewards, tiers));
+                        new Crate(key.toLowerCase(Locale.ROOT), display, cost, rewards));
             }
         }
+
+        int pityTokens = Math.max(0, c.getInt("arcade.pity.tokens", 150));
+        Rarity pityRarity = parseRarity(c.getString("arcade.pity.guarantees_rarity", "RARE"));
+        int pityPerWeek = Math.max(0, c.getInt("arcade.pity.per_week", 1));
 
         List<Prize> prizes = new ArrayList<>();
+        java.util.Set<String> seenPrizes = new java.util.HashSet<>();
         for (Map<?, ?> row : c.getMapList("arcade.prizes")) {
-            Prize prize = readPrize(row);
-            if (prize != null) {
-                prizes.add(prize);
+            Prize prize = readPrize(row, pityTokens, pityPerWeek);
+            if (prize == null) {
+                continue;
             }
+            if (!seenPrizes.add(prize.id().toLowerCase(Locale.ROOT))) {
+                log.warning("Arcade prize id '" + prize.id() + "' is used twice — the second row is skipped.");
+                continue;
+            }
+            prizes.add(prize);
         }
 
-        int pityTokens = Math.max(0, c.getInt("arcade.pity.tokens", 25));
-        Rarity pityRarity = parseRarity(c.getString("arcade.pity.guarantees_rarity", "RARE"));
-
-        double ticketCost = c.getDouble("arcade.lotto.ticket_cost_money", 250);
+        int ticketTokens = Math.max(1, c.getInt("arcade.lotto.ticket_tokens", 10));
         List<LottoPayout> payouts = new ArrayList<>();
         for (Map<?, ?> row : c.getMapList("arcade.lotto.payouts")) {
-            payouts.add(new LottoPayout(Math.max(0, number(row.get("amount"), 0)),
-                    Math.max(0.0001, number(row.get("weight"), 1))));
+            double weight = Math.max(0.0001, number(row.get("weight"), 1));
+            if (Boolean.TRUE.equals(row.get("jackpot"))) {
+                payouts.add(new LottoPayout(0, true, weight));
+            } else if (row.get("tokens") != null) {
+                payouts.add(new LottoPayout((int) Math.max(0, number(row.get("tokens"), 0)), false, weight));
+            } else {
+                log.warning("A Scratch Ticket payout has neither tokens: nor jackpot: true — skipped. (Money "
+                        + "payouts were removed: the ticket costs and pays tokens now.)");
+            }
+        }
+        Jackpot jackpot = new Jackpot(
+                Math.max(0, c.getInt("arcade.lotto.jackpot.seed", 50)),
+                Math.max(0, c.getInt("arcade.lotto.jackpot.per_ticket", 1)),
+                Math.max(0, c.getInt("arcade.lotto.jackpot.cap", 1000)));
+
+        Map<Rarity, Integer> tradeIn = new java.util.EnumMap<>(Rarity.class);
+        int[] tradeDefaults = {3, 5, 12, 25, 50};
+        for (Rarity r : Rarity.values()) {
+            tradeIn.put(r, Math.max(0, c.getInt("arcade.trade_in." + r.name(), tradeDefaults[r.ordinal()])));
         }
 
         BlockDef block = blockDef(c, "arcade.block", Material.JUKEBOX, "&5Arcade Machine");
@@ -1213,8 +1424,8 @@ public final class PluginConfig {
         machines.put("counter", blockDef(c, "arcade.machines.counter", Material.LECTERN, "&eToken Counter"));
 
         return new Arcade(enabled, streakEnabled, streakRewards, ptEnabled, minsPerToken,
-                crates, prizes, pityTokens, pityRarity,
-                new Lotto(Math.max(0, ticketCost), payouts), block, machines);
+                crates, prizes, pityTokens, pityRarity, pityPerWeek,
+                new Lotto(ticketTokens, payouts, jackpot), tradeIn, block, machines);
     }
 
     /**
@@ -1222,28 +1433,125 @@ public final class PluginConfig {
      * with a warning rather than failing the load — the same convention the crate table uses,
      * so one bad row never costs an admin the whole Arcade.
      */
-    private Prize readPrize(Map<?, ?> row) {
+    private Prize readPrize(Map<?, ?> row, int pityTokens, int pityPerWeek) {
         String id = str(row.get("id"), null);
         if (id == null || id.isBlank()) {
             log.warning("Arcade prize row has no id: — skipped.");
             return null;
         }
         id = id.trim();
-        String display = str(row.get("display"), id);
-        int cost = (int) number(row.get("cost_tokens"), 0);
-        if (cost <= 0) {
-            log.warning("Arcade prize '" + id + "' costs " + cost + " tokens — a prize must cost "
-                    + "something to be a sink. Skipped.");
+        String typeName = str(row.get("type"), "").trim().toUpperCase(Locale.ROOT);
+        if (typeName.equals("NATIVE") && id.equalsIgnoreCase("quest_reroll")) {
+            typeName = "QUEST_REROLL";
+        }
+        PrizeType type;
+        try {
+            type = PrizeType.valueOf(typeName);
+        } catch (IllegalArgumentException e) {
+            log.warning("Arcade prize '" + id + "' has unknown type '" + row.get("type") + "' — skipped. Use boost, "
+                    + "radar, lure, firework, trail, hat, command, trophy, filament, block, pack, pity, "
+                    + "trade_in or quest_reroll.");
             return null;
         }
-        String type = str(row.get("type"), "").toLowerCase(Locale.ROOT);
-        switch (type) {
-            case "filament" -> {
-                int amount = Math.max(1, (int) number(row.get("amount"), 8));
-                return new Prize(id, display, cost, PrizeType.FILAMENT, amount,
-                        parseDye(str(row.get("color"), null)), null, null);
+        String display = str(row.get("display"), id);
+        List<String> description = stringList(row.get("description"));
+        boolean enabled = !(row.get("enabled") instanceof Boolean b) || b;
+
+        int cost = (int) number(row.get("cost_tokens"), type == PrizeType.PITY ? pityTokens : 0);
+        if (cost <= 0 && type != PrizeType.TRADE_IN) {
+            log.warning("Arcade prize '" + id + "' costs " + cost + " tokens — a prize must cost "
+                    + "something. Skipped.");
+            return null;
+        }
+
+        PrizeLimit limit = null;
+        if (row.get("limit") instanceof Map<?, ?> lm) {
+            try {
+                LimitPer per = LimitPer.valueOf(str(lm.get("per"), "DAY").trim().toUpperCase(Locale.ROOT));
+                int count = (int) number(lm.get("count"), 1);
+                if (count > 0) {
+                    limit = new PrizeLimit(per, count);
+                }
+            } catch (IllegalArgumentException e) {
+                log.warning("Arcade prize '" + id + "' has a limit per '" + lm.get("per")
+                        + "' — use DAY, WEEK or LIFETIME. The limit is ignored.");
             }
-            case "block" -> {
+        }
+        if (type == PrizeType.PITY && limit == null && pityPerWeek > 0) {
+            limit = new PrizeLimit(LimitPer.WEEK, pityPerWeek);
+        }
+
+        PrizeTab tab = defaultTab(type);
+        if (row.get("tab") != null) {
+            try {
+                tab = PrizeTab.valueOf(str(row.get("tab"), "").trim().toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException e) {
+                log.warning("Arcade prize '" + id + "' names unknown tab '" + row.get("tab") + "' — shown under "
+                        + tab + ". Tabs: BOOSTS, HUNT, COSMETICS, PERKS, TROPHIES, MINIS.");
+            }
+        }
+
+        String texture = "";
+        Material material = null;
+        if (row.get("icon") instanceof Map<?, ?> im) {
+            texture = str(im.get("texture"), "");
+            String mat = str(im.get("material"), null);
+            material = mat == null ? null : Material.matchMaterial(mat.trim().toUpperCase(Locale.ROOT));
+            if (mat != null && material == null) {
+                log.warning("Arcade prize '" + id + "' icon material '" + mat + "' is not a material — using the default.");
+            }
+        }
+        if (material == null || !material.isItem()) {
+            material = defaultIcon(type);
+        }
+        Icon icon = new Icon(texture == null ? "" : texture.trim(), material);
+
+        int amount = Math.max(1, (int) number(row.get("amount"), 8));
+        org.bukkit.DyeColor color = parseDye(str(row.get("color"), null));
+        String blockKey = null;
+        String packId = null;
+        String effect = null;
+        int amplifier = 0;
+        int minutes = 0;
+        String particle = null;
+        int days = 0;
+        String headTexture = str(row.get("texture"), "");
+        List<String> commands = List.of();
+        List<String> requiresPlugins = stringList(row.get("requires_plugins"));
+        String ownedIf = blankToNull(str(row.get("owned_if_permission"), null));
+        String requiresPrize = blankToNull(str(row.get("requires_prize"), null));
+
+        switch (type) {
+            case BOOST -> {
+                effect = str(row.get("effect"), null);
+                if (effect == null || effect.isBlank()) {
+                    log.warning("Arcade prize '" + id + "' is a boost with no effect: — skipped.");
+                    return null;
+                }
+                effect = effect.trim().toLowerCase(Locale.ROOT);
+                amplifier = Math.max(0, (int) number(row.get("amplifier"), 0));
+                minutes = Math.max(1, (int) number(row.get("minutes"), 10));
+            }
+            case TRAIL -> {
+                particle = str(row.get("particle"), null);
+                if (particle == null || particle.isBlank()) {
+                    log.warning("Arcade prize '" + id + "' is a trail with no particle: — skipped.");
+                    return null;
+                }
+                particle = particle.trim().toUpperCase(Locale.ROOT);
+                days = Math.max(1, (int) number(row.get("days"), 7));
+            }
+            case COMMAND -> {
+                commands = stringList(row.get("commands"));
+                if (commands.isEmpty()) {
+                    commands = stringList(row.get("command"));
+                }
+                if (commands.isEmpty()) {
+                    log.warning("Arcade prize '" + id + "' is a command row with no commands: — skipped.");
+                    return null;
+                }
+            }
+            case BLOCK -> {
                 String key = str(row.get("block"), null);
                 com.dierks.homecraft.block.CustomBlockType bt = parseBlockType(key);
                 if (bt == null) {
@@ -1251,22 +1559,72 @@ public final class PluginConfig {
                             + "' — skipped. Valid: display_case, pallet, vending, mailbox, printer, pc, arcade.");
                     return null;
                 }
-                return new Prize(id, display, cost, PrizeType.BLOCK, 1, null, bt.name(), null);
+                blockKey = bt.name();
+                amount = 1;
             }
-            case "pack" -> {
+            case PACK -> {
                 String pack = str(row.get("pack"), null);
                 if (pack == null || pack.isBlank()) {
                     log.warning("Arcade prize '" + id + "' needs a pack: id — skipped.");
                     return null;
                 }
-                return new Prize(id, display, cost, PrizeType.PACK, 1, null, null, pack.trim());
+                packId = pack.trim();
+                amount = 1;
             }
             default -> {
-                log.warning("Arcade prize '" + id + "' has unknown type '" + type
-                        + "' — skipped. Use filament, block or pack.");
-                return null;
+                // radar, lure, firework, hat, trophy, filament, pity, trade_in, quest_reroll:
+                // nothing more to read
             }
         }
+        return new Prize(id, tab, display, description, Math.max(0, cost), icon, type, enabled, limit,
+                amount, color, blockKey, packId, effect, amplifier, minutes, particle, days,
+                headTexture == null ? "" : headTexture.trim(), commands, requiresPlugins, ownedIf, requiresPrize);
+    }
+
+    private static PrizeTab defaultTab(PrizeType type) {
+        return switch (type) {
+            case BOOST, QUEST_REROLL -> PrizeTab.BOOSTS;
+            case RADAR, LURE -> PrizeTab.HUNT;
+            case FIREWORK, TRAIL, HAT -> PrizeTab.COSMETICS;
+            case COMMAND -> PrizeTab.PERKS;
+            case TROPHY -> PrizeTab.TROPHIES;
+            case FILAMENT, BLOCK, PACK, PITY, TRADE_IN -> PrizeTab.MINIS;
+        };
+    }
+
+    /** A distinct, colourful plain item per type, so the counter reads with no textures at all. */
+    private static Material defaultIcon(PrizeType type) {
+        return switch (type) {
+            case BOOST -> Material.SUGAR;
+            case QUEST_REROLL -> Material.WRITABLE_BOOK;
+            case RADAR -> Material.COMPASS;
+            case LURE -> Material.HEART_OF_THE_SEA;
+            case FIREWORK -> Material.FIREWORK_ROCKET;
+            case TRAIL -> Material.BLAZE_POWDER;
+            case HAT -> Material.LEATHER_HELMET;
+            case COMMAND -> Material.NAME_TAG;
+            case TROPHY -> Material.GOLD_BLOCK;
+            case FILAMENT -> Material.WHITE_DYE;
+            case BLOCK -> Material.CHEST;
+            case PACK -> Material.PAPER;
+            case PITY -> Material.NETHER_STAR;
+            case TRADE_IN -> Material.HOPPER;
+        };
+    }
+
+    /** A config value that may be one string or a list of them. */
+    private static List<String> stringList(Object raw) {
+        List<String> out = new ArrayList<>();
+        if (raw instanceof List<?> list) {
+            for (Object o : list) {
+                if (o != null && !String.valueOf(o).isBlank()) {
+                    out.add(String.valueOf(o));
+                }
+            }
+        } else if (raw != null && !String.valueOf(raw).isBlank()) {
+            out.add(String.valueOf(raw));
+        }
+        return out;
     }
 
     /** A {@code block:} name from a prize row, tolerant of the short names the GUI uses. */
@@ -1295,7 +1653,8 @@ public final class PluginConfig {
         switch (type) {
             case "money", "item" -> {
                 log.warning("Arcade crate reward of type '" + type + "' is not allowed — tokens must never "
-                        + "become money or sellable items (§11). Use card, mini, pack, filament or tokens. Skipped.");
+                        + "become money or sellable items (§11). Use card, mini, pack, filament, tokens, prize or "
+                        + "trail. Skipped.");
                 return null;
             }
             case "card", "mini" -> {
@@ -1327,6 +1686,20 @@ public final class PluginConfig {
             case "tokens" -> {
                 int amt = Math.max(1, (int) number(row.get("amount"), 1));
                 return new CrateReward(RewardType.TOKENS, null, null, null, amt, null, weight);
+            }
+            case "prize" -> {
+                List<String> ids = stringList(row.get("prize"));
+                if (ids.isEmpty()) {
+                    log.warning("Arcade crate 'prize' reward needs prize: <id> or prize: [id, id] — skipped.");
+                    return null;
+                }
+                return new CrateReward(RewardType.PRIZE, null, null, null, 1, null, weight, ids, 0);
+            }
+            case "trail" -> {
+                // trail: <id> or [ids]; none = any trail on the counter. days overrides the row's.
+                List<String> ids = stringList(row.get("trail"));
+                int days = Math.max(1, (int) number(row.get("days"), 1));
+                return new CrateReward(RewardType.TRAIL, null, null, null, 1, null, weight, ids, days);
             }
             default -> {
                 log.warning("Arcade crate reward has unknown type '" + type + "' — skipped.");

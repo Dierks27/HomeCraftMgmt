@@ -94,6 +94,9 @@ public final class AuctionService {
         if (!plugin.sandbox().check(seller, "auction listing")) {
             return Result.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
         }
+        if (com.dierks.homecraft.util.TokenPrizes.is(seller.getInventory().getItemInMainHand())) {
+            return Result.fail(com.dierks.homecraft.util.TokenPrizes.REFUSAL);
+        }
         MiniService.HeldMini held = plugin.miniService().getHeldMini(seller);
         if (held == null) {
             return Result.fail("Hold the Mini you want to auction in your main hand.");

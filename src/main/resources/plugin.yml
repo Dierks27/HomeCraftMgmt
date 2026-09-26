@@ -41,6 +41,8 @@ commands:
       /hcm backup now        - admin: write a database backup
       /hcm display sign|hologram|maptv|remove  - bind an in-game economy display
       /hcm arcade            - open the Arcade (crates, pity, scratch tickets)
+      /hcm arcade odds       - admin: Scratch Ticket RTP and each crate's value
+      /hcm trail [name|off]  - turn your particle trail on or off
       /hcm tokens            - show your Arcade token balance
       /hcm tokens give|set|take <player> <n>  - admin: adjust tokens
       /hcm tokens audit [days] [player]  - admin: tokens earned/spent by source

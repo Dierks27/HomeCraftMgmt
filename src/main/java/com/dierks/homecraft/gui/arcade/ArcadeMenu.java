@@ -73,9 +73,9 @@ public final class ArcadeMenu extends Menu {
             });
         }
 
-        // Lotto / scratch ticket.
-        set(33, Menus.icon(Material.PAPER, "&aScratch Ticket",
-                "&7Cost: &6" + plugin.economy().format(arc.lotto().ticketCost()),
+        // The Scratch Ticket — tokens in, tokens out, with the jackpot in its NAME for Bedrock.
+        set(33, Menus.icon(Material.PAPER, "&aScratch Ticket &7- Jackpot &6" + plugin.arcade().pot(),
+                "&7Costs &6" + arc.lotto().ticketTokens() + " tokens&7.",
                 "&7Scratch it and see what you win!",
                 "&8—", "&eClick to scratch"), e -> {
             var r = plugin.arcade().scratch(player);

@@ -573,6 +573,59 @@ public final class Database {
                 player    TEXT    PRIMARY KEY,
                 armed_at  INTEGER NOT NULL
             );
+            """,
+
+            // v30 — the token economy. prize_purchases counts buys against a Prize Counter
+            // limit per period (d<day> / w<week> / life, local days). cosmetics_owned is a trail
+            // (or later cosmetic) with its expiry and on/off switch. quest_assignments is each
+            // player's own draw from the quest pools; quest_biomes and player_biomes are the
+            // distinct biomes entered per quest period and ever. player_counters backs the
+            // COUNTER achievements. arcade_state holds single numbers the Arcade keeps: the
+            // Scratch Ticket pot and the trophy serial.
+            """
+            CREATE TABLE IF NOT EXISTS prize_purchases (
+                player     TEXT    NOT NULL,
+                prize_id   TEXT    NOT NULL,
+                period_key TEXT    NOT NULL,
+                count      INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (player, prize_id, period_key)
+            );
+            CREATE TABLE IF NOT EXISTS cosmetics_owned (
+                player      TEXT    NOT NULL,
+                cosmetic_id TEXT    NOT NULL,
+                expires_at  INTEGER NOT NULL,
+                enabled     INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (player, cosmetic_id)
+            );
+            CREATE TABLE IF NOT EXISTS quest_assignments (
+                player     TEXT    NOT NULL,
+                period_key TEXT    NOT NULL,
+                slot       INTEGER NOT NULL,
+                quest_id   TEXT    NOT NULL,
+                PRIMARY KEY (player, period_key, slot)
+            );
+            CREATE TABLE IF NOT EXISTS quest_biomes (
+                player     TEXT    NOT NULL,
+                period_key TEXT    NOT NULL,
+                biome      TEXT    NOT NULL,
+                PRIMARY KEY (player, period_key, biome)
+            );
+            CREATE TABLE IF NOT EXISTS player_biomes (
+                player   TEXT    NOT NULL,
+                biome    TEXT    NOT NULL,
+                first_at INTEGER NOT NULL,
+                PRIMARY KEY (player, biome)
+            );
+            CREATE TABLE IF NOT EXISTS player_counters (
+                player  TEXT    NOT NULL,
+                counter TEXT    NOT NULL,
+                value   INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (player, counter)
+            );
+            CREATE TABLE IF NOT EXISTS arcade_state (
+                key   TEXT    PRIMARY KEY,
+                value INTEGER NOT NULL
+            );
             """
     };
 

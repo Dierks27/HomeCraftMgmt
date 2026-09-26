@@ -63,6 +63,25 @@ public abstract class Menu implements InventoryHolder {
         player.openInventory(inventory);
     }
 
+    /**
+     * A menu that moves real items in and out (the Card trade-in) takes every click itself:
+     * {@link MenuListener} still cancels the click, then hands it to {@link #onRawClick}, which
+     * moves items explicitly. Nothing is ever left to vanilla cursor handling, so nothing can be
+     * duplicated or lost between the two inventories.
+     */
+    protected boolean handlesRawClicks() {
+        return false;
+    }
+
+    /** Every click in the view, top or bottom, when {@link #handlesRawClicks()} (already cancelled). */
+    protected void onRawClick(InventoryClickEvent event) {
+        handleClick(event);
+    }
+
+    /** Called when the viewer closes this menu — the place to hand back anything held in it. */
+    protected void onClose(org.bukkit.entity.Player player) {
+    }
+
     void handleClick(InventoryClickEvent event) {
         Consumer<InventoryClickEvent> handler = handlers.get(event.getRawSlot());
         if (handler != null) {

@@ -1008,6 +1008,33 @@ arcade:
     scratch: { material: CARTOGRAPHY_TABLE, name: "&aScratch-Ticket Booth" }
     pity:    { material: ENCHANTING_TABLE,  name: "&bPity Exchange" }
     counter: { material: LECTERN,           name: "&eToken Counter" }
+  # Arcade button icons. A blank texture uses the plain material; Bedrock players always see the
+  # material (Geyser shows an unregistered custom head as a plain one). Paste a minecraft-heads
+  # "Value" into texture to give a Java player a head instead. Keys: wallet, crate, scratch, wild,
+  # wild_none, packs, quests, achievements, guide, and the Prize Counter tabs (boosts, hunt,
+  # cosmetics, perks, trophies, minis).
+  icons:
+    wallet:       { texture: "", material: SUNFLOWER }
+    crate:        { texture: "", material: CHEST }
+    scratch:      { texture: "", material: FILLED_MAP }
+    wild:         { texture: "", material: SPYGLASS }
+    wild_none:    { texture: "", material: GRAY_DYE }
+    packs:        { texture: "", material: PAPER }
+    quests:       { texture: "", material: WRITABLE_BOOK }
+    achievements: { texture: "", material: TOTEM_OF_UNDYING }
+    guide:        { texture: "", material: KNOWLEDGE_BOOK }
+    boosts:       { texture: "", material: SUGAR }
+    hunt:         { texture: "", material: COMPASS }
+    cosmetics:    { texture: "", material: FIREWORK_ROCKET }
+    perks:        { texture: "", material: NAME_TAG }
+    trophies:     { texture: "", material: GOLD_BLOCK }
+    minis:        { texture: "", material: AMETHYST_SHARD }
+  # The crate spin: about spin_ticks long (20 = 1 second), in `frames` steps that slow down as it
+  # lands. Bedrock gets bedrock_frames steps — rapid inventory updates stutter through Geyser.
+  reveal:
+    spin_ticks: 60
+    frames: 24
+    bedrock_frames: 6
   tokens:
     login_streak:
       enabled: true

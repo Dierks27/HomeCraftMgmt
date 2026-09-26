@@ -49,7 +49,8 @@ public final class PackShopMenu extends Menu {
             set(i, Menus.FILLER, null);
         }
         set(0, wallet(plugin, player), null);
-        set(8, help(), null);
+        set(8, help(), e -> new com.dierks.homecraft.gui.arcade.GuideMenu(plugin, player,
+                com.dierks.homecraft.gui.arcade.GuideMenu.MINIS, this::reopen).open(player));
 
         List<Pack.PackDef> packs = plugin.packs().packs();
         if (packs.isEmpty()) {
@@ -78,13 +79,14 @@ public final class PackShopMenu extends Menu {
                 + " &7· &6" + tokens + " tokens", "&7What you have to spend.");
     }
 
-    /** "How packs work", in four steps. The full guide arrives with How It Works. */
+    /** "How packs work", in four steps; click for the Minis page of How It Works. */
     static ItemStack help() {
         return Menus.icon(Material.BOOK, "&e? How packs work",
                 "&71. Open a pack to get a Card.",
                 "&72. Take the Card to a Printer.",
                 "&73. Add filament and print it.",
-                "&74. Your Mini is ready!");
+                "&74. Your Mini is ready!",
+                "&eClick for the guide");
     }
 
     /** "$100 or 50 tokens", "$300", "50 tokens" — or "Not for sale". */

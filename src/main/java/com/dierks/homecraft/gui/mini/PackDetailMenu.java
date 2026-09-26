@@ -74,7 +74,8 @@ public final class PackDetailMenu extends Menu {
             set(i, Menus.FILLER, null);
         }
         set(0, PackShopMenu.wallet(plugin, player), null);
-        set(8, PackShopMenu.help(), null);
+        set(8, PackShopMenu.help(), e -> new com.dierks.homecraft.gui.arcade.GuideMenu(plugin, player,
+                com.dierks.homecraft.gui.arcade.GuideMenu.MINIS, this::reopenSelf).open(player));
 
         boolean soldOut = plugin.packs().soldOut(p);
         List<String> summary = new ArrayList<>();
@@ -180,6 +181,10 @@ public final class PackDetailMenu extends Menu {
                 + "! &7Right-click it to open."));
         Sounds.paid(player);
         refresh();
+    }
+
+    private void reopenSelf() {
+        new PackDetailMenu(plugin, player, packId, onBack, page).open(player);
     }
 
     private void back() {

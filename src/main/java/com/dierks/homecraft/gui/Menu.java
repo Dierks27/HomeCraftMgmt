@@ -78,6 +78,16 @@ public abstract class Menu implements InventoryHolder {
         handleClick(event);
     }
 
+    /**
+     * Whether {@code player} is looking at this menu right now. False after an open another plugin
+     * cancelled (combat tag, vanish, anticheat) — in which case no close event will ever come for
+     * it, so anything started on open must not rely on {@link #onClose} to stop it.
+     */
+    protected boolean isOpenFor(org.bukkit.entity.Player player) {
+        return player != null && player.isOnline()
+                && player.getOpenInventory().getTopInventory().getHolder(false) == this;
+    }
+
     /** Called when the viewer closes this menu — the place to hand back anything held in it. */
     protected void onClose(org.bukkit.entity.Player player) {
     }

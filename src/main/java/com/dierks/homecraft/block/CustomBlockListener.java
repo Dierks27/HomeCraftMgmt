@@ -246,10 +246,13 @@ public final class CustomBlockListener implements Listener {
             case AUCTION_HOUSE -> new AuctionMenu(plugin, player, null).open(player);
             case MAILBOX -> new com.dierks.homecraft.gui.MailboxMenu(plugin, player, null).open(player);
             case ARCADE -> new com.dierks.homecraft.gui.arcade.ArcadeMenu(plugin, player).open(player);
-            case CRATE_MACHINE -> com.dierks.homecraft.gui.arcade.CratePickMenu.open(plugin, player);
-            case SCRATCH_BOOTH -> new com.dierks.homecraft.gui.arcade.ScratchMenu(plugin, player).open(player);
-            case PITY_KIOSK -> new com.dierks.homecraft.gui.arcade.PityMenu(plugin, player).open(player);
-            case TOKEN_COUNTER -> new com.dierks.homecraft.gui.arcade.TokenCounterMenu(plugin, player).open(player);
+            // The retired machine blocks still work where they stand: each opens the hub screen it
+            // used to be (a crate, the hub for the Scratch Ticket, the Minis tab for the Rare Card,
+            // the Wallet), with Back going to the hub.
+            case CRATE_MACHINE -> com.dierks.homecraft.gui.arcade.ArcadeScreens.crate(plugin, player);
+            case SCRATCH_BOOTH -> new com.dierks.homecraft.gui.arcade.ArcadeMenu(plugin, player).open(player);
+            case PITY_KIOSK -> com.dierks.homecraft.gui.arcade.ArcadeScreens.minisTab(plugin, player);
+            case TOKEN_COUNTER -> com.dierks.homecraft.gui.arcade.ArcadeScreens.wallet(plugin, player);
             case PALLET -> {
                 boolean owner = placed.get().owner().equals(player.getUniqueId()) || player.hasPermission("hcm.admin");
                 new com.dierks.homecraft.gui.marketplace.PalletMenu(

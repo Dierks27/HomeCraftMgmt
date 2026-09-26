@@ -69,8 +69,7 @@ public final class PrizeCounterMenu extends Menu {
         for (int i = 0; i < tabs.length && i < TAB_SLOTS.length; i++) {
             PrizeTab t = tabs[i];
             boolean current = t == tab;
-            set(TAB_SLOTS[i], Menus.glint(Menus.icon(tabMaterial(t), (current ? "&a&l" : "&f") + t.label(),
-                    current ? "&7You're here." : "&eClick to look"), current),
+            set(TAB_SLOTS[i], tabIcon(plugin, player, t, current),
                     current ? null : e -> new PrizeCounterMenu(plugin, player, back, t, 0).open(player));
         }
 
@@ -99,6 +98,21 @@ public final class PrizeCounterMenu extends Menu {
         }
     }
 
+    /** One tab's button, shared with the hub's Prize Counter row. Icon key: the tab's name. */
+    static ItemStack tabIcon(HomeCraftManagement plugin, Player player, PrizeTab t, boolean current) {
+        String blurb = switch (t) {
+            case BOOSTS -> "Run fast, mine fast, see in the dark.";
+            case HUNT -> "Radar and Lure for wild Minis.";
+            case COSMETICS -> "Fireworks, trails and hats.";
+            case PERKS -> "Extra homes and more.";
+            case TROPHIES -> "Something big to save up for.";
+            case MINIS -> "A Rare Card, filament, trade-ins.";
+        };
+        return Menus.glint(ArcadeIcons.of(plugin, player, t.name().toLowerCase(java.util.Locale.ROOT),
+                tabMaterial(t), (current ? "&a&l" : "&e") + t.label(), "&7" + blurb,
+                current ? "&7You're here." : "&eClick to look"), current);
+    }
+
     private static Material tabMaterial(PrizeTab t) {
         return switch (t) {
             case BOOSTS -> Material.SUGAR;
@@ -106,7 +120,7 @@ public final class PrizeCounterMenu extends Menu {
             case COSMETICS -> Material.FIREWORK_ROCKET;
             case PERKS -> Material.NAME_TAG;
             case TROPHIES -> Material.GOLD_BLOCK;
-            case MINIS -> Material.PAPER;
+            case MINIS -> Material.AMETHYST_SHARD;
         };
     }
 
@@ -147,8 +161,11 @@ public final class PrizeCounterMenu extends Menu {
         if (limit != null && !owned) {
             lore.add("&e" + limit);
         }
-        ItemStack icon = (p.type() == PrizeType.HAT || p.type() == PrizeType.TROPHY) && p.texture() != null
-                && !p.texture().isBlank() ? Heads.base(p.texture()) : new ItemStack(p.icon().material());
+        // A head only for Java players: Bedrock shows an unregistered custom head as a plain one.
+        boolean heads = !com.dierks.homecraft.util.Bedrock.is(player);
+        String texture = !p.icon().texture().isBlank() ? p.icon().texture()
+                : (p.type() == PrizeType.HAT || p.type() == PrizeType.TROPHY) && p.texture() != null ? p.texture() : "";
+        ItemStack icon = heads && !texture.isBlank() ? Heads.base(texture) : new ItemStack(p.icon().material());
         var meta = icon.getItemMeta();
         if (meta != null) {
             meta.displayName(Text.of(name));

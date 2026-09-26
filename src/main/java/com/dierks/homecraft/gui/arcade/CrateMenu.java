@@ -89,8 +89,8 @@ public final class CrateMenu extends Menu {
     private void pull() {
         var r = plugin.arcade().openCrate(player, crateId);
         if (r.ok()) {
-            new RevealMenu(plugin, player, r, () -> new CrateMenu(plugin, player, crateId, onBack).open(player))
-                    .open(player);
+            new CrateSpinMenu(plugin, player, crateId, r,
+                    () -> new CrateMenu(plugin, player, crateId, onBack).open(player)).open(player);
         } else {
             player.sendMessage(Text.of("&c" + r.error()));
             refresh();

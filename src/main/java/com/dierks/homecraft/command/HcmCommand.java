@@ -155,6 +155,35 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
             case "tokens" -> handleTokens(sender, args);
+            case "achievements", "achievement" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(Text.of("&cOnly players have achievements."));
+                    return true;
+                }
+                if (denyUnless(sender, "hcm.achievements.use")) {
+                    return true;
+                }
+                com.dierks.homecraft.gui.arcade.ArcadeScreens.achievements(plugin, player);
+            }
+            case "guide" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(Text.of("&cThe guide is a screen — open it in game."));
+                    return true;
+                }
+                if (denyUnless(sender, "hcm.guide.use")) {
+                    return true;
+                }
+                int page = 0;
+                if (args.length >= 2) {
+                    page = switch (args[1].toLowerCase(Locale.ROOT)) {
+                        case "minis", "packs", "cards" -> com.dierks.homecraft.gui.arcade.GuideMenu.MINIS;
+                        case "wild", "hunt" -> com.dierks.homecraft.gui.arcade.GuideMenu.WILD;
+                        case "arcade", "games" -> com.dierks.homecraft.gui.arcade.GuideMenu.GAMES;
+                        default -> com.dierks.homecraft.gui.arcade.GuideMenu.TOKENS;
+                    };
+                }
+                com.dierks.homecraft.gui.arcade.ArcadeScreens.guide(plugin, player, page);
+            }
             case "quests", "quest" -> {
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Text.of("&cOnly players can open the Quests board."));
@@ -1402,10 +1431,12 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "backup", "hunt", "trail");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "backup", "hunt", "trail", "achievements", "guide");
             } else {
-                addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "balance", "tokens", "courier", "trail");
+                addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "trail", "achievements", "guide");
             }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("guide")) {
+            addMatches(out, args[1], "tokens", "minis", "wild", "arcade");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("museum")) {
             String prefix = args[1].toLowerCase(Locale.ROOT);
             for (com.dierks.homecraft.mini.MiniDef def : plugin.miniService().catalog()) {

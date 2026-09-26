@@ -181,8 +181,8 @@ unzip -p HomeCraftManagement-<version>.jar plugin.yml | grep '^version'
   before 0.19 read as wood.
 - **Arcade** — hub only. `/hcm give arcade` (or craft it); the Crate Machine,
   Scratch-Ticket Booth, Pity Exchange and Token Counter blocks, and
-  `/hcm give auction`, are no longer handed out (already-placed ones keep working;
-  auctions are reached with `/hcm auction`).
+  `/hcm give auction`, are no longer handed out (already-placed machines open the
+  matching Arcade screen; auctions are reached with `/hcm auction`).
 
 ---
 
@@ -334,6 +334,35 @@ armor-stand spawning, and the checkmark web-import.
 
 ---
 
+## The Arcade, tokens & packs (0.31)
+
+Tokens are earned by playing (login streak, playtime, quests, achievements, wild
+hunts) and spent in the Arcade; they never become dollars, and nothing bought with
+them can be sold for dollars. See DESIGN §3.9 and `docs/how-it-works.md` (the
+player-facing guide, also in game with `/hcm guide`).
+
+| Command | Who | What |
+|---|---|---|
+| `/hcm arcade` | `hcm.arcade.use` | The Arcade hub: Wallet, crates, Scratch Ticket, wild-Mini status, Prize Counter, Card Packs, Quests, Achievements, How It Works |
+| `/hcm quests` | `hcm.quests.use` | Your daily and weekly quests |
+| `/hcm achievements` | `hcm.achievements.use` | Your achievements, grouped, with progress |
+| `/hcm guide [tokens\|minis\|wild\|arcade]` | `hcm.guide.use` | How It Works |
+| `/hcm trail [name\|off]` | all | Switch your particle trail |
+| `/hcm packs` | all / admin | The pack shop; admins get the pack editor |
+| `/hcm tokens` | all | Your token balance |
+| `/hcm arcade odds` | admin | Scratch Ticket RTP and each crate's value at counter prices |
+| `/hcm tokens give\|set\|take <player> <n>` | admin | Adjust tokens (ledger source `ADMIN`) |
+| `/hcm tokens audit [days] [player]` | admin | Tokens earned and spent, by source |
+| `/hcm tokens history <player> [n]` | admin | A player's last n token changes |
+| `/hcm hunt spawn [rarity] [player]` | admin | A wild Mini now — with no player named it lands like a natural roll (a Mini Lure wins) |
+| `/hcm hunt status\|clear` | admin | Live hunts; clear them |
+| `/hcm mini repair-escaped [confirm]` | admin | Give back mint numbers old wild escapes burned (dry run first) |
+
+**Known open item:** the market's and the Courier's daily money limits roll over at
+UTC midnight, while everything token-side uses `clock.time_zone` (DESIGN §11 #10).
+
+---
+
 ## Courier — Deliveries (v16)
 
 A **Site on the PC** (also `/hcm courier`) that pays you to move things around the
@@ -477,6 +506,10 @@ board and watch the house go.
 | `hcm.workbench.place` | all | Place a Mini Workbench |
 | `hcm.workbench.use` | all | Open a placed Workbench's GUI |
 | `hcm.courier.use` | all | `/hcm courier` and the Courier Site on the PC |
+| `hcm.arcade.use` | all | `/hcm arcade` — the Arcade hub |
+| `hcm.quests.use` | all | `/hcm quests` |
+| `hcm.achievements.use` | all | `/hcm achievements` |
+| `hcm.guide.use` | all | `/hcm guide` — How It Works |
 | `hcm.protection.bypass` | op | Bypass Towny/WorldGuard checks for our blocks |
 
 ---

@@ -509,6 +509,11 @@ public final class ArcadeService {
      * returns a positive amount.
      */
     public int tradeIn(Player player, List<ItemStack> cards) {
+        // grant() skips the world sandbox (it also pays refunds), so ask here: a creative world
+        // must not turn copied Cards into tokens.
+        if (!plugin.sandbox().check(player, "card trade-in")) {
+            return 0;
+        }
         int total = 0;
         int count = 0;
         for (ItemStack it : cards) {

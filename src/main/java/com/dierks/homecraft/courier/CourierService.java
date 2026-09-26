@@ -325,7 +325,7 @@ public final class CourierService {
                 return failed("A delivery crate is not cargo.");
             }
             // Cargo is sold to the market at the far end, for dollars. A token prize is never cargo.
-            if (com.dierks.homecraft.util.TokenPrizes.is(cargo)) {
+            if (com.dierks.homecraft.util.TokenPrizes.carries(cargo)) {
                 return failed(com.dierks.homecraft.util.TokenPrizes.REFUSAL);
             }
             MarketItem item = marketItemFor(cargo.getType());
@@ -807,7 +807,7 @@ public final class CourierService {
         int have = 0;
         for (ItemStack stack : player.getInventory().getContents()) {
             if (stack != null && stack.getType() == item.material()
-                    && !com.dierks.homecraft.util.TokenPrizes.is(stack)) {
+                    && !com.dierks.homecraft.util.TokenPrizes.carries(stack)) {
                 have += stack.getAmount();
             }
         }

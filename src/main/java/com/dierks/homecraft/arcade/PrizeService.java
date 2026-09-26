@@ -364,7 +364,7 @@ public final class PrizeService {
         return Outcome.won(item.clone(), label);
     }
 
-    /** Run a COMMAND row's console commands; false if any threw. */
+    /** Run a COMMAND row's console commands; false if any threw or was not handled. */
     private boolean runCommands(Player player, Prize p) {
         for (String raw : p.commands()) {
             String cmd = raw.replace("%player%", player.getName()).replace("%uuid%", player.getUniqueId().toString());
@@ -373,8 +373,13 @@ public final class PrizeService {
             }
             try {
                 boolean ok = Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd);
-                plugin.getLogger().info("Prize '" + p.id() + "' for " + player.getName() + ": ran '" + cmd + "'"
-                        + (ok ? "" : " (the server said it was not handled)"));
+                if (!ok) {
+                    // Unknown or unhandled: the perk was not given, so the purchase must not stand.
+                    plugin.getLogger().warning("Prize '" + p.id() + "' for " + player.getName() + ": '" + cmd
+                            + "' was not handled by the server — refunding. Check the command in arcade.prizes.");
+                    return false;
+                }
+                plugin.getLogger().info("Prize '" + p.id() + "' for " + player.getName() + ": ran '" + cmd + "'");
             } catch (RuntimeException e) {
                 plugin.getLogger().warning("Prize '" + p.id() + "' command '" + cmd + "' failed: " + e.getMessage());
                 return false;

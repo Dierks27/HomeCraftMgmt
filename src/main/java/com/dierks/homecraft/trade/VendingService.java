@@ -68,7 +68,7 @@ public final class VendingService {
         if (at(loc).isPresent()) {
             return Result.fail("This block already holds a Mini.");
         }
-        if (com.dierks.homecraft.util.TokenPrizes.is(owner.getInventory().getItemInMainHand())) {
+        if (com.dierks.homecraft.util.TokenPrizes.carries(owner.getInventory().getItemInMainHand())) {
             return Result.fail(com.dierks.homecraft.util.TokenPrizes.REFUSAL);
         }
         MiniService.HeldMini held = plugin.miniService().getHeldMini(owner);
@@ -129,7 +129,7 @@ public final class VendingService {
         if (price <= 0) {
             return Result.fail("Set a price above 0 first.");
         }
-        if (com.dierks.homecraft.util.TokenPrizes.is(owner.getInventory().getItemInMainHand())) {
+        if (com.dierks.homecraft.util.TokenPrizes.carries(owner.getInventory().getItemInMainHand())) {
             return Result.fail(com.dierks.homecraft.util.TokenPrizes.REFUSAL);
         }
         MiniService.HeldMini held = plugin.miniService().getHeldMini(owner);

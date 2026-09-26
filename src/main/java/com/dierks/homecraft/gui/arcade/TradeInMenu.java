@@ -168,6 +168,11 @@ public final class TradeInMenu extends Menu {
         if (cards.isEmpty()) {
             return;
         }
+        if (!plugin.sandbox().check(player, "card trade-in")) {
+            player.sendMessage(Text.of("&c" + com.dierks.homecraft.integration.EconomySandbox.reason()));
+            Sounds.refused(player);
+            return;
+        }
         int count = cards.stream().mapToInt(ItemStack::getAmount).sum();
         int got = plugin.arcade().tradeIn(player, cards);
         if (got <= 0) {

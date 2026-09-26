@@ -82,6 +82,16 @@ public abstract class Menu implements InventoryHolder {
     protected void onClose(org.bukkit.entity.Player player) {
     }
 
+    /**
+     * Run this menu's close handling and close it, for when no close event will reach
+     * {@link MenuListener} (the plugin is shutting down). Running it twice is harmless: a menu
+     * that hands items back empties itself as it does.
+     */
+    public void closeNow(org.bukkit.entity.Player player) {
+        onClose(player);
+        player.closeInventory();
+    }
+
     void handleClick(InventoryClickEvent event) {
         Consumer<InventoryClickEvent> handler = handlers.get(event.getRawSlot());
         if (handler != null) {

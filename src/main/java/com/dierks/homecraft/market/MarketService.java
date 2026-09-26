@@ -749,7 +749,7 @@ public final class MarketService {
     private int countMaterial(Player player, Material material) {
         int count = 0;
         for (ItemStack stack : player.getInventory().getStorageContents()) {
-            if (stack != null && stack.getType() == material && !com.dierks.homecraft.util.TokenPrizes.is(stack)) {
+            if (stack != null && stack.getType() == material && !com.dierks.homecraft.util.TokenPrizes.carries(stack)) {
                 count += stack.getAmount();
             }
         }
@@ -758,7 +758,7 @@ public final class MarketService {
 
     private static boolean holdsPrizeOf(Player player, Material material) {
         for (ItemStack stack : player.getInventory().getStorageContents()) {
-            if (stack != null && stack.getType() == material && com.dierks.homecraft.util.TokenPrizes.is(stack)) {
+            if (stack != null && stack.getType() == material && com.dierks.homecraft.util.TokenPrizes.carries(stack)) {
                 return true;
             }
         }
@@ -771,7 +771,7 @@ public final class MarketService {
         ItemStack[] contents = player.getInventory().getStorageContents();
         for (int i = 0; i < contents.length && remaining > 0; i++) {
             ItemStack stack = contents[i];
-            if (stack == null || stack.getType() != material || com.dierks.homecraft.util.TokenPrizes.is(stack)) {
+            if (stack == null || stack.getType() != material || com.dierks.homecraft.util.TokenPrizes.carries(stack)) {
                 continue;
             }
             int amount = stack.getAmount();

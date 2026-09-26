@@ -82,6 +82,12 @@ public final class PrizeItemListener implements Listener {
         }
         Player player = event.getPlayer();
         EquipmentSlot hand = event.getHand() == null ? EquipmentSlot.HAND : event.getHand();
+        if (hand == EquipmentSlot.OFF_HAND && PrizeItems.kindOf(player.getInventory().getItemInMainHand()) != null) {
+            // The client sends an off-hand use right after the main-hand one; with a prize in
+            // each hand that would spend both on one click.
+            cancel(event);
+            return;
+        }
         switch (kind) {
             case BOOST -> {
                 cancel(event);
@@ -91,6 +97,11 @@ public final class PrizeItemListener implements Listener {
             }
             case RADAR -> {
                 cancel(event);
+                if (plugin.radar() != null && plugin.radar().active(player.getUniqueId())) {
+                    player.sendMessage(Text.of("&7Your Mini Radar is already on. Keep this one for the next hunt!"));
+                    Sounds.refused(player);
+                    return;
+                }
                 if (plugin.radar() != null && plugin.radar().activate(player)) {
                     consume(player, hand);
                     player.sendMessage(Text.of("&bMini Radar on! &7Watch the bar at the bottom of your screen."));
@@ -237,6 +248,59 @@ public final class PrizeItemListener implements Listener {
         }
     }
 
+    // ---- prizes are not ingredients ----------------------------------------------------
+    //
+    // A recipe matches on the item type alone, so a Mini Lure (a heart of the sea) and eight
+    // Water Breathing boosts (nautilus shells) would craft an untagged Conduit to sell on a
+    // Pallet. Every way a prize could become something else — crafting, a crafter, brewing, a
+    // villager trade — refuses it instead.
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPrepareCraft(org.bukkit.event.inventory.PrepareItemCraftEvent event) {
+        for (ItemStack in : event.getInventory().getMatrix()) {
+            if (TokenPrizes.carries(in)) {
+                event.getInventory().setResult(null);
+                return;
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onCrafter(org.bukkit.event.block.CrafterCraftEvent event) {
+        if (event.getBlock().getState(false) instanceof org.bukkit.inventory.InventoryHolder holder) {
+            for (ItemStack in : holder.getInventory().getContents()) {
+                if (TokenPrizes.carries(in)) {
+                    event.setCancelled(true);
+                    return;
+                }
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onBrew(org.bukkit.event.inventory.BrewEvent event) {
+        if (TokenPrizes.carries(event.getContents().getIngredient())) {
+            event.setCancelled(true);
+        }
+    }
+
+    /** A villager trade is taken from its result slot, however the inputs got there. */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onTrade(org.bukkit.event.inventory.InventoryClickEvent event) {
+        if (!(event.getView().getTopInventory() instanceof org.bukkit.inventory.MerchantInventory merchant)
+                || event.getClickedInventory() != merchant
+                || event.getSlotType() != org.bukkit.event.inventory.InventoryType.SlotType.RESULT) {
+            return;
+        }
+        if (TokenPrizes.carries(merchant.getItem(0)) || TokenPrizes.carries(merchant.getItem(1))) {
+            event.setCancelled(true);
+            if (event.getWhoClicked() instanceof Player p) {
+                p.sendMessage(Text.of("&c" + TokenPrizes.REFUSAL));
+                Sounds.refused(p);
+            }
+        }
+    }
+
     // ---- prize heads placed as blocks --------------------------------------------------
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -251,11 +315,19 @@ public final class PrizeItemListener implements Listener {
         skull.update(true, false);
     }
 
+    /** Stop the plain head dropping; harmless if a later handler cancels the break. */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onBreakCheck(BlockBreakEvent event) {
+        if (storedAt(event.getBlock()) != null) {
+            event.setDropItems(false);
+        }
+    }
+
+    /** Drop the real prize only once the break is final, or a cancelled break would duplicate it. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBreak(BlockBreakEvent event) {
         ItemStack stored = storedAt(event.getBlock());
         if (stored != null) {
-            event.setDropItems(false);
             dropAt(event.getBlock(), stored);
         }
     }

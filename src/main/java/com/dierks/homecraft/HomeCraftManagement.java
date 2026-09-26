@@ -392,6 +392,18 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        // Paper skips a disabled plugin's listeners, so MenuListener never sees the close events
+        // that follow a shutdown. A menu holding a player's items (the Card trade-in tray) must
+        // hand them back now, while the player's inventory is still going to be saved.
+        for (org.bukkit.entity.Player p : getServer().getOnlinePlayers()) {
+            try {
+                if (p.getOpenInventory().getTopInventory().getHolder(false) instanceof com.dierks.homecraft.gui.Menu menu) {
+                    menu.closeNow(p);
+                }
+            } catch (RuntimeException e) {
+                getLogger().warning("Could not close " + p.getName() + "'s menu on shutdown: " + e.getMessage());
+            }
+        }
         if (shops != null) {
             shops.stop();
             shops = null;

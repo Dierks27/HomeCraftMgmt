@@ -78,7 +78,9 @@ public final class WalletMenu extends Menu {
 
         set(18, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&lWays to earn"), null);
         set(19, Menus.icon(Material.OAK_DOOR, "&aLog in every day", "&7Your streak pays more each day."), null);
-        set(20, Menus.icon(Material.DIAMOND_PICKAXE, "&aJust play", "&7A token every hour you play."), null);
+        set(20, Menus.icon(Material.DIAMOND_PICKAXE, "&aJust play", arc.playtimeEnabled()
+                && arc.playtimeMinutesPerToken() > 0 ? "&7A token every " + arc.playtimeMinutesPerToken()
+                + " minutes you play." : "&7Playtime tokens are off."), null);
         set(21, Menus.icon(Material.WRITABLE_BOOK, "&aQuests", "&7Three daily and two weekly jobs.",
                 "&eClick to see them"), e -> new QuestsMenu(plugin, player, this::reopen).open(player));
         set(22, Menus.icon(Material.TOTEM_OF_UNDYING, "&aAchievements", "&7Big moments pay once.",

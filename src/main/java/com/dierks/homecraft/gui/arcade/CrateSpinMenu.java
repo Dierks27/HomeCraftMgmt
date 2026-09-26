@@ -168,6 +168,10 @@ public final class CrateSpinMenu extends Menu {
     @Override
     public void open(Player viewer) {
         super.open(viewer);
+        if (!isOpenFor(viewer)) {
+            tell(); // the screen never opened (another plugin said no): the result, now
+            return;
+        }
         if (task == null && !landed) {
             next();
         }
@@ -181,6 +185,10 @@ public final class CrateSpinMenu extends Menu {
         long wait = delays[step];
         task = plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             task = null;
+            if (!isOpenFor(player)) {
+                tell();
+                return;
+            }
             step++;
             paintStrip();
             float pitch = 0.6f + 1.0f * Math.min(1f, (float) step / delays.length);
@@ -211,6 +219,7 @@ public final class CrateSpinMenu extends Menu {
             }
         } else {
             Sounds.miss(player);
+            player.sendMessage(Text.of("&7No prize this time. Better luck next crate!"));
         }
     }
 

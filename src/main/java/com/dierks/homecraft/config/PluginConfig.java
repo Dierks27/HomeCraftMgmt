@@ -268,7 +268,7 @@ public final class PluginConfig {
      */
     public enum QuestType {
         // Pushed by existing gameplay hooks.
-        SELL_MARKET, OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH,
+        SELL_MARKET, OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH, FIND_WILD_MINI,
         // Pulled from vanilla statistics.
         CATCH_FISH, KILL_HOSTILES, BREED_ANIMALS, TRADE_VILLAGER, TRAVEL_ON_FOOT
     }
@@ -1661,16 +1661,49 @@ public final class PluginConfig {
             }
         }
         double shinyPercent = Math.max(0, c.getDouble("minis.loot.shiny_percent", 5.0));
-        int minDistance = Math.max(4, c.getInt("minis.loot.natural.min_distance", 96));
+        int minDistance = Math.max(4, c.getInt("minis.loot.natural.min_distance", 48));
+        Loot.WildEffects wfx = new Loot.WildEffects(
+                Math.max(0, c.getDouble("minis.loot.natural.effects.radius", Loot.WildEffects.DEFAULT.radius())),
+                blankToNull(c.getString("minis.loot.natural.effects.particle", Loot.WildEffects.DEFAULT.particle())),
+                Math.max(0, c.getInt("minis.loot.natural.effects.count", Loot.WildEffects.DEFAULT.count())),
+                Math.max(1, c.getInt("minis.loot.natural.effects.interval_ticks", Loot.WildEffects.DEFAULT.intervalTicks())),
+                Math.max(0, Math.min(15, c.getInt("minis.loot.natural.effects.light", Loot.WildEffects.DEFAULT.light()))));
+        Loot.Beam beam = new Loot.Beam(
+                Math.max(0, Math.min(128, c.getInt("minis.loot.natural.beam.height", Loot.Beam.DEFAULT.height()))),
+                Math.max(1, c.getInt("minis.loot.natural.beam.interval_ticks", Loot.Beam.DEFAULT.intervalTicks())));
         Loot.Natural natural = new Loot.Natural(
                 Math.max(200, c.getInt("minis.loot.natural.interval_ticks", 24000)),
-                Math.max(1, c.getInt("minis.loot.natural.despawn_minutes", 3)),
+                Math.max(1, c.getInt("minis.loot.natural.despawn_minutes", 5)),
                 minDistance,
                 // A max below the min would make every band empty and no Mini would ever land.
-                Math.max(minDistance + 8, c.getInt("minis.loot.natural.max_distance", 128)),
-                Math.max(0, c.getInt("minis.loot.natural.player_cooldown_minutes", 120)),
-                Math.max(0, c.getInt("minis.loot.natural.max_live", 2)));
+                Math.max(minDistance + 8, c.getInt("minis.loot.natural.max_distance", 96)),
+                Math.max(0, c.getInt("minis.loot.natural.player_cooldown_minutes", 90)),
+                Math.max(0, c.getInt("minis.loot.natural.max_live", 1)),
+                wfx, beam, readHints(c));
         return new Loot.MiniLoot(lists, sources, rarityWeights, shinyPercent, natural);
+    }
+
+    /**
+     * {@code minis.loot.natural.hints}: the escalating hint stages, sorted by {@code at_percent}.
+     * A malformed row is skipped; no list at all falls back to the shipped four.
+     */
+    private List<Loot.Hint> readHints(FileConfiguration c) {
+        List<Map<?, ?>> rows = c.getMapList("minis.loot.natural.hints");
+        if (rows.isEmpty()) {
+            return Loot.Hint.defaults();
+        }
+        List<Loot.Hint> out = new ArrayList<>();
+        for (Map<?, ?> row : rows) {
+            Object at = row.get("at_percent");
+            if (!(at instanceof Number n)) {
+                log.warning("A minis.loot.natural.hints row has no at_percent — skipped.");
+                continue;
+            }
+            boolean enabled = !(row.get("enabled") instanceof Boolean b) || b;
+            out.add(new Loot.Hint(Math.max(0, Math.min(100, n.intValue())), enabled, str(row.get("text"), "")));
+        }
+        out.sort(java.util.Comparator.comparingInt(Loot.Hint::atPercent));
+        return out;
     }
 
     /** {@code tags: [a, b]} or {@code tags: "a, b"} → lower-case, de-duplicated list. */

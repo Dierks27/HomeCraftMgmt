@@ -157,6 +157,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 new com.dierks.homecraft.gui.courier.JobBoardMenu(plugin, player, null).open(player);
             }
             case "museum" -> handleMuseum(sender, args);
+            case "hunt" -> handleHunt(sender, args);
             case "backup" -> handleBackup(sender, args);
             case "auction", "auctions" -> {
                 if (!(sender instanceof Player player)) {
@@ -206,8 +207,10 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 for (com.dierks.homecraft.mini.MiniDef def : minis.catalog()) {
                     var c = minis.counts(def.id());
                     String cap = def.uncapped() ? "∞" : Long.toString(def.cap());
-                    sender.sendMessage(Text.of("&d" + def.id() + " &7(" + def.rarity() + ") &f" + def.name()
-                            + " &7minted " + c.minted() + "/" + cap + ", circ " + c.circulation()));
+                    sender.sendMessage(Text.of("&d" + def.id() + " &7(" + def.rarity().display() + ") &f" + def.name()
+                            + " &7minted " + c.minted() + "/" + cap + ", circ " + c.circulation()
+                            + (c.escaped() > 0 ? ", got away " + c.escaped() : "")
+                            + (minis.reserved(def.id()) > 0 ? ", " + minis.reserved(def.id()) + " loose in the wild" : "")));
                 }
             }
             case "give" -> {
@@ -238,7 +241,149 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                         : Text.of("&c" + r.error()));
             }
             case "capturestand" -> handleCaptureStand(sender, args);
-            default -> sender.sendMessage(Text.of("&cUsage: /hcm mini <museum|list|give|capturestand> …"));
+            case "repair-escaped" -> {
+                if (denyUnless(sender, "hcm.admin")) {
+                    return;
+                }
+                handleRepairEscaped(sender, args.length >= 3 && args[2].equalsIgnoreCase("confirm"));
+            }
+            default -> sender.sendMessage(Text.of("&cUsage: /hcm mini <museum|list|give|capturestand|repair-escaped> …"));
+        }
+    }
+
+    /**
+     * {@code /hcm mini repair-escaped [confirm]} — give back the mint numbers the old wild hunt
+     * burned. Before the hunt minted on pickup, a spawn minted its copy the moment it appeared
+     * and retired it when it escaped, so the number and the cap slot were gone for good. Those
+     * copies are exactly the retired ones that never had an owner and never changed hands.
+     *
+     * <p>Without {@code confirm} it is a dry run that lists what it found. With it: a database
+     * backup first, then each copy's row is deleted, it leaves {@code minted} and
+     * {@code destroyed}, is counted as escaped, and its number goes back into the pool the next
+     * mint of that Mini draws from, lowest first.
+     */
+    private void handleRepairEscaped(CommandSender sender, boolean confirm) {
+        List<com.dierks.homecraft.storage.MiniDao.EscapedCopy> found;
+        try {
+            found = plugin.miniService().escapedCopies();
+        } catch (java.sql.SQLException e) {
+            sender.sendMessage(Text.of("&cCould not read the Mini records: " + e.getMessage()));
+            return;
+        }
+        if (found.isEmpty()) {
+            sender.sendMessage(Text.of("&aNo escaped copies to repair — every mint number is accounted for."));
+            return;
+        }
+        Map<String, List<Long>> byMini = new java.util.LinkedHashMap<>();
+        for (com.dierks.homecraft.storage.MiniDao.EscapedCopy c : found) {
+            byMini.computeIfAbsent(c.miniId(), k -> new ArrayList<>()).add(c.mintNumber());
+        }
+        sender.sendMessage(Text.of("&6" + (confirm ? "Repairing" : "Dry run:") + " &f" + found.size()
+                + " &6escaped cop" + (found.size() == 1 ? "y" : "ies") + " across &f" + byMini.size() + " &6Mini(s)"));
+        for (Map.Entry<String, List<Long>> e : byMini.entrySet()) {
+            List<String> numbers = new ArrayList<>();
+            for (long n : e.getValue()) {
+                numbers.add("#" + n);
+            }
+            com.dierks.homecraft.mini.MiniDef def = plugin.miniService().def(e.getKey());
+            sender.sendMessage(Text.of("&e" + (def != null ? def.name() : e.getKey()) + " &7(" + e.getKey() + "): &f"
+                    + String.join(", ", numbers)));
+        }
+        if (!confirm) {
+            sender.sendMessage(Text.of("&7Nothing changed. Run &f/hcm mini repair-escaped confirm &7to give "
+                    + "these numbers back (a database backup is taken first)."));
+            return;
+        }
+        java.io.File backup = plugin.backups() != null ? plugin.backups().backupNow("pre-repair-escaped") : null;
+        if (backup == null) {
+            sender.sendMessage(Text.of("&cThe database backup failed, so nothing was repaired. Check the log."));
+            return;
+        }
+        try {
+            int done = plugin.miniService().repairEscaped(found);
+            plugin.getLogger().info("repair-escaped: " + done + " escaped cop" + (done == 1 ? "y" : "ies")
+                    + " repaired by " + sender.getName() + " (backup " + backup.getName() + ").");
+            sender.sendMessage(Text.of("&aRepaired &f" + done + "&a. Backup: &f" + backup.getName()
+                    + "&a. Those numbers are re-used, lowest first, the next time each Mini is made."));
+        } catch (java.sql.SQLException e) {
+            sender.sendMessage(Text.of("&cRepair failed and was rolled back: " + e.getMessage()));
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    //  hunt (admin — the wild hunt)
+    // ---------------------------------------------------------------------
+
+    private void handleHunt(CommandSender sender, String[] args) {
+        if (denyUnless(sender, "hcm.admin")) {
+            return;
+        }
+        com.dierks.homecraft.hunt.HuntService hunt = plugin.hunt();
+        if (hunt == null) {
+            sender.sendMessage(Text.of("&cThe wild hunt is not running."));
+            return;
+        }
+        String sub = args.length >= 2 ? args[1].toLowerCase(Locale.ROOT) : "status";
+        switch (sub) {
+            case "spawn" -> {
+                com.dierks.homecraft.mini.Rarity rarity = null;
+                int next = 2;
+                if (args.length > next) {
+                    try {
+                        rarity = com.dierks.homecraft.mini.Rarity.valueOf(args[next].toUpperCase(Locale.ROOT));
+                        next++;
+                    } catch (IllegalArgumentException ignored) {
+                        // not a rarity — treat it as the player name
+                    }
+                }
+                Player target;
+                if (args.length > next) {
+                    target = Bukkit.getPlayerExact(args[next]);
+                    if (target == null) {
+                        sender.sendMessage(Text.of("&cPlayer '" + args[next] + "' is not online."));
+                        return;
+                    }
+                } else if (sender instanceof Player p) {
+                    target = p;
+                } else {
+                    sender.sendMessage(Text.of("&cUsage: /hcm hunt spawn [rarity] <player>"));
+                    return;
+                }
+                String err = hunt.forceSpawn(rarity, target);
+                sender.sendMessage(err == null
+                        ? Text.of("&aA wild Mini appeared near " + target.getName() + ". &7/hcm hunt status for where.")
+                        : Text.of("&c" + err));
+            }
+            case "clear" -> {
+                int n = hunt.clear();
+                sender.sendMessage(Text.of("&aCleared " + n + " wild Mini" + (n == 1 ? "" : "s")
+                        + ". &7Nothing was minted and nothing counts as escaped."));
+            }
+            case "status" -> {
+                java.util.Collection<com.dierks.homecraft.hunt.HuntService.Hunt> live = hunt.live();
+                sender.sendMessage(Text.of("&6Wild hunt &7— " + live.size() + " live"));
+                for (com.dierks.homecraft.hunt.HuntService.Hunt h : live) {
+                    com.dierks.homecraft.mini.MiniDef def = plugin.miniService().def(h.miniId());
+                    String who = h.target() == null ? "?" : playerName(h.target());
+                    sender.sendMessage(Text.of("&e" + (def != null ? def.name() + " &7(" + def.rarity().display() + ")"
+                            : h.miniId()) + " &7" + h.grade().display() + (h.shiny() ? " Shiny" : "")
+                            + " near &f" + who + " &7at &f" + h.world() + " " + h.x() + "," + h.y() + "," + h.z()
+                            + " &7— " + com.dierks.homecraft.gui.Menus.duration(hunt.msLeft(h)) + " left, hint "
+                            + h.hintStage()));
+                }
+                Map<java.util.UUID, Long> lures = hunt.lures();
+                if (!lures.isEmpty()) {
+                    List<String> names = new ArrayList<>();
+                    for (java.util.UUID id : lures.keySet()) {
+                        names.add(playerName(id));
+                    }
+                    sender.sendMessage(Text.of("&7Armed lures (earliest first): &f" + String.join(", ", names)));
+                }
+                if (hunt.nextTarget() != null) {
+                    sender.sendMessage(Text.of("&7Next spawn goes to: &f" + playerName(hunt.nextTarget())));
+                }
+            }
+            default -> sender.sendMessage(Text.of("&cUsage: /hcm hunt <spawn [rarity] [player]|status|clear>"));
         }
     }
 
@@ -876,6 +1021,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Text.of("&e/hcm auction &7- open the Mini Auction House"));
         if (sender.hasPermission("hcm.admin")) {
             sender.sendMessage(Text.of("&e/hcm mini list|give <id> [player] &7- admin Minis"));
+            sender.sendMessage(Text.of("&e/hcm mini repair-escaped [confirm] &7- give back numbers old escapes burned"));
+            sender.sendMessage(Text.of("&e/hcm hunt spawn [rarity] [player]|status|clear &7- the wild hunt"));
         }
     }
 
@@ -1223,7 +1370,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "backup");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "backup", "hunt");
             } else {
                 addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "balance", "tokens", "courier");
             }
@@ -1236,6 +1383,28 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("mini")) {
             addMatches(out, args[1], "museum", "list", "give", "capturestand");
+            if (sender.hasPermission("hcm.admin")) {
+                addMatches(out, args[1], "repair-escaped");
+            }
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("mini") && args[1].equalsIgnoreCase("repair-escaped")) {
+            addMatches(out, args[2], "confirm");
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("hunt") && sender.hasPermission("hcm.admin")) {
+            addMatches(out, args[1], "spawn", "status", "clear");
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("hunt") && args[1].equalsIgnoreCase("spawn")) {
+            for (com.dierks.homecraft.mini.Rarity r : com.dierks.homecraft.mini.Rarity.values()) {
+                addMatches(out, args[2], r.name().toLowerCase(Locale.ROOT));
+            }
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))) {
+                    out.add(p.getName());
+                }
+            }
+        } else if (args.length == 4 && args[0].equalsIgnoreCase("hunt") && args[1].equalsIgnoreCase("spawn")) {
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[3].toLowerCase(Locale.ROOT))) {
+                    out.add(p.getName());
+                }
+            }
         } else if (args.length == 3 && args[0].equalsIgnoreCase("mini")
                 && (args[1].equalsIgnoreCase("give") || args[1].equalsIgnoreCase("capturestand"))) {
             String prefix = args[2].toLowerCase(Locale.ROOT);

@@ -39,6 +39,18 @@ public final class MiniService {
     public record MiniRef(String uid, String miniId, long mintNumber) {
     }
 
+    /** How a copy came to exist — stored on its provenance row ({@code mini_individuals.origin}). */
+    public enum Origin {
+        /** Caught in the wild hunt (a natural spawn, minted the moment it was caught). */
+        WILD_SPAWN,
+        /** Dropped by a block, a mob or a fishing line. */
+        WILD_DROP,
+        /** Printed from a Card. */
+        PRINTER,
+        /** Given by an admin. */
+        ADMIN
+    }
+
     private final HomeCraftManagement plugin;
     private final MiniDao dao;
     private final EconomyService economy;
@@ -135,9 +147,23 @@ public final class MiniService {
         return percent > 0 && java.util.concurrent.ThreadLocalRandom.current().nextDouble() * 100.0 < percent;
     }
 
-    /** True if a type has reached its mint cap. */
+    /**
+     * True if a type has no copies left to give: its minted copies <b>plus the wild spawns of it
+     * standing in the world right now</b> reach the cap.
+     *
+     * <p>A live wild spawn is a promise — whoever catches it gets a Mini — but nothing is minted
+     * until then, so it has to hold its slot some other way or the last copy could be printed
+     * out from under it while it stands there. Every issue and mint path asks this, so a Card
+     * for the last slot is refused while a spawn is holding it. The claim itself releases the
+     * reservation before it mints (see {@code HuntService}).
+     */
     public boolean mintedOut(MiniDef def) {
-        return !def.uncapped() && counts(def.id()).minted() >= def.cap();
+        return !def.uncapped() && counts(def.id()).minted() + reserved(def.id()) >= def.cap();
+    }
+
+    /** Live wild spawns of this Mini — slots held for whoever catches them. */
+    public int reserved(String id) {
+        return plugin.hunt() == null ? 0 : plugin.hunt().reserved(id);
     }
 
     /**
@@ -189,16 +215,16 @@ public final class MiniService {
 
     /**
      * <b>The mint.</b> Every Mini that exists is created here and nowhere else: the cap is
-     * enforced, the copy gets its unique anti-dupe uid, the tally advances and the
-     * provenance row is written under {@code owner} (null = the world, e.g. a natural
-     * spawn nobody has claimed yet). The copy is not handed to anyone — callers that give
-     * it out go through {@link #mintAndGive}.
+     * enforced, the copy gets its unique anti-dupe uid, and {@link MiniDao#mint} takes its number,
+     * advances the tally and writes the provenance row under {@code owner} in one transaction.
+     * The copy is not handed to anyone — callers that give it out go through
+     * {@link #mintAndGive}.
      *
-     * <p>Keeping this the only {@code mintNext} + {@code recordIndividual} pair is what
-     * makes the finite-mint promise in §11 #3 checkable: the published "minted X / cap" in
-     * the Museum is true because there is one place that could make it false.
+     * <p>Keeping this the only call to {@code MiniDao.mint} is what makes the finite-mint promise
+     * in §11 #3 checkable: the published "minted X / cap" in the Museum is true because there is
+     * one place that could make it false.
      */
-    public Minted mintItem(MiniDef def, Grade grade, String finish, UUID owner) {
+    public Minted mintItem(MiniDef def, Grade grade, String finish, UUID owner, Origin origin) {
         if (def == null) {
             return Minted.fail("No such Mini.");
         }
@@ -206,11 +232,11 @@ public final class MiniService {
             return Minted.fail(def.name() + " is minted out.");
         }
         try {
-            long mintNumber = dao.mintNext(def.id());
             UUID uid = UUID.randomUUID();
+            long mintNumber = dao.mint(def.id(), uid, owner, origin == null ? null : origin.name(),
+                    System.currentTimeMillis());
             ItemStack item = items.minted(def, style(def.rarity()), mintNumber, uid,
                     grade == null ? Grade.STANDARD : grade, finish);
-            dao.recordIndividual(uid, def.id(), mintNumber, owner, System.currentTimeMillis());
             return new Minted(true, null, mintNumber, uid.toString(), item);
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to mint Mini " + def.id() + ": " + e.getMessage());
@@ -218,18 +244,13 @@ public final class MiniService {
         }
     }
 
-    /** {@link #mintItem} for callers holding a Shiny flag rather than a finish name. */
-    public Minted mintItem(MiniDef def, Grade grade, boolean shiny, UUID owner) {
-        return mintItem(def, grade, shiny ? "SHINY" : null, owner);
-    }
-
     /**
      * Mint through {@link #mintItem} and hand the copy to {@code player} (overflow drops at
      * their feet), firing the first-Mini achievement. The shared tail of every mint path
      * that produces a Mini for somebody.
      */
-    private Minted mintAndGive(Player player, MiniDef def, Grade grade, String finish) {
-        Minted m = mintItem(def, grade, finish, player.getUniqueId());
+    private Minted mintAndGive(Player player, MiniDef def, Grade grade, String finish, Origin origin) {
+        Minted m = mintItem(def, grade, finish, player.getUniqueId(), origin);
         if (!m.ok()) {
             return m;
         }
@@ -242,15 +263,23 @@ public final class MiniService {
     }
 
     /**
-     * The "found it" mint path (wild drops, crates): a graded, possibly Shiny copy handed
-     * straight to the finder. Same cap/tally/provenance as the Printer; no print quest.
+     * The "found it" mint path (wild drops): a graded, possibly Shiny copy handed straight to
+     * the finder. Same cap/tally/provenance as the Printer; no print quest.
      */
     public Minted mintFound(Player player, String id, Grade grade, boolean shiny) {
         MiniDef def = catalog.get(id);
         if (def == null) {
             return Minted.fail("No such Mini '" + id + "'.");
         }
-        return mintAndGive(player, def, grade, shiny ? "SHINY" : null);
+        return mintAndGive(player, def, grade, shiny ? "SHINY" : null, Origin.WILD_DROP);
+    }
+
+    /**
+     * The wild-hunt claim: mint the blueprint a spawn carried and hand it to whoever caught it.
+     * The caller has already released the spawn's reservation, so this is an ordinary capped mint.
+     */
+    public Minted mintCaught(Player player, MiniDef def, Grade grade, String finish) {
+        return mintAndGive(player, def, grade, finish, Origin.WILD_SPAWN);
     }
 
     /**
@@ -322,7 +351,7 @@ public final class MiniService {
         if (def == null) {
             return MintResult.fail("No such Mini '" + id + "'.");
         }
-        Minted m = mintAndGive(player, def, grade, finish);
+        Minted m = mintAndGive(player, def, grade, finish, Origin.PRINTER);
         if (!m.ok()) {
             return MintResult.fail(m.error());
         }
@@ -506,7 +535,46 @@ public final class MiniService {
             return dao.counts(id);
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to read Mini counts for " + id + ": " + e.getMessage());
-            return new MiniDao.Counts(0, 0);
+            return new MiniDao.Counts(0, 0, 0);
+        }
+    }
+
+    /** Count a wild spawn that got away. Nothing was minted, so only the escaped tally moves. */
+    public void recordEscape(String id) {
+        try {
+            dao.addEscaped(id);
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to count an escaped Mini for " + id + ": " + e.getMessage());
+        }
+    }
+
+    /** Copies burned by the old mint-on-spawn rule, found for {@code /hcm mini repair-escaped}. */
+    public List<MiniDao.EscapedCopy> escapedCopies() throws SQLException {
+        return dao.escapedCopies();
+    }
+
+    /** Give escaped copies' numbers back (see {@link MiniDao#repairEscaped}). */
+    public int repairEscaped(List<MiniDao.EscapedCopy> copies) throws SQLException {
+        return dao.repairEscaped(copies, System.currentTimeMillis());
+    }
+
+    /**
+     * Add {@code UNIQUE(mini_id, mint_number)} when the table allows it, and say so either way.
+     * Run once on enable.
+     */
+    public void ensureUniqueNumbers() {
+        try {
+            List<MiniDao.Duplicate> dups = dao.ensureUniqueNumbers();
+            if (dups.isEmpty()) {
+                return;
+            }
+            plugin.getLogger().warning("Mint numbers: " + dups.size() + " number(s) are held by more than one "
+                    + "copy, so the unique index was NOT added. Duplicates:");
+            for (MiniDao.Duplicate d : dups) {
+                plugin.getLogger().warning("  " + d.miniId() + " #" + d.mintNumber() + " × " + d.copies());
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Could not check mint numbers for duplicates: " + e.getMessage());
         }
     }
 
@@ -545,7 +613,7 @@ public final class MiniService {
             double[] range = plugin.values().gradeRange(def);
             valueText = economy.format(range[0]) + " – " + economy.format(range[1]);
         }
-        return items.preview(def, style(def.rarity()), c.minted(), c.circulation(), valueText);
+        return items.preview(def, style(def.rarity()), c.minted(), c.circulation(), c.escaped(), valueText);
     }
 
     /**
@@ -709,7 +777,7 @@ public final class MiniService {
         if (def == null) {
             return MintResult.fail("No such Mini '" + id + "'.");
         }
-        Minted m = mintAndGive(target, def, Grade.STANDARD, null);
+        Minted m = mintAndGive(target, def, Grade.STANDARD, null, Origin.ADMIN);
         return m.ok()
                 ? new MintResult(true, null, m.mintNumber())
                 : MintResult.fail(m.error() + (mintedOut(def)

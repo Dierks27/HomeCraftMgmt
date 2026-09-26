@@ -61,6 +61,12 @@ public final class Keys {
     public static NamespacedKey EFFECT_ENTITY;
     /** On a naturally spawned wild-Mini head block: marks it claimable (Byte). */
     public static NamespacedKey WILD_SPAWN;
+    /**
+     * On a wild head: the grade and finish the Mini WILL have. A wild spawn is a blueprint —
+     * nothing is minted until somebody catches it — so the head carries no uid or mint number.
+     */
+    public static NamespacedKey WILD_GRADE;
+    public static NamespacedKey WILD_FINISH;
 
     /** On a Display Case item / placed tile: its pedestal style (a DisplayCaseVariant name, String). */
     public static NamespacedKey DISPLAY_VARIANT;
@@ -109,6 +115,8 @@ public final class Keys {
         COURIER_JOB = new NamespacedKey(plugin, "courier_job");
         COURIER_PACKAGE = new NamespacedKey(plugin, "courier_package");
         WILD_SPAWN = new NamespacedKey(plugin, "wild_spawn");
+        WILD_GRADE = new NamespacedKey(plugin, "wild_grade");
+        WILD_FINISH = new NamespacedKey(plugin, "wild_finish");
         DISPLAY_VARIANT = new NamespacedKey(plugin, "display_variant");
         SHOP_ANCHOR = new NamespacedKey(plugin, "shop_anchor");
         PEEK_VIEWER = new NamespacedKey(plugin, "peek_viewer");

@@ -63,9 +63,9 @@ public final class HomeCraftManagement extends JavaPlugin {
      * window measured in minutes — plus the grade stars, for a file an editor has flattened.
      * 11 = the courier crate's head textures, which shipped blank and so handed every courier
      * a default Steve head to carry. 12 = the four quests that pushed Mini output (print, packs,
-     * selling) leave the shipped pool.
+     * selling) leave the shipped pool. 13 = the wild hunt retune: closer, longer, one at a time.
      */
-    static final int CONFIG_REVISION = 12;
+    static final int CONFIG_REVISION = 13;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -157,7 +157,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.trade.ShopDisplayService shops;
     private com.dierks.homecraft.trade.PlacedMiniService placedMinis;
     private com.dierks.homecraft.effects.MiniEffectsService effects;
-    private com.dierks.homecraft.trade.NaturalSpawnService naturalSpawns;
+    private com.dierks.homecraft.hunt.HuntService hunt;
     private com.dierks.homecraft.trade.StandService stands;
     private com.dierks.homecraft.marketplace.DeliveryService deliveries;
     private com.dierks.homecraft.marketplace.PalletService pallets;
@@ -221,6 +221,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         // Minis collectibles (Phase 4).
         this.miniService = new MiniService(this, new MiniDao(database), economy);
         this.miniService.reload();
+        this.miniService.ensureUniqueNumbers(); // UNIQUE(mini_id, mint_number) when the data allows it
 
         // Card & Printer collectible economy (Phase 9): Cards are the acquisition
         // token; the Printer is the single mint source (graded, cap-aware).
@@ -247,8 +248,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         // Mini presentation (Phase 12): announcements, world effects, natural spawns.
         this.announce = new com.dierks.homecraft.mini.AnnounceService(this);
         this.effects = new com.dierks.homecraft.effects.MiniEffectsService(this);
-        this.naturalSpawns = new com.dierks.homecraft.trade.NaturalSpawnService(
-                this, new com.dierks.homecraft.storage.MiniSpawnDao(database));
+        this.hunt = new com.dierks.homecraft.hunt.HuntService(this,
+                new com.dierks.homecraft.storage.WildSpawnDao(database),
+                new com.dierks.homecraft.storage.MiniSpawnDao(database));
         this.shops = new com.dierks.homecraft.trade.ShopDisplayService(this);
         this.placedMinis = new com.dierks.homecraft.trade.PlacedMiniService(
                 this, new com.dierks.homecraft.storage.PlacedMiniDao(database));
@@ -309,6 +311,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.mini.MiniDestructionListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.display.DisplayListener(this), this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.ArcadeListener(this), this);
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.hunt.HuntListener(this), this);
         getServer().getPluginManager().registerEvents(effects, this);
         getServer().getPluginManager().registerEvents(shops, this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.mini.MiniRenderListener(this), this);
@@ -343,8 +346,8 @@ public final class HomeCraftManagement extends JavaPlugin {
                 getLogger().info("Display Cases: re-applied the pedestal skin on " + cases + " case(s).");
             }
             effects.rebuild();
-            naturalSpawns.rebuild();
-            naturalSpawns.start();
+            hunt.rebuild();
+            hunt.start();
             placedMinis.rebuild();
             placedMinis.start();
             shops.rebuild();
@@ -387,9 +390,9 @@ public final class HomeCraftManagement extends JavaPlugin {
             backups.stop();
             backups = null;
         }
-        if (naturalSpawns != null) {
-            naturalSpawns.stop();
-            naturalSpawns = null;
+        if (hunt != null) {
+            hunt.stop();
+            hunt = null;
         }
         if (effects != null) {
             effects.stop(); // removes every hologram/display/light we own
@@ -466,8 +469,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (effects != null) {
             effects.start(); // re-arm at the new cadence; the registry is kept
         }
-        if (naturalSpawns != null) {
-            naturalSpawns.start(); // re-arm the spawn/expiry timers under the new config
+        if (hunt != null) {
+            hunt.start(); // re-arm the spawn roll and the hunt tick under the new config
         }
         if (backups != null) {
             backups.start();
@@ -845,6 +848,18 @@ public final class HomeCraftManagement extends JavaPlugin {
                 log.addAll(retireShippedQuests(c, path));
             }
         }
+        if (from < 13) {
+            // The September retune moved wild Minis to 96–128 blocks with a 3-minute window:
+            // about four times the area in under a third of the time, and nobody has found one
+            // since. The hunt is now a shared event (one at a time, named, hinted, beamed), so
+            // it comes in closer and runs longer. The cadence is left alone.
+            String n = "minis.loot.natural.";
+            retune(c, n + "min_distance", 96, 48, log);
+            retune(c, n + "max_distance", 128, 96, log);
+            retune(c, n + "despawn_minutes", 3, 5, log);
+            retune(c, n + "max_live", 2, 1, log);
+            retune(c, n + "player_cooldown_minutes", 120, 90, log);
+        }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);
             log.add("Config migration: config_revision " + from + " → " + CONFIG_REVISION + ".");
@@ -860,6 +875,25 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
 
         return log;
+    }
+
+    /**
+     * One numeric retune: move {@code path} from {@code shipped} to {@code corrected} if it still
+     * holds what we shipped, logging the change; if the admin has set their own number, keep it
+     * and log a {@link #WARN} line naming the key. An absent key is left to the backfill.
+     */
+    static void retune(org.bukkit.configuration.file.FileConfiguration c, String path, int shipped,
+                       int corrected, java.util.List<String> log) {
+        Object current = c.get(path, null);
+        if (current == null) {
+            return;
+        }
+        if (replaceShippedInt(c, path, shipped, corrected)) {
+            log.add("Config migration: " + path + " " + shipped + " → " + corrected + ".");
+        } else if (!(current instanceof Number num) || num.intValue() != corrected) {
+            log.add(WARN + "Config migration: kept " + path + " = " + current + " because you have changed it "
+                    + "(the new default is " + corrected + ").");
+        }
     }
 
     /**
@@ -1688,9 +1722,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         return effects;
     }
 
-    /** Naturally spawned wild Minis (the NATURAL_SPAWN trigger). */
-    public com.dierks.homecraft.trade.NaturalSpawnService naturalSpawns() {
-        return naturalSpawns;
+    /** The wild hunt: naturally spawned wild Minis (the NATURAL_SPAWN trigger). */
+    public com.dierks.homecraft.hunt.HuntService hunt() {
+        return hunt;
     }
 
     public WildDropService wildDrops() {

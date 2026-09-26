@@ -17,10 +17,10 @@ import java.util.Locale;
 
 /**
  * Server-wide Mini announcements (§3.4, Phase 12): a one-line "found" broadcast
- * whenever a Mini is minted by a wild drop, natural spawn, or crate (the name is a
+ * whenever a Mini is minted by a wild drop or caught in the wild hunt (the name is a
  * hover card showing the item's full tooltip and click-runs {@code /hcm museum
- * <id>}), a coordinate-free hint when a natural spawn lands, and a "slipped away"
- * line when one despawns untouched. Every broadcast plays a short sound to
+ * <id>}), the wild hunt's coordinate-free hints, and a "got away" line when a hunt
+ * ends without a catch. Every broadcast plays a short sound to
  * everyone. Gated by {@code minis.announce} (global, per-kind, min rarity, per rarity).
  */
 public final class AnnounceService {
@@ -56,42 +56,25 @@ public final class AnnounceService {
     }
 
     /**
-     * "A &lt;Rarity&gt; Mini has spawned within 128 blocks of a player — 3 minutes to find it!"
-     * — no coordinates, no names.
-     *
-     * <p>Both numbers are read from {@code minis.loot.natural} rather than written into the
-     * sentence. {@code hint_radius_text} used to say "within 100 blocks" while the spawn band
-     * was 24–48, and a hint that is wrong about the only fact it carries is worse than no
-     * hint; {@code %blocks%} cannot drift. The find window is announced for the same reason —
-     * a timed hunt nobody is told the length of is just a Mini that vanishes.
+     * One wild-hunt hint, to everyone: the opening "A Rare Mini appeared near Kaden!" and each
+     * escalating hint after it (biome, direction, the beam). {@code legacy} is already rendered
+     * by the hunt — rarity coloured, placeholders filled, never a coordinate.
      */
-    public void spawnHint(Rarity rarity) {
+    public void hint(Rarity rarity, String legacy) {
         PluginConfig.Announce a = plugin.config().announce();
-        if (a == null || !a.spawnHint() || !a.allows(rarity)) {
+        if (a == null || !a.spawnHint() || !a.allows(rarity) || legacy == null || legacy.isBlank()) {
             return;
         }
-        Loot.Natural n = plugin.config().miniLoot().natural();
-        // hint_radius_text is admin-owned and may be emptied; the sentence still has to read.
-        String where = a.hintRadiusText() == null ? "somewhere out there"
-                : a.hintRadiusText().replace("%blocks%", String.valueOf(n.maxDistance()));
-        int minutes = n.despawnMinutes();
-        String window = minutes <= 0 ? " Good luck!"
-                : " You have " + minutes + (minutes == 1 ? " minute" : " minutes") + " to find it!";
-        RarityStyle style = plugin.miniService().style(rarity);
-        Component msg = Component.text("A ", NamedTextColor.LIGHT_PURPLE)
-                .append(Component.text(pretty(rarity.name()), style.nameColor()))
-                .append(Component.text(" Mini has spawned " + where + "!" + window,
-                        NamedTextColor.LIGHT_PURPLE));
-        broadcast(msg);
+        broadcast(Text.of(legacy));
     }
 
-    /** "The Mini slipped away..." — a natural spawn despawned untouched. */
-    public void slippedAway(Rarity rarity) {
+    /** "The Rare Mini got away!" — a wild spawn ended without a catch. */
+    public void escaped(Rarity rarity) {
         PluginConfig.Announce a = plugin.config().announce();
         if (a == null || !a.slippedAway() || !a.allows(rarity)) {
             return;
         }
-        broadcast(Text.of("&7The Mini slipped away..."));
+        broadcast(Text.of("&7The " + plugin.miniService().rarityText(rarity) + " &7Mini got away!"));
     }
 
     private void broadcast(Component msg) {
@@ -123,10 +106,5 @@ public final class AnnounceService {
         } catch (Throwable t) {
             return fallback;
         }
-    }
-
-    private static String pretty(String enumName) {
-        String n = enumName.toLowerCase(Locale.ROOT).replace('_', ' ');
-        return Character.toUpperCase(n.charAt(0)) + n.substring(1);
     }
 }

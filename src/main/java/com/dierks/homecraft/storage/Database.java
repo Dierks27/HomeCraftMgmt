@@ -531,6 +531,48 @@ public final class Database {
             );
             CREATE INDEX IF NOT EXISTS idx_token_ledger_player ON token_ledger (player, at);
             CREATE INDEX IF NOT EXISTS idx_token_ledger_at ON token_ledger (at);
+            """,
+
+            // v29 — the wild hunt mints on pickup. A live spawn is now a BLUEPRINT (which Mini,
+            // which grade and finish, who it spawned near, when it goes) with no uid and no mint
+            // number: mini_spawns required both, and SQLite cannot relax a NOT NULL, so the
+            // blueprint gets its own table. Legacy mini_spawns rows (each holding a minted copy)
+            // are converted in Java on the next enable, because the grade and finish live inside
+            // the stored item. `escaped` counts spawns that got away (nothing is minted for
+            // them); `origin` says how a copy came to exist; `mini_free_numbers` holds mint
+            // numbers handed back by the escaped-copy repair, re-used lowest first. `hunt_lures`
+            // is one armed Mini Lure per player, so an armed lure survives a restart.
+            """
+            CREATE TABLE IF NOT EXISTS wild_spawns (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                world       TEXT    NOT NULL,
+                x           INTEGER NOT NULL,
+                y           INTEGER NOT NULL,
+                z           INTEGER NOT NULL,
+                mini_id     TEXT    NOT NULL,
+                grade       TEXT    NOT NULL,
+                finish      TEXT,
+                target      TEXT,
+                anchor_x    INTEGER NOT NULL,
+                anchor_z    INTEGER NOT NULL,
+                spawned_at  INTEGER NOT NULL,
+                expires_at  INTEGER NOT NULL,
+                hint_stage  INTEGER NOT NULL DEFAULT 0,
+                UNIQUE (world, x, y, z)
+            );
+            CREATE INDEX IF NOT EXISTS idx_wild_spawns_mini ON wild_spawns (mini_id);
+            ALTER TABLE mini_counts ADD COLUMN escaped INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE mini_individuals ADD COLUMN origin TEXT;
+            CREATE TABLE IF NOT EXISTS mini_free_numbers (
+                mini_id     TEXT    NOT NULL,
+                mint_number INTEGER NOT NULL,
+                freed_at    INTEGER NOT NULL,
+                PRIMARY KEY (mini_id, mint_number)
+            );
+            CREATE TABLE IF NOT EXISTS hunt_lures (
+                player    TEXT    PRIMARY KEY,
+                armed_at  INTEGER NOT NULL
+            );
             """
     };
 

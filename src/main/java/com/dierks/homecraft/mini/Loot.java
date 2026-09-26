@@ -95,7 +95,48 @@ public final class Loot {
      * other end of the same idea: a ceiling on unclaimed Minis standing in the world.
      */
     public record Natural(int intervalTicks, int despawnMinutes, int minDistance, int maxDistance,
-                          int playerCooldownMinutes, int maxLive) {
+                          int playerCooldownMinutes, int maxLive, WildEffects effects, Beam beam,
+                          List<Hint> hints) {
+
+        /** The throttles alone, with the shipped effects, beam and hints. */
+        public Natural(int intervalTicks, int despawnMinutes, int minDistance, int maxDistance,
+                       int playerCooldownMinutes, int maxLive) {
+            this(intervalTicks, despawnMinutes, minDistance, maxDistance, playerCooldownMinutes, maxLive,
+                    WildEffects.DEFAULT, Beam.DEFAULT, Hint.defaults());
+        }
+    }
+
+    /**
+     * How a wild spawn shows itself, for every rarity — on top of (not instead of) the rarity's
+     * own effects. Its own radius, because {@code minis.effects.radius} is set for a trophy on a
+     * shelf: a sixteen-block gate kept a spawn dark until somebody was all but on top of it, and
+     * Common and Uncommon had no effects to show at all.
+     */
+    public record WildEffects(double radius, String particle, int count, int intervalTicks, int light) {
+        public static final WildEffects DEFAULT = new WildEffects(32, "END_ROD", 3, 20, 10);
+    }
+
+    /** The light column the last hint turns on: DUST in the rarity colour, seen from far off. */
+    public record Beam(int height, int intervalTicks) {
+        public static final Beam DEFAULT = new Beam(24, 10);
+    }
+
+    /**
+     * One escalating hint: sent once the hunt is {@code atPercent} of the way through its time.
+     * The last one reached also switches the beam on. {@code enabled: false} keeps the stage (and
+     * its beam) but sends no message.
+     *
+     * <p>Placeholders: {@code {rarity} {player} {minutes} {biome} {direction}}. Never a coordinate
+     * or a distance — the hints narrow the search, they do not end it.
+     */
+    public record Hint(int atPercent, boolean enabled, String text) {
+        public static List<Hint> defaults() {
+            return List.of(
+                    new Hint(0, true, "A {rarity} Mini appeared near {player}! You have {minutes} minutes to find it."),
+                    new Hint(30, true, "Hint: the {rarity} Mini is in a {biome} biome."),
+                    new Hint(60, true, "Hint: it's to the {direction} of where {player} was."),
+                    new Hint(85, true, "Look for the light beam!"));
+        }
     }
 
     /** The full loot config: lists + sources + tag-pool rarity weights + Shiny odds + natural spawns. */

@@ -11,10 +11,10 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Naturally spawned wild-Mini heads (the NATURAL_SPAWN trigger): where each one
- * sits, the exact minted item it holds, and when it despawns. Persisted so an
- * untouched spawn still expires (and retires its copy) across a restart, and so
- * nothing leaks after a crash.
+ * The LEGACY wild-spawn table, from when a spawn was minted the moment it appeared and held its
+ * copy until it was caught or retired. Read only by the upgrade in {@code HuntService}, which
+ * turns each row into a blueprint in {@code wild_spawns} and deletes it here; nothing writes new
+ * rows any more.
  */
 public final class MiniSpawnDao {
 
@@ -85,6 +85,17 @@ public final class MiniSpawnDao {
                 try (ResultSet rs = ps.executeQuery()) {
                     return rs.next() ? Optional.of(map(rs)) : Optional.empty();
                 }
+            }
+        }
+    }
+
+    /** Remove one converted legacy row. */
+    public void deleteById(long id) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement("DELETE FROM mini_spawns WHERE id = ?")) {
+                ps.setLong(1, id);
+                ps.executeUpdate();
             }
         }
     }

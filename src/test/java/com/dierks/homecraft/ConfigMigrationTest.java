@@ -636,8 +636,10 @@ class ConfigMigrationTest {
 
     /**
      * Revision 7: three hours of play produced two wild Minis, both inside 100 blocks, both
-     * found in seconds. Every shipped number was pulling the same way, so all four move
-     * together — a rarer roll, a far longer walk, and a find window short enough to be a hunt.
+     * found in seconds. Every shipped number was pulling the same way, so all four moved
+     * together — a rarer roll, a far longer walk, a find window short enough to be a hunt.
+     * Revision 13 then brought the walk back in and lengthened the window (nobody found one
+     * at 96–128 blocks in 3 minutes), so a rev-6 file lands on 13's numbers, via 7.
      */
     @Test
     void theNaturalSpawnDefaultsAreRetuned() throws Exception {
@@ -648,12 +650,13 @@ class ConfigMigrationTest {
         onDisk.set("minis.loot.natural.min_distance", 24);
         onDisk.set("minis.loot.natural.max_distance", 48);
 
-        assertFalse(HomeCraftManagement.migrateConfig(onDisk, "world").isEmpty());
+        List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
 
+        assertTrue(log.stream().anyMatch(l -> l.contains("96–128")), "revision 7 ran: " + log);
         assertEquals(24000, onDisk.getInt("minis.loot.natural.interval_ticks"));
-        assertEquals(3, onDisk.getInt("minis.loot.natural.despawn_minutes"));
-        assertEquals(96, onDisk.getInt("minis.loot.natural.min_distance"));
-        assertEquals(128, onDisk.getInt("minis.loot.natural.max_distance"));
+        assertEquals(5, onDisk.getInt("minis.loot.natural.despawn_minutes"), "3 (rev 7) → 5 (rev 13)");
+        assertEquals(48, onDisk.getInt("minis.loot.natural.min_distance"), "96 (rev 7) → 48 (rev 13)");
+        assertEquals(96, onDisk.getInt("minis.loot.natural.max_distance"), "128 (rev 7) → 96 (rev 13)");
         assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"));
     }
 
@@ -671,7 +674,7 @@ class ConfigMigrationTest {
 
         assertEquals(6000, onDisk.getInt("minis.loot.natural.interval_ticks"));
         assertEquals(15, onDisk.getInt("minis.loot.natural.despawn_minutes"));
-        assertEquals(96, onDisk.getInt("minis.loot.natural.min_distance"), "ours moves");
+        assertEquals(48, onDisk.getInt("minis.loot.natural.min_distance"), "ours moves (via rev 7 and 13)");
         assertEquals(60, onDisk.getInt("minis.loot.natural.max_distance"), "theirs does not");
     }
 
@@ -948,5 +951,82 @@ class ConfigMigrationTest {
         List<String> added = HomeCraftManagement.backfillConfig(onDisk, bundled());
         assertTrue(added.contains("clock.time_zone"), "added: " + added);
     }
-}
 
+    // ---- revision 13: the wild hunt retune ----------------------------------------
+
+    /** A live file still holding the PR #37 numbers. */
+    private static YamlConfiguration rev12Hunt() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 12);
+        onDisk.set("minis.loot.natural.interval_ticks", 24000);
+        onDisk.set("minis.loot.natural.despawn_minutes", 3);
+        onDisk.set("minis.loot.natural.min_distance", 96);
+        onDisk.set("minis.loot.natural.max_distance", 128);
+        onDisk.set("minis.loot.natural.max_live", 2);
+        onDisk.set("minis.loot.natural.player_cooldown_minutes", 120);
+        return onDisk;
+    }
+
+    @Test
+    void theHuntComesInCloserAndRunsLonger() throws Exception {
+        YamlConfiguration onDisk = rev12Hunt();
+
+        List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals(24000, onDisk.getInt("minis.loot.natural.interval_ticks"), "the cadence is unchanged");
+        assertEquals(48, onDisk.getInt("minis.loot.natural.min_distance"));
+        assertEquals(96, onDisk.getInt("minis.loot.natural.max_distance"));
+        assertEquals(5, onDisk.getInt("minis.loot.natural.despawn_minutes"));
+        assertEquals(1, onDisk.getInt("minis.loot.natural.max_live"), "one hunt at a time");
+        assertEquals(90, onDisk.getInt("minis.loot.natural.player_cooldown_minutes"));
+        assertEquals(5, log.stream().filter(l -> l.contains("minis.loot.natural.") && l.contains("→")).count(),
+                "every change is logged: " + log);
+        assertTrue(log.stream().noneMatch(l -> l.startsWith(HomeCraftManagement.WARN)));
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"));
+    }
+
+    @Test
+    void aTunedHuntValueIsKeptWithAWarningNamingIt() throws Exception {
+        YamlConfiguration onDisk = rev12Hunt();
+        onDisk.set("minis.loot.natural.max_live", 3);
+        onDisk.set("minis.loot.natural.despawn_minutes", 8);
+
+        List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals(3, onDisk.getInt("minis.loot.natural.max_live"));
+        assertEquals(8, onDisk.getInt("minis.loot.natural.despawn_minutes"));
+        assertEquals(48, onDisk.getInt("minis.loot.natural.min_distance"), "the shipped ones still move");
+        assertTrue(log.stream().anyMatch(l -> l.startsWith(HomeCraftManagement.WARN)
+                && l.contains("minis.loot.natural.max_live")), "named: " + log);
+        assertTrue(log.stream().anyMatch(l -> l.startsWith(HomeCraftManagement.WARN)
+                && l.contains("minis.loot.natural.despawn_minutes")), "named: " + log);
+    }
+
+    /** The retune's targets are what a fresh install ships, or the two would disagree. */
+    @Test
+    void theRetuneMatchesTheBundledDefaults() throws Exception {
+        YamlConfiguration shipped = bundled();
+        YamlConfiguration onDisk = rev12Hunt();
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+        for (String key : List.of("interval_ticks", "despawn_minutes", "min_distance", "max_distance",
+                "max_live", "player_cooldown_minutes")) {
+            assertEquals(shipped.getInt("minis.loot.natural." + key), onDisk.getInt("minis.loot.natural." + key),
+                    "minis.loot.natural." + key + " has drifted from src/main/resources/config.yml");
+        }
+    }
+
+    /** The hunt's new sections reach an upgraded file through the backfill. */
+    @Test
+    void theHuntEffectsBeamAndHintsReachAnUpgradedFile() throws Exception {
+        YamlConfiguration onDisk = rev12Hunt();
+        onDisk.set("minis.loot.natural.effects", null);
+        onDisk.set("minis.loot.natural.beam", null);
+        onDisk.set("minis.loot.natural.hints", null);
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+        List<String> added = HomeCraftManagement.backfillConfig(onDisk, bundled());
+        assertTrue(added.contains("minis.loot.natural.effects.radius"), "added: " + added);
+        assertTrue(added.contains("minis.loot.natural.beam.height"), "added: " + added);
+        assertTrue(added.contains("minis.loot.natural.hints"), "added: " + added);
+        assertEquals(4, onDisk.getMapList("minis.loot.natural.hints").size());
+    }
+}

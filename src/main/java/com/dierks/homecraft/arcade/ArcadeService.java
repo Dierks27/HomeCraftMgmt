@@ -439,7 +439,7 @@ public final class ArcadeService {
             return Outcome.lost(icon(Material.GOLD_NUGGET, "&7So close! &e+" + won + " tokens back"),
                     "&e" + won + " tokens back");
         }
-        return Outcome.lost(icon(Material.BARRIER, "&7No win this time"), "&7no win");
+        return Outcome.lost(icon(Material.GRAY_DYE, "&7No win this time"), "&7no win");
     }
 
     private static PluginConfig.LottoPayout roll(List<PluginConfig.LottoPayout> payouts) {

@@ -47,6 +47,9 @@ public final class RevealMenu extends Menu {
             if (outcome.label() != null) {
                 player.sendMessage(Text.of("&aYou got " + outcome.label() + "&a!"));
             }
+            if (outcome.big()) {
+                BigWin.celebrate(player, outcome.label());
+            }
         } else {
             Sounds.miss(player);
         }

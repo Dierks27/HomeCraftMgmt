@@ -7,9 +7,6 @@ import com.dierks.homecraft.util.Keys;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import com.dierks.homecraft.util.TokenPrizes;
-import org.bukkit.Color;
-import org.bukkit.FireworkEffect;
-import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
@@ -33,7 +30,6 @@ import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.FireworkMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -193,7 +189,6 @@ public final class PrizeItemListener implements Listener {
 
     /** A three-second volley of fireworks around the player, tagged so they cannot hurt anyone. */
     private void show(Player player) {
-        Color[] palette = {Color.RED, Color.ORANGE, Color.YELLOW, Color.LIME, Color.AQUA, Color.FUCHSIA, Color.WHITE};
         for (int burst = 0; burst < 6; burst++) {
             plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
                 if (!player.isOnline()) {
@@ -201,22 +196,8 @@ public final class PrizeItemListener implements Listener {
                 }
                 for (int i = 0; i < 2; i++) {
                     ThreadLocalRandom r = ThreadLocalRandom.current();
-                    Location at = player.getLocation().add(r.nextDouble(-3, 3), 0.5, r.nextDouble(-3, 3));
-                    try {
-                        player.getWorld().spawn(at, Firework.class, fw -> {
-                            FireworkMeta meta = fw.getFireworkMeta();
-                            meta.addEffect(FireworkEffect.builder()
-                                    .withColor(palette[r.nextInt(palette.length)], palette[r.nextInt(palette.length)])
-                                    .withFade(Color.WHITE)
-                                    .with(FireworkEffect.Type.values()[r.nextInt(FireworkEffect.Type.values().length)])
-                                    .flicker(r.nextBoolean()).trail(true).build());
-                            meta.setPower(1);
-                            fw.setFireworkMeta(meta);
-                            fw.getPersistentDataContainer().set(Keys.FIREWORK_SHOW, PersistentDataType.BYTE, (byte) 1);
-                        });
-                    } catch (RuntimeException ignored) {
-                        // cosmetic
-                    }
+                    com.dierks.homecraft.util.Fireworks.spawn(
+                            player.getLocation().add(r.nextDouble(-3, 3), 0.5, r.nextDouble(-3, 3)));
                 }
             }, burst * 10L);
         }

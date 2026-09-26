@@ -45,6 +45,8 @@ commands:
       /hcm arcade            - open the Arcade (crates, pity, scratch tickets)
       /hcm arcade odds       - admin: Scratch Ticket RTP and each crate's value
       /hcm trail [name|off]  - turn your particle trail on or off
+      /hcm achievements      - your achievements
+      /hcm guide [page]      - How It Works (tokens, minis, wild, arcade)
       /hcm tokens            - show your Arcade token balance
       /hcm tokens give|set|take <player> <n>  - admin: adjust tokens
       /hcm tokens audit [days] [player]  - admin: tokens earned/spent by source
@@ -143,6 +145,12 @@ permissions:
     default: true
   hcm.quests.use:
     description: Open the daily/weekly Quests board (/hcm quests).
+    default: true
+  hcm.achievements.use:
+    description: Open your Achievements (/hcm achievements).
+    default: true
+  hcm.guide.use:
+    description: Open the How It Works guide (/hcm guide).
     default: true
   hcm.courier.use:
     description: >-

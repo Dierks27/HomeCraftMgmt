@@ -95,6 +95,10 @@ public final class SiteLauncherMenu extends Menu {
         out.add(new Site(Material.CHEST_MINECART, "&eMailbox & Orders",
                 "Track deliveries and collect what has arrived.",
                 p -> new MailboxMenu(plugin, p, this::reopen).open(p)));
+        out.add(new Site(Material.KNOWLEDGE_BOOK, "&bGuide",
+                "How tokens, Minis, wild Minis and the Arcade work.",
+                p -> new com.dierks.homecraft.gui.arcade.GuideMenu(plugin, p,
+                        com.dierks.homecraft.gui.arcade.GuideMenu.TOKENS, this::reopen).open(p)));
         if (plugin.config().courier().enabled()) {
             out.add(new Site(Material.FILLED_MAP, "&2Courier",
                     "Take a delivery run and get paid for the trip.",

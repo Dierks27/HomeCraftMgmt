@@ -399,6 +399,13 @@ public final class PluginConfig {
      * A GUI icon: a head texture, and the plain material every Bedrock player sees instead (and
      * every Java player too, while the texture is blank).
      */
+    /**
+     * The crate spin: {@code spinTicks} long in all, {@code frames} strip steps on Java and
+     * {@code bedrockFrames} on Bedrock, where rapid inventory updates stutter.
+     */
+    public record Reveal(int spinTicks, int frames, int bedrockFrames) {
+    }
+
     public record Icon(String texture, Material material) {
         public boolean hasTexture() {
             return texture != null && !texture.isBlank();
@@ -669,6 +676,8 @@ public final class PluginConfig {
     private WebDashboard webDashboard;
     private Displays displays;
     private Arcade arcade;
+    private Map<String, Icon> arcadeIcons = Map.of();
+    private Reveal reveal = new Reveal(60, 24, 6);
     private Map<String, AchievementDef> achievements;
     private Quests quests;
     private Courier courier;
@@ -821,6 +830,16 @@ public final class PluginConfig {
 
     public Displays displays() {
         return displays;
+    }
+
+    /** {@code arcade.icons.<key>}: a hub or counter button's head texture and plain fallback. */
+    public Icon arcadeIcon(String key) {
+        return arcadeIcons.get(key);
+    }
+
+    /** {@code arcade.reveal}: how the crate spin runs. */
+    public Reveal reveal() {
+        return reveal;
     }
 
     public Arcade arcade() {
@@ -1030,6 +1049,11 @@ public final class PluginConfig {
 
         // ---- Arcade (Phase 8) ----
         this.arcade = readArcade(c);
+        this.arcadeIcons = readArcadeIcons(c);
+        this.reveal = new Reveal(
+                Math.max(10, c.getInt("arcade.reveal.spin_ticks", 60)),
+                Math.max(3, c.getInt("arcade.reveal.frames", 24)),
+                Math.max(1, c.getInt("arcade.reveal.bedrock_frames", 6)));
 
         // ---- Achievements (Phase 9) ----
         this.achievements = readAchievements(c);
@@ -1426,6 +1450,26 @@ public final class PluginConfig {
         return new Arcade(enabled, streakEnabled, streakRewards, ptEnabled, minsPerToken,
                 crates, prizes, pityTokens, pityRarity, pityPerWeek,
                 new Lotto(ticketTokens, payouts, jackpot), tradeIn, block, machines);
+    }
+
+    /** {@code arcade.icons}: key → {texture, material}. A bad material falls back per button. */
+    private Map<String, Icon> readArcadeIcons(FileConfiguration c) {
+        Map<String, Icon> out = new LinkedHashMap<>();
+        ConfigurationSection sec = c.getConfigurationSection("arcade.icons");
+        if (sec == null) {
+            return out;
+        }
+        for (String key : sec.getKeys(false)) {
+            String texture = sec.getString(key + ".texture", "");
+            String mat = sec.getString(key + ".material", null);
+            Material m = mat == null ? null : Material.matchMaterial(mat.trim().toUpperCase(Locale.ROOT));
+            if (mat != null && (m == null || !m.isItem())) {
+                log.warning("arcade.icons." + key + ".material '" + mat + "' is not an item — using the default.");
+                m = null;
+            }
+            out.put(key.toLowerCase(Locale.ROOT), new Icon(texture == null ? "" : texture.trim(), m));
+        }
+        return out;
     }
 
     /**

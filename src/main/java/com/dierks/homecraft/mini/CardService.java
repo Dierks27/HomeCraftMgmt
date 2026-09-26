@@ -44,23 +44,63 @@ public final class CardService {
     }
 
     /**
-     * Issue one sealed Card of {@code id} to the player, enforcing the card cap. A
-     * capped-out type quietly refuses (Wild Drops / crates re-roll or skip) so the
-     * finite promise holds. Uncapped (common) types never refuse.
+     * <b>The one cap check.</b> A Card may be issued only while its type has Cards left AND the
+     * Mini it prints has not minted out.
+     *
+     * <p>Card packs used to check only the first half, so a pack could hand over a Card for a
+     * Mini that could no longer be printed — a dead Card, paid for with real in-game money.
+     * Every issuer (packs, crates, the pity exchange, anything added later) now asks this one
+     * question, and {@link #issue} asks it again itself, so a path that forgets still cannot get
+     * a dead Card out.
+     */
+    public boolean canIssue(MiniDef def) {
+        if (def == null) {
+            return false;
+        }
+        if (plugin.miniService().mintedOut(def)) {
+            return false;
+        }
+        CardSpec spec = plugin.miniService().cardSpec(def);
+        if (spec.uncappedCards()) {
+            return true;
+        }
+        try {
+            return dao.issued(def.id()) < spec.cardCap();
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Could not read the Card tally for " + def.id() + ": " + e.getMessage());
+            return false; // unknown is not "available": refusing costs a re-roll, a dead Card costs a player
+        }
+    }
+
+    /** The subset of {@code pool} whose Cards can be issued right now (a fresh, mutable list). */
+    public java.util.List<MiniDef> issuable(java.util.Collection<MiniDef> pool) {
+        java.util.List<MiniDef> out = new java.util.ArrayList<>();
+        if (pool != null) {
+            for (MiniDef def : pool) {
+                if (canIssue(def)) {
+                    out.add(def);
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Issue one sealed Card of {@code id} to the player, if {@link #canIssue} allows it. A type
+     * that is sold out — or whose Mini is minted out — quietly refuses (packs and crates re-roll
+     * or skip) so the finite promise holds.
      */
     public IssueResult issue(Player player, String id) {
         MiniDef def = plugin.miniService().def(id);
         if (def == null) {
             return IssueResult.fail("No such Mini '" + id + "'.");
         }
-        CardSpec spec = plugin.miniService().cardSpec(def);
+        if (!canIssue(def)) {
+            return IssueResult.fail(plugin.miniService().mintedOut(def)
+                    ? "Every " + def.name() + " has been made — its Cards are gone."
+                    : def.name() + " Cards are sold out.");
+        }
         try {
-            if (!spec.uncappedCards()) {
-                long already = dao.issued(id);
-                if (already >= spec.cardCap()) {
-                    return IssueResult.fail(def.name() + " cards are sold out.");
-                }
-            }
             giveCard(player, id);
             dao.addIssued(id, 1);
             return new IssueResult(true, null, id);
@@ -70,11 +110,20 @@ public final class CardService {
         }
     }
 
-    /** Admin: give a Card ignoring the cap (still tallies issuance). */
+    /**
+     * Admin: give a Card ignoring the cap check (still tallies issuance). The one path allowed
+     * past {@link #canIssue}, and it says so in the log when it actually goes past it — an
+     * admin testing a print should be able to, but it should never be a surprise later.
+     */
     public IssueResult giveAdmin(Player player, String id) {
         MiniDef def = plugin.miniService().def(id);
         if (def == null) {
             return IssueResult.fail("No such Mini '" + id + "'.");
+        }
+        if (!canIssue(def)) {
+            plugin.getLogger().info("Admin Card give: " + id + " to " + player.getName()
+                    + " bypassed the cap check (" + (plugin.miniService().mintedOut(def)
+                    ? "the Mini is minted out" : "its Cards are sold out") + ").");
         }
         giveCard(player, id);
         try {

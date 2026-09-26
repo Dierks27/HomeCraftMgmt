@@ -84,7 +84,7 @@ public final class MiniInfoMenu extends Menu {
             lore.add(grey("Type: ", def.category()));
             lore.add(grey("Series: ", def.series()));
             lore.add(Component.text("Rarity: ", NamedTextColor.GRAY)
-                    .append(Component.text(def.rarity().name(), minis.style(def.rarity()).nameColor()))
+                    .append(Component.text(def.rarity().display(), minis.style(def.rarity()).nameColor()))
                     .decoration(TextDecoration.ITALIC, false));
             lore.add(grey("Mint #", ref.mintNumber() + (def.uncapped() ? "" : " of " + def.cap())));
             lore.add(grey("In circulation: ", Long.toString(counts.circulation())));

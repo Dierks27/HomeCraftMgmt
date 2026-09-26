@@ -836,4 +836,117 @@ class ConfigMigrationTest {
         assertEquals(List.of("standard"), HomeCraftManagement.repairGradeSymbols(c));
         assertEquals(Grade.STANDARD.symbol(), c.getString("minis.grades.standard.symbol"));
     }
+
+    // ---- revision 12: the quests that pushed Mini output ---------------------------
+
+    /** The quest pool rev 9 shipped, as a live rev-11 server has it. */
+    private static YamlConfiguration rev11Quests() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 11);
+        onDisk.set("arcade.quests.daily", List.of(
+                quest("fish_daily", "CATCH_FISH", 8, 3, "Catch 8 fish"),
+                quest("walk_daily", "TRAVEL_ON_FOOT", 800, 3, "Travel 800 blocks on foot"),
+                quest("print_daily", "PRINT_MINI", 1, 2, "Print a Mini at a Printer"),
+                quest("sell_daily", "SELL_MARKET", 300, 1, "Sell $300 to the Market")));
+        onDisk.set("arcade.quests.weekly", List.of(
+                quest("hostiles_weekly", "KILL_HOSTILES", 120, 12, "Defeat 120 hostile mobs"),
+                quest("breed_weekly", "BREED_ANIMALS", 12, 8, "Breed 12 animals"),
+                quest("trade_weekly", "TRADE_VILLAGER", 15, 7, "Trade with villagers 15 times"),
+                quest("pack_weekly", "OPEN_PACK", 3, 6, "Open 3 Card Packs"),
+                quest("sell_weekly", "SELL_MARKET", 2000, 5, "Sell $2,000 to the Market")));
+        return onDisk;
+    }
+
+    private static Map<String, Object> quest(String id, String type, int target, int reward, String display) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", id);
+        m.put("type", type);
+        m.put("target", target);
+        m.put("reward", reward);
+        m.put("display", display);
+        return m;
+    }
+
+    private static List<String> ids(YamlConfiguration c, String path) {
+        List<String> out = new ArrayList<>();
+        for (Map<?, ?> row : c.getMapList(path)) {
+            out.add(String.valueOf(row.get("id")));
+        }
+        return out;
+    }
+
+    @Test
+    void theShippedPushQuestsLeaveThePool() throws Exception {
+        YamlConfiguration onDisk = rev11Quests();
+
+        List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals(List.of("fish_daily", "walk_daily"), ids(onDisk, "arcade.quests.daily"));
+        assertEquals(List.of("hostiles_weekly", "breed_weekly", "trade_weekly"), ids(onDisk, "arcade.quests.weekly"));
+        assertEquals(4, log.stream().filter(l -> l.contains("removed the")).count(), "one line per quest: " + log);
+        assertTrue(log.stream().noneMatch(l -> l.startsWith(HomeCraftManagement.WARN)), "nothing to warn about");
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"));
+        assertEquals(ids(bundled(), "arcade.quests.daily"), ids(onDisk, "arcade.quests.daily"),
+                "an upgraded server ends up with the pool a fresh install ships");
+        assertEquals(ids(bundled(), "arcade.quests.weekly"), ids(onDisk, "arcade.quests.weekly"));
+    }
+
+    @Test
+    void aRetunedPushQuestIsKeptWithAWarningNamingIt() throws Exception {
+        YamlConfiguration onDisk = rev11Quests();
+        List<Map<String, Object>> daily = new ArrayList<>();
+        for (Map<?, ?> row : onDisk.getMapList("arcade.quests.daily")) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            row.forEach((k, v) -> m.put(String.valueOf(k), v));
+            if ("print_daily".equals(m.get("id"))) {
+                m.put("target", 3); // the admin's own number
+            }
+            if ("sell_daily".equals(m.get("id"))) {
+                m.put("display", "Sell some stuff"); // reworded only — still ours
+            }
+            daily.add(m);
+        }
+        onDisk.set("arcade.quests.daily", daily);
+
+        List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals(List.of("fish_daily", "walk_daily", "print_daily"), ids(onDisk, "arcade.quests.daily"));
+        assertTrue(log.stream().anyMatch(l -> l.startsWith(HomeCraftManagement.WARN) && l.contains("print_daily")
+                        && l.contains("arcade.quests.daily")),
+                "the kept row is named in a warning: " + log);
+    }
+
+    @Test
+    void theOriginalShippedSellQuestsGoToo() throws Exception {
+        YamlConfiguration onDisk = rev11Quests();
+        onDisk.set("arcade.quests.daily", List.of(
+                quest("sell_daily", "SELL_MARKET", 500, 2, "Sell $500 to the Market"),
+                quest("crate_daily", "OPEN_CRATE", 1, 1, "Open a Loot Crate")));
+
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals(List.of("crate_daily"), ids(onDisk, "arcade.quests.daily"),
+                "the 0.x sell_daily was also ours; a quest the brief does not name stays");
+    }
+
+    @Test
+    void anAdminsOwnPoolWithoutThoseQuestsIsUntouched() throws Exception {
+        YamlConfiguration onDisk = rev11Quests();
+        List<Map<String, Object>> mine = List.of(quest("mine_daily", "KILL_HOSTILES", 5, 4, "Mine"));
+        onDisk.set("arcade.quests.daily", mine);
+
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals(List.of("mine_daily"), ids(onDisk, "arcade.quests.daily"));
+    }
+
+    @Test
+    void theClockZoneShipsAndReachesAnUpgradedFile() throws Exception {
+        assertEquals("America/Chicago", bundled().getString("clock.time_zone"));
+        YamlConfiguration onDisk = legacyOnDisk();
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+        List<String> added = HomeCraftManagement.backfillConfig(onDisk, bundled());
+        assertTrue(added.contains("clock.time_zone"), "added: " + added);
+    }
 }
+

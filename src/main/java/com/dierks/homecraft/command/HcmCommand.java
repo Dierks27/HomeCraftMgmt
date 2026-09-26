@@ -138,7 +138,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 if (denyUnless(sender, "hcm.quests.use")) {
                     return true;
                 }
-                new com.dierks.homecraft.gui.arcade.QuestsMenu(plugin, player).open(player);
+                new com.dierks.homecraft.gui.arcade.QuestsMenu(plugin, player, null).open(player);
             }
             case "courier" -> {
                 if (!(sender instanceof Player player)) {
@@ -850,6 +850,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.of("&e/hcm backup now &7- write a database backup"));
             sender.sendMessage(Text.of("&e/hcm give <card <id>|pack <id>|binder|filament <color> <n>> [player]"));
             sender.sendMessage(Text.of("&e/hcm printer <public|private> &7- flag the Printer you're looking at"));
+            sender.sendMessage(Text.of("&e/hcm tokens give|set|take <player> <n> &7- adjust tokens"));
+            sender.sendMessage(Text.of("&e/hcm tokens audit [days] [player] &7- tokens earned/spent by source"));
+            sender.sendMessage(Text.of("&e/hcm tokens history <player> [n] &7- a player's last token changes"));
         }
         if (sender.hasPermission("hcm.admin")) {
             sender.sendMessage(Text.of("&e/hcm market resetstock <item|all> &7- reseed stock+price from config"));
@@ -896,7 +899,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         player.sendMessage(plugin.economy().isEnabled()
                 ? Text.of("&7Balance: &a" + plugin.economy().format(plugin.economy().balance(player)))
                 : Text.of("&7Balance: &cunavailable &7(no Vault economy)"));
-        player.sendMessage(Text.of("&7Tokens: &6" + plugin.arcade().balance(player.getUniqueId())));
+        player.sendMessage(Text.of("&7Tokens: &6" + plugin.tokens().balance(player.getUniqueId())));
     }
 
     // ---------------------------------------------------------------------
@@ -906,6 +909,18 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
     private void handleTokens(CommandSender sender, String[] args) {
         if (args.length >= 2) {
             String sub = args[1].toLowerCase(Locale.ROOT);
+            if (sub.equals("audit")) {
+                if (!denyUnless(sender, "hcm.admin")) {
+                    handleTokenAudit(sender, args);
+                }
+                return;
+            }
+            if (sub.equals("history")) {
+                if (!denyUnless(sender, "hcm.admin")) {
+                    handleTokenHistory(sender, args);
+                }
+                return;
+            }
             if (sub.equals("give") || sub.equals("add") || sub.equals("set") || sub.equals("take")) {
                 if (denyUnless(sender, "hcm.admin")) {
                     return;
@@ -923,9 +938,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     return;
                 }
                 int bal = switch (sub) {
-                    case "set" -> plugin.arcade().adminSet(target.getUniqueId(), n);
-                    case "take" -> plugin.arcade().adminTake(target.getUniqueId(), n);
-                    default -> plugin.arcade().adminAdd(target.getUniqueId(), n);
+                    case "set" -> plugin.tokens().adminSet(target.getUniqueId(), n);
+                    case "take" -> plugin.tokens().adminTake(target.getUniqueId(), n);
+                    default -> plugin.tokens().adminAdd(target.getUniqueId(), n);
                 };
                 sender.sendMessage(Text.of("&aTokens for &f" + args[2] + "&a: now &6" + bal + "&a."));
                 return;
@@ -935,10 +950,150 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.of("&cOnly players have a token balance."));
             return;
         }
-        int t = plugin.arcade().balance(player.getUniqueId());
-        int s = plugin.arcade().streak(player.getUniqueId());
+        int t = plugin.tokens().balance(player.getUniqueId());
+        int s = plugin.tokens().streak(player.getUniqueId());
         player.sendMessage(Text.of("&eArcade tokens: &6" + t + " &7(login streak: " + s + " day"
                 + (s == 1 ? "" : "s") + "). &7Play at the Arcade machines or &f/hcm arcade&7."));
+    }
+
+    /**
+     * {@code /hcm tokens audit [days] [player]} — what was earned and spent, by source, over the
+     * last {@code days} local days (default 7; 1 = today so far). Per player, with per-day
+     * averages, then the whole server. Read straight from the ledger, so it is what happened
+     * rather than what the config says should happen.
+     */
+    private void handleTokenAudit(CommandSender sender, String[] args) {
+        int days = 7;
+        String who = null;
+        int next = 2;
+        if (args.length > next) {
+            try {
+                days = Math.max(1, Math.min(365, Integer.parseInt(args[next])));
+                next++;
+            } catch (NumberFormatException ignored) {
+                // not a number — it is the player name, and days stays the default
+            }
+        }
+        if (args.length > next) {
+            who = args[next];
+        }
+        java.util.UUID only = null;
+        if (who != null) {
+            org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(who);
+            only = op.getUniqueId();
+        }
+        com.dierks.homecraft.util.GameClock clock = plugin.clock();
+        long firstDay = clock.dayKey() - (days - 1);
+        long since = clock.startOfDay(firstDay);
+        List<com.dierks.homecraft.storage.TokenDao.SourceTotal> rows = plugin.tokens().totals(since, only);
+
+        String from = java.time.LocalDate.ofEpochDay(firstDay)
+                .format(java.time.format.DateTimeFormatter.ofPattern("MMM d", Locale.ROOT));
+        sender.sendMessage(Text.of("&6Token audit &7— " + (days == 1 ? "today so far" : "the last " + days
+                + " days, since " + from) + " &8(" + clock.zone().getId() + ")"));
+        if (rows.isEmpty()) {
+            sender.sendMessage(Text.of("&7No token has moved in that window."));
+            return;
+        }
+        Map<java.util.UUID, List<com.dierks.homecraft.storage.TokenDao.SourceTotal>> byPlayer =
+                new java.util.LinkedHashMap<>();
+        for (com.dierks.homecraft.storage.TokenDao.SourceTotal r : rows) {
+            byPlayer.computeIfAbsent(r.player(), k -> new ArrayList<>()).add(r);
+        }
+        long allEarned = 0;
+        long allSpent = 0;
+        Map<String, long[]> allBySource = new java.util.TreeMap<>();
+        for (Map.Entry<java.util.UUID, List<com.dierks.homecraft.storage.TokenDao.SourceTotal>> e
+                : byPlayer.entrySet()) {
+            long earned = 0;
+            long spent = 0;
+            List<String> earnedParts = new ArrayList<>();
+            List<String> spentParts = new ArrayList<>();
+            for (com.dierks.homecraft.storage.TokenDao.SourceTotal r : e.getValue()) {
+                earned += r.earned();
+                spent += r.spent();
+                if (r.earned() > 0) {
+                    earnedParts.add(sourceLabel(r.source()) + " " + r.earned());
+                }
+                if (r.spent() > 0) {
+                    spentParts.add(sourceLabel(r.source()) + " " + r.spent());
+                }
+                long[] agg = allBySource.computeIfAbsent(r.source(), k -> new long[2]);
+                agg[0] += r.earned();
+                agg[1] += r.spent();
+            }
+            allEarned += earned;
+            allSpent += spent;
+            sender.sendMessage(Text.of(auditLine(playerName(e.getKey()), earned, spent, days)));
+            if (!earnedParts.isEmpty()) {
+                sender.sendMessage(Text.of("&7   earned: &f" + String.join("&7, &f", earnedParts)));
+            }
+            if (!spentParts.isEmpty()) {
+                sender.sendMessage(Text.of("&7   spent: &f" + String.join("&7, &f", spentParts)));
+            }
+        }
+        if (only == null && byPlayer.size() > 1) {
+            sender.sendMessage(Text.of(auditLine("Everyone", allEarned, allSpent, days)));
+            List<String> parts = new ArrayList<>();
+            for (Map.Entry<String, long[]> e : allBySource.entrySet()) {
+                parts.add(sourceLabel(e.getKey()) + " &a+" + e.getValue()[0] + "&7/&c-" + e.getValue()[1]);
+            }
+            sender.sendMessage(Text.of("&7   by source: &f" + String.join("&7, &f", parts)));
+        }
+    }
+
+    private static String auditLine(String who, long earned, long spent, int days) {
+        long net = earned - spent;
+        return "&e" + who + " &7earned &a+" + earned + " &7(" + perDay(earned, days) + "/day) · spent &c-"
+                + spent + " &7(" + perDay(spent, days) + "/day) · net &f" + (net >= 0 ? "+" : "") + net;
+    }
+
+    private static String perDay(long total, int days) {
+        return String.format(Locale.ROOT, "%.1f", total / (double) Math.max(1, days));
+    }
+
+    /** {@code /hcm tokens history <player> [n]} — a player's last n ledger lines, newest first. */
+    private void handleTokenHistory(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage(Text.of("&cUsage: /hcm tokens history <player> [n]"));
+            return;
+        }
+        int n = 10;
+        if (args.length >= 4) {
+            try {
+                n = Math.max(1, Math.min(100, Integer.parseInt(args[3])));
+            } catch (NumberFormatException e) {
+                sender.sendMessage(Text.of("&cn must be a whole number."));
+                return;
+            }
+        }
+        org.bukkit.OfflinePlayer target = Bukkit.getOfflinePlayer(args[2]);
+        List<com.dierks.homecraft.storage.TokenDao.LedgerRow> rows =
+                plugin.tokens().history(target.getUniqueId(), n);
+        sender.sendMessage(Text.of("&6Token history &7— " + args[2] + " &8(balance "
+                + plugin.tokens().balance(target.getUniqueId()) + ")"));
+        if (rows.isEmpty()) {
+            sender.sendMessage(Text.of("&7Nothing recorded yet."));
+            return;
+        }
+        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter
+                .ofPattern("MMM d HH:mm", Locale.ROOT).withZone(plugin.clock().zone());
+        for (com.dierks.homecraft.storage.TokenDao.LedgerRow r : rows) {
+            String detail = r.detail() == null || r.detail().isBlank() ? "" : ": " + r.detail();
+            sender.sendMessage(Text.of("&8" + fmt.format(java.time.Instant.ofEpochMilli(r.at())) + " "
+                    + (r.delta() >= 0 ? "&a+" : "&c") + r.delta() + " &7" + sourceLabel(r.source()) + detail
+                    + " &8→ " + r.balanceAfter()));
+        }
+    }
+
+    private static String sourceLabel(String stored) {
+        com.dierks.homecraft.arcade.TokenService.Source s = com.dierks.homecraft.arcade.TokenService.Source.of(stored);
+        return s != null ? s.label() : stored;
+    }
+
+    private static String playerName(java.util.UUID id) {
+        String name = Bukkit.getOfflinePlayer(id).getName();
+        return name != null ? name : id.toString().substring(0, 8);
     }
 
     // ---------------------------------------------------------------------
@@ -1159,12 +1314,17 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             addMatches(out, args[1], "public", "private");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("tokens")) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[1], "give", "set", "take");
+                addMatches(out, args[1], "give", "set", "take", "audit", "history");
             }
         } else if (args.length == 3 && args[0].equalsIgnoreCase("tokens")
-                && List.of("give", "add", "set", "take").contains(args[1].toLowerCase(Locale.ROOT))) {
+                && args[1].equalsIgnoreCase("audit")) {
+            addMatches(out, args[2], "1", "7", "30");
+        } else if ((args.length == 3 && args[0].equalsIgnoreCase("tokens")
+                && List.of("give", "add", "set", "take", "history").contains(args[1].toLowerCase(Locale.ROOT)))
+                || (args.length == 4 && args[0].equalsIgnoreCase("tokens") && args[1].equalsIgnoreCase("audit"))) {
+            String prefix = args[args.length - 1].toLowerCase(Locale.ROOT);
             for (Player p : Bukkit.getOnlinePlayers()) {
-                if (p.getName().toLowerCase(Locale.ROOT).startsWith(args[2].toLowerCase(Locale.ROOT))) {
+                if (p.getName().toLowerCase(Locale.ROOT).startsWith(prefix)) {
                     out.add(p.getName());
                 }
             }

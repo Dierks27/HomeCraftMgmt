@@ -42,7 +42,7 @@ public final class CratePickMenu extends Menu {
         for (int i = 0; i < 27; i++) {
             set(i, i >= 18 ? Menus.FILLER : null, null);
         }
-        int tokens = plugin.arcade().balance(player.getUniqueId());
+        int tokens = plugin.tokens().balance(player.getUniqueId());
         set(4, Menus.icon(Material.SUNFLOWER, "&eYour Tokens: &6" + tokens), null);
 
         int slot = 9;

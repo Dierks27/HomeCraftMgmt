@@ -7,73 +7,69 @@ import com.dierks.homecraft.config.PluginConfig.CrateReward;
 import com.dierks.homecraft.config.PluginConfig.PaidTier;
 import com.dierks.homecraft.config.PluginConfig.RewardType;
 import com.dierks.homecraft.mini.MiniDef;
-import com.dierks.homecraft.mini.Rarity;
-import com.dierks.homecraft.storage.TokenDao;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.Sound;
-import org.bukkit.Statistic;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.scheduler.BukkitTask;
 
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * The Arcade engine (Phase 8, §3.9): earn tokens by playing (login streaks +
- * playtime), spend them on weighted loot crates (Cards, packs, filament or more
- * tokens — never money or sellable items, so tokens can never become money), buy
- * better odds with a Vault fee, exchange tokens for a guaranteed Rare+ Card via the
- * pity path, and scratch lotto tickets.
+ * The Arcade's games (§3.9): weighted loot crates, the Prize Counter, the pity exchange and the
+ * scratch ticket. Token balances, the streak, playtime and the ledger live in
+ * {@link TokenService}; every token this class takes or pays goes through it, so each one leaves
+ * a ledger line.
+ *
+ * <p>Crates pay Cards, packs, filament or more tokens — never money or sellable items, so tokens
+ * can never become money. Every Card issued here passes {@link com.dierks.homecraft.mini.CardService#canIssue},
+ * the one cap check every Card path shares.
  *
  * <p>All currency is in-game (tokens + Vault money) — never real money.
  */
 public final class ArcadeService {
 
-    /** The result of opening a crate / pity / lotto — carries a display icon for the reveal GUI. */
-    public record Outcome(boolean ok, String error, ItemStack icon, String label) {
+    /**
+     * The result of opening a crate / pity / lotto — carries a display icon for the reveal GUI.
+     *
+     * @param win whether the pull actually paid something. A loss is still {@code ok} (the ticket
+     *            was bought and resolved), but the reveal must not call it a win: it used to say
+     *            "You won!" and play the fanfare over "no win".
+     */
+    public record Outcome(boolean ok, String error, ItemStack icon, String label, boolean win) {
         static Outcome fail(String e) {
-            return new Outcome(false, e, null, null);
+            return new Outcome(false, e, null, null, false);
         }
         static Outcome won(ItemStack icon, String label) {
-            return new Outcome(true, null, icon, label);
+            return new Outcome(true, null, icon, label, true);
+        }
+        static Outcome lost(ItemStack icon, String label) {
+            return new Outcome(true, null, icon, label, false);
         }
     }
 
-    private static final long MS_PER_DAY = 86_400_000L;
-
     private final HomeCraftManagement plugin;
-    private final TokenDao dao;
-    private BukkitTask playtimeTask;
 
-    public ArcadeService(HomeCraftManagement plugin, TokenDao dao) {
+    public ArcadeService(HomeCraftManagement plugin) {
         this.plugin = plugin;
-        this.dao = dao;
     }
 
     public void start() {
-        stop();
         if (!plugin.config().arcade().enabled()) {
             return;
         }
         validateCrates();
-        // Accrue playtime tokens for online players every 5 minutes.
-        playtimeTask = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
-            for (Player p : plugin.getServer().getOnlinePlayers()) {
-                grantPlaytime(p, false);
-            }
-        }, 20L * 300L, 20L * 300L);
     }
 
     public void stop() {
-        if (playtimeTask != null) {
-            playtimeTask.cancel();
-            playtimeTask = null;
-        }
+        // nothing scheduled here any more — the playtime/streak tick lives in TokenService
+    }
+
+    private TokenService tokens() {
+        return plugin.tokens();
     }
 
     /** Warn (once, on load) about crate rewards that reference a Mini not in the catalog. */
@@ -90,208 +86,6 @@ public final class ArcadeService {
                             + r.packId() + "' — that reward is skipped; the crate still works.");
                 }
             }
-        }
-    }
-
-    // ---- token balance --------------------------------------------------------
-
-    public int balance(UUID player) {
-        try {
-            return dao.get(player).tokens();
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to read tokens: " + e.getMessage());
-            return 0;
-        }
-    }
-
-    public int streak(UUID player) {
-        try {
-            return dao.get(player).streak();
-        } catch (SQLException e) {
-            return 0;
-        }
-    }
-
-    /** Minutes of play until the next playtime token, or -1 if playtime rewards are off. */
-    public int minutesToNextPlaytimeToken(Player player) {
-        PluginConfig.Arcade arc = plugin.config().arcade();
-        if (!arc.playtimeEnabled() || arc.playtimeMinutesPerToken() <= 0) {
-            return -1;
-        }
-        long minutes = player.getStatistic(Statistic.PLAY_ONE_MINUTE) / 20L / 60L;
-        int per = arc.playtimeMinutesPerToken();
-        int into = (int) (minutes % per);
-        return per - into;
-    }
-
-    private boolean spend(UUID player, int tokens) {
-        try {
-            TokenDao.TokenState s = dao.get(player);
-            if (s.tokens() < tokens) {
-                return false;
-            }
-            dao.save(new TokenDao.TokenState(player, s.tokens() - tokens, s.streak(),
-                    s.lastStreakDay(), s.playtimeTokens()));
-            return true;
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to spend tokens: " + e.getMessage());
-            return false;
-        }
-    }
-
-    private void grant(UUID player, int tokens) {
-        try {
-            TokenDao.TokenState s = dao.get(player);
-            dao.save(new TokenDao.TokenState(player, s.tokens() + tokens, s.streak(),
-                    s.lastStreakDay(), s.playtimeTokens()));
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to grant tokens: " + e.getMessage());
-        }
-    }
-
-    /** "+N token" feedback: a chat line and a bright pickup sound. */
-    private void feedback(Player player, int tokens, String reason) {
-        if (tokens <= 0) {
-            return;
-        }
-        player.sendMessage(Text.of("&e✦ &a+" + tokens + " token" + (tokens == 1 ? "" : "s")
-                + " &7(" + reason + ")&7. Balance: &6" + balance(player.getUniqueId())));
-        player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.7f, 1.4f);
-    }
-
-    /**
-     * True if {@code player} can be paid tokens right now — i.e. the world sandbox
-     * (§11 #1) permits earning here. Refusals are logged like every other blocked
-     * economy action.
-     *
-     * <p><b>Check this before committing anything irreversible.</b> {@link #award}
-     * refuses <i>silently</i> outside an economy-enabled world, so a caller that marks
-     * a quest claimed or unlocks a one-time achievement and only then calls
-     * {@code award} spends the progression and pays nothing. That costs a day on a
-     * daily quest and is permanent on an achievement, which by definition never fires
-     * again. Callers that commit first must gate on this instead.
-     */
-    public boolean canEarn(Player player, String reason) {
-        if (player == null) {
-            return false;
-        }
-        if (!plugin.sandbox().allowed(player.getWorld())) {
-            plugin.sandbox().log(player, "token earn (" + reason + ")");
-            return false;
-        }
-        return true;
-    }
-
-    /**
-     * Grant tokens to an online player with "+N token" feedback (the general earn path).
-     *
-     * @return true if the tokens were actually paid; false if the world sandbox refused
-     *         (or there was nothing to pay), so a caller can avoid spending progression
-     *         on a payout that never landed — see {@link #canEarn}.
-     */
-    public boolean award(Player player, int tokens, String reason) {
-        if (tokens <= 0) {
-            return false;
-        }
-        if (!canEarn(player, reason)) {
-            return false;
-        }
-        grant(player.getUniqueId(), tokens);
-        feedback(player, tokens, reason);
-        return true;
-    }
-
-    // ---- admin grants ---------------------------------------------------------
-
-    /** Admin: add tokens to a player (may be offline). Returns the new balance. */
-    public int adminAdd(UUID player, int tokens) {
-        grant(player, tokens);
-        Player online = plugin.getServer().getPlayer(player);
-        if (online != null && tokens > 0) {
-            feedback(online, tokens, "admin grant");
-        }
-        return balance(player);
-    }
-
-    /** Admin: set a player's balance to an exact value. Returns the new balance. */
-    public int adminSet(UUID player, int tokens) {
-        try {
-            TokenDao.TokenState s = dao.get(player);
-            dao.save(new TokenDao.TokenState(player, Math.max(0, tokens), s.streak(),
-                    s.lastStreakDay(), s.playtimeTokens()));
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to set tokens: " + e.getMessage());
-        }
-        return balance(player);
-    }
-
-    /** Admin: take tokens from a player (floored at 0). Returns the new balance. */
-    public int adminTake(UUID player, int tokens) {
-        try {
-            TokenDao.TokenState s = dao.get(player);
-            dao.save(new TokenDao.TokenState(player, Math.max(0, s.tokens() - Math.max(0, tokens)),
-                    s.streak(), s.lastStreakDay(), s.playtimeTokens()));
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to take tokens: " + e.getMessage());
-        }
-        return balance(player);
-    }
-
-    // ---- earning: login streak + playtime -------------------------------------
-
-    /** On join: award today's streak token (once per real day) and catch up playtime tokens. */
-    public void onJoin(Player player) {
-        PluginConfig.Arcade arc = plugin.config().arcade();
-        if (!arc.enabled()) {
-            return;
-        }
-        if (!plugin.sandbox().allowed(player.getWorld())) {
-            plugin.sandbox().log(player, "login-streak / playtime tokens");
-            return;
-        }
-        if (arc.streakEnabled()) {
-            try {
-                TokenDao.TokenState s = dao.get(player.getUniqueId());
-                long today = System.currentTimeMillis() / MS_PER_DAY;
-                if (today != s.lastStreakDay()) {
-                    int streak = (today == s.lastStreakDay() + 1) ? s.streak() + 1 : 1;
-                    int reward = arc.streakReward(streak);
-                    dao.save(new TokenDao.TokenState(player.getUniqueId(), s.tokens() + reward,
-                            streak, today, s.playtimeTokens()));
-                    feedback(player, reward, "day " + streak + " login streak");
-                }
-            } catch (SQLException e) {
-                plugin.getLogger().severe("Failed streak grant: " + e.getMessage());
-            }
-        }
-        grantPlaytime(player, true);
-        if (plugin.achievements() != null) {
-            plugin.achievements().checkBalance(player);
-        }
-    }
-
-    /** Grant any whole playtime-milestone tokens the player has newly earned. */
-    private void grantPlaytime(Player player, boolean announce) {
-        PluginConfig.Arcade arc = plugin.config().arcade();
-        if (!arc.enabled() || !arc.playtimeEnabled() || arc.playtimeMinutesPerToken() <= 0) {
-            return;
-        }
-        if (!plugin.sandbox().allowed(player.getWorld())) {
-            return;
-        }
-        try {
-            TokenDao.TokenState s = dao.get(player.getUniqueId());
-            long ticks = player.getStatistic(Statistic.PLAY_ONE_MINUTE); // stat is in ticks
-            long minutes = ticks / 20L / 60L;
-            int earned = (int) (minutes / arc.playtimeMinutesPerToken());
-            if (earned > s.playtimeTokens()) {
-                int diff = earned - s.playtimeTokens();
-                dao.save(new TokenDao.TokenState(player.getUniqueId(), s.tokens() + diff, s.streak(),
-                        s.lastStreakDay(), earned));
-                feedback(player, diff, "time played");
-            }
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Failed playtime grant: " + e.getMessage());
         }
     }
 
@@ -319,8 +113,9 @@ public final class ArcadeService {
             return Outcome.fail("This crate has no rewards configured.");
         }
         UUID id = player.getUniqueId();
-        if (balance(id) < crate.costTokens()) {
-            return Outcome.fail("You need " + crate.costTokens() + " tokens (you have " + balance(id) + ").");
+        int have = tokens().balance(id);
+        if (have < crate.costTokens()) {
+            return Outcome.fail("You need " + crate.costTokens() + " tokens (you have " + have + ").");
         }
         if (tier != null && !plugin.economy().has(player, tier.costMoney())) {
             return Outcome.fail("You can't afford the " + plugin.economy().format(tier.costMoney()) + " odds fee.");
@@ -329,12 +124,12 @@ public final class ArcadeService {
         List<CrateReward> pool = eligiblePool(crate, tier);
         if (pool.isEmpty()) {
             return Outcome.fail(tier != null
-                    ? "No " + tier.floor() + "+ Mini is available right now — fee not charged."
+                    ? "No " + floorWords(tier.floor()) + " Card is left right now. Nothing was charged."
                     : "Nothing is available in this crate right now.");
         }
 
         // Commit the costs now that a reward is guaranteed.
-        if (!spend(id, crate.costTokens())) {
+        if (!tokens().spend(id, crate.costTokens(), TokenService.Source.CRATE, crate.display())) {
             return Outcome.fail("You need " + crate.costTokens() + " tokens.");
         }
         if (tier != null) {
@@ -364,7 +159,7 @@ public final class ArcadeService {
                     MiniDef def = r.usesTag()
                             ? plugin.miniService().pickByRarity(tagPool(r.tag(), tier))
                             : plugin.miniService().def(r.miniId());
-                    if (def != null && !mintedOut(def)) {
+                    if (def != null && plugin.cards().canIssue(def)) {
                         var cr = plugin.cards().issue(player, def.id());
                         if (cr.ok()) {
                             ItemStack ic = plugin.miniService().cardFor(def.id());
@@ -382,7 +177,7 @@ public final class ArcadeService {
                     }
                     giveOrDrop(player, pack);
                     var def = plugin.packs().pack(r.packId());
-                    return Outcome.won(pack.clone(), "&d" + (def != null ? def.displayName() : r.packId()) + " &7pack");
+                    return Outcome.won(pack.clone(), "&d" + (def != null ? def.displayName() : r.packId()));
                 }
                 case FILAMENT -> {
                     org.bukkit.DyeColor color = r.color() != null ? r.color()
@@ -392,7 +187,7 @@ public final class ArcadeService {
                     return Outcome.won(fil.clone(), "&f" + r.amount() + "x " + niceName(color) + " Filament");
                 }
                 case TOKENS -> {
-                    award(player, r.amount(), "crate prize");
+                    tokens().award(player, r.amount(), TokenService.Source.CRATE, "Crate prize");
                     return Outcome.won(icon(Material.SUNFLOWER, "&e+" + r.amount() + " tokens"),
                             "&e" + r.amount() + " token" + (r.amount() == 1 ? "" : "s"));
                 }
@@ -401,7 +196,7 @@ public final class ArcadeService {
         // Everything left was a minted-out Mini; hand back a small consolation of nothing.
         // A grey dye on the reveal screen's grey pane background was an invisible outcome; the
         // barrier is blunt but honest, and the player can see that the pull resolved.
-        return Outcome.won(icon(Material.BARRIER, "&7Better luck next time"), "&7no prize");
+        return Outcome.lost(icon(Material.BARRIER, "&7Better luck next time"), "&7nothing this time");
     }
 
     /** Rewards that can actually pay out now: issuable Cards (and, unpaid, packs/filament/tokens too). */
@@ -416,7 +211,7 @@ public final class ArcadeService {
                     continue;
                 }
                 MiniDef def = plugin.miniService().def(r.miniId());
-                if (def == null || mintedOut(def)) {
+                if (def == null || !plugin.cards().canIssue(def)) {
                     continue;
                 }
                 if (tier != null && def.rarity().ordinal() < tier.floor().ordinal()) {
@@ -433,17 +228,19 @@ public final class ArcadeService {
         return out;
     }
 
-    /** The mintable Minis carrying a tag, filtered by a paid tier's rarity floor. */
+    /** The issuable Minis carrying a tag, filtered by a paid tier's rarity floor. */
     private List<MiniDef> tagPool(String tag, PaidTier tier) {
-        List<MiniDef> pool = plugin.miniService().poolFromTag(tag);
+        List<MiniDef> pool = plugin.cards().issuable(plugin.miniService().poolFromTag(tag));
         if (tier != null) {
             pool.removeIf(d -> d.rarity().ordinal() < tier.floor().ordinal());
         }
         return pool;
     }
 
-    private boolean mintedOut(MiniDef def) {
-        return !def.uncapped() && plugin.miniService().counts(def.id()).minted() >= def.cap();
+    /** "Rare-or-better" (or just "Legendary", which has nothing better), for plain-text messages. */
+    private static String floorWords(com.dierks.homecraft.mini.Rarity floor) {
+        return floor == com.dierks.homecraft.mini.Rarity.LEGENDARY
+                ? floor.display() : floor.display() + "-or-better";
     }
 
     // ---- prize counter --------------------------------------------------------
@@ -469,9 +266,9 @@ public final class ArcadeService {
             return Outcome.fail("No such prize.");
         }
         UUID id = player.getUniqueId();
-        if (balance(id) < prize.costTokens()) {
-            return Outcome.fail("You need " + prize.costTokens() + " tokens (you have "
-                    + balance(id) + ").");
+        int have = tokens().balance(id);
+        if (have < prize.costTokens()) {
+            return Outcome.fail("You need " + prize.costTokens() + " tokens (you have " + have + ").");
         }
 
         ItemStack item;
@@ -511,7 +308,7 @@ public final class ArcadeService {
         }
 
         // Only now is anything taken: the prize is in hand and cannot fail to appear.
-        if (!spend(id, prize.costTokens())) {
+        if (!tokens().spend(id, prize.costTokens(), TokenService.Source.PRIZE, label)) {
             return Outcome.fail("You need " + prize.costTokens() + " tokens.");
         }
         giveOrDrop(player, item);
@@ -521,7 +318,7 @@ public final class ArcadeService {
 
     // ---- pity exchange --------------------------------------------------------
 
-    /** Spend the configured tokens for a guaranteed Rare+ (config floor) Mini. */
+    /** Spend the configured tokens for a guaranteed Card at or above the configured rarity. */
     public Outcome pity(Player player) {
         if (!plugin.sandbox().check(player, "pity exchange")) {
             return Outcome.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
@@ -529,20 +326,22 @@ public final class ArcadeService {
         PluginConfig.Arcade arc = plugin.config().arcade();
         int cost = arc.pityTokens();
         if (cost <= 0) {
-            return Outcome.fail("The pity exchange is disabled.");
+            return Outcome.fail("This isn't available right now.");
         }
         UUID id = player.getUniqueId();
-        if (balance(id) < cost) {
-            return Outcome.fail("You need " + cost + " tokens (you have " + balance(id) + ").");
+        int have = tokens().balance(id);
+        if (have < cost) {
+            return Outcome.fail("You need " + cost + " tokens (you have " + have + ").");
         }
         List<MiniDef> pool = new ArrayList<>();
         for (MiniDef def : plugin.miniService().catalog()) {
-            if (def.rarity().ordinal() >= arc.pityRarity().ordinal() && !mintedOut(def)) {
+            if (def.rarity().ordinal() >= arc.pityRarity().ordinal() && plugin.cards().canIssue(def)) {
                 pool.add(def);
             }
         }
+        String none = "No " + floorWords(arc.pityRarity()) + " Card is left right now. Nothing was charged.";
         if (pool.isEmpty()) {
-            return Outcome.fail("No " + arc.pityRarity() + "+ Mini is available right now.");
+            return Outcome.fail(none);
         }
         // Weight the pick by rarity, exactly as crates and wild drops do. Picking
         // uniformly made every tier above the floor equally likely, so a Legendary came
@@ -551,15 +350,16 @@ public final class ArcadeService {
         // guarantees Rare-or-better; it was never meant to flatten what sits above it.
         MiniDef chosen = plugin.miniService().pickByRarity(pool);
         if (chosen == null) {
-            return Outcome.fail("No " + arc.pityRarity() + "+ Mini is available right now.");
+            return Outcome.fail(none);
         }
-        if (!spend(id, cost)) {
+        if (!tokens().spend(id, cost, TokenService.Source.PITY, chosen.name() + " Card")) {
             return Outcome.fail("You need " + cost + " tokens.");
         }
         // Phase 9: the pity exchange guarantees a Rare+ CARD (printed at a Printer).
         var cr = plugin.cards().issue(player, chosen.id());
         if (!cr.ok()) {
-            grant(id, cost); // refund on the rare race where its cards just sold out
+            // the rare race where its Cards just sold out
+            tokens().grant(id, cost, TokenService.Source.REFUND, chosen.name() + " Card sold out");
             return Outcome.fail(cr.error());
         }
         ItemStack ic = plugin.miniService().cardFor(chosen.id());
@@ -602,9 +402,9 @@ public final class ArcadeService {
         if (amount > 0) {
             plugin.economy().deposit(player, amount);
             return Outcome.won(icon(Material.EMERALD, "&a" + plugin.economy().format(amount)),
-                    "&aWON " + plugin.economy().format(amount) + "&7!");
+                    "&a" + plugin.economy().format(amount));
         }
-        return Outcome.won(icon(Material.BARRIER, "&7No win"), "&7no win — try again");
+        return Outcome.lost(icon(Material.BARRIER, "&7No win this time"), "&7no win");
     }
 
     // ---- helpers --------------------------------------------------------------

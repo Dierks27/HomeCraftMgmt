@@ -28,16 +28,18 @@ public final class PityMenu extends Menu {
             set(i, i >= 18 ? Menus.FILLER : null, null);
         }
         PluginConfig.Arcade arc = plugin.config().arcade();
-        int tokens = plugin.arcade().balance(player.getUniqueId());
+        int tokens = plugin.tokens().balance(player.getUniqueId());
         set(4, Menus.icon(Material.SUNFLOWER, "&eYour Tokens: &6" + tokens), null);
 
         if (arc.pityTokens() <= 0) {
-            set(13, Menus.icon(Material.BARRIER, "&cThe pity exchange is disabled"), null);
+            set(13, Menus.icon(Material.BARRIER, "&cNot available right now"), null);
         } else {
-            set(13, Menus.icon(Material.NETHER_STAR, "&bRedeem",
-                    "&7Spend &6" + arc.pityTokens() + " tokens &7for a",
-                    "&7guaranteed &d" + arc.pityRarity() + "+ &7Mini.",
-                    "&8—", "&aClick to redeem"), e -> {
+            set(13, Menus.icon(Material.NETHER_STAR, "&bGet " + arc.pityRarity().article() + " "
+                            + plugin.miniService().rarityFloorText(arc.pityRarity()) + " &bCard",
+                    "&7Costs &6" + arc.pityTokens() + " tokens&7.",
+                    "&7Print the Card at a Printer",
+                    "&7to make the Mini.",
+                    "&8—", "&aClick to get one"), e -> {
                 var r = plugin.arcade().pity(player);
                 if (r.ok()) {
                     new RevealMenu(plugin, player, r, () -> new PityMenu(plugin, player).open(player)).open(player);

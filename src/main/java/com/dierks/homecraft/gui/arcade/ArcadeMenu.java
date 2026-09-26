@@ -32,8 +32,8 @@ public final class ArcadeMenu extends Menu {
             set(i, Menus.FILLER, null);
         }
         PluginConfig.Arcade arc = plugin.config().arcade();
-        int tokens = plugin.arcade().balance(player.getUniqueId());
-        int streak = plugin.arcade().streak(player.getUniqueId());
+        int tokens = plugin.tokens().balance(player.getUniqueId());
+        int streak = plugin.tokens().streak(player.getUniqueId());
 
         set(4, Menus.icon(Material.SUNFLOWER, "&eYour Tokens: &6" + tokens,
                 "&7Login streak: &f" + streak + " day" + (streak == 1 ? "" : "s"),
@@ -54,12 +54,15 @@ public final class ArcadeMenu extends Menu {
                     e -> new CrateMenu(plugin, player, id, this::reopen).open(player));
         }
 
-        // Pity exchange.
+        // Pity exchange: a guaranteed Card at or above the configured rarity. It pays a CARD —
+        // it used to promise a "Mini", and a Card is a Card.
         if (arc.pityTokens() > 0) {
-            set(29, Menus.icon(Material.NETHER_STAR, "&bPity Exchange",
-                    "&7Spend &6" + arc.pityTokens() + " tokens &7for a",
-                    "&7guaranteed &d" + arc.pityRarity() + "+ &7Mini.",
-                    "&8—", "&eClick to redeem"), e -> {
+            set(29, Menus.icon(Material.NETHER_STAR, "&bGet " + arc.pityRarity().article() + " "
+                            + plugin.miniService().rarityFloorText(arc.pityRarity()) + " &bCard",
+                    "&7Costs &6" + arc.pityTokens() + " tokens&7.",
+                    "&7Print the Card at a Printer",
+                    "&7to make the Mini.",
+                    "&8—", "&eClick to get one"), e -> {
                 var r = plugin.arcade().pity(player);
                 if (r.ok()) {
                     new RevealMenu(plugin, player, r, this::reopen).open(player);
@@ -73,7 +76,7 @@ public final class ArcadeMenu extends Menu {
         // Lotto / scratch ticket.
         set(33, Menus.icon(Material.PAPER, "&aScratch Ticket",
                 "&7Cost: &6" + plugin.economy().format(arc.lotto().ticketCost()),
-                "&7Randomised payout — a bit of hype.",
+                "&7Scratch it and see what you win!",
                 "&8—", "&eClick to scratch"), e -> {
             var r = plugin.arcade().scratch(player);
             if (r.ok()) {
@@ -98,7 +101,7 @@ public final class ArcadeMenu extends Menu {
         set(31, Menus.icon(Material.WRITABLE_BOOK, "&dQuests",
                 "&7Daily & weekly objectives that pay",
                 "&7out tokens on completion.",
-                "&8—", "&eClick to view"), e -> new QuestsMenu(plugin, player).open(player));
+                "&8—", "&eClick to view"), e -> new QuestsMenu(plugin, player, this::reopen).open(player));
 
         set(49, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
     }

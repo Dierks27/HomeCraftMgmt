@@ -543,6 +543,8 @@ public final class PluginConfig {
     private Map<String, AchievementDef> achievements;
     private Quests quests;
     private Courier courier;
+    private com.dierks.homecraft.util.GameClock clock =
+            new com.dierks.homecraft.util.GameClock(com.dierks.homecraft.util.GameClock.FALLBACK);
 
     public PluginConfig(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -702,6 +704,11 @@ public final class PluginConfig {
     }
 
     /** Daily/weekly quest definitions (Phase 11). */
+    /** Which day and week it is where the players live ({@code clock.time_zone}). */
+    public com.dierks.homecraft.util.GameClock clock() {
+        return clock;
+    }
+
     public Quests quests() {
         return quests;
     }
@@ -901,6 +908,10 @@ public final class PluginConfig {
         // ---- Daily/weekly quests (Phase 11) ----
         this.quests = readQuests(c);
         this.courier = readCourier(c);
+
+        // ---- The players' calendar: streaks, quests and Arcade limits roll at local midnight ----
+        this.clock = new com.dierks.homecraft.util.GameClock(com.dierks.homecraft.util.GameClock.parseZone(
+                c.getString("clock.time_zone", "America/Chicago"), log::warning));
     }
 
     private Courier readCourier(FileConfiguration c) {

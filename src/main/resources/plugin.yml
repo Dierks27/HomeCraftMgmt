@@ -43,6 +43,8 @@ commands:
       /hcm arcade            - open the Arcade (crates, pity, scratch tickets)
       /hcm tokens            - show your Arcade token balance
       /hcm tokens give|set|take <player> <n>  - admin: adjust tokens
+      /hcm tokens audit [days] [player]  - admin: tokens earned/spent by source
+      /hcm tokens history <player> [n]  - admin: a player's last n token changes
       /hcm museum [id]       - browse the Mini Museum (browse-only; click a Mini for details)
       /hcm mini capturestand <miniId>  - capture a posed armor stand into a Mini
     # NOTE: deliberately NOT gated on a single node — every subcommand checks its own

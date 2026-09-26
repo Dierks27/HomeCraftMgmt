@@ -28,8 +28,8 @@ public final class TokenCounterMenu extends Menu {
             set(i, i >= 18 ? Menus.FILLER : null, null);
         }
         PluginConfig.Arcade arc = plugin.config().arcade();
-        int tokens = plugin.arcade().balance(player.getUniqueId());
-        int streak = plugin.arcade().streak(player.getUniqueId());
+        int tokens = plugin.tokens().balance(player.getUniqueId());
+        int streak = plugin.tokens().streak(player.getUniqueId());
 
         set(4, Menus.icon(Material.SUNFLOWER, "&eYour Tokens: &6" + tokens), null);
 
@@ -38,7 +38,7 @@ public final class TokenCounterMenu extends Menu {
                 "&7Log in each day for escalating tokens.",
                 "&7Tomorrow: &a+" + arc.streakReward(streak + 1) + " tokens"), null);
 
-        int toNext = plugin.arcade().minutesToNextPlaytimeToken(player);
+        int toNext = plugin.tokens().minutesToNextPlaytimeToken(player);
         set(13, Menus.icon(Material.DIAMOND_PICKAXE, "&bPlaytime",
                 arc.playtimeEnabled() && arc.playtimeMinutesPerToken() > 0
                         ? "&7Next token in &f~" + toNext + " min &7of play"
@@ -48,7 +48,8 @@ public final class TokenCounterMenu extends Menu {
         set(15, Menus.icon(Material.WRITABLE_BOOK, "&dDaily & Weekly Quests",
                 "&7Finish objectives to earn tokens.",
                 "&8—", "&eClick to view your quests"),
-                e -> new QuestsMenu(plugin, player).open(player));
+                e -> new QuestsMenu(plugin, player,
+                        () -> new TokenCounterMenu(plugin, player).open(player)).open(player));
 
         set(22, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
     }

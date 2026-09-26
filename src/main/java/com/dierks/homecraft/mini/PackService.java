@@ -32,9 +32,6 @@ public final class PackService {
         }
     }
 
-    /** How many times a single slot re-rolls past a card-capped-out type before giving up. */
-    private static final int REROLL_LIMIT = 8;
-
     private final HomeCraftManagement plugin;
     private final PackItems packItems = new PackItems();
 
@@ -128,10 +125,22 @@ public final class PackService {
         return new OpenResult(true, null, awarded);
     }
 
-    /** Weighted-roll a card and issue it; re-roll past a capped-out type up to the limit. */
+    /**
+     * Weighted-roll a Card among the entries that can actually be issued, and issue it.
+     *
+     * <p>Filters first rather than rolling and re-rolling: the old loop gave up after eight
+     * misses, so a pool that was mostly sold out could come up empty-handed while a live Card
+     * sat in it. An entry {@link CardService#canIssue} refuses is simply not in the draw.
+     */
     private String rollAndIssue(Player player, List<Pack.PackEntry> pool) {
-        for (int attempt = 0; attempt < REROLL_LIMIT; attempt++) {
-            String id = pickWeighted(pool);
+        List<Pack.PackEntry> live = new ArrayList<>();
+        for (Pack.PackEntry e : pool) {
+            if (plugin.cards().canIssue(plugin.miniService().def(e.miniId()))) {
+                live.add(e);
+            }
+        }
+        while (!live.isEmpty()) {
+            String id = pickWeighted(live);
             if (id == null) {
                 return null;
             }
@@ -139,7 +148,7 @@ public final class PackService {
             if (r.ok()) {
                 return id;
             }
-            // capped out (or unknown) — try again with a fresh weighted pick
+            live.removeIf(e -> e.miniId().equals(id)); // lost a race to the last one — drop it
         }
         return null;
     }

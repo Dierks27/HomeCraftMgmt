@@ -314,7 +314,7 @@ public final class PlacedMiniService {
         Component text = Component.text(def.name() + " " + grade.symbol(), style.nameColor())
                 .decoration(TextDecoration.ITALIC, false)
                 .append(Component.newline())
-                .append(Component.text(def.rarity().name(), style.nameColor()))
+                .append(Component.text(def.rarity().display(), style.nameColor()))
                 .append(Component.text("  ·  " + grade.display() + (shiny ? "  ✦ Shiny" : ""), NamedTextColor.WHITE))
                 .append(Component.newline())
                 .append(Component.text("Mint #" + ref.mintNumber() + (def.uncapped() ? "" : " of " + def.cap())

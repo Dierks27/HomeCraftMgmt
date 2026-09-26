@@ -37,15 +37,16 @@ public final class AchievementService {
         // next time its trigger runs in an economy-enabled world. A reward of 0 is
         // presentation-only and unlocks anywhere.
         if (def.reward() > 0
-                && (plugin.arcade() == null || !plugin.arcade().canEarn(player, "achievement " + key))) {
+                && (plugin.tokens() == null || !plugin.tokens().canEarn(player, "achievement " + key))) {
             return;
         }
         try {
             if (dao.unlock(player.getUniqueId(), key, System.currentTimeMillis())) {
                 player.sendMessage(Text.of("&6★ Achievement unlocked: &e" + def.display() + "&6!"));
                 player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.8f, 1.0f);
-                if (plugin.arcade() != null) {
-                    plugin.arcade().award(player, def.reward(), "achievement");
+                if (plugin.tokens() != null) {
+                    plugin.tokens().award(player, def.reward(), TokenService.Source.ACHIEVEMENT,
+                            def.display());
                 }
             }
         } catch (SQLException e) {

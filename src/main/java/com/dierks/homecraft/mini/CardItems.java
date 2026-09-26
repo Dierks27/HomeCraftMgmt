@@ -38,7 +38,7 @@ public final class CardItems {
                 .decoration(TextDecoration.ITALIC, false));
 
         List<Component> lore = new ArrayList<>();
-        lore.add(line("Mini: ", def.name() + " (" + def.rarity().name() + ")", style.nameColor()));
+        lore.add(line("Mini: ", def.name() + " (" + def.rarity().display() + ")", style.nameColor()));
         lore.add(Component.text("Prints: ", NamedTextColor.DARK_GRAY)
                 .append(Component.text(gradeOdds(spec), NamedTextColor.GRAY))
                 .decoration(TextDecoration.ITALIC, false));

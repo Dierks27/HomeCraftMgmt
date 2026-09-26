@@ -41,7 +41,7 @@ public final class PrizeCounterMenu extends Menu {
         for (int i = 45; i < 54; i++) {
             set(i, Menus.FILLER, null);
         }
-        int tokens = plugin.arcade().balance(player.getUniqueId());
+        int tokens = plugin.tokens().balance(player.getUniqueId());
         set(4, Menus.icon(Material.SUNFLOWER, "&eYour Tokens: &6" + tokens,
                 "&7Everything here has a fixed price.",
                 "&8No pulls, no odds — you see what you get."), null);
@@ -49,14 +49,14 @@ public final class PrizeCounterMenu extends Menu {
         List<PluginConfig.Prize> prizes = plugin.config().arcade().prizes();
         if (prizes.isEmpty()) {
             set(22, Menus.icon(Material.BARRIER, "&7The counter is empty",
-                    "&8An admin can stock it under arcade.prizes."), null);
+                    "&8Check back soon!"), null);
         }
 
         for (int i = 0; i < GRID_SIZE && i < prizes.size(); i++) {
             PluginConfig.Prize prize = prizes.get(i);
             boolean affordable = tokens >= prize.costTokens();
             set(GRID_START + i, icon(prize, affordable), e -> {
-                if (plugin.arcade().balance(player.getUniqueId()) < prize.costTokens()) {
+                if (plugin.tokens().balance(player.getUniqueId()) < prize.costTokens()) {
                     player.sendMessage(Text.of("&cYou need &6" + prize.costTokens()
                             + " tokens&c for that."));
                     return;

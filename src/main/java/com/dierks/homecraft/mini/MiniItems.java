@@ -127,7 +127,7 @@ public final class MiniItems {
             List<Component> lore = new ArrayList<>();
             lore.add(line("Type: ", def.category(), NamedTextColor.GRAY));
             lore.add(line("Series: ", def.series(), NamedTextColor.GRAY));
-            lore.add(line("Rarity: ", def.rarity().name(), style.nameColor()));
+            lore.add(line("Rarity: ", def.rarity().display(), style.nameColor()));
             lore.add(line("Minted: ", minted + (def.uncapped() ? " (uncapped)" : " / " + def.cap()), NamedTextColor.GRAY));
             lore.add(line("In circulation: ", Long.toString(circulation), NamedTextColor.GRAY));
             if (valueText != null && !valueText.isBlank()) {
@@ -200,7 +200,7 @@ public final class MiniItems {
         List<Component> lore = new ArrayList<>();
         lore.add(line("Type: ", def.category(), NamedTextColor.GRAY));
         lore.add(line("Series: ", def.series(), NamedTextColor.GRAY));
-        lore.add(line("Rarity: ", def.rarity().name(), style.nameColor()));
+        lore.add(line("Rarity: ", def.rarity().display(), style.nameColor()));
         lore.add(Component.text("Grade: ", NamedTextColor.DARK_GRAY)
                 .append(Component.text(grade.symbol() + " " + grade.display(), NamedTextColor.WHITE))
                 .append(shiny ? Component.text("  ✦ Shiny", NamedTextColor.WHITE) : Component.empty())

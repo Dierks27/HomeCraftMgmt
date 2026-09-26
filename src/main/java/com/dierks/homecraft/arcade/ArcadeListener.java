@@ -7,7 +7,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 
 /**
  * Grants login-streak and playtime tokens when a player joins (§3.9). One streak
- * reward per real day (anti-abuse); playtime tokens catch up to time played.
+ * reward per local day (anti-abuse); playtime tokens catch up to time played.
  */
 public final class ArcadeListener implements Listener {
 
@@ -19,8 +19,8 @@ public final class ArcadeListener implements Listener {
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
-        if (plugin.arcade() != null) {
-            plugin.arcade().onJoin(event.getPlayer());
+        if (plugin.tokens() != null) {
+            plugin.tokens().onJoin(event.getPlayer());
         }
     }
 }

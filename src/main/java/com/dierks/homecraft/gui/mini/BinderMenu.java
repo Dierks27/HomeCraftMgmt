@@ -83,7 +83,7 @@ public final class BinderMenu extends Menu {
         if (entries.isEmpty()) {
             set(22, Menus.icon(Material.KNOWLEDGE_BOOK, "&fYour binder is empty",
                     "&7Cards come from packs, the printer",
-                    "&7and the arcade.",
+                    "&7and the Arcade.",
                     "&8—",
                     "&eOpen a Card Pack to start a collection."), null);
         }

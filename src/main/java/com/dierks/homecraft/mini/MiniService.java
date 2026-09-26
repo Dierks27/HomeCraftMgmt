@@ -488,6 +488,19 @@ public final class MiniService {
         return plugin.config().minis().style(rarity);
     }
 
+    /** A rarity's name in its own configured colour, as a legacy string: {@code "&bRare"}. */
+    public String rarityText(Rarity rarity) {
+        return com.dierks.homecraft.util.Text.code(style(rarity).nameColor()) + rarity.display();
+    }
+
+    /**
+     * A rarity floor in words and colour: "Rare-or-better", or just "Legendary", which has nothing
+     * better. What the pity exchange and the paid crate tier guarantee.
+     */
+    public String rarityFloorText(Rarity floor) {
+        return rarityText(floor) + (floor == Rarity.LEGENDARY ? "" : "-or-better");
+    }
+
     public MiniDao.Counts counts(String id) {
         try {
             return dao.counts(id);

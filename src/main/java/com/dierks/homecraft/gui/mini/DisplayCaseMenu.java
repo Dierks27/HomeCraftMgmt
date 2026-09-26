@@ -87,7 +87,7 @@ public final class DisplayCaseMenu extends Menu {
             lore.add(Text.of("&8—"));
             if (def != null) {
                 lore.add(Text.of("&7Series: &f" + def.series()));
-                lore.add(Text.of("&7Rarity: &f" + def.rarity().name()));
+                lore.add(Text.of("&7Rarity: " + plugin.miniService().rarityText(def.rarity())));
                 lore.add(Text.of("&7Mint #&f" + listing.mintNumber()
                         + (def.uncapped() ? "" : " &7of &f" + def.cap())));
             }

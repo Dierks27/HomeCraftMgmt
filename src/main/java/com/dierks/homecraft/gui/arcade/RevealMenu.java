@@ -11,8 +11,13 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
 /**
- * The reward reveal after opening a crate, running the pity exchange, or scratching
- * a ticket — shows the won item/prize front-and-centre before returning to the hub.
+ * The result screen after opening a crate, running the pity exchange, or scratching a ticket —
+ * the prize (or the miss) front and centre, then back to wherever the player came from.
+ *
+ * <p>A miss is not a win. This screen used to be titled "You won!", play the level-up fanfare and
+ * print "Arcade: you won no win — try again!" for a ticket that paid nothing — three ways of
+ * telling a child the opposite of what happened. A loss now says "So close!", plays a soft note,
+ * and prints nothing.
  */
 public final class RevealMenu extends Menu {
 
@@ -25,22 +30,26 @@ public final class RevealMenu extends Menu {
         this.player = player;
         this.outcome = outcome;
         this.onBack = onBack;
-        init(27, Text.of("&5You won!"));
+        init(27, Text.of(outcome.win() ? "&5You won!" : "&8So close!"));
     }
 
     /**
-     * The fanfare rides on open, not on build.
+     * The sound and the chat line ride on open, not on build.
      *
-     * <p>build() also runs on every refresh, and a menu that plays a sound when it merely repaints
-     * would chime at a player for as long as they left it open. This screen is where a crate pull,
-     * a pity redemption and a scratch ticket all land, and it was silent — while PackRevealMenu two
-     * files over plays a note per card and a fanfare at the end. The arcade's actual payoff was its
-     * quietest moment.
+     * <p>build() also runs on every refresh, and a menu that plays a sound or prints a line when
+     * it merely repaints would chime at a player for as long as they left it open.
      */
     @Override
     public void open(Player viewer) {
         super.open(viewer);
-        Sounds.won(player);
+        if (outcome.win()) {
+            Sounds.won(player);
+            if (outcome.label() != null) {
+                player.sendMessage(Text.of("&aYou got " + outcome.label() + "&a!"));
+            }
+        } else {
+            Sounds.miss(player);
+        }
     }
 
     @Override
@@ -50,15 +59,12 @@ public final class RevealMenu extends Menu {
         }
         ItemStack icon = outcome.icon() != null ? outcome.icon() : Menus.icon(Material.PAPER, "&7Prize");
         set(13, icon, null);
-        set(22, Menus.icon(Material.BARRIER, "&aBack to Arcade"), e -> {
+        set(22, Menus.icon(Material.BARRIER, onBack != null ? "&cBack" : "&cClose"), e -> {
             if (onBack != null) {
                 onBack.run();
             } else {
                 e.getWhoClicked().closeInventory();
             }
         });
-        if (outcome.label() != null) {
-            player.sendMessage(Text.of("&5Arcade: &fyou won " + outcome.label() + "&f!"));
-        }
     }
 }

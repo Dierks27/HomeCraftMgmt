@@ -20,10 +20,16 @@ import java.util.List;
 public final class QuestsMenu extends Menu {
 
     private final Player player;
+    private final Runnable back;
 
-    public QuestsMenu(HomeCraftManagement plugin, Player player) {
+    /**
+     * @param back where slot 49 goes — the screen that opened this one. Null when there is
+     *             nothing behind it (opened by command), and then 49 closes.
+     */
+    public QuestsMenu(HomeCraftManagement plugin, Player player, Runnable back) {
         super(plugin);
         this.player = player;
+        this.back = back;
         init(54, Text.of("&5&lQuests"));
     }
 
@@ -33,22 +39,31 @@ public final class QuestsMenu extends Menu {
             set(i, Menus.FILLER, null);
         }
         Quests quests = plugin.config().quests();
-        int tokens = plugin.arcade().balance(player.getUniqueId());
+        int tokens = plugin.tokens().balance(player.getUniqueId());
         set(4, Menus.icon(Material.SUNFLOWER, "&eYour Tokens: &6" + tokens,
                 "&7Finish quests to earn tokens.",
                 "&7They reset on their own — check back!"), null);
 
         if (quests == null || !quests.enabled() || quests.all().isEmpty()) {
-            set(22, Menus.icon(Material.BARRIER, "&cNo quests available",
-                    "&7An admin can add some under &farcade.quests&7."), null);
-            set(49, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
+            set(22, Menus.icon(Material.BARRIER, "&cNo quests right now",
+                    "&7Check back later!"), null);
+            exit();
             return;
         }
 
         renderRow(quests.byPeriod(QuestPeriod.DAILY), QuestPeriod.DAILY, 9, "&eDaily Quests");
         renderRow(quests.byPeriod(QuestPeriod.WEEKLY), QuestPeriod.WEEKLY, 27, "&bWeekly Quests");
 
-        set(49, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
+        exit();
+    }
+
+    /** Slot 49: Back to the screen that opened this one, or Close when there is none. */
+    private void exit() {
+        if (back != null) {
+            set(49, Menus.icon(Material.BARRIER, "&cBack"), e -> back.run());
+        } else {
+            set(49, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
+        }
     }
 
     /** One period's label (at {@code base}) followed by its quest icons across the row. */

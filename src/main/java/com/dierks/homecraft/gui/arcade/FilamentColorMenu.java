@@ -43,7 +43,7 @@ public final class FilamentColorMenu extends Menu {
 
     @Override
     protected void build() {
-        int tokens = plugin.arcade().balance(player.getUniqueId());
+        int tokens = plugin.tokens().balance(player.getUniqueId());
         set(4, Menus.icon(Material.SUNFLOWER, "&eYour Tokens: &6" + tokens,
                 "&7" + prize.amount() + "x filament for &6" + prize.costTokens() + " tokens",
                 "&8Pick the colour you need for your next print."), null);

@@ -35,7 +35,7 @@ public final class ScratchMenu extends Menu {
         set(4, Menus.icon(Material.PAPER, "&aScratch Ticket",
                 "&7Cost: &6" + plugin.economy().format(lotto.ticketCost()),
                 "&7Top prize: &6" + plugin.economy().format(best),
-                "&8A bit of hype + a money sink."), null);
+                "&8Scratch it and see what you win!"), null);
         set(13, Menus.icon(Material.SHEARS, "&eBuy & Scratch",
                 "&7Balance: &6" + plugin.economy().format(plugin.economy().balance(player)),
                 "&8—", "&aClick to scratch"), e -> {

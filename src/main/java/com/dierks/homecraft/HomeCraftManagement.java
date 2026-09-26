@@ -62,9 +62,35 @@ public final class HomeCraftManagement extends JavaPlugin {
      * and rendered as an empty slot. 7 = wild Mini spawns — rarer, much further out, a find
      * window measured in minutes — plus the grade stars, for a file an editor has flattened.
      * 11 = the courier crate's head textures, which shipped blank and so handed every courier
-     * a default Steve head to carry.
+     * a default Steve head to carry. 12 = the four quests that pushed Mini output (print, packs,
+     * selling) leave the shipped pool.
      */
-    static final int CONFIG_REVISION = 11;
+    static final int CONFIG_REVISION = 12;
+
+    /**
+     * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
+     * that found an admin's own value where it expected ours, and left it alone. The admin needs
+     * to see that line — it names a key they may want to change by hand.
+     */
+    static final String WARN = "WARN ";
+
+    /**
+     * Every quest row revision 12 retires, with each (type, target, reward) it has ever shipped
+     * with. A row still holding one of those is ours and goes; a row the admin has retuned is
+     * theirs and stays, with a warning naming it.
+     */
+    private static final java.util.Map<String, java.util.List<Object[]>> PUSH_QUESTS = pushQuests();
+
+    private static java.util.Map<String, java.util.List<Object[]>> pushQuests() {
+        java.util.Map<String, java.util.List<Object[]>> m = new java.util.LinkedHashMap<>();
+        m.put("print_daily", java.util.List.<Object[]>of(new Object[] {"PRINT_MINI", 1, 2}));
+        m.put("sell_daily", java.util.List.of(new Object[] {"SELL_MARKET", 300, 1},
+                new Object[] {"SELL_MARKET", 500, 2}));
+        m.put("pack_weekly", java.util.List.<Object[]>of(new Object[] {"OPEN_PACK", 3, 6}));
+        m.put("sell_weekly", java.util.List.of(new Object[] {"SELL_MARKET", 2000, 5},
+                new Object[] {"SELL_MARKET", 5000, 8}));
+        return java.util.Collections.unmodifiableMap(m);
+    }
 
     /**
      * Per-item daily caps (~2% sell / ~4% buy of {@code full_stock}), mirroring the
@@ -138,6 +164,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.web.MarketDashboardServer dashboard;
     private com.dierks.homecraft.integration.HcmPlaceholders placeholders;
     private com.dierks.homecraft.display.DisplayService displayService;
+    private com.dierks.homecraft.arcade.TokenService tokens;
     private com.dierks.homecraft.arcade.ArcadeService arcade;
     private com.dierks.homecraft.arcade.AchievementService achievements;
     private com.dierks.homecraft.arcade.QuestService quests;
@@ -239,9 +266,11 @@ public final class HomeCraftManagement extends JavaPlugin {
         this.displayService = new com.dierks.homecraft.display.DisplayService(
                 this, new com.dierks.homecraft.storage.DisplayDao(database));
 
-        // The Arcade (Phase 8) — tokens, loot crates, pity, lotto.
-        this.arcade = new com.dierks.homecraft.arcade.ArcadeService(
+        // The Arcade (Phase 8): tokens (balances, streak, playtime, the ledger) and the games
+        // that spend them (loot crates, the Prize Counter, pity, lotto).
+        this.tokens = new com.dierks.homecraft.arcade.TokenService(
                 this, new com.dierks.homecraft.storage.TokenDao(database));
+        this.arcade = new com.dierks.homecraft.arcade.ArcadeService(this);
         this.achievements = new com.dierks.homecraft.arcade.AchievementService(
                 this, new com.dierks.homecraft.storage.AchievementDao(database));
         // Daily/weekly quests (Phase 11) — repeatable token objectives; no listener,
@@ -297,6 +326,7 @@ public final class HomeCraftManagement extends JavaPlugin {
 
         // Start the economy-display refresh timer (renders signs + spawns holograms).
         this.displayService.start();
+        this.tokens.start(); // the five-minute streak + playtime tick
         this.arcade.start();
         this.quests.start(); // poll statistic-backed quests (fish, distance, kills…)
         this.courier.start(); // sweep abandoned delivery runs
@@ -364,6 +394,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (effects != null) {
             effects.stop(); // removes every hologram/display/light we own
             effects = null;
+        }
+        if (tokens != null) {
+            tokens.stop();
+            tokens = null;
         }
         if (arcade != null) {
             arcade.stop();
@@ -448,7 +482,8 @@ public final class HomeCraftManagement extends JavaPlugin {
             displayService.start(); // re-arm the refresh timer at the new cadence
         }
         if (arcade != null) {
-            arcade.start(); // re-arm the playtime task under any new config
+            tokens.start(); // re-arm the streak + playtime tick under any new config
+            arcade.start();
             quests.start(); // re-arm the quest stat poll under any new config
         }
         if (courier != null) {
@@ -505,7 +540,11 @@ public final class HomeCraftManagement extends JavaPlugin {
             return false;
         }
         for (String line : log) {
-            getLogger().info(line);
+            if (line.startsWith(WARN)) {
+                getLogger().warning(line.substring(WARN.length()));
+            } else {
+                getLogger().info(line);
+            }
         }
         reloadConfig();
         return true;
@@ -524,6 +563,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         return ids;
     }
 
+    /** The rev-9 pool. Revision 12 then drops print_daily and sell_daily from it again. */
     private static java.util.List<java.util.Map<String, Object>> defaultDailyQuests() {
         java.util.List<java.util.Map<String, Object>> rows = new java.util.ArrayList<>();
         rows.add(questRow("fish_daily", "CATCH_FISH", 8, 3, "Catch 8 fish"));
@@ -796,6 +836,15 @@ public final class HomeCraftManagement extends JavaPlugin {
                         + "Steve's head, and the package is carried in hand for the whole delivery.");
             }
         }
+        if (from < 12) {
+            // Every token sink ended in Minis content, and so did two of the quests paying
+            // them: print a Mini a day, open three packs a week. Selling to the market was
+            // the other push. The quest system is replaced wholesale later; this stops the
+            // pressure now. Only rows still holding a value we shipped go.
+            for (String path : java.util.List.of("arcade.quests.daily", "arcade.quests.weekly")) {
+                log.addAll(retireShippedQuests(c, path));
+            }
+        }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);
             log.add("Config migration: config_revision " + from + " → " + CONFIG_REVISION + ".");
@@ -811,6 +860,61 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
 
         return log;
+    }
+
+    /**
+     * Revision 12: drop the quest rows in {@link #PUSH_QUESTS} from one quest list, where they
+     * still hold a (type, target, reward) this plugin shipped. A row with the same id but the
+     * admin's own numbers is kept, with a {@link #WARN} line naming it. The display text is not
+     * compared: rewording a label does not change what the quest makes a player do.
+     *
+     * @return the log lines — one per row removed or kept
+     */
+    static java.util.List<String> retireShippedQuests(org.bukkit.configuration.file.FileConfiguration c,
+                                                      String path) {
+        java.util.List<String> log = new java.util.ArrayList<>();
+        if (!(c.get(path, null) instanceof java.util.List<?> raw)) {
+            return log;
+        }
+        java.util.List<Object> kept = new java.util.ArrayList<>();
+        boolean changed = false;
+        for (Object o : raw) {
+            if (!(o instanceof java.util.Map<?, ?> row)) {
+                kept.add(o);
+                continue;
+            }
+            String id = String.valueOf(row.get("id")).toLowerCase(java.util.Locale.ROOT);
+            java.util.List<Object[]> shipped = PUSH_QUESTS.get(id);
+            if (shipped == null) {
+                kept.add(o);
+                continue;
+            }
+            if (matchesShippedQuest(row, shipped)) {
+                changed = true;
+                log.add("Config migration: removed the " + id + " quest from " + path + " — it paid "
+                        + "tokens for printing Minis, opening packs or selling, which pushed Mini "
+                        + "output instead of play.");
+            } else {
+                kept.add(o);
+                log.add(WARN + "Config migration: kept " + path + " → " + id + " because you have "
+                        + "changed it. Remove it by hand if you want the quest pressure gone.");
+            }
+        }
+        if (changed) {
+            c.set(path, kept);
+        }
+        return log;
+    }
+
+    private static boolean matchesShippedQuest(java.util.Map<?, ?> row, java.util.List<Object[]> shipped) {
+        String type = String.valueOf(row.get("type")).trim().toUpperCase(java.util.Locale.ROOT);
+        for (Object[] v : shipped) {
+            if (v[0].equals(type) && row.get("target") instanceof Number t && t.longValue() == ((Integer) v[1])
+                    && row.get("reward") instanceof Number r && r.intValue() == (Integer) v[2]) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1607,6 +1711,16 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public com.dierks.homecraft.display.DisplayService displayService() {
         return displayService;
+    }
+
+    /** Arcade token balances, the login streak, playtime and the ledger. */
+    public com.dierks.homecraft.arcade.TokenService tokens() {
+        return tokens;
+    }
+
+    /** Which day and week it is where the players live ({@code clock.time_zone}). */
+    public com.dierks.homecraft.util.GameClock clock() {
+        return config.clock();
     }
 
     public com.dierks.homecraft.arcade.ArcadeService arcade() {

@@ -512,19 +512,95 @@ public final class Database {
             // back to the old any-player behaviour rather than restoring under somebody.
             """
             ALTER TABLE courier_sites ADD COLUMN player TEXT;
+            """,
+
+            // v28 — the token ledger. Every change to a token balance writes one row here in
+            // the same transaction as the balance update, so "where do tokens come from and
+            // where do they go" is a query rather than a guess. balance_after makes a row
+            // self-describing (no replay needed to know what a player had at the time), and
+            // (at) alone serves the whole-server audit window.
+            """
+            CREATE TABLE IF NOT EXISTS token_ledger (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                player        TEXT    NOT NULL,
+                delta         INTEGER NOT NULL,
+                balance_after INTEGER NOT NULL,
+                source        TEXT    NOT NULL,
+                detail        TEXT,
+                at            INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_token_ledger_player ON token_ledger (player, at);
+            CREATE INDEX IF NOT EXISTS idx_token_ledger_at ON token_ledger (at);
             """
     };
 
+    /** One unit of work run inside {@link #transaction}. */
+    @FunctionalInterface
+    public interface SqlWork<T> {
+        T run(Connection connection) throws SQLException;
+    }
+
     private final HomeCraftManagement plugin;
+    private final java.util.logging.Logger log;
     private Connection connection;
     private File dbFile;
 
     public Database(HomeCraftManagement plugin) {
         this.plugin = plugin;
+        this.log = plugin.getLogger();
+    }
+
+    /** A database over an already-open connection (tests use an in-memory SQLite). */
+    private Database(Connection connection, java.util.logging.Logger log) {
+        this.plugin = null;
+        this.log = log;
+        this.connection = connection;
+    }
+
+    /**
+     * Wrap an open connection and bring it to the current schema. No file, no pre-migration
+     * backup — this exists so a DAO can be exercised against a real SQLite without a server.
+     */
+    public static Database open(Connection connection, java.util.logging.Logger log) throws SQLException {
+        Database db = new Database(connection, log);
+        db.migrate();
+        return db;
     }
 
     public Connection connection() {
         return connection;
+    }
+
+    /**
+     * Run {@code work} as one transaction: every statement lands or none does.
+     *
+     * <p>Holds the connection's monitor for the whole unit, the same lock every DAO takes, so
+     * nothing else can interleave a statement between a guarded UPDATE and the rows that depend
+     * on it. Re-entrant: called from inside another transaction it simply joins it, so the
+     * outer unit still commits (or rolls back) as one.
+     */
+    public <T> T transaction(SqlWork<T> work) throws SQLException {
+        Connection c = connection;
+        synchronized (c) {
+            if (!c.getAutoCommit()) {
+                return work.run(c); // already inside a transaction — join it
+            }
+            c.setAutoCommit(false);
+            try {
+                T result = work.run(c);
+                c.commit();
+                return result;
+            } catch (SQLException | RuntimeException e) {
+                try {
+                    c.rollback();
+                } catch (SQLException rollback) {
+                    e.addSuppressed(rollback);
+                }
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        }
     }
 
     public void connect() throws SQLException {
@@ -560,12 +636,12 @@ public final class Database {
                 st.execute("CREATE TABLE IF NOT EXISTS hcm_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
             }
             int current = schemaVersion();
-            if (current < MIGRATIONS.length && current > 0) {
+            if (current < MIGRATIONS.length && current > 0 && plugin != null) {
                 // A schema change is about to run: keep a copy of the file first (§11 #6).
                 BackupService.preMigrationCopy(plugin, dbFile);
             }
             for (int v = current + 1; v <= MIGRATIONS.length; v++) {
-                plugin.getLogger().info("Applying database migration v" + v + "…");
+                log.info("Applying database migration v" + v + "…");
                 try (Statement st = connection.createStatement()) {
                     for (String stmt : MIGRATIONS[v - 1].split(";")) {
                         if (!stmt.isBlank()) {
@@ -606,7 +682,7 @@ public final class Database {
             try {
                 connection.close();
             } catch (SQLException e) {
-                plugin.getLogger().warning("Error closing database: " + e.getMessage());
+                log.warning("Error closing database: " + e.getMessage());
             }
             connection = null;
         }

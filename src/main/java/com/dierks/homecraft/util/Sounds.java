@@ -11,7 +11,7 @@ import org.bukkit.entity.Player;
  * indistinguishable. A call site should say what happened, not choose a pitch; if the palette is
  * ever retuned, it is retuned here.
  *
- * <p>Four motifs and no fifth without a reason:
+ * <p>Five motifs and no sixth without a reason:
  * <ul>
  *   <li>{@link #paid} — money left your pocket. Two notes rising, so it reads as a transaction
  *       completing rather than a button acknowledging a press.</li>
@@ -20,6 +20,8 @@ import org.bukkit.entity.Player;
  *   <li>{@link #refused} — it did not happen. A low bass note, never {@code ENTITY_VILLAGER_NO},
  *       which reads as mockery by the third hearing and this is a child's server.</li>
  *   <li>{@link #won} — a genuine payoff. Rare on purpose; spend it and it stops meaning anything.</li>
+ *   <li>{@link #miss} — a pull that paid nothing. Soft and short: the ticket was not a mistake and
+ *       the player did nothing wrong, so it must not sound like {@link #refused}.</li>
  * </ul>
  *
  * <p>Volumes sit between 0.3 and 0.8. These play while a player is reading a menu, and a sound loud
@@ -59,6 +61,14 @@ public final class Sounds {
     /** A real payoff: a crate pull, a scratch win, a pack finishing. */
     public static void won(Player player) {
         play(player, Sound.ENTITY_PLAYER_LEVELUP, 0.7f, 1.4f);
+    }
+
+    /**
+     * A pull that paid nothing — a scratch ticket with no prize, a crate with nothing left in it.
+     * The level-up fanfare used to play here, which is the one thing a loss must never sound like.
+     */
+    public static void miss(Player player) {
+        play(player, Sound.BLOCK_NOTE_BLOCK_HARP, 0.4f, 0.7f);
     }
 
     /**

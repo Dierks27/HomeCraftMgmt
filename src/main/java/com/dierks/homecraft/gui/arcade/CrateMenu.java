@@ -70,7 +70,7 @@ public final class CrateMenu extends Menu {
             set(slot++, rewardIcon(r, pct), null);
         }
 
-        int tokens = plugin.arcade().balance(player.getUniqueId());
+        int tokens = plugin.tokens().balance(player.getUniqueId());
         set(46, Menus.icon(Material.SUNFLOWER, "&eYour Tokens: &6" + tokens), null);
 
         // Free (token) open — no glint and a "need N more" note when unaffordable, but still
@@ -96,8 +96,9 @@ public final class CrateMenu extends Menu {
             }
             set(tierSlot++, Menus.icon(Material.GOLD_INGOT,
                     "&6Better odds — " + plugin.economy().format(tier.costMoney()),
-                    "&7Guarantees a &d" + tier.floor() + "+ &7Mini.",
-                    "&8Money sink — burned.", "&8—", "&eClick to open"),
+                    "&7Always gives " + tier.floor().article() + " "
+                            + plugin.miniService().rarityFloorText(tier.floor()) + " &7Card.",
+                    "&8—", "&eClick to open"),
                     e -> pull(tier));
         }
 
@@ -137,16 +138,16 @@ public final class CrateMenu extends Menu {
             }
             case CARD, MINI -> {
                 if (r.usesTag()) {
-                    int pool = plugin.miniService().poolFromTag(r.tag()).size();
-                    return Menus.icon(Material.PLAYER_HEAD, "&bRandom Card &7(tag: " + r.tag() + ")",
-                            "&7A rarity-weighted Card from every", "&7Mini tagged &f" + r.tag(),
-                            "&7Available now: &f" + pool, odds);
+                    int pool = plugin.cards().issuable(plugin.miniService().poolFromTag(r.tag())).size();
+                    return Menus.icon(Material.PLAYER_HEAD, "&bRandom Card",
+                            "&7A Card for one of the", "&f" + niceName(r.tag()) + " &7Minis.",
+                            "&7Rarer Minis are harder to get.",
+                            "&7Minis you can still get: &f" + pool, odds);
                 }
                 MiniDef def = plugin.miniService().def(r.miniId());
-                boolean out = def != null && !def.uncapped()
-                        && plugin.miniService().counts(def.id()).minted() >= def.cap();
+                boolean out = def != null && !plugin.cards().canIssue(def);
                 if (def == null) {
-                    return Menus.icon(Material.PLAYER_HEAD, "&dMini &7(" + r.miniId() + ")", odds);
+                    return Menus.icon(Material.PLAYER_HEAD, "&bCard", odds);
                 }
                 ItemStack ic = plugin.miniService().cardFor(def.id());
                 if (ic == null) {
@@ -156,10 +157,10 @@ public final class CrateMenu extends Menu {
                 if (meta != null) {
                     java.util.List<net.kyori.adventure.text.Component> lore = meta.hasLore()
                             ? new java.util.ArrayList<>(meta.lore()) : new java.util.ArrayList<>();
-                    lore.add(Text.of("&7Rarity: &f" + def.rarity()));
+                    lore.add(Text.of("&7Rarity: " + plugin.miniService().rarityText(def.rarity())));
                     lore.add(Text.of(odds));
                     if (out) {
-                        lore.add(Text.of("&cMinted out — won't drop"));
+                        lore.add(Text.of("&cAll gone — can't drop"));
                     }
                     meta.lore(lore);
                     ic.setItemMeta(meta);
@@ -177,13 +178,9 @@ public final class CrateMenu extends Menu {
             return true;
         }
         if (r.usesTag()) {
-            return !plugin.miniService().poolFromTag(r.tag()).isEmpty();
+            return !plugin.cards().issuable(plugin.miniService().poolFromTag(r.tag())).isEmpty();
         }
-        MiniDef def = plugin.miniService().def(r.miniId());
-        if (def == null) {
-            return false;
-        }
-        return def.uncapped() || plugin.miniService().counts(def.id()).minted() < def.cap();
+        return plugin.cards().canIssue(plugin.miniService().def(r.miniId()));
     }
 
     private ItemStack back() {
@@ -195,8 +192,9 @@ public final class CrateMenu extends Menu {
         return Character.toUpperCase(n.charAt(0)) + n.substring(1);
     }
 
-    private String niceName(Material material) {
-        String n = material.name().toLowerCase().replace('_', ' ');
-        return Character.toUpperCase(n.charAt(0)) + n.substring(1);
+    /** "starter" → "Starter", "wild_west" → "Wild west". */
+    private String niceName(String key) {
+        String n = key.toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
+        return n.isEmpty() ? n : Character.toUpperCase(n.charAt(0)) + n.substring(1);
     }
 }

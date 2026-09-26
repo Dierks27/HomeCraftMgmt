@@ -14,9 +14,6 @@ import org.bukkit.scheduler.BukkitTask;
 
 import java.sql.SQLException;
 import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
-import java.time.temporal.TemporalAdjusters;
 import java.util.UUID;
 
 /**
@@ -109,8 +106,8 @@ public final class QuestService {
                 }
                 int progress = dao.advanceStat(id, q.id(), period, current, credit);
                 if (progress >= q.target()) {
-                    if (q.reward() > 0 && (plugin.arcade() == null
-                            || !plugin.arcade().canEarn(player, "quest " + q.id()))) {
+                    if (q.reward() > 0 && (plugin.tokens() == null
+                            || !plugin.tokens().canEarn(player, "quest " + q.id()))) {
                         continue;
                     }
                     if (dao.markClaimed(id, q.id(), period)) {
@@ -157,7 +154,7 @@ public final class QuestService {
                 // Progress is already banked, so the quest claims on the next qualifying
                 // action in a world where the reward actually lands.
                 if (q.reward() > 0
-                        && (plugin.arcade() == null || !plugin.arcade().canEarn(player, "quest " + q.id()))) {
+                        && (plugin.tokens() == null || !plugin.tokens().canEarn(player, "quest " + q.id()))) {
                     continue;
                 }
                 if (dao.markClaimed(id, q.id(), period)) {
@@ -172,8 +169,9 @@ public final class QuestService {
     private void complete(Player player, Quest q) {
         player.sendMessage(Text.of("&a✔ Quest complete: &f" + q.display()));
         player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.7f, 1.2f);
-        if (plugin.arcade() != null) {
-            plugin.arcade().award(player, q.reward(), "quest"); // "+N token" feedback lives here
+        if (plugin.tokens() != null) {
+            // "+N token" feedback lives here
+            plugin.tokens().award(player, q.reward(), TokenService.Source.QUEST, q.display());
         }
     }
 
@@ -197,29 +195,30 @@ public final class QuestService {
         }
     }
 
-    /** Milliseconds until this period rolls over (for a "resets in …" countdown). */
+    /** Milliseconds until this period rolls over (for a "resets in …" countdown), local time. */
     public long msToReset(QuestPeriod period) {
-        LocalDate today = LocalDate.now(ZoneOffset.UTC);
-        LocalDate next = period == QuestPeriod.WEEKLY
-                ? today.with(TemporalAdjusters.next(weekStartsOn()))
-                : today.plusDays(1);
-        return next.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() - System.currentTimeMillis();
+        return period == QuestPeriod.WEEKLY
+                ? plugin.clock().msUntilNextWeek(weekStartsOn())
+                : plugin.clock().msUntilNextDay();
     }
 
     /**
-     * The reset-window key for a period: {@code d<epochDay>}, or {@code w<epochDay of the week's
-     * first day>}.
+     * The reset-window key for a period: {@code d<local epochDay>}, or {@code w<local epochDay of
+     * the week's first day>}.
      *
-     * <p>The weekly key used to be {@code epochDay / 7}, which looks like a week and is one —
-     * but it starts on a <b>Thursday</b>, because epoch day 0 was 1 January 1970 and that was a
-     * Thursday. Nobody would choose that, and nobody noticed. Keying on the actual first day of
-     * the configured week makes the rollover a date you can name.
+     * <p>Local, not UTC: a UTC day ended at 7 PM in Minnesota, in the middle of the evening that
+     * is the whole of family play time, so a daily finished at 6:55 was open again at 7:05. The
+     * keys keep their shape, which is why they shift once on the day this ships and never again.
+     *
+     * <p>The weekly key used to be {@code epochDay / 7}, which looks like a week and is one — but
+     * it starts on a <b>Thursday</b>, because epoch day 0 was 1 January 1970 and that was a
+     * Thursday. Keying on the actual first day of the configured week makes the rollover a date
+     * you can name.
      */
     private String periodKey(QuestPeriod period) {
-        LocalDate today = LocalDate.now(ZoneOffset.UTC);
         return period == QuestPeriod.WEEKLY
-                ? "w" + today.with(TemporalAdjusters.previousOrSame(weekStartsOn())).toEpochDay()
-                : "d" + today.toEpochDay();
+                ? "w" + plugin.clock().weekKey(weekStartsOn())
+                : "d" + plugin.clock().dayKey();
     }
 
     private DayOfWeek weekStartsOn() {

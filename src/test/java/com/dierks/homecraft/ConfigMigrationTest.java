@@ -1260,4 +1260,81 @@ class ConfigMigrationTest {
         assertTrue(added.contains("arcade.trade_in.LEGENDARY"), "added: " + added);
         assertEquals(3, onDisk.getInt("arcade.quests.daily_draw"));
     }
+
+    // ---- revision 15: one-Card packs on rarity odds ---------------------------------
+
+    /** The two packs exactly as revision 3 shipped them, on a live rev-14 server. */
+    private static YamlConfiguration rev14Packs() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 14);
+        onDisk.set("packs", yaml("""
+                packs:
+                  - id: starter
+                    display: "Starter Pack"
+                    price: 250.0
+                    count: 3
+                    pool:
+                      - { card: piggy_mini,  weight: 50 }
+                      - { card: chick_mini,  weight: 50 }
+                  - id: premium
+                    display: "Premium Pack"
+                    price: 750.0
+                    count: 3
+                    pool:
+                      - { card: piggy_mini,  weight: 45 }
+                      - { card: chick_mini,  weight: 45 }
+                      - { card: golden_idol, weight: 1 }
+                """).getList("packs"));
+        return onDisk;
+    }
+
+    @Test
+    void theShippedPacksBecomeOneCardOddsPacks() throws Exception {
+        YamlConfiguration onDisk = rev14Packs();
+
+        List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals(bundled().getMapList("packs"), onDisk.getMapList("packs"),
+                "an untouched server ends up with exactly the packs a fresh install ships");
+        assertTrue(log.stream().noneMatch(l -> l.startsWith(HomeCraftManagement.WARN)), "nothing to warn: " + log);
+        assertEquals(2, log.stream().filter(l -> l.contains("rolls by rarity odds")).count(), "one line each: " + log);
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"), "a second pass is a no-op");
+    }
+
+    @Test
+    void anAdminsPackKeepsItsPoolAndPriceButHoldsOneCard() throws Exception {
+        YamlConfiguration onDisk = rev14Packs();
+        List<Map<String, Object>> packs = new ArrayList<>();
+        for (Map<?, ?> row : onDisk.getMapList("packs")) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            row.forEach((k, v) -> m.put(String.valueOf(k), v));
+            packs.add(m);
+        }
+        packs.get(0).put("pool", List.of(Map.of("card", "creeper_mini", "weight", 10))); // their own pool
+        packs.get(1).put("price", 900.0);                                                   // their own price
+        packs.add(new LinkedHashMap<>(Map.of("id", "holiday", "display", "Holiday Pack", "price", 500.0,
+                "count", 5, "pool", List.of(Map.of("card", "golden_idol", "weight", 1)))));
+        onDisk.set("packs", packs);
+
+        List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        Map<String, Map<?, ?>> byId = new LinkedHashMap<>();
+        for (Map<?, ?> row : onDisk.getMapList("packs")) {
+            byId.put(String.valueOf(row.get("id")), row);
+        }
+        // starter: their pool stays a pool; its price was still ours, so it moves.
+        assertEquals(1, intAt(byId.get("starter"), "count"));
+        assertEquals(100, intAt(byId.get("starter"), "price"));
+        assertInstanceOf(List.class, byId.get("starter").get("pool"));
+        assertWarns(log, "packs → starter as a hand-picked pool");
+        // premium: our pool becomes the odds row, their price stays.
+        assertEquals(900, intAt(byId.get("premium"), "price"));
+        assertNull(byId.get("premium").get("pool"));
+        assertNotNull(byId.get("premium").get("rarity_odds"));
+        assertWarns(log, "packs → premium price");
+        // their own pack holds one Card now too, and says so.
+        assertEquals(1, intAt(byId.get("holiday"), "count"));
+        assertEquals(500, intAt(byId.get("holiday"), "price"));
+        assertTrue(log.stream().anyMatch(l -> l.contains("packs → holiday count 5 → 1")), "logged: " + log);
+    }
 }

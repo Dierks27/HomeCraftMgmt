@@ -24,6 +24,8 @@ softdepend:
   - WorldEdit
   - LuckPerms
   - PlaceholderAPI
+  # Bedrock players (Geyser) get plain-material icons and short animations.
+  - floodgate
 
 commands:
   hcm:

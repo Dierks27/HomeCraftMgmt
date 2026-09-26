@@ -59,7 +59,7 @@ clock:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 14
+config_revision: 15
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -186,33 +186,39 @@ printer:
     fee: 25             # extra money on top of the base fee (0 = none)
 
 # ---------------------------------------------------------------------
-#  Phase 10 — Card Packs (booster packs; a money sink).
-#  Buying a pack charges money and gives N weighted-random CARDS (never
-#  Minis — a Card is printed into a Mini later at the Printer). Build/edit
-#  packs in-game with /hcm packs (or Admin Studio → Card Packs); this list
-#  is kept in sync — no need to edit it by hand.
-#    id       unique key
-#    display  shown name (&-colour codes ok)
-#    price    money per open (Vault)
-#    count    how many cards you get per open
-#    pool     weighted list of cards (card = a Mini id; weight = relative odds)
+#  Card Packs (§3.5). Open a pack, get a Card, print it into a Mini.
+#  A pack is bought sealed (for dollars, tokens, or either) and opened with a
+#  right-click; it gives CARDS, never Minis — a Card is printed into a Mini at a
+#  Printer. Build/edit packs in-game with /hcm packs (Admin Studio → Card Packs);
+#  this list is kept in sync, so there's no need to edit it by hand.
+#    id            unique key
+#    display       shown name (&-colour codes ok)
+#    price         dollars (0 = not sold for dollars)
+#    price_tokens  tokens (0 = not sold for tokens)
+#    count         Cards per pack. A pack that can only fill some of them refunds
+#                  the rest's share in whatever currency paid for it.
+#    tag           optional: only Minis with this tag (blank = every Mini)
+#    rarity_odds   relative odds per rarity. A rarity with no Cards left drops out
+#                  and the rest scale up; if nothing is left the pack is Sold out.
+#                  New Minis join automatically — no list to keep up to date.
+#    pool          optional hand-picked list ({ card: <mini id>, weight: N });
+#                  when present it is used INSTEAD of rarity_odds.
 # ---------------------------------------------------------------------
 packs:
   - id: starter
-    display: "Starter Pack"
-    price: 250.0
-    count: 3
-    pool:
-      - { card: piggy_mini,  weight: 50 }
-      - { card: chick_mini,  weight: 50 }
+    display: "&aStarter Pack"
+    price: 100
+    price_tokens: 50
+    count: 1
+    tag: ""
+    rarity_odds: { COMMON: 62, UNCOMMON: 28, RARE: 9, EPIC: 1, LEGENDARY: 0 }
   - id: premium
-    display: "Premium Pack"
-    price: 750.0
-    count: 3
-    pool:
-      - { card: piggy_mini,  weight: 45 }
-      - { card: chick_mini,  weight: 45 }
-      - { card: golden_idol, weight: 1 }    # ≈1.1% per card
+    display: "&dPremium Pack"
+    price: 300
+    price_tokens: 0
+    count: 1
+    tag: ""
+    rarity_odds: { COMMON: 0, UNCOMMON: 45, RARE: 38, EPIC: 13, LEGENDARY: 4 }
 
 # ---------------------------------------------------------------------
 #  Courier — paid delivery runs (Phase 1: economy only, no world changes).

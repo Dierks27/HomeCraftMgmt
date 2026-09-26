@@ -82,10 +82,20 @@ public final class GuideMenu extends Menu {
         set(slot, Menus.icon(m, name, lore), null);
     }
 
+    /** "A token for every hour." — from the config, so the guide never disagrees with the Wallet. */
+    private String playtimeLine() {
+        var arc = plugin.config().arcade();
+        int m = arc.playtimeMinutesPerToken();
+        if (!arc.playtimeEnabled() || m <= 0) {
+            return "Playtime tokens are off.";
+        }
+        return m == 60 ? "A token for every hour." : "A token every " + m + " minutes.";
+    }
+
     /** Four ways in → tokens → four ways to spend them, one lane per row. */
     private void tokens() {
         step(11, Material.OAK_DOOR, "&aLog in every day", "&7Your streak pays more", "&7each day in a row.");
-        step(20, Material.CLOCK, "&aPlay", "&7A token for every hour.");
+        step(20, Material.CLOCK, "&aPlay", "&7" + playtimeLine());
         step(29, Material.WRITABLE_BOOK, "&aDo quests", "&7Three daily jobs and", "&7two weekly ones.");
         step(38, Material.TOTEM_OF_UNDYING, "&aGet achievements", "&7Big moments pay once.");
         for (int row = 0; row < 4; row++) {
@@ -134,10 +144,13 @@ public final class GuideMenu extends Menu {
     private void games() {
         step(19, Material.CHEST, "&6Crates", "&7Pay tokens, get a surprise.");
         step(28, Material.FIREWORK_ROCKET, "&7Boosts, trails, hats…", "&7and sometimes a Card!");
-        step(21, Material.FILLED_MAP, "&6Scratch Ticket", "&710 tokens a ticket.");
+        step(21, Material.FILLED_MAP, "&6Scratch Ticket",
+                "&7" + plugin.config().arcade().lotto().ticketTokens() + " tokens a ticket.");
         step(30, Material.GOLD_BLOCK, "&7Match three to win", "&7The jackpot grows", "&7with every ticket!");
         step(23, Material.NETHER_STAR, "&6Rare Card", "&7At the Prize Counter.");
-        step(32, Material.AMETHYST_SHARD, "&7Rare or better", "&7One a week.");
+        int perWeek = plugin.config().arcade().pityPerWeek();
+        step(32, Material.AMETHYST_SHARD, "&7Rare or better",
+                "&7" + (perWeek <= 0 ? "Any time." : perWeek == 1 ? "One a week." : perWeek + " a week."));
         step(25, Material.HOPPER, "&6Trade In Cards", "&7Spare Cards?");
         step(34, Material.SUNFLOWER, "&7Swap them for tokens", "&7Rarer Cards give more.");
     }

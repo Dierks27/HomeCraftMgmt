@@ -131,6 +131,15 @@ public final class ScratchTicketMenu extends Menu {
         }
     }
 
+    /** Paid already: if the screen could not open, say what the ticket was right away. */
+    @Override
+    public void open(Player viewer) {
+        super.open(viewer);
+        if (!isOpenFor(viewer)) {
+            tell();
+        }
+    }
+
     @Override
     protected void onClose(Player viewer) {
         tell();

@@ -17,14 +17,16 @@ public final class ArcadeScreens {
         return () -> new ArcadeMenu(plugin, player).open(player);
     }
 
-    /** The first crate, or the hub if there are none. */
+    /** The only crate, or a list of every crate, or the hub if there are none. */
     public static void crate(HomeCraftManagement plugin, Player player) {
         var crates = plugin.config().arcade().crates();
         if (crates.isEmpty()) {
             new ArcadeMenu(plugin, player).open(player);
-            return;
+        } else if (crates.size() == 1) {
+            new CrateMenu(plugin, player, crates.keySet().iterator().next(), hub(plugin, player)).open(player);
+        } else {
+            new CrateListMenu(plugin, player, hub(plugin, player)).open(player);
         }
-        new CrateMenu(plugin, player, crates.keySet().iterator().next(), hub(plugin, player)).open(player);
     }
 
     /** The Prize Counter's Minis tab, where the Rare Card lives. */

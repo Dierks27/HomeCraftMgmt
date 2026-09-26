@@ -40,6 +40,7 @@ public final class ArcadeMenu extends Menu {
     static final int WALLET = 4;
     static final int WILD = 16;
     private static final int[] CRATES = {10, 11, 12};
+    private static final int MORE_CRATES = 13;
     private static final int SCRATCH = 14;
     private static final int[] TABS = {19, 20, 21, 22, 23, 24};
     private static final int PACKS = 25;
@@ -101,6 +102,12 @@ public final class ArcadeMenu extends Menu {
 
     private void crates(PluginConfig.Arcade arc) {
         List<String> ids = new ArrayList<>(arc.crates().keySet());
+        if (ids.size() > CRATES.length) {
+            // Three crate slots on the hub; the rest are one click away rather than unreachable.
+            set(MORE_CRATES, Menus.icon(Material.BARREL, "&6All crates &7(" + ids.size() + ")",
+                    "&eClick to see every crate"),
+                    e -> new CrateListMenu(plugin, player, this::reopen).open(player));
+        }
         for (int i = 0; i < CRATES.length && i < ids.size(); i++) {
             String id = ids.get(i);
             PluginConfig.Crate crate = arc.crates().get(id);
@@ -227,12 +234,18 @@ public final class ArcadeMenu extends Menu {
     @Override
     public void open(Player viewer) {
         super.open(viewer);
-        if (ticker == null) {
+        if (ticker == null && isOpenFor(viewer)) {
             // Only the wild tile changes by itself; repaint just that slot, and less often on
-            // Bedrock, where every inventory update is a stutter.
+            // Bedrock, where every inventory update is a stutter. The tick also stops itself once
+            // nobody is looking, in case a close event never reaches this menu.
             long every = Bedrock.is(player) ? 100L : 20L;
-            ticker = plugin.getServer().getScheduler().runTaskTimer(plugin,
-                    () -> getInventory().setItem(WILD, wildTile()), every, every);
+            ticker = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
+                if (!isOpenFor(player)) {
+                    onClose(player);
+                    return;
+                }
+                getInventory().setItem(WILD, wildTile());
+            }, every, every);
         }
     }
 

@@ -118,7 +118,8 @@ public final class MiniItems {
      * circulation and the Standard→Mint value appraisal. The Museum is browse-only, so
      * the action line points at the Printer rather than a purchase.
      */
-    public ItemStack preview(MiniDef def, RarityStyle style, long minted, long circulation, String valueText) {
+    public ItemStack preview(MiniDef def, RarityStyle style, long minted, long circulation, long escaped,
+                             String valueText) {
         ItemStack item = baseItem(def);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
@@ -130,6 +131,10 @@ public final class MiniItems {
             lore.add(line("Rarity: ", def.rarity().display(), style.nameColor()));
             lore.add(line("Minted: ", minted + (def.uncapped() ? " (uncapped)" : " / " + def.cap()), NamedTextColor.GRAY));
             lore.add(line("In circulation: ", Long.toString(circulation), NamedTextColor.GRAY));
+            if (escaped > 0) {
+                // Wild ones nobody caught. Never minted, so never part of "Minted" above.
+                lore.add(line("Got away: ", Long.toString(escaped), NamedTextColor.GRAY));
+            }
             if (valueText != null && !valueText.isBlank()) {
                 lore.add(Component.text("Est. value: ", NamedTextColor.DARK_GRAY)
                         .append(Component.text(valueText, NamedTextColor.AQUA))

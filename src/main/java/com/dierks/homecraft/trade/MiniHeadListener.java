@@ -81,9 +81,9 @@ public final class MiniHeadListener implements Listener {
         event.setCancelled(true);
         event.setUseInteractedBlock(Event.Result.DENY);
         Player player = event.getPlayer();
-        // A naturally spawned wild Mini is claimed by touching it, not inspected.
-        if (plugin.naturalSpawns() != null && plugin.naturalSpawns().isWild(clicked)) {
-            plugin.naturalSpawns().claim(player, clicked, true);
+        // A wild Mini is caught by touching it, not inspected.
+        if (plugin.hunt() != null && plugin.hunt().isWild(clicked)) {
+            plugin.hunt().claim(player, clicked, true);
             return;
         }
         ItemStack display = plugin.placedMinis().itemAt(clicked);
@@ -101,8 +101,8 @@ public final class MiniHeadListener implements Listener {
             return;
         }
         event.setDropItems(false); // never a plain head
-        if (plugin.naturalSpawns() != null && plugin.naturalSpawns().isWild(event.getBlock())) {
-            plugin.naturalSpawns().claim(event.getPlayer(), event.getBlock(), false);
+        if (plugin.hunt() != null && plugin.hunt().isWild(event.getBlock())) {
+            plugin.hunt().claim(event.getPlayer(), event.getBlock(), false);
             return;
         }
         if (!plugin.placedMinis().mayBreak(event.getPlayer(), event.getBlock())) {

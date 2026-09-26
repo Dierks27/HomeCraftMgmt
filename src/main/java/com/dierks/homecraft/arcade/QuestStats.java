@@ -57,7 +57,7 @@ public final class QuestStats {
     public static boolean isPulled(QuestType type) {
         return switch (type) {
             case CATCH_FISH, KILL_HOSTILES, BREED_ANIMALS, TRADE_VILLAGER, TRAVEL_ON_FOOT -> true;
-            case SELL_MARKET, OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH -> false;
+            case SELL_MARKET, OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH, FIND_WILD_MINI -> false;
         };
     }
 
@@ -94,7 +94,7 @@ public final class QuestStats {
                 }
                 yield kills;
             }
-            case SELL_MARKET, OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH -> 0;
+            case SELL_MARKET, OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH, FIND_WILD_MINI -> 0;
         };
     }
 

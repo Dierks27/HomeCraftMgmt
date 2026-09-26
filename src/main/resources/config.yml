@@ -59,7 +59,7 @@ clock:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 12
+config_revision: 13
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -655,7 +655,7 @@ minis:
     MINT:     { name: "Mint",     symbol: "★★★", multiplier: 6.0 }
 
   # ---- World effects (Phase 12) for PLACED Minis — Display Case trophies, posed
-  # armor-stand Minis, and natural wild spawns — by rarity. One repeating task serves
+  # armor-stand Minis, and wild-hunt spawns (which also get minis.loot.natural.effects) — by rarity. One repeating task serves
   # every placed Mini, skipping any with no player within `radius` blocks and any in
   # an unloaded chunk. Everything is torn down on removal / chunk unload / disable and
   # rebuilt from the datastore on load, so nothing leaks after a crash.
@@ -705,21 +705,19 @@ minis:
       place_sound: ITEM_TOTEM_USE
       place_particle: TOTEM_OF_UNDYING
 
-  # ---- Announcements (Phase 12). One server-wide line when a Mini is FOUND (wild
-  # drop, natural spawn, crate — never the Printer or a pack); the [name] is a hover
-  # card showing the item's full tooltip and click-runs /hcm museum <id>. A SPAWN HINT
-  # when a natural spawn lands ("A <Rarity> Mini has spawned within 128 blocks of a
-  # player! You have 3 minutes to find it!") — never coordinates, never who, and both
-  # numbers read from minis.loot.natural so they cannot drift — and a "slipped away" line if it
-  # despawns untouched. Every broadcast plays `sound` to everyone. `min_rarity` and
-  # `per_rarity` silence chat for tiers you don't want announced.
+  # ---- Announcements (Phase 12). One server-wide line when a Mini is FOUND (a wild
+  # drop, or caught in the wild hunt — never the Printer or a pack); the [name] is a
+  # hover card showing the item's full tooltip and click-runs /hcm museum <id>. The
+  # wild hunt's HINTS (spawn_hint gates them; their text lives under
+  # minis.loot.natural.hints) and a "The Rare Mini got away!" line when a hunt ends
+  # without a catch (slipped_away). Every broadcast plays `sound` to everyone.
+  # `min_rarity` and `per_rarity` silence chat for tiers you don't want announced.
   announce:
     enabled: true
     found: true
     spawn_hint: true
     slipped_away: true
     min_rarity: COMMON      # COMMON | UNCOMMON | RARE | EPIC | LEGENDARY
-    hint_radius_text: "within %blocks% blocks of a player"   # %blocks% = natural.max_distance
     sound: ENTITY_EXPERIENCE_ORB_PICKUP
     per_rarity: { COMMON: true, UNCOMMON: true, RARE: true, EPIC: true, LEGENDARY: true }
 
@@ -737,7 +735,7 @@ minis:
     anti_snipe_seconds: 15      # a bid within this window of the end extends the timer
     max_duration_minutes: 10080 # 7 days
 
-  # ---- Wild Drops (Phase 4c / 12). A source ties a trigger (BLOCK_BREAK | MOB_KILL |
+  # ---- Wild Drops and the wild hunt (Phase 4c / 12). A source ties a trigger (BLOCK_BREAK | MOB_KILL |
   # FISHING | NATURAL_SPAWN) + a match (material / entity, or * for any) to a POOL with
   # a percentage chance — `chance_percent: 0.02` means 0.02% (about one per 5,000
   # rolls). The pool is either `list: <id>` (a weighted bag of Mini ids, below) or
@@ -746,30 +744,50 @@ minis:
   # rolled from the Mini's Printer odds (or the source's `grades:` override) and a
   # Shiny roll at shiny_percent (or the source's `shiny_percent`) — so it respects the
   # cap, counts toward circulation, and is announced. Block-break sources must name a
-  # material (anti-farm). NATURAL_SPAWN sources fire every natural.interval_ticks for
-  # each online player and place the Mini as a head min_distance–max_distance blocks
-  # away instead of handing it over. Empty by default — nothing drops until you configure it.
+  # material (anti-farm). NATURAL_SPAWN sources are the WILD HUNT: they roll every
+  # natural.interval_ticks for each online player and, on a hit, put a wild Mini's head
+  # on the ground min_distance–max_distance blocks away for everyone to hunt. It is NOT
+  # minted until somebody catches it — one that gets away burns no mint number. Empty by
+  # default — nothing drops until you configure it.
   loot:
     # Tag-pool odds by rarity (relative weights).
     rarity_weights: { LEGENDARY: 1, EPIC: 4, RARE: 15, UNCOMMON: 40, COMMON: 100 }
     # Chance (%) that a found Mini is Shiny; sources may override with shiny_percent.
     shiny_percent: 5
-    # Natural spawns: cadence, lifetime before it slips away, and distance from a player.
+    # The wild hunt: cadence, the find window, and how far from a player a Mini lands.
     # `chance_percent` on a NATURAL_SPAWN source is rolled once PER PLAYER PER TICK, so it
     # is not a rate on its own — with several people online the Minis-per-hour climbs with
     # the player count. The two throttles below say the thing you actually mean and hold
     # whatever the chance is: player_cooldown_minutes is how often ONE player can be
-    # targeted, max_live is how many unclaimed Minis may stand in the world at once.
-    # max_distance has a ceiling the plugin cannot see: a spot is only usable in a LOADED
-    # chunk, so anything past your server.properties view-distance (10 chunks = 160 blocks
-    # by default) silently finds nowhere to stand and no Mini ever spawns.
+    # targeted, max_live is how many uncaught Minis may stand in the world at once (1 =
+    # one hunt at a time, so everybody chases the same Mini).
+    # A spot is real ground (never a treetop or a lake bed), never within 16 blocks of any
+    # player, and only in a LOADED chunk — so keep max_distance inside your view-distance
+    # (10 chunks = 160 blocks by default) or no Mini ever finds anywhere to stand.
     natural:
       interval_ticks: 24000          # 20 minutes
-      despawn_minutes: 3             # the find window, announced in the spawn hint
-      min_distance: 96
-      max_distance: 128
-      player_cooldown_minutes: 120   # 0 disables; forgotten on restart
-      max_live: 2                    # 0 = no ceiling
+      despawn_minutes: 5             # the find window, announced in the first hint
+      min_distance: 48
+      max_distance: 96
+      player_cooldown_minutes: 90    # 0 disables; forgotten on restart
+      max_live: 1                    # 0 = no ceiling
+      # How a wild Mini shows itself, for EVERY rarity, on top of its rarity's own effects
+      # (minis.effects): a sparkle seen from `radius` blocks and a light. Its own radius
+      # because minis.effects.radius (16) is set for a trophy on a shelf, not a hunt.
+      effects: { radius: 32, particle: END_ROD, count: 3, interval_ticks: 20, light: 10 }
+      # The light column the LAST hint turns on: rarity-coloured dust `height` blocks tall,
+      # drawn every `interval_ticks` and sent to players far outside normal particle range.
+      beam: { height: 24, interval_ticks: 10 }
+      # Escalating hints, sent to everyone as the hunt's time runs down (at_percent of the
+      # find window). Placeholders: {rarity} {player} (who it appeared near) {minutes}
+      # {biome} {direction} (8-way, from where {player} was standing). Never coordinates or
+      # distances. enabled: false keeps a stage silent; the last stage still lights the beam.
+      # Players who log in mid-hunt get the hints so far.
+      hints:
+        - { at_percent: 0,  enabled: true, text: "A {rarity} Mini appeared near {player}! You have {minutes} minutes to find it." }
+        - { at_percent: 30, enabled: true, text: "Hint: the {rarity} Mini is in a {biome} biome." }
+        - { at_percent: 60, enabled: true, text: "Hint: it's to the {direction} of where {player} was." }
+        - { at_percent: 85, enabled: true, text: "Look for the light beam!" }
     lists: []
     #  - id: common_blocks
     #    entries:

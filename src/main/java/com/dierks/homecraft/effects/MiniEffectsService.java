@@ -5,6 +5,7 @@ import com.dierks.homecraft.block.CustomBlockType;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.mini.AnnounceService;
 import com.dierks.homecraft.mini.Grade;
+import com.dierks.homecraft.mini.Loot;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.mini.MiniService;
 import com.dierks.homecraft.storage.MiniListingDao;
@@ -93,6 +94,7 @@ public final class MiniEffectsService implements Listener {
         final ItemStack item;
         final String hologramText; // null = the Mini's own name
         final UUID standId;        // STAND only
+        boolean beam;              // WILD_SPAWN only: the final-hint light column
         UUID hologramId;
         UUID displayId;
         Location lightLoc;
@@ -121,6 +123,8 @@ public final class MiniEffectsService implements Listener {
     private final Map<String, Particle> particleCache = new HashMap<>();
     private final Set<String> warnedParticles = new HashSet<>();
     private BukkitTask task;
+    /** Ticks since start — the beam's clock, which must run whether or not anyone is near. */
+    private long clock;
 
     public MiniEffectsService(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -204,12 +208,44 @@ public final class MiniEffectsService implements Listener {
     }
 
     /**
-     * A naturally spawned wild-Mini head: its rarity effects, plus the "A wild Mini!" label —
-     * which, unlike every other hologram here, appears only within {@code wild_hologram_range}
-     * and is removed again when you leave. See {@link #wildLabel}.
+     * A wild-hunt head: the wild profile ({@code minis.loot.natural.effects} — its own, wider
+     * radius, a particle and a light for EVERY rarity) with the rarity's effects on top, plus the
+     * "A wild Mini!" label, which appears only within {@code wild_hologram_range} and is removed
+     * again when you leave (see {@link #wildLabel}).
+     *
+     * <p>Takes the blueprint rather than an item: a wild spawn is not minted until it is caught,
+     * so there is no copy to read the rarity, grade and finish from.
      */
-    public void registerWild(Location loc, ItemStack item, boolean justPlaced) {
-        register(blockKey(loc), Kind.WILD_SPAWN, loc, item, cfg().wildHologramText(), null, justPlaced);
+    public void registerWild(Location loc, MiniDef def, Grade grade, boolean shiny, boolean justPlaced) {
+        if (def == null || loc == null || loc.getWorld() == null) {
+            return;
+        }
+        String key = blockKey(loc);
+        Placed old = placed.remove(key);
+        if (old != null) {
+            teardown(old);
+        }
+        Placed p = new Placed(key, Kind.WILD_SPAWN, loc, def, grade == null ? Grade.STANDARD : grade, shiny,
+                null, cfg().wildHologramText(), null);
+        placed.put(key, p);
+        PluginConfig.MiniEffect fx = wildFx(def);
+        if (loc.getWorld().isChunkLoaded(p.bx >> 4, p.bz >> 4)) {
+            ensureLight(p, fx);
+            if (justPlaced) {
+                placeEffects(p, fx);
+            }
+        }
+    }
+
+    /** Switch a wild spawn's light beam on or off (the hunt turns it on at its final hint). */
+    public void setWildBeam(Location loc, boolean on) {
+        if (loc == null || loc.getWorld() == null) {
+            return;
+        }
+        Placed p = placed.get(blockKey(loc));
+        if (p != null && p.kind == Kind.WILD_SPAWN) {
+            p.beam = on;
+        }
     }
 
     /**
@@ -317,11 +353,16 @@ public final class MiniEffectsService implements Listener {
     private void tick() {
         PluginConfig.MiniEffects cfg = cfg();
         int interval = Math.max(1, cfg.tickInterval());
+        clock += interval;
         double r2 = cfg.radius() * cfg.radius();
         for (Placed p : new ArrayList<>(placed.values())) {
             if (!p.world.isChunkLoaded(p.bx >> 4, p.bz >> 4)) {
                 p.hologramId = null; // non-persistent entities went with the chunk
                 p.displayId = null;
+                continue;
+            }
+            if (p.kind == Kind.WILD_SPAWN) {
+                tickWild(p, cfg, interval);
                 continue;
             }
             ArmorStand stand = null;
@@ -334,9 +375,6 @@ public final class MiniEffectsService implements Listener {
                 stand = s;
             }
             Location base = baseLoc(p);
-            if (p.kind == Kind.WILD_SPAWN) {
-                wildLabel(p, cfg, base);
-            }
             if (!playerNear(p, base, r2)) {
                 continue;
             }
@@ -345,8 +383,7 @@ public final class MiniEffectsService implements Listener {
             // A Display Case always shows its Mini as a floating ItemDisplay (static for
             // Common/Uncommon, rotating for Rare+, full-bright for Legendary per config).
             boolean wantsDisplay = p.kind == Kind.DISPLAY_CASE;
-            if (p.kind != Kind.WILD_SPAWN
-                    && ((fx.hologram() && p.kind != Kind.PLACED_HEAD) || p.hologramText != null)) {
+            if ((fx.hologram() && p.kind != Kind.PLACED_HEAD) || p.hologramText != null) {
                 ensureHologram(p, fx, base, wantsDisplay);
             }
             if (wantsDisplay) {
@@ -363,6 +400,81 @@ public final class MiniEffectsService implements Listener {
                 shinyRing(base.clone().add(0, 1.0, 0));
             }
             ensureLight(p, fx);
+        }
+    }
+
+    /**
+     * One wild-hunt head, every tick.
+     *
+     * <p>The wild profile's radius (32 shipped) gates the sparkle, not {@code effects.radius}:
+     * sixteen blocks kept a spawn dark until somebody was nearly standing on it, and Common and
+     * Uncommon had no effects to show at all, so the commonest finds were the hardest to see.
+     * The beam ignores both radii — it is a long-distance particle meant to be seen across the
+     * map — and runs on its own clock.
+     */
+    private void tickWild(Placed p, PluginConfig.MiniEffects cfg, int interval) {
+        Location base = baseLoc(p);
+        wildLabel(p, cfg, base);
+        Loot.Natural natural = plugin.config().miniLoot().natural();
+        if (p.beam) {
+            Loot.Beam beam = natural.beam();
+            if (beam.height() > 0 && clock % Math.max(1, beam.intervalTicks()) < interval) {
+                beam(p, base, beam.height());
+            }
+        }
+        Loot.WildEffects wild = natural.effects();
+        if (!playerNear(p, base, wild.radius() * wild.radius())) {
+            return;
+        }
+        p.ticks += interval;
+        if (wild.particle() != null && wild.intervalTicks() > 0 && p.ticks % wild.intervalTicks() < interval) {
+            spawnParticle(wild.particle(), base.clone().add(0, 0.6, 0), wild.count(), 0.35);
+        }
+        PluginConfig.MiniEffect fx = cfg.of(p.def.rarity());
+        if (fx.particle() != null && fx.particleInterval() > 0 && p.ticks % fx.particleInterval() < interval) {
+            spawnParticle(fx.particle(), base.clone().add(0, 0.8, 0), fx.particleCount(), fx.particleOffset());
+        }
+        if (p.shiny && p.ticks % 20 < interval) {
+            shinyRing(base.clone().add(0, 1.0, 0));
+        }
+        ensureLight(p, wildFx(p.def));
+    }
+
+    /**
+     * The rarity's effect with the wild profile's light folded in: whichever is brighter, and
+     * always on when the wild profile asks for one — a Common has none of its own.
+     */
+    private PluginConfig.MiniEffect wildFx(MiniDef def) {
+        PluginConfig.MiniEffect fx = cfg().of(def.rarity());
+        int wildLight = plugin.config().miniLoot().natural().effects().light();
+        int level = Math.max(fx.light() ? fx.lightLevel() : 0, wildLight);
+        return new PluginConfig.MiniEffect(fx.particle(), fx.particleCount(), fx.particleInterval(),
+                fx.particleOffset(), fx.hologram(), fx.hologramColor(), level > 0, level, fx.rotate(),
+                fx.degreesPerSecond(), fx.fullBright(), fx.placeSound(), fx.placeParticle());
+    }
+
+    /**
+     * A column of rarity-coloured dust {@code height} blocks tall, sent with the long-distance
+     * flag so it reaches players well outside normal particle range. Six particles a block is
+     * plenty to read as a line from a distance and cheap enough to send every half-second.
+     */
+    private void beam(Placed p, Location base, int height) {
+        org.bukkit.Color colour;
+        try {
+            colour = org.bukkit.Color.fromRGB(plugin.miniService().style(p.def.rarity()).nameColor().value());
+        } catch (Throwable t) {
+            colour = org.bukkit.Color.WHITE;
+        }
+        Particle.DustOptions dust = new Particle.DustOptions(colour, 1.6f);
+        Location at = base.clone().add(0, 1.2, 0);
+        try {
+            for (double dy = 0; dy <= height; dy += 0.5) {
+                p.world.spawnParticle(Particle.DUST, at.clone().add(0, dy, 0), 1, 0.05, 0.05, 0.05, 0.0, dust, true);
+            }
+        } catch (Throwable t) {
+            if (warnedParticles.add("BEAM")) {
+                plugin.getLogger().warning("The wild hunt beam could not be drawn: " + t.getMessage());
+            }
         }
     }
 

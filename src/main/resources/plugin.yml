@@ -47,6 +47,8 @@ commands:
       /hcm tokens history <player> [n]  - admin: a player's last n token changes
       /hcm museum [id]       - browse the Mini Museum (browse-only; click a Mini for details)
       /hcm mini capturestand <miniId>  - capture a posed armor stand into a Mini
+      /hcm mini repair-escaped [confirm]  - admin: give back mint numbers old wild escapes burned
+      /hcm hunt spawn [rarity] [player]|status|clear  - admin: the wild hunt
     # NOTE: deliberately NOT gated on a single node — every subcommand checks its own
     # permission (hcm.admin, hcm.market.list, hcm.market.price, hcm.market.order, …), so
     # a player who may check a price can still do so without being handed the whole CLI.

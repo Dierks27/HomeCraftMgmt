@@ -27,9 +27,11 @@ public final class PackItemListener implements Listener {
         this.plugin = plugin;
     }
 
-    @EventHandler(ignoreCancelled = true)
+    // Not ignoreCancelled: Bukkit marks a right-click on AIR as cancelled from the start (there is
+    // no block to use), so an ignoreCancelled handler only ever saw packs clicked on a block.
+    @EventHandler
     public void onInteract(PlayerInteractEvent event) {
-        if (event.getHand() != EquipmentSlot.HAND) {
+        if (event.getHand() != EquipmentSlot.HAND || event.useItemInHand() == org.bukkit.event.Event.Result.DENY) {
             return;
         }
         Action action = event.getAction();
@@ -55,7 +57,7 @@ public final class PackItemListener implements Listener {
             player.sendMessage(Text.of("&cThis pack type no longer exists."));
             return;
         }
-        int cards = plugin.packs().packItems().legacyCardCount(held);
+        int cards = plugin.packs().packItems().cardCountOf(held);
         PackService.OpenResult r = plugin.packs().open(player, packId, plugin.packs().packItems().paidOf(held), cards);
         if (!r.ok()) {
             player.sendMessage(Text.of("&c" + r.error()));

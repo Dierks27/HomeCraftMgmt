@@ -49,11 +49,20 @@ public final class PackEditMenu extends Menu {
         init(54, Text.of("&5Pack: &f" + packId));
     }
 
+    /** A pack deleted in the meantime: go back rather than open an empty screen. */
+    @Override
+    public void open(Player viewer) {
+        if (plugin.packs().pack(packId) == null) {
+            back();
+            return;
+        }
+        super.open(viewer);
+    }
+
     @Override
     protected void build() {
         Pack.PackDef pack = plugin.packs().pack(packId);
         if (pack == null) {
-            back();
             return;
         }
         for (int i = 0; i < 18; i++) {

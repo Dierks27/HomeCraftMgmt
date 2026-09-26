@@ -49,6 +49,8 @@ public final class Keys {
     public static NamespacedKey PACK_ID;
     /** What a sealed pack was bought with: "money:100.0" or "tokens:50" (absent = given free). */
     public static NamespacedKey PACK_PAID;
+    /** How many Cards a sealed pack holds — fixed when it is made, whatever the pack type says later. */
+    public static NamespacedKey PACK_COUNT;
     /** On a Card Binder item: marks it as a binder (Byte). */
     public static NamespacedKey BINDER_ITEM;
 
@@ -126,6 +128,7 @@ public final class Keys {
         MINI_DISPLAY_ONLY = new NamespacedKey(plugin, "mini_display_only");
         PACK_ID = new NamespacedKey(plugin, "pack_id");
         PACK_PAID = new NamespacedKey(plugin, "pack_paid");
+        PACK_COUNT = new NamespacedKey(plugin, "pack_count");
         BINDER_ITEM = new NamespacedKey(plugin, "binder_item");
         MAILBOX_VARIANT = new NamespacedKey(plugin, "mailbox_variant");
         VENDING_UPPER = new NamespacedKey(plugin, "vending_upper");

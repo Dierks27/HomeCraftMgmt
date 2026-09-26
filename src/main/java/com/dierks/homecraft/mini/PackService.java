@@ -63,8 +63,13 @@ public final class PackService {
 
     /** A sealed pack item for a pack id, given free (crates, /hcm give) — or null if unknown. */
     public ItemStack packItem(String packId) {
+        return packItem(packId, null);
+    }
+
+    /** A sealed pack item carrying what it was bought with (null = free), or null if unknown. */
+    public ItemStack packItem(String packId, Paid paid) {
         Pack.PackDef def = pack(packId);
-        return def == null ? null : packItems.pack(def);
+        return def == null ? null : packItems.pack(def, paid);
     }
 
     public List<Pack.PackDef> packs() {
@@ -243,6 +248,10 @@ public final class PackService {
                     + "when there are Cards to give.");
         }
         int count = cards > 0 ? cards : def.cardCount();
+        if (count > 1 && paid != null && !canRefund(paid.currency())) {
+            // A short pack must be able to pay back its share; if that currency is offline, wait.
+            return OpenResult.fail("This pack can't be opened right now — try again in a bit.");
+        }
         List<String> awarded = new ArrayList<>();
         for (int slot = 0; slot < count; slot++) {
             String id = def.usesPool() ? rollPool(player, def.pool()) : rollOdds(player, def);
@@ -264,6 +273,10 @@ public final class PackService {
         return new OpenResult(true, null, awarded, refund);
     }
 
+    private boolean canRefund(Currency currency) {
+        return currency == Currency.TOKENS ? plugin.tokens() != null : plugin.economy().isEnabled();
+    }
+
     /** Hand back the missing Cards' share; returns what was refunded, for the chat line. */
     private String refund(Player player, int count, Paid paid, int awarded) {
         if (paid == null || awarded >= count) {
@@ -271,17 +284,31 @@ public final class PackService {
         }
         if (paid.currency() == Currency.TOKENS) {
             int back = PackOdds.refundTokens((int) Math.round(paid.amount()), count, awarded);
-            if (back > 0 && plugin.tokens() != null
-                    && plugin.tokens().grant(player.getUniqueId(), back, TokenService.Source.REFUND,
-                    "Pack short " + (count - awarded) + " Card(s)") >= 0) {
+            if (back <= 0) {
+                return null;
+            }
+            if (plugin.tokens() != null && plugin.tokens().grant(player.getUniqueId(), back,
+                    TokenService.Source.REFUND, "Pack short " + (count - awarded) + " Card(s)") >= 0) {
                 return back + " tokens";
             }
-            return null;
+            return refundFailed(player, back + " tokens");
         }
         double back = PackOdds.refundMoney(paid.amount(), count, awarded);
-        if (back > 0 && plugin.economy().isEnabled() && plugin.economy().deposit(player, back)) {
+        if (back <= 0) {
+            return null;
+        }
+        if (plugin.economy().isEnabled() && plugin.economy().deposit(player, back)) {
             return plugin.economy().format(back);
         }
+        return refundFailed(player, plugin.economy().format(back));
+    }
+
+    /** Never silently: the player is told, and the log says exactly what is owed to whom. */
+    private String refundFailed(Player player, String owed) {
+        plugin.getLogger().warning("Could not refund " + owed + " to " + player.getName() + " ("
+                + player.getUniqueId() + ") for a pack that came up short. Pay it by hand.");
+        player.sendMessage(com.dierks.homecraft.util.Text.of("&cThis pack came up short and we couldn't hand back "
+                + owed + " just now. An admin has been told."));
         return null;
     }
 

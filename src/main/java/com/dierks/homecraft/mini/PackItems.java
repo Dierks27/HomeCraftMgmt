@@ -78,6 +78,7 @@ public final class PackItems {
         meta.setEnchantmentGlintOverride(true);
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
         pdc.set(Keys.PACK_ID, PersistentDataType.STRING, def.id());
+        pdc.set(Keys.PACK_COUNT, PersistentDataType.INTEGER, n);
         if (paid != null && paid.amount() > 0) {
             pdc.set(Keys.PACK_PAID, PersistentDataType.STRING, paid.encode());
         }
@@ -100,6 +101,23 @@ public final class PackItems {
         }
         return Paid.decode(item.getItemMeta().getPersistentDataContainer().get(Keys.PACK_PAID,
                 PersistentDataType.STRING));
+    }
+
+    /**
+     * How many Cards this sealed pack holds: the count stamped on it when it was made, else what
+     * an older pack's lore promised, else 0 (use the pack type's count). A pack is a thing someone
+     * paid for — an admin changing the pack type later changes new packs, not this one.
+     */
+    public int cardCountOf(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) {
+            return 0;
+        }
+        Integer stamped = item.getItemMeta().getPersistentDataContainer().get(Keys.PACK_COUNT,
+                PersistentDataType.INTEGER);
+        if (stamped != null && stamped > 0) {
+            return stamped;
+        }
+        return legacyCardCount(item);
     }
 
     private static final java.util.regex.Pattern LEGACY_COUNT =

@@ -51,11 +51,20 @@ public final class PackDetailMenu extends Menu {
         init(54, Text.of("&6" + (def == null ? "Card Pack" : Text.plain(def.displayName()))));
     }
 
+    /** A pack deleted while someone was browsing: go back rather than open an empty screen. */
+    @Override
+    public void open(Player viewer) {
+        if (plugin.packs().pack(packId) == null) {
+            back();
+            return;
+        }
+        super.open(viewer);
+    }
+
     @Override
     protected void build() {
         Pack.PackDef p = plugin.packs().pack(packId);
         if (p == null) {
-            back();
             return;
         }
         for (int i = 0; i < 9; i++) {

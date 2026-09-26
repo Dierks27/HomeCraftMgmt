@@ -5,7 +5,7 @@ description: HomeCraft Management — dynamic market, online ordering, and Mini 
 authors: [Dierks27]
 website: https://github.com/Dierks27/HomeCraftMgmt
 
-# Paper 26.2 target. api-version selects the compatibility contract; '1.21' is a
+# Paper 26.2 / 26.3 target. api-version selects the compatibility contract; '1.21' is a
 # broadly-supported baseline. If the live 26.2 server logs that this value is
 # unsupported/legacy, bump it to the newest token that server accepts.
 api-version: '1.21'

@@ -1,48 +1,96 @@
 # HomeCraft Management
 
-A Minecraft **Paper** plugin. See [`DESIGN.md`](DESIGN.md) for the full spec and
-[`CLAUDE-CODE-PHASE1.md`](CLAUDE-CODE-PHASE1.md) for the Phase 1 brief.
+A Minecraft **Paper** plugin that turns a family survival server into a small town with a
+working economy: a computer in every house, a shop that ships, a market with real stock, a
+collectible line of numbered **Minis**, wild Minis to hunt, delivery jobs, and an **Arcade**
+that rewards playing. Built for a server where the youngest player is just learning to read,
+so every screen is short, plain and readable on **Bedrock** as well as Java.
 
-- **Target server:** Paper **26.2**, Java **25**
-- **Build:** Gradle (toolchain pinned to Java 25), shaded runnable jar
-- **Latest release:** [`v0.27.0-the-crate`](https://github.com/Dierks27/HomeCraftMgmt/releases/latest)
-- **Status:** the plugin is well past the numbered phases. Shipped and in use:
-  the **PC and its Sites**, the **finite-stock commodities market**, the **Crate
-  storefronts** (store, Marketplace, Pallets, Locker, real-time shipping), the
-  **Minis collectibles** line end to end (catalog, minting, provenance, Museum,
-  Vending Machine, Auction House, wild spawns, the Mini Printer), the **Arcade**
-  (achievements, daily/weekly quests, Prize Counter), the **web dashboard**, the
-  **in-game displays**, and the **Courier** — paid delivery runs with a placed
-  village house and a villager recipient at the far end.
-
-  *Still open:* the Courier's Fragile/Perishable cargo modifiers, a
-  complete-a-delivery quest verb, and Marketplace search + sort.
+- **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
+  code is also compiled and tested against the 26.3 API with no errors or removals)
+- **Version:** `0.31.0-arcade-overhaul`
+- **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
+- **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md)
 
 ---
 
-## What Phase 1 delivers
+## Features
 
-| Piece | What it does |
-|---|---|
-| **Skeleton** | `plugin.yml`, main class with clean enable/disable, `/hcm` command, LuckPerms-ready permission nodes. |
-| **Config** | `config.yml` matching the design schema. The `crafting` section is fully wired; `market`/`shipping`/`minis` are stubs. `/hcm reload` re-reads it live. |
-| **Persistence** | SQLite (JDBC) with a clean DAO layer and a forward-only migration framework. Phase 1 table: placed custom-block locations + owner. |
-| **Mini Workbench** | A placeable custom block (tagged vanilla `CRAFTER`). Right-click opens a custom crafting GUI. Placement + owner persisted. |
-| **The PC** | A custom item crafted at any crafting table (vanilla recipe under `recipes.pc`, also matched in a Printer's craft grid). Placeable; right-click opens the **Crate** store. |
-| **Recipes** | Fully **data-driven and reloadable** — nothing hardcoded. Every craftable block (PC, Printer, Vending Machine, Pallet, Arcade, eight Mailbox colours) has a vanilla SHAPED recipe under `recipes:` in `config.yml`; the retired Workbench has none. |
-| **Protection** | Towny + WorldGuard build-permission checks for place/use/break, via reflection so they stay optional soft-depends and degrade gracefully. |
-| **Finite-Stock Market** (Phase 2.5) | Real conserved stock per commodity (sell adds, buy subtracts, floored at 0), out-of-stock enforcement, scarcity pricing (empty→ceiling, full→floor) with buy/sell spread, per-item starting stock, daily anti-whale sell limit, and a price-history log — all persisted to SQLite, Vault-backed. Commands: `/hcm market list|price|history|buy|sell`. |
+### The PC and its Sites
+A placeable computer. Right-click opens a launcher of **Sites**: the Crate store, Sell to
+Crate, the Marketplace, Card Packs, the Mini Museum, Mailbox & Orders, the Courier job board
+and the How It Works **Guide**.
 
-### Verified build coordinates
+### Economy
+- **Finite-stock market:** real conserved stock per commodity; selling adds to it and buying
+  takes from it. Scarcity pricing with a buy/sell spread, daily per-item caps, daily money
+  limits and a price history. All of it is Vault-backed and stored in SQLite.
+- **Crate storefront:** order with real-time shipping tiers (Rush and slower). Orders wait in
+  the **Locker** if you're offline or your bag is full.
+- **Marketplace & Pallets:** player-to-player selling through placeable Pallet seller boxes,
+  auto-sorted into departments, with commission and an admin ban list.
+- **Mailboxes** in eight colours, the **Auction House** for Minis, and **in-game displays**
+  (signs, holograms, map TVs) plus a web **dashboard**.
+- **Safeguards:** the economy is sandboxed per world (no creative-world money), protection
+  hooks cover Towny and WorldGuard, and the database is backed up automatically before every
+  migration and on a schedule.
 
-- **Paper API:** `io.papermc.paper:paper-api:26.2.build.+` — verified against
-  PaperMC's published javadocs (`26.2.build.107-stable`). This artifact is
-  published **only** on `https://repo.papermc.io/repository/maven-public/`
-  (it is **not** on Maven Central).
-- **Java toolchain:** pinned to **25** (Paper 26.2's required runtime).
-- `plugin.yml` `api-version` is set to `1.21` (a broadly-supported baseline).
-  If the live 26.2 server logs it as unsupported/legacy, bump it to the newest
-  token that server accepts.
+### Minis — numbered collectibles
+- **Numbered and capped:** every Mini has a mint number, a grade (Standard up to Mint) and
+  sometimes a **Shiny** finish, with provenance tracked from its first owner.
+- **Card Packs:** a pack gives a **Card**, and a Card prints into a Mini at the **Mini
+  Printer** using filament.
+  - Packs roll by rarity odds, so new Minis join automatically, and show "Sold out" when
+    nothing is left.
+  - Packs sell for dollars or tokens.
+  - The shop shows each pack's odds, what's inside, and which Minis you're still missing.
+- **Where Minis live:** the **Museum** shows every Mini there is. Display Cases, Vending
+  Machines, the Auction House and a Card Binder hold them.
+- **The wild hunt:** now and then a Mini appears in the wild near a player.
+  - Everyone hears about it, then hints follow: the biome, then a direction, then a light beam.
+  - Whoever reaches it first catches it. It's only minted when it's caught, so Minis that get
+    away never waste a number.
+  - The Mini Radar and the Mini Lure help.
+
+### The Arcade — tokens buy fun
+Tokens are **earned by playing and never become dollars**.
+- **Earning:** a login streak, playtime, three daily and two weekly **quests** (drawn per
+  player from a pool: fishing, farming, cooking, mining, biomes, deliveries…), **26
+  achievements**, wild hunts and Card trade-in.
+  - Days roll over at **local midnight** (`clock.time_zone`).
+  - Every token change is written to an auditable ledger.
+- **The hub:** one screen with your **Wallet**, the games, the Prize Counter, Card Packs,
+  Quests, Achievements and How It Works. A live countdown shows any wild Mini that's out.
+- **Games:**
+  - **Crates** spin and land on their prize.
+  - The **Scratch Ticket** has three squares to scratch and a growing jackpot.
+  - The Rare Card is a once-a-week pity pick.
+- **Prize Counter:** boosts (speed, haste, night vision, water breathing, luck), the Mini
+  Radar and Lure, a Firework Show, particle trails, hats, perks (extra homes and `/hat` via
+  LuckPerms and EssentialsX), and a numbered Arcade Trophy.
+- **Prizes can't be sold:** everything bought with tokens is tagged and refused by every
+  money path.
+- **Animations are only a show:** every result is decided and paid first, so closing early
+  just prints the result. Bedrock players get shorter animations and plain icons.
+
+### Courier — delivery jobs
+Take a run from the PC's job board, carry the parcel to a village house built at the far end,
+and get paid by distance and how you travelled (on foot pays more than by elytra).
+
+### Data-driven and safe to upgrade
+- **Config-driven:** recipes, skins, prices, odds, prizes, quests and achievements all live in
+  `config.yml` and reload live.
+- **Upgrades keep your edits:** a numbered config migration (`config_revision`) changes a value
+  only while it still holds the shipped default, and warns about anything an admin changed.
+- **Tested:** 145 unit tests cover migrations, odds, the ledger, mint numbering, player-facing
+  copy and Bedrock glyphs.
+
+### Build coordinates
+- **Paper API:** `io.papermc.paper:paper-api:26.2.build.107-stable`, which is published only
+  on `https://repo.papermc.io/repository/maven-public/` (not Maven Central).
+- **Java toolchain:** 25.
+- **Soft dependencies:** Vault, Towny, WorldGuard/WorldEdit, LuckPerms, PlaceholderAPI and
+  Floodgate. All are optional, and the plugin degrades gracefully without them.
 
 ---
 
@@ -56,7 +104,7 @@ auto-provision it), and network access to `repo.papermc.io`.
 # -> build/libs/HomeCraftManagement-<version>.jar   (shaded; SQLite bundled)
 ```
 
-Drop the jar into your server's `plugins/` folder and start Paper 26.2.
+Drop the jar into your server's `plugins/` folder and start Paper (26.2 or 26.3).
 
 > **Note on this repo's automated environment:** the sandbox that scaffolded
 > this project **cannot** compile the jar — its egress policy returns **403**

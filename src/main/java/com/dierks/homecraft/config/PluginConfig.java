@@ -385,7 +385,9 @@ public final class PluginConfig {
     /** What a Prize Counter row hands over. Never money, never a market good (§11 #9). */
     public enum PrizeType {
         BOOST, RADAR, LURE, FIREWORK, TRAIL, HAT, COMMAND, TROPHY,
-        FILAMENT, BLOCK, PACK, PITY, TRADE_IN, QUEST_REROLL
+        FILAMENT, BLOCK, PACK, PITY, TRADE_IN, QUEST_REROLL,
+        /** One more Essentials home on top of the player's own, as many times as its limit allows. */
+        HOME_SLOT
     }
 
     /** How often a limit resets: per local day, per local week, or never. */
@@ -433,10 +435,21 @@ public final class PluginConfig {
                         int amount, org.bukkit.DyeColor color, String blockKey, String packId,
                         String effect, int amplifier, int minutes, String particle, int days, String texture,
                         List<String> commands, List<String> requiresPlugins, String ownedIfPermission,
-                        String requiresPrize) {
+                        String requiresPrize, List<Integer> costs) {
         /** True if the buyer picks the filament colour at purchase time. */
         public boolean choosesColor() {
             return type == PrizeType.FILAMENT && color == null;
+        }
+
+        /**
+         * The price of the buyer's next one: {@code costs[bought]} when the row lists a price per
+         * purchase (the last price repeats), else {@code cost_tokens}.
+         */
+        public int priceAfter(int bought) {
+            if (costs == null || costs.isEmpty()) {
+                return costTokens;
+            }
+            return costs.get(Math.min(Math.max(0, bought), costs.size() - 1));
         }
     }
 
@@ -1494,14 +1507,23 @@ public final class PluginConfig {
         } catch (IllegalArgumentException e) {
             log.warning("Arcade prize '" + id + "' has unknown type '" + row.get("type") + "' — skipped. Use boost, "
                     + "radar, lure, firework, trail, hat, command, trophy, filament, block, pack, pity, "
-                    + "trade_in or quest_reroll.");
+                    + "trade_in, quest_reroll or home_slot.");
             return null;
         }
         String display = str(row.get("display"), id);
         List<String> description = stringList(row.get("description"));
         boolean enabled = !(row.get("enabled") instanceof Boolean b) || b;
 
-        int cost = (int) number(row.get("cost_tokens"), type == PrizeType.PITY ? pityTokens : 0);
+        List<Integer> costs = new ArrayList<>();
+        if (row.get("costs") instanceof List<?> cl) {
+            for (Object o : cl) {
+                if (o instanceof Number n && n.intValue() > 0) {
+                    costs.add(n.intValue());
+                }
+            }
+        }
+        int cost = (int) number(row.get("cost_tokens"), type == PrizeType.PITY ? pityTokens
+                : costs.isEmpty() ? 0 : costs.get(0));
         if (cost <= 0 && type != PrizeType.TRADE_IN) {
             log.warning("Arcade prize '" + id + "' costs " + cost + " tokens — a prize must cost "
                     + "something. Skipped.");
@@ -1622,7 +1644,8 @@ public final class PluginConfig {
         }
         return new Prize(id, tab, display, description, Math.max(0, cost), icon, type, enabled, limit,
                 amount, color, blockKey, packId, effect, amplifier, minutes, particle, days,
-                headTexture == null ? "" : headTexture.trim(), commands, requiresPlugins, ownedIf, requiresPrize);
+                headTexture == null ? "" : headTexture.trim(), commands, requiresPlugins, ownedIf, requiresPrize,
+                List.copyOf(costs));
     }
 
     private static PrizeTab defaultTab(PrizeType type) {
@@ -1630,7 +1653,7 @@ public final class PluginConfig {
             case BOOST, QUEST_REROLL -> PrizeTab.BOOSTS;
             case RADAR, LURE -> PrizeTab.HUNT;
             case FIREWORK, TRAIL, HAT -> PrizeTab.COSMETICS;
-            case COMMAND -> PrizeTab.PERKS;
+            case COMMAND, HOME_SLOT -> PrizeTab.PERKS;
             case TROPHY -> PrizeTab.TROPHIES;
             case FILAMENT, BLOCK, PACK, PITY, TRADE_IN -> PrizeTab.MINIS;
         };
@@ -1647,6 +1670,7 @@ public final class PluginConfig {
             case TRAIL -> Material.BLAZE_POWDER;
             case HAT -> Material.LEATHER_HELMET;
             case COMMAND -> Material.NAME_TAG;
+            case HOME_SLOT -> Material.RED_BED;
             case TROPHY -> Material.GOLD_BLOCK;
             case FILAMENT -> Material.WHITE_DYE;
             case BLOCK -> Material.CHEST;

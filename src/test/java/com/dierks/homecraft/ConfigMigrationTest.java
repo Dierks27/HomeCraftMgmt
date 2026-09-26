@@ -1337,4 +1337,72 @@ class ConfigMigrationTest {
         assertEquals(500, intAt(byId.get("holiday"), "price"));
         assertTrue(log.stream().anyMatch(l -> l.contains("packs → holiday count 5 → 1")), "logged: " + log);
     }
+
+    // ---- revision 16: +1 Home ------------------------------------------------------------
+
+    private static Map<String, Object> homeRow(String id, int cost, String tier) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", id);
+        m.put("tab", "PERKS");
+        m.put("cost_tokens", cost);
+        m.put("type", "command");
+        m.put("commands", List.of("lp user %player% permission set essentials.sethome.multiple." + tier + " true"));
+        return m;
+    }
+
+    /** A 0.31.0 file: the two shipped home rows, no home_slot. */
+    private static YamlConfiguration rev15Homes() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("config_revision", 15);
+        List<Map<String, Object>> prizes = new ArrayList<>();
+        for (Map<?, ?> row : onDisk.getMapList("arcade.prizes")) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            row.forEach((k, v) -> m.put(String.valueOf(k), v));
+            if ("home_slot".equals(m.get("id"))) {
+                prizes.add(homeRow("home_2", 400, "homes2"));
+                prizes.add(homeRow("home_3", 600, "homes3"));
+            } else {
+                prizes.add(m);
+            }
+        }
+        onDisk.set("arcade.prizes", prizes);
+        return onDisk;
+    }
+
+    @Test
+    void theShippedHomeRowsBecomeOneHomeSlotRow() throws Exception {
+        YamlConfiguration onDisk = rev15Homes();
+
+        List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals(ids(bundled(), "arcade.prizes"), ids(onDisk, "arcade.prizes"),
+                "home_slot sits where home_2 was; the list matches a fresh install");
+        assertTrue(log.stream().anyMatch(l -> l.contains("+1 Home")), "logged: " + log);
+        assertTrue(log.stream().noneMatch(l -> l.startsWith(HomeCraftManagement.WARN)), "nothing to warn: " + log);
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"), "a second pass is a no-op");
+    }
+
+    @Test
+    void anEditedHomeRowIsKeptWithAWarning() throws Exception {
+        YamlConfiguration onDisk = rev15Homes();
+        List<Map<String, Object>> prizes = new ArrayList<>();
+        for (Map<?, ?> row : onDisk.getMapList("arcade.prizes")) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            row.forEach((k, v) -> m.put(String.valueOf(k), v));
+            if ("home_3".equals(m.get("id"))) {
+                m.put("cost_tokens", 800); // their own price
+            }
+            prizes.add(m);
+        }
+        onDisk.set("arcade.prizes", prizes);
+
+        List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        List<String> ids = ids(onDisk, "arcade.prizes");
+        assertTrue(ids.contains("home_slot"));
+        assertTrue(ids.contains("home_3"), "their row stays");
+        assertFalse(ids.contains("home_2"), "ours goes");
+        assertTrue(log.stream().anyMatch(l -> l.startsWith(HomeCraftManagement.WARN) && l.contains("home_3")),
+                "named: " + log);
+    }
 }

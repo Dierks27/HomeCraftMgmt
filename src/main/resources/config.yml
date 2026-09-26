@@ -59,7 +59,7 @@ clock:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 15
+config_revision: 16
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -1121,10 +1121,15 @@ arcade:
     - { id: name_color_aqua, tab: COSMETICS, display: "&bAqua Name", description: ["Your name in aqua."], cost_tokens: 150, icon: { texture: "", material: LIGHT_BLUE_DYE }, type: command, enabled: false, commands: ["lp user %player% meta set hcm_name_color &b"], requires_plugins: [LuckPerms], limit: { per: LIFETIME, count: 1 } }
     - { id: name_color_gold, tab: COSMETICS, display: "&6Gold Name", description: ["Your name in gold."], cost_tokens: 150, icon: { texture: "", material: ORANGE_DYE }, type: command, enabled: false, commands: ["lp user %player% meta set hcm_name_color &6"], requires_plugins: [LuckPerms], limit: { per: LIFETIME, count: 1 } }
     - { id: name_color_pink, tab: COSMETICS, display: "&dPink Name", description: ["Your name in pink."], cost_tokens: 150, icon: { texture: "", material: PINK_DYE }, type: command, enabled: false, commands: ["lp user %player% meta set hcm_name_color &d"], requires_plugins: [LuckPerms], limit: { per: LIFETIME, count: 1 } }
-    # -- Perks (EssentialsX + LuckPerms). home_2/home_3 need homes2/homes3 tiers under
-    #    sethome-multiple in the Essentials config — see the PR / README.
-    - { id: home_2, tab: PERKS, display: "&aSecond Home", description: ["Set a second /home."], cost_tokens: 400, icon: { texture: "", material: RED_BED }, type: command, commands: ["lp user %player% permission set essentials.sethome.multiple.homes2 true"], owned_if_permission: essentials.sethome.multiple.homes2, requires_plugins: [LuckPerms, Essentials], limit: { per: LIFETIME, count: 1 } }
-    - { id: home_3, tab: PERKS, display: "&aThird Home", description: ["Set a third /home."], cost_tokens: 600, icon: { texture: "", material: LIME_BED }, type: command, commands: ["lp user %player% permission set essentials.sethome.multiple.homes3 true"], owned_if_permission: essentials.sethome.multiple.homes3, requires_prize: home_2, requires_plugins: [LuckPerms, Essentials], limit: { per: LIFETIME, count: 1 } }
+    # -- Perks (EssentialsX + LuckPerms).
+    # home_slot: +1 home on top of whatever the player already has (a mayor with 5 gets a 6th).
+    #   Essentials gives a player their HIGHEST sethome-multiple tier, never the sum, so the perk
+    #   works out the player's own limit, adds the slots bought, and grants one tier hcm_<total>
+    #   through LuckPerms. Each total needs its tier under sethome-multiple in
+    #   plugins/Essentials/config.yml — e.g. hcm_2: 2, hcm_3: 3 … up to your biggest base + 2.
+    #   A missing tier refuses the purchase (nothing charged) and logs the exact line to add.
+    #   costs: the price of the 1st, 2nd, … one. Hidden for unlimited players and bases of 20+.
+    - { id: home_slot, tab: PERKS, display: "&a+1 Home", description: ["One more /home, on top of", "the homes you already have."], costs: [400, 600], icon: { texture: "", material: RED_BED }, type: home_slot, requires_plugins: [LuckPerms, Essentials], limit: { per: LIFETIME, count: 2 } }
     - { id: hat_command, tab: PERKS, display: "&e/hat", description: ["Wear the block in your hand", "on your head with /hat."], cost_tokens: 300, icon: { texture: "", material: CARVED_PUMPKIN }, type: command, commands: ["lp user %player% permission set essentials.hat true"], owned_if_permission: essentials.hat, requires_plugins: [LuckPerms, Essentials], limit: { per: LIFETIME, count: 1 } }
     # Chat titles need your chat format / TAB to show %luckperms_meta_hcm_title% — off until they do.
     - { id: title_explorer, tab: PERKS, display: "&aTitle: Explorer", description: ["Show [Explorer] in chat."], cost_tokens: 500, icon: { texture: "", material: MAP }, type: command, enabled: false, commands: ["lp user %player% meta set hcm_title Explorer"], requires_plugins: [LuckPerms], limit: { per: LIFETIME, count: 1 } }

@@ -46,6 +46,8 @@ commands:
       /hcm arcade odds       - admin: Scratch Ticket RTP and each crate's value
       /hcm trail [name|off]  - turn your particle trail on or off
       /hcm achievements      - your achievements
+      /hcm config reset <section> [confirm]  - admin: put arcade/packs/hunt/effects/clock back to defaults
+      /hcm homes refresh [player]  - admin: recheck the +1 Home perk
       /hcm guide [page]      - How It Works (tokens, minis, wild, arcade)
       /hcm tokens            - show your Arcade token balance
       /hcm tokens give|set|take <player> <n>  - admin: adjust tokens

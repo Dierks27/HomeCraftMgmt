@@ -83,6 +83,39 @@ public final class PrizeService {
     }
 
     /**
+     * The rows this player sees on one tab: {@link #visible(Prize)}, and a +1 Home row only for
+     * someone it can add to (not unlimited, a base under 20, Essentials and LuckPerms present).
+     */
+    public List<Prize> visible(Player player, PluginConfig.PrizeTab tab) {
+        List<Prize> out = new ArrayList<>();
+        for (Prize p : visible(tab)) {
+            if (visibleTo(player, p)) {
+                out.add(p);
+            }
+        }
+        return out;
+    }
+
+    public boolean visibleTo(Player player, Prize p) {
+        if (!visible(p)) {
+            return false;
+        }
+        return p.type() != PrizeType.HOME_SLOT || (plugin.homes() != null && plugin.homes().offered(player));
+    }
+
+    /** What this player's next one costs: a +1 Home gets dearer with each one bought. */
+    public int price(UUID player, Prize p) {
+        if (p.costs() == null || p.costs().isEmpty()) {
+            return p.costTokens();
+        }
+        try {
+            return p.priceAfter(dao.purchases(player, p.id(), "life"));
+        } catch (SQLException e) {
+            return p.priceAfter(Integer.MAX_VALUE);
+        }
+    }
+
+    /**
      * True if the player already has this for good: the permission it grants, or a lifetime
      * limit already used up.
      */
@@ -179,7 +212,7 @@ public final class PrizeService {
         if (!plugin.sandbox().check(player, "prize purchase " + p.id())) {
             return Outcome.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
         }
-        if (!visible(p)) {
+        if (!visibleTo(player, p)) {
             return Outcome.fail("That isn't for sale right now.");
         }
         String locked = lockedBecause(player, p);
@@ -196,8 +229,9 @@ public final class PrizeService {
                     : per == LimitPer.WEEK ? "this week" : "good") + ".");
         }
         int have = plugin.tokens().balance(id);
-        if (have < p.costTokens()) {
-            return Outcome.fail("You need " + (p.costTokens() - have) + " more tokens.");
+        int cost = price(id, p);
+        if (have < cost) {
+            return Outcome.fail("You need " + (cost - have) + " more tokens.");
         }
         Outcome out = switch (p.type()) {
             case PITY -> plugin.arcade().pity(player);
@@ -275,6 +309,7 @@ public final class PrizeService {
      */
     private Outcome deliver(Player player, Prize p, DyeColor color, boolean charge, int daysOverride) {
         UUID id = player.getUniqueId();
+        int cost = price(id, p);
         ItemStack item = null;
         String label = p.display();
         long trophyNumber = 0;
@@ -324,24 +359,32 @@ public final class PrizeService {
                 // Bought here, it carries its price, so a pack that comes up short pays back.
                 item = plugin.packs().packItem(p.packId(), charge
                         ? new com.dierks.homecraft.mini.PackItems.Paid(
-                        com.dierks.homecraft.mini.PackItems.Currency.TOKENS, p.costTokens()) : null);
+                        com.dierks.homecraft.mini.PackItems.Currency.TOKENS, cost) : null);
             }
             case TRAIL, COMMAND -> {
                 // nothing to build: applied after the charge
+            }
+            case HOME_SLOT -> {
+                // Everything that could refuse is checked here, before the charge.
+                String refused = plugin.homes() == null ? "That isn't for sale right now."
+                        : plugin.homes().refuseReason(player);
+                if (refused != null) {
+                    return Outcome.fail(refused);
+                }
             }
             default -> {
                 return Outcome.fail("That prize can't be given like this.");
             }
         }
-        if (charge && !plugin.tokens().spend(id, p.costTokens(), TokenService.Source.PRIZE, p.display())) {
-            return Outcome.fail("You need " + p.costTokens() + " tokens.");
+        if (charge && !plugin.tokens().spend(id, cost, TokenService.Source.PRIZE, p.display())) {
+            return Outcome.fail("You need " + cost + " tokens.");
         }
         switch (p.type()) {
             case TRAIL -> {
                 int days = daysOverride > 0 ? daysOverride : p.days();
                 if (!plugin.trails().grant(player, p, days)) {
                     if (charge) {
-                        plugin.tokens().grant(id, p.costTokens(), TokenService.Source.REFUND, p.display());
+                        plugin.tokens().grant(id, cost, TokenService.Source.REFUND, p.display());
                     }
                     return Outcome.fail("Couldn't add that trail — nothing charged. Tell an admin.");
                 }
@@ -351,10 +394,16 @@ public final class PrizeService {
             case COMMAND -> {
                 if (!runCommands(player, p)) {
                     if (charge) {
-                        plugin.tokens().grant(id, p.costTokens(), TokenService.Source.REFUND, p.display());
+                        plugin.tokens().grant(id, cost, TokenService.Source.REFUND, p.display());
                     }
                     return Outcome.fail("That didn't work — nothing charged. Tell an admin.");
                 }
+                item = icon(p);
+            }
+            case HOME_SLOT -> {
+                int now = plugin.homes().total(player) + 1;
+                plugin.homes().refresh(player, 1); // this slot is recorded right after
+                label = "&a+1 Home &7(you have " + now + " now)";
                 item = icon(p);
             }
             case TROPHY -> {

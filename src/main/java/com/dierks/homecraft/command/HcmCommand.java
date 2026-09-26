@@ -155,6 +155,48 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
             case "tokens" -> handleTokens(sender, args);
+            case "config" -> {
+                if (denyUnless(sender, "hcm.admin")) {
+                    return true;
+                }
+                if (args.length < 3 || !args[1].equalsIgnoreCase("reset")) {
+                    sender.sendMessage(Text.of("&7Usage: /hcm config reset <arcade|arcade.<part>|packs|minis.loot.natural"
+                            + "|minis.effects|clock> [confirm]"));
+                    return true;
+                }
+                boolean confirm = args.length >= 4 && args[3].equalsIgnoreCase("confirm");
+                for (String line : plugin.resetConfigSection(args[2], confirm)) {
+                    sender.sendMessage(Text.of(line));
+                }
+            }
+            case "homes" -> {
+                if (denyUnless(sender, "hcm.admin")) {
+                    return true;
+                }
+                if (args.length < 2 || !args[1].equalsIgnoreCase("refresh")) {
+                    sender.sendMessage(Text.of("&7Usage: /hcm homes refresh [player]"));
+                    return true;
+                }
+                var homes = plugin.homes();
+                if (homes == null || !homes.available()) {
+                    sender.sendMessage(Text.of("&cThe +1 Home perk needs LuckPerms and an Essentials config.yml."));
+                    return true;
+                }
+                homes.reload();
+                if (args.length >= 3) {
+                    Player target = Bukkit.getPlayerExact(args[2]);
+                    if (target == null) {
+                        sender.sendMessage(Text.of("&cPlayer '" + args[2] + "' is not online."));
+                        return true;
+                    }
+                    homes.refresh(target, 0);
+                    sender.sendMessage(Text.of("&a" + target.getName() + ": base " + homes.base(target) + " + bought "
+                            + homes.bonus(target.getUniqueId()) + " = " + homes.total(target) + " homes. Checked."));
+                } else {
+                    homes.refreshAll();
+                    sender.sendMessage(Text.of("&aChecked every online player's homes."));
+                }
+            }
             case "achievements", "achievement" -> {
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage(Text.of("&cOnly players have achievements."));
@@ -1431,10 +1473,19 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             if (sender.hasPermission("hcm.admin")) {
-                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "backup", "hunt", "trail", "achievements", "guide");
+                addMatches(out, args[0], "admin", "reload", "give", "market", "display", "mini", "museum", "printer", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "backup", "hunt", "trail", "achievements", "guide", "config", "homes");
             } else {
                 addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "trail", "achievements", "guide");
             }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("config") && sender.hasPermission("hcm.admin")) {
+            addMatches(out, args[1], "reset");
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("config") && sender.hasPermission("hcm.admin")) {
+            addMatches(out, args[2], "arcade", "arcade.quests", "arcade.prizes", "arcade.crates", "arcade.achievements",
+                    "arcade.lotto", "packs", "minis.loot.natural", "minis.effects", "clock");
+        } else if (args.length == 4 && args[0].equalsIgnoreCase("config") && sender.hasPermission("hcm.admin")) {
+            addMatches(out, args[3], "confirm");
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("homes") && sender.hasPermission("hcm.admin")) {
+            addMatches(out, args[1], "refresh");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("guide")) {
             addMatches(out, args[1], "tokens", "minis", "wild", "arcade");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("museum")) {

@@ -626,8 +626,23 @@ public final class Database {
                 key   TEXT    PRIMARY KEY,
                 value INTEGER NOT NULL
             );
-            """
+            """,
+            // v31 — the +1 Home perk replaces the Second Home / Third Home rows. Everyone who
+            // bought either is credited that many home_slot purchases (at most two, the new
+            // row's lifetime limit), so what they paid for carries over as slots on top of
+            // their own homes. The old rows' purchases are kept: they are how the perk knows
+            // which homes2/homes3 nodes it granted, and so may clear.
+            Database.CREDIT_HOME_SLOTS
     };
+
+    /** Schema v31's one statement, named so a test can run it against seeded rows. */
+    static final String CREDIT_HOME_SLOTS = """
+            INSERT OR IGNORE INTO prize_purchases (player, prize_id, period_key, count)
+                SELECT player, 'home_slot', 'life', MIN(2, SUM(count))
+                FROM prize_purchases
+                WHERE prize_id IN ('home_2', 'home_3') AND period_key = 'life' AND count > 0
+                GROUP BY player
+            """;
 
     /** One unit of work run inside {@link #transaction}. */
     @FunctionalInterface

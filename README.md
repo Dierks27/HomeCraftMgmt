@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.31.0-arcade-overhaul`
+- **Version:** `0.31.1-homes-and-resets`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md)
 
@@ -405,9 +405,15 @@ player-facing guide, also in game with `/hcm guide`).
 | `/hcm hunt spawn [rarity] [player]` | admin | A wild Mini now — with no player named it lands like a natural roll (a Mini Lure wins) |
 | `/hcm hunt status\|clear` | admin | Live hunts; clear them |
 | `/hcm mini repair-escaped [confirm]` | admin | Give back mint numbers old wild escapes burned (dry run first) |
+| `/hcm config reset <section> [confirm]` | admin | Put `arcade` (or `arcade.<part>`), `packs`, `minis.loot.natural`, `minis.effects` or `clock` back to the bundled defaults. Dry run without `confirm`; snapshots config.yml first |
+| `/hcm homes refresh [player]` | admin | Recheck the +1 Home perk (re-reads Essentials' `sethome-multiple`) |
 
-**Known open item:** the market's and the Courier's daily money limits roll over at
-UTC midnight, while everything token-side uses `clock.time_zone` (DESIGN §11 #10).
+Every daily limit — the Arcade's, the market's and the Courier's — rolls over at local
+midnight (`clock.time_zone`).
+
+**+1 Home** (Prize Counter › Perks) adds to the homes a player already has. It needs a tier
+per total under `sethome-multiple` in `plugins/Essentials/config.yml` (`hcm_2: 2`, `hcm_3: 3`,
+… up to your biggest base + 2); a missing one refuses the purchase and logs the line to add.
 
 ---
 

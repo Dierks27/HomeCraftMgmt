@@ -66,9 +66,9 @@ public final class HomeCraftManagement extends JavaPlugin {
      * selling) leave the shipped pool. 13 = the wild hunt retune: closer, longer, one at a time.
      * 14 = the token economy: no money in the Arcade, Prize Counter tabs, quest pools, and the
      * achievements list. 15 = packs hold one Card and roll by rarity odds; the shipped prices
-     * drop to $100 / $300.
+     * drop to $100 / $300. 16 = the Second/Third Home rows become one "+1 Home" row.
      */
-    static final int CONFIG_REVISION = 15;
+    static final int CONFIG_REVISION = 16;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -169,6 +169,7 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.display.DisplayService displayService;
     private com.dierks.homecraft.arcade.TokenService tokens;
     private com.dierks.homecraft.arcade.PrizeService prizes;
+    private com.dierks.homecraft.arcade.homes.HomeService homes;
     private com.dierks.homecraft.arcade.TrailService trails;
     private com.dierks.homecraft.arcade.RadarService radar;
     private com.dierks.homecraft.arcade.ArcadeService arcade;
@@ -324,6 +325,11 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.hunt.HuntListener(this), this);
         getServer().getPluginManager().registerEvents(trails, this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.arcade.PrizeItemListener(this), this);
+        // The +1 Home perk. LuckPerms and Essentials load before us (softdepend), so both the
+        // tiers and the API are there to read now.
+        this.homes = new com.dierks.homecraft.arcade.homes.HomeService(this);
+        homes.reload();
+        getServer().getPluginManager().registerEvents(homes, this);
         getServer().getPluginManager().registerEvents(
                 new com.dierks.homecraft.arcade.QuestListener(this, placedNatural), this);
         getServer().getPluginManager().registerEvents(effects, this);
@@ -522,6 +528,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
         if (courier != null) {
             courier.start(); // re-arm the courier expiry sweep under any new config
+        }
+        if (homes != null) {
+            homes.reload(); // re-read Essentials' sethome-multiple tiers
+            homes.refreshAll();
         }
     }
 
@@ -900,6 +910,11 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (from < 15) {
             // Packs hold one Card and roll by rarity odds. See PackConfigMigration.
             PackConfigMigration.apply(c, log);
+        }
+        if (from < 16) {
+            // Second/Third Home become "+1 Home", which adds to what a player has. See
+            // HomeSlotMigration.
+            HomeSlotMigration.apply(c, log);
         }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);
@@ -1438,6 +1453,83 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
     }
 
+    /**
+     * {@code /hcm config reset <section> [confirm]}: without confirm, list what would change;
+     * with it, snapshot config.yml, put the section back to the bundled defaults (comments and
+     * all), save and reload. Only {@link ConfigReset#ALLOWED} sections: catalogs are the admin's.
+     *
+     * @return the lines to show, as '&amp;'-coded strings
+     */
+    public java.util.List<String> resetConfigSection(String section, boolean confirm) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        String path = ConfigReset.normalise(section);
+        if (!ConfigReset.allowed(path)) {
+            out.add("&c" + (path.isEmpty() ? "Name a section." : "'" + path + "' can't be reset.")
+                    + " &7Allowed: arcade (or arcade.<part>), packs, minis.loot.natural, minis.effects, clock.");
+            return out;
+        }
+        org.bukkit.configuration.file.YamlConfiguration bundled = ArcadeConfigMigration.bundled();
+        java.io.File file = configFile();
+        org.bukkit.configuration.file.YamlConfiguration onDisk = loadOnDisk(file);
+        if (bundled == null || onDisk == null) {
+            out.add("&cCouldn't read " + (bundled == null ? "the bundled defaults" : "config.yml") + " — nothing changed.");
+            return out;
+        }
+        if (!bundled.contains(path)) {
+            out.add("&c'" + path + "' isn't in the bundled config, so there's nothing to reset it to.");
+            return out;
+        }
+        ConfigReset.Plan plan = ConfigReset.plan(onDisk, bundled, path);
+        if (plan.none()) {
+            out.add("&a" + path + " already matches the defaults. Nothing to do.");
+            return out;
+        }
+        out.add((confirm ? "&6Resetting " : "&6Dry run — resetting ") + "&f" + path + "&6 would change "
+                + plan.changed().size() + ", add " + plan.added().size() + " and remove " + plan.removed().size()
+                + " key(s):");
+        int shown = 0;
+        for (java.util.Map.Entry<String, Object[]> e : plan.changed().entrySet()) {
+            if (shown++ < 40) {
+                out.add("&e~ &f" + e.getKey() + "&7: " + ConfigReset.brief(e.getValue()[0]) + " &7→ &a"
+                        + ConfigReset.brief(e.getValue()[1]));
+            }
+        }
+        for (java.util.Map.Entry<String, Object> e : plan.added().entrySet()) {
+            if (shown++ < 40) {
+                out.add("&a+ &f" + e.getKey() + "&7: " + ConfigReset.brief(e.getValue()));
+            }
+        }
+        for (java.util.Map.Entry<String, Object> e : plan.removed().entrySet()) {
+            if (shown++ < 40) {
+                out.add("&c- &f" + e.getKey() + "&7: " + ConfigReset.brief(e.getValue()));
+            }
+        }
+        if (shown > 40) {
+            out.add("&7…and " + (shown - 40) + " more (all of them are in the server log).");
+        }
+        if (!confirm) {
+            out.add("&7Nothing has changed. Run &f/hcm config reset " + path + " confirm&7 to do it.");
+            return out;
+        }
+        getLogger().info("Config reset of " + path + ": " + plan.changed().keySet() + " changed, "
+                + plan.added().keySet() + " added, " + plan.removed().keySet() + " removed.");
+        configSnapshotTaken = false;
+        snapshotConfig(file);
+        ConfigReset.apply(onDisk, bundled, path);
+        if (!saveTo(onDisk, file, "reset")) {
+            out.add("&cCouldn't write config.yml — nothing changed. See the server log.");
+            return out;
+        }
+        reloadAll();
+        out.add("&aDone. A copy of the old config.yml is in backups/. Reloaded live — no restart needed.");
+        if (ConfigReset.touchesQuests(path) && quests != null) {
+            int cleared = quests.redrawCurrent();
+            out.add("&aQuest pools changed: everyone draws today's and this week's quests again (" + cleared
+                    + " draw rows cleared; progress kept).");
+        }
+        return out;
+    }
+
     /** The admin's own config.yml inside the plugin's data folder. */
     private java.io.File configFile() {
         return new java.io.File(getDataFolder(), "config.yml");
@@ -1791,6 +1883,11 @@ public final class HomeCraftManagement extends JavaPlugin {
     /** Arcade token balances, the login streak, playtime and the ledger. */
     public com.dierks.homecraft.arcade.TokenService tokens() {
         return tokens;
+    }
+
+    /** The +1 Home perk: Essentials home tiers granted through LuckPerms. */
+    public com.dierks.homecraft.arcade.homes.HomeService homes() {
+        return homes;
     }
 
     /** The Prize Counter: fixed-price token purchases, limits, and giving prizes. */

@@ -13,8 +13,6 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.sql.SQLException;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -814,9 +812,12 @@ public final class CourierService {
         return have >= job.cargoAmount();
     }
 
-    /** UTC epoch-day, the same key every other daily tally here uses. */
+    /**
+     * The local epoch day ({@code clock.time_zone}) the Courier's daily limits count against — the
+     * same day the market and the Arcade use. It was a UTC day, which rolled over at 7 PM Central.
+     */
     private long today() {
-        return LocalDate.now(ZoneOffset.UTC).toEpochDay();
+        return plugin.clock().dayKey();
     }
 
     private String pretty(Material material) {

@@ -133,6 +133,22 @@ public final class QuestDao {
 
     // ---- draws (quests v2) ----------------------------------------------------------
 
+    /**
+     * Forget every player's draw for one period, so each draws again from the pool on next use.
+     * Progress and claimed rows are left alone.
+     *
+     * @return how many draw rows were removed
+     */
+    public int clearAssignments(String periodKey) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement("DELETE FROM quest_assignments WHERE period_key=?")) {
+                ps.setString(1, periodKey);
+                return ps.executeUpdate();
+            }
+        }
+    }
+
     /** The player's drawn quest ids for one period, by slot; empty if nothing is drawn yet. */
     public java.util.List<String> assignments(UUID player, String periodKey) throws SQLException {
         Connection c = conn();

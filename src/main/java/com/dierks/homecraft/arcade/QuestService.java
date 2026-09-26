@@ -381,6 +381,21 @@ public final class QuestService {
      * the week's first day>}. Local, not UTC: a UTC day ended at 7 PM in Minnesota, in the middle
      * of family play time.
      */
+    /**
+     * Everyone draws today's and this week's quests again from the current pools (after the pools
+     * change). Progress and claimed rows stay.
+     *
+     * @return draw rows removed
+     */
+    public int redrawCurrent() {
+        try {
+            return dao.clearAssignments(periodKey(QuestPeriod.DAILY)) + dao.clearAssignments(periodKey(QuestPeriod.WEEKLY));
+        } catch (java.sql.SQLException e) {
+            plugin.getLogger().warning("Could not clear this period's quest draws: " + e.getMessage());
+            return 0;
+        }
+    }
+
     private String periodKey(QuestPeriod period) {
         return period == QuestPeriod.WEEKLY
                 ? "w" + plugin.clock().weekKey(weekStartsOn())

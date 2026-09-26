@@ -646,11 +646,9 @@ public final class MarketService {
         return (price(id) - base) / base * 100.0;
     }
 
-    /** Hours (rounded up, min 1) until the UTC daily sell limit resets. */
+    /** Hours (rounded up, min 1) until the daily limits reset at local midnight. */
     public long hoursUntilReset() {
-        long now = System.currentTimeMillis();
-        long nextMidnight = (epochDay() + 1) * MS_PER_DAY;
-        return Math.max(1, (long) Math.ceil((nextMidnight - now) / 3_600_000.0));
+        return Math.max(1, (long) Math.ceil(plugin.clock().msUntilNextDay() / 3_600_000.0));
     }
 
     // ---------------------------------------------------------------------
@@ -738,8 +736,13 @@ public final class MarketService {
                 + hoursUntilReset() + "h.";
     }
 
+    /**
+     * The day the daily buy/sell limits count against: a LOCAL day ({@code clock.time_zone}), the
+     * same one the streak and quests use. It was a UTC day, which rolled over at 7 PM Central —
+     * mid-evening, while the family plays.
+     */
     private long epochDay() {
-        return System.currentTimeMillis() / MS_PER_DAY;
+        return plugin.clock().dayKey();
     }
 
     /**

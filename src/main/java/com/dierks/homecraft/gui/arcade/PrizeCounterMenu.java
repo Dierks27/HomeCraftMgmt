@@ -73,7 +73,7 @@ public final class PrizeCounterMenu extends Menu {
                     current ? null : e -> new PrizeCounterMenu(plugin, player, back, t, 0).open(player));
         }
 
-        List<Prize> rows = plugin.prizes().visible(tab);
+        List<Prize> rows = plugin.prizes().visible(player, tab);
         if (rows.isEmpty()) {
             set(22, Menus.icon(Material.BARRIER, "&7Nothing here yet", "&8Check back soon!"), null);
         }
@@ -130,7 +130,7 @@ public final class PrizeCounterMenu extends Menu {
         String locked = plugin.prizes().lockedBecause(player, p);
         int left = plugin.prizes().left(player.getUniqueId(), p);
         boolean free = p.type() == PrizeType.TRADE_IN;
-        int cost = p.costTokens();
+        int cost = plugin.prizes().price(player.getUniqueId(), p);
         boolean afford = free || tokens >= cost;
 
         String name = free ? p.display() : p.display() + " &7- &6" + cost + " tokens";
@@ -138,10 +138,19 @@ public final class PrizeCounterMenu extends Menu {
         for (String line : p.description()) {
             lore.add("&7" + line);
         }
+        if (p.type() == PrizeType.HOME_SLOT && plugin.homes() != null) {
+            // The result, for this viewer: what they have and what they'd have.
+            int have = plugin.homes().total(player);
+            int max = p.limit() != null ? p.limit().count() : 0;
+            int bought = plugin.homes().bonus(player.getUniqueId());
+            name = owned ? p.display() + " &7- &aOwned (" + bought + " of " + max + ")"
+                    : p.display() + " &7(you'll have " + (have + 1) + ") &7- &6" + cost + " tokens";
+            lore.add("&7You have &f" + have + (have == 1 ? " home" : " homes") + " &7now.");
+        }
         String limit = plugin.prizes().limitText(player.getUniqueId(), p);
         boolean available = true;
         if (owned) {
-            lore.add("&a✔ You have this!");
+            lore.add(p.type() == PrizeType.HOME_SLOT ? "&a✔ You've got every extra home there is!" : "&a✔ You have this!");
             available = false;
         } else if (locked != null) {
             lore.add("&7" + locked);
@@ -196,10 +205,10 @@ public final class PrizeCounterMenu extends Menu {
             default -> {
                 if (p.choosesColor()) {
                     new FilamentColorMenu(plugin, player, p, this::reopen).open(player);
-                } else if (p.costTokens() >= CONFIRM_AT) {
+                } else if (plugin.prizes().price(player.getUniqueId(), p) >= CONFIRM_AT) {
                     new ConfirmMenu(plugin, "&5Buy " + Text.plain(p.display()) + "?",
                             tile(p, plugin.tokens().balance(player.getUniqueId())),
-                            List.of("&7Costs &6" + p.costTokens() + " tokens&7.",
+                            List.of("&7Costs &6" + plugin.prizes().price(player.getUniqueId(), p) + " tokens&7.",
                                     "&7You have &6" + plugin.tokens().balance(player.getUniqueId()) + "&7."),
                             "&7Click to buy it.", () -> buy(p), this::reopen).open(player);
                 } else {

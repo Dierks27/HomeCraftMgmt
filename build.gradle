@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.dierks.homecraft'
-version = '0.31.0-arcade-overhaul'
+version = '0.31.1-homes-and-resets'
 description = 'HomeCraft Management — Paper plugin (market, Crate store + Marketplace, Minis and the wild hunt, Card Packs, Courier, web dashboard, in-game displays, the Arcade)'
 
 // Target server: Paper 26.2 and 26.3 / Java 25. Compiled against the 26.2 API; the code also
@@ -62,6 +62,10 @@ dependencies {
     // expansion is only loaded/registered when PlaceholderAPI is installed, so
     // this is compileOnly (never shaded) and the plugin soft-depends on it.
     compileOnly 'me.clip:placeholderapi:2.11.6'
+    // LuckPerms API (Maven Central): the +1 Home perk writes its Essentials home tier through
+    // the API rather than console commands, and listens for group changes. compileOnly, never
+    // shaded; LuckPerms is a soft dependency and the code that touches it only loads with it.
+    compileOnly 'net.luckperms:api:5.4'
 
     // Bundled at runtime (shaded) so the plugin needs no external DB server.
     implementation 'org.xerial:sqlite-jdbc:3.50.1.0'

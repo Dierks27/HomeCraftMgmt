@@ -97,6 +97,13 @@ public final class ArcadeMenu extends Menu {
                     e -> new PrizeCounterMenu(plugin, player, this::reopen).open(player));
         }
 
+        // Card Packs: the same shop as the PC's Card Packs site, with Back coming here.
+        set(22, Menus.icon(Material.PAPER, "&bCard Packs",
+                "&7Open a pack, get a Card,",
+                "&7print it into a Mini.",
+                "&8—", "&eClick to shop"),
+                e -> new com.dierks.homecraft.gui.mini.PackShopMenu(plugin, player, this::reopen).open(player));
+
         // Daily / weekly quests.
         set(31, Menus.icon(Material.WRITABLE_BOOK, "&dQuests",
                 "&7Daily & weekly objectives that pay",

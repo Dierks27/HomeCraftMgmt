@@ -2349,7 +2349,11 @@ public final class PluginConfig {
         }
     }
 
-    /** Parse the {@code packs:} list into the typed Card-Pack model (Phase 10). */
+    /**
+     * Parse the {@code packs:} list (schema v2): {@code price} (dollars) and {@code price_tokens},
+     * {@code count}, an optional {@code tag}, and either {@code rarity_odds} or a legacy explicit
+     * {@code pool:} list — a pool, when present, wins.
+     */
     private com.dierks.homecraft.mini.Pack.Packs readPacks(FileConfiguration c) {
         List<com.dierks.homecraft.mini.Pack.PackDef> list = new ArrayList<>();
         for (Map<?, ?> row : c.getMapList("packs")) {
@@ -2359,7 +2363,21 @@ public final class PluginConfig {
             }
             String display = str(row.get("display"), id);
             double price = Math.max(0, number(row.get("price"), 0));
-            int count = Math.max(1, (int) number(row.get("count"), 3));
+            int priceTokens = (int) Math.max(0, number(row.get("price_tokens"), 0));
+            int count = Math.max(1, (int) number(row.get("count"), 1));
+            String tag = str(row.get("tag"), "");
+            Map<Rarity, Double> odds = new java.util.EnumMap<>(Rarity.class);
+            if (row.get("rarity_odds") instanceof Map<?, ?> om) {
+                for (Map.Entry<?, ?> e : om.entrySet()) {
+                    Rarity r = parseRarity(e.getKey(), null);
+                    if (r == null) {
+                        log.warning("Pack '" + id + "' rarity_odds names '" + e.getKey() + "', which is not a "
+                                + "rarity — ignored. Use COMMON, UNCOMMON, RARE, EPIC or LEGENDARY.");
+                        continue;
+                    }
+                    odds.put(r, Math.max(0, number(e.getValue(), 0)));
+                }
+            }
             List<com.dierks.homecraft.mini.Pack.PackEntry> pool = new ArrayList<>();
             if (row.get("pool") instanceof List<?> pl) {
                 for (Object o : pl) {
@@ -2373,7 +2391,17 @@ public final class PluginConfig {
                     }
                 }
             }
-            list.add(new com.dierks.homecraft.mini.Pack.PackDef(id, display, price, count, pool));
+            var def = new com.dierks.homecraft.mini.Pack.PackDef(id, display, price, priceTokens, count, tag,
+                    odds, pool);
+            if (!def.isValid()) {
+                log.warning("Pack '" + id + "' has neither rarity_odds nor a pool: — it shows as not ready "
+                        + "and can't be bought until it has one.");
+            }
+            if (price <= 0 && priceTokens <= 0) {
+                log.warning("Pack '" + id + "' has no price in dollars or tokens — it can only be given "
+                        + "(crates, /hcm give pack), not bought.");
+            }
+            list.add(def);
         }
         return new com.dierks.homecraft.mini.Pack.Packs(list);
     }

@@ -72,11 +72,13 @@ public final class PacksAdminMenu extends Menu {
     private org.bukkit.inventory.ItemStack packIcon(Pack.PackDef p) {
         List<String> lore = new ArrayList<>();
         lore.add("&7id: &f" + p.id());
-        lore.add("&7Price: &6" + plugin.economy().format(p.price()));
+        lore.add("&7Dollars: &6" + plugin.economy().format(p.price()) + " &7Tokens: &6" + p.priceTokens());
         lore.add("&7Cards per open: &f" + p.cardCount());
-        lore.add("&7Pool: &f" + p.pool().size() + " card(s)");
+        lore.add(p.usesPool() ? "&7Hand-picked pool: &f" + p.pool().size() + " Card(s)" : "&7Rarity odds");
         if (!p.isValid()) {
-            lore.add("&cNeeds cards before it can be sold.");
+            lore.add("&cNeeds rarity odds or a pool before it can be sold.");
+        } else if (plugin.packs().soldOut(p)) {
+            lore.add("&cSold out right now.");
         }
         lore.add("&eLeft: edit  &cRight: remove");
         return Menus.icon(Material.PAPER, "&b" + p.displayName(), lore.toArray(new String[0]));
@@ -90,9 +92,21 @@ public final class PacksAdminMenu extends Menu {
         }
         String id = MiniIds.slug(trimmed);
         if (plugin.packs().pack(id) == null) {
-            plugin.packs().upsert(new Pack.PackDef(id, trimmed, 100, 3, new ArrayList<>()));
+            plugin.packs().upsert(new Pack.PackDef(id, trimmed, 100, 0, 1, "", defaultOdds(), List.of()));
         }
         new PackEditMenu(plugin, player, id, this::reopen).open(player);
+    }
+
+    /** A new pack starts on the Starter Pack's odds, so it can be sold straight away. */
+    private static java.util.Map<com.dierks.homecraft.mini.Rarity, Double> defaultOdds() {
+        java.util.Map<com.dierks.homecraft.mini.Rarity, Double> m =
+                new java.util.EnumMap<>(com.dierks.homecraft.mini.Rarity.class);
+        m.put(com.dierks.homecraft.mini.Rarity.COMMON, 62.0);
+        m.put(com.dierks.homecraft.mini.Rarity.UNCOMMON, 28.0);
+        m.put(com.dierks.homecraft.mini.Rarity.RARE, 9.0);
+        m.put(com.dierks.homecraft.mini.Rarity.EPIC, 1.0);
+        m.put(com.dierks.homecraft.mini.Rarity.LEGENDARY, 0.0);
+        return m;
     }
 
     private void reopen() {

@@ -46,7 +46,9 @@ public final class CardItems {
                 .append(Component.text(filamentCost(spec), NamedTextColor.GRAY))
                 .decoration(TextDecoration.ITALIC, false));
         lore.add(Component.empty());
-        lore.add(Component.text("Sealed card — print it at a Printer.", NamedTextColor.YELLOW)
+        lore.add(Component.text("Print this at a Printer to make your ", NamedTextColor.YELLOW)
+                .append(Component.text(def.rarity().display(), style.nameColor()))
+                .append(Component.text(" Mini.", NamedTextColor.YELLOW))
                 .decoration(TextDecoration.ITALIC, false));
         meta.lore(lore);
         meta.getPersistentDataContainer().set(Keys.CARD_ID, PersistentDataType.STRING, def.id());

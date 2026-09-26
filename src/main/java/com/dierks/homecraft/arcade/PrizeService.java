@@ -314,10 +314,17 @@ public final class PrizeService {
                 }
             }
             case PACK -> {
-                item = plugin.packs() != null ? plugin.packs().packItem(p.packId()) : null;
-                if (item == null) {
+                var pack = plugin.packs() == null ? null : plugin.packs().pack(p.packId());
+                if (pack == null) {
                     return Outcome.fail("That pack isn't sold any more — nothing charged.");
                 }
+                if (plugin.packs().soldOut(pack)) {
+                    return Outcome.fail("That pack is sold out — nothing charged.");
+                }
+                // Bought here, it carries its price, so a pack that comes up short pays back.
+                item = plugin.packs().packItem(p.packId(), charge
+                        ? new com.dierks.homecraft.mini.PackItems.Paid(
+                        com.dierks.homecraft.mini.PackItems.Currency.TOKENS, p.costTokens()) : null);
             }
             case TRAIL, COMMAND -> {
                 // nothing to build: applied after the charge

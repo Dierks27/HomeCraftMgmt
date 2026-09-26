@@ -65,9 +65,10 @@ public final class HomeCraftManagement extends JavaPlugin {
      * a default Steve head to carry. 12 = the four quests that pushed Mini output (print, packs,
      * selling) leave the shipped pool. 13 = the wild hunt retune: closer, longer, one at a time.
      * 14 = the token economy: no money in the Arcade, Prize Counter tabs, quest pools, and the
-     * achievements list.
+     * achievements list. 15 = packs hold one Card and roll by rarity odds; the shipped prices
+     * drop to $100 / $300.
      */
-    static final int CONFIG_REVISION = 14;
+    static final int CONFIG_REVISION = 15;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -895,6 +896,10 @@ public final class HomeCraftManagement extends JavaPlugin {
             // gets tabs and real prizes, quests are drawn per player from a pool, and the
             // achievements become a list. See ArcadeConfigMigration.
             ArcadeConfigMigration.apply(c, log);
+        }
+        if (from < 15) {
+            // Packs hold one Card and roll by rarity odds. See PackConfigMigration.
+            PackConfigMigration.apply(c, log);
         }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);

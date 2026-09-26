@@ -87,7 +87,7 @@ public final class SiteLauncherMenu extends Menu {
                 "What other players list in their Pallets.",
                 p -> new com.dierks.homecraft.gui.marketplace.MarketplaceMenu(plugin, p, this::reopen).open(p)));
         out.add(new Site(Material.PAPER, "&bCard Packs",
-                "Buy booster packs and open them for Cards.",
+                "Open a pack, get a Card, print it into a Mini.",
                 p -> new com.dierks.homecraft.gui.mini.PackShopMenu(plugin, p, this::reopen).open(p)));
         out.add(new Site(Material.PLAYER_HEAD, "&5Mini Museum",
                 "Every collectible, and what you have.",

@@ -302,9 +302,55 @@ class SeasonCalendarTest {
         List<Season> parsed = SeasonCalendar.parse(rows, warnings::add);
         assertEquals(List.of("twice", "scary", "bare"), parsed.stream().map(Season::id).toList());
         assertEquals("Spooky is here!", parsed.get(1).headline(), "a banned word is never shown");
-        assertEquals("bare", parsed.get(2).name());
-        assertEquals("bare is here!", parsed.get(2).headline());
+        assertEquals("Bare", parsed.get(2).name(), "no name: the id written as words");
+        assertEquals("Bare is here!", parsed.get(2).headline());
         assertEquals(5, warnings.size(), warnings.toString());
         assertEquals(List.of(), SeasonCalendar.parse(null, s -> { }));
+    }
+
+    @Test
+    void aMissingNameReadsAsWordsNotTheRawId() {
+        Map<String, Object> harvest = row("harvest_time", "09-15", "10-31", Map.of("wheat", -4));
+        harvest.remove("name");
+        harvest.put("headline", "The storm ruined the farms");
+        Map<String, Object> school = row("back_to_school", "08-15", "09-10", Map.of("iron_ingot", 3));
+        school.remove("name");
+        school.remove("headline");
+        List<Season> parsed = SeasonCalendar.parse(List.of(harvest, school), w -> { });
+        assertEquals("Harvest Time", parsed.get(0).name(), "never harvest_time in chat, catch-up or PAPI");
+        assertEquals("Harvest Time is here!", parsed.get(0).headline(), "the unsafe headline is replaced");
+        assertEquals("Back To School", parsed.get(1).name(), "as the website writes it");
+        assertEquals("Harvest Time", SeasonCalendar.nameOf("harvest_time"));
+        assertEquals("", SeasonCalendar.nameOf(null));
+    }
+
+    @Test
+    void aSeasonsEffectsAreQuotedAsTheyReallyApply() {
+        Season harvest = shipped("harvest_time");
+        Season gifts = shipped("gift_season");
+        // Shipped spread 0.10: the cap is 4.5%, so -4 stays -4.
+        assertEquals(Map.of("wheat", -4.0), SeasonCalendar.effective(harvest, 0.045));
+        // Spread 0.05: c_pred = 0.45 x 0.05 = 2.25%, and that is what wheat really moves.
+        assertEquals(Map.of("wheat", -2.25), SeasonCalendar.effective(harvest, 0.0225));
+        assertEquals(List.of("gold_ingot", "diamond"), List.copyOf(SeasonCalendar.effective(gifts, 0.02).keySet()),
+                "config order is kept");
+        assertEquals(2.0, SeasonCalendar.effective(gifts, 0.02).get("diamond"), EPS);
+        // Spread 0: no season moves anything, so there is nothing to quote.
+        assertTrue(SeasonCalendar.effective(harvest, 0.0).isEmpty());
+        assertEquals(harvest.percent(), SeasonCalendar.effective(harvest, Double.NaN), "no cap known: as configured");
+        assertTrue(SeasonCalendar.effective(null, 0.045).isEmpty());
+        // The SEASON row's own percent follows the same cap.
+        assertEquals(-4.0, MarketSimulator.headlinePercent(harvest, 0.045), EPS);
+        assertEquals(-2.25, MarketSimulator.headlinePercent(harvest, 0.0225), EPS);
+        assertEquals(0.0, MarketSimulator.headlinePercent(harvest, 0.0), EPS);
+    }
+
+    @Test
+    void aSeasonRowsTagNamesItsSeason() {
+        assertEquals("harvest_time", SeasonCalendar.byTag(SHIPPED, "harvest_time:2026").id());
+        assertEquals("cozy_winter", SeasonCalendar.byTag(SHIPPED, "cozy_winter:2025").id());
+        assertEquals(null, SeasonCalendar.byTag(SHIPPED, "spooky_week:2026"), "removed from the list");
+        assertEquals(null, SeasonCalendar.byTag(SHIPPED, null));
+        assertEquals(null, SeasonCalendar.byTag(null, "harvest_time:2026"));
     }
 }

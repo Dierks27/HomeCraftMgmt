@@ -59,6 +59,11 @@ import java.util.function.Function;
  * and every database write and state change happens there. {@link #cancel()} (disable, pause,
  * {@code real_world.enabled: false}) cancels whatever is in flight and drops late results.
  *
+ * <p><b>Applied once.</b> A trade day's move is marked applied in the same transaction that writes
+ * its REAL event, not when it is fetched: a move queued in memory and lost to a restart, a pause
+ * or {@code real_world} being switched off before the next tick is queued again from the cache
+ * ({@link #unapplied}) when the market next runs.
+ *
  * <p><b>Failure.</b> Any error keeps the cached quotes and lets existing impulses fade. One WARN
  * per symbol per local day, FINE after that. {@code real status} shows the last fetch and error.
  */
@@ -496,9 +501,10 @@ public final class RealWorldFetcher {
                         }
                         String symbol = f.job().symbol();
                         dao.upsertQuotes(c, symbol, f.closes(), now);
+                        List<MarketSimDao.StoredQuote> stored = dao.quotes(symbol,
+                                today.minusDays(RealQuotes.LOOKBACK_DAYS * 2L).toEpochDay());
                         List<RealQuotes.DailyClose> closes = new ArrayList<>();
-                        for (MarketSimDao.StoredQuote q : dao.quotes(symbol,
-                                today.minusDays(RealQuotes.LOOKBACK_DAYS * 2L).toEpochDay())) {
+                        for (MarketSimDao.StoredQuote q : stored) {
                             closes.add(q.dailyClose());
                         }
                         Optional<RealQuotes.Move> move = RealQuotes.latestMove(closes, today, MAX_AGE_DAYS);
@@ -514,7 +520,9 @@ public final class RealWorldFetcher {
                             continue;
                         }
                         long day = move.get().day().toEpochDay();
-                        if (dao.markApplied(c, symbol, day)) {
+                        // Marked applied only in the tick that turns it into a REAL event
+                        // (MarketSimService.commit), so a restart or pause first loses nothing.
+                        if (!applied(stored, day)) {
                             impulses.add(new RealImpulse(f.job().itemId(), symbol, day, strength, f.job().name(),
                                     q * 100.0));
                             lines.add("&a" + symbol + " → " + f.job().itemId() + ": " + pct(q) + " on "
@@ -549,6 +557,64 @@ public final class RealWorldFetcher {
         for (String line : lines) {
             tell(echo, line);
         }
+    }
+
+    /**
+     * The real-world moves fetched earlier that no REAL event has used yet: for each configured
+     * symbol whose item is in the catalog, the newest cached move (fresh, at most
+     * {@value #MAX_AGE_DAYS} days old) if its trade day is not marked applied. A move is marked
+     * applied only by the tick that turns it into a REAL event, so this is what a restart, pause
+     * or {@code real_world} toggle dropped from the in-memory queue before the next tick (main
+     * thread; reads the cache only, writes nothing).
+     */
+    List<RealImpulse> unapplied(long now) {
+        SimSettings.Real r = sim.settings().real();
+        if (!r.enabled()) {
+            return List.of();
+        }
+        LocalDate today = Instant.ofEpochMilli(now).atZone(sim.zone()).toLocalDate();
+        List<RealImpulse> out = new ArrayList<>();
+        for (RealSymbol row : r.symbols()) {
+            String symbol = row.symbol(r.provider());
+            if (symbol.isBlank() || !RealQuotes.validSymbol(symbol) || plugin.market() == null
+                    || plugin.market().item(row.item()) == null) {
+                continue;
+            }
+            try {
+                List<MarketSimDao.StoredQuote> stored = dao.quotes(symbol,
+                        today.minusDays(RealQuotes.LOOKBACK_DAYS * 2L).toEpochDay());
+                List<RealQuotes.DailyClose> closes = new ArrayList<>();
+                for (MarketSimDao.StoredQuote q : stored) {
+                    closes.add(q.dailyClose());
+                }
+                Optional<RealQuotes.Move> move = RealQuotes.latestMove(closes, today, MAX_AGE_DAYS);
+                if (move.isEmpty()) {
+                    continue;
+                }
+                double q = move.get().change();
+                double strength = RealQuotes.impulse(q, r.gain(), r.maxFrac(), r.ignoreAboveFrac());
+                long day = move.get().day().toEpochDay();
+                if (Double.isNaN(strength) || applied(stored, day)) {
+                    continue;
+                }
+                String name = row.name().isBlank() ? row.item() : row.name();
+                out.add(new RealImpulse(row.item(), symbol, day, strength, name, q * 100.0));
+            } catch (SQLException e) {
+                plugin.getLogger().warning("Real prices: could not read the cached closes for " + symbol + ": "
+                        + e.getMessage());
+            }
+        }
+        return out;
+    }
+
+    /** Whether trade day {@code day} of these stored closes is already marked applied. */
+    private static boolean applied(List<MarketSimDao.StoredQuote> stored, long day) {
+        for (MarketSimDao.StoredQuote q : stored) {
+            if (q.tradeDay() == day && q.applied()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** {@code real test}'s report (main thread). */

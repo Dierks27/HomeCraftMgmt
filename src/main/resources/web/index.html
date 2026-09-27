@@ -134,9 +134,10 @@
     background: var(--accent); color: #131922; font: inherit; font-weight: 700;
   }
   footer { color: var(--muted); font-size: 12px; text-align: center; padding: 24px; }
+  /* phones, with the live market on (html.live); with it off the page is 0.32's */
   @media (max-width: 480px) {
-    main { padding: 16px; }
-    .grid { grid-template-columns: minmax(0, 1fr); }
+    html.live main { padding: 16px; }
+    html.live .grid { grid-template-columns: minmax(0, 1fr); }
   }
   @media (prefers-color-scheme: light) {
     :root {
@@ -186,6 +187,7 @@
   var reqSeq = 0;        // only the newest request's answer counts (an Unlock can overtake a refresh)
   var lastFeed = null;   // the last /api/market answer (the range toggle redraws from it)
   var serverNow = 0;     // its generatedAt: "ends in" and "ago" count from the server's clock
+  var lastNews = null;   // the last /api/news answer (drawn with the next market answer until a newer one comes)
 
   // The feed token (web.dashboard.feed_token), only needed when the server asks for it with a
   // 401. Kept in localStorage so it is asked for once; every access is guarded (private windows
@@ -437,10 +439,13 @@
     });
   }
 
-  // The 48H/7D/30D toggle: shown once the feed carries a long range; a range no item has is off.
-  function updateRanges(items) {
-    available["7d"] = items.some(function (i) { return Array.isArray(i.history7d) && i.history7d.length > 0; });
-    available["30d"] = items.some(function (i) { return Array.isArray(i.history30d) && i.history30d.length > 0; });
+  // The 48H/7D/30D toggle: part of the live market's page, so shown only while the feed says the
+  // market is live and carries a long range; a range no item has is off. With the market off or
+  // paused there is no toggle and every chart is the 48-hour line, as in 0.32 (whose feed already
+  // carried history7d/history30d for the website without the page drawing them).
+  function updateRanges(items, live) {
+    available["7d"] = live && items.some(function (i) { return Array.isArray(i.history7d) && i.history7d.length > 0; });
+    available["30d"] = live && items.some(function (i) { return Array.isArray(i.history30d) && i.history30d.length > 0; });
     document.getElementById("toolbar").hidden = !(available["7d"] || available["30d"]);
     var r = shownRange();
     Array.prototype.forEach.call(document.querySelectorAll("#range button"), function (b) {
@@ -456,7 +461,7 @@
     range = b.getAttribute("data-range");
     saveRange(range);
     if (lastFeed) {
-      updateRanges(lastFeed.items || []);
+      updateRanges(lastFeed.items || [], lastFeed.live === true);
       redrawCharts();
     }
   });
@@ -598,16 +603,19 @@
     document.title = fullTitle;
   }
 
-  function render(feed, news) {
+  function render(feed) {
     // Show the configured title from the feed.
     showTitle(feed.title || "Market");
     refreshMs = Math.max(2, feed.refreshSeconds || 30) * 1000;
     serverNow = isNum(feed.generatedAt) ? feed.generatedAt : Date.now();
     lastFeed = feed;
+    var live = feed.live === true;
+    if (!live) lastNews = null; // off or paused: nothing of the live market's is kept or shown
+    document.documentElement.classList.toggle("live", live);
     var grid = document.getElementById("grid");
     var items = feed.items || [];
     document.getElementById("empty").style.display = items.length ? "none" : "block";
-    updateRanges(items);
+    updateRanges(items, live);
     var seen = {};
     items.forEach(function (item) {
       seen[item.id] = true;
@@ -620,8 +628,10 @@
       var id = card.id.replace("card-", "");
       if (!seen[id]) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } card.remove(); }
     });
-    // The news bar is extra: whatever goes wrong there, the prices above still count.
-    try { renderNews(feed, news); } catch (e) { document.getElementById("news").hidden = true; }
+    // The news bar is extra: whatever goes wrong there, the prices above still count. It is
+    // drawn now from the last /api/news answer (or the feed's own copy), and again when this
+    // refresh's news arrives (fetchNews).
+    drawNews(feed, lastNews && lastNews.live === true ? lastNews : null);
     var now = new Date();
     document.getElementById("status").textContent =
       "updated " + now.getHours().toString().padStart(2, "0") + ":" +
@@ -633,9 +643,48 @@
     timer = setTimeout(tick, refreshMs);
   }
 
+  function drawNews(feed, news) {
+    try { renderNews(feed, news); } catch (e) { document.getElementById("news").hidden = true; }
+  }
+
+  // The live market's news (/api/news), with the same token. It is fetched only while the market
+  // feed says the market is live, and only after the cards are drawn and the next refresh is
+  // scheduled, so a slow, failing or hung news request can never hold back the prices or stop the
+  // refresh loop. A news request still waiting when the next refresh starts is cancelled, and none
+  // waits longer than NEWS_TIMEOUT_MS, so a stalled one never ties up the browser's connections.
+  // An error, a refusal or a timeout leaves the news bar to the market feed's own copy.
+  var NEWS_TIMEOUT_MS = 10000;
+  var newsAbort = null;
+  function cancelNews() {
+    if (newsAbort) { var a = newsAbort; newsAbort = null; a(); }
+  }
+  function fetchNews(seq, headers) {
+    cancelNews();
+    var opts = { cache: "no-store", headers: headers };
+    var ctl = null, killer = null;
+    if (typeof AbortController === "function") {
+      ctl = new AbortController();
+      opts.signal = ctl.signal;
+      killer = setTimeout(function () { ctl.abort(); }, NEWS_TIMEOUT_MS);
+    }
+    var mine = function () { if (killer) clearTimeout(killer); if (ctl) ctl.abort(); };
+    newsAbort = mine;
+    fetch("/api/news", opts)
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; })
+      .then(function (news) {
+        if (killer) clearTimeout(killer);
+        if (newsAbort === mine) newsAbort = null;
+        if (seq !== reqSeq || !lastFeed) return; // a newer request owns the page now
+        lastNews = news && typeof news === "object" ? news : null;
+        drawNews(lastFeed, lastNews);
+      });
+  }
+
   // A 401: stop refreshing, hide the stale cards and news and ask for the token.
   function showLock(rejected, why) {
     if (timer) { clearTimeout(timer); timer = null; }
+    cancelNews();
     document.getElementById("grid").style.display = "none";
     document.getElementById("empty").style.display = "none";
     document.getElementById("news").hidden = true;
@@ -652,6 +701,7 @@
 
   function tick() {
     var seq = ++reqSeq;
+    cancelNews(); // its answer would be for an older request
     var token = loadToken();
     var headers = {};
     if (token) {
@@ -663,11 +713,6 @@
       }
       headers["Authorization"] = "Bearer " + token;
     }
-    // The news rides along with the same token. It is optional: an error, a refusal or an
-    // older server without /api/news just leaves the news bar to the market feed's copy.
-    var newsReq = fetch("/api/news", { cache: "no-store", headers: headers })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .catch(function () { return null; });
     fetch("/api/market", { cache: "no-store", headers: headers })
       .then(function (r) {
         if (seq !== reqSeq) return null; // overtaken by a newer request
@@ -675,14 +720,11 @@
         return r.json();
       })
       .then(function (feed) {
-        if (seq !== reqSeq || feed === null) return null;
-        return newsReq.then(function (news) { return { feed: feed, news: news }; });
-      })
-      .then(function (got) {
-        if (seq !== reqSeq || got === null) return;
+        if (seq !== reqSeq || feed === null) return;
         hideLock();
-        render(got.feed, got.news);
+        render(feed);
         schedule();
+        if (feed.live === true) fetchNews(seq, headers);
       })
       .catch(function (e) {
         if (seq !== reqSeq) return; // a newer request owns the page now

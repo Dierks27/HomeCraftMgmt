@@ -28,6 +28,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -99,6 +100,8 @@ public final class MarketSimService implements PriceMood {
     static final long PREVIEW_STEP_MS = 6 * SimMath.HOUR_MS;
     /** {@code sim status}'s money line covers this many days. */
     static final int STATUS_MONEY_DAYS = 7;
+    /** A restart or reload reads the SEASON rows started this far back (a season lasts at most a year). */
+    static final long SEASON_ROWS_MS = 400 * SimMath.DAY_MS;
 
     private static final String SPARK = "▁▂▃▄▅▆▇█";
 
@@ -232,6 +235,7 @@ public final class MarketSimService implements PriceMood {
             long t = settings.tickMs();
             lastTickAt = MarketSimDao.Meta.longOf(meta, MarketSimDao.Meta.LAST_TICK_AT, floor(now, t));
             events = new ArrayList<>(dao.loadLive(Math.min(lastTickAt, now)));
+            addSeasonRows(dao.loadSeasons(now - SEASON_ROWS_MS));
             newsCache.clear();
             for (MarketEvent e : dao.loadRecentNews(now - NEWS_CACHE_MS, NEWS_CACHE_MAX)) {
                 if (e.id() > 0) {
@@ -245,6 +249,7 @@ public final class MarketSimService implements PriceMood {
             schedule = MarketSimDao.Meta.schedule(meta);
             broadcast = MarketSimDao.Meta.broadcast(meta);
             realWorld.load(meta);
+            clockCheck(now);
             boolean wasEnabled = !firstEver && MarketSimDao.Meta.flagOf(meta, MarketSimDao.Meta.WAS_ENABLED);
             seedRows();
             pendingInserts.clear();
@@ -271,6 +276,7 @@ public final class MarketSimService implements PriceMood {
                 lastTickAt = floor(now, t);
             }
             endUnlisted(now); // items removed or set sim: false while the server was off
+            requeueReal(now); // real-world moves fetched but not applied before the stop
         } catch (SQLException e) {
             started = false;
             snapshot = Snapshot.NEUTRAL;
@@ -325,6 +331,8 @@ public final class MarketSimService implements PriceMood {
             plugin.getLogger().info("Live market: turned on.");
         } else if (on) {
             endUnlisted(now);
+            reloadSeasonRows(now);
+            requeueReal(now);
             commit();
             republish(now, true);
         } else {
@@ -433,6 +441,32 @@ public final class MarketSimService implements PriceMood {
             }
         }
         return 0L;
+    }
+
+    /**
+     * Whether the event behind this side's cap is one players can see right now: a DEAL or DOWN
+     * showing its badge ({@code sell == false}), a HOT or UP showing its badge
+     * ({@code sell == true}). False during a HOT/DEAL's silent ramp (and for one stopped in it)
+     * and in an UP/DOWN's badge-less tail, so a refusal never tips anyone off; always false
+     * while the sim is off.
+     */
+    @Override
+    public boolean eventCapShown(MarketItem item, boolean sell) {
+        Snapshot s = snapshot;
+        if (!s.active() || item == null) {
+            return false;
+        }
+        ItemParams p = s.params().get(item.id());
+        if (p == null || !p.enabled()) {
+            return false;
+        }
+        List<MarketEvent> mine = new ArrayList<>(2);
+        for (MarketEvent e : s.events()) {
+            if (item.id().equals(e.itemId())) {
+                mine.add(e);
+            }
+        }
+        return MoodEngine.capEventShown(mine, sell, System.currentTimeMillis());
     }
 
     /**
@@ -687,7 +721,7 @@ public final class MarketSimService implements PriceMood {
         return switch (e.kind()) {
             case SEASON -> {
                 Season s = seasonOf(e);
-                yield s != null ? s.name() : seasonId(e);
+                yield s != null ? s.name() : SeasonCalendar.nameOf(seasonId(e));
             }
             case REAL -> {
                 String name = realName(e);
@@ -923,7 +957,7 @@ public final class MarketSimService implements PriceMood {
         } else {
             List<String> parts = new ArrayList<>();
             for (SeasonCalendar.Active a : MarketSimulator.seasonsAt(settings, now, zone())) {
-                String fx = MarketLabels.seasonEffects(a.season().percent(), x -> x);
+                String fx = MarketLabels.seasonEffects(effective(a.season()), x -> x);
                 parts.add(a.season().name() + (fx.isEmpty() ? "" : " (" + fx + ")"));
             }
             seasons = parts.isEmpty() ? "none" : String.join(", ", parts);
@@ -1103,7 +1137,7 @@ public final class MarketSimService implements PriceMood {
             return;
         }
         for (RealImpulse ri : impulses) {
-            if (ri != null) {
+            if (ri != null && queued.stream().noneMatch(x -> x.tag().equals(ri.tag()))) {
                 queued.add(ri);
             }
         }
@@ -1173,15 +1207,23 @@ public final class MarketSimService implements PriceMood {
         return Instant.ofEpochMilli(Math.max(e.startedAt(), e.endsAt() - 1)).atZone(zone()).toLocalDate();
     }
 
-    /** A SEASON row's effects in words ({@code Wheat -4%}). */
+    /**
+     * A SEASON row's effects in words ({@code Wheat -4%}), each as it really applies: held to the
+     * predictable cap {@code min(4.5%, 45% of market.spread)} ({@link SeasonCalendar#effective}).
+     */
     String seasonEffects(MarketEvent e) {
         Season s = seasonOf(e);
-        return s == null ? "" : MarketLabels.seasonEffects(s.percent(), this::displayName);
+        return s == null ? "" : MarketLabels.seasonEffects(effective(s), this::displayName);
+    }
+
+    /** {@code s}'s effects held to today's predictable cap. */
+    private Map<String, Double> effective(Season s) {
+        return SeasonCalendar.effective(s, settings.seasons().predictableCap(spread()));
     }
 
     /** When {@code e} became news: a HOT/DEAL at the end of its ramp, anything else when it started. */
     static long newsTime(MarketEvent e) {
-        return e.kind().story() ? e.startedAt() + e.rampMs() : e.startedAt();
+        return e.newsTime();
     }
 
     /** Players may know about {@code e}: never a HOT/DEAL in (or stopped during) its silent ramp. */
@@ -1204,6 +1246,7 @@ public final class MarketSimService implements PriceMood {
         }
         long now = System.currentTimeMillis();
         try {
+            clockCheck(now);
             if (floor(now, settings.tickMs()) > lastTickAt) {
                 advance(now, true);
                 housekeeping(now);
@@ -1252,6 +1295,15 @@ public final class MarketSimService implements PriceMood {
                 if (line != null && !line.isEmpty()) {
                     lined.put(e, e.withText(e.headline(), line));
                 }
+            }
+        }
+        AnnounceGate.Pending chosen = r.broadcast().orElse(null);
+        if (chosen != null && chosen.type() == AnnounceGate.Type.STORY && chosen.event() != null) {
+            // A HOT/DEAL quotes its % as of its announcement: its stored line says the same.
+            MarketEvent e = lined.getOrDefault(chosen.event(), chosen.event());
+            String line = renderLine(e);
+            if (line != null && !line.isEmpty()) {
+                lined.put(chosen.event(), e.withText(e.headline(), line));
             }
         }
         List<MarketEvent> working = swap(r.events(), lined);
@@ -1342,6 +1394,9 @@ public final class MarketSimService implements PriceMood {
                     long id = dao.insertEvent(c, e);
                     // 0: a SEASON/REAL row with that tag is already stored; never try it again.
                     ids.put(e, id > 0 ? id : -1L);
+                    if (e.kind() == EventKind.REAL) {
+                        dao.markApplied(c, e); // the fetched move is used up only now, with its row
+                    }
                 }
                 for (MarketEvent e : updates.values()) {
                     dao.updateEvent(c, e);
@@ -1369,7 +1424,7 @@ public final class MarketSimService implements PriceMood {
         for (int i = 0; i < events.size(); i++) {
             Long id = ids.get(events.get(i));
             if (id != null) {
-                events.set(i, events.get(i).withId(id));
+                events.set(i, id > 0 ? events.get(i).withId(id) : stored(events.get(i)));
             }
         }
         for (MarketEvent e : inserts) {
@@ -1382,6 +1437,77 @@ public final class MarketSimService implements PriceMood {
             newsCache.put(e.id(), e);
         }
         return ids;
+    }
+
+    /**
+     * A working-set row whose insert hit the unique {@code (kind, tag)} index: the row already
+     * stored with that tag takes its place, so it is not shown or announced a second time and
+     * the next tick sees the tag. Id {@code -1} (never written again) if that cannot be read.
+     */
+    private MarketEvent stored(MarketEvent lost) {
+        try {
+            Optional<MarketEvent> row = dao.findByTag(lost.kind(), lost.tag());
+            if (row.isPresent()) {
+                newsCache.put(row.get().id(), row.get());
+                return row.get();
+            }
+        } catch (SQLException ex) {
+            plugin.getLogger().warning("Live market: could not read the stored " + lost.kind() + " " + lost.tag()
+                    + ": " + ex.getMessage());
+        }
+        return lost.withId(-1L);
+    }
+
+    /**
+     * SEASON rows the working set lacks (by id), e.g. one whose season an admin extended past the
+     * row's stored end: the simulator keeps them while the calendar runs their season, so it
+     * never makes a second row for the same {@code id:year}.
+     */
+    private void addSeasonRows(List<MarketEvent> rows) {
+        Set<Long> have = new HashSet<>();
+        for (MarketEvent e : events) {
+            have.add(e.id());
+        }
+        for (MarketEvent e : rows) {
+            if (e.kind() == EventKind.SEASON && e.id() > 0 && have.add(e.id())) {
+                events.add(e);
+            }
+        }
+    }
+
+    /** {@link #addSeasonRows} from the database (a reload may have moved a season's dates). */
+    private void reloadSeasonRows(long now) {
+        try {
+            addSeasonRows(dao.loadSeasons(now - SEASON_ROWS_MS));
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Live market: could not read the season rows: " + e.getMessage());
+        }
+    }
+
+    /** Queue again the real-world moves fetched earlier that no REAL event has used yet. */
+    private void requeueReal(long now) {
+        if (running() && settings.real().enabled()) {
+            queueReal(realWorld.unapplied(now));
+        }
+    }
+
+    /**
+     * The host clock went back (a bad clock at boot, a restored snapshot, a big NTP correction):
+     * the stored last tick is more than a tick ahead of now, and waiting for the clock to catch
+     * up would freeze the market with no word. Carry on from now instead, without replaying, and
+     * say so once. A broadcast "in the future" would also hold every announcement back.
+     */
+    private void clockCheck(long now) {
+        long t = settings.tickMs();
+        if (MarketSimulator.clockWentBack(lastTickAt, now, t)) {
+            plugin.getLogger().warning("Live market: the clock is " + approx(lastTickAt - now)
+                    + " behind the last tick (was it moved back?) - carrying on from now.");
+            lastTickAt = floor(now, t);
+            previous = null;
+        }
+        if (broadcast.lastAt() > now) {
+            broadcast = new BroadcastState(broadcast.day(), broadcast.count(), now, broadcast.introDone());
+        }
     }
 
     private Map<String, String> metaRows() {
@@ -1443,6 +1569,8 @@ public final class MarketSimService implements PriceMood {
         MarketSimulator.enable(now, rng, schedule, state);
         lastTickAt = floor(now, settings.tickMs());
         previous = null;
+        reloadSeasonRows(now);
+        requeueReal(now);
         commit();
         republish(now, false);
         bumpAll();
@@ -1648,7 +1776,9 @@ public final class MarketSimService implements PriceMood {
         MarketSimulator.Evaluation ev = MarketSimulator.evaluate(settings, params, quotes, state, events, zone(),
                 spread(), now);
         Double m0 = ev.multipliers().get(p.id());
-        return MarketSimulator.candidate(p, quotes.get(p.id()), state.get(p.id()), m0 == null ? 1.0 : m0,
+        double m = m0 == null ? 1.0 : m0;
+        MoodEngine.Breakdown bd = ev.breakdowns().get(p.id());
+        return MarketSimulator.candidate(p, quotes.get(p.id()), state.get(p.id()), m, bd == null ? m : bd.raw(),
                 MarketSimulator.busy(events, p.id(), now), popular.contains(p.id()), settings);
     }
 
@@ -1661,7 +1791,8 @@ public final class MarketSimService implements PriceMood {
             case DOWN -> MarketLabels.newsLine(e, name, money(ask(id, e.priceBefore())), money(ask(id, e.priceAfter())),
                     buyLimit(id, EventKind.DOWN));
             case HOT, DEAL -> {
-                long from = e.announceDueAt() != null ? e.announceDueAt() : e.startedAt();
+                long from = e.announcedAt() != null ? e.announcedAt()
+                        : e.announceDueAt() != null ? e.announceDueAt() : e.startedAt();
                 yield MarketLabels.storyLine(e, name, Headlines.left(Math.max(0L, e.endsAt() - from)),
                         buyLimit(id, e.kind()));
             }

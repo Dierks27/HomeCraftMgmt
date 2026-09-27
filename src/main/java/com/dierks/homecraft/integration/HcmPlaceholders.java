@@ -53,9 +53,11 @@ import org.bukkit.entity.Player;
  *   <li>{@code %hcm_mood_<item>%} — {@code +11.7%}, {@code -3.2%}, {@code 0%}</li>
  *   <li>{@code %hcm_endsin_<item>%} — {@code 20h}, {@code 2d}, or empty</li>
  * </ul>
- * With the live market off they read as a quiet market: the calm line, {@code none}, empty,
- * {@code 0%}, and the usual price equals the price. {@code %hcm_price_<item>%} and
- * {@code %hcm_trend_<item>%} already include the live market's multiplier.
+ * They are answered only while the live market runs. With it off or paused they are not ours,
+ * exactly as in 0.32 (PlaceholderAPI leaves the token as typed); while it runs a quiet market
+ * reads the calm line, {@code none}, empty, {@code 0%}, and the usual price equals the price.
+ * {@code %hcm_price_<item>%} and {@code %hcm_trend_<item>%} already include the live market's
+ * multiplier (exactly 1 while it is off).
  */
 public final class HcmPlaceholders extends PlaceholderExpansion {
 
@@ -95,43 +97,12 @@ public final class HcmPlaceholders extends PlaceholderExpansion {
         if (p.equals("order_status")) {
             return orderStatus(player);
         }
-        // ---- live market: exact keys first, then the per-item prefixes ----
-        switch (p) {
-            case "news" -> {
-                MarketEvent latest = latestNews();
-                return MarketLabels.papiNews(latest == null ? "" : MarketNewsMenu.headline(plugin, latest));
+        // ---- live market (only while it runs): exact keys first, then the per-item prefixes ----
+        if (MarketNewsMenu.live(plugin) != null) {
+            String mood = liveMarket(p);
+            if (mood != null) {
+                return mood;
             }
-            case "news_age" -> {
-                MarketEvent latest = latestNews();
-                return latest == null ? "" : MarketNewsMenu.age(latest, System.currentTimeMillis());
-            }
-            case "hot_list" -> {
-                return nameList(Badge.HOT);
-            }
-            case "deal_list" -> {
-                return nameList(Badge.DEAL);
-            }
-            case "season" -> {
-                return MarketNewsMenu.seasonName(plugin);
-            }
-            default -> {
-                // not an exact live-market key; fall through to the prefixes
-            }
-        }
-        if (p.startsWith("status_")) {
-            return itemMood(p.substring("status_".length()), MoodField.STATUS);
-        }
-        if (p.startsWith("badge_")) {
-            return itemMood(p.substring("badge_".length()), MoodField.BADGE);
-        }
-        if (p.startsWith("usual_")) {
-            return itemMood(p.substring("usual_".length()), MoodField.USUAL);
-        }
-        if (p.startsWith("mood_")) {
-            return itemMood(p.substring("mood_".length()), MoodField.MOOD);
-        }
-        if (p.startsWith("endsin_")) {
-            return itemMood(p.substring("endsin_".length()), MoodField.ENDS_IN);
         }
         if (p.startsWith("price_")) {
             return priceOf(p.substring("price_".length()));
@@ -168,13 +139,57 @@ public final class HcmPlaceholders extends PlaceholderExpansion {
         return plugin.economy().format(plugin.market().price(id));
     }
 
+    /**
+     * A live-market placeholder ({@code p} lower-cased), or {@code null} when {@code p} is not one.
+     * Called only while the live market runs. Exact keys are matched before the prefixes.
+     */
+    private String liveMarket(String p) {
+        switch (p) {
+            case "news" -> {
+                MarketEvent latest = latestNews();
+                return MarketLabels.papiNews(latest == null ? "" : MarketNewsMenu.headline(plugin, latest));
+            }
+            case "news_age" -> {
+                MarketEvent latest = latestNews();
+                return latest == null ? "" : MarketNewsMenu.age(latest, System.currentTimeMillis());
+            }
+            case "hot_list" -> {
+                return nameList(Badge.HOT);
+            }
+            case "deal_list" -> {
+                return nameList(Badge.DEAL);
+            }
+            case "season" -> {
+                return MarketNewsMenu.seasonName(plugin);
+            }
+            default -> {
+                // not an exact live-market key; try the prefixes
+            }
+        }
+        if (p.startsWith("status_")) {
+            return itemMood(p.substring("status_".length()), MoodField.STATUS);
+        }
+        if (p.startsWith("badge_")) {
+            return itemMood(p.substring("badge_".length()), MoodField.BADGE);
+        }
+        if (p.startsWith("usual_")) {
+            return itemMood(p.substring("usual_".length()), MoodField.USUAL);
+        }
+        if (p.startsWith("mood_")) {
+            return itemMood(p.substring("mood_".length()), MoodField.MOOD);
+        }
+        if (p.startsWith("endsin_")) {
+            return itemMood(p.substring("endsin_".length()), MoodField.ENDS_IN);
+        }
+        return null;
+    }
+
     /** The per-item live-market placeholders. */
     private enum MoodField { STATUS, BADGE, USUAL, MOOD, ENDS_IN }
 
     /**
-     * One per-item live-market value; {@code N/A} for an item the market does not trade. With
-     * the live market off (or the item quiet) it reads: no status, no badge, usual = price,
-     * mood {@code 0%}, nothing ending.
+     * One per-item live-market value; {@code N/A} for an item the market does not trade. A quiet
+     * item reads: no status, no badge, usual = price, mood {@code 0%}, nothing ending.
      */
     private String itemMood(String id, MoodField field) {
         if (plugin.market().item(id) == null) {

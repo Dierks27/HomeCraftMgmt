@@ -518,9 +518,12 @@ public final class MarketLabels {
      * &amp;f{real_up|real_down headline}
      * &amp;a▲ So Crate's {Name} went up a little too. &amp;7(+{pct}%)
      * &amp;c▼ So Crate's {Name} went down a little too. &amp;7(-{pct}%)
+     * &amp;7» But Crate's {Name} price stayed about the same.
      * </pre>
-     * The direction and size come from the event's percent (or its strength). Any other kind
-     * gives an empty list.
+     * The direction and size come from the event's percent ({@link #pct}). Line 3 never claims
+     * a move Crate's price did not make: when that percent rounds to 0 (the item is sold out and
+     * pinned at its ceiling, or the mood was already at its limit) it says the price stayed
+     * about the same. Any other kind gives an empty list.
      */
     public static List<String> realLines(MarketEvent e, String name, String headline) {
         if (e == null || e.kind() != EventKind.REAL) {
@@ -529,8 +532,7 @@ public final class MarketLabels {
         List<String> out = new ArrayList<>(3);
         out.add(REAL_HEADER);
         addHeadline(out, headline);
-        boolean up = pct(e) >= 0;
-        out.add((up ? "&a▲ " : "&c▼ ") + realBody(e, name));
+        out.add(realLead(e, true) + realBody(e, name));
         return List.copyOf(out);
     }
 
@@ -539,7 +541,7 @@ public final class MarketLabels {
         if (e == null || e.kind() != EventKind.REAL) {
             return "";
         }
-        return (pct(e) >= 0 ? "&a" : "&c") + realBody(e, name);
+        return realLead(e, false) + realBody(e, name);
     }
 
     /**
@@ -677,7 +679,7 @@ public final class MarketLabels {
             case DEAL -> "&a✦ &f" + n + " went on sale";
             case WANTED -> "&e» &fCrate is looking for " + n;
             case SEASON -> "&2» &f" + n + " started";
-            case REAL -> "&d» &fReal-world " + n + (pct(e) >= 0 ? " went up" : " went down");
+            case REAL -> "&d» &fReal-world " + n + (realUp(e) ? " went up" : " went down");
         };
     }
 
@@ -950,19 +952,27 @@ public final class MarketLabels {
      * {@code pct} when set, else its strength as a percent ({@code 0.12} = 12); the sign is the
      * kind's (HOT/UP +, DEAL/DOWN -), a REAL's own strength sign, or for other kinds the stored
      * sign. So a row whose {@code pct} was stored unsigned still reads the right way.
+     *
+     * <p>A REAL that carries its before and after prices (every row the simulator writes) is
+     * what Crate's price really did, so its stored {@code pct} counts even when it is 0: a
+     * sold-out or clamped item whose price could not move reads 0, never its strength.
      */
     public static double pct(MarketEvent e) {
         if (e == null) {
             return 0.0;
         }
         double p = e.pct();
-        double raw = Double.isFinite(p) && p != 0.0 ? p : e.strength() * 100.0;
+        boolean measured = e.kind() == EventKind.REAL && hasPrices(e);
+        double raw = Double.isFinite(p) && (p != 0.0 || measured) ? p : e.strength() * 100.0;
         if (!Double.isFinite(raw)) {
             return 0.0;
         }
         int sign = e.kind().sign();
         if (sign == 0 && e.kind() == EventKind.REAL && e.strength() != 0.0) {
             sign = e.strength() > 0 ? 1 : -1;
+        }
+        if (raw == 0.0) {
+            return 0.0; // never -0.0: it would print as "-0.00" / "-0%"
         }
         return sign == 0 ? raw : sign * Math.abs(raw);
     }
@@ -1068,9 +1078,39 @@ public final class MarketLabels {
 
     private static String realBody(MarketEvent e, String name) {
         double pct = pct(e);
+        if (!realMoved(e)) {
+            return "But Crate's " + s(name) + " price stayed about the same.";
+        }
         return pct >= 0
                 ? "So Crate's " + s(name) + " went up a little too. &7(+" + wholeUp(pct) + "%)"
                 : "So Crate's " + s(name) + " went down a little too. &7(-" + wholeDown(pct) + "%)";
+    }
+
+    /** A REAL's line 3 colour and arrow: up, down, or none when Crate's price did not move. */
+    private static String realLead(MarketEvent e, boolean arrow) {
+        if (!realMoved(e)) {
+            return arrow ? "&7» " : "&7";
+        }
+        boolean up = pct(e) >= 0;
+        return (up ? "&a" : "&c") + (arrow ? (up ? "▲ " : "▼ ") : "");
+    }
+
+    /** Whether Crate's price moved by at least a whole percent, so "went up/down" is true. */
+    private static boolean realMoved(MarketEvent e) {
+        return Math.round(Math.abs(pct(e))) >= 1;
+    }
+
+    /** Which way the real-world price went: the strength's sign (the headline's list), else the pct's. */
+    private static boolean realUp(MarketEvent e) {
+        double st = e.strength();
+        return st != 0.0 && Double.isFinite(st) ? st > 0 : !(pct(e) < 0);
+    }
+
+    /** Both prices recorded (positive and finite), as the simulator stores them. */
+    private static boolean hasPrices(MarketEvent e) {
+        double b = e.priceBefore();
+        double a = e.priceAfter();
+        return b > 0 && a > 0 && Double.isFinite(b) && Double.isFinite(a);
     }
 
     private static void addHeadline(List<String> out, String headline) {

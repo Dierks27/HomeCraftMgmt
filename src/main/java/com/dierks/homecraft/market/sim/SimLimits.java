@@ -33,6 +33,26 @@ public final class SimLimits {
     public static final double PREDICTABLE_MAX = 0.045;
     /** Per-item {@code volatility} override: 0 (no drift) .. 1.5. */
     public static final double VOLATILITY_MAX = 1.5;
+    /**
+     * {@code drift.half_life_hours} is never shorter than a day. A drift that fades within hours
+     * is redrawn within the day, so the same day's low and high drift apart by more than the
+     * day-to-day move: at a 6 h half-life iron beat the 10.5% buy-then-sell round trip on about
+     * one day in ten, and at 0 the drift was fresh noise every tick. At 24 h or more a day is
+     * at most one half-life and the wander builds over days, not hours.
+     */
+    public static final double DRIFT_MIN_HALF_LIFE_HOURS = 24.0;
+    /**
+     * The widest drift size (the drift's stationary sd {@code sigma}) any item can have: the
+     * liveliest the shipped settings allow, a lively item (3%) at volatility 1.5. Paired with
+     * the shipped half-life ({@link #DRIFT_SPEED_HALF_LIFE_HOURS}) that is about 3% a day.
+     */
+    public static final double DRIFT_SIGMA_MAX = 0.045;
+    /**
+     * The half-life {@link #DRIFT_SIGMA_MAX} is paired with (the shipped 66 h). A shorter
+     * half-life with the same {@code sigma} would move prices faster, so below it the drift size
+     * is scaled down to keep the same speed ({@link #driftSigmaCap}).
+     */
+    public static final double DRIFT_SPEED_HALF_LIFE_HOURS = 66.0;
     /** {@code tick_minutes} range. */
     public static final int MIN_TICK_MINUTES = 1;
     public static final int MAX_TICK_MINUTES = 60;
@@ -108,6 +128,33 @@ public final class SimLimits {
     /** A per-item volatility squeezed into {@code [0, 1.5]}. */
     public static double clampVolatility(double v) {
         return clamp(v, 0.0, VOLATILITY_MAX);
+    }
+
+    /**
+     * {@code drift.half_life_hours} held to at least {@link #DRIFT_MIN_HALF_LIFE_HOURS} (24);
+     * longer is calmer and always allowed (+infinity freezes the drift). NaN gives 24.
+     */
+    public static double clampDriftHalfLife(double hours) {
+        return clamp(hours, DRIFT_MIN_HALF_LIFE_HOURS, Double.POSITIVE_INFINITY);
+    }
+
+    /**
+     * The largest drift size {@code sigma} (a fraction) an item may have at this half-life: the
+     * drift's speed lock. How fast the drift moves prices over hours is
+     * {@code sigma x sqrt(2 ln2 / halfLife)} (its sd per square-root hour), so this keeps it at or
+     * under the shipped settings at their liveliest (4.5% at 66 h):
+     * {@code 0.045 x sqrt(min(halfLife, 66) / 66)}, exactly 0.045 from 66 h up. With the half-life
+     * floor that is at most about 3% a day and 0.19% a 5-minute tick, far under the 10.5% round
+     * trip, so no setting of {@code calm_percent}, {@code lively_percent}, {@code volatility} or
+     * {@code half_life_hours} brings back same-day scalping of the drift. The half-life is first
+     * held to its floor ({@link #clampDriftHalfLife}).
+     */
+    public static double driftSigmaCap(double halfLifeHours) {
+        double h = clampDriftHalfLife(halfLifeHours);
+        if (h >= DRIFT_SPEED_HALF_LIFE_HOURS) {
+            return DRIFT_SIGMA_MAX;
+        }
+        return DRIFT_SIGMA_MAX * Math.sqrt(h / DRIFT_SPEED_HALF_LIFE_HOURS);
     }
 
     /** {@code tick_minutes} squeezed into {@code [1, 60]}. */

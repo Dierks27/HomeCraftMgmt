@@ -6,7 +6,6 @@ import com.dierks.homecraft.market.MarketService;
 import com.dierks.homecraft.market.sim.Badge;
 import com.dierks.homecraft.market.sim.ItemStatus;
 import com.dierks.homecraft.market.sim.MarketEvent;
-import com.dierks.homecraft.market.sim.MarketSimService;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -58,6 +57,10 @@ public final class MarketMenu extends Menu {
     protected void build() {
         MarketService market = plugin.market();
         BrowseState.Shop state = plugin.browseState().market(player);
+        // "Hot & Deals" only exists while the live market runs; with it off the grid and the
+        // sort button are 0.32's name order.
+        boolean hot = MarketNewsMenu.live(plugin) != null;
+        state.sort = state.sort.usable(hot);
         List<MarketItem> items = Departments.view(plugin, state.department, state.sort);
         int pages = Math.max(1, (int) Math.ceil(items.size() / (double) Departments.PAGE_SIZE));
         state.page = Math.max(0, Math.min(state.page, pages - 1));
@@ -84,9 +87,11 @@ public final class MarketMenu extends Menu {
             List<String> lore = new ArrayList<>();
             lore.add("&bCrate pays: &6" + money(market.sellPrice(item.id())));
             if (st != null) {
+                long cap = sellCap(item);
                 lore.addAll(MarketLabels.sellLore(badge, st.fading(), st.pct(),
                         money(MarketNewsMenu.usualQuote(plugin, item, st.usual(), true)),
-                        MarketNewsMenu.left(st, now), sellCap(item, badge)));
+                        MarketNewsMenu.left(st, now), cap));
+                lore.addAll(MarketNewsMenu.capLine(badge, true, cap));
             }
             lore.add("&7Crate's stock: &f" + stock);
             lore.add("&8—");
@@ -131,7 +136,6 @@ public final class MarketMenu extends Menu {
         });
         // Slot 50 was free: the Market News button while the live market runs. With it off or
         // paused the slot stays filler, so the Sell screen is exactly 0.32's (spec §11.3).
-        boolean hot = MarketNewsMenu.live(plugin) != null;
         if (hot) {
             set(50, newsButton(now), e -> MarketNewsMenu.open(plugin, player, this::reopen));
         }
@@ -160,13 +164,14 @@ public final class MarketMenu extends Menu {
         return Menus.icon(Material.BELL, MarketLabels.NEWS_BUTTON, lore.toArray(new String[0]));
     }
 
-    /** The HOT/UP "Up to N a day at this price" cap; 0 (not shown) for any other badge. */
-    private long sellCap(MarketItem item, Badge badge) {
-        if (badge != Badge.HOT && badge != Badge.UP) {
-            return 0L;
-        }
-        MarketSimService sim = MarketNewsMenu.live(plugin);
-        return sim == null ? 0L : sim.eventSellCap(item);
+    /**
+     * The HOT/UP "Up to N a day" to show: the event sell cap while its event is showing its badge,
+     * 0 otherwise (a HOT's silent ramp, an UP's tail — the cap binds but must not give the event
+     * away) and while the live market is off ({@link MarketNewsMenu#shownCap}). The HOT/UP badge
+     * lore says it, and {@link MarketNewsMenu#capLine} says it under any other.
+     */
+    private long sellCap(MarketItem item) {
+        return MarketNewsMenu.shownCap(plugin, item, true);
     }
 
     private void openSell(MarketItem item) {

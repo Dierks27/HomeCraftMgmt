@@ -13,7 +13,8 @@ import java.util.List;
  * e     = story + news: sum of strength x envelope over the item's HOT/DEAL and UP/DOWN events
  * q     = clamp(season + real, -c_pred, +c_pred),  c_pred = min(4.5%, 0.45 x spread, config)
  * raw   = 1 + d + e + q
- * M     = sim on AND item sim-enabled ? clamp(raw, Lo, Hi) : 1.0     (Lo >= 0.75, Hi <= 1.25)
+ * M     = sim on AND item sim-enabled ? clamp(raw, Lo, Hi) : 1.0
+ *         Lo = 1 - b, Hi = 1 + b, b = min(max_up_percent, max_down_percent)/100 <= 0.25 (symmetric)
  * P     = clamp(B x (S &gt; 0 ? M : 1), F, C),  B = clamp(balanced price, F, C)
  * </pre>
  *
@@ -154,6 +155,31 @@ public final class MoodEngine {
                     wanted == null ? null : wanted.phase(t));
         }
         return new ItemStatus(Badge.NONE, 0L, m, usual, price, pct, null, null);
+    }
+
+    /**
+     * Whether players can already see an event behind one of the item's event caps at {@code t}
+     * (what {@link com.dierks.homecraft.market.PriceMood#eventCapShown} answers): for the sell
+     * side a HOT or UP, for the buy side a DEAL or DOWN, that is running and showing its badge.
+     * A HOT/DEAL shows it only at full strength or fading, never during its silent ramp nor
+     * after a stop during it; an UP/DOWN only while its badge lasts, not in its tail. Until
+     * then the cap still binds, but a refusal must not name the event.
+     *
+     * @param itemEvents the item's events; {@code null} = none
+     * @param sell       true for the sell cap (HOT/UP), false for the buy cap (DEAL/DOWN)
+     * @param t          the moment
+     */
+    public static boolean capEventShown(List<MarketEvent> itemEvents, boolean sell, long t) {
+        if (itemEvents == null) {
+            return false;
+        }
+        int side = sell ? 1 : -1;
+        for (MarketEvent e : itemEvents) {
+            if (e != null && e.kind().mood() && e.kind().sign() == side && e.active(t) && e.badge(t).shown()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Same precedence: the newer event wins, then the bigger move. */

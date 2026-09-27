@@ -11,8 +11,9 @@ package com.dierks.homecraft.market.sim;
  * @param multiplier {@code M}, already clamped to the configured band inside {@code [0.75, 1.25]};
  *                   exactly 1.0 when the sim is off or the item is {@code sim: false}
  * @param usual      the balanced price {@code B = clamp(currentPrice, F, C)} ("Usually $X")
- * @param price      the displayed mid {@code P = clamp(B * m(S), F, C)}; exactly the ceiling at
- *                   stock 0 whatever {@code M} is
+ * @param price      the displayed mid {@code P = clamp(B * m(S), F, C)}; at stock 0 the unmoved
+ *                   usual price whatever {@code M} is (the ceiling on day one or after setstock,
+ *                   a hair under it after a buy-out)
  * @param pct        {@code (P / usual - 1) * 100}, the % a player sees
  * @param event      the event behind the badge (HOT/DEAL/UP/DOWN, or the item's live WANTED row),
  *                   or {@code null}

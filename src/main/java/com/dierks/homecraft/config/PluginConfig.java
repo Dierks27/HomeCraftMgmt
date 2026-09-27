@@ -610,7 +610,9 @@ public final class PluginConfig {
      * to open a menu.
      *
      * @param storeDepartment the department tab selected first ("All", or a department name)
-     * @param storeSort       NAME | PRICE_UP | PRICE_DOWN | STOCK
+     * @param storeSort       NAME | PRICE_UP | PRICE_DOWN | STOCK | HOT (HOT only while the
+     *                        live market runs, else NAME); the Store and the Sell screen both
+     *                        start on it
      * @param museumView      SERIES | RARITY | TYPE
      */
     public record MenuDefaults(String storeDepartment, String storeSort, String museumView) {

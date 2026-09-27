@@ -24,6 +24,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,7 +44,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *       one, and unknown keys and item ids are reported;</li>
  *   <li>per-row {@code sim}, {@code volatility}, {@code sim_weight} and {@code news_name}
  *       parse, clamp with a WARN, and skip reserved {@code @} ids;</li>
- *   <li>a config the parser cannot use turns the live market OFF instead of failing.</li>
+ *   <li>a config the parser cannot use turns the live market OFF instead of failing, and so
+ *       does a {@code market.sim.enabled} it cannot read: the kill switch fails closed.</li>
  * </ul>
  *
  * <p>Needs paper-api on the test classpath for {@link YamlConfiguration}, like
@@ -276,6 +278,37 @@ class MarketSimConfigTest {
         assertEquals(0, warnsNaming(warns, "market.sim.keep_days"));
     }
 
+    /**
+     * The kill switch fails CLOSED. Every other key falls back to its shipped value, but the only
+     * reason to edit market.sim.enabled is to turn the market off, so a typo there must not leave
+     * it running. Review findings #6 / #33.
+     */
+    @Test
+    void anUnreadableKillSwitchTurnsTheMarketOff() {
+        for (String bad : List.of("0", "1", "n", "flase", "disabled", "\"maybe\"", "[false]")) {
+            List<String> warns = new ArrayList<>();
+            SimSettings s = MarketSimConfig.parse(sim("    enabled: " + bad + "\n"), warns::add).settings();
+            assertEquals(SimSettings.defaults().withEnabled(false), s, "enabled: " + bad + " must read as off");
+            assertOneWarn(warns, "market.sim.enabled");
+            assertEquals(1, warns.size(), warns.toString());
+            assertTrue(warns.get(0).contains("off"), "the WARN says the market is off: " + warns);
+        }
+        for (String off : List.of("false", "off", "no", "\"false\"", "\"OFF\"", "\" no \"")) {
+            List<String> warns = new ArrayList<>();
+            assertFalse(MarketSimConfig.parse(sim("    enabled: " + off + "\n"), warns::add).enabled(),
+                    "enabled: " + off);
+            assertEquals(List.of(), warns, "enabled: " + off + " is a plain off");
+        }
+        for (String on : List.of("true", "yes", "on", "\"true\"")) {
+            List<String> warns = new ArrayList<>();
+            assertTrue(MarketSimConfig.parse(sim("    enabled: " + on + "\n"), warns::add).enabled(),
+                    "enabled: " + on);
+            assertEquals(List.of(), warns);
+        }
+        // Left out, it is the shipped value (on); only a value that is THERE and unreadable is off.
+        assertTrue(MarketSimConfig.parse(sim("    tick_minutes: 5\n"), w -> { }).enabled());
+    }
+
     // ---- the other rules -------------------------------------------------------------------
 
     @Test
@@ -451,6 +484,22 @@ class MarketSimConfigTest {
         assertFalse(junk.enabled(), "a section nobody can read turns the live market off");
         assertEquals(1, warns.size(), warns.toString());
 
+        // A quoted switch reads the way the config migration will write it (market.sim.enabled).
+        for (String word : List.of("off", "no", "\"no\"", "\"off\"")) {
+            warns.clear();
+            assertEquals(SimSettings.defaults().withEnabled(false),
+                    MarketSimConfig.parse(yaml("market:\n  sim: " + word + "\n" + CATALOG), warns::add).settings(),
+                    "sim: " + word);
+            assertEquals(1, warns.size(), warns.toString());
+        }
+        warns.clear();
+        assertTrue(MarketSimConfig.parse(yaml("market:\n  sim: \"yes\"\n" + CATALOG), warns::add).enabled());
+        assertEquals(1, warns.size(), warns.toString());
+        assertEquals(Boolean.FALSE, MarketSimConfig.readSwitch("Off"));
+        assertEquals(Boolean.TRUE, MarketSimConfig.readSwitch(true));
+        assertNull(MarketSimConfig.readSwitch(0));
+        assertNull(MarketSimConfig.readSwitch("yes please"));
+
         warns.clear();
         SimSettings drift = MarketSimConfig.parse(sim("    drift: 8\n"), warns::add).settings();
         assertEquals(SimSettings.Drift.defaults(), drift.drift());
@@ -544,5 +593,36 @@ class MarketSimConfigTest {
         assertEquals(SimSettings.defaults(), MarketSimConfig.Parsed.DEFAULTS.settings());
         assertSame(ItemOverride.NONE, MarketSimConfig.Parsed.OFF.override(null));
         assertEquals(MarketSimConfig.Parsed.DEFAULTS, MarketSimConfig.parse((ConfigurationSection) null, null));
+    }
+
+    @Test
+    void aOneSidedBandIsUsedBothWaysAndSaysSo() {
+        List<String> warns = new ArrayList<>();
+        SimSettings s = MarketSimConfig.parse(sim("""
+                    max_up_percent: 25
+                    max_down_percent: 10
+                """), warns::add).settings();
+        assertEquals(0.90, s.multiplierLo(), 1e-9);
+        assertEquals(1.10, s.multiplierHi(), 1e-9, "the narrower side sets both, so the mood can't lean one way");
+        assertEquals(1, warns.stream().filter(w -> w.startsWith("market.sim: max_up_percent (25)")
+                && w.contains("10%, both ways")).count(), warns.toString());
+    }
+
+    @Test
+    void theDriftSpeedLockIsHeldAndSaysSo() {
+        List<String> warns = new ArrayList<>();
+        SimSettings s = MarketSimConfig.parse(sim("""
+                    drift:
+                      half_life_hours: 6
+                      lively_percent: 3
+                """), warns::add).settings();
+        assertEquals(24, s.drift().halfLifeHours(), 1e-9, "the half-life is held to at least 24 h");
+        assertOneWarn(warns, "market.sim.drift.half_life_hours");
+        assertEquals(1, warns.stream().filter(w -> w.startsWith("market.sim.drift: lively_percent 3")
+                && w.contains("held to")).count(), "3% at 24 h is past the speed lock: " + warns);
+
+        List<String> quiet = new ArrayList<>();
+        MarketSimConfig.parse(sim("    max_up_percent: 25\n"), quiet::add);
+        assertTrue(quiet.isEmpty(), "the shipped drift and a symmetric band say nothing: " + quiet);
     }
 }

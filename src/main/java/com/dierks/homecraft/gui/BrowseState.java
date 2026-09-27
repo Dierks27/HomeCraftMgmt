@@ -63,6 +63,16 @@ public final class BrowseState implements Listener {
             return n == HOT && !hot ? n.next() : n;
         }
 
+        /**
+         * The sort a shop grid can use right now: {@link #HOT} reads as {@link #NAME} while the
+         * live market is off ({@code hot == false}). So a player left on "Hot &amp; Deals" when the
+         * market is paused, or a {@code default_sort: HOT} on a server with it disabled, gets the
+         * name order and the "Name A–Z" button, exactly as 0.32 (which parsed HOT to NAME).
+         */
+        public Sort usable(boolean hot) {
+            return this == HOT && !hot ? NAME : this;
+        }
+
         /** Parse a config value; anything unrecognised falls back to NAME. */
         public static Sort of(String raw) {
             if (raw != null) {

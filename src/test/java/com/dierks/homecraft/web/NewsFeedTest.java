@@ -268,4 +268,20 @@ class NewsFeedTest {
         assertEquals(1_793_509_200_000L, row.endsAt());
         assertNull(NewsFeed.seasonRow(null, CHICAGO));
     }
+
+    /**
+     * A real-world move on a sold-out or clamped item is stored with before == after and pct 0: the
+     * feed must report 0, not fall back to the impulse's strength and claim a move Crate never made.
+     */
+    @Test
+    void aRealMoveThatDidNotMoveCratesPriceReportsZero() {
+        MarketEvent stuck = MarketEvent.shock(EventKind.REAL, Source.REAL, "gold_ingot", 0.04, T, 24 * H, 96 * H)
+                .toBuilder().pct(0.0).priceBefore(150.0).priceAfter(150.0).build();
+        assertEquals(0.0, NewsFeed.pct(stuck), 1e-9, "measured, and it did not move");
+        MarketEvent unmeasured = MarketEvent.shock(EventKind.REAL, Source.REAL, "gold_ingot", 0.04, T, 24 * H, 96 * H);
+        assertEquals(4.0, NewsFeed.pct(unmeasured), 1e-9, "no prices recorded: the strength stands in");
+        MarketEvent stuckDown = MarketEvent.shock(EventKind.REAL, Source.REAL, "gold_ingot", -0.03, T, 24 * H, 96 * H)
+                .toBuilder().pct(0.0).priceBefore(150.0).priceAfter(150.0).build();
+        assertEquals("0.00", Json.num2(NewsFeed.pct(stuckDown)), "a stuck down-move is 0, never -0.00");
+    }
 }

@@ -103,6 +103,10 @@ class MarketSimDaoTest {
         return tx(c -> dao.markApplied(c, symbol, day.toEpochDay()));
     }
 
+    private boolean markApplied(MarketEvent real) throws SQLException {
+        return tx(c -> dao.markApplied(c, real));
+    }
+
     /** A HOT with every column set, so a round trip checks all 24. */
     private static MarketEvent fullHot() {
         return MarketEvent.story(EventKind.HOT, Source.SIM, "oak_log", 0.1234567890123, NOW - 10 * HOUR, 4 * HOUR,
@@ -470,18 +474,75 @@ class MarketSimDaoTest {
         dao.setSeen(ALEX, 70, NOW);
         dao.setMuted(BEA, true);
         UUID cam = UUID.fromString("00000000-0000-0000-0000-00000000000c");
-        dao.advanceSeen(List.of(ALEX, cam), 64);
-        assertEquals(new MarketSimDao.Seen(ALEX, 70, false, NOW), dao.seen(ALEX).orElseThrow(), "never back");
-        assertEquals(new MarketSimDao.Seen(cam, 64, false, 0), dao.seen(cam).orElseThrow());
-        dao.advanceSeen(List.of(ALEX, cam), 80);
+        dao.advanceSeen(List.of(ALEX, cam), 64, NOW - HOUR);
+        assertEquals(new MarketSimDao.Seen(ALEX, 70, false, NOW), dao.seen(ALEX).orElseThrow(),
+                "never back, the mark nor seen_at");
+        assertEquals(new MarketSimDao.Seen(cam, 64, false, NOW - HOUR), dao.seen(cam).orElseThrow());
+        dao.advanceSeen(List.of(ALEX, cam), 80, NOW + 5 * MIN);
         assertEquals(80, dao.seen(ALEX).orElseThrow().lastEventId());
-        assertEquals(NOW, dao.seen(ALEX).orElseThrow().seenAt(), "seen_at is the catch-up clock: untouched");
-        assertEquals(80, dao.seen(cam).orElseThrow().lastEventId());
-        assertEquals(0, dao.seen(BEA).orElseThrow().lastEventId(), "not reached, not moved");
-        dao.advanceSeen(List.of(), 99);
+        assertEquals(NOW + 5 * MIN, dao.seen(ALEX).orElseThrow().seenAt(),
+                "seen_at is when they were last brought up to date: the broadcast they heard");
+        assertEquals(new MarketSimDao.Seen(cam, 80, false, NOW + 5 * MIN), dao.seen(cam).orElseThrow());
+        assertEquals(new MarketSimDao.Seen(BEA, 0, true, 0), dao.seen(BEA).orElseThrow(), "not reached, not moved");
+        dao.advanceSeen(List.of(), 99, NOW);
+    }
+
+    @Test
+    void storedSeasonRowsAndTagsCanBeReadBack() throws Exception {
+        MarketEvent harvest = MarketEvent.info(EventKind.SEASON, Source.CALENDAR, null, "harvest_time:2026",
+                NOW - 40 * DAY, NOW - 3 * HOUR).withAnnouncedAt(NOW - 39 * DAY);  // its stored end has passed
+        MarketEvent old = MarketEvent.info(EventKind.SEASON, Source.CALENDAR, null, "harvest_time:2025",
+                NOW - 400 * DAY, NOW - 350 * DAY);
+        MarketEvent up = MarketEvent.shock(EventKind.UP, Source.SIM, "wheat", 0.2, NOW - HOUR, 6 * HOUR, 30 * HOUR);
+        long a = insert(harvest);
+        long b = insert(old);
+        insert(up);
+        assertTrue(dao.loadLive(NOW).stream().noneMatch(e -> e.id() == a), "not in the live set any more");
+        assertEquals(List.of(harvest.withId(a)), dao.loadSeasons(NOW - 100 * DAY), "SEASON rows only, by start");
+        assertEquals(List.of(harvest.withId(a), old.withId(b)), dao.loadSeasons(0L), "oldest id first");
+
+        assertEquals(harvest.withId(a), dao.findByTag(EventKind.SEASON, "harvest_time:2026").orElseThrow());
+        assertTrue(dao.findByTag(EventKind.REAL, "harvest_time:2026").isEmpty(), "per kind");
+        assertTrue(dao.findByTag(EventKind.SEASON, "spooky:2026").isEmpty());
+        assertTrue(dao.findByTag(EventKind.SEASON, null).isEmpty());
     }
 
     // ---------------------------------------------------------------- quotes
+
+    @Test
+    void aRealRowMarksItsQuoteAppliedInTheSameTransaction() throws Exception {
+        LocalDate d = LocalDate.of(2026, 9, 25);
+        upsertQuotes("gc.f", List.of(new RealQuotes.DailyClose(d.minusDays(1), 2648.5),
+                new RealQuotes.DailyClose(d, 2688.25)), NOW);
+        MarketEvent real = MarketEvent.shock(EventKind.REAL, Source.REAL, "gold_ingot", 0.03, NOW, 24 * HOUR,
+                96 * HOUR).toBuilder().tag("gold_ingot:gc.f:" + d.toEpochDay()).build();
+        assertFalse(dao.quotes("gc.f", d.toEpochDay()).get(0).applied(), "fetched, not yet used");
+
+        // A tick whose transaction fails leaves the move unapplied, to be queued again.
+        assertThrows(SQLException.class, () -> tx(c -> {
+            dao.insertEvent(c, real);
+            dao.markApplied(c, real);
+            throw new SQLException("disk full");
+        }));
+        assertFalse(dao.quotes("gc.f", d.toEpochDay()).get(0).applied());
+        assertEquals(0, count("SELECT COUNT(*) FROM market_events"));
+
+        boolean flipped = tx(c -> {
+            dao.insertEvent(c, real);
+            return dao.markApplied(c, real);
+        });
+        assertTrue(flipped, "the tick that writes the REAL row uses the move up");
+        assertTrue(dao.quotes("gc.f", d.toEpochDay()).get(0).applied());
+        assertFalse(dao.quotes("gc.f", d.minusDays(1).toEpochDay()).get(0).applied(), "only that trade day");
+        assertFalse(markApplied(real), "once");
+
+        // Anything that is not a REAL row with a readable tag is left alone.
+        assertFalse(markApplied(real.toBuilder().tag("nonsense").build()));
+        assertFalse(markApplied(real.toBuilder().tag("gold_ingot:gc.f:day").build()));
+        assertFalse(markApplied(MarketEvent.info(EventKind.SEASON, Source.CALENDAR, null,
+                "x:gc.f:" + d.toEpochDay(), NOW, NOW + DAY)));
+        assertFalse(markApplied((MarketEvent) null));
+    }
 
     @Test
     void quotesRoundTripAndMarkAppliedIsIdempotent() throws Exception {

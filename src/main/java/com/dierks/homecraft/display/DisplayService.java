@@ -293,7 +293,7 @@ public final class DisplayService {
 
     /** Bind a floating hologram above {@code loc} to a commodity and spawn it now. */
     public Result bindHologram(Player admin, Location loc, String itemId) {
-        if (!NEWS_ID.equals(itemId) && plugin.market().item(itemId) == null) {
+        if (!bindable(itemId)) {
             return Result.fail("Unknown commodity '" + itemId + "'.");
         }
         try {
@@ -381,6 +381,19 @@ public final class DisplayService {
             despawn(h.text());
             despawn(h.item());
         }
+    }
+
+    /**
+     * What a hologram or TV may be bound to: a commodity the market trades, or the Market News
+     * board ({@link #NEWS_ID}) while the live market runs. With it off or paused {@code @news} is
+     * refused as an unknown commodity, exactly as 0.32 refused it; boards bound earlier stay and
+     * read "The Crate Market is calm today."
+     */
+    private boolean bindable(String itemId) {
+        if (NEWS_ID.equals(itemId)) {
+            return MarketNewsMenu.live(plugin) != null;
+        }
+        return plugin.market().item(itemId) != null;
     }
 
     /**
@@ -496,7 +509,7 @@ public final class DisplayService {
      * a rebind at the same block replaces it. Never spawns an ItemDisplay or a map.
      */
     public Result bindTvPanel(Player admin, Block wall, BlockFace face, String itemId, float scale) {
-        if (!NEWS_ID.equals(itemId) && plugin.market().item(itemId) == null) {
+        if (!bindable(itemId)) {
             return Result.fail("Unknown commodity '" + itemId + "'.");
         }
         if (face != BlockFace.NORTH && face != BlockFace.SOUTH
@@ -584,8 +597,9 @@ public final class DisplayService {
 
     /**
      * The panel's screen content: commodity name, big price, trend arrow, and stock; then, while
-     * the live market runs, the badge line (or "Usually $X" for an unbadged item 3%+ off usual).
-     * The news board ({@link #NEWS_ID}) shows the board instead.
+     * the live market runs, the badge on line 5, or for an unbadged item 3%+ off usual an empty
+     * line 5 and "Usually $X" on line 6 (spec §7.1). The news board ({@link #NEWS_ID}) shows the
+     * board instead.
      */
     private net.kyori.adventure.text.Component panelText(String itemId) {
         if (NEWS_ID.equals(itemId)) {
@@ -604,14 +618,24 @@ public final class DisplayService {
                 + "\n&7Stock: &f" + state.stock();
         ItemStatus mood = MarketNewsMenu.status(plugin, itemId);
         if (mood != null) {
-            String badge = MarketLabels.tvLine(mood.badge(), mood.fading());
-            if (!badge.isEmpty()) {
-                screen += "\n" + badge;
-            } else if (MarketLabels.showUsual(mood.pct())) {
-                screen += "\n" + MarketLabels.usually(plugin.economy().format(mood.usual()));
-            }
+            screen += tvMoodLines(mood.badge(), mood.fading(), mood.pct(),
+                    plugin.economy().format(mood.usual()));
         }
         return Text.of(screen);
+    }
+
+    /**
+     * What the live market adds under a TV panel's four lines (spec §7.1), each with its leading
+     * newline: the badge on line 5 ({@link MarketLabels#tvLine}); for an unbadged item 3% or more
+     * off usual an empty line 5 and {@code &7Usually &f{usual}} on line 6 (line 5 is the badge's);
+     * otherwise nothing.
+     */
+    static String tvMoodLines(Badge badge, boolean fading, double pct, String usual) {
+        String line5 = MarketLabels.tvLine(badge, fading);
+        if (!line5.isEmpty()) {
+            return "\n" + line5;
+        }
+        return MarketLabels.showUsual(pct) ? "\n\n" + MarketLabels.usually(usual) : "";
     }
 
     // ---- Market News board and celebrations -----------------------------------

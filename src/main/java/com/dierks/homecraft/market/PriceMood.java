@@ -8,6 +8,9 @@ package com.dierks.homecraft.market;
  *
  * <pre>price = clamp(balanced × (stock &gt; 0 ? M : 1), floor, ceiling)</pre>
  *
+ * <p>(A buy charges the unit that empties the shelf at {@code max(M, 1)}, never below its
+ * {@code M = 1} price: {@link OrderMath#buyMid}.)
+ *
  * <p>The contract every implementation keeps:
  * <ul>
  *   <li>{@link #multiplier} is exactly {@code 1.0} whenever the sim is off or paused, or the
@@ -47,6 +50,24 @@ public interface PriceMood {
      * or {@code 0} for no event cap. It binds bypass holders too.
      */
     long eventSellCap(MarketItem item);
+
+    /**
+     * Whether players can already see the event behind this item's event cap on one side, so a
+     * refusal may name it. For {@code sell == false} (the {@link #eventBuyCap} side): true while
+     * a DEAL or DOWN on the item is showing its badge right now. For {@code sell == true} (the
+     * {@link #eventSellCap} side): true while a HOT or UP on the item is showing its badge.
+     *
+     * <p>False during a HOT/DEAL's silent ramp (it is announced only at full strength), for a
+     * HOT/DEAL stopped during its ramp, and for an UP/DOWN's badge-less tail. The caps still
+     * bind then; {@link MarketService} only words the refusal as the plain daily limit, so a
+     * refusal can never tip anyone off to an event nobody has been told about.
+     *
+     * <p>The default is {@code false}: without an answer, refusals stay neutral. The live
+     * market answers it from the item's events with {@code MoodEngine.capEventShown}.
+     */
+    default boolean eventCapShown(MarketItem item, boolean sell) {
+        return false;
+    }
 
     /**
      * A trade just went through at a multiplier other than exactly {@code 1.0}. {@code total}

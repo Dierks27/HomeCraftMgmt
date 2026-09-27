@@ -15,9 +15,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The owner's hard rule, in code: config can make the live market calmer, never wilder.
  *
- * <p>Pins the §2.2 limits — the whole multiplier inside {@code [0.75, 1.25]}, drift at most 8%,
- * HOT/DEAL at most 15%, news at most 25%, seasons + real at most {@code min(4.5%, 0.45 x spread)},
- * volatility at most 1.5 — both in {@link SimLimits} itself and in every place a configured
+ * <p>Pins the §2.2 limits — the whole multiplier inside {@code [0.75, 1.25]} and narrowed only
+ * symmetrically, drift at most 8% with a half-life of at least 24 h and never faster than the
+ * shipped settings at their liveliest, HOT/DEAL at most 15%, news at most 25%, seasons + real at
+ * most {@code min(4.5%, 0.45 x spread)}, volatility at most 1.5 — both in {@link SimLimits}
+ * itself and in every place a configured
  * number enters: the {@link SimSettings} records squeeze their values on construction, and
  * {@link ItemParams#of} squeezes the per-item volatility. Also pins that
  * {@link SimSettings#defaults()} is the shipped §12 section.
@@ -40,6 +42,121 @@ class SimLimitsTest {
         assertEquals(0.75, SimLimits.multiplierLo(Double.POSITIVE_INFINITY));
         assertEquals(1.25, SimLimits.multiplierHi(Double.NaN));
         assertEquals(0.75, SimLimits.multiplierLo(Double.NaN));
+    }
+
+    /**
+     * Narrowing is always symmetric: the band is {@code [1 - b, 1 + b]} with {@code b} the
+     * narrower of max_up_percent and max_down_percent. Narrowing one side only (max_down_percent:
+     * 0) used to clip every dip while keeping every rise, a mood that leaned about +2.3% on
+     * average; now it narrows both sides.
+     */
+    @Test
+    void narrowingOneSideOfTheBandNarrowsBoth() {
+        Object[][] cases = {
+                // max_up, max_down, band, lo, hi
+                {25.0, 25.0, 25.0, 0.75, 1.25},
+                {25.0, 0.0, 0.0, 1.0, 1.0},
+                {0.0, 25.0, 0.0, 1.0, 1.0},
+                {25.0, 10.0, 10.0, 0.90, 1.10},
+                {10.0, 25.0, 10.0, 0.90, 1.10},
+                {5.0, 10.0, 5.0, 0.95, 1.05},
+                {50.0, 90.0, 25.0, 0.75, 1.25},    // both past the lock: the hard band
+                {90.0, 20.0, 20.0, 0.80, 1.20},    // one past the lock never widens the other
+                {-10.0, 25.0, 0.0, 1.0, 1.0},      // negative reads as 0
+                {Double.NaN, 25.0, 0.0, 1.0, 1.0}, // NaN reads as 0
+        };
+        for (Object[] c : cases) {
+            SimSettings s = band((double) c[0], (double) c[1]);
+            String at = "max_up " + c[0] + ", max_down " + c[1];
+            assertEquals((double) c[2], s.bandPercent(), 1e-12, at);
+            assertEquals((double) c[3], s.multiplierLo(), 1e-12, at);
+            assertEquals((double) c[4], s.multiplierHi(), 1e-12, at);
+            assertEquals(1.0 - s.multiplierLo(), s.multiplierHi() - 1.0, 1e-12, at + ": symmetric");
+            assertTrue(s.multiplierLo() >= SimLimits.MIN_MULTIPLIER && s.multiplierHi() <= SimLimits.MAX_MULTIPLIER, at);
+        }
+        assertEquals(25.0, SimSettings.defaults().bandPercent(), "shipped: 25 both ways");
+    }
+
+    private static SimSettings band(double maxUp, double maxDown) {
+        SimSettings d = SimSettings.defaults();
+        return new SimSettings(true, d.tickMinutes(), d.maxCatchupHours(), maxUp, maxDown, d.keepDays(), d.drift(),
+                d.hot(), d.deal(), d.slotsPerItems(), d.cooldownDays(), d.popularWeight(), d.news(), d.announce(),
+                d.headlines(), d.samePlural(), d.seasons(), d.real());
+    }
+
+    /**
+     * The drift's speed is locked: {@code half_life_hours} is at least 24 (a shorter one redrew
+     * the drift within the day and brought back same-day scalping), and the drift size is held
+     * so the drift never moves prices faster than the shipped settings at their liveliest
+     * (4.5% at 66 h): {@code sigma <= 0.045 x sqrt(min(h, 66) / 66)}.
+     */
+    @Test
+    void theDriftsSpeedIsLocked() {
+        assertEquals(24.0, SimLimits.clampDriftHalfLife(0.0), "0 would redraw the drift every tick");
+        assertEquals(24.0, SimLimits.clampDriftHalfLife(6.0));
+        assertEquals(24.0, SimLimits.clampDriftHalfLife(-3.0));
+        assertEquals(24.0, SimLimits.clampDriftHalfLife(Double.NaN));
+        assertEquals(24.0, SimLimits.clampDriftHalfLife(24.0));
+        assertEquals(66.0, SimLimits.clampDriftHalfLife(66.0), "the shipped value passes");
+        assertEquals(500.0, SimLimits.clampDriftHalfLife(500.0), "slower is calmer, always allowed");
+        assertEquals(Double.POSITIVE_INFINITY, SimLimits.clampDriftHalfLife(Double.POSITIVE_INFINITY));
+
+        assertEquals(0.045, SimLimits.driftSigmaCap(66.0), "exactly 4.5% at the shipped half-life");
+        assertEquals(0.045, SimLimits.driftSigmaCap(1000.0));
+        assertEquals(0.045, SimLimits.driftSigmaCap(Double.POSITIVE_INFINITY));
+        assertEquals(0.045 * Math.sqrt(24.0 / 66.0), SimLimits.driftSigmaCap(24.0), 1e-15);
+        assertEquals(SimLimits.driftSigmaCap(24.0), SimLimits.driftSigmaCap(1.0), "below the floor reads as the floor");
+        assertEquals(SimLimits.driftSigmaCap(24.0), SimLimits.driftSigmaCap(Double.NaN));
+
+        // The Drift record holds the half-life to its floor, structurally.
+        assertEquals(24.0, new SimSettings.Drift(8, 1.5, 3, 10, 0).halfLifeHours());
+        assertEquals(24.0, new SimSettings.Drift(8, 1.5, 3, 10, 6).halfLifeHours());
+        assertEquals(24.0, new SimSettings.Drift(8, 1.5, 3, 10, Double.NaN).halfLifeHours());
+        assertEquals(66.0, SimSettings.Drift.defaults().halfLifeHours());
+
+        // Whatever the knobs say, the drift's short-run speed (sd per square-root hour,
+        // sigma x sqrt(2 ln2 / h)) never passes the shipped liveliest: lively 3% x volatility 1.5
+        // at 66 h. Nor does its day-to-day move (about 3%) or its 5-minute tick move (about 0.19%).
+        MarketItem iron = new MarketItem("iron_ingot", Material.IRON_INGOT, "&fIron Ingot", 4.0, 40.0, 512, 2048, 40, 80);
+        MarketItem oak = new MarketItem("oak_log", Material.OAK_LOG, "&6Oak Log", 1.0, 20.0, 4000, 8000, 160, 320);
+        double ln2 = Math.log(2);
+        double shippedSpeed = 0.045 * Math.sqrt(2 * ln2 / 66.0);
+        double shippedDay = 0.045 * Math.sqrt(2 * (1 - Math.pow(2, -24.0 / 66.0)));
+        for (double h : new double[] {0, 1, 6, 12, 23.9, 24, 30, 48, 65.9, 66, 100, 1000}) {
+            for (double pct : new double[] {0, 1.5, 3, 4.5, 8, 30, 1e6}) {
+                for (Double vol : new Double[] {null, 0.5, 1.5, 9.0}) {
+                    SimSettings s = drift(pct, pct, h);
+                    for (MarketItem item : List.of(iron, oak)) {
+                        double sigma = ItemParams.of(item, new ItemOverride(null, vol, null, null), s).sigma();
+                        double hl = s.drift().halfLifeHours();
+                        String at = item.id() + " percent " + pct + " volatility " + vol + " half-life " + h;
+                        assertTrue(hl >= 24.0, at);
+                        assertTrue(sigma <= SimLimits.DRIFT_SIGMA_MAX, at + ": sigma " + sigma);
+                        assertTrue(sigma * Math.sqrt(2 * ln2 / hl) <= shippedSpeed * (1 + 1e-12), at + ": speed");
+                        double day = sigma * Math.sqrt(2 * (1 - Math.pow(2, -24.0 / hl)));
+                        assertTrue(day <= shippedDay * (1 + 1e-12), at + ": day move " + day);
+                        double a = SimMath.ouDecay(5.0 / 60.0, hl);
+                        assertTrue(sigma * Math.sqrt(1 - a * a) <= 0.0019, at + ": 5-minute tick move");
+                    }
+                }
+            }
+        }
+
+        // The shipped settings are untouched by the lock, volatility 1.5 included.
+        SimSettings shipped = SimSettings.defaults();
+        assertEquals(0.03, ItemParams.of(iron, ItemOverride.NONE, shipped).sigma());
+        assertEquals(0.015, ItemParams.of(oak, ItemOverride.NONE, shipped).sigma());
+        assertEquals(0.045, ItemParams.of(iron, new ItemOverride(null, 1.5, null, null), shipped).sigma());
+        // A shorter half-life slows the drift size to keep the speed: 24 h holds lively to 2.7%.
+        assertEquals(0.045 * Math.sqrt(24.0 / 66.0), ItemParams.of(iron, ItemOverride.NONE, drift(1.5, 3.0, 6)).sigma(), 1e-15);
+    }
+
+    private static SimSettings drift(double calm, double lively, double halfLife) {
+        SimSettings d = SimSettings.defaults();
+        return new SimSettings(true, d.tickMinutes(), d.maxCatchupHours(), d.maxUpPercent(), d.maxDownPercent(),
+                d.keepDays(), new SimSettings.Drift(8, calm, lively, 10, halfLife), d.hot(), d.deal(), d.slotsPerItems(),
+                d.cooldownDays(), d.popularWeight(), d.news(), d.announce(), d.headlines(), d.samePlural(), d.seasons(),
+                d.real());
     }
 
     @Test
@@ -270,11 +387,15 @@ class SimLimitsTest {
                 "negative volatility is no drift");
         assertEquals(0.0, ItemParams.of(iron, new ItemOverride(null, Double.NaN, null, null), s).sigma());
 
-        // A config that asks for a wilder wander than the drift bound gets the bound: a bigger
-        // sigma could only pin the drift against its clamp.
+        // A config that asks for a wilder wander gets the drift's speed lock (4.5% at 66 h), and
+        // never more than the drift bound: a bigger sigma could only pin the drift against its clamp.
         SimSettings wild = new SimSettings(true, 5, 48, 25, 25, 60, new SimSettings.Drift(8, 1.5, 30, 10, 66),
                 null, null, 40, 7, 2, null, null, null, s.samePlural(), null, null);
-        assertEquals(0.08, ItemParams.of(iron, new ItemOverride(null, 1.5, null, null), wild).sigma());
+        assertEquals(0.045, ItemParams.of(iron, new ItemOverride(null, 1.5, null, null), wild).sigma());
+        SimSettings tightBound = new SimSettings(true, 5, 48, 25, 25, 60, new SimSettings.Drift(2, 1.5, 30, 10, 66),
+                null, null, 40, 7, 2, null, null, null, s.samePlural(), null, null);
+        assertEquals(0.02, ItemParams.of(iron, new ItemOverride(null, 1.5, null, null), tightBound).sigma(),
+                "a drift bound under the speed lock wins");
 
         assertFalse(ItemParams.of(iron, new ItemOverride(false, null, null, null), s).enabled(), "sim: false");
         assertTrue(ItemParams.of(iron, ItemOverride.NONE, s).enabled());

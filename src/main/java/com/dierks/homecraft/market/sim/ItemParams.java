@@ -14,7 +14,10 @@ import java.util.regex.Pattern;
  *   <li>{@code sigma}: the drift's stationary sd,
  *       {@code volatility x (lively ? lively_percent : calm_percent) / 100}, with
  *       {@code volatility} held to {@code [0, 1.5]} and sigma itself never above the drift
- *       bound {@code D} (a wider sigma would only pin the drift against its clamp).</li>
+ *       bound {@code D} (a wider sigma would only pin the drift against its clamp), nor above
+ *       the drift's speed lock {@link SimLimits#driftSigmaCap} for the configured half-life
+ *       (4.5% at the shipped 66 h, less for a shorter half-life), so no drift setting moves
+ *       prices faster than the shipped settings at their liveliest.</li>
  *   <li>{@code weight}: {@code sim_weight} (default 1; negative, NaN or infinite reads as 0 =
  *       never picked).</li>
  *   <li>{@code name}: the singular plain label ({@code {Name}}); {@code plural}: the plural
@@ -47,7 +50,8 @@ public record ItemParams(String id, double floor, double ceiling, long fullStock
         boolean lively = geo >= drift.livelyFrom();
         double volatility = o.volatility() == null ? 1.0 : SimLimits.clampVolatility(o.volatility());
         double classPercent = lively ? drift.livelyPercent() : drift.calmPercent();
-        double sigma = Math.min(volatility * classPercent / 100.0, drift.maxFrac());
+        double sigma = Math.min(volatility * classPercent / 100.0,
+                Math.min(drift.maxFrac(), SimLimits.driftSigmaCap(drift.halfLifeHours())));
 
         double weight = 1.0;
         if (o.weight() != null) {

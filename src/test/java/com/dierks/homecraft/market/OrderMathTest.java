@@ -8,7 +8,9 @@ import java.util.List;
 import java.util.SplittableRandom;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Pins {@link OrderMath}, the per-unit order pricing pulled out of {@code MarketService} for the
@@ -21,7 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *       states (with random daily limits), filled, total, end price and end stock must match
  *       exactly, and the end balanced price must equal the end price.</li>
  *   <li><b>At {@code m != 1}:</b> {@code endPrice == clamp(endBase × m)}; every unit's mid stays
- *       inside [floor, ceiling]; the first unit sold into stock 0 is priced at {@code m = 1};
+ *       inside [floor, ceiling]; the first unit sold into stock 0 is priced at {@code m = 1} and
+ *       the unit bought out of stock 1 at {@code max(m, 1)}, so no round trip through the empty
+ *       shelf ever profits, at any {@code m} in the band or with {@code m} moving between trades;
  *       {@code m} never changes the balanced price or the stock an order leaves; money and unit
  *       caps stop an order mid-way; totals rise with quantity; the neutral-total helper is an
  *       {@code m = 1} order.</li>
@@ -230,7 +234,8 @@ class OrderMathTest {
                     long s = stock;
                     double total = 0;
                     for (int u = 0; u < whole.filled(); u++) {
-                        double mid = OrderMath.mid(item, PricingEngine.clamp(b, item.floor(), item.ceiling()), s, m);
+                        double clamped = PricingEngine.clamp(b, item.floor(), item.ceiling());
+                        double mid = sell ? OrderMath.mid(item, clamped, s, m) : OrderMath.buyMid(item, clamped, s, m);
                         assertTrue(mid >= item.floor() && mid <= item.ceiling(),
                                 item.id() + " unit " + u + " mid " + mid + " outside the band");
                         OrderMath.Plan one = order(SHIPPED, item, sell, b, s, 1, OrderMath.Limits.NONE, m);
@@ -252,7 +257,11 @@ class OrderMathTest {
         }
     }
 
-    /** DESIGN §3.1: an empty item sits at its ceiling, so the first unit sold into it ignores M. */
+    /**
+     * DESIGN §3.1: an empty item sits at its ceiling, so the first unit sold into it ignores M.
+     * (The unit bought back out of it is never discounted either, so the two cannot be played
+     * against each other: {@link #aRoundTripThroughTheEmptyShelfNeverProfitsAtAnyMultiplier}.)
+     */
     @Test
     void firstUnitSoldIntoAnEmptyItemIsPricedAtOne() {
         for (MarketItem item : CATALOG) {
@@ -278,22 +287,156 @@ class OrderMathTest {
         }
     }
 
-    /** A buy always has stock under it, so every unit, the first included, carries M. */
+    /**
+     * A buy always has stock under it, so every unit carries M, except that the unit that
+     * empties the shelf is never discounted: it is charged at {@code max(M, 1)}.
+     */
     @Test
-    void everyBoughtUnitCarriesTheMultiplier() {
+    void everyBoughtUnitCarriesTheMultiplierButTheLastIsNeverDiscounted() {
         MarketItem iron = item("iron_ingot");
         double base = 22.49;
         for (double m : MOODS) {
             OrderMath.Plan one = OrderMath.buy(SHIPPED, iron, base, 512, 1, OrderMath.Limits.NONE, m);
             assertBits(OrderMath.ask(SHIPPED, iron, PricingEngine.clamp(base * m, 4.0, 40.0)), one.total(), "m=" + m);
+            // From stock 2 the unit still carries M, whichever way it points.
+            OrderMath.Plan two = OrderMath.buy(SHIPPED, iron, 30.0, 2, 1, OrderMath.Limits.NONE, m);
+            assertBits(OrderMath.ask(SHIPPED, iron, PricingEngine.clamp(30.0 * m, 4.0, 40.0)), two.total(), "stock 2, m=" + m);
         }
-        // The last unit on the shelf too: it is bought from stock 1.
+        // The last unit on the shelf, bought from stock 1: lifted by M above 1 ...
         OrderMath.Plan last = OrderMath.buy(SHIPPED, iron, 30.0, 1, 5, OrderMath.Limits.NONE, 1.2);
         assertEquals(1, last.filled());
         assertEquals(0, last.endStock());
         assertBits(OrderMath.ask(SHIPPED, iron, PricingEngine.clamp(30.0 * 1.2, 4.0, 40.0)), last.total(),
                 "last unit at 30 x 1.2");
         assertBits(last.endBase(), last.endPrice(), "an emptied item shows its balanced price");
+        // ... but never lowered by M below 1: it costs what it costs at M = 1.
+        for (double m : new double[] {0.75, 0.8, 0.9, 0.97, 0.999}) {
+            OrderMath.Plan cheap = OrderMath.buy(SHIPPED, iron, 30.0, 1, 5, OrderMath.Limits.NONE, m);
+            OrderMath.Plan atOne = OrderMath.buy(SHIPPED, iron, 30.0, 1, 5, OrderMath.Limits.NONE, 1.0);
+            assertBits(atOne.total(), cheap.total(), "last unit at m=" + m);
+            assertBits(OrderMath.ask(SHIPPED, iron, 30.0), cheap.total(), "last unit at 30 x 1, m=" + m);
+            assertBits(OrderMath.ask(SHIPPED, iron, 30.0), OrderMath.ask(SHIPPED, iron, OrderMath.buyMid(iron, 30.0, 1, m)),
+                    "buyMid at stock 1, m=" + m);
+            // The displayed mid at stock 1 still carries M; only the buy of the last unit does not.
+            assertBits(PricingEngine.clamp(30.0 * m, 4.0, 40.0), OrderMath.mid(iron, 30.0, 1, m), "mid, m=" + m);
+        }
+        // Everywhere else buyMid is mid.
+        SplittableRandom rnd = new SplittableRandom(15);
+        for (MarketItem item : CATALOG) {
+            for (int n = 0; n < 500; n++) {
+                double b = randomBase(rnd, item);
+                long s = randomStock(rnd, item, false);
+                double m = MOODS[rnd.nextInt(MOODS.length)];
+                if (s != 1 || m >= 1.0) {
+                    assertBits(OrderMath.mid(item, b, s, m), OrderMath.buyMid(item, b, s, m), item.id() + " s=" + s + " m=" + m);
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ the empty-shelf boundary
+
+    /** Every multiplier from 0.75 to 1.25 in steps of 0.005, both ends exactly. */
+    private static double[] moodGrid() {
+        double[] out = new double[101];
+        for (int i = 0; i <= 100; i++) {
+            out[i] = i == 100 ? OrderMath.MAX_MULTIPLIER : OrderMath.MIN_MULTIPLIER + i * 0.005;
+        }
+        return out;
+    }
+
+    /**
+     * The empty-shelf rule (an empty item sits at its ceiling, so the first unit sold into it is
+     * paid at {@code M = 1}) must never be a money pump. Selling one into an empty item and buying
+     * it straight back leaves stock and the balanced price where they started (the cycle closes
+     * on a fixed point), so any profit per cycle would repeat for ever, and bypass holders have
+     * no daily cap to stop it. From the shipped sold-out state (gold, diamond; and iron once it is
+     * bought out), 1,000 sell-1/buy-1 cycles at every multiplier in the hard band must lose money
+     * on every single cycle, and so must 1,000 buy-1/sell-1 cycles from one unit on the shelf.
+     */
+    @Test
+    void aRoundTripThroughTheEmptyShelfNeverProfitsAtAnyMultiplier() {
+        for (String id : List.of("gold_ingot", "diamond", "iron_ingot")) {
+            MarketItem item = item(id);
+            for (double m : moodGrid()) {
+                // sell one into the empty shelf, then buy it back
+                double base = item.ceiling();
+                long stock = 0;
+                for (int cycle = 0; cycle < 1_000; cycle++) {
+                    OrderMath.Plan sold = OrderMath.sell(SHIPPED, item, base, stock, 1, OrderMath.Limits.NONE, m);
+                    OrderMath.Plan bought = OrderMath.buy(SHIPPED, item, sold.endBase(), sold.endStock(), 1,
+                            OrderMath.Limits.NONE, m);
+                    assertEquals(1, bought.filled());
+                    assertEquals(0, bought.endStock());
+                    double net = sold.total() - bought.total();
+                    if (!(net < 0)) {
+                        fail(id + " m=" + m + " cycle " + cycle + ": sell 1 into the empty shelf for "
+                                + sold.total() + ", buy it back for " + bought.total() + " (net +" + net + ")");
+                    }
+                    base = bought.endBase();
+                    stock = bought.endStock();
+                }
+
+                // buy the last unit on the shelf, then sell it back into the empty shelf
+                OrderMath.Plan seed = OrderMath.sell(SHIPPED, item, item.ceiling(), 0, 1, OrderMath.Limits.NONE, 1.0);
+                base = seed.endBase();
+                stock = seed.endStock();
+                for (int cycle = 0; cycle < 1_000; cycle++) {
+                    OrderMath.Plan bought = OrderMath.buy(SHIPPED, item, base, stock, 1, OrderMath.Limits.NONE, m);
+                    OrderMath.Plan sold = OrderMath.sell(SHIPPED, item, bought.endBase(), bought.endStock(), 1,
+                            OrderMath.Limits.NONE, m);
+                    double net = sold.total() - bought.total();
+                    if (!(net < 0)) {
+                        fail(id + " m=" + m + " cycle " + cycle + ": buy the last one for " + bought.total()
+                                + ", sell it back into the empty shelf for " + sold.total() + " (net +" + net + ")");
+                    }
+                    base = sold.endBase();
+                    stock = sold.endStock();
+                }
+            }
+        }
+    }
+
+    /**
+     * The same round trip when the mood moves between the two trades (sold into the empty shelf
+     * at one multiplier, bought back at another, either order): the boundary pair must still
+     * lose, whatever the two multipliers are. And k units out and back at one multiplier
+     * (k = 1..8) never profit either.
+     */
+    @Test
+    void theEmptyShelfBoundaryLosesEvenWhenTheMoodMovesBetweenTheTrades() {
+        double[] grid = moodGrid();
+        for (String id : List.of("gold_ingot", "diamond", "iron_ingot")) {
+            MarketItem item = item(id);
+            for (double m1 : grid) {
+                for (double m2 : grid) {
+                    OrderMath.Plan sold = OrderMath.sell(SHIPPED, item, item.ceiling(), 0, 1, OrderMath.Limits.NONE, m1);
+                    OrderMath.Plan bought = OrderMath.buy(SHIPPED, item, sold.endBase(), sold.endStock(), 1,
+                            OrderMath.Limits.NONE, m2);
+                    assertTrue(sold.total() < bought.total(),
+                            id + ": sold into empty at m=" + m1 + " for " + sold.total()
+                                    + ", bought back at m=" + m2 + " for " + bought.total());
+
+                    OrderMath.Plan last = OrderMath.buy(SHIPPED, item, sold.endBase(), sold.endStock(), 1,
+                            OrderMath.Limits.NONE, m1);
+                    OrderMath.Plan back = OrderMath.sell(SHIPPED, item, last.endBase(), last.endStock(), 1,
+                            OrderMath.Limits.NONE, m2);
+                    assertTrue(back.total() < last.total(),
+                            id + ": bought the last one at m=" + m1 + " for " + last.total()
+                                    + ", sold it into empty at m=" + m2 + " for " + back.total());
+                }
+            }
+            for (double m : grid) {
+                for (int k = 1; k <= 8; k++) {
+                    OrderMath.Plan sold = OrderMath.sell(SHIPPED, item, item.ceiling(), 0, k, OrderMath.Limits.NONE, m);
+                    OrderMath.Plan bought = OrderMath.buy(SHIPPED, item, sold.endBase(), sold.endStock(), k,
+                            OrderMath.Limits.NONE, m);
+                    assertEquals(k, bought.filled());
+                    assertTrue(sold.total() < bought.total(),
+                            id + " m=" + m + ": " + k + " out for " + sold.total() + ", back for " + bought.total());
+                }
+            }
+        }
     }
 
     @Test
@@ -448,6 +591,19 @@ class OrderMathTest {
         assertEquals(0L, mood.jumpSeq("iron_ingot"));
         assertEquals(0L, mood.eventBuyCap(iron));
         assertEquals(0L, mood.eventSellCap(iron));
+        assertFalse(mood.eventCapShown(iron, true), "no event to name");
+        assertFalse(mood.eventCapShown(iron, false));
+        // A mood that does not answer eventCapShown keeps every event-cap refusal neutral.
+        PriceMood silent = new PriceMood() {
+            @Override public double multiplier(String id) { return 1.0; }
+            @Override public long jumpSeq(String id) { return 0L; }
+            @Override public long eventBuyCap(MarketItem item) { return 40L; }
+            @Override public long eventSellCap(MarketItem item) { return 40L; }
+            @Override public void onTrade(String id, boolean sell, int units, double total, double neutralTotal) { }
+            @Override public void catalogChanged() { }
+        };
+        assertFalse(silent.eventCapShown(iron, true), "the default is neutral");
+        assertFalse(silent.eventCapShown(iron, false));
         mood.onTrade("iron_ingot", true, 1, 1.0, 1.0);
         mood.catalogChanged();
         assertEquals(OrderMath.Limits.NONE, new OrderMath.Limits(false, 0, 0, 0, 0));

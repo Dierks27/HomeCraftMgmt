@@ -1393,9 +1393,16 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "remove" -> removeDisplay(player);
             case "cleanup" -> cleanupDisplays(player);
             default -> {
+                // The Market News board (@news) is offered only while the live market runs; with it
+                // off or paused the help reads exactly as 0.32's.
+                boolean news = newsBoardOffered();
                 player.sendMessage(Text.of("&e/hcm display sign &7- bind the sign you're looking at to a commodity"));
-                player.sendMessage(Text.of("&e/hcm display hologram &7- float a live-price hologram (or the Market News board) above the block you're looking at"));
-                player.sendMessage(Text.of("&e/hcm display tv [commodity|@news] [scale] &7- mount a flat price-screen panel (or the Market News board) on the wall you're looking at"));
+                player.sendMessage(Text.of(news
+                        ? "&e/hcm display hologram &7- float a live-price hologram (or the Market News board) above the block you're looking at"
+                        : "&e/hcm display hologram &7- float a live-price hologram above the block you're looking at"));
+                player.sendMessage(Text.of(news
+                        ? "&e/hcm display tv [commodity|@news] [scale] &7- mount a flat price-screen panel (or the Market News board) on the wall you're looking at"
+                        : "&e/hcm display tv [commodity] [scale] &7- mount a flat price-screen panel on the wall you're looking at"));
                 player.sendMessage(Text.of("&e/hcm display remove &7- unbind the display block you're looking at"));
                 player.sendMessage(Text.of("&e/hcm display cleanup &7- despawn every plugin-owned display entity in loaded chunks (wipes strays)"));
             }
@@ -1427,7 +1434,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             return;
         }
         org.bukkit.Location loc = target.getLocation();
-        // offerNews: a hologram can also be the Market News board (@news).
+        // offerNews: a hologram can also be the Market News board (@news) - the picker offers it only
+        // while the live market runs, and is 0.32's picker while it is off or paused.
         new com.dierks.homecraft.gui.display.CommodityPickerMenu(plugin, player, "Bind hologram → commodity",
                 id -> {
                     var r = plugin.displayService().bindHologram(player, loc, id);
@@ -1468,12 +1476,16 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         }
         final float panelScale = scale;
         if (args.length >= 3) {
-            String id = args[2].toLowerCase(Locale.ROOT);
+            // A commodity id goes through as typed, as in 0.32; "@news" in any case is the news
+            // board while the live market runs (DisplayService refuses it while it is off).
+            String id = newsBoardOffered() && com.dierks.homecraft.display.DisplayService.NEWS_ID.equalsIgnoreCase(args[2])
+                    ? com.dierks.homecraft.display.DisplayService.NEWS_ID : args[2];
             reportTvBind(player, plugin.displayService().bindTvPanel(player, wall, face, id, panelScale), id);
             return;
         }
         // No commodity argument → pick one from the GUI (mounts on the wall we captured above).
-        // offerNews: a TV can also be the Market News board (@news).
+        // offerNews: a TV can also be the Market News board (@news) - the picker offers it only
+        // while the live market runs, and is 0.32's picker while it is off or paused.
         new com.dierks.homecraft.gui.display.CommodityPickerMenu(plugin, player, "Bind TV panel → commodity",
                 id -> {
                     reportTvBind(player, plugin.displayService().bindTvPanel(player, wall, face, id, panelScale), id);
@@ -1486,6 +1498,14 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         player.sendMessage(r.ok()
                 ? Text.of("&aTV price panel mounted on the wall, showing " + shows(id) + "&a live.")
                 : Text.of("&c" + r.error()));
+    }
+
+    /**
+     * Whether the display binders offer the Market News board ({@code @news}): only while the live
+     * market runs, so with it off or paused the pickers, help and tab completion are 0.32's.
+     */
+    private boolean newsBoardOffered() {
+        return com.dierks.homecraft.gui.MarketNewsMenu.live(plugin) != null;
     }
 
     /** What a freshly bound display shows: {@code &fwheat}, or the Market News board for {@code @news}. */
@@ -1660,7 +1680,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             addMatches(out, args[1], "sign", "hologram", "tv", "remove", "cleanup");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("display") && args[1].equalsIgnoreCase("tv")) {
             String prefix = args[2].toLowerCase(Locale.ROOT);
-            addMatches(out, prefix, com.dierks.homecraft.display.DisplayService.NEWS_ID);
+            if (newsBoardOffered()) {
+                addMatches(out, prefix, com.dierks.homecraft.display.DisplayService.NEWS_ID);
+            }
             for (MarketItem item : plugin.market().catalog()) {
                 if (item.id().startsWith(prefix)) {
                     out.add(item.id());

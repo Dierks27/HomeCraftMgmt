@@ -111,7 +111,8 @@ public final class Headlines {
 
     /**
      * Words a headline may never use, matched as whole words in any case, plus their plain
-     * plural ({@code wars}, {@code crashes}).
+     * plural ({@code wars}, {@code crashes}) and the other ways each is written
+     * ({@code crashed}, {@code fighting}, {@code fought}, {@code dying}, {@code stolen}…).
      */
     public static final List<String> BANNED = List.of(
             "war", "fight", "dead", "die", "dies", "died", "kill", "hurt", "blood", "bomb", "gun",
@@ -121,10 +122,49 @@ public final class Headlines {
 
     /**
      * Words about Crate's own shelf, which the live market never changes. Matched like
-     * {@link #BANNED}; {@code stock} also catches {@code stocked}/{@code stocking}.
+     * {@link #BANNED}; {@code stock} also catches {@code stocked}/{@code stocking} and
+     * {@code restock}/{@code overstock}/{@code understock} (but not {@code stockpile}), and a
+     * phrase's words may be joined by spaces or hyphens ({@code sold-out}, {@code out-of}).
      */
     public static final List<String> SHELF_WORDS = List.of(
             "shelf", "shelves", "stock", "warehouse", "overflowing", "sold out", "out of");
+
+    /**
+     * The other ways a {@link #BANNED} or {@link #SHELF_WORDS} entry is written, each matched as
+     * a whole word too (and with its plain plural: {@code fighters}). Listed out rather than
+     * made by adding endings, so a harmless word that happens to start the same way
+     * ({@code wares}, {@code gunpowder}, {@code fireworks}, {@code scarecrow}) is never caught.
+     */
+    private static final Map<String, List<String>> FORMS = Map.ofEntries(
+            Map.entry("war", List.of("warring", "warred")),
+            Map.entry("fight", List.of("fighting", "fought", "fighter")),
+            Map.entry("dead", List.of("deadly")),
+            Map.entry("die", List.of("dying")),
+            Map.entry("kill", List.of("killed", "killing", "killer")),
+            Map.entry("hurt", List.of("hurting")),
+            Map.entry("blood", List.of("bloody")),
+            Map.entry("bomb", List.of("bombed", "bombing", "bomber")),
+            Map.entry("gun", List.of("gunned", "gunning", "gunfire")),
+            Map.entry("fire", List.of("fired", "firing")),
+            Map.entry("burn", List.of("burned", "burnt", "burning")),
+            Map.entry("crash", List.of("crashed", "crashing")),
+            Map.entry("panic", List.of("panicked", "panicking", "panicky")),
+            Map.entry("scary", List.of("scarier", "scariest")),
+            Map.entry("scare", List.of("scared", "scaring")),
+            Map.entry("fear", List.of("feared", "fearing", "fearful")),
+            Map.entry("hate", List.of("hated", "hating", "hatred")),
+            Map.entry("sick", List.of("sickness")),
+            Map.entry("storm", List.of("stormed", "storming", "stormy")),
+            Map.entry("flood", List.of("flooded", "flooding")),
+            Map.entry("disaster", List.of("disastrous")),
+            Map.entry("attack", List.of("attacked", "attacking", "attacker")),
+            Map.entry("bankrupt", List.of("bankrupted", "bankruptcy")),
+            Map.entry("collapse", List.of("collapsed", "collapsing")),
+            Map.entry("poor", List.of("poorer", "poorest")),
+            Map.entry("steal", List.of("stealing", "stole", "stolen")),
+            Map.entry("thief", List.of("thieves")),
+            Map.entry("overflowing", List.of("overflow", "overflowed")),
+            Map.entry("sold out", List.of("sell out", "sells out", "selling out")));
 
     /**
      * Item ids whose name stays the same for one or many (the shipped
@@ -137,6 +177,37 @@ public final class Headlines {
             "glowstone_dust", "snow", "ice", "clay", "white_wool", "cocoa_beans", "andesite", "diorite",
             "granite", "deepslate", "cobbled_deepslate", "tuff", "calcite", "basalt", "blackstone",
             "sandstone", "mud")));
+
+    /**
+     * Head words that stay the same for one or many whatever {@code same_plural} says (it
+     * matches whole ids, and an older config's list is shorter): the stuff that is counted in
+     * piles, not pieces — ore and metal ({@code Raw Iron}, {@code Iron Ore}), food and fish
+     * ({@code Cooked Beef}, {@code Bread}, {@code Tropical Fish}) and building material
+     * ({@code Packed Ice}, {@code Red Wool}). A {@code news_name} still wins over this.
+     */
+    private static final Set<String> MASS_WORDS = Set.of(
+            // farm, food and fish
+            "wheat", "bread", "beef", "mutton", "pork", "chicken", "rabbit", "salmon", "cod", "fish",
+            "pufferfish", "flesh", "kelp", "bamboo", "sugar", "cane", "cocoa", "honey", "milk", "stew",
+            "soup", "fruit", "hay",
+            // ore and metal
+            "ore", "iron", "gold", "copper", "netherite", "coal", "charcoal", "redstone", "glowstone",
+            "quartz", "lazuli", "gunpowder", "powder", "dust", "meal",
+            // blocks and materials
+            "stone", "cobblestone", "deepslate", "tuff", "calcite", "basalt", "blackstone", "sandstone",
+            "andesite", "diorite", "granite", "obsidian", "netherrack", "dripstone", "prismarine",
+            "terracotta", "concrete", "sand", "gravel", "dirt", "mud", "soil", "clay", "snow", "ice",
+            "glass", "wool", "leather", "string", "flint", "paper", "tnt");
+
+    /** Plurals the rule cannot work out ({@code Potato} → {@code Potatoes}, {@code Rabbit Foot} → {@code Rabbit Feet}). */
+    private static final Map<String, String> IRREGULAR = Map.ofEntries(
+            Map.entry("potato", "potatoes"), Map.entry("tomato", "tomatoes"), Map.entry("mango", "mangoes"),
+            Map.entry("echo", "echoes"), Map.entry("hero", "heroes"), Map.entry("foot", "feet"),
+            Map.entry("tooth", "teeth"), Map.entry("leaf", "leaves"), Map.entry("loaf", "loaves"),
+            Map.entry("knife", "knives"), Map.entry("wolf", "wolves"));
+
+    /** Parts of a raw material label kept in capitals when it is title-cased ({@code TNT_MINECART} → {@code TNT Minecart}). */
+    private static final Set<String> ACRONYMS = Set.of("tnt");
 
     private static final Pattern LEGACY_CODE = Pattern.compile("(?i)[&§][0-9a-fk-or]");
     private static final Pattern RAW_LABEL = Pattern.compile("[A-Z0-9_]+");
@@ -184,8 +255,8 @@ public final class Headlines {
     /**
      * The singular plain label headlines use for {@code {Name}}: colour codes stripped and
      * trimmed, and a raw material-style label ({@code IRON_INGOT}) title-cased to
-     * {@code Iron Ingot} ({@code HEART_OF_THE_SEA} → {@code Heart of the Sea}). {@code null}
-     * gives {@code ""}.
+     * {@code Iron Ingot} ({@code HEART_OF_THE_SEA} → {@code Heart of the Sea}, {@code TNT}
+     * stays {@code TNT}). {@code null} gives {@code ""}.
      */
     public static String name(String label) {
         String plain = plain(label);
@@ -198,6 +269,10 @@ public final class Headlines {
                 continue;
             }
             String lower = part.toLowerCase(Locale.ROOT);
+            if (ACRONYMS.contains(lower)) {
+                sb.append(sb.length() > 0 ? " " : "").append(part);
+                continue;
+            }
             if (sb.length() > 0) {
                 sb.append(' ');
                 if (SMALL_WORDS.contains(lower)) {
@@ -220,9 +295,12 @@ public final class Headlines {
      *       ({@code "Red Sand"} → {@code red_sand}) — keeps its singular name.</li>
      *   <li>Otherwise the head word is made plural: the last word, or the word before
      *       {@code of}/{@code o'} ({@code Heart of the Sea} → {@code Hearts of the Sea}). A word
-     *       ending in {@code s} is left alone (Glass, Oak Planks, Wheat Seeds); {@code x/z/ch/sh}
-     *       add {@code es}; a consonant before {@code y} becomes {@code ies} (Berry → Berries);
-     *       anything else adds {@code s}.</li>
+     *       counted in piles, not pieces, stays as it is (Raw Iron, Cooked Beef, Bread, Tropical
+     *       Fish, Iron Ore, TNT — see {@code MASS_WORDS}); a few need their own plural (Potato →
+     *       Potatoes, Rabbit Foot → Rabbit Feet); a word ending in {@code s} is left alone
+     *       (Glass, Oak Planks, Wheat Seeds); {@code x/z/ch/sh} add {@code es}; a consonant
+     *       before {@code y} becomes {@code ies} (Berry → Berries); anything else adds
+     *       {@code s}.</li>
      * </ol>
      *
      * @param id       the catalog id
@@ -285,8 +363,12 @@ public final class Headlines {
             return word;
         }
         String lower = word.toLowerCase(Locale.ROOT);
-        if (lower.endsWith("s")) {
+        if (MASS_WORDS.contains(lower) || lower.endsWith("s")) {
             return word;
+        }
+        String irregular = IRREGULAR.get(lower);
+        if (irregular != null) {
+            return sameCase(word, irregular);
         }
         if (lower.endsWith("x") || lower.endsWith("z") || lower.endsWith("ch") || lower.endsWith("sh")) {
             return word + "es";
@@ -295,6 +377,17 @@ public final class Headlines {
             return word.substring(0, word.length() - 1) + "ies";
         }
         return word + "s";
+    }
+
+    /** {@code plural} (lower case) written like {@code word}: {@code POTATO}/{@code Potato}/{@code potato}. */
+    private static String sameCase(String word, String plural) {
+        if (word.length() > 1 && word.equals(word.toUpperCase(Locale.ROOT))) {
+            return plural.toUpperCase(Locale.ROOT);
+        }
+        if (Character.isUpperCase(word.charAt(0))) {
+            return Character.toUpperCase(plural.charAt(0)) + plural.substring(1);
+        }
+        return plural;
     }
 
     // ---- picking and rendering ----------------------------------------------------------
@@ -607,33 +700,45 @@ public final class Headlines {
     }
 
     /**
-     * Whole words (and phrases, any run of spaces between their words) in any case, each
-     * allowing its plain plural; {@code stock} also allows {@code ed}/{@code ing}.
+     * Whole words (and phrases, any run of spaces or hyphens between their words) in any case:
+     * each word, its {@link #FORMS}, and the plain plural of either; {@code stock} also allows
+     * {@code ed}/{@code ing} and a {@code re}/{@code over}/{@code under} in front.
      */
     private static Pattern wordPattern(List<String> words) {
         StringBuilder sb = new StringBuilder("(?iu)(?<![\\p{L}\\p{N}])(?:");
-        for (int i = 0; i < words.size(); i++) {
-            String w = words.get(i);
-            if (i > 0) {
-                sb.append('|');
-            }
-            String[] parts = w.split(" ");
-            for (int p = 0; p < parts.length; p++) {
-                if (p > 0) {
-                    sb.append("\\s+");
+        boolean first = true;
+        for (String w : words) {
+            List<String> all = new ArrayList<>();
+            all.add(w);
+            all.addAll(FORMS.getOrDefault(w, List.of()));
+            for (String form : all) {
+                if (!first) {
+                    sb.append('|');
                 }
-                sb.append(Pattern.quote(parts[p]));
-            }
-            if (parts.length == 1) {
-                if (w.equals("stock")) {
-                    sb.append("(?:s|ed|ing)?");
-                } else if (w.endsWith("s") || w.endsWith("sh")) {
-                    sb.append("(?:es)?");
-                } else {
-                    sb.append("s?");
-                }
+                first = false;
+                appendWord(sb, form);
             }
         }
         return Pattern.compile(sb.append(")(?![\\p{L}\\p{N}])").toString());
+    }
+
+    private static void appendWord(StringBuilder sb, String w) {
+        String[] parts = w.split(" ");
+        if (parts.length > 1) {
+            for (int p = 0; p < parts.length; p++) {
+                if (p > 0) {
+                    sb.append("[\\s\\-]+");
+                }
+                sb.append(Pattern.quote(parts[p]));
+            }
+            return;
+        }
+        if (w.equals("stock")) {
+            sb.append("(?:re|over|under)?stock(?:s|ed|ing)?");
+        } else if (w.endsWith("s") || w.endsWith("sh")) {
+            sb.append(Pattern.quote(w)).append("(?:es)?");
+        } else {
+            sb.append(Pattern.quote(w)).append("s?");
+        }
     }
 }

@@ -44,7 +44,10 @@ import java.util.regex.Pattern;
  * the bundled block parses to exactly {@link SimSettings#defaults()} without a single WARN.
  *
  * <p><b>Never throws.</b> A config this parser cannot make sense of turns the live market OFF
- * (every multiplier exactly 1.0) with a WARN, rather than failing the plugin's load.
+ * (every multiplier exactly 1.0) with a WARN, rather than failing the plugin's load. The kill
+ * switch {@code market.sim.enabled} fails closed the same way: a value that is not
+ * true/false/yes/no/on/off turns the market OFF with a WARN naming the key, where any other key
+ * falls back to its shipped value.
  *
  * <p>The only Bukkit type is {@link ConfigurationSection}: the section is turned into plain maps
  * and lists up front ({@link #tree}), and the rules run on those in
@@ -195,7 +198,10 @@ public final class MarketSimConfig {
         if (sim == null) {
             return d;
         }
-        if (sim instanceof Boolean on) {
+        // A bare `sim: false` (or off/no/true...). The config migration rewrites it as
+        // sim.enabled before the backfill runs, so this is only seen if that write failed.
+        Boolean on = sim instanceof Map<?, ?> ? null : bool(sim);
+        if (on != null) {
             w.accept(PATH + " should be a section of settings - reading it as enabled: " + on
                     + " for now; write " + PATH + ".enabled: " + on + " instead");
             return d.withEnabled(on);
@@ -208,7 +214,7 @@ public final class MarketSimConfig {
         Node root = new Node(PATH, map, w);
         root.unknownKeys(TOP);
 
-        boolean enabled = root.bool("enabled", d.enabled());
+        boolean enabled = offSwitch(root, d.enabled());
         int tickMinutes = root.whole("tick_minutes", d.tickMinutes(),
                 SimLimits.MIN_TICK_MINUTES, SimLimits.MAX_TICK_MINUTES, true);
         int catchup = root.whole("max_catchup_hours", d.maxCatchupHours(), 0, MAX_CATCHUP_HOURS, false);
@@ -216,6 +222,12 @@ public final class MarketSimConfig {
                 0, (SimLimits.MAX_MULTIPLIER - 1.0) * 100.0, true);
         double maxDown = root.num("max_down_percent", d.maxDownPercent(),
                 0, (1.0 - SimLimits.MIN_MULTIPLIER) * 100.0, true);
+        if (maxUp != maxDown) {
+            // SimSettings.bandPercent uses the narrower both ways; say so, since the file reads otherwise.
+            root.warn(root.path + ": max_up_percent (" + fmt(maxUp) + ") and max_down_percent (" + fmt(maxDown)
+                    + ") differ - the mood uses the narrower, " + fmt(Math.min(maxUp, maxDown))
+                    + "%, both ways so it can never lean one way");
+        }
         int keepDays = root.whole("keep_days", d.keepDays(), 1, ANY_INT, false);
 
         SimSettings.Drift drift = drift(root.child("drift"), d.drift());
@@ -238,14 +250,44 @@ public final class MarketSimConfig {
                 slots, cooldown, popular, news, announce, headlines, samePlural, seasons, real);
     }
 
+    /**
+     * {@code market.sim.enabled}, the kill switch. Unlike every other key it fails CLOSED: the only
+     * reason to edit it is to turn the market off, so a value that is not true/false/yes/no/on/off
+     * ({@code 0}, {@code disabled}, a typo) turns the live market OFF with a WARN naming the key,
+     * instead of falling back to the shipped {@code true}. Left out, it reads as shipped.
+     */
+    private static boolean offSwitch(Node root, boolean shipped) {
+        Object v = root.raw("enabled");
+        if (v == null) {
+            return shipped;
+        }
+        Boolean on = bool(v);
+        if (on == null) {
+            root.warn(root.key("enabled") + " should be true or false, not \"" + v
+                    + "\" - the live market is off until it reads true or false");
+            return false;
+        }
+        return on;
+    }
+
     private static SimSettings.Drift drift(Node n, SimSettings.Drift d) {
         n.unknownKeys(DRIFT);
+        double calm = n.num("calm_percent", d.calmPercent(), 0, SimLimits.DRIFT_SIGMA_MAX * 100.0, true);
+        double lively = n.num("lively_percent", d.livelyPercent(), 0, SimLimits.DRIFT_SIGMA_MAX * 100.0, true);
+        double halfLife = n.num("half_life_hours", d.halfLifeHours(), SimLimits.DRIFT_MIN_HALF_LIFE_HOURS, ANY, true);
+        double cap = SimLimits.driftSigmaCap(halfLife) * 100.0;
+        if (Math.max(calm, lively) > cap) {
+            // ItemParams holds the drift to this speed (no same-day scalping); say so rather than silently.
+            n.warn(n.path + ": " + (calm > lively ? "calm_percent " : "lively_percent ") + fmt(Math.max(calm, lively))
+                    + " at half_life_hours " + fmt(halfLife) + " would move prices faster than the code allows"
+                    + " - the drift size is held to " + fmt(Math.round(cap * 100.0) / 100.0) + "%");
+        }
         return new SimSettings.Drift(
                 n.num("max_percent", d.maxPercent(), 0, SimLimits.DRIFT_MAX * 100.0, true),
-                n.num("calm_percent", d.calmPercent(), 0, ANY, false),
-                n.num("lively_percent", d.livelyPercent(), 0, ANY, false),
+                calm,
+                lively,
                 n.num("lively_from", d.livelyFrom(), 0, ANY, false),
-                n.num("half_life_hours", d.halfLifeHours(), 0, ANY, false));
+                halfLife);
     }
 
     /**
@@ -849,6 +891,16 @@ public final class MarketSimConfig {
             return null;
         }
         return Double.isFinite(d) ? d : null;
+    }
+
+    /**
+     * A switch as this parser reads it: a boolean, or {@code true}/{@code yes}/{@code on} and
+     * {@code false}/{@code no}/{@code off} as text; {@code null} for anything else. Public for the
+     * config migration, which turns a bare {@code market.sim: false} into
+     * {@code market.sim.enabled: false} before the backfill runs.
+     */
+    public static Boolean readSwitch(Object raw) {
+        return bool(raw);
     }
 
     /** A boolean, or a quoted {@code "true"}/{@code "false"}; {@code null} for anything else. */

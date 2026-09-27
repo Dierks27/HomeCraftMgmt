@@ -139,6 +139,14 @@ public record MarketEvent(long id, EventKind kind, Source source, String itemId,
         return announcedAt != null;
     }
 
+    /**
+     * When it became news: a HOT/DEAL at the end of its silent ramp ({@code started_at + ramp}),
+     * anything else when it started.
+     */
+    public long newsTime() {
+        return kind.story() ? startedAt + rampMs : startedAt;
+    }
+
     /** The envelope in {@code [0, 1]} ({@link SimMath#envelope}). */
     public double envelope(long t) {
         return SimMath.envelope(this, t);

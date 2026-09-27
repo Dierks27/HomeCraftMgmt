@@ -7,7 +7,6 @@ import com.dierks.homecraft.market.MarketService;
 import com.dierks.homecraft.market.sim.Badge;
 import com.dierks.homecraft.market.sim.ItemStatus;
 import com.dierks.homecraft.market.sim.MarketEvent;
-import com.dierks.homecraft.market.sim.MarketSimService;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -52,6 +51,10 @@ public final class StoreMenu extends Menu {
     protected void build() {
         MarketService market = plugin.market();
         BrowseState.Shop state = plugin.browseState().store(player);
+        // "Hot & Deals" only exists while the live market runs; with it off the grid and the
+        // sort button are 0.32's name order.
+        boolean hot = MarketNewsMenu.live(plugin) != null;
+        state.sort = state.sort.usable(hot);
         List<MarketItem> items = Departments.view(plugin, state.department, state.sort);
 
         int pages = Math.max(1, (int) Math.ceil(items.size() / (double) Departments.PAGE_SIZE));
@@ -80,9 +83,11 @@ public final class StoreMenu extends Menu {
             List<String> lore = new ArrayList<>();
             lore.add("&aBuy: &6" + money(market.buyPrice(item.id())) + "&7/ea");
             if (st != null) {
+                long cap = buyCap(plugin, item);
                 lore.addAll(MarketLabels.storeLore(badge, st.fading(), st.pct(),
                         money(MarketNewsMenu.usualQuote(plugin, item, st.usual(), false)),
-                        MarketNewsMenu.left(st, now), buyCap(plugin, item, badge)));
+                        MarketNewsMenu.left(st, now), cap));
+                lore.addAll(MarketNewsMenu.capLine(badge, false, cap));
             }
             lore.add("&7Stock: " + (out ? "&cOUT OF STOCK" : "&f" + stock));
             lore.add("&8—");
@@ -132,7 +137,6 @@ public final class StoreMenu extends Menu {
         set(51, Menus.icon(Material.CHEST_MINECART, "&eMailbox & Orders",
                 "&7Track deliveries and collect what has arrived."),
                 e -> new MailboxMenu(plugin, player, this::reopen).open(player));
-        boolean hot = MarketNewsMenu.live(plugin) != null;
         set(52, Departments.sortButton(state.sort, hot), e -> {
             state.sort = state.sort.next(hot);
             state.page = 0;
@@ -170,13 +174,14 @@ public final class StoreMenu extends Menu {
         return Menus.icon(Material.EMERALD, "&aSell to Crate", lore.toArray(new String[0]));
     }
 
-    /** The DEAL/DOWN "Limit N a day" cap; 0 (not shown) for any other badge. */
-    private static long buyCap(HomeCraftManagement plugin, MarketItem item, Badge badge) {
-        if (badge != Badge.DEAL && badge != Badge.DOWN) {
-            return 0L;
-        }
-        MarketSimService sim = MarketNewsMenu.live(plugin);
-        return sim == null ? 0L : sim.eventBuyCap(item);
+    /**
+     * The DEAL/DOWN "Limit N a day" to show: the event buy cap while its event is showing its
+     * badge, 0 otherwise (a DEAL's silent ramp, a DOWN's tail — the cap binds but must not give
+     * the event away) and while the live market is off ({@link MarketNewsMenu#shownCap}). The
+     * DEAL/DOWN badge lore says it, and {@link MarketNewsMenu#capLine} says it under any other.
+     */
+    private static long buyCap(HomeCraftManagement plugin, MarketItem item) {
+        return MarketNewsMenu.shownCap(plugin, item, false);
     }
 
     private void openOrderQuantity(MarketItem item) {
@@ -204,8 +209,9 @@ public final class StoreMenu extends Menu {
                             "&8+ shipping chosen at checkout"));
                     ItemStatus st = MarketNewsMenu.status(plugin, item.id());
                     if (st != null) {
-                        lines.addAll(MarketLabels.previewLines(st.badge(), false,
-                                buyCap(plugin, item, st.badge())));
+                        long cap = buyCap(plugin, item);
+                        lines.addAll(MarketLabels.previewLines(st.badge(), false, cap));
+                        lines.addAll(MarketNewsMenu.capLine(st.badge(), false, cap));
                     }
                     return lines;
                 },

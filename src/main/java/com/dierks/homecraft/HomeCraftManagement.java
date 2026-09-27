@@ -976,7 +976,55 @@ public final class HomeCraftManagement extends JavaPlugin {
             }
         }
 
+        // Not revision-gated: an owner can write a bare `market.sim: false` at any time.
+        liveMarketSwitch(c, log);
+
         return log;
+    }
+
+    /**
+     * A bare {@code market.sim: false} (or {@code off}, {@code no}, {@code true}, or junk) where the
+     * live market's section belongs becomes {@code market.sim.enabled: <that value>}. Without this
+     * the backfill that follows sees no {@code market.sim.enabled} on disk, replaces the scalar with
+     * the whole shipped section, {@code enabled: true} included, and a market the owner switched off
+     * would run. With it, the backfill fills in the rest of the section around the owner's switch.
+     *
+     * <p>A value that does not read as a switch ({@code sim: "yes please"}, {@code sim: 0}) is
+     * written as {@code false} with a {@link #WARN}: an off switch nobody can read keeps the market
+     * off, as {@code MarketSimConfig} reads it. The key keeps its place and its comments.
+     */
+    static void liveMarketSwitch(org.bukkit.configuration.file.FileConfiguration c,
+                                 java.util.List<String> log) {
+        String path = com.dierks.homecraft.config.MarketSimConfig.PATH;
+        Object sim = c.get(path, null);
+        if (sim == null || sim instanceof org.bukkit.configuration.ConfigurationSection) {
+            return;
+        }
+        Boolean read = com.dierks.homecraft.config.MarketSimConfig.readSwitch(sim);
+        boolean enabled = Boolean.TRUE.equals(read);
+        java.util.List<String> above = commentsOf(c, path);
+        java.util.List<String> inline;
+        try {
+            inline = c.getInlineComments(path);
+        } catch (Throwable ignored) {
+            inline = java.util.List.of();
+        }
+        // createSection replaces the scalar in place (same map slot, so the same spot in the file).
+        c.createSection(path).set("enabled", enabled);
+        try {
+            c.setComments(path, above);
+            c.setInlineComments(path, inline);
+        } catch (Throwable ignored) {
+            // Comment API unavailable on this server: the switch still stands.
+        }
+        if (read == null) {
+            log.add(WARN + "Config migration: " + path + " was \"" + sim + "\", which is not true or false - "
+                    + "wrote " + path + ".enabled: false, so the live market is off until you set it to true.");
+        } else {
+            log.add("Config migration: " + path + ": " + sim + " is now " + path + ".enabled: " + enabled
+                    + " (the rest of the section is filled in with the shipped settings"
+                    + (enabled ? ")." : "; the live market stays off)."));
+        }
     }
 
     /**

@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.display.DisplayService;
 import com.dierks.homecraft.display.Trend;
 import com.dierks.homecraft.gui.MarketLabels;
+import com.dierks.homecraft.gui.MarketNewsMenu;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.market.MarketItem;
@@ -21,9 +22,10 @@ import java.util.function.Consumer;
  * pattern (visual list, never a typed item name). Each icon shows the live price
  * and trend so the admin binds by sight.
  *
- * <p>Holograms and TVs can also show the Market News board: built with {@code offerNews}, the
- * first tile (slot 0 of page 1) is a BELL that picks {@link DisplayService#NEWS_ID}. Signs never
- * offer it — a sign is too small for a headline.
+ * <p>Holograms and TVs can also show the Market News board: built with {@code offerNews}, and
+ * while the live market runs, the first tile (slot 0 of page 1) is a BELL that picks
+ * {@link DisplayService#NEWS_ID}. With the live market off or paused the picker is exactly 0.32's
+ * (every commodity in its old slot). Signs never offer it — a sign is too small for a headline.
  */
 public final class CommodityPickerMenu extends Menu {
 
@@ -42,8 +44,8 @@ public final class CommodityPickerMenu extends Menu {
     }
 
     /**
-     * @param offerNews put the Market News board ({@link DisplayService#NEWS_ID}) first, for
-     *                  the hologram and TV binders
+     * @param offerNews put the Market News board ({@link DisplayService#NEWS_ID}) first while the
+     *                  live market runs, for the hologram and TV binders
      */
     public CommodityPickerMenu(HomeCraftManagement plugin, Player player, String title,
                                Consumer<String> onPick, Runnable onBack, boolean offerNews) {
@@ -62,8 +64,9 @@ public final class CommodityPickerMenu extends Menu {
             set(i, Menus.FILLER, null);
         }
         List<MarketItem> items = new ArrayList<>(plugin.market().catalog());
-        // The news board, when offered, takes the first tile and every commodity moves up one.
-        int lead = offerNews ? 1 : 0;
+        // The news board, when offered and the live market runs, takes the first tile and every
+        // commodity moves up one. Checked on every build, so a pause shows the 0.32 picker.
+        int lead = offerNews && MarketNewsMenu.live(plugin) != null ? 1 : 0;
         int entries = items.size() + lead;
         int pages = Math.max(1, (int) Math.ceil(entries / (double) PAGE_SIZE));
         page = Math.max(0, Math.min(page, pages - 1));

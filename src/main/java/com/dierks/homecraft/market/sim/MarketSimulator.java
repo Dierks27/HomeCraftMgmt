@@ -44,6 +44,9 @@ import java.util.TreeSet;
  * <p><b>Replays</b> ({@code live = false}; boundaries at least one tick in the past when the
  * pump catches up) do expiry, drift and season rows only: no event starts, no REAL impulses,
  * no broadcasts. So downtime never generates events and a restart replays deterministically.
+ * A news flash that comes due during replays is not "held" by them: nobody could join while the
+ * server was down, so it waits for the next live tick and its hold for a player
+ * ({@code max_hold_hours}) starts there.
  * {@link #run} replays at most {@code max_catchup_hours} of boundaries and runs the newest live;
  * it is exactly the same as calling {@link #tick} once per boundary with the state carried over.
  *
@@ -230,12 +233,29 @@ public final class MarketSimulator {
         Catchup plan = boundaries(lastTickAt, now, in.settings().tickMs(), in.settings().maxCatchupHours());
         Run run = new Run(in);
         List<Long> bs = plan.boundaries();
+        if (plan.skipped() > 0 && !bs.isEmpty()) {
+            // The skipped boundaries were not ticked live either: a flash due in them waits too.
+            waitForLiveTick(in.schedule(), bs.get(0) - Math.max(SimMath.MINUTE_MS, in.settings().tickMs()),
+                    in.settings().tickMs());
+        }
         for (int i = 0; i < bs.size(); i++) {
             boolean last = i == bs.size() - 1;
             boolean live = last && in.live();
             run.step(bs.get(i), live, live ? in.queued() : List.of());
         }
         return run.result(plan.skipped());
+    }
+
+    /**
+     * The clock went back: the last tick run ({@code lastTickAt}) is more than one tick ahead of
+     * the newest boundary at {@code now}. Waiting for the clock to catch up would freeze the
+     * market (no decay, no expiry, no housekeeping) for as long as it went back, so the caller
+     * carries on from {@code floor(now)} instead. Up to one tick of slack covers a small clock
+     * correction, which only delays the next tick.
+     */
+    public static boolean clockWentBack(long lastTickAt, long now, long tickMs) {
+        long t = Math.max(SimMath.MINUTE_MS, tickMs);
+        return lastTickAt - Math.floorDiv(now, t) * t > t;
     }
 
     /** The boundaries a pump run covers (see {@link Catchup}). */
@@ -369,15 +389,36 @@ public final class MarketSimulator {
         return false;
     }
 
-    /** The planner's view of one item (also for admin-forced events). */
+    /** The planner's view of one item (also for admin-forced events), its mood inside the band. */
     public static EventPlanner.Candidate candidate(ItemParams p, Quote q, ItemSimState st, double m0, boolean busy,
                                                    boolean popular, SimSettings s) {
+        return candidate(p, q, st, m0, m0, busy, popular, s);
+    }
+
+    /**
+     * The planner's view of one item (also for admin-forced events).
+     *
+     * @param raw0 the item's multiplier before the band's clamp ({@link MoodEngine.Breakdown#raw})
+     */
+    public static EventPlanner.Candidate candidate(ItemParams p, Quote q, ItemSimState st, double m0, double raw0,
+                                                   boolean busy, boolean popular, SimSettings s) {
         ItemSimState row = st == null ? ItemSimState.fresh(p.id()) : st;
         double w = p.weight() * (popular ? s.popularWeight() : 1.0);
         double base = q == null ? p.ceiling() : q.base();
         long stock = q == null ? 0L : q.stock();
         return new EventPlanner.Candidate(p.id(), w, base, p.floor(), p.ceiling(), stock, p.fullStock(), m0, busy,
-                row.featuredUntil(), row.lastNewsAt(), row.lastWantedAt());
+                row.featuredUntil(), row.lastNewsAt(), row.lastWantedAt(), raw0);
+    }
+
+    /**
+     * A replayed (or skipped) boundary {@code b}: a news flash already due there is not held by
+     * it — nobody can be online while the server is down — so it is due again at the next
+     * boundary, and its hold for a player starts at the first live one.
+     */
+    static void waitForLiveTick(Schedule sched, long b, long tickMs) {
+        if (sched.nextNewsAt() <= b) {
+            sched.setNextNewsAt(b + Math.max(SimMath.MINUTE_MS, tickMs));
+        }
     }
 
     /**
@@ -531,13 +572,16 @@ public final class MarketSimulator {
             ZonedDateTime local = Instant.ofEpochMilli(b).atZone(zone);
             long today = local.toLocalDate().toEpochDay();
 
+            seasonsNow = seasonsAt(s, b, zone);
             expireAndStop(b);
             drift(b, c);
-            seasonsNow = seasonsAt(s, b, zone);
             if (live && s.real().enabled() && queued != null && !queued.isEmpty()) {
                 applyReal(b, c, queued);
             }
             seasonRows(b);
+            if (!live) {
+                waitForLiveTick(in.schedule(), b, s.tickMs());
+            }
 
             MarketEvent flash = null;
             long flashDelay = 0L;
@@ -583,8 +627,13 @@ public final class MarketSimulator {
                     t.now = e.withEnd(b, STOP_STOCKED);
                 }
             }
+            Set<String> seasonTags = new HashSet<>();
+            for (SeasonCalendar.Active a : seasonsNow) {
+                seasonTags.add(a.tag());
+            }
             events.removeIf(t -> {
-                if (b >= t.now.endsAt() + RETAIN_MS) {
+                if (b >= t.now.endsAt() + RETAIN_MS
+                        && !(t.now.kind() == EventKind.SEASON && seasonTags.contains(t.now.tag()))) {
                     retired.add(t);
                     return true;
                 }
@@ -632,20 +681,14 @@ public final class MarketSimulator {
                 }
                 ok.add(ri);
             }
-            RealImpulse lead = null;
-            for (RealImpulse ri : ok) {
-                double mag = Math.abs(ri.realChangePct());
-                if (mag >= r.announceAbovePercent() && (lead == null || mag > Math.abs(lead.realChangePct()))) {
-                    lead = ri;
-                }
-            }
+            List<Tracked> rows = new ArrayList<>(ok.size());
             for (RealImpulse ri : ok) {
                 String id = ri.itemId();
                 ItemParams p = in.items().get(id);
                 double strength = Math.max(-cap, Math.min(cap, ri.strength()));
                 double m0 = moodOf(id, b).multiplier();
                 MarketEvent e = MarketEvent.shock(EventKind.REAL, Source.REAL, id, strength, b, r.halfLifeMs(),
-                        r.lastsMs()).toBuilder().tag(ri.tag()).announceDueAt(ri == lead ? b : null).build();
+                        r.lastsMs()).toBuilder().tag(ri.tag()).announceDueAt(null).build();
                 Tracked t = new Tracked(e, null);
                 events.add(t);
                 double m1 = moodOf(id, b).multiplier();
@@ -656,6 +699,23 @@ public final class MarketSimulator {
                 double after = SimMath.displayPrice(base, stock, m1, p.floor(), p.ceiling());
                 e = e.withPrices(SimMath.pct(after, before), before, after);
                 t.now = headline(e, p, s, in.schedule(), rng, c, ri.realName());
+                rows.add(t);
+            }
+            // At most one headline per fetch: the biggest real move of at least
+            // announce_above_percent whose Crate price visibly moved (a whole percent or more).
+            // A sold-out item sits at its ceiling and a capped season + real cannot move further,
+            // so their real-world move is never broadcast as a price change that did not happen.
+            int lead = -1;
+            for (int i = 0; i < ok.size(); i++) {
+                double mag = Math.abs(ok.get(i).realChangePct());
+                if (mag >= r.announceAbovePercent() && visibleMove(rows.get(i).now)
+                        && (lead < 0 || mag > Math.abs(ok.get(lead).realChangePct()))) {
+                    lead = i;
+                }
+            }
+            if (lead >= 0) {
+                Tracked t = rows.get(lead);
+                t.now = t.now.toBuilder().announceDueAt(b).build();
             }
         }
 
@@ -666,7 +726,7 @@ public final class MarketSimulator {
                     continue;
                 }
                 MarketEvent row = MarketEvent.info(EventKind.SEASON, Source.CALENDAR, null, tag, b, a.endsAt(zone))
-                        .withPrices(headlinePercent(a.season()), 0.0, 0.0)
+                        .withPrices(headlinePercent(a.season(), s.seasons().predictableCap(in.spread())), 0.0, 0.0)
                         .withText(a.season().headline(), null);
                 events.add(new Tracked(row, null));
                 seasonStarts.add(a);
@@ -701,7 +761,9 @@ public final class MarketSimulator {
                 }
                 simItems++;
                 String id = en.getKey();
-                cands.add(candidate(p, in.market().get(id), state.get(id), before.multipliers().get(id),
+                MoodEngine.Breakdown bd = before.breakdowns().get(id);
+                double m0 = before.multipliers().get(id);
+                cands.add(candidate(p, in.market().get(id), state.get(id), m0, bd == null ? m0 : bd.raw(),
                         busy.contains(id), in.popular().contains(id), s));
             }
             BroadcastState bs = in.broadcast();
@@ -715,7 +777,7 @@ public final class MarketSimulator {
             BroadcastState bs = in.broadcast();
             boolean introPending = s.announce().intro() && !bs.introDone();
             List<AnnounceGate.Pending> pending = new ArrayList<>(
-                    AnnounceGate.collect(current(), b, s, rng, introPending));
+                    AnnounceGate.collect(current(), b, s, rng, introPending, in.spread()));
             if (flash != null) {
                 pending.add(new AnnounceGate.Pending(AnnounceGate.Type.FLASH, flash, b, b + 1, flashDelay, false));
             }
@@ -729,6 +791,9 @@ public final class MarketSimulator {
                 bs.setIntroDone(true);
             } else {
                 MarketEvent sent = AnnounceGate.markSent(p, b);
+                if (p.type() == AnnounceGate.Type.STORY) {
+                    sent = storyAtAnnouncement(sent);
+                }
                 for (Tracked t : events) {
                     if (t.now == p.event()) {
                         t.now = sent;
@@ -753,6 +818,29 @@ public final class MarketSimulator {
             }
             previous = ev.multipliers();
             last = ev;
+        }
+
+        /**
+         * A HOT/DEAL going out now quotes what its item shows now: its price against the usual
+         * price, from this tick's evaluation ({@link EventPlanner#storyPriced}), not the numbers
+         * worked out when its silent ramp began hours earlier.
+         */
+        private MarketEvent storyAtAnnouncement(MarketEvent e) {
+            String id = e.itemId();
+            ItemStatus st = last == null || id == null ? null : last.status().get(id);
+            MoodEngine.Breakdown bd = last == null || id == null ? null : last.breakdowns().get(id);
+            ItemParams p = id == null ? null : in.items().get(id);
+            if (st == null || bd == null || p == null) {
+                return e;
+            }
+            Quote q = in.market().get(id);
+            double base = q == null ? p.ceiling() : q.base();
+            long stock = q == null ? 0L : q.stock();
+            // The event's own move, for when the usual-price reading would point the wrong way.
+            double without = SimLimits.clampMultiplier(bd.raw() - e.contribution(lastB), s.multiplierLo(),
+                    s.multiplierHi());
+            double before = SimMath.displayPrice(base, stock, without, p.floor(), p.ceiling());
+            return EventPlanner.storyPriced(e, st.usual(), before, st.price());
         }
 
         private MoodEngine.Breakdown moodOf(String id, long b) {
@@ -821,14 +909,24 @@ public final class MarketSimulator {
         }
     }
 
-    /** The SEASON row's {@code pct}: its biggest entry, signed (the first one on a tie). */
-    static double headlinePercent(Season season) {
+    /**
+     * The SEASON row's {@code pct}: its biggest entry as it really applies, each held to the
+     * predictable cap {@code capFrac} ({@link SeasonCalendar#effective}), signed (the first one on
+     * a tie); 0 when the cap leaves nothing.
+     */
+    static double headlinePercent(Season season, double capFrac) {
         double best = 0.0;
-        for (double v : season.percent().values()) {
+        for (double v : SeasonCalendar.effective(season, capFrac).values()) {
             if (Math.abs(v) > Math.abs(best)) {
                 best = v;
             }
         }
         return best;
+    }
+
+    /** A REAL row's quoted move rounds to at least a whole percent: its price visibly moved. */
+    static boolean visibleMove(MarketEvent e) {
+        double pct = SimMath.pct(e.priceAfter(), e.priceBefore());
+        return Double.isFinite(pct) && Math.round(Math.abs(pct)) >= 1;
     }
 }

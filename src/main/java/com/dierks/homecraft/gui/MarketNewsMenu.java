@@ -4,6 +4,7 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.market.OrderMath;
+import com.dierks.homecraft.market.PriceMood;
 import com.dierks.homecraft.market.PricingEngine;
 import com.dierks.homecraft.market.sim.Badge;
 import com.dierks.homecraft.market.sim.EventKind;
@@ -15,6 +16,7 @@ import com.dierks.homecraft.market.sim.MarketNewsService;
 import com.dierks.homecraft.market.sim.MarketSimService;
 import com.dierks.homecraft.market.sim.RealSymbol;
 import com.dierks.homecraft.market.sim.Season;
+import com.dierks.homecraft.market.sim.SeasonCalendar;
 import com.dierks.homecraft.market.sim.SimSettings;
 import com.dierks.homecraft.util.Text;
 import com.dierks.homecraft.web.NewsFeed;
@@ -146,18 +148,42 @@ public final class MarketNewsMenu extends Menu {
     /** One news entry: the item (or a BELL), its headline, age, prices and where a click goes. */
     private org.bukkit.inventory.ItemStack entryIcon(MarketEvent e, long now) {
         Material icon = Material.BELL;
-        if (e.kind() != EventKind.SEASON && e.kind() != EventKind.REAL && e.itemId() != null) {
-            MarketItem item = plugin.market().item(e.itemId());
-            if (item != null) {
-                icon = item.material();
-            }
+        MarketItem item = e.itemId() == null ? null : plugin.market().item(e.itemId());
+        if (e.kind() != EventKind.SEASON && e.kind() != EventKind.REAL && item != null) {
+            icon = item.material();
         }
+        PricingEngine engine = engine(plugin);
         List<String> lore = MarketLabels.newsEntryLore(e, age(e, now),
-                price(e.priceBefore()), price(e.priceAfter()), e.active(now));
+                price(entryQuote(e.kind(), engine, item, e.priceBefore())),
+                price(entryQuote(e.kind(), engine, item, e.priceAfter())), e.active(now));
         return Menus.icon(icon, MarketLabels.newsEntryName(headline(plugin, e)), lore.toArray(new String[0]));
     }
 
-    /** A stored price, formatted; blank when the event has none (seasons, WANTED, real moves). */
+    /**
+     * One of a news entry's "{before} → {after}" prices, quoted the way the chat announcement and
+     * the event's stored line quote it ({@code MarketSimService.renderLine}): what Crate pays (the
+     * bid) for an UP or HOT — the entries that open the sell picker — and what it charges (the ask)
+     * for a DOWN or DEAL — the ones that open an order; the stored mid for a real-world move. NaN
+     * (no price line) for a WANTED or a season: their rows carry no move (a WANTED stores its top
+     * price as both), so "$180.00 → $180.00 (0%)" would say nothing. An item the market no longer
+     * knows is quoted at its stored mid, as the chat line does.
+     */
+    static double entryQuote(EventKind kind, PricingEngine engine, MarketItem item, double mid) {
+        if (kind == null || kind == EventKind.WANTED || kind == EventKind.SEASON
+                || !Double.isFinite(mid) || !(mid > 0)) {
+            return Double.NaN;
+        }
+        if (item == null || kind == EventKind.REAL) {
+            return mid;
+        }
+        return switch (kind) {
+            case UP, HOT -> OrderMath.bid(engine, item, mid);
+            case DOWN, DEAL -> OrderMath.ask(engine, item, mid);
+            default -> mid;
+        };
+    }
+
+    /** A quoted price, formatted; blank when there is none (NaN, 0, or below). */
     private String price(double amount) {
         return Double.isFinite(amount) && amount > 0 ? plugin.economy().format(amount) : "";
     }
@@ -193,13 +219,61 @@ public final class MarketNewsMenu extends Menu {
     }
 
     /**
+     * The event's daily cap a tile or order preview may show for {@code item}: the buy cap
+     * ({@code sell == false}, a DEAL or DOWN) or the sell cap ({@code sell == true}, a HOT or UP),
+     * but only while the event behind it is showing its badge — {@code PriceMood.eventCapShown},
+     * the same answer {@code MarketService} words its refusals by (its mood is this sim). During a
+     * HOT/DEAL's silent ramp, and an UP/DOWN's badge-less tail, the cap still binds but no surface
+     * may give the event away, so this is 0 then; and always 0 while the live market is off.
+     */
+    public static long shownCap(HomeCraftManagement plugin, MarketItem item, boolean sell) {
+        MarketSimService sim = live(plugin);
+        return sim == null ? 0L : guard(plugin, () -> shownCap(sim, item, sell), 0L);
+    }
+
+    /** {@link #shownCap(HomeCraftManagement, MarketItem, boolean)} against any mood. */
+    static long shownCap(PriceMood mood, MarketItem item, boolean sell) {
+        if (mood == null || item == null || !mood.eventCapShown(item, sell)) {
+            return 0L;
+        }
+        return Math.max(0L, sell ? mood.eventSellCap(item) : mood.eventBuyCap(item));
+    }
+
+    /**
+     * {@link #shownCap} as a plain line, for a tile or order preview whose badge lore does not
+     * already carry it: {@code &7Limit &f{n} &7a day.} on the Store (buys), {@code &7Up to &f{n}
+     * &7a day.} on the Sell screen. A tile shows one badge (UP/DOWN before HOT/DEAL), so a DEAL's
+     * limit under an ▲ badge, or a HOT's under a ▼, would otherwise go unsaid.
+     *
+     * <p>Empty when {@code cap <= 0}, or when the badge's own lore already carries the number —
+     * DEAL/DOWN on the Store ({@link MarketLabels#storeLore}, {@link MarketLabels#previewLines}),
+     * HOT/UP on the Sell screen ({@link MarketLabels#sellLore}). It never names the event.
+     */
+    static List<String> capLine(Badge badge, boolean sell, long cap) {
+        if (cap <= 0) {
+            return List.of();
+        }
+        Badge b = badge == null ? Badge.NONE : badge;
+        boolean said = sell ? b == Badge.HOT || b == Badge.UP : b == Badge.DEAL || b == Badge.DOWN;
+        if (said) {
+            return List.of();
+        }
+        return List.of(sell ? "&7Up to &f" + cap + " &7a day." : "&7Limit &f" + cap + " &7a day.");
+    }
+
+    /**
      * The usual price the way a tile quotes it: the ask on the Store, the bid on the Sell screen.
      * "Usually $X" then compares like with like — the tile's price over it is exactly the mood.
      */
     public static double usualQuote(HomeCraftManagement plugin, MarketItem item, double usual, boolean sell) {
-        PluginConfig.Market m = plugin.config().market();
-        PricingEngine engine = new PricingEngine(m.elasticity(), m.inertia(), m.spread());
+        PricingEngine engine = engine(plugin);
         return sell ? OrderMath.bid(engine, item, usual) : OrderMath.ask(engine, item, usual);
+    }
+
+    /** The configured spread, as {@code MarketService} and the sim quote with it. */
+    private static PricingEngine engine(HomeCraftManagement plugin) {
+        PluginConfig.Market m = plugin.config().market();
+        return new PricingEngine(m.elasticity(), m.inertia(), m.spread());
     }
 
     /**
@@ -325,7 +399,9 @@ public final class MarketNewsMenu extends Menu {
                         return s.name();
                     }
                 }
-                return seasonId;
+                // A season no longer configured still reads as words (harvest_time -> Harvest Time),
+                // the same fallback the calendar uses.
+                return SeasonCalendar.nameOf(seasonId);
             }
             case REAL -> {
                 for (RealSymbol r : settings.real().symbols()) {

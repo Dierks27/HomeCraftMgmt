@@ -61,7 +61,8 @@ public final class MarketSimDao {
      *
      * @param lastEventId the newest event this player has been shown (catch-up shows ids above it)
      * @param muted       {@code /hcm market news off}
-     * @param seenAt      when they last had a catch-up (0 = never)
+     * @param seenAt      when they were last brought up to date: their last catch-up or the last
+     *                    live broadcast they heard (0 = never)
      */
     public record Seen(UUID player, long lastEventId, boolean muted, long seenAt) {
     }
@@ -70,7 +71,8 @@ public final class MarketSimDao {
      * One {@code market_real_quotes} row.
      *
      * @param tradeDay the trade date as an epoch day
-     * @param applied  its impulse has been queued; it is never applied twice
+     * @param applied  its move has become a REAL event (set in that tick's transaction); it is
+     *                 never applied twice
      */
     public record StoredQuote(String symbol, long tradeDay, double close, long fetchedAt, boolean applied) {
 
@@ -211,8 +213,10 @@ public final class MarketSimDao {
     /**
      * The simulator's working set at {@code now}: every event with
      * {@code ends_at > now - }{@link MarketSimulator#RETAIN_MS} (live ones, plus any that closed
-     * within the last hour for their ending line), oldest id first. This is exactly the set
-     * {@link MarketSimulator} keeps between ticks, so a restart continues where it stopped.
+     * within the last hour for their ending line), oldest id first. With the SEASON rows of
+     * {@link #loadSeasons} this is the set {@link MarketSimulator} keeps between ticks (it keeps a
+     * SEASON row while the calendar still runs its season), so a restart continues where it
+     * stopped.
      *
      * <p>Rows whose {@code kind} or {@code source} this version does not know are skipped.
      */
@@ -224,6 +228,45 @@ public final class MarketSimDao {
                     "SELECT id, " + EVENT_COLUMNS + " FROM market_events WHERE ends_at > ? ORDER BY id")) {
                 ps.setLong(1, from);
                 return events(ps);
+            }
+        }
+    }
+
+    /**
+     * Every SEASON row started at or after {@code since}, oldest id first, whatever its
+     * {@code ends_at}. A restart adds the ones whose season the calendar still runs to the
+     * working set: an admin may have moved a season's end later than the row's stored
+     * {@code ends_at}, and without the row the simulator would try to make (and announce) a
+     * second one for the same {@code id:year}.
+     */
+    public List<MarketEvent> loadSeasons(long since) throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT id, " + EVENT_COLUMNS + " FROM market_events WHERE kind = ? AND started_at >= ? ORDER BY id")) {
+                ps.setString(1, EventKind.SEASON.name());
+                ps.setLong(2, since);
+                return events(ps);
+            }
+        }
+    }
+
+    /**
+     * The stored row of {@code kind} with {@code tag} (SEASON and REAL rows are unique by it), or
+     * empty. What a working-set row that lost the unique-tag race is swapped for.
+     */
+    public Optional<MarketEvent> findByTag(EventKind kind, String tag) throws SQLException {
+        if (kind == null || tag == null) {
+            return Optional.empty();
+        }
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT id, " + EVENT_COLUMNS + " FROM market_events WHERE kind = ? AND tag = ? ORDER BY id LIMIT 1")) {
+                ps.setString(1, kind.name());
+                ps.setString(2, tag);
+                List<MarketEvent> rows = events(ps);
+                return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
             }
         }
     }
@@ -465,25 +508,31 @@ public final class MarketSimDao {
     }
 
     /**
-     * A live broadcast reached these players: move each one's mark up to {@code lastEventId}
-     * (never back), leaving {@code seen_at} and the mute alone. Players with no row get one. One
-     * transaction for the lot.
+     * A live broadcast reached these players at {@code at}: move each one's mark up to
+     * {@code lastEventId} and their {@code seen_at} up to {@code at} (neither ever back), leaving
+     * the mute alone. Players with no row get one. One transaction for the lot.
+     *
+     * <p>{@code seen_at} is when the player was last brought up to date — their last catch-up or
+     * the last broadcast they heard. The catch-up uses it to find a HOT/DEAL that became news
+     * after that although its id (given when its silent ramp began) is below the mark.
      */
-    public void advanceSeen(Collection<UUID> players, long lastEventId) throws SQLException {
+    public void advanceSeen(Collection<UUID> players, long lastEventId, long at) throws SQLException {
         if (players == null || players.isEmpty()) {
             return;
         }
         database.transaction(c -> {
             try (PreparedStatement ps = c.prepareStatement(
-                    "INSERT INTO market_news_seen(player, last_event_id, muted, seen_at) VALUES(?,?,0,0) "
+                    "INSERT INTO market_news_seen(player, last_event_id, muted, seen_at) VALUES(?,?,0,?) "
                             + "ON CONFLICT(player) DO UPDATE SET "
-                            + "last_event_id = MAX(last_event_id, excluded.last_event_id)")) {
+                            + "last_event_id = MAX(last_event_id, excluded.last_event_id), "
+                            + "seen_at = MAX(seen_at, excluded.seen_at)")) {
                 for (UUID p : players) {
                     if (p == null) {
                         continue;
                     }
                     ps.setString(1, p.toString());
                     ps.setLong(2, Math.max(0L, lastEventId));
+                    ps.setLong(3, Math.max(0L, at));
                     ps.executeUpdate();
                 }
             }
@@ -546,7 +595,8 @@ public final class MarketSimDao {
 
     /**
      * Mark {@code (symbol, tradeDay)} applied inside the caller's transaction. Exactly one call
-     * per stored quote returns {@code true}; that call is the one that may queue the impulse.
+     * per stored quote returns {@code true}. The tick calls it (through
+     * {@link #markApplied(Connection, MarketEvent)}) in the transaction that writes the REAL row.
      *
      * @return {@code true} when this call flipped it; {@code false} when it was already applied
      *         or no such quote is stored
@@ -560,6 +610,35 @@ public final class MarketSimDao {
                 return ps.executeUpdate() > 0;
             }
         }
+    }
+
+    /**
+     * Mark the quote a REAL row came from applied, inside the tick's transaction that writes the
+     * row ({@code tag = item:symbol:tradeDay}, {@link com.dierks.homecraft.market.sim.RealImpulse#tag}).
+     * So a fetched move counts as used only once it really is a REAL event: a restart or pause
+     * between the fetch and the next tick leaves it unapplied, to be queued again.
+     *
+     * @return {@code true} when this call flipped it; {@code false} for any other row, a tag that
+     *         does not parse, or a quote already applied or not stored
+     */
+    public boolean markApplied(Connection c, MarketEvent real) throws SQLException {
+        if (real == null || real.kind() != EventKind.REAL || real.tag() == null) {
+            return false;
+        }
+        String tag = real.tag();
+        int last = tag.lastIndexOf(':');
+        int mid = last <= 0 ? -1 : tag.lastIndexOf(':', last - 1);
+        if (mid < 0) {
+            return false;
+        }
+        long day;
+        try {
+            day = Long.parseLong(tag.substring(last + 1));
+        } catch (NumberFormatException e) {
+            return false;
+        }
+        String symbol = tag.substring(mid + 1, last);
+        return !symbol.isEmpty() && markApplied(c, symbol, day);
     }
 
     /** The cached closes for {@code symbol} from trade day {@code sinceDay} on, oldest first. */

@@ -77,7 +77,7 @@ menus:
   store:
     # The department tab selected first: All, or any name from marketplace.departments.
     default_department: All
-    # NAME | PRICE_UP | PRICE_DOWN | STOCK
+    # NAME | PRICE_UP | PRICE_DOWN | STOCK | HOT (HOT only while the live market runs, else NAME)
     default_sort: NAME
   museum:
     # How the Museum groups Minis: SERIES | RARITY | TYPE
@@ -516,12 +516,14 @@ market:
   #    NEWS FLASH  a sudden jump of up to 25% that fades over the next day
   #    seasons     small calendar nudges; real-world prices (off by default)
   #  The whole mood is LOCKED IN CODE to 25% either way (0.75x to 1.25x): the
-  #  numbers below can make it calmer, never wilder. An item with no stock stays
-  #  at exactly its ceiling. Daily sell/buy limits and per-item caps still apply,
+  #  numbers below can make it calmer, never wilder. An item with no stock is
+  #  never moved by the mood (it stays at its balanced price, the ceiling once the
+  #  curve has caught up). Daily sell/buy limits and per-item caps still apply,
   #  at the moved price. While an item is HOT or UP, its daily sell cap applies to
   #  everyone; while it is on a DEAL or DOWN, "Limit N a day" applies to everyone -
   #  including players with hcm.market.limit.bypass (ops).
-  #  enabled: false puts every price back exactly as it was in 0.32.
+  #  enabled: false puts every price back exactly as it was in 0.32. A value that is
+  #  not true or false (a typo) turns it off too, with a warning in the log.
   #  Everything here reloads with /hcm reload. See /hcm market sim status.
   #  Optional keys for a market.catalog row (the admin GUI keeps them):
   #    sim: false            this item never moves on its own
@@ -533,15 +535,18 @@ market:
     enabled: true
     tick_minutes: 5              # how often the mood moves (1-60)
     max_catchup_hours: 48        # after the server was off, replay the quiet drift for at most this long
+    # If these two differ, the narrower is used both ways (with a warning), so the mood never leans.
     max_up_percent: 25           # whole mood at most +25% ...   (locked in code: at most 25)
     max_down_percent: 25         # ... and at most -25%          (locked in code: at most 25)
     keep_days: 60                # market news older than this is deleted
     drift:
       max_percent: 8             # the wander alone never goes past this (locked in code: at most 8)
+      # calm_percent / lively_percent: the drift's speed is locked in code (at most 4.5,
+      # less with a half-life under 66 hours; a bigger value is held back with a warning).
       calm_percent: 1.5          # typical size for cheap staples (about 1% a day)
       lively_percent: 3.0        # typical size for dearer items (about 2% a day)
       lively_from: 10.0          # "lively" when sqrt(floor x ceiling) is at least this many $
-      half_life_hours: 66        # half of any wander fades in this long
+      half_life_hours: 66        # half of any wander fades in this long (locked in code: at least 24)
     hot:
       enabled: true
       percent: [8, 15]           # how much higher at full strength (locked in code: at most 15)
@@ -550,7 +555,7 @@ market:
       fade_hours: 10             # cools back down at the end
       gap_hours: [48, 120]       # quiet time after one ends before the next can start
       last_call_hours: 3         # "Last call!" this long before it starts cooling (0 = never)
-      sell_limit: true           # while HOT, the item's daily sell cap applies to everyone
+      sell_limit: true           # while HOT or UP (a news flash), the item's daily sell cap applies to everyone
     deal:
       enabled: true
       percent: [8, 15]           # how much cheaper at full strength (locked in code: at most 15)
@@ -577,6 +582,7 @@ market:
       hours: "07:00-21:00"       # local time (clock.time_zone) when anything is announced
       wait_for_players: true     # hold a due flash until someone has been online a few minutes
       join_delay_minutes: [2, 8]
+      # max_hold_hours counts hours the server is running; downtime does not count.
       max_hold_hours: 14         # then it happens anyway; players see it in "while you were away"
       item_cooldown_hours: 72
       min_stock_percent: 5       # a DOWN flash needs at least this much stock to buy
@@ -693,15 +699,21 @@ market:
       gain: 2.0                  # a real +1% day = +2% here ...
       max_percent: 4             # ... never more than this (and seasons + real together stay under half the spread)
       ignore_above_percent: 8    # a bigger real "move" is treated as bad data and skipped
+      # At most one news line per fetch: the biggest real move of at least
+      # announce_above_percent, and only if it moved Crate's price a whole percent or more.
       announce_above_percent: 2  # real moves at least this big get a news line
       half_life_hours: 24
       lasts_hours: 96
       timeout_seconds: 10
+      # One row per item: its Stooq and Yahoo symbols and the name headlines use.
+      # iron_ingot follows copper (hg.f / HG=F): there is no free daily iron-ore quote.
+      # Lumber for oak_log is Yahoo's LBR=F (no Stooq symbol) and is unverified: set
+      # provider: yahoo, /hcm reload, and try /hcm market sim real test LBR=F first.
+      # To use it, add a row:  - { item: oak_log, stooq: "", yahoo: "LBR=F", name: "lumber" }
       symbols:                   # set a symbol to "" to turn it off (deleting a row also works)
         - { item: gold_ingot, stooq: "gc.f", yahoo: "GC=F", name: "gold" }
         - { item: wheat,      stooq: "zw.f", yahoo: "ZW=F", name: "wheat" }
-        - { item: iron_ingot, stooq: "hg.f", yahoo: "HG=F", name: "metal" }   # copper: no free daily iron-ore quote
-        # - { item: oak_log,  stooq: "",     yahoo: "LBR=F", name: "lumber" } # unverified - test it first
+        - { item: iron_ingot, stooq: "hg.f", yahoo: "HG=F", name: "metal" }
 
   # Admin-defined catalog. Each item:
   #   id            unique key used in commands (lower-case)
@@ -1167,7 +1179,10 @@ recipes:
 #    /api/minis   every Mini in the catalog: rarity, category, series, cap,
 #                 how many were printed, sold out, and its head skin. Counts
 #                 only — never who owns them.
-#  Both are gzipped for clients that ask for it.
+#    /api/news    the live market's news: headlines, what is HOT, on sale, up
+#                 or down right now, and the season ("live": false and nothing
+#                 else while the live market is off or paused)
+#  All are gzipped for clients that ask for it, and a feed_token gates them all.
 # ---------------------------------------------------------------------
 web:
   dashboard:

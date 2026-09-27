@@ -243,17 +243,25 @@ public final class NewsFeed {
     /**
      * The signed percent an event reports: its stored {@code pct} when set, else its strength as
      * a percent; the sign is the kind's (HOT/UP +, DEAL/DOWN -), a REAL's strength sign, or the
-     * stored sign for the other kinds. The same rule as {@code MarketLabels.pct}.
+     * stored sign for the other kinds. A REAL row that recorded its before and after prices keeps
+     * its stored pct even at 0: the real-world move did not move Crate's price (a sold-out or
+     * clamped item), and the feed must not claim it did. The same rule as {@code MarketLabels.pct}.
      */
     static double pct(MarketEvent e) {
         double p = e.pct();
-        double raw = Double.isFinite(p) && p != 0.0 ? p : e.strength() * 100.0;
+        boolean measured = e.kind() == EventKind.REAL
+                && e.priceBefore() > 0 && Double.isFinite(e.priceBefore())
+                && e.priceAfter() > 0 && Double.isFinite(e.priceAfter());
+        double raw = Double.isFinite(p) && (p != 0.0 || measured) ? p : e.strength() * 100.0;
         if (!Double.isFinite(raw)) {
             return 0.0;
         }
         int sign = e.kind().sign();
         if (sign == 0 && e.kind() == EventKind.REAL && e.strength() != 0.0) {
             sign = e.strength() > 0 ? 1 : -1;
+        }
+        if (raw == 0.0) {
+            return 0.0; // never -0.0: it would print as "-0.00" / "-0%"
         }
         return sign == 0 ? raw : sign * Math.abs(raw);
     }

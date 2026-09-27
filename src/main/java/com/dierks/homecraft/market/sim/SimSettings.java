@@ -85,14 +85,29 @@ public record SimSettings(boolean enabled, int tickMinutes, int maxCatchupHours,
         return tickMinutes * MINUTE_MS;
     }
 
-    /** The configured lower bound of the multiplier, never below 0.75. */
-    public double multiplierLo() {
-        return SimLimits.multiplierLo(maxDownPercent / 100.0);
+    /**
+     * How far the whole mood may move, in whole percents, the SAME both ways: the narrower of
+     * {@code max_up_percent} and {@code max_down_percent} (each already at most 25).
+     *
+     * <p>The band is always symmetric, {@code [1 - band, 1 + band]}. Narrowing only one side
+     * would make the mood lean the other way: with {@code max_down_percent: 0} every dip is
+     * clipped to 1.0 while every rise stands, no DEAL fits and DOWN flashes turn into UPs, so
+     * the average multiplier sits a couple of percent above 1 — extra money on every sale, and
+     * on unlimited volume for players who bypass the daily caps. Using the narrower side for
+     * both keeps every part zero-mean, so narrowing either key can only make the market calmer.
+     */
+    public double bandPercent() {
+        return Math.min(maxUpPercent, maxDownPercent);
     }
 
-    /** The configured upper bound of the multiplier, never above 1.25. */
+    /** The lower bound of the multiplier: {@code 1 - bandPercent/100}, never below 0.75. */
+    public double multiplierLo() {
+        return SimLimits.multiplierLo(bandPercent() / 100.0);
+    }
+
+    /** The upper bound of the multiplier: {@code 1 + bandPercent/100}, never above 1.25. */
     public double multiplierHi() {
-        return SimLimits.multiplierHi(maxUpPercent / 100.0);
+        return SimLimits.multiplierHi(bandPercent() / 100.0);
     }
 
     /** {@link #samePlural} as a set, for {@code Headlines.plural}. */
@@ -212,9 +227,12 @@ public record SimSettings(boolean enabled, int tickMinutes, int maxCatchupHours,
      *
      * @param maxPercent    {@code |d|} never passes this (locked: at most 8)
      * @param calmPercent   σ for cheap staples (about 1% a day)
-     * @param livelyPercent σ for dearer items (about 2% a day)
+     * @param livelyPercent σ for dearer items (about 2% a day). Either one, times the item's
+     *                      volatility, is held under the drift's speed lock when it becomes the
+     *                      item's sigma ({@link SimLimits#driftSigmaCap}: 4.5% at a 66 h
+     *                      half-life, less for a shorter one)
      * @param livelyFrom    "lively" when {@code sqrt(floor x ceiling)} is at least this many $
-     * @param halfLifeHours half of any wander fades in this long
+     * @param halfLifeHours half of any wander fades in this long (locked: at least 24)
      */
     public record Drift(double maxPercent, double calmPercent, double livelyPercent,
                         double livelyFrom, double halfLifeHours) {
@@ -224,7 +242,7 @@ public record SimSettings(boolean enabled, int tickMinutes, int maxCatchupHours,
             calmPercent = nonNeg(calmPercent);
             livelyPercent = nonNeg(livelyPercent);
             livelyFrom = nonNeg(livelyFrom);
-            halfLifeHours = nonNeg(halfLifeHours);
+            halfLifeHours = SimLimits.clampDriftHalfLife(halfLifeHours);
         }
 
         public static Drift defaults() {
@@ -248,7 +266,9 @@ public record SimSettings(boolean enabled, int tickMinutes, int maxCatchupHours,
      * @param fadeHours     cool-down at the end
      * @param gapHours      quiet time after one ends before the next can start
      * @param lastCallHours "Last call!" this long before it starts cooling (0 = never)
-     * @param sellLimit     HOT only: the item's daily sell cap applies to everyone while HOT
+     * @param sellLimit     the key is {@code hot.sell_limit}, but it covers HOT and UP (a news
+     *                      flash): while either runs on the item, its daily sell cap applies to
+     *                      everyone; false for DEAL
      * @param minStockPercent DEAL only: only items holding this much of full_stock (and 16+)
      * @param buyLimitShare   DEAL only: "Limit N a day" as this share of max_daily_buy
      */

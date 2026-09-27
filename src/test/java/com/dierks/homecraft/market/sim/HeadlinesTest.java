@@ -3,7 +3,9 @@ package com.dierks.homecraft.market.sim;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -22,7 +24,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * moves; every template carries its placeholder, fits 60 characters with the shipped items'
  * names and 72 with a 24-character one, uses no banned word, no shelf word (except
  * {@code wanted}, which is only sent while Crate really has none) and nothing above U+FFFF.
- * Plurals follow the same-plural list and plain English (Berry → Berries). The time words
+ * Plurals follow the same-plural list and plain English (Berry → Berries, Potato → Potatoes,
+ * Raw Iron and Cooked Beef unchanged), and the banned/shelf checks catch the usual inflections
+ * and hyphen forms (crashed, fighting, restocked, sold-out). The time words
  * fall in the documented buckets. A template is not reused until four others from its list
  * have been, and a broken template is reported and dropped, falling back to the shipped list
  * when nothing is left.
@@ -155,6 +159,31 @@ class HeadlinesTest {
         assertNull(Headlines.problem("up", "Fireworks and wares need {item}!"));
         assertNull(Headlines.problem("up", "Everyone is stockpiling {item}!"));
 
+        // The ways people really write these words are caught too, not just the dictionary form.
+        for (String bad : List.of("Prices crashed! Grab {item}!", "Miners are fighting over {item}!",
+                "The {item} market is burning hot!", "Traders killed it with {item}!",
+                "Oh no, {item} is dying out!", "Everyone is scared to sell {item}!", "Someone stole {item}!",
+                "Two thieves want {item}!", "The warring towns need {item}!", "{item} fighters are here!",
+                "A stormy day for {item}!", "Deadly good {item}!", "{item}-killer deals!")) {
+            String why = Headlines.problem("up", bad);
+            assertNotNull(why, bad);
+            assertTrue(why.startsWith("uses the word"), bad + ": " + why);
+        }
+        // ...and so are shelf claims written as one word or with a hyphen.
+        for (String shelf : List.of("Crate just restocked {item}!", "Crate has overstocked {item}!",
+                "Crate is restocking {item}!", "Everyone wants the sold-out {item}!",
+                "{item} are selling out fast!", "Crate is out-of {item}!", "Crate's shelves are full of {item}")) {
+            String why = Headlines.problem("up", shelf);
+            assertNotNull(why, shelf);
+            assertTrue(why.startsWith("talks about Crate's shelf"), shelf + ": " + why);
+        }
+        // Harmless words that start the same way stay allowed.
+        for (String fine : List.of("Wares and gunpowder need {item}!", "A scarecrow wants {item}!",
+                "The warden is warm and wants {item}!", "Farmers with livestock want {item}!",
+                "Bookshelves need {item}!", "Warped forests need {item}!")) {
+            assertNull(Headlines.problem("up", fine), fine);
+        }
+
         // Real lines need {real}, and may name the item too.
         assertNotNull(Headlines.problem("real_up", "In the real world, {item} went up!"));
         assertNull(Headlines.problem("real_up", "{real} went up, so {Name} did too!"));
@@ -204,6 +233,86 @@ class HeadlinesTest {
         assertEquals("Bottles o' Enchanting", Headlines.plural("xp", "Bottle o' Enchanting", null, SAME));
         assertTrue(SAME.contains("cobbled_deepslate"));
         assertEquals(41, SAME.size());
+    }
+
+    @Test
+    void commonFarmAndOreItemsGetTheirRealPlurals() {
+        // Every shipped catalog item, then the common farm, food and ore commodities. These hold
+        // with no same_plural at all (an older config's list, or an admin's own, may lack them).
+        Map<String, String> want = new LinkedHashMap<>();
+        want.put("COBBLESTONE", "Cobblestone");
+        want.put("OAK_LOG", "Oak Logs");
+        want.put("WHEAT", "Wheat");
+        want.put("IRON_INGOT", "Iron Ingots");
+        want.put("GOLD_INGOT", "Gold Ingots");
+        want.put("DIAMOND", "Diamonds");
+        want.put("CARROT", "Carrots");
+        want.put("POTATO", "Potatoes");
+        want.put("BAKED_POTATO", "Baked Potatoes");
+        want.put("BEETROOT", "Beetroots");
+        want.put("PUMPKIN", "Pumpkins");
+        want.put("MELON_SLICE", "Melon Slices");
+        want.put("APPLE", "Apples");
+        want.put("EGG", "Eggs");
+        want.put("BREAD", "Bread");
+        want.put("BEEF", "Beef");
+        want.put("COOKED_BEEF", "Cooked Beef");
+        want.put("MUTTON", "Mutton");
+        want.put("CHICKEN", "Chicken");
+        want.put("PORKCHOP", "Porkchops");
+        want.put("COD", "Cod");
+        want.put("SALMON", "Salmon");
+        want.put("TROPICAL_FISH", "Tropical Fish");
+        want.put("ROTTEN_FLESH", "Rotten Flesh");
+        want.put("SUGAR_CANE", "Sugar Cane");
+        want.put("DRIED_KELP", "Dried Kelp");
+        want.put("MUSHROOM_STEW", "Mushroom Stew");
+        want.put("RAW_IRON", "Raw Iron");
+        want.put("RAW_GOLD", "Raw Gold");
+        want.put("RAW_COPPER", "Raw Copper");
+        want.put("IRON_ORE", "Iron Ore");
+        want.put("COAL", "Coal");
+        want.put("COPPER_INGOT", "Copper Ingots");
+        want.put("IRON_NUGGET", "Iron Nuggets");
+        want.put("EMERALD", "Emeralds");
+        want.put("LAPIS_LAZULI", "Lapis Lazuli");
+        want.put("QUARTZ", "Quartz");
+        want.put("REDSTONE", "Redstone");
+        want.put("GLOWSTONE_DUST", "Glowstone Dust");
+        want.put("GUNPOWDER", "Gunpowder");
+        want.put("BONE_MEAL", "Bone Meal");
+        want.put("STRING", "String");
+        want.put("LEATHER", "Leather");
+        want.put("WHITE_WOOL", "White Wool");
+        want.put("PACKED_ICE", "Packed Ice");
+        want.put("SAND", "Sand");
+        want.put("FLINT", "Flint");
+        want.put("PAPER", "Paper");
+        want.put("SWEET_BERRIES", "Sweet Berries");
+        want.put("RABBIT_FOOT", "Rabbit Feet");
+        want.put("TORCH", "Torches");
+        want.put("TNT", "TNT");
+        want.put("TNT_MINECART", "TNT Minecarts");
+        List<String> wrong = new ArrayList<>();
+        want.forEach((raw, plural) -> {
+            String id = raw.toLowerCase();
+            List<Set<String>> lists = Arrays.asList(SAME, Set.of(), null);
+            List<String> labels = List.of("shipped", "empty", "none");
+            for (int i = 0; i < lists.size(); i++) {
+                String got = Headlines.plural(id, raw, null, lists.get(i));
+                if (!plural.equals(got)) {
+                    wrong.add(raw + " -> " + got + " (want " + plural + ", same_plural " + labels.get(i) + ")");
+                }
+            }
+        });
+        assertEquals(List.of(), wrong);
+
+        assertEquals("TNT", Headlines.name("TNT"));
+        assertEquals("TNT Minecart", Headlines.name("TNT_MINECART"));
+        assertEquals("Potatoes", Headlines.plural("x", "Potato", null, null));
+        assertEquals("potatoes", Headlines.plural("x", "potato", null, null), "the case is kept");
+        assertEquals("Big POTATOES", Headlines.plural("x", "Big POTATO", null, null));
+        assertEquals("Spuds", Headlines.plural("potato", "Potato", "Spuds", SAME), "news_name still wins");
     }
 
     // ---- picking and rendering ----------------------------------------------------------

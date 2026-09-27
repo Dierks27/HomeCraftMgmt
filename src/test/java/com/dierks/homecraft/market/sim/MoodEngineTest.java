@@ -120,6 +120,11 @@ class MoodEngineTest {
         assertEquals(1.0, MoodEngine.breakdown(P, Double.NaN, List.of(), Double.NaN, T0, S, SPREAD).multiplier());
     }
 
+    /**
+     * Config can narrow the band, never widen it, and narrowing is always symmetric: the band is
+     * {@code [1 - b, 1 + b]} with {@code b} the narrower of max_up_percent and max_down_percent,
+     * so narrowing one side narrows both and the mood can never lean one way.
+     */
     @Test
     void configCanNarrowTheBandButNeverWidenIt() {
         List<MarketEvent> up = List.of(hot(0.15, T0 - 10 * H), up(0.25, T0));
@@ -128,8 +133,22 @@ class MoodEngineTest {
         assertEquals(1.25, MoodEngine.breakdown(P, 0.08, up, 0.045, T0, wide, SPREAD).multiplier());
         assertEquals(0.75, MoodEngine.breakdown(P, -0.08, down, -0.045, T0, wide, SPREAD).multiplier());
         SimSettings narrow = band(10, 5);
-        assertEquals(1.10, MoodEngine.breakdown(P, 0.08, up, 0.045, T0, narrow, SPREAD).multiplier(), 1e-15);
+        assertEquals(1.05, MoodEngine.breakdown(P, 0.08, up, 0.045, T0, narrow, SPREAD).multiplier(), 1e-15,
+                "max_down 5 narrows the top too");
         assertEquals(0.95, MoodEngine.breakdown(P, -0.08, down, -0.045, T0, narrow, SPREAD).multiplier(), 1e-15);
+        SimSettings mirrored = band(5, 10);
+        assertEquals(1.05, MoodEngine.breakdown(P, 0.08, up, 0.045, T0, mirrored, SPREAD).multiplier(), 1e-15);
+        assertEquals(0.95, MoodEngine.breakdown(P, -0.08, down, -0.045, T0, mirrored, SPREAD).multiplier(), 1e-15,
+                "max_up 5 narrows the bottom too");
+        // One side at 0 is no mood at all, never a one-way one.
+        for (SimSettings oneSided : List.of(band(25, 0), band(0, 25))) {
+            assertEquals(1.0, MoodEngine.breakdown(P, 0.08, up, 0.045, T0, oneSided, SPREAD).multiplier());
+            assertEquals(1.0, MoodEngine.breakdown(P, -0.08, down, -0.045, T0, oneSided, SPREAD).multiplier());
+        }
+        // A wide side never widens the narrow one past the hard band either.
+        SimSettings half = band(90, 25);
+        assertEquals(1.25, MoodEngine.breakdown(P, 0.08, up, 0.045, T0, half, SPREAD).multiplier());
+        assertEquals(0.75, MoodEngine.breakdown(P, -0.08, down, -0.045, T0, half, SPREAD).multiplier());
     }
 
     @Test
@@ -236,6 +255,50 @@ class MoodEngineTest {
         ItemStatus t = MoodEngine.status(P, MoodEngine.breakdown(P, 0.0, List.of(u), 0.0, tail, S, SPREAD),
                 List.of(u), 22.49, 512, tail);
         assertEquals(Badge.NONE, t.badge());
+    }
+
+    /**
+     * Review #3: an event-cap refusal may name the event only once players can see it. The HOT's
+     * cap binds from its first (silent) ramp tick, but the sell side reads as shown only from full
+     * strength; the DEAL likewise on the buy side; an UP/DOWN only while its badge lasts. Each
+     * side only answers for its own kinds.
+     */
+    @Test
+    void anEventCapIsShownOnlyOnceItsEventsBadgeIs() {
+        MarketEvent h = hot(0.12, T0);
+        assertFalse(MoodEngine.capEventShown(List.of(h), true, T0 - H), "not started");
+        assertFalse(MoodEngine.capEventShown(List.of(h), true, T0), "the silent ramp begins");
+        assertFalse(MoodEngine.capEventShown(List.of(h), true, T0 + 3 * H), "still ramping");
+        assertTrue(h.active(T0 + 3 * H), "(the cap binds all the same: the event is active)");
+        assertTrue(MoodEngine.capEventShown(List.of(h), true, T0 + 4 * H), "full strength: announced");
+        assertTrue(MoodEngine.capEventShown(List.of(h), true, h.holdEndsAt() + H), "fading still shows it");
+        assertFalse(MoodEngine.capEventShown(List.of(h), true, h.endsAt()), "over");
+        assertFalse(MoodEngine.capEventShown(List.of(h), false, T0 + 10 * H), "a HOT says nothing about the buy side");
+
+        MarketEvent stoppedInRamp = hot(0.12, T0).withStop(T0 + 2 * H, "admin");
+        assertTrue(stoppedInRamp.active(T0 + 2 * H + 10 * SimMath.MINUTE_MS));
+        assertFalse(MoodEngine.capEventShown(List.of(stoppedInRamp), true, T0 + 2 * H + 10 * SimMath.MINUTE_MS),
+                "stopped before it was ever announced: never shown");
+
+        MarketEvent d = deal(0.12, T0);
+        assertFalse(MoodEngine.capEventShown(List.of(d), false, T0 + H), "a ramping DEAL is silent");
+        assertTrue(MoodEngine.capEventShown(List.of(d), false, T0 + 5 * H));
+        assertFalse(MoodEngine.capEventShown(List.of(d), true, T0 + 5 * H), "a DEAL says nothing about the sell side");
+
+        MarketEvent u = up(0.22, T0);
+        assertTrue(MoodEngine.capEventShown(List.of(u), true, T0), "an UP is news the tick it fires");
+        assertFalse(MoodEngine.capEventShown(List.of(u), true, u.badgeEndsAt() + H), "the badge-less tail");
+        assertTrue(u.active(u.badgeEndsAt() + H), "(the tail still caps)");
+        MarketEvent dn = down(0.22, T0);
+        assertTrue(MoodEngine.capEventShown(List.of(dn), false, T0 + H));
+        assertFalse(MoodEngine.capEventShown(List.of(dn), true, T0 + H));
+
+        // A shown UP next to a ramping HOT: the sell side is shown (the UP's badge is up), and
+        // naming "the price is up" gives nothing about the HOT away.
+        assertTrue(MoodEngine.capEventShown(List.of(h, u), true, T0 + H));
+        assertFalse(MoodEngine.capEventShown(null, true, T0));
+        assertFalse(MoodEngine.capEventShown(List.of(), false, T0));
+        assertFalse(MoodEngine.capEventShown(List.of(real(0.03, T0)), true, T0), "REAL never caps");
     }
 
     @Test

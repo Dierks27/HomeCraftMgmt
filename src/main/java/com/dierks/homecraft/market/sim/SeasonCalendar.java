@@ -246,8 +246,8 @@ public final class SeasonCalendar {
      * {@code [a-z0-9_]{1,32}} or repeated; when {@code from} or {@code to} is not a real
      * {@code MM-DD}; or when it has no usable percent. A percent that is not a number is
      * dropped; one past {@code ±min(maxPercent, 4.5)} is clamped — each with a WARN naming the
-     * key. A missing or unsafe name falls back to the id, a missing or unsafe headline to
-     * "{name} is here!". Item ids are lower-cased; whether they exist is checked separately
+     * key. A missing or unsafe name falls back to the id written as words ({@code harvest_time}
+     * → {@code Harvest Time}), a missing or unsafe headline to "{name} is here!". Item ids are lower-cased; whether they exist is checked separately
      * ({@link #unknownIds}), because the catalog can change on reload.
      */
     public static List<Season> parse(List<Map<?, ?>> rows, double maxPercent, Consumer<String> warn) {
@@ -292,7 +292,7 @@ public final class SeasonCalendar {
                 w.accept(where + ".name " + badName + " - using the id");
             }
             if (name.isEmpty() || badName != null) {
-                name = id;
+                name = nameOf(id);
             }
             String headline = str(row.get("headline"));
             String bad = headline.isEmpty() ? null : Headlines.textProblem(headline, true);
@@ -305,6 +305,57 @@ public final class SeasonCalendar {
             out.add(new Season(id, name, from, to, percent, headline));
         }
         return Collections.unmodifiableList(out);
+    }
+
+    /**
+     * A season id as players read it when no name is configured: {@code harvest_time} →
+     * {@code Harvest Time} (the same words the website uses).
+     */
+    public static String nameOf(String id) {
+        String s = id == null ? "" : id.strip();
+        return s.isEmpty() ? "" : Headlines.name(s.toUpperCase(Locale.ROOT));
+    }
+
+    /**
+     * {@code season}'s effects as they can really apply: each whole percent held to
+     * {@code ±capFrac × 100} (the predictable cap {@code c_pred}, spec §2.4), entries that end up
+     * 0 dropped, config order kept. What a SEASON announcement may quote: with a narrow
+     * {@code market.spread} a configured {@code -4} reads {@code -2.25}, and with a spread of 0
+     * nothing is left. A cap that is not a number (or infinite) keeps the configured percents.
+     */
+    public static Map<String, Double> effective(Season season, double capFrac) {
+        Map<String, Double> out = new LinkedHashMap<>();
+        if (season == null || season.percent() == null) {
+            return out;
+        }
+        boolean capped = Double.isFinite(capFrac);
+        double cap = capped ? Math.max(0.0, capFrac) * 100.0 : Double.POSITIVE_INFINITY;
+        for (Map.Entry<String, Double> e : season.percent().entrySet()) {
+            Double v = e.getValue();
+            if (e.getKey() == null || v == null || !Double.isFinite(v)) {
+                continue;
+            }
+            double held = Math.max(-cap, Math.min(cap, v));
+            if (held != 0.0) {
+                out.put(e.getKey(), held);
+            }
+        }
+        return out;
+    }
+
+    /** The season in {@code seasons} a SEASON row's tag ({@code id:year}) names, or {@code null}. */
+    public static Season byTag(List<Season> seasons, String tag) {
+        if (seasons == null || tag == null) {
+            return null;
+        }
+        int colon = tag.indexOf(':');
+        String id = colon < 0 ? tag : tag.substring(0, colon);
+        for (Season s : seasons) {
+            if (s != null && s.id().equalsIgnoreCase(id)) {
+                return s;
+            }
+        }
+        return null;
     }
 
     /**

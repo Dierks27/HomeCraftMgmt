@@ -54,6 +54,23 @@ class HotSortTest {
     }
 
     @Test
+    void hotReadsAsNameWhileTheMarketIsOff() {
+        // A player left on "Hot & Deals" when the market is paused, and default_sort: HOT on a
+        // server with it disabled, get 0.32's name order and "Name A–Z" button.
+        assertEquals(BrowseState.Sort.NAME, BrowseState.Sort.HOT.usable(false));
+        assertEquals(BrowseState.Sort.NAME, BrowseState.Sort.of("HOT").usable(false));
+        assertEquals(BrowseState.Sort.HOT, BrowseState.Sort.HOT.usable(true));
+        for (BrowseState.Sort s : BrowseState.Sort.values()) {
+            if (s != BrowseState.Sort.HOT) {
+                assertEquals(s, s.usable(false));
+                assertEquals(s, s.usable(true));
+            }
+        }
+        // From there the button cycles exactly as 0.32's did.
+        assertEquals(BrowseState.Sort.PRICE_UP, BrowseState.Sort.HOT.usable(false).next(false));
+    }
+
+    @Test
     void badgedItemsComeFirstInBadgeOrder() {
         List<MarketItem> items = new ArrayList<>(List.of(
                 item("a_quiet"), item("b_wanted"), item("c_down"), item("d_deal"), item("e_up"), item("f_hot")));

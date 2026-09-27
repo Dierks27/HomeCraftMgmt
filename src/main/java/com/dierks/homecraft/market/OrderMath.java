@@ -11,7 +11,9 @@ package com.dierks.homecraft.market;
  * multiplier {@code M} ({@link PriceMood#multiplier}), held inside the band:
  * <pre>b     = clamp(startBase, floor, ceiling);  s = startStock
  * for each unit:
- *     mid   = clamp(b × (s &gt; 0 ? M : 1), floor, ceiling)   // an empty item sits at its ceiling
+ *     m_s   = sell ? (s &gt; 0 ? M : 1)                        // an empty item sits at its ceiling
+ *                  : (s &gt; 1 ? M : max(M, 1))               // the unit that empties the shelf: no discount
+ *     mid   = clamp(b × m_s, floor, ceiling)
  *     unit  = buy ? ask(mid) : max(0, bid(mid))
  *     (stop if this unit would pass the daily money cap)
  *     s     = s ∓ 1
@@ -22,6 +24,14 @@ package com.dierks.homecraft.market;
  * <ul>
  *   <li>{@code M} is frozen for the whole order and squeezed into the hard {@code [0.75, 1.25]}
  *       band first ({@link #clampMultiplier}).</li>
+ *   <li><b>The empty-shelf boundary is never a discount.</b> The first unit sold into an empty
+ *       item is paid at {@code M = 1}, from its ceiling, so the unit bought back out of it (the
+ *       one that empties the shelf, bought at stock 1) is charged at {@code max(M, 1)}, never
+ *       less than at {@code M = 1}. Otherwise, with {@code M} below about 0.9, selling one into
+ *       an empty item and buying it straight back made money every time and returned stock and
+ *       the balanced price to where they started: a pump with no end for anyone without a daily
+ *       cap. Now any round trip across the boundary costs at least what it cost in 0.32,
+ *       whatever {@code M} is, even if it changes between the two trades.</li>
  *   <li>{@code M} never feeds the balanced price: {@code endBase} and {@code endStock} are the
  *       same whatever {@code M} is, for the same number of units.</li>
  *   <li>At {@code M = 1.0} every result is bit-for-bit 0.32's {@code simulateBuy/simulateSell}:
@@ -82,6 +92,17 @@ public final class OrderMath {
     }
 
     /**
+     * The mid the next unit <em>bought</em> at this stock is priced at: {@link #mid}, except
+     * that the unit that empties the shelf (bought at stock 1) is priced at {@code max(M, 1)},
+     * never below its {@code M = 1} price (see the class notes). The unit sold into the empty
+     * shelf is paid at {@code M = 1}, so no round trip across the boundary can profit. Equal to
+     * {@link #mid} at any other stock, and at stock 1 whenever {@code M >= 1}.
+     */
+    public static double buyMid(MarketItem item, double base, long stock, double m) {
+        return buyMidAt(item, base, stock, clampMultiplier(m));
+    }
+
+    /**
      * The spread-adjusted ask, held inside the item's band. floor/ceiling are a hard contract on
      * every price a player ever sees or pays: the spread widens the mid within the band, it
      * never pushes a quote outside it. A null item (not in the catalog) is not clamped.
@@ -100,7 +121,8 @@ public final class OrderMath {
     /**
      * Price buying up to {@code want} units: each unit costs a little more as stock drops, so
      * the total is the area under the rising price, stopping at the stock on hand and at
-     * whatever {@code limits} allow.
+     * whatever {@code limits} allow. The unit that empties the shelf is charged at
+     * {@code max(M, 1)} ({@link #buyMid}).
      *
      * @param startBase  the balanced price before the order ({@link MarketState#currentPrice()})
      * @param startStock the stock before the order
@@ -119,7 +141,7 @@ public final class OrderMath {
             cap = (int) Math.min(cap, lim.remainingUnits());
         }
         for (; filled < cap; filled++) {
-            double unit = ask(engine, item, midAt(item, base, stock, mult));
+            double unit = ask(engine, item, buyMidAt(item, base, stock, mult));
             if (lim.limited() && lim.maxMoney() > 0 && total + unit > lim.remainingMoney()) {
                 break; // this unit would exceed the daily spend cap
             }
@@ -178,5 +200,13 @@ public final class OrderMath {
     private static double midAt(MarketItem item, double base, long stock, double mult) {
         double m = stock > 0 ? mult : 1.0;
         return PricingEngine.clamp(base * m, item.floor(), item.ceiling());
+    }
+
+    /**
+     * {@link #buyMid} with {@code mult} already inside the hard band. At {@code mult == 1.0}
+     * this is {@code midAt(..., 1.0)} exactly ({@code max(1.0, 1.0) == 1.0}), so 0.32 is kept.
+     */
+    private static double buyMidAt(MarketItem item, double base, long stock, double mult) {
+        return midAt(item, base, stock, stock > 1 ? mult : Math.max(mult, 1.0));
     }
 }

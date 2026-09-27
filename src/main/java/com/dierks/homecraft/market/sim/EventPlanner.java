@@ -23,7 +23,9 @@ import java.util.Objects;
  *
  * <p><b>Headroom</b>: {@code up = min(Hi, C/B) - M0}, {@code down = M0 - max(Lo, F/B)}. An event
  * is only created if {@code 0.9 x headroom} reaches its minimum, and its strength is capped at
- * {@code 0.9 x headroom}, so every announced % is real.
+ * {@code 0.9 x headroom}. Its prices are worked out from the multiplier before the band's clamp
+ * ({@link Candidate#raw0}), and it must really move the price by its minimum, so every announced
+ * % is real even when a narrowed band already clips the mood.
  *
  * <p><b>HOT/DEAL</b>: slots {@code clamp(1 + floor(N_sim / slots_per_items), 1, 3)} of each,
  * both together at most {@code max(2, floor(N_sim / 3))}; the item needs stock, 7 days' rest
@@ -57,6 +59,8 @@ public final class EventPlanner {
     public static final double FORCED_MIN = 0.05;
     /** Admin-forced news sizes are held to this range (percent). */
     public static final double FORCED_NEWS_MIN_PERCENT = 10.0;
+    /** Rounding slack when a real move is compared with a minimum. */
+    private static final double MOVE_EPS = 1e-9;
 
     /**
      * One sim-enabled item as the planner sees it at the boundary.
@@ -68,13 +72,26 @@ public final class EventPlanner {
      * @param featuredUntil when its last HOT/DEAL ended (0 = never)
      * @param lastNewsAt    when it last had an UP/DOWN (0 = never)
      * @param lastWantedAt  when it last had a WANTED (0 = never)
+     * @param raw0          the item's multiplier before the band's clamp ({@code 1 + d + e + q});
+     *                      {@code m0 = clamp(raw0)}. A new event adds to this, so a mood already
+     *                      past a narrowed band moves less than the event's strength. NaN reads
+     *                      as {@code m0}.
      */
     public record Candidate(String id, double weight, double base, double floor, double ceiling, long stock,
                             long fullStock, double m0, boolean busy, long featuredUntil, long lastNewsAt,
-                            long lastWantedAt) {
+                            long lastWantedAt, double raw0) {
 
         public Candidate {
             Objects.requireNonNull(id, "id");
+            raw0 = Double.isNaN(raw0) ? m0 : raw0;
+        }
+
+        /** An item whose mood is inside the band: {@code raw0 = m0}. */
+        public Candidate(String id, double weight, double base, double floor, double ceiling, long stock,
+                         long fullStock, double m0, boolean busy, long featuredUntil, long lastNewsAt,
+                         long lastWantedAt) {
+            this(id, weight, base, floor, ceiling, stock, fullStock, m0, busy, featuredUntil, lastNewsAt,
+                    lastWantedAt, m0);
         }
 
         /** Shared eligibility: weight above 0, a real band, nothing active. */
@@ -101,6 +118,17 @@ public final class EventPlanner {
         public double priceAt(double m, SimSettings s) {
             double mm = SimLimits.clampMultiplier(m, s.multiplierLo(), s.multiplierHi());
             return SimMath.displayPrice(base, stock, mm, floor, ceiling);
+        }
+
+        /**
+         * How far an event of {@code strength} really moves the multiplier:
+         * {@code |clamp(raw0 + strength) - clamp(raw0)|}. The same as {@code |strength|} while
+         * the mood is inside the band and the event fits its headroom.
+         */
+        public double moveBy(double strength, SimSettings s) {
+            double lo = s.multiplierLo();
+            double hi = s.multiplierHi();
+            return Math.abs(SimLimits.clampMultiplier(raw0 + strength, lo, hi) - SimLimits.clampMultiplier(raw0, lo, hi));
         }
     }
 
@@ -320,10 +348,10 @@ public final class EventPlanner {
                 }
             }
             double a = Math.min(j, up ? hu : hd);
-            if (a < minMove || !(a > 0.0)) {
+            EventKind kind = up ? EventKind.UP : EventKind.DOWN;
+            if (a < minMove || !(a > 0.0) || k.moveBy(kind.sign() * a, s) < minMove - MOVE_EPS) {
                 continue;
             }
-            EventKind kind = up ? EventKind.UP : EventKind.DOWN;
             MarketEvent e = MarketEvent.shock(kind, Source.SIM, k.id(), kind.sign() * a, b,
                     news.halfLifeMs(), news.lastsMs());
             return priced(e, k, s);
@@ -364,6 +392,11 @@ public final class EventPlanner {
         Candidate x = pool.get(at);
         double room = HEADROOM_SHARE * (kind == EventKind.HOT ? x.headroomUp(s) : x.headroomDown(s));
         double a = Math.min(k.strength(rng.uniform(p + ".size", c)), room);
+        if (x.moveBy(kind.sign() * a, s) < k.minFrac() - MOVE_EPS) {
+            // A mood already past a narrowed band would swallow most of it: look again later.
+            sched.setNextAt(kind, b + RETRY_MS);
+            return null;
+        }
         long hold = Math.round(k.holdHours().lerp(rng.uniform(p + ".hold", c)) * SimMath.HOUR_MS);
         MarketEvent e = MarketEvent.story(kind, Source.SIM, x.id(), kind.sign() * a, b, k.rampMs(), hold, k.fadeMs());
         long gap = Math.round(k.gapHours().lerp(rng.uniform(p + ".gap", c)) * SimMath.HOUR_MS);
@@ -390,10 +423,38 @@ public final class EventPlanner {
         return true;
     }
 
-    /** {@code price_before = P(M0)}, {@code price_after = P(M0 + strength)}, pct from those. */
+    /**
+     * The prices an event quotes, from the item's multiplier before the band's clamp
+     * ({@code raw0}), so they are the move that really happens: {@code before = P(clamp(raw0))},
+     * {@code after = P(clamp(raw0 + strength))}. An UP/DOWN quotes {@code pct} from those two. A
+     * HOT/DEAL quotes its price against the usual price ({@link #storyPriced}).
+     */
     private static MarketEvent priced(MarketEvent e, Candidate k, SimSettings s) {
-        double before = k.priceAt(k.m0(), s);
-        double after = k.priceAt(k.m0() + e.strength(), s);
+        double before = k.priceAt(k.raw0(), s);
+        double after = k.priceAt(k.raw0() + e.strength(), s);
+        if (e.kind().story()) {
+            return storyPriced(e, k.balanced(), before, after);
+        }
+        return e.withPrices(SimMath.pct(after, before), before, after);
+    }
+
+    /**
+     * A HOT/DEAL's quoted numbers. Every % a player sees is {@code P / usual - 1} (spec §2.1) and
+     * the tiles, signs and placeholders show exactly that, so "Crate pays about +{pct}%" and
+     * "about {pct}% off" do too: {@code pct = after / usual - 1}, {@code price_before = usual},
+     * {@code price_after = after}. When that would read the wrong way for the kind (a HOT priced
+     * at or under the usual price, a DEAL at or over it, after rounding to a whole percent) the
+     * event's own move {@code after / before - 1} is quoted instead, so a HOT never reads "+0%".
+     *
+     * @param usual  the usual (balanced) price
+     * @param before the price without the event
+     * @param after  the price with it
+     */
+    public static MarketEvent storyPriced(MarketEvent e, double usual, double before, double after) {
+        double vsUsual = SimMath.pct(after, usual);
+        if (Double.isFinite(vsUsual) && usual > 0.0 && Math.round(e.kind().sign() * vsUsual) >= 1) {
+            return e.withPrices(vsUsual, usual, after);
+        }
         return e.withPrices(SimMath.pct(after, before), before, after);
     }
 
@@ -460,10 +521,11 @@ public final class EventPlanner {
         }
         double room = HEADROOM_SHARE * (kind == EventKind.UP ? k.headroomUp(s) : k.headroomDown(s));
         double a = Math.min(j, room);
-        if (!(a >= FORCED_MIN)) {
+        double moved = a > 0.0 ? k.moveBy(kind.sign() * a, s) : 0.0;
+        if (!(a >= FORCED_MIN) || moved < FORCED_MIN - MOVE_EPS) {
             return Forced.refused(String.format(java.util.Locale.ROOT,
                     "%s can only go %s %.1f%% right now (at least 5%% needed).",
-                    k.id(), kind == EventKind.UP ? "up" : "down", Math.max(0.0, a) * 100.0));
+                    k.id(), kind == EventKind.UP ? "up" : "down", Math.max(0.0, Math.min(a, moved)) * 100.0));
         }
         MarketEvent e = MarketEvent.shock(kind, Source.ADMIN, k.id(), kind.sign() * a, now,
                 s.news().halfLifeMs(), s.news().lastsMs());
@@ -497,10 +559,11 @@ public final class EventPlanner {
                 : st.strength(rng.uniform("admin.story.size", counter));
         double room = HEADROOM_SHARE * (kind == EventKind.HOT ? k.headroomUp(s) : k.headroomDown(s));
         double a = Math.min(a0, room);
-        if (!(a >= FORCED_MIN)) {
+        double moved = a > 0.0 ? k.moveBy(kind.sign() * a, s) : 0.0;
+        if (!(a >= FORCED_MIN) || moved < FORCED_MIN - MOVE_EPS) {
             return Forced.refused(String.format(java.util.Locale.ROOT,
                     "%s can only go %s %.1f%% right now (at least 5%% needed).",
-                    k.id(), kind == EventKind.HOT ? "up" : "down", Math.max(0.0, a) * 100.0));
+                    k.id(), kind == EventKind.HOT ? "up" : "down", Math.max(0.0, Math.min(a, moved)) * 100.0));
         }
         double holdH = hours != null && Double.isFinite(hours) && hours > 0
                 ? hours : st.holdHours().lerp(rng.uniform("admin.story.hold", counter));

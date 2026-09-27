@@ -36,10 +36,13 @@ import java.util.logging.Level;
  * chat line each.
  *
  * <p><b>Catch-up and mute.</b> 60 ticks after a join the player gets "While you were away" (at most
- * once per 10 minutes): news with an id above their mark from the last {@code catch_up_hours},
- * then the "Right now" line. A player with no row yet only gets "Right now", and their mark starts
- * at the newest event, so an upgrade does not replay old news. A live broadcast moves the mark of
- * everyone who heard it. Muted players get no chat, title, action bar, sound or catch-up.
+ * once per 10 minutes since they were last brought up to date): news with an id above their mark
+ * from the last {@code catch_up_hours} — plus any HOT/DEAL that became news after they were last
+ * brought up to date, whose id (given when its silent ramp began) may be below the mark
+ * ({@link AnnounceGate#unseen}) — then the "Right now" line. A player with no row yet only gets
+ * "Right now", and their mark starts at the newest event, so an upgrade does not replay old news.
+ * A live broadcast moves the mark and {@code seen_at} of everyone who heard it. Muted players get
+ * no chat, title, action bar, sound or catch-up.
  *
  * <p>Main thread only.
  */
@@ -162,7 +165,7 @@ public final class MarketNewsService {
         MarketEvent e = p.event();
         if (d.advance() && e != null && e.id() > 0 && !heard.isEmpty()) {
             try {
-                dao.advanceSeen(heard, e.id());
+                dao.advanceSeen(heard, e.id(), now);
             } catch (SQLException ex) {
                 plugin.getLogger().warning("Live market: could not mark the news as seen: " + ex.getMessage());
             }
@@ -290,7 +293,8 @@ public final class MarketNewsService {
     /**
      * "While you were away" (§6.3): the news this player has not seen from the last
      * {@code catch_up_hours}, newest first, at most {@code catch_up_lines}, then the "Right now"
-     * line. Once per 10 minutes at most; never for a muted player.
+     * line. Not within 10 minutes of the player last being brought up to date (a catch-up, or a
+     * broadcast they heard); never for a muted player.
      */
     public void catchUp(Player p) {
         MarketSimService s = sim;
@@ -314,7 +318,9 @@ public final class MarketNewsService {
             muted.put(u, true);
             return;
         }
-        if (seen.isPresent() && now - seen.get().seenAt() < CATCH_UP_EVERY_MS) {
+        // seen_at after now: the clock went back since; treat it as long ago rather than wait.
+        long seenAt = seen.isPresent() && seen.get().seenAt() <= now ? seen.get().seenAt() : 0L;
+        if (seenAt > 0 && now - seenAt < CATCH_UP_EVERY_MS) {
             return;
         }
         String rightNow = s.rightNowLine(now);
@@ -329,7 +335,7 @@ public final class MarketNewsService {
                 List<MarketEvent> fresh = new ArrayList<>();
                 mark = seen.get().lastEventId();
                 for (MarketEvent e : s.recentNews(Integer.MAX_VALUE, since)) {
-                    if (e.id() > seen.get().lastEventId()) {
+                    if (AnnounceGate.unseen(e, seen.get().lastEventId(), seenAt)) {
                         fresh.add(e);
                         mark = Math.max(mark, e.id());
                     }

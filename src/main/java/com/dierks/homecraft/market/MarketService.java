@@ -29,8 +29,9 @@ import java.util.Map;
  * price: only trades and the admin stock commands move it. A {@link PriceMood} supplies a
  * multiplier {@code M} (held inside [0.75, 1.25]) applied whenever a price is quoted, so every
  * price a player sees, pays or is paid is {@code clamp(balanced × M, floor, ceiling)}, with
- * {@code M = 1} for an empty item. Orders are priced by {@link OrderMath} with {@code M} frozen
- * for the order. With {@link PriceMood#NEUTRAL} (no sim, or the sim off) every price, total and
+ * {@code M = 1} for an empty item and {@code max(M, 1)} for the unit a buy empties the shelf
+ * with (so a round trip through the empty shelf can never profit). Orders are priced by
+ * {@link OrderMath} with {@code M} frozen for the order. With {@link PriceMood#NEUTRAL} (no sim, or the sim off) every price, total and
  * cap is bit-for-bit 0.32's.
  *
  * <p>This is the Amazon-market side only; QuickShop is untouched.
@@ -293,14 +294,43 @@ public final class MarketService {
         return mood.jumpSeq(id);
     }
 
-    /** Ask price — clamped to the band, so a player never pays above the ceiling. */
+    /**
+     * Ask price — clamped to the band, so a player never pays above the ceiling. It is the ask
+     * of the next unit a buy would charge ({@link OrderMath#buyMid}): the ask of {@link #price}
+     * everywhere, except that the last unit on the shelf is never discounted by the live market.
+     * With no live market it is exactly the ask of {@link #price}.
+     */
     public double buyPrice(String id) {
-        return OrderMath.ask(engine, catalog.get(id), price(id));
+        MarketItem item = catalog.get(id);
+        MarketState state = states.get(id);
+        if (item == null || state == null) {
+            return OrderMath.ask(engine, item, price(id));
+        }
+        double m = state.stock() > 0 ? mood.multiplier(id) : 1.0;
+        return OrderMath.ask(engine, item, OrderMath.buyMid(item, state.currentPrice(), state.stock(), m));
     }
 
     /** Bid price — clamped to the band, so the market never pays below the floor. */
     public double sellPrice(String id) {
         return OrderMath.bid(engine, catalog.get(id), price(id));
+    }
+
+    /**
+     * Whether a refusal at the live market's event cap may name the event (the sale, or the
+     * price being up): only once players can see it ({@link PriceMood#eventCapShown}). While it
+     * is still unannounced — a HOT/DEAL's silent ramp — the cap binds all the same, but the
+     * refusal is the player's own daily-limit message when their limits refuse too (word for
+     * word what they would get with nothing running), else the plain daily-limit wording at
+     * the event cap. A mood that throws is read as "not shown".
+     */
+    private boolean eventCapShown(MarketItem item, boolean sell) {
+        try {
+            return mood.eventCapShown(item, sell);
+        } catch (RuntimeException e) {
+            plugin.getLogger().warning("The live market could not say whether an event on " + item.id()
+                    + " is showing: " + e);
+            return false;
+        }
     }
 
     /**
@@ -340,18 +370,19 @@ public final class MarketService {
 
         // While a DEAL or DOWN runs on this item, the live market caps how many units anyone may
         // buy today — bypass holders included. The tally exists for everyone: record() below is
-        // unconditional.
+        // unconditional. The refusal names the sale only once players can see it; during a DEAL's
+        // silent ramp it reads exactly as the plain daily limit (see eventCapShown).
         long eventCap = Math.max(0L, mood.eventBuyCap(item));
         long eventLeft = Long.MAX_VALUE;
+        long eventDone = 0;
         if (eventCap > 0) {
-            long bought = 0;
             try {
-                bought = buyDao.unitsBought(player.getUniqueId(), epochDay(), id);
+                eventDone = buyDao.unitsBought(player.getUniqueId(), epochDay(), id);
             } catch (SQLException e) {
                 plugin.getLogger().severe("Failed to read daily buy tally: " + e.getMessage());
             }
-            eventLeft = eventCap - bought;
-            if (eventLeft <= 0) {
+            eventLeft = eventCap - eventDone;
+            if (eventLeft <= 0 && eventCapShown(item, false)) {
                 return TradeResult.fail("&eSale limit: you can buy &f" + eventCap + " " + item.label()
                         + " &ea day while it's on sale. &7Resets in ~" + hoursUntilReset() + "h.");
             }
@@ -385,6 +416,10 @@ public final class MarketService {
                 plugin.getLogger().severe("Failed to read daily buy tally: " + e.getMessage());
                 enforced = false;
             }
+        }
+        if (eventCap > 0 && eventLeft <= 0) {
+            // An event nobody can see yet, and the player's own limits let them through.
+            return TradeResult.fail(unitsCappedMessage(true, eventDone, eventCap, item));
         }
 
         // Integrate the price across the order: each unit costs a little more as stock
@@ -446,18 +481,19 @@ public final class MarketService {
 
         // While a HOT or UP runs on this item, the live market caps how many units anyone may
         // sell today — bypass holders included. The tally exists for everyone: record() below is
-        // unconditional.
+        // unconditional. The refusal names the rise only once players can see it; during a HOT's
+        // silent ramp it reads exactly as the plain daily limit (see executeBuy).
         long eventCap = Math.max(0L, mood.eventSellCap(item));
         long eventLeft = Long.MAX_VALUE;
+        long eventDone = 0;
         if (eventCap > 0) {
-            long sold = 0;
             try {
-                sold = dailyDao.unitsSold(player.getUniqueId(), epochDay(), id);
+                eventDone = dailyDao.unitsSold(player.getUniqueId(), epochDay(), id);
             } catch (SQLException e) {
                 plugin.getLogger().severe("Failed to read daily sell tally: " + e.getMessage());
             }
-            eventLeft = eventCap - sold;
-            if (eventLeft <= 0) {
+            eventLeft = eventCap - eventDone;
+            if (eventLeft <= 0 && eventCapShown(item, true)) {
                 return TradeResult.fail("&eCrate buys up to &f" + eventCap + " " + item.label()
                         + " &ea day while the price is up. &7Resets in ~" + hoursUntilReset() + "h.");
             }
@@ -491,6 +527,10 @@ public final class MarketService {
                 plugin.getLogger().severe("Failed to read daily sell tally: " + e.getMessage());
                 enforced = false;
             }
+        }
+        if (eventCap > 0 && eventLeft <= 0) {
+            // An event nobody can see yet, and the player's own limits let them through.
+            return TradeResult.fail(unitsCappedMessage(false, eventDone, eventCap, item));
         }
 
         // Integrate the price across the order (earn a little less per unit as

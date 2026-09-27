@@ -34,7 +34,7 @@ and the How It Works **Guide**.
 - **Marketplace & Pallets:** player-to-player selling through placeable Pallet seller boxes,
   auto-sorted into departments, with commission and an admin ban list.
 - **Mailboxes** in eight colours, the **Auction House** for Minis, and **in-game displays**
-  (signs, holograms, map TVs) plus a web **dashboard**, whose JSON feeds (`/api/market`,
+  (signs, holograms, TVs) plus a web **dashboard**, whose JSON feeds (`/api/market`,
   `/api/minis`, `/api/news`) also drive the LilahCraft website, behind an optional token.
 - **Safeguards:** the economy is sandboxed per world (no creative-world money), protection
   hooks cover Towny and WorldGuard, and the database is backed up automatically before every
@@ -249,6 +249,8 @@ vending machine. The market holds a real **stock** count per commodity:
 - **At zero stock an item is OUT OF STOCK** — you can't buy it at all.
 - **Price is a function of stock:** empty ⇒ **ceiling** price (and unbuyable);
   full ⇒ **floor** price; `elasticity` shapes the curve, `inertia` glides it.
+  This is the *usual* price: the live market adds a small mood on top (see
+  [Live market (0.33)](#live-market-033)).
 - **Buy/sell spread:** the market sells to you slightly above, and buys from you
   slightly below, the mid price — kills round-trip arbitrage.
 - **Per-item starting stock:** staples (cobblestone) seed with generous stock
@@ -324,7 +326,7 @@ inventories; `/hcm …` stays admin/testing only.
 - **Sell to Crate** (a button in the store): click to **sell now** at the live
   price against the same finite stock. Instant because you are the one delivering
   the goods — there is nothing to ship. Every sale **raises Crate's stock**, which
-  is what moves the price.
+  is what moves the usual price (the live market's mood only adds a little on top).
 
   It is sell-only on purpose. It used to buy as well, at the live price with no
   shipping and no wait, and nothing would ever have made a player pick a shipping
@@ -567,7 +569,7 @@ else in the JSON.
 | `GET /api/market` | Every commodity: prices, stock, 24 h change and three price histories | when one is set |
 | `GET /api/minis` | Every Mini in the catalog, with how many have been printed | when one is set |
 | `GET /api/news` | **New in 0.33.** Market News: headlines, what is HOT or on sale, the season. See [Live market (0.33)](#live-market-033) | when one is set |
-| `GET /` | The dashboard page. It holds no data; its script fetches `/api/market` from the browser | never |
+| `GET /` | The dashboard page. It holds no data; its script fetches `/api/market` from the browser, and `/api/news` too while the live market runs | never |
 
 The feeds are rebuilt by a main-thread task every `web.dashboard.refresh_seconds`; the HTTP
 handlers only serve the last build and never touch the game or the database. The real
@@ -652,9 +654,10 @@ byte for byte the same (a test pins it against the old builder). About the two l
   leak the length. The token is never logged or echoed; the startup line only says whether a
   token is on.
 
-**Keeping the dashboard page working.** The page fetches `/api/market` from the browser,
-which has no token. Of the handoff's two options this takes **"the page gets its data another
-way"**: the page asks for the token itself. The LAN option is there too, but **off by default**:
+**Keeping the dashboard page working.** The page fetches `/api/market` (and, while the live
+market runs, `/api/news`) from the browser, which has no token. Of the handoff's two options
+this takes **"the page gets its data another way"**: the page asks for the token itself.
+The LAN option is there too, but **off by default**:
 
 - **The page asks for the token.** When a feed answers 401, the page forgets any token
   it had, stops refreshing and shows a password box with one line: "This dashboard needs the
@@ -747,12 +750,20 @@ price = usual price × mood        (then kept inside the item's floor..ceiling)
 
 - **The mood is locked in code to 0.75×–1.25×**, so no price is ever more than 25% from its
   usual price, whatever config.yml says. config.yml can make the market calmer, never wilder:
-  a value past a code limit is clamped with a warning naming the key.
+  a value past a code limit is clamped with a warning naming the key. Narrowing
+  `max_up_percent` or `max_down_percent` narrows both sides, and `drift.half_life_hours` is at
+  least 24.
 - **The live market never changes stock and never changes the usual price.** Only players'
   trades (and `/hcm market setstock` / `resetstock`) move those, exactly as before.
-- **An item with no stock stays at exactly its ceiling** (gold and diamond on day one).
+- **An item with no stock is never moved by the mood.** It sits at its usual price: exactly
+  its ceiling for gold and diamond on day one or after `setstock`, a hair under it after
+  players buy it out (iron: $39.99 of $40.00). Buying the last unit on the shelf never gets
+  the mood's discount, so selling one into an empty item and buying it straight back never
+  pays.
 - **`market.sim.enabled: false` puts every price back exactly as it was in 0.32**, down to the
-  last cent of every order total and feed.
+  last cent of every order total and feed. Screens, displays, placeholders and the dashboard
+  page go back to 0.32's too (a `@news` board bound earlier just reads "The Crate Market is
+  calm today.").
 - The maths is in DESIGN §3.1 "The live market (0.33)", and the bounds are in DESIGN §11 #11.
 
 ### How big the swings are: Tight
@@ -762,11 +773,11 @@ the code puts on each:
 
 | Layer | What it does (shipped) | Hard limit in code |
 |---|---|---|
-| Drift | A quiet wander: about **1% a day** on cheap staples, **2% a day** on dearer items (√(floor × ceiling) ≥ $10). Half of any wander fades in 66 hours | ±8% |
+| Drift | A quiet wander: about **1% a day** on cheap staples, **2% a day** on dearer items (√(floor × ceiling) ≥ $10). Half of any wander fades in 66 hours | ±8%, and never faster than about 3% a day (half-life at least 24 hours) |
 | HOT / DEAL | +8–15% (HOT) or −8–15% (DEAL) for 30–54 hours, about one of each a week. The item then rests for 7 days | 15% |
 | NEWS FLASH | A sudden 15–25% jump UP or DOWN, half gone in 6 hours and gone after 30. About 5 a week, at most 2 a day | 25% |
 | Seasons + real world | Small calendar nudges (Harvest Time: wheat −4% until Oct 31) and real commodity prices (off by default) | 4.5% together, and never more than 45% of the spread |
-| The whole mood | Everything above added up | **0.75×–1.25×** |
+| The whole mood | Everything above added up | **0.75×–1.25×**, always the same both ways |
 
 On a model of these exact rules (3 seeds × 90 days, the shipped catalog, someone online most
 evenings), there were 0.71–0.78 news flashes a day, all landing while someone was online. HOT
@@ -790,33 +801,50 @@ large catalog, most items are quiet most days.
 
   The price moves the moment it is announced, never before.
 - **HOT and DEAL** are announced once they are at full strength. A "Last call!" line comes
-  about 3 hours before they start cooling, and one quiet line when they end. Seasons and
-  real-world moves get a line of their own. The very first time, everyone gets "The Crate
-  Market is LIVE!".
+  about 3 hours before they start cooling, and one quiet line when they end. The % a HOT or
+  DEAL announces is its price against the usual price at that moment, the same % its tile
+  shows. Seasons and real-world moves get a line of their own: a season only if one of its
+  nudges still applies, a real-world move only if it moved Crate's price by a whole percent or
+  more. The very first time, everyone gets "The Crate Market is LIVE!".
 - **Never spammy:** at most one market announcement at a time, 20 minutes apart, 6 a day, and
   only 07:00–21:00 local time. A news flash that comes due while nobody is on waits until
   someone has been online a few minutes. If nobody comes on before 21:00, it moves to the next
-  morning.
+  morning. Time the server is off doesn't count as waiting: a flash that came due then is due
+  again once it is back up.
 - **"While you were away"** a few seconds after joining: the newest 3 things from the last 48
-  hours, and a "Right now" line with what is HOT or on sale and how long it has left. On the
-  first join after the upgrade, only the "Right now" line shows, so nobody is flooded with old
-  news.
+  hours that are newer than the last news you heard (a HOT or DEAL counts from when it reached
+  full strength, even if it started quietly before), and a "Right now" line with what is HOT
+  or on sale and how long it has left. It comes at most once per 10 minutes: not within 10
+  minutes of your last catch-up or of the last announcement you heard (a "Last call!" or
+  ending line doesn't count). On the first join after the upgrade, only the "Right now" line
+  shows, so nobody is flooded with old news.
 - **Market News:** the bell in the Sell to Crate screen (slot 50) opens a screen with:
   - what is going on right now;
-  - the 9 newest stories (click an UP or HOT one to sell some, a DOWN or DEAL one to order some);
+  - the 9 newest stories (click an UP or HOT one to sell some, a DOWN or DEAL one to order
+    some). Each shows what Crate pays (UP, HOT) or charges (DOWN, DEAL), before → after, as
+    the chat flash did; WANTED and season stories show no prices;
   - a switch that turns news in your chat off.
 
   `/hcm market news` prints the same in chat, and `/hcm market news off|on` mutes it. Muted
   players get no chat, title, sound or catch-up.
-- **Sort by "Hot & Deals"** in the Store and on the Sell screen.
+- **Sort by "Hot & Deals"** in the Store and on the Sell screen, only while the live market
+  runs. A saved or default HOT sort (`menus.store.default_sort: HOT`) shows as Name A–Z while
+  it is off.
 - **The Market News board:** bind a hologram or TV to `@news` (`/hcm display tv @news`, or the
-  bell in slot 0 of the picker) to show the newest headline and what is HOT or on sale.
+  bell in slot 0 of the picker) to show the newest headline and what is HOT or on sale. It is
+  offered only while the live market runs (the picker, `/hcm display tv @news` and tab
+  completion). With it off, `@news` is refused as an unknown commodity, as in 0.32, and boards
+  bound earlier stay and read "The Crate Market is calm today." Catalog ids starting with `@`
+  are reserved and are skipped at load with a warning, even with the live market off; the
+  admin GUI never makes one.
 - **PlaceholderAPI:**
   - `%hcm_news%`, `%hcm_news_age%`, `%hcm_hot_list%`, `%hcm_deal_list%` and `%hcm_season%`;
   - per item: `%hcm_status_<item>%`, `%hcm_badge_<item>%`, `%hcm_usual_<item>%`,
     `%hcm_mood_<item>%` and `%hcm_endsin_<item>%`.
 
-  `%hcm_price_<item>%` and `%hcm_trend_<item>%` include the mood.
+  These are answered only while the live market runs; with it off or paused PlaceholderAPI
+  leaves them as typed, as in 0.32. `%hcm_price_<item>%` and `%hcm_trend_<item>%` include the
+  mood.
 - **"Prices just moved! Take another look."** If a price jumps while a Sell quantity or
   checkout screen is open, confirming is refused once and the new price is shown. Nobody pays
   a price they did not see.
@@ -825,19 +853,27 @@ large catalog, most items are quiet most days.
   Headlines you write under `market.sim.headlines` are checked at load and skipped with a
   warning if one:
   - is too long,
-  - uses a banned word (war, fire, crash, …), or
-  - talks about the shelf.
+  - uses a banned word or one of its forms (war, fire, crash, crashed, fighting, stolen, …), or
+  - talks about the shelf (stock, restock, sold out, sold-out, …).
 
   A list left empty falls back to the shipped one.
 
 ### Event limits apply to everyone, ops included
 
 - While an item is **HOT** or **UP**, each player can sell at most its daily sell cap
-  (`max_daily_sell`, or 2% of `full_stock` when unset). Normal players already had that cap.
-  It now also binds anyone with `hcm.market.limit.bypass`.
+  (`max_daily_sell`, or 2% of `full_stock` when unset). For an item with a `max_daily_sell`,
+  normal players already had that cap and it now also binds anyone with
+  `hcm.market.limit.bypass`; for an item without one, 2% of `full_stock` applies to everyone
+  while it is HOT or UP. (`hot.sell_limit: false` turns this off, for HOT and UP alike.)
 - While an item is on a **DEAL** or **DOWN**, each player can order at most half its daily buy
   cap (`buy_limit_share: 0.5`). That is 40 Iron Ingots or 160 Oak Logs a day, bypass or not.
-  The refusal says "Sale limit: you can buy … a day while it's on sale."
+  Once the DEAL or DOWN is showing its badge, the refusal says "Sale limit: you can buy … a
+  day while it's on sale." (and a HOT or UP's says "Crate buys up to … a day while the price
+  is up.").
+- The limit shows on the tiles ("Limit N a day", "Up to N a day") only while the event's badge
+  shows. During a HOT or DEAL's silent ramp, and in an UP or DOWN's tail after its badge has
+  gone, the limit still applies but nothing names it: the refusal is the ordinary daily-limit
+  message, so it never gives away an event that has not been announced.
 - The usual daily money limits and per-item caps still apply, at the moved price. A Courier
   trade run sells at the moved price and under the same caps.
 
@@ -885,16 +921,16 @@ above clamp anything written here.
 
 | You want | Change |
 |---|---|
-| The live market off | `enabled: false` under `market.sim`, or `/hcm market sim pause` without touching config. A bare `market.sim: false` only works until the next start, when the full section is written back |
+| The live market off | `enabled: false` under `market.sim`, or `/hcm market sim pause` without touching config. A bare `market.sim: false` (or `off`/`no`) also works: the next start or `/hcm reload` rewrites it as `market.sim.enabled: false` and fills in the rest of the section, still off. The switch fails safe: a value that is not true or false (`enabled: 0`, `enabled: disabled`, a typo) turns the live market off, with a warning naming the key |
 | HOT and DEAL more or less often | `hot.gap_hours` / `deal.gap_hours` (`[48, 120]`) |
 | News more or less often | `news.gap_hours` (10) plus `news.extra_hours` (14), and `news.max_per_day` (2) |
-| Calmer prices | Lower `drift.calm_percent` / `drift.lively_percent`, `hot.percent` / `deal.percent`, `news.percent`, or `max_up_percent` / `max_down_percent` |
+| Calmer prices | Lower `drift.calm_percent` / `drift.lively_percent`, `hot.percent` / `deal.percent`, `news.percent`, or `max_up_percent` / `max_down_percent` (the narrower of the two is used both ways, with a warning when they differ). A longer `drift.half_life_hours` makes the drift slower; it is at least 24. A `calm_percent` or `lively_percent` that would move prices faster than the shipped liveliest at that half-life is held back, with a warning giving the size it is held to |
 | Different announcement hours | `news.hours: "07:00-21:00"` (local, `clock.time_zone`) |
 | Fewer effects | `announce.title`, `action_bar`, `particles`, `chat`, `endings`, `intro`, `catch_up` |
 | Flashes that don't wait for players | `news.wait_for_players: false` |
 | One item left alone, or tuned | On its `market.catalog` row: `sim: false` (never moves), `volatility` (0 = no drift, at most 1.5), `sim_weight` (0 = never picked for HOT, DEAL or news), `news_name: "Diamonds"` (the name headlines use, at most 24 characters) |
 | Your own headlines | `headlines.up/down/hot/deal/wanted`, `real_up`, `real_down`. `{item}` is the plural name, `{Name}` the singular, `{real}` the real-world thing |
-| Your own seasons | `seasons.list`: id, name, `from`/`to` as local `MM-DD` (inclusive, may wrap the year), percent per item id or `"*"`, and a headline. `seasons.enabled` turns them off |
+| Your own seasons | `seasons.list`: id, name, `from`/`to` as local `MM-DD` (inclusive, may wrap the year), percent per item id or `"*"`, and a headline. With no usable name, players see the id as words (`harvest_time` → Harvest Time). `seasons.enabled` turns them off |
 | Different sounds | `announce.sound_*`. Keep them namespaced (`minecraft:block.note_block.bell`). A plain `BLOCK_NOTE_BLOCK_BELL` would turn into the XP-orb sound, so the plugin swaps it for the shipped sound with a warning |
 
 The pace is two numbers: `gap_hours` for HOT and DEAL, and `gap_hours` plus `extra_hours` for
@@ -967,7 +1003,7 @@ At the top level, after `items`, it gains:
 | `news` | Up to 50 rows from the last 7 days, newest first |
 | `t` | When it became news. For a HOT or DEAL, that is when it reached full strength and was announced |
 | `kind` | `up`, `down`, `hot`, `deal`, `wanted`, `season` or `real` |
-| `dir` / `pct` | `1`, `-1` or `0` / the signed percent |
+| `dir` / `pct` | `1`, `-1` or `0` / the signed percent. For a `real` row it is how far Crate's price moved: `0` (and `dir` `0`) when the real-world move did not move it, for a sold-out item or one already at its limit |
 | `before` / `after` | The price before and after, when both are known |
 | `headline` / `line` | Plain text, colour codes stripped |
 | `source` | `sim`, `admin`, `calendar` or `real` |
@@ -977,8 +1013,9 @@ At the top level, after `items`, it gains:
 `active` at the top level lists every running HOT, DEAL, UP and DOWN. With the live market off
 or paused, the whole reply is `{"generatedAt":…,"live":false,"active":[],"news":[]}`. The
 dashboard page shows a news ticker, badge pills with "ends in", "Usually $X" when the mood is
-3% or more, chart event markers and a 48H/7D/30D toggle. The LilahCraft site ignores all of
-this until a theme release shows it.
+3% or more, chart event markers and a 48H/7D/30D toggle, all only while the live market runs.
+With it off or paused the page is 0.32's: 48-hour charts, no toggle and no `/api/news`
+requests. The LilahCraft site ignores all of this until a theme release shows it.
 
 ### Real-world prices: checklist
 
@@ -993,19 +1030,25 @@ trading day. Only the number comes from outside; the headline is always one of o
    - gold: `gc.f` / `GC=F`;
    - wheat: `zw.f` / `ZW=F`;
    - iron ingot: copper, `hg.f` / `HG=F`, since there is no free daily iron-ore quote;
-   - the oak/lumber row ships commented out and unverified, so test it before using it.
+   - lumber for oak_log is not a row: Yahoo's `LBR=F` is unverified (there is no Stooq
+     symbol), so set `provider: yahoo`, test it with `/hcm market sim real test LBR=F`, then
+     add the row yourself (the comment above `symbols:` shows it).
 
    A symbol set to `""` is off.
 4. **Turn it on:** `real_world.enabled: true`, then `/hcm reload`.
-5. **Fetch now:** `/hcm market sim real fetch` fetches and applies at once. Each trading day is
-   applied only once per symbol, so repeating it is safe.
+5. **Fetch now:** `/hcm market sim real fetch` fetches at once, and the move is applied at the
+   next tick. Each trading day is applied only once per symbol, so repeating it is safe. A
+   day counts as applied only once its move is in the market: one fetched but not applied yet
+   (a restart, a pause, `real_world` switched off) is applied when the market next runs.
 6. **Check it:** `/hcm market sim real status` shows the last fetch time and the last error.
 7. **What to expect:**
    - It fetches on weekdays at `fetch_time` (17:30 local), after the US commodity markets close.
    - A real +1% day is +2% here (`gain`), never more than `max_percent` (4%). The code allows
      4.5% at most, and seasons and real prices together also stay within 4.5%.
    - A "move" over 8% is treated as bad data and skipped.
-   - A move of 2% or more gets a news line, at most one per fetch.
+   - A move of 2% or more gets a news line, at most one per fetch: the biggest one that moved
+     Crate's price by a whole percent or more. A sold-out item, or one whose seasons and real
+     moves are already at the limit, is never the headline.
    - The nudge halves every 24 hours and is gone after 96.
    - If the source is down, it retries every 60 minutes, up to 3 times a day, with one warning
      per symbol per day. The market carries on without it.
@@ -1015,8 +1058,8 @@ trading day. Only the number comes from outside; the headline is always one of o
 
 ### Verify in game
 
-1. `/hcm market sim status` shows the ticks advancing ("last 1m ago") and, from Sep 15 to
-   Oct 31, `Harvest Time (wheat -4%)`.
+1. `/hcm market sim status` shows the ticks advancing ("last just now", or "last 2m ago" to
+   "last 4m ago") and, from Sep 15 to Oct 31, `Harvest Time (wheat -4%)`.
 2. `/hcm market news wheat up`:
    - a title, a bell and sparkles at any Wheat TV;
    - the price moves at once, and the Store and Sell tiles show ▲;
@@ -1027,13 +1070,19 @@ trading day. Only the number comes from outside; the headline is always one of o
 
    If oak already has an event, `/hcm market sim reset oak_log` first.
 4. `/hcm market sim deal iron_ingot`: the order limit is 40 a day, for an op too.
-5. Log out and back in: "While you were away" appears, with its "Right now" line.
+5. Wait 10 minutes after your last join and after the last announcement you heard (step 4's),
+   then log out and back in: the "Right now" line lists the oak HOT and the iron DEAL with
+   their time left. News from while you were out is listed above it under "While you were
+   away"; what you already heard live is not repeated.
 6. `curl -H "Authorization: Bearer <token>" http://127.0.0.1:8080/api/news` returns the events
    (leave out the header if no feed token is set).
 7. `/hcm market sim audit` shows the sell bonus and the buy discount.
 8. Set `market.sim.enabled: false` and run `/hcm reload`:
    - every price equals its usual price and the badges go;
-   - `/api/market` drops the new fields, and `/api/news` says `"live":false`.
+   - `/api/market` drops the new fields, and `/api/news` says `"live":false`;
+   - the Hot & Deals sort, the Market News button and `@news` in the display picker are gone,
+     the new placeholders stay as typed, and the dashboard page shows 48-hour charts with no
+     toggle.
 
 ---
 

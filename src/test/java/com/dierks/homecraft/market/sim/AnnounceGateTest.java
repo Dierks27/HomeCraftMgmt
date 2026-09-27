@@ -268,4 +268,65 @@ class AnnounceGateTest {
         assertEquals(NOON, AnnounceGate.markSent(pending(AnnounceGate.Type.ENDING, h), NOON).endLineAt());
         assertNull(AnnounceGate.markSent(pending(AnnounceGate.Type.INTRO, null), NOON));
     }
+
+    // ---- seasons that no longer apply (review) --------------------------------------------
+
+    private static SimSettings withSeasons(SimSettings.Seasons seasons) {
+        return new SimSettings(true, S.tickMinutes(), S.maxCatchupHours(), S.maxUpPercent(), S.maxDownPercent(),
+                S.keepDays(), S.drift(), S.hot(), S.deal(), S.slotsPerItems(), S.cooldownDays(), S.popularWeight(),
+                S.news(), S.announce(), S.headlines(), S.samePlural(), seasons, S.real());
+    }
+
+    @Test
+    void aSeasonIsNotAnnouncedOnceItsEffectIsGone() {
+        long s0 = at(0, 5);
+        MarketEvent harvest = MarketEvent.info(EventKind.SEASON, Source.CALENDAR, null, "harvest_time:2026", s0,
+                s0 + 40 * 24 * H);
+        long noon = s0 + 12 * H;
+        SimSettings.Seasons on = S.seasons();
+        assertEquals(1, AnnounceGate.collect(List.of(harvest), noon, S, RNG, false, 0.10).size(), "the shipped case");
+
+        // seasons.enabled: false after /hcm reload: the row still waits, but it is no longer news.
+        SimSettings off = withSeasons(new SimSettings.Seasons(false, on.predictableMaxPercent(), on.rampDays(), on.list()));
+        assertTrue(AnnounceGate.collect(List.of(harvest), noon, off, RNG, false, 0.10).isEmpty());
+        assertTrue(AnnounceGate.collect(List.of(harvest), noon, off, RNG, false).isEmpty());
+
+        // The season was taken out of the list.
+        List<Season> without = new ArrayList<>(on.list());
+        without.removeIf(x -> x.id().equals("harvest_time"));
+        SimSettings removed = withSeasons(new SimSettings.Seasons(true, on.predictableMaxPercent(), on.rampDays(), without));
+        assertTrue(AnnounceGate.collect(List.of(harvest), noon, removed, RNG, false, 0.10).isEmpty());
+
+        // market.spread 0: c_pred = 0, no season moves anything, so none is announced.
+        assertTrue(AnnounceGate.collect(List.of(harvest), noon, S, RNG, false, 0.0).isEmpty());
+        assertEquals(1, AnnounceGate.collect(List.of(harvest), noon, S, RNG, false, 0.05).size(),
+                "a narrower cap still leaves wheat -2.25%");
+    }
+
+    // ---- the catch-up's rule (review) ------------------------------------------------------
+
+    @Test
+    void aHotThatBecameNewsAfterTheMarkMovedPastItIsStillCaughtUp() {
+        // HOT id 1 starts its silent ramp at 08:00 and becomes news at 12:00. At 10:00 the player
+        // hears flash id 2: their mark is 2 and they were brought up to date at 10:00.
+        MarketEvent hot = hot(at(8, 0)).withId(1);
+        MarketEvent flash = MarketEvent.shock(EventKind.UP, Source.SIM, "wheat", 0.2, at(10, 0), 6 * H, 30 * H)
+                .withId(2);
+        long heardAt = at(10, 0) + 13_000;
+        assertEquals(at(12, 0), hot.newsTime());
+        assertTrue(AnnounceGate.unseen(hot, 2, heardAt), "became news after they were last told anything");
+        assertFalse(AnnounceGate.unseen(flash, 2, heardAt), "they heard this one");
+
+        // They heard the HOT itself go out (seen_at moves to the broadcast): not again.
+        assertFalse(AnnounceGate.unseen(hot, 2, at(12, 0) + 13_000));
+        // A catch-up after it became news listed it and moved seen_at: not again either.
+        assertFalse(AnnounceGate.unseen(hot, 2, at(13, 0)));
+        // Above the mark: always new.
+        assertTrue(AnnounceGate.unseen(hot.withId(3), 2, at(13, 0)));
+        // Only a HOT/DEAL gets its id before it is news; a flash below the mark stays seen.
+        assertFalse(AnnounceGate.unseen(flash, 2, at(9, 0)));
+        // seen_at unknown (0): the id rule alone.
+        assertFalse(AnnounceGate.unseen(hot, 2, 0L));
+        assertFalse(AnnounceGate.unseen(null, 0, 0L));
+    }
 }

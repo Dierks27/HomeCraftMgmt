@@ -30,7 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * §7.1 tile / sign / hologram / TV / preview table and the §7.4 PlaceholderAPI forms, string for
  * string; the stored lines strip to exactly what {@code /api/news} shows; a template's
  * {@code {pct}} is a whole number that never contradicts its badge, whichever sign the row was
- * stored with; a kind a renderer does not handle gives nothing rather than a wrong message; and
+ * stored with; a REAL never claims Crate's price moved when it did not (a sold-out item pinned
+ * at its ceiling); a kind a renderer does not handle gives nothing rather than a wrong message; and
  * the cut / wrap limits (34, 40, 32 × 3, 60).
  */
 class MarketLabelsTest {
@@ -455,6 +456,43 @@ class MarketLabelsTest {
     }
 
     @Test
+    void aRealMoveNeverClaimsACratePriceChangeThatDidNotHappen() {
+        // gold_ingot ships with stock 0: pinned at its $150 ceiling, a REAL nudge cannot move it,
+        // so the simulator stores pct 0 with before == after. That 0 is the truth, not "unset".
+        MarketEvent stuckUp = real(0.04).withPrices(SimMath.pct(150.0, 150.0), 150.0, 150.0);
+        MarketEvent stuckDown = real(-0.04).withPrices(0.0, 150.0, 150.0);
+        assertEquals(0.0, Math.abs(MarketLabels.pct(stuckUp)), 1e-12);
+        assertEquals(0.0, Math.abs(MarketLabels.pct(stuckDown)), 1e-12);
+        assertEquals(List.of("&d&l» REAL-WORLD NEWS «", "&fIn the real world, gold prices went up today!",
+                        "&7» But Crate's Gold Ingot price stayed about the same."),
+                MarketLabels.realLines(stuckUp, "Gold Ingot", "In the real world, gold prices went up today!"));
+        assertEquals("&7» But Crate's Gold Ingot price stayed about the same.",
+                MarketLabels.realLines(stuckDown, "Gold Ingot", "h").get(2));
+        assertEquals("But Crate's Gold Ingot price stayed about the same.",
+                MarketLabels.plain(MarketLabels.realLine(stuckUp, "Gold Ingot")), "the stored line /api/news shows");
+        // The real world did move, and the summary still says which way.
+        assertEquals("&d» &fReal-world gold went up", MarketLabels.summary(stuckUp, "gold"));
+        assertEquals("&d» &fReal-world gold went down", MarketLabels.summary(stuckDown, "gold"));
+        assertEquals("[Market] REAL gold_ingot 0% ($150.00 → $150.00) real",
+                MarketLabels.consoleLine(stuckUp, "gold_ingot", "$150.00", "$150.00"));
+
+        // Under half a percent rounds to 0: no "went up a little too (+0%)".
+        MarketEvent tiny = real(0.04).withPrices(0.4, 100.0, 100.4);
+        assertEquals("&7But Crate's Gold Ingot price stayed about the same.", MarketLabels.realLine(tiny, "Gold Ingot"));
+
+        // A measured move quotes what the price did, not the strength.
+        MarketEvent partly = real(0.04).withPrices(2.6, 100.0, 102.6);
+        assertEquals("&a▲ So Crate's Gold Ingot went up a little too. &7(+3%)",
+                MarketLabels.realLines(partly, "Gold Ingot", "h").get(2));
+        MarketEvent partlyDown = real(-0.04).withPrices(-1.2, 100.0, 98.8);
+        assertEquals("&cSo Crate's Gold Ingot went down a little too. &7(-1%)",
+                MarketLabels.realLine(partlyDown, "Gold Ingot"));
+
+        // A row with no prices recorded still falls back to its strength.
+        assertEquals("&aSo Crate's Gold Ingot went up a little too. &7(+3%)", MarketLabels.realLine(real(0.03), "Gold Ingot"));
+    }
+
+    @Test
     void theNewsButtonTheSellButtonAndTheNewsMenu() {
         assertEquals("&e» Market News", MarketLabels.NEWS_BUTTON);
         assertEquals(List.of("&a▲ &fWheat went up 22% &8(3h ago)", "&6★ &fOak Log got HOT &8(yesterday)",
@@ -596,6 +634,7 @@ class MarketLabelsTest {
             out.add(MarketLabels.storyLine(e, name, "about a day", 40));
             out.addAll(MarketLabels.realLines(e, name, "Head"));
             out.addAll(MarketLabels.realLines(real(-0.04), name, "Head"));
+            out.addAll(MarketLabels.realLines(real(0.04).withPrices(0.0, 150.0, 150.0), name, "Head"));
             out.add(MarketLabels.realLine(e, name));
             out.addAll(MarketLabels.newsEntryLore(e, "3h ago", "$1.00", "$2.00", true));
             out.addAll(MarketLabels.newsEntryLore(e, "3h ago", "$1.00", "$2.00", false));

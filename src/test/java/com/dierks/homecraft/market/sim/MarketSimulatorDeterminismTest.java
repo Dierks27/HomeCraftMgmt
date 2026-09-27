@@ -226,7 +226,12 @@ class MarketSimulatorDeterminismTest {
         }
         assertEquals(1, r.started().size(), "Harvest Time, once");
         assertTrue(r.broadcast().isEmpty());
-        assertEquals(before, sched, "the planner never ran");
+        assertEquals(before.nextHotAt(), sched.nextHotAt(), "the planner never ran");
+        assertEquals(before.nextDealAt(), sched.nextDealAt());
+        assertEquals(before.newsToday(), sched.newsToday());
+        assertEquals(before.recentLists(), sched.recentLists());
+        assertEquals(now + T, sched.nextNewsAt(),
+                "the flash that came due during the replays waits for the next live tick instead");
         assertEquals(new BroadcastState(), bs);
         for (MarketEvent e : r.events()) {
             if (e.id() != 1) {

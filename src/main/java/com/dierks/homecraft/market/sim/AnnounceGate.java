@@ -174,7 +174,9 @@ public final class AnnounceGate {
      *   <li>STORY: an unannounced HOT/DEAL that was not stopped, from {@code announce_due_at}
      *       (the end of the silent ramp) until {@code t1}, the end of the hold.</li>
      *   <li>SEASON: an unannounced SEASON row, for 7 days from {@code started_at} (never past
-     *       the season's end).</li>
+     *       the season's end) — only while seasons are on and the season is still configured,
+     *       and (when {@code spread} is known) only if at least one of its effects survives the
+     *       predictable cap: a season that moves nothing is not news.</li>
      *   <li>REAL: an unannounced REAL row picked as that fetch's headline
      *       ({@code announce_due_at} set), for 12 h.</li>
      *   <li>LAST CALL: an announced HOT/DEAL, not stopped, once, in
@@ -184,9 +186,23 @@ public final class AnnounceGate {
      * </ul>
      *
      * UP, DOWN and WANTED rows never appear here: one that fired silently stays silent.
+     *
+     * <p>This form does not know {@code market.spread}, so it cannot tell whether the predictable
+     * cap leaves a season any effect; {@link #collect(List, long, SimSettings, SimRandom, boolean,
+     * double)} can.
      */
     public static List<Pending> collect(List<MarketEvent> events, long now, SimSettings s, SimRandom rng,
                                         boolean introPending) {
+        return collect(events, now, s, rng, introPending, Double.NaN);
+    }
+
+    /**
+     * {@link #collect(List, long, SimSettings, SimRandom, boolean)} knowing {@code market.spread}:
+     * a SEASON whose every effect the predictable cap ({@code min(4.5%, 45% of spread)}) holds to
+     * 0 is not announced. {@code spread} NaN skips that check.
+     */
+    public static List<Pending> collect(List<MarketEvent> events, long now, SimSettings s, SimRandom rng,
+                                        boolean introPending, double spread) {
         List<Pending> out = new ArrayList<>();
         if (introPending && s.announce().intro()) {
             out.add(new Pending(Type.INTRO, null, Long.MIN_VALUE, Long.MAX_VALUE,
@@ -202,7 +218,7 @@ public final class AnnounceGate {
             switch (e.kind()) {
                 case HOT, DEAL -> story(e, now, s, rng, out);
                 case SEASON -> {
-                    if (!e.announced() && e.announceDueAt() != null) {
+                    if (!e.announced() && e.announceDueAt() != null && seasonIsNews(e, s, spread)) {
                         long end = Math.min(e.startedAt() + SEASON_WINDOW_MS, e.endsAt());
                         add(out, Type.SEASON, e, e.announceDueAt(), end, now, s, rng);
                     }
@@ -219,6 +235,44 @@ public final class AnnounceGate {
             }
         }
         return out;
+    }
+
+    /**
+     * A SEASON row is still news only while seasons are on, its season is still in the list, and
+     * (with a known {@code spread}) the predictable cap leaves it some effect. Otherwise the
+     * announcement would quote an effect that no longer applies.
+     */
+    static boolean seasonIsNews(MarketEvent e, SimSettings s, double spread) {
+        if (!s.seasons().enabled()) {
+            return false;
+        }
+        Season season = SeasonCalendar.byTag(s.seasons().list(), e.tag());
+        if (season == null) {
+            return false;
+        }
+        return Double.isNaN(spread) || !SeasonCalendar.effective(season, s.seasons().predictableCap(spread)).isEmpty();
+    }
+
+    // ---- the catch-up's rule -------------------------------------------------------------
+
+    /**
+     * Whether the join catch-up ("While you were away", spec §6.3) should list {@code e} for a
+     * player whose mark is {@code lastEventId} and who was last brought up to date at
+     * {@code seenAt} (their last catch-up, or the last live broadcast they heard; 0 = unknown).
+     *
+     * <p>Anything with an id above the mark is new to them. A HOT/DEAL gets its id when its
+     * silent ramp starts but only becomes news hours later, at full strength, so a mark moved
+     * past it during the ramp (by a flash they heard, or by a catch-up) would hide it for good;
+     * it is listed too when it became news after they were last brought up to date.
+     */
+    public static boolean unseen(MarketEvent e, long lastEventId, long seenAt) {
+        if (e == null) {
+            return false;
+        }
+        if (e.id() > lastEventId) {
+            return true;
+        }
+        return e.kind().story() && seenAt > 0 && e.newsTime() > seenAt;
     }
 
     private static void story(MarketEvent e, long now, SimSettings s, SimRandom rng, List<Pending> out) {

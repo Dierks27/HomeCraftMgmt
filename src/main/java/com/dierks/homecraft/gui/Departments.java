@@ -4,11 +4,13 @@ import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.market.MarketService;
 import com.dierks.homecraft.market.MarketState;
+import com.dierks.homecraft.market.sim.ItemStatus;
 import com.dierks.homecraft.marketplace.Categorizer;
 import org.bukkit.Material;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -85,18 +87,52 @@ final class Departments {
                 out.add(item);
             }
         }
-        out.sort(comparator(market, sort));
+        out.sort(comparator(plugin, out, sort));
         return out;
     }
 
-    private static Comparator<MarketItem> comparator(MarketService market, BrowseState.Sort sort) {
+    private static Comparator<MarketItem> comparator(HomeCraftManagement plugin, List<MarketItem> items,
+                                                     BrowseState.Sort sort) {
+        MarketService market = plugin.market();
         Comparator<MarketItem> byName = Comparator.comparing(i -> i.label().toLowerCase(java.util.Locale.ROOT));
         return switch (sort) {
             case PRICE_UP -> Comparator.<MarketItem>comparingDouble(i -> market.buyPrice(i.id())).thenComparing(byName);
             case PRICE_DOWN -> Comparator.<MarketItem>comparingDouble(i -> -market.buyPrice(i.id())).thenComparing(byName);
             case STOCK -> Comparator.<MarketItem>comparingLong(i -> -stock(market, i.id())).thenComparing(byName);
+            case HOT -> hotFirst(plugin, items).thenComparing(byName);
             case NAME -> byName;
         };
+    }
+
+    /**
+     * "Hot &amp; Deals" over the live statuses, each read once up front rather than once per
+     * comparison. With the live market off there are none, so this is the name order.
+     */
+    private static Comparator<MarketItem> hotFirst(HomeCraftManagement plugin, List<MarketItem> items) {
+        Map<String, ItemStatus> status = new HashMap<>();
+        for (MarketItem item : items) {
+            ItemStatus st = MarketNewsMenu.status(plugin, item.id());
+            if (st != null) {
+                status.put(item.id(), st);
+            }
+        }
+        return hotFirst(status);
+    }
+
+    /**
+     * "Hot &amp; Deals": badged items first — HOT, UP, DEAL, DOWN, WANTED, then the rest
+     * ({@code Badge.sortRank}) — and within each, the biggest move against the usual price
+     * first. An item missing from {@code status} counts as unbadged and unmoved. Ties are left to
+     * the caller's name order.
+     */
+    static Comparator<MarketItem> hotFirst(Map<String, ItemStatus> status) {
+        return Comparator.<MarketItem>comparingInt(i -> MarketNewsMenu.badge(status.get(i.id())).sortRank())
+                .thenComparingDouble(i -> -movedPct(status.get(i.id())));
+    }
+
+    /** How far an item's price is from usual, in percent, whichever way; 0 with no status. */
+    private static double movedPct(ItemStatus st) {
+        return st == null || !Double.isFinite(st.pct()) ? 0.0 : Math.abs(st.pct());
     }
 
     /** Live stock, tolerating a state row that has not caught up with a catalog edit. */
@@ -188,10 +224,13 @@ final class Departments {
                 selected ? "&aShowing this department" : "&eClick to view"), selected);
     }
 
-    /** The sort toggle for the bottom row. */
-    static org.bukkit.inventory.ItemStack sortButton(BrowseState.Sort sort) {
+    /**
+     * The sort toggle for the bottom row; {@code hot} (the live market is running) adds
+     * "Hot &amp; Deals" to the cycle, matching {@link BrowseState.Sort#next(boolean)}.
+     */
+    static org.bukkit.inventory.ItemStack sortButton(BrowseState.Sort sort, boolean hot) {
         return Menus.icon(Material.HOPPER, "&bSort: &f" + sort.label(),
                 "&7Click to cycle Name → Price ↑",
-                "&7→ Price ↓ → Stock.");
+                hot ? "&7→ Price ↓ → Stock → Hot & Deals." : "&7→ Price ↓ → Stock.");
     }
 }

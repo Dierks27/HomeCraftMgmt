@@ -33,6 +33,10 @@ import java.util.Map;
  *       nothing, so leaving it open to everyone made every shipping tier pointless.</li>
  *   <li>{@code /hcm market resetstock <item|all>} — reseed stock + price from config. (admin)</li>
  *   <li>{@code /hcm market setstock <item> <amount>} — set one item's stock. (admin)</li>
+ *   <li>{@code /hcm market news [on|off]} — the Crate Market news; news in chat on or off.
+ *       (hcm.market.price, all)</li>
+ *   <li>{@code /hcm market news <item> <up|down|wanted> …} and {@code /hcm market sim …} — run
+ *       and test the live market; see {@link MarketSimCommand}. (hcm.market.sim, op-only)</li>
  *   <li>{@code /hcm balance} — Vault money + Arcade tokens together. (hcm.market.price)</li>
  * </ul>
  *
@@ -49,9 +53,12 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
     private final HomeCraftManagement plugin;
     /** Sender name → when they armed a {@code resetstock all}. */
     private final Map<String, Long> resetConfirmations = new HashMap<>();
+    /** {@code /hcm market news …} and {@code /hcm market sim …} (the live market). */
+    private final MarketSimCommand liveMarket;
 
     public HcmCommand(HomeCraftManagement plugin) {
         this.plugin = plugin;
+        this.liveMarket = new MarketSimCommand(plugin);
     }
 
     @Override
@@ -859,6 +866,10 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(Text.of("&7  buy: &a" + plugin.economy().format(market.buyPrice(item.id()))
                         + " &7 sell: &c" + plugin.economy().format(market.sellPrice(item.id()))
                         + " &7 mid: &f" + plugin.economy().format(market.price(item.id()))));
+                // The live market's usual price, mood and badge; nothing while it is off.
+                for (String line : liveMarket.priceLines(item)) {
+                    sender.sendMessage(Text.of(line));
+                }
                 sender.sendMessage(Text.of("&7  floor: &f" + plugin.economy().format(item.floor())
                         + " &7 ceiling: &f" + plugin.economy().format(item.ceiling())));
             }
@@ -892,6 +903,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "sell" -> handleTrade(sender, args, false);
             case "resetstock" -> handleResetStock(sender, args);
             case "setstock" -> handleSetStock(sender, args);
+            case "news" -> liveMarket.news(sender, args);
+            case "sim" -> liveMarket.sim(sender, args);
             default -> marketUsage(sender);
         }
     }
@@ -906,6 +919,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             subs.add("price <item>");
             subs.add("history <item>");
         }
+        subs.addAll(MarketSimCommand.usageParts(sender));
         if (sender.hasPermission("hcm.market.order")) {
             subs.add("sell <item> <qty>");
         }
@@ -962,7 +976,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             return;
         }
         sender.sendMessage(Text.of("&aReset &f" + target + " &7→ stock &f" + result.stock()
-                + " &7mid &f" + plugin.economy().format(result.price())
+                + " &7mid &f" + plugin.economy().format(result.price()) + usualNote(target, result.price())
                 + (result.capped() ? " &8(initial_stock capped below full_stock)" : "")));
     }
 
@@ -1000,7 +1014,20 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     + ") so the market always has room to sell into — capped at &f" + result.stock() + "&e."));
         }
         sender.sendMessage(Text.of("&aSet &f" + id + " &7→ stock &f" + result.stock()
-                + " &7mid &f" + plugin.economy().format(result.price())));
+                + " &7mid &f" + plugin.economy().format(result.price()) + usualNote(id, result.price())));
+    }
+
+    /**
+     * {@code " &8(usual $X)"} when the live market has moved {@code id}'s mid away from its usual
+     * (balanced) price, so an admin who just snapped a price to the curve sees both; {@code ""}
+     * otherwise — with the live market off the two are always equal and the line reads as before.
+     */
+    private String usualNote(String id, double mid) {
+        double usual = plugin.market().usualPrice(id);
+        if (Double.isNaN(usual) || usual == mid) {
+            return "";
+        }
+        return " &8(usual " + plugin.economy().format(usual) + ")";
     }
 
     /**
@@ -1112,6 +1139,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.of("&e/hcm market price <item> &7- inspect a commodity"));
             sender.sendMessage(Text.of("&e/hcm market history <item> &7- recent price snapshots"));
             sender.sendMessage(Text.of("&e/hcm balance &7- your money and Arcade tokens"));
+        }
+        for (String line : MarketSimCommand.helpLines(sender)) {
+            sender.sendMessage(Text.of(line));
         }
         if (sender.hasPermission("hcm.market.order")) {
             sender.sendMessage(Text.of("&e/hcm market sell <item> <qty> &7- sell into the market"));
@@ -1363,9 +1393,16 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "remove" -> removeDisplay(player);
             case "cleanup" -> cleanupDisplays(player);
             default -> {
+                // The Market News board (@news) is offered only while the live market runs; with it
+                // off or paused the help reads exactly as 0.32's.
+                boolean news = newsBoardOffered();
                 player.sendMessage(Text.of("&e/hcm display sign &7- bind the sign you're looking at to a commodity"));
-                player.sendMessage(Text.of("&e/hcm display hologram &7- float a live-price hologram above the block you're looking at"));
-                player.sendMessage(Text.of("&e/hcm display tv [commodity] [scale] &7- mount a flat price-screen panel on the wall you're looking at"));
+                player.sendMessage(Text.of(news
+                        ? "&e/hcm display hologram &7- float a live-price hologram (or the Market News board) above the block you're looking at"
+                        : "&e/hcm display hologram &7- float a live-price hologram above the block you're looking at"));
+                player.sendMessage(Text.of(news
+                        ? "&e/hcm display tv [commodity|@news] [scale] &7- mount a flat price-screen panel (or the Market News board) on the wall you're looking at"
+                        : "&e/hcm display tv [commodity] [scale] &7- mount a flat price-screen panel on the wall you're looking at"));
                 player.sendMessage(Text.of("&e/hcm display remove &7- unbind the display block you're looking at"));
                 player.sendMessage(Text.of("&e/hcm display cleanup &7- despawn every plugin-owned display entity in loaded chunks (wipes strays)"));
             }
@@ -1397,15 +1434,17 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             return;
         }
         org.bukkit.Location loc = target.getLocation();
+        // offerNews: a hologram can also be the Market News board (@news) - the picker offers it only
+        // while the live market runs, and is 0.32's picker while it is off or paused.
         new com.dierks.homecraft.gui.display.CommodityPickerMenu(plugin, player, "Bind hologram → commodity",
                 id -> {
                     var r = plugin.displayService().bindHologram(player, loc, id);
                     player.sendMessage(r.ok()
-                            ? Text.of("&aHologram floating above the block, showing &f" + id + "&a live.")
+                            ? Text.of("&aHologram floating above the block, showing " + shows(id) + "&a live.")
                             : Text.of("&c" + r.error()));
                     player.closeInventory();
                 },
-                player::closeInventory).open(player);
+                player::closeInventory, true).open(player);
     }
 
     private void removeDisplay(Player player) {
@@ -1437,22 +1476,41 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         }
         final float panelScale = scale;
         if (args.length >= 3) {
-            reportTvBind(player, plugin.displayService().bindTvPanel(player, wall, face, args[2], panelScale), args[2]);
+            // A commodity id goes through as typed, as in 0.32; "@news" in any case is the news
+            // board while the live market runs (DisplayService refuses it while it is off).
+            String id = newsBoardOffered() && com.dierks.homecraft.display.DisplayService.NEWS_ID.equalsIgnoreCase(args[2])
+                    ? com.dierks.homecraft.display.DisplayService.NEWS_ID : args[2];
+            reportTvBind(player, plugin.displayService().bindTvPanel(player, wall, face, id, panelScale), id);
             return;
         }
         // No commodity argument → pick one from the GUI (mounts on the wall we captured above).
+        // offerNews: a TV can also be the Market News board (@news) - the picker offers it only
+        // while the live market runs, and is 0.32's picker while it is off or paused.
         new com.dierks.homecraft.gui.display.CommodityPickerMenu(plugin, player, "Bind TV panel → commodity",
                 id -> {
                     reportTvBind(player, plugin.displayService().bindTvPanel(player, wall, face, id, panelScale), id);
                     player.closeInventory();
                 },
-                player::closeInventory).open(player);
+                player::closeInventory, true).open(player);
     }
 
     private void reportTvBind(Player player, com.dierks.homecraft.display.DisplayService.Result r, String id) {
         player.sendMessage(r.ok()
-                ? Text.of("&aTV price panel mounted on the wall, showing &f" + id + "&a live.")
+                ? Text.of("&aTV price panel mounted on the wall, showing " + shows(id) + "&a live.")
                 : Text.of("&c" + r.error()));
+    }
+
+    /**
+     * Whether the display binders offer the Market News board ({@code @news}): only while the live
+     * market runs, so with it off or paused the pickers, help and tab completion are 0.32's.
+     */
+    private boolean newsBoardOffered() {
+        return com.dierks.homecraft.gui.MarketNewsMenu.live(plugin) != null;
+    }
+
+    /** What a freshly bound display shows: {@code &fwheat}, or the Market News board for {@code @news}. */
+    private static String shows(String id) {
+        return com.dierks.homecraft.display.DisplayService.NEWS_ID.equals(id) ? "&fthe Market News board" : "&f" + id;
     }
 
     /** Despawn every plugin-owned display entity in loaded chunks (wipes stray/leaked holograms). */
@@ -1622,6 +1680,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             addMatches(out, args[1], "sign", "hologram", "tv", "remove", "cleanup");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("display") && args[1].equalsIgnoreCase("tv")) {
             String prefix = args[2].toLowerCase(Locale.ROOT);
+            if (newsBoardOffered()) {
+                addMatches(out, prefix, com.dierks.homecraft.display.DisplayService.NEWS_ID);
+            }
             for (MarketItem item : plugin.market().catalog()) {
                 if (item.id().startsWith(prefix)) {
                     out.add(item.id());
@@ -1629,12 +1690,21 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("market")) {
             addMatches(out, args[1], "list", "price", "history", "sell");
+            if (sender.hasPermission(MarketSimCommand.READ_PERMISSION)) {
+                addMatches(out, args[1], "news");
+            }
+            if (sender.hasPermission(MarketSimCommand.PERMISSION)) {
+                addMatches(out, args[1], "sim");
+            }
             if (sender.hasPermission("hcm.market.buy")) {
                 addMatches(out, args[1], "buy");
             }
             if (sender.hasPermission("hcm.admin")) {
                 addMatches(out, args[1], "resetstock", "setstock");
             }
+        } else if (args.length >= 3 && args[0].equalsIgnoreCase("market")
+                && (args[1].equalsIgnoreCase("news") || args[1].equalsIgnoreCase("sim"))) {
+            out.addAll(liveMarket.complete(sender, args));
         } else if (args.length == 3 && args[0].equalsIgnoreCase("market")
                 && List.of("price", "history", "buy", "sell", "resetstock", "setstock")
                         .contains(args[1].toLowerCase(Locale.ROOT))) {

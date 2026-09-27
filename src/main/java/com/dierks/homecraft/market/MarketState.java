@@ -9,6 +9,12 @@ package com.dierks.homecraft.market;
  * <b>adds</b> to it, buying <b>subtracts</b>, and it is floored at 0. A negative
  * value is a persistence sentinel meaning "not yet seeded" (see {@link #isSeeded()}),
  * used to migrate Phase 2 rows forward to a config-defined starting stock.
+ *
+ * <p>{@code currentPrice} is the <b>balanced</b> price: it follows the stock curve, and only
+ * player trades and the admin stock commands move it. The live market (0.33) never writes it
+ * (nor {@code stock}); it multiplies it when a price is quoted
+ * ({@link MarketService#price(String)}), and {@link MarketService#usualPrice(String)} shows it
+ * as the item's usual price.
  */
 public final class MarketState {
 
@@ -28,6 +34,7 @@ public final class MarketState {
         return itemId;
     }
 
+    /** The balanced price, before the live market's multiplier (see the class comment). */
     public double currentPrice() {
         return currentPrice;
     }

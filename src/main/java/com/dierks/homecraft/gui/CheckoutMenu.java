@@ -16,6 +16,11 @@ import java.util.List;
  * Checkout: pick a shipping tier for an order. Shows the item cost and, per tier,
  * the shipping fee, real-time delivery delay, and grand total. Clicking a tier
  * places the order (charges item + shipping, consumes stock now, delivers later).
+ *
+ * <p>The item cost shown is a quote. If the item's price jumps before a tier is clicked (a live
+ * market news flash, an admin action — {@code MarketService.quoteEpoch}, spec §3.5), the order
+ * is refused once with "Prices just moved!" and the screen re-quotes, so nobody pays a total
+ * they were never shown. With the live market off the epoch never changes.
  */
 public final class CheckoutMenu extends Menu {
 
@@ -25,6 +30,8 @@ public final class CheckoutMenu extends Menu {
     private final MarketItem item;
     private final int qty;
     private final Runnable onBack;
+    /** The item's quote epoch when this screen last priced the order. */
+    private long shownEpoch;
 
     public CheckoutMenu(HomeCraftManagement plugin, Player player, MarketItem item, int qty, Runnable onBack) {
         super(plugin);
@@ -43,6 +50,7 @@ public final class CheckoutMenu extends Menu {
 
         MarketService market = plugin.market();
         OrderService orders = plugin.orderService();
+        shownEpoch = market.quoteEpoch(item.id());
         MarketService.Plan quote = market.quoteBuy(item.id(), qty);
         double itemTotal = quote.total();
 
@@ -67,6 +75,12 @@ public final class CheckoutMenu extends Menu {
     }
 
     private void placeOrder(PluginConfig.ShippingTier tier) {
+        if (plugin.market().quoteEpoch(item.id()) != shownEpoch) {
+            Sounds.refused(player);
+            player.sendMessage(Text.of(MarketLabels.PRICES_MOVED));
+            refresh();
+            return;
+        }
         OrderService.PlaceResult result = plugin.orderService().placeOrder(player, item.id(), qty, tier);
         if (!result.ok()) {
             Sounds.refused(player);

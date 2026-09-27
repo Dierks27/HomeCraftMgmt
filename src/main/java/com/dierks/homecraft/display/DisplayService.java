@@ -2,13 +2,20 @@ package com.dierks.homecraft.display;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig;
+import com.dierks.homecraft.gui.MarketLabels;
+import com.dierks.homecraft.gui.MarketNewsMenu;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.market.MarketState;
+import com.dierks.homecraft.market.sim.Badge;
+import com.dierks.homecraft.market.sim.ItemStatus;
+import com.dierks.homecraft.market.sim.MarketEvent;
 import com.dierks.homecraft.storage.DisplayDao;
 import com.dierks.homecraft.util.Keys;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.Particle;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -34,8 +41,27 @@ import java.util.UUID;
  * and map-TVs, each bound to a market commodity and re-rendered from the live
  * market on a config timer — never per-tick. Placements persist so they survive
  * restarts and re-render on chunk load.
+ *
+ * <p><b>Live market (0.33, spec §7.3).</b> While it runs, a display shows its item's badge — a
+ * prefix on the sign's trend line, a suffix on the hologram's name, a line on the TV (or
+ * "Usually $X" once the price is 3% or more off usual). A hologram or TV bound to
+ * {@link #NEWS_ID} is the Market News board: the newest headline, its age, and what is HOT or on
+ * sale. {@link #celebrate} puts a burst of particles on every display of an item that just made
+ * the news. With the live market off every display reads exactly as before, and the news board
+ * reads "The Crate Market is calm today."
  */
 public final class DisplayService {
+
+    /**
+     * The pseudo-commodity a hologram or TV binds to for the Market News board. Catalog ids
+     * never start with {@code @} (the loader skips them), so it cannot clash with a real item.
+     */
+    public static final String NEWS_ID = "@news";
+
+    /** {@link #celebrate}: happy-villager sparkles for good news, a puff of cloud for a drop. */
+    private static final int SPARKLES = 12;
+    private static final int CLOUDS = 8;
+    private static final double PARTICLE_SPREAD = 0.4;
 
     public record Result(boolean ok, String error) {
         static Result fail(String e) {
@@ -156,6 +182,9 @@ public final class DisplayService {
 
     /** Bind the sign at {@code loc} to a commodity and render it now. */
     public Result bindSign(Player admin, Location loc, String itemId) {
+        if (NEWS_ID.equals(itemId)) {
+            return Result.fail(MarketLabels.NEWS_NO_SIGN);
+        }
         Block block = loc.getBlock();
         if (!(block.getState() instanceof Sign)) {
             return Result.fail("Look at a placed sign first.");
@@ -244,10 +273,12 @@ public final class DisplayService {
         }
         double change = plugin.market().change24h(itemId);
         String name = stripToWidth(item.label());
+        ItemStatus mood = MarketNewsMenu.status(plugin, itemId);
         return new String[] {
                 "&1&l" + name,
                 "&2" + plugin.economy().format(plugin.market().price(itemId)),
-                Trend.color(change) + Trend.label(change),
+                mood == null ? Trend.color(change) + Trend.label(change)
+                        : MarketLabels.signLine(mood.badge(), Trend.color(change), Trend.label(change)),
                 "&8Stock: &7" + state.stock()
         };
     }
@@ -262,7 +293,7 @@ public final class DisplayService {
 
     /** Bind a floating hologram above {@code loc} to a commodity and spawn it now. */
     public Result bindHologram(Player admin, Location loc, String itemId) {
-        if (plugin.market().item(itemId) == null) {
+        if (!bindable(itemId)) {
             return Result.fail("Unknown commodity '" + itemId + "'.");
         }
         try {
@@ -352,10 +383,29 @@ public final class DisplayService {
         }
     }
 
-    /** The item shown by a hologram: the config override, else the commodity's own item. */
+    /**
+     * What a hologram or TV may be bound to: a commodity the market trades, or the Market News
+     * board ({@link #NEWS_ID}) while the live market runs. With it off or paused {@code @news} is
+     * refused as an unknown commodity, exactly as 0.32 refused it; boards bound earlier stay and
+     * read "The Crate Market is calm today."
+     */
+    private boolean bindable(String itemId) {
+        if (NEWS_ID.equals(itemId)) {
+            return MarketNewsMenu.live(plugin) != null;
+        }
+        return plugin.market().item(itemId) != null;
+    }
+
+    /**
+     * The item shown by a hologram: the config override, else the commodity's own item (a bell
+     * over the Market News board).
+     */
     private ItemStack holoItem(String itemId, PluginConfig.HologramOpts opts) {
         if (opts.itemOverride() != null && opts.itemOverride().isItem()) {
             return new ItemStack(opts.itemOverride());
+        }
+        if (NEWS_ID.equals(itemId)) {
+            return new ItemStack(Material.BELL);
         }
         MarketItem item = plugin.market().item(itemId);
         if (item != null && item.material().isItem()) {
@@ -396,15 +446,22 @@ public final class DisplayService {
         }
     }
 
-    /** Two-line hologram text: coloured name, then price + trend + stock. */
+    /**
+     * Two-line hologram text: coloured name (and its badge), then price + trend + stock. The
+     * news board ({@link #NEWS_ID}) shows the board instead.
+     */
     private net.kyori.adventure.text.Component holoText(String itemId) {
+        if (NEWS_ID.equals(itemId)) {
+            return Text.of(newsBoardText());
+        }
         MarketItem item = plugin.market().item(itemId);
         MarketState state = plugin.market().state(itemId);
         if (item == null || state == null) {
             return Text.of("&cUnknown commodity");
         }
         double change = plugin.market().change24h(itemId);
-        return Text.of(item.label()
+        ItemStatus mood = MarketNewsMenu.status(plugin, itemId);
+        return Text.of(item.label() + (mood == null ? "" : MarketLabels.holoSuffix(mood.badge()))
                 + "\n&6" + plugin.economy().format(plugin.market().price(itemId))
                 + "  " + Trend.color(change) + Trend.label(change)
                 + " &8· &7" + state.stock());
@@ -452,7 +509,7 @@ public final class DisplayService {
      * a rebind at the same block replaces it. Never spawns an ItemDisplay or a map.
      */
     public Result bindTvPanel(Player admin, Block wall, BlockFace face, String itemId, float scale) {
-        if (plugin.market().item(itemId) == null) {
+        if (!bindable(itemId)) {
             return Result.fail("Unknown commodity '" + itemId + "'.");
         }
         if (face != BlockFace.NORTH && face != BlockFace.SOUTH
@@ -538,8 +595,16 @@ public final class DisplayService {
         despawn(tvPanels.remove(id));
     }
 
-    /** The panel's screen content: commodity name, big price, trend arrow, and stock. */
+    /**
+     * The panel's screen content: commodity name, big price, trend arrow, and stock; then, while
+     * the live market runs, the badge on line 5, or for an unbadged item 3%+ off usual an empty
+     * line 5 and "Usually $X" on line 6 (spec §7.1). The news board ({@link #NEWS_ID}) shows the
+     * board instead.
+     */
     private net.kyori.adventure.text.Component panelText(String itemId) {
+        if (NEWS_ID.equals(itemId)) {
+            return Text.of(newsBoardText());
+        }
         MarketItem item = plugin.market().item(itemId);
         MarketState state = plugin.market().state(itemId);
         if (item == null || state == null) {
@@ -547,10 +612,81 @@ public final class DisplayService {
         }
         double change = plugin.market().change24h(itemId);
         String price = plugin.economy().format(plugin.market().price(itemId));
-        return Text.of("&f&l" + stripCodes(item.label())
+        String screen = "&f&l" + stripCodes(item.label())
                 + "\n&e&l" + price
                 + "\n" + Trend.color(change) + Trend.label(change)
-                + "\n&7Stock: &f" + state.stock());
+                + "\n&7Stock: &f" + state.stock();
+        ItemStatus mood = MarketNewsMenu.status(plugin, itemId);
+        if (mood != null) {
+            screen += tvMoodLines(mood.badge(), mood.fading(), mood.pct(),
+                    plugin.economy().format(mood.usual()));
+        }
+        return Text.of(screen);
+    }
+
+    /**
+     * What the live market adds under a TV panel's four lines (spec §7.1), each with its leading
+     * newline: the badge on line 5 ({@link MarketLabels#tvLine}); for an unbadged item 3% or more
+     * off usual an empty line 5 and {@code &7Usually &f{usual}} on line 6 (line 5 is the badge's);
+     * otherwise nothing.
+     */
+    static String tvMoodLines(Badge badge, boolean fading, double pct, String usual) {
+        String line5 = MarketLabels.tvLine(badge, fading);
+        if (!line5.isEmpty()) {
+            return "\n" + line5;
+        }
+        return MarketLabels.showUsual(pct) ? "\n\n" + MarketLabels.usually(usual) : "";
+    }
+
+    // ---- Market News board and celebrations -----------------------------------
+
+    /**
+     * The {@link #NEWS_ID} board as one '&amp;'-coded block: the newest headline players already
+     * know about (7 days at most), its age, and what is HOT or on sale; the calm line when there
+     * is nothing, which is also all it says while the live market is off.
+     */
+    private String newsBoardText() {
+        long now = System.currentTimeMillis();
+        List<MarketEvent> latest = MarketNewsMenu.news(plugin, 1);
+        MarketEvent newest = latest.isEmpty() ? null : latest.get(0);
+        List<String> lines = MarketLabels.newsBoard(
+                newest == null ? "" : MarketNewsMenu.headline(plugin, newest),
+                newest == null ? "" : MarketNewsMenu.age(newest, now),
+                MarketNewsMenu.names(plugin, Badge.HOT),
+                MarketNewsMenu.names(plugin, Badge.DEAL));
+        return String.join("\n", lines);
+    }
+
+    /**
+     * A burst of particles at every loaded display bound to {@code itemId} and at every Market
+     * News board, when that item makes the news: happy-villager sparkles ({@code up} — UP, HOT,
+     * DEAL) or a puff of cloud (DOWN), 1.2 blocks above the display's block. Unloaded chunks are
+     * skipped; nothing is spawned for a player who is not near one.
+     */
+    public void celebrate(String itemId, boolean up) {
+        List<DisplayDao.Display> displays;
+        try {
+            displays = dao.all();
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to read displays for the news particles: " + e.getMessage());
+            return;
+        }
+        Particle particle = up ? Particle.HAPPY_VILLAGER : Particle.CLOUD;
+        int count = up ? SPARKLES : CLOUDS;
+        for (DisplayDao.Display d : displays) {
+            if (DisplayDao.MAPTV.equals(d.kind())) {
+                continue; // retired map-TVs have nothing in the world to decorate
+            }
+            if (!NEWS_ID.equals(d.itemId()) && (itemId == null || !itemId.equals(d.itemId()))) {
+                continue;
+            }
+            World world = plugin.getServer().getWorld(d.world());
+            if (world == null || !world.isChunkLoaded(d.x() >> 4, d.z() >> 4)) {
+                continue;
+            }
+            Location at = new Location(world, d.x() + 0.5, d.y() + 1.2, d.z() + 0.5);
+            world.spawnParticle(particle, at, count, PARTICLE_SPREAD, PARTICLE_SPREAD, PARTICLE_SPREAD, 0.0);
+        }
     }
 
     private BlockFace parseFace(String name) {

@@ -2,9 +2,14 @@ package com.dierks.homecraft.integration;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.display.Trend;
+import com.dierks.homecraft.gui.MarketLabels;
+import com.dierks.homecraft.gui.MarketNewsMenu;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.market.MarketState;
+import com.dierks.homecraft.market.sim.Badge;
+import com.dierks.homecraft.market.sim.ItemStatus;
+import com.dierks.homecraft.market.sim.MarketEvent;
 import com.dierks.homecraft.mini.MiniService;
 import com.dierks.homecraft.order.Order;
 import com.dierks.homecraft.storage.DeliveryDao;
@@ -31,6 +36,28 @@ import org.bukkit.entity.Player;
  *   <li>{@code %hcm_mini_minted_<id>%} / {@code %hcm_mini_circulation_<id>%}</li>
  *   <li>{@code %hcm_order_status%} — the player's next delivery + ETA</li>
  * </ul>
+ *
+ * <p>Live market (0.33, spec §7.4), plain text from the sim's snapshot. Exact keys are matched
+ * before any prefix, so {@code news_age} can never be read as a {@code news_} lookup:
+ * <ul>
+ *   <li>{@code %hcm_news%} — the latest headline (at most 60 characters), or
+ *       "The Crate Market is calm today."</li>
+ *   <li>{@code %hcm_news_age%} — {@code 12m ago}, or empty</li>
+ *   <li>{@code %hcm_hot_list%} / {@code %hcm_deal_list%} — {@code Oak Log, Iron Ingot}, or
+ *       {@code none}</li>
+ *   <li>{@code %hcm_season%} — {@code Harvest Time}, or empty</li>
+ *   <li>{@code %hcm_status_<item>%} — {@code HOT}/{@code DEAL}/{@code UP}/{@code DOWN}/{@code WANTED}
+ *       or empty</li>
+ *   <li>{@code %hcm_badge_<item>%} — {@code ★ HOT +12%}, {@code » WANTED}, … or empty</li>
+ *   <li>{@code %hcm_usual_<item>%} — the usual (balanced) price, formatted</li>
+ *   <li>{@code %hcm_mood_<item>%} — {@code +11.7%}, {@code -3.2%}, {@code 0%}</li>
+ *   <li>{@code %hcm_endsin_<item>%} — {@code 20h}, {@code 2d}, or empty</li>
+ * </ul>
+ * They are answered only while the live market runs. With it off or paused they are not ours,
+ * exactly as in 0.32 (PlaceholderAPI leaves the token as typed); while it runs a quiet market
+ * reads the calm line, {@code none}, empty, {@code 0%}, and the usual price equals the price.
+ * {@code %hcm_price_<item>%} and {@code %hcm_trend_<item>%} already include the live market's
+ * multiplier (exactly 1 while it is off).
  */
 public final class HcmPlaceholders extends PlaceholderExpansion {
 
@@ -70,6 +97,13 @@ public final class HcmPlaceholders extends PlaceholderExpansion {
         if (p.equals("order_status")) {
             return orderStatus(player);
         }
+        // ---- live market (only while it runs): exact keys first, then the per-item prefixes ----
+        if (MarketNewsMenu.live(plugin) != null) {
+            String mood = liveMarket(p);
+            if (mood != null) {
+                return mood;
+            }
+        }
         if (p.startsWith("price_")) {
             return priceOf(p.substring("price_".length()));
         }
@@ -103,6 +137,87 @@ public final class HcmPlaceholders extends PlaceholderExpansion {
             return "N/A";
         }
         return plugin.economy().format(plugin.market().price(id));
+    }
+
+    /**
+     * A live-market placeholder ({@code p} lower-cased), or {@code null} when {@code p} is not one.
+     * Called only while the live market runs. Exact keys are matched before the prefixes.
+     */
+    private String liveMarket(String p) {
+        switch (p) {
+            case "news" -> {
+                MarketEvent latest = latestNews();
+                return MarketLabels.papiNews(latest == null ? "" : MarketNewsMenu.headline(plugin, latest));
+            }
+            case "news_age" -> {
+                MarketEvent latest = latestNews();
+                return latest == null ? "" : MarketNewsMenu.age(latest, System.currentTimeMillis());
+            }
+            case "hot_list" -> {
+                return nameList(Badge.HOT);
+            }
+            case "deal_list" -> {
+                return nameList(Badge.DEAL);
+            }
+            case "season" -> {
+                return MarketNewsMenu.seasonName(plugin);
+            }
+            default -> {
+                // not an exact live-market key; try the prefixes
+            }
+        }
+        if (p.startsWith("status_")) {
+            return itemMood(p.substring("status_".length()), MoodField.STATUS);
+        }
+        if (p.startsWith("badge_")) {
+            return itemMood(p.substring("badge_".length()), MoodField.BADGE);
+        }
+        if (p.startsWith("usual_")) {
+            return itemMood(p.substring("usual_".length()), MoodField.USUAL);
+        }
+        if (p.startsWith("mood_")) {
+            return itemMood(p.substring("mood_".length()), MoodField.MOOD);
+        }
+        if (p.startsWith("endsin_")) {
+            return itemMood(p.substring("endsin_".length()), MoodField.ENDS_IN);
+        }
+        return null;
+    }
+
+    /** The per-item live-market placeholders. */
+    private enum MoodField { STATUS, BADGE, USUAL, MOOD, ENDS_IN }
+
+    /**
+     * One per-item live-market value; {@code N/A} for an item the market does not trade. A quiet
+     * item reads: no status, no badge, usual = price, mood {@code 0%}, nothing ending.
+     */
+    private String itemMood(String id, MoodField field) {
+        if (plugin.market().item(id) == null) {
+            return "N/A";
+        }
+        ItemStatus st = MarketNewsMenu.status(plugin, id);
+        Badge badge = MarketNewsMenu.badge(st);
+        double pct = st == null ? 0.0 : st.pct();
+        return switch (field) {
+            case STATUS -> MarketLabels.papiStatus(badge);
+            case BADGE -> MarketLabels.papiBadge(badge, pct);
+            case USUAL -> plugin.economy().format(st == null ? plugin.market().usualPrice(id) : st.usual());
+            case MOOD -> MarketLabels.moodPct(pct);
+            case ENDS_IN -> st == null || !badge.shown() || st.endsAt() <= 0 ? ""
+                    : MarketLabels.endsIn(st.endsAt() - System.currentTimeMillis());
+        };
+    }
+
+    /** The newest headline players already know about (7 days at most), or null. */
+    private MarketEvent latestNews() {
+        java.util.List<MarketEvent> latest = MarketNewsMenu.news(plugin, 1);
+        return latest.isEmpty() ? null : latest.get(0);
+    }
+
+    /** {@code Oak Log, Iron Ingot}: every item showing {@code badge}, sorted by name; {@code none} if none. */
+    private String nameList(Badge badge) {
+        java.util.List<String> names = MarketNewsMenu.names(plugin, badge);
+        return names.isEmpty() ? "none" : strip(String.join(", ", names));
     }
 
     private String miniCount(String id, boolean circulation) {

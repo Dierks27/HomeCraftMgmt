@@ -3,12 +3,16 @@ package com.dierks.homecraft.gui;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.market.MarketService;
+import com.dierks.homecraft.market.sim.Badge;
+import com.dierks.homecraft.market.sim.ItemStatus;
+import com.dierks.homecraft.market.sim.MarketEvent;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -28,6 +32,12 @@ import java.util.List;
  * <p>Selling ADDS to Crate's stock, which is what makes the market dynamic: more stock, lower
  * price, exactly as if the goods had been brought into a warehouse. See
  * {@code MarketService.sell}.
+ *
+ * <p><b>Live market (0.33).</b> While it runs, a tile wears its badge ({@link MarketLabels}):
+ * the name suffix, the extra lore under "Crate pays", and a shimmer for HOT/DEAL. Slot 50 is the
+ * Market News button ({@link MarketNewsMenu}). A sell confirm is refused once if the item's price
+ * jumped after the quote was shown ({@code MarketService.quoteEpoch}, spec §3.5). With the live
+ * market off, tiles and the sell flow are exactly what they were.
  */
 public final class MarketMenu extends Menu {
 
@@ -47,6 +57,10 @@ public final class MarketMenu extends Menu {
     protected void build() {
         MarketService market = plugin.market();
         BrowseState.Shop state = plugin.browseState().market(player);
+        // "Hot & Deals" only exists while the live market runs; with it off the grid and the
+        // sort button are 0.32's name order.
+        boolean hot = MarketNewsMenu.live(plugin) != null;
+        state.sort = state.sort.usable(hot);
         List<MarketItem> items = Departments.view(plugin, state.department, state.sort);
         int pages = Math.max(1, (int) Math.ceil(items.size() / (double) Departments.PAGE_SIZE));
         state.page = Math.max(0, Math.min(state.page, pages - 1));
@@ -57,6 +71,7 @@ public final class MarketMenu extends Menu {
             set(slot, Menus.FILLER, null);
         }
 
+        long now = System.currentTimeMillis();
         int start = state.page * Departments.PAGE_SIZE;
         for (int i = 0; i < Departments.PAGE_SIZE; i++) {
             int slot = Departments.GRID_START + i;
@@ -67,12 +82,27 @@ public final class MarketMenu extends Menu {
             }
             MarketItem item = items.get(idx);
             long stock = Departments.stock(market, item.id());
-            set(slot, Menus.icon(item.material(), item.label(),
-                    "&bCrate pays: &6" + money(market.sellPrice(item.id())),
-                    "&7Crate's stock: &f" + stock,
-                    "&8—",
-                    "&8The more Crate holds, the less it pays.",
-                    "&eClick to sell"), e -> openSell(item));
+            ItemStatus st = MarketNewsMenu.status(plugin, item.id());
+            Badge badge = MarketNewsMenu.badge(st);
+            List<String> lore = new ArrayList<>();
+            lore.add("&bCrate pays: &6" + money(market.sellPrice(item.id())));
+            if (st != null) {
+                long cap = sellCap(item);
+                lore.addAll(MarketLabels.sellLore(badge, st.fading(), st.pct(),
+                        money(MarketNewsMenu.usualQuote(plugin, item, st.usual(), true)),
+                        MarketNewsMenu.left(st, now), cap));
+                lore.addAll(MarketNewsMenu.capLine(badge, true, cap));
+            }
+            lore.add("&7Crate's stock: &f" + stock);
+            lore.add("&8—");
+            lore.add("&8The more Crate holds, the less it pays.");
+            lore.add("&eClick to sell");
+            ItemStack icon = Menus.icon(item.material(), item.label() + MarketLabels.nameSuffix(badge, true),
+                    lore.toArray(new String[0]));
+            if (MarketLabels.glint(badge)) {
+                Menus.glint(icon, true);
+            }
+            set(slot, icon, e -> openSell(item));
         }
 
         if (state.page > 0) {
@@ -104,8 +134,13 @@ public final class MarketMenu extends Menu {
                 e.getWhoClicked().closeInventory();
             }
         });
-        set(51, Departments.sortButton(state.sort), e -> {
-            state.sort = state.sort.next();
+        // Slot 50 was free: the Market News button while the live market runs. With it off or
+        // paused the slot stays filler, so the Sell screen is exactly 0.32's (spec §11.3).
+        if (hot) {
+            set(50, newsButton(now), e -> MarketNewsMenu.open(plugin, player, this::reopen));
+        }
+        set(51, Departments.sortButton(state.sort, hot), e -> {
+            state.sort = state.sort.next(hot);
             state.page = 0;
             refresh();
         });
@@ -118,23 +153,76 @@ public final class MarketMenu extends Menu {
         }
     }
 
+    /** Slot 50: BELL, the latest three summaries with ages, what is HOT and on sale. */
+    private ItemStack newsButton(long now) {
+        List<String> latest = new ArrayList<>();
+        for (MarketEvent e : MarketNewsMenu.news(plugin, MarketLabels.LATEST_MAX)) {
+            latest.add(MarketNewsMenu.summaryWithAge(plugin, e, now));
+        }
+        List<String> lore = MarketLabels.newsButtonLore(latest,
+                MarketNewsMenu.names(plugin, Badge.HOT), MarketNewsMenu.names(plugin, Badge.DEAL));
+        return Menus.icon(Material.BELL, MarketLabels.NEWS_BUTTON, lore.toArray(new String[0]));
+    }
+
+    /**
+     * The HOT/UP "Up to N a day" to show: the event sell cap while its event is showing its badge,
+     * 0 otherwise (a HOT's silent ramp, an UP's tail — the cap binds but must not give the event
+     * away) and while the live market is off ({@link MarketNewsMenu#shownCap}). The HOT/UP badge
+     * lore says it, and {@link MarketNewsMenu#capLine} says it under any other.
+     */
+    private long sellCap(MarketItem item) {
+        return MarketNewsMenu.shownCap(plugin, item, true);
+    }
+
     private void openSell(MarketItem item) {
+        openSell(plugin, player, item, this::reopen, 1);
+    }
+
+    /**
+     * Open the sell quantity for one item (the Market News menu's UP/HOT entries). Back — and
+     * the return after a sale — runs {@code onBack}; with none it lands on the Sell screen.
+     */
+    static void openSellFor(HomeCraftManagement plugin, Player player, MarketItem item, Runnable onBack) {
+        Runnable back = onBack != null ? onBack : () -> new MarketMenu(plugin, player, null).open(player);
+        openSell(plugin, player, item, back, 1);
+    }
+
+    /**
+     * The sell quantity picker. The preview remembers the item's quote epoch as it prices the
+     * order; the confirm refuses once if the price jumped since (a news flash, an admin action)
+     * and reopens the picker at the same quantity with the new price.
+     */
+    private static void openSell(HomeCraftManagement plugin, Player player, MarketItem item, Runnable back,
+                                 int startQty) {
         MarketService market = plugin.market();
-        int have = countHeld(item.material());
+        int have = countHeld(player, item.material());
         if (have <= 0) {
             player.sendMessage(Text.of("&cYou have no " + item.label() + " &cto sell."));
             return;
         }
         int max = Math.min(have, MAX_QTY);
+        long[] shown = {market.quoteEpoch(item.id())};
         new QuantityMenu(plugin, "Sell", item.material(), item.label(), max,
                 qty -> {
+                    shown[0] = market.quoteEpoch(item.id());
                     MarketService.Plan plan = market.quoteSell(item.id(), qty);
-                    return List.of(
-                            "&bYou receive: &6" + money(plan.total()),
+                    List<String> lines = new ArrayList<>(List.of(
+                            "&bYou receive: &6" + plugin.economy().format(plan.total()),
                             "&7Stock after: &f" + plan.endStock(),
-                            "&7New price: &6" + money(plan.endPrice()));
+                            "&7New price: &6" + plugin.economy().format(plan.endPrice())));
+                    ItemStatus st = MarketNewsMenu.status(plugin, item.id());
+                    if (st != null) {
+                        lines.addAll(MarketLabels.previewLines(st.badge(), true, 0L));
+                    }
+                    return lines;
                 },
                 qty -> {
+                    if (market.quoteEpoch(item.id()) != shown[0]) {
+                        Sounds.refused(player);
+                        player.sendMessage(Text.of(MarketLabels.PRICES_MOVED));
+                        openSell(plugin, player, item, back, qty);
+                        return;
+                    }
                     MarketService.TradeResult r = market.sell(player, item.id(), qty);
                     if (r.ok()) {
                         Sounds.received(player);
@@ -142,11 +230,11 @@ public final class MarketMenu extends Menu {
                         Sounds.refused(player);
                     }
                     player.sendMessage(r.ok()
-                            ? Text.of("&aSold &f" + r.qty() + " &afor &a+" + money(r.amount()))
+                            ? Text.of("&aSold &f" + r.qty() + " &afor &a+" + plugin.economy().format(r.amount()))
                             : Text.of("&c" + r.error()));
-                    reopen();
+                    back.run();
                 },
-                this::reopen).open(player);
+                back).startAt(startQty).open(player);
     }
 
     private void reopen() {
@@ -155,7 +243,7 @@ public final class MarketMenu extends Menu {
         new MarketMenu(plugin, player, onBack).open(player);
     }
 
-    private int countHeld(Material material) {
+    private static int countHeld(Player player, Material material) {
         int count = 0;
         for (ItemStack stack : player.getInventory().getStorageContents()) {
             if (stack != null && stack.getType() == material && !com.dierks.homecraft.util.TokenPrizes.carries(stack)) {

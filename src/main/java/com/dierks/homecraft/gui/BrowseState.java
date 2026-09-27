@@ -27,12 +27,18 @@ import java.util.UUID;
  */
 public final class BrowseState implements Listener {
 
-    /** How a shop grid is sorted. */
+    /**
+     * How a shop grid is sorted.
+     *
+     * <p>{@link #HOT} ("Hot &amp; Deals": badged items first) is appended last so every value an
+     * older config or session saved still parses to the same sort.
+     */
     public enum Sort {
         NAME("Name A–Z"),
         PRICE_UP("Price ↑"),
         PRICE_DOWN("Price ↓"),
-        STOCK("Stock");
+        STOCK("Stock"),
+        HOT("Hot & Deals");
 
         private final String label;
 
@@ -46,6 +52,25 @@ public final class BrowseState implements Listener {
 
         public Sort next() {
             return values()[(ordinal() + 1) % values().length];
+        }
+
+        /**
+         * The next sort for the sort button. {@link #HOT} is only offered while the live market
+         * runs ({@code hot}); with it off the button cycles the four sorts it always had.
+         */
+        public Sort next(boolean hot) {
+            Sort n = next();
+            return n == HOT && !hot ? n.next() : n;
+        }
+
+        /**
+         * The sort a shop grid can use right now: {@link #HOT} reads as {@link #NAME} while the
+         * live market is off ({@code hot == false}). So a player left on "Hot &amp; Deals" when the
+         * market is paused, or a {@code default_sort: HOT} on a server with it disabled, gets the
+         * name order and the "Name A–Z" button, exactly as 0.32 (which parsed HOT to NAME).
+         */
+        public Sort usable(boolean hot) {
+            return this == HOT && !hot ? NAME : this;
         }
 
         /** Parse a config value; anything unrecognised falls back to NAME. */

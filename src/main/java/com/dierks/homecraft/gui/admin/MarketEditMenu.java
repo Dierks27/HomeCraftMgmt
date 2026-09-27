@@ -2,12 +2,15 @@ package com.dierks.homecraft.gui.admin;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.gui.ConfirmMenu;
+import com.dierks.homecraft.gui.MarketLabels;
+import com.dierks.homecraft.gui.MarketNewsMenu;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.market.MarketDraft;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.market.MarketService;
 import com.dierks.homecraft.market.MarketState;
+import com.dierks.homecraft.market.sim.ItemStatus;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -143,6 +146,11 @@ public final class MarketEditMenu extends Menu {
             if (item != null) {
                 lore.add("&7Max holdable: &f" + MarketService.maxStock(item));
                 lore.add("&7Price: &6" + plugin.economy().format(plugin.market().price(item.id())));
+                // The live market's mood on top of the balanced price (only while it runs).
+                ItemStatus mood = MarketNewsMenu.status(plugin, item.id());
+                if (mood != null) {
+                    lore.add(MarketLabels.adminMood(plugin.economy().format(mood.usual()), mood.pct(), mood.badge()));
+                }
             }
             lore.add("&8Live figures, not config values.");
             set(31, Menus.icon(Material.CLOCK, "&bLive state", lore.toArray(new String[0])), null);

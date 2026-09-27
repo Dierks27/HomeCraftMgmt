@@ -118,10 +118,14 @@ public final class PluginConfig {
                             String bypassPermission, List<RankLimit> ranks) {
     }
 
-    /** The finite-stock market tuning + catalog (Phase 2.5). */
+    /**
+     * The finite-stock market tuning + catalog (Phase 2.5). {@code priceHistoryKeepDays} is
+     * {@code market.price_history.keep_days}: snapshots older than that many days are pruned
+     * (0 = keep everything); the website's 30-day chart needs 30.
+     */
     public record Market(double elasticity, double inertia, double spread,
                          List<MarketItem> catalog, SellLimits sellLimits, BuyLimits buyLimits,
-                         int priceHistoryIntervalMinutes) {
+                         int priceHistoryIntervalMinutes, int priceHistoryKeepDays) {
     }
 
     /** How shipping is priced. */
@@ -146,8 +150,25 @@ public final class PluginConfig {
     public record Shipping(ShippingMode mode, List<ShippingTier> tiers) {
     }
 
-    /** The Market Web Dashboard's embedded-server settings (Phase 6, §3.7). */
-    public record WebDashboard(boolean enabled, String bind, int port, int refreshSeconds, String title) {
+    /**
+     * The Market Web Dashboard's embedded-server settings (Phase 6, §3.7), plus the gate on the
+     * website feeds (0.32): {@code feedToken} is the shared secret {@code /api/*} asks for as
+     * {@code Authorization: Bearer <token>} (blank = open), and {@code lanSkipsToken} (off unless an
+     * admin turns it on) lets requests straight from this PC or the LAN through without it.
+     *
+     * <p>{@link #toString()} is written out by hand to mask the token: a record's generated one
+     * would print it into any log line the record ever reached.
+     */
+    public record WebDashboard(boolean enabled, String bind, int port, int refreshSeconds, String title,
+                               String feedToken, boolean lanSkipsToken) {
+
+        @Override
+        public String toString() {
+            return "WebDashboard[enabled=" + enabled + ", bind=" + bind + ", port=" + port
+                    + ", refreshSeconds=" + refreshSeconds + ", title=" + title
+                    + ", feedToken=" + (feedToken == null || feedToken.isBlank() ? "<blank>" : "<set>")
+                    + ", lanSkipsToken=" + lanSkipsToken + "]";
+        }
     }
 
     /** In-game economy displays refresh cadence (Phase 7, §3.8). */
@@ -589,7 +610,9 @@ public final class PluginConfig {
      * to open a menu.
      *
      * @param storeDepartment the department tab selected first ("All", or a department name)
-     * @param storeSort       NAME | PRICE_UP | PRICE_DOWN | STOCK
+     * @param storeSort       NAME | PRICE_UP | PRICE_DOWN | STOCK | HOT (HOT only while the
+     *                        live market runs, else NAME); the Store and the Sell screen both
+     *                        start on it
      * @param museumView      SERIES | RARITY | TYPE
      */
     public record MenuDefaults(String storeDepartment, String storeSort, String museumView) {
@@ -666,6 +689,8 @@ public final class PluginConfig {
     private Printer printer;
     private com.dierks.homecraft.mini.Pack.Packs packs;
     private Market market;
+    /** Off until {@link #load()} has read it: every multiplier is exactly 1.0. */
+    private MarketSimConfig.Parsed marketSim = MarketSimConfig.Parsed.OFF;
     private Shipping shipping;
     private Store store;
     private MenuTitles menuTitles;
@@ -917,6 +942,14 @@ public final class PluginConfig {
         return market;
     }
 
+    /**
+     * The live market (0.33): the {@code market.sim} settings and each catalog row's optional
+     * {@code sim}/{@code volatility}/{@code sim_weight}/{@code news_name} keys.
+     */
+    public MarketSimConfig.Parsed marketSim() {
+        return marketSim;
+    }
+
     /** (Re)parse config.yml into the typed views above. */
     public void load() {
         FileConfiguration c = plugin.getConfig();
@@ -967,6 +1000,8 @@ public final class PluginConfig {
 
         // ---- Market (Phase 2.5 — finite stock) ----
         this.market = readMarket(c);
+        // ---- The live market (0.33): market.sim + the per-row sim keys; Market is untouched ----
+        this.marketSim = MarketSimConfig.parse(c, log::warning);
 
         // ---- Shipping (Phase 3) ----
         this.shipping = readShipping(c);
@@ -1990,12 +2025,15 @@ public final class PluginConfig {
     }
 
     private WebDashboard readWebDashboard(FileConfiguration c) {
+        String feedToken = c.getString("web.dashboard.feed_token", "");
         return new WebDashboard(
                 c.getBoolean("web.dashboard.enabled", true),
                 c.getString("web.dashboard.bind", "0.0.0.0"),
                 c.getInt("web.dashboard.port", 8080),
                 Math.max(2, c.getInt("web.dashboard.refresh_seconds", 30)),
-                c.getString("web.dashboard.title", "Crate Market"));
+                c.getString("web.dashboard.title", "Crate Market"),
+                feedToken == null ? "" : feedToken.trim(),
+                c.getBoolean("web.dashboard.lan_skips_token", false));
     }
 
     private Marketplace readMarketplace(FileConfiguration c) {
@@ -2582,6 +2620,7 @@ public final class PluginConfig {
         double spread = c.getDouble("market.spread", 0.10);
         long defaultFullStock = c.getLong("market.default_full_stock", 1024);
         int historyMinutes = c.getInt("market.price_history.interval_minutes", 30);
+        int historyKeepDays = Math.max(0, c.getInt("market.price_history.keep_days", 30));
 
         List<MarketItem> catalog = new ArrayList<>();
         Set<String> seen = new HashSet<>();
@@ -2593,6 +2632,13 @@ public final class PluginConfig {
                 continue;
             }
             String id = String.valueOf(idObj).trim().toLowerCase();
+            if (id.startsWith("@")) {
+                // Reserved: display boards bind pseudo-commodities such as @news (the Market
+                // News board). A real item under that id would be unreachable from a display.
+                log.warning("Skipping market.catalog entry '" + id
+                        + "': ids starting with @ are reserved (@news is the Market News board).");
+                continue;
+            }
             if (id.isEmpty() || !seen.add(id)) {
                 log.warning("Skipping market.catalog entry with empty/duplicate id '" + id + "'.");
                 continue;
@@ -2636,7 +2682,7 @@ public final class PluginConfig {
                     maxDailySell, maxDailyBuy));
         }
         return new Market(elasticity, inertia, spread, catalog,
-                readSellLimits(c), readBuyLimits(c), Math.max(1, historyMinutes));
+                readSellLimits(c), readBuyLimits(c), Math.max(1, historyMinutes), historyKeepDays);
     }
 
     private SellLimits readSellLimits(FileConfiguration c) {

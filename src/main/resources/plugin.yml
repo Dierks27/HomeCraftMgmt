@@ -39,9 +39,12 @@ commands:
       /hcm market list|price <item>|buy <item> <qty>|sell <item> <qty>
       /hcm market resetstock <item|all>  - admin: reseed stock+price from config
       /hcm market setstock <item> <amount>  - admin: set one item's stock
+      /hcm market news [on|off]  - what's new at the Crate Market; news in your chat on or off
+      /hcm market news <item> <up|down|wanted> [percent] [quiet]  - admin: force a news flash now
+      /hcm market sim status|hot|deal|stop|reset|pause|resume|preview|audit|real  - admin: run and test the live market
       /hcm balance           - your money and Arcade tokens in one place
       /hcm backup now        - admin: write a database backup
-      /hcm display sign|hologram|maptv|remove  - bind an in-game economy display
+      /hcm display sign|hologram|tv [commodity|@news]|remove  - bind an in-game economy display
       /hcm arcade            - open the Arcade hub
       /hcm arcade odds       - admin: Scratch Ticket RTP and each crate's value
       /hcm trail [name|off]  - turn your particle trail on or off
@@ -78,6 +81,7 @@ permissions:
       hcm.market.order: true
       hcm.market.buy: true
       hcm.market.limit.bypass: true
+      hcm.market.sim: true
       hcm.protection.bypass: true
   hcm.use:
     description: >-
@@ -94,8 +98,10 @@ permissions:
     default: op
   hcm.market.price:
     description: >-
-      Check a single commodity's price and history (/hcm market price|history) and
-      view your own balance (/hcm balance). Available to everyone — no PC needed.
+      Check a single commodity's price and history (/hcm market price|history), read
+      the Crate Market news and turn it on or off in your chat (/hcm market news
+      [on|off]), and view your own balance (/hcm balance). Available to everyone — no
+      PC needed.
     default: true
   hcm.market.order:
     description: >-
@@ -110,7 +116,16 @@ permissions:
       every tier — and the Locker, and in-transit orders — pointless.
     default: op
   hcm.market.limit.bypass:
-    description: Exempt from the daily per-player buy AND sell limits (and per-item caps).
+    description: >-
+      Exempt from the daily per-player buy AND sell limits (and per-item caps). The live
+      market's event limits (HOT/UP sell limit, DEAL/DOWN buy limit) still apply.
+    default: op
+  hcm.market.sim:
+    description: >-
+      Run and test the live market: force a news flash (/hcm market news <item>
+      <up|down|wanted>), start a HOT or DEAL, stop, reset, pause or resume it, preview
+      and audit it, and test real-world prices (/hcm market sim ...). Op-only: forcing
+      events moves prices for everyone.
     default: op
   hcm.pc.use:
     description: Open the store by right-clicking a placed PC.

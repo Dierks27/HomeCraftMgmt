@@ -1,12 +1,15 @@
 package com.dierks.homecraft.gui.admin;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.gui.MarketLabels;
+import com.dierks.homecraft.gui.MarketNewsMenu;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.market.MarketDraft;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.market.MarketService;
 import com.dierks.homecraft.market.MarketState;
+import com.dierks.homecraft.market.sim.ItemStatus;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -85,7 +88,10 @@ public final class MarketAdminMenu extends Menu {
         }
     }
 
-    /** One catalog row, with the live figures an admin needs to judge it. */
+    /**
+     * One catalog row, with the live figures an admin needs to judge it. While the live market
+     * runs, the row also shows the usual (balanced) price and the mood on top of it.
+     */
     private ItemStack icon(MarketItem item) {
         MarketState st = plugin.market().state(item.id());
         long stock = st == null ? 0 : st.stock();
@@ -95,6 +101,10 @@ public final class MarketAdminMenu extends Menu {
         lore.add("&7Band: &6" + plugin.economy().format(item.floor())
                 + " &7– &6" + plugin.economy().format(item.ceiling()));
         lore.add("&7Now: &6" + plugin.economy().format(plugin.market().price(item.id())));
+        ItemStatus mood = MarketNewsMenu.status(plugin, item.id());
+        if (mood != null) {
+            lore.add(MarketLabels.adminMood(plugin.economy().format(mood.usual()), mood.pct(), mood.badge()));
+        }
         if (item.maxDailySell() > 0 || item.maxDailyBuy() > 0) {
             lore.add("&8Daily caps: sell " + item.maxDailySell() + " / buy " + item.maxDailyBuy());
         }

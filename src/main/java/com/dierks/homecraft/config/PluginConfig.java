@@ -687,6 +687,8 @@ public final class PluginConfig {
     private Printer printer;
     private com.dierks.homecraft.mini.Pack.Packs packs;
     private Market market;
+    /** Off until {@link #load()} has read it: every multiplier is exactly 1.0. */
+    private MarketSimConfig.Parsed marketSim = MarketSimConfig.Parsed.OFF;
     private Shipping shipping;
     private Store store;
     private MenuTitles menuTitles;
@@ -938,6 +940,14 @@ public final class PluginConfig {
         return market;
     }
 
+    /**
+     * The live market (0.33): the {@code market.sim} settings and each catalog row's optional
+     * {@code sim}/{@code volatility}/{@code sim_weight}/{@code news_name} keys.
+     */
+    public MarketSimConfig.Parsed marketSim() {
+        return marketSim;
+    }
+
     /** (Re)parse config.yml into the typed views above. */
     public void load() {
         FileConfiguration c = plugin.getConfig();
@@ -988,6 +998,8 @@ public final class PluginConfig {
 
         // ---- Market (Phase 2.5 — finite stock) ----
         this.market = readMarket(c);
+        // ---- The live market (0.33): market.sim + the per-row sim keys; Market is untouched ----
+        this.marketSim = MarketSimConfig.parse(c, log::warning);
 
         // ---- Shipping (Phase 3) ----
         this.shipping = readShipping(c);
@@ -2618,6 +2630,13 @@ public final class PluginConfig {
                 continue;
             }
             String id = String.valueOf(idObj).trim().toLowerCase();
+            if (id.startsWith("@")) {
+                // Reserved: display boards bind pseudo-commodities such as @news (the Market
+                // News board). A real item under that id would be unreachable from a display.
+                log.warning("Skipping market.catalog entry '" + id
+                        + "': ids starting with @ are reserved (@news is the Market News board).");
+                continue;
+            }
             if (id.isEmpty() || !seen.add(id)) {
                 log.warning("Skipping market.catalog entry with empty/duplicate id '" + id + "'.");
                 continue;

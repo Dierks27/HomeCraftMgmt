@@ -10,6 +10,8 @@
     --bg: #0e1116; --panel: #171c24; --panel2: #1e242e; --line: #2a313c;
     --text: #e7edf5; --muted: #93a1b3; --up: #33d17a; --down: #ff6b6b;
     --accent: #f6a821; --chart: #6aa8ff;
+    /* live market (0.33): badge pills and chart markers; pills carry dark text in both themes */
+    --hot: #f6a821; --wanted: #f5d547; --real: #b48cff; --season: #7cc4ff; --ink: #131922;
   }
   * { box-sizing: border-box; }
   body {
@@ -52,6 +54,67 @@
   .bar.out > span { background: var(--down); }
   .chartwrap { height: 90px; }
   .empty { color: var(--muted); text-align: center; padding: 60px 0; }
+  /* live market: the badge row on a card */
+  .moodrow {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .moodrow[hidden] { display: none; }
+  .moodrow .usual { margin-left: auto; }
+  .moodrow .usual b { color: var(--text); font-weight: 600; }
+  .pill {
+    display: inline-block; padding: 1px 8px; border-radius: 999px; white-space: nowrap;
+    font-size: 11px; font-weight: 800; letter-spacing: .3px; line-height: 1.5;
+    color: var(--ink); background: var(--muted);
+  }
+  .pill.hot { background: var(--hot); }
+  .pill.deal, .pill.up { background: var(--up); }
+  .pill.down { background: var(--down); }
+  .pill.wanted { background: var(--wanted); }
+  .pill.real { background: var(--real); }
+  .pill.season { background: var(--season); }
+  /* live market: news bar (running events, season) and the headline ticker */
+  .news {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    margin: 0 0 16px; overflow: hidden;
+  }
+  .news[hidden] { display: none; }
+  .newsbar { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; padding: 10px 14px; }
+  .newstag { font-weight: 800; font-size: 13px; letter-spacing: .3px; color: var(--accent); }
+  .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+    padding: 2px 10px 2px 3px; border-radius: 999px; background: var(--panel2);
+    font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums;
+  }
+  .chip .when, .calm { color: var(--muted); }
+  .calm { font-size: 12px; }
+  .ticker { border-top: 1px solid var(--line); overflow: hidden; white-space: nowrap; padding: 8px 0; font-size: 13px; }
+  .ticker[hidden] { display: none; }
+  .ticker-track { display: inline-block; white-space: nowrap; }
+  .ticker-track.run { animation: hcm-ticker linear infinite; will-change: transform; }
+  .ticker:hover .ticker-track, .ticker:focus-within .ticker-track { animation-play-state: paused; }
+  .tk-copy { display: inline-block; padding-left: 14px; }
+  .tk { display: inline-flex; align-items: baseline; gap: 6px; margin-right: 32px; }
+  .tk .line, .tk .ago { color: var(--muted); }
+  .tk .ago { font-size: 12px; }
+  @keyframes hcm-ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) {
+    .ticker { overflow-x: auto; }
+    .ticker-track.run { animation: none; }
+  }
+  /* 48H / 7D / 30D */
+  .toolbar { display: flex; justify-content: flex-end; margin: 0 0 12px; }
+  .toolbar[hidden] { display: none; }
+  .range { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .range button {
+    padding: 5px 12px; border: 0; background: var(--panel); color: var(--muted); cursor: pointer;
+    font: inherit; font-size: 12px; font-weight: 700; letter-spacing: .3px;
+  }
+  .range button + button { border-left: 1px solid var(--line); }
+  .range button[aria-pressed="true"] { background: var(--panel2); color: var(--text); }
+  .range button:disabled { opacity: .4; cursor: default; }
+  .range button:focus-visible { outline: 2px solid var(--chart); outline-offset: -2px; }
   .lock {
     max-width: 460px; margin: 40px auto; padding: 18px 20px;
     background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
@@ -71,6 +134,10 @@
     background: var(--accent); color: #131922; font: inherit; font-weight: 700;
   }
   footer { color: var(--muted); font-size: 12px; text-align: center; padding: 24px; }
+  @media (max-width: 480px) {
+    main { padding: 16px; }
+    .grid { grid-template-columns: minmax(0, 1fr); }
+  }
   @media (prefers-color-scheme: light) {
     :root {
       --bg: #f4f6fa; --panel: #ffffff; --panel2: #eef1f6; --line: #dfe4ec;
@@ -95,6 +162,17 @@
       <button type="submit">Unlock</button>
     </div>
   </form>
+  <section id="news" class="news" hidden aria-label="Market news">
+    <div class="newsbar"><span class="newstag">» Market News</span><span id="chips" class="chips"></span></div>
+    <div id="ticker" class="ticker" hidden><div id="tickerTrack" class="ticker-track"></div></div>
+  </section>
+  <div id="toolbar" class="toolbar" hidden>
+    <div id="range" class="range" role="group" aria-label="Chart range">
+      <button type="button" data-range="48h" aria-pressed="true">48H</button>
+      <button type="button" data-range="7d" aria-pressed="false">7D</button>
+      <button type="button" data-range="30d" aria-pressed="false">30D</button>
+    </div>
+  </div>
   <div id="grid" class="grid"></div>
   <div id="empty" class="empty" style="display:none">No commodities to show yet.</div>
 </main>
@@ -106,6 +184,8 @@
   var refreshMs = 30000; // updated from the feed
   var timer = null;
   var reqSeq = 0;        // only the newest request's answer counts (an Unlock can overtake a refresh)
+  var lastFeed = null;   // the last /api/market answer (the range toggle redraws from it)
+  var serverNow = 0;     // its generatedAt: "ends in" and "ago" count from the server's clock
 
   // The feed token (web.dashboard.feed_token), only needed when the server asks for it with a
   // 401. Kept in localStorage so it is asked for once; every access is guarded (private windows
@@ -129,6 +209,36 @@
     try { window.localStorage.removeItem(TOKEN_KEY); } catch (e) { /* nothing stored */ }
   }
 
+  // The chart range (48H / 7D / 30D), remembered per browser the same guarded way.
+  var RANGE_KEY = "hcmChartRange";
+  var RANGE_SERIES = { "48h": "history", "7d": "history7d", "30d": "history30d" };
+  var available = { "48h": true, "7d": false, "30d": false }; // 7D/30D once the feed carries them
+  function loadRange() {
+    try {
+      var r = window.localStorage.getItem(RANGE_KEY);
+      if (r && has(RANGE_SERIES, r)) return r;
+    } catch (e) { /* storage unavailable */ }
+    return "48h";
+  }
+  function saveRange(r) {
+    try { window.localStorage.setItem(RANGE_KEY, r); } catch (e) { /* this visit only */ }
+  }
+  var range = loadRange();
+  function shownRange() { return available[range] ? range : "48h"; }
+
+  // The live market's badges and news kinds. Pills and markers are styled per kind; anything
+  // else a newer server might send is shown without a pill (or not at all, for markers).
+  var KINDS = {
+    hot: "★ HOT", deal: "✦ DEAL", up: "▲ UP", down: "▼ DOWN", wanted: "» WANTED",
+    season: "SEASON", real: "REAL WORLD"
+  };
+  var BADGES = { hot: true, deal: true, up: true, down: true, wanted: true };
+  var MOODS = { hot: true, deal: true, up: true, down: true };
+  var MARKER_COLORS = { hot: "--hot", deal: "--up", up: "--up", down: "--down", real: "--real" };
+
+  function has(o, k) { return typeof k === "string" && Object.prototype.hasOwnProperty.call(o, k); }
+  function isNum(v) { return typeof v === "number" && isFinite(v); }
+  function pad2(n) { return n.toString().padStart(2, "0"); }
   function money(n) {
     return "$" + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
@@ -137,7 +247,36 @@
     var s = v > 0 ? "▲ " : (v < 0 ? "▼ " : "· ");
     return s + Math.abs(v).toFixed(2) + "%";
   }
+  function pctText(v) {
+    if (!isNum(v) || Math.abs(v) < 0.05) return "0%";
+    return (v > 0 ? "+" : "") + v.toFixed(1) + "%";
+  }
+  // The in-game wording (%hcm_endsin_<item>%): "20h" under two days, then "2d".
+  function endsIn(ms) {
+    if (!isNum(ms) || ms <= 0) return "";
+    var hour = 3600000;
+    if (ms < 48 * hour) return Math.max(1, Math.ceil(ms / hour)) + "h";
+    return Math.round(ms / (24 * hour)) + "d";
+  }
+  // The in-game wording for news ages.
+  function ago(ms) {
+    if (!isNum(ms) || ms < 2 * 60000) return "just now";
+    if (ms < 3600000) return Math.floor(ms / 60000) + "m ago";
+    if (ms < 86400000) return Math.floor(ms / 3600000) + "h ago";
+    if (ms < 2 * 86400000) return "yesterday";
+    return Math.floor(ms / 86400000) + " days ago";
+  }
   function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function pill(kind, extra) {
+    if (!has(KINDS, kind)) return null;
+    return el("span", "pill " + kind, KINDS[kind] + (extra ? " · " + extra : ""));
+  }
 
   function cardFor(item) {
     var card = document.createElement("div");
@@ -147,6 +286,7 @@
     var out = item.stock <= 0;
     card.innerHTML =
       '<div class="top"><span class="name"></span><span class="price"></span></div>' +
+      '<div class="moodrow" hidden><span class="badge"></span><span class="usual"></span></div>' +
       '<div class="top"><span class="spread"><span>Buy <b class="buy"></b></span>' +
         '<span>Sell <b class="sell"></b></span></span><span class="chg"></span></div>' +
       '<div class="chartwrap"><canvas></canvas></div>' +
@@ -170,22 +310,93 @@
     var maxPct = item.maxStock > 0 ? Math.max(0, Math.min(100, (item.stock / item.maxStock) * 100)) : 0;
     bar.className = "bar" + (out ? " out" : "");
     bar.querySelector("span").style.width = maxPct + "%";
+    updateMood(card, item);
     drawChart(card.querySelector("canvas"), item);
   }
 
-  function drawChart(canvas, item) {
-    var labels = item.history.map(function (h) {
-      var d = new Date(h.t);
-      return d.getHours().toString().padStart(2, "0") + ":" + d.getMinutes().toString().padStart(2, "0");
+  // The live market's line on a card: the badge (with "ends in" while it has an end) and
+  // "Usually $X" when the price is 3% or more away from usual. Hidden when the feed has neither.
+  function updateMood(card, item) {
+    var row = card.querySelector(".moodrow");
+    var badge = card.querySelector(".badge");
+    var usual = card.querySelector(".usual");
+    badge.textContent = "";
+    usual.textContent = "";
+    var shown = false;
+    if (has(BADGES, item.status)) {
+      var left = isNum(item.statusEndsAt) ? endsIn(item.statusEndsAt - serverNow) : "";
+      badge.appendChild(pill(item.status, left ? "ends in " + left : ""));
+      shown = true;
+    }
+    if (isNum(item.usual) && isNum(item.moodPct) && Math.abs(item.moodPct) >= 3) {
+      usual.appendChild(document.createTextNode("Usually "));
+      usual.appendChild(el("b", null, money(item.usual)));
+      shown = true;
+    }
+    row.hidden = !shown;
+  }
+
+  // The points the chart shows for the chosen range: history (48H), history7d or history30d,
+  // falling back to history for an item the feed has no long range for yet.
+  function seriesFor(item) {
+    var s = item[RANGE_SERIES[shownRange()]];
+    if (Array.isArray(s) && s.length) return s;
+    return Array.isArray(item.history) ? item.history : [];
+  }
+  function pointLabel(t, r) {
+    var d = new Date(t);
+    var hm = pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+    return r === "48h" ? hm : d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " " + hm;
+  }
+  function nearestIndex(points, t) {
+    var lo = 0, hi = points.length - 1;
+    while (hi - lo > 1) {
+      var mid = (lo + hi) >> 1;
+      if (points[mid].t <= t) lo = mid; else hi = mid;
+    }
+    return Math.abs(points[hi].t - t) < Math.abs(points[lo].t - t) ? hi : lo;
+  }
+  // Event markers (item.events, oldest first): a dot on the point nearest each event's start,
+  // for events inside the range shown. None -> today's plain line.
+  function markersFor(points, events) {
+    var none = { radius: 0, color: undefined, border: undefined, text: null };
+    if (!Array.isArray(events) || !events.length || !points.length) return none;
+    var first = points[0].t, last = points[points.length - 1].t;
+    var step = points.length > 1 ? (last - first) / (points.length - 1) : 30 * 60000;
+    var radius = [], color = [], text = {}, any = false;
+    for (var i = 0; i < points.length; i++) { radius.push(0); color.push("transparent"); }
+    events.forEach(function (ev) {
+      if (!ev || !isNum(ev.t) || !has(MARKER_COLORS, ev.kind)) return;
+      if (ev.t < first - step || ev.t > last + step) return;
+      var at = nearestIndex(points, ev.t);
+      radius[at] = 4;
+      color[at] = css(MARKER_COLORS[ev.kind]);
+      text[at] = KINDS[ev.kind] + " " + pctText(ev.pct);
+      any = true;
     });
-    var data = item.history.map(function (h) { return h.p; });
-    var up = item.change24h >= 0;
+    return any ? { radius: radius, color: color, border: css("--panel"), text: text } : none;
+  }
+
+  function drawChart(canvas, item) {
+    var r = shownRange();
+    var points = seriesFor(item);
+    var labels = points.map(function (h) { return pointLabel(h.t, r); });
+    var data = points.map(function (h) { return h.p; });
+    // 48H keeps today's colour (the 24h change); 7D/30D colour by their own first-to-last move.
+    var up = r === "48h" ? item.change24h >= 0
+      : (points.length < 2 || points[points.length - 1].p >= points[0].p);
     var color = up ? css("--up") : css("--down");
+    var marks = markersFor(points, item.events);
     var existing = charts[item.id];
     if (existing) {
+      var ds = existing.data.datasets[0];
       existing.data.labels = labels;
-      existing.data.datasets[0].data = data;
-      existing.data.datasets[0].borderColor = color;
+      ds.data = data;
+      ds.borderColor = color;
+      ds.pointRadius = marks.radius;
+      ds.pointBackgroundColor = marks.color;
+      ds.pointBorderColor = marks.border;
+      ds.markers = marks.text;
       existing.update("none");
       return;
     }
@@ -193,12 +404,20 @@
       type: "line",
       data: { labels: labels, datasets: [{
         data: data, borderColor: color, borderWidth: 2,
-        pointRadius: 0, tension: 0.25, fill: false
+        pointRadius: marks.radius, pointBackgroundColor: marks.color,
+        pointBorderColor: marks.border, pointBorderWidth: 1.5,
+        tension: 0.25, fill: false, markers: marks.text
       }] },
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
         plugins: { legend: { display: false }, tooltip: {
-          callbacks: { label: function (c) { return money(c.parsed.y); } }
+          callbacks: {
+            label: function (c) { return money(c.parsed.y); },
+            afterLabel: function (c) {
+              var m = c.dataset.markers;
+              return m && m[c.dataIndex] ? m[c.dataIndex] : "";
+            }
+          }
         } },
         scales: {
           x: { display: false },
@@ -210,6 +429,165 @@
     });
   }
 
+  function redrawCharts() {
+    if (!lastFeed) return;
+    (lastFeed.items || []).forEach(function (item) {
+      var card = document.getElementById("card-" + item.id);
+      if (card) drawChart(card.querySelector("canvas"), item);
+    });
+  }
+
+  // The 48H/7D/30D toggle: shown once the feed carries a long range; a range no item has is off.
+  function updateRanges(items) {
+    available["7d"] = items.some(function (i) { return Array.isArray(i.history7d) && i.history7d.length > 0; });
+    available["30d"] = items.some(function (i) { return Array.isArray(i.history30d) && i.history30d.length > 0; });
+    document.getElementById("toolbar").hidden = !(available["7d"] || available["30d"]);
+    var r = shownRange();
+    Array.prototype.forEach.call(document.querySelectorAll("#range button"), function (b) {
+      var id = b.getAttribute("data-range");
+      b.disabled = !available[id];
+      b.setAttribute("aria-pressed", id === r ? "true" : "false");
+    });
+  }
+
+  document.getElementById("range").addEventListener("click", function (ev) {
+    var b = ev.target && ev.target.closest ? ev.target.closest("button[data-range]") : null;
+    if (!b || b.disabled) return;
+    range = b.getAttribute("data-range");
+    saveRange(range);
+    if (lastFeed) {
+      updateRanges(lastFeed.items || []);
+      redrawCharts();
+    }
+  });
+
+  // ---- live market news ------------------------------------------------------------------
+
+  // What the news bar shows: /api/news when it answered; else the market feed's own copy (its
+  // five newest, badges from the cards) while it says the market is live; else nothing.
+  function newsSource(feed, news) {
+    if (news && typeof news === "object" && typeof news.live === "boolean") {
+      return news.live ? news : null;
+    }
+    if (feed.live !== true) return null;
+    var active = (feed.items || []).filter(function (i) { return has(MOODS, i.status); }).map(function (i) {
+      return { item: i.id, name: i.name, kind: i.status, pct: i.moodPct, endsAt: i.statusEndsAt };
+    });
+    return { live: true, season: feed.season, active: active, news: feed.news };
+  }
+
+  function chip(kind, text, when) {
+    var c = el("span", "chip");
+    var p = pill(kind);
+    if (p) c.appendChild(p);
+    c.appendChild(el("span", null, text));
+    if (when) c.appendChild(el("span", "when", when));
+    return c;
+  }
+
+  function renderNews(feed, news) {
+    var box = document.getElementById("news");
+    var src = newsSource(feed, news);
+    if (!src) {
+      box.hidden = true;
+      renderTicker([]);
+      return;
+    }
+    box.hidden = false;
+    var chips = document.getElementById("chips");
+    chips.textContent = "";
+    var season = src.season;
+    if (season && typeof season.name === "string") {
+      var sLeft = isNum(season.endsAt) ? endsIn(season.endsAt - serverNow) : "";
+      chips.appendChild(chip("season", season.name, sLeft ? "ends in " + sLeft : ""));
+    }
+    (Array.isArray(src.active) ? src.active : []).forEach(function (a) {
+      if (!a || !has(MOODS, a.kind)) return;
+      var left = isNum(a.endsAt) ? endsIn(a.endsAt - serverNow) : "";
+      chips.appendChild(chip(a.kind, (a.name || a.item || "") + " " + pctText(a.pct), left ? "ends in " + left : ""));
+    });
+    var rows = (Array.isArray(src.news) ? src.news : []).filter(function (n) {
+      return n && (typeof n.headline === "string" && n.headline || typeof n.line === "string" && n.line);
+    });
+    if (!chips.children.length && !rows.length) {
+      chips.appendChild(el("span", "calm", "The Crate Market is calm today."));
+    }
+    renderTicker(rows);
+  }
+
+  function tickerItem(n) {
+    var item = el("span", "tk");
+    var p = pill(n.kind);
+    if (p) item.appendChild(p);
+    var head = n.headline || n.line;
+    item.appendChild(el("span", "head", head));
+    if (n.headline && n.line && n.line !== n.headline) item.appendChild(el("span", "line", n.line));
+    item.appendChild(el("span", "ago", ""));
+    return item;
+  }
+
+  // The headline ticker scrolls (two identical copies, moved left by one copy's width) when it
+  // is wider than the bar; it pauses on hover, and stands still (scrollable) with reduced motion.
+  // It is rebuilt only when the news changes, so a refresh does not restart the scroll.
+  var tickerSig = null;
+  var reduceMotion = false;
+  try {
+    reduceMotion = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  } catch (e) { /* assume motion is fine */ }
+
+  function renderTicker(rows) {
+    var box = document.getElementById("ticker");
+    var track = document.getElementById("tickerTrack");
+    if (!rows.length) {
+      box.hidden = true;
+      track.textContent = "";
+      track.className = "ticker-track";
+      tickerSig = null;
+      return;
+    }
+    box.hidden = false;
+    var sig = JSON.stringify(rows.map(function (n) { return [n.id, n.kind, n.headline, n.line]; }));
+    var changed = sig !== tickerSig;
+    if (changed) {
+      tickerSig = sig;
+      track.textContent = "";
+      var copy = el("span", "tk-copy");
+      rows.forEach(function (n) { copy.appendChild(tickerItem(n)); });
+      track.appendChild(copy);
+    }
+    // Only the ages move between refreshes: set them in place in every copy.
+    Array.prototype.forEach.call(track.querySelectorAll(".tk-copy"), function (copy) {
+      var ages = copy.querySelectorAll(".ago");
+      rows.forEach(function (n, i) {
+        if (ages[i]) ages[i].textContent = isNum(n.t) ? ago(serverNow - n.t) : "";
+      });
+    });
+    if (changed) layoutTicker();
+  }
+
+  function layoutTicker() {
+    var box = document.getElementById("ticker");
+    var track = document.getElementById("tickerTrack");
+    var copies = track.querySelectorAll(".tk-copy");
+    if (!copies.length || box.hidden) return;
+    for (var i = copies.length - 1; i > 0; i--) copies[i].remove(); // back to one copy
+    track.className = "ticker-track";
+    track.style.animationDuration = "";
+    var width = copies[0].getBoundingClientRect().width;
+    if (reduceMotion || width <= box.clientWidth) return; // it fits, or motion is off: stand still
+    var clone = copies[0].cloneNode(true);
+    clone.setAttribute("aria-hidden", "true");
+    track.appendChild(clone);
+    track.style.animationDuration = Math.max(20, Math.round(width / 60)) + "s"; // about 60 px a second
+    track.className = "ticker-track run";
+  }
+
+  var resizeTimer = null;
+  window.addEventListener("resize", function () {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () { resizeTimer = null; layoutTicker(); }, 200);
+  });
+
   function showTitle(fullTitle) {
     // Accent the first word, plain-text the rest.
     var sp = fullTitle.indexOf(" ");
@@ -220,13 +598,16 @@
     document.title = fullTitle;
   }
 
-  function render(feed) {
+  function render(feed, news) {
     // Show the configured title from the feed.
     showTitle(feed.title || "Market");
     refreshMs = Math.max(2, feed.refreshSeconds || 30) * 1000;
+    serverNow = isNum(feed.generatedAt) ? feed.generatedAt : Date.now();
+    lastFeed = feed;
     var grid = document.getElementById("grid");
     var items = feed.items || [];
     document.getElementById("empty").style.display = items.length ? "none" : "block";
+    updateRanges(items);
     var seen = {};
     items.forEach(function (item) {
       seen[item.id] = true;
@@ -239,6 +620,8 @@
       var id = card.id.replace("card-", "");
       if (!seen[id]) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } card.remove(); }
     });
+    // The news bar is extra: whatever goes wrong there, the prices above still count.
+    try { renderNews(feed, news); } catch (e) { document.getElementById("news").hidden = true; }
     var now = new Date();
     document.getElementById("status").textContent =
       "updated " + now.getHours().toString().padStart(2, "0") + ":" +
@@ -250,11 +633,13 @@
     timer = setTimeout(tick, refreshMs);
   }
 
-  // A 401: stop refreshing, hide the stale cards and ask for the token.
+  // A 401: stop refreshing, hide the stale cards and news and ask for the token.
   function showLock(rejected, why) {
     if (timer) { clearTimeout(timer); timer = null; }
     document.getElementById("grid").style.display = "none";
     document.getElementById("empty").style.display = "none";
+    document.getElementById("news").hidden = true;
+    document.getElementById("toolbar").hidden = true;
     document.getElementById("status").textContent = why || (rejected ? "token not accepted" : "locked");
     var lock = document.getElementById("lock");
     lock.hidden = false;
@@ -278,6 +663,11 @@
       }
       headers["Authorization"] = "Bearer " + token;
     }
+    // The news rides along with the same token. It is optional: an error, a refusal or an
+    // older server without /api/news just leaves the news bar to the market feed's copy.
+    var newsReq = fetch("/api/news", { cache: "no-store", headers: headers })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; });
     fetch("/api/market", { cache: "no-store", headers: headers })
       .then(function (r) {
         if (seq !== reqSeq) return null; // overtaken by a newer request
@@ -285,9 +675,13 @@
         return r.json();
       })
       .then(function (feed) {
-        if (seq !== reqSeq || feed === null) return;
+        if (seq !== reqSeq || feed === null) return null;
+        return newsReq.then(function (news) { return { feed: feed, news: news }; });
+      })
+      .then(function (got) {
+        if (seq !== reqSeq || got === null) return;
         hideLock();
-        render(feed);
+        render(got.feed, got.news);
         schedule();
       })
       .catch(function (e) {

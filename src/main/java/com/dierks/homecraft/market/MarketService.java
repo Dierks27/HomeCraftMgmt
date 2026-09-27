@@ -25,6 +25,14 @@ import java.util.Map;
  * through Vault; only item stock is finite. A per-player daily sell limit keeps
  * any one player from vacuuming the market.
  *
+ * <p><b>Live market (0.33).</b> {@link MarketState#currentPrice()} is the <em>balanced</em>
+ * price: only trades and the admin stock commands move it. A {@link PriceMood} supplies a
+ * multiplier {@code M} (held inside [0.75, 1.25]) applied whenever a price is quoted, so every
+ * price a player sees, pays or is paid is {@code clamp(balanced × M, floor, ceiling)}, with
+ * {@code M = 1} for an empty item. Orders are priced by {@link OrderMath} with {@code M} frozen
+ * for the order. With {@link PriceMood#NEUTRAL} (no sim, or the sim off) every price, total and
+ * cap is bit-for-bit 0.32's.
+ *
  * <p>This is the Amazon-market side only; QuickShop is untouched.
  */
 public final class MarketService {
@@ -58,6 +66,8 @@ public final class MarketService {
     private Map<String, MarketItem> catalog = new LinkedHashMap<>();
     private Map<String, MarketState> states = new LinkedHashMap<>();
     private PricingEngine engine = new PricingEngine(1.0, 0.2, 0.10);
+    /** The live market's multiplier and event caps; {@link PriceMood#NEUTRAL} until one is set. */
+    private PriceMood mood = PriceMood.NEUTRAL;
     /** Bumped once per {@link #snapshotHistory()} run; main thread only. */
     private long historyVersion;
 
@@ -70,6 +80,14 @@ public final class MarketService {
         this.buyDao = buyDao;
         this.historyDao = historyDao;
         this.economy = economy;
+    }
+
+    /**
+     * Plug in the live market (or {@code null} to take it out again, which is the same as
+     * {@link PriceMood#NEUTRAL}). Takes effect on the next price read.
+     */
+    public void setMood(PriceMood mood) {
+        this.mood = mood == null ? PriceMood.NEUTRAL : mood;
     }
 
     /**
@@ -125,6 +143,11 @@ public final class MarketService {
         plugin.getLogger().info("Market engine loaded " + catalog.size() + " commodity(ies)."
                 + (rebounded > 0 ? " Clamped " + rebounded + " price(s) back inside the configured floor/ceiling." : ""));
         logDepartments();
+        try {
+            mood.catalogChanged();
+        } catch (RuntimeException e) {
+            plugin.getLogger().warning("The live market could not take the new catalog: " + e);
+        }
     }
 
     /**
@@ -228,11 +251,30 @@ public final class MarketService {
     }
 
     /**
-     * Current mid price, always inside the configured floor/ceiling. The stored value
-     * is clamped on reload, but we clamp on read too so a stale cache can never be
-     * displayed (or charged) outside the band the admin configured.
+     * Current mid price: the balanced price times the live market's multiplier, always inside
+     * the configured floor/ceiling ({@code clamp(balanced × M, floor, ceiling)}, with {@code M = 1}
+     * for an empty item). The stored value is clamped on reload, but we clamp on read too so a
+     * stale cache can never be displayed (or charged) outside the band the admin configured.
+     * With no live market this is exactly {@link #usualPrice}.
      */
     public double price(String id) {
+        MarketState state = states.get(id);
+        if (state == null) {
+            return Double.NaN;
+        }
+        MarketItem item = catalog.get(id);
+        if (item == null) {
+            return state.currentPrice();
+        }
+        double m = state.stock() > 0 ? mood.multiplier(id) : 1.0;
+        return OrderMath.mid(item, state.currentPrice(), state.stock(), m);
+    }
+
+    /**
+     * The balanced price, before the live market's multiplier: what the item "usually" costs
+     * at its current stock ({@code clamp(currentPrice, floor, ceiling)}). NaN for an unknown id.
+     */
+    public double usualPrice(String id) {
         MarketState state = states.get(id);
         if (state == null) {
             return Double.NaN;
@@ -242,30 +284,31 @@ public final class MarketService {
                 : PricingEngine.clamp(state.currentPrice(), item.floor(), item.ceiling());
     }
 
+    /**
+     * Changes whenever this item's price jumps (a news flash, a forced event, pause/resume).
+     * A GUI that remembers it when it showed a quote refuses the confirm if it moved, so nobody
+     * trades on a stale price. Always 0 with no live market.
+     */
+    public long quoteEpoch(String id) {
+        return mood.jumpSeq(id);
+    }
+
     /** Ask price — clamped to the band, so a player never pays above the ceiling. */
     public double buyPrice(String id) {
-        return ask(catalog.get(id), price(id));
+        return OrderMath.ask(engine, catalog.get(id), price(id));
     }
 
     /** Bid price — clamped to the band, so the market never pays below the floor. */
     public double sellPrice(String id) {
-        return bid(catalog.get(id), price(id));
+        return OrderMath.bid(engine, catalog.get(id), price(id));
     }
 
     /**
-     * The spread-adjusted ask, held inside the item's band. floor/ceiling are a hard
-     * contract on every price a player ever sees or pays — the spread widens the mid
-     * within the band, it never pushes a quote outside it.
+     * The multiplier an order on this item runs at, read once and frozen for the whole order:
+     * the mood's {@code M}, held inside the hard [0.75, 1.25] band whatever the mood says.
      */
-    private double ask(MarketItem item, double mid) {
-        double price = engine.buyPrice(mid);
-        return item == null ? price : PricingEngine.clamp(price, item.floor(), item.ceiling());
-    }
-
-    /** The spread-adjusted bid, held inside the item's band. Mirrors {@link #ask}. */
-    private double bid(MarketItem item, double mid) {
-        double price = engine.sellPrice(mid);
-        return item == null ? price : PricingEngine.clamp(price, item.floor(), item.ceiling());
+    private double multiplier(String id) {
+        return OrderMath.clampMultiplier(mood.multiplier(id));
     }
 
     // ---------------------------------------------------------------------
@@ -293,6 +336,25 @@ public final class MarketService {
         MarketState state = states.get(id);
         if (state.stock() <= 0) {
             return TradeResult.fail(item.label() + " is out of stock.");
+        }
+
+        // While a DEAL or DOWN runs on this item, the live market caps how many units anyone may
+        // buy today — bypass holders included. The tally exists for everyone: record() below is
+        // unconditional.
+        long eventCap = Math.max(0L, mood.eventBuyCap(item));
+        long eventLeft = Long.MAX_VALUE;
+        if (eventCap > 0) {
+            long bought = 0;
+            try {
+                bought = buyDao.unitsBought(player.getUniqueId(), epochDay(), id);
+            } catch (SQLException e) {
+                plugin.getLogger().severe("Failed to read daily buy tally: " + e.getMessage());
+            }
+            eventLeft = eventCap - bought;
+            if (eventLeft <= 0) {
+                return TradeResult.fail("&eSale limit: you can buy &f" + eventCap + " " + item.label()
+                        + " &ea day while it's on sale. &7Resets in ~" + hoursUntilReset() + "h.");
+            }
         }
 
         // Resolve the daily anti-drain allowance (money spent + units) for this player,
@@ -327,9 +389,14 @@ public final class MarketService {
 
         // Integrate the price across the order: each unit costs a little more as stock
         // drops, so the total is the area under the rising price curve — stopping at
-        // whatever the daily buy limit allows.
-        Plan plan = simulateBuy(item, state.currentPrice(), state.stock(), qty,
-                enforced, limits.maxMoney(), remainingMoney, unitCap, remainingUnits);
+        // whatever the daily buy limit allows. The live market's multiplier is frozen here
+        // for the whole order.
+        double m = multiplier(id);
+        double startBase = state.currentPrice();
+        long startStock = state.stock();
+        OrderMath.Plan plan = OrderMath.buy(engine, item, startBase, startStock, qty,
+                orderLimits(enforced, limits.maxMoney(), remainingMoney, unitCap, remainingUnits,
+                        eventCap, eventLeft), m);
         if (plan.filled() <= 0) {
             return TradeResult.fail(enforced ? moneyCappedMessage(true) : item.label() + " is out of stock.");
         }
@@ -353,7 +420,8 @@ public final class MarketService {
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to record daily buy tally: " + e.getMessage());
         }
-        return new TradeResult(true, null, plan.filled(), plan.total(), state.currentPrice(), state.stock());
+        recordMood(item, false, startBase, startStock, plan, m);
+        return new TradeResult(true, null, plan.filled(), plan.total(), price(id), state.stock());
     }
 
     public TradeResult sell(Player player, String id, int qty) {
@@ -374,6 +442,25 @@ public final class MarketService {
             // Holding only Arcade prizes made of this material is a different answer from holding none.
             return TradeResult.fail(holdsPrizeOf(player, item.material())
                     ? com.dierks.homecraft.util.TokenPrizes.REFUSAL : "You have no " + item.label() + " to sell.");
+        }
+
+        // While a HOT or UP runs on this item, the live market caps how many units anyone may
+        // sell today — bypass holders included. The tally exists for everyone: record() below is
+        // unconditional.
+        long eventCap = Math.max(0L, mood.eventSellCap(item));
+        long eventLeft = Long.MAX_VALUE;
+        if (eventCap > 0) {
+            long sold = 0;
+            try {
+                sold = dailyDao.unitsSold(player.getUniqueId(), epochDay(), id);
+            } catch (SQLException e) {
+                plugin.getLogger().severe("Failed to read daily sell tally: " + e.getMessage());
+            }
+            eventLeft = eventCap - sold;
+            if (eventLeft <= 0) {
+                return TradeResult.fail("&eCrate buys up to &f" + eventCap + " " + item.label()
+                        + " &ea day while the price is up. &7Resets in ~" + hoursUntilReset() + "h.");
+            }
         }
 
         // Resolve the daily anti-whale allowance (money + units) for this player,
@@ -407,9 +494,14 @@ public final class MarketService {
         }
 
         // Integrate the price across the order (earn a little less per unit as
-        // stock rises), stopping at whatever the daily limit allows.
-        Plan plan = simulateSell(item, state.currentPrice(), state.stock(),
-                Math.min(qty, have), enforced, limits.maxMoney(), remainingMoney, unitCap, remainingUnits);
+        // stock rises), stopping at whatever the daily limit allows. The live market's
+        // multiplier is frozen here for the whole order.
+        double m = multiplier(id);
+        double startBase = state.currentPrice();
+        long startStock = state.stock();
+        OrderMath.Plan plan = OrderMath.sell(engine, item, startBase, startStock, Math.min(qty, have),
+                orderLimits(enforced, limits.maxMoney(), remainingMoney, unitCap, remainingUnits,
+                        eventCap, eventLeft), m);
         if (plan.filled() <= 0) {
             return TradeResult.fail(enforced ? moneyCappedMessage(false)
                     : "You have no " + item.label() + " to sell.");
@@ -430,6 +522,7 @@ public final class MarketService {
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to record daily sell tally: " + e.getMessage());
         }
+        recordMood(item, true, startBase, startStock, plan, m);
         if (plugin.achievements() != null) {
             plugin.achievements().tryAward(player, "first_sale");
             plugin.achievements().checkBalance(player);
@@ -438,21 +531,39 @@ public final class MarketService {
             plugin.quests().record(player,
                     com.dierks.homecraft.config.PluginConfig.QuestType.SELL_MARKET, (long) plan.total());
         }
-        return new TradeResult(true, null, plan.filled(), plan.total(), state.currentPrice(), state.stock());
+        return new TradeResult(true, null, plan.filled(), plan.total(), price(id), state.stock());
     }
 
-    /** A previewed/executed order: how many units, the integrated total, and the resulting price/stock. */
-    public record Plan(int filled, double total, double endPrice, long endStock) {
+    /**
+     * A previewed order: how many units, the integrated total, the displayed price it leaves
+     * ({@code endPrice}, the live market's multiplier included), the stock it leaves, and the
+     * balanced price it leaves ({@code endBase}). With no live market {@code endBase == endPrice}.
+     */
+    public record Plan(int filled, double total, double endPrice, long endStock, double endBase) {
+
+        /** The 0.32 shape: with no live market the balanced and displayed end prices are one. */
+        public Plan(int filled, double total, double endPrice, long endStock) {
+            this(filled, total, endPrice, endStock, endPrice);
+        }
+
+        static Plan from(OrderMath.Plan p) {
+            return new Plan(p.filled(), p.total(), p.endPrice(), p.endStock(), p.endBase());
+        }
     }
 
-    /** Preview the cost of buying up to {@code qty} without mutating anything (for GUIs). */
+    /**
+     * Preview the cost of buying up to {@code qty} without mutating anything (for GUIs). It runs
+     * the same {@link OrderMath} as the trade, at the same multiplier, so within a tick the quote
+     * is what the trade charges (daily limits aside).
+     */
     public Plan quoteBuy(String id, int qty) {
         MarketItem item = catalog.get(id);
         MarketState state = states.get(id);
         if (item == null || state == null) {
             return new Plan(0, 0, Double.NaN, 0);
         }
-        return simulateBuy(item, state.currentPrice(), state.stock(), qty, false, 0, 0, 0, 0);
+        return Plan.from(OrderMath.buy(engine, item, state.currentPrice(), state.stock(), qty,
+                OrderMath.Limits.NONE, multiplier(id)));
     }
 
     /** Preview the proceeds of selling up to {@code qty} (ignoring daily limits) for GUIs. */
@@ -462,68 +573,64 @@ public final class MarketService {
         if (item == null || state == null) {
             return new Plan(0, 0, Double.NaN, 0);
         }
-        return simulateSell(item, state.currentPrice(), state.stock(), qty, false, 0, 0, 0, 0);
+        return Plan.from(OrderMath.sell(engine, item, state.currentPrice(), state.stock(), qty,
+                OrderMath.Limits.NONE, multiplier(id)));
     }
 
-    private Plan simulateBuy(MarketItem item, double startPrice, long startStock, int want,
-                            boolean limited, double maxMoney, double remainingMoney,
-                            long maxUnits, long remainingUnits) {
-        long stock = startStock;
-        double price = PricingEngine.clamp(startPrice, item.floor(), item.ceiling());
-        double total = 0;
-        int filled = 0;
-        int cap = (int) Math.max(0, Math.min(want, stock));
-        if (limited && maxUnits > 0) {
-            cap = (int) Math.min(cap, remainingUnits);
-        }
-        for (; filled < cap; filled++) {
-            double unit = ask(item, price);
-            if (limited && maxMoney > 0 && total + unit > remainingMoney) {
-                break; // this unit would exceed the daily spend cap
-            }
-            total += unit;
-            stock -= 1;
-            price = engine.nextPrice(item, price, stock);
-        }
-        return new Plan(filled, total, price, stock);
+    /**
+     * The allowance an order runs under: the player's daily limits (when {@code enforced}) combined
+     * with the live market's event cap (which binds bypass holders too). The money cap stays a
+     * non-bypass-only rule. With no event cap this is exactly the 0.32 allowance.
+     */
+    private static OrderMath.Limits orderLimits(boolean enforced, double maxMoney, double remainingMoney,
+                                                long unitCap, long remainingUnits,
+                                                long eventCap, long eventLeft) {
+        boolean limited = enforced || eventCap > 0;
+        long maxUnits = enforced ? tighter(unitCap, eventCap) : eventCap;
+        long leftUnits = Math.min(enforced && unitCap > 0 ? remainingUnits : Long.MAX_VALUE,
+                eventCap > 0 ? eventLeft : Long.MAX_VALUE);
+        return new OrderMath.Limits(limited, enforced ? maxMoney : 0, remainingMoney, maxUnits, leftUnits);
     }
 
-    private Plan simulateSell(MarketItem item, double startPrice, long startStock, int want,
-                             boolean limited, double maxMoney, double remainingMoney,
-                             long maxUnits, long remainingUnits) {
-        long stock = startStock;
-        double price = PricingEngine.clamp(startPrice, item.floor(), item.ceiling());
-        double total = 0;
-        int filled = 0;
-        int cap = Math.max(0, want);
-        if (limited && maxUnits > 0) {
-            cap = (int) Math.min(cap, remainingUnits);
-        }
-        for (; filled < cap; filled++) {
-            double unit = Math.max(0.0, bid(item, price));
-            if (limited && maxMoney > 0 && total + unit > remainingMoney) {
-                break; // this unit would exceed the daily earning cap
-            }
-            total += unit;
-            stock += 1;
-            price = engine.nextPrice(item, price, stock);
-        }
-        return new Plan(filled, total, price, stock);
-    }
-
-    /** Apply a plan's resulting stock + price to the state and persist (price re-clamped). */
-    private void commit(MarketItem item, MarketState state, Plan plan) {
+    /**
+     * Apply a plan's resulting stock + balanced price to the state and persist (price re-clamped).
+     * The balanced price is {@code endBase}: the live market's multiplier is never written back.
+     */
+    private void commit(MarketItem item, MarketState state, OrderMath.Plan plan) {
         state.setStock(plan.endStock());
-        state.setCurrentPrice(PricingEngine.clamp(plan.endPrice(), item.floor(), item.ceiling()));
+        state.setCurrentPrice(PricingEngine.clamp(plan.endBase(), item.floor(), item.ceiling()));
         state.setUpdatedAt(System.currentTimeMillis());
         persist(state);
+    }
+
+    /**
+     * Tell the live market's ledger about a trade made at a moved price: what it came to, and what
+     * the same units would have come to at {@code M = 1}. A trade at exactly {@code M = 1} is not
+     * reported (it is 0.32's trade, and the ledger would record no difference). Runs after the
+     * money and goods moved, so a failure here is logged and the trade stands.
+     */
+    private void recordMood(MarketItem item, boolean sell, double startBase, long startStock,
+                            OrderMath.Plan plan, double m) {
+        if (m == 1.0 || plan.filled() <= 0) {
+            return;
+        }
+        try {
+            double neutral = OrderMath.neutralTotal(engine, item, sell, startBase, startStock, plan.filled());
+            mood.onTrade(item.id(), sell, plan.filled(), plan.total(), neutral);
+        } catch (RuntimeException e) {
+            plugin.getLogger().warning("The live market ledger missed a " + (sell ? "sale" : "purchase")
+                    + " of " + item.id() + ": " + e);
+        }
     }
 
     // ---------------------------------------------------------------------
     //  Admin stock management — apply a new economy design to a live database
     // ---------------------------------------------------------------------
 
-    /** Outcome of an admin stock write. {@code capped} = the request was clamped below full_stock. */
+    /**
+     * Outcome of an admin stock write. {@code price} is the displayed price afterwards
+     * ({@link MarketService#price(String)}); {@code capped} = the request was clamped below full_stock.
+     */
     public record StockResult(boolean ok, String error, long stock, double price, boolean capped) {
         static StockResult fail(String error) {
             return new StockResult(false, error, 0, 0, false);
@@ -560,7 +667,7 @@ public final class MarketService {
         state.setCurrentPrice(engine.targetPrice(item, stock));   // snap, don't glide
         state.setUpdatedAt(System.currentTimeMillis());
         persist(state);
-        return new StockResult(true, null, state.stock(), state.currentPrice(),
+        return new StockResult(true, null, state.stock(), price(id),
                 stock < item.initialStock());
     }
 
@@ -595,11 +702,12 @@ public final class MarketService {
         state.setCurrentPrice(engine.targetPrice(item, stock));
         state.setUpdatedAt(System.currentTimeMillis());
         persist(state);
-        return new StockResult(true, null, state.stock(), state.currentPrice(), stock < amount);
+        return new StockResult(true, null, state.stock(), price(id), stock < amount);
     }
 
     /**
-     * Record a price/stock snapshot for every commodity (periodic history), then prune
+     * Record a price/stock snapshot for every commodity (periodic history; the displayed price,
+     * so the charts and the 24h trend show what players saw), then prune
      * snapshots older than {@code market.price_history.keep_days} (0 keeps everything), at most
      * {@link PriceHistoryDao#PRUNE_BATCH} rows per run so a first prune of a big old table
      * can't stall the tick. Bumps {@link #historyVersion()}.
@@ -612,7 +720,7 @@ public final class MarketService {
                 continue;
             }
             try {
-                historyDao.record(item.id(), state.currentPrice(), state.stock(), now);
+                historyDao.record(item.id(), price(item.id()), state.stock(), now);
             } catch (SQLException e) {
                 plugin.getLogger().warning("Failed to snapshot price history for " + item.id() + ": " + e.getMessage());
             }

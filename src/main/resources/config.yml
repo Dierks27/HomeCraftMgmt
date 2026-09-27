@@ -450,8 +450,8 @@ courier:
 #  of stock: empty (0) = ceiling price AND out of stock; full = floor price.
 # ---------------------------------------------------------------------
 market:
-  # Price curve shape. price = floor + (ceiling-floor) * (1 - stock/full_stock)^elasticity
-  #   1.0 = linear from ceiling (empty) down to floor (full).
+  # Price curve shape. price = floor * (ceiling/floor)^((1 - stock/full_stock)^elasticity)
+  #   1.0 = an even glide from ceiling (empty) down to floor (full), by ratio rather than by $.
   #   > 1 = stays cheap once decently stocked, spikes only near empty.
   #   < 1 = stays pricey until nearly full. Range > 0.
   elasticity: 1.0
@@ -503,6 +503,206 @@ market:
     # snapshot). The website's 30-day chart needs 30. 0 = keep everything.
     keep_days: 30
 
+  # ---------------------------------------------------------------------
+  #  The live market (0.33) - Crate's prices move a little on their own.
+  #
+  #    price = balanced price  x  market mood     (then kept inside floor..ceiling)
+  #
+  #  The BALANCED price is the stock curve above, exactly as before: only player
+  #  trades (and /hcm market setstock / resetstock) move it. The live market never
+  #  changes stock. It only adds a small MOOD on top:
+  #    drift       a quiet wander, about 1-2% a day, never past 8%
+  #    HOT / DEAL  a couple of days up to +15% (HOT) or down to -15% (DEAL)
+  #    NEWS FLASH  a sudden jump of up to 25% that fades over the next day
+  #    seasons     small calendar nudges; real-world prices (off by default)
+  #  The whole mood is LOCKED IN CODE to 25% either way (0.75x to 1.25x): the
+  #  numbers below can make it calmer, never wilder. An item with no stock stays
+  #  at exactly its ceiling. Daily sell/buy limits and per-item caps still apply,
+  #  at the moved price. While an item is HOT or UP, its daily sell cap applies to
+  #  everyone; while it is on a DEAL or DOWN, "Limit N a day" applies to everyone -
+  #  including players with hcm.market.limit.bypass (ops).
+  #  enabled: false puts every price back exactly as it was in 0.32.
+  #  Everything here reloads with /hcm reload. See /hcm market sim status.
+  #  Optional keys for a market.catalog row (the admin GUI keeps them):
+  #    sim: false            this item never moves on its own
+  #    volatility: 1.0       x its drift size (0 = no drift, at most 1.5)
+  #    sim_weight: 1.0       how often it is picked for HOT/DEAL/news (0 = never)
+  #    news_name: "Diamonds" the name headlines use (at most 24 characters)
+  # ---------------------------------------------------------------------
+  sim:
+    enabled: true
+    tick_minutes: 5              # how often the mood moves (1-60)
+    max_catchup_hours: 48        # after the server was off, replay the quiet drift for at most this long
+    max_up_percent: 25           # whole mood at most +25% ...   (locked in code: at most 25)
+    max_down_percent: 25         # ... and at most -25%          (locked in code: at most 25)
+    keep_days: 60                # market news older than this is deleted
+    drift:
+      max_percent: 8             # the wander alone never goes past this (locked in code: at most 8)
+      calm_percent: 1.5          # typical size for cheap staples (about 1% a day)
+      lively_percent: 3.0        # typical size for dearer items (about 2% a day)
+      lively_from: 10.0          # "lively" when sqrt(floor x ceiling) is at least this many $
+      half_life_hours: 66        # half of any wander fades in this long
+    hot:
+      enabled: true
+      percent: [8, 15]           # how much higher at full strength (locked in code: at most 15)
+      hold_hours: [30, 54]       # how long it stays at full strength
+      ramp_hours: 4              # rises quietly first; announced as HOT once it is at full strength
+      fade_hours: 10             # cools back down at the end
+      gap_hours: [48, 120]       # quiet time after one ends before the next can start
+      last_call_hours: 3         # "Last call!" this long before it starts cooling (0 = never)
+      sell_limit: true           # while HOT, the item's daily sell cap applies to everyone
+    deal:
+      enabled: true
+      percent: [8, 15]           # how much cheaper at full strength (locked in code: at most 15)
+      hold_hours: [30, 54]
+      ramp_hours: 4
+      fade_hours: 10
+      gap_hours: [48, 120]
+      last_call_hours: 3
+      min_stock_percent: 3       # only items holding this much of full_stock (and 16+); a DEAL ends if it sells out
+      buy_limit_share: 0.5       # "Limit N a day": this share of max_daily_buy (or of 4% of full_stock)
+    slots_per_items: 40          # 1 HOT + 1 DEAL at a time, one more of each per 40 items, 3 at most
+    cooldown_days: 7             # an item rests this long after a HOT or DEAL
+    popular_weight: 2.0          # items anyone traded in the last 14 days are this much likelier to be picked
+    news:
+      enabled: true
+      percent: [15, 25]          # jump size (locked in code: at most 25)
+      min_percent: 10            # a flash the limits would shrink below this is skipped
+      half_life_hours: 6         # a jump fades by half every 6 hours ...
+      lasts_hours: 30            # ... and is completely gone after 30
+      gap_hours: 10              # at least this long between flashes ...
+      extra_hours: 14            # ... plus a random wait averaging this long ...
+      max_gap_hours: 48          # ... but never longer than this (about 5 a week)
+      max_per_day: 2
+      hours: "07:00-21:00"       # local time (clock.time_zone) when anything is announced
+      wait_for_players: true     # hold a due flash until someone has been online a few minutes
+      join_delay_minutes: [2, 8]
+      max_hold_hours: 14         # then it happens anyway; players see it in "while you were away"
+      item_cooldown_hours: 72
+      min_stock_percent: 5       # a DOWN flash needs at least this much stock to buy
+      buy_limit_share: 0.5       # the "Limit N a day" also applies while a price is DOWN
+      wanted_share: 0.15         # share of flashes that say "Crate is looking for X!" (sold-out items)
+      wanted_every_days: 7
+    announce:
+      chat: true
+      title: true                # big NEWS FLASH across the screen (Bedrock too)
+      action_bar: true
+      particles: true            # sparkles at that item's signs, holograms and TVs
+      min_gap_minutes: 20        # between any two market announcements
+      max_per_day: 6
+      endings: true              # one quiet line when a HOT or DEAL ends
+      intro: true                # one-time "The Crate Market is LIVE!"
+      # Sounds must be namespaced (minecraft:...): a plain BLOCK_NOTE_BLOCK_BELL
+      # name silently turns into the XP-orb sound.
+      sound_up: "minecraft:block.note_block.bell"
+      sound_down: "minecraft:block.note_block.bell"
+      sound_story: "minecraft:block.note_block.pling"
+      sound_other: "minecraft:block.note_block.chime"
+      volume: 0.8
+      pitch_up: 1.4
+      pitch_down: 0.8
+      catch_up: true             # "While you were away" a few seconds after joining
+      catch_up_lines: 3
+      catch_up_hours: 48
+    # {item} = the plural name ("Iron Ingots"), {Name} = one ("Iron Ingot"),
+    # {real} = the real-world thing ("gold"). Keep them short, happy and about
+    # people WANTING things - never about Crate's shelf, which does not move.
+    headlines:
+      up:
+        - "A giant castle is being built! Everyone wants {item}!"
+        - "The villagers are having a party and need {item}!"
+        - "A famous builder just ordered lots of {item}!"
+        - "Wandering traders are paying big for {item} today!"
+        - "Everybody on the server is talking about {item}!"
+        - "The big building contest needs lots of {item}!"
+        - "A mystery shopper wants to buy {item}!"
+        - "A brand new town needs {item} for its houses!"
+        - "Kids all over the land are collecting {item}!"
+        - "The mayor wants {item} for the new town hall!"
+        - "Llamas are packing {item} for a long trip!"
+        - "Hooray! Everyone is looking for {item} today!"
+      down:
+        - "A giant cart full of {item} just rolled into town!"
+        - "Miners found a huge pile of {item}!"
+        - "The villagers brought lots of {item} to town!"
+        - "A boat full of {item} just landed at the dock!"
+        - "Hardly anyone needs {item} this week!"
+        - "A wandering trader is selling {item} cheap!"
+        - "A lucky miner found a secret stash of {item}!"
+        - "Everyone already has enough {item} today."
+        - "Llamas carried in a mountain of {item}!"
+        - "The farms and mines made extra {item} this week!"
+        - "Lucky day! You can find {item} everywhere!"
+        - "Shopping time! Get {item} for less right now!"
+      hot:
+        - "Everybody wants {item} this week!"
+        - "Hot item alert! Everyone is looking for {item}!"
+        - "Everyone is talking about {item}!"
+        - "Builders all over the land need {item}!"
+        - "{Name} is the cool thing to have right now!"
+        - "Hot, hot, hot! Crate wants your {item}!"
+      deal:
+        - "{Name} is on sale at Crate!"
+        - "Sale time! Get {item} for less at Crate!"
+        - "Deal alert! Save on {item} for a couple of days!"
+        - "Grab some {item} while the sale is on!"
+        - "Crate's special this week: {item} for less!"
+        - "Psst! There is a great deal on {item} right now!"
+      wanted:
+        - "Crate is looking for {item}!"
+        - "Wanted: {item}! Crate would love some."
+        - "Who has {item}? Crate wants to buy some!"
+      real_up: "In the real world, {real} prices went up today!"
+      real_down: "In the real world, {real} prices went down today!"
+    # Names that stay the same for one or many (no "s" added in headlines).
+    same_plural: [cobblestone, stone, dirt, sand, red_sand, gravel, glass, wheat, coal, charcoal,
+                  redstone, lapis_lazuli, quartz, obsidian, netherrack, sugar, gunpowder, string,
+                  bone_meal, leather, kelp, bamboo, sugar_cane, cactus, glowstone_dust, snow, ice,
+                  clay, white_wool, cocoa_beans, andesite, diorite, granite, deepslate,
+                  cobbled_deepslate, tuff, calcite, basalt, blackstone, sandstone, mud]
+    seasons:
+      enabled: true
+      # Seasons (and real-world prices) are known ahead of time, so together they
+      # stay under half the buy/sell spread - nobody can buy before and sell after
+      # for a sure profit. The plugin enforces it: min(this, 45% of market.spread).
+      predictable_max_percent: 4.5
+      ramp_days: 2               # each season fades in and out over this many days
+      list:                      # local dates MM-DD (inclusive, may wrap the year); "*" = every item
+        - { id: new_year, name: "New Year", from: "01-01", to: "01-07", percent: { "*": -3 },
+            headline: "Happy New Year! Everything at Crate costs a little less this week." }
+        - { id: cozy_winter, name: "Cozy Winter", from: "12-01", to: "02-28", percent: { oak_log: 4 },
+            headline: "Brrr, it's cold! Everyone wants Oak Logs to keep warm." }
+        - { id: sparkle_week, name: "Sparkle Week", from: "02-07", to: "02-14", percent: { gold_ingot: 3, diamond: 3 },
+            headline: "Sparkle week! Everyone wants something shiny." }
+        - { id: spring_building, name: "Spring Building", from: "03-20", to: "05-20", percent: { cobblestone: 3, oak_log: 3 },
+            headline: "Spring is here! Time to build, build, build!" }
+        - { id: back_to_school, name: "Back to School", from: "08-15", to: "09-10", percent: { iron_ingot: 3 },
+            headline: "Back to school! Everyone is making new tools." }
+        - { id: harvest_time, name: "Harvest Time", from: "09-15", to: "10-31", percent: { wheat: -4 },
+            headline: "Harvest time! The farms are full of wheat." }
+        - { id: gift_season, name: "Gift Season", from: "12-10", to: "12-26", percent: { gold_ingot: 4, diamond: 4 },
+            headline: "Gift season! Shiny gold and diamonds make great presents." }
+    real_world:
+      # Real commodity prices nudge matching items once a trading day. OFF by default.
+      # Needs internet on the game server. If the source is down the market simply
+      # carries on. Try a symbol first: /hcm market sim real test gc.f
+      enabled: false
+      provider: stooq            # stooq | yahoo
+      url: ""                    # blank = the provider's default; must be https; {symbol} {from} {to}
+      fetch_time: "17:30"        # local, Monday-Friday, after the US commodity markets close
+      gain: 2.0                  # a real +1% day = +2% here ...
+      max_percent: 4             # ... never more than this (and seasons + real together stay under half the spread)
+      ignore_above_percent: 8    # a bigger real "move" is treated as bad data and skipped
+      announce_above_percent: 2  # real moves at least this big get a news line
+      half_life_hours: 24
+      lasts_hours: 96
+      timeout_seconds: 10
+      symbols:                   # set a symbol to "" to turn it off (deleting a row also works)
+        - { item: gold_ingot, stooq: "gc.f", yahoo: "GC=F", name: "gold" }
+        - { item: wheat,      stooq: "zw.f", yahoo: "ZW=F", name: "wheat" }
+        - { item: iron_ingot, stooq: "hg.f", yahoo: "HG=F", name: "metal" }   # copper: no free daily iron-ore quote
+        # - { item: oak_log,  stooq: "",     yahoo: "LBR=F", name: "lumber" } # unverified - test it first
+
   # Admin-defined catalog. Each item:
   #   id            unique key used in commands (lower-case)
   #   material      a Bukkit Material (what is bought/sold)
@@ -514,6 +714,8 @@ market:
   #   full_stock    units at which price hits the floor (default: default_full_stock)
   #   max_daily_sell optional per-player, per-item, per-day SELL cap (0/omitted = none)
   #   max_daily_buy  optional per-player, per-item, per-day BUY cap  (0/omitted = none)
+  #   sim, volatility, sim_weight, news_name  optional live-market keys (see market.sim above)
+  #   Ids starting with @ are reserved (@news is the Market News board) and are skipped.
   # Per-item caps stack ON TOP of the global sell_limits/buy_limits (tighter wins) and
   # are skipped by the bypass permission. Rule of thumb: max_daily_sell ~= 2% of
   # full_stock, max_daily_buy ~= 4% of full_stock, so no single player can move a

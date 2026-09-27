@@ -41,6 +41,15 @@ public final class QuantityMenu extends Menu {
         init(27, Text.of(title));
     }
 
+    /**
+     * Start at {@code qty} (clamped to 1..max) instead of 1 — for reopening the picker where the
+     * player left it, e.g. after a sell confirm was refused because the price had just moved.
+     */
+    public QuantityMenu startAt(int qty) {
+        this.qty = Math.max(1, Math.min(max, qty));
+        return this;
+    }
+
     private void changeQty(int delta) {
         qty = Math.max(1, Math.min(max, qty + delta));
         refresh();

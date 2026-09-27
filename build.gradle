@@ -5,8 +5,8 @@ plugins {
 }
 
 group = 'com.dierks.homecraft'
-version = '0.32.0-site-feeds'
-description = 'HomeCraft Management — Paper plugin (market, Crate store + Marketplace, Minis and the wild hunt, Card Packs, Courier, web dashboard + website feeds, in-game displays, the Arcade)'
+version = '0.33.0-live-market'
+description = 'HomeCraft Management — Paper plugin (market with a live, bounded price mood and Market News, Crate store + Marketplace, Minis and the wild hunt, Card Packs, Courier, web dashboard + website feeds, in-game displays, the Arcade)'
 
 // Target server: Paper 26.2 and 26.3 / Java 25. Compiled against the 26.2 API; the code also
 // compiles and passes every test against the 26.3 API (no removals, no new deprecations). The toolchain is pinned to 25 so the

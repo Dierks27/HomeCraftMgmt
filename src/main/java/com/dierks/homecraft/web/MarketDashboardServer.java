@@ -1,10 +1,18 @@
 package com.dierks.homecraft.web;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.config.MarketSimConfig;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.market.MarketService;
 import com.dierks.homecraft.market.MarketState;
+import com.dierks.homecraft.market.sim.Badge;
+import com.dierks.homecraft.market.sim.EventKind;
+import com.dierks.homecraft.market.sim.Headlines;
+import com.dierks.homecraft.market.sim.ItemStatus;
+import com.dierks.homecraft.market.sim.MarketEvent;
+import com.dierks.homecraft.market.sim.MarketSimService;
+import com.dierks.homecraft.market.sim.Season;
 import com.dierks.homecraft.mini.MiniService;
 import com.dierks.homecraft.storage.PriceHistoryDao;
 import com.sun.net.httpserver.Headers;
@@ -21,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -33,21 +42,33 @@ import java.util.function.Supplier;
  * {@link com.sun.net.httpserver} — no extra dependencies.
  *
  * <p><b>Endpoints:</b> {@code /api/market} (every commodity with its 48-hour, 7-day and
- * 30-day price history — see {@link MarketFeed}), {@code /api/minis} (the Minis catalog
+ * 30-day price history — see {@link MarketFeed}), {@code /api/news} (the live market's news,
+ * its running events and season — see {@link NewsFeed}), {@code /api/minis} (the Minis catalog
  * with printed counts — see {@link MinisFeed}) and {@code /} (the dashboard page, which
- * fetches {@code /api/market} from the browser). The LilahCraft website reads both feeds
- * from its own server.
+ * fetches {@code /api/market} and {@code /api/news} from the browser). The LilahCraft website
+ * reads the feeds from its own server.
+ *
+ * <p><b>The live market (0.33, spec §14).</b> While {@link MarketSimService#active()} the
+ * snapshot also carries the sim's side: per sim-enabled item its usual price, mood percent,
+ * badge and chart markers, and at the top level the HOT/DEAL ids, the season and the newest
+ * news; {@code /api/news} carries the full news list. It is read once per refresh from the
+ * sim's immutable snapshot (see {@code liveView}). While the sim is missing, off or paused nothing
+ * new is written: {@code /api/market} is byte for byte the 0.32 feed and {@code /api/news} is
+ * {@code {"generatedAt":…,"live":false,"active":[],"news":[]}}. News rows, active rows and
+ * markers are made only through {@link NewsFeed}'s factories, which drop a HOT or DEAL still in
+ * its silent ramp, so the site can never show an event before players are told about it.
  *
  * <p><b>Threading:</b> the HTTP handlers never touch the Bukkit API or the database.
- * A main-thread Bukkit task rebuilds both feeds on the configured interval; the handlers
+ * A main-thread Bukkit task rebuilds every feed on the configured interval; the handlers
  * only serve those pre-built payloads (and the static page). This keeps all
  * game-state/DB access on the main thread and off the request path. The 7- and 30-day
  * histories are the heavy part, so they are re-read from the database only after a new
  * snapshot has been recorded, and at most every ten minutes.
  *
  * <p><b>Scope:</b> market data and Minis catalog counts only — prices, buy/sell
- * spread, stock, price history, and how many of each Mini were printed. No balances,
- * no owners, no UUIDs, no player data of any kind, no internals.
+ * spread, stock, price history, market news, and how many of each Mini were printed. No
+ * balances, no owners, no UUIDs, no player data of any kind, no internals (no drift, no seed,
+ * no schedule, nothing about events players have not been told about).
  *
  * <p><b>Auth:</b> the page is public; the feeds ({@code /api/*}) all pass one gate,
  * {@link FeedAuth}. With {@code web.dashboard.feed_token} blank they are open, as they
@@ -72,6 +93,7 @@ public final class MarketDashboardServer {
     private ExecutorService executor;
     private BukkitTask snapshotTask;
     private volatile FeedPayload marketFeed = new FeedPayload("{\"items\":[]}");
+    private volatile FeedPayload newsFeed = new FeedPayload(NewsFeed.json(0L, false, null, null, null));
     private volatile FeedPayload minisFeed = new FeedPayload("{\"minis\":[]}");
     private volatile FeedAuth auth = new FeedAuth("", false);
     private String indexHtml = "";
@@ -81,6 +103,23 @@ public final class MarketDashboardServer {
     private long longHistoryBuiltAt;
     private Map<String, List<PriceHistoryDao.Snapshot>> history7d = Map.of();
     private Map<String, List<PriceHistoryDao.Snapshot>> history30d = Map.of();
+    // Reading the live market failed on the last refresh (logged once per run of failures).
+    private boolean liveFailing;
+
+    /**
+     * The live market's side of {@code /api/market} and {@code /api/news} for one refresh
+     * ({@link #liveView}). Only built while the sim is active.
+     *
+     * @param items  per sim-enabled item id, its {@code /api/market} fields
+     * @param extras {@code /api/market}'s top-level fields
+     * @param season the running season, or {@code null}
+     * @param active {@code /api/news}' running HOT/DEAL/UP/DOWN, soonest-ending first
+     * @param news   the news of the last 7 days, newest first (both feeds select from it)
+     */
+    private record LiveView(Map<String, MarketFeed.SimInfo> items, MarketFeed.Extras extras,
+                            NewsFeed.SeasonRow season, List<NewsFeed.ActiveRow> active,
+                            List<NewsFeed.NewsRow> news) {
+    }
 
     public MarketDashboardServer(HomeCraftManagement plugin) {
         this.plugin = plugin;
@@ -125,6 +164,7 @@ public final class MarketDashboardServer {
         // Every /api feed goes through serveFeed, so each one gets the same token gate. The
         // supplier reads the field per request, i.e. always the latest snapshot.
         server.createContext("/api/market", ex -> serveFeed(ex, () -> marketFeed));
+        server.createContext("/api/news", ex -> serveFeed(ex, () -> newsFeed));
         server.createContext("/api/minis", ex -> serveFeed(ex, () -> minisFeed));
         server.createContext("/", this::handleRoot);
         server.start();
@@ -135,7 +175,7 @@ public final class MarketDashboardServer {
                 .runTaskTimer(plugin, this::refreshSnapshot, 1L, periodTicks);
 
         plugin.getLogger().info("Market dashboard live at http://" + cfg.bind() + ":" + cfg.port()
-                + " (refresh " + cfg.refreshSeconds() + "s; feeds /api/market, /api/minis). "
+                + " (refresh " + cfg.refreshSeconds() + "s; feeds /api/market, /api/news, /api/minis). "
                 + tokenState(gate));
     }
 
@@ -238,16 +278,42 @@ public final class MarketDashboardServer {
     // ---- snapshot builder (main thread) ---------------------------------------
 
     /**
-     * Rebuild both feeds from live state (main thread). Each is built on its own, so one
-     * failing leaves the other fresh and itself serving its last good payload.
+     * Rebuild every feed from live state (main thread). Each is built on its own, so one
+     * failing leaves the others fresh and itself serving its last good payload.
+     *
+     * <p>The live market's side is read once, first, and shared by {@code /api/market} and
+     * {@code /api/news}. If reading it fails, both go out as if the sim were off —
+     * {@code /api/market} in its 0.32 shape (its prices come from {@link MarketService#price},
+     * so they stay right) and {@code /api/news} with {@code "live":false} — rather than freeze
+     * the market's prices on an old payload.
      */
     private void refreshSnapshot() {
         PluginConfig.WebDashboard cfg = plugin.config().webDashboard();
         long now = System.currentTimeMillis();
+        LiveView live = null;
         try {
-            marketFeed = new FeedPayload(marketJson(cfg, now));
+            live = liveView(now);
+            if (liveFailing) {
+                liveFailing = false;
+                plugin.getLogger().info("Market dashboard: the live market's feed fields are back.");
+            }
+        } catch (RuntimeException e) {
+            if (!liveFailing) {
+                liveFailing = true;
+                plugin.getLogger().warning("Market dashboard: could not read the live market (" + e
+                        + ") — the feeds go out without its fields until it can be read again.");
+            }
+        }
+        try {
+            marketFeed = new FeedPayload(marketJson(cfg, now, live));
         } catch (RuntimeException e) {
             plugin.getLogger().warning("Market dashboard: could not rebuild /api/market (" + e
+                    + ") — still serving the previous snapshot.");
+        }
+        try {
+            newsFeed = new FeedPayload(newsJson(now, live));
+        } catch (RuntimeException e) {
+            plugin.getLogger().warning("Market dashboard: could not rebuild /api/news (" + e
                     + ") — still serving the previous snapshot.");
         }
         try {
@@ -258,8 +324,12 @@ public final class MarketDashboardServer {
         }
     }
 
-    /** The {@code /api/market} JSON from live market state + price history. Main thread. */
-    private String marketJson(PluginConfig.WebDashboard cfg, long now) {
+    /**
+     * The {@code /api/market} JSON from live market state + price history. Main thread. With
+     * {@code live == null} no row gets live-market fields and no extras are written, so the
+     * output is byte for byte the 0.32 feed.
+     */
+    private String marketJson(PluginConfig.WebDashboard cfg, long now, LiveView live) {
         MarketService market = plugin.market();
         refreshLongHistory(market, now);
         List<MarketFeed.Row> rows = new ArrayList<>();
@@ -277,10 +347,129 @@ public final class MarketDashboardServer {
             rows.add(new MarketFeed.Row(item.id(), item.label(), item.material().name(), price,
                     market.buyPrice(item.id()), market.sellPrice(item.id()),
                     state.stock(), item.fullStock(), change24h(chrono, price, now), chrono,
-                    history7d.get(item.id()), history30d.get(item.id())));
+                    history7d.get(item.id()), history30d.get(item.id()),
+                    live == null ? null : live.items().get(item.id())));
         }
         return MarketFeed.json(cfg != null ? cfg.title() : "Crate Market", now,
-                cfg != null ? cfg.refreshSeconds() : 30, rows);
+                cfg != null ? cfg.refreshSeconds() : 30, rows, live == null ? null : live.extras());
+    }
+
+    /**
+     * The {@code /api/news} JSON (spec §14.2). Main thread. With {@code live == null} (the sim
+     * missing, off or paused): {@code {"generatedAt":…,"live":false,"active":[],"news":[]}}.
+     */
+    private static String newsJson(long now, LiveView live) {
+        if (live == null) {
+            return NewsFeed.json(now, false, null, null, null);
+        }
+        return NewsFeed.json(now, true, live.season(), live.active(), live.news());
+    }
+
+    /**
+     * The live market's side of {@code /api/market} and {@code /api/news} (spec §14), read once
+     * from the sim's immutable snapshot; {@code null} while the sim is missing (it failed to
+     * construct), off or paused. Main thread.
+     *
+     * <p>Every news row, active row and chart marker is made by {@link NewsFeed#newsRow},
+     * {@link NewsFeed#activeRow} or {@link NewsFeed#mark}, which return {@code null} for a HOT or
+     * DEAL still in its silent ramp (or stopped during it); those are skipped, so nothing reaches
+     * the site before players are told (spec §5, §10.1). Per-item fields go only to sim-enabled
+     * items (not {@code sim: false} in the catalog).
+     */
+    private LiveView liveView(long now) {
+        MarketSimService sim = plugin.marketSim();
+        if (sim == null || !sim.active()) {
+            return null;
+        }
+        MarketService market = plugin.market();
+        NewsFeed.SeasonRow season = NewsFeed.seasonRow(sim.season().orElse(null), plugin.clock().zone());
+
+        List<NewsFeed.NewsRow> news = new ArrayList<>();
+        for (MarketEvent e : sim.recentNews(NewsFeed.NEWS_LIMIT, now - NewsFeed.NEWS_WINDOW_MS)) {
+            NewsFeed.NewsRow row = NewsFeed.newsRow(e, newsName(sim, e), now);
+            if (row != null) {
+                news.add(row);
+            }
+        }
+
+        List<NewsFeed.ActiveRow> active = new ArrayList<>();
+        for (MarketEvent e : sim.activeEvents()) {
+            NewsFeed.ActiveRow row = NewsFeed.activeRow(e, sim.displayName(e.itemId()), activePct(sim, e, now), now);
+            if (row != null) {
+                active.add(row);
+            }
+        }
+
+        Map<String, MarketFeed.SimInfo> items = new HashMap<>();
+        MarketSimConfig.Parsed parsed = plugin.config().marketSim();
+        long markersFrom = now - MarketFeed.EVENTS_WINDOW_MS;
+        for (MarketItem item : market.catalog()) {
+            if (Boolean.FALSE.equals(parsed.override(item.id()).sim())) {
+                continue; // sim: false — the sim never moves it, so the feed says nothing new about it
+            }
+            ItemStatus status = sim.status(item.id());
+            if (status == null) {
+                continue;
+            }
+            items.put(item.id(), simInfo(status, sim.markers(item.id(), markersFrom, MarketFeed.EVENTS_MAX), now));
+        }
+
+        MarketFeed.Extras extras = new MarketFeed.Extras(sim.activeIds(Badge.HOT), sim.activeIds(Badge.DEAL),
+                season, news);
+        return new LiveView(Map.copyOf(items), extras, season, List.copyOf(active), List.copyOf(news));
+    }
+
+    /**
+     * One item's {@code /api/market} live fields: {@code usual} and {@code moodPct} always;
+     * {@code status} only while a badge shows, and {@code statusEndsAt} only when that badge has
+     * an end still ahead (a WANTED has none); the markers players may know about.
+     */
+    private static MarketFeed.SimInfo simInfo(ItemStatus status, List<MarketEvent> markers, long now) {
+        List<MarketFeed.EventMark> marks = new ArrayList<>();
+        for (MarketEvent e : markers) {
+            MarketFeed.EventMark mark = NewsFeed.mark(e, now);
+            if (mark != null) {
+                marks.add(mark);
+            }
+        }
+        boolean shown = status.shown();
+        Long endsAt = shown && status.endsAt() > now ? Long.valueOf(status.endsAt()) : null;
+        return new MarketFeed.SimInfo(status.usual(), status.pct(), shown ? status.badge().id() : "", endsAt, marks);
+    }
+
+    /**
+     * The percent an {@code active} row publishes: the item's percent against usual now
+     * ({@link ItemStatus#pct}, what {@code moodPct} says), or the event's own contribution for an
+     * item the market no longer knows. Never against the event's direction — a HOT that drift
+     * has pulled below usual reads 0, not a minus — the same rule the tiles and placeholders use.
+     */
+    private static double activePct(MarketSimService sim, MarketEvent e, long now) {
+        ItemStatus status = sim.status(e.itemId());
+        double pct = status != null ? status.pct() : e.contribution(now) * 100.0;
+        if (!Double.isFinite(pct)) {
+            return 0.0;
+        }
+        return e.kind().sign() * pct < 0 ? 0.0 : pct;
+    }
+
+    /**
+     * The {@code name} a news row carries: the season's name for a SEASON (its tag is
+     * {@code id:year}; a season no longer in the config reads as its id in words), otherwise the
+     * item's plain label ({@link MarketSimService#displayName}).
+     */
+    private String newsName(MarketSimService sim, MarketEvent e) {
+        if (e.kind() != EventKind.SEASON) {
+            return sim.displayName(e.itemId());
+        }
+        String tag = e.tag() == null ? "" : e.tag();
+        int colon = tag.indexOf(':');
+        String id = colon < 0 ? tag : tag.substring(0, colon);
+        for (Season season : plugin.config().marketSim().settings().seasons().list()) {
+            if (season != null && season.id() != null && season.id().equalsIgnoreCase(id)) {
+                return season.name();
+            }
+        }
+        return id.isBlank() ? "Season" : Headlines.name(id.toUpperCase(Locale.ROOT));
     }
 
     /**

@@ -20,7 +20,7 @@ package com.dierks.homecraft.market;
  * only moves a fraction of the way to the target each step:
  * <pre>next = current + (target - current) * (1 - inertia)</pre>
  * Bulk orders integrate this step <i>per unit</i> across the order (see
- * {@code MarketService}) so a large order's cost is the area under the rising
+ * {@link OrderMath}) so a large order's cost is the area under the rising
  * price, and the final displayed price is where the order actually ended.
  *
  * <p><b>Spread</b> splits that mid price into an ask (what you pay to buy) sitting
@@ -67,6 +67,11 @@ public final class PricingEngine {
     /** Bid price — what a player is paid per unit to SELL (mid − half-spread). */
     public double sellPrice(double mid) {
         return mid * (1.0 - spread / 2.0);
+    }
+
+    /** The bid/ask spread as a fraction ({@code 0.10} = 10%), after the constructor's floor at 0. */
+    public double spread() {
+        return spread;
     }
 
     public static double clamp(double value, double lo, double hi) {

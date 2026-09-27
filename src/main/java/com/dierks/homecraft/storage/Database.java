@@ -632,7 +632,93 @@ public final class Database {
             // row's lifetime limit), so what they paid for carries over as slots on top of
             // their own homes. The old rows' purchases are kept: they are how the perk knows
             // which homes2/homes3 nodes it granted, and so may clear.
-            Database.CREDIT_HOME_SLOTS
+            Database.CREDIT_HOME_SLOTS,
+            // v32 — the live market (0.33). The sim's own bookkeeping only: it never writes stock
+            // or market_state, so nothing here can change what Crate holds or its balanced price.
+            // market_sim_state is one row per item: drift is the quiet wander d as a fraction,
+            // and the three *_at columns are the news, HOT/DEAL and WANTED cooldown clocks.
+            // market_events is one row per event. Column notes:
+            //   kind              HOT DEAL UP DOWN WANTED SEASON REAL
+            //   source            SIM ADMIN CALENDAR REAL
+            //   strength          signed fraction (+0.12 = 12% up)
+            //   pct               the announced % (signed)
+            //   headline, line    rendered with & codes, which the feeds strip
+            //   tag               NULL except SEASON (id:year) and REAL (item:symbol:tradeDay), and
+            //                     the partial unique index makes those two idempotent
+            //   *_ms, *_at        milliseconds, and a NULL *_at has not happened
+            // market_sim_meta holds the seed (hex), the schedule and the anti-spam counters.
+            // market_sim_ledger is what the sim paid out (sell_bonus) or saved buyers
+            // (buy_discount) per local day and item, where day is GameClock.dayKey().
+            // market_news_seen is each player's catch-up mark and mute. market_real_quotes caches
+            // real-world closes per symbol and trade day (an epoch day), and applied = 1 once the
+            // impulse for that day has been queued.
+            """
+            CREATE TABLE IF NOT EXISTS market_sim_state (
+                item_id          TEXT    PRIMARY KEY,
+                drift            REAL    NOT NULL DEFAULT 0,
+                last_news_at     INTEGER NOT NULL DEFAULT 0,
+                featured_until   INTEGER NOT NULL DEFAULT 0,
+                last_wanted_at   INTEGER NOT NULL DEFAULT 0,
+                updated_at       INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS market_events (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind            TEXT    NOT NULL,
+                source          TEXT    NOT NULL,
+                item_id         TEXT,
+                tag             TEXT,
+                strength        REAL    NOT NULL DEFAULT 0,
+                started_at      INTEGER NOT NULL,
+                ramp_ms         INTEGER NOT NULL DEFAULT 0,
+                hold_ms         INTEGER NOT NULL DEFAULT 0,
+                fade_ms         INTEGER NOT NULL DEFAULT 0,
+                half_life_ms    INTEGER NOT NULL DEFAULT 0,
+                lasts_ms        INTEGER NOT NULL DEFAULT 0,
+                ends_at         INTEGER NOT NULL,
+                stopped_at      INTEGER,
+                stop_reason     TEXT,
+                pct             REAL    NOT NULL DEFAULT 0,
+                price_before    REAL    NOT NULL DEFAULT 0,
+                price_after     REAL    NOT NULL DEFAULT 0,
+                headline        TEXT,
+                line            TEXT,
+                announce_due_at INTEGER,
+                announced_at    INTEGER,
+                last_call_at    INTEGER,
+                end_line_at     INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_market_events_ends ON market_events (ends_at);
+            CREATE INDEX IF NOT EXISTS idx_market_events_started ON market_events (started_at);
+            CREATE INDEX IF NOT EXISTS idx_market_events_item ON market_events (item_id, started_at);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_market_events_tag ON market_events (kind, tag) WHERE tag IS NOT NULL;
+            CREATE TABLE IF NOT EXISTS market_sim_meta (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS market_sim_ledger (
+                day          INTEGER NOT NULL,
+                item_id      TEXT    NOT NULL,
+                sell_bonus   REAL    NOT NULL DEFAULT 0,
+                buy_discount REAL    NOT NULL DEFAULT 0,
+                units_sold   INTEGER NOT NULL DEFAULT 0,
+                units_bought INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (day, item_id)
+            );
+            CREATE TABLE IF NOT EXISTS market_news_seen (
+                player        TEXT    PRIMARY KEY,
+                last_event_id INTEGER NOT NULL DEFAULT 0,
+                muted         INTEGER NOT NULL DEFAULT 0,
+                seen_at       INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS market_real_quotes (
+                symbol     TEXT    NOT NULL,
+                trade_day  INTEGER NOT NULL,
+                close      REAL    NOT NULL,
+                fetched_at INTEGER NOT NULL,
+                applied    INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (symbol, trade_day)
+            )
+            """
     };
 
     /** Schema v31's one statement, named so a test can run it against seeded rows. */

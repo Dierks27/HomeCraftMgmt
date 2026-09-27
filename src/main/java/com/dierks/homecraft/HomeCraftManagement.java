@@ -176,6 +176,10 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.arcade.AchievementService achievements;
     private com.dierks.homecraft.arcade.QuestService quests;
     private com.dierks.homecraft.courier.CourierService courier;
+    /** The live market (0.33): the price multiplier, its events and ticks. Null only if it failed to build. */
+    private com.dierks.homecraft.market.sim.MarketSimService marketSim;
+    /** Market news delivery: broadcasts, the join catch-up, the per-player mute. Null only if it failed to build. */
+    private com.dierks.homecraft.market.sim.MarketNewsService marketNews;
     /** Set once a pre-migration copy of config.yml is taken this start / {@code /hcm reload}. */
     private boolean configSnapshotTaken;
     private BukkitTask historyTask;
@@ -219,6 +223,22 @@ public final class HomeCraftManagement extends JavaPlugin {
                 new DailySellDao(database), new com.dierks.homecraft.storage.DailyBuyDao(database),
                 new PriceHistoryDao(database), economy);
         this.market.reload();
+        // The live market (0.33): a bounded multiplier on the balanced price. It never touches
+        // stock; with market.sim.enabled false it answers exactly 1.0 and the market is 0.32's.
+        // Built right after the catalog, plugged in as the market's mood, started (ticks, replay)
+        // once the displays are up.
+        try {
+            com.dierks.homecraft.storage.MarketSimDao simDao = new com.dierks.homecraft.storage.MarketSimDao(database);
+            this.marketNews = new com.dierks.homecraft.market.sim.MarketNewsService(this, simDao);
+            this.marketSim = new com.dierks.homecraft.market.sim.MarketSimService(this, simDao, marketNews);
+            this.market.setMood(marketSim);
+        } catch (RuntimeException e) {
+            getLogger().log(java.util.logging.Level.SEVERE,
+                    "Could not set up the live market - prices stay at their usual level.", e);
+            this.marketSim = null;
+            this.marketNews = null;
+            this.market.setMood(null);
+        }
         scheduleHistorySnapshots();
 
         // Crate ordering + shipping (Phase 3).
@@ -335,6 +355,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         getServer().getPluginManager().registerEvents(effects, this);
         getServer().getPluginManager().registerEvents(shops, this);
         getServer().getPluginManager().registerEvents(new com.dierks.homecraft.mini.MiniRenderListener(this), this);
+        // Market news: join sessions (announcements wait for someone who has been on a while) and
+        // the "While you were away" catch-up.
+        getServer().getPluginManager().registerEvents(
+                new com.dierks.homecraft.market.sim.MarketNewsListener(this), this);
 
         PluginCommand hcm = getCommand("hcm");
         if (hcm != null) {
@@ -349,6 +373,7 @@ public final class HomeCraftManagement extends JavaPlugin {
 
         // Start the economy-display refresh timer (renders signs + spawns holograms).
         this.displayService.start();
+        startMarketSim(); // load, replay the missed ticks, arm the pump (§11.2)
         this.tokens.start(); // the five-minute streak + playtime tick
         this.arcade.start();
         this.radar.start(); // the Mini Radar's two-second ping
@@ -479,6 +504,20 @@ public final class HomeCraftManagement extends JavaPlugin {
             auctionTask.cancel();
             auctionTask = null;
         }
+        if (marketSim != null) {
+            // Before the database closes: cancel the pump and any real-price fetch, then write the
+            // per-item rows and the ledger buffer in one transaction.
+            try {
+                marketSim.stop();
+            } catch (RuntimeException e) {
+                getLogger().log(java.util.logging.Level.WARNING, "Could not stop the live market cleanly.", e);
+            }
+            if (market != null) {
+                market.setMood(null);
+            }
+            marketSim = null;
+        }
+        marketNews = null;
         if (recipeManager != null) {
             recipeManager.unregisterRecipes();
         }
@@ -497,7 +536,14 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
         config.load();
         recipeManager.registerRecipes();
-        market.reload();
+        market.reload(); // also tells the live market the catalog changed
+        if (marketSim != null) {
+            try {
+                marketSim.reload(); // new settings; on/off; events of removed items end
+            } catch (RuntimeException e) {
+                getLogger().log(java.util.logging.Level.SEVERE, "The live market could not reload.", e);
+            }
+        }
         scheduleHistorySnapshots();
         miniService.reload();
         if (wildDrops != null) {
@@ -1715,6 +1761,27 @@ public final class HomeCraftManagement extends JavaPlugin {
         return c.get("config_revision", null) instanceof Number n ? n.intValue() : 0;
     }
 
+    /**
+     * Start the live market after the displays: load its rows, replay the ticks missed while the
+     * server was off, publish, arm the pump. A failure leaves every price at its usual level.
+     */
+    private void startMarketSim() {
+        if (marketSim == null) {
+            return;
+        }
+        try {
+            marketSim.start();
+        } catch (RuntimeException e) {
+            getLogger().log(java.util.logging.Level.SEVERE,
+                    "The live market could not start - prices stay at their usual level.", e);
+            try {
+                marketSim.stop(); // neutral from here on (M = 1.0); /hcm reload tries again
+            } catch (RuntimeException ignored) {
+                // it never got going
+            }
+        }
+    }
+
     /** (Re)schedule the periodic price-history snapshot task at the configured cadence. */
     private void scheduleHistorySnapshots() {
         if (historyTask != null) {
@@ -1924,5 +1991,23 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public com.dierks.homecraft.courier.CourierService courier() {
         return courier;
+    }
+
+    /**
+     * The live market (0.33): multipliers, badges, events, admin controls. {@code null} only if it
+     * could not be built; callers null-check, and check {@code active()} before showing anything.
+     */
+    public com.dierks.homecraft.market.sim.MarketSimService marketSim() {
+        return marketSim;
+    }
+
+    /** Market news delivery (broadcasts, catch-up, mute). {@code null} only if it could not be built. */
+    public com.dierks.homecraft.market.sim.MarketNewsService marketNews() {
+        return marketNews;
+    }
+
+    /** The SQLite datastore (the live market writes each tick through one of its transactions). */
+    public Database database() {
+        return database;
     }
 }

@@ -1,7 +1,9 @@
 package com.dierks.homecraft.gui.display;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.display.DisplayService;
 import com.dierks.homecraft.display.Trend;
+import com.dierks.homecraft.gui.MarketLabels;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.market.MarketItem;
@@ -18,6 +20,10 @@ import java.util.function.Consumer;
  * every economy display (sign, hologram, map-TV). Reuses the loot-editor picker
  * pattern (visual list, never a typed item name). Each icon shows the live price
  * and trend so the admin binds by sight.
+ *
+ * <p>Holograms and TVs can also show the Market News board: built with {@code offerNews}, the
+ * first tile (slot 0 of page 1) is a BELL that picks {@link DisplayService#NEWS_ID}. Signs never
+ * offer it — a sign is too small for a headline.
  */
 public final class CommodityPickerMenu extends Menu {
 
@@ -27,15 +33,26 @@ public final class CommodityPickerMenu extends Menu {
     private final String title;
     private final Consumer<String> onPick;
     private final Runnable onBack;
+    private final boolean offerNews;
     private int page;
 
     public CommodityPickerMenu(HomeCraftManagement plugin, Player player, String title,
                                Consumer<String> onPick, Runnable onBack) {
+        this(plugin, player, title, onPick, onBack, false);
+    }
+
+    /**
+     * @param offerNews put the Market News board ({@link DisplayService#NEWS_ID}) first, for
+     *                  the hologram and TV binders
+     */
+    public CommodityPickerMenu(HomeCraftManagement plugin, Player player, String title,
+                               Consumer<String> onPick, Runnable onBack, boolean offerNews) {
         super(plugin);
         this.player = player;
         this.title = title;
         this.onPick = onPick;
         this.onBack = onBack;
+        this.offerNews = offerNews;
         init(54, Text.of(title));
     }
 
@@ -45,17 +62,28 @@ public final class CommodityPickerMenu extends Menu {
             set(i, Menus.FILLER, null);
         }
         List<MarketItem> items = new ArrayList<>(plugin.market().catalog());
-        int pages = Math.max(1, (int) Math.ceil(items.size() / (double) PAGE_SIZE));
+        // The news board, when offered, takes the first tile and every commodity moves up one.
+        int lead = offerNews ? 1 : 0;
+        int entries = items.size() + lead;
+        int pages = Math.max(1, (int) Math.ceil(entries / (double) PAGE_SIZE));
         page = Math.max(0, Math.min(page, pages - 1));
 
         int start = page * PAGE_SIZE;
         for (int i = 0; i < PAGE_SIZE; i++) {
             int idx = start + i;
-            if (idx >= items.size()) {
+            if (idx >= entries) {
                 set(i, null, null);
                 continue;
             }
-            MarketItem item = items.get(idx);
+            if (idx < lead) {
+                set(i, Menus.icon(Material.BELL, MarketLabels.NEWS_BUTTON,
+                        "&7The newest market headline and",
+                        "&7what is HOT or on sale right now.",
+                        "&8—",
+                        "&eClick to bind this display"), e -> onPick.accept(DisplayService.NEWS_ID));
+                continue;
+            }
+            MarketItem item = items.get(idx - lead);
             double change = plugin.market().change24h(item.id());
             set(i, Menus.icon(item.material(), item.label(),
                     "&7Price: &6" + plugin.economy().format(plugin.market().price(item.id())),
@@ -77,7 +105,7 @@ public final class CommodityPickerMenu extends Menu {
                 e.getWhoClicked().closeInventory();
             }
         });
-        if ((page + 1) * PAGE_SIZE < items.size()) {
+        if ((page + 1) * PAGE_SIZE < entries) {
             set(53, Menus.icon(Material.ARROW, "&eNext »"), e -> {
                 page++;
                 refresh();

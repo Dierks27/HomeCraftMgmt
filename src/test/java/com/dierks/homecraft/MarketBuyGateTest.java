@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -28,6 +29,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Selling is the asymmetry and stays open to everyone: you are the one delivering the
  * goods, so there is nothing to ship.
+ *
+ * <p>The live market (0.33) adds one more gate of the same kind: {@code hcm.market.sim} forces
+ * news flashes and HOT/DEAL, pauses and resets the market — every one of those moves prices for
+ * everyone — so it is pinned op-only and granted through {@code hcm.admin}. Reading the news
+ * rides on {@code hcm.market.price}, which is pinned still open to everyone.
  *
  * <p>Registry-free: this reads the shipped {@code plugin.yml} as YAML, so it needs no server.
  */
@@ -94,5 +100,42 @@ class MarketBuyGateTest {
         assertTrue(!description.contains("buy from"), "hcm.market.order still describes itself "
                 + "as granting buying. It does not, and an admin reading that would reasonably "
                 + "grant it expecting to hand out both");
+    }
+
+    /**
+     * Running the live market is op-only and comes with the admin bundle.
+     *
+     * <p>{@code /hcm market news <item> up} and {@code /hcm market sim hot|deal|reset|pause} move
+     * the price every player sees, pays and is paid. Open that node to everyone and any player
+     * could force a +25% flash on what they are holding and sell into it.
+     */
+    @Test
+    void runningTheLiveMarketIsOpOnlyAndComesWithAdmin() throws Exception {
+        YamlConfiguration yml = pluginYml();
+        Object declared = node(yml, "hcm.market.sim", "default");
+        assertNotNull(declared, "hcm.market.sim is not declared — Bukkit would then default it to "
+                + "op silently, and nothing would document who may force market events");
+        assertEquals("op", String.valueOf(declared).toLowerCase(java.util.Locale.ROOT),
+                "hcm.market.sim must default to op: it forces news flashes, HOT and DEAL, and "
+                        + "pauses or resets the market, which moves prices for everyone");
+
+        // Same dotted-path split as node(): the child's name is nested under children too.
+        assertEquals(Boolean.TRUE, yml.get("permissions.hcm.admin.children.hcm.market.sim"),
+                "hcm.admin must grant hcm.market.sim, so an admin can run /hcm market sim "
+                        + "without a separate grant");
+
+        for (String open : new String[] {"hcm.market.price", "hcm.market.order"}) {
+            assertNull(yml.get("permissions." + open + ".children.hcm.market.sim"),
+                    open + " defaults to true, so it must never carry hcm.market.sim as a child");
+        }
+    }
+
+    /** Reading prices and the market news stays open to everyone ({@code /hcm market news} rides on it). */
+    @Test
+    void checkingPricesAndReadingTheNewsStaysOpenToEveryone() throws Exception {
+        YamlConfiguration yml = pluginYml();
+        assertEquals("true", String.valueOf(node(yml, "hcm.market.price", "default")),
+                "hcm.market.price must stay true: every player checks prices and reads the "
+                        + "market news (/hcm market price, /hcm market news) with it");
     }
 }

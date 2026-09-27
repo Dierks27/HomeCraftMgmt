@@ -1,5 +1,8 @@
 package com.dierks.homecraft;
 
+import com.dierks.homecraft.config.MarketSimConfig;
+import com.dierks.homecraft.market.sim.RealSymbol;
+import com.dierks.homecraft.market.sim.SimSettings;
 import com.dierks.homecraft.mini.Grade;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -1404,5 +1407,133 @@ class ConfigMigrationTest {
         assertFalse(ids.contains("home_2"), "ours goes");
         assertTrue(log.stream().anyMatch(l -> l.startsWith(HomeCraftManagement.WARN) && l.contains("home_3")),
                 "named: " + log);
+    }
+
+    // ---- 0.33: the live market (market.sim) arrives by backfill alone -------------------
+    //
+    // Every market.sim key is new, so no migration step and no config_revision bump: the leaf
+    // backfill adds the section. Its lists (headline lists, same_plural, seasons.list,
+    // real_world.symbols, the [low, high] pairs) are single leaves, so they arrive whole and an
+    // admin's edits or deletions inside them are never undone.
+
+    /** A 0.32 file: everything the jar ships except market.sim — what every live server has. */
+    private static YamlConfiguration v032OnDisk() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        onDisk.set("market.sim", null);
+        assertFalse(onDisk.contains("market.sim", true), "fixture: market.sim is gone");
+        return onDisk;
+    }
+
+    /** market.sim's leaves in the bundled file, full paths, in file order. */
+    private static List<String> marketSimLeaves(YamlConfiguration c) {
+        List<String> leaves = new ArrayList<>();
+        for (String key : c.getConfigurationSection("market.sim").getKeys(true)) {
+            if (!c.isConfigurationSection("market.sim." + key)) {
+                leaves.add("market.sim." + key);
+            }
+        }
+        return leaves;
+    }
+
+    @Test
+    void aPreLiveMarketFileGainsEveryMarketSimLeafAndNothingElse() throws Exception {
+        YamlConfiguration shipped = bundled();
+        YamlConfiguration onDisk = v032OnDisk();
+        List<Map<?, ?>> catalogBefore = onDisk.getMapList("market.catalog");
+
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"),
+                "every market.sim key is new: no migration step, no config_revision bump");
+        List<String> added = HomeCraftManagement.backfillConfig(onDisk, shipped);
+
+        List<String> leaves = marketSimLeaves(shipped);
+        assertFalse(leaves.isEmpty(), "config.yml ships market.sim");
+        assertEquals(leaves, added, "exactly the market.sim leaves, in file order");
+        for (String key : leaves) {
+            assertEquals(shipped.get(key), onDisk.get(key), key + " must arrive with its shipped value");
+        }
+
+        // Lists arrive whole, as one leaf each — never element by element.
+        for (String list : List.of("market.sim.hot.percent", "market.sim.headlines.up", "market.sim.same_plural",
+                "market.sim.seasons.list", "market.sim.real_world.symbols")) {
+            assertTrue(added.contains(list), list + " is one leaf: " + added);
+            assertTrue(added.stream().noneMatch(k -> k.startsWith(list + ".")), list + " was split: " + added);
+        }
+        assertEquals(List.of(8, 15), onDisk.getList("market.sim.hot.percent"));
+        assertEquals(12, onDisk.getStringList("market.sim.headlines.up").size());
+        assertEquals(41, onDisk.getStringList("market.sim.same_plural").size());
+        assertEquals(7, onDisk.getMapList("market.sim.seasons.list").size());
+        assertEquals(3, onDisk.getMapList("market.sim.real_world.symbols").size());
+
+        assertEquals(catalogBefore, onDisk.getMapList("market.catalog"), "the catalog is untouched");
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"));
+
+        // The explanation travels with the keys: the section header and the inline notes.
+        assertTrue(String.valueOf(onDisk.getComments("market.sim")).contains("LOCKED IN CODE"),
+                "the market.sim header must come across: " + onDisk.getComments("market.sim"));
+        assertFalse(onDisk.getInlineComments("market.sim.tick_minutes").isEmpty());
+        assertTrue(onDisk.saveToString().contains("LOCKED IN CODE"));
+
+        // And what arrived is exactly the shipped live market, read without a WARN.
+        List<String> warns = new ArrayList<>();
+        assertEquals(SimSettings.defaults(), MarketSimConfig.parse(onDisk, warns::add).settings());
+        assertEquals(List.of(), warns);
+
+        assertEquals(List.of(), HomeCraftManagement.backfillConfig(onDisk, shipped), "a second pass adds nothing");
+    }
+
+    /** The pre-0.21 file (an admin's own two-row catalog) gains market.sim and keeps its catalog. */
+    @Test
+    void aLegacyFileGainsTheLiveMarketAndKeepsItsCatalog() throws Exception {
+        YamlConfiguration onDisk = legacyOnDisk();
+        HomeCraftManagement.migrateConfig(onDisk, "world");
+        List<Map<?, ?>> catalog = onDisk.getMapList("market.catalog");
+
+        List<String> added = HomeCraftManagement.backfillConfig(onDisk, bundled());
+
+        assertTrue(added.contains("market.sim.enabled"), "added: " + added);
+        assertTrue(added.contains("market.sim.seasons.list"), "added: " + added);
+        assertEquals(catalog, onDisk.getMapList("market.catalog"), "the admin's two rows stay two rows");
+        assertEquals(SimSettings.defaults(), MarketSimConfig.parse(onDisk, w -> { }).settings());
+    }
+
+    /**
+     * An admin's live-market edits survive: a deleted real_world.symbols row (and season) is not
+     * re-added, a trimmed headline list and a retuned pair stay as written — only a missing
+     * scalar leaf comes back.
+     */
+    @Test
+    void aDeletedRealWorldSymbolRowIsNotReAdded() throws Exception {
+        YamlConfiguration onDisk = bundled();
+        List<Map<?, ?>> symbols = new ArrayList<>(onDisk.getMapList("market.sim.real_world.symbols"));
+        assertTrue(symbols.removeIf(row -> "wheat".equals(row.get("item"))), "fixture: wheat ships");
+        onDisk.set("market.sim.real_world.symbols", symbols);
+        List<Map<?, ?>> seasons = new ArrayList<>(onDisk.getMapList("market.sim.seasons.list"));
+        assertTrue(seasons.removeIf(row -> "new_year".equals(row.get("id"))), "fixture: new_year ships");
+        onDisk.set("market.sim.seasons.list", seasons);
+        onDisk.set("market.sim.headlines.up", List.of("Everyone wants {item} at the fair!"));
+        onDisk.set("market.sim.hot.percent", List.of(5, 10));
+        onDisk.set("market.sim.enabled", false);
+        onDisk.set("market.sim.news.max_per_day", null);
+
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"));
+        List<String> added = HomeCraftManagement.backfillConfig(onDisk, bundled());
+
+        assertEquals(List.of("market.sim.news.max_per_day"), added,
+                "only the missing scalar comes back; the lists are the admin's");
+        assertEquals(symbols, onDisk.getMapList("market.sim.real_world.symbols"), "the wheat row stays deleted");
+        assertEquals(seasons, onDisk.getMapList("market.sim.seasons.list"), "new_year stays deleted");
+        assertEquals(List.of("Everyone wants {item} at the fair!"), onDisk.getStringList("market.sim.headlines.up"));
+        assertEquals(List.of(5, 10), onDisk.getList("market.sim.hot.percent"));
+        assertFalse(onDisk.getBoolean("market.sim.enabled"), "their off switch stands");
+
+        List<String> warns = new ArrayList<>();
+        SimSettings s = MarketSimConfig.parse(onDisk, warns::add).settings();
+        assertEquals(List.of(), warns);
+        assertFalse(s.enabled());
+        assertEquals(List.of("gold_ingot", "iron_ingot"), s.real().symbols().stream().map(RealSymbol::item).toList());
+        assertEquals(6, s.seasons().list().size());
+        assertEquals(List.of("Everyone wants {item} at the fair!"), s.headlines().up());
+        assertEquals(new SimSettings.Range(5, 10), s.hot().percent());
+        assertEquals(2, s.news().maxPerDay(), "the re-added leaf carries the shipped value");
     }
 }

@@ -649,12 +649,13 @@ public final class MarketService {
 
     /**
      * A commodity's history thinned to one point per epoch-aligned {@code bucketMs} bucket (the
-     * latest snapshot in each) from {@code fromInclusive} on, oldest first. See
-     * {@link PriceHistoryDao#sampled}.
+     * latest snapshot in each) from {@code fromInclusive} to {@code toInclusive}, oldest first.
+     * See {@link PriceHistoryDao#sampled}.
      */
-    public List<PriceHistoryDao.Snapshot> sampledHistory(String id, long fromInclusive, long bucketMs) {
+    public List<PriceHistoryDao.Snapshot> sampledHistory(String id, long fromInclusive, long toInclusive,
+                                                         long bucketMs) {
         try {
-            return historyDao.sampled(id, fromInclusive, bucketMs);
+            return historyDao.sampled(id, fromInclusive, toInclusive, bucketMs);
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to read sampled price history: " + e.getMessage());
             return List.of();

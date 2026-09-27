@@ -1,5 +1,6 @@
 package com.dierks.homecraft.web;
 
+import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -120,14 +121,18 @@ public final class FeedAuth {
      * (10/8, 172.16/12, 192.168/16), link-local (169.254/16, fe80::/10) and IPv6 unique-local
      * (fc00::/7). An IPv4-mapped IPv6 address ({@code ::ffff:a.b.c.d}) is judged as the IPv4
      * address inside it. Everything else is not local — including CGNAT / Tailscale (100.64/10),
-     * which is shared with strangers, and the wildcard 0.0.0.0.
+     * which is shared with strangers, the retired IPv6 site-local range fec0::/10, and the
+     * wildcard 0.0.0.0.
      */
     public static boolean isLocal(InetAddress a) {
         if (a == null) {
             return false;
         }
         InetAddress addr = unmapped(a);
-        if (addr.isLoopbackAddress() || addr.isSiteLocalAddress() || addr.isLinkLocalAddress()) {
+        // isSiteLocalAddress only for IPv4: on IPv6 it means the long-retired fec0::/10, which is
+        // not a home network (ULA, fc00::/7, is checked below).
+        if (addr.isLoopbackAddress() || (addr instanceof Inet4Address && addr.isSiteLocalAddress())
+                || addr.isLinkLocalAddress()) {
             return true;
         }
         if (addr instanceof Inet6Address) {
@@ -157,6 +162,35 @@ public final class FeedAuth {
             }
         }
         return false;
+    }
+
+    /**
+     * An {@code Authorization} header value as the client wrote it. The JDK server turns each header
+     * byte into one char (ISO-8859-1); clients such as WordPress and curl send a token's UTF-8
+     * bytes, so this re-reads those bytes as UTF-8. An ASCII value comes back unchanged.
+     */
+    public static String fromWire(String header) {
+        if (header == null) {
+            return null;
+        }
+        return new String(header.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Whether a token is plain printable ASCII (space to {@code ~}) — what every client, the
+     * dashboard page included, can put in a header. A blank or null token is fine (the gate is off).
+     */
+    public static boolean isPlainAscii(String token) {
+        if (token == null) {
+            return true;
+        }
+        for (int i = 0; i < token.length(); i++) {
+            char c = token.charAt(i);
+            if (c < 0x20 || c > 0x7e) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Only the switches: the token (and its digest) never reach a log line. */

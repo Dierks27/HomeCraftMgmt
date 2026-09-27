@@ -81,7 +81,9 @@ public final class PriceHistoryDao {
     /**
      * One point per epoch-aligned bucket: the latest snapshot in each bucket of
      * {@code bucketMs} (bucket = {@code recorded_at / bucketMs}) with
-     * {@code recorded_at >= fromInclusive}, oldest first. Each point is a real row: its
+     * {@code fromInclusive <= recorded_at <= toInclusive}, oldest first. The upper bound is the
+     * caller's "now": a row stamped later (the clock was stepped back after it was written) would
+     * otherwise add a point past the window, and one more than the window has buckets. Each point is a real row: its
      * price, stock and exact {@code recorded_at}. Buckets with no snapshot are simply absent.
      *
      * <p>Relies on SQLite's bare-column rule: with a single {@code MAX()} aggregate, the other
@@ -90,7 +92,8 @@ public final class PriceHistoryDao {
      *
      * @param bucketMs bucket width in ms; must be positive
      */
-    public List<Snapshot> sampled(String itemId, long fromInclusive, long bucketMs) throws SQLException {
+    public List<Snapshot> sampled(String itemId, long fromInclusive, long toInclusive, long bucketMs)
+            throws SQLException {
         if (bucketMs <= 0) {
             throw new IllegalArgumentException("bucketMs must be positive: " + bucketMs);
         }
@@ -99,10 +102,12 @@ public final class PriceHistoryDao {
         synchronized (c) {
             try (PreparedStatement ps = c.prepareStatement(
                     "SELECT item_id, price, stock, MAX(recorded_at) AS t FROM market_price_history "
-                            + "WHERE item_id = ? AND recorded_at >= ? GROUP BY recorded_at / ? ORDER BY t")) {
+                            + "WHERE item_id = ? AND recorded_at >= ? AND recorded_at <= ? "
+                            + "GROUP BY recorded_at / ? ORDER BY t")) {
                 ps.setString(1, itemId);
                 ps.setLong(2, fromInclusive);
-                ps.setLong(3, bucketMs); // bound as an integer, so the division is integer division
+                ps.setLong(3, toInclusive);
+                ps.setLong(4, bucketMs); // bound as an integer, so the division is integer division
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         out.add(new Snapshot(

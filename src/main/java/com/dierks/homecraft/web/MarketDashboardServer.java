@@ -95,6 +95,12 @@ public final class MarketDashboardServer {
         this.indexHtml = loadIndexHtml(cfg.title());
         FeedAuth gate = new FeedAuth(cfg.feedToken(), cfg.lanSkipsToken());
         this.auth = gate;
+        if (!FeedAuth.isPlainAscii(cfg.feedToken())) {
+            // Names the key, never the value.
+            plugin.getLogger().warning("web.dashboard.feed_token has characters other than plain ASCII letters,"
+                    + " digits and punctuation. The dashboard page cannot send such a token; use something like"
+                    + " the output of `openssl rand -hex 32`.");
+        }
         // A reload may have changed the catalog: rebuild the long histories on the first refresh.
         this.longHistoryVersion = -1;
         this.longHistoryBuiltAt = 0L;
@@ -108,12 +114,13 @@ public final class MarketDashboardServer {
             server = null;
             return;
         }
-        // A tiny bounded pool; requests are trivial (serve a cached payload).
-        executor = Executors.newFixedThreadPool(2, r -> {
-            Thread t = new Thread(r, "hcm-dashboard");
-            t.setDaemon(true);
-            return t;
-        });
+        // One virtual thread per request. The JDK server reads a request's headers on this
+        // executor with no time limit, so with a small fixed pool a couple of connections that
+        // send half a request and stop (the port faces the internet now) would starve every
+        // feed; a stalled virtual thread costs next to nothing and holds nobody else up. (That
+        // needs Java 24+, where a virtual thread blocked inside the JDK's synchronized request
+        // reader gives its carrier back — JEP 491; this plugin is built for Java 25.)
+        executor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("hcm-dashboard-", 0).factory());
         server.setExecutor(executor);
         // Every /api feed goes through serveFeed, so each one gets the same token gate. The
         // supplier reads the field per request, i.e. always the latest snapshot.
@@ -142,8 +149,8 @@ public final class MarketDashboardServer {
             server.stop(0);
             server = null;
         }
-        // HttpServer.stop leaves the executor it was handed running; without this every
-        // /hcm reload (which restarts the server) would leave two idle threads behind.
+        // HttpServer.stop leaves the executor it was handed running; shut it down so an
+        // /hcm reload (which restarts the server) leaves nothing of the old one behind.
         if (executor != null) {
             executor.shutdown();
             executor = null;
@@ -180,7 +187,8 @@ public final class MarketDashboardServer {
         Headers request = ex.getRequestHeaders();
         InetSocketAddress remote = ex.getRemoteAddress();
         InetAddress remoteAddress = remote == null ? null : remote.getAddress();
-        if (!auth.allows(request.getFirst("Authorization"), remoteAddress, FeedAuth.looksForwarded(request))) {
+        String authorization = FeedAuth.fromWire(request.getFirst("Authorization"));
+        if (!auth.allows(authorization, remoteAddress, FeedAuth.looksForwarded(request))) {
             ex.getResponseHeaders().set("WWW-Authenticate", "Bearer");
             respond(ex, 401, JSON, UNAUTHORIZED);
             return;
@@ -211,6 +219,15 @@ public final class MarketDashboardServer {
     private void respond(HttpExchange ex, int status, String contentType, byte[] body) throws IOException {
         ex.getResponseHeaders().set("Content-Type", contentType);
         ex.getResponseHeaders().set("Cache-Control", "no-store");
+        if ("HEAD".equalsIgnoreCase(ex.getRequestMethod())) {
+            // The headers a GET would get, and no body. Handing the JDK a length for a HEAD logs a
+            // warning per request (a way for anyone to fill the server log) and fails the write,
+            // so the length goes in a header of our own.
+            ex.getResponseHeaders().set("Content-Length", Integer.toString(body.length));
+            ex.sendResponseHeaders(status, -1);
+            ex.close();
+            return;
+        }
         // A length of 0 would mean "chunked" to the JDK server; -1 is "no body".
         ex.sendResponseHeaders(status, body.length == 0 ? -1 : body.length);
         try (var os = ex.getResponseBody()) {
@@ -289,8 +306,8 @@ public final class MarketDashboardServer {
         Map<String, List<PriceHistoryDao.Snapshot>> next7d = new HashMap<>();
         Map<String, List<PriceHistoryDao.Snapshot>> next30d = new HashMap<>();
         for (MarketItem item : market.catalog()) {
-            next7d.put(item.id(), market.sampledHistory(item.id(), from7d, MarketFeed.H7_BUCKET_MS));
-            next30d.put(item.id(), market.sampledHistory(item.id(), from30d, MarketFeed.H30_BUCKET_MS));
+            next7d.put(item.id(), market.sampledHistory(item.id(), from7d, now, MarketFeed.H7_BUCKET_MS));
+            next30d.put(item.id(), market.sampledHistory(item.id(), from30d, now, MarketFeed.H30_BUCKET_MS));
         }
         history7d = next7d;
         history30d = next30d;

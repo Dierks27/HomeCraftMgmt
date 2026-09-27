@@ -978,7 +978,10 @@ web:
     # the port can read /api/* (how it always worked). When set, /api/* needs
     # the header "Authorization: Bearer <token>" and answers 401 without it.
     # Put the same value in WordPress (Settings → LilahCraft → Feed token).
-    # Quote it, and pick something long and random. It is never logged.
+    # Quote it, and pick something long and random in plain ASCII (letters,
+    # digits, punctuation), e.g. the output of `openssl rand -hex 32`: an
+    # accented letter or a symbol like € can't go in the dashboard page's
+    # header. It is never logged.
     feed_token: ""
     # With a token set, the dashboard page asks for it once (and the browser
     # remembers it). Set this true to let requests from this PC or the home

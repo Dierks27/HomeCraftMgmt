@@ -105,6 +105,7 @@
   var charts = {};       // id -> Chart instance
   var refreshMs = 30000; // updated from the feed
   var timer = null;
+  var reqSeq = 0;        // only the newest request's answer counts (an Unlock can overtake a refresh)
 
   // The feed token (web.dashboard.feed_token), only needed when the server asks for it with a
   // 401. Kept in localStorage so it is asked for once; every access is guarded (private windows
@@ -250,11 +251,11 @@
   }
 
   // A 401: stop refreshing, hide the stale cards and ask for the token.
-  function showLock(rejected) {
+  function showLock(rejected, why) {
     if (timer) { clearTimeout(timer); timer = null; }
     document.getElementById("grid").style.display = "none";
     document.getElementById("empty").style.display = "none";
-    document.getElementById("status").textContent = rejected ? "token not accepted" : "locked";
+    document.getElementById("status").textContent = why || (rejected ? "token not accepted" : "locked");
     var lock = document.getElementById("lock");
     lock.hidden = false;
     document.getElementById("lockToken").focus();
@@ -265,24 +266,32 @@
   }
 
   function tick() {
+    var seq = ++reqSeq;
     var token = loadToken();
     var headers = {};
     if (token) {
-      // A header can only carry plain text; a token that can't be sent can't be right either.
-      if (/[^\x20-\x7e]/.test(token)) { forgetToken(); showLock(true); return; }
+      // The page can only send plain ASCII in a header (the feed_token rule in config.yml).
+      if (/[^\x20-\x7e]/.test(token)) {
+        forgetToken();
+        showLock(true, "the token must be plain letters, digits and punctuation");
+        return;
+      }
       headers["Authorization"] = "Bearer " + token;
     }
     fetch("/api/market", { cache: "no-store", headers: headers })
       .then(function (r) {
+        if (seq !== reqSeq) return null; // overtaken by a newer request
         if (r.status === 401) throw UNAUTHORIZED;
         return r.json();
       })
       .then(function (feed) {
+        if (seq !== reqSeq || feed === null) return;
         hideLock();
         render(feed);
         schedule();
       })
       .catch(function (e) {
+        if (seq !== reqSeq) return; // a newer request owns the page now
         if (e === UNAUTHORIZED) {
           forgetToken();
           showLock(!!token);

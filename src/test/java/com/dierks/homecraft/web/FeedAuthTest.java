@@ -243,4 +243,32 @@ class FeedAuthTest {
         assertTrue(auth.lanSkipsToken());
         assertFalse(new FeedAuth(TOKEN, false).lanSkipsToken());
     }
+
+    @Test
+    void theRetiredIpv6SiteLocalRangeIsNotTheHomeNetwork() throws Exception {
+        assertFalse(FeedAuth.isLocal(ip("fec0::1")));
+        assertFalse(new FeedAuth(TOKEN, true).allows(null, ip("fec0::1"), false));
+    }
+
+    @Test
+    void aUtf8TokenOnTheWireMatchesTheConfiguredOne() {
+        FeedAuth gate = new FeedAuth("clé-secrète-42", false);
+        // What the JDK server hands over for a client that sent the token's UTF-8 bytes.
+        String wire = new String("Bearer clé-secrète-42".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                java.nio.charset.StandardCharsets.ISO_8859_1);
+        assertFalse(gate.allows(wire, null, false), "read as ISO-8859-1 it does not match");
+        assertTrue(gate.allows(FeedAuth.fromWire(wire), null, false), "re-read as UTF-8 it does");
+        assertEquals(GOOD, FeedAuth.fromWire(GOOD), "an ASCII header comes back unchanged");
+        assertNull(FeedAuth.fromWire(null));
+    }
+
+    @Test
+    void onlyPlainAsciiTokensCountAsSendable() {
+        assertTrue(FeedAuth.isPlainAscii("a1b2-C3_d4.e5 ~!"));
+        assertTrue(FeedAuth.isPlainAscii(""));
+        assertTrue(FeedAuth.isPlainAscii(null));
+        assertFalse(FeedAuth.isPlainAscii("pässwörd"));
+        assertFalse(FeedAuth.isPlainAscii("tab\there"));
+        assertFalse(FeedAuth.isPlainAscii("euro€"));
+    }
 }

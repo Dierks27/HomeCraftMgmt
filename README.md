@@ -632,12 +632,14 @@ byte for byte the same (a test pins it against the old builder). About the two l
 ### The feed token
 
 - **`web.dashboard.feed_token`**, blank by default. Blank is how it always worked: anyone
-  who can reach the port can read the feeds. Set it (long, random, in quotes) and put the
-  same value in WordPress: Settings → LilahCraft → **Feed token**. `/hcm reload` applies it.
+  who can reach the port can read the feeds. Set it (long, random, in quotes, **plain ASCII**:
+  letters, digits and punctuation, e.g. `openssl rand -hex 32`) and put the same value in
+  WordPress: Settings → LilahCraft → **Feed token**. `/hcm reload` applies it. A token with
+  accented letters or symbols like € logs a warning at start: the dashboard page can't send it.
 - **When it's set,** every `/api/*` feed goes through one gate that wants
   `Authorization: Bearer <token>`. Anything else gets **`401`** with `WWW-Authenticate: Bearer`,
   `Cache-Control: no-store` and the body `{"error":"unauthorized"}`.
-- **Constant-time:** the plugin keeps only the token's SHA-256 and compares digests with
+- **Constant-time:** the gate (`FeedAuth`) keeps only the token's SHA-256 and compares digests with
   `MessageDigest.isEqual`, so the check takes the same time for every wrong guess and doesn't
   leak the length. The token is never logged or echoed; the startup line only says whether a
   token is on.
@@ -676,8 +678,9 @@ way"**: the page asks for the token itself. The LAN option is there too, but **o
 Every `/api/*` feed is gzipped (`Content-Encoding: gzip`) when the request's
 `Accept-Encoding` allows `gzip` (or `x-gzip`, or `*`) with a q above 0. The compressed copy is
 made the first time a client asks for it after each rebuild, then reused until the next one.
-Feeds always send `Vary: Accept-Encoding`,
-`Content-Type: application/json; charset=utf-8` and `Cache-Control: no-store`. It matters
+Every 200 from a feed sends `Vary: Accept-Encoding`,
+`Content-Type: application/json; charset=utf-8` and `Cache-Control: no-store` (the 401 above
+carries the last two). A `HEAD` request gets the same headers with no body. It matters
 here: each item can carry up to 96 + 168 + 120 history points.
 
 ### Exposing the feeds (on the VPS)

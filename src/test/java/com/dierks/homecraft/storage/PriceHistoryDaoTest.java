@@ -30,6 +30,8 @@ class PriceHistoryDaoTest {
     private static final long MIN = 60_000L;
     private static final long HOUR = 3_600_000L;
     private static final long DAY = 86_400_000L;
+    /** No upper bound, for the tests about everything else. */
+    private static final long END = Long.MAX_VALUE;
     /** An hour boundary in 2026: 1 790 000 000 000 ms rounded down to the hour. */
     private static final long H0 = Math.floorDiv(1_790_000_000_000L, HOUR) * HOUR;
 
@@ -92,7 +94,7 @@ class PriceHistoryDaoTest {
         // hour 2: nothing — the bucket is simply absent
         dao.record("iron_ingot", 2.50, 4500, H0 + 3 * HOUR + 1);
 
-        List<PriceHistoryDao.Snapshot> points = dao.sampled("iron_ingot", H0, HOUR);
+        List<PriceHistoryDao.Snapshot> points = dao.sampled("iron_ingot", H0, END, HOUR);
 
         assertEquals(3, points.size());
         assertPoint(points.get(0), "iron_ingot", H0 + HOUR - 1, 2.30, 4300);
@@ -105,13 +107,13 @@ class PriceHistoryDaoTest {
         dao.record("iron_ingot", 1.0, 10, H0 + HOUR - 1);
         dao.record("iron_ingot", 2.0, 20, H0 + HOUR);
 
-        List<PriceHistoryDao.Snapshot> points = dao.sampled("iron_ingot", H0, HOUR);
+        List<PriceHistoryDao.Snapshot> points = dao.sampled("iron_ingot", H0, END, HOUR);
         assertEquals(2, points.size(), "k*bucket belongs to bucket k, not k-1");
         assertPoint(points.get(0), "iron_ingot", H0 + HOUR - 1, 1.0, 10);
         assertPoint(points.get(1), "iron_ingot", H0 + HOUR, 2.0, 20);
 
         dao.record("iron_ingot", 3.0, 30, H0 + 2 * HOUR - 1);
-        points = dao.sampled("iron_ingot", H0, HOUR);
+        points = dao.sampled("iron_ingot", H0, END, HOUR);
         assertEquals(2, points.size());
         assertPoint(points.get(1), "iron_ingot", H0 + 2 * HOUR - 1, 3.0, 30);
     }
@@ -121,12 +123,12 @@ class PriceHistoryDaoTest {
         dao.record("iron_ingot", 1.0, 10, H0 - 1);
         dao.record("iron_ingot", 2.0, 20, H0);
 
-        List<PriceHistoryDao.Snapshot> points = dao.sampled("iron_ingot", H0, HOUR);
+        List<PriceHistoryDao.Snapshot> points = dao.sampled("iron_ingot", H0, END, HOUR);
         assertEquals(1, points.size(), "one ms before from is out");
         assertPoint(points.get(0), "iron_ingot", H0, 2.0, 20);
 
-        assertEquals(2, dao.sampled("iron_ingot", H0 - 1, HOUR).size(), "a row exactly at from is in");
-        assertTrue(dao.sampled("iron_ingot", H0 + 1, HOUR).isEmpty());
+        assertEquals(2, dao.sampled("iron_ingot", H0 - 1, END, HOUR).size(), "a row exactly at from is in");
+        assertTrue(dao.sampled("iron_ingot", H0 + 1, END, HOUR).isEmpty());
     }
 
     @Test
@@ -134,10 +136,10 @@ class PriceHistoryDaoTest {
         dao.record("iron_ingot", 1.0, 10, H0 + 10 * MIN);
         dao.record("iron_ingot", 2.0, 20, H0 + 40 * MIN);
 
-        List<PriceHistoryDao.Snapshot> points = dao.sampled("iron_ingot", H0 + 30 * MIN, HOUR);
+        List<PriceHistoryDao.Snapshot> points = dao.sampled("iron_ingot", H0 + 30 * MIN, END, HOUR);
         assertEquals(1, points.size());
         assertPoint(points.get(0), "iron_ingot", H0 + 40 * MIN, 2.0, 20);
-        assertTrue(dao.sampled("iron_ingot", H0 + 45 * MIN, HOUR).isEmpty(),
+        assertTrue(dao.sampled("iron_ingot", H0 + 45 * MIN, END, HOUR).isEmpty(),
                 "a bucket whose rows are all before from is empty, not filled from before it");
     }
 
@@ -148,12 +150,12 @@ class PriceHistoryDaoTest {
         dao.record("iron_ingot", 2.1, 110, H0 + HOUR + 10 * MIN);
         dao.record("gold_ingot", 9.1, 910, H0 + HOUR + 50 * MIN);
 
-        List<PriceHistoryDao.Snapshot> iron = dao.sampled("iron_ingot", H0, HOUR);
+        List<PriceHistoryDao.Snapshot> iron = dao.sampled("iron_ingot", H0, END, HOUR);
         assertEquals(2, iron.size());
         assertPoint(iron.get(0), "iron_ingot", H0 + 10 * MIN, 2.0, 100);
         assertPoint(iron.get(1), "iron_ingot", H0 + HOUR + 10 * MIN, 2.1, 110);
 
-        List<PriceHistoryDao.Snapshot> gold = dao.sampled("gold_ingot", H0, HOUR);
+        List<PriceHistoryDao.Snapshot> gold = dao.sampled("gold_ingot", H0, END, HOUR);
         assertEquals(2, gold.size());
         assertPoint(gold.get(0), "gold_ingot", H0 + 20 * MIN, 9.0, 900);
         assertPoint(gold.get(1), "gold_ingot", H0 + HOUR + 50 * MIN, 9.1, 910);
@@ -162,8 +164,8 @@ class PriceHistoryDaoTest {
     @Test
     void anItemWithNoHistorySamplesToNothing() throws Exception {
         dao.record("iron_ingot", 2.0, 100, H0);
-        assertTrue(dao.sampled("diamond", 0, HOUR).isEmpty());
-        assertTrue(dao.sampled("iron_ingot", H0 + 1, HOUR).isEmpty(), "…and nothing since from is the same");
+        assertTrue(dao.sampled("diamond", 0, END, HOUR).isEmpty());
+        assertTrue(dao.sampled("iron_ingot", H0 + 1, END, HOUR).isEmpty(), "…and nothing since from is the same");
     }
 
     @Test
@@ -175,7 +177,7 @@ class PriceHistoryDaoTest {
             dao.record("iron_ingot", 2.0 + i / 1000.0, 4000 + i, d0 + i * 30 * MIN);
         }
 
-        List<PriceHistoryDao.Snapshot> points = dao.sampled("iron_ingot", d0, h6);
+        List<PriceHistoryDao.Snapshot> points = dao.sampled("iron_ingot", d0, END, h6);
 
         assertEquals(8, points.size(), "two days = eight quarter-days");
         for (int b = 0; b < points.size(); b++) {
@@ -201,7 +203,7 @@ class PriceHistoryDaoTest {
         long now = written.get(n - 1) + 5 * MIN;
 
         long from7 = windowStart(now, HOUR, 168);
-        List<PriceHistoryDao.Snapshot> h7 = dao.sampled("iron_ingot", from7, HOUR);
+        List<PriceHistoryDao.Snapshot> h7 = dao.sampled("iron_ingot", from7, now, HOUR);
         assertEquals(168, h7.size(), "half-hourly snapshots fill every hour of the window");
         long prev = Long.MIN_VALUE;
         for (PriceHistoryDao.Snapshot s : h7) {
@@ -224,12 +226,30 @@ class PriceHistoryDaoTest {
         assertEquals(written.get(n - 1).longValue(), h7.get(h7.size() - 1).recordedAt(), "ends at the newest snapshot");
 
         long h6 = 6 * HOUR;
-        List<PriceHistoryDao.Snapshot> h30 = dao.sampled("iron_ingot", windowStart(now, h6, 120), h6);
+        List<PriceHistoryDao.Snapshot> h30 = dao.sampled("iron_ingot", windowStart(now, h6, 120), now, h6);
         assertTrue(h30.size() <= 120);
         assertTrue(h30.size() >= 8 * 4, "eight days of quarter-days, give or take the partial ends");
         for (int k = 1; k < h30.size(); k++) {
             assertEquals(h30.get(k - 1).recordedAt() / h6 + 1, h30.get(k).recordedAt() / h6);
         }
+    }
+
+    /**
+     * A row stamped after "now" — the clock was stepped back after it was written — must not add a
+     * point past the window: it would be one more than the window has buckets, in the future.
+     */
+    @Test
+    void aRowStampedAfterNowIsLeftOut() throws Exception {
+        long now = H0 + 3 * HOUR - 1_000;                  // 2:59:59 into the day's third hour
+        for (int h = 0; h < 3; h++) {
+            dao.record("iron_ingot", 1.0 + h, 10 + h, H0 + h * HOUR + 30 * MIN);
+        }
+        dao.record("iron_ingot", 9.0, 99, H0 + 3 * HOUR + 1_000); // the next hour, two seconds "ahead"
+        List<PriceHistoryDao.Snapshot> points = dao.sampled("iron_ingot", H0, now, HOUR);
+        assertEquals(3, points.size());
+        assertEquals(H0 + 2 * HOUR + 30 * MIN, points.get(2).recordedAt(), "ends at the last row not after now");
+        assertEquals(4, dao.sampled("iron_ingot", H0, END, HOUR).size(), "the row is still there, just not shown");
+        assertEquals(1, dao.sampled("iron_ingot", H0, H0 + 30 * MIN, HOUR).size(), "a row exactly at to is in");
     }
 
     // ---------------------------------------------------------------- pruning
@@ -258,7 +278,7 @@ class PriceHistoryDaoTest {
         assertEquals(4, dao.pruneBefore(cutoff, PriceHistoryDao.PRUNE_BATCH));
         assertEquals(List.of(cutoff, cutoff + 1, now), times());
         assertEquals(0, dao.pruneBefore(cutoff, PriceHistoryDao.PRUNE_BATCH), "nothing left to prune");
-        assertEquals(1, dao.sampled("iron_ingot", 0, HOUR).stream()
+        assertEquals(1, dao.sampled("iron_ingot", 0, END, HOUR).stream()
                 .filter(s -> s.recordedAt() == cutoff).count(), "the row at the cutoff still reads back");
     }
 

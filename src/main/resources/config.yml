@@ -499,6 +499,9 @@ market:
   # Periodic price/stock snapshots (feed the Phase 5 web dashboard charts).
   price_history:
     interval_minutes: 30
+    # Snapshots older than this many days are deleted (a batch at a time, on each
+    # snapshot). The website's 30-day chart needs 30. 0 = keep everything.
+    keep_days: 30
 
   # Admin-defined catalog. Each item:
   #   id            unique key used in commands (lower-case)
@@ -949,9 +952,20 @@ recipes:
 #  Phase 6 (Part C) — The Market Web Dashboard
 #  A live, read-only web page for the Crate market, served by the plugin on its
 #  own port (JDK built-in HTTP server — no extra deps). Tunnel the port with a
-#  second Playit tunnel for outside access. Read-only: it exposes market data
-#  only — never balances or internals. Reloadable with /hcm reload (restarts
-#  the server if bind/port/enabled changed).
+#  second Playit tunnel for outside access.
+#  Read-only: it exposes market data and Minis counts only — never balances,
+#  player names or internals.
+#  Reloadable with /hcm reload (restarts the server, so a new feed token takes
+#  effect straight away).
+#
+#  The same port serves the website's JSON feeds (the LilahCraft site fetches
+#  them from its own server and caches them):
+#    /api/market  every commodity: price, buy/sell, stock, 24h change and its
+#                 price history (48 hours, 7 days and 30 days)
+#    /api/minis   every Mini in the catalog: rarity, category, series, cap,
+#                 how many were printed, sold out, and its head skin. Counts
+#                 only — never who owns them.
+#  Both are gzipped for clients that ask for it.
 # ---------------------------------------------------------------------
 web:
   dashboard:
@@ -960,6 +974,22 @@ web:
     port: 8080
     refresh_seconds: 30
     title: "Crate Market"
+    # Shared secret for the website feeds. Blank = open: anyone who can reach
+    # the port can read /api/* (how it always worked). When set, /api/* needs
+    # the header "Authorization: Bearer <token>" and answers 401 without it.
+    # Put the same value in WordPress (Settings → LilahCraft → Feed token).
+    # Quote it, and pick something long and random. It is never logged.
+    feed_token: ""
+    # With a token set, the dashboard page asks for it once (and the browser
+    # remembers it). Set this true to let requests from this PC or the home
+    # network (127.0.0.1, 10.x, 172.16-31.x, 192.168.x) skip the token instead.
+    # A proxied request (X-Forwarded-For, Forwarded, X-Real-IP,
+    # CF-Connecting-IP, ...) never counts as local.
+    # Leave it false if the website reaches this port through a Playit agent on
+    # this PC or any tunnel (ssh -R, WireGuard, frp, cloudflared...): their
+    # connections arrive from 127.0.0.1 or a LAN address, so with this on the
+    # internet would get in without the token.
+    lan_skips_token: false
 
 # ---------------------------------------------------------------------
 #  Phase 7 — In-game economy displays (§3.8)

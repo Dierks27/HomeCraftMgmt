@@ -118,10 +118,14 @@ public final class PluginConfig {
                             String bypassPermission, List<RankLimit> ranks) {
     }
 
-    /** The finite-stock market tuning + catalog (Phase 2.5). */
+    /**
+     * The finite-stock market tuning + catalog (Phase 2.5). {@code priceHistoryKeepDays} is
+     * {@code market.price_history.keep_days}: snapshots older than that many days are pruned
+     * (0 = keep everything); the website's 30-day chart needs 30.
+     */
     public record Market(double elasticity, double inertia, double spread,
                          List<MarketItem> catalog, SellLimits sellLimits, BuyLimits buyLimits,
-                         int priceHistoryIntervalMinutes) {
+                         int priceHistoryIntervalMinutes, int priceHistoryKeepDays) {
     }
 
     /** How shipping is priced. */
@@ -146,8 +150,25 @@ public final class PluginConfig {
     public record Shipping(ShippingMode mode, List<ShippingTier> tiers) {
     }
 
-    /** The Market Web Dashboard's embedded-server settings (Phase 6, §3.7). */
-    public record WebDashboard(boolean enabled, String bind, int port, int refreshSeconds, String title) {
+    /**
+     * The Market Web Dashboard's embedded-server settings (Phase 6, §3.7), plus the gate on the
+     * website feeds (0.32): {@code feedToken} is the shared secret {@code /api/*} asks for as
+     * {@code Authorization: Bearer <token>} (blank = open), and {@code lanSkipsToken} (off unless an
+     * admin turns it on) lets requests straight from this PC or the LAN through without it.
+     *
+     * <p>{@link #toString()} is written out by hand to mask the token: a record's generated one
+     * would print it into any log line the record ever reached.
+     */
+    public record WebDashboard(boolean enabled, String bind, int port, int refreshSeconds, String title,
+                               String feedToken, boolean lanSkipsToken) {
+
+        @Override
+        public String toString() {
+            return "WebDashboard[enabled=" + enabled + ", bind=" + bind + ", port=" + port
+                    + ", refreshSeconds=" + refreshSeconds + ", title=" + title
+                    + ", feedToken=" + (feedToken == null || feedToken.isBlank() ? "<blank>" : "<set>")
+                    + ", lanSkipsToken=" + lanSkipsToken + "]";
+        }
     }
 
     /** In-game economy displays refresh cadence (Phase 7, §3.8). */
@@ -1990,12 +2011,15 @@ public final class PluginConfig {
     }
 
     private WebDashboard readWebDashboard(FileConfiguration c) {
+        String feedToken = c.getString("web.dashboard.feed_token", "");
         return new WebDashboard(
                 c.getBoolean("web.dashboard.enabled", true),
                 c.getString("web.dashboard.bind", "0.0.0.0"),
                 c.getInt("web.dashboard.port", 8080),
                 Math.max(2, c.getInt("web.dashboard.refresh_seconds", 30)),
-                c.getString("web.dashboard.title", "Crate Market"));
+                c.getString("web.dashboard.title", "Crate Market"),
+                feedToken == null ? "" : feedToken.trim(),
+                c.getBoolean("web.dashboard.lan_skips_token", false));
     }
 
     private Marketplace readMarketplace(FileConfiguration c) {
@@ -2582,6 +2606,7 @@ public final class PluginConfig {
         double spread = c.getDouble("market.spread", 0.10);
         long defaultFullStock = c.getLong("market.default_full_stock", 1024);
         int historyMinutes = c.getInt("market.price_history.interval_minutes", 30);
+        int historyKeepDays = Math.max(0, c.getInt("market.price_history.keep_days", 30));
 
         List<MarketItem> catalog = new ArrayList<>();
         Set<String> seen = new HashSet<>();
@@ -2636,7 +2661,7 @@ public final class PluginConfig {
                     maxDailySell, maxDailyBuy));
         }
         return new Market(elasticity, inertia, spread, catalog,
-                readSellLimits(c), readBuyLimits(c), Math.max(1, historyMinutes));
+                readSellLimits(c), readBuyLimits(c), Math.max(1, historyMinutes), historyKeepDays);
     }
 
     private SellLimits readSellLimits(FileConfiguration c) {

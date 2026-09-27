@@ -5,8 +5,8 @@ plugins {
 }
 
 group = 'com.dierks.homecraft'
-version = '0.31.1-homes-and-resets'
-description = 'HomeCraft Management — Paper plugin (market, Crate store + Marketplace, Minis and the wild hunt, Card Packs, Courier, web dashboard, in-game displays, the Arcade)'
+version = '0.32.0-site-feeds'
+description = 'HomeCraft Management — Paper plugin (market, Crate store + Marketplace, Minis and the wild hunt, Card Packs, Courier, web dashboard + website feeds, in-game displays, the Arcade)'
 
 // Target server: Paper 26.2 and 26.3 / Java 25. Compiled against the 26.2 API; the code also
 // compiles and passes every test against the 26.3 API (no removals, no new deprecations). The toolchain is pinned to 25 so the
@@ -75,6 +75,8 @@ dependencies {
     // configuration API (YamlConfiguration is plain Java — no server is started),
     // so paper-api has to be on the TEST classpath as well as compileOnly.
     testImplementation 'io.papermc.paper:paper-api:26.2.build.107-stable'
+    // MiniSkin parses the texture JSON with Gson, which is compileOnly for main, so tests need it explicitly.
+    testImplementation 'com.google.code.gson:gson:2.11.0'
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

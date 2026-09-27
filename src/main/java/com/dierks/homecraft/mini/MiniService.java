@@ -539,6 +539,19 @@ public final class MiniService {
         }
     }
 
+    /**
+     * How many of each Mini type have been minted, by id, in one query (the website's Minis
+     * feed). A type with no tally row is absent; read it as 0. Empty when the lookup fails.
+     */
+    public Map<String, Long> printedCounts() {
+        try {
+            return dao.mintedCounts();
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to read Mini minted counts: " + e.getMessage());
+            return Map.of();
+        }
+    }
+
     /** Count a wild spawn that got away. Nothing was minted, so only the escaped tally moves. */
     public void recordEscape(String id) {
         try {

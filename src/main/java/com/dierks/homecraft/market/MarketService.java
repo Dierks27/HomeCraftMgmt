@@ -58,6 +58,8 @@ public final class MarketService {
     private Map<String, MarketItem> catalog = new LinkedHashMap<>();
     private Map<String, MarketState> states = new LinkedHashMap<>();
     private PricingEngine engine = new PricingEngine(1.0, 0.2, 0.10);
+    /** Bumped once per {@link #snapshotHistory()} run; main thread only. */
+    private long historyVersion;
 
     public MarketService(HomeCraftManagement plugin, MarketStateDao stateDao,
                          DailySellDao dailyDao, DailyBuyDao buyDao, PriceHistoryDao historyDao,
@@ -596,7 +598,12 @@ public final class MarketService {
         return new StockResult(true, null, state.stock(), state.currentPrice(), stock < amount);
     }
 
-    /** Record a price/stock snapshot for every commodity (periodic history). */
+    /**
+     * Record a price/stock snapshot for every commodity (periodic history), then prune
+     * snapshots older than {@code market.price_history.keep_days} (0 keeps everything), at most
+     * {@link PriceHistoryDao#PRUNE_BATCH} rows per run so a first prune of a big old table
+     * can't stall the tick. Bumps {@link #historyVersion()}.
+     */
     public void snapshotHistory() {
         long now = System.currentTimeMillis();
         for (MarketItem item : catalog.values()) {
@@ -610,6 +617,24 @@ public final class MarketService {
                 plugin.getLogger().warning("Failed to snapshot price history for " + item.id() + ": " + e.getMessage());
             }
         }
+        int keepDays = plugin.config().market().priceHistoryKeepDays();
+        if (keepDays > 0) {
+            try {
+                historyDao.pruneBefore(PriceHistoryDao.keepCutoff(now, keepDays), PriceHistoryDao.PRUNE_BATCH);
+            } catch (SQLException e) {
+                plugin.getLogger().warning("Failed to prune old price history: " + e.getMessage());
+            }
+        }
+        historyVersion++;
+    }
+
+    /**
+     * Goes up by one every {@link #snapshotHistory()} run, so a reader that caches something
+     * built from the history (the dashboard's 7- and 30-day charts) can tell when it may be
+     * stale. Main thread only.
+     */
+    public long historyVersion() {
+        return historyVersion;
     }
 
     /** Most recent price/stock snapshots for a commodity, newest first. */
@@ -618,6 +643,20 @@ public final class MarketService {
             return historyDao.recent(id, limit);
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to read price history: " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * A commodity's history thinned to one point per epoch-aligned {@code bucketMs} bucket (the
+     * latest snapshot in each) from {@code fromInclusive} on, oldest first. See
+     * {@link PriceHistoryDao#sampled}.
+     */
+    public List<PriceHistoryDao.Snapshot> sampledHistory(String id, long fromInclusive, long bucketMs) {
+        try {
+            return historyDao.sampled(id, fromInclusive, bucketMs);
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to read sampled price history: " + e.getMessage());
             return List.of();
         }
     }

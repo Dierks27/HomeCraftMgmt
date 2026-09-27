@@ -516,7 +516,7 @@ public final class HomeCraftManagement extends JavaPlugin {
             shops.start();
         }
         if (dashboard != null) {
-            dashboard.restart(); // pick up bind/port/enabled/refresh/title changes
+            dashboard.restart(); // pick up bind/port/enabled/refresh/title/feed-token changes
         }
         if (displayService != null) {
             displayService.start(); // re-arm the refresh timer at the new cadence

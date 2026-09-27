@@ -52,6 +52,24 @@
   .bar.out > span { background: var(--down); }
   .chartwrap { height: 90px; }
   .empty { color: var(--muted); text-align: center; padding: 60px 0; }
+  .lock {
+    max-width: 460px; margin: 40px auto; padding: 18px 20px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .lock[hidden] { display: none; }
+  .lock p { margin: 0; color: var(--muted); font-size: 14px; }
+  .lock code { color: var(--text); }
+  .lock .row { display: flex; gap: 8px; }
+  .lock input {
+    flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--panel2); color: var(--text); font: inherit;
+  }
+  .lock input:focus { outline: 2px solid var(--chart); outline-offset: 1px; }
+  .lock button {
+    padding: 8px 16px; border: 0; border-radius: 8px; cursor: pointer;
+    background: var(--accent); color: #131922; font: inherit; font-weight: 700;
+  }
   footer { color: var(--muted); font-size: 12px; text-align: center; padding: 24px; }
   @media (prefers-color-scheme: light) {
     :root {
@@ -69,6 +87,14 @@
   <div class="status"><span class="dot"></span><span id="status">connecting…</span></div>
 </header>
 <main>
+  <form id="lock" class="lock" hidden autocomplete="off">
+    <p>This dashboard needs the feed token (<code>web.dashboard.feed_token</code> in config.yml).</p>
+    <div class="row">
+      <input id="lockToken" type="password" aria-label="Feed token" placeholder="Feed token"
+             autocomplete="off" spellcheck="false">
+      <button type="submit">Unlock</button>
+    </div>
+  </form>
   <div id="grid" class="grid"></div>
   <div id="empty" class="empty" style="display:none">No commodities to show yet.</div>
 </main>
@@ -79,6 +105,28 @@
   var charts = {};       // id -> Chart instance
   var refreshMs = 30000; // updated from the feed
   var timer = null;
+
+  // The feed token (web.dashboard.feed_token), only needed when the server asks for it with a
+  // 401. Kept in localStorage so it is asked for once; every access is guarded (private windows
+  // and blocked storage throw), with an in-memory copy as the fallback. It is never displayed.
+  var TOKEN_KEY = "hcmFeedToken";
+  var UNAUTHORIZED = {};  // marker thrown on a 401
+  var memToken = "";
+  function loadToken() {
+    try {
+      var t = window.localStorage.getItem(TOKEN_KEY);
+      if (t) return t;
+    } catch (e) { /* storage unavailable: use the in-memory copy */ }
+    return memToken;
+  }
+  function saveToken(t) {
+    memToken = t;
+    try { window.localStorage.setItem(TOKEN_KEY, t); } catch (e) { /* in-memory only */ }
+  }
+  function forgetToken() {
+    memToken = "";
+    try { window.localStorage.removeItem(TOKEN_KEY); } catch (e) { /* nothing stored */ }
+  }
 
   function money(n) {
     return "$" + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -161,15 +209,19 @@
     });
   }
 
-  function render(feed) {
-    // Show the configured title once. Accent the first word, plain-text the rest.
-    var fullTitle = feed.title || "Market";
+  function showTitle(fullTitle) {
+    // Accent the first word, plain-text the rest.
     var sp = fullTitle.indexOf(" ");
     var first = sp === -1 ? fullTitle : fullTitle.slice(0, sp);
     var rest = sp === -1 ? "" : fullTitle.slice(sp); // keeps the leading space
     document.getElementById("brandFirst").textContent = first;
     document.getElementById("title").textContent = rest;
     document.title = fullTitle;
+  }
+
+  function render(feed) {
+    // Show the configured title from the feed.
+    showTitle(feed.title || "Market");
     refreshMs = Math.max(2, feed.refreshSeconds || 30) * 1000;
     var grid = document.getElementById("grid");
     var items = feed.items || [];
@@ -192,16 +244,67 @@
       now.getMinutes().toString().padStart(2, "0") + ":" + now.getSeconds().toString().padStart(2, "0");
   }
 
+  function schedule() {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(tick, refreshMs);
+  }
+
+  // A 401: stop refreshing, hide the stale cards and ask for the token.
+  function showLock(rejected) {
+    if (timer) { clearTimeout(timer); timer = null; }
+    document.getElementById("grid").style.display = "none";
+    document.getElementById("empty").style.display = "none";
+    document.getElementById("status").textContent = rejected ? "token not accepted" : "locked";
+    var lock = document.getElementById("lock");
+    lock.hidden = false;
+    document.getElementById("lockToken").focus();
+  }
+  function hideLock() {
+    document.getElementById("lock").hidden = true;
+    document.getElementById("grid").style.display = "";
+  }
+
   function tick() {
-    fetch("/api/market", { cache: "no-store" })
-      .then(function (r) { return r.json(); })
-      .then(function (feed) { render(feed); })
-      .catch(function () { document.getElementById("status").textContent = "offline — retrying…"; })
-      .finally(function () {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(tick, refreshMs);
+    var token = loadToken();
+    var headers = {};
+    if (token) {
+      // A header can only carry plain text; a token that can't be sent can't be right either.
+      if (/[^\x20-\x7e]/.test(token)) { forgetToken(); showLock(true); return; }
+      headers["Authorization"] = "Bearer " + token;
+    }
+    fetch("/api/market", { cache: "no-store", headers: headers })
+      .then(function (r) {
+        if (r.status === 401) throw UNAUTHORIZED;
+        return r.json();
+      })
+      .then(function (feed) {
+        hideLock();
+        render(feed);
+        schedule();
+      })
+      .catch(function (e) {
+        if (e === UNAUTHORIZED) {
+          forgetToken();
+          showLock(!!token);
+          return;
+        }
+        document.getElementById("status").textContent = "offline — retrying…";
+        schedule();
       });
   }
+
+  document.getElementById("lock").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var input = document.getElementById("lockToken");
+    var t = input.value.trim();
+    input.value = "";
+    if (!t) { input.focus(); return; }
+    saveToken(t);
+    document.getElementById("status").textContent = "connecting…";
+    tick();
+  });
+
+  showTitle(document.title || "Market"); // the page's own title until a feed arrives (or while locked)
   tick();
 })();
 </script>

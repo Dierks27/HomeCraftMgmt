@@ -86,6 +86,26 @@ public final class MiniDao {
     }
 
     /**
+     * The {@code minted} tally of every Mini type that has a {@code mini_counts} row, in one
+     * query — the website's Minis feed ("printed"). A type never minted may have no row (or a
+     * row at 0 if one only escaped or was retired); callers default a missing id to 0.
+     */
+    public java.util.Map<String, Long> mintedCounts() throws SQLException {
+        Connection c = conn();
+        synchronized (c) {
+            java.util.Map<String, Long> out = new java.util.LinkedHashMap<>();
+            try (PreparedStatement ps = c.prepareStatement("SELECT mini_id, minted FROM mini_counts")) {
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        out.put(rs.getString("mini_id"), rs.getLong("minted"));
+                    }
+                }
+            }
+            return out;
+        }
+    }
+
+    /**
      * Mint one copy: take its number, bump the tally and write the provenance row, as one
      * transaction.
      *

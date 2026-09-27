@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.31.1-homes-and-resets`
+- **Version:** `0.32.0-site-feeds`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md)
 
@@ -30,7 +30,8 @@ and the How It Works **Guide**.
 - **Marketplace & Pallets:** player-to-player selling through placeable Pallet seller boxes,
   auto-sorted into departments, with commission and an admin ban list.
 - **Mailboxes** in eight colours, the **Auction House** for Minis, and **in-game displays**
-  (signs, holograms, map TVs) plus a web **dashboard**.
+  (signs, holograms, map TVs) plus a web **dashboard**, whose JSON feeds (`/api/market`,
+  `/api/minis`) also drive the LilahCraft website, behind an optional token.
 - **Safeguards:** the economy is sandboxed per world (no creative-world money), protection
   hooks cover Towny and WorldGuard, and the database is backed up automatically before every
   migration and on a schedule.
@@ -544,6 +545,185 @@ board and watch the house go.
 
 ---
 
+## Website feeds (0.32)
+
+The dashboard's port also serves the JSON the **LilahCraft website** reads (the WordPress
+theme, `Dierks27/Lilah-Craft-Theme`). WordPress fetches the feeds **from its own server**,
+caches them (60 s by default), keeps the last good copy and serves its own pages to
+visitors, so browsers never talk to the game server, and a feed that is missing or down
+only puts that part of the site back on its labelled sample data. The field meanings below
+are the ones in the website team's handoff (`HCM-SITE-FEEDS.md`); the site ignores anything
+else in the JSON.
+
+| Endpoint | What it is | Needs the token |
+|---|---|---|
+| `GET /api/market` | Every commodity: prices, stock, 24 h change and three price histories | when one is set |
+| `GET /api/minis` | Every Mini in the catalog, with how many have been printed | when one is set |
+| `GET /` | The dashboard page. It holds no data; its script fetches `/api/market` from the browser | never |
+
+Both feeds are rebuilt by a main-thread task every `web.dashboard.refresh_seconds`; the HTTP
+handlers only serve the last build and never touch the game or the database. The real
+feeds have no whitespace; the examples are spread out to read.
+
+### `/api/market`
+
+```json
+{ "title": "Crate Market", "generatedAt": 1790000000000, "refreshSeconds": 30,
+  "items": [ { "id": "iron_ingot", "name": "Iron Ingot", "material": "IRON_INGOT",
+    "price": 2.40, "buy": 2.52, "sell": 2.28, "stock": 4200, "maxStock": 10000,
+    "change24h": 0.90,
+    "history":    [ { "t": 1790000000000, "p": 2.38,   "s": 4150 } ],
+    "history7d":  [ { "t": 1790000000000, "p": 2.3125, "s": 4020 } ],
+    "history30d": [ { "t": 1790000000000, "p": 2.1,    "s": 3900 } ] } ] }
+```
+
+| Field | Meaning |
+|---|---|
+| `price` | The market price. `buy` / `sell` are what a player pays / is paid. Two decimals. |
+| `stock` / `maxStock` | On the shelf now (`0` = sold out) / a full shelf (the item's `full_stock`). |
+| `change24h` | A **percent** (`0.9` = +0.9 %) against the oldest snapshot inside the last 24 hours. |
+| `history` | The newest 96 snapshots, **oldest first**: 48 hours at the shipped `market.price_history.interval_minutes: 30`. `t` epoch ms, `p` price then (two decimals), `s` stock then. |
+| `history7d` | **New.** One point per hour, up to 168 (7 days), oldest first. Same point shape. |
+| `history30d` | **New.** One point per six hours, up to 120 (30 days), oldest first. Same point shape. |
+
+Everything that was in the feed before 0.32 is still there, in the same order and written
+byte for byte the same (a test pins it against the old builder). About the two long arrays:
+
+- **Buckets are epoch-aligned:** whole UTC hours for `history7d`, and 00:00 / 06:00 / 12:00 /
+  18:00 UTC for `history30d`; the newest bucket is the one holding "now". Each point is the
+  **latest snapshot in its bucket**, a real row with its own `t`, not an average. A bucket
+  with no snapshot in it (the server was off) has no point.
+- **`p` is rounded to 4 decimals** (trailing zeros dropped) to keep the JSON small.
+- **An array with no points is left out** (the key is absent), so the site keeps that range
+  switched off until there is data.
+- **Built from the table that was already there.** The half-hourly snapshots have gone into
+  `market_price_history` since Phase 2.5, so the arrays survive restarts as they are, and on
+  a server that has been running they fill on the first refresh. No new table, no schema
+  change. They are re-read after a new snapshot, at most every ten minutes, not on every refresh.
+- **Pruning:** `market.price_history.keep_days` (30 shipped; `0` keeps everything) deletes
+  snapshots older than that many days after each snapshot, at most **50,000 rows per
+  snapshot tick**, so the first prune of a table that has grown for months finishes over a
+  few ticks instead of stalling one. Below 30 the 30-day chart comes up short.
+- **Upgrading trims old history.** Before 0.32 nothing was ever deleted. To keep everything,
+  add `keep_days: 0` under `market.price_history` before the first start on 0.32; a missing
+  key is filled in with 30.
+
+### `/api/minis`
+
+```json
+{ "generatedAt": 1790000000000,
+  "minis": [ { "id": "blue_amethyst", "name": "Blue Amethyst", "rarity": "COMMON",
+    "category": "MISC", "series": "…", "cap": 50, "printed": 12, "soldOut": false,
+    "skin": "https://textures.minecraft.net/texture/<hex>" } ] }
+```
+
+| Field | Meaning |
+|---|---|
+| `id` | The Mini's id. One entry per Mini, in `minis:` config order. |
+| `name`, `series` | With legacy colour codes stripped. |
+| `rarity` | `COMMON`, `UNCOMMON`, `RARE`, `EPIC` or `LEGENDARY`. |
+| `category` | Upper-case; `MISC` when blank. Categories beyond the shipped list are fine (the site adds them to its filter). |
+| `cap` / `printed` | `cap` is `-1` for uncapped. `printed` is how many have been minted so far (`mini_counts.minted`). |
+| `soldOut` | Capped and `printed >= cap`. |
+| `skin` | The Mini's Base64 `texture` decoded to its `textures.SKIN.url`, forced to `https://`. Sent only when it is exactly `https://textures.minecraft.net/texture/<hex>` (the one shape the site accepts); missing or undecodable, the field is left out. |
+
+**No player data of any kind:** no owners, holders, provenance, UUIDs or balances. Counts only.
+
+### The feed token
+
+- **`web.dashboard.feed_token`**, blank by default. Blank is how it always worked: anyone
+  who can reach the port can read the feeds. Set it (long, random, in quotes) and put the
+  same value in WordPress: Settings → LilahCraft → **Feed token**. `/hcm reload` applies it.
+- **When it's set,** every `/api/*` feed goes through one gate that wants
+  `Authorization: Bearer <token>`. Anything else gets **`401`** with `WWW-Authenticate: Bearer`,
+  `Cache-Control: no-store` and the body `{"error":"unauthorized"}`.
+- **Constant-time:** the plugin keeps only the token's SHA-256 and compares digests with
+  `MessageDigest.isEqual`, so the check takes the same time for every wrong guess and doesn't
+  leak the length. The token is never logged or echoed; the startup line only says whether a
+  token is on.
+
+**Keeping the dashboard page working.** The page fetches `/api/market` from the browser,
+which has no token. Of the handoff's two options this takes **"the page gets its data another
+way"**: the page asks for the token itself. The LAN option is there too, but **off by default**:
+
+- **The page asks for the token.** When a feed answers 401, the page forgets any token
+  it had, stops refreshing and shows a password box with one line: "This dashboard needs the
+  feed token (web.dashboard.feed_token in config.yml)." **Unlock** keeps the token in that
+  browser (`localStorage`, key `hcmFeedToken`; when storage is blocked, only until the page
+  is reloaded), sends it as `Authorization: Bearer …` from then on, and never shows it. So
+  with a token set, each browser asks once.
+- **`web.dashboard.lan_skips_token: false`** (the default). Set it `true` and a request from
+  this PC or the home network skips the token: loopback, the private ranges (10.x,
+  172.16–31.x, 192.168.x), link-local (169.254.x, `fe80::`) and IPv6 unique-local (`fc00::/7`); an IPv4
+  address wrapped in IPv6 (`::ffff:192.168.1.5`) counts as that IPv4 address. Everything else
+  needs the token, including CGNAT/Tailscale addresses (100.64.x to 100.127.x).
+- **A proxied request never counts as local,** whatever address it arrives from. If any of
+  `Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Real-IP`,
+  `CF-Connecting-IP`, `True-Client-IP`, `X-Client-IP`, `Fastly-Client-IP` or
+  `X-Cluster-Client-IP` is present (any capitalisation), the token is required. A reverse
+  proxy on this PC that adds one of them can't turn internet traffic into LAN traffic.
+
+> **Why the LAN switch ships off: tunnels.** config.yml's own advice for reaching the port from
+> outside is a Playit tunnel, and a Playit agent on this PC, like `ssh -R`, WireGuard, frp or
+> cloudflared, delivers internet traffic from `127.0.0.1` or a LAN address without a forwarding
+> header. With `lan_skips_token: true` behind one of those, the internet gets in **without the
+> token**. Turn it on only when every outside request reaches the port from a public address
+> (say, a VPS proxying to your router's forwarded port) or through a proxy that adds
+> `X-Forwarded-For`.
+
+### gzip
+
+Every `/api/*` feed is gzipped (`Content-Encoding: gzip`) when the request's
+`Accept-Encoding` allows `gzip` (or `x-gzip`, or `*`) with a q above 0. The compressed copy is
+made the first time a client asks for it after each rebuild, then reused until the next one.
+Feeds always send `Vary: Accept-Encoding`,
+`Content-Type: application/json; charset=utf-8` and `Cache-Control: no-store`. It matters
+here: each item can carry up to 96 + 168 + 120 history points.
+
+### Exposing the feeds (on the VPS)
+
+Only the WordPress server needs the feeds. Put the port behind https on the VPS (a reverse
+proxy or a tunnel to this PC's dashboard port, ideally allowing only the web host) and set
+the token. Then in WordPress, Settings → LilahCraft: Market feed URL `https://…/api/market`,
+Minis feed URL `https://…/api/minis`, and the same Feed token. Read the warning above before
+choosing a tunnel.
+
+Not built yet: part 4 of the handoff (a volume `v` on each history point with `volume24h`,
+and `GET /api/trades`). Its exact shape gets agreed with the theme first.
+
+**Verify** on the server PC (port 8080 as shipped; replace `<token>` with yours. On Windows,
+type `curl.exe` so PowerShell doesn't substitute its own `curl`):
+
+```bash
+# 1. No token configured: every Mini in the shape above, and nothing in it names a player.
+curl http://127.0.0.1:8080/api/minis
+
+# 2. Token configured (web.dashboard.feed_token, then /hcm reload).
+curl -i http://127.0.0.1:8080/api/minis
+#    -> HTTP/1.1 401, WWW-Authenticate: Bearer, {"error":"unauthorized"}
+curl -i -H "Authorization: Bearer <token>" http://127.0.0.1:8080/api/minis
+curl -i -H "Authorization: Bearer <token>" http://127.0.0.1:8080/api/market
+#    -> both HTTP/1.1 200
+#    The dashboard page, http://127.0.0.1:8080/, asks for the token once, then shows its data.
+#    (With lan_skips_token: true, the first request answers 200 from this PC; add
+#    -H "X-Forwarded-For: 203.0.113.7" to make it look proxied and get the 401.)
+
+# 3. history7d / history30d are there, and still there after a restart.
+curl http://127.0.0.1:8080/api/market
+
+# gzip: the response headers include Content-Encoding: gzip and Vary: Accept-Encoding.
+#    (On Windows, write -o NUL in place of -o /dev/null. With a token set, add the
+#    Authorization header to this and to step 3.)
+curl -s -D - -o /dev/null -H "Accept-Encoding: gzip" http://127.0.0.1:8080/api/market
+```
+
+On lilahcraft.com, with the URLs and token in Settings → LilahCraft: Market and Minis show
+live data (no "Sample data" label), the settings page says the last fetch worked, and the
+Market page's 7D and 30D ranges turn on once `history7d` / `history30d` have points, with no
+theme change.
+
+---
+
 ## Permissions
 
 | Node | Default | Grants |
@@ -585,7 +765,10 @@ src/main/java/com/dierks/homecraft/
   market/                      dynamic market engine (catalog, pricing, service)
   storage/                     SQLite datastore + DAOs
   util/                        NamespacedKeys, text helpers
+  web/                         dashboard web server, the website's JSON feeds (market,
+                               Minis), the feed token check, gzip
 src/main/resources/
   plugin.yml
   config.yml
+  web/index.html               the dashboard page (asks for the feed token on a 401)
 ```

@@ -281,7 +281,9 @@ class FairPlayTest {
         assertNull(FairPlay.movement(0.2f, own(FairPlay.MOVEMENT_SPEED, 0.1f)),
                 "the default walk speed and a movement speed of 0.1 (stored as a float)");
         assertNull(FairPlay.movement(0.2f, own(FairPlay.MOVEMENT_SPEED, 0.1, FairPlay.SPRINTING)),
-                "vanilla sprinting is the one modifier an honest run has");
+                "vanilla sprinting is a modifier an honest run has");
+        assertNull(FairPlay.movement(0.2f, own(FairPlay.MOVEMENT_SPEED, 0.1, FairPlay.POWDER_SNOW)),
+                "so is powder snow's slow-down: a course may be built with powder snow");
         assertNull(FairPlay.movement(0.2f, List.of(new FairPlay.Stat("minecraft:scale", 2, List.of("x:y")))),
                 "an attribute the run doesn't watch is none of its business");
     }

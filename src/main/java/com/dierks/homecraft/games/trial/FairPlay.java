@@ -52,8 +52,10 @@ final class FairPlay {
 
     /** A player's walk speed when nothing has changed it. */
     static final float DEFAULT_WALK_SPEED = 0.2f;
-    /** The one movement modifier an honest run has: vanilla sprinting, on the movement speed. */
+    /** The movement modifiers an honest run has: vanilla sprinting, on the movement speed. */
     static final String SPRINTING = "minecraft:sprinting";
+    /** Vanilla's powder-snow slow-down: it only slows, so a course built with powder snow is fair. */
+    static final String POWDER_SNOW = "minecraft:powder_snow";
     static final String MOVEMENT_SPEED = "minecraft:movement_speed";
     /** The movement attributes a run watches, and a player's own base value of each. */
     static final Map<String, Double> PLAYER_BASES = Map.of(
@@ -230,7 +232,7 @@ final class FairPlay {
      * Why the player's movement voids a run, or {@code null} when it is a player's own: a walk
      * speed other than {@value #DEFAULT_WALK_SPEED} ({@code /speed}), or a watched attribute
      * ({@link #PLAYER_BASES}) with its base value changed or any modifier on it but vanilla
-     * sprinting — another plugin's speed, jump, step, gravity or safe-fall boost. A value that
+     * sprinting or powder snow's slow-down — another plugin's speed, jump, step, gravity or safe-fall boost. A value that
      * isn't a number counts as changed.
      */
     static String movement(float walkSpeed, Collection<Stat> stats) {
@@ -246,7 +248,7 @@ final class FairPlay {
                 return MOVEMENT;
             }
             for (String m : st.modifiers()) {
-                if (!(SPRINTING.equals(m) && MOVEMENT_SPEED.equals(st.key()))) {
+                if (!((SPRINTING.equals(m) || POWDER_SNOW.equals(m)) && MOVEMENT_SPEED.equals(st.key()))) {
                     return MOVEMENT;
                 }
             }

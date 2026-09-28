@@ -21,10 +21,17 @@ package com.dierks.homecraft.games.golf;
  *       sideways speed); rolling from another block onto slime pops it up;</li>
  *   <li>after every sub-step: in the cup (its centre passes within {@value #CUP_RADIUS} of the
  *       cup's top centre while moving slower than {@value #CUP_SPEED} a tick — faster, it lips out
- *       and keeps going), in water or lava, or out of the hole's bounds.</li>
+ *       and keeps going; or it lands with its centre over the cup block and its bottom no higher
+ *       than the cup's top), in water or lava, or out of the hole's bounds.</li>
  * </ul>
  * Then rolling friction by the block underneath (normal 0.90 a tick, ice 0.98, soul sand, soul
- * soil and honey 0.80); below {@value #STOP} blocks a tick it stops.
+ * soil and honey 0.80); below {@value #STOP} blocks a tick it stops — in the cup if it comes to
+ * rest over the cup block no higher than its top, or shut in a hollow block sitting on it.
+ *
+ * <p><b>The cup's top</b> is where the cup block's real collision shape is at its centre (a slab's
+ * is half a block up), read at the start of the hole, so a ball resting on the floor of a sunken
+ * hole or in a slab is where the cup is. A block with nothing a ball can rest on at its centre, a
+ * sliver like a carpet, or a hollow one like a cauldron can't be a cup ({@link #cupShape}).
  */
 public final class BallPhysics {
 
@@ -61,6 +68,8 @@ public final class BallPhysics {
     public static final double CUP_RADIUS = 0.3;
     /** ...going no faster than this (blocks a tick); faster, it lips out. */
     public static final double CUP_SPEED = 0.35;
+    /** A cup block's top must be at least this high above its bottom (a carpet is a sliver, not a cup). */
+    public static final double CUP_MIN_TOP = 0.2;
     /** How far down {@link #settle} looks for ground. */
     static final int SETTLE = 4;
     /** Below the hole's lowest corner by this much, the ball is out of bounds (it fell off). */
@@ -120,21 +129,54 @@ public final class BallPhysics {
         Surface surface(int x, int y, int z);
     }
 
+    /** What a block would be as a cup ({@link #cupShape}). */
+    public enum CupShape {
+        /** Something a ball can rest on, at its centre. */
+        FINE,
+        /** Nothing solid at its centre (air, a flower, a pressure plate). */
+        NOTHING,
+        /** Lower than {@value #CUP_MIN_TOP} of a block (a carpet, a trapdoor laid flat). */
+        THIN,
+        /** Higher round the edge than at the centre (a cauldron, a composter, a hopper). */
+        HOLLOW
+    }
+
     /**
-     * One hole as the ball sees it: the cup's top centre and the bounds (block corners, inclusive).
+     * One hole as the ball sees it: the cup's top centre (its top where the cup block's collision
+     * shape is at its centre) and the bounds (block corners, inclusive).
      */
     public record Hole(double cupX, double cupY, double cupZ, int minX, int minY, int minZ, int maxX, int maxY,
                        int maxZ) {
 
-        /** The hole for a cup block and two bound corners, in any order. */
+        /** The hole for a full cup block and two bound corners, in any order. */
         public static Hole of(int cupX, int cupY, int cupZ, int ax, int ay, int az, int bx, int by, int bz) {
-            return new Hole(cupX + 0.5, cupY + 1.0, cupZ + 0.5, Math.min(ax, bx), Math.min(ay, by), Math.min(az, bz),
+            return of(cupX, cupY, cupZ, 1.0, ax, ay, az, bx, by, bz);
+        }
+
+        /** The same, the cup block's top {@code top} above its bottom ({@link #cupTop}). */
+        public static Hole of(int cupX, int cupY, int cupZ, double top, int ax, int ay, int az, int bx, int by,
+                              int bz) {
+            return new Hole(cupX + 0.5, cupY + top, cupZ + 0.5, Math.min(ax, bx), Math.min(ay, by), Math.min(az, bz),
                     Math.max(ax, bx), Math.max(ay, by), Math.max(az, bz));
         }
 
         /** Whether a point is over the hole (the bounds' columns); any height counts. */
         public boolean over(double x, double z) {
             return x >= minX && x < maxX + 1 && z >= minZ && z < maxZ + 1;
+        }
+
+        /** Whether a point is over the cup block (its column); any height counts. */
+        public boolean overCup(double x, double z) {
+            return Math.abs(x - cupX) < 0.5 && Math.abs(z - cupZ) < 0.5;
+        }
+
+        /**
+         * Whether a ball standing at ({@code x}, {@code y}, {@code z}) is down on the cup: its centre
+         * over the cup block and its bottom no higher than the cup's top — nor below the cup block
+         * itself (a ball in a tunnel under the cup isn't in it).
+         */
+        public boolean onCup(double x, double y, double z) {
+            return overCup(x, z) && y <= cupY + EPS && y >= Math.floor(cupY - EPS) - EPS;
         }
 
         /** Whether the ball, standing at {@code (x, y, z)}, is out of bounds. */
@@ -291,7 +333,7 @@ public final class BallPhysics {
             b.vz *= f;
             if (b.speed() < STOP) {
                 b.stop();
-                return Outcome.STOPPED;
+                return restsInCup(b, w, h) ? Outcome.IN_CUP : Outcome.STOPPED;
             }
         } else {
             b.vx *= AIR_DRAG;
@@ -309,6 +351,71 @@ public final class BallPhysics {
         if (g != FREE) {
             b.place(b.x, g, b.z);
         }
+    }
+
+    // ---- the cup ----------------------------------------------------------------------------------
+
+    /**
+     * How high the cup block ({@code x}, {@code y}, {@code z}) really is: its collision top at its
+     * centre, above its bottom. 1 (a full block) when nothing is there now — the block was broken,
+     * or its chunk isn't loaded — which is what the cup was before it was read.
+     */
+    public static double cupTop(Blocks w, int x, int y, int z) {
+        double top = w.top(x, y, z, x + 0.5, z + 0.5);
+        return top == Blocks.NONE ? 1.0 : top;
+    }
+
+    /**
+     * Whether block ({@code x}, {@code y}, {@code z}) can be a cup: a ball must be able to rest on it
+     * at its centre, on something thicker than a carpet, and not shut inside it — no part of the
+     * block may rise more than a sliver above its centre.
+     */
+    public static CupShape cupShape(Blocks w, int x, int y, int z) {
+        double centre = w.top(x, y, z, x + 0.5, z + 0.5);
+        if (centre == Blocks.NONE) {
+            return CupShape.NOTHING;
+        }
+        double[] at = {1.0 / 32, 0.25, 0.5, 0.75, 31.0 / 32};
+        for (double fx : at) {
+            for (double fz : at) {
+                if (w.top(x, y, z, x + fx, z + fz) > centre + SLIVER) {
+                    return CupShape.HOLLOW;
+                }
+            }
+        }
+        return centre < CUP_MIN_TOP ? CupShape.THIN : CupShape.FINE;
+    }
+
+    /**
+     * Whether a ball that has come to rest is in the cup: its centre over the cup block, and either
+     * its bottom no higher than the cup's top (on the floor of a sunken hole, in a slab, anywhere
+     * on a flush cup), or shut in a hollow block sitting on the cup ({@link #trapped}). A ball shut
+     * in a hollow block anywhere else stays where it is ("Reset ball" gets it out).
+     */
+    public static boolean restsInCup(Ball b, Blocks w, Hole h) {
+        if (b.moving || !h.overCup(b.x, b.z)) {
+            return false;
+        }
+        return h.onCup(b.x, b.y, b.z) || (b.y > h.cupY() && b.y < h.cupY() + 1 && trapped(b, w));
+    }
+
+    /**
+     * Whether a still ball sits inside a hollow block (a cauldron, a composter) whose sides all
+     * rise more than a climbable step above it, so no putt can get it out.
+     */
+    static boolean trapped(Ball b, Blocks w) {
+        int bx = floor(b.x);
+        int by = floor(b.y + EPS);
+        int bz = floor(b.z);
+        double in = 1.0 / 32;
+        return wall(w, bx, by, bz, bx + in, b.z, b.y) && wall(w, bx, by, bz, bx + 1 - in, b.z, b.y)
+                && wall(w, bx, by, bz, b.x, bz + in, b.y) && wall(w, bx, by, bz, b.x, bz + 1 - in, b.y);
+    }
+
+    /** Whether block (bx, by, bz) at (px, pz) is higher than a ball standing at y could climb. */
+    private static boolean wall(Blocks w, int bx, int by, int bz, double px, double pz, double y) {
+        double top = w.top(bx, by, bz, px, pz);
+        return top != Blocks.NONE && by + top > y + STEP + EPS;
     }
 
     // ---- moving ---------------------------------------------------------------------------------
@@ -401,6 +508,10 @@ public final class BallPhysics {
         double cz = b.z;
         if (b.speed() <= CUP_SPEED && distanceToSegment(h.cupX(), h.cupY(), h.cupZ(), px, py, pz, cx, cy, cz)
                 <= CUP_RADIUS) {
+            return Outcome.IN_CUP;
+        }
+        boolean landed = cy < py - EPS && supported(b, w); // it came down onto something this sub-step
+        if (landed && h.onCup(cx, b.y, cz)) {
             return Outcome.IN_CUP;
         }
         if (w.surface(floor(cx), floor(cy), floor(cz)).wet()) {

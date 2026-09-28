@@ -79,10 +79,13 @@ final class LiveRound {
         return course.hole(Math.min(run.hole(), run.holes() - 1) + 1);
     }
 
-    /** Put the ball on the current hole's tee: the start of the hole, and its last spot. */
-    void tee() {
+    /**
+     * Put the ball on the current hole's tee: the start of the hole, and its last spot. The cup's
+     * height is read from {@code blocks} now, so it is where the cup block really is.
+     */
+    void tee(BallPhysics.Blocks blocks) {
         GolfCourse.Hole h = hole();
-        area = h.physics();
+        area = h.physics(blocks);
         ball.place(h.tee().x(), h.tee().y(), h.tee().z());
         yaw = h.tee().yaw();
         rolling = 0;
@@ -119,7 +122,7 @@ final class LiveRound {
         BallPhysics.Outcome o = BallPhysics.tick(ball, blocks, area);
         if (o == BallPhysics.Outcome.ROLLING && ++rolling > MAX_ROLL_TICKS) {
             ball.place(ball.x(), ball.y(), ball.z()); // half a minute is enough: it stops here
-            o = BallPhysics.Outcome.STOPPED;
+            o = BallPhysics.restsInCup(ball, blocks, area) ? BallPhysics.Outcome.IN_CUP : BallPhysics.Outcome.STOPPED;
         }
         outcome = o;
         if (ball.speed() > BallPhysics.STOP) {

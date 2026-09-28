@@ -60,6 +60,12 @@ public record TimeTrialsSettings(boolean enabled, Map<String, Integer> firstClea
                 courseOfWeekBonus, dailyCap, fallDepth, minSeconds);
     }
 
+    /** The first-clear reward for a tier ({@code easy}...), 0 for an unknown one. */
+    public int firstClearFor(String tier) {
+        Integer v = tier == null ? null : firstClear.get(tier);
+        return v == null ? 0 : Math.max(0, v);
+    }
+
     /** An ordered, unmodifiable map from key, value pairs. */
     private static Map<String, Integer> map(Object... kv) {
         Map<String, Integer> out = new LinkedHashMap<>();

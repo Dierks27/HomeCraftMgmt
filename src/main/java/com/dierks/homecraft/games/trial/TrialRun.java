@@ -3,6 +3,8 @@ package com.dierks.homecraft.games.trial;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -26,6 +28,8 @@ final class TrialRun {
 
     final UUID player;
     final Course course;
+    /** The course's {@link Course#layoutHash()} when the run started, to tell a re-made course apart. */
+    final int layout;
     final boolean test;
     Phase phase = Phase.COUNTDOWN;
     /** Ticks until "Go!". */
@@ -51,10 +55,13 @@ final class TrialRun {
     long lastReset = Long.MIN_VALUE / 2;
     /** A re-seat in a boat is under way until this tick. */
     long reseatUntil;
+    /** The server stalls seen while the clock ran: the speed check skips the legs they touch. */
+    final List<FairPlay.Stall> stalls = new ArrayList<>();
 
     TrialRun(UUID player, Course course, boolean test, int countdown) {
         this.player = player;
         this.course = course;
+        this.layout = course.layoutHash();
         this.test = test;
         this.countdown = countdown;
     }

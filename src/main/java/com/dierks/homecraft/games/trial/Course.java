@@ -3,6 +3,8 @@ package com.dierks.homecraft.games.trial;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 
 /**
  * One time-trial course (spec §11, R2.15): where it starts, the checkpoints in the order they must
@@ -113,6 +115,27 @@ public record Course(String id, TrialKind kind, String name, Tier tier, String w
             out.add(finish);
         }
         return out;
+    }
+
+    /**
+     * A fingerprint of the layout — the world, the start, the checkpoints, the finish and the fall
+     * height — so a run can tell its course from a different one with the same {@link #rev} (a
+     * course deleted and made again starts at layout 1 again). Kept in memory only, never stored.
+     */
+    public int layoutHash() {
+        return Objects.hash(world.toLowerCase(Locale.ROOT), start, targets(), fallY);
+    }
+
+    /**
+     * The lowest point a run must be at — the start, a checkpoint or the finish — or {@code null}
+     * when nothing is placed yet. A fall height must be under it.
+     */
+    public Double lowestY() {
+        Double low = start == null ? null : start.y();
+        for (Mark m : targets()) {
+            low = low == null ? m.y() : Math.min(low, m.y());
+        }
+        return low;
     }
 
     /** Its own shortest time, or the server's when it has none. */

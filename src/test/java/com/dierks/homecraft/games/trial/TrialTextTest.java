@@ -16,8 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Pinned here: a time reads as minutes, seconds and tenths, floored (never better than it
  * was); a course is labelled by kind and tier, the hardest tier with its own name; tiers and kinds
  * are read in any case and nothing else is; each kind pays under its own ledger source; a course
- * id is a short lower-case word; a name comes from the id; and a typed name loses colour codes and
- * anything Bedrock can't draw.
+ * id is a short lower-case word, and never "auto" (the feature command's word); a name comes from
+ * the id; a typed name loses colour codes and anything Bedrock can't draw; and a new best with no
+ * time before it is called a first finish only when the first finish is being paid.
  */
 class TrialTextTest {
 
@@ -91,5 +92,24 @@ class TrialTextTest {
         assertEquals("5 checkpoints", TrialText.checkpoints(5), "many");
         assertEquals("1 token", TrialText.tokens(1), "one");
         assertEquals("10 tokens", TrialText.tokens(10), "many");
+    }
+
+    @Test
+    void autoIsTheFeatureCommandsWordAndNoCoursesId() {
+        assertTrue(TrialText.keptWord("auto"),
+                "/hcm games feature auto lets the day pick: a course so called could never be pinned");
+        assertTrue(TrialText.keptWord("AUTO "), "in any case");
+        assertFalse(TrialText.keptWord("autobahn"), "a longer word is fine");
+        assertFalse(TrialText.keptWord(null), "nothing is no word");
+    }
+
+    @Test
+    void aFirstFinishIsCalledThatOnlyWhenItIsBeingPaid() {
+        assertEquals("&e★ Your first finish on Cliffs!", TrialText.bestLine("Cliffs", null, true),
+                "no time before and the first finish is paid now");
+        assertEquals("&e★ New best!", TrialText.bestLine("Cliffs", null, false),
+                "no time on the board (it was cleared) but the first finish was paid long ago");
+        assertEquals("&e★ New best! &7(was 0:13.1)", TrialText.bestLine("Cliffs", 13_100L, false),
+                "better than a time on the board");
     }
 }

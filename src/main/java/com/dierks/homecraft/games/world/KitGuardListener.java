@@ -8,6 +8,7 @@ import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.gui.games.GameScreen;
 import com.dierks.homecraft.util.Text;
+import io.papermc.paper.event.entity.EntityKnockbackEvent;
 import io.papermc.paper.event.player.PlayerFlowerPotManipulateEvent;
 import io.papermc.paper.event.player.PlayerInsertLecternBookEvent;
 import io.papermc.paper.event.player.PlayerItemFrameChangeEvent;
@@ -28,6 +29,7 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDismountEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.entity.EntityPotionEffectEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.entity.ItemSpawnEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
@@ -41,6 +43,7 @@ import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
@@ -63,9 +66,11 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.projectiles.ProjectileSource;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -79,6 +84,9 @@ import java.util.UUID;
  * clicks), no opening any other inventory or HomeCraft screen (nothing may add items mid-game);
  * no swapping hands, placing, buckets, eating, throwing, portals, or using blocks and entities
  * (except their own boat);
+ * no knockback, no effect from anything but the game or an admin's command (a splash potion, a
+ * cloud, an arrow, a beacon), and no being reeled in by someone's fishing rod — a bystander can
+ * neither spoil a run nor carry it across a gap;
  * foreign game-mode changes are cancelled and ADVENTURE re-asserted (Multiverse-Core re-applies a
  * world's mode after every world change, so this must never END a session); flight is switched
  * off again. Teleports are sorted into ours, harmless and the end (R2.8); a world change some
@@ -102,6 +110,13 @@ public final class KitGuardListener implements Listener {
     /** "Leave game": the second click must come within this long, and not in the same breath. */
     static final long LEAVE_WINDOW_MS = 3_000;
     static final long LEAVE_MIN_MS = 250;
+    /**
+     * Where an effect on a player in a game may come from: the game itself (a plugin) and an
+     * admin's {@code /effect}, which a game that cares sees for itself. Everything else — a splash
+     * potion, a cloud, an arrow, a beacon, a conduit, a mob — is the world or someone else.
+     */
+    static final Set<EntityPotionEffectEvent.Cause> OWN_EFFECTS =
+            EnumSet.of(EntityPotionEffectEvent.Cause.PLUGIN, EntityPotionEffectEvent.Cause.COMMAND);
 
     private final GamesService games;
     private final WorldSessions sessions;
@@ -296,6 +311,42 @@ public final class KitGuardListener implements Listener {
         if (inSession(e.getEntity())) {
             e.setCancelled(true);
         }
+    }
+
+    // ---- bystanders: no effects, knockback or rods from outside the game --------------------------
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onEffect(EntityPotionEffectEvent e) {
+        if (inSession(e.getEntity()) && fromOutside(e.getCause(), e.getAction())) {
+            e.setCancelled(true);
+        }
+    }
+
+    /** Whether an effect being given comes from outside the game (taking one away is always fine). */
+    static boolean fromOutside(EntityPotionEffectEvent.Cause cause, EntityPotionEffectEvent.Action action) {
+        boolean gives = action == EntityPotionEffectEvent.Action.ADDED
+                || action == EntityPotionEffectEvent.Action.CHANGED;
+        return gives && !OWN_EFFECTS.contains(cause);
+    }
+
+    /** Every knockback — a wind charge, an explosion, a hit: the games themselves never knock anyone back. */
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onKnockback(EntityKnockbackEvent e) {
+        if (inSession(e.getEntity())) {
+            e.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onFish(PlayerFishEvent e) {
+        if (reelsIn(e.getState()) && inSession(e.getCaught())) {
+            e.setCancelled(true);
+        }
+    }
+
+    /** Whether a rod is pulling what it hooked towards the angler. */
+    static boolean reelsIn(PlayerFishEvent.State state) {
+        return state == PlayerFishEvent.State.CAUGHT_ENTITY;
     }
 
     // ---- items in and out -----------------------------------------------------------------------

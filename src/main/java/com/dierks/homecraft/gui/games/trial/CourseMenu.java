@@ -20,9 +20,10 @@ import java.util.List;
  * One course (27, spec §11): what to know before you start.
  *
  * <p>4 the course ("River Run (Boat · Medium)"); 10 how to play; 11 your best; 12 its high
- * scores; 13 Start; 14 this week's best; 15 the record and who holds it; 16 what it pays; 22 the
- * way out. Start runs the gate again (the screen may have been open a while) and then the world
- * session takes the player to the start line.
+ * scores; 13 Start; 14 this week's best; 15 the record and who holds it; 16 what it pays (the
+ * first finish's amount, or that it's done, in the name); 22 the way out. Start runs the gate
+ * again (the screen may have been open a while) and then the world session takes the player to
+ * the start line.
  */
 public final class CourseMenu extends GameMenu {
 
@@ -72,14 +73,18 @@ public final class CourseMenu extends GameMenu {
         exitTile();
     }
 
-    /** What finishing can pay, and what the player has already had. */
+    /**
+     * What finishing can pay, and what the player has already had. The first finish — the one
+     * reward that differs from player to player — is in the name too, so Bedrock shows it without
+     * a tap and hold.
+     */
     private ItemStack rewards(boolean week) {
         TimeTrialsSettings s = trials.settings();
         List<String> lore = new ArrayList<>();
         int first = trials.firstClear(course);
+        boolean done = first > 0 && trials.firstClearDone(viewer, course);
         if (first > 0) {
-            lore.add(trials.firstClearDone(viewer, course) ? "&a✔ First finish" : "&7First finish: &6"
-                    + TrialText.tokens(first));
+            lore.add(done ? "&a✔ First finish" : "&7First finish: &6" + TrialText.tokens(first));
         }
         if (s.weeklyBestBonus() > 0) {
             lore.add("&7Best time this week: &6" + TrialText.tokens(s.weeklyBestBonus()));
@@ -91,7 +96,10 @@ public final class CourseMenu extends GameMenu {
             lore.add("&7Today's pick: &6" + TrialText.tokens(trials.featuredBonus()));
         }
         lore.add("&7A new best is announced, not paid.");
-        return Menus.icon(Material.GOLD_NUGGET, "&eTokens for finishing", lore.toArray(new String[0]));
+        String name = first <= 0 ? "&eTokens for finishing"
+                : done ? "&eTokens for finishing &7- first finish &a✔ done"
+                : "&eTokens for finishing &7- first finish &6" + TrialText.tokens(first);
+        return Menus.icon(Material.GOLD_NUGGET, name, lore.toArray(new String[0]));
     }
 
     private void reopen() {

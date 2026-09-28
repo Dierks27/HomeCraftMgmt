@@ -6,6 +6,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -14,7 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Pinned here: a new course is closed, named from its id, and at layout 1; it can open only
  * with a start, a finish and a world listed in {@code games.worlds} (and says which is missing);
  * its targets are its checkpoints in order and then the finish; checkpoints are added at the end
- * and removed by their 1-based number, the ones after moving up; and a radius is kept in range.
+ * and removed by their 1-based number, the ones after moving up; a radius is kept in range; the
+ * layout's fingerprint changes with the world, start, checkpoints, finish or fall height and
+ * nothing else; and its lowest point is the lowest of the start, checkpoints and finish.
  */
 class CourseTest {
 
@@ -66,5 +70,37 @@ class CourseTest {
         Course.Mark m = new Course.Mark(0, 0, 0, 2);
         assertTrue(m.contains(new Point(0, 2, 0)), "on the surface counts");
         assertFalse(m.contains(new Point(0, 2.01, 0)), "just outside doesn't");
+    }
+
+    private static Course placed() {
+        return Course.create("cliff_run", TrialKind.PARKOUR, Tier.HARD).withWorld("games")
+                .withStart(new Course.Spot(0, 64, 0, 90, 0)).plusCheckpoint(new Course.Mark(10, 70, 0, 1.5))
+                .withFinish(new Course.Mark(20, 66, 0, 2));
+    }
+
+    @Test
+    void theLayoutsFingerprintChangesWithTheLayoutAndNothingElse() {
+        Course c = placed();
+        int layout = c.layoutHash();
+        assertEquals(layout, placed().layoutHash(), "the same layout, made again: the same fingerprint");
+        assertEquals(layout, c.withName("Cliffs").withTier(Tier.EASY).withEnabled(true).withPinned(true)
+                .withMinSeconds(20).withRev(7).layoutHash(),
+                "name, tier, open, pin, shortest time and rev aren't layout");
+        assertEquals(layout, c.withWorld("GAMES").layoutHash(), "a world name in another case is the same world");
+        assertNotEquals(layout, c.withWorld("games2").layoutHash(), "another world");
+        assertNotEquals(layout, c.withStart(new Course.Spot(0, 64, 1, 90, 0)).layoutHash(), "a moved start");
+        assertNotEquals(layout, c.plusCheckpoint(new Course.Mark(15, 70, 0, 1.5)).layoutHash(), "one more checkpoint");
+        assertNotEquals(layout, c.withFinish(new Course.Mark(20, 66, 0, 3)).layoutHash(), "a bigger finish");
+        assertNotEquals(layout, c.withFallY(50.0).layoutHash(), "a fall height");
+    }
+
+    @Test
+    void theLowestPointIsTheLowestOfTheStartCheckpointsAndFinish() {
+        assertNull(Course.create("x1", TrialKind.PARKOUR, Tier.EASY).lowestY(), "nothing placed: no lowest point");
+        assertEquals(64, placed().lowestY(), 1e-9, "the start (64) under a checkpoint (70) and the finish (66)");
+        assertEquals(60, placed().plusCheckpoint(new Course.Mark(15, 60, 0, 1.5)).lowestY(), 1e-9,
+                "a lower checkpoint");
+        assertEquals(66, Course.create("x1", TrialKind.PARKOUR, Tier.EASY).withFinish(new Course.Mark(0, 66, 0, 1))
+                .lowestY(), 1e-9, "only a finish so far");
     }
 }

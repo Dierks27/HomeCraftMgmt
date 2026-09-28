@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.trial;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -21,6 +22,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * whether it would have been; the parkour fall height sits fall_depth under the lower of the last
  * and next checkpoint, a course's own fall_y wins for any kind, and elytra and boat courses have
  * no default; and a landing is fine near the start, in a checkpoint or at the finish only.
+ *
+ * <p>Also pinned (review fixes): a gap between trial ticks over 250 ms is a server stall, and a
+ * leg its window touches isn't speed-checked — the reviewer's honest 7.2 s run through a 1.7 s
+ * stall counts — while a leg away from any stall still is, with a tick of slack; a changed walk
+ * speed, a movement attribute off a player's own base or any modifier but vanilla sprinting voids
+ * a run; and a course deleted and made again at the same layout number is still a changed course.
  */
 class FairPlayTest {
 
@@ -147,5 +154,169 @@ class FairPlayTest {
         assertEquals(5, PARKOUR.minSecondsOr(5), "no course value: the server's min_seconds");
         assertEquals(40, PARKOUR.withMinSeconds(40).minSecondsOr(5), "the course's own wins");
         assertTrue(FairPlay.tooQuick(39_999, PARKOUR.withMinSeconds(40).minSecondsOr(5)), "and is what's checked");
+    }
+
+    // ---- server stalls ----------------------------------------------------------------------------
+
+    private static final long TICK = 50_000_000L;
+    private static final long SECOND = 1_000_000_000L;
+
+    /** The reviewer's probe: checkpoints every 6 blocks (radius 1.5), the finish at 42. */
+    private static final Course PROBE = new Course("probe", TrialKind.PARKOUR, "Probe", Tier.EASY, "games",
+            new Course.Spot(0, 64, 0, 0, 0),
+            List.of(new Course.Mark(6, 64, 0, 1.5), new Course.Mark(12, 64, 0, 1.5), new Course.Mark(18, 64, 0, 1.5)),
+            new Course.Mark(42, 64, 0, 1.5), null, null, true, false, 3);
+
+    /** What the probe run left: its progress, the stalls its ticks saw, and when it started and finished. */
+    private record LagRun(Progress progress, List<FairPlay.Stall> stalls, long start, long finish) {
+    }
+
+    /**
+     * The reviewer's LagProbe: a player sprinting at 5.6 b/s (far under parkour's 14) along
+     * {@link #PROBE}, and the server standing still from 1.5 s to 3.2 s into the run. The moves the
+     * client sent meanwhile queue up and are handled 20 µs apart once it's back; the trial tick
+     * that sees the stall runs just before them (the tightest case for the stall's window).
+     */
+    private static LagRun lagRun() {
+        long t0 = SECOND;
+        long stallFrom = t0 + 1_500_000_000L;
+        long stallTo = t0 + 3_200_000_000L;
+        Progress p = new Progress(PROBE, new Point(0, 64, 0), t0);
+        List<FairPlay.Stall> stalls = new ArrayList<>();
+        long lastTick = t0;
+        long processed = stallTo;
+        for (int i = 1; i <= 400; i++) {
+            long real = t0 + i * TICK;
+            long seen;
+            long tick = -1;
+            if (real > stallFrom && real <= stallTo) {
+                if (processed == stallTo) {
+                    tick = stallTo; // the server is back: its first tick, then the queue
+                }
+                processed += 20_000;
+                seen = processed;
+            } else {
+                tick = real;
+                seen = real;
+            }
+            if (tick >= 0) {
+                FairPlay.Stall st = FairPlay.stall(lastTick, tick);
+                if (st != null) {
+                    stalls.add(st);
+                }
+                lastTick = tick;
+            }
+            for (Progress.Reached r : p.move(new Point(5.6 * (i * TICK) / 1e9, 64, 0), seen)) {
+                if (r.finish()) {
+                    return new LagRun(p, stalls, t0, r.nanos());
+                }
+            }
+        }
+        throw new AssertionError("the probe run never finished");
+    }
+
+    @Test
+    void aGapBetweenTicksOverAQuarterSecondIsAStallThatRunsOnPastIt() {
+        long t = 10 * SECOND;
+        assertNull(FairPlay.stall(0, t), "no tick before this one: nothing to compare");
+        assertNull(FairPlay.stall(t, t + TICK), "an ordinary tick");
+        assertNull(FairPlay.stall(t, t + FairPlay.STALL_NANOS), "exactly a quarter second is still no stall");
+        assertEquals(new FairPlay.Stall(t, t + 1_700_000_000L + FairPlay.STALL_NANOS),
+                FairPlay.stall(t, t + 1_700_000_000L),
+                "a 1.7 s stall, running on past the tick after it, when the queued moves are handled");
+        FairPlay.Stall st = new FairPlay.Stall(2 * SECOND, 3 * SECOND);
+        assertTrue(st.overlaps(SECOND, 2 * SECOND), "a leg ending as it starts touches it");
+        assertTrue(st.overlaps(2_500_000_000L, 4 * SECOND), "a leg starting inside it touches it");
+        assertFalse(st.overlaps(3 * SECOND + 1, 4 * SECOND), "a leg after it doesn't");
+    }
+
+    @Test
+    void anHonestRunThroughAServerStallCounts() {
+        LagRun run = lagRun();
+        Progress p = run.progress();
+        assertEquals(1, run.stalls().size(), "the ticks saw the one stall");
+        assertTrue(FairPlay.tooFast(PROBE, run.start(), p.times(), p.reachedTargets()) >= 0,
+                "without the stall's window a leg looks impossibly fast: the false void the review found");
+        int fast = FairPlay.tooFast(PROBE, run.start(), p.times(), p.reachedTargets(), run.stalls());
+        assertEquals(-1, fast, "the legs the stall touched aren't checked; the rest are believable");
+        long ms = (run.finish() - run.start()) / 1_000_000L;
+        assertTrue(ms >= 7_200 && ms < 7_300, "an honest 7.2 s run, lag only ever lengthens a time: " + ms);
+        assertTrue(FairPlay.judge(false, null, false, ms, 5, fast).counts(), "so it counts");
+    }
+
+    @Test
+    void aLegAwayFromAnyStallIsStillChecked() {
+        long[] teleport = {2 * SECOND, 2 * SECOND + 100_000_000L, 7 * SECOND};
+        List<FairPlay.Stall> later = List.of(new FairPlay.Stall(5 * SECOND, 6 * SECOND));
+        assertEquals(1, FairPlay.tooFast(PARKOUR, 0, teleport, 3, later),
+                "a stall on the last leg doesn't excuse a teleport on the second");
+        List<FairPlay.Stall> there = List.of(new FairPlay.Stall(2 * SECOND + 50_000_000L, 2 * SECOND + 400_000_000L));
+        assertEquals(-1, FairPlay.tooFast(PARKOUR, 0, teleport, 3, there),
+                "a leg a stall touched isn't checked: its times are when the server caught up");
+    }
+
+    @Test
+    void everyLegHasATickOfSlack() {
+        Course straight = new Course("dash", TrialKind.PARKOUR, "Dash", Tier.EASY, "games",
+                new Course.Spot(0, 64, 0, 0, 0), List.of(), new Course.Mark(16, 64, 0, 1), null, null, true, false, 1);
+        assertEquals(-1, FairPlay.tooFast(straight, 0, new long[] {980_000_000L}, 1, List.of()),
+                "14 blocks to cover in 0.98 s is 14.3 b/s by the clock, but within a tick of slack of 14");
+        assertEquals(0, FairPlay.tooFast(straight, 0, new long[] {900_000_000L}, 1, List.of()),
+                "in 0.9 s it is too fast even with the slack");
+    }
+
+    // ---- walk speed and movement attributes ---------------------------------------------------
+
+    private static List<FairPlay.Stat> own(String key, double base, String... modifiers) {
+        List<FairPlay.Stat> out = new ArrayList<>();
+        for (var e : FairPlay.PLAYER_BASES.entrySet()) {
+            out.add(e.getKey().equals(key) ? new FairPlay.Stat(key, base, List.of(modifiers))
+                    : new FairPlay.Stat(e.getKey(), e.getValue(), List.of()));
+        }
+        return out;
+    }
+
+    @Test
+    void aPlayersOwnMovementIsFineSprintingIncluded() {
+        assertNull(FairPlay.movement(0.2f, own(FairPlay.MOVEMENT_SPEED, 0.1f)),
+                "the default walk speed and a movement speed of 0.1 (stored as a float)");
+        assertNull(FairPlay.movement(0.2f, own(FairPlay.MOVEMENT_SPEED, 0.1, FairPlay.SPRINTING)),
+                "vanilla sprinting is the one modifier an honest run has");
+        assertNull(FairPlay.movement(0.2f, List.of(new FairPlay.Stat("minecraft:scale", 2, List.of("x:y")))),
+                "an attribute the run doesn't watch is none of its business");
+    }
+
+    @Test
+    void aChangedWalkSpeedOrMovementAttributeVoidsARun() {
+        assertEquals(FairPlay.WALK_SPEED, FairPlay.movement(0.4f, own(FairPlay.MOVEMENT_SPEED, 0.1)),
+                "/speed walk: the walk speed changed");
+        assertEquals(FairPlay.WALK_SPEED, FairPlay.movement(Float.NaN, own(FairPlay.MOVEMENT_SPEED, 0.1)),
+                "a walk speed that isn't a number is not the default");
+        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f, own("minecraft:jump_strength", 0.6)),
+                "a jump strength base off the player's own 0.42");
+        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f, own("minecraft:gravity", 0.08, "someplugin:floaty")),
+                "another plugin's gravity modifier");
+        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f,
+                own(FairPlay.MOVEMENT_SPEED, 0.1, FairPlay.SPRINTING, "someplugin:boots")),
+                "a speed modifier next to sprinting");
+        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f, own("minecraft:step_height", 0.6, FairPlay.SPRINTING)),
+                "sprinting belongs on the movement speed only");
+        assertEquals(FairPlay.MOVEMENT, FairPlay.movement(0.2f, own("minecraft:safe_fall_distance", 10)),
+                "a longer safe fall");
+    }
+
+    // ---- a changed course ------------------------------------------------------------------------
+
+    @Test
+    void aCourseDeletedAndMadeAgainAtTheSameLayoutNumberIsStillChanged() {
+        int layout = PARKOUR.layoutHash();
+        assertFalse(FairPlay.stale(PARKOUR.rev(), layout, PARKOUR), "the same course: the run counts");
+        assertFalse(FairPlay.stale(PARKOUR.rev(), layout, PARKOUR.withName("Big Steps").withTier(Tier.HARD)
+                .withPinned(true).withMinSeconds(9)), "a new name, tier, pin or shortest time isn't a new layout");
+        assertTrue(FairPlay.stale(PARKOUR.rev(), layout, null), "deleted");
+        assertTrue(FairPlay.stale(PARKOUR.rev(), layout, PARKOUR.withRev(2)), "a layout edit bumps the rev");
+        Course remade = PARKOUR.withFinish(new Course.Mark(40, 80, 0, 2));
+        assertEquals(PARKOUR.rev(), remade.rev(), "made again, it came round to the same layout number");
+        assertTrue(FairPlay.stale(PARKOUR.rev(), layout, remade), "but it is a different layout: nothing recorded");
     }
 }

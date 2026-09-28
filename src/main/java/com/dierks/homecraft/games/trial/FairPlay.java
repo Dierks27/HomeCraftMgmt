@@ -1,6 +1,8 @@
 package com.dierks.homecraft.games.trial;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The fair-play rules of a run (spec §11, R2.15), pure and tested: when a fall sends you back,
@@ -12,8 +14,16 @@ import java.util.List;
  * check is what the session can't see: a run quicker than the course could ever be done
  * ({@code min_seconds}); a leg between two checkpoints covered faster than the kind of course
  * allows, counting only the distance that must really be travelled, {@code max(0, d − r_prev −
- * r_cur)}, so big spheres close together never trip it; and flying, a changed game mode or a
- * potion effect, which void the run the moment they are seen.
+ * r_cur)}, so big spheres close together never trip it; and flying, a changed game mode, a
+ * potion effect or a changed walk speed or movement attribute, which void the run the moment
+ * they are seen.
+ *
+ * <p><b>Server stalls.</b> A move is timed when the server handles it. While the server stalls
+ * (an autosave, new chunks, a GC pause) the client's moves queue up and are then handled
+ * microseconds apart, so two checkpoints crossed during the stall look a hair apart. Lag only
+ * ever lengthens a time, so it is never a cheat — but it would look like one. So a gap between
+ * two trial ticks longer than {@link #STALL_NANOS} is kept as a {@link Stall}, and the speed check
+ * skips any leg whose time overlaps one; every other leg gets {@link #LEG_SLACK} of slack.
  *
  * <p>A void is not a punishment: the player finishes the run, sees their time, and reads "That run
  * didn't count." with why. A test run is judged the same way but records nothing, and says
@@ -32,6 +42,26 @@ final class FairPlay {
     static final String TOO_QUICK = "quicker than this course allows";
     static final String TOO_FAST = "too fast between two checkpoints";
     static final String CHANGED = "the course changed during your run";
+    static final String WALK_SPEED = "your walk speed changed";
+    static final String MOVEMENT = "your movement changed";
+
+    /** A gap between two trial ticks longer than this is a server stall. */
+    static final long STALL_NANOS = 250_000_000L;
+    /** Every leg gets this much more time before it counts as too fast (one tick of jitter). */
+    static final double LEG_SLACK = 0.05;
+
+    /** A player's walk speed when nothing has changed it. */
+    static final float DEFAULT_WALK_SPEED = 0.2f;
+    /** The one movement modifier an honest run has: vanilla sprinting, on the movement speed. */
+    static final String SPRINTING = "minecraft:sprinting";
+    static final String MOVEMENT_SPEED = "minecraft:movement_speed";
+    /** The movement attributes a run watches, and a player's own base value of each. */
+    static final Map<String, Double> PLAYER_BASES = Map.of(
+            MOVEMENT_SPEED, 0.1,
+            "minecraft:jump_strength", 0.42,
+            "minecraft:step_height", 0.6,
+            "minecraft:gravity", 0.08,
+            "minecraft:safe_fall_distance", 3.0);
 
     private FairPlay() {
     }
@@ -60,6 +90,31 @@ final class FairPlay {
         boolean counts() {
             return kind == Kind.COUNTED;
         }
+    }
+
+    /**
+     * A time the server stood still, in {@code System.nanoTime()}: from the last trial tick before
+     * it to a little after the first tick after it, when the moves that queued up are handled.
+     */
+    record Stall(long from, long to) {
+
+        /** Whether it overlaps {@code start}..{@code end}. */
+        boolean overlaps(long start, long end) {
+            return start <= to && end >= from;
+        }
+    }
+
+    /**
+     * The stall between two trial ticks at {@code prevTick} and {@code tick}, or {@code null} when
+     * the gap was an ordinary one. It runs on {@link #STALL_NANOS} past the second tick: the moves
+     * that queued up during it are handled in a burst around then. A {@code prevTick} of 0 means
+     * there was no tick before this one.
+     */
+    static Stall stall(long prevTick, long tick) {
+        if (prevTick == 0 || tick - prevTick <= STALL_NANOS) {
+            return null;
+        }
+        return new Stall(prevTick, tick + STALL_NANOS);
     }
 
     /**
@@ -116,6 +171,17 @@ final class FairPlay {
      * @param reached    how many targets were reached
      */
     static int tooFast(Course course, long startNanos, long[] times, int reached) {
+        return tooFast(course, startNanos, times, reached, List.of());
+    }
+
+    /**
+     * {@link #tooFast(Course, long, long[], int)} for a run that saw server stalls: a leg whose
+     * time overlaps a stall isn't checked (its times are when the server caught up, not when the
+     * player got there), and every other leg gets {@link #LEG_SLACK} more time.
+     *
+     * @param stalls the stalls seen while the run ran
+     */
+    static int tooFast(Course course, long startNanos, long[] times, int reached, List<Stall> stalls) {
         if (course.start() == null) {
             return -1;
         }
@@ -126,8 +192,10 @@ final class FairPlay {
         int n = Math.min(reached, Math.min(times.length, targets.size()));
         for (int i = 0; i < n; i++) {
             Course.Mark cur = targets.get(i);
-            double seconds = (times[i] - prevAt) / 1e9;
-            if (tooFast(prev.distance(cur.center()), prevRadius, cur.radius(), seconds, course.kind().maxSpeed())) {
+            double seconds = (times[i] - prevAt) / 1e9 + LEG_SLACK;
+            double d = prev.distance(cur.center());
+            if (!stalled(stalls, prevAt, times[i])
+                    && tooFast(d, prevRadius, cur.radius(), seconds, course.kind().maxSpeed())) {
                 return i;
             }
             prev = cur.center();
@@ -135,6 +203,69 @@ final class FairPlay {
             prevAt = times[i];
         }
         return -1;
+    }
+
+    private static boolean stalled(List<Stall> stalls, long start, long end) {
+        if (stalls != null) {
+            for (Stall st : stalls) {
+                if (st.overlaps(start, end)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * One movement attribute as the player has it.
+     *
+     * @param key       the attribute's key ({@code minecraft:gravity})
+     * @param base      its base value
+     * @param modifiers the keys of the modifiers on it
+     */
+    record Stat(String key, double base, Collection<String> modifiers) {
+    }
+
+    /**
+     * Why the player's movement voids a run, or {@code null} when it is a player's own: a walk
+     * speed other than {@value #DEFAULT_WALK_SPEED} ({@code /speed}), or a watched attribute
+     * ({@link #PLAYER_BASES}) with its base value changed or any modifier on it but vanilla
+     * sprinting — another plugin's speed, jump, step, gravity or safe-fall boost. A value that
+     * isn't a number counts as changed.
+     */
+    static String movement(float walkSpeed, Collection<Stat> stats) {
+        if (!(Math.abs(walkSpeed - DEFAULT_WALK_SPEED) <= 1e-4)) {
+            return WALK_SPEED;
+        }
+        for (Stat st : stats) {
+            Double base = PLAYER_BASES.get(st.key());
+            if (base == null) {
+                continue;
+            }
+            if (!(Math.abs(st.base() - base) <= 1e-6)) {
+                return MOVEMENT;
+            }
+            for (String m : st.modifiers()) {
+                if (!(SPRINTING.equals(m) && MOVEMENT_SPEED.equals(st.key()))) {
+                    return MOVEMENT;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Whether a run that started on {@code then} records nothing because of {@code now}: the
+     * course was deleted, or its layout is not the one the run started on — a new {@code rev}, or
+     * the same {@code rev} on a different layout (a course deleted and made again starts at
+     * layout 1, so the rev alone can come round to the same number).
+     *
+     * @param rev    the course's layout version when the run started
+     * @param layout {@link Course#layoutHash()} when the run started
+     * @param now    the course as it is now, or {@code null} for deleted
+     */
+    static boolean stale(int rev, int layout, Course now) {
+        return now == null || now.rev() != rev || now.layoutHash() != layout;
     }
 
     /**

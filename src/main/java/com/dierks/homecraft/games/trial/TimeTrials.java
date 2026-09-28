@@ -35,6 +35,9 @@ import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.Sound;
 import org.bukkit.World;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.attribute.AttributeModifier;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.boat.OakBoat;
@@ -62,6 +65,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -87,10 +91,11 @@ import java.util.logging.Logger;
  * run back to its last checkpoint; the clock keeps running.
  *
  * <p><b>Fair play.</b> The session already keeps the player's things out and their game mode on
- * adventure. On top of it, flying, a changed game mode or any potion effect voids the run the
- * moment it is seen, and at the finish a run quicker than the course's shortest time, or a leg
- * faster than the kind allows, doesn't count either. A run whose course changed layout while it
- * ran records nothing (its time belongs to a course that's gone). Test runs record nothing ever.
+ * adventure. On top of it, flying, a changed game mode, any potion effect, or a changed walk speed
+ * or movement attribute voids the run the moment it is seen, and at the finish a run quicker than
+ * the course's shortest time, or a leg faster than the kind allows (legs a server stall touched
+ * aside), doesn't count either. A run whose course changed layout while it ran records nothing
+ * (its time belongs to a course that's gone). Test runs record nothing ever.
  *
  * <p><b>The finish.</b> The time goes onto the course's all-time board and this week's board;
  * the player reads the time, their best and the record (with who holds it); the rewards are paid
@@ -146,6 +151,8 @@ public final class TimeTrials implements Game {
     /** Every course, read once and again after each edit; {@code null} = read on next use. */
     private List<Course> cache;
     private long lastReadError;
+    /** When the last trial tick ran ({@code System.nanoTime()}; 0 = none yet), to see server stalls. */
+    private long lastTick;
 
     public TimeTrials(GameContext ctx) {
         this.ctx = ctx;
@@ -283,6 +290,7 @@ public final class TimeTrials implements Game {
     @Override
     public void start() {
         cache = null;
+        lastTick = 0;
         WorldEntities.sweep(this);
         GamesService g = games();
         g.on(this, PlayerMoveEvent.class, EventPriority.HIGH, true, this::hold);
@@ -306,6 +314,7 @@ public final class TimeTrials implements Game {
         runs.clear();
         boats.clear();
         cache = null;
+        lastTick = 0;
     }
 
     @Override
@@ -439,6 +448,9 @@ public final class TimeTrials implements Game {
         if (GameCatalog.taken(id)) {
             return "'" + id + "' is a game's id, or a word /hcm play keeps for itself.";
         }
+        if (TrialText.keptWord(id)) {
+            return "'" + id + "' is a word /hcm games feature keeps for itself.";
+        }
         if (games().game(id) != null) {
             return "'" + id + "' is another name for a game.";
         }
@@ -468,9 +480,17 @@ public final class TimeTrials implements Game {
         return CourseOfWeek.pick(ids, weekKey(), pinned);
     }
 
-    /** Whether {@code courseId} is today's featured pick. */
+    /** Whether {@code courseId} is today's featured pick: by its own id, or the whole game pinned. */
     public boolean featured(String courseId) {
-        return games().featured().isFeatured(courseId);
+        return featured(games().featured()::isFeatured, courseId);
+    }
+
+    /**
+     * Whether {@code courseId} is today's pick, asking {@code isFeatured} about a play id: the
+     * course by its own id, or every course when the game itself ({@code trials}) is the pick.
+     */
+    static boolean featured(Predicate<String> isFeatured, String courseId) {
+        return isFeatured.test(courseId) || isFeatured.test(SPEC.id());
     }
 
     /** This week's key (the same week as the weekly quests). */
@@ -503,7 +523,7 @@ public final class TimeTrials implements Game {
         }
         lore.add(recordLine(record, viewer));
         int first = firstClear(c);
-        if (best == null && first > 0) {
+        if (first > 0 && !firstClearDone(viewer, c)) {
             lore.add("&7First finish: &6" + TrialText.tokens(first));
         }
         if (c.id().equals(courseOfWeek)) {
@@ -710,6 +730,9 @@ public final class TimeTrials implements Game {
     // ---- the tick: countdowns, clocks and the fair-play watch ---------------------------------
 
     private void tick() {
+        long nanos = System.nanoTime();
+        FairPlay.Stall stall = FairPlay.stall(lastTick, nanos);
+        lastTick = nanos;
         if (runs.isEmpty()) {
             return;
         }
@@ -721,6 +744,9 @@ public final class TimeTrials implements Game {
                 runs.remove(run.player);
                 removeBoat(run, p);
                 continue;
+            }
+            if (stall != null && run.running()) {
+                run.stalls.add(stall); // the moves handled in its wake were timed late: no leg check across it
             }
             if (s.phase() != Session.Phase.ACTIVE) {
                 continue;
@@ -766,33 +792,62 @@ public final class TimeTrials implements Game {
         run.phase = TrialRun.Phase.RUNNING;
         title(p, "&aGo!", "", 15);
         ping(p, 2.0f);
+        watch(p, run);
     }
 
     private void running(Player p, TrialRun run, long now) {
-        if (run.voided == null) {
-            String why = p.getGameMode() != GameMode.ADVENTURE ? FairPlay.GAME_MODE
-                    : p.getAllowFlight() || p.isFlying() ? FairPlay.FLYING
-                    : !p.getActivePotionEffects().isEmpty() ? FairPlay.EFFECT : null;
-            if (why != null) {
-                run.voided = why;
-                p.sendMessage(Text.of("&cThis run won't count &7- " + why + ". Finish it for fun, or use Leave game."));
-                Sounds.miss(p);
-            }
-        }
+        watch(p, run);
         if (run.suspended) {
             long waited = now - run.lastReset;
             if (waited >= (run.expect == null ? SUSPEND_TICKS : WAIT_TICKS)) {
                 sendBack(p, run, 0); // moved by someone else and not sent back yet, or our teleport never came
             }
         } else if (run.backDue) {
-            sendBack(p, run, RESET_GAP);
-            run.backDue = false;
+            sendBack(p, run, RESET_GAP); // clears backDue only once it really sends them back
         } else if (run.course.kind() == TrialKind.BOAT && now >= run.reseatUntil && !seated(p, run)) {
             sendBack(p, run, RESET_GAP);
         }
         if (run.phase == TrialRun.Phase.RUNNING && run.ticks % CLOCK_EVERY == 0) {
             p.sendActionBar(Text.of(clockLine(run)));
         }
+    }
+
+    /**
+     * The fair-play watch, at Go and on every tick: flying, a changed game mode, a potion effect,
+     * a changed walk speed or movement attribute — the run won't count, and the player hears it
+     * once.
+     */
+    private void watch(Player p, TrialRun run) {
+        if (run.voided != null) {
+            return;
+        }
+        String why = p.getGameMode() != GameMode.ADVENTURE ? FairPlay.GAME_MODE
+                : p.getAllowFlight() || p.isFlying() ? FairPlay.FLYING
+                : !p.getActivePotionEffects().isEmpty() ? FairPlay.EFFECT
+                : FairPlay.movement(p.getWalkSpeed(), movementStats(p));
+        if (why != null) {
+            run.voided = why;
+            p.sendMessage(Text.of("&cThis run won't count &7- " + why + ". Finish it for fun, or use Leave game."));
+            Sounds.miss(p);
+        }
+    }
+
+    /** The movement attributes the watch reads: base values and modifier keys. */
+    private static List<FairPlay.Stat> movementStats(Player p) {
+        List<FairPlay.Stat> out = new ArrayList<>(5);
+        for (Attribute a : List.of(Attribute.MOVEMENT_SPEED, Attribute.JUMP_STRENGTH, Attribute.STEP_HEIGHT,
+                Attribute.GRAVITY, Attribute.SAFE_FALL_DISTANCE)) {
+            AttributeInstance in = p.getAttribute(a);
+            if (in == null) {
+                continue;
+            }
+            List<String> modifiers = new ArrayList<>();
+            for (AttributeModifier m : in.getModifiers()) {
+                modifiers.add(m.getKey().toString());
+            }
+            out.add(new FairPlay.Stat(a.getKey().toString(), in.getBaseValue(), modifiers));
+        }
+        return out;
     }
 
     /** "0:21.4 · 2/5 checkpoints", or "on to the finish!". */
@@ -1096,11 +1151,10 @@ public final class TimeTrials implements Game {
     private void finish(Player p, TrialRun run, long nanos) {
         run.phase = TrialRun.Phase.DONE;
         long ms = run.elapsedMs(nanos);
-        Course now = course(run.course.id());
-        boolean stale = now == null || now.rev() != run.course.rev();
+        boolean stale = FairPlay.stale(run.course.rev(), run.layout, course(run.course.id()));
         TimeTrialsSettings s = settings();
         int tooFast = FairPlay.tooFast(run.course, run.progress.startNanos(), run.progress.times(),
-                run.progress.reachedTargets());
+                run.progress.reachedTargets(), run.stalls);
         FairPlay.Verdict verdict = FairPlay.judge(run.test, run.voided, stale, ms,
                 run.course.minSecondsOr(s.minSeconds()), tooFast);
         String name = run.course.name();
@@ -1150,8 +1204,13 @@ public final class TimeTrials implements Game {
             }
 
             @Override
-            public void announce(ScoreResult course, ScoreResult week) {
-                announceTo(p, run.course, ms, course, week);
+            public void announce(ScoreResult course, ScoreResult week, boolean firstFinish) {
+                announceTo(p, run.course, ms, course, week, firstFinish);
+            }
+
+            @Override
+            public boolean firstClearPaid() {
+                return firstClearDone(p, run.course);
             }
 
             @Override
@@ -1163,11 +1222,10 @@ public final class TimeTrials implements Game {
     }
 
     /** The finish lines: your best, the record (and who holds it), this week's best. */
-    private void announceTo(Player p, Course c, long ms, ScoreResult course, ScoreResult week) {
+    private void announceTo(Player p, Course c, long ms, ScoreResult course, ScoreResult week, boolean firstFinish) {
         String sub;
         if (course.personalBest()) {
-            p.sendMessage(Text.of(course.previous() == null ? "&e★ Your first finish on " + c.name() + "!"
-                    : "&e★ New best! &7(was " + TrialText.time(course.previous()) + ")"));
+            p.sendMessage(Text.of(TrialText.bestLine(c.name(), course.previous(), firstFinish)));
             sub = "&eNew best!";
         } else {
             String yours = course.previous() == null ? "" : TrialText.time(course.previous());

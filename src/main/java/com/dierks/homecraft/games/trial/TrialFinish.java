@@ -35,8 +35,15 @@ final class TrialFinish {
         /** Record {@code ms} on {@code board} (lower is better). */
         ScoreResult submit(String board, long ms);
 
-        /** Tell the player how the time stands (between recording and paying). */
-        void announce(ScoreResult course, ScoreResult week);
+        /**
+         * Tell the player how the time stands (between recording and paying).
+         *
+         * @param firstFinish the course's first-clear reward is about to be paid for this run
+         */
+        void announce(ScoreResult course, ScoreResult week, boolean firstFinish);
+
+        /** Whether the player had the course's first-clear reward before this run. */
+        boolean firstClearPaid();
 
         /** Pay a reward; the tokens actually paid (the caps may hold some back). */
         int pay(RewardKind kind, String ref, int tokens, String detail);
@@ -80,7 +87,8 @@ final class TrialFinish {
         }
         ScoreResult course = orNone(ledger.submit(Scores.course(run.course()), run.ms()));
         ScoreResult week = orNone(ledger.submit(Scores.week(run.course(), run.weekKey()), run.ms()));
-        ledger.announce(course, week);
+        boolean firstFinish = run.firstClear() > 0 && !ledger.firstClearPaid();
+        ledger.announce(course, week, firstFinish);
         int earned = 0;
         if (run.firstClear() > 0) {
             earned += ledger.pay(RewardKind.FIRST_CLEAR, SkillRewards.firstClearRef(run.course()), run.firstClear(),

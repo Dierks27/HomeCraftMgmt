@@ -19,7 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * announces how it stands between recording and paying, then pays the first clear (the tier's
  * amount, once per course), the week's best only when it IS the week's best, the course of the
  * week only on that course and today's pick only when featured — each under its one spelling of
- * ref — and never a reward of 0; and what was earned is what the ledger actually paid.
+ * ref — and never a reward of 0; what was earned is what the ledger actually paid; and the
+ * lines call it a first finish only when the first clear is about to be paid, not when the
+ * board is empty because the course changed.
  */
 class TrialFinishTest {
 
@@ -32,6 +34,8 @@ class TrialFinishTest {
         ScoreResult course = new ScoreResult(true, null, false, 3);
         ScoreResult week = new ScoreResult(true, null, false, 2);
         int cap = Integer.MAX_VALUE;
+        boolean firstPaid;
+        Boolean firstFinish;
 
         @Override
         public ScoreResult submit(String board, long ms) {
@@ -40,8 +44,14 @@ class TrialFinishTest {
         }
 
         @Override
-        public void announce(ScoreResult c, ScoreResult w) {
+        public void announce(ScoreResult c, ScoreResult w, boolean first) {
             calls.add("announce");
+            firstFinish = first;
+        }
+
+        @Override
+        public boolean firstClearPaid() {
+            return firstPaid;
         }
 
         @Override
@@ -135,5 +145,21 @@ class TrialFinishTest {
         TrialFinish.Summary s = TrialFinish.settle(counted(), run(true, true), ledger);
         assertEquals(12, s.earned(), "10 + 5 + 2 + 3 asked, 12 let through");
         assertEquals(new ScoreResult(true, null, true, 1), s.week(), "the week's standing is kept for the screen");
+    }
+
+    @Test
+    void theLinesCallItAFirstFinishOnlyWhenTheFirstClearIsAboutToBePaid() {
+        FakeLedger fresh = new FakeLedger();
+        TrialFinish.settle(counted(), run(false, false), fresh);
+        assertEquals(Boolean.TRUE, fresh.firstFinish, "never paid before: this finish pays it, so it is the first");
+        FakeLedger again = new FakeLedger();
+        again.firstPaid = true;
+        TrialFinish.settle(counted(), run(false, false), again);
+        assertEquals(Boolean.FALSE, again.firstFinish,
+                "paid long ago (the board was cleared by a layout change): not called a first finish");
+        FakeLedger none = new FakeLedger();
+        TrialFinish.settle(counted(), new TrialFinish.Run("river_run", "River Run", 62_345, DAY, WEEK, false, false,
+                0, 5, 2, 3), none);
+        assertEquals(Boolean.FALSE, none.firstFinish, "a first clear of 0 pays nothing, so it promises nothing");
     }
 }

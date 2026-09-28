@@ -33,7 +33,10 @@ import java.util.logging.Level;
  * {@code games.worlds}. A layout change bumps the course's {@code rev} and clears its all-time and
  * this week's times — a time on the old layout isn't a time on the new one — so when there are
  * times to lose it asks for the same command again with {@code confirm} on the end (R2.15). A
- * course opens only with a start and a finish. Every change is logged with who made it.
+ * fall height must sit under the lowest point of the course and not under the world's floor
+ * (else every run goes straight back, or none ever falls). A course opens only with a start and a
+ * finish. Every change is logged with who made it, and a command that goes wrong says so here and
+ * in the console — it never reaches the framework's guard, which would switch the game off.
  */
 final class CourseAdmin implements GameAdmin {
 
@@ -83,6 +86,11 @@ final class CourseAdmin implements GameAdmin {
         } catch (SQLException e) {
             trials.plugin().getLogger().log(Level.SEVERE, "Time trials: a course command failed", e);
             sender.sendMessage(Text.of("&cCouldn't reach the database - see the console."));
+        } catch (RuntimeException e) {
+            // Never out to the framework's guard: that would switch time trials off over a typo.
+            trials.plugin().getLogger().log(Level.SEVERE, "Time trials: /hcm games course "
+                    + String.join(" ", args) + " failed", e);
+            sender.sendMessage(Text.of("&cThat didn't work - see the console."));
         }
     }
 
@@ -150,7 +158,7 @@ final class CourseAdmin implements GameAdmin {
             return;
         }
         boolean confirm = args[args.length - 1].equalsIgnoreCase("confirm");
-        List<String> rest = new ArrayList<>(Arrays.asList(args).subList(2, args.length - (confirm ? 1 : 0)));
+        List<String> rest = rest(args, confirm);
         switch (args[1].toLowerCase(Locale.ROOT)) {
             case "start" -> start(sender, c, confirm, args);
             case "checkpoint", "checkpoints", "cp" -> checkpoint(sender, c, rest, confirm, args);
@@ -268,6 +276,12 @@ final class CourseAdmin implements GameAdmin {
                 ? (c.kind() == TrialKind.PARKOUR ? "Falls now count at " + trials.settings().fallDepth()
                 + " blocks under the checkpoints either side." : "No fall height: runs go back on landing or leaving.")
                 : "Falling below y " + fmt(y) + " sends a run back to its last checkpoint.");
+    }
+
+    /** The world's floor under a course, or {@code null} while it has no world (or it isn't loaded). */
+    private static Integer minHeight(Course c) {
+        World w = c.world().isBlank() ? null : Bukkit.getWorld(c.world());
+        return w == null ? null : w.getMinHeight();
     }
 
     private void tier(CommandSender sender, Course c, List<String> rest, String[] args) throws SQLException {
@@ -411,6 +425,11 @@ final class CourseAdmin implements GameAdmin {
      */
     private void layout(CommandSender sender, Course before, Course after, boolean confirm, String[] args, String done)
             throws SQLException {
+        String fall = fallProblem(after, minHeight(after));
+        if (fall != null) {
+            sender.sendMessage(Text.of("&c" + fall + " &7(/hcm games course " + before.id() + " fall <y|off>)"));
+            return;
+        }
         long week = trials.weekKey();
         boolean times = trials.store().hasTimes(before.id(), week);
         if (times && !confirm) {
@@ -562,6 +581,39 @@ final class CourseAdmin implements GameAdmin {
     }
 
     // ---- small pure helpers (tested) ----------------------------------------------------------
+
+    /**
+     * The words after the verb, without a {@code confirm} on the end: {@code [cliffs, fall, 60,
+     * confirm]} → {@code [60]}; {@code [cliffs, confirm]} (no verb) → none, never a throw.
+     */
+    static List<String> rest(String[] args, boolean confirm) {
+        int to = Math.max(2, args.length - (confirm ? 1 : 0));
+        return args.length <= 2 ? new ArrayList<>() : new ArrayList<>(Arrays.asList(args).subList(2, to));
+    }
+
+    /**
+     * What's wrong with a course's fall height, or {@code null} when nothing is: under the
+     * world's floor no run ever falls that far, and at or above the lowest point of the course
+     * (the start, a checkpoint or the finish) every run would go straight back, again and again.
+     *
+     * @param minHeight the world's floor, or {@code null} when not known
+     */
+    static String fallProblem(Course c, Integer minHeight) {
+        Double y = c.fallY();
+        if (y == null) {
+            return null;
+        }
+        if (minHeight != null && y < minHeight) {
+            return "y " + fmt(y) + " is below the bottom of the world (y " + minHeight
+                    + "): no run would ever get there.";
+        }
+        Double low = c.lowestY();
+        if (low != null && y >= low) {
+            return "The fall height (y " + fmt(y) + ") must be under the lowest point of the course (y " + fmt(low)
+                    + "), or every run goes straight back.";
+        }
+        return null;
+    }
 
     /**
      * A radius typed by an admin ({@code null}/blank = {@code fallback}), kept inside

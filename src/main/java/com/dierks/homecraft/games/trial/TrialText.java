@@ -50,6 +50,28 @@ public final class TrialText {
         return id != null && ID.matcher(id).matches();
     }
 
+    /**
+     * Whether {@code id} is a word another command keeps for itself, so no course may be called it:
+     * {@code auto} is how {@code /hcm games feature} lets the day pick again, so a course called
+     * that could never be pinned.
+     */
+    public static boolean keptWord(String id) {
+        return id != null && id.trim().equalsIgnoreCase("auto");
+    }
+
+    /**
+     * The finish line for a new personal best: "★ New best! (was 0:13.1)"; with no time before it
+     * on the board, "★ Your first finish on Cliffs!" only when that first finish is being paid
+     * ({@code firstFinish}) — after a layout change or a course made again the board is empty but
+     * the first finish was long ago, so it's simply "★ New best!".
+     */
+    public static String bestLine(String courseName, Long previous, boolean firstFinish) {
+        if (previous != null) {
+            return "&e★ New best! &7(was " + time(previous) + ")";
+        }
+        return firstFinish ? "&e★ Your first finish on " + courseName + "!" : "&e★ New best!";
+    }
+
     /** A course's first name from its id: {@code river_run} → "River Run". */
     public static String defaultName(String id) {
         if (id == null || id.isBlank()) {

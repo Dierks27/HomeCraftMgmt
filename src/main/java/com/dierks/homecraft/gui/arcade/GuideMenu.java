@@ -1,31 +1,48 @@
 package com.dierks.homecraft.gui.arcade;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.arcade.ArcadeService;
+import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.Game;
+import com.dierks.homecraft.games.GameKind;
+import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.RtpLimits;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.gui.games.BreakMenu;
+import com.dierks.homecraft.gui.games.Screens;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
 /**
- * How It Works: four pages, each a picture of how one thing flows — items joined by arrow panes,
+ * How It Works: five pages, each a picture of how one thing flows — items joined by arrow panes,
  * the step in each item's name, one or two short lines of lore. Reachable from the Arcade hub,
- * the pack shop's "?", the PC's Guide site and {@code /hcm guide}.
+ * the pack shop's "?", the PC's Guide site, the Games screen and {@code /hcm guide}.
  *
  * <p>Written for the youngest player on the server: short words, one idea per tile, and the
  * important part in the name, since Bedrock shows lore only on tap-and-hold.
+ *
+ * <p>The Games page (spec §8.4) never states a number it made up: what each game of chance gives
+ * back is read from the game's own engine (the same object it plays with, via what it publishes),
+ * and the limits and daily amounts come from the live config.
  */
 public final class GuideMenu extends Menu {
 
     public static final int TOKENS = 0;
     public static final int MINIS = 1;
     public static final int WILD = 2;
-    public static final int GAMES = 3;
-    private static final String[] TITLES = {"Tokens", "Minis", "Wild Minis", "Arcade games"};
+    /** Crates, the Scratch Ticket, the Rare Card and trade-in. */
+    public static final int ARCADE = 3;
+    /** The Games: what games of chance give back, what skill games pay, Take a break. */
+    public static final int GAMES_PAGE = 4;
+    private static final String[] TITLES = {"Tokens", "Minis", "Wild Minis", "Arcade", "Games"};
     private static final Material[] TAB_ICONS = {Material.SUNFLOWER, Material.PAPER, Material.SPYGLASS,
-            Material.CHEST};
-    private static final int[] TAB_SLOTS = {1, 3, 5, 7};
+            Material.CHEST, Material.TARGET};
+    private static final int[] TAB_SLOTS = {0, 2, 4, 6, 8};
+    /** Where the games of chance line up on the Games page. */
+    private static final int[] CHANCE_SLOTS = {14, 15, 16, 23, 24, 25};
 
     private final Player player;
     private final int page;
@@ -55,7 +72,8 @@ public final class GuideMenu extends Menu {
             case TOKENS -> tokens();
             case MINIS -> minis();
             case WILD -> wild();
-            default -> games();
+            case GAMES_PAGE -> gamesPage();
+            default -> arcade();
         }
         if (page > 0) {
             set(45, Menus.icon(Material.ARROW, "&fPrevious: " + TITLES[page - 1]),
@@ -141,7 +159,7 @@ public final class GuideMenu extends Menu {
     }
 
     /** Crate, Scratch Ticket, Rare Card and Card trade-in, each over what it gives. */
-    private void games() {
+    private void arcade() {
         step(19, Material.CHEST, "&6Crates", "&7Pay tokens, get a surprise.");
         step(28, Material.FIREWORK_ROCKET, "&7Boosts, trails, hats…", "&7and sometimes a Card!");
         step(21, Material.FILLED_MAP, "&6Scratch Ticket",
@@ -153,5 +171,81 @@ public final class GuideMenu extends Menu {
                 "&7" + (perWeek <= 0 ? "Any time." : perWeek == 1 ? "One a week." : perWeek + " a week."));
         step(25, Material.HOPPER, "&6Trade In Cards", "&7Spare Cards?");
         step(34, Material.SUNFLOWER, "&7Swap them for tokens", "&7Rarer Cards give more.");
+    }
+
+    /**
+     * Pick a game → games of chance (each with what it gives back, from its engine) → skill games
+     * (milestones, the daily challenge, a daily amount) → Take a break.
+     */
+    private void gamesPage() {
+        GamesService games = plugin.games();
+        GamesConfig.Common common = plugin.config().games().common();
+        boolean open = games != null && plugin.config().games().enabled();
+        if (!open) {
+            step(22, Material.GRAY_DYE, "&7The games are closed right now",
+                    "&7Take a break still covers", "&7Crates, tickets and packs.");
+        } else {
+            step(10, Material.CHEST, "&bPick a game", "&7In the Arcade, or", "&7type /hcm play.");
+            if (player.hasPermission("hcm.games.chance")) {
+                set(11, arrow("→"), null);
+                step(12, Material.GOLD_NUGGET, "&6Games of chance", "&7You put tokens in. Each one",
+                        "&7gives back less than it takes.");
+                set(13, arrow("→"), null);
+                chanceGames(games);
+                step(21, Material.PAPER, "&6Before you play", "&7Its screen shows the rules",
+                        "&7and what it gives back.");
+                if (common.chanceDailyTokens() > 0) {
+                    step(22, Material.HOPPER, "&6Everyone: up to " + common.chanceDailyTokens() + " a day",
+                            "&7Tokens put into all games", "&7of chance, each day.");
+                }
+            }
+            step(28, Material.TARGET, "&aSkill games", "&7Free to play.", "&7Beat your best!");
+            set(29, arrow("→"), null);
+            step(30, Material.GOLD_INGOT, "&aMilestones", "&7Bronze, silver and gold.", "&7Each pays once, ever.");
+            step(31, Material.CLOCK, "&aDaily challenge", "&7One scored try a day.", "&7Meet the goal to earn.");
+            set(32, arrow("→"), null);
+            int cap = common.skillDailyCap();
+            step(33, Material.SUNFLOWER, "&6Up to " + cap + " token" + (cap == 1 ? "" : "s") + " a day",
+                    "&7from skill games.", "&7Scores always count.");
+            if (common.featuredBonus() > 0) {
+                step(34, Material.NETHER_STAR, "&eToday's pick", "&7Finish it for a bonus",
+                        "&7of " + common.featuredBonus() + " more.");
+            }
+        }
+        int wait = common.breakRaiseDelayDays();
+        step(37, Material.BLUE_BED, "&bTake a break", "&7Set a daily limit, or", "&7pause games of chance.");
+        set(38, arrow("→"), null);
+        step(39, Material.BOOK, "&bIt covers", BreakMenu.coversLore());
+        step(41, Material.LIME_DYE, "&aLower: right away", "&7A lower limit starts now.");
+        step(42, Material.YELLOW_DYE, "&eHigher: later", "&7A higher one waits",
+                "&7" + wait + " day" + (wait == 1 ? "" : "s") + ", then midnight.");
+        step(43, Material.GRAY_DYE, "&7A pause stays", "&7It can't be made shorter.");
+    }
+
+    /** Every open game of chance, and the Scratch Ticket, with what it gives back. */
+    private void chanceGames(GamesService games) {
+        int i = 0;
+        for (Game g : games.games()) {
+            if (g.kind() != GameKind.CHANCE || i >= CHANCE_SLOTS.length) {
+                continue;
+            }
+            double back = Screens.giveBack(games, g);
+            if (Double.isNaN(back)) {
+                continue;
+            }
+            step(CHANCE_SLOTS[i++], Material.GOLD_NUGGET, "&6" + g.name() + " &7- about "
+                            + RtpLimits.wholePercent(back) + " of every 100 back",
+                    "&7It " + RtpLimits.playerLine(back) + ",", "&7over lots of plays.");
+        }
+        var lotto = plugin.config().arcade().lotto();
+        if (i < CHANCE_SLOTS.length && plugin.arcade() != null && !lotto.payouts().isEmpty()) {
+            double back = ArcadeService.rtp(lotto);
+            step(CHANCE_SLOTS[i++], Material.FILLED_MAP, "&6Scratch Ticket &7- about "
+                            + RtpLimits.wholePercent(back) + " of every 100 back",
+                    "&7It " + RtpLimits.playerLine(back) + ",", "&7over lots of tickets.");
+        }
+        if (i == 0) {
+            step(CHANCE_SLOTS[0], Material.GRAY_DYE, "&7None are open right now");
+        }
     }
 }

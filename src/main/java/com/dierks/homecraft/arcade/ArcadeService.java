@@ -39,15 +39,28 @@ public final class ArcadeService {
     /**
      * The result of opening a crate / pity / lotto — carries a display icon for the reveal GUI.
      *
-     * @param win whether the pull actually paid something worth celebrating. A loss is still
-     *            {@code ok} (the ticket was bought and resolved), but the reveal must not call
-     *            it a win.
-     * @param big a headline result (the Card jackpot from a crate, the Scratch Ticket jackpot, a
-     *            Rare-or-better pity Card): the reveal adds a title and a firework
+     * @param win      whether the pull actually paid something worth celebrating. A loss is still
+     *                 {@code ok} (the ticket was bought and resolved), but the reveal must not
+     *                 call it a win.
+     * @param big      a headline result (the Card jackpot from a crate, the Scratch Ticket jackpot,
+     *                 a Rare-or-better pity Card): the reveal adds a title and a firework
+     * @param returned tokens handed back by a result that is NOT a win — some or all of what was
+     *                 put in (spec §0.9, R1.18). Said plainly as "tokens back", never dressed up:
+     *                 the reveal reads this flag, not the icon it happens to be drawn with.
      */
-    public record Outcome(boolean ok, String error, ItemStack icon, String label, boolean win, boolean big) {
+    public record Outcome(boolean ok, String error, ItemStack icon, String label, boolean win, boolean big,
+                          int returned) {
+        public Outcome(boolean ok, String error, ItemStack icon, String label, boolean win, boolean big) {
+            this(ok, error, icon, label, win, big, 0);
+        }
+
         public Outcome(boolean ok, String error, ItemStack icon, String label, boolean win) {
-            this(ok, error, icon, label, win, false);
+            this(ok, error, icon, label, win, false, 0);
+        }
+
+        /** Whether this was no win but some (or all) of the tokens put in came back. */
+        public boolean someBack() {
+            return !win && returned > 0;
         }
 
         static Outcome fail(String e) {
@@ -64,6 +77,10 @@ public final class ArcadeService {
 
         static Outcome lost(ItemStack icon, String label) {
             return new Outcome(true, null, icon, label, false, false);
+        }
+
+        static Outcome back(ItemStack icon, String label, int tokens) {
+            return new Outcome(true, null, icon, label, false, false, Math.max(0, tokens));
         }
     }
 
@@ -135,6 +152,10 @@ public final class ArcadeService {
         Crate crate = plugin.config().arcade().crates().get(crateId);
         if (crate == null) {
             return Outcome.fail("No such crate.");
+        }
+        String paused = chanceRefusal(plugin, player, crate.costTokens());
+        if (paused != null) {
+            return Outcome.fail(paused);
         }
         if (crate.rewards().isEmpty()) {
             return Outcome.fail("This crate is empty right now.");
@@ -228,7 +249,7 @@ public final class ArcadeService {
             }
         }
         // Everything left was a Mini whose Cards are gone; a pull that resolved to nothing.
-        return Outcome.lost(icon(Material.BARRIER, "&7Better luck next time"), "&7nothing this time");
+        return Outcome.lost(icon(Material.BARRIER, "&7No prize this time"), "&7nothing this time");
     }
 
     /**
@@ -387,6 +408,10 @@ public final class ArcadeService {
             return Outcome.fail(com.dierks.homecraft.integration.EconomySandbox.reason());
         }
         PluginConfig.Lotto l = plugin.config().arcade().lotto();
+        String paused = chanceRefusal(plugin, player, l.ticketTokens());
+        if (paused != null) {
+            return Outcome.fail(paused);
+        }
         if (l.payouts().isEmpty()) {
             return Outcome.fail("The Scratch Ticket isn't set up right now.");
         }
@@ -432,14 +457,49 @@ public final class ArcadeService {
         if (won > 0) {
             tokens().grant(id, won, TokenService.Source.LOTTO, "Scratch Ticket");
         }
-        if (won >= l.ticketTokens()) {
+        // Only more than the ticket is a win. Getting some or all of it back is said as exactly
+        // that — never dressed up as a near win, never the win sound (spec §2, R1.18).
+        if (won > l.ticketTokens()) {
             return Outcome.won(icon(Material.SUNFLOWER, "&e+" + won + " tokens"), "&e" + won + " tokens");
         }
         if (won > 0) {
-            return Outcome.lost(icon(Material.GOLD_NUGGET, "&7So close! &e+" + won + " tokens back"),
-                    "&e" + won + " tokens back");
+            return Outcome.back(icon(Material.IRON_NUGGET, "&7Tokens back: &f" + won + " &7of &f" + l.ticketTokens()),
+                    "&7You got " + backText(won, l.ticketTokens()), won);
         }
         return Outcome.lost(icon(Material.GRAY_DYE, "&7No win this time"), "&7no win");
+    }
+
+    /** "3 of your 10 tokens back", or "your 10 tokens back" when it was all of them. */
+    static String backText(int back, int in) {
+        return (back >= in ? "&7your &f" + back : "&f" + back + " &7of your &f" + in) + " tokens &7back";
+    }
+
+    /**
+     * Take a break's say before a game of chance takes tokens (spec §4.2, R1.11): the player's own
+     * and a parent's pause and daily limit, the {@code hcm.games.chance} permission, and the
+     * server's daily limit while the games are on. Crates, the Scratch Ticket and token Card Packs
+     * all ask this right after their world check. It fails closed: no service, or a service that
+     * throws, means no.
+     *
+     * @return why not, as a plain line, or {@code null} to go ahead
+     */
+    public static String chanceRefusal(HomeCraftManagement plugin, Player player, int cost) {
+        com.dierks.homecraft.games.Breaks breaks = plugin.breaks();
+        String closed = com.dierks.homecraft.games.Refusal.CHANCE_CLOSED.message();
+        if (breaks == null) {
+            return closed;
+        }
+        try {
+            com.dierks.homecraft.games.Refusal r = breaks.chanceAllowed(player, cost);
+            if (r == null) {
+                return null;
+            }
+            return r.message().isEmpty() ? closed : r.message();
+        } catch (RuntimeException e) {
+            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Take a break could not check "
+                    + player.getName() + " - games of chance refuse until it can", e);
+            return closed;
+        }
     }
 
     private static PluginConfig.LottoPayout roll(List<PluginConfig.LottoPayout> payouts) {

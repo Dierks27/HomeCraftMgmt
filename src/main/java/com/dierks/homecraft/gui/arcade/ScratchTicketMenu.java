@@ -16,14 +16,19 @@ import org.bukkit.inventory.ItemStack;
  * three the same is a win. The result was decided — and paid — when the ticket was bought, so
  * this is only the fun part: closing it early just tells you what you got.
  *
- * <p>The symbols follow the order you scratch in, not the squares: the first two match whenever
- * the ticket paid anything back, so the suspense always lands on the last square.
+ * <p>The squares show exactly what happened, never an "almost". A ticket that gave back some of
+ * its price used to show two suns and a lump of coal — an engineered near miss that also dressed a
+ * loss up as nearly a win. It now shows three plain squares that say "Tokens back", and the result
+ * line says how many (spec §2, R1.18). Which result it was comes from the outcome's own
+ * {@link ArcadeService.Outcome#someBack()} flag, not from the icon the service drew it with.
  */
 public final class ScratchTicketMenu extends Menu {
 
     private static final int[] SQUARES = {11, 13, 15};
     private static final int HEADER = 4;
-    private static final int BACK = 22;
+    private static final int EXIT = 22;
+    /** The plain square of a ticket that gave some tokens back: not a symbol that wins anything. */
+    private static final Material BACK = Material.IRON_NUGGET;
 
     private final Player player;
     private final ArcadeService.Outcome outcome;
@@ -45,8 +50,8 @@ public final class ScratchTicketMenu extends Menu {
     }
 
     /**
-     * Big win: three stars. Win: three suns. Some tokens back ("So close!"): two suns and a lump
-     * of coal. Nothing: three different things.
+     * Big win: three stars. Win: three suns. Some tokens back: three plain "Tokens back" squares,
+     * none of them a winning symbol. Nothing: three different things.
      */
     static Material[] symbols(ArcadeService.Outcome o) {
         if (o.big()) {
@@ -55,11 +60,10 @@ public final class ScratchTicketMenu extends Menu {
         if (o.win()) {
             return new Material[] {Material.SUNFLOWER, Material.SUNFLOWER, Material.SUNFLOWER};
         }
-        // The Arcade marks "some tokens back" with a gold nugget and "nothing" with a gray dye.
-        boolean someBack = o.icon() != null && o.icon().getType() == Material.GOLD_NUGGET;
-        return someBack
-                ? new Material[] {Material.SUNFLOWER, Material.SUNFLOWER, Material.COAL}
-                : new Material[] {Material.COAL, Material.FLINT, Material.CLAY_BALL};
+        if (o.someBack()) {
+            return new Material[] {BACK, BACK, BACK};
+        }
+        return new Material[] {Material.COAL, Material.FLINT, Material.CLAY_BALL};
     }
 
     @Override
@@ -72,12 +76,12 @@ public final class ScratchTicketMenu extends Menu {
         for (int i = 0; i < SQUARES.length; i++) {
             int square = i;
             if (shown[i] != null) {
-                set(SQUARES[i], symbolIcon(shown[i]), null);
+                set(SQUARES[i], symbolIcon(shown[i], outcome.returned()), null);
             } else {
                 set(SQUARES[i], Menus.icon(Material.GRAY_CONCRETE, "&7Tap to scratch!"), e -> scratch(square));
             }
         }
-        set(BACK, Menus.icon(Material.BARRIER, done() ? "&cBack" : "&7Back &8(shows your result)"), e -> {
+        set(EXIT, Menus.icon(Material.BARRIER, done() ? "&cBack" : "&7Back &8(shows your result)"), e -> {
             if (back != null) {
                 back.run();
             } else {
@@ -86,10 +90,11 @@ public final class ScratchTicketMenu extends Menu {
         });
     }
 
-    private static ItemStack symbolIcon(Material m) {
+    private static ItemStack symbolIcon(Material m, int returned) {
         String name = switch (m) {
             case NETHER_STAR -> "&6Star!";
             case SUNFLOWER -> "&eToken!";
+            case IRON_NUGGET -> "&7Tokens back: &f" + returned;
             default -> "&8Nothing";
         };
         return Menus.glint(Menus.icon(m, name), m == Material.NETHER_STAR);
@@ -125,9 +130,9 @@ public final class ScratchTicketMenu extends Menu {
             }
         } else {
             Sounds.miss(player);
-            boolean someBack = outcome.icon() != null && outcome.icon().getType() == Material.GOLD_NUGGET;
-            player.sendMessage(Text.of(someBack ? "&7So close! You got " + outcome.label() + "&7."
-                    : "&7No win this time. Better luck next ticket!"));
+            player.sendMessage(Text.of(outcome.someBack() && outcome.label() != null
+                    ? "&7No win this time. " + outcome.label() + "&7."
+                    : "&7No win this time."));
         }
     }
 

@@ -152,9 +152,11 @@ public final class CrateSpinMenu extends Menu {
         }
         paintStrip();
         if (landed) {
-            set(22, Menus.glint(Menus.icon(Material.LIME_CONCRETE, "&a&lCollect",
-                    "&7It's already in your bag."), true), e -> leave());
-            set(26, Menus.icon(Material.CHEST, "&eOpen another", "&7Back to the crate."), e -> leave());
+            // One way on, the same for a prize or a miss: no "Open another" nudging the next spin
+            // (spec R1.17). The prize is already in the bag, so there is nothing to collect.
+            set(22, Menus.icon(Material.BARRIER, back != null ? "&cBack to the crate" : "&cBack",
+                    outcome.win() ? "&7Your prize is already in your bag." : "&7No prize this time."),
+                    e -> leave());
         }
     }
 
@@ -219,7 +221,7 @@ public final class CrateSpinMenu extends Menu {
             }
         } else {
             Sounds.miss(player);
-            player.sendMessage(Text.of("&7No prize this time. Better luck next crate!"));
+            player.sendMessage(Text.of("&7No prize this time."));
         }
     }
 

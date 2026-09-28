@@ -180,6 +180,8 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.muffler.SoundMufflerService soundMufflers;
     /** The Games (0.35). Null until it is built, or if it failed to start; callers null-check. */
     private com.dierks.homecraft.games.GamesService games;
+    /** Take a break (0.35): limits and pauses on games of chance. Null only if it failed to build. */
+    private com.dierks.homecraft.games.Breaks breaks;
     /** The live market (0.33): the price multiplier, its events and ticks. Null only if it failed to build. */
     private com.dierks.homecraft.market.sim.MarketSimService marketSim;
     /** Market news delivery: broadcasts, the join catch-up, the per-player mute. Null only if it failed to build. */
@@ -2131,6 +2133,14 @@ public final class HomeCraftManagement extends JavaPlugin {
     /** The Games framework, or null if it failed to start. */
     public com.dierks.homecraft.games.GamesService games() {
         return games;
+    }
+
+    /**
+     * Take a break, or null if it failed to build. Every game of chance asks it first, and refuses
+     * when it is null (it fails closed).
+     */
+    public com.dierks.homecraft.games.Breaks breaks() {
+        return breaks;
     }
 
     public com.dierks.homecraft.courier.CourierService courier() {

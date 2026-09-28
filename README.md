@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.34.0-sound-muffler`
+- **Version:** `0.35.0-arcade-games`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md)
 
@@ -35,7 +35,8 @@ and the How It Works **Guide**.
   auto-sorted into departments, with commission and an admin ban list.
 - **Mailboxes** in eight colours, the **Auction House** for Minis, and **in-game displays**
   (signs, holograms, TVs) plus a web **dashboard**, whose JSON feeds (`/api/market`,
-  `/api/minis`, `/api/news`) also drive the LilahCraft website, behind an optional token.
+  `/api/minis`, `/api/news`, `/api/arcade`) also drive the LilahCraft website, behind an
+  optional token.
 - **Safeguards:** the economy is sandboxed per world (no creative-world money), protection
   hooks cover Towny and WorldGuard, and the database is backed up automatically before every
   migration and on a schedule.
@@ -70,6 +71,10 @@ Tokens are **earned by playing and never become dollars**.
   - **Crates** spin and land on their prize.
   - The **Scratch Ticket** has three squares to scratch and a growing jackpot.
   - The Rare Card is a once-a-week pity pick.
+  - **The Games (0.35):** five games of chance for tokens that show what they give back before
+    you play, eight free arcade cabinets (Creeper Sweeper, Snake, Connect Four and more), and time
+    trials and mini golf in a Games world. A Take a break screen sets your own limits. They ship
+    off; see [Games (0.35)](#games-035).
 - **Prize Counter:** boosts (speed, haste, night vision, water breathing, luck), the Mini
   Radar and Lure, a Firework Show, particle trails, hats, perks (extra homes and `/hat` via
   LuckPerms and EssentialsX), and a numbered Arcade Trophy.
@@ -93,9 +98,9 @@ made inside its box are hushed for everyone, wherever they stand. Needs **Protoc
   `config.yml` and reload live.
 - **Upgrades keep your edits:** a numbered config migration (`config_revision`) changes a value
   only while it still holds the shipped default, and warns about anything an admin changed.
-- **Tested:** more than 600 unit tests cover migrations, odds, the token ledger, mint numbering,
-  player-facing copy, Bedrock glyphs, and the live market's hard limits, determinism and
-  90-day soak runs.
+- **Tested:** more than 1,000 unit tests cover migrations, odds, the token ledger, mint numbering,
+  player-facing copy, Bedrock glyphs, the live market's hard limits, determinism and 90-day soak
+  runs, and the games' exact give-back maths, crash-safe rounds and saved things.
 
 ### Build coordinates
 - **Paper API:** `io.papermc.paper:paper-api:26.2.build.107-stable`, which is published only
@@ -412,18 +417,18 @@ player-facing guide, also in game with `/hcm guide`).
 | `/hcm arcade` | `hcm.arcade.use` | The Arcade hub: Wallet, crates, Scratch Ticket, wild-Mini status, Prize Counter, Card Packs, Quests, Achievements, How It Works |
 | `/hcm quests` | `hcm.quests.use` | Your daily and weekly quests |
 | `/hcm achievements` | `hcm.achievements.use` | Your achievements, grouped, with progress |
-| `/hcm guide [tokens\|minis\|wild\|arcade]` | `hcm.guide.use` | How It Works |
+| `/hcm guide [tokens\|minis\|wild\|arcade\|games]` | `hcm.guide.use` | How It Works |
 | `/hcm trail [name\|off]` | all | Switch your particle trail |
 | `/hcm packs` | all / admin | The pack shop; admins get the pack editor |
 | `/hcm tokens` | all | Your token balance |
-| `/hcm arcade odds` | admin | Scratch Ticket RTP and each crate's value at counter prices |
+| `/hcm arcade odds` | `hcm.arcade.use` | Players: one line per open game of chance (what it gives back). Admins: the per-stake detail, the Scratch Ticket RTP and each crate's value at counter prices |
 | `/hcm tokens give\|set\|take <player> <n>` | admin | Adjust tokens (ledger source `ADMIN`) |
 | `/hcm tokens audit [days] [player]` | admin | Tokens earned and spent, by source |
 | `/hcm tokens history <player> [n]` | admin | A player's last n token changes |
 | `/hcm hunt spawn [rarity] [player]` | admin | A wild Mini now — with no player named it lands like a natural roll (a Mini Lure wins) |
 | `/hcm hunt status\|clear` | admin | Live hunts; clear them |
 | `/hcm mini repair-escaped [confirm]` | admin | Give back mint numbers old wild escapes burned (dry run first) |
-| `/hcm config reset <section> [confirm]` | admin | Put `arcade` (or `arcade.<part>`), `packs`, `minis.loot.natural`, `minis.effects` or `clock` back to the bundled defaults. Dry run without `confirm`; snapshots config.yml first |
+| `/hcm config reset <section> [confirm]` | admin | Put `arcade` (or `arcade.<part>`), `games` (or `games.<part>`), `packs`, `minis.loot.natural`, `minis.effects` or `clock` back to the bundled defaults. Dry run without `confirm`; snapshots config.yml first |
 | `/hcm homes refresh [player]` | admin | Recheck the +1 Home perk (re-reads Essentials' `sethome-multiple`) |
 
 Every daily limit — the Arcade's, the market's and the Courier's — rolls over at local
@@ -432,6 +437,422 @@ midnight (`clock.time_zone`).
 **+1 Home** (Prize Counter › Perks) adds to the homes a player already has. It needs a tier
 per total under `sethome-multiple` in `plugins/Essentials/config.yml` (`hcm_2: 2`, `hcm_3: 3`,
 … up to your biggest base + 2); a missing one refuses the purchase and logs the line to add.
+
+---
+
+## Games (0.35)
+
+Games to play for tokens, next to the Crates and the Scratch Ticket: five **games of chance**,
+eight free **arcade cabinets** (little video games in a menu), and **time trials** and **mini
+golf** in a world of their own. All of it sits behind **`games.enabled: false`**, so installing
+the jar changes nothing until you set `games.enabled: true` and run `/hcm reload`. DESIGN §3.12
+says how it is built; [`docs/how-it-works.md`](docs/how-it-works.md) is the players' version.
+
+### What players get
+
+- **The Games screen:** `/hcm play`, or the Arcade hub's **Play** row. Tabs for All, **Luck**
+  (games of chance, plus links to the Scratch Ticket and each crate), **Cabinets**, **Courses**
+  and **Golf**. The bottom row has Today's pick (46), High scores (47), Take a break (48) and How
+  the games work (50). A closed game shows no tile at all.
+- **`/hcm play <game>`** opens one game, rules first; **`/hcm play <course>`** starts a course.
+  `/hcm play blackjack` opens Twenty-One.
+- **The hub's Play row** (row 4, only while the games are on): All games, Today's pick, Luck,
+  Cabinets, Courses, Mini golf and Take a break. Row 1's label changes from "Games" to "Luck".
+  With the games off, the hub is exactly what it was.
+- **Today's pick:** one skill game or course a day, the same for everyone, changing at local
+  midnight. Its first finish of the day pays `games.featured_bonus`. A game of chance is never
+  the pick.
+- **High scores:** your best on a board, then its top ten with their names. Only the website
+  feed leaves names out.
+- **Take a break:** the Wallet's blue bed (slot 51), the hub's Play row, the Games screen, or
+  `/hcm play break`. A player sets their own daily limit on the tokens they put into games of
+  chance, or pauses them for 1, 7 or 30 days. It works while the games are off, and it also
+  covers Crates, Scratch Tickets and Card Packs bought with tokens.
+- **Invites:** Connect Four and Tic-Tac-Toe can be played against a friend, and Coin Flip is
+  always two players. Java players click **[Accept]**; Bedrock players type `/hcm play accept`
+  (or `deny`). Friend-game invites are on until a player turns them off; Coin Flip invites are
+  off until the player turns them on, on the Take a break screen.
+- **`[Arcade]` join signs:** an admin writes `[Arcade]` on line 1 and a game or course id on
+  line 2. A tick later the sign reads **[Arcade] / the game's name / Click to play** and is
+  waxed. A click opens the game through the same checks as `/hcm play`. Anyone else who writes
+  `[Arcade]` loses that line, so nobody can make an official-looking sign.
+
+### House rules
+
+- **Tokens only.** No game takes or pays dollars, items that can be sold, Cards or Minis. The one
+  thing a world game hands you is its kit, and the kit never leaves the game.
+- **Every game of chance gives back less than it takes.** Each is worked out, stake by stake, to
+  give back between 85 and 95 of every 100 tokens put in, over lots of plays. Config picks the
+  target (`rtp`, shipped 90); the 85-95 band is locked in code. A stake that can't land inside it
+  is dropped with one WARN, and a game with no stake left stays closed.
+- **The odds are shown before you play, from the same numbers the game plays with.** The screen
+  says "gives back about 89 of every 100 tokens" (the engine's own number, floored: never the
+  config's 90), what each result pays and how often, your plays left and today's tokens.
+  `/hcm arcade odds`, the How It Works page and `/api/arcade` read the same engine.
+- **Decided first, then shown.** The tokens in, the result and the tokens back are saved in one
+  step before any animation. Closing the screen early just prints the result.
+- **No near misses, nothing dressed up.** Reels and the Wheel show exactly what was drawn, and a
+  spinning frame never shows a paying line. After a loss the screen says "No win this time.":
+  no teasing line, no play-again button, no win sound. Getting some tokens back is never called
+  a win, and getting exactly your tokens back reads "Your 10 back". A win gets a private title at
+  most: no fireworks, no shout.
+- **Daily limits.** Each game of chance has its own plays a day (`daily_limit`), and
+  `games.chance_daily_tokens` (100) caps the tokens a player puts into all of them in a day. The
+  lowest of that, the player's own limit and an admin's limit applies.
+- **A cooldown.** Two plays of a game of chance are at least `games.click_cooldown_ms` apart
+  (600 ms, never under 250). A click that comes sooner does nothing, silently.
+- **Take a break leans the careful way.** A lower limit starts now. A higher one, or none, waits
+  `games.break.raise_delay_days` (7) and then starts at midnight. A pause can be made longer,
+  never shorter. A parent or admin can set a limit or pause the player can't lift. If the
+  settings can't be read, games of chance stay closed.
+- **Finished fairly after a crash.** A card game left open (a quit, a restart, or 10 minutes
+  untouched) is finished for the player by a fixed rule: Twenty-One stands, and Higher or Lower
+  cashes out (a run with no guess yet takes the likelier side first). The player is told on their
+  next join. A round is never paid twice, and a round whose game can't finish it gives the
+  tokens back.
+- **Nothing rewards playing a game of chance:** no quest, achievement, featured bonus or skill
+  reward. Skill games pay small, capped rewards, and scores always count.
+- **A game that breaks switches itself off** ("That game is taking a break. Try another one!")
+  until `/hcm reload`. Its screens close, its world sessions end and its open rounds are
+  finished. The rest of the plugin carries on.
+
+### Owner knobs (`games`)
+
+Everything under `games:` reloads with `/hcm reload`. A value out of range is clamped with one
+WARN naming the key. A value that can't be read at all closes what it belongs to: junk in these
+common keys turns the games off, junk in one game's block closes that game.
+`/hcm config reset games` (or `games.<part>`) puts it back as shipped.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | The master switch. Off, the rest of the plugin is exactly as before |
+| `worlds` | `[games]` | The Games worlds: where courses are built and world games pay. Read-only for non-admins while the games are on |
+| `play_worlds` | `[]` | Extra worlds (besides the economy worlds and `worlds`) where the games open, such as a hub that isn't an economy world |
+| `click_cooldown_ms` | `600` | The pause between two plays of a game of chance (never below 250) |
+| `chance_daily_tokens` | `100` | Most tokens a player can put into all games of chance in a day (`0` = off, at most 10000). While the games are on it also counts Crates, Scratch Tickets and token Card Packs |
+| `max_payout` | `250` | Most any single play of a game of chance can pay (never below the game's largest stake) |
+| `skill_daily_cap` | `6` | Most tokens all skill games together pay a player in a day (first clears don't count) |
+| `featured` | `auto` | `auto` picks a skill game or course each day; a game or course id pins it (`/hcm games feature`) |
+| `featured_bonus` | `1` | Tokens for the first finish of today's pick (counts toward `skill_daily_cap`) |
+| `break.daily_choices` | `[10, 25, 50, 100]` | The daily limits a player can pick (they can also pick none) |
+| `break.pause_days` | `[1, 7, 30]` | The pauses a player can pick, in days |
+| `break.raise_delay_days` | `7` | How long a raised or removed limit waits before it starts (at least 1) |
+
+### Games of chance
+
+| Game (`/hcm play` id) | How it plays | Tokens in | Gives back, as shipped |
+|---|---|---|---|
+| **Ore Slots** (`ore_slots`) | Three reels, one line. Three the same pays that ore's line, a Wild stands in for any ore, two the same pays ×2, Stone never pays | 1, 2, 5 | 89.9% at every stake |
+| **Twenty-One** (`twenty_one`, or `blackjack`) | Beat the Arcade's hand without going over 21. Hit, Stand, or Double on your first two cards. The Arcade draws to 17 and stops on any 17. At 5 in, a win gives back 9, Twenty-One! 11, and a doubled win (10 in) 18 | 5, 10, 20 | 89.7% with the best play |
+| **The Wheel** (`wheel`) | 24 spaces, all just as likely, each showing what it gives | 5, 10, 20 | 87.5%, 89.5%, 90.0% |
+| **Higher or Lower** (`higher_lower`) | Guess the next card. Each right guess grows the pot; cash out any time after one. Aces are high; the same card loses | 10, 20, 50 | 89.6%, 90.0%, 89.7% |
+| **Coin Flip** (`coin_flip`, ships off) | Two players near each other put in the same; one flip. The winner gets 9, 18 or 45 and the rest is gone | 5, 10, 25 | 90.0% |
+
+The percentages are the engines' exact values floored to one decimal, as admins and the website
+see them; players read the whole number ("about 89"). Change an `rtp` and reload: the game works
+its payouts out again and shows the new number, with an INFO line if only a value above the
+target fits.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `<game>.enabled` | `true` (`coin_flip`: `false`) | The game's own switch |
+| `<game>.stakes` | as above | The tokens a player can put in (1-1000 each; Ore Slots shows at most 7) |
+| `<game>.daily_limit` | Ore Slots `50`, Coin Flip `5`, the rest `30` | Plays per player per day |
+| `<game>.rtp` | `90` | Target tokens back per 100 put in; held to 85-95 in code |
+| `ore_slots.reels.<coal\|copper\|iron\|gold\|diamond\|wild>` | `10`, `8`, `6`, `4`, `2`, `2` | How often each lands (0-10000). Turn one off with 0, never by deleting it. Stone's weight is worked out |
+| `ore_slots.pays.<two\|coal\|copper\|iron\|gold\|diamond\|wild>` | `2`, `4`, `6`, `10`, `20`, `40`, `50` | What a line pays, as a multiple of the tokens in (three wilds at 5 in = 250, the `max_payout`) |
+| `twenty_one.natural_bonus` | `1.5` | A two-card 21 adds this many times what a normal win adds (1-3) |
+| `wheel.segments` | 24 spaces: 13 × 0, 5 × 1, 3 × 2, 2 × 4, 1 × 5 | Clockwise from the top-left: 0 is nothing, 1 your tokens back, above 1 a win scaled per stake. Nothing between 0 and 1. A list of 8 or 12 repeats around the ring |
+| `higher_lower.max_multiplier` | `20` | Cash out automatically at this many times the tokens in (or `max_payout`, if lower) |
+| `higher_lower.max_guesses` | `10` | Cash out automatically after this many right guesses |
+| `coin_flip.pair_daily_limit` | `2` | Flips between the same two players per day |
+| `coin_flip.max_distance` | `32` | How close the two must be, in blocks (0 = anywhere in the same world) |
+| `coin_flip.invite_seconds` | `60` | How long an invite stays open (10-600) |
+
+Every flip is logged with both names and its seed, and a flip that was called off is logged with
+why.
+
+### Arcade cabinets
+
+Free to play. Each solo cabinet has three one-time **milestones** (bronze, silver, gold), each
+paying once ever, and a **daily challenge**: today's board is the same for everyone, the first
+try is the scored one, and meeting the goal pays a token. Later tries are practice. A personal
+best is announced but pays nothing, and friend games never pay.
+
+| Cabinet (`id`) | The game | Daily goal | Milestones |
+|---|---|---|---|
+| **Creeper Sweeper** (`creeper_sweeper`) | Dig every safe square of a 9×5 board; easy, normal or hard. The first dig is always safe | Clear today's board | Clear times per difficulty |
+| **Ore Merge** (`ore_merge`) | Slide and merge ores from coal up to a dragon egg | Make a diamond | Biggest tile: 256, 512, 1024 |
+| **Snake** (`snake`) | Turn left or right to eat apples; a little faster every 5 apples | 15 apples | 10, 20, 30 apples |
+| **Mini Match** (`mini_match`) | Find the 8 pairs of Minis in as few flips as you can | 24 flips or fewer | 30, 24, 20 flips |
+| **Simon Says** (`simon_says`) | Repeat the growing pattern of lights and notes | A pattern of 8 | 5, 10, 15 |
+| **Whack-a-Zombie** (`whack_a_zombie`) | Bonk zombies (+1), not villagers (−1), for 30 seconds | 20 points | 15, 25, 35 points |
+| **Connect Four** (`connect_four`) | Four in a row on a 7×5 board, against the Arcade (easy, normal, hard) or a friend | The day's first win against the Arcade on normal or hard | none |
+| **Tic-Tac-Toe** (`tic_tac_toe`) | Against the Arcade (easy, or hard, which never loses) or a friend | The day's first easy win, or a draw or better on hard | none |
+
+| Key | Default | Meaning |
+|---|---|---|
+| `<cabinet>.enabled` | `true` | The cabinet's own switch |
+| `<cabinet>.milestone_reward` | `1` | Tokens for each milestone, once ever (the six solo cabinets) |
+| `<cabinet>.daily_reward` | `1` | Tokens for the daily goal |
+| `<cabinet>.daily_cap` | `2` (`connect_four`, `tic_tac_toe`: `1`) | Most tokens that cabinet pays a player a day. `games.skill_daily_cap` still applies on top |
+| `<cabinet>.milestones` | as above | Three values (bronze, silver, gold), each better than the last |
+| `creeper_sweeper.mines.<easy\|normal\|hard>` | `6`, `8`, `10` | Creepers per board (1-30). The daily board uses normal's |
+| `creeper_sweeper.milestones.<easy\|normal\|hard>` | `[180, 90, 45]`, `[240, 120, 75]`, `[300, 180, 120]` | Clear times in seconds (at or under) |
+| `snake.tick_java` / `snake.tick_bedrock` | `6` / `10` | Ticks between moves (3-40; 20 = 1 second). It speeds up, never below 3 |
+| `whack_a_zombie.seconds` | `30` | How long a round lasts (10-120) |
+
+A player in creative or spectator mode, or in a world where games aren't played, earns nothing
+("No tokens can be earned here — scores still count!"), and a one-time reward stays there to earn
+later. Past a cap: "You've won all the game tokens you can today — scores still count!".
+
+### Time trials
+
+<!-- TODO G5: time trials are still being built. Check this whole subsection (rules, rewards,
+knobs, commands) against the merged G5 code and fill in what is marked. -->
+
+Parkour, elytra and boat courses in the Games world, built by admins. Each course is its own tile
+on the Courses tab and its own `/hcm play <course>` id. You race from the start through every
+checkpoint in order to the finish; a fall puts you back at the last checkpoint. Courses have a
+tier: Easy, Medium, Hard or "Why did we build this?". A run that doesn't play fair (flying, a
+teleport, an impossible speed, a finish faster than the course allows) says "That run didn't
+count." Rewards: a first clear pays by tier, once ever per course; the week's best time on a
+course pays a bonus; one course is the course of the week, and finishing it pays once a day.
+Scores keep your best time on each course and on each week's board.
+
+<!-- TODO G5: confirm keys and defaults (these are the F1a skeleton's). -->
+
+| Key | Default | Meaning |
+|---|---|---|
+| `trials.enabled` | `true` | Every time-trial course's switch |
+| `trials.first_clear.<easy\|medium\|hard\|extreme>` | `5`, `10`, `20`, `40` | Tokens for the first finish of a course, once ever, by tier (not capped) |
+| `trials.weekly_best_bonus` | `5` | Tokens for the week's best time on a course (once per course per week) |
+| `trials.course_of_week_bonus` | `2` | Tokens for finishing the course of the week (once a day) |
+| `trials.daily_cap` | `4` | Most tokens time trials pay a player a day (first clears don't count) |
+| `trials.fall_depth` | `6` | Parkour: blocks below the lower of the last and next checkpoint that count as a fall |
+| `trials.min_seconds` | `5` | A run faster than this doesn't count (a course can set its own) |
+
+<!-- TODO G5: confirm the command list and add each command's reply. -->
+
+Building a course (admin, in a Games world): `/hcm games course create <id> <parkour|elytra|boat>
+[tier]`, then `<id> start` (where you stand), `<id> checkpoint add [radius]` (and `remove <n>`,
+`list`), `<id> finish [radius]`, `<id> tier <tier>`, `<id> name <words…>`, `<id> fall <y|off>`,
+`<id> minseconds <n>`, `<id> enable|disable`, `<id> info`, `<id> tp`, `<id> test` (a run that
+records nothing), `<id> feature`, `<id> delete confirm` and `list`. A course id can't be a game
+id or one of `accept`, `deny`, `break`, `leave`, `invites`.
+
+### Mini golf
+
+<!-- TODO G6: mini golf is still being built. Check this whole subsection (rules, rewards, knobs,
+commands) against the merged G6 code and fill in what is marked. -->
+
+Mini golf in the Games world, and **your Mini is the ball**: pick one of your Minis on the "Pick
+your ball" screen (a plain white ball if you have none; the Mini itself is never touched). Five
+clubs in your hotbar, from a tap to a drive: click with one while the ball is still and within 4
+blocks, and the ball goes the way you look. Slime bounces, ice slides, water or leaving the hole
+puts the ball back with a stroke added. Take too many strokes and the hole is picked up. A
+scorecard shows each hole against par. Several players can play a course at once, each with
+their own ball.
+
+<!-- TODO G6: confirm keys and defaults (these are the F1a skeleton's). -->
+
+| Key | Default | Meaning |
+|---|---|---|
+| `golf.enabled` | `true` | Every mini golf course's switch |
+| `golf.par_reward` | `2` | Tokens for finishing a course at par or better (once per course per day) |
+| `golf.hole_in_one_reward` | `1` | Tokens for a hole-in-one on a course you finish (once per hole per day) |
+| `golf.first_clear` | `5` | Tokens for the first finish of a course, once ever (not capped) |
+| `golf.daily_cap` | `4` | Most tokens mini golf pays a player a day (first clears don't count) |
+| `golf.max_over_par` | `3` | Strokes over par before a hole is picked up |
+
+<!-- TODO G6: confirm the command list and add each command's reply. -->
+
+Building a course (admin, in a Games world): `/hcm games golf create <id> [name…]`, then
+`<id> hole add <par>` (the tee at your feet; par 2-6), `<id> hole <n> cup` (the block you look at),
+`<id> hole <n> par <p>`, `<id> hole <n> bounds <1|2>` (two corners), `<id> hole <n> remove`,
+`<id> info`, `<id> tp`, `<id> enable|disable`, `<id> delete confirm` and `list`. A course is
+ready once every hole has a tee, a cup and bounds.
+
+### Commands
+
+Every admin action on the Games is logged with who did it. A player in a world game can use only
+`/hcm play`, `/hcm leave`, `/hcm games` and `/hcm help`; anything else says "Finish or leave your
+game first — /hcm leave".
+
+| Command | Who | What |
+|---|---|---|
+| `/hcm play` | `hcm.games.play` | The Games screen |
+| `/hcm play <game\|course>` | `hcm.games.play` | Open a game (rules and odds first) or start a course |
+| `/hcm play <game\|course> <player>` | `hcm.games.admin` or the console | The same for someone else: NPCs, command blocks, a hub |
+| `/hcm play break` | `hcm.games.play` | The Take a break screen |
+| `/hcm play accept\|deny` | `hcm.games.play` | Answer your latest invite |
+| `/hcm play invites [on\|off]` | `hcm.games.play` | Your invite settings. `off` also turns Coin Flip invites off; only the Take a break screen turns them on |
+| `/hcm leave` | `hcm.games.play` | Leave the world game you're in; your things come back. Also finishes a trip home that didn't complete |
+| `/hcm games status` | `hcm.games.admin` | Every game, open or closed and why, with the odds of the open games of chance; players in world games, saved things waiting to go back, unfinished rounds and today's pick |
+| `/hcm games feature <game\|course\|auto>` | `hcm.games.admin` | Pin today's pick (writes `games.featured`), or let the day pick again. Never a game of chance |
+| `/hcm games break <player> show\|pause <days>\|limit <tokens\|none>\|clear\|clear-own confirm` | `hcm.games.admin` | A player's Take a break, online or not. `pause` (1-365 days) and `limit` set an admin pause or limit the player can't lift; `clear` removes only those; `clear-own confirm` lifts the player's OWN settings and logs a WARNING |
+| `/hcm games scores reset <game> [board\|all] [player] [confirm]` | `hcm.games.admin` | Clear high scores. Without `confirm` it only counts what it would clear |
+| `/hcm games saved <player> show\|restore\|return\|discard confirm` | `hcm.games.admin` | A player's things saved by a world game. `show` works offline; `restore` and `return` need them online; `discard confirm` deletes the row (logged) |
+| `/hcm games course …` | `hcm.games.admin` | Time-trial courses; see [Time trials](#time-trials) <!-- TODO G5 --> |
+| `/hcm games golf …` | `hcm.games.admin` | Mini golf courses; see [Mini golf](#mini-golf) <!-- TODO G6 --> |
+| `/hcm arcade odds` | `hcm.arcade.use` | Players: one line per open game of chance. Admins: the per-stake detail, the Scratch Ticket and the crates |
+| `/hcm guide games` | `hcm.guide.use` | The Games page of How It Works |
+
+### Turning it on, and the Games world
+
+1. **Check the economy worlds.** The games open in `worlds.economy_enabled`, the Games worlds and
+   `games.play_worlds`. In the live config.yml, `worlds.economy_enabled` should list your main
+   world and your hub world by their real names.
+2. **Switch it on:** `games.enabled: true`, then `/hcm reload`. Vault isn't needed: tokens are
+   HomeCraft's own.
+3. **`games.play_worlds` stays `[]`** unless a world that is NOT an economy world should still
+   have the games.
+
+Cabinets and games of chance need nothing more. **Courses and mini golf need a Games world:**
+
+1. Make the world with Multiverse, and put its name in `games.worlds` (shipped `[games]`).
+2. **Keep it out of `worlds.economy_enabled`.** The market, PCs and Pallets stay out of it. World
+   games still pay tokens there: the session is what proves the play was real.
+3. **Set its Multiverse game mode to adventure:** `/mv modify set mode adventure <world>`. Players
+   in a game are held in adventure mode anyway; with the world set the same, Multiverse has
+   nothing to switch on the way in.
+4. **Give it its own Multiverse-Inventories group** with only that world in it (like the creative
+   group in [Economy safety](#economy-safety-021)), and keep per-game-mode profiles **off**. A
+   player's things are saved after Multiverse-Inventories has swapped them for the Games world's,
+   and the game switches them to adventure mode, which a per-game-mode profile would treat as one
+   more swap.
+5. **Build as an admin.** While the games are on, nobody without `hcm.games.admin` can change a
+   Games world ("The Games world can't be changed."), so a friend can't bridge a shortcut across
+   a course.
+
+Players take nothing in and lose nothing. Entering saves everything (inventory, XP, health,
+food, effects, game mode, where they stood) and hands them the game's kit.
+Leaving puts it all back exactly, however they leave: the kit's Leave item (click twice),
+`/hcm leave`, finishing, quitting, a restart or a teleport away. Anything that reached them
+during the game (an auction delivery, say) is handed over once they're home. They can't be hurt,
+get hungry, drop things or open other screens while they play, and the kit never leaves the game.
+
+### For the owner: the older games of chance
+
+The Scratch Ticket and Crates now follow the house rules' copy (no teasing lines, a part refund
+reads "Tokens back", no "Open another" button), and Take a break covers them. Their tables are
+unchanged and are **not** held to 85-95 in this release: the ticket gives back about 77 of every
+100 tokens (77.6%). Decisions left for you:
+
+- retune the ticket into 85-95;
+- drop its 3-tokens-back row;
+- decide whether its jackpot still gets a server-wide shout;
+- the `first_crate` and `jackpot` achievements and the OPEN_CRATE and SCRATCH quest types still
+  reward a game of chance (changing shipped quests and achievements needs a `config_revision`).
+  The website feed already leaves `jackpot` out; `first_crate` is still published.
+
+### Data
+
+Schema **v34** adds seven tables: `game_rounds` (every round of a game of chance, and each
+cabinet's scored daily try), `game_breaks` (Take a break), `game_scores`, `game_rewards`,
+`game_saved_state` (a player's things during a world game), `game_courses` and `game_prefs`
+(invites, the golf ball, lines waiting for the next join). No `config_revision` bump: every
+`games` key is new and back-filled with its comments. A bare `games: false` (or
+`games.<id>: false`) is first rewritten as its `enabled` key, so a game you switched off stays
+off. Every token a game moves is in the ledger under that game's own source, so
+`/hcm tokens audit` shows each game's real flow.
+
+### Verify in game
+
+**The screens and Take a break**
+
+1. With `games.enabled: false`: `/hcm play` says "The games are closed right now.", the hub looks
+   as before, and the Wallet has a blue bed (Take a break) at slot 51.
+2. Set `games.enabled: true` and `/hcm reload`: no games WARN in the console. `/hcm games status`
+   lists every game, open or closed with the reason, and today's pick.
+3. `/hcm arcade`: row 1 reads "Luck" and row 4 is the Play row. `/hcm play` opens the Games
+   screen; the Luck tab shows the Scratch Ticket ("gives back about 77 of every 100 tokens") and
+   the crates.
+4. `/hcm play blackjack` opens Twenty-One. `/hcm play nope` says there's no game called "nope".
+5. Take a break: pick 25 (it starts now), then 100 (it waits; the clock tile at 17 cancels it).
+6. Pause for 1 day and confirm: hub slot 39 and the Luck tab read "Taking a break until … 12 AM",
+   the Scratch Ticket, a crate and a token pack are refused, and cabinets still open.
+   `/hcm games break <you> clear-own confirm` lifts it, with a WARNING in the console.
+7. `/hcm games break <you> limit 5`, then spin Ore Slots at 5: the next spin says "That's your
+   limit for today (5 tokens). It resets at midnight." `show` lists every limit and today's total;
+   `clear` removes it.
+8. `lp user <you> permission set hcm.games.chance false`: no Luck tab and no games of chance, and
+   `/hcm arcade odds` says "Games of chance aren't open to you." Unset it after.
+9. As a non-op, `/hcm arcade odds` gives one line per open game of chance; as op, the per-stake
+   detail and the crate values too.
+10. A Scratch Ticket that pays 3 back shows three "Tokens back: 3" squares and "No win this time.
+    You got 3 of your 10 tokens back." A crate result has one button at 22, "Back to the crate",
+    and a miss says "No prize this time."
+11. As admin, write a sign `[Arcade]` / `snake`: it becomes "[Arcade] / Snake / Click to play",
+    waxed, and a click opens Snake. A non-admin's `[Arcade]` line is blanked.
+12. `/hcm games feature ore_slots` is refused ("Games of chance are never featured…");
+    `/hcm games feature snake` pins it; `auto` lets the day pick again.
+13. `/hcm games scores reset snake` gives the count it would clear; add `confirm` to clear it.
+
+**Games of chance**
+
+14. `/hcm play ore_slots`: before the first spin the screen lists every line's pay with "1 in N",
+    "Gives back about 89 of every 100 tokens", 50 plays left and "Today: 0 of 100 tokens". A spin
+    stops left to right in about a second (Bedrock: 3 steps). Close it mid-spin: the result prints
+    once. `/hcm tokens history <you>` shows "Ore Slots: 5 in" and, on a win, "Ore Slots: won 10".
+15. After 50 spins the Spin button is grey: "No plays left today".
+16. `/hcm play twenty_one`: at 5 in the button says a win pays 9, Twenty-One! 11 and a doubled win
+    18; the screen says "With the best play it gives back about 89 of every 100 tokens". Close
+    mid-hand and reopen: the same hand. A tie reads "Same total. Your 5 back".
+17. Log out mid-hand and back in: about 2 seconds later, "Your Twenty-One game from before was
+    finished for you: …".
+18. Higher or Lower: each button says what you'd have if right, a guess that can't grow the pot
+    isn't offered, and Cash out lights up after a right guess.
+19. The Wheel at 10: the spaces show 44, 35, 17, "Your 10 back" and nothing; the screen says about
+    89 back (87 at 5). "Your 10 back" plays no win sound and doesn't glint.
+20. Coin Flip: set `games.coin_flip.enabled: true` and reload. B turns Coin Flip invites on (Take
+    a break, slot 31); A invites B; B's screen says "10 tokens each - winner gets 18". After the
+    flip, one INFO line in the console. After two flips, the same pair can't flip again that day.
+21. `games.ore_slots.rtp: 85` and reload: an INFO line per stake, and the screen shows the new
+    number. `games.max_payout: 1`: one WARN, and the 5-token stake is gone.
+
+**Cabinets**
+
+22. `/hcm play creeper_sweeper`: pick Normal; the first dig is safe; clearing says "✔ Cleared in
+    m:ss.t!" and "★ New best!". Today's board: the first try is scored, later ones are practice.
+23. Snake: Start, turn with the side buttons, Back pauses. 10 apples pays +1 token once, ever.
+    Bedrock players move every 10 ticks.
+24. Ore Merge (arrows at 47, 48, 50, 51; End game at 46, tap twice), Mini Match ("All pairs found
+    in N flips!"), Simon Says and Whack-a-Zombie (3 seconds to get ready, then a 30-second clock)
+    each play and record a score.
+25. Connect Four on hard: the day's first win pays "+1 token (Connect Four: today's win)", once.
+    Tic-Tac-Toe on hard: a draw pays.
+26. Play a friend: pick them, they accept, you take turns; one leaving says "<name> left the
+    game."; nobody is paid.
+27. Past 6 tokens from skill games in a day: "You've won all the game tokens you can today —
+    scores still count!"
+
+**World games**
+
+<!-- TODO G5/G6: add the course and golf steps (build a course, run it, rewards, records) once
+they are merged. Steps 28-32 need a course to play. -->
+
+28. With a full inventory, an effect and some XP, `/hcm play <course>`: you're in adventure mode
+    with only the kit, and `/hcm games saved <you> show` says ACTIVE. The Leave item (click twice)
+    brings everything back.
+29. `/give` yourself diamonds mid-game: they're in your bag once you're home, once.
+30. Disconnect and rejoin mid-game: you're home with everything and no kit anywhere. `/kill`: no
+    death screen, you're home ("You're out of the game. Your things are back."). A teleport far
+    away or to another world ends the game; a 2-block one doesn't. `/gamemode survival` doesn't
+    stick.
+31. `/stop` mid-game, then start and join: you're home, "Your things are back — the server
+    restarted during your game."
+32. In a game, `/hcm auction` says "Finish or leave your game first — /hcm leave"; the binder,
+    chests, the ender chest and dropping do nothing. Setting `games.enabled: false` and
+    `/hcm reload` mid-game sends you home.
+
+**The website feed**
+
+33. With the games off, `/api/arcade` has only the `scratch_ticket` entry (plus the pot, prizes,
+    packs and achievements), no `featured` and no `jackpot` achievement. Its `rtp` (77.6) matches
+    `/hcm arcade odds`.
+34. With the games on, each open game appears, its `rtpByStake` matching the admin odds.
+    `web.dashboard.arcade_show_names: true` adds `holder` to records; `false` takes it away.
 
 ---
 
@@ -577,6 +998,7 @@ else in the JSON.
 | `GET /api/market` | Every commodity: prices, stock, 24 h change and three price histories | when one is set |
 | `GET /api/minis` | Every Mini in the catalog, with how many have been printed | when one is set |
 | `GET /api/news` | **New in 0.33.** Market News: headlines, what is HOT or on sale, the season. See [Live market (0.33)](#live-market-033) | when one is set |
+| `GET /api/arcade` | **New in 0.35.** The Arcade: open games with their odds or records, the featured game, the Scratch Ticket's pot, prizes, token packs, achievements. See [`/api/arcade`](#apiarcade) | when one is set |
 | `GET /` | The dashboard page. It holds no data; its script fetches `/api/market` from the browser, and `/api/news` too while the live market runs | never |
 
 The feeds are rebuilt by a main-thread task every `web.dashboard.refresh_seconds`; the HTTP
@@ -646,6 +1068,85 @@ byte for byte the same (a test pins it against the old builder). About the two l
 | `skin` | The Mini's Base64 `texture` decoded to its `textures.SKIN.url`, forced to `https://`. Sent only when it is exactly `https://textures.minecraft.net/texture/<hex>` (the one shape the site accepts); missing or undecodable, the field is left out. |
 
 **No player data of any kind:** no owners, holders, provenance, UUIDs or balances. Counts only.
+
+### `/api/arcade`
+
+**New in 0.35.** What the site's Arcade page shows: every open game with the odds it publishes
+(games of chance) or its record (skill games), today's pick, the Scratch Ticket's pot, the Prize
+Counter, the Card Packs sold for tokens and the achievements. Each game writes its own entries
+from the same engine it plays with, so the site's numbers are the game's numbers. The example
+is the test's (`ArcadeFeedTest`), shortened where it says `…`; a server publishes its own.
+
+```json
+{ "generatedAt": 1790000000000,
+  "games": [
+    { "id": "scratch_ticket", "name": "Scratch Ticket", "kind": "chance", "stakes": [10],
+      "rtp": 77.6, "rtpByStake": { "10": 77.6 },
+      "paytable": [ { "stake": 10, "combo": "3 tokens", "pays": 3, "chance": 0.4, "oneIn": 3 },
+                    "…",
+                    { "stake": 10, "combo": "the jackpot", "pays": 137, "chance": 0.01, "oneIn": 100 } ] },
+    { "id": "ore_slots", "name": "Ore Slots", "kind": "chance", "stakes": [1, 2, 5], "rtp": 89.7,
+      "rtpByStake": { "1": 89.7, "2": 89.7, "5": 90.0 }, "dailyLimit": 50,
+      "paytable": [ { "combo": "3 diamond", "pays": 40, "chance": 0.002421, "oneIn": 413 },
+                    { "combo": "two the same", "pays": 2, "chance": 0.25, "oneIn": 4 } ] },
+    { "id": "wheel", "name": "The Wheel", "kind": "chance", "stakes": [5, 10], "rtp": 89.5,
+      "rtpByStake": { "5": 90.0, "10": 89.5 }, "dailyLimit": 30,
+      "paytable": [ { "stake": 5, "combo": "17 tokens", "pays": 17, "spaces": 3, "of": 24 },
+                    { "stake": 10, "combo": "your 10 back", "pays": 10, "spaces": 21, "of": 24 } ] },
+    { "id": "twenty_one", "name": "Twenty-One", "kind": "chance", "stakes": [5], "rtp": 90.1,
+      "rtpByStake": { "5": 90.1 }, "dailyLimit": 30,
+      "rules": "Beat the Arcade's hand without going over 21.",
+      "payouts": { "5": { "win": 9, "twentyOne": 11, "doubleWin": 19 } } },
+    { "id": "higher_lower", "name": "Higher or Lower", "kind": "chance", "stakes": [10], "rtp": 90.5,
+      "rtpByStake": { "10": 90.5 }, "dailyLimit": 30,
+      "rules": "Guess higher or lower. Cash out any time.", "maxMultiplier": 8, "maxGuesses": 6 },
+    { "id": "coin_flip", "name": "Coin Flip", "kind": "chance", "stakes": [5], "rtp": 90.0,
+      "rtpByStake": { "5": 90.0 }, "dailyLimit": 5,
+      "paytable": [ { "stake": 5, "combo": "win the flip", "pays": 9, "chance": 0.5, "oneIn": 2 } ] },
+    { "id": "creeper_sweeper", "name": "Creeper Sweeper", "kind": "cabinet", "board": "normal",
+      "unit": "ms", "lowerIsBetter": true, "best": 18400 },
+    { "id": "river_run", "name": "River Run", "kind": "boat", "tier": "medium",
+      "record": { "ms": 61234, "at": 1789990000000 } },
+    { "id": "golf_meadow", "name": "Meadow Links", "kind": "golf", "holes": 9, "par": 27,
+      "record": { "strokes": 24, "at": 1789980000000 } } ],
+  "featured": { "game": "river_run", "until": 1790035200000 },
+  "jackpots": [ { "game": "scratch_ticket", "tokens": 137 } ],
+  "prizes": [ { "id": "night_vision", "name": "Night Vision", "category": "boosts", "cost": 6,
+                "description": "See in the dark for 20 minutes." }, "…" ],
+  "packs": [ { "id": "starter", "name": "Starter Pack", "cost": 50,
+               "odds": { "COMMON": 62, "UNCOMMON": 28, "RARE": 9, "EPIC": 1 } } ],
+  "achievements": [ { "id": "first_sale", "name": "Sell something to Crate",
+                      "description": "Sell something to Crate", "tokens": 10 } ] }
+```
+
+| Field | Meaning |
+|---|---|
+| `games` | Every open game in catalog order, after the Scratch Ticket; the time trials and mini golf publish one entry per course. `kind` is `chance`, `cabinet`, `parkour`, `elytra`, `boat` or `golf`. An id is published once, so the site can key on `id` |
+| `stakes` / `rtp` / `rtpByStake` | A game of chance's stakes, and what each gives back in percent: the engine's exact value **floored** to one decimal, the same number `/hcm arcade odds` gives admins. `rtp` is the lowest of them. A stake is published only with its RTP, and a game with no stake left is left out |
+| `dailyLimit` | Plays per player per day (the Scratch Ticket has none) |
+| `paytable` | What each result pays. `chance` has 4 significant digits and never reads `0`; `oneIn` is the number the game's screen shows. With `stake`, `pays` is tokens at that stake; without it (Ore Slots), `pays` is a multiple of the tokens put in. The Wheel counts `spaces` of `of` (24) instead of `chance`, one row per stake per prize, "your N back" and nothing included. A row without its odds is never published |
+| `rules` | One plain line, where the game gives one |
+| `payouts` | Twenty-One: per stake, what a `win`, a `twentyOne` and a `doubleWin` pay back (no paytable) |
+| `maxMultiplier` / `maxGuesses` | Higher or Lower: where a run cashes out by itself |
+| `board` / `unit` / `lowerIsBetter` / `best` | A cabinet's published board, its unit (`ms`, `points`, `flips`, `apples` or `wins`) and the server record, `best` (absent until there is one) |
+| `tier` / `record` | A course's tier (`easy`…) and record `{ms, at}`. Golf has `holes`, `par` and `record` `{strokes, at}`. `at` is epoch ms |
+| `featured` | Today's pick (a game or course id) and `until`, the next local midnight. Only when that id is in `games` |
+| `jackpots` | The Scratch Ticket's pot now. Whenever it is there, `games` has the `scratch_ticket` entry too, so the site never shows a pot without its odds. Its `rtp` is the steady-state figure `/hcm arcade odds` prints |
+| `prizes` | The visible Prize Counter rows, without Trade In, Quest Reroll and the Rare Card. `category` is the counter's tab in lower case (`boosts`, `hunt`, `cosmetics`, `perks`, `trophies`, `minis`); the +1 Home gives its first price |
+| `packs` | Packs sold for tokens, with the rarity odds they roll with, as percents |
+| `achievements` | Enabled achievements. `name` and `description` are both the one line the screen shows. One won by a game of chance (`jackpot`) is left out |
+
+`generatedAt` always comes first. A section with nothing in it is left out rather than sent empty:
+with the games off there are no game entries and no `featured`, and with `arcade.enabled: false`
+the Scratch Ticket, `jackpots`, `prizes`, `packs` and `achievements` go too. A game whose feed
+fails is switched off like any failing game, and whatever it wrote is dropped, never the feed.
+Colour codes are stripped.
+
+**No player data:** no UUIDs, balances, per-player limits, winners or names. A record is a score
+or a time and a date. The one exception is **`web.dashboard.arcade_show_names`**, shipped
+`false`: only while it is `true` does a record carry its `holder`, the name of whoever set it. It
+is read on every refresh, so `/hcm reload` applies it. A game's extra keys that would name a
+person or a balance, and any UUID-shaped text, are dropped at any depth.
 
 ### The feed token
 
@@ -1216,7 +1717,10 @@ block without settings gets fresh ones.
 | `hcm.workbench.place` | all | Place a Mini Workbench |
 | `hcm.workbench.use` | all | Open a placed Workbench's GUI |
 | `hcm.courier.use` | all | `/hcm courier` and the Courier Site on the PC |
-| `hcm.arcade.use` | all | `/hcm arcade` — the Arcade hub |
+| `hcm.arcade.use` | all | `/hcm arcade` — the Arcade hub, and `/hcm arcade odds` |
+| `hcm.games.play` | all | Play the Games: `/hcm play`, the Games screen, the cabinets, courses and mini golf, invites and Take a break, and `/hcm leave`. Nothing opens until `games.enabled: true` |
+| `hcm.games.chance` | all | The games of chance. Revoke it for a group to keep them out of every game of chance, Crates, Scratch Tickets and token Card Packs included; they then don't see those games at all. Skill games are not affected |
+| `hcm.games.admin` | op | Run the Games (`/hcm games …`), open a game for another player (`/hcm play <game> <player>`), write `[Arcade]` join signs and build in the Games worlds (a child of `hcm.admin`) |
 | `hcm.quests.use` | all | `/hcm quests` |
 | `hcm.achievements.use` | all | `/hcm achievements` |
 | `hcm.guide.use` | all | `/hcm guide` — How It Works |
@@ -1245,10 +1749,22 @@ src/main/java/com/dierks/homecraft/
   muffler/                     Sound Mufflers: groups, picks, the box maths (pure, unit-tested),
                                the service, and the one ProtocolLib class
   gui/muffler/                 the muffler's menu and its sound lists
+  games/                       the Games framework: the catalog, the play gate, Take a break,
+                               crash-safe rounds, skill rewards, scores, invites, today's pick,
+                               join signs, the RTP band
+  games/chance/                games of chance: Ore Slots, Twenty-One, the Wheel, Higher or
+                               Lower, Coin Flip (pure engines with exact give-back maths)
+  games/cabinet/               the arcade cabinets (pure engines, boards and AIs)
+  games/world/                 world sessions: saved state, the kit and its guard, the Games-world
+                               guard, recovery
+  games/trial/                 time trials: parkour, elytra and boat courses
+  games/golf/                  mini golf
+  gui/games/                   the Games screen, Take a break, high scores, the invite picker,
+                               and each game's screens
   storage/                     SQLite datastore + DAOs
   util/                        NamespacedKeys, text helpers
   web/                         dashboard web server, the website's JSON feeds (market,
-                               Minis, news), the feed token check, gzip
+                               Minis, news, arcade), the feed token check, gzip
 src/main/resources/
   plugin.yml
   config.yml

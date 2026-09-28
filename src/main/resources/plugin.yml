@@ -58,7 +58,7 @@ commands:
       /hcm achievements      - your achievements
       /hcm config reset <section> [confirm]  - admin: put arcade/games/packs/hunt/effects/clock back to defaults
       /hcm homes refresh [player]  - admin: recheck the +1 Home perk
-      /hcm guide [page]      - How It Works (tokens, minis, wild, arcade)
+      /hcm guide [page]      - How It Works (tokens, minis, wild, arcade, games)
       /hcm tokens            - show your Arcade token balance
       /hcm tokens give|set|take <player> <n>  - admin: adjust tokens
       /hcm tokens audit [days] [player]  - admin: tokens earned/spent by source
@@ -75,6 +75,7 @@ commands:
       /hcm leave             - leave the world game you are in (your things come back)
       /hcm games status|course|golf|feature|break|saved|scores  - admin: run the Games
       /hcm games break <player> show|pause <days>|limit <tokens|none>|clear|clear-own confirm  - admin: a player's Take a break
+      /hcm games saved <player> show|restore|return|discard confirm  - admin: a player's things saved by a world game
       /hcm games scores reset <game> [board|all] [player] [confirm]  - admin: clear high scores (a dry run first)
     # NOTE: deliberately NOT gated on a single node — every subcommand checks its own
     # permission (hcm.admin, hcm.market.list, hcm.market.price, hcm.market.order, …), so

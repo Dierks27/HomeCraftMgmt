@@ -180,6 +180,11 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.muffler.SoundMufflerService soundMufflers;
     /** The Games (0.35). Null until it is built, or if it failed to start; callers null-check. */
     private com.dierks.homecraft.games.GamesService games;
+    /**
+     * Take a break (0.35): players' own limits and pauses on games of chance, the Scratch Ticket,
+     * Crates and token Card Packs included. Built on its own, outside the Games' error isolation.
+     */
+    private com.dierks.homecraft.games.Breaks breaks;
     /** The live market (0.33): the price multiplier, its events and ticks. Null only if it failed to build. */
     private com.dierks.homecraft.market.sim.MarketSimService marketSim;
     /** Market news delivery: broadcasts, the join catch-up, the per-player mute. Null only if it failed to build. */
@@ -303,6 +308,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         // that spend them (loot crates, the Prize Counter, pity, lotto).
         this.tokens = new com.dierks.homecraft.arcade.TokenService(
                 this, new com.dierks.homecraft.storage.TokenDao(database));
+        // Take a break covers every game of chance, the Scratch Ticket and Crates too, whatever
+        // games.enabled says — so it is its own small service, built right after the tokens and
+        // outside the Games' try/catch. It fails closed: limits it can't read close the games.
+        this.breaks = new com.dierks.homecraft.games.Breaks(this, new com.dierks.homecraft.storage.GamesDao(database));
         this.arcade = new com.dierks.homecraft.arcade.ArcadeService(this);
         com.dierks.homecraft.storage.PrizeDao prizeDao = new com.dierks.homecraft.storage.PrizeDao(database);
         this.prizes = new com.dierks.homecraft.arcade.PrizeService(this, prizeDao);
@@ -340,6 +349,29 @@ public final class HomeCraftManagement extends JavaPlugin {
             }
             this.soundMufflers = null;
         }
+
+        // The Games (0.35): games of chance, arcade cabinets, time trials and mini golf, all
+        // behind games.enabled. Built even while that is false (it still finishes rounds a crash
+        // left open); a failure here leaves the games out and the rest of the plugin as it was.
+        try {
+            this.games = new com.dierks.homecraft.games.GamesService(this, breaks);
+            this.games.start();
+        } catch (RuntimeException e) {
+            getLogger().log(java.util.logging.Level.SEVERE, "Could not start the Games - they are off.", e);
+            if (this.games != null) {
+                try {
+                    this.games.stop();
+                } catch (RuntimeException ignored) {
+                    // already failing; the SEVERE above says why
+                }
+            }
+            this.games = null;
+        }
+        // Registered whatever happened above: the join/quit hooks do nothing without the service,
+        // and a player's saved things must come back even if the Games never started.
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.games.GamesListener(this), this);
+        getServer().getPluginManager().registerEvents(
+                new com.dierks.homecraft.games.world.SessionRecoveryListener(this), this);
 
         getServer().getPluginManager().registerEvents(
                 new com.dierks.homecraft.courier.CourierListener(this), this);
@@ -423,6 +455,13 @@ public final class HomeCraftManagement extends JavaPlugin {
                     pallets.refreshSkin(new org.bukkit.Location(w, pb.x(), pb.y(), pb.z()));
                 }
             }
+            if (games != null) {
+                try {
+                    games.worldsReady(); // players whose last world game is still sending them home
+                } catch (RuntimeException e) {
+                    getLogger().log(java.util.logging.Level.SEVERE, "The Games could not finish starting up.", e);
+                }
+            }
         });
 
         // In-Game Economy Displays (Phase 7): the PlaceholderAPI 'hcm' expansion —
@@ -456,6 +495,16 @@ public final class HomeCraftManagement extends JavaPlugin {
                 getLogger().warning("Could not close " + p.getName() + "'s menu on shutdown: " + e.getMessage());
             }
         }
+        if (games != null) {
+            // Synchronously, while the tokens and the database are still here: no task can run now,
+            // so world sessions restore in place and OPEN rounds wait for the next start.
+            try {
+                games.stop();
+            } catch (RuntimeException e) {
+                getLogger().log(java.util.logging.Level.SEVERE, "Could not stop the Games cleanly.", e);
+            }
+            games = null;
+        }
         if (shops != null) {
             shops.stop();
             shops = null;
@@ -480,6 +529,7 @@ public final class HomeCraftManagement extends JavaPlugin {
             tokens.stop();
             tokens = null;
         }
+        breaks = null;
         if (radar != null) {
             radar.stop();
             radar = null;
@@ -601,6 +651,13 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
         if (soundMufflers != null) {
             soundMufflers.reload(); // on/off and the range limits
+        }
+        if (games != null) {
+            try {
+                games.reload(); // games that closed stop (sessions home, rounds finished), new ones start
+            } catch (RuntimeException e) {
+                getLogger().log(java.util.logging.Level.SEVERE, "The Games could not reload.", e);
+            }
         }
         if (homes != null) {
             homes.reload(); // re-read Essentials' sethome-multiple tiers
@@ -2131,6 +2188,14 @@ public final class HomeCraftManagement extends JavaPlugin {
     /** The Games framework, or null if it failed to start. */
     public com.dierks.homecraft.games.GamesService games() {
         return games;
+    }
+
+    /**
+     * Take a break (limits and pauses on games of chance), or null before enable / after disable.
+     * Callers that are about to take tokens for a game of chance refuse when it is null.
+     */
+    public com.dierks.homecraft.games.Breaks breaks() {
+        return breaks;
     }
 
     public com.dierks.homecraft.courier.CourierService courier() {

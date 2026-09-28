@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GamesService;
 import org.bukkit.Location;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 import java.util.function.Consumer;
@@ -72,5 +73,24 @@ public final class WorldSessions {
     public void ownDismount(Player player, Runnable action) {
         // F3: flag the dismount as ours around the action.
         action.run();
+    }
+
+    /**
+     * The worlds are up (the plugin's one-tick pass after enable): send online players whose row
+     * is RETURN to {@code from}, and sweep stray game entities (R2.6).
+     */
+    public void worldsReady() {
+        // F3
+    }
+
+    /**
+     * {@code /hcm games saved <player> show|restore|return|discard confirm} (§7.6, R2.17). The
+     * command has already checked {@code hcm.games.admin}.
+     *
+     * @param args the words AFTER {@code saved}: {@code <player> <show|restore|return|discard> [confirm]}
+     */
+    public void adminSaved(CommandSender sender, String[] args) {
+        // F3
+        sender.sendMessage(com.dierks.homecraft.util.Text.of("&7Saved-state tools aren't ready yet."));
     }
 }

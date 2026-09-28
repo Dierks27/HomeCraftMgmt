@@ -1,16 +1,20 @@
 package com.dierks.homecraft.games;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.config.GamesConfig;
 import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.storage.GamesDao.BreakRow;
 import com.dierks.homecraft.util.GameClock;
 import org.bukkit.entity.Player;
 
+import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.function.UnaryOperator;
+import java.util.logging.Level;
 
 /**
  * Take a break: the personal limits on games of chance (spec §4.3, R1.9, R1.11-R1.15).
@@ -40,17 +44,50 @@ public final class Breaks {
     public static final int NO_PENDING = -2;
     /** A raise always waits at least this many days, whatever the config says. */
     public static final int MIN_RAISE_DELAY_DAYS = 1;
+    /** The permission for every game of chance, the Scratch Ticket, Crates and token Card Packs included. */
+    public static final String PERMISSION_CHANCE = "hcm.games.chance";
 
     private static final long DAY_MS = 86_400_000L;
     private static final DateTimeFormatter UNTIL = DateTimeFormatter.ofPattern("EEE h a", Locale.US);
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("EEE MMM d", Locale.US);
 
-    private final HomeCraftManagement plugin;
-    private final GamesDao dao;
+    /** The longest pause anyone can set in one go, in days (a year; longer is renewed, not typed). */
+    public static final int MAX_PAUSE_DAYS = 365;
+
+    private final GamesHost host;
 
     public Breaks(HomeCraftManagement plugin, GamesDao dao) {
-        this.plugin = plugin;
-        this.dao = dao;
+        this(GamesHost.live(plugin, dao));
+    }
+
+    Breaks(GamesHost host) {
+        this.host = host;
+    }
+
+    /**
+     * Where a player stands today: their limits (with any change that has come due applied), the
+     * day's effective limit, and the tokens they have put into games of chance since midnight.
+     *
+     * @param row      the settled row
+     * @param limit    today's effective limit ({@link #effectiveLimit}), or {@link #NO_LIMIT}
+     * @param tokensIn tokens put in today (the ledger, R1.10)
+     */
+    public record Today(BreakRow row, int limit, int tokensIn) {
+
+        /** Whether games of chance are paused at {@code now}. */
+        public boolean paused(long now) {
+            return Breaks.paused(row, now);
+        }
+
+        /** When the later pause ends, or 0 for none. */
+        public long pausedUntil() {
+            return Breaks.pausedUntil(row);
+        }
+
+        /** Whether putting {@code cost} more in today would pass the limit. */
+        public boolean over(int cost) {
+            return limit >= 0 && (long) tokensIn + Math.max(0, cost) > limit;
+        }
     }
 
     // ---- the rules (pure) ------------------------------------------------------------------
@@ -189,79 +226,167 @@ public final class Breaks {
      * permission, the pause and the day's token limit (with {@code cost} added), never a game's
      * own daily limit or cooldown.
      *
+     * <p>The player's own and the admin's pause and limit always apply, even while
+     * {@code games.enabled} is false; the server-wide {@code games.chance_daily_tokens} only while
+     * the games are on, so switching them off leaves a player with no break row exactly where they
+     * were before the games existed.
+     *
      * @return {@code null} to go ahead, or why not; {@link Refusal#CHANCE_CLOSED} if the limits
      *         can't be read (fails closed)
      */
     public Refusal chanceAllowed(Player player, int cost) {
-        // F1b: permission hcm.games.chance -> NO_CHANCE; row(player) null -> CHANCE_CLOSED;
-        // paused -> Refusal.paused(untilText(...)); limit(player) >= 0 && tokensInToday + cost >
-        // limit -> personalLimit(limit). The server limit only counts while games.enabled (R1.9).
-        return Refusal.CHANCE_CLOSED;
+        if (player == null) {
+            return Refusal.CHANCE_CLOSED;
+        }
+        try {
+            if (!player.hasPermission(PERMISSION_CHANCE)) {
+                return Refusal.NO_CHANCE;
+            }
+            Today today = today(player.getUniqueId());
+            if (today == null) {
+                return Refusal.CHANCE_CLOSED;
+            }
+            long now = host.clock().nowMillis();
+            if (today.paused(now)) {
+                return Refusal.paused(untilText(host.clock(), today.pausedUntil()));
+            }
+            if (today.over(cost)) {
+                return Refusal.personalLimit(today.limit());
+            }
+            return null;
+        } catch (RuntimeException e) {
+            host.logger().log(Level.SEVERE, "Take a break could not be checked - games of chance stay closed", e);
+            return Refusal.CHANCE_CLOSED;
+        }
+    }
+
+    /**
+     * Where the player stands today (their settled limits, the effective limit and the tokens put
+     * in since local midnight), or {@code null} if it can't be read — callers then refuse.
+     */
+    public Today today(UUID player) {
+        BreakRow row = row(player);
+        if (row == null) {
+            return null;
+        }
+        try {
+            int in = host.dao().chanceTokensToday(player, host.clock().startOfDay(host.clock().dayKey()));
+            return new Today(row, effectiveLimit(row.dailyTokens(), row.adminTokens(), serverLimit()), in);
+        } catch (SQLException e) {
+            host.logger().log(Level.SEVERE, "Could not read today's tokens in games of chance", e);
+            return null;
+        }
     }
 
     /** The player's limits with any due change applied, or {@code null} if they can't be read. */
     public BreakRow row(UUID player) {
-        // F1b: settle(dao.breakRow(player), clock.dayKey()), saving it if a pending change applied.
-        return null;
+        if (player == null) {
+            return null;
+        }
+        try {
+            BreakRow stored = host.dao().breakRow(player);
+            BreakRow settled = settle(stored, host.clock().dayKey());
+            if (!settled.equals(stored)) {
+                settled = settled.withUpdatedAt(host.clock().nowMillis());
+                host.dao().saveBreak(settled); // the raise has started: from now on it is the limit
+            }
+            return settled;
+        } catch (SQLException | RuntimeException e) {
+            host.logger().log(Level.SEVERE, "Could not read a player's Take a break settings", e);
+            return null;
+        }
     }
 
-    /** Today's effective limit ({@link #effectiveLimit}), or {@link #NO_LIMIT}. */
+    /**
+     * Today's effective limit ({@link #effectiveLimit}), or {@link #NO_LIMIT}. 0 when the limits
+     * can't be read: nothing may go in then.
+     */
     public int limit(UUID player) {
-        // F1b
-        return 0;
+        BreakRow row = row(player);
+        return row == null ? 0 : effectiveLimit(row.dailyTokens(), row.adminTokens(), serverLimit());
     }
 
-    /** Tokens put into games of chance today (the ledger, R1.10). */
+    /** Tokens put into games of chance today (the ledger, R1.10); 0 if it can't be read. */
     public int tokensInToday(UUID player) {
-        // F1b: dao.chanceTokensToday(player, clock.startOfDay(clock.dayKey())).
-        return 0;
+        try {
+            return host.dao().chanceTokensToday(player, host.clock().startOfDay(host.clock().dayKey()));
+        } catch (SQLException e) {
+            host.logger().log(Level.SEVERE, "Could not read today's tokens in games of chance", e);
+            return 0;
+        }
     }
 
-    /** When the player's pause ends (own or admin, whichever is later), or 0 for none. */
+    /**
+     * When the player's pause ends (own or admin, whichever is later), or 0 for none — also 0 when
+     * it can't be read, which is for showing only: the gate and the hook refuse on their own then.
+     */
     public long pausedUntil(UUID player) {
-        // F1b
-        return 0;
+        BreakRow row = row(player);
+        return row == null ? 0 : pausedUntil(row);
     }
 
     /** The player picks their own limit (see {@link #setOwnLimit}). False if it couldn't be saved. */
     public boolean setLimit(UUID player, int tokens) {
-        // F1b: save(setOwnLimit(row, tokens, clock, now, config raise_delay_days)).
-        return false;
+        int wanted = tokens < 0 ? NO_LIMIT : Math.min(tokens, GamesConfig.MAX_CHANCE_DAILY_TOKENS);
+        return change(player, row -> setOwnLimit(row, wanted, host.clock(), host.clock().nowMillis(),
+                host.config().common().breakRaiseDelayDays()));
     }
 
     /** The player drops their waiting raise. */
     public boolean cancelPending(UUID player) {
-        // F1b
-        return false;
+        return change(player, Breaks::cancelPending);
     }
 
     /** The player pauses games of chance for {@code days} (longer only). */
     public boolean pause(UUID player, int days) {
-        // F1b: save(pauseOwn(row, pauseEnd(clock, now, days))).
-        return false;
+        long until = pauseEnd(host.clock(), host.clock().nowMillis(), days(days));
+        return change(player, row -> pauseOwn(row, until));
     }
 
     /** An admin limit for the player ({@link #NO_LIMIT} = none). */
     public boolean setAdminLimit(UUID player, int tokens) {
-        // F1b
-        return false;
+        int limit = tokens < 0 ? NO_LIMIT : Math.min(tokens, GamesConfig.MAX_CHANCE_DAILY_TOKENS);
+        return change(player, row -> adminLimit(row, limit));
     }
 
-    /** An admin pause for {@code days}. */
+    /** An admin pause for {@code days}, ending by the same rule as the player's own. */
     public boolean setAdminPause(UUID player, int days) {
-        // F1b
-        return false;
+        long until = pauseEnd(host.clock(), host.clock().nowMillis(), days(days));
+        return change(player, row -> adminPause(row, until));
     }
 
     /** Remove what an admin set (limit and pause). */
     public boolean clearAdmin(UUID player) {
-        // F1b
-        return false;
+        return change(player, Breaks::clearAdmin);
     }
 
     /** Remove the player's own pause, limit and waiting change (admin, confirmed, logged at WARNING by the caller). */
     public boolean clearOwn(UUID player) {
-        // F1b
-        return false;
+        return change(player, Breaks::clearOwn);
+    }
+
+    /** The server-wide limit, which only counts while the games are on (R1.9); 0 = none. */
+    private int serverLimit() {
+        GamesConfig.Parsed cfg = host.config();
+        return cfg.enabled() ? cfg.common().chanceDailyTokens() : 0;
+    }
+
+    /** Read the settled row, apply {@code rule}, save it. False (and logged) if it couldn't be. */
+    private boolean change(UUID player, UnaryOperator<BreakRow> rule) {
+        BreakRow row = row(player);
+        if (row == null) {
+            return false;
+        }
+        try {
+            host.dao().saveBreak(rule.apply(row).withUpdatedAt(host.clock().nowMillis()));
+            return true;
+        } catch (SQLException | RuntimeException e) {
+            host.logger().log(Level.SEVERE, "Could not save a player's Take a break settings", e);
+            return false;
+        }
+    }
+
+    private static int days(int days) {
+        return Math.max(1, Math.min(MAX_PAUSE_DAYS, days));
     }
 }

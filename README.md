@@ -837,6 +837,14 @@ Leaving puts it all back exactly, however they leave: the kit's Leave item (clic
 during the game (an auction delivery, say) is handed over once they're home. They can't be hurt,
 get hungry, drop things or open other screens while they play, and the kit never leaves the game.
 
+Things come back **exactly once**, even when something goes wrong. If what arrived during the
+game doesn't all fit at home, the rest waits in their saved row: "Some of your things didn't fit.
+Make room, then type /hcm leave to get the rest." If the database refuses a write partway, they
+stay where they are with their things ("Type /hcm leave in a moment to go home") and nothing is
+applied twice. A game refuses to start while they hold something on the cursor ("Put down what
+you're holding first."). `/hcm leave` and `/hcm games saved` work even while the games are off,
+and an admin's `restore` or `return` says what really happened.
+
 ### For the owner: the older games of chance
 
 The Scratch Ticket and Crates now follow the house rules' copy (no teasing lines, a part refund
@@ -997,13 +1005,24 @@ off. Every token a game moves is in the ledger under that game's own source, so
 46. In a game, `/hcm auction` says "Finish or leave your game first — /hcm leave"; the binder,
     chests, the ender chest and dropping do nothing. Setting `games.enabled: false` and
     `/hcm reload` mid-game sends you home.
+47. Fill your inventory but one slot, start a course, `/give` yourself a diamond and an emerald,
+    then leave: you're home with one, told "Some of your things didn't fit…", and
+    `/hcm games saved <you> show` says RETURN. Free a slot, `/hcm leave`: the second arrives and
+    the row goes DONE.
+48. Open your inventory holding an item on the cursor, then from the console
+    `/hcm play cliffs <you>`: "Put down what you're holding first." and nothing drops.
+49. With a RETURN row waiting, set `games.enabled: false`, `/hcm reload`, then `/hcm leave`: it
+    finishes.
+50. After a session, `/data get entity <you> BukkitValues` shows
+    `homecraftmanagement:games_session_mark` (the mark that keeps a crash from applying the same
+    things twice). If Multiverse-Inventories swaps it per world group, tell us.
 
 **The website feed**
 
-47. With the games off, `/api/arcade` has only the `scratch_ticket` entry (plus the pot, prizes,
+51. With the games off, `/api/arcade` has only the `scratch_ticket` entry (plus the pot, prizes,
     packs and achievements), no `featured` and no `jackpot` achievement. Its `rtp` (77.6) matches
     `/hcm arcade odds`.
-48. With the games on, each open game appears, its `rtpByStake` matching the admin odds; `cliffs`
+52. With the games on, each open game appears, its `rtpByStake` matching the admin odds; `cliffs`
     appears as `"kind":"parkour","tier":"easy"` with its `record`, and `meadow` as `"kind":"golf"`
     with `holes` and `par`. `web.dashboard.arcade_show_names: true` adds `holder` to records;
     `false` takes it away.

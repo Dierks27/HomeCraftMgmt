@@ -1575,7 +1575,7 @@ games:
     daily_limit: 50
     # Target tokens given back per 100 put in (85-95); the screen shows what it really reaches.
     rtp: 90
-    # How often each symbol lands on a reel (whole numbers; Stone is worked out).
+    # How often each symbol lands on a reel (whole numbers, 0-10000; Stone is worked out).
     reels:
       # Coal, the most common ore.
       coal: 10

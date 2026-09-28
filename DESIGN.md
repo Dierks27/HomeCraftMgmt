@@ -94,6 +94,7 @@ Towny 0.103.1.0 · Vault · EssentialsX 2.22.1 · LuckPerms · CoreProtect *(cur
 - **QuickShop-Hikari 6.3** — **DO NOT touch or integrate.** Player shops are intentionally separate; Minis are never sold through QuickShop.
 - **PlaceholderAPI** — expose placeholders (prices, stock, mint counts, circulation, order status) so TAB/holograms/scoreboards can display live economy data — this also powers the in-game tickers (§3.8).
 - **GravesX** — Minis can end up in graves on death; ensure recovery without duplication (§11).
+- **ProtocolLib** — the Sound Muffler (§3.11) hears and hushes sounds through it. Soft-depend.
 Declare Vault / Towny / WorldGuard / LuckPerms / PlaceholderAPI as **soft-dependencies** and **degrade gracefully** if any is missing.
 ---
 ## 3. Module Specifications
@@ -594,6 +595,21 @@ crates the settlement needs to see.
 
 **Still open:** the Fragile and Perishable cargo modifiers, stubbed disabled in config.
 
+### 3.11 The Sound Muffler
+A placeable block (craft: eight wool around a note block) that hushes chosen sounds made near it. It replaces the old *Sound Muffler* mod, which players reported as broken, and does it server-side, so nobody installs anything.
+
+**Rules.**
+- **The box.** A muffler hushes sounds **made** inside its box: every block within `radius` of it in each direction (default 8, a player may pick up to `sound_muffler.max_radius`, hard limit 32). They are hushed for every listener, wherever they stand. What decides is the source's position, not the listener's.
+- **Choices.** 32 friendly groups (`muffler/SoundGroups`: glob patterns over the vanilla sound key, so `entity.chicken.*` or `block.*door*`). Each is Normal, **Quieter** (the muffler's volume: 50/25/10%) or **Silent**. Single sounds can also be picked, from "Heard nearby" (what the muffler actually heard in the last 10 minutes) or a search over the sound registry. A single pick beats its group, and **Always play** is the exception to a hushed group. Where mufflers overlap, the strongest answer wins (Silent > Quieter > the lower Quieter volume). An Always play only speaks for its own muffler.
+- **Ownership.** Anyone may open a muffler and see its choices. The owner or `hcm.admin` may change them. Placing needs `hcm.muffler.use` (default true). The muffler skips the economy-world sandbox (§11 #1), because quiet isn't economy.
+- **Portable.** A muffler that was changed drops an item carrying its settings in PDC (`muffler_memory`), and placing it restores them.
+
+**Mechanism** (ProtocolLib, §9.7). Paper has no sound event, so `MufflerPacketListener` watches the outgoing sound, entity-sound and level-event packets. The level events are how the dispenser click, anvils, brewing stands, grindstones, crafters and zombie door-banging reach players (`muffler/LevelEvents`). Only pure-sound events are touched; ones that also draw particles are left alone. **Silent** cancels the packet for that player. **Quieter** cancels it and queues a quieter copy, played on the next tick (`Player#playSound` with the key, category, pitch and scaled volume). A packet is never edited in place, because one packet object goes to every listener. The copy's seed carries a 24-bit mark (`muffler/Replay`) so the listener lets it pass.
+
+**Threads and safety.** Packets leave on network threads. The listener reads only an immutable snapshot (`MufflerZones`, rebuilt and swapped in whole on every change) plus concurrent maps ("Heard nearby", the replay queue). Entity sounds are resolved only on the main thread. Any packet that can't be read passes through untouched and is logged once per kind. Pistons, fire, withers and water can't move or destroy a muffler, and explosions already skip every HomeCraft block. A 30-second sweep forgets a muffler whose block vanished without a break event.
+
+**Out of reach, by construction:** sounds each client makes itself (rain and thunder, music and jukeboxes, furnace, campfire and portal ambience, lava, minecarts rolling, bee flight loops, a player's own footsteps, clicks and pickups). The menu says so, and no group offers a button for them.
+
 ---
 ## 4. Configuration Schema (sketch)
 ```yaml
@@ -676,6 +692,7 @@ SQLite via JDBC. Tables:
 - **Courier (§3.10):** one row per job — player, type, state, band, accepted-at world/coords, waypoint coords, the **locked** distance, trade-run cargo + quoted value, the movement-statistic **snapshot** taken at acceptance, the UTC epoch-day it counts against, and its expiry. Daily band caps are counted from these rows; there is no separate tally table.
 - **Daily limits:** per-player sell + buy counters (per-item too), reset daily (UTC).
 - **Live market (schema v32, §3.1 "The live market (0.33)"):** per-item drift and cooldown clocks (`market_sim_state`), one row per event (`market_events`), the seed, schedule and counters (`market_sim_meta`), the daily sim-money ledger (`market_sim_ledger`), each player's last-seen news and mute (`market_news_seen`), and cached real-world closes (`market_real_quotes`). It holds no stock and no prices: those stay in the market tables and are only ever read.
+- **Sound Mufflers (schema v33, §3.11):** `sound_mufflers`, one row per placed muffler keyed by world + block: owner, on/off, radius, Quieter percent, and the choices as text (`g <group> <LEVEL>` / `s <sound key> <LEVEL>` per line). The block itself is a `placed_blocks` row like every custom block. The two are reconciled on start.
 Everything survives restarts. **Back up the DB before every migration (see §11).**
 ---
 ## 6. Phased Build Plan (for Claude Code)
@@ -734,6 +751,8 @@ Query the `RegionContainer` and test BUILD for the player before placement/inter
 Declare nodes in `plugin.yml`; check `player.hasPermission(...)`. Node list in §10.
 ### 9.5 PlaceholderAPI — data display + in-game tickers
 Register a `PlaceholderExpansion` (identifier `hcm`) exposing e.g. `%hcm_price_<item>%`, `%hcm_stock_<item>%`, `%hcm_trend_<item>%`, `%hcm_mini_minted_<id>%`, `%hcm_mini_circulation_<id>%`, `%hcm_order_status%`. Powers TAB/holograms/sign boards (§3.8). Soft-depend.
+### 9.7 ProtocolLib — the Sound Muffler (§3.11)
+`net.dmulloy2:ProtocolLib:5.4.0` (Maven Central), compileOnly and soft-depend. One `PacketAdapter` (`muffler/MufflerPacketListener`) on `NAMED_SOUND_EFFECT`, `ENTITY_SOUND` and `WORLD_EVENT`, loaded only when ProtocolLib is enabled. The sound key comes from `getSoundEffects()` + `Registry.SOUNDS.getKey`, falling back to the holder's text for a resource-pack sound. Without ProtocolLib, mufflers place and save but hush nothing, and the menu says so.
 ### 9.6 Native Paper/Bukkit APIs we rely on
 - **Custom heads (Minis):** `PlayerProfile` + `PlayerTextures`.
 - **Armor-stand Minis:** spawn + configure `ArmorStand` from stored data.
@@ -748,7 +767,7 @@ Register a `PlaceholderExpansion` (identifier `hcm`) exposing e.g. `%hcm_price_<
 ## 10. Commands & Permission Nodes
 **Commands (most interaction is block/GUI-based, admin commands aside):**
 - `/hcm reload`, `/hcm admin …` (curate Minis, caps/prices/series, give items, Mall anchor, manage departments/ban list), `/hcm market …` (admin/test buy/sell/price/list/history).
-- `/hcm give <printer|pc|vending|display|mailbox [variant]|pallet|arcade> [player]` and `/hcm give <card <id>|pack <id>|binder|filament <color> <n>> [player]` (admin). The Mailbox variant is one of `wood` (default), `light_blue`, `black`, `white`, `purple`, `blue`, `orange`, `yellow`. **Not given out any more:** the Auction House block (use `/hcm auction`) and the four Arcade machine blocks (the Arcade hub covers them).
+- `/hcm give <printer|pc|vending|display|mailbox [variant]|pallet|arcade|muffler> [player]` and `/hcm give <card <id>|pack <id>|binder|filament <color> <n>> [player]` (admin). The Mailbox variant is one of `wood` (default), `light_blue`, `black`, `white`, `purple`, `blue`, `orange`, `yellow`. **Not given out any more:** the Auction House block (use `/hcm auction`) and the four Arcade machine blocks (the Arcade hub covers them).
 - `/hcm auction` — the Mini Auction House (the only way to reach it).
 - `/hcm museum [id]` — the browse-only Mini Museum; with an id, straight onto that Mini's detail card (the click target of found-broadcasts).
 - `/hcm courier` — the Courier job board (§3.10). Also a Site on the PC.
@@ -769,6 +788,7 @@ Register a `PlaceholderExpansion` (identifier `hcm`) exposing e.g. `%hcm_price_<
 - `hcm.mall.rent` (or delegate to Towny)
 - `hcm.market.limit.bypass` (op, a child of `hcm.admin`) — skips the daily buy/sell limits and per-item caps, **but not the live market's event limits** (the HOT/UP sell limit and the DEAL/DOWN buy limit bind everyone, §3.1)
 - `hcm.market.sim` (0.33; op, a child of `hcm.admin`) — run and test the live market: forced flashes and HOT/DEALs, stop, reset, pause/resume, preview, audit, real-world tests
+- `hcm.muffler.use` (all, a child of `hcm.admin`) — place a Sound Muffler and change your own; anyone may look at one, `hcm.admin` may change any (§3.11)
 ---
 ## 11. Economy Risks & Safeguards (holes to close before real players)
 **Ordered roughly by urgency.**

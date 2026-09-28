@@ -586,10 +586,11 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             case "vending" -> item = plugin.items().vendingMachine();
             case "pallet" -> item = plugin.items().pallet();
             case "arcade" -> item = plugin.items().arcade();
+            case "muffler", "sound_muffler" -> item = plugin.items().soundMuffler();
             default -> {
                 sender.sendMessage(Text.of("&cUnknown item '" + args[1]
                         + "'. Use printer, pc, card, filament, pack, binder, vending, display, "
-                        + "mailbox [variant], pallet, or arcade."));
+                        + "mailbox [variant], pallet, arcade, or muffler."));
                 return;
             }
         }
@@ -1587,7 +1588,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
             addMatches(out, args[1], "printer", "binder", "pc", "card", "filament", "pack", "vending", "display",
-                    "mailbox", "pallet", "arcade");
+                    "mailbox", "pallet", "arcade", "muffler");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("give")
                 && args[1].equalsIgnoreCase("mailbox")) {
             String prefix = args[2].toLowerCase(Locale.ROOT);

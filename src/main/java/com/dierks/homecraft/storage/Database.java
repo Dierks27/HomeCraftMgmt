@@ -718,6 +718,25 @@ public final class Database {
                 applied    INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (symbol, trade_day)
             )
+            """,
+            // v33 — Sound Mufflers. One row per placed muffler, next to its placed_blocks row
+            // (which still says what the block is and who owns it). radius is blocks in each
+            // direction, quiet_percent is the volume "Quieter" plays at, and rules is the picks as
+            // text, one per line: "g <group id> <LEVEL>" or "s <sound key> <LEVEL>".
+            """
+            CREATE TABLE IF NOT EXISTS sound_mufflers (
+                world         TEXT    NOT NULL,
+                x             INTEGER NOT NULL,
+                y             INTEGER NOT NULL,
+                z             INTEGER NOT NULL,
+                owner         TEXT    NOT NULL,
+                enabled       INTEGER NOT NULL DEFAULT 1,
+                radius        INTEGER NOT NULL,
+                quiet_percent INTEGER NOT NULL,
+                rules         TEXT    NOT NULL DEFAULT '',
+                updated_at    INTEGER NOT NULL,
+                PRIMARY KEY (world, x, y, z)
+            )
             """
     };
 

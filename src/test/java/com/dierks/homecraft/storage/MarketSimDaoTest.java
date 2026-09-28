@@ -126,7 +126,8 @@ class MarketSimDaoTest {
         try (Statement st = conn.createStatement();
              ResultSet rs = st.executeQuery("SELECT value FROM hcm_meta WHERE key = 'schema_version'")) {
             assertTrue(rs.next());
-            assertEquals("32", rs.getString(1));
+            // At least v32: later migrations (v33 Sound Mufflers, …) stack on top of it.
+            assertTrue(Integer.parseInt(rs.getString(1)) >= 32, "schema_version " + rs.getString(1));
         }
         Set<String> tables = new TreeSet<>();
         try (Statement st = conn.createStatement();

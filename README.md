@@ -82,12 +82,18 @@ Tokens are **earned by playing and never become dollars**.
 Take a run from the PC's job board, carry the parcel to a village house built at the far end,
 and get paid by distance and how you travelled (on foot pays more than by elytra).
 
+### Sound Mufflers — hush the noisy stuff
+A block you put next to a noisy farm. Its menu opens the moment it's placed. Pick what to hush
+from 32 groups (chickens, villagers, pistons, dispensers, doors and more) or any single sound,
+including ones it has just heard nearby. Then pick how much: **Quieter** or **Silent**. Sounds
+made inside its box are hushed for everyone, wherever they stand. Needs **ProtocolLib**.
+
 ### Data-driven and safe to upgrade
 - **Config-driven:** recipes, skins, prices, odds, prizes, quests and achievements all live in
   `config.yml` and reload live.
 - **Upgrades keep your edits:** a numbered config migration (`config_revision`) changes a value
   only while it still holds the shipped default, and warns about anything an admin changed.
-- **Tested:** more than 500 unit tests cover migrations, odds, the token ledger, mint numbering,
+- **Tested:** more than 600 unit tests cover migrations, odds, the token ledger, mint numbering,
   player-facing copy, Bedrock glyphs, and the live market's hard limits, determinism and
   90-day soak runs.
 
@@ -95,8 +101,10 @@ and get paid by distance and how you travelled (on foot pays more than by elytra
 - **Paper API:** `io.papermc.paper:paper-api:26.2.build.107-stable`, which is published only
   on `https://repo.papermc.io/repository/maven-public/` (not Maven Central).
 - **Java toolchain:** 25.
-- **Soft dependencies:** Vault, Towny, WorldGuard/WorldEdit, LuckPerms, PlaceholderAPI and
-  Floodgate. All are optional, and the plugin degrades gracefully without them.
+- **Soft dependencies:** Vault, Towny, WorldGuard/WorldEdit, LuckPerms, PlaceholderAPI,
+  Floodgate and ProtocolLib (`net.dmulloy2:ProtocolLib:5.4.0` from Maven Central, compile
+  only, for the Sound Muffler). All are optional, and the plugin degrades gracefully without
+  them.
 
 ---
 
@@ -1084,6 +1092,111 @@ trading day. Only the number comes from outside; the headline is always one of o
      the new placeholders stay as typed, and the dashboard page shows 48-hour charts with no
      toggle.
 
+## Sound Mufflers
+
+A **Sound Muffler** is a block that hushes the sounds you choose near it. It is the answer to
+the chicken farm under the bedroom, the villager trading hall and the dispenser clock that
+never stops clicking.
+
+- **Craft:** eight wool (any colour) around a note block. Admins: `/hcm give muffler [player]`.
+- **Place it and its menu opens.** Right-click it any time after to change things.
+- **It hushes sounds MADE inside its box:** every block within its range, in each direction
+  (range 8 = a 17×17×17 box around the muffler). They are hushed for everyone who would hear
+  them, wherever they stand, so a muffler by the farm quiets the farm from the house too.
+- **Break it and the item remembers its settings**, so moving a muffler is pick up, put
+  down, done. A muffler that was never changed drops a plain one that stacks.
+- **Anyone can look** at a muffler's menu. **Only its owner** (or an admin) can change it.
+- It works in **every world**. It is not part of the economy, so it skips the economy-world
+  check the other HomeCraft blocks have.
+
+### The menu
+
+| Tile | What it does |
+|---|---|
+| **Muffler: ON / OFF** | Switch it off without losing your choices |
+| **Range** | Left-click bigger, right-click smaller: 1, 2, 3, 4, 6, 8, 10, 12, 16… up to `max_radius` |
+| **Quieter = 25% volume** | How loud "Quieter" still plays: 50%, 25% or 10% |
+| **Show the area** | Outlines the box in the air for 10 seconds |
+| **Heard nearby** | Every sound made in the box in the last 10 minutes, newest first. The quick way to find the noise: stand by the farm, open this, click the culprit |
+| **Find a sound** | Type part of a name (`chicken`, `piston`, `zombie door`) and pick from every sound in the game |
+| **Single sounds** | The sounds picked one at a time |
+| **The 32 group buttons** | Normal → Quieter → Silent (right-click steps back): farm animals, pets, villagers, golems, every kind of monster, other players, footsteps, fishing, pistons, dispensers, doors and gates, buttons and levers, note blocks, bells, chests, workstations, beacons |
+| **Clear every choice** | Back to hushing nothing (asks first) |
+
+A single sound steps **Quieter → Silent → Always play → not picked**. A single pick beats its
+group, so you can make Villagers Silent and set their trading sound to **Always play**. Where
+two mufflers overlap, the stronger choice wins: Silent beats Quieter, two Quieters give the
+quieter volume, and a neighbour's "Always play" can't undo your Silent.
+
+### What no muffler can hush
+
+Some sounds are made by each player's own game, and the server never sends them, so no
+plugin can reach them: rain and thunder, music and jukeboxes, furnaces and campfires
+crackling, portals humming, lava popping, minecarts rolling, bees buzzing in flight, and a
+player's **own** footsteps, clicks and pickups (other players hear yours, and those can be
+hushed). The menu says this too. The rule of thumb: **anything that shows up in "Heard
+nearby" can be hushed.**
+
+### How it works
+
+Bukkit has no event for a sound being played, so the muffler catches sounds on their way to
+each player through **ProtocolLib**, which is already on the server. It watches three packets:
+
+- a sound at a position (almost everything);
+- a sound attached to an entity (goat horns and a few others; hushed only when sent from the
+  main thread);
+- a "level event". The **dispenser/dropper click** travels this way, and so do anvils,
+  brewing stands, grindstones, smithing tables, crafters, zombies banging on doors, and ghast
+  and blaze shots. Level events that also draw particles (a block breaking, a composter) are
+  left alone.
+
+**Silent** drops the packet. **Quieter** drops it and plays a quieter copy to the same player
+on the next tick. It never edits a packet in place, because the game sends one packet object
+to every player in earshot, so turning it down in place would turn it down again for each
+of them. The copy's seed carries a mark so it isn't hushed a second time.
+
+It fails safe. A packet the muffler can't read (a future Minecraft change, a sound ProtocolLib
+can't convert) goes through untouched and is logged once. **Without ProtocolLib**, mufflers
+still place, save and show their menu, with a red tile saying why nothing is hushed.
+
+A piston, fire, a wither or flowing water can't move or destroy a muffler, and explosions skip
+it like every HomeCraft block. If one vanishes without being broken (WorldEdit, `/setblock`),
+a 30-second sweep forgets it, so nobody is left with an invisible muffler hushing a farm.
+
+### Owner knobs (`sound_muffler`)
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | `false`: mufflers stay placed and keep their settings but hush nothing |
+| `block.material` / `block.name` | `WHITE_WOOL` / `&fSound Muffler` | The item and block. A texture in `skins.sound_muffler` makes it a textured head instead |
+| `default_radius` | `8` | The range a new muffler starts at |
+| `max_radius` | `16` | The biggest range a player can pick (hard limit 32, clamped with a warning) |
+| `default_quiet_percent` | `25` | The volume "Quieter" starts at |
+
+The recipe is `recipes.sound_muffler`. All of it back-fills into an existing `config.yml` on
+the first start and reloads with `/hcm reload`.
+
+### Data
+
+Schema **v33** adds `sound_mufflers`: one row per muffler with its owner, on/off, range,
+Quieter volume and choices. The block itself is still a `placed_blocks` row like every other
+HomeCraft block, and the two are squared on start: settings without a block are dropped, and a
+block without settings gets fresh ones.
+
+### Verify in game
+
+1. With ProtocolLib installed, the log says `Sound Muffler: hooked into ProtocolLib.`
+2. `/hcm give muffler`, then place it next to some chickens: the menu opens.
+3. Click **Chickens** twice (Silent): the clucking stops for you and for a friend standing
+   further off. Click once more (Normal) and it's back. Set it to Quieter at 10%: it's faint.
+4. Stand by a dispenser clock inside the box, open **Heard nearby**: `Dispenser — dispense`
+   is listed. Click it to Silent: the clicking stops.
+5. **Show the area** draws the box. Right-click **Range** and show it again: it's smaller.
+6. Break the muffler: the dropped item says "Remembers its settings". Place it elsewhere: the
+   same choices are there.
+7. A second player right-clicks it: they can look, but a click says only the owner can change it.
+8. Push it with a piston: the piston doesn't fire. Set it on fire: it doesn't burn.
+
 ---
 
 ## Permissions
@@ -1107,6 +1220,7 @@ trading day. Only the number comes from outside; the headline is always one of o
 | `hcm.quests.use` | all | `/hcm quests` |
 | `hcm.achievements.use` | all | `/hcm achievements` |
 | `hcm.guide.use` | all | `/hcm guide` — How It Works |
+| `hcm.muffler.use` | all | Place a Sound Muffler and change what your own mufflers hush (anyone may look; admins may change any) |
 | `hcm.protection.bypass` | op | Bypass Towny/WorldGuard checks for our blocks |
 
 ---
@@ -1128,6 +1242,9 @@ src/main/java/com/dierks/homecraft/
   market/                      dynamic market engine (catalog, pricing, service, OrderMath)
   market/sim/                  the live market: mood, events, seasons, headlines, news,
                                real-world prices (pure, unit-tested) and its service
+  muffler/                     Sound Mufflers: groups, picks, the box maths (pure, unit-tested),
+                               the service, and the one ProtocolLib class
+  gui/muffler/                 the muffler's menu and its sound lists
   storage/                     SQLite datastore + DAOs
   util/                        NamespacedKeys, text helpers
   web/                         dashboard web server, the website's JSON feeds (market,

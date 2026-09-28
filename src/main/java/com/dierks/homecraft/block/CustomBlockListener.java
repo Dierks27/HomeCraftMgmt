@@ -72,7 +72,16 @@ public final class CustomBlockListener implements Listener {
             return;
         }
 
-        if (!plugin.sandbox().check(player, "place " + type.name().toLowerCase(java.util.Locale.ROOT))) {
+        if (type == CustomBlockType.SOUND_MUFFLER && !player.hasPermission("hcm.muffler.use")) {
+            event.setCancelled(true);
+            player.sendMessage(Text.of("&cYou can't place a Sound Muffler."));
+            return;
+        }
+
+        // The Sound Muffler isn't part of the economy — quiet is welcome in every world — so it
+        // alone skips the economy-world check.
+        if (type != CustomBlockType.SOUND_MUFFLER
+                && !plugin.sandbox().check(player, "place " + type.name().toLowerCase(java.util.Locale.ROOT))) {
             event.setCancelled(true);
             return;
         }
@@ -112,6 +121,21 @@ public final class CustomBlockListener implements Listener {
             blocks.tagDisplayVariant(block, variant == null ? DisplayCaseVariant.PLAIN : variant);
         }
         player.sendMessage(Text.of("&aPlaced a " + friendly(type) + "."));
+        if (type == CustomBlockType.SOUND_MUFFLER && plugin.soundMufflers() != null) {
+            // Placing one opens its menu straight away (on the next tick, once the block is
+            // really there): the first thing anyone wants is to pick what to hush.
+            plugin.soundMufflers().placed(block, player.getUniqueId(), inHand);
+            Location at = block.getLocation();
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                // Another plugin may have cancelled the placement after us; the 30-second sweep
+                // forgets that muffler, and there is no block to show a menu for.
+                if (player.isOnline() && plugin.soundMufflers() != null && plugin.soundMufflers().at(at) != null
+                        && !at.getBlock().getType().isAir()) {
+                    new com.dierks.homecraft.gui.muffler.MufflerMenu(plugin, player,
+                            com.dierks.homecraft.muffler.SoundMufflerService.posOf(at)).open(player);
+                }
+            });
+        }
         if (type == CustomBlockType.PC && plugin.achievements() != null) {
             plugin.achievements().tryAward(player, "first_pc");
         }
@@ -156,10 +180,17 @@ public final class CustomBlockListener implements Listener {
         ItemStack drop = switch (record.type()) {
             case MAILBOX -> items.mailbox(blocks.mailboxVariantAt(base));
             case DISPLAY_CASE -> items.displayCase(blocks.displayVariantAt(base));
+            // A muffler that was set up drops an item that remembers its settings.
+            case SOUND_MUFFLER -> plugin.soundMufflers() != null
+                    ? plugin.soundMufflers().itemFor(plugin.soundMufflers().at(loc))
+                    : items.of(record.type());
             default -> items.of(record.type());
         };
 
         blocks.removeAt(loc);
+        if (record.type() == CustomBlockType.SOUND_MUFFLER && plugin.soundMufflers() != null) {
+            plugin.soundMufflers().removed(loc);
+        }
         event.setDropItems(false); // suppress the vanilla base-block drop
         if (record.type() == CustomBlockType.MINI_VENDING_MACHINE) {
             // Remove the other half too — exactly one vending item drops either way.
@@ -197,7 +228,8 @@ public final class CustomBlockListener implements Listener {
         Player player = event.getPlayer();
         CustomBlockType type = placed.get().type();
 
-        if (!plugin.sandbox().check(player, "use " + type.name().toLowerCase(java.util.Locale.ROOT))) {
+        if (type != CustomBlockType.SOUND_MUFFLER
+                && !plugin.sandbox().check(player, "use " + type.name().toLowerCase(java.util.Locale.ROOT))) {
             return; // "the economy is disabled in this world" — the block stays, its GUI doesn't open
         }
 
@@ -258,6 +290,19 @@ public final class CustomBlockListener implements Listener {
                 new com.dierks.homecraft.gui.marketplace.PalletMenu(
                         plugin, player, clicked.getLocation(), owner).open(player);
             }
+            // Anyone may look at what a muffler hushes; only its owner (or an admin) may change it.
+            case SOUND_MUFFLER -> {
+                if (plugin.soundMufflers() == null) {
+                    return;
+                }
+                if (plugin.soundMufflers().at(clicked.getLocation()) == null) {
+                    // A placed_blocks row with no muffler behind it (the service failed to load):
+                    // re-register it so the block isn't dead.
+                    plugin.soundMufflers().placed(clicked, placed.get().owner(), null);
+                }
+                new com.dierks.homecraft.gui.muffler.MufflerMenu(plugin, player,
+                        com.dierks.homecraft.muffler.SoundMufflerService.posOf(clicked.getLocation())).open(player);
+            }
         }
     }
 
@@ -277,6 +322,7 @@ public final class CustomBlockListener implements Listener {
             case SCRATCH_BOOTH -> "Scratch-Ticket Booth";
             case PITY_KIOSK -> "Pity Exchange";
             case TOKEN_COUNTER -> "Token Counter";
+            case SOUND_MUFFLER -> "Sound Muffler";
         };
     }
 

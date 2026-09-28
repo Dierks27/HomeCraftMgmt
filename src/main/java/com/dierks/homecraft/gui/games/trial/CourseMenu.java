@@ -1,0 +1,100 @@
+package com.dierks.homecraft.gui.games.trial;
+
+import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.TimeTrials;
+import com.dierks.homecraft.games.trial.TimeTrialsSettings;
+import com.dierks.homecraft.games.trial.TrialText;
+import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.gui.games.GameMenu;
+import com.dierks.homecraft.storage.GamesDao;
+import com.dierks.homecraft.util.Text;
+import org.bukkit.Material;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * One course (27, spec §11): what to know before you start.
+ *
+ * <p>4 the course ("River Run (Boat · Medium)"); 10 how to play; 11 your best; 12 its high
+ * scores; 13 Start; 14 this week's best; 15 the record and who holds it; 16 what it pays; 22 the
+ * way out. Start runs the gate again (the screen may have been open a while) and then the world
+ * session takes the player to the start line.
+ */
+public final class CourseMenu extends GameMenu {
+
+    private final TimeTrials trials;
+    private final Course course;
+
+    public CourseMenu(HomeCraftManagement plugin, TimeTrials trials, Course course, Player viewer, Runnable back) {
+        super(plugin, trials, viewer, back);
+        this.trials = trials;
+        this.course = course;
+        init(27, Text.of("&b" + course.name()));
+    }
+
+    @Override
+    protected void build() {
+        fill();
+        boolean week = course.id().equals(trials.courseOfWeek());
+        List<String> head = new ArrayList<>();
+        head.add("&7" + TrialText.checkpoints(course.checkpoints().size()) + ", then the finish");
+        if (week) {
+            head.add("&6★ Course of the week");
+        }
+        if (trials.featured(course.id())) {
+            head.add("&6★ Today's pick");
+        }
+        set(4, Menus.icon(TimeTrials.icon(course.kind()), "&e" + course.name() + " &7(" + TrialText.label(course) + ")",
+                head.toArray(new String[0])), null);
+        List<String> rules = new ArrayList<>(course.kind().rules());
+        rules.add("The clock keeps running when you go back.");
+        set(10, rulesTile(rules), null);
+        Long best = trials.best(viewer, course.id());
+        set(11, Menus.icon(Material.CLOCK, best == null ? "&7No time yet" : "&eYour best: &f" + TrialText.time(best)),
+                null);
+        set(12, Menus.icon(Material.OAK_SIGN, "&eHigh scores", "&7The fastest times on " + course.name() + "."),
+                e -> trials.showScores(viewer, course.id(), this::reopen));
+        set(13, Menus.icon(Material.LIME_CONCRETE, "&aStart", "&7You go to the start line",
+                "&7with only the course kit.", "&7Your things come back when", "&7you finish or leave."),
+                e -> trials.startFromScreen(viewer, course.id()));
+        GamesDao.ScoreRow weekBest = trials.weekRecord(course.id());
+        set(14, Menus.icon(Material.IRON_INGOT, weekBest == null ? "&7No time this week yet"
+                : "&eThis week: &f" + TrialText.time(weekBest.score()) + " &7by &f" + trials.holder(weekBest.player())),
+                null);
+        GamesDao.ScoreRow record = trials.record(course.id());
+        set(15, Menus.icon(Material.GOLD_INGOT, record == null ? "&7No record yet - set one!"
+                : "&6Record: &f" + TrialText.time(record.score()) + " &7by &f" + trials.holder(record.player())), null);
+        set(16, rewards(week), null);
+        exitTile();
+    }
+
+    /** What finishing can pay, and what the player has already had. */
+    private ItemStack rewards(boolean week) {
+        TimeTrialsSettings s = trials.settings();
+        List<String> lore = new ArrayList<>();
+        int first = trials.firstClear(course);
+        if (first > 0) {
+            lore.add(trials.firstClearDone(viewer, course) ? "&a✔ First finish" : "&7First finish: &6"
+                    + TrialText.tokens(first));
+        }
+        if (s.weeklyBestBonus() > 0) {
+            lore.add("&7Best time this week: &6" + TrialText.tokens(s.weeklyBestBonus()));
+        }
+        if (week && s.courseOfWeekBonus() > 0) {
+            lore.add("&7Course of the week: &6" + TrialText.tokens(s.courseOfWeekBonus()) + " &7a day");
+        }
+        if (trials.featured(course.id()) && trials.featuredBonus() > 0) {
+            lore.add("&7Today's pick: &6" + TrialText.tokens(trials.featuredBonus()));
+        }
+        lore.add("&7A new best is announced, not paid.");
+        return Menus.icon(Material.GOLD_NUGGET, "&eTokens for finishing", lore.toArray(new String[0]));
+    }
+
+    private void reopen() {
+        new CourseMenu(plugin, trials, course, viewer, back).open(viewer);
+    }
+}

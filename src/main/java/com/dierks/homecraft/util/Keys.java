@@ -110,6 +110,21 @@ public final class Keys {
      */
     public static NamespacedKey COURIER_PACKAGE;
 
+    /**
+     * On a game's kit item: {@code "<gameId>:<action>"} (String). A kit item exists only inside a
+     * world game; anything carrying this key outside a session is swept, and every money surface
+     * refuses it. Its own key, never shared with a prize or a Mini, so no other listener can match it.
+     */
+    public static NamespacedKey GAME_KIT;
+    /** On a join sign: the game or course id it opens with {@code /hcm play} (String). */
+    public static NamespacedKey GAME_SIGN;
+    /**
+     * On an entity a game spawned (a golf ball, a race boat): {@code "<gameId>:<owner uuid>"}
+     * (String). Such entities are never persistent and are swept on start and on chunk load.
+     * Deliberately NOT {@link #EFFECT_ENTITY}, which the effects service deletes on sight.
+     */
+    public static NamespacedKey GAME_ENTITY;
+
     private Keys() {
     }
 
@@ -152,5 +167,8 @@ public final class Keys {
         DISPLAY_VARIANT = new NamespacedKey(plugin, "display_variant");
         SHOP_ANCHOR = new NamespacedKey(plugin, "shop_anchor");
         PEEK_VIEWER = new NamespacedKey(plugin, "peek_viewer");
+        GAME_KIT = new NamespacedKey(plugin, "game_kit");
+        GAME_SIGN = new NamespacedKey(plugin, "game_sign");
+        GAME_ENTITY = new NamespacedKey(plugin, "game_entity");
     }
 }

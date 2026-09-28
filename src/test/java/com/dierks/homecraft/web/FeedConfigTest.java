@@ -37,7 +37,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FeedConfigTest {
 
     private static final List<String> NEW_KEYS = List.of(
-            "web.dashboard.feed_token", "web.dashboard.lan_skips_token", "market.price_history.keep_days");
+            "web.dashboard.feed_token", "web.dashboard.lan_skips_token", "market.price_history.keep_days",
+            "web.dashboard.arcade_show_names");
 
     /**
      * The bundled config.yml, loaded with the throwing {@code load(Reader)} so a YAML mistake

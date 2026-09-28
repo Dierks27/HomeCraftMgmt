@@ -737,6 +737,131 @@ public final class Database {
                 updated_at    INTEGER NOT NULL,
                 PRIMARY KEY (world, x, y, z)
             )
+            """,
+            // v34 — the Games (0.35), every table in one block (GamesDao).
+            // game_rounds: one row per round of a game of chance (OPEN while a multi-step round is
+            //   played, SETTLED once paid — stake, payout and the row land in one transaction), plus
+            //   one DAILY row per player per game per day for a skill game's one scored daily attempt.
+            //   day is the LOCAL epoch day; opponent is the other player of a Coin Flip (one row each);
+            //   touched_at moves on open, step and raise (a round left 10 minutes is settled for you).
+            //   At most one OPEN round per player per game, and one DAILY row per day.
+            // game_breaks: Take a break. -1 = no limit, pending_tokens -2 = nothing waiting.
+            // game_scores: each player's best per board, and how many runs.
+            // game_rewards: skill rewards. A one-time reward has a non-empty ref and the partial
+            //   unique index refuses it twice; repeatable ones have ref ''. game is '*' for the
+            //   once-a-day-across-games kinds; played is always the game that paid (its daily cap).
+            // game_saved_state: a player's things while they are in a world game, one row per session,
+            //   written BEFORE anything is changed and marked DONE only once they are back (phases
+            //   ACTIVE, RETURN, DONE; DONE rows are pruned after a week). At most one live row a player.
+            // game_courses: world-game courses (data = the game's own YAML); rev bumps on each edit.
+            // game_prefs: per-player choices (invites on or off, the golf ball, queued join lines).
+            """
+            CREATE TABLE IF NOT EXISTS game_rounds (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                player     TEXT    NOT NULL,
+                game       TEXT    NOT NULL,
+                day        INTEGER NOT NULL,
+                stake      INTEGER NOT NULL DEFAULT 0,
+                payout     INTEGER NOT NULL DEFAULT 0,
+                state      TEXT    NOT NULL,
+                seed       INTEGER NOT NULL DEFAULT 0,
+                data       TEXT,
+                opponent   TEXT,
+                created_at INTEGER NOT NULL,
+                touched_at INTEGER NOT NULL DEFAULT 0,
+                settled_at INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_game_rounds_player_day ON game_rounds (player, game, day);
+            CREATE INDEX IF NOT EXISTS idx_game_rounds_open ON game_rounds (state, player);
+            CREATE INDEX IF NOT EXISTS idx_game_rounds_pair ON game_rounds (game, day, player, opponent);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_game_rounds_one_open ON game_rounds (player, game) WHERE state = 'OPEN';
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_game_rounds_daily ON game_rounds (player, game, day) WHERE state = 'DAILY';
+            CREATE TABLE IF NOT EXISTS game_breaks (
+                player             TEXT    PRIMARY KEY,
+                daily_tokens       INTEGER NOT NULL DEFAULT -1,
+                pending_tokens     INTEGER NOT NULL DEFAULT -2,
+                pending_day        INTEGER NOT NULL DEFAULT 0,
+                paused_until       INTEGER NOT NULL DEFAULT 0,
+                admin_tokens       INTEGER NOT NULL DEFAULT -1,
+                admin_paused_until INTEGER NOT NULL DEFAULT 0,
+                updated_at         INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS game_scores (
+                player TEXT    NOT NULL,
+                game   TEXT    NOT NULL,
+                board  TEXT    NOT NULL,
+                score  INTEGER NOT NULL,
+                at     INTEGER NOT NULL,
+                runs   INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY (player, game, board)
+            );
+            CREATE INDEX IF NOT EXISTS idx_game_scores_board ON game_scores (game, board, score);
+            CREATE TABLE IF NOT EXISTS game_rewards (
+                id     INTEGER PRIMARY KEY AUTOINCREMENT,
+                player TEXT    NOT NULL,
+                game   TEXT    NOT NULL,
+                played TEXT    NOT NULL DEFAULT '',
+                day    INTEGER NOT NULL,
+                kind   TEXT    NOT NULL,
+                ref    TEXT    NOT NULL DEFAULT '',
+                tokens INTEGER NOT NULL,
+                at     INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_game_rewards_player_day ON game_rewards (player, day);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_game_rewards_once ON game_rewards (player, game, kind, ref) WHERE ref <> '';
+            CREATE TABLE IF NOT EXISTS game_saved_state (
+                session_id    TEXT    PRIMARY KEY,
+                player        TEXT    NOT NULL,
+                game          TEXT    NOT NULL,
+                ref           TEXT    NOT NULL DEFAULT '',
+                phase         TEXT    NOT NULL,
+                session_world TEXT    NOT NULL,
+                items         BLOB,
+                carry         BLOB,
+                xp_level      INTEGER,
+                xp_progress   REAL,
+                xp_total      INTEGER,
+                health        REAL,
+                food          INTEGER,
+                saturation    REAL,
+                exhaustion    REAL,
+                fire_ticks    INTEGER,
+                air           INTEGER,
+                game_mode     TEXT,
+                allow_flight  INTEGER,
+                flying        INTEGER,
+                walk_speed    REAL,
+                fly_speed     REAL,
+                absorption    REAL,
+                effects       TEXT,
+                world         TEXT,
+                x             REAL,
+                y             REAL,
+                z             REAL,
+                yaw           REAL,
+                pitch         REAL,
+                created_at    INTEGER NOT NULL,
+                done_at       INTEGER
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_game_saved_state_live ON game_saved_state (player) WHERE phase <> 'DONE';
+            CREATE TABLE IF NOT EXISTS game_courses (
+                id         TEXT    PRIMARY KEY,
+                game       TEXT    NOT NULL,
+                kind       TEXT    NOT NULL,
+                name       TEXT    NOT NULL,
+                world      TEXT    NOT NULL,
+                enabled    INTEGER NOT NULL DEFAULT 1,
+                data       TEXT    NOT NULL,
+                rev        INTEGER NOT NULL DEFAULT 1,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS game_prefs (
+                player TEXT NOT NULL,
+                pref   TEXT NOT NULL,
+                value  TEXT,
+                PRIMARY KEY (player, pref)
+            )
             """
     };
 

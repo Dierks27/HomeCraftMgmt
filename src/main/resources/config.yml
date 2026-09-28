@@ -1235,6 +1235,9 @@ web:
     # connections arrive from 127.0.0.1 or a LAN address, so with this on the
     # internet would get in without the token.
     lan_skips_token: false
+    # /api/arcade: true adds record holders' names to the website feed. Leave it
+    # false: the feed then publishes scores and times only, never who set them.
+    arcade_show_names: false
 
 # ---------------------------------------------------------------------
 #  Phase 7 — In-game economy displays (§3.8)
@@ -1521,3 +1524,304 @@ arcade:
       - { tokens: 50, weight: 3 }
       - { jackpot: true, weight: 1 }
     jackpot: { seed: 50, per_ticket: 1, cap: 1000 }
+
+# ---------------------------------------------------------------------
+#  Games — play games of chance and skill games for tokens (never dollars).
+#  Off until you turn it on. Games of chance give back less than they take
+#  (85-95 of every 100 tokens, worked out and published per stake); skill
+#  games pay small, capped rewards. Players' "Take a break" limits and pauses
+#  also cover Crates, Scratch Tickets and Card Packs bought with tokens.
+# ---------------------------------------------------------------------
+games:
+  # Master switch. false = the games are off and the rest of the plugin is unchanged.
+  enabled: false
+  # Worlds where time-trial and mini golf courses may be built (each its own
+  # Multiverse-Inventories group, Multiverse game mode adventure).
+  worlds: [games]
+  # Extra worlds (besides economy worlds and the ones above) where the Games screen works, e.g. your hub.
+  play_worlds: []
+  # Minimum time between two plays of a game of chance, in milliseconds (never below 250).
+  click_cooldown_ms: 600
+  # Most tokens a player can put into ALL games of chance per day (0 = off, at most 10000).
+  # Players and admins can set a lower limit of their own.
+  chance_daily_tokens: 100
+  # Most tokens any single play of a game of chance can pay (never below the largest stake).
+  max_payout: 250
+  # Most tokens one player can earn from skill games (cabinets, courses, golf) in a day.
+  skill_daily_cap: 6
+  # Today's featured game: auto (a skill game or course picked each day) or a game/course id.
+  featured: auto
+  # Tokens for the first finish of today's featured game (counts toward skill_daily_cap).
+  featured_bonus: 1
+  # "Take a break" (Wallet): the choices players get.
+  break:
+    # Daily token limits a player can pick for games of chance (they can also pick none).
+    daily_choices: [10, 25, 50, 100]
+    # How many days a player can pause games of chance for (a pause can't be shortened).
+    pause_days: [1, 7, 30]
+    # Days a raised or removed limit waits before it starts (never below 1).
+    raise_delay_days: 7
+  # ---- ore_slots ----
+  # Ore Slots: three reels, one line. Three the same pays that ore's multiple of
+  # the tokens put in (a Wild stands in for any ore), two the same pays `two`,
+  # Stone never pays. The game works out Stone's weight so it gives back `rtp`.
+  # Turn a symbol off with weight 0, never by deleting its key.
+  ore_slots:
+    # false = Ore Slots is closed.
+    enabled: true
+    # The tokens a player can put in per spin.
+    stakes: [1, 2, 5]
+    # Spins per player per day (resets at local midnight).
+    daily_limit: 50
+    # Target tokens given back per 100 put in (85-95); the screen shows what it really reaches.
+    rtp: 90
+    # How often each symbol lands on a reel (whole numbers; Stone is worked out).
+    reels:
+      # Coal, the most common ore.
+      coal: 10
+      # Copper.
+      copper: 8
+      # Iron.
+      iron: 6
+      # Gold.
+      gold: 4
+      # Diamond, the rarest ore.
+      diamond: 2
+      # Wild: stands in for any ore.
+      wild: 2
+    # What a line pays, as a multiple of the tokens put in.
+    pays:
+      # Any two the same ore (a Wild counts).
+      two: 2
+      # Three coal.
+      coal: 4
+      # Three copper.
+      copper: 6
+      # Three iron.
+      iron: 10
+      # Three gold.
+      gold: 20
+      # Three diamonds.
+      diamond: 40
+      # Three wilds (5 in → 250, the max_payout).
+      wild: 50
+  # ---- twenty_one ----
+  # Twenty-One: beat the Arcade's hand without going over 21 (/hcm play blackjack
+  # works too). What a win adds is worked out per stake so the best play gives back `rtp`.
+  twenty_one:
+    # false = Twenty-One is closed.
+    enabled: true
+    # The tokens a player can put in per hand (a Double puts the same in again).
+    stakes: [5, 10, 20]
+    # Hands per player per day.
+    daily_limit: 30
+    # Target tokens given back per 100 put in with the best play (85-95).
+    rtp: 90
+    # A two-card 21 adds this many times what a normal win adds.
+    natural_bonus: 1.5
+  # ---- wheel ----
+  # The Wheel: 24 equally likely spaces around the screen. Each space's number is a
+  # base: 0 = nothing, 1 = your tokens back, above 1 = a win (scaled per stake so it
+  # gives back `rtp`). Bases between 0 and 1 aren't allowed.
+  wheel:
+    # false = the Wheel is closed.
+    enabled: true
+    # The tokens a player can put in per spin.
+    stakes: [5, 10, 20]
+    # Spins per player per day.
+    daily_limit: 30
+    # Target tokens given back per 100 put in (85-95).
+    rtp: 90
+    # Exactly 24 bases, clockwise from the top-left corner (slots 0-8, 17, 26, 35,
+    # 44-36, 27, 18, 9): 13 x 0, 5 x 1, 3 x 2, 2 x 4, 1 x 5. No three zeros in a row.
+    segments: [5, 0, 1, 0, 2, 0, 0, 1, 0, 4, 0, 1, 0, 2, 0, 1, 0, 4, 0, 0, 1, 0, 2, 0]
+  # ---- higher_lower ----
+  # Higher or Lower: guess whether the next card is higher or lower; each right
+  # guess grows what you'd get back, cash out any time. The same card loses.
+  higher_lower:
+    # false = Higher or Lower is closed.
+    enabled: true
+    # The tokens a player can put in per run.
+    stakes: [10, 20, 50]
+    # Runs per player per day.
+    daily_limit: 30
+    # Target tokens given back per 100 put in with the best play (85-95).
+    rtp: 90
+    # Cash out automatically at this many times the tokens put in (or max_payout, if lower).
+    max_multiplier: 20
+    # Cash out automatically after this many right guesses.
+    max_guesses: 10
+  # ---- coin_flip ----
+  # Coin Flip: two nearby players put in the same, one wins. The winner gets `rtp`
+  # of the tokens put in; the rest is gone. Players must turn Coin Flip invites on.
+  coin_flip:
+    # Off by default: the one game of chance between players.
+    enabled: false
+    # The tokens each player can put in.
+    stakes: [5, 10, 25]
+    # Flips per player per day.
+    daily_limit: 5
+    # Flips between the same two players per day.
+    pair_daily_limit: 2
+    # Target tokens given back per 100 put in (85-95).
+    rtp: 90
+    # How close the two players must be, in blocks (0 = anywhere in the same world).
+    max_distance: 32
+    # How long an invite stays open, in seconds.
+    invite_seconds: 60
+  # ---- creeper_sweeper ----
+  # Creeper Sweeper: dig every safe square without digging a creeper.
+  creeper_sweeper:
+    # false = Creeper Sweeper is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for clearing the daily board on your scored try.
+    daily_reward: 1
+    # Most tokens Creeper Sweeper pays a player per day.
+    daily_cap: 2
+    # Creepers on the 9x5 board per difficulty.
+    mines:
+      # Easy board.
+      easy: 6
+      # Normal board.
+      normal: 8
+      # Hard board.
+      hard: 10
+    # Bronze, silver, gold: clear times in seconds (at or under), per difficulty.
+    milestones:
+      # Easy board.
+      easy: [180, 90, 45]
+      # Normal board.
+      normal: [240, 120, 75]
+      # Hard board.
+      hard: [300, 180, 120]
+  # ---- ore_merge ----
+  # Ore Merge: slide and merge ores (2048) from coal up to a dragon egg.
+  ore_merge:
+    # false = Ore Merge is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for making a diamond on the daily board's scored try.
+    daily_reward: 1
+    # Most tokens Ore Merge pays a player per day.
+    daily_cap: 2
+    # Bronze, silver, gold: the biggest tile made (256 diamond, 512 netherite, 1024 nether star).
+    milestones: [256, 512, 1024]
+  # ---- snake ----
+  # Snake: turn left or right to eat apples without hitting the wall or yourself.
+  snake:
+    # false = Snake is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for 15 apples on the daily board's scored try.
+    daily_reward: 1
+    # Most tokens Snake pays a player per day.
+    daily_cap: 2
+    # Ticks between moves for Java players (20 = 1 second; it speeds up, never below 3).
+    tick_java: 6
+    # Ticks between moves for Bedrock players.
+    tick_bedrock: 10
+    # Bronze, silver, gold: apples in one run.
+    milestones: [10, 20, 30]
+  # ---- mini_match ----
+  # Mini Match: find the 8 pairs of Minis in as few flips as you can.
+  mini_match:
+    # false = Mini Match is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for finishing the daily board in 24 flips or fewer on your scored try.
+    daily_reward: 1
+    # Most tokens Mini Match pays a player per day.
+    daily_cap: 2
+    # Bronze, silver, gold: finish in at most this many flips.
+    milestones: [30, 24, 20]
+  # ---- simon_says ----
+  # Simon Says: repeat the growing sequence of lights and notes.
+  simon_says:
+    # false = Simon Says is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for repeating 8 on the daily board's scored try.
+    daily_reward: 1
+    # Most tokens Simon Says pays a player per day.
+    daily_cap: 2
+    # Bronze, silver, gold: the longest sequence repeated.
+    milestones: [5, 10, 15]
+  # ---- whack_a_zombie ----
+  # Whack-a-Zombie: bonk the zombies, not the villagers.
+  whack_a_zombie:
+    # false = Whack-a-Zombie is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for 20 points on the daily board's scored try.
+    daily_reward: 1
+    # Most tokens Whack-a-Zombie pays a player per day.
+    daily_cap: 2
+    # How long a round lasts, in seconds.
+    seconds: 30
+    # Bronze, silver, gold: points in one round.
+    milestones: [15, 25, 35]
+  # ---- connect_four ----
+  # Connect Four: four in a row against the Arcade or a friend (friend games pay nothing).
+  connect_four:
+    # false = Connect Four is closed.
+    enabled: true
+    # Tokens for the first win of the day against the Arcade on normal or hard.
+    daily_reward: 1
+    # Most tokens Connect Four pays a player per day.
+    daily_cap: 1
+  # ---- tic_tac_toe ----
+  # Tic-Tac-Toe: against the Arcade or a friend (friend games pay nothing).
+  tic_tac_toe:
+    # false = Tic-Tac-Toe is closed.
+    enabled: true
+    # Tokens for the first win (easy) or draw-or-better (hard) of the day against the Arcade.
+    daily_reward: 1
+    # Most tokens Tic-Tac-Toe pays a player per day.
+    daily_cap: 1
+  # ---- trials ----
+  # Time trials: parkour, elytra and boat courses built with /hcm games course.
+  trials:
+    # false = every time-trial course is closed.
+    enabled: true
+    # Tokens for the first finish of a course, once ever per course, by tier.
+    first_clear:
+      # Easy courses.
+      easy: 5
+      # Medium courses.
+      medium: 10
+      # Hard courses.
+      hard: 20
+      # "Why did we build this?" courses.
+      extreme: 40
+    # Tokens for setting the week's best time on a course (once per course per week).
+    weekly_best_bonus: 5
+    # Tokens for finishing the course of the week (once a day).
+    course_of_week_bonus: 2
+    # Most tokens time trials pay a player per day (first clears don't count).
+    daily_cap: 4
+    # Parkour: blocks below the lower of the last and next checkpoint that count as a fall.
+    fall_depth: 6
+    # A run faster than this many seconds doesn't count (a course can set its own).
+    min_seconds: 5
+  # ---- golf ----
+  # Mini golf: your Mini is the ball. Courses are built with /hcm games golf.
+  golf:
+    # false = every mini golf course is closed.
+    enabled: true
+    # Tokens for finishing a course at par or better (once per course per day).
+    par_reward: 2
+    # Tokens for a hole-in-one on a course you finish (once per hole per day).
+    hole_in_one_reward: 1
+    # Tokens for the first finish of a course, once ever per course.
+    first_clear: 5
+    # Most tokens mini golf pays a player per day (first clears don't count).
+    daily_cap: 4
+    # Strokes over par before a hole is picked up.
+    max_over_par: 3

@@ -29,6 +29,10 @@ softdepend:
   # Sound Mufflers reach sounds on their way to each player through ProtocolLib. Without it
   # mufflers still place and save their settings, but hush nothing.
   - ProtocolLib
+  # The Games world: loading after Multiverse means the Games world exists when world games start,
+  # and a player's saved things are captured after Multiverse-Inventories has swapped them.
+  - Multiverse-Core
+  - Multiverse-Inventories
 
 commands:
   hcm:
@@ -52,7 +56,7 @@ commands:
       /hcm arcade odds       - admin: Scratch Ticket RTP and each crate's value
       /hcm trail [name|off]  - turn your particle trail on or off
       /hcm achievements      - your achievements
-      /hcm config reset <section> [confirm]  - admin: put arcade/packs/hunt/effects/clock back to defaults
+      /hcm config reset <section> [confirm]  - admin: put arcade/games/packs/hunt/effects/clock back to defaults
       /hcm homes refresh [player]  - admin: recheck the +1 Home perk
       /hcm guide [page]      - How It Works (tokens, minis, wild, arcade)
       /hcm tokens            - show your Arcade token balance
@@ -63,6 +67,12 @@ commands:
       /hcm mini capturestand <miniId>  - capture a posed armor stand into a Mini
       /hcm mini repair-escaped [confirm]  - admin: give back mint numbers old wild escapes burned
       /hcm hunt spawn [rarity] [player]|status|clear  - admin: the wild hunt
+      /hcm play              - the Games screen (games of chance, cabinets, courses, mini golf)
+      /hcm play <game|course> [player]  - open a game or start a course (for another player: admin)
+      /hcm play break        - Take a break: your own limits on games of chance
+      /hcm play accept|deny  - answer a game invite
+      /hcm leave             - leave the world game you are in (your things come back)
+      /hcm games status|course|golf|feature|break|saved|scores  - admin: run the Games
     # NOTE: deliberately NOT gated on a single node — every subcommand checks its own
     # permission (hcm.admin, hcm.market.list, hcm.market.price, hcm.market.order, …), so
     # a player who may check a price can still do so without being handed the whole CLI.
@@ -82,6 +92,9 @@ permissions:
       hcm.workbench.use: true
       hcm.printer.use: true
       hcm.muffler.use: true
+      hcm.games.play: true
+      hcm.games.chance: true
+      hcm.games.admin: true
       hcm.market.order: true
       hcm.market.buy: true
       hcm.market.limit.bypass: true
@@ -153,6 +166,26 @@ permissions:
     default: true
   hcm.protection.bypass:
     description: Bypass Towny/WorldGuard build checks for HomeCraft custom blocks.
+    default: op
+  hcm.games.play:
+    description: >-
+      Play the Games (/hcm play): the Games screen, the menu cabinets, time-trial courses and
+      mini golf, and leave a world game (/hcm leave). The Games only open once games.enabled is
+      true in config.
+    default: true
+  hcm.games.chance:
+    description: >-
+      Play the games of chance for tokens (Ore Slots, Twenty-One, the Wheel, Higher or Lower,
+      Coin Flip). Revoke it for a group to keep them out of every game of chance, including
+      Crates, Scratch Tickets and Card Packs bought with tokens; they then don't see those games
+      at all. Skill games are not affected.
+    default: true
+  hcm.games.admin:
+    description: >-
+      Run the Games (/hcm games): status, time-trial and golf courses, the featured game, a
+      player's Take a break limits (/hcm games break), saved things (/hcm games saved) and score
+      boards; open a game for another player (/hcm play <game> <player>); write [Arcade] join
+      signs; build in the Games world.
     default: op
   # The player-facing /hcm openers (DESIGN.md §10). Each opens a read-only or
   # token-only GUI and is the documented player route to that feature — /hcm auction

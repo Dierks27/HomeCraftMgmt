@@ -18,13 +18,17 @@ import java.util.Set;
  * <p>The config migrations keep any value that isn't what we shipped, on the assumption an admin
  * chose it. That is right for real choices and wrong for values an earlier setup pass wrote, which
  * look exactly the same. This is the explicit way out, for the sections where the defaults are
- * the design (the Arcade, packs, the wild hunt, effects, the clock). Everything else — the market
+ * the design (the Arcade, the Games, packs, the wild hunt, effects, the clock). Everything else — the market
  * and Mini catalogs above all — is the admin's own data and is refused.
  */
 final class ConfigReset {
 
-    /** Sections that can be reset. {@code arcade} also allows any {@code arcade.<child>}. */
-    static final Set<String> ALLOWED = Set.of("arcade", "packs", "minis.loot.natural", "minis.effects", "clock");
+    /**
+     * Sections that can be reset. {@code arcade} also allows any {@code arcade.<child>}, and
+     * {@code games} any {@code games.<child>} (one game's block, or {@code games.break}).
+     */
+    static final Set<String> ALLOWED = Set.of("arcade", "games", "packs", "minis.loot.natural", "minis.effects",
+            "clock");
 
     private ConfigReset() {
     }
@@ -36,7 +40,8 @@ final class ConfigReset {
 
     static boolean allowed(String path) {
         String p = normalise(path);
-        return ALLOWED.contains(p) || (p.startsWith("arcade.") && p.length() > "arcade.".length());
+        return ALLOWED.contains(p) || (p.startsWith("arcade.") && p.length() > "arcade.".length())
+                || (p.startsWith("games.") && p.length() > "games.".length());
     }
 
     /** Whether resetting this section changes the quest pools (so today's draws should redraw). */

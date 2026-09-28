@@ -167,8 +167,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     return true;
                 }
                 if (args.length < 3 || !args[1].equalsIgnoreCase("reset")) {
-                    sender.sendMessage(Text.of("&7Usage: /hcm config reset <arcade|arcade.<part>|packs|minis.loot.natural"
-                            + "|minis.effects|clock> [confirm]"));
+                    sender.sendMessage(Text.of("&7Usage: /hcm config reset <arcade|arcade.<part>|games|games.<part>|packs"
+                            + "|minis.loot.natural|minis.effects|clock> [confirm]"));
                     return true;
                 }
                 boolean confirm = args.length >= 4 && args[3].equalsIgnoreCase("confirm");
@@ -1540,7 +1540,10 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             addMatches(out, args[1], "reset");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("config") && sender.hasPermission("hcm.admin")) {
             addMatches(out, args[2], "arcade", "arcade.quests", "arcade.prizes", "arcade.crates", "arcade.achievements",
-                    "arcade.lotto", "packs", "minis.loot.natural", "minis.effects", "clock");
+                    "arcade.lotto", "games", "games.break", "packs", "minis.loot.natural", "minis.effects", "clock");
+            for (com.dierks.homecraft.games.GameSpec<?> spec : com.dierks.homecraft.games.GameCatalog.SPECS) {
+                addMatches(out, args[2], "games." + spec.id());
+            }
         } else if (args.length == 4 && args[0].equalsIgnoreCase("config") && sender.hasPermission("hcm.admin")) {
             addMatches(out, args[3], "confirm");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("homes") && sender.hasPermission("hcm.admin")) {

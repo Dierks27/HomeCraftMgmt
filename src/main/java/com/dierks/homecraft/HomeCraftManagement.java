@@ -178,6 +178,8 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.courier.CourierService courier;
     /** Sound Mufflers: placed blocks that hush chosen sounds near them. Null only if they failed to start. */
     private com.dierks.homecraft.muffler.SoundMufflerService soundMufflers;
+    /** The Games (0.35). Null until it is built, or if it failed to start; callers null-check. */
+    private com.dierks.homecraft.games.GamesService games;
     /** The live market (0.33): the price multiplier, its events and ticks. Null only if it failed to build. */
     private com.dierks.homecraft.market.sim.MarketSimService marketSim;
     /** Market news delivery: broadcasts, the join catch-up, the per-player mute. Null only if it failed to build. */
@@ -1003,6 +1005,8 @@ public final class HomeCraftManagement extends JavaPlugin {
 
         // Not revision-gated: an owner can write a bare `market.sim: false` at any time.
         liveMarketSwitch(c, log);
+        // Nor this: a bare `games: false` or `games.ore_slots: false`.
+        gamesSwitch(c, log);
 
         return log;
     }
@@ -1049,6 +1053,62 @@ public final class HomeCraftManagement extends JavaPlugin {
             log.add("Config migration: " + path + ": " + sim + " is now " + path + ".enabled: " + enabled
                     + " (the rest of the section is filled in with the shipped settings"
                     + (enabled ? ")." : "; the live market stays off)."));
+        }
+    }
+
+    /**
+     * A bare switch where a Games section belongs becomes that section's {@code enabled}:
+     * {@code games: false} becomes {@code games.enabled: false}, and {@code games.<id>: false}
+     * becomes {@code games.<id>.enabled: false} for every game in the catalog. Without it the
+     * backfill that follows would replace the scalar with the whole shipped section — and a game
+     * the owner switched off would come back on. A value that is not a switch is written as
+     * {@code false} with a {@link #WARN} (an off switch nobody can read stays off, as
+     * {@code GamesConfig} reads it). The key keeps its place and its comments.
+     */
+    static void gamesSwitch(org.bukkit.configuration.file.FileConfiguration c, java.util.List<String> log) {
+        String root = com.dierks.homecraft.config.GamesConfig.PATH;
+        Object games = c.get(root, null);
+        if (games == null) {
+            return;
+        }
+        if (!(games instanceof org.bukkit.configuration.ConfigurationSection)) {
+            switchToSection(c, root, games, "the Games module", log);
+            return;
+        }
+        for (com.dierks.homecraft.games.GameSpec<?> spec : com.dierks.homecraft.games.GameCatalog.SPECS) {
+            String path = root + "." + spec.id();
+            Object v = c.get(path, null);
+            if (v != null && !(v instanceof org.bukkit.configuration.ConfigurationSection)) {
+                switchToSection(c, path, v, spec.id(), log);
+            }
+        }
+    }
+
+    /** Replace the scalar at {@code path} with a section holding only {@code enabled}, keeping its comments. */
+    private static void switchToSection(org.bukkit.configuration.file.FileConfiguration c, String path, Object value,
+                                        String what, java.util.List<String> log) {
+        Boolean read = com.dierks.homecraft.config.GamesConfig.readSwitch(value);
+        boolean enabled = Boolean.TRUE.equals(read);
+        java.util.List<String> above = commentsOf(c, path);
+        java.util.List<String> inline;
+        try {
+            inline = c.getInlineComments(path);
+        } catch (Throwable ignored) {
+            inline = java.util.List.of();
+        }
+        c.createSection(path).set("enabled", enabled);
+        try {
+            c.setComments(path, above);
+            c.setInlineComments(path, inline);
+        } catch (Throwable ignored) {
+            // Comment API unavailable on this server: the switch still stands.
+        }
+        if (read == null) {
+            log.add(WARN + "Config migration: " + path + " was \"" + value + "\", which is not true or false - "
+                    + "wrote " + path + ".enabled: false, so " + what + " stays off until you set it to true.");
+        } else {
+            log.add("Config migration: " + path + ": " + value + " is now " + path + ".enabled: " + enabled
+                    + " (the rest of the section is filled in with the shipped settings).");
         }
     }
 
@@ -1584,7 +1644,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         String path = ConfigReset.normalise(section);
         if (!ConfigReset.allowed(path)) {
             out.add("&c" + (path.isEmpty() ? "Name a section." : "'" + path + "' can't be reset.")
-                    + " &7Allowed: arcade (or arcade.<part>), packs, minis.loot.natural, minis.effects, clock.");
+                    + " &7Allowed: arcade (or arcade.<part>), games (or games.<part>), packs, minis.loot.natural,"
+                    + " minis.effects, clock.");
             return out;
         }
         org.bukkit.configuration.file.YamlConfiguration bundled = ArcadeConfigMigration.bundled();
@@ -2065,6 +2126,11 @@ public final class HomeCraftManagement extends JavaPlugin {
     /** Sound Mufflers, or null if they failed to start. */
     public com.dierks.homecraft.muffler.SoundMufflerService soundMufflers() {
         return soundMufflers;
+    }
+
+    /** The Games framework, or null if it failed to start. */
+    public com.dierks.homecraft.games.GamesService games() {
+        return games;
     }
 
     public com.dierks.homecraft.courier.CourierService courier() {

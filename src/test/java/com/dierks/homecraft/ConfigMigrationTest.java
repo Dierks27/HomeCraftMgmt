@@ -1,6 +1,9 @@
 package com.dierks.homecraft;
 
+import com.dierks.homecraft.config.GamesConfig;
 import com.dierks.homecraft.config.MarketSimConfig;
+import com.dierks.homecraft.games.GameCatalog;
+import com.dierks.homecraft.games.GameSpec;
 import com.dierks.homecraft.market.sim.RealSymbol;
 import com.dierks.homecraft.market.sim.SimSettings;
 import com.dierks.homecraft.mini.Grade;
@@ -1675,5 +1678,101 @@ class ConfigMigrationTest {
         HomeCraftManagement.liveMarketSwitch(yaml("store:\n  name: Crate\n"), log);
         assertEquals(List.of(), log);
         assertEquals(bundled().saveToString(), shipped.saveToString());
+    }
+
+    // ---- a bare `games: false` / `games.<id>: false` (spec §13, R3.15) -----------------------
+    //
+    // The same trap as market.sim: a scalar where a Games section belongs would be replaced by the
+    // backfill with the whole shipped section, enabled included. gamesSwitch rewrites it first.
+
+    /** The bundled config.yml as text, with the lines from {@code from} up to {@code to} replaced. */
+    private static String bundledReplacing(String from, String to, String replacement) throws IOException {
+        String text;
+        try (InputStream in = ConfigMigrationTest.class.getResourceAsStream("/config.yml")) {
+            assertNotNull(in, "the bundled config.yml is missing from the test classpath");
+            text = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        int a = text.indexOf(from);
+        int b = to == null ? text.length() : text.indexOf(to, a + 1);
+        assertTrue(a > 0 && b > a, "fixture: config.yml ships " + from.trim());
+        return text.substring(0, a) + replacement + text.substring(b);
+    }
+
+    /** games.<id>'s leaves in a config, full paths, in file order. */
+    private static List<String> gameLeaves(YamlConfiguration c, String id) {
+        List<String> leaves = new ArrayList<>();
+        for (String key : c.getConfigurationSection("games." + id).getKeys(true)) {
+            if (!c.isConfigurationSection("games." + id + "." + key)) {
+                leaves.add("games." + id + "." + key);
+            }
+        }
+        return leaves;
+    }
+
+    @Test
+    void aBareGameSwitchSurvivesMigrateAndBackfillAsItsEnabledKey() throws Exception {
+        YamlConfiguration shipped = bundled();
+        YamlConfiguration onDisk = yaml(bundledReplacing("\n  ore_slots:\n", "  # ---- twenty_one ----",
+                "\n  ore_slots: false\n"));
+        List<String> added = new ArrayList<>();
+        List<String> log = startUp(onDisk, added);
+
+        assertEquals(1, log.size(), log.toString());
+        assertTrue(log.get(0).contains("games.ore_slots.enabled: false"), log.get(0));
+        assertFalse(log.get(0).startsWith(HomeCraftManagement.WARN), "a plain off is not a warning: " + log);
+        assertEquals(Boolean.FALSE, onDisk.get("games.ore_slots.enabled", null), "ore_slots stays off");
+        List<String> rest = new ArrayList<>(gameLeaves(shipped, "ore_slots"));
+        assertTrue(rest.remove("games.ore_slots.enabled"));
+        assertEquals(rest, added, "the backfill fills in the rest of the section around the switch");
+
+        List<String> warns = new ArrayList<>();
+        GamesConfig.Parsed parsed = GamesConfig.parse(onDisk, warns::add);
+        assertEquals(List.of(), warns, "it now reads cleanly");
+        GameSpec<?> slots = GameCatalog.spec("ore_slots");
+        assertEquals(switchedOff(slots), parsed.settings(slots), "ore_slots reads as shipped, switched off");
+
+        YamlConfiguration reloaded = yaml(onDisk.saveToString());
+        List<String> again = new ArrayList<>();
+        assertEquals(List.of(), startUp(reloaded, again), "a second start changes nothing");
+        assertEquals(List.of(), again);
+        assertEquals(Boolean.FALSE, reloaded.get("games.ore_slots.enabled", null));
+    }
+
+    @Test
+    void aBareGamesTrueBecomesGamesEnabledAndTheRestIsShipped() throws Exception {
+        YamlConfiguration shipped = bundled();
+        YamlConfiguration onDisk = yaml(bundledReplacing("\ngames:\n", null, "\ngames: true\n"));
+        List<String> added = new ArrayList<>();
+        List<String> log = startUp(onDisk, added);
+
+        assertEquals(1, log.size(), log.toString());
+        assertTrue(log.get(0).contains("games.enabled: true"), log.get(0));
+        assertEquals(Boolean.TRUE, onDisk.get("games.enabled", null));
+        assertFalse(added.contains("games.enabled"), "the owner's switch is kept, not backfilled: " + added);
+        assertEquals(shipped.get("games.ore_slots.stakes"), onDisk.get("games.ore_slots.stakes"));
+
+        List<String> warns = new ArrayList<>();
+        GamesConfig.Parsed parsed = GamesConfig.parse(onDisk, warns::add);
+        assertEquals(List.of(), warns);
+        assertTrue(parsed.enabled(), "games: true means the games are on");
+        for (GameSpec<?> spec : GameCatalog.SPECS) {
+            assertEquals(spec.defaults(), parsed.settings(spec), spec.id() + " reads as shipped");
+        }
+    }
+
+    @Test
+    void aBareGameValueThatIsNotASwitchIsWrittenAsOffWithAWarning() throws Exception {
+        YamlConfiguration onDisk = yaml(bundledReplacing("\n  snake:\n", "  # ---- mini_match ----",
+                "\n  snake: maybe\n"));
+        List<String> log = startUp(onDisk, new ArrayList<>());
+        assertEquals(1, log.size(), log.toString());
+        assertTrue(log.get(0).startsWith(HomeCraftManagement.WARN), "named as a warning: " + log);
+        assertEquals(Boolean.FALSE, onDisk.get("games.snake.enabled", null), "snake: maybe fails closed");
+    }
+
+    /** The game's shipped settings with {@code enabled: false}, read through its own parser. */
+    private static <S> S switchedOff(GameSpec<S> spec) {
+        return spec.parse().apply(new GamesConfig.Node("games." + spec.id(), Map.of("enabled", false), w -> { }),
+                spec.defaults());
     }
 }

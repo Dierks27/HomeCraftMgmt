@@ -13,13 +13,17 @@ import java.time.Duration;
  * Card: a title on screen, a harmless firework at the player and a toast sound. The server-wide
  * shout is sent by the Arcade when the prize is granted, so it goes out even if nobody watches the
  * animation.
+ *
+ * <p>Public for the skill games (a new record, a first clear). Games of chance never use it: a
+ * chance result gets a private title at most, never "BIG WIN", a firework others can see or a
+ * shout (spec R1.4).
  */
-final class BigWin {
+public final class BigWin {
 
     private BigWin() {
     }
 
-    static void celebrate(Player player, String label) {
+    public static void celebrate(Player player, String label) {
         if (player == null || !player.isOnline()) {
             return;
         }

@@ -700,6 +700,8 @@ public final class PluginConfig {
     private Market market;
     /** Off until {@link #load()} has read it: every multiplier is exactly 1.0. */
     private MarketSimConfig.Parsed marketSim = MarketSimConfig.Parsed.OFF;
+    /** Off until {@link #load()} has read it (the games ship off anyway). */
+    private GamesConfig.Parsed games = GamesConfig.Parsed.OFF;
     private Shipping shipping;
     private Store store;
     private MenuTitles menuTitles;
@@ -965,6 +967,14 @@ public final class PluginConfig {
         return marketSim;
     }
 
+    /**
+     * The Games (0.35): the {@code games:} section — the common keys and every game's own
+     * settings. Never null; {@link GamesConfig.Parsed#OFF} until loaded.
+     */
+    public GamesConfig.Parsed games() {
+        return games;
+    }
+
     /** (Re)parse config.yml into the typed views above. */
     public void load() {
         FileConfiguration c = plugin.getConfig();
@@ -1127,6 +1137,7 @@ public final class PluginConfig {
         // ---- Daily/weekly quests (Phase 11) ----
         this.quests = readQuests(c);
         this.courier = readCourier(c);
+        this.games = GamesConfig.parse(c, log::warning, log::info);
 
         // ---- The players' calendar: streaks, quests and Arcade limits roll at local midnight ----
         this.clock = new com.dierks.homecraft.util.GameClock(com.dierks.homecraft.util.GameClock.parseZone(

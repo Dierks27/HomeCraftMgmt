@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.world.Session;
 import com.dierks.homecraft.games.world.WorldSessions;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.storage.GamesDao;
+import com.dierks.homecraft.util.GameClock;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.entity.Player;
@@ -424,6 +425,35 @@ public final class GamesService {
         return gate.check(player, game, stake);
     }
 
+    // ---- the restart hold -------------------------------------------------------------------
+
+    /**
+     * The scheduled-restart hold as configured now ({@code games.restart_times},
+     * {@code games.restart_hold_minutes}, read in {@code clock.time_zone}). Built on every call,
+     * so a reload takes effect at once.
+     */
+    public RestartHold restartHold() {
+        GamesConfig.Common c = config().common();
+        return new RestartHold(c.restartTimes(), host.clock().zone(), c.restartHoldMinutes());
+    }
+
+    /**
+     * While a scheduled restart is minutes away, its time for players ("4:00 PM"); otherwise
+     * {@code null}. "Now" is the plugin's clock.
+     */
+    public String restartHeld() {
+        return restartHold().heldFor(host.clock().nowMillis());
+    }
+
+    /**
+     * The refusal for starting something a restart would cut off (a world game, a new round of
+     * chance), or {@code null} to go ahead. Nothing already going is ever stopped by it.
+     */
+    public Refusal restartRefusal() {
+        String at = restartHeld();
+        return at == null ? null : Refusal.restart(at);
+    }
+
     /** Tell the player why not: a red chat line and the refused sound; nothing at all for the cooldown. */
     public void tell(Player player, Refusal refusal) {
         if (player == null || refusal == null || refusal.silent() || refusal.message().isEmpty()) {
@@ -533,6 +563,11 @@ public final class GamesService {
 
     public HomeCraftManagement plugin() {
         return host.plugin();
+    }
+
+    /** The server's calendar where the players live (the plugin's clock; a test's movable one). */
+    public GameClock clock() {
+        return host.clock();
     }
 
     public GameContext context() {

@@ -7,6 +7,7 @@ import com.dierks.homecraft.games.GameAdmin;
 import com.dierks.homecraft.games.GameCatalog;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.Invites;
+import com.dierks.homecraft.games.RestartHold;
 import com.dierks.homecraft.games.world.Session;
 import com.dierks.homecraft.games.world.WorldSessions;
 import com.dierks.homecraft.storage.GamesDao;
@@ -352,6 +353,9 @@ public final class GamesCommand {
         sender.sendMessage(Text.of("&7Today's pick: &f" + (featured == null ? "none" : featured)
                 + (games.config().common().featuredAuto() ? " &8(auto)" : " &8(pinned)")
                 + " &7until &f" + Breaks.untilText(plugin.clock(), games.featured().until())));
+        long now = games.clock().nowMillis();
+        RestartHold hold = games.restartHold();
+        sender.sendMessage(Text.of("&7" + hold.status(now) + (hold.holding(now) ? " &c- held now" : "")));
         log(sender, "status");
     }
 

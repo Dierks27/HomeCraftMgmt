@@ -3,9 +3,11 @@ package com.dierks.homecraft.config;
 import com.dierks.homecraft.games.GameCatalog;
 import com.dierks.homecraft.games.GameSpec;
 import com.dierks.homecraft.games.PlayGate;
+import com.dierks.homecraft.games.RestartHold;
 import com.dierks.homecraft.games.RtpLimits;
 import org.bukkit.configuration.ConfigurationSection;
 
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -49,6 +51,7 @@ public final class GamesConfig {
     /** The common keys, relative to {@code games}, in config order. */
     public static final List<String> COMMON = List.of("enabled", "worlds", "play_worlds", "click_cooldown_ms",
             "chance_daily_tokens", "max_payout", "skill_daily_cap", "featured", "featured_bonus",
+            "restart_times", "restart_hold_minutes",
             "break.daily_choices", "break.pause_days", "break.raise_delay_days");
 
     /**
@@ -78,12 +81,16 @@ public final class GamesConfig {
      * @param skillDailyCap       the most tokens all skill games together pay a player a day
      * @param featured            {@code auto}, or the id of the game or course to feature every day
      * @param featuredBonus       tokens for the first finish of the featured game each day
+     * @param restartTimes        the host's scheduled restarts, local times of every day, sorted
+     *                            with no duplicates (empty: no restart hold)
+     * @param restartHoldMinutes  how long before each restart nothing new starts (1-60)
      * @param breakDailyChoices   the daily limits a player can pick
      * @param breakPauseDays      the pauses a player can pick, in days
      * @param breakRaiseDelayDays how long a raised limit waits before it starts (at least 1)
      */
     public record Common(boolean enabled, List<String> worlds, List<String> playWorlds, int clickCooldownMs,
                          int chanceDailyTokens, int maxPayout, int skillDailyCap, String featured, int featuredBonus,
+                         List<LocalTime> restartTimes, int restartHoldMinutes,
                          List<Integer> breakDailyChoices, List<Integer> breakPauseDays, int breakRaiseDelayDays) {
 
         public Common {
@@ -92,20 +99,37 @@ public final class GamesConfig {
             clickCooldownMs = (int) Math.max(PlayGate.COOLDOWN_FLOOR_MS, clickCooldownMs);
             chanceDailyTokens = Math.max(0, Math.min(MAX_CHANCE_DAILY_TOKENS, chanceDailyTokens));
             featured = featured == null || featured.isBlank() ? "auto" : featured.trim().toLowerCase(Locale.ROOT);
+            // The same sorting, de-duplicating and clamping the hold itself does, so two configs
+            // that hold the same way compare equal.
+            RestartHold hold = new RestartHold(restartTimes, null, restartHoldMinutes);
+            restartTimes = hold.times();
+            restartHoldMinutes = hold.holdMinutes();
             breakDailyChoices = breakDailyChoices == null ? List.of() : List.copyOf(breakDailyChoices);
             breakPauseDays = breakPauseDays == null ? List.of() : List.copyOf(breakPauseDays);
             breakRaiseDelayDays = Math.max(com.dierks.homecraft.games.Breaks.MIN_RAISE_DELAY_DAYS, breakRaiseDelayDays);
         }
 
-        /** The shipped common keys (the games ship OFF). */
+        /**
+         * The shipped common keys (the games ship OFF). The restart times are the owner's host's
+         * schedule, 04:00 and 16:00.
+         */
         public static Common defaults() {
             return new Common(false, List.of("games"), List.of(), 600, 100, 250, 6, "auto", 1,
+                    List.of(LocalTime.of(4, 0), LocalTime.of(16, 0)), RestartHold.DEFAULT_MINUTES,
                     List.of(10, 25, 50, 100), List.of(1, 7, 30), 7);
         }
 
         public Common withEnabled(boolean on) {
             return new Common(on, worlds, playWorlds, clickCooldownMs, chanceDailyTokens, maxPayout, skillDailyCap,
-                    featured, featuredBonus, breakDailyChoices, breakPauseDays, breakRaiseDelayDays);
+                    featured, featuredBonus, restartTimes, restartHoldMinutes, breakDailyChoices, breakPauseDays,
+                    breakRaiseDelayDays);
+        }
+
+        /** The same with these restart times and hold (for tests and admin tools). */
+        public Common withRestarts(List<LocalTime> times, int holdMinutes) {
+            return new Common(enabled, worlds, playWorlds, clickCooldownMs, chanceDailyTokens, maxPayout,
+                    skillDailyCap, featured, featuredBonus, times, holdMinutes, breakDailyChoices, breakPauseDays,
+                    breakRaiseDelayDays);
         }
 
         /** Whether the featured game is picked by the day ({@code featured: auto}). */
@@ -299,13 +323,47 @@ public final class GamesConfig {
         int skillCap = n.whole("skill_daily_cap", d.skillDailyCap(), 0, 1000);
         String featured = featured(n, d.featured());
         int featuredBonus = n.whole("featured_bonus", d.featuredBonus(), 0, 100);
+        List<LocalTime> restartTimes = restartTimes(n, d.restartTimes());
+        int holdMinutes = n.whole("restart_hold_minutes", d.restartHoldMinutes(), RestartHold.MIN_MINUTES,
+                RestartHold.MAX_MINUTES);
         Node b = n.child("break");
         List<Integer> choices = sortedDistinct(b.intList("daily_choices", d.breakDailyChoices(), 1, MAX_CHANCE_DAILY_TOKENS));
         List<Integer> pauses = sortedDistinct(b.intList("pause_days", d.breakPauseDays(), 1, 365));
         int raiseDelay = b.whole("raise_delay_days", d.breakRaiseDelayDays(),
                 com.dierks.homecraft.games.Breaks.MIN_RAISE_DELAY_DAYS, 365, true);
         return new Common(enabled, worlds, playWorlds, cooldown, chanceTokens, maxPayout, skillCap, featured,
-                featuredBonus, choices, pauses, raiseDelay);
+                featuredBonus, restartTimes, holdMinutes, choices, pauses, raiseDelay);
+    }
+
+    /**
+     * {@code restart_times}: a list of "HH:mm" local times ({@code []} = no hold; a single time is
+     * a list of one). An entry that isn't such a time is dropped with one WARN, as a clamp would
+     * be: the other restarts still hold. Duplicates are ignored. Not a list at all (a section) is
+     * junk, like any other common key.
+     */
+    private static List<LocalTime> restartTimes(Node n, List<LocalTime> d) {
+        String k = "restart_times";
+        Object v = n.raw(k);
+        if (v == null) {
+            return d;
+        }
+        if (v instanceof Map<?, ?>) {
+            n.invalid(n.key(k) + " should be a list of times like [\"04:00\", \"16:00\"]");
+            return d;
+        }
+        List<?> items = v instanceof List<?> l ? l : List.of(v);
+        TreeSet<LocalTime> out = new TreeSet<>();
+        for (Object o : items) {
+            LocalTime t = RestartHold.parseTime(o);
+            if (t != null) {
+                out.add(t);
+            } else if (o instanceof Number num) {
+                n.warn(n.key(k) + " " + o + " is not a time - dropped (" + unquoted(num) + ")");
+            } else if (o == null || !String.valueOf(o).isBlank()) {
+                n.warn(n.key(k) + " \"" + o + "\" is not a 24-hour time like \"16:00\" - dropped");
+            }
+        }
+        return List.copyOf(out);
     }
 
     /** {@code auto} or an id; never a game of chance (nothing may reward playing one, R1.17). */
@@ -318,6 +376,21 @@ public final class GamesConfig {
             return "auto";
         }
         return id;
+    }
+
+    /**
+     * What to say about a number where a restart time belongs. YAML 1.1 reads an unquoted
+     * {@code 16:00} as the base-60 number 960, so a whole number of minutes in a day is named back
+     * as the time it probably was - in the WARN only, never as a value (no guessing what was meant).
+     */
+    static String unquoted(Number n) {
+        double v = n.doubleValue();
+        if (v == Math.rint(v) && v >= 60 && v < 24 * 60) {
+            int m = (int) v;
+            String time = String.format(Locale.ROOT, "%d:%02d", m / 60, m % 60);
+            return "YAML reads an unquoted " + time + " as " + m + ": write it in quotes, \"" + time + "\"";
+        }
+        return "write each time in quotes, like \"16:00\"";
     }
 
     // ---- each game ----------------------------------------------------------------------------

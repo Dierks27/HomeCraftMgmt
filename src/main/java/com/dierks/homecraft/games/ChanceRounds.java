@@ -163,6 +163,11 @@ public final class ChanceRounds {
      * Start a multi-step round: gate (every step), debit and write the OPEN row with the seed and
      * {@code data} (which must already hold every payout parameter). {@code null} when refused
      * (told) or when this game already has an OPEN round for the player (resume that instead).
+     *
+     * <p>A new round is also refused, before anything is taken, while a scheduled restart is
+     * minutes away ({@link GamesService#restartRefusal}): the restart would leave it to the exit
+     * rule. An OPEN round is never held up (it is resumed, not opened), and instant plays
+     * ({@link #play}) aren't either: they are over as soon as they start.
      */
     public Round open(Player player, Game game, int stake, String data) {
         if (stake <= 0) {
@@ -178,6 +183,11 @@ public final class ChanceRounds {
         try {
             if (games.dao().openRoundFor(id, game.id()) != null) {
                 return null; // the game resumes that one
+            }
+            Refusal held = games.restartRefusal();
+            if (held != null) {
+                games.tell(player, held);
+                return null;
             }
             round = games.dao().openRound(id, game.id(), game.source(), clock().dayKey(), stake,
                     ThreadLocalRandom.current().nextLong(), data, stakeDetail(game.name(), stake), clock().nowMillis());

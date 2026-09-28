@@ -37,6 +37,11 @@ public record Refusal(Reason reason, String message) {
         PERSONAL_LIMIT,
         /** Not enough tokens (step 8). */
         BALANCE,
+        /**
+         * A scheduled server restart is minutes away: nothing new that it would cut off starts
+         * ({@link RestartHold}). Not a gate step: only the places that start such a thing ask.
+         */
+        RESTART,
         /** Anything else a game refuses for (its own message). */
         OTHER
     }
@@ -78,6 +83,15 @@ public record Refusal(Reason reason, String message) {
     /** {@code missing} more tokens are needed. */
     public static Refusal needMore(int missing) {
         return new Refusal(Reason.BALANCE, "You need " + missing + " more token" + (missing == 1 ? "" : "s") + ".");
+    }
+
+    /**
+     * The restart hold: the server restarts at {@code when} (already formatted: "4:00 PM"), so a
+     * new run would be cut off. Says what is true and when it opens again, nothing more (the
+     * host's own chat warnings do the rest).
+     */
+    public static Refusal restart(String when) {
+        return new Refusal(Reason.RESTART, "The server restarts at " + when + ". New runs open again after it.");
     }
 
     /** A game's own refusal. */

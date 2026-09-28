@@ -15,6 +15,7 @@ import java.util.logging.Logger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -24,8 +25,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Pinned here: a milestone counts at its threshold (inclusive) in the right direction for the
  * board; a missing or zero threshold never pays; the daily seed is an HMAC-SHA256 of the day and
  * game keyed with the server's secret — stable for a day, different per day, per game and per
- * secret; a player who can't earn where they are is dealt practice without using the scored try;
- * and a finished daily's "Play again" says what the next deal really is.
+ * secret; a player who can't earn where they are, or who deals minutes before a scheduled restart,
+ * is dealt practice without using the scored try and told one reason; and a finished daily's
+ * "Play again" says what the next deal really is.
  */
 class CabinetGameTest {
 
@@ -99,6 +101,20 @@ class CabinetGameTest {
             assertEquals(42, later.seed(), "the same board as everyone's today");
             assertFalse(CabinetGame.deal(day, 42, true, mark).scored(), "and the one after it is practice");
         }
+    }
+
+    @Test
+    void aDealMinutesBeforeARestartIsPracticeAndSaysOneReason() throws Exception {
+        assertNull(CabinetGame.practiceWhy(true, null), "somewhere it can count with no restart near, nothing is said");
+        assertEquals("&7The server restarts at 4:00 PM, so today's board is practice for now. "
+                        + "Your scored try waits until after.", CabinetGame.practiceWhy(true, "4:00 PM"),
+                "minutes before a restart the player reads when, and that the try waits");
+        assertEquals(CabinetGame.NOT_HERE_DAILY, CabinetGame.practiceWhy(false, "4:00 PM"),
+                "somewhere nothing can be earned that is the reason given, not the restart too");
+        boolean[] written = {false};
+        CabinetGame.DailyStart held = CabinetGame.deal(20_000, 42, false, () -> written[0] = true);
+        assertFalse(held.scored(), "a deal that can't count is practice");
+        assertFalse(written[0], "and the attempt row is never written for it");
     }
 
     @Test

@@ -163,9 +163,11 @@ public final class WorldSessions {
     // ---- the games' API -------------------------------------------------------------------------
 
     /**
-     * Take the player into {@code game} at {@code start}. Refused (false, player told) when they
+     * Take the player into {@code game} at {@code start}. Refused (false, player told) when the
+     * game is closed or a scheduled restart is minutes away ({@link #entryRefusal}), when they
      * are already in a session or have a saved-state row, are dead, asleep, riding, gliding,
-     * falling, burning, in water or lava, or were hurt in the last 5 seconds.
+     * falling, burning, in water or lava, or were hurt in the last 5 seconds. A refusal before the
+     * state machine is reached takes and moves nothing.
      *
      * @param ref     the course (or other) the session is for
      * @param onReady run once the player is in, saved, cleared: give the kit and start here
@@ -176,8 +178,9 @@ public final class WorldSessions {
             return false;
         }
         start(); // the guard is up before anyone is in a session
-        if (!games.enabled(game)) {
-            games.tell(player, Refusal.CLOSED);
+        Refusal refusal = entryRefusal(game);
+        if (refusal != null) {
+            games.tell(player, refusal);
             return false;
         }
         String[] why = {SessionCore.CANT_START};
@@ -188,6 +191,19 @@ public final class WorldSessions {
         }
         games.tell(player, SessionCore.IN_SESSION.equals(why[0]) ? Refusal.IN_SESSION : Refusal.of(why[0]));
         return false;
+    }
+
+    /**
+     * Why nobody may enter {@code game} right now, before anything is taken or moved: it is
+     * closed, or the server restarts in a few minutes and would cut the run off (the restart
+     * hold, which covers every course and round of golf). {@code null} = go ahead. Needs no
+     * server, so the framework's tests run it.
+     */
+    public Refusal entryRefusal(Game game) {
+        if (game == null || !games.enabled(game)) {
+            return Refusal.CLOSED;
+        }
+        return games.restartRefusal();
     }
 
     /** End the player's session: bank what turned up, restore, send them back (R2.3). */

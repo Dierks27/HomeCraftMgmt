@@ -265,19 +265,23 @@ final class GamesKit {
         }
     }
 
-    /** The common keys with the ones the tests turn. */
+    /**
+     * The common keys with the ones the tests turn. No restart times: a test's clock never lands in
+     * a restart hold unless it sets one ({@link GamesConfig.Common#withRestarts}).
+     */
     static GamesConfig.Common common(boolean enabled, int chanceDailyTokens, int cooldownMs, int skillDailyCap) {
         GamesConfig.Common d = GamesConfig.Common.defaults();
         return new GamesConfig.Common(enabled, List.of("games"), List.of("hub"), cooldownMs, chanceDailyTokens,
-                d.maxPayout(), skillDailyCap, d.featured(), d.featuredBonus(), d.breakDailyChoices(),
-                d.breakPauseDays(), d.breakRaiseDelayDays());
+                d.maxPayout(), skillDailyCap, d.featured(), d.featuredBonus(), List.of(), d.restartHoldMinutes(),
+                d.breakDailyChoices(), d.breakPauseDays(), d.breakRaiseDelayDays());
     }
 
     /** The same common keys with {@code featured} set. */
     static GamesConfig.Common featured(GamesConfig.Common c, String featured) {
         return new GamesConfig.Common(c.enabled(), c.worlds(), c.playWorlds(), c.clickCooldownMs(),
                 c.chanceDailyTokens(), c.maxPayout(), c.skillDailyCap(), featured, c.featuredBonus(),
-                c.breakDailyChoices(), c.breakPauseDays(), c.breakRaiseDelayDays());
+                c.restartTimes(), c.restartHoldMinutes(), c.breakDailyChoices(), c.breakPauseDays(),
+                c.breakRaiseDelayDays());
     }
 
     static GamesConfig.Parsed config(GamesConfig.Common common, Object... idThenSettings) {

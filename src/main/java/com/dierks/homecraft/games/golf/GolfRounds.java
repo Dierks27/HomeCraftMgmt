@@ -389,7 +389,7 @@ public final class GolfRounds {
         GolfRun.HoleScore s = r.last;
         p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_BELL, 0.8f, 1.2f);
         if (s.holeInOne()) {
-            BigWin.celebrate(p, "Hole in one!");
+            BigWin.celebrate(p, "&6&lHole in one!", "&f" + GolfRun.strokesText(s.strokes()) + " (par " + s.par() + ")");
         } else {
             p.showTitle(Title.title(Text.of("&a" + GolfRun.holeWord(s)), Text.of("&fIn the cup &7- "
                     + GolfRun.strokesText(s.strokes()) + " (par " + s.par() + ")"),

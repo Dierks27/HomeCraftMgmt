@@ -1632,8 +1632,9 @@ games:
     daily_limit: 30
     # Target tokens given back per 100 put in (85-95).
     rtp: 90
-    # Exactly 24 bases, clockwise from the top-left corner (slots 0-8, 17, 26, 35,
+    # 24 bases, clockwise from the top-left corner (slots 0-8, 17, 26, 35,
     # 44-36, 27, 18, 9): 13 x 0, 5 x 1, 3 x 2, 2 x 4, 1 x 5. No three zeros in a row.
+    # 8 or 12 bases are repeated around the ring.
     segments: [5, 0, 1, 0, 2, 0, 0, 1, 0, 4, 0, 1, 0, 2, 0, 1, 0, 4, 0, 0, 1, 0, 2, 0]
   # ---- higher_lower ----
   # Higher or Lower: guess whether the next card is higher or lower; each right

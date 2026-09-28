@@ -7,15 +7,22 @@ import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.persistence.PersistentDataType;
 
+import java.util.Collection;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
  * Entities a game spawns — a golf ball, a race boat (spec R2.15, R3.8, R3.13).
  *
  * <p>They are never persistent and always carry {@link Keys#GAME_ENTITY}
  * ({@code "<gameId>:<owner>"}), so a crash can't leave one standing: anything tagged is removed
- * when the game starts and whenever a chunk loads with one in it. Deliberately NOT the effects
- * service's tag, which deletes whatever carries it.
+ * when the game starts, once the worlds are up, and whenever a chunk loads with one in it (a
+ * non-persistent entity is never saved, so one that loads is always a leftover). Deliberately NOT
+ * the effects service's tag, which deletes whatever carries it — and an entity carrying that tag
+ * is never touched here.
+ *
+ * <p>The session guard also keeps them whole: nobody can damage, break, enter (but the owner) or
+ * dress a tagged entity, so a boat can never become a boat item.
  */
 public final class WorldEntities {
 
@@ -53,22 +60,65 @@ public final class WorldEntities {
     }
 
     /**
-     * Remove every entity {@code game} spawned, in every loaded world.
+     * Remove every entity {@code game} spawned, in every loaded world (a game calls this from its
+     * {@code start()}).
      *
      * @return how many were removed
      */
     public static int sweep(Game game) {
+        return sweepWhere(e -> game.id().equals(gameId(e)));
+    }
+
+    /**
+     * Remove every game's entities except those of a player still playing, in every loaded world
+     * (the worlds-up pass).
+     *
+     * @param playing whether an owner is still in a session (their entities stay)
+     * @return how many were removed
+     */
+    static int sweepAll(Predicate<UUID> playing) {
+        return sweepWhere(e -> {
+            if (gameId(e) == null) {
+                return false;
+            }
+            UUID owner = owner(e);
+            return owner == null || !playing.test(owner);
+        });
+    }
+
+    /**
+     * Remove the game entities of a chunk that just loaded (EntitiesLoadEvent): a live one is never
+     * saved, so any that loads is a leftover.
+     *
+     * @return how many were removed
+     */
+    static int removeLoaded(Collection<Entity> entities) {
+        int removed = 0;
+        for (Entity e : entities) {
+            if (gameId(e) != null && !effect(e)) {
+                e.remove();
+                removed++;
+            }
+        }
+        return removed;
+    }
+
+    private static int sweepWhere(Predicate<Entity> match) {
         int removed = 0;
         for (World world : Bukkit.getWorlds()) {
             for (Entity e : world.getEntities()) {
-                if (game.id().equals(gameId(e))) {
+                if (!effect(e) && match.test(e)) {
                     e.remove();
                     removed++;
                 }
             }
         }
-        // F3: also sweep on EntitiesLoadEvent (through GamesService.on) for chunks loaded later.
         return removed;
+    }
+
+    /** Whether the effects service owns it: never ours to remove. */
+    private static boolean effect(Entity e) {
+        return Keys.EFFECT_ENTITY != null && e.getPersistentDataContainer().has(Keys.EFFECT_ENTITY);
     }
 
     private static String tag(Entity entity) {

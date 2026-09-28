@@ -1,0 +1,1497 @@
+package com.dierks.homecraft.games.world;
+
+import com.dierks.homecraft.games.EndReason;
+import com.dierks.homecraft.games.Refusal;
+import com.dierks.homecraft.storage.GamesDao;
+
+import java.sql.SQLException;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+/**
+ * The world-session state machine (spec §7.2, §7.5, §7.6): every way into a world game and every
+ * way out, with no Bukkit types in it, so each path can be walked in a test through a fake
+ * {@link Port}.
+ *
+ * <p>The rules it keeps, because these are the paths that can lose or duplicate a player's things:
+ * <ul>
+ *   <li><b>One at a time.</b> A player with any in-memory phase (ENTERING, ACTIVE, LEAVING), a
+ *       recovery on the way, or ANY live saved-state row can't enter. ENTERING is set before
+ *       anything else; the row is a plain INSERT the database refuses while another live row
+ *       exists. Every later write names its {@code session_id}, and every async callback carries a
+ *       token, so a late callback from an old session can never touch a newer one.</li>
+ *   <li><b>Nothing changes before the row is saved.</b> The inventory is closed first (the cursor
+ *       and crafting grid go home), the player travels, THEN the state is captured and inserted,
+ *       THEN they are changed.</li>
+ *   <li><b>A snapshot is applied only where it was taken</b> (Multiverse-Inventories swaps
+ *       inventories per world group), OVERWRITES, and is followed in the same tick by RETURN. A
+ *       RETURN row is never applied again: it only sends the player home and hands over the carry.
+ *       A dead player is never restored; the row waits for the respawn.</li>
+ *   <li><b>Anything that reached the player during the game</b> (an auction delivery, an inbox
+ *       Mini) is banked in the row's {@code carry} BEFORE the restore overwrites the inventory,
+ *       and handed over once they are home. A crash in between loses nothing and duplicates
+ *       nothing: a crash-join restore is overwrite-only and the carry is still in the row.</li>
+ *   <li><b>Only home is DONE.</b> The row is marked DONE after the return teleport and the carry;
+ *       a failed step keeps it, and the next join, {@code /hcm leave} or an admin finishes it.</li>
+ * </ul>
+ *
+ * <p>Everything runs on the main thread. {@link Port#later} and {@link Port#teleport} complete
+ * there too (and never while the plugin is stopping).
+ *
+ * @param <P> the player handle ({@code Player} on the server)
+ * @param <I> an item stack ({@code ItemStack} on the server)
+ */
+final class SessionCore<P, I> {
+
+    /** An armed teleport of ours is recognised for this long (R2.8). */
+    static final long ARM_TICKS = 200;
+    /** How close a teleport's destination must be to ours, on every axis. */
+    static final double MATCH = 0.01;
+    /** A foreign same-world teleport further than this ends the session. */
+    static final double FAR = 16;
+    /** Hurt this recently and you can't start ("Stand still and safe"). */
+    static final long HURT_TICKS = 100;
+    /** Falling further than this and you can't start. */
+    static final float FALL = 3f;
+    /** An entry still teleporting after this long is dropped (its callback never came). */
+    static final long STALE_ENTERING_TICKS = 600;
+    /** DONE rows are kept this long for support, then pruned. */
+    static final long KEEP_DONE_MS = 7L * 24 * 60 * 60 * 1000;
+    /** Respawn restores wait this long, so Multiverse-Inventories' own respawn pass runs first. */
+    static final long RESPAWN_DELAY = 5;
+    /** One void rescue per this many ticks. */
+    static final long VOID_COOLDOWN = 20;
+
+    static final String IN_SESSION = Refusal.IN_SESSION.message();
+    static final String STILL_SENDING = "Your last game is still sending you back. Type /hcm leave.";
+    static final String SAFE = "Stand still and safe to start.";
+    static final String HANDS = "Put down what you're holding first.";
+    static final String CANT_START = "Couldn't start the game right now.";
+    static final String CANT_REACH = "Couldn't get you to the game right now.";
+
+    static final String BACK = "&aYour things are back.";
+    static final String BACK_AFTER_RESTART = "&aYour things are back &7— the server restarted during your game.";
+    static final String BACK_BY_ADMIN = "&aYour things are back &7— an admin helped.";
+    static final String SAFE_WITH_ADMIN = "&cYour things are safe &7— an admin will help.";
+    static final String NOT_HOME = "&cCouldn't send you back yet. &7Type &e/hcm leave &7to try again.";
+    static final String NOT_RESTORED = "&cCouldn't bring your things back yet. &7Type &e/hcm leave &7to try again.";
+    static final String FULL = "&eYour inventory is full. &7Make room, then type &e/hcm leave &7for the rest.";
+    static final String NOT_IN_GAME = "&7You're not in a game.";
+    static final String ENDED = "&7Your game has ended.";
+
+    /** Why a recovery runs, which decides what the player is told. */
+    enum Why { JOIN, RESPAWN, READY, RETRY, ADMIN }
+
+    /** What a teleport during a session means (R2.8). */
+    enum Move {
+        /** One of ours (a checkpoint, a rescue, our own dismount). */
+        OURS,
+        /** Someone else's, but small or harmless: the session goes on (the game may void a run). */
+        KEEP,
+        /** Out of the session world, or far: the session ends where they stand. */
+        END
+    }
+
+    /** What the player's body is doing when they ask to start (R2.9). */
+    record Standing(boolean dead, boolean sleeping, boolean gliding, boolean riding, boolean ownBoat,
+                    boolean otherScreen, float fallDistance, boolean onGround, int fireTicks, boolean inLava,
+                    boolean inWater, long ticksSinceHurt) {
+
+        /** Standing still on the ground, hurt long ago, nothing open. */
+        static Standing still() {
+            return new Standing(false, false, false, false, false, false, 0f, true, 0, false, false, Long.MAX_VALUE);
+        }
+    }
+
+    /** A snapshot decoded and ready to go on (nothing has changed while it was decoded). */
+    interface Restore<P> {
+        void applyTo(P player);
+    }
+
+    /** What a session tells its game. The world sessions run each inside the game's guard. */
+    interface Hooks<P> {
+        /** In, saved, cleared: give the kit and start. */
+        void ready(P player);
+
+        /** The session ended (after the restore). */
+        void ended(P player, EndReason reason);
+
+        /** Fell out of the world, or was moved by someone else a little way. */
+        void voided(P player);
+    }
+
+    /** Everything the state machine needs from the server. */
+    interface Port<P, I> {
+        UUID id(P p);
+
+        String name(P p);
+
+        boolean online(P p);
+
+        boolean dead(P p);
+
+        String world(P p);
+
+        Place location(P p);
+
+        boolean worldExists(String world);
+
+        /** The world's spawn, or {@code null} if it is gone. */
+        Place spawn(String world);
+
+        /** The main (first) world's spawn. */
+        Place mainSpawn();
+
+        /** Whether the world is one of {@code games.worlds} (nothing is ever dropped there). */
+        boolean gamesWorld(String world);
+
+        /** Whether the chunk at {@code place} is loaded (a same-tick teleport is possible). */
+        boolean loaded(Place place);
+
+        long tick();
+
+        long now();
+
+        /** Shutting down or disabling: no task can run, so no teleport may be started. */
+        boolean stopping();
+
+        /** Run on the main thread after {@code ticks}; dropped while stopping. */
+        void later(long ticks, Runnable task);
+
+        /** Our async teleport; {@code done} runs later on the main thread (never while stopping). */
+        void teleport(P p, Place to, Consumer<Boolean> done);
+
+        /** Our synchronous teleport. */
+        boolean teleportNow(P p, Place to);
+
+        Standing standing(P p, String gameId);
+
+        void closeInventory(P p);
+
+        /** Nothing on the cursor and nothing in the crafting grid. */
+        boolean handsFree(P p);
+
+        /** The player's whole state now, as a new ACTIVE row. */
+        SavedState capture(P p, String sessionId, String gameId, String ref, String sessionWorld, Place from, long now);
+
+        /** Decode a snapshot; throws (and changes nothing) if it can't be read. */
+        Restore<P> prepare(SavedState s);
+
+        /** ADVENTURE first, then empty everything (§7.2 step 6). */
+        void clearForGame(P p);
+
+        /** Empty the cursor, the crafting grid and every slot; return what wasn't a kit item. */
+        List<I> takeExtras(P p);
+
+        /** Throw away what's on the cursor and in the crafting grid (an overwrite restore). */
+        void discardHeld(P p);
+
+        /** Remove kit items from the inventory, the cursor and the ender chest. */
+        void stripKit(P p);
+
+        /** Add to the inventory; return what didn't fit. */
+        List<I> give(P p, List<I> items);
+
+        /** The item blob for a list ({@code null} for none). */
+        byte[] encode(List<I> items);
+
+        /** The list back from a blob; throws if it can't be read. */
+        List<I> decode(byte[] blob);
+
+        String describe(I item);
+
+        void drop(P p, List<I> items);
+
+        /** Write the player's data to disk now, so a crash can't undo a restore. */
+        void save(P p);
+
+        /** Leave any vehicle. */
+        void dismount(P p);
+
+        /** Leave and remove the game vehicle they ride (a race boat), if any. */
+        void removeGameVehicle(P p);
+
+        void tell(P p, String line);
+    }
+
+    /** A player's session in memory. */
+    final class Live {
+        final P player;
+        final UUID uuid;
+        final long token;
+        final String sid;
+        final String gameId;
+        final String ref;
+        final Place start;
+        final Hooks<P> hooks;
+        final long startedAt;
+        final long enteredTick;
+        Session.Phase phase = Session.Phase.ENTERING;
+        Place from;
+        Place safe;
+        String world;
+        EndReason abort;
+        long voidTick = Long.MIN_VALUE / 2;
+        boolean deathQueued;
+        List<I> deathStash;
+        /** Extras the database refused to bank: handed back right after the restore instead. */
+        final List<I> unbanked = new ArrayList<>();
+
+        Live(P player, UUID uuid, long token, String sid, String gameId, String ref, Place start, Hooks<P> hooks) {
+            this.player = player;
+            this.uuid = uuid;
+            this.token = token;
+            this.sid = sid;
+            this.gameId = gameId;
+            this.ref = ref;
+            this.start = start;
+            this.hooks = hooks;
+            this.startedAt = port.now();
+            this.enteredTick = port.tick();
+            this.world = start.world();
+        }
+
+        Session snapshot() {
+            return new Session(uuid, gameId, ref, sid, world, phase, startedAt);
+        }
+    }
+
+    private record Armed(Place target, long tick) {
+    }
+
+    private final GamesDao dao;
+    private final Port<P, I> port;
+    private final Logger log;
+    private final long bootedAt;
+
+    private final Map<UUID, Live> live = new HashMap<>();
+    /** Recoveries and hand-overs under way outside a session: player → token. */
+    private final Map<UUID, Long> recovering = new HashMap<>();
+    /** Players with a live row (O(1) for everyone else); unknown if it couldn't be loaded. */
+    private final Set<UUID> rows = new HashSet<>();
+    private boolean rowsKnown;
+    private final Map<UUID, ArrayDeque<Armed>> armed = new HashMap<>();
+    private final Map<UUID, Long> ownDismount = new HashMap<>();
+    private final Set<String> reported = new HashSet<>();
+    private long tokens;
+
+    SessionCore(GamesDao dao, Port<P, I> port, Logger log) {
+        this.dao = dao;
+        this.port = port;
+        this.log = log;
+        this.bootedAt = port.now();
+        try {
+            rows.addAll(dao.livePlayers());
+            rowsKnown = true;
+        } catch (SQLException | RuntimeException e) {
+            log.log(Level.SEVERE, "Could not read the games' saved player states - checking each join instead", e);
+        }
+        try {
+            int pruned = dao.pruneDone(port.now() - KEEP_DONE_MS);
+            if (pruned > 0) {
+                log.info("Games: pruned " + pruned + " finished saved state(s) older than a week.");
+            }
+        } catch (SQLException | RuntimeException e) {
+            log.log(Level.WARNING, "Could not prune old games saved states", e);
+        }
+    }
+
+    // ---- questions ------------------------------------------------------------------------------
+
+    /** The player's session, or {@code null}. */
+    Session session(UUID player) {
+        Live s = live.get(player);
+        return s == null ? null : s.snapshot();
+    }
+
+    Session.Phase phase(UUID player) {
+        Live s = live.get(player);
+        return s == null ? null : s.phase;
+    }
+
+    /** Nobody is in a session: the move and teleport listeners stop at this. */
+    boolean none() {
+        return live.isEmpty();
+    }
+
+    List<Session> sessions() {
+        List<Session> out = new ArrayList<>();
+        for (Live s : live.values()) {
+            out.add(s.snapshot());
+        }
+        return out;
+    }
+
+    /** The players in sessions, for the server's own lookups. */
+    List<P> players() {
+        List<P> out = new ArrayList<>();
+        for (Live s : live.values()) {
+            out.add(s.player);
+        }
+        return out;
+    }
+
+    /** Whether the player has a live row (O(1) once loaded; asks the database if it couldn't be). */
+    boolean hasRow(UUID player) {
+        if (rowsKnown) {
+            return rows.contains(player);
+        }
+        try {
+            return dao.loadState(player) != null;
+        } catch (SQLException e) {
+            return true;
+        }
+    }
+
+    /** Back from every game: no session, nothing on the way, no live row. */
+    boolean home(UUID player) {
+        return !live.containsKey(player) && !recovering.containsKey(player) && !hasRow(player);
+    }
+
+    /** Whether a recovery or a hand-over is under way for the player. */
+    boolean recovering(UUID player) {
+        return recovering.containsKey(player);
+    }
+
+    /** Why a player standing like this can't start, or {@code null} if they can (R2.9). */
+    static String refusal(Standing s) {
+        if (s.dead()) {
+            return SAFE;
+        }
+        if (s.sleeping()) {
+            return "Get out of bed first.";
+        }
+        if (s.gliding()) {
+            return "Land first.";
+        }
+        if (s.riding() && !s.ownBoat()) {
+            return "Get off first.";
+        }
+        if (s.otherScreen()) {
+            return "Close what you have open first.";
+        }
+        if (s.fallDistance() > FALL || (!s.onGround() && !s.ownBoat()) || s.fireTicks() > 0 || s.inLava()
+                || s.inWater() || s.ticksSinceHurt() < HURT_TICKS) {
+            return SAFE;
+        }
+        return null;
+    }
+
+    /** Whether a teleport is the one we armed: cause PLUGIN, armed no longer ago than 200 ticks, within 0.01. */
+    static boolean matches(Place armedTarget, long armedTick, long nowTick, String cause, Place to) {
+        return "PLUGIN".equals(cause) && nowTick - armedTick <= ARM_TICKS && armedTarget.near(to, MATCH);
+    }
+
+    /**
+     * What a teleport of a session player means (R2.8): ours by exact match (or our own
+     * dismount); otherwise leaving the session world or moving further than 16 blocks ends it,
+     * and DISMOUNT, EXIT_BED, UNKNOWN or a short hop keeps it.
+     */
+    static Move classify(boolean ours, boolean ownDismount, String cause, Place from, Place to, String sessionWorld) {
+        if (ours || (ownDismount && "DISMOUNT".equals(cause))) {
+            return Move.OURS;
+        }
+        if (to == null || sessionWorld == null || !sessionWorld.equals(to.world())) {
+            return Move.END;
+        }
+        if ("DISMOUNT".equals(cause) || "EXIT_BED".equals(cause) || "UNKNOWN".equals(cause)) {
+            return Move.KEEP;
+        }
+        return from != null && from.distance(to) <= FAR ? Move.KEEP : Move.END;
+    }
+
+    // ---- entering -------------------------------------------------------------------------------
+
+    /**
+     * Start taking the player into a game at {@code start}.
+     *
+     * @return {@code null} if the entry started, else the refusal to tell them
+     */
+    String enter(P p, String gameId, String ref, Place start, Hooks<P> hooks) {
+        UUID id = port.id(p);
+        Live cur = live.get(id);
+        if (cur != null) {
+            if (cur.phase != Session.Phase.ENTERING || port.tick() - cur.enteredTick <= STALE_ENTERING_TICKS) {
+                return IN_SESSION;
+            }
+            live.remove(id);
+            log.warning("Games: dropped " + port.name(p) + "'s entry that never arrived (session " + cur.sid + ")");
+        }
+        if (recovering.containsKey(id)) {
+            return STILL_SENDING;
+        }
+        SavedState row;
+        try {
+            row = dao.loadState(id);
+        } catch (SQLException e) {
+            log.log(Level.SEVERE, "Games: could not check " + port.name(p) + "'s saved state", e);
+            return CANT_START;
+        }
+        if (row != null) {
+            rows.add(id);
+            return STILL_SENDING;
+        }
+        rows.remove(id);
+        if (start == null || !port.worldExists(start.world())) {
+            return CANT_START;
+        }
+        String why = refusal(port.standing(p, gameId));
+        if (why != null) {
+            return why;
+        }
+        Live s = new Live(p, id, ++tokens, UUID.randomUUID().toString(), gameId, ref == null ? "" : ref, start, hooks);
+        live.put(id, s); // ENTERING, before anything else: a second entry is refused from here on
+        // The rest waits a tick: closing an inventory from inside its own click is unsafe.
+        port.later(1, () -> depart(s));
+        return null;
+    }
+
+    private void depart(Live s) {
+        P p = s.player;
+        if (live.get(s.uuid) != s) {
+            return;
+        }
+        if (!port.online(p) || s.abort != null) {
+            live.remove(s.uuid);
+            return;
+        }
+        port.closeInventory(p); // the cursor and the crafting grid go back into the inventory first
+        String why = port.handsFree(p) ? refusal(port.standing(p, s.gameId)) : HANDS;
+        if (why != null) {
+            live.remove(s.uuid);
+            refuse(p, why);
+            return;
+        }
+        s.from = port.location(p);
+        go(p, s.start, false, ok -> arrived(s, ok));
+    }
+
+    private void arrived(Live s, boolean ok) {
+        P p = s.player;
+        UUID id = s.uuid;
+        if (live.get(id) != s) {
+            return; // dropped (quit, stop) or replaced: nothing of theirs was touched
+        }
+        if (!ok) {
+            live.remove(id);
+            if (port.online(p)) {
+                refuse(p, CANT_REACH);
+            }
+            return;
+        }
+        if (!port.online(p) || port.dead(p)) {
+            live.remove(id);
+            return;
+        }
+        if (s.abort != null) {
+            abort(s, null);
+            return;
+        }
+        Place here = port.location(p);
+        if (!s.start.sameWorld(here) || here.distance(s.start) > FAR) {
+            live.remove(id); // someone else moved them on the way; they still have everything
+            refuse(p, CANT_REACH);
+            return;
+        }
+        SavedState existing;
+        try {
+            existing = dao.loadState(id);
+        } catch (SQLException e) {
+            log.log(Level.SEVERE, "Games: could not check " + port.name(p) + "'s saved state", e);
+            abort(s, CANT_START);
+            return;
+        }
+        if (existing != null) {
+            rows.add(id);
+            abort(s, STILL_SENDING);
+            return;
+        }
+        if (!port.handsFree(p)) {
+            abort(s, HANDS);
+            return;
+        }
+        SavedState state = port.capture(p, s.sid, s.gameId, s.ref, here.world(), s.from, port.now());
+        boolean saved;
+        try {
+            saved = dao.saveState(state); // a plain INSERT: refused while any live row exists
+        } catch (SQLException e) {
+            log.log(Level.SEVERE, "Games: could not save " + port.name(p) + "'s state - not starting", e);
+            saved = false;
+        }
+        if (!saved) {
+            abort(s, CANT_START);
+            return;
+        }
+        rows.add(id);
+        s.world = here.world();
+        s.safe = s.start;
+        try {
+            port.clearForGame(p);
+        } catch (RuntimeException e) {
+            log.log(Level.SEVERE, "Games: could not ready " + port.name(p) + " for " + s.gameId + " - sending them back", e);
+            s.phase = Session.Phase.LEAVING;
+            end(s, EndReason.GAME_OFF);
+            return;
+        }
+        s.phase = Session.Phase.ACTIVE;
+        s.hooks.ready(p);
+    }
+
+    /** An entry that arrived but must not start: nothing was changed; send them back where they were. */
+    private void abort(Live s, String why) {
+        live.remove(s.uuid);
+        if (s.from != null) {
+            go(s.player, s.from, false, ok -> {
+            });
+        }
+        if (why != null) {
+            refuse(s.player, why);
+        }
+    }
+
+    // ---- leaving --------------------------------------------------------------------------------
+
+    /**
+     * End the player's session for {@code reason}. With no session, {@code /hcm leave} (and an
+     * admin) finish a row that is still sending the player back.
+     */
+    void leave(P p, EndReason reason) {
+        UUID id = port.id(p);
+        Live s = live.get(id);
+        if (s == null) {
+            if (reason == EndReason.COMMAND || reason == EndReason.QUIT_ITEM || reason == EndReason.ADMIN) {
+                if (recovering.containsKey(id)) {
+                    return;
+                }
+                if (hasRow(id)) {
+                    recover(p, reason == EndReason.ADMIN ? Why.ADMIN : Why.RETRY);
+                } else if (reason == EndReason.COMMAND) {
+                    port.tell(p, NOT_IN_GAME);
+                }
+            }
+            return;
+        }
+        switch (s.phase) {
+            case ENTERING -> {
+                if (reason == EndReason.DISCONNECT || port.stopping()) {
+                    live.remove(id);
+                } else {
+                    s.abort = reason; // the arrival sends them back without starting
+                }
+            }
+            case LEAVING -> {
+                // already on the way out
+            }
+            case ACTIVE -> {
+                s.phase = Session.Phase.LEAVING;
+                end(s, reason);
+            }
+        }
+    }
+
+    /** The quit path (PlayerQuitEvent, LOWEST): restore in place, no teleport. */
+    void quit(P p) {
+        UUID id = port.id(p);
+        recovering.remove(id);
+        armed.remove(id);
+        Live s = live.get(id);
+        if (s != null && s.phase == Session.Phase.ACTIVE) {
+            s.phase = Session.Phase.LEAVING;
+            end(s, EndReason.DISCONNECT);
+        }
+        // An entry or a trip home can't finish now; the next join does (the row says where it got to).
+        Live left = live.remove(id);
+        if (left != null) {
+            giveBackUnbanked(left);
+        }
+        ownDismount.remove(id);
+    }
+
+    /**
+     * Every session ends. While the server is stopping (or the plugin disabling) it restores in
+     * place and marks RETURN without a teleport; otherwise it is the full leave with a synchronous
+     * teleport home (R3.12).
+     */
+    void stop() {
+        boolean stopping = port.stopping();
+        for (Live s : new ArrayList<>(live.values())) {
+            switch (s.phase) {
+                case ACTIVE -> {
+                    s.phase = Session.Phase.LEAVING;
+                    end(s, EndReason.STOP);
+                }
+                case ENTERING -> {
+                    if (stopping) {
+                        live.remove(s.uuid);
+                    } else {
+                        s.abort = EndReason.STOP;
+                    }
+                }
+                case LEAVING -> {
+                    if (stopping) {
+                        live.remove(s.uuid);
+                    }
+                }
+            }
+        }
+        if (stopping) {
+            live.clear();
+            recovering.clear();
+            armed.clear();
+            ownDismount.clear();
+        }
+    }
+
+    /**
+     * The normal leave. In order: off the game's vehicle; a dead player is left for the respawn;
+     * a player outside the session world goes back there first; then extras into the carry,
+     * the snapshot on (overwrite), saved, RETURN, and home.
+     */
+    private void end(Live s, EndReason reason) {
+        P p = s.player;
+        UUID id = s.uuid;
+        boolean inPlace = reason == EndReason.DISCONNECT || reason == EndReason.TELEPORT
+                || (reason == EndReason.STOP && port.stopping());
+        boolean sync = !inPlace && (reason == EndReason.GAME_OFF || reason == EndReason.STOP);
+        ownDismount(p, () -> port.removeGameVehicle(p));
+        if (port.dead(p)) {
+            // Never restore a dead player: the row stays ACTIVE for the respawn (or the next join).
+            port.stripKit(p);
+            live.remove(id);
+            s.hooks.ended(p, reason);
+            return;
+        }
+        SavedState row;
+        try {
+            row = dao.loadState(id);
+        } catch (SQLException e) {
+            log.log(Level.SEVERE, "Games: could not read " + port.name(p) + "'s saved state (session " + s.sid
+                    + ") - leaving them as they are", e);
+            port.stripKit(p);
+            live.remove(id);
+            port.tell(p, SAFE_WITH_ADMIN);
+            s.hooks.ended(p, reason);
+            return;
+        }
+        if (row == null || !s.sid.equals(row.sessionId())) {
+            // No row for this session (an admin discarded it): nothing to put back.
+            log.warning("Games: no saved state for " + port.name(p) + "'s game (session " + s.sid
+                    + ") - their things are left as they are");
+            port.stripKit(p);
+            live.remove(id);
+            s.hooks.ended(p, reason);
+            port.tell(p, ENDED);
+            if (!inPlace && s.from != null) {
+                go(p, s.from, sync, ok -> {
+                });
+            }
+            return;
+        }
+        if (SavedState.RETURN.equals(row.phase())) {
+            port.stripKit(p);
+            s.hooks.ended(p, reason);
+            afterRestore(s, row, reason, inPlace, sync);
+            return;
+        }
+        if (!row.sessionWorld().equals(port.world(p))) {
+            detour(s, row, reason);
+            return;
+        }
+        restoreHere(s, row, reason, inPlace, sync);
+    }
+
+    /**
+     * The world-change backstop (§7.2, §7.5 (1)): at the event, before Multiverse-Inventories
+     * swaps, bank the extras and drop the kit; then go back to the session world, restore there,
+     * and go home.
+     */
+    private void detour(Live s, SavedState row, EndReason reason) {
+        P p = s.player;
+        UUID id = s.uuid;
+        s.unbanked.addAll(bank(p, row));
+        port.stripKit(p);
+        Place back = s.start != null && row.sessionWorld().equals(s.start.world()) ? s.start : port.spawn(row.sessionWorld());
+        if (back == null) {
+            live.remove(id);
+            giveBackUnbanked(s);
+            failed(p, row, null, "its world is gone");
+            s.hooks.ended(p, reason);
+            return;
+        }
+        long token = s.token;
+        port.later(1, () -> { // never teleport from inside the world-change event
+            if (!owns(id, token)) {
+                return;
+            }
+            if (!port.online(p)) {
+                live.remove(id);
+                return;
+            }
+            go(p, back, false, ok -> {
+                if (!owns(id, token)) {
+                    return;
+                }
+                if (!ok || !port.online(p) || !row.sessionWorld().equals(port.world(p))) {
+                    live.remove(id);
+                    giveBackUnbanked(s);
+                    if (port.online(p)) {
+                        port.tell(p, NOT_RESTORED);
+                    }
+                    s.hooks.ended(p, reason);
+                    return;
+                }
+                restoreHere(s, row, reason, false, false);
+            });
+        });
+    }
+
+    /** Restore in the session world: extras banked, snapshot on, saved, RETURN; then home (or not). */
+    private void restoreHere(Live s, SavedState row, EndReason reason, boolean inPlace, boolean sync) {
+        P p = s.player;
+        UUID id = s.uuid;
+        Restore<P> restore;
+        try {
+            restore = port.prepare(row);
+        } catch (RuntimeException e) {
+            // Nothing has changed: the snapshot stays for an admin, the extras go to the carry.
+            s.unbanked.addAll(bank(p, row));
+            port.stripKit(p);
+            live.remove(id);
+            giveBackUnbanked(s);
+            failed(p, row, e, "the saved state can't be read");
+            s.hooks.ended(p, reason);
+            return;
+        }
+        s.unbanked.addAll(bank(p, row));
+        try {
+            restore.applyTo(p);
+        } catch (RuntimeException e) {
+            port.stripKit(p);
+            live.remove(id);
+            giveBackUnbanked(s);
+            failed(p, row, e, "putting it back failed");
+            s.hooks.ended(p, reason);
+            return;
+        }
+        giveBackUnbanked(s);
+        port.save(p);
+        setPhase(p, row, SavedState.RETURN);
+        port.stripKit(p);
+        s.hooks.ended(p, reason);
+        String line = endLine(reason);
+        if (line != null) {
+            port.tell(p, line);
+        }
+        afterRestore(s, row, reason, inPlace, sync);
+    }
+
+    /** After the restore: stay (quit, stop, a teleport out) or go home. */
+    private void afterRestore(Live s, SavedState row, EndReason reason, boolean inPlace, boolean sync) {
+        P p = s.player;
+        UUID id = s.uuid;
+        if (inPlace) {
+            live.remove(id);
+            if (reason == EndReason.TELEPORT) {
+                // They are going somewhere: hand over the carry once they are there.
+                long token = ++tokens;
+                recovering.put(id, token);
+                port.later(1, () -> {
+                    if (owns(id, token)) {
+                        recovering.remove(id);
+                        if (port.online(p)) {
+                            handOver(p, row.sessionId());
+                        }
+                    }
+                });
+            }
+            return;
+        }
+        returnTrip(p, row, sync, s.token);
+    }
+
+    // ---- death, teleports, worlds, the void -----------------------------------------------------
+
+    /**
+     * PlayerDeathEvent at LOWEST: a session player's death is cancelled (the listener revives
+     * them). What would have dropped is kept aside in case another plugin lets the death happen.
+     *
+     * @return whether the player is in a session (so the death must be cancelled)
+     */
+    boolean dying(P p, List<I> nonKitDrops) {
+        Live s = live.get(port.id(p));
+        if (s == null) {
+            return false;
+        }
+        s.deathStash = new ArrayList<>(nonKitDrops);
+        return true;
+    }
+
+    /** PlayerDeathEvent at MONITOR: bank the stash if the death went ahead; leave next tick. */
+    void died(P p, boolean cancelled) {
+        UUID id = port.id(p);
+        Live s = live.get(id);
+        if (s == null) {
+            return;
+        }
+        List<I> stash = s.deathStash;
+        s.deathStash = null;
+        if (!cancelled && stash != null && !stash.isEmpty()) {
+            try {
+                SavedState row = dao.loadState(id);
+                if (row != null && s.sid.equals(row.sessionId())) {
+                    s.unbanked.addAll(addCarry(p, row.sessionId(), stash));
+                }
+            } catch (SQLException e) {
+                log.log(Level.SEVERE, "Games: could not keep " + port.name(p) + "'s things from a death", e);
+            }
+        }
+        if (s.phase == Session.Phase.ACTIVE && !s.deathQueued) {
+            s.deathQueued = true;
+            long token = s.token;
+            port.later(1, () -> {
+                Live cur = live.get(id);
+                if (cur != null && cur.token == token && cur.phase == Session.Phase.ACTIVE) {
+                    leave(p, EndReason.DEATH);
+                }
+            });
+        }
+    }
+
+    /** PlayerTeleportEvent at MONITOR (not cancelled): ours, harmless, or the end of the session. */
+    void teleported(P p, Place from, Place to, String cause) {
+        UUID id = port.id(p);
+        boolean ours = consumeOurs(id, to, cause);
+        Live s = live.get(id);
+        if (s == null || s.phase != Session.Phase.ACTIVE) {
+            return;
+        }
+        switch (classify(ours, dismountIsOurs(id), cause, from, to, s.world)) {
+            case OURS -> {
+                if (to != null && to.world().equals(s.world)) {
+                    s.safe = to;
+                }
+            }
+            case KEEP -> voidNextTick(s);
+            case END -> leave(p, EndReason.TELEPORT);
+        }
+    }
+
+    /** PlayerChangedWorldEvent at LOWEST: a session player left the session world some other way. */
+    void worldChanged(P p) {
+        Live s = live.get(port.id(p));
+        if (s == null || s.phase != Session.Phase.ACTIVE || s.world.equals(port.world(p))) {
+            return;
+        }
+        s.phase = Session.Phase.LEAVING;
+        end(s, EndReason.WORLD_CHANGE);
+    }
+
+    /**
+     * A move: below the world's floor, back to the last safe point (ours; next tick, not from
+     * inside the move), then the game hears of it.
+     */
+    void moved(P p, Place to, double minY) {
+        Live s = live.get(port.id(p));
+        if (s == null || s.phase != Session.Phase.ACTIVE || to == null || to.y() >= minY || !s.world.equals(to.world())) {
+            return;
+        }
+        long now = port.tick();
+        if (now - s.voidTick < VOID_COOLDOWN) {
+            return;
+        }
+        s.voidTick = now;
+        long token = s.token;
+        port.later(1, () -> {
+            Live cur = live.get(s.uuid);
+            if (cur != null && cur.token == token && cur.phase == Session.Phase.ACTIVE) {
+                teleport(p, cur.safe != null ? cur.safe : cur.start);
+                voidNextTick(cur);
+            }
+        });
+    }
+
+    /** A game's own teleport within the session world; the destination is armed as ours. */
+    boolean teleport(P p, Place to) {
+        UUID id = port.id(p);
+        Live s = live.get(id);
+        if (s == null || s.phase != Session.Phase.ACTIVE || to == null || !to.world().equals(s.world)) {
+            return false;
+        }
+        if (port.loaded(to)) {
+            boolean[] ok = {false};
+            go(p, to, true, done -> ok[0] = done);
+            if (!ok[0]) {
+                disarm(id, to);
+            }
+            return ok[0];
+        }
+        go(p, to, false, done -> {
+        });
+        return true;
+    }
+
+    /** Run a dismount the game makes itself, past the dismount guard and the teleport rule. */
+    void ownDismount(P p, Runnable action) {
+        UUID id = port.id(p);
+        ownDismount.put(id, port.tick());
+        try {
+            action.run();
+        } finally {
+            ownDismount.put(id, port.tick());
+        }
+    }
+
+    /** Whether a dismount of this player right now is one of ours (this tick or the last). */
+    boolean dismountIsOurs(UUID id) {
+        Long at = ownDismount.get(id);
+        return at != null && port.tick() - at <= 1;
+    }
+
+    private void voidNextTick(Live s) {
+        long token = s.token;
+        port.later(1, () -> {
+            Live cur = live.get(s.uuid);
+            if (cur != null && cur.token == token && cur.phase == Session.Phase.ACTIVE) {
+                cur.hooks.voided(cur.player);
+            }
+        });
+    }
+
+    // ---- recovery (joins, respawns, the worlds-up pass, /hcm leave, admins) ---------------------
+
+    /** One tick after a join: strays out (unconditionally), then finish any row. */
+    void joined(P p) {
+        UUID id = port.id(p);
+        if (live.containsKey(id)) {
+            return;
+        }
+        port.stripKit(p);
+        if (hasRow(id)) {
+            recover(p, Why.JOIN);
+        }
+    }
+
+    /** After a respawn: a player who died with an ACTIVE row gets it back (a little later, see RESPAWN_DELAY). */
+    void respawned(P p) {
+        UUID id = port.id(p);
+        if (live.containsKey(id) || !hasRow(id)) {
+            return;
+        }
+        port.later(RESPAWN_DELAY, () -> {
+            if (port.online(p) && !port.dead(p)) {
+                recover(p, Why.RESPAWN);
+            }
+        });
+    }
+
+    /** Once the worlds are up: finish every online player's row (a /reload, a stop). */
+    void worldsReady(Collection<P> online) {
+        for (P p : online) {
+            UUID id = port.id(p);
+            if (!live.containsKey(id) && hasRow(id)) {
+                recover(p, Why.READY);
+            }
+        }
+    }
+
+    /**
+     * Finish a row outside a session: a RETURN row only goes home (it is never applied again);
+     * an ACTIVE row is restored overwrite-only in its session world, then goes home.
+     */
+    void recover(P p, Why why) {
+        UUID id = port.id(p);
+        if (live.containsKey(id) || recovering.containsKey(id) || !port.online(p)) {
+            return;
+        }
+        SavedState row;
+        try {
+            row = dao.loadState(id);
+        } catch (SQLException e) {
+            log.log(Level.SEVERE, "Games: could not read " + port.name(p) + "'s saved state", e);
+            return;
+        }
+        if (row == null) {
+            rows.remove(id);
+            if (why == Why.RETRY) {
+                port.tell(p, NOT_IN_GAME);
+            }
+            return;
+        }
+        rows.add(id);
+        long token = ++tokens;
+        if (SavedState.RETURN.equals(row.phase())) {
+            recovering.put(id, token);
+            port.stripKit(p);
+            returnTrip(p, row, false, token);
+            return;
+        }
+        if (port.dead(p)) {
+            return; // after the respawn
+        }
+        if (!port.worldExists(row.sessionWorld())) {
+            failed(p, row, null, "its world " + row.sessionWorld() + " is gone");
+            return;
+        }
+        recovering.put(id, token);
+        if (row.sessionWorld().equals(port.world(p))) {
+            restoreRow(p, row, why, token);
+            return;
+        }
+        // Apply only in the session world (§7.5): go there first.
+        Place there = port.spawn(row.sessionWorld());
+        go(p, there, false, ok -> {
+            if (!owns(id, token)) {
+                return;
+            }
+            if (!ok || !port.online(p) || !row.sessionWorld().equals(port.world(p))) {
+                recovering.remove(id);
+                if (port.online(p)) {
+                    port.tell(p, NOT_RESTORED);
+                }
+                return;
+            }
+            restoreRow(p, row, why, token);
+        });
+    }
+
+    /** The overwrite-only restore of an ACTIVE row (crash-join, respawn, admin): no extras step. */
+    private void restoreRow(P p, SavedState row, Why why, long token) {
+        UUID id = port.id(p);
+        SavedState fresh;
+        try {
+            fresh = dao.loadState(id);
+        } catch (SQLException e) {
+            recovering.remove(id);
+            log.log(Level.SEVERE, "Games: could not read " + port.name(p) + "'s saved state", e);
+            return;
+        }
+        if (fresh == null || !fresh.sessionId().equals(row.sessionId()) || !SavedState.ACTIVE.equals(fresh.phase())) {
+            recovering.remove(id); // it moved on while they travelled
+            return;
+        }
+        Restore<P> restore;
+        try {
+            restore = port.prepare(fresh);
+        } catch (RuntimeException e) {
+            recovering.remove(id);
+            port.stripKit(p);
+            failed(p, fresh, e, "the saved state can't be read");
+            return;
+        }
+        List<I> unbanked = List.of();
+        if (why == Why.RESPAWN) {
+            // A live body after a respawn holds nothing from before the game: bank what it holds.
+            unbanked = bank(p, fresh);
+        } else {
+            port.discardHeld(p); // overwrite only: what a joining player holds may predate the game
+        }
+        port.stripKit(p);
+        try {
+            restore.applyTo(p);
+        } catch (RuntimeException e) {
+            recovering.remove(id);
+            give(p, unbanked);
+            failed(p, fresh, e, "putting it back failed");
+            return;
+        }
+        give(p, unbanked);
+        port.save(p);
+        setPhase(p, fresh, SavedState.RETURN);
+        port.stripKit(p);
+        port.tell(p, switch (why) {
+            case JOIN, READY -> fresh.createdAt() < bootedAt ? BACK_AFTER_RESTART : BACK;
+            case ADMIN -> BACK_BY_ADMIN;
+            default -> BACK;
+        });
+        returnTrip(p, fresh, false, token);
+    }
+
+    // ---- home -----------------------------------------------------------------------------------
+
+    /** Teleport home ({@code from}, or the main spawn if its world is gone); then the carry and DONE. */
+    private void returnTrip(P p, SavedState row, boolean sync, long token) {
+        UUID id = port.id(p);
+        Place from = SavedStateCodec.from(row);
+        Place home = from != null && port.worldExists(from.world()) ? from : port.mainSpawn();
+        if (home != from) {
+            log.warning("Games: " + port.name(p) + " came from a world that is gone ("
+                    + (from == null ? "none" : from.world()) + ") - sending them to spawn instead");
+        }
+        go(p, home, sync, ok -> arrivedHome(p, id, row.sessionId(), token, ok));
+    }
+
+    private void arrivedHome(P p, UUID id, String sid, long token, boolean ok) {
+        if (!owns(id, token)) {
+            return; // a quit, a stop or a newer session took over: the next join finishes it
+        }
+        release(id, token);
+        if (!port.online(p)) {
+            return;
+        }
+        if (!ok) {
+            port.tell(p, NOT_HOME); // stays RETURN: the next join or /hcm leave tries again
+            return;
+        }
+        handOver(p, sid);
+    }
+
+    /** Home: hand over the carry, then DONE. Leftovers drop at their feet, never in a Games world. */
+    private void handOver(P p, String sid) {
+        UUID id = port.id(p);
+        SavedState row;
+        try {
+            row = dao.loadState(id);
+        } catch (SQLException e) {
+            log.log(Level.SEVERE, "Games: could not read " + port.name(p) + "'s saved state", e);
+            port.tell(p, NOT_HOME);
+            return;
+        }
+        if (row == null) {
+            rows.remove(id);
+            return;
+        }
+        if (!row.sessionId().equals(sid) || !SavedState.RETURN.equals(row.phase())) {
+            return;
+        }
+        List<I> carry;
+        try {
+            carry = row.carry() == null ? List.of() : port.decode(row.carry());
+        } catch (RuntimeException e) {
+            failed(p, row, e, "the things kept for them can't be read");
+            return;
+        }
+        if (!carry.isEmpty()) {
+            List<I> left = port.give(p, carry);
+            if (!left.isEmpty()) {
+                if (port.gamesWorld(port.world(p))) {
+                    if (setCarry(p, sid, left)) {
+                        port.save(p);
+                        port.tell(p, FULL);
+                        return; // stays RETURN until there is room
+                    }
+                    log.severe("Games: could not keep " + port.name(p) + "'s leftovers - dropping them");
+                }
+                for (I item : left) {
+                    log.info("Games: " + port.name(p) + "'s inventory was full - dropped "
+                            + port.describe(item) + " at their feet (session " + sid + ")");
+                }
+                port.drop(p, left);
+            }
+            port.save(p);
+        }
+        finish(p, sid);
+        port.stripKit(p);
+    }
+
+    // ---- admin ----------------------------------------------------------------------------------
+
+    /** {@code /hcm games saved <player> restore}: put the saved things back now (§7.5 rules). */
+    String adminRestore(P p) {
+        UUID id = port.id(p);
+        Live s = live.get(id);
+        if (s != null) {
+            if (s.phase == Session.Phase.ACTIVE) {
+                leave(p, EndReason.ADMIN);
+                return "&aEnded their game: their things are going back now.";
+            }
+            return "&7They're on their way into or out of a game. Try in a moment.";
+        }
+        if (recovering.containsKey(id)) {
+            return "&7Their things are already on the way back.";
+        }
+        SavedState row = rowOrNull(id);
+        if (row == null) {
+            return "&7No saved things for them.";
+        }
+        if (SavedState.RETURN.equals(row.phase())) {
+            return "&7Their things were put back already. Use &ereturn &7to send them home.";
+        }
+        if (port.dead(p)) {
+            return "&7They're dead: their things come back when they respawn.";
+        }
+        reported.remove(row.sessionId());
+        recover(p, Why.ADMIN);
+        return "&aPutting their things back now.";
+    }
+
+    /** {@code /hcm games saved <player> return}: send them home (only once their things are back). */
+    String adminReturn(P p) {
+        UUID id = port.id(p);
+        Live s = live.get(id);
+        if (s != null) {
+            return adminRestore(p);
+        }
+        if (recovering.containsKey(id)) {
+            return "&7They're already on the way back.";
+        }
+        SavedState row = rowOrNull(id);
+        if (row == null) {
+            return "&7No saved things for them.";
+        }
+        if (SavedState.ACTIVE.equals(row.phase())) {
+            return "&cTheir things haven't been put back yet. &7Use &erestore &7first.";
+        }
+        recover(p, Why.ADMIN);
+        return "&aSending them back now.";
+    }
+
+    /** {@code /hcm games saved <player> discard confirm}: delete the row for good (logged). */
+    String adminDiscard(UUID id, String name, String by) {
+        Live s = live.get(id);
+        if (s != null) {
+            return "&cThey're in a game. &7Use &erestore &7or &ereturn&7.";
+        }
+        if (recovering.containsKey(id)) {
+            return "&7Their things are on the way back. Try in a moment.";
+        }
+        SavedState row = rowOrNull(id);
+        if (row == null) {
+            return "&7No saved things for them.";
+        }
+        try {
+            if (!dao.deleteState(id, row.sessionId())) {
+                return "&7No saved things for them.";
+            }
+        } catch (SQLException e) {
+            log.log(Level.SEVERE, "Games: could not discard " + name + "'s saved state", e);
+            return "&cCouldn't discard it. &7See the server log.";
+        }
+        rows.remove(id);
+        log.warning("Games: " + by + " discarded " + name + "'s saved state (session " + row.sessionId()
+                + ", game " + row.gameId() + ", phase " + row.phase() + ")");
+        return "&aDiscarded their saved things.";
+    }
+
+    /** The player's most recent finished session still kept for support, or {@code null}. */
+    SavedState lastDone(UUID id) {
+        try {
+            SavedState best = null;
+            for (SavedState s : dao.statesInPhase(SavedState.DONE)) {
+                if (s.player().equals(id) && (best == null || done(s) > done(best))) {
+                    best = s;
+                }
+            }
+            return best;
+        } catch (SQLException e) {
+            log.log(Level.WARNING, "Games: could not read finished saved states", e);
+            return null;
+        }
+    }
+
+    private static long done(SavedState s) {
+        return s.doneAt() == null ? s.createdAt() : s.doneAt();
+    }
+
+    /** The live row, or {@code null} (also when it can't be read, which is logged). */
+    SavedState rowOrNull(UUID id) {
+        try {
+            return dao.loadState(id);
+        } catch (SQLException e) {
+            log.log(Level.SEVERE, "Games: could not read a saved state", e);
+            return null;
+        }
+    }
+
+    // ---- helpers --------------------------------------------------------------------------------
+
+    /** Every teleport of ours: off any vehicle, armed, then sent. */
+    private void go(P p, Place to, boolean sync, Consumer<Boolean> done) {
+        UUID id = port.id(p);
+        ownDismount(p, () -> port.dismount(p));
+        arm(id, to);
+        if (sync) {
+            done.accept(port.teleportNow(p, to));
+        } else {
+            port.teleport(p, to, done);
+        }
+    }
+
+    private void arm(UUID id, Place to) {
+        ArrayDeque<Armed> list = armed.computeIfAbsent(id, k -> new ArrayDeque<>());
+        list.addLast(new Armed(to, port.tick()));
+        while (list.size() > 8) {
+            list.removeFirst();
+        }
+    }
+
+    private void disarm(UUID id, Place to) {
+        ArrayDeque<Armed> list = armed.get(id);
+        if (list != null) {
+            list.removeIf(a -> a.target().equals(to));
+        }
+    }
+
+    private boolean consumeOurs(UUID id, Place to, String cause) {
+        ArrayDeque<Armed> list = armed.get(id);
+        if (list == null || to == null) {
+            return false;
+        }
+        long now = port.tick();
+        for (Iterator<Armed> it = list.iterator(); it.hasNext(); ) {
+            Armed a = it.next();
+            if (now - a.tick() > ARM_TICKS) {
+                it.remove();
+            } else if (matches(a.target(), a.tick(), now, cause, to)) {
+                it.remove();
+                return true;
+            }
+        }
+        if (list.isEmpty()) {
+            armed.remove(id);
+        }
+        return false;
+    }
+
+    /** Whether the async step with {@code token} still belongs to the player's current session or recovery. */
+    private boolean owns(UUID id, long token) {
+        Live s = live.get(id);
+        if (s != null) {
+            return s.token == token;
+        }
+        Long r = recovering.get(id);
+        return r != null && r == token;
+    }
+
+    private void release(UUID id, long token) {
+        Live s = live.get(id);
+        if (s != null && s.token == token) {
+            live.remove(id);
+        } else {
+            Long r = recovering.get(id);
+            if (r != null && r == token) {
+                recovering.remove(id);
+            }
+        }
+    }
+
+    /**
+     * Take everything the player holds that isn't the kit and add it to the row's carry.
+     *
+     * @return what couldn't be banked (the database refused), to be handed straight back
+     */
+    private List<I> bank(P p, SavedState row) {
+        List<I> extras = port.takeExtras(p);
+        if (extras.isEmpty()) {
+            return List.of();
+        }
+        return addCarry(p, row.sessionId(), extras);
+    }
+
+    /** Add to the carry already in the row; each item is logged. Returns what couldn't be kept. */
+    private List<I> addCarry(P p, String sid, List<I> items) {
+        UUID id = port.id(p);
+        try {
+            SavedState row = dao.loadState(id);
+            if (row == null || !row.sessionId().equals(sid)) {
+                return items;
+            }
+            List<I> all = new ArrayList<>();
+            if (row.carry() != null) {
+                all.addAll(port.decode(row.carry())); // an unreadable carry is never overwritten
+            }
+            all.addAll(items);
+            if (!dao.setCarry(id, sid, port.encode(all))) {
+                return items;
+            }
+        } catch (SQLException | RuntimeException e) {
+            log.log(Level.SEVERE, "Games: could not keep " + port.name(p) + "'s things in the carry (session "
+                    + sid + ") - handing them straight back", e);
+            return items;
+        }
+        for (I item : items) {
+            log.info("Games: kept " + port.describe(item) + " for " + port.name(p) + " until they are home (session " + sid + ")");
+        }
+        return List.of();
+    }
+
+    private boolean setCarry(P p, String sid, List<I> items) {
+        try {
+            return dao.setCarry(port.id(p), sid, port.encode(items));
+        } catch (SQLException | RuntimeException e) {
+            log.log(Level.SEVERE, "Games: could not keep " + port.name(p) + "'s things (session " + sid + ")", e);
+            return false;
+        }
+    }
+
+    /** Extras the database refused: straight back into the inventory now the snapshot is on. */
+    private void giveBackUnbanked(Live s) {
+        List<I> items = new ArrayList<>(s.unbanked);
+        s.unbanked.clear();
+        give(s.player, items);
+    }
+
+    private void give(P p, List<I> items) {
+        if (items.isEmpty()) {
+            return;
+        }
+        List<I> left = port.give(p, items);
+        if (!left.isEmpty()) {
+            for (I item : left) {
+                log.warning("Games: dropped " + port.describe(item) + " at " + port.name(p) + "'s feet");
+            }
+            port.drop(p, left);
+        }
+    }
+
+    private void setPhase(P p, SavedState row, String phase) {
+        try {
+            if (!dao.setPhase(port.id(p), row.sessionId(), phase)) {
+                log.severe("Games: " + port.name(p) + "'s saved state (session " + row.sessionId()
+                        + ") was not there to mark " + phase);
+            }
+        } catch (SQLException e) {
+            log.log(Level.SEVERE, "Games: could not mark " + port.name(p) + "'s saved state " + phase
+                    + " (session " + row.sessionId() + ")", e);
+        }
+    }
+
+    private void finish(P p, String sid) {
+        UUID id = port.id(p);
+        try {
+            if (dao.finishState(id, sid, port.now())) {
+                rows.remove(id);
+            }
+        } catch (SQLException e) {
+            log.log(Level.SEVERE, "Games: could not finish " + port.name(p) + "'s saved state (session " + sid + ")", e);
+        }
+    }
+
+    /** A restore that can't happen: keep the row as it is, say so once in the log, reassure the player. */
+    private void failed(P p, SavedState row, Throwable cause, String what) {
+        if (reported.add(row.sessionId())) {
+            log.log(Level.SEVERE, "Games: could not put back " + port.name(p) + "'s things (session "
+                    + row.sessionId() + "): " + what + ". The saved state is kept - /hcm games saved "
+                    + port.name(p) + " show", cause);
+        }
+        if (port.online(p)) {
+            port.tell(p, SAFE_WITH_ADMIN);
+        }
+    }
+
+    private void refuse(P p, String why) {
+        if (port.online(p)) {
+            port.tell(p, "&c" + why);
+        }
+    }
+
+    private static String endLine(EndReason reason) {
+        return switch (reason) {
+            case GAME_OFF -> "&cThat game is taking a break. &7Your things are back.";
+            case ADMIN -> "&7An admin ended your game. Your things are back.";
+            case DEATH -> "&7You're out of the game. Your things are back.";
+            case COMMAND, QUIT_ITEM, TELEPORT, WORLD_CHANGE -> "&7You left the game. Your things are back.";
+            default -> null;
+        };
+    }
+}

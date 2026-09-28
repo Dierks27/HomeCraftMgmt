@@ -141,6 +141,8 @@ public final class GamesService {
             host.logger().log(Level.WARNING, "Could not prune old saved states", e);
         }
         rounds.settleAtStart();
+        // The session and Games-world guards (they check games.enabled themselves).
+        quietly(sessions::start);
         for (Game g : games) {
             if (enabled(g)) {
                 startGame(g);
@@ -199,6 +201,8 @@ public final class GamesService {
         }
         invites.clear();
         featured.forget();
+        // Anyone still in a session ends it the right way for a stop, and the guards come off.
+        quietly(sessions::stop);
     }
 
     /**

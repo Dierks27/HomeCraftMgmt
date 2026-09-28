@@ -233,7 +233,9 @@ class GamesConfigTest {
         Map<String, Object> clamps = new LinkedHashMap<>();
         clamps.put("click_cooldown_ms", 100);
         clamps.put("chance_daily_tokens", 20_000);
-        clamps.put("max_payout", 0);
+        // Clamped from above: a max_payout of 0 (clamped up to 1) caps chance games' payouts so hard
+        // that a stake drops out of the RTP band, and that drop has its own WARN (spec §5.1).
+        clamps.put("max_payout", 2_000_000);
         clamps.put("skill_daily_cap", -3);
         clamps.put("featured_bonus", 1_000);
         clamps.put("break.raise_delay_days", 0);

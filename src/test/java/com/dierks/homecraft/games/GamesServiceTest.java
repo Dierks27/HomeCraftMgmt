@@ -194,4 +194,17 @@ class GamesServiceTest {
         assertEquals(1, slots.joins, "an open one hears the join");
         assertEquals(1, slots.quits, "and the quit");
     }
+
+    @Test
+    void goingBackToARoundAlreadyPaidForSkipsTheGate() {
+        ChanceRounds.Round round = games.rounds().open(alex.player, slots, 5, "v1");
+        assertNotNull(round, "a round opens");
+        games.breaks().pause(alex.id, 1);
+        assertTrue(games.open(alex.player, "test_slots", null),
+                "a pause stops new plays, not the way back to a hand already paid for (spec §5.2)");
+        assertEquals(1, slots.opened, "the game opens to resume it");
+        assertTrue(games.rounds().close(round, 0, "v1"), "the hand is finished");
+        assertFalse(games.open(alex.player, "test_slots", null), "with the round finished, the pause applies again");
+        assertEquals(1, slots.opened, "and the game isn't opened");
+    }
 }

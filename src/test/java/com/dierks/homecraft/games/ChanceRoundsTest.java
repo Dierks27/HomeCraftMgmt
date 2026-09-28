@@ -96,9 +96,19 @@ class ChanceRoundsTest {
     }
 
     @Test
-    void aPayoutIsHeldToTheGamesCap() {
-        games.rounds().play(alex.player, slots, 10, PlayGateTest.engine(100_000));
-        assertEquals(100 - 10 + 250, host.balanceOf(alex.id), "max_payout 250 (above the largest stake) caps it");
+    void aPlayThatWouldPayPastTheGamesCapIsRefusedAndTakesNothing() throws Exception {
+        // The screen shows what the engine decided, so a round never pays a different number: an
+        // engine past max_payout (a bug, or a screen left open while a reload lowered the cap) is
+        // refused before anything moves.
+        assertNull(games.rounds().play(alex.player, slots, 10, PlayGateTest.engine(100_000)), "refused");
+        assertEquals(100, host.balanceOf(alex.id), "nothing taken, nothing paid");
+        assertEquals(0, count("SELECT COUNT(*) FROM game_rounds"), "and no round written");
+        assertTrue(alex.heard().contains("That game's settings just changed. Open it again to play."),
+                "the player is told to reopen it: " + alex.heard());
+        host.move(1_000);
+        assertEquals(250, games.rounds().play(alex.player, slots, 10, PlayGateTest.engine(250)),
+                "a payout at the cap (250) goes ahead");
+        assertEquals(100 - 10 + 250, host.balanceOf(alex.id), "and is paid as decided");
     }
 
     @Test

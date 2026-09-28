@@ -140,4 +140,13 @@ class SkillRewardsTest {
         assertEquals("✦ +1 token (Snake: silver milestone!). You have 5.", alex.said.get(0),
                 "the reward, why, and the new balance");
     }
+
+    @Test
+    void todaysPickCountsTowardTheServerCapButNotTheGamesOwn() {
+        long day = host.clock.dayKey();
+        assertEquals(1, pay(snake, RewardKind.FEATURED, SkillRewards.featuredRef(day), 1), "today's pick pays");
+        assertEquals(1, pay(snake, RewardKind.MILESTONE, SkillRewards.milestoneRef("classic", 1), 1), "bronze pays");
+        assertEquals(1, pay(snake, RewardKind.DAILY_CHALLENGE, SkillRewards.dailyRef(day), 1),
+                "daily_cap 2 still holds the milestone and the daily challenge: the pick is the server cap's only");
+    }
 }

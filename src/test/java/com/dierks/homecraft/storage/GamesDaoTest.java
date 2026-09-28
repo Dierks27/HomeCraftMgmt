@@ -287,7 +287,9 @@ class GamesDaoTest {
         assertEquals(0, dao.payReward(alice, "ore_merge", Source.GAMES_MERGE, DAY, RewardKind.FEATURED, ref, 1, 2, 6,
                 true, "Ore Merge: today's pick", NOW));
         assertEquals("*", one("SELECT game FROM game_rewards"), "stored across games");
-        assertEquals(1, dao.rewardsToday(alice, "snake", DAY), "but it counts toward the game that paid it");
+        assertEquals(0, dao.rewardsToday(alice, "snake", DAY),
+                "it counts toward the server-wide cap only, never the game's own (spec §6.1)");
+        assertEquals(1, dao.rewardsToday(alice, DAY), "the server-wide total has it");
         assertTrue(dao.rewardPaid(alice, "ore_merge", RewardKind.FEATURED, ref));
     }
 

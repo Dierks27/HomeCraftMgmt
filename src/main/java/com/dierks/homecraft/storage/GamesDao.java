@@ -1113,7 +1113,10 @@ public final class GamesDao {
         }
     }
 
-    /** Capped rewards today: for one game ({@code played}), or across all ({@code game} null). */
+    /**
+     * Capped rewards today: for one game ({@code played}, its own kinds only), or across all
+     * ({@code game} null).
+     */
     private static int cappedSum(Connection c, UUID player, long day, String game) throws SQLException {
         StringBuilder uncapped = new StringBuilder();
         for (RewardKind k : RewardKind.values()) {
@@ -1123,7 +1126,9 @@ public final class GamesDao {
         }
         String sql = "SELECT COALESCE(SUM(tokens), 0) FROM game_rewards WHERE player = ? AND day = ?"
                 + (uncapped.isEmpty() ? "" : " AND kind NOT IN (" + uncapped + ")")
-                + (game != null ? " AND played = ?" : "");
+                // Across-games kinds (today's pick, the course of the week) count toward the
+                // server-wide cap only, never one game's own (spec §6.1).
+                + (game != null ? " AND played = ? AND game <> '" + ACROSS_GAMES + "'" : "");
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, player.toString());
             ps.setLong(2, day);

@@ -104,6 +104,9 @@ public final class ChanceRounds {
             "higher_lower", TokenService.Source.ARCADE_HILO,
             "coin_flip", TokenService.Source.ARCADE_COIN_FLIP);
 
+    /** An open screen whose settings changed under it (a reload): reopen to play. */
+    static final Refusal CHANGED = Refusal.of("That game's settings just changed. Open it again to play.");
+
     private final GamesService games;
     /** Game ids whose exit rule is missing or threw, already logged this run. */
     private final Set<String> logged = new HashSet<>();
@@ -128,7 +131,16 @@ public final class ChanceRounds {
         }
         long seed = ThreadLocalRandom.current().nextLong();
         O outcome = engine.decide(seed, stake);
-        int payout = capped(game, stake, engine.payout(outcome));
+        int decided = Math.max(0, engine.payout(outcome));
+        int payout = capped(game, stake, decided);
+        if (payout != decided) {
+            // The screen shows the engine's number, so paying anything else would tell the player
+            // one thing and pay another. It happens only when the engine didn't cap (a bug) or a
+            // reload lowered games.max_payout under a screen still open: nothing is taken, and
+            // reopening the game builds it with today's settings.
+            games.tell(player, CHANGED);
+            return null;
+        }
         Round round;
         try {
             round = games.dao().settleRound(player.getUniqueId(), game.id(), game.source(), clock().dayKey(), stake,

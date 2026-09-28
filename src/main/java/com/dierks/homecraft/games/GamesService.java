@@ -171,6 +171,12 @@ public final class GamesService {
                 switchOff(g, Refusal.CLOSED);
             } else if (!running.contains(g.id()) && open) {
                 startGame(g);
+            } else if (open && g.kind() == GameKind.CHANCE) {
+                // A game of chance plays with the settings its screen opened with (its odds and
+                // payouts were shown from them): close it so the next open shows the new ones.
+                // Nothing is lost: a result is decided and paid before it's shown, and an open
+                // round stays open to resume.
+                closeScreensOf(g, ChanceRounds.CHANGED);
             }
         }
     }
@@ -367,7 +373,10 @@ public final class GamesService {
             return false;
         }
         Game game = t.game();
-        Refusal refusal = canOpen(player, game);
+        // Going back to a round already paid for is not a new play: no gate (spec §5.2), or a
+        // pause or a world change would leave it to be finished by the exit rule.
+        boolean resume = t.playable() == null && enabled(game) && rounds.openRound(player.getUniqueId(), game.id()) != null;
+        Refusal refusal = resume ? null : canOpen(player, game);
         if (refusal != null) {
             tell(player, refusal);
             return false;
@@ -706,13 +715,7 @@ public final class GamesService {
      */
     private void switchOff(Game game, Refusal why) {
         String id = game.id();
-        for (Player p : online()) {
-            GameMenu menu = menu(p);
-            if (menu != null && menu.game() != null && id.equals(menu.game().id())) {
-                quietly(() -> menu.closeNow(p));
-                tell(p, why);
-            }
-        }
+        closeScreensOf(game, why);
         for (Player p : online()) {
             quietly(() -> {
                 Session s = sessions.session(p);
@@ -724,6 +727,17 @@ public final class GamesService {
         }
         quietly(() -> rounds.settleGame(id));
         quietly(() -> invites.cancelGame(id));
+    }
+
+    /** Close every screen of {@code game}, telling each player {@code why}. */
+    private void closeScreensOf(Game game, Refusal why) {
+        for (Player p : online()) {
+            GameMenu menu = menu(p);
+            if (menu != null && menu.game() != null && game.id().equals(menu.game().id())) {
+                quietly(() -> menu.closeNow(p));
+                tell(p, why);
+            }
+        }
     }
 
     /** Close every games screen, the shared ones (which belong to no game) included. */

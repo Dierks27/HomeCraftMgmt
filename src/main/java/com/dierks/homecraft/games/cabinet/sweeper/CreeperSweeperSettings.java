@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.cabinet.sweeper;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.cabinet.CabinetSettings;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -23,7 +24,8 @@ import java.util.Map;
  * @param milestones bronze, silver and gold clear times in seconds (at or under) for each difficulty
  */
 public record CreeperSweeperSettings(boolean enabled, int milestoneReward, int dailyReward, int dailyCap,
-                                     Map<String, Integer> mines, Map<String, List<Integer>> milestones) {
+                                     Map<String, Integer> mines, Map<String, List<Integer>> milestones)
+        implements CabinetSettings {
 
     /** The leaves under {@code games.creeper_sweeper}, in config order. */
     public static final List<String> KEYS = List.of("enabled", "milestone_reward", "daily_reward",
@@ -38,6 +40,28 @@ public record CreeperSweeperSettings(boolean enabled, int milestoneReward, int d
         Map<String, List<Integer>> copy = new LinkedHashMap<>();
         milestones.forEach((k, v) -> copy.put(k, List.copyOf(v)));
         milestones = Collections.unmodifiableMap(copy);
+    }
+
+    /** The board the daily challenge is dealt on (its creeper count) and the website shows. */
+    public static final String DAILY_LEVEL = "normal";
+
+    /** Creepers on {@code level}'s board (the normal count for anything else). */
+    public int minesFor(String level) {
+        Integer n = mines.get(level);
+        return n != null ? n : mines.getOrDefault(DAILY_LEVEL, 8);
+    }
+
+    /**
+     * A difficulty's milestones in the board's own unit, milliseconds, so a 45.3 s clear is not
+     * counted as "within 45 s". The daily boards have none.
+     */
+    @Override
+    public List<Integer> milestonesFor(String board) {
+        List<Integer> seconds = milestones.get(board);
+        if (seconds == null) {
+            return List.of();
+        }
+        return seconds.stream().map(s -> s * 1000).toList();
     }
 
     /** The shipped settings. */

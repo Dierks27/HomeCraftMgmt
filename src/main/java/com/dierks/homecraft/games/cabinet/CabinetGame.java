@@ -109,13 +109,22 @@ public abstract class CabinetGame implements Game {
      * first time, and today's featured bonus if this is today's pick.
      */
     public Finish finishClassic(Player player, String board, long score, boolean lowerIsBetter) {
+        return finishClassic(player, board, score, score, lowerIsBetter);
+    }
+
+    /**
+     * As {@link #finishClassic(Player, String, long, boolean)}, for a board whose milestones read
+     * another number than its score: Ore Merge scores the sum of its merges, but its milestones
+     * are the biggest tile made. {@code milestoneValue} is compared in the same direction.
+     */
+    public Finish finishClassic(Player player, String board, long score, long milestoneValue, boolean lowerIsBetter) {
         ScoreResult result = games().scores().submit(player.getUniqueId(), id(), board, score, lowerIsBetter);
         CabinetSettings s = cabinetSettings();
         int paid = 0;
         List<Integer> reached = new ArrayList<>();
         int reward = s.milestoneReward();
         if (reward > 0) {
-            for (int n : milestonesReached(s.milestonesFor(board), score, lowerIsBetter)) {
+            for (int n : milestonesReached(s.milestonesFor(board), milestoneValue, lowerIsBetter)) {
                 int got = games().rewards().pay(player, this, source(), RewardKind.MILESTONE,
                         SkillRewards.milestoneRef(board, n), reward, s.dailyCap(),
                         name() + ": " + medal(n) + " milestone");

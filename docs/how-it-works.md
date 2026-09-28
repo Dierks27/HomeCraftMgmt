@@ -88,10 +88,8 @@ server turns them on.
 | **Higher or Lower** | Is the next card higher or lower? Stop when you like. | Put in 10, 20 or 50 |
 | **Coin Flip** | You and a friend put in the same. One flip, one winner. | Put in 5, 10 or 25 |
 | **Cabinets** | Creeper Sweeper, Ore Merge, Snake, Mini Match, Simon Says, Whack-a-Zombie, Connect Four and Tic-Tac-Toe. | Free |
-| **Time trials** | Race a parkour, elytra or boat course. Beat the clock! | Free |
-| **Mini golf** | Putt the ball into the hole. Your Mini is the ball! | Free |
-
-<!-- TODO G5/G6: check the Time trials and Mini golf rows once they are merged. -->
+| **Time trials** | Race a parkour, elytra or boat course through every checkpoint. Beat the clock! | Free |
+| **Mini golf** | Putt the ball into the cup in as few strokes as you can. Your Mini is the ball! | Free |
 
 ### Games of chance give back less than you put in
 
@@ -122,8 +120,13 @@ tokens too.
 The cabinets, time trials and mini golf are free, and they pay a few tokens:
 
 - **Milestones:** bronze, silver and gold. Each pays once, ever.
-- **Today's challenge:** the same board for everyone. Your first try of the day counts.
+- **Today's challenge:** the same board for everyone. Your first try of the day counts. In
+  Creeper Sweeper the clock starts as soon as today's board appears. If you're somewhere tokens
+  can't be earned (like creative mode), today's board is just practice, and your scored try waits
+  for later.
 - **Today's pick:** a bonus the first time you finish it each day.
+- **Courses and golf:** your first finish of each course, the best time of the week, the course
+  of the week, a round of golf at par or better, and a hole-in-one.
 
 You can win up to 6 tokens a day from all skill games together (the first time you finish a
 course pays extra). After that, your scores still count. Beating your own best doesn't pay, but

@@ -20,6 +20,11 @@ import java.util.List;
  * the last ten token moves at the bottom, one per tile, in plain words — "+5 Quest: Catch 8 fish",
  * "−25 Mini Radar" — with the words in each tile's NAME so they read on Bedrock too. Replaces the
  * old Token Counter.
+ *
+ * <p>Slot 51 is Take a break (a blue bed, spec §4.3): the player's own daily limit and pause for
+ * games of chance, its state in the name ("Take a break - limit 25 a day", "Paused until Tue 12
+ * AM"). It sits here, next to where the tokens go, and works whether or not the games are on,
+ * because it also covers Crates, the Scratch Ticket and Card Packs bought with tokens.
  */
 public final class WalletMenu extends Menu {
 
@@ -109,6 +114,9 @@ public final class WalletMenu extends Menu {
                 e.getWhoClicked().closeInventory();
             }
         });
+        // Take a break: a Material.BLUE_BED named with its state (not a CLOCK: that's the streak).
+        set(51, com.dierks.homecraft.gui.games.BreakMenu.stateTile(plugin, player),
+                e -> new com.dierks.homecraft.gui.games.BreakMenu(plugin, player, this::reopen).open(player));
     }
 
     /**

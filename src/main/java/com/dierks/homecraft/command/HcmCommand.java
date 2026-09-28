@@ -227,7 +227,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     page = switch (args[1].toLowerCase(Locale.ROOT)) {
                         case "minis", "packs", "cards" -> com.dierks.homecraft.gui.arcade.GuideMenu.MINIS;
                         case "wild", "hunt" -> com.dierks.homecraft.gui.arcade.GuideMenu.WILD;
-                        case "arcade", "games" -> com.dierks.homecraft.gui.arcade.GuideMenu.GAMES;
+                        case "arcade" -> com.dierks.homecraft.gui.arcade.GuideMenu.ARCADE;
+                        case "games" -> com.dierks.homecraft.gui.arcade.GuideMenu.GAMES_PAGE;
                         default -> com.dierks.homecraft.gui.arcade.GuideMenu.TOKENS;
                     };
                 }
@@ -1549,7 +1550,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         } else if (args.length == 2 && args[0].equalsIgnoreCase("homes") && sender.hasPermission("hcm.admin")) {
             addMatches(out, args[1], "refresh");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("guide")) {
-            addMatches(out, args[1], "tokens", "minis", "wild", "arcade");
+            addMatches(out, args[1], "tokens", "minis", "wild", "arcade", "games");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("museum")) {
             String prefix = args[1].toLowerCase(Locale.ROOT);
             for (com.dierks.homecraft.mini.MiniDef def : plugin.miniService().catalog()) {

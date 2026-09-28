@@ -141,7 +141,8 @@ public final class TwentyOne implements Game {
             return List.of();
         }
         List<String> out = new ArrayList<>();
-        out.add("&6Twenty-One &7— " + RtpLimits.playerLine(s.lowestRtp()) + " · " + s.dailyLimit() + " hands a day");
+        out.add("&6Twenty-One &7— the best play " + RtpLimits.playerLine(s.lowestRtp()) + " · " + s.dailyLimit()
+                + " hands a day");
         for (TwentyOneSettings.Odds o : s.odds()) {
             TwentyOneMath.Payouts p = o.payouts();
             out.add("&7  " + o.stake() + " in: &f" + RtpLimits.tenthPercent(o.rtp()) + "% &7(win " + p.win()

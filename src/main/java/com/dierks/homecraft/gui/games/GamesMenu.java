@@ -8,7 +8,9 @@ import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.Invite;
+import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.RtpLimits;
+import com.dierks.homecraft.games.world.Session;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.arcade.ArcadeIcons;
 import com.dierks.homecraft.gui.arcade.CrateMenu;
@@ -152,6 +154,28 @@ public final class GamesMenu extends GameMenu {
         int p = clampPage(page, all.size());
         int from = p * PER_PAGE;
         return all.subList(Math.min(from, all.size()), Math.min(all.size(), from + PER_PAGE));
+    }
+
+    /**
+     * Whether the Arcade hub draws its Crate and Scratch Ticket tiles (R1.16): always while the
+     * games are off (the hub is then exactly the old one), otherwise only while games of chance
+     * are open to the player — paused, closed or not permitted, they aren't shown at all.
+     */
+    public static boolean hubShowsChance(boolean gamesOn, Luck state) {
+        return !gamesOn || state == Luck.OPEN;
+    }
+
+    /**
+     * Gate step 0 for the Arcade's own links (the Scratch Ticket, a crate): nothing of theirs while
+     * the player is in a world game, before anything is taken. {@code null} = go ahead.
+     */
+    static Refusal linkRefusal(Session session) {
+        return session == null ? null : Refusal.IN_SESSION;
+    }
+
+    /** The invite tile's name: the game, then who from ("&amp;eConnect Four invite &amp;7from Sam"). */
+    static String inviteName(String game, String from) {
+        return "&e" + (game == null ? "Game" : game) + " invite &7from " + (from == null ? "a player" : from);
     }
 
     /** How many tiles each tab has. */
@@ -362,7 +386,11 @@ public final class GamesMenu extends GameMenu {
                     "&aScratch Ticket &7- &6" + lotto.ticketTokens() + " tokens",
                     "&7It " + RtpLimits.playerLine(rtp) + ",", "&7over lots of tickets.",
                     "&7Scratch three squares.", "&eClick to buy one");
-            out.add(new Tile(Game.Tab.LUCK, LINK_RANK, 0, icon, e -> scratch()));
+            out.add(new Tile(Game.Tab.LUCK, LINK_RANK, 0, icon, e -> {
+                if (linkAllowed()) {
+                    scratch();
+                }
+            }));
         }
         int order = 1;
         for (Map.Entry<String, PluginConfig.Crate> c : arc.crates().entrySet()) {
@@ -370,9 +398,26 @@ public final class GamesMenu extends GameMenu {
             ItemStack icon = ArcadeIcons.of(plugin, viewer, "crate", Material.CHEST,
                     c.getValue().display() + " &7- &6" + c.getValue().costTokens() + " tokens",
                     "&7See what's inside and the chances,", "&7then open it.", "&eClick to look");
-            out.add(new Tile(Game.Tab.LUCK, LINK_RANK, order++, icon,
-                    e -> new CrateMenu(plugin, viewer, id, this::reopen).open(viewer)));
+            out.add(new Tile(Game.Tab.LUCK, LINK_RANK, order++, icon, e -> {
+                if (linkAllowed()) {
+                    new CrateMenu(plugin, viewer, id, this::reopen).open(viewer);
+                }
+            }));
         }
+    }
+
+    /** Gate step 0 for a Scratch Ticket or crate link: refused (and told) while in a world game. */
+    private boolean linkAllowed() {
+        GamesService games = plugin.games();
+        if (games == null) {
+            return true;
+        }
+        Refusal r = linkRefusal(games.sessions().session(viewer));
+        if (r != null) {
+            games.tell(viewer, r);
+            return false;
+        }
+        return true;
     }
 
     private void scratch() {
@@ -400,8 +445,9 @@ public final class GamesMenu extends GameMenu {
             return;
         }
         String from = Bukkit.getOfflinePlayer(inv.from()).getName();
+        Game invitedTo = games.game(inv.gameId());
         set(INVITE, Menus.glint(Menus.icon(Material.WRITABLE_BOOK,
-                "&eInvite from &f" + (from == null ? "a player" : from),
+                inviteName(invitedTo == null ? null : invitedTo.name(), from),
                 "&7" + inv.summary(), "&eClick to say yes", "&7Or type /hcm play deny"), true), e -> {
             if (!games.invites().accept(viewer)) {
                 viewer.sendMessage(Text.of("&cThat invite has ended."));

@@ -25,11 +25,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Pinned here: a game whose constructor throws is left out (logged) while every other game is
  * built, and a reload tries it again; ids and aliases are found in any case and a course only
- * while its game is open; a game that throws is switched off alone, logged once, and its rounds
- * finished — a reload brings it back; a reload stops games that closed, starts games that opened
- * and leaves running games running; {@code /hcm play} runs the gate before the game; a stop while
- * the server is stopping leaves OPEN rounds for the next start, any other stop finishes them; the
- * Games screen stays shut while the games are off.
+ * while its game is open, and no course may take a game's id or other name; a game that throws is
+ * switched off alone, logged once, and its rounds finished — a reload brings it back, and one that
+ * comes in the tick before the switch-off keeps it running; a reload stops games that closed,
+ * starts games that opened and leaves running games running; {@code /hcm play} runs the gate
+ * before the game; a stop while the server is stopping leaves OPEN rounds for the next start, any
+ * other stop finishes them; the Games screen stays shut while the games are off.
  */
 class GamesServiceTest {
 
@@ -119,6 +120,32 @@ class GamesServiceTest {
         assertFalse(games.failed(slots), "a reload clears the failure");
         assertEquals(2, slots.started, "and starts it again");
         assertTrue(games.open(alex.player, "test_slots", null), "it opens again");
+    }
+
+    @Test
+    void aReloadInTheTickAfterAFailureKeepsTheGameRunning() {
+        slots.throwOnOpen = true;
+        games.start();
+        games.rounds().open(alex.player, slots, 10, "v1");
+        assertFalse(games.open(alex.player, "test_slots", null), "opening it fails");
+        assertTrue(games.failed(slots), "switched off");
+        slots.throwOnOpen = false;
+        games.reload();
+        host.runTasks(); // the switch-off queued for the tick after the failure
+        assertFalse(games.failed(slots), "the reload gave it another chance");
+        assertNotNull(games.rounds().openRound(alex.id, slots.id()),
+                "so the late switch-off leaves its open round alone: the game is running again");
+        assertTrue(games.open(alex.player, "test_slots", null), "and it opens");
+    }
+
+    @Test
+    void aCourseIdMayNotBeAGameIdAReservedWordOrAGamesOtherName() {
+        assertTrue(GameCatalog.taken("snake", games), "a game id");
+        assertTrue(GameCatalog.taken("Accept", games), "a word /hcm play keeps for itself");
+        assertTrue(GameCatalog.taken(" WORM ", games), "Test Snake's alias resolves to a game, so it is taken too");
+        assertFalse(GameCatalog.taken("worm"), "the catalog alone can't see aliases (they live on the built game)");
+        assertFalse(GameCatalog.taken("cliff_hop", games), "a free id");
+        assertFalse(GameCatalog.taken(null, games), "no id is not taken");
     }
 
     @Test

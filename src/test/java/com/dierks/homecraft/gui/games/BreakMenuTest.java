@@ -1,9 +1,16 @@
 package com.dierks.homecraft.gui.games;
 
 import com.dierks.homecraft.games.Breaks;
+import com.dierks.homecraft.storage.GamesDao.BreakRow;
+import com.dierks.homecraft.util.GameClock;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -74,6 +81,32 @@ class BreakMenuTest {
                 "repeats and negatives are left out");
         assertEquals(List.of(1, 2, 3, 4, 5, Breaks.NO_LIMIT), BreakMenu.choices(List.of(1, 2, 3, 4, 5, 6, 7)),
                 "at most five fit in the row next to No limit");
+    }
+
+    @Test
+    void theKeyFactOfEachChoiceIsInItsNameForBedrock() {
+        assertEquals("&e50 tokens a day &7- waits 7 days", BreakMenu.laterName("50 tokens a day", 7),
+                "a raise names its real wait, since Bedrock shows lore only on a long press");
+        assertEquals("&eNo limit of my own &7- waits 1 day", BreakMenu.laterName("No limit of my own", 1),
+                "removing the limit is a raise too; one day is singular");
+        assertTrue(BreakMenu.pauseName(7).startsWith("&ePause for 7 days"), "what the pause is");
+        assertTrue(BreakMenu.pauseName(7).contains("can't be undone"), "and that it can't be taken back");
+        assertEquals("&bPause until Tue 12 AM &7- can't be undone", BreakMenu.confirmName("Tue 12 AM"),
+                "the confirm says it in its name too");
+    }
+
+    @Test
+    void afterPausingThePlayerReadsTheEndTheRowHoldsNow() {
+        ZoneId zone = ZoneId.of("America/Chicago");
+        long now = LocalDateTime.of(2026, 3, 10, 15, 0).atZone(zone).toInstant().toEpochMilli();
+        GameClock clock = new GameClock(zone, Clock.fixed(Instant.ofEpochMilli(now), zone));
+        long own = Breaks.pauseEnd(clock, now, 1);
+        long admin = Breaks.pauseEnd(clock, now, 7);
+        BreakRow row = new BreakRow(UUID.randomUUID(), -1, Breaks.NO_PENDING, 0, own, -1, admin, now);
+        assertEquals(Breaks.untilText(clock, admin), BreakMenu.pausedUntilText(row, clock, "Wed 12 AM"),
+                "an admin's longer pause is the real end, not the one the tile worked out");
+        assertEquals("Wed 12 AM", BreakMenu.pausedUntilText(null, clock, "Wed 12 AM"),
+                "if the row can't be read, the tile's own end is the best there is");
     }
 
     @Test

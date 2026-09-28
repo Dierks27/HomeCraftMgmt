@@ -5,7 +5,6 @@ import com.dierks.homecraft.games.FeedWriter;
 import com.dierks.homecraft.games.GameContext;
 import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GameSpec;
-import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.Scores;
 import com.dierks.homecraft.games.SkillRewards;
@@ -155,9 +154,11 @@ public final class Snake extends CabinetGame {
     /** Deal today's board to the player (their first deal today is the scored try) and say which it is. */
     public Run daily(Player player) {
         DailyStart start = startDaily(player);
-        player.sendMessage(Text.of(start.scored()
-                ? "&bToday's board &7- your scored try. Closing the game uses it up."
-                : "&7Today's board again: practice, so nothing is recorded."));
+        if (start.scored()) {
+            player.sendMessage(Text.of("&bToday's board &7- your scored try. Closing the game uses it up."));
+        } else if (dailyTried(player)) {
+            player.sendMessage(Text.of("&7Today's board again: practice, so nothing is recorded."));
+        } // else: it can't count where they are, and startDaily said so
         return new Run(start, tick(player));
     }
 
@@ -170,16 +171,6 @@ public final class Snake extends CabinetGame {
     private int tick(Player player) {
         SnakeSettings s = settings();
         return Bedrock.is(player) ? s.tickBedrock() : s.tickJava();
-    }
-
-    /** Whether the player may start a run right now (they're told why not). */
-    public boolean mayPlay(Player player) {
-        Refusal refusal = games().canOpen(player, this);
-        if (refusal != null) {
-            games().tell(player, refusal);
-            return false;
-        }
-        return true;
     }
 
     /** A run just ended: say how it went, record it and pay. */

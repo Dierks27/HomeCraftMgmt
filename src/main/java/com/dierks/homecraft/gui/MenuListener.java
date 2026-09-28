@@ -32,7 +32,7 @@ public final class MenuListener implements Listener {
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
         if (event.getInventory().getHolder() instanceof Menu menu && event.getPlayer() instanceof Player player) {
-            menu.onClose(player);
+            menu.handleClose(player);
         }
     }
 

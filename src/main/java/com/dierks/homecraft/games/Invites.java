@@ -121,11 +121,14 @@ public final class Invites {
         return true;
     }
 
-    /** The invite waiting for {@code to}, or {@code null}. */
+    /**
+     * The invite waiting for {@code to}, or {@code null} (also once its time is up). A pure read:
+     * screens call it while they paint, so it never tells anyone anything and never runs an
+     * answer — lapsing is the invite's own task's job, and the one-minute sweep's.
+     */
     public Invite pending(UUID to) {
-        expireLapsed();
         Pending p = pending.get(to);
-        return p == null ? null : p.invite();
+        return p == null || p.invite().expired(now()) ? null : p.invite();
     }
 
     /** Cancel every invite from or to the player (quit, world change). */
@@ -141,6 +144,27 @@ public final class Invites {
                 answer(p, false);
             }
         }
+    }
+
+    /**
+     * The player calls off their OWN invite (the "Waiting for ..." tile): only the one they sent
+     * goes, any invite waiting for them stays. The invitee is told; the game's answer is not run,
+     * since the game asked for this itself and already knows — so the inviter never reads that
+     * their friend "didn't take" an invite they took back.
+     *
+     * @return whether there was one to call off
+     */
+    public boolean cancelFrom(UUID from) {
+        for (Pending p : new ArrayList<>(pending.values())) {
+            Invite i = p.invite();
+            if (i.from().equals(from)) {
+                pending.remove(i.to());
+                p.cancelExpiry().run();
+                tell(i.to(), "&7That invite was called off.");
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Whether the player takes invites to this game (Coin Flip off by default, friend games on). */
@@ -187,7 +211,10 @@ public final class Invites {
         pending.clear();
     }
 
-    /** Lapse every invite whose time is up (their own task normally does it; this is the backstop). */
+    /**
+     * Lapse every invite whose time is up (their own task normally does it; this is the backstop),
+     * and forget pairs whose cooldown is over, so the map doesn't grow with every pair ever asked.
+     */
     void expireLapsed() {
         long now = now();
         for (Pending p : new ArrayList<>(pending.values())) {
@@ -195,6 +222,12 @@ public final class Invites {
                 expire(p.invite());
             }
         }
+        lastPair.values().removeIf(at -> now - at >= PAIR_COOLDOWN_MS);
+    }
+
+    /** How many pairs are still on cooldown (for the tests). */
+    int pairsRemembered() {
+        return lastPair.size();
     }
 
     /** The invite {@code from} has out, or {@code null}. */

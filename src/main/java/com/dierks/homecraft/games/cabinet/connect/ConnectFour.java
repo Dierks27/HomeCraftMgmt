@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.cabinet.connect;
 
 import com.dierks.homecraft.arcade.TokenService;
 import com.dierks.homecraft.games.FeedWriter;
+import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GameContext;
 import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GameSpec;
@@ -11,6 +12,7 @@ import com.dierks.homecraft.games.SkillRewards;
 import com.dierks.homecraft.games.cabinet.CabinetGame;
 import com.dierks.homecraft.games.cabinet.CabinetSettings;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.gui.games.cabinet.connect.ConnectFourMenu;
 import com.dierks.homecraft.gui.games.cabinet.connect.ConnectFourPlayMenu;
 import com.dierks.homecraft.storage.GamesDao;
@@ -264,10 +266,13 @@ public final class ConnectFour extends CabinetGame {
         return p.getName() == null ? "a friend" : p.getName();
     }
 
-    /** Call off the player's own invite. */
+    /**
+     * Call off the player's own invite — only the one they sent (an invite waiting for them
+     * stays), and with no "didn't take your invite" line, since they took it back themselves.
+     */
     public void cancelInvite(Player player) {
         friends.answered(player.getUniqueId());
-        games().invites().cancel(player.getUniqueId());
+        games().invites().cancelFrom(player.getUniqueId());
     }
 
     /** Whether the player takes friend invites to this game. */
@@ -291,6 +296,18 @@ public final class ConnectFour extends CabinetGame {
             }
             return;
         }
+        for (Player p : new Player[] {a, b}) {
+            if (p != null && busyElsewhere(p)) {
+                // Don't pull them out of another game; the invite is used up, they can ask again.
+                Player other = p == a ? b : a;
+                p.sendMessage(Text.of("&7You're in another game right now, so the Connect Four game didn't start."));
+                if (other != null) {
+                    other.sendMessage(Text.of("&7" + p.getName()
+                            + " is playing another game right now - ask again in a bit."));
+                }
+                return;
+            }
+        }
         boolean here = a != null && b != null && a.isOnline() && b.isOnline() && games().enabled(this)
                 && games().canOpen(a, this) == null && games().canOpen(b, this) == null;
         ConnectFourMatch match = here ? ConnectFourMatch.friends(a.getUniqueId(), b.getUniqueId()) : null;
@@ -302,9 +319,31 @@ public final class ConnectFour extends CabinetGame {
             }
             return;
         }
-        for (Player p : new Player[] {a, b}) {
-            new ConnectFourPlayMenu(ctx.plugin(), this, p, () -> open(p, null), match).open(p);
+        Player[] players = {a, b};
+        ConnectFourPlayMenu[] boards = new ConnectFourPlayMenu[2];
+        for (int i = 0; i < 2; i++) {
+            Player p = players[i];
+            boards[i] = new ConnectFourPlayMenu(ctx.plugin(), this, p, () -> open(p, null), match);
+            boards[i].open(p);
         }
+        if (!boards[0].showing() || !boards[1].showing()) {
+            // Something cancelled a board opening (another plugin): nobody waits on a board whose
+            // other side never comes. The game ends now, quietly, and both are told.
+            match.leave(players[boards[0].showing() ? 1 : 0].getUniqueId());
+            friends.end(a.getUniqueId());
+            for (int i = 0; i < 2; i++) {
+                if (boards[i].showing()) {
+                    open(players[i], null); // back to the lobby; the board's close says nothing more
+                }
+                players[i].sendMessage(Text.of("&7The Connect Four game couldn't start."));
+            }
+        }
+    }
+
+    /** In a world session, or looking at another game's screen: an accepted invite mustn't pull them out. */
+    private boolean busyElsewhere(Player player) {
+        Game on = GameMenu.gameOnScreen(player);
+        return FriendGames.elsewhere(id(), on == null ? null : on.id(), games().sessions().session(player) != null);
     }
 
     /**

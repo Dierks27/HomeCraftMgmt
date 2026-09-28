@@ -24,7 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Pinned here: {@code auto} picks among the open skill games and courses only — never a game of
  * chance, never a closed game, and a world game by its courses — by a hash of the LOCAL day, the
  * same pick all day and the pure {@link Featured#pick} over the candidates; a pinned id wins while
- * it is an open skill game or course; {@code until} is the next local midnight.
+ * it is an open skill game or course; a changed {@code games.featured} is seen at once, without a
+ * reload; {@code until} is the next local midnight.
  */
 class FeaturedTest {
 
@@ -95,6 +96,17 @@ class FeaturedTest {
         games.featured().forget();
         assertEquals(Featured.pick(games.featured().candidates(), host.clock.dayKey()), games.featured().today(),
                 "a pinned game that is closed falls back to the day's pick");
+    }
+
+    @Test
+    void aChangedSettingIsPickedUpWithoutAReload() {
+        String auto = games.featured().today();
+        assertEquals(Featured.pick(games.featured().candidates(), host.clock.dayKey()), auto, "auto first");
+        host.config = GamesKit.config(GamesKit.featured(GamesKit.common(true, 100, 600, 6), "cliff_hop"));
+        assertEquals("cliff_hop", games.featured().today(),
+                "pinning is seen at once, so /hcm games feature needs no reload (which would close screens)");
+        host.config = GamesKit.config(GamesKit.featured(GamesKit.common(true, 100, 600, 6), "auto"));
+        assertEquals(auto, games.featured().today(), "and so is going back to auto");
     }
 
     @Test

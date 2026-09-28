@@ -48,7 +48,7 @@ public final class WhackAZombieMenu extends GameMenu {
                 "&aPlay" + (best == null || best == 0 ? "" : " &7- your best: " + best + " points"),
                 "&7A new round every time.",
                 "&7Milestones: " + ladder(whack.settings().milestones()) + " points",
-                "&7Closing the round ends it (no score)."), e -> play(null));
+                "&7Closing the round ends it (no score)."), e -> classic());
 
         int reward = whack.settings().dailyReward();
         String prize = reward > 0 ? " &6(+" + reward + " token" + (reward == 1 ? "" : "s") + ")" : "";
@@ -76,8 +76,17 @@ public final class WhackAZombieMenu extends GameMenu {
         new WhackAZombiePlayMenu(plugin, whack, viewer, this::reopen, daily, seed).open(viewer);
     }
 
+    /** Each new game runs the gate again: a pause or a world change since this screen opened counts. */
+    private void classic() {
+        if (whack.mayPlay(viewer)) {
+            play(null);
+        }
+    }
+
     private void daily() {
-        play(whack.startDaily(viewer));
+        if (whack.mayPlay(viewer)) {
+            play(whack.startDaily(viewer));
+        }
     }
 
     private void reopen() {

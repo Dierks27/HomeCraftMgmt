@@ -19,8 +19,10 @@ import java.util.SplittableRandom;
  * daily board has to be the same for everyone, so it can't wait for anyone's first tap: it is laid
  * out from the day's seed with a safe opening already dug, and every player starts from that.
  *
- * <p>The clock starts on the player's first dig (never on the pre-dug opening) and stops on the
- * dig that ends the board; the caller passes the time in, so the engine stays testable.
+ * <p>On a Classic board the clock starts on the player's first dig and stops on the dig that ends
+ * the board. The daily board arrives already dug open, so its clock starts when it is dealt:
+ * otherwise a player could flag every creeper they can work out from the opening for free and
+ * then clear the board in a second. The caller passes the time in, so the engine stays testable.
  */
 public final class SweeperEngine {
 
@@ -30,7 +32,7 @@ public final class SweeperEngine {
 
     /** Where a board is. */
     public enum State {
-        /** Nothing dug by the player yet (a daily board already has its opening). */
+        /** A Classic board nothing has been dug on yet (a daily board starts LIVE). */
         READY,
         LIVE,
         /** Every safe square dug. */
@@ -84,9 +86,10 @@ public final class SweeperEngine {
     /**
      * The daily board: laid out from {@code seed} alone, with a safe opening already dug, so
      * every player gets exactly the same board. An opening that would already clear the whole
-     * board is skipped for the next one the seed gives.
+     * board is skipped for the next one the seed gives. It is LIVE from {@code dealtAt}: the
+     * clock runs from the deal, not from the first dig.
      */
-    public static SweeperEngine daily(int mines, long seed) {
+    public static SweeperEngine daily(int mines, long seed, long dealtAt) {
         SweeperEngine board = new SweeperEngine(mines, seed);
         for (int attempt = 0; attempt < 100; attempt++) {
             board.reset();
@@ -94,9 +97,11 @@ public final class SweeperEngine {
             board.place(start);
             board.reveal(start);
             if (board.opened < CELLS - board.mines) {
-                return board;
+                break;
             }
         }
+        board.state = State.LIVE;
+        board.startedAt = dealtAt;
         return board;
     }
 
@@ -111,7 +116,7 @@ public final class SweeperEngine {
 
     /**
      * Dig {@code cell} at time {@code now} (ms). Does nothing (false) on a flagged or already dug
-     * square, or once the board is over. The first dig starts the clock and, on a Classic board,
+     * square, or once the board is over. On a Classic board the first dig starts the clock and
      * places the creepers away from it.
      */
     public boolean dig(int cell, long now) {
@@ -205,8 +210,8 @@ public final class SweeperEngine {
     }
 
     /**
-     * The time on the clock in ms: 0 before the first dig, running while live, frozen when the
-     * board ends. A cleared board's score.
+     * The time on the clock in ms: 0 before a Classic board's first dig, running while live
+     * (a daily board from its deal), frozen when the board ends. A cleared board's score.
      */
     public long timeMs(long now) {
         if (startedAt < 0) {

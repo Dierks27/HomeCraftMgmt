@@ -48,7 +48,7 @@ public final class SimonSaysMenu extends GameMenu {
                 "&aPlay" + (best == null || best == 0 ? "" : " &7- your best: " + best),
                 "&7A new pattern every time.",
                 "&7Milestones: " + ladder(simon.settings().milestones()),
-                "&7Closing the game ends it (no score)."), e -> play(null));
+                "&7Closing the game ends it (no score)."), e -> classic());
 
         int reward = simon.settings().dailyReward();
         String prize = reward > 0 ? " &6(+" + reward + " token" + (reward == 1 ? "" : "s") + ")" : "";
@@ -76,8 +76,17 @@ public final class SimonSaysMenu extends GameMenu {
         new SimonSaysPlayMenu(plugin, simon, viewer, this::reopen, daily, seed).open(viewer);
     }
 
+    /** Each new game runs the gate again: a pause or a world change since this screen opened counts. */
+    private void classic() {
+        if (simon.mayPlay(viewer)) {
+            play(null);
+        }
+    }
+
     private void daily() {
-        play(simon.startDaily(viewer));
+        if (simon.mayPlay(viewer)) {
+            play(simon.startDaily(viewer));
+        }
     }
 
     private void reopen() {

@@ -24,11 +24,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Pinned here: an invite waits for one answer and the game hears it exactly once (accept, deny,
  * expiry or a quit); one pending invite per invitee and one out per inviter; the same two players
- * wait 30 seconds between invites; an invite runs out after its time (by its own task, or when
- * next looked at); Coin Flip invites are off until the player turns them on, friend games on; the
- * invitee reads how to answer; a player who can't be asked is simply not asked. What the INVITER
- * hears after sending is the game's answer callback's to say, so the framework says nothing to
- * them on a deny, an expiry or a quit — nobody reads the same news twice.
+ * wait 30 seconds between invites, and a pair is forgotten once that is over; an invite runs out
+ * after its time (by its own task, or the one-minute sweep); looking at the pending invite is a
+ * pure read — a lapsed one reads as none, and looking never tells anyone anything or answers it;
+ * an inviter can call off their own invite without touching one waiting for them; Coin Flip
+ * invites are off until the player turns them on, friend games on; the invitee reads how to
+ * answer; a player who can't be asked is simply not asked. What the INVITER hears after sending is
+ * the game's answer callback's to say, so the framework says nothing to them on a deny, an expiry
+ * or a quit — nobody reads the same news twice.
  */
 class InvitesTest {
 
@@ -127,8 +130,60 @@ class InvitesTest {
         send(kim, sam, connect);
         host.tasks.clear(); // as if its task never ran
         host.move(60_000);
-        assertNull(games.invites().pending(sam.id), "an invite past its time is gone when next looked at");
+        games.sweep();
+        assertNull(games.invites().pending(sam.id), "the one-minute sweep lapses an invite its task missed");
         assertEquals(List.of(kim.id + ":false"), answers, "and still answered once");
+    }
+
+    @Test
+    void lookingAtAnInviteIsAPureReadEvenOnceItHasLapsed() {
+        Invite invite = send(alex, sam, connect);
+        host.tasks.clear(); // its task hasn't run yet
+        host.move(60_000);
+        sam.said.clear();
+        alex.said.clear();
+        assertNull(games.invites().pending(sam.id), "an invite past its time reads as none");
+        assertNull(games.invites().pending(sam.id), "every time");
+        assertTrue(answers.isEmpty(), "looking never answers it (a screen looks while it paints)");
+        assertTrue(sam.said.isEmpty() && alex.said.isEmpty(), "and never says anything: " + sam.heard() + alex.heard());
+        assertFalse(games.invites().accept(sam.player), "a lapsed invite can't be accepted");
+        assertEquals(List.of(invite.from() + ":false"), answers, "the action that finds it lapsed answers it, once");
+        assertTrue(sam.heard().contains("That invite has run out."), "and the invitee hears it then");
+    }
+
+    @Test
+    void anInviterCallsOffOnlyTheirOwnInviteAndHearsNothingBack() {
+        send(alex, sam, connect);
+        send(kim, alex, connect);
+        alex.said.clear();
+        kim.said.clear();
+        assertTrue(games.invites().cancelFrom(alex.id), "Alex takes back the invite they sent");
+        assertNull(games.invites().pending(sam.id), "Sam's invite from Alex is gone");
+        assertNotNull(games.invites().pending(alex.id), "the invite waiting for Alex, from Kim, stays");
+        assertTrue(sam.heard().contains("That invite was called off."), "Sam, who was invited, is told");
+        assertTrue(answers.isEmpty(), "the game asked for this itself, so its answer isn't run: nobody reads "
+                + "that Sam 'didn't take' an invite Alex took back");
+        assertTrue(alex.said.isEmpty() && kim.said.isEmpty(), "nothing for Alex or Kim: " + alex.heard() + kim.heard());
+        assertFalse(games.invites().cancelFrom(alex.id), "nothing left to call off");
+        host.runTasks();
+        assertEquals(List.of(kim.id + ":false"), answers,
+                "later only Kim's invite, whose time ran out, is answered: the called-off one's task does nothing");
+    }
+
+    @Test
+    void aPairIsForgottenOnceItsCooldownIsOver() {
+        send(alex, sam, connect);
+        games.invites().deny(sam.player);
+        send(kim, alex, connect);
+        games.invites().deny(alex.player);
+        assertEquals(2, games.invites().pairsRemembered(), "two pairs are on cooldown");
+        host.move(Invites.PAIR_COOLDOWN_MS - 1);
+        games.sweep();
+        assertEquals(2, games.invites().pairsRemembered(), "still inside the cooldown: kept");
+        host.move(1);
+        games.sweep();
+        assertEquals(0, games.invites().pairsRemembered(),
+                "once it's over the pairs are dropped, so the map never grows");
     }
 
     @Test

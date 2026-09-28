@@ -196,6 +196,9 @@ public final class ConnectFourPlayMenu extends GameMenu {
     }
 
     private void newGame() {
+        if (!connect.mayPlay(viewer)) {
+            return;
+        }
         new ConnectFourPlayMenu(plugin, connect, viewer, back, connect.vsArcade(viewer, match.level())).open(viewer);
     }
 

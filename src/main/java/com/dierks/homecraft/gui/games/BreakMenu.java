@@ -112,6 +112,33 @@ public final class BreakMenu extends GameMenu {
         return Breaks.isRaise(current, wanted) ? Choice.LATER : Choice.NOW;
     }
 
+    /**
+     * A looser limit's tile name: "&amp;e50 tokens a day &amp;7- waits 7 days". The wait is the key
+     * fact, so it is in the NAME (Bedrock shows lore only on a long press).
+     */
+    static String laterName(String choice, int waitDays) {
+        return "&e" + choice + " &7- waits " + days(waitDays);
+    }
+
+    /** A pause tile's name: "&amp;ePause for 7 days &amp;7- can't be undone" (in the NAME, for Bedrock). */
+    static String pauseName(int days) {
+        return "&ePause for " + days(days) + " &7- can't be undone";
+    }
+
+    /** The pause confirm's name: "&amp;bPause until Tue 12 AM &amp;7- can't be undone". */
+    static String confirmName(String until) {
+        return "&bPause until " + until + " &7- can't be undone";
+    }
+
+    /**
+     * When the pause just started ends, as the player reads it: from the row as it is NOW (an
+     * admin's longer pause wins, and midnight may have passed since the tile was drawn), or
+     * {@code fallback} when the row can't be read.
+     */
+    static String pausedUntilText(BreakRow row, GameClock clock, String fallback) {
+        return row == null ? fallback : Breaks.untilText(clock, Breaks.pausedUntil(row));
+    }
+
     /** Whether a pause ending at {@code end} makes the player's own pause longer (it can never shorten it). */
     static boolean lengthens(long ownUntil, long end) {
         return end > ownUntil;
@@ -270,7 +297,8 @@ public final class BreakMenu extends GameMenu {
                     "&7Starts on " + Breaks.dateText(row.pendingDay()) + "."), null);
             case NOW -> set(slot, Menus.icon(Material.LIME_DYE, "&e" + name,
                     "&7Starts now.", "&eClick to choose it"), e -> setLimit(wanted, c));
-            case LATER -> set(slot, Menus.icon(wanted < 0 ? Material.GRAY_DYE : Material.YELLOW_DYE, "&e" + name,
+            case LATER -> set(slot, Menus.icon(wanted < 0 ? Material.GRAY_DYE : Material.YELLOW_DYE,
+                    laterName(name, common.breakRaiseDelayDays()),
                     "&7A looser limit waits " + days(common.breakRaiseDelayDays()) + ":",
                     "&7it would start on " + Breaks.dateText(Breaks.pendingDay(clock, now,
                             common.breakRaiseDelayDays())) + ".",
@@ -324,13 +352,13 @@ public final class BreakMenu extends GameMenu {
                     "&7A pause can only be made longer."), null);
             return;
         }
-        set(slot, Menus.icon(Material.BLUE_BED, "&ePause for " + days(days),
+        set(slot, Menus.icon(Material.BLUE_BED, pauseName(days),
                 "&7Until " + until + ".", "&7It can't be made shorter", "&7or cancelled.", "&eClick to choose"),
                 e -> confirmPause(days, until));
     }
 
     private void confirmPause(int days, String until) {
-        ItemStack display = Menus.icon(Material.BLUE_BED, "&bPause until " + until,
+        ItemStack display = Menus.icon(Material.BLUE_BED, confirmName(until),
                 "&7Games of chance stay closed", "&7until then. Skill games stay open.");
         new ConfirmMenu(plugin, "&bPause for " + days(days) + "?", display,
                 List.of("&7Until " + until + ".", "&cIt can't be made shorter", "&cor cancelled."),
@@ -339,8 +367,9 @@ public final class BreakMenu extends GameMenu {
                     if (breaks == null || !safe(() -> breaks.pause(viewer.getUniqueId(), days))) {
                         couldNotSave();
                     } else {
+                        String now = pausedUntilText(read(plugin, breaks, viewer.getUniqueId()), plugin.clock(), until);
                         viewer.sendMessage(Text.of("&bYou're taking a break from games of chance until "
-                                + until + "."));
+                                + now + "."));
                         click();
                     }
                     reopen();

@@ -100,8 +100,8 @@ public final class WhackAZombiePlayMenu extends GameMenu {
         set(49, Menus.icon(Material.BARRIER, "&cBack",
                 engine.over() ? "&7Back to Whack-a-Zombie." : "&7Leaves this round (no score)."), e -> back.run());
         if (engine.over()) {
-            set(50, Menus.icon(Material.LIME_CONCRETE,
-                    daily != null ? "&ePlay today's round again &7(practice)" : "&ePlay again"), e -> again());
+            set(50, Menus.icon(Material.LIME_CONCRETE, daily != null
+                    ? "&e" + CabinetGame.dailyAgain("round", whack.triedToday(viewer)) : "&ePlay again"), e -> again());
             set(51, Menus.icon(Material.OAK_SIGN, "&eHigh scores"),
                     e -> whack.scores(viewer, daily == null ? Scores.CLASSIC : whack.todayBoard(), back));
         }
@@ -215,6 +215,9 @@ public final class WhackAZombiePlayMenu extends GameMenu {
     }
 
     private void again() {
+        if (!whack.mayPlay(viewer)) {
+            return;
+        }
         if (daily == null) {
             new WhackAZombiePlayMenu(plugin, whack, viewer, back, null, whack.classicSeed()).open(viewer);
         } else {

@@ -84,11 +84,21 @@ public final class ConnectFourMenu extends GameMenu {
         exitTile();
     }
 
+    /**
+     * Each new game (and each invite) runs the gate again: a pause or a world change since this
+     * screen opened counts.
+     */
     private void play(ConnectFourAI.Level level) {
+        if (!connect.mayPlay(viewer)) {
+            return;
+        }
         new ConnectFourPlayMenu(plugin, connect, viewer, this::reopen, connect.vsArcade(viewer, level)).open(viewer);
     }
 
     private void pickFriend() {
+        if (!connect.mayPlay(viewer)) {
+            return;
+        }
         connect.pickFriend(viewer, this::reopen, this::reopen);
     }
 

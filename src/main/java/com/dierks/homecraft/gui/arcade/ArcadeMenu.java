@@ -45,7 +45,9 @@ import java.util.Set;
  * is labelled "Games" and row 4 is border. Once they are on, row 1 reads "Luck" (it is the
  * crates and the ticket) and row 4 becomes the Play row (spec §8.2). Its Luck button follows Take
  * a break (R1.16): "Taking a break until ..." while paused, border for a player who may not play
- * games of chance, and closed if the break can't be read.
+ * games of chance, and closed if the break can't be read. Row 1's crates and Scratch Ticket follow
+ * it too: they are games of chance, so a player on a break sees the same "Taking a break" tile in
+ * their place (or "closed"), and one without {@code hcm.games.chance} sees none of them at all.
  */
 public final class ArcadeMenu extends Menu {
 
@@ -90,8 +92,13 @@ public final class ArcadeMenu extends Menu {
 
         PluginConfig.Arcade arc = plugin.config().arcade();
         wallet(arc);
-        crates(arc);
-        scratch(arc);
+        GamesMenu.LuckView luck = playRow ? GamesMenu.luck(plugin, player) : null;
+        if (GamesMenu.hubShowsChance(playRow, luck == null ? null : luck.state())) {
+            crates(arc);
+            scratch(arc);
+        } else {
+            chanceStandIn(luck);
+        }
         set(WILD, wildTile(), null);
         prizeTabs();
         set(PACKS, ArcadeIcons.of(plugin, player, "packs", Material.PAPER, "&bCard Packs",
@@ -99,19 +106,30 @@ public final class ArcadeMenu extends Menu {
                 e -> new com.dierks.homecraft.gui.mini.PackShopMenu(plugin, player, this::reopen).open(player));
         you();
         if (playRow && player.hasPermission("hcm.games.play")) {
-            play(games);
+            play(games, luck);
         }
         set(49, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
     }
 
+    /** Row 1 in place of the crates and the ticket while games of chance aren't open to the player. */
+    private void chanceStandIn(GamesMenu.LuckView luck) {
+        switch (luck.state()) {
+            case PAUSED -> set(CRATES[0], GamesMenu.breakTile(plugin, luck.until()),
+                    e -> new BreakMenu(plugin, player, this::reopen).open(player));
+            case CLOSED -> set(CRATES[0], GamesMenu.closedTile(), null);
+            case OPEN, HIDDEN -> {
+                // open: drawn as usual; hidden: nothing at all, the row stays filler
+            }
+        }
+    }
+
     /** Row 4 while the games are on: the doors into the Games screen's tabs, and Take a break. */
-    private void play(GamesService games) {
+    private void play(GamesService games, GamesMenu.LuckView luck) {
         set(PLAY[0], Menus.icon(Material.LIGHT_BLUE_STAINED_GLASS_PANE, "&b&lPlay",
                 "&7Games of luck and skill,", "&7for tokens."), null);
         set(PLAY[1], Menus.icon(Material.BOOKSHELF, "&bAll games", "&7Every game that's open.",
                 "&eClick to see them"), e -> tab(null));
         pick(games);
-        GamesMenu.LuckView luck = GamesMenu.luck(plugin, player);
         switch (luck.state()) {
             case OPEN -> set(PLAY[3], Menus.icon(Material.GOLD_NUGGET, "&6Luck",
                     "&7Games of chance, crates", "&7and the Scratch Ticket.", "&eClick to see them"),

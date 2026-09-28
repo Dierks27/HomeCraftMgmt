@@ -7,6 +7,7 @@ import com.dierks.homecraft.games.cabinet.snake.Snake;
 import com.dierks.homecraft.games.cabinet.snake.SnakeEngine;
 import com.dierks.homecraft.games.cabinet.snake.SnakeSettings;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -31,7 +32,8 @@ import java.util.function.Supplier;
  * resume / play again; 45 and 53 stay filler. A run waits for Start, then moves on a one-tick
  * {@link #ticker} countdown (so the speed can change between moves), which stops by itself when
  * the screen closes. During a run the first tap on Back pauses and asks "click again to quit",
- * because leaving ends the run with no score.
+ * because leaving ends the run with no score. A deal and an armed quit each hold clicks for a
+ * moment ({@link ClickHold}), so a double click can't start a run and quit it, or quit at once.
  */
 public final class SnakeMenu extends GameMenu {
 
@@ -147,6 +149,7 @@ public final class SnakeMenu extends GameMenu {
             ticking = true;
             ticker(1, this::tick);
         }
+        hold(ClickHold.SETTLE_MS);
         refresh();
     }
 
@@ -174,6 +177,7 @@ public final class SnakeMenu extends GameMenu {
             if (!field.state().over() && !quitArmed) {
                 paused = true;
                 quitArmed = true;
+                hold(ClickHold.SETTLE_MS);
                 refresh();
                 return;
             }
@@ -185,7 +189,8 @@ public final class SnakeMenu extends GameMenu {
 
     private ItemStack playButton(boolean over) {
         if (over) {
-            return Menus.icon(Material.LIME_DYE, "&aPlay again" + (run.isDaily() ? " &7- practice" : ""));
+            return Menus.icon(Material.LIME_DYE, run.isDaily()
+                    ? "&a" + CabinetGame.dailyAgain("board", snake.dailyTried(viewer)) : "&aPlay again");
         }
         if (!started) {
             return Menus.icon(Material.LIME_DYE, "&a▶ Start", "&7The snake starts moving right.");

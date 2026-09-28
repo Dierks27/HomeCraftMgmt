@@ -7,6 +7,7 @@ import com.dierks.homecraft.games.cabinet.merge.MergeEngine;
 import com.dierks.homecraft.games.cabinet.merge.OreMerge;
 import com.dierks.homecraft.games.cabinet.merge.OreMergeSettings;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -29,7 +30,9 @@ import java.util.function.Supplier;
  * board and the biggest ore. The four slide buttons are in row 5 either side of Back (47 ◀, 48 ▲,
  * 50 ▼, 51 ▶), never on 45/49/53. Ores made by the last move shimmer. "End game" (46) keeps the
  * score now; Back during a live game first asks "click again to quit", because leaving ends it
- * with no score. When no move is left the game records itself and 4 offers "Play again".
+ * with no score. When no move is left the game records itself and 4 offers "Play again". A deal
+ * and each armed "click again" hold clicks for a moment ({@link ClickHold}), so one double click
+ * can't both arm and confirm.
  */
 public final class OreMergeMenu extends GameMenu {
 
@@ -138,6 +141,7 @@ public final class OreMergeMenu extends GameMenu {
         ended = false;
         endArmed = false;
         quitArmed = false;
+        hold(ClickHold.SETTLE_MS);
         refresh();
     }
 
@@ -160,6 +164,7 @@ public final class OreMergeMenu extends GameMenu {
                 quitArmed = false;
                 if (!endArmed) {
                     endArmed = true;
+                    hold(ClickHold.SETTLE_MS);
                     refresh();
                     return;
                 }
@@ -170,7 +175,8 @@ public final class OreMergeMenu extends GameMenu {
             arrow("&e▼ Down", MergeEngine.Dir.DOWN);
             arrow("&eRight ▶", MergeEngine.Dir.RIGHT);
         } else {
-            set(MergeLayout.RUN, Menus.icon(Material.LIME_DYE, "&aPlay again &7- " + (run.isDaily() ? "practice" : "Classic")),
+            set(MergeLayout.RUN, Menus.icon(Material.LIME_DYE, run.isDaily()
+                    ? "&a" + CabinetGame.dailyAgain("board", merge.dailyTried(viewer)) : "&aPlay again &7- Classic"),
                     e -> start(() -> run.isDaily() ? merge.daily(viewer) : merge.classic()));
         }
         set(49, Menus.icon(Material.BARRIER, quitArmed ? "&cBack - click again to quit" : "&cBack",
@@ -178,6 +184,7 @@ public final class OreMergeMenu extends GameMenu {
             if (!ended && !quitArmed) {
                 quitArmed = true;
                 endArmed = false;
+                hold(ClickHold.SETTLE_MS);
                 refresh();
                 return;
             }

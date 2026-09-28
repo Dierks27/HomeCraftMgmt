@@ -58,8 +58,20 @@ public final class GameCatalog {
         return null;
     }
 
-    /** Whether {@code id} is taken: a game id or a reserved word (a course may not use it). */
+    /**
+     * Whether {@code id} is taken by a game id or a reserved word. It can't see a game's aliases
+     * (Twenty-One's "blackjack" lives on the built game): a course id is checked with
+     * {@link #taken(String, GamesService)}.
+     */
     public static boolean taken(String id) {
         return id != null && (spec(id) != null || RESERVED.contains(id.trim().toLowerCase(Locale.ROOT)));
+    }
+
+    /**
+     * Whether {@code id} is taken, so a course may not use it: a game id, a reserved word, or
+     * anything {@code games} resolves to a game — an alias like "blackjack" included.
+     */
+    public static boolean taken(String id, GamesService games) {
+        return taken(id) || (id != null && games != null && games.game(id) != null);
     }
 }

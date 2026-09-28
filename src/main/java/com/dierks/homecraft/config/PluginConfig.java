@@ -637,6 +637,15 @@ public final class PluginConfig {
     public record BlockDef(Material material, String name) {
     }
 
+    /**
+     * The Sound Muffler ({@code sound_muffler}): whether mufflers hush anything, the block's
+     * look, the range a new one starts at and the most it may be set to, and the volume
+     * "Quieter" starts at. Ranges are blocks in each direction.
+     */
+    public record SoundMuffler(boolean enabled, BlockDef block, int defaultRadius, int maxRadius,
+                               int defaultQuietPercent) {
+    }
+
     /** The Mini trading blocks' appearance (Phase 4c). */
     public record MiniBlocks(BlockDef vending, BlockDef display, BlockDef auction) {
     }
@@ -705,6 +714,7 @@ public final class PluginConfig {
     private Shops shops = new Shops(true, 16, Map.of(), true, 3, 6);
     private Map<String, StandData> miniStands;
     private Marketplace marketplace;
+    private SoundMuffler soundMuffler = new SoundMuffler(true, new BlockDef(Material.WHITE_WOOL, "&fSound Muffler"), 8, 16, 25);
     private Map<com.dierks.homecraft.block.CustomBlockType, String> skins;
     /** Extra skin slots that aren't 1:1 with a block type (pallet_used, vending_upper, mailbox.<variant>). */
     private Map<String, String> namedSkins = new LinkedHashMap<>();
@@ -773,6 +783,11 @@ public final class PluginConfig {
 
     public Marketplace marketplace() {
         return marketplace;
+    }
+
+    /** The Sound Muffler block and its limits. */
+    public SoundMuffler soundMuffler() {
+        return soundMuffler;
     }
 
     /** The Base64 head-texture value configured for a custom block, or "" if none. */
@@ -1076,6 +1091,9 @@ public final class PluginConfig {
 
         // ---- Crate Marketplace (Phase 5) ----
         this.marketplace = readMarketplace(c);
+
+        // ---- Sound Muffler ----
+        this.soundMuffler = readSoundMuffler(c);
 
         // ---- Block skins + Web Dashboard (Phase 6) ----
         this.skins = readSkins(c);
@@ -1862,6 +1880,7 @@ public final class PluginConfig {
         putSkin(map, sec, "scratch_booth", com.dierks.homecraft.block.CustomBlockType.SCRATCH_BOOTH);
         putSkin(map, sec, "pity_kiosk", com.dierks.homecraft.block.CustomBlockType.PITY_KIOSK);
         putSkin(map, sec, "token_counter", com.dierks.homecraft.block.CustomBlockType.TOKEN_COUNTER);
+        putSkin(map, sec, "sound_muffler", com.dierks.homecraft.block.CustomBlockType.SOUND_MUFFLER);
 
         // Named slots: the Pallet's loaded state, the Vending Machine's top half, and
         // one skin per Mailbox colour. A legacy single-string `mailbox:` counts as wood.
@@ -2323,6 +2342,27 @@ public final class PluginConfig {
 
     private static String blankToNull(String s) {
         return s == null || s.isBlank() || s.equalsIgnoreCase("none") ? null : s;
+    }
+
+    /**
+     * {@code sound_muffler}. The ranges are clamped to what a muffler can hold
+     * ({@link com.dierks.homecraft.muffler.Muffler#HARD_MAX_RADIUS}), the default range to the
+     * maximum, and the Quieter volume to 1–90% — at 100% "Quieter" would do nothing at all.
+     */
+    private SoundMuffler readSoundMuffler(FileConfiguration c) {
+        boolean enabled = c.getBoolean("sound_muffler.enabled", true);
+        BlockDef block = blockDef(c, "sound_muffler.block", Material.WHITE_WOOL, "&fSound Muffler");
+        int hardMax = com.dierks.homecraft.muffler.Muffler.HARD_MAX_RADIUS;
+        int min = com.dierks.homecraft.muffler.Muffler.MIN_RADIUS;
+        int maxRadius = c.getInt("sound_muffler.max_radius", 16);
+        if (maxRadius < min || maxRadius > hardMax) {
+            log.warning("sound_muffler.max_radius " + maxRadius + " is outside " + min + "-" + hardMax
+                    + "; using " + Math.max(min, Math.min(hardMax, maxRadius)) + ".");
+            maxRadius = Math.max(min, Math.min(hardMax, maxRadius));
+        }
+        int radius = Math.max(min, Math.min(maxRadius, c.getInt("sound_muffler.default_radius", 8)));
+        int quiet = Math.max(1, Math.min(90, c.getInt("sound_muffler.default_quiet_percent", 25)));
+        return new SoundMuffler(enabled, block, radius, maxRadius, quiet);
     }
 
     private BlockDef blockDef(FileConfiguration c, String path, Material fallback, String defaultName) {

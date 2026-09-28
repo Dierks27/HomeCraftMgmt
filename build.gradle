@@ -5,8 +5,8 @@ plugins {
 }
 
 group = 'com.dierks.homecraft'
-version = '0.33.0-live-market'
-description = 'HomeCraft Management — Paper plugin (market with a live, bounded price mood and Market News, Crate store + Marketplace, Minis and the wild hunt, Card Packs, Courier, web dashboard + website feeds, in-game displays, the Arcade)'
+version = '0.34.0-sound-muffler'
+description = 'HomeCraft Management — Paper plugin (market with a live, bounded price mood and Market News, Crate store + Marketplace, Minis and the wild hunt, Card Packs, Courier, web dashboard + website feeds, in-game displays, the Arcade, Sound Mufflers)'
 
 // Target server: Paper 26.2 and 26.3 / Java 25. Compiled against the 26.2 API; the code also
 // compiles and passes every test against the 26.3 API (no removals, no new deprecations). The toolchain is pinned to 25 so the
@@ -66,6 +66,10 @@ dependencies {
     // the API rather than console commands, and listens for group changes. compileOnly, never
     // shaded; LuckPerms is a soft dependency and the code that touches it only loads with it.
     compileOnly 'net.luckperms:api:5.4'
+    // ProtocolLib (Maven Central): Sound Mufflers reach sounds on their way to each player through
+    // it. compileOnly, never shaded; a soft dependency, and only muffler/MufflerPacketListener
+    // touches it, loaded only when ProtocolLib is running.
+    compileOnly 'net.dmulloy2:ProtocolLib:5.4.0'
 
     // Bundled at runtime (shaded) so the plugin needs no external DB server.
     implementation 'org.xerial:sqlite-jdbc:3.50.1.0'

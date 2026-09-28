@@ -176,6 +176,8 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.arcade.AchievementService achievements;
     private com.dierks.homecraft.arcade.QuestService quests;
     private com.dierks.homecraft.courier.CourierService courier;
+    /** Sound Mufflers: placed blocks that hush chosen sounds near them. Null only if they failed to start. */
+    private com.dierks.homecraft.muffler.SoundMufflerService soundMufflers;
     /** The live market (0.33): the price multiplier, its events and ticks. Null only if it failed to build. */
     private com.dierks.homecraft.market.sim.MarketSimService marketSim;
     /** Market news delivery: broadcasts, the join catch-up, the per-player mute. Null only if it failed to build. */
@@ -320,6 +322,22 @@ public final class HomeCraftManagement extends JavaPlugin {
                 new com.dierks.homecraft.courier.BuildingService(
                         this, new com.dierks.homecraft.storage.CourierSiteDao(database),
                         new com.dierks.homecraft.storage.TrackedGroundDao(database)));
+
+        // Sound Mufflers — a block that hushes the sounds you pick near it. The hushing itself goes
+        // through ProtocolLib (a soft dependency); without it mufflers still place and save.
+        try {
+            this.soundMufflers = new com.dierks.homecraft.muffler.SoundMufflerService(
+                    this, new com.dierks.homecraft.storage.SoundMufflerDao(database));
+            this.soundMufflers.start();
+            getServer().getPluginManager().registerEvents(
+                    new com.dierks.homecraft.muffler.MufflerBlockListener(soundMufflers), this);
+        } catch (RuntimeException e) {
+            getLogger().log(java.util.logging.Level.SEVERE, "Could not start the Sound Mufflers.", e);
+            if (this.soundMufflers != null) {
+                this.soundMufflers.stop();
+            }
+            this.soundMufflers = null;
+        }
 
         getServer().getPluginManager().registerEvents(
                 new com.dierks.homecraft.courier.CourierListener(this), this);
@@ -476,6 +494,10 @@ public final class HomeCraftManagement extends JavaPlugin {
             courier.stop();
             courier = null;
         }
+        if (soundMufflers != null) {
+            soundMufflers.stop(); // unhooks ProtocolLib before the database goes
+            soundMufflers = null;
+        }
         if (displayService != null) {
             displayService.stop();
             displayService = null;
@@ -574,6 +596,9 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
         if (courier != null) {
             courier.start(); // re-arm the courier expiry sweep under any new config
+        }
+        if (soundMufflers != null) {
+            soundMufflers.reload(); // on/off and the range limits
         }
         if (homes != null) {
             homes.reload(); // re-read Essentials' sethome-multiple tiers
@@ -2035,6 +2060,11 @@ public final class HomeCraftManagement extends JavaPlugin {
 
     public com.dierks.homecraft.arcade.QuestService quests() {
         return quests;
+    }
+
+    /** Sound Mufflers, or null if they failed to start. */
+    public com.dierks.homecraft.muffler.SoundMufflerService soundMufflers() {
+        return soundMufflers;
     }
 
     public com.dierks.homecraft.courier.CourierService courier() {

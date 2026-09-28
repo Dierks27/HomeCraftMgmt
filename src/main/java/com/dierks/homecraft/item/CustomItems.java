@@ -152,6 +152,17 @@ public final class CustomItems {
                 CustomBlockType.ARCADE, config.skin(CustomBlockType.ARCADE));
     }
 
+    /**
+     * A Sound Muffler, ready to place: a fresh one. A picked-up muffler's drop carries its
+     * settings on top of this (see {@code SoundMufflerService#itemFor}).
+     */
+    public ItemStack soundMuffler() {
+        PluginConfig.BlockDef def = config.soundMuffler().block();
+        return tagged(def.material(), def.name(), List.of("&7Place it, then pick what to hush:",
+                "&7chickens, pistons, villagers, doors…", "&8Quieter or Silent, right where you need it."),
+                CustomBlockType.SOUND_MUFFLER, config.skin(CustomBlockType.SOUND_MUFFLER));
+    }
+
     /** An Arcade machine block (crate/scratch/pity/counter). */
     public ItemStack arcadeMachine(String key, CustomBlockType type, String lore) {
         PluginConfig.BlockDef def = config.arcade().machines().get(key);
@@ -181,6 +192,7 @@ public final class CustomItems {
             case "vending" -> vendingMachine();
             case "pallet" -> pallet();
             case "arcade" -> arcade();
+            case "sound_muffler" -> soundMuffler();
             default -> null;
         };
     }
@@ -201,6 +213,7 @@ public final class CustomItems {
             case SCRATCH_BOOTH -> arcadeMachine("scratch", type, "&7Right-click to buy a scratch ticket.");
             case PITY_KIOSK -> arcadeMachine("pity", type, "&7Right-click: tokens → a guaranteed Rare+ Mini.");
             case TOKEN_COUNTER -> arcadeMachine("counter", type, "&7Right-click to check your tokens.");
+            case SOUND_MUFFLER -> soundMuffler();
         };
     }
 

@@ -1091,6 +1091,7 @@ skins:
   scratch_booth: ""   # scratch-ticket booth head
   pity_kiosk:    ""   # pity-exchange kiosk head
   token_counter: ""   # token-counter head
+  sound_muffler: ""   # blank = the plain block from sound_muffler.block (white wool)
 
 # ---------------------------------------------------------------------
 #  Recipes — every craftable HomeCraft block, data-driven and reloadable.
@@ -1161,6 +1162,30 @@ recipes:
     yellow:
       shape: ["XIX", "ICI", " F "]
       ingredients: { X: YELLOW_DYE, I: IRON_INGOT, C: CHEST, F: "#wooden_fences" }
+  # The Sound Muffler: a note block wrapped in wool (any colour).
+  sound_muffler:
+    shape: ["WWW", "WNW", "WWW"]
+    ingredients: { W: "#wool", N: NOTE_BLOCK }
+
+# ---------------------------------------------------------------------
+#  The Sound Muffler — a block that hushes noisy things near it.
+#  Place one and its menu opens: pick what to hush (chickens, villagers,
+#  pistons, dispensers, doors… or any single sound, including ones it
+#  heard nearby) and how much — Quieter or Silent. Right-click it later to
+#  change things; break it and the item remembers its settings.
+#  It hushes sounds MADE inside its box (every block within the range, in
+#  each direction), for everyone who hears them, wherever they stand.
+#  Needs ProtocolLib. Without it mufflers still place and save, but hush
+#  nothing (the menu says so). It works in every world: quiet isn't part
+#  of the economy. Sounds each player's own game makes — rain, music,
+#  furnaces, portals, their own footsteps — can't be reached by any plugin.
+# ---------------------------------------------------------------------
+sound_muffler:
+  enabled: true                 # false: mufflers stay placed but hush nothing
+  block: { material: WHITE_WOOL, name: "&fSound Muffler" }   # wool muffles, even for the Warden
+  default_radius: 8             # blocks in each direction a new muffler reaches (a 17x17x17 box)
+  max_radius: 16                # the most a player can set (hard limit 32)
+  default_quiet_percent: 25     # the volume "Quieter" starts at; players pick 50/25/10%
 
 # ---------------------------------------------------------------------
 #  Phase 6 (Part C) — The Market Web Dashboard

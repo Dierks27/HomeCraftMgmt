@@ -26,6 +26,9 @@ softdepend:
   - PlaceholderAPI
   # Bedrock players (Geyser) get plain-material icons and short animations.
   - floodgate
+  # Sound Mufflers reach sounds on their way to each player through ProtocolLib. Without it
+  # mufflers still place and save their settings, but hush nothing.
+  - ProtocolLib
 
 commands:
   hcm:
@@ -34,7 +37,7 @@ commands:
       /hcm admin             - open the Admin Studio (manage & import Minis)
       /hcm auction           - open the Mini Auction House
       /hcm reload            - reload config.yml and re-register recipes
-      /hcm give <printer|pc|vending|display [plain|royal]|mailbox [variant]|pallet|arcade> [player]
+      /hcm give <printer|pc|vending|display [plain|royal]|mailbox [variant]|pallet|arcade|muffler> [player]
       /hcm give <card <id>|pack <id>|binder|filament <color> <n>> [player]
       /hcm market list|price <item>|buy <item> <qty>|sell <item> <qty>
       /hcm market resetstock <item|all>  - admin: reseed stock+price from config
@@ -78,6 +81,7 @@ permissions:
       hcm.workbench.place: true
       hcm.workbench.use: true
       hcm.printer.use: true
+      hcm.muffler.use: true
       hcm.market.order: true
       hcm.market.buy: true
       hcm.market.limit.bypass: true
@@ -141,6 +145,11 @@ permissions:
     default: true
   hcm.printer.use:
     description: Use a placed Mini Printer to print Minis from Cards.
+    default: true
+  hcm.muffler.use:
+    description: >-
+      Place a Sound Muffler and change what it hushes. Anyone can look at a muffler's
+      settings; only its owner (or an admin) can change them.
     default: true
   hcm.protection.bypass:
     description: Bypass Towny/WorldGuard build checks for HomeCraft custom blocks.

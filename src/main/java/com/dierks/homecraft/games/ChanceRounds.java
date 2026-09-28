@@ -209,7 +209,7 @@ public final class ChanceRounds {
             ok = games.dao().raiseStake(round.id(), id, game.source(), extra, () -> {
                 Breaks.Today today = games.breaks() == null ? null : games.breaks().today(id);
                 return today != null && !today.paused(clock().nowMillis()) && !today.over(extra);
-            }, null, stakeDetail(game.name(), extra), clock().nowMillis());
+            }, round.data(), stakeDetail(game.name(), extra), clock().nowMillis()); // the action lands with the tokens
         } catch (SQLException e) {
             log().log(Level.SEVERE, "Could not add to a " + game.id() + " round - nothing was taken", e);
             games.tell(player, Refusal.CLOSED);

@@ -25,8 +25,11 @@ import java.util.logging.Level;
  * <ul>
  *   <li><b>Join</b> (one tick after, once Multiverse-Inventories has loaded their profile): every
  *       player's inventory and ender chest are swept of stray kit items; a RETURN row sends them
- *       home and hands over the carry; an ACTIVE row (a crash) is restored overwrite-only in its
- *       session world, then they go home.</li>
+ *       home and hands over the carry; an ACTIVE row (a crash) is restored in its session world
+ *       (what they hold is banked first if their own data says it was saved after the game's
+ *       clear, else it is overwrite-only), then they go home. A row that can't be finished (a
+ *       snapshot or carry that no longer reads, a world that is gone) fails in place: they stay
+ *       where they are and an admin helps.</li>
  *   <li><b>Respawn</b>: a player who died with an ACTIVE row gets it back.</li>
  *   <li><b>Quit</b> (LOWEST, before Multiverse-Inventories saves): a live session is restored in
  *       place and marked RETURN; the next join sends them home.</li>

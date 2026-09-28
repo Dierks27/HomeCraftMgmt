@@ -25,7 +25,8 @@ import java.util.UUID;
  *   <li>{@code show} — phase, game, session world, where they came from, how many stacks are
  *       saved and kept for later (works offline; also the last finished session, kept a week).</li>
  *   <li>{@code restore} — put the saved things back now, by the usual rules: in the session world
- *       only, overwriting, then home (online).</li>
+ *       only, what they hold now kept for them first, overwriting, then home (online). The admin
+ *       is told what really happened (or why it couldn't).</li>
  *   <li>{@code return} — send them home once their things are back (online).</li>
  *   <li>{@code discard confirm} — delete the row for good (logged). Without {@code confirm} it
  *       only says what would go.</li>

@@ -74,9 +74,11 @@ import java.util.UUID;
  *
  * <p><b>For a player in a session</b> (any phase): no damage, hunger, fire or death (a death is
  * cancelled and the player revived, then leaves normally next tick); no pickups of items, arrows
- * or XP; no drops, no inventory moves (only games screens take clicks), no opening any other
- * inventory or HomeCraft screen (nothing may add items mid-game); no swapping hands, placing,
- * buckets, eating, throwing, portals, or using blocks and entities (except their own boat);
+ * or XP; no drops (on the way in, only a kit item's: closing a full inventory may have to drop
+ * what was held, and a cancelled drop there is lost), no inventory moves (only games screens take
+ * clicks), no opening any other inventory or HomeCraft screen (nothing may add items mid-game);
+ * no swapping hands, placing, buckets, eating, throwing, portals, or using blocks and entities
+ * (except their own boat);
  * foreign game-mode changes are cancelled and ADVENTURE re-asserted (Multiverse-Core re-applies a
  * world's mode after every world change, so this must never END a session); flight is switched
  * off again. Teleports are sorted into ours, harmless and the end (R2.8); a world change some
@@ -333,7 +335,10 @@ public final class KitGuardListener implements Listener {
             return;
         }
         safely("a game drop check", () -> {
-            if (inSession(e.getPlayer())) {
+            Session.Phase phase = core.none() ? null : core.phase(e.getPlayer().getUniqueId());
+            // Not while ENTERING: the kit isn't given yet, and a drop that closing an inventory makes
+            // (no room for the cursor) falls back, when cancelled, to an addItem that discards it.
+            if (phase != null && phase != Session.Phase.ENTERING) {
                 e.setCancelled(true);
             } else if (KitItems.isKit(e.getItemDrop().getItemStack())) {
                 e.getItemDrop().remove(); // a stray kit item: deleted, never dropped

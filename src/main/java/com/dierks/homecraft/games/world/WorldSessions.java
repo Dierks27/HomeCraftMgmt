@@ -1,9 +1,11 @@
 package com.dierks.homecraft.games.world;
 
+import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.Refusal;
+import com.dierks.homecraft.util.Text;
 import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -22,11 +24,13 @@ import java.util.logging.Level;
  *
  * <p>The order of every step is the design. Entering: close the inventory, teleport, THEN save
  * the player's state (after the teleport, so Multiverse-Inventories has already swapped in the
- * Games world's inventory), THEN clear and give the kit. Leaving: bank anything that turned up
- * during the game, restore in place (overwriting), mark the row RETURN in the same tick, THEN
- * teleport back and hand the banked things over, THEN mark the row DONE. A RETURN row is never
- * applied twice, and the row is finished only after the player is home — so a quit, a crash or a
- * stop at any point leaves something the next join can finish, and nothing can be duplicated.
+ * Games world's inventory), THEN clear, save and give the kit. Leaving: bank anything that turned
+ * up during the game, restore in place (overwriting), mark the row RETURN in the same tick, THEN
+ * teleport back, THEN mark the row DONE and only then hand the banked things over (what doesn't fit
+ * stays in the row until the player makes room and types {@code /hcm leave}). A RETURN row is
+ * never applied twice, and the row is finished only after the player is home — so a quit, a crash,
+ * a stop or a failed write at any point leaves something the next join can finish, and nothing
+ * can be duplicated.
  * The state machine itself is {@link SessionCore}; this class is the games' face of it.
  *
  * <p>World sessions never change attributes, walk or fly speed, invulnerability or collisions.
@@ -271,6 +275,41 @@ public final class WorldSessions {
     /** Tab completion for {@link #adminSaved}, with the same arguments. */
     public List<String> adminSavedTab(CommandSender sender, String[] args) {
         return SavedStateAdmin.tab(sender, args);
+    }
+
+    // ---- with or without the games service (recovery never switches off, §7.6) ------------------
+
+    /**
+     * {@code /hcm leave}: end the player's world game, or finish a return that didn't (the trip
+     * home, or the things kept for them once they have made room), or say they're not in a game.
+     * Through the plugin's one state machine, so it works with the games off or failed to start.
+     */
+    public static void leaveCommand(HomeCraftManagement plugin, Player player) {
+        BukkitPort port = sharedPort(plugin, player);
+        if (port != null) {
+            port.safely("/hcm leave", () -> port.core().leave(player, EndReason.COMMAND));
+        }
+    }
+
+    /**
+     * {@code /hcm games saved <player> show|restore|return|discard confirm}, with or without the
+     * games service. Takes the words after {@code saved}.
+     */
+    public static void savedCommand(HomeCraftManagement plugin, CommandSender sender, String[] args) {
+        BukkitPort port = sharedPort(plugin, sender);
+        if (port != null) {
+            port.safely("/hcm games saved", () -> new SavedStateAdmin(port).handle(sender, args));
+        }
+    }
+
+    private static BukkitPort sharedPort(HomeCraftManagement plugin, CommandSender sender) {
+        try {
+            return BukkitPort.of(plugin);
+        } catch (RuntimeException | LinkageError e) {
+            plugin.getLogger().log(Level.SEVERE, "Games: saved-state recovery is not available", e);
+            sender.sendMessage(Text.of("&cThat can't be done right now - see the console."));
+            return null;
+        }
     }
 
     // ---- internals ------------------------------------------------------------------------------

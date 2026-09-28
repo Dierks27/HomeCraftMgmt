@@ -59,6 +59,8 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
         int applies;
         final List<String> appliedIn = new ArrayList<>();
         int saves;
+        /** The mark in the player's own data (on the server it is saved with their inventory). */
+        String mark;
 
         Body(String name, Place place) {
             this.id = UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8));
@@ -378,6 +380,27 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
             }
         }
         return left;
+    }
+
+    @Override
+    public int room(Body p, List<String> items) {
+        int free = 0;
+        for (int i = 0; i < STORAGE; i++) {
+            if (p.slots[i] == null) {
+                free++;
+            }
+        }
+        return Math.min(free, items.size());
+    }
+
+    @Override
+    public String mark(Body p) {
+        return p.mark;
+    }
+
+    @Override
+    public void setMark(Body p, String mark) {
+        p.mark = mark;
     }
 
     @Override

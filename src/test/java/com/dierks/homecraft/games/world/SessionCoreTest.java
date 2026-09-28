@@ -35,10 +35,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * session world; a RETURN row is never applied again; death is cancelled and leaves normally, and
  * a player who is dead anyway keeps an ACTIVE row until the respawn; racing entries are refused
  * and a late callback from an old session can't touch a new one; things that arrived mid-game come
- * back (dropped at their feet only outside a Games world); stop while stopping never teleports; a
- * reload that closes games sends them home at once; foreign teleports and world changes; the
- * void; an unreadable snapshot is kept for an admin; DONE rows are pruned after a week; the kit
- * never survives any path.
+ * back (what doesn't fit waits in the row for {@code /hcm leave}, never on the ground); a crash-join
+ * banks what arrived after the clear; stop while stopping never teleports; a reload that closes
+ * games sends them home at once; foreign teleports (into another Games world the carry waits) and
+ * world changes; the void; an unreadable snapshot is kept for an admin; DONE rows are pruned after
+ * a week; the kit never survives any path. When a write fails or a blob can't be read, see
+ * {@link SessionCoreFailureTest}.
  */
 class SessionCoreTest {
 
@@ -150,13 +152,29 @@ class SessionCoreTest {
     }
 
     @Test
-    void theCursorAndCraftingGridGoHomeBeforeTheCapture() throws Exception {
+    void somethingOnTheCursorOrInTheGridIsRefusedBeforeTheInventoryCloses() throws Exception {
+        for (int i = 2; i < FakeServer.STORAGE; i++) {
+            alice.slots[i] = "cobble " + i; // full: closing would have to drop what is held
+        }
         alice.cursor = "gold ingot";
         alice.grid[2] = "stick x2";
+        assertNull(core.enter(alice, "trials", "", START, trials), "the entry starts");
+        server.step();
+        assertTrue(server.trips.isEmpty(), "but never leaves");
+        assertNull(core.session(alice.id), "the entry is cleared");
+        assertNull(row(), "nothing saved");
+        assertEquals("gold ingot", alice.cursor, "the cursor is left as it was");
+        assertEquals("stick x2", alice.grid[2], "and the grid");
+        assertTrue(alice.dropped.isEmpty(), "nothing was dropped (a full inventory can't take them back)");
+        assertTrue(alice.messages.contains("&c" + SessionCore.HANDS), "told to put them down first");
+
+        alice.slots[2] = "gold ingot"; // put down
+        alice.slots[3] = "stick x2";
+        alice.cursor = null;
+        alice.grid[2] = null;
         play();
         List<String> saved = Arrays.stream(FakeServer.slots(row().items())).filter(s -> s != null).toList();
-        assertTrue(saved.contains("gold ingot") && saved.contains("stick x2"),
-                "closing the inventory first puts the cursor and grid into what is saved: nothing is lost");
+        assertTrue(saved.contains("gold ingot") && saved.contains("stick x2"), "then it all goes into what is saved");
     }
 
     @Test
@@ -316,15 +334,37 @@ class SessionCoreTest {
         play();
         FakeServer after = new FakeServer();
         SessionCore<FakeServer.Body, String> rebooted = new SessionCore<>(dao, after, log);
-        // The disk was saved before the clear: her own things AND an extra copy of the diamonds.
+        // The disk was saved before the clear (a crash between the clear and its save): her own
+        // things AND an extra copy of the diamonds, and so not the clear's mark either.
         alice.slots = original();
         alice.slots[5] = "diamond x3";
         alice.cursor = "emerald";
+        alice.mark = null;
         rebooted.joined(alice);
         after.arriveAll(); // she was still in the games world: restore, then home
         assertArrayEquals(original(), Arrays.copyOf(alice.slots, FakeServer.SLOTS),
                 "overwritten, not merged: the stale copy is gone and nothing is doubled");
         assertNull(alice.cursor, "what was in hand predates the game and is not kept");
+        assertNull(row(), "finished");
+    }
+
+    @Test
+    void theClearIsSavedAtOnceSoACrashJoinBanksWhatArrivedDuringTheGame() throws Exception {
+        play();
+        String sid = row().sessionId();
+        assertEquals(SessionCore.CLEARED + sid, alice.mark, "her own data says it was cleared for this session");
+        assertEquals(1, alice.saves, "and it was saved right after the clear: the file no longer holds her things");
+        alice.slots[20] = "Mini #42"; // delivered mid-game; the autosave caught it, then the server died
+
+        FakeServer after = new FakeServer();
+        SessionCore<FakeServer.Body, String> rebooted = new SessionCore<>(dao, after, log);
+        rebooted.joined(alice);
+        after.arriveAll();
+        assertEquals(HOME, alice.place, "home");
+        assertEquals(1, alice.items().stream().filter("Mini #42"::equals).count(),
+                "what arrived after the clear is banked and handed over, not thrown away");
+        assertEquals(1, alice.items().stream().filter("diamond x3"::equals).count(), "her own things once");
+        assertEquals(1, alice.applies, "applied once");
         assertNull(row(), "finished");
     }
 
@@ -414,16 +454,29 @@ class SessionCoreTest {
     }
 
     @Test
-    void leftoversDropAtTheirFeetOutsideAGamesWorld() throws Exception {
-        for (int i = 2; i < FakeServer.STORAGE; i++) {
-            alice.slots[i] = "cobble " + i;
+    void whatDoesntFitAtHomeWaitsInTheRowForRoomAndLeaveHandsItOver() throws Exception {
+        for (int i = 2; i < FakeServer.STORAGE - 1; i++) {
+            alice.slots[i] = "cobble " + i; // one slot left
         }
         play();
         alice.slots[20] = "Mini #42";
+        alice.slots[21] = "Mini #43";
         core.leave(alice, EndReason.FINISH);
         server.arriveAll();
-        assertEquals(List.of("Mini #42"), alice.dropped, "a full inventory at home: dropped at their feet");
-        assertNull(row(), "and the session finishes");
+        assertEquals(HOME, alice.place, "home");
+        assertTrue(alice.dropped.isEmpty(), "nothing is dropped on the ground");
+        assertTrue(alice.items().contains("Mini #42"), "what fits is handed over");
+        assertEquals(List.of("Mini #43"), server.decode(row().carry()), "the rest waits in the row");
+        assertEquals(SavedState.RETURN, row().phase(), "which stays RETURN");
+        assertTrue(alice.messages.contains(SessionCore.FULL), "and they are told to make room");
+
+        alice.slots[5] = null; // made room
+        int trips = server.started;
+        core.leave(alice, EndReason.COMMAND); // /hcm leave
+        assertEquals(trips, server.started, "already home: no second trip");
+        assertEquals(1, alice.items().stream().filter("Mini #43"::equals).count(), "handed over once");
+        assertEquals(1, alice.items().stream().filter("Mini #42"::equals).count(), "and the first one still once");
+        assertNull(row(), "finished");
     }
 
     @Test
@@ -617,6 +670,52 @@ class SessionCoreTest {
     }
 
     @Test
+    void aForeignTeleportIntoAnotherGamesWorldKeepsTheCarryForTheTripHome() throws Exception {
+        server.worlds.add("games2");
+        server.gamesWorlds.add("games2");
+        play();
+        alice.slots[20] = "Mini #42";
+        Place there = Place.of("games2", 0, 64, 0);
+        core.teleported(alice, START, there, "COMMAND");
+        alice.place = there;
+        server.step();
+        assertFalse(alice.items().contains("Mini #42"), "not handed over inside a Games world");
+        assertEquals(List.of("Mini #42"), server.decode(row().carry()), "it waits in the row");
+        assertEquals(SavedState.RETURN, row().phase(), "which stays RETURN");
+        assertTrue(alice.messages.contains(SessionCore.KEPT), "told how to get it");
+        assertTrue(alice.items().contains("diamond x3"), "her own things are back");
+
+        core.leave(alice, EndReason.COMMAND); // /hcm leave
+        server.arriveAll();
+        assertEquals(HOME, alice.place, "taken home");
+        assertEquals(1, alice.items().stream().filter("Mini #42"::equals).count(), "and handed it there, once");
+        assertNull(row(), "finished");
+    }
+
+    @Test
+    void aFarTeleportInsideTheGamesWorldWithAFullInventoryLosesNothing() throws Exception {
+        for (int i = 2; i < FakeServer.STORAGE; i++) {
+            alice.slots[i] = "cobble " + i;
+        }
+        play();
+        alice.slots[20] = "Mini #42";
+        Place far = Place.of("games", 500, 64, 500);
+        core.teleported(alice, START, far, "COMMAND");
+        alice.place = far;
+        server.step();
+        assertEquals(SavedState.RETURN, row().phase(), "the carry waits");
+        core.leave(alice, EndReason.COMMAND);
+        server.arriveAll();
+        assertEquals(HOME, alice.place, "sent home");
+        assertTrue(alice.dropped.isEmpty(), "nothing on the ground: her inventory is full");
+        assertEquals(List.of("Mini #42"), server.decode(row().carry()), "the Mini waits for room");
+        alice.slots[7] = null;
+        core.leave(alice, EndReason.COMMAND);
+        assertTrue(alice.items().contains("Mini #42"), "then it is handed over");
+        assertNull(row(), "finished");
+    }
+
+    @Test
     void aSmallForeignMoveKeepsTheGameAndTheGameHearsIt() throws Exception {
         play();
         core.teleported(alice, START, Place.of("games", 104, 70, 100), "UNKNOWN");
@@ -692,7 +791,8 @@ class SessionCoreTest {
             ps.setBytes(1, good);
             ps.executeUpdate();
         }
-        assertEquals("&aPutting their things back now.", core.adminRestore(alice), "an admin restores");
+        assertEquals(SessionCore.ADMIN_BACK, core.adminRestore(alice),
+                "an admin restores: she is still in the session world, so it happens at once and the admin hears so");
         server.arriveAll();
         assertEquals(HOME, alice.place, "home");
         assertTrue(alice.items().contains("Mini #42") && alice.items().contains("diamond x3"), "with everything");
@@ -702,12 +802,8 @@ class SessionCoreTest {
     @Test
     void aRestoreWhoseWorldIsGoneKeepsTheRow() throws Exception {
         play();
-        core.quit(alice); // RETURN
-        FakeServer after = new FakeServer();
+        FakeServer after = new FakeServer(); // the server dies mid-game
         SessionCore<FakeServer.Body, String> rebooted = new SessionCore<>(dao, after, log);
-        try (PreparedStatement ps = conn.prepareStatement("UPDATE game_saved_state SET phase = 'ACTIVE'")) {
-            ps.executeUpdate(); // as if it had crashed mid-game instead
-        }
         after.worlds.remove("games");
         alice.place = Place.of("world", 0, 64, 0);
         rebooted.joined(alice);
@@ -731,10 +827,9 @@ class SessionCoreTest {
         assertNull(row(), "finished");
 
         play();
-        core.quit(alice);
-        try (PreparedStatement ps = conn.prepareStatement("UPDATE game_saved_state SET phase = 'ACTIVE' WHERE phase = 'RETURN'")) {
-            ps.executeUpdate();
-        }
+        alice.dead = true;
+        core.quit(alice); // dead: never restored, the row stays ACTIVE
+        alice.dead = false;
         alice.online = true;
         assertTrue(core.adminReturn(alice).contains("haven't been put back"), "return refuses an ACTIVE row: it would lose it");
         assertEquals("&aDiscarded their saved things.", core.adminDiscard(alice.id, "Alice", "Admin"), "discard deletes it");

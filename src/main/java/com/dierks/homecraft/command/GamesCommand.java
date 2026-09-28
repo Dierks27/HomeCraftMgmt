@@ -2,13 +2,13 @@ package com.dierks.homecraft.command;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.Breaks;
-import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GameAdmin;
 import com.dierks.homecraft.games.GameCatalog;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.Invites;
 import com.dierks.homecraft.games.world.Session;
+import com.dierks.homecraft.games.world.WorldSessions;
 import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.util.GameClock;
 import com.dierks.homecraft.util.Text;
@@ -252,31 +252,16 @@ public final class GamesCommand {
 
     /**
      * {@code /hcm leave}: end the world game you are in and go home with your things. Also retries
-     * a return that didn't finish (a failed teleport keeps the row until then).
+     * a return that didn't finish (a failed teleport, or things kept until you made room). It
+     * works with the games off or failed to start too: getting your things back never switches
+     * off (§7.6).
      */
     public void leave(CommandSender sender, String[] args) {
         Player player = self(sender, "Only players can leave a game.");
         if (player == null || deny(sender, PLAY)) {
             return;
         }
-        GamesService games = plugin.games();
-        if (games == null) {
-            player.sendMessage(Text.of("&7You're not in a game."));
-            return;
-        }
-        boolean live = games.sessions().session(player) != null;
-        if (!live) {
-            try {
-                live = games.dao().loadState(player.getUniqueId()) != null;
-            } catch (SQLException e) {
-                plugin.getLogger().log(Level.WARNING, "Could not read " + player.getName() + "'s saved things", e);
-            }
-        }
-        if (!live) {
-            player.sendMessage(Text.of("&7You're not in a game."));
-            return;
-        }
-        games.sessions().leave(player, EndReason.COMMAND);
+        WorldSessions.leaveCommand(plugin, player); // says "You're not in a game." when there is nothing
     }
 
     // ---------------------------------------------------------------------
@@ -297,6 +282,12 @@ public final class GamesCommand {
             help(sender);
             return;
         }
+        if (verb.equals("saved")) {
+            // Works without the games service too: players' things come back whatever the switches say.
+            log(sender, "saved " + String.join(" ", Arrays.copyOfRange(args, 2, args.length)));
+            WorldSessions.savedCommand(plugin, sender, Arrays.copyOfRange(args, 2, args.length));
+            return;
+        }
         GamesService games = plugin.games();
         if (games == null) {
             sender.sendMessage(Text.of("&cThe Games failed to start - check the console."));
@@ -306,10 +297,6 @@ public final class GamesCommand {
             case "status" -> status(sender, games);
             case "feature" -> feature(sender, games, args);
             case "scores" -> scores(sender, games, args);
-            case "saved" -> {
-                log(sender, "saved " + String.join(" ", Arrays.copyOfRange(args, 2, args.length)));
-                games.sessions().adminSaved(sender, Arrays.copyOfRange(args, 2, args.length));
-            }
             default -> {
                 Game owner = adminOwner(games, verb);
                 if (owner == null) {

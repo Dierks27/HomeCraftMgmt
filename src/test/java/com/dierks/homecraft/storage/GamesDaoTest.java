@@ -424,6 +424,30 @@ class GamesDaoTest {
         assertNull(dao.loadState(bob));
     }
 
+    @Test
+    void finishingClearsTheCarryInTheSameWrite() throws Exception {
+        assertTrue(dao.saveState(state(alice, "s1")), "seeded");
+        assertTrue(dao.setCarry(alice, "s1", new byte[]{9}), "something is kept for later");
+        assertTrue(dao.finishState(alice, "s1", NOW + 5), "home");
+        SavedState done = dao.lastDoneState(alice);
+        assertEquals(SavedState.DONE, done.phase(), "DONE");
+        assertNull(done.carry(), "and its carry is cleared with it: the hand-over comes after this write, never before");
+    }
+
+    @Test
+    void theLastFinishedSessionIsReadForOnePlayerOnly() throws Exception {
+        assertNull(dao.lastDoneState(alice), "nothing finished yet");
+        for (String[] s : new String[][]{{"a1", "10"}, {"a2", "30"}, {"a3", "20"}}) {
+            assertTrue(dao.saveState(state(alice, s[0])), "seeded " + s[0]);
+            assertTrue(dao.finishState(alice, s[0], NOW + Long.parseLong(s[1])), "finished " + s[0]);
+        }
+        assertTrue(dao.saveState(state(bob, "b1")), "bob's");
+        assertTrue(dao.finishState(bob, "b1", NOW + 99), "finished later than any of alice's");
+        assertTrue(dao.saveState(state(alice, "a4")), "and alice has a live one too");
+        assertEquals("a2", dao.lastDoneState(alice).sessionId(), "the most recently finished of hers, not bob's or the live one");
+        assertEquals("b1", dao.lastDoneState(bob).sessionId(), "bob's own");
+    }
+
     // ---- Take a break, courses, prefs, the secret ---------------------------------------------
 
     @Test

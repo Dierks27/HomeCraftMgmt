@@ -27,6 +27,10 @@ import java.util.logging.Level;
  * they take invites at all ({@code invites.<gameId>} in {@code game_prefs}): Coin Flip invites are
  * OFF until the player turns them on; friend games are on. A player who can't be invited is
  * simply not offered — the inviter is never told why.
+ *
+ * <p>What the INVITER hears after sending is the game's to say, through its answer callback
+ * ("Sam didn't take your Coin Flip invite."): this class only speaks to the invitee (the invite,
+ * how to answer, that it ran out or was called off), so nobody reads the same news twice.
  */
 public final class Invites {
 
@@ -113,8 +117,7 @@ public final class Invites {
             return false;
         }
         to.sendMessage(Text.of("&7Invite turned down."));
-        tell(p.invite().from(), "&f" + to.getName() + " &7can't play right now.");
-        answer(p, false);
+        answer(p, false); // the game tells the inviter
         return true;
     }
 
@@ -132,8 +135,9 @@ public final class Invites {
             if (i.to().equals(player) || i.from().equals(player)) {
                 pending.remove(i.to());
                 p.cancelExpiry().run();
-                UUID other = i.to().equals(player) ? i.from() : i.to();
-                tell(other, i.to().equals(player) ? "&7That invite was called off." : "&7The invite was called off.");
+                if (i.from().equals(player)) {
+                    tell(i.to(), "&7That invite was called off."); // the invitee; the game tells an inviter
+                }
                 answer(p, false);
             }
         }
@@ -212,8 +216,7 @@ public final class Invites {
         }
         pending.remove(invite.to());
         p.cancelExpiry().run();
-        tell(invite.to(), "&7The invite ran out.");
-        tell(invite.from(), "&7Your invite ran out.");
+        tell(invite.to(), "&7That invite has run out."); // the game tells the inviter
         answer(p, false);
     }
 

@@ -132,7 +132,7 @@ class PlayGateTest {
         }
         Refusal r = games.canStake(alex.player, slots, 1);
         assertEquals(Refusal.dailyLimit("Test Slots"), r, "the fourth play of the day is refused at 23:58");
-        assertEquals("That's all the Test Slots for today. It opens again at midnight.", r.message(),
+        assertEquals("That's all your plays of Test Slots for today. It opens again at midnight.", r.message(),
                 "and says when it opens again");
         assertNull(games.canOpen(alex.player, slots), "the screen still opens (steps 0-4 only)");
         host.time.now = GamesKit.at(2026, 3, 11, 0, 1);

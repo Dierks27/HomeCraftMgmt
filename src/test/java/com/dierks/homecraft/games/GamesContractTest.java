@@ -30,7 +30,8 @@ class GamesContractTest {
             assertFalse(r.message().isEmpty(), r.toString());
         }
         assertEquals("You're taking a break from games of chance until Thu 12 AM.", Refusal.paused("Thu 12 AM").message());
-        assertEquals("That's all the Ore Slots for today. It opens again at midnight.",
+        // "your plays of <name>" reads naturally for every name, "The Wheel" included (not "all the The Wheel")
+        assertEquals("That's all your plays of Ore Slots for today. It opens again at midnight.",
                 Refusal.dailyLimit("Ore Slots").message());
         assertEquals("That's your limit for today (25 tokens). It resets at midnight.",
                 Refusal.personalLimit(25).message());

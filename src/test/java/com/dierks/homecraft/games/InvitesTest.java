@@ -26,7 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * expiry or a quit); one pending invite per invitee and one out per inviter; the same two players
  * wait 30 seconds between invites; an invite runs out after its time (by its own task, or when
  * next looked at); Coin Flip invites are off until the player turns them on, friend games on; the
- * invitee reads how to answer; a player who can't be asked is simply not asked.
+ * invitee reads how to answer; a player who can't be asked is simply not asked. What the INVITER
+ * hears after sending is the game's answer callback's to say, so the framework says nothing to
+ * them on a deny, an expiry or a quit — nobody reads the same news twice.
  */
 class InvitesTest {
 
@@ -84,11 +86,13 @@ class InvitesTest {
     }
 
     @Test
-    void aDenyAnswersNoAndTellsTheInviterGently() {
+    void aDenyAnswersNoAndLeavesTheInviterToTheGame() {
         send(alex, sam, connect);
+        alex.said.clear();
         assertTrue(games.invites().deny(sam.player), "Sam says no");
-        assertEquals(List.of(alex.id + ":false"), answers, "the game hears no");
-        assertTrue(alex.heard().contains("Sam can't play right now."), "Alex is told gently");
+        assertEquals(List.of(alex.id + ":false"), answers, "the game hears no, and tells Alex in its own words");
+        assertTrue(alex.said.isEmpty(), "the framework adds nothing for Alex: " + alex.heard());
+        assertTrue(sam.heard().contains("Invite turned down."), "Sam hears it went");
     }
 
     @Test
@@ -112,10 +116,12 @@ class InvitesTest {
     @Test
     void anInviteRunsOutAndAnswersNo() {
         send(alex, sam, connect);
+        alex.said.clear();
         host.runTasks();
         assertNull(games.invites().pending(sam.id), "its task lapses it");
         assertEquals(List.of(alex.id + ":false"), answers, "the game hears no");
-        assertTrue(alex.heard().contains("Your invite ran out."), "the inviter is told");
+        assertTrue(sam.heard().contains("That invite has run out."), "the invitee is told");
+        assertTrue(alex.said.isEmpty(), "the inviter hears it from the game only");
         answers.clear();
         host.move(60_000);
         send(kim, sam, connect);
@@ -140,10 +146,12 @@ class InvitesTest {
     void aQuitOrAWorldChangeCallsItOffBothWays() {
         send(alex, sam, connect);
         send(kim, alex, connect);
+        kim.said.clear();
         games.invites().cancel(alex.id);
         assertNull(games.invites().pending(sam.id), "the invite Alex sent is gone");
         assertNull(games.invites().pending(alex.id), "and the one Alex had waiting");
         assertEquals(2, answers.size(), "both games heard no");
-        assertTrue(sam.heard().contains("called off"), "Sam is told");
+        assertTrue(sam.heard().contains("That invite was called off."), "Sam, who was invited, is told");
+        assertTrue(kim.said.isEmpty(), "Kim, who invited Alex, hears it from the game only");
     }
 }

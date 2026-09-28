@@ -66,7 +66,7 @@ public record Refusal(Reason reason, String message) {
     /** The game's own daily limit is used up. */
     public static Refusal dailyLimit(String gameName) {
         return new Refusal(Reason.DAILY_LIMIT,
-                "That's all the " + gameName + " for today. It opens again at midnight.");
+                "That's all your plays of " + gameName + " for today. It opens again at midnight.");
     }
 
     /** Putting this many in would pass the day's token limit of {@code limit}. */

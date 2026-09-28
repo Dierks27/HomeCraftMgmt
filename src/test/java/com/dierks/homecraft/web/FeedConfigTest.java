@@ -23,9 +23,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * exactly how the feeds worked before there was a token), the LAN switch off
  * ({@code web.dashboard.lan_skips_token: false}: the shipped way in from outside is a Playit agent
  * on this PC, whose connections arrive from 127.0.0.1, so a default-on switch would let the
- * internet past the token; the dashboard page asks for the token instead) and 30 days of market
+ * internet past the token; the dashboard page asks for the token instead), 30 days of market
  * history ({@code market.price_history.keep_days}, which the
- * website's 30-day chart needs). Each new key carries its explanation, because the config
+ * website's 30-day chart needs) and {@code /api/arcade} without record holders' names
+ * ({@code web.dashboard.arcade_show_names: false}). Each new key carries its explanation, because the config
  * backfill copies a new key's comments into live configs along with its value — and the Playit /
  * tunnel warning has to travel with the LAN switch. Finally, {@link PluginConfig.WebDashboard#toString()}
  * says whether a token is set, never what it is: a record's generated {@code toString()} would
@@ -86,6 +87,14 @@ class FeedConfigTest {
         String lanComment = String.join("\n", c.getComments("web.dashboard.lan_skips_token"));
         assertTrue(lanComment.contains("Playit") && lanComment.contains("tunnel"),
                 "the Playit / tunnel warning has to ship with the LAN switch, got: " + lanComment);
+    }
+
+    @Test
+    void theArcadeFeedShipsWithoutNames() throws Exception {
+        YamlConfiguration c = bundled();
+        assertTrue(c.isBoolean("web.dashboard.arcade_show_names"), "arcade_show_names should ship as a boolean");
+        assertFalse(c.getBoolean("web.dashboard.arcade_show_names", true),
+                "/api/arcade ships with scores and times only, never who set them");
     }
 
     @Test

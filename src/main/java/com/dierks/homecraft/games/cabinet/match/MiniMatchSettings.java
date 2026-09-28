@@ -18,7 +18,8 @@ import java.util.List;
  * @param milestoneReward tokens for each board milestone (bronze, silver, gold), paid once ever
  * @param dailyReward tokens for meeting the daily challenge, once a day
  * @param dailyCap the most tokens this game pays a player a day
- * @param milestones bronze, silver and gold: finish in at most this many flips
+ * @param milestones bronze, silver and gold: finish in at most this many flips (at least
+ *                   {@link MatchEngine#PAIRS}, a perfect game)
  */
 public record MiniMatchSettings(boolean enabled, int milestoneReward, int dailyReward, int dailyCap,
                                 List<Integer> milestones) implements CabinetSettings {
@@ -53,7 +54,8 @@ public record MiniMatchSettings(boolean enabled, int milestoneReward, int dailyR
         int milestoneReward = n.whole("milestone_reward", d.milestoneReward(), 0, 100);
         int dailyReward = n.whole("daily_reward", d.dailyReward(), 0, 100);
         int dailyCap = n.whole("daily_cap", d.dailyCap(), 0, 1000);
-        List<Integer> milestones = n.ladder("milestones", d.milestones(), 200, true);
+        // A perfect game takes one flip per pair, so no milestone may ask for fewer.
+        List<Integer> milestones = n.ladder("milestones", d.milestones(), MatchEngine.PAIRS, 200, true);
         return new MiniMatchSettings(enabled, milestoneReward, dailyReward, dailyCap, milestones);
     }
 }

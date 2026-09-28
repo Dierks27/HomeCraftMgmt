@@ -699,7 +699,16 @@ public final class GamesConfig {
          * (times, flips). Anything else is junk.
          */
         public List<Integer> ladder(String k, List<Integer> d, int hi, boolean lowerIsBetter) {
-            List<Integer> l = intList(k, d, 1, hi, 3);
+            return ladder(k, d, 1, hi, lowerIsBetter);
+        }
+
+        /**
+         * As {@link #ladder(String, List, int, boolean)}, with the lowest value a game can reach
+         * too ({@code lo}): a milestone past what the game can reach would never pay, so it is
+         * clamped with one WARN like any other.
+         */
+        public List<Integer> ladder(String k, List<Integer> d, int lo, int hi, boolean lowerIsBetter) {
+            List<Integer> l = intList(k, d, Math.max(1, lo), hi, 3);
             if (l == d) {
                 return d;
             }

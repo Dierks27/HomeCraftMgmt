@@ -47,7 +47,7 @@ public final class MiniMatchMenu extends GameMenu {
         set(11, Menus.icon(Material.LIME_CONCRETE, "&aPlay" + (best == null ? "" : " &7- your best: " + best + " flips"),
                 "&7A new board every time.",
                 "&7Milestones: " + ladder(match.settings().milestones()) + " flips",
-                "&7Closing the game ends it (no score)."), e -> play(null));
+                "&7Closing the game ends it (no score)."), e -> classic());
 
         int reward = match.settings().dailyReward();
         String prize = reward > 0 ? " &6(+" + reward + " token" + (reward == 1 ? "" : "s") + ")" : "";
@@ -75,8 +75,17 @@ public final class MiniMatchMenu extends GameMenu {
         new MiniMatchPlayMenu(plugin, match, viewer, this::reopen, daily, seed).open(viewer);
     }
 
+    /** Each new game runs the gate again: a pause or a world change since this screen opened counts. */
+    private void classic() {
+        if (match.mayPlay(viewer)) {
+            play(null);
+        }
+    }
+
     private void daily() {
-        play(match.startDaily(viewer));
+        if (match.mayPlay(viewer)) {
+            play(match.startDaily(viewer));
+        }
     }
 
     private void reopen() {

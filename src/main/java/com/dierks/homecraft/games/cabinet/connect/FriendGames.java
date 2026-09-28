@@ -39,6 +39,19 @@ public final class FriendGames<M> {
                 && !busy(self) && !busy(other) && !waiting.containsKey(self);
     }
 
+    /**
+     * Whether a player is busy with something else when their invite is answered, so the game must
+     * not pull them out of it: in a world session, or looking at another game's screen. A screen
+     * of this game (the lobby) or one that belongs to no game (the Games screen) is not busy.
+     *
+     * @param gameId       this game
+     * @param screenGameId the game whose screen they have open, or {@code null}
+     * @param inSession    whether they are in a world session
+     */
+    public static boolean elsewhere(String gameId, String screenGameId, boolean inSession) {
+        return inSession || (screenGameId != null && !screenGameId.equals(gameId));
+    }
+
     /** {@code inviter} sent an invite to {@code invitee}: they wait for the answer. */
     public void invited(UUID inviter, UUID invitee) {
         waiting.put(inviter, invitee);

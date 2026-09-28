@@ -93,12 +93,21 @@ public abstract class Menu implements InventoryHolder {
     }
 
     /**
+     * How a close reaches {@link #onClose}: from {@link MenuListener} and from {@link #closeNow}.
+     * A family of menus that must contain what its close handlers throw (the games screens run
+     * them inside the game's guard) overrides this rather than every {@code onClose}.
+     */
+    protected void handleClose(org.bukkit.entity.Player player) {
+        onClose(player);
+    }
+
+    /**
      * Run this menu's close handling and close it, for when no close event will reach
      * {@link MenuListener} (the plugin is shutting down). Running it twice is harmless: a menu
      * that hands items back empties itself as it does.
      */
     public void closeNow(org.bukkit.entity.Player player) {
-        onClose(player);
+        handleClose(player);
         player.closeInventory();
     }
 

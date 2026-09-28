@@ -26,10 +26,16 @@ import java.util.logging.Level;
  *
  * <p>Every click handler set here runs inside the game's guard: if it throws, that one game is
  * switched off, the screen closes and the player reads "That game is taking a break. Try another
- * one!" — nothing reaches the menu listener. Real-time games tick through {@link #ticker}, which
+ * one!" — nothing reaches the menu listener. The first paint ({@link #open}) and the close
+ * handling run inside it too; a screen that belongs to no game (the Games screen, Take a break)
+ * logs what it throws instead. Real-time games tick through {@link #ticker}, which
  * stops by itself when the screen closes, is replaced by another, or the game fails, so a
  * forgotten task can never keep running for a screen nobody is looking at. It is also a
  * {@link GameScreen}, the only kind of screen a player in a world session may open.
+ *
+ * <p>A double click never reaches a handler as three clicks on a repainted screen: its
+ * {@code DOUBLE_CLICK} is dropped, and a screen that just changed under the cursor calls
+ * {@link #hold} so the rest of it is dropped too ({@link ClickHold}).
  *
  * <p>Subclasses call {@code init(size, title)} in their constructor and paint every slot in
  * {@code build()} (filler first, {@link #fill()}).
@@ -41,6 +47,7 @@ public abstract class GameMenu extends Menu implements GameScreen {
     /** What "Back" does, or {@code null} for "Close". */
     protected final Runnable back;
     private final List<BukkitTask> tickers = new ArrayList<>();
+    private final ClickHold clicks = new ClickHold(() -> System.nanoTime() / 1_000_000L);
 
     protected GameMenu(HomeCraftManagement plugin, Game game, Player viewer, Runnable back) {
         super(plugin);
@@ -59,16 +66,69 @@ public abstract class GameMenu extends Menu implements GameScreen {
         return viewer;
     }
 
-    /** As {@link Menu#set}, with the handler run inside the game's guard. */
+    /** Whether the viewer is looking at this screen now (false after an open something cancelled). */
+    public boolean showing() {
+        return isOpenFor(viewer);
+    }
+
+    /**
+     * The game whose screen {@code player} has open, or {@code null} (no games screen, or a
+     * shared one that belongs to no game).
+     */
+    public static Game gameOnScreen(Player player) {
+        try {
+            return player != null && player.getOpenInventory().getTopInventory().getHolder(false) instanceof GameMenu m
+                    ? m.game() : null;
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * As {@link Menu#set}, with the handler run inside the game's guard. A double click's
+     * {@code DOUBLE_CLICK}, and any click inside a {@link #hold}, never reaches it.
+     */
     @Override
     protected void set(int slot, ItemStack item, Consumer<InventoryClickEvent> onClick) {
         super.set(slot, item, onClick == null ? null : e -> {
+            if (!clicks.passes(e.getClick())) {
+                return;
+            }
             if (!guarded(() -> {
                 onClick.accept(e);
                 return true;
             })) {
                 broken();
             }
+        });
+    }
+
+    /**
+     * Drop every click on this screen for {@code ms} (see {@link ClickHold}): call it when a click
+     * turns this screen into another layout ({@link ClickHold#SETTLE_MS} after a deal or an armed
+     * "click again"), or after each move of a game of chance ({@link ClickHold#ACTION_MS}).
+     */
+    protected void hold(long ms) {
+        clicks.hold(ms);
+    }
+
+    /** The first paint and the open, inside the game's guard: a throw fails the game, not the caller. */
+    @Override
+    public void open(Player player) {
+        if (!guarded(() -> {
+            super.open(player);
+            return true;
+        })) {
+            broken();
+        }
+    }
+
+    /** The close handling (this screen's {@code onClose}), inside the game's guard. */
+    @Override
+    protected void handleClose(Player player) {
+        guarded(() -> {
+            super.handleClose(player);
+            return true;
         });
     }
 
@@ -148,21 +208,24 @@ public abstract class GameMenu extends Menu implements GameScreen {
         tickers.clear();
     }
 
-    /** True if {@code work} ran without throwing (through the game's guard when there is one). */
+    /**
+     * True if {@code work} ran without throwing: through the game's guard when there is one (a
+     * throw fails the game), else caught and logged (a screen that belongs to no game).
+     */
     private boolean guarded(Supplier<Boolean> work) {
         GamesService games = plugin.games();
-        if (games != null) {
+        if (games != null && game != null) {
             return games.guard(game, work, false);
         }
         try {
             return work.get();
         } catch (RuntimeException | LinkageError e) {
-            plugin.getLogger().log(Level.SEVERE, "A " + game.id() + " screen failed", e);
+            plugin.getLogger().log(Level.SEVERE, (game == null ? "A games" : "A " + game.id()) + " screen failed", e);
             return false;
         }
     }
 
-    /** The game failed under this screen: close it and say so. */
+    /** The game failed under this screen: close it (its close handling guarded too) and say so. */
     private void broken() {
         closeNow(viewer);
         viewer.sendMessage(Text.of("&c" + Refusal.BROKEN.message()));

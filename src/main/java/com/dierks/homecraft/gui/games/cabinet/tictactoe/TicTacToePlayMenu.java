@@ -169,6 +169,9 @@ public final class TicTacToePlayMenu extends GameMenu {
     }
 
     private void newGame() {
+        if (!ttt.mayPlay(viewer)) {
+            return;
+        }
         new TicTacToePlayMenu(plugin, ttt, viewer, back, ttt.vsArcade(viewer, match.level())).open(viewer);
     }
 

@@ -66,7 +66,11 @@ public final class TicTacToeMenu extends GameMenu {
         } else {
             set(14, Menus.icon(Material.PLAYER_HEAD, "&bPlay a friend &7- just for fun",
                     "&7Pick someone online to invite.", "&7Friend games pay no tokens."),
-                    e -> ttt.pickFriend(viewer, this::reopen, this::reopen));
+                    e -> {
+                        if (ttt.mayPlay(viewer)) {
+                            ttt.pickFriend(viewer, this::reopen, this::reopen);
+                        }
+                    });
         }
         Long wins = ttt.wins(viewer);
         set(16, Menus.icon(Material.OAK_SIGN, "&eHigh scores &7- wins",
@@ -83,7 +87,14 @@ public final class TicTacToeMenu extends GameMenu {
         exitTile();
     }
 
+    /**
+     * Each new game (and each invite) runs the gate again: a pause or a world change since this
+     * screen opened counts.
+     */
     private void play(TicTacToeAI.Level level) {
+        if (!ttt.mayPlay(viewer)) {
+            return;
+        }
         new TicTacToePlayMenu(plugin, ttt, viewer, this::reopen, ttt.vsArcade(viewer, level)).open(viewer);
     }
 

@@ -11,6 +11,7 @@ import com.dierks.homecraft.games.chance.twentyone.TwentyOneHand.Card;
 import com.dierks.homecraft.games.chance.twentyone.TwentyOneMath;
 import com.dierks.homecraft.games.chance.twentyone.TwentyOneSettings;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
@@ -34,6 +35,10 @@ import java.util.List;
  *
  * <p>Closing the screen leaves the hand open; opening Twenty-One again resumes it. After a hand the
  * result stays on the table and Deal is where it always is: no prompt to go again.
+ *
+ * <p>Each move (Deal, Hit, Stand, Double) holds clicks for {@link ClickHold#ACTION_MS}: the table
+ * repaints in place, so the rest of a double click on Hit would otherwise take a card the player
+ * never saw coming.
  */
 public final class TwentyOneMenu extends GameMenu {
 
@@ -321,6 +326,7 @@ public final class TwentyOneMenu extends GameMenu {
     // ---- clicks ------------------------------------------------------------------------------------
 
     private void deal() {
+        hold(ClickHold.ACTION_MS);
         if (playing()) {
             return;
         }
@@ -352,6 +358,7 @@ public final class TwentyOneMenu extends GameMenu {
     }
 
     private void hit() {
+        hold(ClickHold.ACTION_MS);
         if (!playing()) {
             return;
         }
@@ -375,6 +382,7 @@ public final class TwentyOneMenu extends GameMenu {
     }
 
     private void stand() {
+        hold(ClickHold.ACTION_MS);
         if (!playing()) {
             return;
         }
@@ -386,6 +394,7 @@ public final class TwentyOneMenu extends GameMenu {
     }
 
     private void doubleDown() {
+        hold(ClickHold.ACTION_MS);
         if (!playing() || !hand.canDouble()) {
             return;
         }

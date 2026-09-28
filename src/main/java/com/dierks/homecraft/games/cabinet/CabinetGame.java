@@ -3,12 +3,19 @@ package com.dierks.homecraft.games.cabinet;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GameContext;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.ScoreResult;
 import com.dierks.homecraft.games.Scores;
 import com.dierks.homecraft.games.SkillRewards;
+import com.dierks.homecraft.util.Text;
 import org.bukkit.entity.Player;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,11 +34,24 @@ import java.util.concurrent.ThreadLocalRandom;
  * server's daily caps always apply.
  *
  * <p><b>Why the daily seed is secret.</b> A board worked out from a formula in the public source
- * could be solved before it is dealt. The seed mixes the server's own random secret (made once,
- * kept in the database, never logged) with the local day and the game id, so it is stable all day,
- * different for every game, and unguessable outside the server.
+ * could be solved before it is dealt. The seed is an HMAC-SHA256 of the local day and the game id
+ * keyed with the server's own random secret (made once, kept in the database, never logged), so it
+ * is stable all day, different for every game, unguessable outside the server — and a board a
+ * player has seen (so its seed, worked back from the layout) can't be walked back to the secret to
+ * predict tomorrow's, which a plain mixing function could be.
+ *
+ * <p><b>Where it can't pay, it doesn't use the try.</b> A player who can't earn where they are
+ * (creative, a world without games) is dealt today's board as practice and told why: the scored try
+ * is kept for when it can count.
  */
 public abstract class CabinetGame implements Game {
+
+    /**
+     * Why a daily board is practice for a player who can't earn where they are (SkillRewards'
+     * NOT_HERE, which says scores still count — practice records none, so it says what is true).
+     */
+    public static final String NOT_HERE_DAILY =
+            "&7No tokens can be earned here, so today's board is practice. Your scored try waits for later.";
 
     protected final GameContext ctx;
     /** Read once from the database; a per-run random stand-in if that ever fails. */
@@ -67,25 +87,44 @@ public abstract class CabinetGame implements Game {
 
     /** The seed of this game's daily board for {@code day}. */
     public long dailySeed(long day) {
-        return mix(secret(), day, id());
+        return seed(secret(), day, id());
     }
 
     /**
      * Deal today's board to {@code player}: the first deal of the day is the scored try (recorded
-     * now, so closing the screen can't earn a second one); every later one is practice.
+     * now, so closing the screen can't earn a second one); every later one is practice. A player
+     * who can't earn here ({@link SkillRewards#canEarnHere}) gets practice without the try being
+     * used, and is told once why.
      */
     public DailyStart startDaily(Player player) {
         long day = today();
         long seed = dailySeed(day);
-        boolean scored = false;
+        boolean canEarn = games().rewards().canEarnHere(player);
+        if (!canEarn) {
+            player.sendMessage(Text.of(NOT_HERE_DAILY));
+        }
         try {
-            scored = games().dao().markDailyAttempt(player.getUniqueId(), id(), day, seed, "",
-                    ctx.plugin().clock().nowMillis());
+            return deal(day, seed, canEarn, () -> games().dao().markDailyAttempt(player.getUniqueId(), id(), day,
+                    seed, "", ctx.plugin().clock().nowMillis()));
         } catch (SQLException e) {
             ctx.plugin().getLogger().warning("Could not record " + id() + "'s daily try for "
                     + player.getName() + " - it is practice: " + e.getMessage());
+            return new DailyStart(day, seed, false);
         }
-        return new DailyStart(day, seed, scored);
+    }
+
+    /** Writes a player's daily attempt row: true when it is their first today (the scored try). */
+    @FunctionalInterface
+    interface Attempt {
+        boolean mark() throws SQLException;
+    }
+
+    /**
+     * A daily deal: the scored try only where the player can earn, and only then is the attempt
+     * row written — practice somewhere it can't count never uses the try up.
+     */
+    static DailyStart deal(long day, long seed, boolean canEarn, Attempt attempt) throws SQLException {
+        return new DailyStart(day, seed, canEarn && attempt.mark());
     }
 
     // ---- finishing ----------------------------------------------------------------------------
@@ -173,6 +212,20 @@ public abstract class CabinetGame implements Game {
                 name() + ": today's pick");
     }
 
+    /**
+     * Whether the player may start a new game, board or match right now (gate steps 0-4, re-run
+     * before every deal: a pause, a world change or the game closing since the screen opened all
+     * count). They're told why not.
+     */
+    public boolean mayPlay(Player player) {
+        Refusal refusal = games().canOpen(player, this);
+        if (refusal != null) {
+            games().tell(player, refusal);
+            return false;
+        }
+        return true;
+    }
+
     /** Open one of this game's high-score boards. */
     protected void openScores(Player player, String board, boolean lowerIsBetter, Runnable back) {
         games().screens().scores(player, this, board, lowerIsBetter, back);
@@ -214,22 +267,33 @@ public abstract class CabinetGame implements Game {
     }
 
     /**
-     * Mix the secret, the day and the game id into one seed (SplitMix64 finaliser over each part):
-     * the same inputs always give the same seed, and changing any one of them changes it
-     * completely.
+     * What a finished daily board's "Play again" says, decided when the screen is drawn:
+     * "Play today's board again (practice)" while today's scored try is used, and "Play today's
+     * board - your scored try" once it isn't (after midnight the next deal counts again).
+     *
+     * @param thing what the game calls its daily ("board", "pattern", "round")
      */
-    public static long mix(long secret, long day, String gameId) {
-        long h = splitMix(secret);
-        h = splitMix(h ^ day);
-        h = splitMix(h ^ (gameId == null ? 0 : gameId.hashCode()));
-        return h;
+    public static String dailyAgain(String thing, boolean triedToday) {
+        return triedToday ? "Play today's " + thing + " again &7(practice)"
+                : "Play today's " + thing + " &7- your scored try";
     }
 
-    private static long splitMix(long z) {
-        z += 0x9E3779B97F4A7C15L;
-        z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
-        z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
-        return z ^ (z >>> 31);
+    /**
+     * A daily board's seed: HMAC-SHA256 keyed with the secret (its 8 bytes, big-endian) over
+     * "{@code day}|{@code gameId}", the first 8 bytes of the MAC as a long. The same inputs always
+     * give the same seed; a changed day, game or secret gives an unrelated one; and knowing seeds
+     * (boards) tells nothing about the key.
+     */
+    public static long seed(long secret, long day, String gameId) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(ByteBuffer.allocate(Long.BYTES).putLong(secret).array(), "HmacSHA256"));
+            byte[] out = mac.doFinal((day + "|" + (gameId == null ? "" : gameId)).getBytes(StandardCharsets.UTF_8));
+            return ByteBuffer.wrap(out, 0, Long.BYTES).getLong();
+        } catch (GeneralSecurityException e) {
+            // Every Java runtime ships HmacSHA256; this can't happen on one that runs the server.
+            throw new IllegalStateException("HmacSHA256 is not available", e);
+        }
     }
 
     private long secret() {

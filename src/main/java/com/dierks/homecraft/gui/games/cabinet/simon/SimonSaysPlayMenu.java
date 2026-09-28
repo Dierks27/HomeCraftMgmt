@@ -114,8 +114,9 @@ public final class SimonSaysPlayMenu extends GameMenu {
         set(49, Menus.icon(Material.BARRIER, "&cBack",
                 engine.over() ? "&7Back to Simon Says." : "&7Leaves this game (no score)."), e -> back.run());
         if (engine.over()) {
-            set(50, Menus.icon(Material.LIME_CONCRETE,
-                    daily != null ? "&ePlay today's pattern again &7(practice)" : "&ePlay again"), e -> again());
+            set(50, Menus.icon(Material.LIME_CONCRETE, daily != null
+                    ? "&e" + CabinetGame.dailyAgain("pattern", simon.triedToday(viewer)) : "&ePlay again"),
+                    e -> again());
             set(51, Menus.icon(Material.OAK_SIGN, "&eHigh scores"),
                     e -> simon.scores(viewer, daily == null ? Scores.CLASSIC : simon.todayBoard(), back));
         }
@@ -208,6 +209,9 @@ public final class SimonSaysPlayMenu extends GameMenu {
     }
 
     private void again() {
+        if (!simon.mayPlay(viewer)) {
+            return;
+        }
         if (daily == null) {
             new SimonSaysPlayMenu(plugin, simon, viewer, back, null, simon.classicSeed()).open(viewer);
         } else {

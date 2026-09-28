@@ -503,7 +503,8 @@ public final class GamesService {
      * Switch {@code game} off until {@code /hcm reload}, logging why once. Its handlers and tasks
      * go at once; a tick later (so the screen whose click failed has closed itself first) its
      * screens close with "That game is taking a break. Try another one!", its world sessions end
-     * (GAME_OFF) and its OPEN rounds are finished by its exit rule (R2.6).
+     * (GAME_OFF) and its OPEN rounds are finished by its exit rule (R2.6) — unless a reload came
+     * in between and brought it back.
      */
     public void fail(Game game, Throwable cause) {
         if (game == null) {
@@ -517,7 +518,12 @@ public final class GamesService {
                 cause);
         featured.forget();
         stopGame(game);
-        Runnable cleanup = () -> switchOff(game, Refusal.BROKEN);
+        Runnable cleanup = () -> {
+            // A reload in the tick between gave it another chance: leave it running.
+            if (failed.contains(game.id())) {
+                switchOff(game, Refusal.BROKEN);
+            }
+        };
         if (host.later(1, cleanup) == null) {
             cleanup.run();
         }

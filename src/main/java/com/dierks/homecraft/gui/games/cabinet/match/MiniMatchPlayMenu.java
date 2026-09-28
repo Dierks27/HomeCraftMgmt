@@ -93,9 +93,8 @@ public final class MiniMatchPlayMenu extends GameMenu {
         set(49, Menus.icon(Material.BARRIER, "&cBack",
                 engine.done() ? "&7Back to Mini Match." : "&7Leaves this board (no score)."), e -> back.run());
         if (engine.done()) {
-            boolean dailyAgain = daily != null;
-            set(50, Menus.icon(Material.LIME_CONCRETE,
-                    dailyAgain ? "&ePlay today's board again &7(practice)" : "&ePlay again"), e -> again());
+            set(50, Menus.icon(Material.LIME_CONCRETE, daily != null
+                    ? "&e" + CabinetGame.dailyAgain("board", match.triedToday(viewer)) : "&ePlay again"), e -> again());
             set(51, Menus.icon(Material.OAK_SIGN, "&eHigh scores"),
                     e -> match.scores(viewer, daily == null ? Scores.CLASSIC : match.todayBoard(), back));
         }
@@ -156,6 +155,9 @@ public final class MiniMatchPlayMenu extends GameMenu {
     }
 
     private void again() {
+        if (!match.mayPlay(viewer)) {
+            return;
+        }
         if (daily == null) {
             new MiniMatchPlayMenu(plugin, match, viewer, back, null, match.classicSeed()).open(viewer);
         } else {

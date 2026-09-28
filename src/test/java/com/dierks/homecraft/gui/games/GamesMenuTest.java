@@ -1,18 +1,26 @@
 package com.dierks.homecraft.gui.games;
 
 import com.dierks.homecraft.games.Game;
+import com.dierks.homecraft.games.Refusal;
+import com.dierks.homecraft.games.world.Session;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The Games screen's plain logic: how tiles sort into tabs and pages, and what a player on a
- * break (or without the permission) sees in place of the games of chance (spec §8.1, R1.16).
+ * The Games screen's plain logic: how tiles sort into tabs and pages, what a player on a break
+ * (or without the permission) sees in place of the games of chance — here and on the Arcade hub
+ * (spec §8.1, §8.2, R1.16) — that the Arcade's own links wait while a world game is on, and that
+ * an invite names its game.
  */
 class GamesMenuTest {
 
@@ -97,5 +105,35 @@ class GamesMenuTest {
         assertEquals(1, counts.get(Game.Tab.GOLF), "one Golf tile");
         assertEquals(0, counts.get(Game.Tab.CABINETS), "a tab with nothing reads 0, never null");
         assertEquals(0, counts.get(Game.Tab.COURSES), "a tab with nothing reads 0, never null");
+    }
+
+    @Test
+    void theHubShowsCratesAndTheTicketOnlyWhileGamesOfChanceAreOpenToThePlayer() {
+        assertTrue(GamesMenu.hubShowsChance(true, GamesMenu.Luck.OPEN), "open: as normal");
+        assertFalse(GamesMenu.hubShowsChance(true, GamesMenu.Luck.PAUSED), "on a break: the break tile instead");
+        assertFalse(GamesMenu.hubShowsChance(true, GamesMenu.Luck.CLOSED), "unreadable break: closed instead");
+        assertFalse(GamesMenu.hubShowsChance(true, GamesMenu.Luck.HIDDEN),
+                "without hcm.games.chance they aren't seen at all, as plugin.yml promises");
+        for (GamesMenu.Luck any : GamesMenu.Luck.values()) {
+            assertTrue(GamesMenu.hubShowsChance(false, any), "games off: the hub is exactly the old one (" + any + ")");
+        }
+        assertTrue(GamesMenu.hubShowsChance(false, null), "games off: the luck isn't even read");
+    }
+
+    @Test
+    void theArcadesLinksWaitWhileTheViewerIsInAWorldGame() {
+        Session session = new Session(UUID.randomUUID(), "trials", "river_run", "s1", "games",
+                Session.Phase.ACTIVE, 0L);
+        assertSame(Refusal.IN_SESSION, GamesMenu.linkRefusal(session),
+                "a Scratch Ticket or crate from inside a world game is refused before anything is taken");
+        assertNull(GamesMenu.linkRefusal(null), "outside one, go ahead");
+    }
+
+    @Test
+    void anInviteTileNamesItsGameAndWhoItIsFrom() {
+        assertEquals("&eConnect Four invite &7from Sam", GamesMenu.inviteName("Connect Four", "Sam"),
+                "the game in the NAME: Bedrock shows lore only on a long press");
+        assertEquals("&eGame invite &7from a player", GamesMenu.inviteName(null, null),
+                "still reads with nothing known");
     }
 }

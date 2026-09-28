@@ -41,7 +41,8 @@ import java.util.logging.Level;
  * <p>The click handler runs at HIGH without {@code ignoreCancelled} (clicks can arrive already
  * cancelled, e.g. in a protected hub) and cancels both results, so a sign never also places or
  * uses whatever is in the hand. It is a plain listener registered once; while the games are off
- * (or the service failed) it does nothing, and it never lets an exception out.
+ * (or the service failed) it does nothing but wipe a non-admin's "[Arcade]", and it never lets an
+ * exception out.
  */
 public final class JoinSigns implements Listener {
 
@@ -54,6 +55,31 @@ public final class JoinSigns implements Listener {
     /** Whether a sign's first line asks to be a join sign: "[Arcade]", any case. */
     static boolean isHeader(String line) {
         return line != null && line.trim().equalsIgnoreCase("[Arcade]");
+    }
+
+    /** What writing a sign does. */
+    enum Write {
+        /** Not a join sign: left alone. */
+        IGNORE,
+        /** "[Arcade]" from someone who isn't an admin: the line is wiped. */
+        CLEAR,
+        /** An admin's join sign: tagged a tick later. */
+        TAG
+    }
+
+    /**
+     * What writing a sign with this first line does. A non-admin's "[Arcade]" is wiped whether the
+     * games are on or not, so a look-alike sign can't be left waiting for the day they open; an
+     * admin's is only tagged while they are on (it names a game that must exist).
+     */
+    static Write onWrite(boolean header, boolean admin, boolean gamesOn) {
+        if (!header) {
+            return Write.IGNORE;
+        }
+        if (!admin) {
+            return Write.CLEAR;
+        }
+        return gamesOn ? Write.TAG : Write.IGNORE;
     }
 
     /** The id written on the second line, lower-cased, or {@code null} when it is blank. */
@@ -77,12 +103,15 @@ public final class JoinSigns implements Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onWrite(SignChangeEvent event) {
         try {
-            if (games() == null || !isHeader(plain(event.line(0)))) {
+            if (!isHeader(plain(event.line(0)))) {
                 return;
             }
             Player writer = event.getPlayer();
-            if (!writer.hasPermission("hcm.games.admin")) {
+            Write what = onWrite(true, writer.hasPermission("hcm.games.admin"), games() != null);
+            if (what == Write.CLEAR) {
                 event.line(0, Component.empty());
+            }
+            if (what != Write.TAG) {
                 return;
             }
             Block block = event.getBlock();

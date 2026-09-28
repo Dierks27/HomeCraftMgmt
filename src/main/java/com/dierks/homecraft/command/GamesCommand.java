@@ -392,7 +392,8 @@ public final class GamesCommand {
             return;
         }
         plugin.config().load();
-        games.reload();
+        // No games.reload(): that would close every open game of chance's screen. Today's pick
+        // is worked out again by itself once games.featured reads differently.
         String today = games.featured().today();
         sender.sendMessage(Text.of(value.equals("auto")
                 ? "&aThe day picks the featured game again. &7Today: &f" + (today == null ? "none" : today)

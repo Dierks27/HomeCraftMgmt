@@ -17,9 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * its neighbours; the daily board comes with a safe opening dug); the creeper count is exact;
  * zeros flood-fill and stop at numbers (and at flags); numbers are right and never leak from an
  * undug square; clearing every safe square wins and a creeper is a Boom that shows every creeper;
- * flags toggle, protect a square and never outnumber the creepers; the clock starts on the first
- * dig and freezes at the end; the daily board is the same for the same seed; and the milestone
- * times compare in milliseconds.
+ * flags toggle, protect a square and never outnumber the creepers; a Classic clock starts on the
+ * first dig and freezes at the end, while the daily board's (it arrives dug open) starts when it is
+ * dealt, so flagging before the first dig is on the clock; the daily board is the same for the
+ * same seed; and the milestone times compare in milliseconds.
  */
 class SweeperEngineTest {
 
@@ -180,8 +181,8 @@ class SweeperEngineTest {
     @Test
     void theDailyBoardIsTheSameForTheSameSeedAndStartsWithASafeOpening() {
         for (long seed = 0; seed < 200; seed++) {
-            SweeperEngine a = SweeperEngine.daily(8, seed);
-            SweeperEngine b = SweeperEngine.daily(8, seed);
+            SweeperEngine a = SweeperEngine.daily(8, seed, T0);
+            SweeperEngine b = SweeperEngine.daily(8, seed, T0);
             for (int c = 0; c < SweeperEngine.CELLS; c++) {
                 assertEquals(a.mineAt(c), b.mineAt(c), "the same seed lays the same creepers (seed " + seed + ")");
                 assertEquals(a.look(c), b.look(c), "and digs the same opening (seed " + seed + ")");
@@ -190,18 +191,41 @@ class SweeperEngineTest {
                 }
             }
             assertEquals(8, count(a), "the daily board has the configured creepers");
-            assertEquals(SweeperEngine.State.READY, a.state(), "the opening isn't the player's dig: the clock waits");
-            assertEquals(0, a.timeMs(T0), "no time on the clock before the player digs");
+            assertEquals(SweeperEngine.State.LIVE, a.state(),
+                    "the board arrives dug open, so it is live from the deal");
+            assertEquals(0, a.timeMs(T0), "nothing on the clock at the moment it is dealt");
             assertTrue(opened(a) > 0, "some squares are already dug");
             assertTrue(opened(a) < SweeperEngine.CELLS - 8, "the opening never clears the board by itself");
         }
         boolean differs = false;
-        SweeperEngine first = SweeperEngine.daily(8, 1);
-        SweeperEngine other = SweeperEngine.daily(8, 2);
+        SweeperEngine first = SweeperEngine.daily(8, 1, T0);
+        SweeperEngine other = SweeperEngine.daily(8, 2, T0);
         for (int c = 0; c < SweeperEngine.CELLS; c++) {
             differs |= first.mineAt(c) != other.mineAt(c);
         }
         assertTrue(differs, "another day's seed gives another board");
+    }
+
+    @Test
+    void theDailyClockRunsFromTheDealSoFreeFlaggingCantLowerTheTime() {
+        SweeperEngine board = SweeperEngine.daily(8, 7, T0);
+        assertEquals(5_000, board.timeMs(T0 + 5_000), "the clock is running before any dig");
+        int flagged = 0;
+        for (int c = 0; c < SweeperEngine.CELLS && flagged < 8; c++) {
+            if (board.mineAt(c)) {
+                assertTrue(board.toggleFlag(c), "a hidden creeper can be flagged");
+                flagged++;
+            }
+        }
+        long end = T0 + 90_000;
+        for (int c = 0; c < SweeperEngine.CELLS; c++) {
+            if (!board.mineAt(c)) {
+                board.dig(c, end);
+            }
+        }
+        assertEquals(SweeperEngine.State.WON, board.state(), "every safe square dug clears it");
+        assertEquals(90_000, board.timeMs(end + 5_000),
+                "the time counts the minute and a half of flagging before the first dig, and stops at the clear");
     }
 
     @Test

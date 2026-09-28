@@ -10,6 +10,7 @@ import com.dierks.homecraft.games.chance.hilo.HigherLowerRun.Card;
 import com.dierks.homecraft.games.chance.hilo.HigherLowerRun.Side;
 import com.dierks.homecraft.games.chance.hilo.HigherLowerSettings;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
@@ -31,6 +32,10 @@ import java.util.List;
  * the engine's state: a guess is written to the round BEFORE its card is painted, and the end
  * settles once through {@link ChanceRounds}. Closing the screen leaves the run open; opening the
  * game again resumes it. After a run, Start is where it always is: no prompt to go again.
+ *
+ * <p>Each move (Start, a guess, Cash out) holds clicks for {@link ClickHold#ACTION_MS}: the table
+ * repaints in place, so the rest of a double click on Higher would otherwise guess on the next
+ * card before the player has seen it.
  */
 public final class HigherLowerMenu extends GameMenu {
 
@@ -272,6 +277,7 @@ public final class HigherLowerMenu extends GameMenu {
     // ---- clicks ------------------------------------------------------------------------------------
 
     private void start() {
+        hold(ClickHold.ACTION_MS);
         if (playing()) {
             return;
         }
@@ -300,6 +306,7 @@ public final class HigherLowerMenu extends GameMenu {
     }
 
     private void guess(Side side) {
+        hold(ClickHold.ACTION_MS);
         if (!playing() || !run.offered(side)) {
             return;
         }
@@ -325,6 +332,7 @@ public final class HigherLowerMenu extends GameMenu {
     }
 
     private void cashOut() {
+        hold(ClickHold.ACTION_MS);
         if (!playing() || !run.canCashOut()) {
             return;
         }

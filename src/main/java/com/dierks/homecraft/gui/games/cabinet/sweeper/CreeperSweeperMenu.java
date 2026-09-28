@@ -7,6 +7,7 @@ import com.dierks.homecraft.games.cabinet.sweeper.CreeperSweeper;
 import com.dierks.homecraft.games.cabinet.sweeper.CreeperSweeperSettings;
 import com.dierks.homecraft.games.cabinet.sweeper.SweeperEngine;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.gui.games.ClickHold;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -32,6 +33,10 @@ import java.util.function.Supplier;
  * coloured pane carrying its number both as its stack size and in its name. Only the engine's
  * public view is drawn. 49 goes back to the choice; during a live board the first tap on it only
  * asks "click again to quit", because leaving ends the board with no score.
+ *
+ * <p>The choice tiles share slots with board squares, so a deal holds clicks for a moment
+ * ({@link ClickHold}): the second half of a double click on "Today's board" must not dig the
+ * square that has just appeared under it. Arming the quit holds them too.
  */
 public final class CreeperSweeperMenu extends GameMenu {
 
@@ -115,6 +120,7 @@ public final class CreeperSweeperMenu extends GameMenu {
         List<String> lore = new ArrayList<>();
         lore.add("&7The same board for everyone today,");
         lore.add("&7with a safe start already dug.");
+        lore.add("&7Its clock starts when it's dealt.");
         if (sweeper.dailyDone(viewer)) {
             lore.add("&a✔ Today's challenge done");
         } else if (s.dailyReward() > 0) {
@@ -149,6 +155,7 @@ public final class CreeperSweeperMenu extends GameMenu {
             clockRunning = true;
             ticker(20, this::tickClock);
         }
+        hold(ClickHold.SETTLE_MS);
         refresh();
     }
 
@@ -180,13 +187,15 @@ public final class CreeperSweeperMenu extends GameMenu {
                 live ? "&7Leaving ends this board: no score." : "&7Back to the boards."), e -> {
             if (board.state() == SweeperEngine.State.LIVE && !quitArmed) {
                 quitArmed = true;
+                hold(ClickHold.SETTLE_MS);
                 refresh();
                 return;
             }
             reopen();
         });
         if (over) {
-            set(SweeperLayout.AGAIN, Menus.icon(Material.LIME_DYE, "&aPlay again" + (run.isDaily() ? " &7- practice" : "")),
+            set(SweeperLayout.AGAIN, Menus.icon(Material.LIME_DYE, run.isDaily()
+                    ? "&a" + CabinetGame.dailyAgain("board", sweeper.dailyTried(viewer)) : "&aPlay again"),
                     e -> start(() -> run.isDaily() ? sweeper.daily(viewer) : sweeper.classic(run.level())));
         }
         set(SweeperLayout.RUN, runTile(), null);

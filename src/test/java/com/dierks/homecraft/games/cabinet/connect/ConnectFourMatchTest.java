@@ -135,6 +135,17 @@ class ConnectFourMatchTest {
     }
 
     @Test
+    void anAcceptedInviteNeverPullsSomeoneOutOfAnotherGame() {
+        assertTrue(FriendGames.elsewhere("connect_four", "snake", false),
+                "looking at another game's screen: busy, so the match doesn't start");
+        assertTrue(FriendGames.elsewhere("connect_four", null, true), "in a world session: busy");
+        assertFalse(FriendGames.elsewhere("connect_four", "connect_four", false),
+                "waiting in this game's own lobby is what an inviter does: the board opens");
+        assertFalse(FriendGames.elsewhere("connect_four", null, false),
+                "no games screen, or one of no game (the Games screen): free");
+    }
+
+    @Test
     void quittingEndsTheGameAndForgetsTheInvite() {
         FriendGames<String> f = new FriendGames<>();
         f.invited(CAT, ANNA);

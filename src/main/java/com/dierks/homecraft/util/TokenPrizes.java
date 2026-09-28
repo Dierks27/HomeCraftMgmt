@@ -20,13 +20,19 @@ public final class TokenPrizes {
     private TokenPrizes() {
     }
 
-    /** True if the item was bought or won with tokens. */
+    /**
+     * True if the item was bought or won with tokens — or is a world game's kit item
+     * ({@link Keys#GAME_KIT}, spec §7.4): a kit elytra or rocket is a real item, so every money
+     * surface that already refuses a prize (and the craft, brew and trade blocks) refuses it too.
+     */
     public static boolean is(ItemStack item) {
         if (item == null || !item.hasItemMeta() || Keys.TOKEN_PRIZE == null) {
             return false;
         }
         try {
-            return item.getItemMeta().getPersistentDataContainer().has(Keys.TOKEN_PRIZE, PersistentDataType.STRING);
+            var pdc = item.getItemMeta().getPersistentDataContainer();
+            return pdc.has(Keys.TOKEN_PRIZE, PersistentDataType.STRING)
+                    || (Keys.GAME_KIT != null && pdc.has(Keys.GAME_KIT, PersistentDataType.STRING));
         } catch (RuntimeException e) {
             return false;
         }

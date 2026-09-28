@@ -331,6 +331,36 @@ final class BukkitStateAdapter {
         return left;
     }
 
+    /**
+     * How many of {@code items}, from the first, surely fit in the player's storage now. Each one
+     * needs whole empty storage slots (more than one for a stack over its maximum, as addItem
+     * splits it); topping up a partial stack is not counted, so the answer is never too high and
+     * {@link #give} will take all of them. Nothing changes.
+     */
+    static int room(Player p, List<ItemStack> items) {
+        PlayerInventory inv = p.getInventory();
+        int free = 0;
+        for (ItemStack i : inv.getStorageContents()) {
+            if (empty(i)) {
+                free++;
+            }
+        }
+        int fits = 0;
+        for (ItemStack item : items) {
+            int need = 0;
+            if (!empty(item)) {
+                int max = Math.max(1, Math.min(item.getMaxStackSize(), inv.getMaxStackSize()));
+                need = (item.getAmount() + max - 1) / max;
+            }
+            if (need > free) {
+                break;
+            }
+            free -= need;
+            fits++;
+        }
+        return fits;
+    }
+
     static byte[] encode(List<ItemStack> items) {
         List<ItemStack> real = new ArrayList<>();
         for (ItemStack i : items) {

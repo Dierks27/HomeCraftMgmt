@@ -781,8 +781,10 @@ public final class GamesDao {
     }
 
     /**
-     * The player is home: mark THIS session's row DONE (it is kept a week for support, then
-     * pruned). The player may then enter again.
+     * The player is home: mark THIS session's row DONE and clear its carry, in one write (it is
+     * kept a week for support, then pruned). The player may then enter again. The world sessions
+     * write this BEFORE they hand the carry over, and hand it over only if it succeeded, so a
+     * failed write can never hand the same things over twice.
      *
      * @return false if there is no such live row
      */
@@ -790,7 +792,7 @@ public final class GamesDao {
         Connection c = database.connection();
         synchronized (c) {
             try (PreparedStatement ps = c.prepareStatement(
-                    "UPDATE game_saved_state SET phase = 'DONE', done_at = ? "
+                    "UPDATE game_saved_state SET phase = 'DONE', done_at = ?, carry = NULL "
                             + "WHERE player = ? AND session_id = ? AND phase <> 'DONE'")) {
                 ps.setLong(1, now);
                 ps.setString(2, player.toString());
@@ -816,6 +818,16 @@ public final class GamesDao {
     /** Every row in this phase, oldest first. */
     public List<SavedState> statesInPhase(String phase) throws SQLException {
         return states("SELECT * FROM game_saved_state WHERE phase = ? ORDER BY created_at", phase);
+    }
+
+    /**
+     * The player's most recently finished session still kept for support, or {@code null}: one
+     * row, for {@code /hcm games saved <player> show}.
+     */
+    public SavedState lastDoneState(UUID player) throws SQLException {
+        List<SavedState> rows = states("SELECT * FROM game_saved_state WHERE player = ? AND phase = 'DONE' "
+                + "ORDER BY COALESCE(done_at, created_at) DESC LIMIT 1", player.toString());
+        return rows.isEmpty() ? null : rows.get(0);
     }
 
     /** Every player with a LIVE row (the recovery listener's in-memory set, §7.6). */

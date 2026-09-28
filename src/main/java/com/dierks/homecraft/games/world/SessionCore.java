@@ -31,19 +31,31 @@ import java.util.logging.Logger;
  *       anything else; the row is a plain INSERT the database refuses while another live row
  *       exists. Every later write names its {@code session_id}, and every async callback carries a
  *       token, so a late callback from an old session can never touch a newer one.</li>
- *   <li><b>Nothing changes before the row is saved.</b> The inventory is closed first (the cursor
- *       and crafting grid go home), the player travels, THEN the state is captured and inserted,
- *       THEN they are changed.</li>
+ *   <li><b>Nothing changes before the row is saved.</b> Nothing may be on the cursor or in the
+ *       crafting grid (with a full inventory, closing it would drop them), the inventory is
+ *       closed, the player travels, THEN the state is captured and inserted (a capture that throws
+ *       changes nothing and sends them back), THEN they are cleared, their own data is marked
+ *       "cleared for this session" ({@link Port#mark}) and saved at once.</li>
  *   <li><b>A snapshot is applied only where it was taken</b> (Multiverse-Inventories swaps
- *       inventories per world group), OVERWRITES, and is followed in the same tick by RETURN. A
- *       RETURN row is never applied again: it only sends the player home and hands over the carry.
- *       A dead player is never restored; the row waits for the respawn.</li>
+ *       inventories per world group), OVERWRITES, marks their own data "applied", is saved, and is
+ *       followed in the same tick by RETURN. A RETURN row is never applied again: it only sends
+ *       the player home and hands over the carry. If RETURN can't be written, the row counts as
+ *       RETURN anyway (in memory for this run, and by the "applied" mark after a restart) and the
+ *       player is not sent home until it is written ({@code /hcm leave} tries again). A dead
+ *       player is never restored; the row waits for the respawn.</li>
  *   <li><b>Anything that reached the player during the game</b> (an auction delivery, an inbox
  *       Mini) is banked in the row's {@code carry} BEFORE the restore overwrites the inventory,
- *       and handed over once they are home. A crash in between loses nothing and duplicates
- *       nothing: a crash-join restore is overwrite-only and the carry is still in the row.</li>
- *   <li><b>Only home is DONE.</b> The row is marked DONE after the return teleport and the carry;
- *       a failed step keeps it, and the next join, {@code /hcm leave} or an admin finishes it.</li>
+ *       and handed over once they are home. A crash-join banks what the player holds only when
+ *       their own data says it was saved after the clear (the "cleared" mark); without it the
+ *       restore is overwrite-only, since that inventory may predate the game. A respawn, an admin
+ *       restore and {@code /hcm leave} after a failure always bank what they hold first.</li>
+ *   <li><b>Write, then give.</b> The carry is handed over only after the write that records it:
+ *       DONE (carry cleared) when it all fits, else what doesn't fit stays in the row (still
+ *       RETURN) until the player makes room and types {@code /hcm leave}. A failed write gives
+ *       nothing. The carry is never dropped on the ground.</li>
+ *   <li><b>Fail in place.</b> A snapshot or carry that can't be read, or a session world that is
+ *       gone, is found before anyone is moved: the row is kept for an admin
+ *       ({@code /hcm games saved}) and the player stays where they are.</li>
  * </ul>
  *
  * <p>Everything runs on the main thread. {@link Port#later} and {@link Port#teleport} complete
@@ -83,12 +95,39 @@ final class SessionCore<P, I> {
     static final String BACK = "&aYour things are back.";
     static final String BACK_AFTER_RESTART = "&aYour things are back &7— the server restarted during your game.";
     static final String BACK_BY_ADMIN = "&aYour things are back &7— an admin helped.";
+    static final String BACK_STAY = "&aYour things are back. &7Type &e/hcm leave &7in a moment to go home.";
     static final String SAFE_WITH_ADMIN = "&cYour things are safe &7— an admin will help.";
     static final String NOT_HOME = "&cCouldn't send you back yet. &7Type &e/hcm leave &7to try again.";
     static final String NOT_RESTORED = "&cCouldn't bring your things back yet. &7Type &e/hcm leave &7to try again.";
-    static final String FULL = "&eYour inventory is full. &7Make room, then type &e/hcm leave &7for the rest.";
+    static final String NOT_DONE = "&cCouldn't finish bringing you back. &7Type &e/hcm leave &7to try again.";
+    static final String FULL = "&eSome of your things didn't fit. &7Make room, then type &e/hcm leave &7to get the rest.";
+    static final String KEPT = "&eSome of your things are kept for you. &7Type &e/hcm leave &7to get them.";
     static final String NOT_IN_GAME = "&7You're not in a game.";
     static final String ENDED = "&7Your game has ended.";
+
+    /** The player's own data after the clear for a session: what they hold arrived during it. */
+    static final String CLEARED = "cleared:";
+    /** The player's own data after a restore: the snapshot is on them. */
+    static final String APPLIED = "applied:";
+
+    // What an admin is told ({@code /hcm games saved <player> restore|return}).
+    static final String ADMIN_BUSY = "&7Their things are already on the way back.";
+    static final String ADMIN_OFFLINE = "&7They're not online. &7Their things are kept.";
+    static final String ADMIN_NONE = "&7No saved things for them.";
+    static final String ADMIN_READ = "&cCouldn't read their saved things. &7See the server log.";
+    static final String ADMIN_DEAD = "&7They're dead: their things come back when they respawn.";
+    static final String ADMIN_UNREADABLE = "&cTheir saved things can't be read. &7Nothing was changed - see the server log.";
+    static final String ADMIN_CARRY = "&cThe things kept for them can't be read. &7Nothing was changed - see the server log.";
+    static final String ADMIN_APPLY = "&cPutting their things back failed. &7The saved state is kept - see the server log.";
+    static final String ADMIN_WRITE = "&cTheir things are back, but that couldn't be saved yet. &7See the server log, then try "
+            + "&ereturn &7again.";
+    static final String ADMIN_DONE_WRITE = "&cCouldn't save the hand-over. &7Nothing was given - see the server log.";
+    static final String ADMIN_MOVED = "&7Their saved things changed meanwhile. &7Look again with &eshow&7.";
+    static final String ADMIN_BACK = "&aTheir things are back. &7Sending them home now.";
+    static final String ADMIN_SENDING = "&aSending them back now.";
+    static final String ADMIN_HANDED = "&aDone: everything kept for them is handed over.";
+    static final String ADMIN_FULL = "&eSome of their things don't fit yet. &7They need to make room, then &e/hcm leave&7.";
+    static final String ADMIN_KEPT = "&eThey're in a Games world: what's kept for them waits for &e/hcm leave&7.";
 
     /** Why a recovery runs, which decides what the player is told. */
     enum Why { JOIN, RESPAWN, READY, RETRY, ADMIN }
@@ -203,6 +242,22 @@ final class SessionCore<P, I> {
         /** Add to the inventory; return what didn't fit. */
         List<I> give(P p, List<I> items);
 
+        /**
+         * How many of {@code items}, from the first, surely fit in the inventory now, so the write
+         * can come before the give. Never too many: only whole empty slots count. Changes nothing.
+         */
+        int room(P p, List<I> items);
+
+        /**
+         * What we last did to the player's body, kept in the player's own data so it is saved (and
+         * lost in a crash) together with their inventory: {@link #CLEARED} or {@link #APPLIED}
+         * plus the session id, or {@code null}.
+         */
+        String mark(P p);
+
+        /** Set {@link #mark}; {@code null} removes it. */
+        void setMark(P p, String mark);
+
         /** The item blob for a list ({@code null} for none). */
         byte[] encode(List<I> items);
 
@@ -284,6 +339,10 @@ final class SessionCore<P, I> {
     private final Map<UUID, ArrayDeque<Armed>> armed = new HashMap<>();
     private final Map<UUID, Long> ownDismount = new HashMap<>();
     private final Set<String> reported = new HashSet<>();
+    /** Sessions whose snapshot is on the player although RETURN couldn't be written: RETURN for us. */
+    private final Set<String> applied = new HashSet<>();
+    /** Sessions whose trip home was made this run: only the hand-over is left. */
+    private final Set<String> reached = new HashSet<>();
     private long tokens;
 
     SessionCore(GamesDao dao, Port<P, I> port, Logger log) {
@@ -466,7 +525,14 @@ final class SessionCore<P, I> {
             live.remove(s.uuid);
             return;
         }
-        port.closeInventory(p); // the cursor and the crafting grid go back into the inventory first
+        if (!port.handsFree(p)) {
+            // Closing would put the cursor and the crafting grid back, or drop them if the inventory
+            // is full (and a drop on the way in can be lost): they put them down themselves first.
+            live.remove(s.uuid);
+            refuse(p, HANDS);
+            return;
+        }
+        port.closeInventory(p);
         String why = port.handsFree(p) ? refusal(port.standing(p, s.gameId)) : HANDS;
         if (why != null) {
             live.remove(s.uuid);
@@ -521,7 +587,16 @@ final class SessionCore<P, I> {
             abort(s, HANDS);
             return;
         }
-        SavedState state = port.capture(p, s.sid, s.gameId, s.ref, here.world(), s.from, port.now());
+        SavedState state;
+        try {
+            state = port.capture(p, s.sid, s.gameId, s.ref, here.world(), s.from, port.now());
+        } catch (RuntimeException e) {
+            // Nothing has changed yet (a stack that won't serialise, say): back as they are.
+            log.log(Level.SEVERE, "Games: could not save " + port.name(p) + "'s state for " + s.gameId
+                    + " - not starting", e);
+            abort(s, CANT_START);
+            return;
+        }
         boolean saved;
         try {
             saved = dao.saveState(state); // a plain INSERT: refused while any live row exists
@@ -538,6 +613,11 @@ final class SessionCore<P, I> {
         s.safe = s.start;
         try {
             port.clearForGame(p);
+            // Their own data says "cleared for this session" and is saved at once: from here on the
+            // file no longer holds what they had, so what a crash-join finds on them arrived during
+            // the game, and is banked rather than thrown away.
+            port.setMark(p, CLEARED + s.sid);
+            port.save(p);
         } catch (RuntimeException e) {
             log.log(Level.SEVERE, "Games: could not ready " + port.name(p) + " for " + s.gameId + " - sending them back", e);
             s.phase = Session.Phase.LEAVING;
@@ -698,9 +778,14 @@ final class SessionCore<P, I> {
             }
             return;
         }
-        if (SavedState.RETURN.equals(row.phase())) {
+        if (SavedState.RETURN.equals(row.phase()) || alreadyApplied(p, row)) {
             port.stripKit(p);
             s.hooks.ended(p, reason);
+            if (!SavedState.RETURN.equals(row.phase()) && !markReturn(p, row)) {
+                live.remove(id);
+                port.tell(p, BACK_STAY);
+                return;
+            }
             afterRestore(s, row, reason, inPlace, sync);
             return;
         }
@@ -726,6 +811,15 @@ final class SessionCore<P, I> {
             live.remove(id);
             giveBackUnbanked(s);
             failed(p, row, null, "its world is gone");
+            s.hooks.ended(p, reason);
+            return;
+        }
+        try {
+            port.prepare(row); // never back into the Games world for a snapshot that can't be put on
+        } catch (RuntimeException e) {
+            live.remove(id);
+            giveBackUnbanked(s);
+            failed(p, row, e, "the saved state can't be read");
             s.hooks.ended(p, reason);
             return;
         }
@@ -784,11 +878,19 @@ final class SessionCore<P, I> {
             s.hooks.ended(p, reason);
             return;
         }
+        port.setMark(p, APPLIED + row.sessionId());
         giveBackUnbanked(s);
         port.save(p);
-        setPhase(p, row, SavedState.RETURN);
+        boolean returned = markReturn(p, row);
         port.stripKit(p);
         s.hooks.ended(p, reason);
+        if (!returned) {
+            // Their things are on them but the row still says ACTIVE: they are not sent home until
+            // it says RETURN, and until then nothing applies it again. /hcm leave writes it and goes on.
+            live.remove(id);
+            port.tell(p, BACK_STAY);
+            return;
+        }
         String line = endLine(reason);
         if (line != null) {
             port.tell(p, line);
@@ -803,14 +905,15 @@ final class SessionCore<P, I> {
         if (inPlace) {
             live.remove(id);
             if (reason == EndReason.TELEPORT) {
-                // They are going somewhere: hand over the carry once they are there.
+                // They are going somewhere: hand over the carry once they are there (unless that is
+                // inside a Games world: then it waits for /hcm leave).
                 long token = ++tokens;
                 recovering.put(id, token);
                 port.later(1, () -> {
                     if (owns(id, token)) {
                         recovering.remove(id);
                         if (port.online(p)) {
-                            handOver(p, row.sessionId());
+                            handOver(p, row.sessionId(), true);
                         }
                     }
                 });
@@ -1006,47 +1109,59 @@ final class SessionCore<P, I> {
     }
 
     /**
-     * Finish a row outside a session: a RETURN row only goes home (it is never applied again);
-     * an ACTIVE row is restored overwrite-only in its session world, then goes home.
+     * Finish a row outside a session. A RETURN row only goes home (it is never applied again), and
+     * so does an ACTIVE row whose snapshot is already on the player. Any other ACTIVE row is
+     * restored in its session world, then goes home. Nobody is moved before what is needed has
+     * been read (the snapshot and its world, or for a row whose things are back, the carry): a row
+     * that can't be finished fails in place, with the player where they are, and waits for an admin.
+     *
+     * @return what happened, for an admin
      */
-    void recover(P p, Why why) {
+    String recover(P p, Why why) {
         UUID id = port.id(p);
-        if (live.containsKey(id) || recovering.containsKey(id) || !port.online(p)) {
-            return;
+        if (live.containsKey(id) || recovering.containsKey(id)) {
+            return ADMIN_BUSY;
+        }
+        if (!port.online(p)) {
+            return ADMIN_OFFLINE;
         }
         SavedState row;
         try {
             row = dao.loadState(id);
         } catch (SQLException e) {
             log.log(Level.SEVERE, "Games: could not read " + port.name(p) + "'s saved state", e);
-            return;
+            return ADMIN_READ;
         }
         if (row == null) {
             rows.remove(id);
             if (why == Why.RETRY) {
                 port.tell(p, NOT_IN_GAME);
             }
-            return;
+            return ADMIN_NONE;
         }
         rows.add(id);
-        long token = ++tokens;
-        if (SavedState.RETURN.equals(row.phase())) {
-            recovering.put(id, token);
-            port.stripKit(p);
-            returnTrip(p, row, false, token);
-            return;
+        if (SavedState.RETURN.equals(row.phase()) || alreadyApplied(p, row)) {
+            return sendHome(p, row, why);
         }
         if (port.dead(p)) {
-            return; // after the respawn
+            return ADMIN_DEAD; // after the respawn
         }
         if (!port.worldExists(row.sessionWorld())) {
+            port.stripKit(p);
             failed(p, row, null, "its world " + row.sessionWorld() + " is gone");
-            return;
+            return "&cTheir game's world (" + row.sessionWorld() + ") is gone. &7Nothing was changed - see the server log.";
         }
+        try {
+            port.prepare(row); // read it all BEFORE anyone is moved: an unreadable one fails in place
+        } catch (RuntimeException e) {
+            port.stripKit(p);
+            failed(p, row, e, "the saved state can't be read");
+            return ADMIN_UNREADABLE;
+        }
+        long token = ++tokens;
         recovering.put(id, token);
         if (row.sessionWorld().equals(port.world(p))) {
-            restoreRow(p, row, why, token);
-            return;
+            return restoreRow(p, row, why, token);
         }
         // Apply only in the session world (§7.5): go there first.
         Place there = port.spawn(row.sessionWorld());
@@ -1063,10 +1178,42 @@ final class SessionCore<P, I> {
             }
             restoreRow(p, row, why, token);
         });
+        return "&aTaking them to " + row.sessionWorld() + " to put their things back.";
     }
 
-    /** The overwrite-only restore of an ACTIVE row (crash-join, respawn, admin): no extras step. */
-    private void restoreRow(P p, SavedState row, Why why, long token) {
+    /**
+     * A row whose things are on the player already (RETURN, or ACTIVE with the snapshot applied):
+     * RETURN written if it isn't yet, then home and the carry. {@code /hcm leave} and a join after
+     * the trip was made (or outside every Games world) only hand the carry over; an admin's
+     * {@code return} always sends them home.
+     */
+    private String sendHome(P p, SavedState row, Why why) {
+        UUID id = port.id(p);
+        port.stripKit(p);
+        if (!carryReadable(p, row)) {
+            return ADMIN_CARRY; // fail in place: no trip home on every join
+        }
+        if (!SavedState.RETURN.equals(row.phase()) && !markReturn(p, row)) {
+            port.tell(p, BACK_STAY);
+            return ADMIN_WRITE;
+        }
+        if (why != Why.ADMIN && (reached.contains(row.sessionId()) || !port.gamesWorld(port.world(p)))) {
+            return handOver(p, row.sessionId(), false);
+        }
+        long token = ++tokens;
+        recovering.put(id, token);
+        returnTrip(p, row, false, token);
+        return ADMIN_SENDING;
+    }
+
+    /**
+     * The restore of an ACTIVE row outside a session (crash-join, respawn, {@code /hcm leave}, an
+     * admin), in its session world. What the player holds is banked first when it arrived after
+     * the clear: always after a respawn, an admin's restore or {@code /hcm leave} (things they
+     * gathered since a failure), and at a crash-join when their own data says it was saved after
+     * the clear. Otherwise it is overwrite-only: that inventory may predate the game.
+     */
+    private String restoreRow(P p, SavedState row, Why why, long token) {
         UUID id = port.id(p);
         SavedState fresh;
         try {
@@ -1074,11 +1221,15 @@ final class SessionCore<P, I> {
         } catch (SQLException e) {
             recovering.remove(id);
             log.log(Level.SEVERE, "Games: could not read " + port.name(p) + "'s saved state", e);
-            return;
+            return ADMIN_READ;
         }
         if (fresh == null || !fresh.sessionId().equals(row.sessionId()) || !SavedState.ACTIVE.equals(fresh.phase())) {
             recovering.remove(id); // it moved on while they travelled
-            return;
+            return ADMIN_MOVED;
+        }
+        if (alreadyApplied(p, fresh)) {
+            recovering.remove(id); // read again here in the session world: never a second apply
+            return sendHome(p, fresh, why);
         }
         Restore<P> restore;
         try {
@@ -1087,11 +1238,10 @@ final class SessionCore<P, I> {
             recovering.remove(id);
             port.stripKit(p);
             failed(p, fresh, e, "the saved state can't be read");
-            return;
+            return ADMIN_UNREADABLE;
         }
         List<I> unbanked = List.of();
-        if (why == Why.RESPAWN) {
-            // A live body after a respawn holds nothing from before the game: bank what it holds.
+        if (why == Why.RESPAWN || why == Why.ADMIN || why == Why.RETRY || clearedBody(p, fresh)) {
             unbanked = bank(p, fresh);
         } else {
             port.discardHeld(p); // overwrite only: what a joining player holds may predate the game
@@ -1103,11 +1253,17 @@ final class SessionCore<P, I> {
             recovering.remove(id);
             give(p, unbanked);
             failed(p, fresh, e, "putting it back failed");
-            return;
+            return ADMIN_APPLY;
         }
+        port.setMark(p, APPLIED + fresh.sessionId());
         give(p, unbanked);
         port.save(p);
-        setPhase(p, fresh, SavedState.RETURN);
+        if (!markReturn(p, fresh)) {
+            recovering.remove(id);
+            port.stripKit(p);
+            port.tell(p, BACK_STAY);
+            return ADMIN_WRITE;
+        }
         port.stripKit(p);
         port.tell(p, switch (why) {
             case JOIN, READY -> fresh.createdAt() < bootedAt ? BACK_AFTER_RESTART : BACK;
@@ -1115,6 +1271,7 @@ final class SessionCore<P, I> {
             default -> BACK;
         });
         returnTrip(p, fresh, false, token);
+        return ADMIN_BACK;
     }
 
     // ---- home -----------------------------------------------------------------------------------
@@ -1143,55 +1300,88 @@ final class SessionCore<P, I> {
             port.tell(p, NOT_HOME); // stays RETURN: the next join or /hcm leave tries again
             return;
         }
-        handOver(p, sid);
+        reached.add(sid);
+        handOver(p, sid, false);
     }
 
-    /** Home: hand over the carry, then DONE. Leftovers drop at their feet, never in a Games world. */
-    private void handOver(P p, String sid) {
+    /**
+     * Home: the carry, then DONE — written first, given after. When it all fits, the row is marked
+     * DONE (its carry cleared) and only then is the carry handed over; when some of it doesn't
+     * fit, the rest is written back to the row (still RETURN, for {@code /hcm leave} once they have
+     * made room) and only then is what fits handed over. A failed write gives nothing, so nothing
+     * can be handed over twice; nothing is dropped.
+     *
+     * @param away a foreign teleport took them somewhere instead of our trip home: in a Games world
+     *             other than the one they came from, the carry waits for {@code /hcm leave}
+     * @return what happened, for an admin
+     */
+    private String handOver(P p, String sid, boolean away) {
         UUID id = port.id(p);
         SavedState row;
         try {
             row = dao.loadState(id);
         } catch (SQLException e) {
             log.log(Level.SEVERE, "Games: could not read " + port.name(p) + "'s saved state", e);
-            port.tell(p, NOT_HOME);
-            return;
+            port.tell(p, NOT_DONE);
+            return ADMIN_READ;
         }
         if (row == null) {
             rows.remove(id);
-            return;
+            return ADMIN_NONE;
         }
         if (!row.sessionId().equals(sid) || !SavedState.RETURN.equals(row.phase())) {
-            return;
+            return ADMIN_MOVED;
         }
         List<I> carry;
         try {
             carry = row.carry() == null ? List.of() : port.decode(row.carry());
         } catch (RuntimeException e) {
             failed(p, row, e, "the things kept for them can't be read");
-            return;
+            return ADMIN_CARRY;
         }
-        if (!carry.isEmpty()) {
-            List<I> left = port.give(p, carry);
-            if (!left.isEmpty()) {
-                if (port.gamesWorld(port.world(p))) {
-                    if (setCarry(p, sid, left)) {
-                        port.save(p);
-                        port.tell(p, FULL);
-                        return; // stays RETURN until there is room
-                    }
-                    log.severe("Games: could not keep " + port.name(p) + "'s leftovers - dropping them");
+        port.stripKit(p);
+        if (!carry.isEmpty() && away && awayInGames(p, row)) {
+            port.tell(p, KEPT); // stays RETURN: /hcm leave takes them home and hands it over there
+            return ADMIN_KEPT;
+        }
+        int fits = carry.isEmpty() ? 0 : Math.max(0, Math.min(carry.size(), port.room(p, carry)));
+        List<I> now = new ArrayList<>(carry.subList(0, fits));
+        List<I> later = new ArrayList<>(carry.subList(fits, carry.size()));
+        boolean written;
+        if (later.isEmpty()) {
+            written = finish(p, sid);
+        } else {
+            written = now.isEmpty() || setCarry(p, sid, later); // nothing fits: nothing to write or give
+        }
+        if (!written) {
+            port.tell(p, NOT_DONE); // nothing given: the row still holds all of it
+            return ADMIN_DONE_WRITE;
+        }
+        if (!now.isEmpty()) {
+            List<I> over = port.give(p, now);
+            if (!over.isEmpty()) {
+                // room() promised these would fit. Back into the row if it is still live; else at their feet.
+                List<I> lost = later.isEmpty() ? over : addCarry(p, sid, over);
+                for (I item : lost) {
+                    log.severe("Games: no room for " + port.describe(item) + " after all - dropped at "
+                            + port.name(p) + "'s feet (session " + sid + ")");
                 }
-                for (I item : left) {
-                    log.info("Games: " + port.name(p) + "'s inventory was full - dropped "
-                            + port.describe(item) + " at their feet (session " + sid + ")");
+                if (!lost.isEmpty()) {
+                    port.drop(p, lost);
                 }
-                port.drop(p, left);
             }
             port.save(p);
         }
-        finish(p, sid);
-        port.stripKit(p);
+        if (!later.isEmpty()) {
+            port.tell(p, FULL); // stays RETURN until there is room
+            return ADMIN_FULL;
+        }
+        reached.remove(sid);
+        applied.remove(sid);
+        if ((APPLIED + sid).equals(port.mark(p))) {
+            port.setMark(p, null);
+        }
+        return ADMIN_HANDED;
     }
 
     // ---- admin ----------------------------------------------------------------------------------
@@ -1208,21 +1398,20 @@ final class SessionCore<P, I> {
             return "&7They're on their way into or out of a game. Try in a moment.";
         }
         if (recovering.containsKey(id)) {
-            return "&7Their things are already on the way back.";
+            return ADMIN_BUSY;
         }
         SavedState row = rowOrNull(id);
         if (row == null) {
-            return "&7No saved things for them.";
+            return ADMIN_NONE;
         }
-        if (SavedState.RETURN.equals(row.phase())) {
+        if (SavedState.RETURN.equals(row.phase()) || alreadyApplied(p, row)) {
             return "&7Their things were put back already. Use &ereturn &7to send them home.";
         }
         if (port.dead(p)) {
-            return "&7They're dead: their things come back when they respawn.";
+            return ADMIN_DEAD;
         }
         reported.remove(row.sessionId());
-        recover(p, Why.ADMIN);
-        return "&aPutting their things back now.";
+        return recover(p, Why.ADMIN);
     }
 
     /** {@code /hcm games saved <player> return}: send them home (only once their things are back). */
@@ -1237,13 +1426,13 @@ final class SessionCore<P, I> {
         }
         SavedState row = rowOrNull(id);
         if (row == null) {
-            return "&7No saved things for them.";
+            return ADMIN_NONE;
         }
-        if (SavedState.ACTIVE.equals(row.phase())) {
+        if (SavedState.ACTIVE.equals(row.phase()) && !alreadyApplied(p, row)) {
             return "&cTheir things haven't been put back yet. &7Use &erestore &7first.";
         }
-        recover(p, Why.ADMIN);
-        return "&aSending them back now.";
+        reported.remove(row.sessionId());
+        return recover(p, Why.ADMIN);
     }
 
     /** {@code /hcm games saved <player> discard confirm}: delete the row for good (logged). */
@@ -1268,6 +1457,8 @@ final class SessionCore<P, I> {
             return "&cCouldn't discard it. &7See the server log.";
         }
         rows.remove(id);
+        applied.remove(row.sessionId());
+        reached.remove(row.sessionId());
         log.warning("Games: " + by + " discarded " + name + "'s saved state (session " + row.sessionId()
                 + ", game " + row.gameId() + ", phase " + row.phase() + ")");
         return "&aDiscarded their saved things.";
@@ -1276,21 +1467,11 @@ final class SessionCore<P, I> {
     /** The player's most recent finished session still kept for support, or {@code null}. */
     SavedState lastDone(UUID id) {
         try {
-            SavedState best = null;
-            for (SavedState s : dao.statesInPhase(SavedState.DONE)) {
-                if (s.player().equals(id) && (best == null || done(s) > done(best))) {
-                    best = s;
-                }
-            }
-            return best;
+            return dao.lastDoneState(id);
         } catch (SQLException e) {
             log.log(Level.WARNING, "Games: could not read finished saved states", e);
             return null;
         }
-    }
-
-    private static long done(SavedState s) {
-        return s.doneAt() == null ? s.createdAt() : s.doneAt();
     }
 
     /** The live row, or {@code null} (also when it can't be read, which is logged). */
@@ -1444,27 +1625,76 @@ final class SessionCore<P, I> {
         }
     }
 
-    private void setPhase(P p, SavedState row, String phase) {
+    /**
+     * The snapshot is on the player now: mark the row RETURN. If that write fails, the session is
+     * remembered as applied for this run (and the player's own data says so, see {@link Port#mark}),
+     * so nothing applies it again; the caller keeps the player where they are.
+     *
+     * @return whether the row says RETURN now (or is gone: nothing is left to apply)
+     */
+    private boolean markReturn(P p, SavedState row) {
+        String sid = row.sessionId();
         try {
-            if (!dao.setPhase(port.id(p), row.sessionId(), phase)) {
-                log.severe("Games: " + port.name(p) + "'s saved state (session " + row.sessionId()
-                        + ") was not there to mark " + phase);
+            if (!dao.setPhase(port.id(p), sid, SavedState.RETURN)) {
+                log.severe("Games: " + port.name(p) + "'s saved state (session " + sid + ") was not there to mark RETURN");
             }
-        } catch (SQLException e) {
-            log.log(Level.SEVERE, "Games: could not mark " + port.name(p) + "'s saved state " + phase
-                    + " (session " + row.sessionId() + ")", e);
+            applied.remove(sid);
+            return true;
+        } catch (SQLException | RuntimeException e) {
+            applied.add(sid);
+            log.log(Level.SEVERE, "Games: could not mark " + port.name(p) + "'s saved state RETURN (session " + sid
+                    + "). Their things are back on them and it won't be applied again; they stay until it is written"
+                    + " (/hcm leave tries again).", e);
+            return false;
         }
     }
 
-    private void finish(P p, String sid) {
+    /** DONE, carry cleared. Whether it was written: the carry is handed over only if it was. */
+    private boolean finish(P p, String sid) {
         UUID id = port.id(p);
         try {
             if (dao.finishState(id, sid, port.now())) {
                 rows.remove(id);
+                return true;
             }
+            log.warning("Games: " + port.name(p) + "'s saved state (session " + sid + ") was not there to finish");
+            return false;
         } catch (SQLException e) {
-            log.log(Level.SEVERE, "Games: could not finish " + port.name(p) + "'s saved state (session " + sid + ")", e);
+            log.log(Level.SEVERE, "Games: could not finish " + port.name(p) + "'s saved state (session " + sid
+                    + ") - nothing handed over; it stays for /hcm leave", e);
+            return false;
         }
+    }
+
+    /** Whether the row's snapshot is on the player already: RETURN couldn't be written (this run, or before a restart). */
+    private boolean alreadyApplied(P p, SavedState row) {
+        return applied.contains(row.sessionId()) || (APPLIED + row.sessionId()).equals(port.mark(p));
+    }
+
+    /** Whether the player's own data says it was saved after the clear for this row's session. */
+    private boolean clearedBody(P p, SavedState row) {
+        return (CLEARED + row.sessionId()).equals(port.mark(p));
+    }
+
+    /** Whether the row's carry reads; if not, it is kept for an admin and the player told (in place). */
+    private boolean carryReadable(P p, SavedState row) {
+        if (row.carry() == null) {
+            return true;
+        }
+        try {
+            port.decode(row.carry());
+            return true;
+        } catch (RuntimeException e) {
+            failed(p, row, e, "the things kept for them can't be read");
+            return false;
+        }
+    }
+
+    /** In a Games world other than the one they came from. */
+    private boolean awayInGames(P p, SavedState row) {
+        String world = port.world(p);
+        Place from = SavedStateCodec.from(row);
+        return port.gamesWorld(world) && (from == null || !world.equals(from.world()));
     }
 
     /** A restore that can't happen: keep the row as it is, say so once in the log, reassure the player. */

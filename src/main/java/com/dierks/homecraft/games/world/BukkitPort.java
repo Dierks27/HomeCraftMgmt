@@ -7,6 +7,7 @@ import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -14,6 +15,7 @@ import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.IllegalPluginAccessException;
 
 import java.util.HashMap;
@@ -45,12 +47,21 @@ final class BukkitPort implements SessionCore.Port<Player, ItemStack> {
     private final BukkitStateAdapter state = new BukkitStateAdapter();
     /** When each player was last hurt (server tick), for "Stand still and safe". */
     private final Map<UUID, Long> hurt = new HashMap<>();
+    /**
+     * {@link SessionCore.Port#mark}: in the player's PersistentDataContainer, which
+     * {@link Player#saveData} writes into the player's own data file together with their inventory,
+     * so after a crash it describes the inventory the player comes back with. It is only ever set
+     * in the session world (at the clear and at the restore), so wherever it is read it describes
+     * that world's inventory as last saved, whatever Multiverse-Inventories group the player is in.
+     */
+    private final NamespacedKey markKey;
     private SessionCore<Player, ItemStack> core;
     /** Our plugin is being disabled: from here on nothing may teleport or schedule. */
     private boolean disabling;
 
     private BukkitPort(HomeCraftManagement plugin) {
         this.plugin = plugin;
+        this.markKey = new NamespacedKey(plugin, "games_session_mark");
     }
 
     /** The plugin's one port (and state machine), built on first use from the database alone. */
@@ -311,6 +322,34 @@ final class BukkitPort implements SessionCore.Port<Player, ItemStack> {
     @Override
     public List<ItemStack> give(Player p, List<ItemStack> items) {
         return BukkitStateAdapter.give(p, items);
+    }
+
+    @Override
+    public int room(Player p, List<ItemStack> items) {
+        return BukkitStateAdapter.room(p, items);
+    }
+
+    @Override
+    public String mark(Player p) {
+        try {
+            return p.getPersistentDataContainer().get(markKey, PersistentDataType.STRING);
+        } catch (RuntimeException e) {
+            plugin.getLogger().log(Level.WARNING, "Games: could not read " + p.getName() + "'s game mark", e);
+            return null; // as if unmarked: a crash-join is then overwrite-only, as before the mark
+        }
+    }
+
+    @Override
+    public void setMark(Player p, String mark) {
+        try {
+            if (mark == null) {
+                p.getPersistentDataContainer().remove(markKey);
+            } else {
+                p.getPersistentDataContainer().set(markKey, PersistentDataType.STRING, mark);
+            }
+        } catch (RuntimeException e) {
+            plugin.getLogger().log(Level.WARNING, "Games: could not mark " + p.getName() + "'s data", e);
+        }
     }
 
     @Override

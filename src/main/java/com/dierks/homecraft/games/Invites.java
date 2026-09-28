@@ -96,7 +96,7 @@ public final class Invites {
         } : cancel));
         lastPair.put(pair(a, b), now);
         offer(to, from.getName(), invite, secs);
-        from.sendMessage(Text.of("&7Invite sent to &f" + to.getName() + "&7."));
+        // The game says "Invite sent" itself, with its own details (how long it lasts, what it is).
         return invite;
     }
 

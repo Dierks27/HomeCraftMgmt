@@ -713,11 +713,14 @@ Cabinets and games of chance need nothing more. **Courses and mini golf need a G
 1. Make the world with Multiverse, and put its name in `games.worlds` (shipped `[games]`).
 2. **Keep it out of `worlds.economy_enabled`.** The market, PCs and Pallets stay out of it. World
    games still pay tokens there: the session is what proves the play was real.
-3. **Set its Multiverse game mode to adventure:** `/mv modify set mode adventure <world>`. Players
+3. **Set its Multiverse game mode to adventure:** `/mv modify <world> set gamemode adventure`
+   (Multiverse-Core 5; on 4.x it was `/mv modify set mode adventure <world>`). Players
    in a game are held in adventure mode anyway; with the world set the same, Multiverse has
    nothing to switch on the way in.
 4. **Give it its own Multiverse-Inventories group** with only that world in it (like the creative
-   group in [Economy safety](#economy-safety-021)), and keep per-game-mode profiles **off**. A
+   group in [Economy safety](#economy-safety-021)), and keep per-game-mode profiles **off**
+   (`share-handling.enable-gamemode-share-handling: false` in Multiverse-Inventories 5's
+   `config.yml`, the shipped value; `use_game_mode_profiles: false` on 4.x). A
    player's things are saved after Multiverse-Inventories has swapped them for the Games world's,
    and the game switches them to adventure mode, which a per-game-mode profile would treat as one
    more swap.

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,8 +25,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * angle; slime bounces a dropped ball back up with its sideways speed kept, and pops up a ball
  * rolling onto it; a half-block step is climbed only with the speed for it, a full block always
  * bounces, and steps down are fallen down; water, lava and leaving the bounds end the stroke;
- * the cup takes a slow ball and lets a fast one lip out; and the same putt on the same grid
- * gives the same path every time.
+ * the cup takes a slow ball and lets a fast one lip out, and takes every ball that lands or comes
+ * to rest on it — on the floor of a sunken hole, in a slab, or shut in a cauldron sitting on it —
+ * but not one under it; the cup's top is where its block really is, and a block a ball can't rest
+ * on (air, a carpet, a hollow block) can't be the cup; and the same putt on the same grid gives
+ * the same path every time.
  */
 class BallPhysicsTest {
 
@@ -33,15 +37,33 @@ class BallPhysicsTest {
     private static final int FLOOR = 63;
     private static final double GROUND = 64;
 
+    /** A block whose top depends on where in it: {@code fx}, {@code fz} from its corner, 0-1. */
+    interface Shape {
+        double top(double fx, double fz);
+    }
+
+    /** A cauldron-like block: walls two pixels thick up to the top, and a floor {@code floor} up inside. */
+    static Shape hollow(double floor) {
+        return (fx, fz) -> fx <= 0.125 || fx >= 0.875 || fz <= 0.125 || fz >= 0.875 ? 1.0 : floor;
+    }
+
     /** A block grid for tests: full or partial blocks by position, everything else air. */
     static final class Grid implements BallPhysics.Blocks {
         private record Cell(double top, Surface surface) {
         }
 
         private final Map<List<Integer>, Cell> cells = new HashMap<>();
+        private final Map<List<Integer>, Shape> shapes = new HashMap<>();
 
         Grid set(int x, int y, int z, double top, Surface surface) {
             cells.put(List.of(x, y, z), new Cell(top, surface));
+            return this;
+        }
+
+        /** A block shaped like {@code shape} (a normal surface). */
+        Grid set(int x, int y, int z, Shape shape) {
+            cells.put(List.of(x, y, z), new Cell(0, Surface.NORMAL));
+            shapes.put(List.of(x, y, z), shape);
             return this;
         }
 
@@ -57,11 +79,16 @@ class BallPhysicsTest {
 
         Grid remove(int x, int y, int z) {
             cells.remove(List.of(x, y, z));
+            shapes.remove(List.of(x, y, z));
             return this;
         }
 
         @Override
         public double top(int x, int y, int z, double px, double pz) {
+            Shape s = shapes.get(List.of(x, y, z));
+            if (s != null) {
+                return s.top(px - x, pz - z);
+            }
             Cell c = cells.get(List.of(x, y, z));
             return c == null ? NONE : c.top();
         }
@@ -420,6 +447,172 @@ class BallPhysicsTest {
         Ball b = new Ball(6.3, GROUND, 0.5);
         b.putt(1, 0, 0.02);
         assertEquals(Outcome.IN_CUP, run(b, lane(Surface.NORMAL), h, 500), "trickling to the edge of the cup is in");
+    }
+
+    /** A green at y 63 with a 1x1 hole at (10, 63, 0) one block deep; its floor, (10, 62, 0), is the cup. */
+    static Grid sunken() {
+        Grid g = new Grid().floor(-5, 30, -5, 5, FLOOR, Surface.NORMAL);
+        g.remove(10, FLOOR, 0);
+        return g.set(10, FLOOR - 1, 0, 1.0, Surface.NORMAL);
+    }
+
+    /** The sunken hole's cup and bounds, its cup's top read from the grid. */
+    static BallPhysics.Hole sunkenHole(BallPhysics.Blocks g) {
+        return BallPhysics.Hole.of(10, FLOOR - 1, 0, BallPhysics.cupTop(g, 10, FLOOR - 1, 0), -5, FLOOR - 3, -5, 30,
+                FLOOR + 10, 5);
+    }
+
+    /** Whether the ball is down in the 1x1 hole at (10, 0), below {@code below}. */
+    private static boolean downInTheHole(Ball b, double below) {
+        return b.x() >= 10 && b.x() < 11 && b.z() >= 0 && b.z() < 1 && b.y() < below;
+    }
+
+    @Test
+    void everyBallThatComesToRestOnTheFloorOfASunkenHoleIsIn() {
+        Grid g = sunken();
+        BallPhysics.Hole h = sunkenHole(g);
+        assertEquals(GROUND - 1, h.cupY(), 1e-12, "the cup's top is the floor of the hole, a block below the green");
+        int in = 0;
+        int putts = 0;
+        for (int zi = 1; zi <= 19; zi++) {
+            for (int si = 0; si <= 24; si++) {
+                double z = zi * 0.05;
+                double speed = 0.12 + si * 0.02;
+                Ball b = new Ball(5.5, GROUND, z);
+                b.putt(1, 0, speed);
+                Outcome o = run(b, g, h, 2000);
+                putts++;
+                assertFalse(o != Outcome.IN_CUP && downInTheHole(b, GROUND - 0.5), String.format(Locale.ROOT,
+                        "a ball down in the hole is in: z %.2f speed %.2f ended %s at (%.3f, %.3f, %.3f)", z, speed, o,
+                        b.x(), b.y(), b.z()));
+                if (o == Outcome.IN_CUP) {
+                    in++;
+                }
+            }
+        }
+        assertTrue(in > 58, "more go in than the 58 the centre-only rule counted: " + in + " of " + putts);
+    }
+
+    @Test
+    void aBallThatDropsIntoASunkenHoleOffCentreIsIn() {
+        Grid g = sunken();
+        Ball b = new Ball(5.5, GROUND, 0.2); // 0.3 off the hole's centre line, where the old rule missed every one
+        b.putt(1, 0, 0.5);
+        assertEquals(Outcome.IN_CUP, run(b, g, sunkenHole(g), 2000), "it falls in and is counted");
+        assertTrue(downInTheHole(b, GROUND - 0.5), "down in the hole: (" + b.x() + ", " + b.y() + ", " + b.z() + ")");
+    }
+
+    @Test
+    void aBallThatLandsOnTheCupIsInHoweverFastItGoes() {
+        Grid g = lane(Surface.NORMAL);
+        BallPhysics.Hole h = BallPhysics.Hole.of(10, FLOOR, 0, -20, FLOOR - 3, -3, 40, FLOOR + 5, 3);
+        Ball b = new Ball(10.1, GROUND + 0.05, 0.5); // just above a flush cup, on its way down
+        b.putt(1, 0, 0.4);
+        assertTrue(b.speed() > BallPhysics.CUP_SPEED, "faster than a rolling ball may be to drop in");
+        assertEquals(Outcome.IN_CUP, run(b, g, h, 50), "landing on the cup block is in");
+        assertTrue(h.overCup(b.x(), b.z()), "it came down over the cup: " + b.x());
+    }
+
+    @Test
+    void aBallThatStopsOnAFlushCupAwayFromItsCentreIsIn() {
+        BallPhysics.Hole h = BallPhysics.Hole.of(6, FLOOR, 0, -2, FLOOR, -3, 40, FLOOR + 2, 3);
+        Ball b = new Ball(5.2, GROUND, 0.9); // rolls onto the cup block's corner, 0.4 off its centre line
+        b.putt(1, 0, 0.12);
+        assertEquals(Outcome.IN_CUP, run(b, lane(Surface.NORMAL), h, 500), "resting on the cup block is in");
+        assertTrue(Math.hypot(b.x() - 6.5, b.z() - 0.5) > BallPhysics.CUP_RADIUS, "though it never came within "
+                + BallPhysics.CUP_RADIUS + " of the centre: (" + b.x() + ", " + b.z() + ")");
+    }
+
+    @Test
+    void aBallThatStopsUnderTheCupIsNotInIt() {
+        Grid g = lane(Surface.NORMAL).set(10, FLOOR + 2, 0, 1.0, Surface.NORMAL); // the cup up on a bridge, open below
+        BallPhysics.Hole h = BallPhysics.Hole.of(10, FLOOR + 2, 0, -20, FLOOR - 3, -3, 40, FLOOR + 5, 3);
+        Ball b = new Ball(9.6, GROUND, 0.5);
+        b.putt(1, 0, 0.09);
+        assertEquals(Outcome.STOPPED, run(b, g, h, 500), "it rolled under the cup, not into it");
+        assertTrue(h.overCup(b.x(), b.z()), "though it stopped right below it: " + b.x());
+    }
+
+    @Test
+    void aSlabCupHoldsEveryBallThatComesToRestInIt() {
+        Grid g = lane(Surface.NORMAL).set(10, FLOOR, 0, 0.5, Surface.NORMAL); // a bottom slab, half a block down
+        BallPhysics.Hole h = BallPhysics.Hole.of(10, FLOOR, 0, BallPhysics.cupTop(g, 10, FLOOR, 0), -20, FLOOR - 3, -3,
+                40, FLOOR + 5, 3);
+        assertEquals(GROUND - 0.5, h.cupY(), 1e-12, "the cup's top is the slab's, not a full block's");
+        int centreLine = 0;
+        for (int zi = 3; zi <= 7; zi++) {
+            for (int si = 0; si <= 55; si++) {
+                double z = zi * 0.1;
+                double speed = 0.05 + si * 0.01;
+                Ball b = new Ball(5.5, GROUND, z);
+                b.putt(1, 0, speed);
+                Outcome o = run(b, g, h, 2000);
+                assertFalse(o != Outcome.IN_CUP && downInTheHole(b, GROUND - 0.25), String.format(Locale.ROOT,
+                        "a ball resting in the slab is in: z %.1f speed %.2f ended %s at (%.3f, %.3f, %.3f)", z, speed,
+                        o, b.x(), b.y(), b.z()));
+                if (o == Outcome.IN_CUP && zi == 5) {
+                    centreLine++;
+                }
+            }
+        }
+        assertTrue(centreLine > 11, "straight at it, more go in than the 11 of 56 a full block's height let in: "
+                + centreLine);
+    }
+
+    @Test
+    void aBallShutInAHollowBlockOnTheCupIsIn() {
+        Grid g = sunken().set(10, FLOOR, 0, hollow(0.25)); // a cauldron flush in the green, on the cup block
+        BallPhysics.Hole h = sunkenHole(g);
+        Ball b = new Ball(7.5, GROUND, 0.5);
+        b.putt(1, 0, 0.3);
+        assertEquals(Outcome.IN_CUP, run(b, g, h, 2000), "it can't be putted out, and it's over the cup: in");
+        assertEquals(GROUND - 0.75, b.y(), 1e-12, "at rest on the cauldron's floor");
+        assertTrue(BallPhysics.trapped(b, g), "shut in by walls it can't climb");
+    }
+
+    @Test
+    void aBallShutInAHollowBlockAwayFromTheCupIsLeftForReset() {
+        Grid g = lane(Surface.NORMAL).set(10, FLOOR, 0, hollow(0.25));
+        BallPhysics.Hole h = BallPhysics.Hole.of(20, FLOOR, 0, -20, FLOOR - 3, -3, 40, FLOOR + 5, 3);
+        Ball b = new Ball(7.5, GROUND, 0.5);
+        b.putt(1, 0, 0.3);
+        assertEquals(Outcome.STOPPED, run(b, g, h, 2000), "stuck in the cauldron, not the cup");
+        assertTrue(BallPhysics.trapped(b, g), "shut in: only Reset gets it out");
+        assertFalse(BallPhysics.restsInCup(b, g, h), "and not in the cup");
+        assertFalse(BallPhysics.trapped(new Ball(3.5, GROUND, 0.5), g), "a ball on the open green isn't shut in");
+        Grid hopper = lane(Surface.NORMAL).set(10, FLOOR, 0, hollow(0.6875));
+        assertFalse(BallPhysics.trapped(new Ball(10.5, GROUND - 0.3125, 0.5), hopper),
+                "walls a putt can climb (under half a block) don't shut it in");
+    }
+
+    @Test
+    void theCupsTopIsWhereItsBlockReallyIs() {
+        Grid g = lane(Surface.NORMAL).set(5, FLOOR, 0, 0.5, Surface.NORMAL).set(6, FLOOR, 0, hollow(0.25));
+        assertEquals(1.0, BallPhysics.cupTop(g, 4, FLOOR, 0), 0.0, "a full block");
+        assertEquals(0.5, BallPhysics.cupTop(g, 5, FLOOR, 0), 0.0, "a slab: half a block");
+        assertEquals(0.25, BallPhysics.cupTop(g, 6, FLOOR, 0), 0.0, "a cauldron: its floor, at its centre");
+        assertEquals(1.0, BallPhysics.cupTop(g, 4, FLOOR + 5, 0), 0.0, "nothing there now: a full block, as before");
+    }
+
+    @Test
+    void onlyABlockABallCanRestOnCanBeTheCup() {
+        Grid g = lane(Surface.NORMAL).set(5, FLOOR + 1, 0, 0.5, Surface.NORMAL)
+                .set(6, FLOOR + 1, 0, 1.0 / 16, Surface.NORMAL)
+                .set(7, FLOOR + 1, 0, 3.0 / 16, Surface.NORMAL)
+                .set(8, FLOOR + 1, 0, hollow(0.25))
+                .set(9, FLOOR + 1, 0, hollow(0.125))
+                .set(10, FLOOR + 1, 0, hollow(0.6875))
+                .set(11, FLOOR + 1, 0, (fx, fz) -> fx >= 0.375 && fx <= 0.625 && fz >= 0.375 && fz <= 0.625 ? 1.5
+                        : BallPhysics.Blocks.NONE);
+        assertEquals(BallPhysics.CupShape.FINE, BallPhysics.cupShape(g, 4, FLOOR, 0), "a full block");
+        assertEquals(BallPhysics.CupShape.FINE, BallPhysics.cupShape(g, 5, FLOOR + 1, 0), "a slab");
+        assertEquals(BallPhysics.CupShape.FINE, BallPhysics.cupShape(g, 11, FLOOR + 1, 0), "a fence post");
+        assertEquals(BallPhysics.CupShape.NOTHING, BallPhysics.cupShape(g, 4, FLOOR + 1, 0), "air");
+        assertEquals(BallPhysics.CupShape.THIN, BallPhysics.cupShape(g, 6, FLOOR + 1, 0), "a carpet");
+        assertEquals(BallPhysics.CupShape.THIN, BallPhysics.cupShape(g, 7, FLOOR + 1, 0), "a trapdoor laid flat");
+        assertEquals(BallPhysics.CupShape.HOLLOW, BallPhysics.cupShape(g, 8, FLOOR + 1, 0), "a cauldron");
+        assertEquals(BallPhysics.CupShape.HOLLOW, BallPhysics.cupShape(g, 9, FLOOR + 1, 0), "a composter");
+        assertEquals(BallPhysics.CupShape.HOLLOW, BallPhysics.cupShape(g, 10, FLOOR + 1, 0), "a hopper");
     }
 
     @Test

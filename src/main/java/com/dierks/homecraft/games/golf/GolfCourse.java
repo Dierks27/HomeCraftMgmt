@@ -79,10 +79,16 @@ public record GolfCourse(String id, String name, String world, boolean enabled, 
             return corner1 != null && corner2 != null;
         }
 
-        /** The hole as the ball sees it (only when complete). */
+        /** The hole as the ball sees it, its cup a full block (only when complete; for the checks). */
         public BallPhysics.Hole physics() {
             return BallPhysics.Hole.of(cup.x(), cup.y(), cup.z(), corner1.x(), corner1.y(), corner1.z(),
                     corner2.x(), corner2.y(), corner2.z());
+        }
+
+        /** The hole to play, its cup as high as the cup block in {@code w} really is ({@link BallPhysics#cupTop}). */
+        public BallPhysics.Hole physics(BallPhysics.Blocks w) {
+            return BallPhysics.Hole.of(cup.x(), cup.y(), cup.z(), BallPhysics.cupTop(w, cup.x(), cup.y(), cup.z()),
+                    corner1.x(), corner1.y(), corner1.z(), corner2.x(), corner2.y(), corner2.z());
         }
 
         /** What this hole still needs, numbered {@code n}; empty when it's ready. */

@@ -47,18 +47,21 @@ public final class GolfBallMenu extends GameMenu {
         init(54, Text.of("&dPick your ball"));
     }
 
-    /** The "Pick your ball" button other screens show: the ball the player has now. */
+    /**
+     * The "Pick your ball" button other screens show: the ball the player has now — the chosen
+     * Mini only while they still own it and it can be a ball (as {@link #build} checks), else the
+     * plain white ball.
+     */
     static ItemStack currentTile(MiniGolf golf, Player viewer) {
         if (Bedrock.is(viewer)) {
             return Menus.icon(Material.WHITE_CONCRETE, "&fYour ball: &7a white block",
                     "&7On Bedrock the ball is a white", "&7block, so it's easy to see.");
         }
         String chosen = golf.chosenBall(viewer.getUniqueId());
-        MiniDef def = chosen == null || golf.plugin().miniService() == null ? null
-                : golf.plugin().miniService().def(chosen);
+        MiniDef def = chosen == null ? null : golf.ballChoices(viewer.getUniqueId()).stream()
+                .filter(d -> d.id().equals(chosen)).findFirst().orElse(null);
         String name = def == null ? "the plain white ball" : def.name();
-        ItemStack head = def == null || def.texture() == null || def.texture().isBlank() ? MiniGolf.whiteBall()
-                : Heads.base(def.texture());
+        ItemStack head = def == null ? MiniGolf.whiteBall() : Heads.base(def.texture());
         return named(head, "&ePick your ball &7- " + name, "&7Your Mini can be the ball!", "&eClick to choose");
     }
 

@@ -29,7 +29,7 @@ import java.util.logging.Level;
  * &lt;id&gt; info | list                 its holes and what's missing
  * &lt;id&gt; tp [hole]                   to a tee
  * &lt;id&gt; hole add &lt;par&gt;              a new last hole, its tee where you stand, facing the way you face
- * &lt;id&gt; hole &lt;n&gt; cup               the block you look at (within 6) is the cup
+ * &lt;id&gt; hole &lt;n&gt; cup               the block you look at (within 6) is the cup: the floor of the hole
  * &lt;id&gt; hole &lt;n&gt; tee               move the tee to where you stand
  * &lt;id&gt; hole &lt;n&gt; par &lt;p&gt;           par 2-6
  * &lt;id&gt; hole &lt;n&gt; bounds &lt;1|2&gt;      a corner of the hole's bounds at your feet
@@ -42,9 +42,14 @@ import java.util.logging.Level;
  * <p>A change to where a hole is (a tee, cup, bounds, or adding or removing a hole) bumps the
  * course's {@code rev} and clears its board, since old scores were set on another layout; when
  * there are scores to lose, the command asks for a trailing {@code confirm} first. A round being
- * played on the old layout finishes but isn't recorded. Par and the name aren't layout: they
- * change nothing else. Course ids share {@code /hcm play} with every game, alias and course, so a
- * taken id is refused.
+ * played on the old layout ends at once (it couldn't count) and the player is sent home. Par and
+ * the name aren't layout: they change nothing else. Course ids share {@code /hcm play} with every
+ * game, alias and course, so a taken id is refused.
+ *
+ * <p>The cup is the block the ball comes to rest on: the floor of a sunken hole, a slab, or a
+ * block flush with the green. A block with nothing to rest on at its centre, a sliver like a
+ * carpet, or a hollow one like a cauldron is refused ({@link BallPhysics#cupShape}). Every edit that
+ * is saved goes in the server log, as the trials editor's do.
  */
 final class GolfAdmin implements GameAdmin {
 
@@ -78,18 +83,27 @@ final class GolfAdmin implements GameAdmin {
                 "&e/hcm games golf <id> delete confirm &7- delete it and its high scores");
     }
 
+    /**
+     * A command. A bug in one is logged and answered here rather than thrown: this runs inside the
+     * game's guard, where a throw would switch golf off and end every round.
+     */
     @Override
     public void handle(CommandSender sender, String[] args) {
-        if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
-            for (String line : help()) {
-                tell(sender, line);
+        try {
+            if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
+                for (String line : help()) {
+                    tell(sender, line);
+                }
+                return;
             }
-            return;
-        }
-        switch (args[0].toLowerCase(Locale.ROOT)) {
-            case "create" -> create(sender, args);
-            case "list" -> list(sender);
-            default -> course(sender, args);
+            switch (args[0].toLowerCase(Locale.ROOT)) {
+                case "create" -> create(sender, args);
+                case "list" -> list(sender);
+                default -> course(sender, args);
+            }
+        } catch (RuntimeException e) {
+            golf.log(Level.SEVERE, "Mini golf: /hcm games golf " + String.join(" ", args) + " failed", e);
+            tell(sender, "&cThat didn't work - see the console.");
         }
     }
 
@@ -121,13 +135,13 @@ final class GolfAdmin implements GameAdmin {
                     + "). You're in " + world + ".");
             return;
         }
+        String name = args.length > 2 ? cleanName(String.join(" ", Arrays.copyOfRange(args, 2, args.length)))
+                : pretty(id);
         try {
             if (games.dao().course(id) != null || games.resolve(id) != null) {
                 tell(sender, "&cThere's already a course called " + id + ".");
                 return;
             }
-            String name = args.length > 2 ? cleanName(String.join(" ", Arrays.copyOfRange(args, 2, args.length)))
-                    : pretty(id);
             long now = System.currentTimeMillis();
             games.dao().saveCourse(CourseCodec.toRow(GolfCourse.create(id, name, world), now, now));
         } catch (SQLException e) {
@@ -135,7 +149,8 @@ final class GolfAdmin implements GameAdmin {
             return;
         }
         golf.reloadCourses();
-        tell(sender, "&aMade the golf course " + id + " (" + golf.course(id).name() + "), closed for now.");
+        logged(sender, "created", id, name + " in " + world);
+        tell(sender, "&aMade the golf course " + id + " (" + name + "), closed for now.");
         tell(sender, "&7Stand on hole 1's tee, face down the hole, then: &e/hcm games golf " + id + " hole add <par>");
     }
 
@@ -262,9 +277,21 @@ final class GolfAdmin implements GameAdmin {
                     tell(sender, "&cLook at the cup block, within 6 blocks.");
                     return;
                 }
+                String what = b.getType().name().toLowerCase(Locale.ROOT);
+                BallPhysics.CupShape shape = BallPhysics.cupShape(new LiveBlocks(p.getWorld()), b.getX(), b.getY(),
+                        b.getZ());
+                if (shape != BallPhysics.CupShape.FINE) {
+                    String why = switch (shape) {
+                        case NOTHING -> " has nothing a ball can rest on.";
+                        case THIN -> " is too thin to hold a ball.";
+                        default -> " is hollow: a ball would be stuck inside it.";
+                    };
+                    tell(sender, "&cThe " + what + why);
+                    tell(sender, "&7Look at the floor of the hole instead: the block the ball ends up resting on.");
+                    return;
+                }
                 layout(sender, c, c.withHole(n, h.withCup(new GolfCourse.Spot(b.getX(), b.getY(), b.getZ()))), args,
-                        "Hole " + n + "'s cup is the " + b.getType().name().toLowerCase(Locale.ROOT) + " at "
-                                + b.getX() + " " + b.getY() + " " + b.getZ() + ".");
+                        "Hole " + n + "'s cup is the " + what + " at " + b.getX() + " " + b.getY() + " " + b.getZ() + ".");
             }
             case "tee" -> {
                 Player p = here(sender, c);
@@ -278,7 +305,7 @@ final class GolfAdmin implements GameAdmin {
                     tell(sender, "&cPar is " + GolfCourse.MIN_PAR + " to " + GolfCourse.MAX_PAR + ".");
                     return;
                 }
-                save(sender, c.withHole(n, h.withPar(par)), "Hole " + n + " is par " + par + ".");
+                save(sender, c.withHole(n, h.withPar(par)), "changed", "Hole " + n + " is par " + par + ".");
             }
             case "bounds" -> {
                 int which = args.length > 4 ? number(args[4], -1) : -1;
@@ -349,7 +376,7 @@ final class GolfAdmin implements GameAdmin {
             tell(sender, "&e/hcm games golf " + c.id() + " name <name>");
             return;
         }
-        save(sender, c.withName(name), "It's called " + name + " now.");
+        save(sender, c.withName(name), "renamed", "It's called " + name + " now.");
     }
 
     private void enable(CommandSender sender, GolfCourse c) {
@@ -361,13 +388,13 @@ final class GolfAdmin implements GameAdmin {
             }
             return;
         }
-        if (save(sender, c.withEnabled(true), c.name() + " is open.")) {
+        if (save(sender, c.withEnabled(true), "opened", c.name() + " is open.")) {
             tell(sender, "&7Players find it on the Golf tab of /hcm play, or with &e/hcm play " + c.id() + "&7.");
         }
     }
 
     private void disable(CommandSender sender, GolfCourse c) {
-        if (save(sender, c.withEnabled(false), c.name() + " is closed.")) {
+        if (save(sender, c.withEnabled(false), "closed", c.name() + " is closed.")) {
             golf.rounds().closeCourse(c.id(), "&7" + c.name() + " was closed by an admin.");
         }
     }
@@ -388,14 +415,15 @@ final class GolfAdmin implements GameAdmin {
             return;
         }
         golf.reloadCourses();
-        tell(sender, "&aDeleted " + id + (cleared > 0 ? " and " + cleared + " high score" + (cleared == 1 ? "" : "s") : "")
-                + ".");
+        String scores = cleared > 0 ? cleared + " high score" + (cleared == 1 ? "" : "s") : "";
+        logged(sender, "deleted", id, scores.isEmpty() ? "" : scores + " cleared");
+        tell(sender, "&aDeleted " + id + (scores.isEmpty() ? "" : " and " + scores) + ".");
     }
 
     // ---- saving ----------------------------------------------------------------------------------------
 
-    /** Save a change that isn't layout (par, name, the switch). */
-    private boolean save(CommandSender sender, GolfCourse edited, String done) {
+    /** Save a change that isn't layout (par, name, the switch); {@code action} is for the server log. */
+    private boolean save(CommandSender sender, GolfCourse edited, String action, String done) {
         try {
             long now = System.currentTimeMillis();
             golf.games().dao().saveCourse(CourseCodec.toRow(edited, now, now), false);
@@ -404,13 +432,16 @@ final class GolfAdmin implements GameAdmin {
             return false;
         }
         golf.reloadCourses();
+        logged(sender, action, edited.id(), done);
         tell(sender, "&a" + done);
         return true;
     }
 
     /**
      * Save a layout change: {@code rev} goes up and the board is cleared — after a trailing
-     * {@code confirm} when there are scores to lose. Then what's still missing, if anything.
+     * {@code confirm} when there are scores to lose. Rounds being played on the course end at once
+     * (they couldn't count on the old layout), and the players are told why. Then what's still
+     * missing, if anything.
      *
      * @return whether it was saved
      */
@@ -434,8 +465,12 @@ final class GolfAdmin implements GameAdmin {
             return false;
         }
         golf.reloadCourses();
-        tell(sender, "&a" + done + " &7(rev " + rev + (cleared > 0 ? ", " + cleared + " high score"
-                + (cleared == 1 ? "" : "s") + " cleared" : "") + ")");
+        String note = "rev " + rev + (cleared > 0 ? ", " + cleared + " high score" + (cleared == 1 ? "" : "s")
+                + " cleared" : "");
+        int playing = golf.playing().getOrDefault(old.id(), List.of()).size();
+        logged(sender, "changed the layout of", old.id(), done + " (" + note + (playing > 0 ? ", " + playing
+                + " round" + (playing == 1 ? "" : "s") + " ended" : "") + ")");
+        tell(sender, "&a" + done + " &7(" + note + ")");
         GolfCourse now = golf.course(old.id());
         if (now != null) {
             List<String> problems = now.problems(golf.worlds());
@@ -445,9 +480,10 @@ final class GolfAdmin implements GameAdmin {
                 tell(sender, "&7It's ready. Open it with &e/hcm games golf " + now.id() + " enable");
             }
         }
-        int playing = golf.playing().getOrDefault(old.id(), List.of()).size();
         if (playing > 0) {
-            tell(sender, "&7" + playing + " playing it now: their rounds won't be recorded.");
+            golf.rounds().closeCourse(old.id(), GolfRounds.changedLine(old));
+            tell(sender, "&7" + playing + " playing it now " + (playing == 1 ? "was" : "were")
+                    + " sent home: a round on the old layout can't count.");
         }
         return true;
     }
@@ -551,6 +587,12 @@ final class GolfAdmin implements GameAdmin {
     }
 
     // ---- helpers ---------------------------------------------------------------------------------------
+
+    /** A saved edit in the server log, as the trials editor keeps them: who, what, which course. */
+    private void logged(CommandSender sender, String action, String id, String detail) {
+        golf.log(Level.INFO, "Games: " + sender.getName() + " " + action + " golf course " + id
+                + (detail == null || detail.isEmpty() ? "" : " - " + Text.plain(detail)), null);
+    }
 
     private void failed(CommandSender sender, SQLException e) {
         golf.log(Level.SEVERE, "Mini golf: a course edit could not be saved", e);

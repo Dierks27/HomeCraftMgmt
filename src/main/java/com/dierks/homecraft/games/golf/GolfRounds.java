@@ -133,8 +133,18 @@ public final class GolfRounds {
                 p -> begin(p, course, look, maxOverPar));
     }
 
-    /** They're in, saved and cleared: the kit, the ball on the first tee. */
+    /**
+     * They're in, saved and cleared: the kit, the ball on the first tee — unless an admin closed
+     * the course or changed its layout while they were on their way, when they go straight home.
+     */
     private void begin(Player p, GolfCourse course, ItemStack look, int maxOverPar) {
+        GolfCourse now = golf.playableCourse(course.id());
+        if (now == null || now.rev() != course.rev()) {
+            p.sendMessage(Text.of(now == null ? "&7" + course.name() + " was closed by an admin."
+                    : changedLine(course)));
+            games().sessions().leave(p, EndReason.ADMIN);
+            return;
+        }
         LiveRound r = new LiveRound(p.getUniqueId(), course, new GolfRun(course.pars(), maxOverPar),
                 new BallView(golf.plugin(), golf, p.getUniqueId(), look));
         LiveRound old = live.put(p.getUniqueId(), r);
@@ -167,12 +177,14 @@ public final class GolfRounds {
     /** The ball on the current hole's tee; the player there too unless it's the first (they're already there). */
     private void startHole(Player p, LiveRound r, boolean teleport) {
         r.state = LiveRound.State.PLAYING;
-        r.tee();
         World world = p.getWorld();
-        world.getChunkAt((int) Math.floor(r.ball.x()) >> 4, (int) Math.floor(r.ball.z()) >> 4); // the tee's chunk is up
-        BallPhysics.settle(r.ball, new LiveBlocks(world));
-        r.markSpot();
         GolfCourse.Hole h = r.hole();
+        world.getChunkAt((int) Math.floor(h.tee().x()) >> 4, (int) Math.floor(h.tee().z()) >> 4); // the tee's chunk
+        world.getChunkAt(h.cup().x() >> 4, h.cup().z() >> 4); // and the cup's, to read how high it is
+        LiveBlocks blocks = new LiveBlocks(world);
+        r.tee(blocks);
+        BallPhysics.settle(r.ball, blocks);
+        r.markSpot();
         if (teleport) {
             games().sessions().teleport(p, new Location(world, h.tee().x(), h.tee().y(), h.tee().z(), h.tee().yaw(), 0));
         }
@@ -474,12 +486,19 @@ public final class GolfRounds {
     /** Whether an admin changed (or closed) the course since the round began. */
     private boolean changed(GolfCourse c) {
         try {
-            GamesDao.CourseRow now = games().dao().course(c.id());
-            return now == null || now.rev() != c.rev() || !CourseCodec.GAME.equals(now.game());
+            return stale(c, games().dao().course(c.id()));
         } catch (SQLException e) {
             golf.log(Level.WARNING, "Mini golf: could not check a course before recording a round", e);
             return true;
         }
+    }
+
+    /**
+     * Whether a round begun on {@code c} can't count against the course's row as it is now: it is
+     * gone, it isn't golf's, its layout changed, or it was closed.
+     */
+    static boolean stale(GolfCourse c, GamesDao.CourseRow now) {
+        return now == null || now.rev() != c.rev() || !CourseCodec.GAME.equals(now.game()) || !now.enabled();
     }
 
     /** The score on the board, then the rewards — while the player is still in the game, where they earn. */
@@ -506,7 +525,8 @@ public final class GolfRounds {
             pay(p, RewardKind.HOLE_IN_ONE, SkillRewards.holeInOneRef(c.id(), hole, day), s.holeInOneReward(),
                     name + " hole-in-one on hole " + hole);
         }
-        if (games().featured().isFeatured(c.id())) {
+        // today's pick is this course, or golf as a whole (the reward is once a day either way)
+        if (games().featured().isFeatured(c.id()) || games().featured().isFeatured(golf.id())) {
             pay(p, RewardKind.FEATURED, SkillRewards.featuredRef(day), games().config().common().featuredBonus(),
                     name + " is today's pick");
         }
@@ -562,6 +582,11 @@ public final class GolfRounds {
         if (r != null && r.state == LiveRound.State.PLAYING) {
             goToBall(p, r);
         }
+    }
+
+    /** What a player is told when an admin changes the layout of the course they are playing. */
+    static String changedLine(GolfCourse c) {
+        return "&7" + c.name() + " was changed by an admin, so this round can't count. Your things are back.";
     }
 
     /** An admin closed or changed a course: end the rounds on it. */

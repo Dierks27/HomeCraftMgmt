@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.golf.BallPhysicsTest.Grid;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -14,9 +15,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A round's rules on a fake course (spec §12): a putt goes the way the player looks and counts a
  * stroke from a new last spot; water and out of bounds put the ball back on that spot with a
- * penalty stroke; "Reset ball" does the same; the cup ends the hole with its strokes; and a hole
- * whose strokes reach par + max over par is picked up — whether the ball stopped short or the
- * last penalty got it there.
+ * penalty stroke; "Reset ball" does the same; the cup ends the hole with its strokes — its height
+ * read from the course, so a putt that drops into a sunken hole or a slab counts at once (a
+ * hole-in-one stays one); and a hole whose strokes reach par + max over par is picked up —
+ * whether the ball stopped short or the last penalty got it there.
  */
 class LiveRoundTest {
 
@@ -33,7 +35,18 @@ class LiveRoundTest {
     private static LiveRound round(int par, int maxOverPar) {
         GolfCourse c = course(par);
         LiveRound r = new LiveRound(UUID.randomUUID(), c, new GolfRun(c.pars(), maxOverPar), null);
-        r.tee();
+        r.tee(floor());
+        return r;
+    }
+
+    /** One par 2 hole facing +x, its cup at (10, {@code cupY}, 0), on {@code g}. */
+    private static LiveRound roundOn(double teeX, double teeZ, int cupY, BallPhysics.Blocks g) {
+        GolfCourse.Hole h = new GolfCourse.Hole(new GolfCourse.Tee(teeX, GROUND, teeZ, -90f),
+                new GolfCourse.Spot(10, cupY, 0), 2, new GolfCourse.Spot(-5, FLOOR, -5),
+                new GolfCourse.Spot(30, FLOOR + 3, 5));
+        GolfCourse c = new GolfCourse("t", "Test", "games", true, 1, List.of(h));
+        LiveRound r = new LiveRound(UUID.randomUUID(), c, new GolfRun(c.pars(), 3), null);
+        r.tee(g);
         return r;
     }
 
@@ -118,6 +131,50 @@ class LiveRoundTest {
         assertEquals(2, r.last.strokes(), "two strokes");
         assertEquals(r.run.scores().get(0), r.last, "the hole's score is the one just made");
         assertTrue(r.run.finished(), "the only hole");
+    }
+
+    @Test
+    void aPuttThatDropsIntoASunkenHoleIsAHoleInOne() {
+        Grid g = BallPhysicsTest.sunken();
+        LiveRound r = roundOn(7.0, 0.2, FLOOR - 1, g); // the floor of the hole is the cup; 0.3 off its centre line
+        assertEquals(GROUND - 1, r.area.cupY(), 1e-12, "the cup's top was read from the course: the hole's floor");
+        r.putt(-90f, 2); // "Putt"
+        assertEquals(LiveRound.Result.IN_CUP, rollOut(r, g), "it drops in and counts, with no second tap");
+        assertEquals(1, r.last.strokes(), "one stroke");
+        assertTrue(r.last.holeInOne(), "a hole-in-one");
+        assertEquals(List.of(1), r.run.holesInOne(), "and the round says so, for its reward");
+    }
+
+    @Test
+    void noPuttEndsAtRestInASunkenHoleUncounted() {
+        Grid g = BallPhysicsTest.sunken();
+        int in = 0;
+        for (int power = 1; power <= 3; power++) {
+            for (int i = 0; i <= 66; i++) {
+                double teeX = 3.0 + i * 0.1;
+                LiveRound r = roundOn(teeX, 0.2, FLOOR - 1, g);
+                r.putt(-90f, power);
+                LiveRound.Result res = rollOut(r, g);
+                boolean down = r.ball.x() >= 10 && r.ball.x() < 11 && r.ball.y() < GROUND - 0.5;
+                assertFalse(res == LiveRound.Result.STILL && down, String.format(Locale.ROOT,
+                        "power %d from x %.1f came to rest in the hole at (%.3f, %.3f, %.3f) and must be in", power,
+                        teeX, r.ball.x(), r.ball.y(), r.ball.z()));
+                if (res == LiveRound.Result.IN_CUP) {
+                    in++;
+                }
+            }
+        }
+        assertTrue(in > 0, "and some of them are in: " + in);
+    }
+
+    @Test
+    void aSlabCupIsReadAsHalfABlock() {
+        Grid g = new Grid().floor(-5, 30, -5, 5, FLOOR, Surface.NORMAL).set(10, FLOOR, 0, 0.5, Surface.NORMAL);
+        LiveRound r = roundOn(7.0, 0.5, FLOOR, g);
+        assertEquals(GROUND - 0.5, r.area.cupY(), 1e-12, "the cup's top is the slab's, half a block down");
+        r.putt(-90f, 2);
+        assertEquals(LiveRound.Result.IN_CUP, rollOut(r, g), "a Putt drops into the slab and counts");
+        assertTrue(r.ball.y() < GROUND, "down below the green, into it: " + r.ball.y());
     }
 
     @Test

@@ -3,6 +3,8 @@ package com.dierks.homecraft.web;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.MarketSimConfig;
 import com.dierks.homecraft.config.PluginConfig;
+import com.dierks.homecraft.games.Game;
+import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.market.MarketItem;
 import com.dierks.homecraft.market.MarketService;
 import com.dierks.homecraft.market.MarketState;
@@ -13,6 +15,7 @@ import com.dierks.homecraft.market.sim.ItemStatus;
 import com.dierks.homecraft.market.sim.MarketEvent;
 import com.dierks.homecraft.market.sim.MarketSimService;
 import com.dierks.homecraft.market.sim.Season;
+import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.mini.MiniService;
 import com.dierks.homecraft.storage.PriceHistoryDao;
 import com.sun.net.httpserver.Headers;
@@ -37,16 +40,18 @@ import java.util.function.Supplier;
 
 /**
  * The Market Web Dashboard (Phase 6, §3.7): a small, read-only web server embedded
- * in the plugin that publishes the live commodities market and the Minis catalog as
+ * in the plugin that publishes the live commodities market, the Minis catalog and the Arcade as
  * JSON feeds, plus a static HTML dashboard. Built on the JDK's
  * {@link com.sun.net.httpserver} — no extra dependencies.
  *
  * <p><b>Endpoints:</b> {@code /api/market} (every commodity with its 48-hour, 7-day and
  * 30-day price history — see {@link MarketFeed}), {@code /api/news} (the live market's news,
  * its running events and season — see {@link NewsFeed}), {@code /api/minis} (the Minis catalog
- * with printed counts — see {@link MinisFeed}) and {@code /} (the dashboard page, which
- * fetches {@code /api/market} and {@code /api/news} from the browser). The LilahCraft website
- * reads the feeds from its own server.
+ * with printed counts — see {@link MinisFeed}), {@code /api/arcade} (the open games with their
+ * published odds or records, the featured game, the Scratch Ticket's pot, the Prize Counter,
+ * token Card Packs and achievements — see {@link ArcadeFeed}) and {@code /} (the dashboard page,
+ * which fetches {@code /api/market} and {@code /api/news} from the browser). The LilahCraft
+ * website reads the feeds from its own server.
  *
  * <p><b>The live market (0.33, spec §14).</b> While {@link MarketSimService#active()} the
  * snapshot also carries the sim's side: per sim-enabled item its usual price, mood percent,
@@ -65,10 +70,13 @@ import java.util.function.Supplier;
  * histories are the heavy part, so they are re-read from the database only after a new
  * snapshot has been recorded, and at most every ten minutes.
  *
- * <p><b>Scope:</b> market data and Minis catalog counts only — prices, buy/sell
- * spread, stock, price history, market news, and how many of each Mini were printed. No
- * balances, no owners, no UUIDs, no player data of any kind, no internals (no drift, no seed,
- * no schedule, nothing about events players have not been told about).
+ * <p><b>Scope:</b> market data, Minis catalog counts and the Arcade's public side only —
+ * prices, buy/sell spread, stock, price history, market news, how many of each Mini were
+ * printed, and each game's odds and records (a score or a time and a date). No balances, no
+ * owners, no UUIDs, no winners, no per-player limits, no internals (no drift, no seed, no
+ * schedule, nothing about events players have not been told about). The one switch that adds a
+ * name is {@code web.dashboard.arcade_show_names} (shipped false): only then do the Arcade
+ * feed's records carry who set them.
  *
  * <p><b>Auth:</b> the page is public; the feeds ({@code /api/*}) all pass one gate,
  * {@link FeedAuth}. With {@code web.dashboard.feed_token} blank they are open, as they
@@ -95,6 +103,8 @@ public final class MarketDashboardServer {
     private volatile FeedPayload marketFeed = new FeedPayload("{\"items\":[]}");
     private volatile FeedPayload newsFeed = new FeedPayload(NewsFeed.json(0L, false, null, null, null));
     private volatile FeedPayload minisFeed = new FeedPayload("{\"minis\":[]}");
+    private volatile FeedPayload arcadeFeed =
+            new FeedPayload(new ArcadeFeed(false).json(0L, null, null, null, null, null));
     private volatile FeedAuth auth = new FeedAuth("", false);
     private String indexHtml = "";
 
@@ -105,6 +115,8 @@ public final class MarketDashboardServer {
     private Map<String, List<PriceHistoryDao.Snapshot>> history30d = Map.of();
     // Reading the live market failed on the last refresh (logged once per run of failures).
     private boolean liveFailing;
+    // Reading today's featured game failed on the last refresh (likewise).
+    private boolean featuredFailing;
 
     /**
      * The live market's side of {@code /api/market} and {@code /api/news} for one refresh
@@ -166,6 +178,7 @@ public final class MarketDashboardServer {
         server.createContext("/api/market", ex -> serveFeed(ex, () -> marketFeed));
         server.createContext("/api/news", ex -> serveFeed(ex, () -> newsFeed));
         server.createContext("/api/minis", ex -> serveFeed(ex, () -> minisFeed));
+        server.createContext("/api/arcade", ex -> serveFeed(ex, () -> arcadeFeed));
         server.createContext("/", this::handleRoot);
         server.start();
 
@@ -175,7 +188,7 @@ public final class MarketDashboardServer {
                 .runTaskTimer(plugin, this::refreshSnapshot, 1L, periodTicks);
 
         plugin.getLogger().info("Market dashboard live at http://" + cfg.bind() + ":" + cfg.port()
-                + " (refresh " + cfg.refreshSeconds() + "s; feeds /api/market, /api/news, /api/minis). "
+                + " (refresh " + cfg.refreshSeconds() + "s; feeds /api/market, /api/news, /api/minis, /api/arcade). "
                 + tokenState(gate));
     }
 
@@ -320,6 +333,12 @@ public final class MarketDashboardServer {
             minisFeed = new FeedPayload(minisJson(now));
         } catch (RuntimeException e) {
             plugin.getLogger().warning("Market dashboard: could not rebuild /api/minis (" + e
+                    + ") — still serving the previous snapshot.");
+        }
+        try {
+            arcadeFeed = new FeedPayload(arcadeJson(now));
+        } catch (RuntimeException e) {
+            plugin.getLogger().warning("Market dashboard: could not rebuild /api/arcade (" + e
                     + ") — still serving the previous snapshot.");
         }
     }
@@ -511,6 +530,95 @@ public final class MarketDashboardServer {
             return MinisFeed.json(now, null, null);
         }
         return MinisFeed.json(now, minis.catalog(), minis.printedCounts());
+    }
+
+    /**
+     * The {@code /api/arcade} JSON (games spec §10). Main thread.
+     *
+     * <p>Every open game writes its own entries through {@link Game#feed}, in the framework's
+     * guard: a game whose {@code feed} throws is switched off like any other failing game
+     * ({@link GamesService#fail}) and whatever it wrote before throwing is dropped, never the
+     * feed. With the games off (or the service missing) there are no game entries and no
+     * featured game. The Arcade's own side — the Scratch Ticket (its entry and pot), the Prize
+     * Counter, token packs and achievements — is published while {@code arcade.enabled}, games or
+     * not. Record holders' names only with {@code web.dashboard.arcade_show_names} (read here on
+     * every refresh, so {@code /hcm reload} applies it).
+     */
+    private String arcadeJson(long now) {
+        ArcadeFeed feed = new ArcadeFeed(plugin.getConfig().getBoolean("web.dashboard.arcade_show_names", false));
+        ArcadeFeed.Featured featured = writeGames(feed);
+        PluginConfig.Arcade arcade = plugin.config().arcade();
+        if (arcade == null || !arcade.enabled()) {
+            return feed.json(now, featured, null, null, null, null);
+        }
+        ArcadeFeed.Scratch scratch = plugin.arcade() == null ? null
+                : ArcadeFeed.scratch(arcade.lotto(), plugin.arcade().pot());
+
+        List<ArcadeFeed.PrizeRow> prizes = List.of();
+        if (plugin.prizes() != null) {
+            List<PluginConfig.Prize> visible = new ArrayList<>();
+            for (PluginConfig.PrizeTab tab : PluginConfig.PrizeTab.values()) {
+                for (PluginConfig.Prize p : plugin.prizes().visible(tab)) {
+                    // The +1 Home is only ever offered through the homes service.
+                    if (p.type() != PluginConfig.PrizeType.HOME_SLOT || plugin.homes() != null) {
+                        visible.add(p);
+                    }
+                }
+            }
+            prizes = ArcadeFeed.prizes(visible);
+        }
+
+        List<ArcadeFeed.PackRow> packs = List.of();
+        MiniService minis = plugin.miniService();
+        if (plugin.packs() != null) {
+            packs = ArcadeFeed.packs(plugin.packs().packs(), id -> {
+                MiniDef def = minis == null ? null : minis.def(id);
+                return def == null ? null : def.rarity();
+            });
+        }
+
+        List<ArcadeFeed.AchievementRow> achievements = plugin.achievements() == null ? List.of()
+                : ArcadeFeed.achievements(plugin.achievements().all());
+        return feed.json(now, featured, scratch, prizes, packs, achievements);
+    }
+
+    /**
+     * Have every open game write its {@code games[]} entries into {@code feed}, and return
+     * today's featured game ({@code null} with the games off or none picked). Main thread.
+     */
+    private ArcadeFeed.Featured writeGames(ArcadeFeed feed) {
+        GamesService games = plugin.games();
+        if (games == null || !games.config().enabled()) {
+            return null;
+        }
+        for (Game game : games.games()) {
+            if (!games.enabled(game)) {
+                continue;
+            }
+            int mark = feed.size();
+            if (!games.guard(game, () -> {
+                game.feed(feed);
+                return Boolean.TRUE;
+            }, Boolean.FALSE)) {
+                feed.truncate(mark);
+            }
+        }
+        try {
+            String today = games.featured().today();
+            long until = games.featured().until();
+            if (featuredFailing) {
+                featuredFailing = false;
+                plugin.getLogger().info("Market dashboard: /api/arcade's featured game is back.");
+            }
+            return today == null || today.isBlank() ? null : new ArcadeFeed.Featured(today, until);
+        } catch (RuntimeException e) {
+            if (!featuredFailing) {
+                featuredFailing = true;
+                plugin.getLogger().warning("Market dashboard: could not read today's featured game (" + e
+                        + ") — /api/arcade goes out without it until it can be read again.");
+            }
+            return null;
+        }
     }
 
     /**

@@ -65,6 +65,8 @@ public final class GamesService {
     private final Invites invites;
     private final Featured featured;
     private final List<Game> games;
+    /** The shared screens (gui/games); "Coming soon!" until installed. */
+    private GamesScreens screens = GamesScreens.NONE;
     /** Ids and aliases, lower-case. */
     private final Map<String, Game> byName = new HashMap<>();
     /** Games that threw: off until {@code /hcm reload}. */
@@ -360,6 +362,16 @@ public final class GamesService {
 
     public Featured featured() {
         return featured;
+    }
+
+    /** The shared games screens (Games screen, high scores, Take a break, player picker). */
+    public GamesScreens screens() {
+        return screens;
+    }
+
+    /** Install the real screens (done once at enable, after the service is built). */
+    public void screens(GamesScreens screens) {
+        this.screens = screens == null ? GamesScreens.NONE : screens;
     }
 
     // ---- internals --------------------------------------------------------------------------

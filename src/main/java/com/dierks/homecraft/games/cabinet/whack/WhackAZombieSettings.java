@@ -1,6 +1,8 @@
 package com.dierks.homecraft.games.cabinet.whack;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.cabinet.CabinetSettings;
 
 import java.util.List;
 
@@ -20,7 +22,7 @@ import java.util.List;
  * @param milestones bronze, silver and gold: points in one round
  */
 public record WhackAZombieSettings(boolean enabled, int milestoneReward, int dailyReward, int dailyCap,
-                                   int seconds, List<Integer> milestones) {
+                                   int seconds, List<Integer> milestones) implements CabinetSettings {
 
     /** The leaves under {@code games.whack_a_zombie}, in config order. */
     public static final List<String> KEYS = List.of("enabled", "milestone_reward", "daily_reward",
@@ -28,6 +30,12 @@ public record WhackAZombieSettings(boolean enabled, int milestoneReward, int dai
 
     public WhackAZombieSettings {
         milestones = List.copyOf(milestones);
+    }
+
+    /** Bronze, silver and gold on the one {@code classic} board; the daily board has none. */
+    @Override
+    public List<Integer> milestonesFor(String board) {
+        return Scores.CLASSIC.equals(board) ? milestones : List.of();
     }
 
     /** The shipped settings. */

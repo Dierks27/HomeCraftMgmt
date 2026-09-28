@@ -1,6 +1,8 @@
 package com.dierks.homecraft.games.cabinet.match;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.cabinet.CabinetSettings;
 
 import java.util.List;
 
@@ -19,7 +21,7 @@ import java.util.List;
  * @param milestones bronze, silver and gold: finish in at most this many flips
  */
 public record MiniMatchSettings(boolean enabled, int milestoneReward, int dailyReward, int dailyCap,
-                                List<Integer> milestones) {
+                                List<Integer> milestones) implements CabinetSettings {
 
     /** The leaves under {@code games.mini_match}, in config order. */
     public static final List<String> KEYS = List.of("enabled", "milestone_reward", "daily_reward",
@@ -27,6 +29,12 @@ public record MiniMatchSettings(boolean enabled, int milestoneReward, int dailyR
 
     public MiniMatchSettings {
         milestones = List.copyOf(milestones);
+    }
+
+    /** Bronze, silver and gold on the one {@code classic} board; the daily board has none. */
+    @Override
+    public List<Integer> milestonesFor(String board) {
+        return Scores.CLASSIC.equals(board) ? milestones : List.of();
     }
 
     /** The shipped settings. */

@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.cabinet.tictactoe;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.cabinet.CabinetSettings;
 
 import java.util.List;
 
@@ -16,7 +17,7 @@ import java.util.List;
  * @param dailyReward tokens for the day's first win on easy (or draw on hard) against the Arcade
  * @param dailyCap the most tokens this game pays a player a day
  */
-public record TicTacToeSettings(boolean enabled, int dailyReward, int dailyCap) {
+public record TicTacToeSettings(boolean enabled, int dailyReward, int dailyCap) implements CabinetSettings {
 
     /** The leaves under {@code games.tic_tac_toe}, in config order. */
     public static final List<String> KEYS = List.of("enabled", "daily_reward", "daily_cap");

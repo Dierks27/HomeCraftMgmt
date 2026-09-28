@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.cabinet.connect;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.cabinet.CabinetSettings;
 
 import java.util.List;
 
@@ -16,7 +17,7 @@ import java.util.List;
  * @param dailyReward tokens for the day's first win against the Arcade on normal or hard
  * @param dailyCap the most tokens this game pays a player a day
  */
-public record ConnectFourSettings(boolean enabled, int dailyReward, int dailyCap) {
+public record ConnectFourSettings(boolean enabled, int dailyReward, int dailyCap) implements CabinetSettings {
 
     /** The leaves under {@code games.connect_four}, in config order. */
     public static final List<String> KEYS = List.of("enabled", "daily_reward", "daily_cap");

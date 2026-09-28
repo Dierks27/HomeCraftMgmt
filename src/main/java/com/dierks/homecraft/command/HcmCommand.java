@@ -38,6 +38,8 @@ import java.util.Map;
  *   <li>{@code /hcm market news <item> <up|down|wanted> …} and {@code /hcm market sim …} — run
  *       and test the live market; see {@link MarketSimCommand}. (hcm.market.sim, op-only)</li>
  *   <li>{@code /hcm balance} — Vault money + Arcade tokens together. (hcm.market.price)</li>
+ *   <li>{@code /hcm play …}, {@code /hcm leave} and {@code /hcm games …} — playing and running the
+ *       Games; see {@link GamesCommand}. (hcm.games.play / hcm.games.admin)</li>
  * </ul>
  *
  * <p>Each subcommand checks its own permission — the command node itself is ungated, so
@@ -55,10 +57,13 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
     private final Map<String, Long> resetConfirmations = new HashMap<>();
     /** {@code /hcm market news …} and {@code /hcm market sim …} (the live market). */
     private final MarketSimCommand liveMarket;
+    /** {@code /hcm play …}, {@code /hcm leave} and {@code /hcm games …} (the Games). */
+    private final GamesCommand gamesCommand;
 
     public HcmCommand(HomeCraftManagement plugin) {
         this.plugin = plugin;
         this.liveMarket = new MarketSimCommand(plugin);
+        this.gamesCommand = new GamesCommand(plugin);
     }
 
     @Override
@@ -66,6 +71,11 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                              @NotNull String label, @NotNull String[] args) {
         if (args.length == 0) {
             usage(sender);
+            return true;
+        }
+        // Inside a world game only play, leave, games and help work: any other screen could hand
+        // the player items the session would then lose, or take them somewhere it can't follow.
+        if (gamesCommand.refuseInSession(sender, args)) {
             return true;
         }
 
@@ -127,11 +137,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             }
             case "arcade" -> {
                 if (args.length >= 2 && args[1].equalsIgnoreCase("odds")) {
-                    if (!denyUnless(sender, "hcm.admin")) {
-                        for (String line : plugin.arcade().oddsReport()) {
-                            sender.sendMessage(Text.of(line));
-                        }
-                    }
+                    gamesCommand.odds(sender); // players: one line per game of chance; admins: the detail
                     return true;
                 }
                 if (!(sender instanceof Player player)) {
@@ -162,6 +168,9 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
             case "tokens" -> handleTokens(sender, args);
+            case "play" -> gamesCommand.play(sender, args);
+            case "leave" -> gamesCommand.leave(sender, args);
+            case "games" -> gamesCommand.admin(sender, args);
             case "config" -> {
                 if (denyUnless(sender, "hcm.admin")) {
                     return true;
@@ -1126,7 +1135,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.of("&e/hcm give <card <id>|pack <id>|binder|filament <color> <n>> [player]"));
             sender.sendMessage(Text.of("&e/hcm printer <public|private> &7- flag the Printer you're looking at"));
             sender.sendMessage(Text.of("&e/hcm tokens give|set|take <player> <n> &7- adjust tokens"));
-            sender.sendMessage(Text.of("&e/hcm arcade odds &7- Scratch Ticket RTP and each crate's value"));
+            sender.sendMessage(Text.of("&e/hcm arcade odds &7- what each game of chance gives back, crate values"));
             sender.sendMessage(Text.of("&e/hcm tokens audit [days] [player] &7- tokens earned/spent by source"));
             sender.sendMessage(Text.of("&e/hcm tokens history <player> [n] &7- a player's last token changes"));
         }
@@ -1150,6 +1159,12 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         }
         if (sender.hasPermission("hcm.market.buy")) {
             sender.sendMessage(Text.of("&e/hcm market buy <item> <qty> &7- admin buy, no shipping"));
+        }
+        if (!sender.hasPermission("hcm.admin") && sender.hasPermission("hcm.arcade.use")) {
+            sender.sendMessage(Text.of("&e/hcm arcade odds &7- what each game of chance gives back"));
+        }
+        for (String line : gamesCommand.helpLines(sender)) {
+            sender.sendMessage(Text.of(line));
         }
         sender.sendMessage(Text.of("&e/hcm museum [id] &7- browse the Mini Museum"));
         sender.sendMessage(Text.of("&e/hcm trail [name|off] &7- turn your trail on or off"));
@@ -1537,6 +1552,14 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             } else {
                 addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "trail", "achievements", "guide");
             }
+            if (sender.hasPermission(GamesCommand.PLAY)) {
+                addMatches(out, args[0], "play", "leave");
+            }
+            if (sender.hasPermission(GamesCommand.ADMIN)) {
+                addMatches(out, args[0], "games");
+            }
+        } else if (List.of("play", "leave", "games").contains(args[0].toLowerCase(Locale.ROOT))) {
+            out.addAll(gamesCommand.complete(sender, args));
         } else if (args.length == 2 && args[0].equalsIgnoreCase("config") && sender.hasPermission("hcm.admin")) {
             addMatches(out, args[1], "reset");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("config") && sender.hasPermission("hcm.admin")) {
@@ -1648,7 +1671,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     out.add(p.getName());
                 }
             }
-        } else if (args.length == 2 && args[0].equalsIgnoreCase("arcade") && sender.hasPermission("hcm.admin")) {
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("arcade") && sender.hasPermission("hcm.arcade.use")) {
             addMatches(out, args[1], "odds");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("trail") && sender instanceof Player tp) {
             addMatches(out, args[1], "off");

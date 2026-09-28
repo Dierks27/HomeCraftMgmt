@@ -53,7 +53,7 @@ commands:
       /hcm backup now        - admin: write a database backup
       /hcm display sign|hologram|tv [commodity|@news]|remove  - bind an in-game economy display
       /hcm arcade            - open the Arcade hub
-      /hcm arcade odds       - admin: Scratch Ticket RTP and each crate's value
+      /hcm arcade odds       - what each game of chance gives back (admins: per stake, Scratch Ticket and crates too)
       /hcm trail [name|off]  - turn your particle trail on or off
       /hcm achievements      - your achievements
       /hcm config reset <section> [confirm]  - admin: put arcade/games/packs/hunt/effects/clock back to defaults
@@ -71,8 +71,11 @@ commands:
       /hcm play <game|course> [player]  - open a game or start a course (for another player: admin)
       /hcm play break        - Take a break: your own limits on games of chance
       /hcm play accept|deny  - answer a game invite
+      /hcm play invites [on|off]  - your invites to friend games (Coin Flip: the Take a break screen)
       /hcm leave             - leave the world game you are in (your things come back)
       /hcm games status|course|golf|feature|break|saved|scores  - admin: run the Games
+      /hcm games break <player> show|pause <days>|limit <tokens|none>|clear|clear-own confirm  - admin: a player's Take a break
+      /hcm games scores reset <game> [board|all] [player] [confirm]  - admin: clear high scores (a dry run first)
     # NOTE: deliberately NOT gated on a single node — every subcommand checks its own
     # permission (hcm.admin, hcm.market.list, hcm.market.price, hcm.market.order, …), so
     # a player who may check a price can still do so without being handed the whole CLI.
@@ -200,7 +203,9 @@ permissions:
     description: Browse the Mini Museum (/hcm museum [id]).
     default: true
   hcm.arcade.use:
-    description: Open the Arcade — crates, pity and scratch tickets (/hcm arcade).
+    description: >-
+      Open the Arcade — crates, pity and scratch tickets (/hcm arcade) — and see what each game
+      of chance gives back (/hcm arcade odds).
     default: true
   hcm.quests.use:
     description: Open the daily/weekly Quests board (/hcm quests).

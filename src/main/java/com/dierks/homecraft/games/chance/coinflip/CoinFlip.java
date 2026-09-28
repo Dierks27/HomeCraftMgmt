@@ -463,6 +463,13 @@ public final class CoinFlip implements Game {
             calledOff(a, b, o, "a player's tokens were refused");
             return;
         }
+        // Both players' click cooldowns start when their tokens go in (PlayGate.clicked).
+        if (a != null) {
+            ctx.games().gate().clicked(a);
+        }
+        if (b != null) {
+            ctx.games().gate().clicked(b);
+        }
         ctx.plugin().getLogger().info("Coin Flip: " + o.fromName() + " and " + o.toName() + " put in " + o.stake()
                 + " each; " + (inviterWins ? o.fromName() : o.toName()) + " got " + odds.pays()
                 + " (pair " + pair + ", seed " + seed + ")");

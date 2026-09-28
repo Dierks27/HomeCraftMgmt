@@ -34,9 +34,9 @@ public final class Scores {
     public ScoreResult submit(UUID player, String gameId, String board, long score, boolean lowerIsBetter) {
         try {
             return games.dao().submit(player, gameId, board, score, lowerIsBetter,
-                    games.plugin().clock().nowMillis());
+                    games.host().clock().nowMillis());
         } catch (SQLException e) {
-            games.plugin().getLogger().log(Level.SEVERE, "Could not record a " + gameId + " score", e);
+            games.host().logger().log(Level.SEVERE, "Could not record a " + gameId + " score", e);
             return ScoreResult.NONE;
         }
     }
@@ -46,7 +46,7 @@ public final class Scores {
         try {
             return games.dao().best(player, gameId, board);
         } catch (SQLException e) {
-            games.plugin().getLogger().log(Level.SEVERE, "Could not read a " + gameId + " score", e);
+            games.host().logger().log(Level.SEVERE, "Could not read a " + gameId + " score", e);
             return null;
         }
     }
@@ -56,7 +56,7 @@ public final class Scores {
         try {
             return games.dao().top(gameId, board, lowerIsBetter, limit);
         } catch (SQLException e) {
-            games.plugin().getLogger().log(Level.SEVERE, "Could not read the " + gameId + " board", e);
+            games.host().logger().log(Level.SEVERE, "Could not read the " + gameId + " board", e);
             return List.of();
         }
     }

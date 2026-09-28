@@ -1680,7 +1680,7 @@ games:
     daily_reward: 1
     # Most tokens Creeper Sweeper pays a player per day.
     daily_cap: 2
-    # Creepers on the 9x5 board per difficulty.
+    # Creepers on the 9x5 board per difficulty (the daily board uses normal's).
     mines:
       # Easy board.
       easy: 6
@@ -1724,7 +1724,7 @@ games:
     tick_java: 6
     # Ticks between moves for Bedrock players.
     tick_bedrock: 10
-    # Bronze, silver, gold: apples in one run.
+    # Bronze, silver, gold: apples in one run (32 fills the whole field).
     milestones: [10, 20, 30]
   # ---- mini_match ----
   # Mini Match: find the 8 pairs of Minis in as few flips as you can.

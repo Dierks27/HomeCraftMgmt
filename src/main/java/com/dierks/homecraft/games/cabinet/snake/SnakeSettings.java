@@ -1,6 +1,8 @@
 package com.dierks.homecraft.games.cabinet.snake;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.cabinet.CabinetSettings;
 
 import java.util.List;
 
@@ -18,10 +20,11 @@ import java.util.List;
  * @param dailyCap the most tokens this game pays a player a day
  * @param tickJava ticks between moves for Java players (never below 3)
  * @param tickBedrock ticks between moves for Bedrock players
- * @param milestones bronze, silver and gold: apples in one run
+ * @param milestones bronze, silver and gold: apples in one run (at most a full field,
+ *                   {@link SnakeEngine#MAX_APPLES})
  */
 public record SnakeSettings(boolean enabled, int milestoneReward, int dailyReward, int dailyCap, int tickJava,
-                            int tickBedrock, List<Integer> milestones) {
+                            int tickBedrock, List<Integer> milestones) implements CabinetSettings {
 
     /** The leaves under {@code games.snake}, in config order. */
     public static final List<String> KEYS = List.of("enabled", "milestone_reward", "daily_reward",
@@ -29,6 +32,12 @@ public record SnakeSettings(boolean enabled, int milestoneReward, int dailyRewar
 
     public SnakeSettings {
         milestones = List.copyOf(milestones);
+    }
+
+    /** The Classic board's milestones (apples); the daily boards have none. */
+    @Override
+    public List<Integer> milestonesFor(String board) {
+        return Scores.CLASSIC.equals(board) ? milestones : List.of();
     }
 
     /** The shipped settings. */
@@ -51,7 +60,7 @@ public record SnakeSettings(boolean enabled, int milestoneReward, int dailyRewar
         int dailyCap = n.whole("daily_cap", d.dailyCap(), 0, 1000);
         int tickJava = n.whole("tick_java", d.tickJava(), 3, 40);
         int tickBedrock = n.whole("tick_bedrock", d.tickBedrock(), 3, 40);
-        List<Integer> milestones = n.ladder("milestones", d.milestones(), 34, false);
+        List<Integer> milestones = n.ladder("milestones", d.milestones(), SnakeEngine.MAX_APPLES, false);
         return new SnakeSettings(enabled, milestoneReward, dailyReward,
                 dailyCap, tickJava, tickBedrock, milestones);
     }

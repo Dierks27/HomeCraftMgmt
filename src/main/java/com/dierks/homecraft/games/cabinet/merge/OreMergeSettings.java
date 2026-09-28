@@ -1,6 +1,8 @@
 package com.dierks.homecraft.games.cabinet.merge;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.cabinet.CabinetSettings;
 
 import java.util.List;
 
@@ -19,7 +21,7 @@ import java.util.List;
  * @param milestones bronze, silver and gold: the biggest tile made (256 diamond, 512 netherite, 1024 nether star)
  */
 public record OreMergeSettings(boolean enabled, int milestoneReward, int dailyReward, int dailyCap,
-                               List<Integer> milestones) {
+                               List<Integer> milestones) implements CabinetSettings {
 
     /** The leaves under {@code games.ore_merge}, in config order. */
     public static final List<String> KEYS = List.of("enabled", "milestone_reward", "daily_reward",
@@ -27,6 +29,12 @@ public record OreMergeSettings(boolean enabled, int milestoneReward, int dailyRe
 
     public OreMergeSettings {
         milestones = List.copyOf(milestones);
+    }
+
+    /** The Classic board's milestones: tile values, read against the biggest tile made (not the score). */
+    @Override
+    public List<Integer> milestonesFor(String board) {
+        return Scores.CLASSIC.equals(board) ? milestones : List.of();
     }
 
     /** The shipped settings. */

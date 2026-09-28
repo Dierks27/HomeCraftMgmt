@@ -1,7 +1,7 @@
 # How It Works
 
-A short guide to tokens, Minis, wild Minis and the Arcade on HomeCraft. In game, open it with
-`/hcm guide`, from the Arcade, or from the **Guide** site on any PC.
+A short guide to tokens, Minis, wild Minis, the Arcade and its games on HomeCraft. In game, open
+it with `/hcm guide`, from the Arcade, or from the **Guide** site on any PC.
 
 ## Tokens
 
@@ -74,3 +74,57 @@ The Arcade shows if a wild Mini is out right now, who it's near and how long is 
 | **Card trade-in** | Your spare Cards | 3 to 50 tokens each; rarer Cards give more |
 
 Every crate shows its chances before you open it.
+
+## Games
+
+Type `/hcm play`, or click **Play** in the Arcade, to see every game. They're there once the
+server turns them on.
+
+| Game | What you do | Tokens |
+|---|---|---|
+| **Ore Slots** | Spin three reels of ores. Match them to win. | Put in 1, 2 or 5 |
+| **Twenty-One** | Get closer to 21 than the Arcade, without going over. | Put in 5, 10 or 20 |
+| **The Wheel** | Spin 24 spaces. Each one shows what it gives you. | Put in 5, 10 or 20 |
+| **Higher or Lower** | Is the next card higher or lower? Stop when you like. | Put in 10, 20 or 50 |
+| **Coin Flip** | You and a friend put in the same. One flip, one winner. | Put in 5, 10 or 25 |
+| **Cabinets** | Creeper Sweeper, Ore Merge, Snake, Mini Match, Simon Says, Whack-a-Zombie, Connect Four and Tic-Tac-Toe. | Free |
+| **Time trials** | Race a parkour, elytra or boat course. Beat the clock! | Free |
+| **Mini golf** | Putt the ball into the hole. Your Mini is the ball! | Free |
+
+<!-- TODO G5/G6: check the Time trials and Mini golf rows once they are merged. -->
+
+### Games of chance give back less than you put in
+
+Before you play, each game of chance tells you how much it gives back, like "gives back about 89
+of every 100 tokens". The games above give back about 90 of every 100 tokens you put in (the
+Scratch Ticket about 77). So if you put 100 tokens into one of them, a little at a time, you get
+about 90 back. Some days you get more, some days less, but over lots of plays the game keeps
+about 10. Play them for fun, not to get more tokens.
+
+- Every result is picked before the reels move. Closing the screen doesn't change it.
+- Each game has a few plays a day, and there's a limit on the tokens you can put into all of them
+  in a day.
+- If you leave in the middle of a card game, it's finished for you, fairly.
+
+### Take a break
+
+Click the **blue bed** in your Wallet, or type `/hcm play break`.
+
+- **Set a daily limit:** the most tokens you want to put into games of chance each day.
+- **Pause** games of chance for 1, 7 or 30 days.
+
+A lower limit starts right away. A higher one waits 7 days, so you can't change your mind in a
+hurry. A pause can't be made shorter. It covers Crates, Scratch Tickets and Card Packs bought with
+tokens too.
+
+### Skill games pay a little
+
+The cabinets, time trials and mini golf are free, and they pay a few tokens:
+
+- **Milestones:** bronze, silver and gold. Each pays once, ever.
+- **Today's challenge:** the same board for everyone. Your first try of the day counts.
+- **Today's pick:** a bonus the first time you finish it each day.
+
+You can win up to 6 tokens a day from all skill games together (the first time you finish a
+course pays extra). After that, your scores still count. Beating your own best doesn't pay, but
+it goes on the high scores.

@@ -131,8 +131,7 @@ final class GamesCheckLive implements GamesCheck.Facts {
 
     @Override
     public List<Object> restartTimes() {
-        List<?> raw = plugin.getConfig().getList(GamesConfig.PATH + ".restart_times");
-        return raw == null ? List.of() : new ArrayList<>(raw);
+        return GamesCheck.restartTimes(plugin.getConfig()); // the owner's value, never the jar's in its place
     }
 
     @Override
@@ -271,9 +270,12 @@ final class GamesCheckLive implements GamesCheck.Facts {
         }
         boolean token = dash.feedToken() != null && !dash.feedToken().isBlank();
         long now = plugin.clock().nowMillis();
-        ArcadeFeed feed = new ArcadeFeed(plugin.getConfig().getBoolean("web.dashboard.arcade_show_names", false));
-        String error = null;
         GamesService g = games();
+        // as /api/arcade builds it, top lists included (MarketDashboardServer.arcadeJson)
+        ArcadeFeed feed = new ArcadeFeed(plugin.getConfig().getBoolean("web.dashboard.arcade_show_names", false),
+                g == null ? 0 : g.config().common().feedTop(),
+                g == null ? null : com.dierks.homecraft.web.MarketDashboardServer.topBoards(g));
+        String error = null;
         if (g != null && g.config().enabled()) {
             for (Game game : g.games()) {
                 if (!g.enabled(game)) {
@@ -302,7 +304,12 @@ final class GamesCheckLive implements GamesCheck.Facts {
                 if (plugin.prizes() != null) {
                     List<PluginConfig.Prize> visible = new ArrayList<>();
                     for (PluginConfig.PrizeTab tab : PluginConfig.PrizeTab.values()) {
-                        visible.addAll(plugin.prizes().visible(tab));
+                        for (PluginConfig.Prize p : plugin.prizes().visible(tab)) {
+                            // the +1 Home is only ever offered through the homes service, as on /api/arcade
+                            if (p.type() != PluginConfig.PrizeType.HOME_SLOT || plugin.homes() != null) {
+                                visible.add(p);
+                            }
+                        }
                     }
                     prizes = ArcadeFeed.prizes(visible);
                 }

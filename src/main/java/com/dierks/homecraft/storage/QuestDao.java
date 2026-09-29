@@ -131,6 +131,49 @@ public final class QuestDao {
         }
     }
 
+    /**
+     * A quest the player has progress on and hasn't been paid for, in one period.
+     *
+     * @param periodKey {@code d<day>} or {@code w<week>}
+     */
+    public record Held(String questId, String periodKey, int progress) {
+    }
+
+    /**
+     * The player's unpaid rows with some progress, of these quests, in ANY period: where
+     * {@code QuestService.settle} finds a game quest reached where tokens couldn't be paid (the
+     * Games world), even once its day or week is over.
+     */
+    public java.util.List<Held> unclaimed(UUID player, java.util.Collection<String> questIds) throws SQLException {
+        java.util.List<Held> out = new java.util.ArrayList<>();
+        if (player == null || questIds == null || questIds.isEmpty()) {
+            return out;
+        }
+        java.util.List<String> ids = new java.util.ArrayList<>(new java.util.LinkedHashSet<>(questIds));
+        StringBuilder in = new StringBuilder();
+        for (int i = 0; i < ids.size(); i++) {
+            in.append(i == 0 ? "?" : ",?");
+        }
+        Connection c = conn();
+        synchronized (c) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT quest_id, period_key, progress FROM quest_progress "
+                            + "WHERE player=? AND claimed=0 AND progress>0 AND quest_id IN (" + in + ") "
+                            + "ORDER BY period_key, quest_id")) {
+                ps.setString(1, player.toString());
+                for (int i = 0; i < ids.size(); i++) {
+                    ps.setString(i + 2, ids.get(i));
+                }
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        out.add(new Held(rs.getString(1), rs.getString(2), rs.getInt(3)));
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
     // ---- draws (quests v2) ----------------------------------------------------------
 
     /**

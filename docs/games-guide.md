@@ -94,7 +94,7 @@
 - A cabinet counts when you play it to the end, win, lose or draw: a game against the Arcade played out, or a Creeper Sweeper board that finds a creeper, counts too. Practice counts too. A game you close early, or a game against a friend, doesn't count.
 - A course counts when your run counts. A round of golf counts when you finish every hole. Each Fresh Courses star counts once.
 - Nothing counts in creative or spectator mode, or in a world without games.
-- Courses are in the Games world, and no tokens are paid there. A quest or achievement you finish there is paid as soon as you are back home.
+- Courses are in the Games world, and no tokens are paid there. A quest or achievement you finish there is paid as soon as you are back home, even if that is the next day or the next week.
 - The Games achievements, each paid once:
   - "Finish an arcade cabinet game" (10 tokens)
   - "Earn a gold medal in a cabinet" (20 tokens; practice has no medals)

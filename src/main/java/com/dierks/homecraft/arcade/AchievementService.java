@@ -138,6 +138,23 @@ public final class AchievementService {
     }
 
     /**
+     * What a counter a skill game pushed unlocks at once: what it reaches ({@link #counterUnlocks})
+     * where tokens can be paid, and nothing where they can't (the Games world), since an unlock
+     * there would spend its only chance and pay nothing. The count is kept either way, and the next
+     * {@link #sweep} back home unlocks it with its reward ({@link #sweepUnlocks}). Pure, so it is
+     * tested.
+     */
+    public static List<String> unlocksNow(Collection<AchievementDef> defs, String counter, long value,
+                                          boolean paysHere) {
+        return paysHere ? counterUnlocks(defs, counter, value) : List.of();
+    }
+
+    /** Whether a sweep unlocks {@code def} now: enabled, not had yet, its progress at its target. Pure. */
+    public static boolean sweepUnlocks(AchievementDef def, long progress, boolean had) {
+        return def != null && def.enabled() && !had && progress >= def.target();
+    }
+
+    /**
      * Add to a counter a skill game pushes (EXTRAS E4, through {@link GamesProgress}). The count is
      * kept wherever it happened; what it unlocks is checked now only where tokens can be paid, and
      * otherwise by the next {@link #sweep} (join, the five-minute tick, a world change), so a first
@@ -149,8 +166,8 @@ public final class AchievementService {
         }
         try {
             long value = dao.addCounter(player.getUniqueId(), counter, by);
-            if (plugin.sandbox().allowed(player.getWorld())) {
-                checkCounter(player, counter, value);
+            for (String id : unlocksNow(defs(), counter, value, plugin.sandbox().allowed(player.getWorld()))) {
+                tryAward(player, id);
             }
         } catch (SQLException e) {
             plugin.getLogger().warning("Failed to count '" + counter + "': " + e.getMessage());
@@ -247,7 +264,7 @@ public final class AchievementService {
             }
             switch (def.type()) {
                 case STAT, STREAK, COLLECTION, BALANCE, COUNTER -> {
-                    if (progress(player, def) >= def.target()) {
+                    if (sweepUnlocks(def, progress(player, def), false)) {
                         tryAward(player, def.id());
                     }
                 }

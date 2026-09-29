@@ -369,6 +369,10 @@ public final class QuestService {
      * Pay every pushed quest the player has already reached but that couldn't be paid where it was
      * reached (a course finished in the Games world, say): now, if tokens can be paid here. Run on
      * every poll and on a world change; one that is paid is claimed first, so it pays once.
+     *
+     * <p>A game quest reached in the Games world stays owed after its day or week is over: a player
+     * who finished "Finish a course" there at 8 PM and logged off is paid the next time they are
+     * back home, whenever that is ({@link #due}).
      */
     public void settle(Player player) {
         Quests quests = plugin.config().quests();
@@ -379,26 +383,82 @@ public final class QuestService {
             return; // quietly: canEarn would log a refusal every 30 seconds
         }
         UUID id = player.getUniqueId();
+        Set<String> dealtNow = new HashSet<>();
+        Set<String> ids = new HashSet<>();
         for (Quest q : assignedAll(id)) {
-            if (QuestStats.isPulled(q.type())) {
-                continue; // the poll pays those
+            dealtNow.add(q.id());
+            ids.add(q.id());
+        }
+        for (Quest q : quests.all()) {
+            if (q.type().game()) {
+                ids.add(q.id()); // one reached in an earlier day or week, still owed
             }
+        }
+        List<Due> due;
+        try {
+            due = due(dao.unclaimed(id, ids), periodKey(QuestPeriod.DAILY), periodKey(QuestPeriod.WEEKLY), dealtNow,
+                    quests::byId, QuestStats::isPulled);
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to read the quests to settle: " + e.getMessage());
+            return;
+        }
+        for (Due d : due) {
+            Quest q = d.quest();
             try {
-                String period = periodKey(q.period());
-                QuestDao.Progress row = dao.get(id, q.id(), period);
-                if (row.claimed() || row.progress() < q.target()) {
-                    continue;
-                }
                 if (q.reward() > 0 && !plugin.tokens().canEarn(player, "quest " + q.id())) {
                     continue;
                 }
-                if (dao.markClaimed(id, q.id(), period)) {
+                if (dao.markClaimed(id, q.id(), d.periodKey())) {
                     complete(player, q);
                 }
             } catch (SQLException e) {
                 plugin.getLogger().warning("Failed to settle quest '" + q.id() + "': " + e.getMessage());
             }
         }
+    }
+
+    /**
+     * A reached, unpaid quest {@link #settle} pays now, and the period it was reached in.
+     *
+     * @param periodKey the row's {@code d<day>} or {@code w<week>}: the one {@code markClaimed} flips
+     */
+    public record Due(Quest quest, String periodKey) {
+    }
+
+    /**
+     * Which unpaid rows {@link #settle} pays: a pushed quest (never one the poll reads from the
+     * statistics) that has reached its target, dealt now in the current day or week, or a GAME
+     * quest from an earlier one (reached in the Games world and still owed; any other kind is paid
+     * where it is reached, in its own period). A row of an unknown period or a quest no longer in
+     * the pool is left alone. Pure, so it is tested.
+     *
+     * @param dayKey   today's period key
+     * @param weekKey  this week's period key
+     * @param dealtNow the ids of the player's quests today and this week
+     * @param byId     the pool: a period's quest by id, or {@code null}
+     * @param pulled   whether a type is read from the statistics (the poll pays those)
+     */
+    public static List<Due> due(List<QuestDao.Held> rows, String dayKey, String weekKey, Set<String> dealtNow,
+                                java.util.function.BiFunction<QuestPeriod, String, Quest> byId,
+                                java.util.function.Predicate<QuestType> pulled) {
+        List<Due> out = new ArrayList<>();
+        if (rows == null) {
+            return out;
+        }
+        for (QuestDao.Held row : rows) {
+            String key = row.periodKey() == null ? "" : row.periodKey();
+            QuestPeriod period = key.startsWith("w") ? QuestPeriod.WEEKLY : key.startsWith("d") ? QuestPeriod.DAILY
+                    : null;
+            Quest q = period == null ? null : byId.apply(period, row.questId());
+            if (q == null || pulled.test(q.type()) || row.progress() < q.target()) {
+                continue;
+            }
+            boolean current = key.equals(period == QuestPeriod.WEEKLY ? weekKey : dayKey);
+            if (current ? dealtNow != null && dealtNow.contains(q.id()) : q.type().game()) {
+                out.add(new Due(q, key));
+            }
+        }
+        return out;
     }
 
     /**

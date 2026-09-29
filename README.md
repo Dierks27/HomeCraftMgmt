@@ -1474,11 +1474,13 @@ off. Every token a game moves is in the ledger under that game's own source, so
     `on`/`off`.
 65. With the games on, `/hcm quests` can deal "Play 3 arcade cabinets" or "Finish a course or a
     round of golf" (with the games off it never does). Play three cabinet games (practice counts;
-    closing one early doesn't): "Quest complete" and the tokens. Finish a course in the Games
-    world: the quest's tokens come the moment you are back home.
+    closing one early doesn't; losing a Connect Four or Tic-Tac-Toe game against the Arcade, or
+    digging up a creeper, does): "Quest complete" and the tokens. Finish a course in the Games
+    world: the quest's tokens come the moment you are back home. Finish one from a Games-world
+    lobby, log off there, and log in the next day in your home world: the quest is paid then.
 66. `/hcm achievements`: the Games group. Finish a cabinet game: "Achievement! Finish an arcade
-    cabinet game" (+10). Finish a course: that one unlocks when you get home. Games of chance never
-    move any of them.
+    cabinet game" (+10). Finish a course: that one unlocks when you get home. Set a golf course's
+    record: "Set a course record" counts it. Games of chance never move any of them.
 
 ---
 

@@ -586,9 +586,10 @@ public final class MarketDashboardServer {
 
     /**
      * Where the feed's {@code top} lists are read (EXTRAS E3): the games' own boards, and a record
-     * holder's name, which the feed asks for only while {@code arcade_show_names} is on.
+     * holder's name, which the feed asks for only while {@code arcade_show_names} is on. Public so
+     * {@code /hcm games check} builds the feed exactly as {@code /api/arcade} does.
      */
-    private static ArcadeFeed.Boards topBoards(GamesService games) {
+    public static ArcadeFeed.Boards topBoards(GamesService games) {
         return new ArcadeFeed.Boards() {
             @Override
             public List<com.dierks.homecraft.storage.GamesDao.ScoreRow> top(String game, String board,

@@ -41,13 +41,23 @@ public final class ArcadeListener implements Listener {
         }
         try {
             if (plugin.quests() != null) {
-                plugin.quests().settle(player);
+                plugin.quests().settle(player); // it checks the quests' own switch
             }
-            if (plugin.achievements() != null) {
+            if (plugin.achievements() != null && sweeps(plugin.config().arcade() != null
+                    && plugin.config().arcade().enabled())) {
                 plugin.achievements().sweep(player);
             }
         } catch (RuntimeException e) {
             plugin.getLogger().log(java.util.logging.Level.WARNING, "Could not pay game quests after a world change", e);
         }
+    }
+
+    /**
+     * Whether a world change home sweeps the achievements: only while the Arcade is on, as the join
+     * and five-minute sweeps ({@code TokenService}); with it off, walking through a portal must not
+     * unlock and pay "Have $1,000" or the biomes when nothing else would.
+     */
+    static boolean sweeps(boolean arcadeEnabled) {
+        return arcadeEnabled;
     }
 }

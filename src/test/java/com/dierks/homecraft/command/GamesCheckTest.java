@@ -287,6 +287,79 @@ class GamesCheckTest {
     }
 
     @Test
+    void theOwnersRestartTimesAreCheckedNeverTheShippedOnesInTheirPlace() throws Exception {
+        org.bukkit.configuration.file.YamlConfiguration shipped = new org.bukkit.configuration.file.YamlConfiguration();
+        shipped.loadFromString("games:\n  restart_times: [\"04:00\", \"16:00\"]\n");
+        org.bukkit.configuration.file.YamlConfiguration owner = new org.bukkit.configuration.file.YamlConfiguration();
+        owner.loadFromString("games:\n  enabled: true\n  restart_times: 16:00\n");
+        owner.setDefaults(shipped);
+        assertEquals(List.of("04:00", "16:00"), owner.getList("games.restart_times"),
+                "(Bukkit's getList hands back the jar's list for a single value)");
+        List<Object> raw = GamesCheck.restartTimes(owner);
+        assertEquals(List.of(960), raw, "an unquoted 16:00 reads as the number 960, and that is what is checked");
+        Good g = new Good();
+        g.restarts = raw;
+        Line bad = only(GamesCheck.run(g));
+        assertEquals("games.restart_times has 960, which isn't a time", bad.what(), "so the FAIL meant for it shows");
+        assertTrue(bad.fix().contains("in quotes"), bad.fix());
+
+        owner.loadFromString("games:\n  restart_times: \"16:00\"\n");
+        assertEquals(List.of("16:00"), GamesCheck.restartTimes(owner), "a quoted single time is the owner's one time");
+        owner.loadFromString("games:\n  enabled: true\n");
+        assertEquals(List.of("04:00", "16:00"), GamesCheck.restartTimes(owner),
+                "a key left out is the shipped times, as the games read it");
+        owner.loadFromString("games:\n  restart_times: []\n");
+        assertEquals(List.of(), GamesCheck.restartTimes(owner), "an empty list is no restarts");
+
+        org.bukkit.configuration.file.YamlConfiguration bundled = new org.bukkit.configuration.file.YamlConfiguration();
+        try (java.io.Reader r = new java.io.InputStreamReader(GamesCheckTest.class.getResourceAsStream("/config.yml"),
+                java.nio.charset.StandardCharsets.UTF_8)) {
+            bundled.load(r);
+        }
+        List<Object> times = GamesCheck.restartTimes(bundled);
+        assertEquals(2, times.size(), "the shipped config has two restart times: " + times);
+        g = new Good();
+        g.restarts = times;
+        assertEquals(List.of(), bad(GamesCheck.run(g)), "and the shipped config's times read clean");
+    }
+
+    @Test
+    void aServerOnTheShippedConfigChecksCleanButForTwoRemindersToTheOwner() throws Exception {
+        org.bukkit.configuration.file.YamlConfiguration c = new org.bukkit.configuration.file.YamlConfiguration();
+        try (java.io.Reader r = new java.io.InputStreamReader(GamesCheckTest.class.getResourceAsStream("/config.yml"),
+                java.nio.charset.StandardCharsets.UTF_8)) {
+            c.load(r);
+        }
+        Good g = new Good(); // its worlds loaded, the Games world in adventure mode, no Multiverse-Inventories
+        g.enabled = c.getBoolean("games.enabled");
+        g.economy = c.getStringList("worlds.economy_enabled");
+        g.games = c.getStringList("games.worlds");
+        g.loaded = new java.util.HashSet<>(g.economy);
+        g.loaded.addAll(g.games);
+        g.modes = new LinkedHashMap<>();
+        for (String w : g.games) {
+            g.modes.put(w, "ADVENTURE");
+        }
+        g.inv = null;
+        g.restarts = GamesCheck.restartTimes(c);
+        g.fresh = new Fresh(c.getBoolean("games.fresh.enabled"), "weekly", "New courses every Monday", "", false,
+                false, List.of(), null, null, null, null);
+        g.courses = List.of();
+        g.web = new Web(c.getBoolean("web.dashboard.enabled"), false, null, 1, 512);
+        List<Line> lines = GamesCheck.run(g);
+        String all = String.join("\n", GamesCheck.render(lines));
+        assertFalse(g.enabled, "the games ship off");
+        assertEquals(List.of(), lines.stream().filter(l -> l.status() == Status.FAIL).toList(),
+                "nothing fails on the shipped config:\n" + all);
+        assertEquals(List.of("games.enabled is false, so every game is closed",
+                "web.dashboard.feed_token is empty, so anyone who can reach the port can read the feeds"),
+                bad(lines).stream().map(Line::what).toList(),
+                "two reminders, both the owner's to set: the games' switch and the website's token:\n" + all);
+        assertTrue(all.contains("Fresh Courses is off") && all.contains("Next restart"), all);
+        assertTrue(all.endsWith("2 things to fix."), all);
+    }
+
+    @Test
     void freshCoursesOffForeignBlocksAreasAndBuilds() {
         Good g = new Good();
         g.fresh = new Fresh(false, "weekly", "", "", false, false, List.of(), null, null, null, "");

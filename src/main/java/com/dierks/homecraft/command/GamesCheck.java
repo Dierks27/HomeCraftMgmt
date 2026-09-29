@@ -323,6 +323,30 @@ public final class GamesCheck {
         }
     }
 
+    /**
+     * {@code games.restart_times} as the owner wrote it, read the way the games read it: one value
+     * is a list of one (an unquoted {@code 16:00} reads as the number 960), and only a key the
+     * owner left out falls back to the shipped times. Bukkit's {@code getList} hands back the
+     * shipped list for a single value, so the mistake this check is for would never be seen.
+     */
+    public static List<Object> restartTimes(ConfigurationSection config) {
+        String path = "games.restart_times";
+        if (config == null) {
+            return List.of();
+        }
+        Object v = config.get(path, null);
+        if (v == null) {
+            List<?> shipped = config.getList(path);
+            return shipped == null ? List.of() : new ArrayList<>(shipped);
+        }
+        if (v instanceof List<?> l) {
+            return new ArrayList<>(l);
+        }
+        List<Object> one = new ArrayList<>();
+        one.add(v instanceof ConfigurationSection section ? String.valueOf(section.getValues(false)) : v);
+        return one;
+    }
+
     private static void restarts(Facts f, List<Line> out) {
         List<Object> raw = f.restartTimes() == null ? List.of() : f.restartTimes();
         boolean bad = false;

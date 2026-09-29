@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.trial;
 import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.ScoreResult;
 import com.dierks.homecraft.games.gen.api.DailyStars;
+import com.dierks.homecraft.games.gen.api.GenBoards;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.storage.GamesDao;
 import org.junit.jupiter.api.Test;
@@ -192,7 +193,7 @@ class TrialFinishTest {
 
         @Override
         public boolean firstClearPaid() {
-            return paidRefs.contains("first_clear:daily_parkour_easy");
+            return paidRefs.contains("first_clear:fresh_parkour_easy");
         }
 
         @Override
@@ -226,13 +227,13 @@ class TrialFinishTest {
 
     /** Easy Parkour's layout for {@code day}: 3 stars at 45 s or less, 2 at 70 s or less. */
     private static GenTag tag(long day, int reroll) {
-        return new GenTag("daily_parkour_easy", "parkour", 1, day, reroll, 0x3f2aL, 'B', "3c9e51aa07b2", 22_500,
+        return new GenTag("fresh_parkour_easy", "parkour", 1, day, reroll, 0x3f2aL, 'B', "3c9e51aa07b2", 22_500,
                 45_000, 70_000, List.of(), List.of(), 1L);
     }
 
     /** A run on that layout, finished on calendar day {@link #DAY} (5 days after the layout's), at {@code ms}. */
     private static TrialFinish.Run dailyRun(GenTag tag, long ms, boolean courseOfWeek, boolean featured) {
-        return new TrialFinish.Run("daily_parkour_easy", "Easy Parkour", ms, DAY, WEEK, courseOfWeek, featured, 5, 7,
+        return new TrialFinish.Run("fresh_parkour_easy", "Easy Parkour", ms, DAY, WEEK, courseOfWeek, featured, 5, 7,
                 2, 3, new TrialFinish.Daily(tag, STAR_WEEK, 1, List.of(10, 25), 1));
     }
 
@@ -245,13 +246,13 @@ class TrialFinishTest {
         DailyLedger ledger = new DailyLedger();
         TrialFinish.settle(counted(60_000), dailyRun(tag(LAYOUT_DAY, 0), 60_000, false, false), ledger);
         List<String> submits = ledger.calls.stream().filter(c -> c.startsWith("submit")).toList();
-        assertEquals(List.of("submit gday:daily_parkour_easy:" + LAYOUT_DAY + " 60000"), submits,
+        assertEquals(List.of("submit " + GenBoards.day(tag(LAYOUT_DAY, 0)) + " 60000"), submits,
                 "one board: the layout's own; never the all-time or the weekly board");
         assertTrue(ledger.calls.contains("announce no week"), "announced without a week's standing");
 
         DailyLedger rerolled = new DailyLedger();
         TrialFinish.settle(counted(60_000), dailyRun(tag(LAYOUT_DAY, 2), 60_000, false, false), rerolled);
-        assertTrue(rerolled.calls.contains("submit gday:daily_parkour_easy:" + LAYOUT_DAY + "r2 60000"),
+        assertTrue(rerolled.calls.contains("submit " + GenBoards.day(tag(LAYOUT_DAY, 2)) + " 60000"),
                 "a reroll is a fresh board: " + rerolled.calls);
     }
 
@@ -264,7 +265,7 @@ class TrialFinishTest {
                 false), ledger);
         TrialFinish.Summary reroll = TrialFinish.settle(counted(50_000), dailyRun(tag(LAYOUT_DAY, 1), 50_000, false,
                 false), ledger);
-        long asked = ledger.calls.stream().filter(c -> c.equals("pay DAILY_CLEAR dclear:daily_parkour_easy:"
+        long asked = ledger.calls.stream().filter(c -> c.equals("pay DAILY_CLEAR dclear:fresh_parkour_easy:"
                 + LAYOUT_DAY + " 1")).count();
         assertEquals(3, asked, "every counted finish asks under the one ref of its course day: " + ledger.calls);
         assertEquals(1 + 5, first.earned(), "the first pays the day's 1 and the very first finish's 5");
@@ -273,7 +274,7 @@ class TrialFinishTest {
 
         TrialFinish.Summary tomorrow = TrialFinish.settle(counted(60_000), dailyRun(tag(LAYOUT_DAY + 1, 0), 60_000,
                 false, false), ledger);
-        assertTrue(ledger.calls.contains("pay DAILY_CLEAR dclear:daily_parkour_easy:" + (LAYOUT_DAY + 1) + " 1"),
+        assertTrue(ledger.calls.contains("pay DAILY_CLEAR dclear:fresh_parkour_easy:" + (LAYOUT_DAY + 1) + " 1"),
                 "the next course day has its own ref");
         assertEquals(1, tomorrow.earned(), "and pays again (the first clear doesn't)");
     }
@@ -284,10 +285,10 @@ class TrialFinishTest {
         for (int d = 0; d < 3; d++) {
             TrialFinish.settle(counted(60_000), dailyRun(tag(LAYOUT_DAY + d, 0), 60_000, false, false), ledger);
         }
-        long asked = ledger.calls.stream().filter(c -> c.startsWith("pay FIRST_CLEAR first_clear:daily_parkour_easy "))
+        long asked = ledger.calls.stream().filter(c -> c.startsWith("pay FIRST_CLEAR first_clear:fresh_parkour_easy "))
                 .count();
         assertEquals(3, asked, "the same once-ever ref every day, whatever the layout: " + ledger.calls);
-        assertTrue(ledger.paidRefs.contains("first_clear:daily_parkour_easy"), "paid the first time");
+        assertTrue(ledger.paidRefs.contains("first_clear:fresh_parkour_easy"), "paid the first time");
     }
 
     @Test
@@ -310,7 +311,7 @@ class TrialFinishTest {
                 false), ledger);
         assertEquals(1, one.stars(), "slower than silver: 1 star for finishing");
         assertEquals(1, one.weekStars(), "the week has 1");
-        assertTrue(ledger.calls.contains("stars gstars:daily_parkour_easy:" + LAYOUT_DAY + " gweek:" + STAR_WEEK + " 1"),
+        assertTrue(ledger.calls.contains("stars gstars:fresh_parkour_easy:" + LAYOUT_DAY + " gweek:" + STAR_WEEK + " 1"),
                 "kept on the layout's day and its week: " + ledger.calls);
 
         TrialFinish.Summary three = TrialFinish.settle(counted(45_000), dailyRun(tag(LAYOUT_DAY, 0), 45_000, false,
@@ -372,9 +373,9 @@ class TrialFinishTest {
     void everyDayADailyRunUsesIsItsLayoutsNotTheCalendars() {
         DailyLedger ledger = new DailyLedger();
         TrialFinish.settle(counted(60_000), dailyRun(tag(LAYOUT_DAY, 0), 60_000, true, true), ledger);
-        assertTrue(ledger.calls.contains("pay DAILY_CLEAR dclear:daily_parkour_easy:" + LAYOUT_DAY + " 1"),
+        assertTrue(ledger.calls.contains("pay DAILY_CLEAR dclear:fresh_parkour_easy:" + LAYOUT_DAY + " 1"),
                 "the daily reward is the layout's day, even when the calendar has moved on");
-        assertTrue(ledger.calls.stream().anyMatch(c -> c.startsWith("stars gstars:daily_parkour_easy:" + LAYOUT_DAY)),
+        assertTrue(ledger.calls.stream().anyMatch(c -> c.startsWith("stars gstars:fresh_parkour_easy:" + LAYOUT_DAY)),
                 "and so are the stars");
         assertTrue(ledger.calls.contains("pay FEATURED featured:" + DAY + " 3"), "today's pick is the calendar's");
     }
@@ -400,8 +401,8 @@ class TrialFinishTest {
         TrialFinish.Summary s = TrialFinish.settle(counted(), run(false, false), new FakeLedger());
         assertEquals(0, s.stars(), "no stars on a hand-built course");
         assertEquals(-1, s.weekStars(), "and no Star Chart");
-        assertFalse(now.calls.stream().anyMatch(c -> c.contains("gday:") || c.contains("DAILY_CLEAR")),
-                "nothing of Daily Courses");
+        assertFalse(now.calls.stream().anyMatch(c -> c.contains(GenBoards.DAY_PREFIX) || c.contains("DAILY_CLEAR")),
+                "nothing of Fresh Courses");
     }
 
     @Test

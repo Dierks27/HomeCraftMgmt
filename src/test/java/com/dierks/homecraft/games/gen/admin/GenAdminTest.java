@@ -162,17 +162,19 @@ class GenAdminTest {
     void theWordsAreParsedAndTheSlotCheckedBeforeTheEngineIsAsked() {
         run("status");
         assertEquals(List.of("status null"), ops.calls, "status of every slot");
-        run("status Tiny_Golf");
-        assertEquals("status tiny_golf", ops.calls.get(1), "a slot in any case is read as its id");
+        run("status Fresh_Tiny_Golf");
+        assertEquals("status fresh_tiny_golf", ops.calls.get(1), "a slot in any case is read as its id");
         run("rebuild mystery");
-        assertTrue(heard().contains("No daily course called 'mystery'"), heard());
+        assertTrue(heard().contains("No Fresh Course called 'mystery'"), heard());
         assertEquals(2, ops.calls.size(), "an unknown slot never reaches the engine");
-        run("plan daily_golf tomorrow");
-        run("plan daily_golf 3F2A");
-        run("plan daily_golf nope");
+        run("plan fresh_golf next");
+        run("plan fresh_golf tomorrow");
+        run("plan fresh_golf 3F2A");
+        run("plan fresh_golf nope");
         assertTrue(heard().contains("16 hex digits"), "a bad seed is refused: " + heard());
-        assertEquals(List.of("status null", "status tiny_golf", "plan daily_golf tomorrow", "plan daily_golf 3F2A"),
-                ops.calls, "plans for tomorrow and for a seed");
+        assertEquals(List.of("status null", "status fresh_tiny_golf", "plan fresh_golf next",
+                "plan fresh_golf tomorrow", "plan fresh_golf 3F2A"), ops.calls,
+                "plans for the next set (tomorrow still reads as next) and a seed");
         run("wibble");
         assertTrue(heard().contains("Unknown: wibble"), heard());
         run("");
@@ -183,20 +185,20 @@ class GenAdminTest {
 
     @Test
     void destructiveVerbsNeedConfirm() {
-        run("reroll daily_parkour_easy");
-        assertTrue(heard().contains("reroll daily_parkour_easy confirm"), "reroll asks for confirm: " + heard());
-        run("clear sky_rings");
-        assertTrue(heard().contains("clear sky_rings confirm"), "clear asks for confirm: " + heard());
+        run("reroll fresh_parkour_easy");
+        assertTrue(heard().contains("reroll fresh_parkour_easy confirm"), "reroll asks for confirm: " + heard());
+        run("clear fresh_rings");
+        assertTrue(heard().contains("clear fresh_rings confirm"), "clear asks for confirm: " + heard());
         run("reroll all");
         assertTrue(heard().contains("reroll all confirm"), heard());
         assertTrue(ops.calls.isEmpty(), "nothing was done without confirm");
-        run("reroll daily_parkour_easy confirm");
-        run("clear sky_rings confirm");
-        run("claim tiny_golf");
-        run("claim tiny_golf confirm");
-        run("promote daily_golf");
-        assertEquals(List.of("reroll daily_parkour_easy", "clear sky_rings", "claim tiny_golf false",
-                "claim tiny_golf true", "promote daily_golf false"), ops.calls,
+        run("reroll fresh_parkour_easy confirm");
+        run("clear fresh_rings confirm");
+        run("claim fresh_tiny_golf");
+        run("claim fresh_tiny_golf confirm");
+        run("promote fresh_golf");
+        assertEquals(List.of("reroll fresh_parkour_easy", "clear fresh_rings", "claim fresh_tiny_golf false",
+                "claim fresh_tiny_golf true", "promote fresh_golf false"), ops.calls,
                 "with confirm they go; claim counts first; promote asks the engine (it knows the board)");
         ops.calls.clear();
         run("reroll all confirm");
@@ -206,47 +208,48 @@ class GenAdminTest {
     @Test
     void rerollPreviewAndPromoteAreRefusedNearARestartAndTheRestAreNot() {
         ops.restart = "&cA restart is coming at 4:00 PM - try after it.";
-        run("reroll daily_golf confirm");
+        run("reroll fresh_golf confirm");
         assertTrue(heard().contains("A restart is coming at 4:00 PM"), heard());
-        run("preview daily_golf");
-        run("promote daily_golf confirm");
+        run("preview fresh_golf");
+        run("promote fresh_golf confirm");
         run("reroll all confirm");
         assertTrue(ops.calls.isEmpty(), "none of them reached the engine: " + ops.calls);
-        run("rebuild daily_golf");
-        run("off daily_golf");
-        assertEquals(List.of("rebuild daily_golf", "off daily_golf"), ops.calls, "a repair and a switch still work");
+        run("rebuild fresh_golf");
+        run("off fresh_golf");
+        assertEquals(List.of("rebuild fresh_golf", "off fresh_golf"), ops.calls, "a repair and a switch still work");
     }
 
     @Test
     void tierAndMixGoToTheRightKindOfCourseAndPinsAreChecked() {
-        run("tier daily_golf hard");
+        run("tier fresh_golf hard");
         assertTrue(heard().contains("takes a mix"), "golf takes a mix: " + heard());
-        run("mix sky_rings EEM");
+        run("mix fresh_rings EEM");
         assertTrue(heard().contains("takes a tier"), "rings take a tier: " + heard());
-        run("tier sky_rings extreme");
+        run("tier fresh_rings extreme");
         assertTrue(heard().contains("easy, medium or hard"), heard());
-        run("mix tiny_golf EEEE");
+        run("mix fresh_tiny_golf EEEE");
         assertTrue(heard().contains("1-3"), "tiny golf fits three holes: " + heard());
-        run("tier sky_rings Medium");
-        run("mix tiny_golf emh");
-        run("pin sky_rings today 7");
-        run("pin sky_rings 3f2a91c07d1e55b0");
-        run("pin sky_rings 3f2a 400");
+        run("tier fresh_rings Medium");
+        run("mix fresh_tiny_golf emh");
+        run("pin fresh_rings live 7");
+        run("pin fresh_rings today 7");
+        run("pin fresh_rings 3f2a91c07d1e55b0");
+        run("pin fresh_rings 3f2a 400");
         assertTrue(heard().contains("1 to 365"), heard());
-        run("pin sky_rings now");
+        run("pin fresh_rings now");
         assertTrue(heard().contains("16 hex digits"), heard());
-        run("unpin sky_rings");
-        assertEquals(List.of("tier sky_rings Medium", "tier tiny_golf emh",
-                "pin sky_rings today 7", "pin sky_rings 3f2a91c07d1e55b0 0", "unpin sky_rings"), ops.calls,
-                "the good ones reached the engine");
+        run("unpin fresh_rings");
+        assertEquals(List.of("tier fresh_rings Medium", "tier fresh_tiny_golf emh",
+                "pin fresh_rings live 7", "pin fresh_rings live 7", "pin fresh_rings 3f2a91c07d1e55b0 0",
+                "unpin fresh_rings"), ops.calls, "the good ones reached the engine (today reads as live)");
     }
 
     @Test
     void changesAreLoggedWithWhoMadeThemAndABugNeverEscapes() {
         run("status");
-        run("off tiny_golf");
+        run("off fresh_tiny_golf");
         assertEquals(1, logs.size(), "only the change is logged: " + logs.stream().map(LogRecord::getMessage).toList());
-        assertTrue(logs.get(0).getMessage().contains("Console ran /hcm games gen off tiny_golf"),
+        assertTrue(logs.get(0).getMessage().contains("Console ran /hcm games gen off fresh_tiny_golf"),
                 logs.get(0).getMessage());
         ops.throwOnStatus = true;
         run("status");
@@ -256,8 +259,8 @@ class GenAdminTest {
         GenAdmin off = new GenAdmin(() -> null, Logger.getAnonymousLogger());
         said.clear();
         off.handle(console, new String[]{"status"});
-        assertTrue(heard().contains("isn't running"), "while Daily Courses is off it says so: " + heard());
-        run("tp daily_golf");
+        assertTrue(heard().contains("isn't running"), "while Fresh Courses is off it says so: " + heard());
+        run("tp fresh_golf");
         assertTrue(heard().contains("Only players"), "the console can't go anywhere");
     }
 
@@ -266,13 +269,16 @@ class GenAdminTest {
         assertEquals(List.of("plan", "preview", "promote", "pin"), admin.tab(console, new String[]{"p"}),
                 "verbs by prefix");
         assertTrue(admin.tab(console, new String[]{"reroll", ""}).contains("all"), "reroll offers all");
-        assertEquals(List.of("daily_golf"), admin.tab(console, new String[]{"mix", "d"}), "mix offers golf only");
-        assertFalse(admin.tab(console, new String[]{"tier", ""}).contains("tiny_golf"), "tier offers no golf");
-        assertEquals(List.of("tomorrow"), admin.tab(console, new String[]{"plan", "sky_rings", ""}), "plan tomorrow");
-        assertEquals(List.of("live", "idle"), admin.tab(console, new String[]{"tp", "sky_rings", ""}), "tp where");
-        assertEquals(List.of("confirm"), admin.tab(console, new String[]{"clear", "sky_rings", "c"}), "clear confirm");
-        assertEquals(List.of("EEE"), admin.tab(console, new String[]{"mix", "tiny_golf", ""}), "the shipped mix");
-        assertEquals(List.of("today"), admin.tab(console, new String[]{"pin", "sky_rings", "t"}), "pin today");
+        assertEquals(List.of("fresh_golf"), admin.tab(console, new String[]{"mix", "fresh_g"}), "mix offers golf only");
+        assertEquals(List.of("fresh_golf", "fresh_tiny_golf"), admin.tab(console, new String[]{"mix", ""}),
+                "both golf courses");
+        assertFalse(admin.tab(console, new String[]{"tier", ""}).contains("fresh_tiny_golf"), "tier offers no golf");
+        assertEquals(List.of("next"), admin.tab(console, new String[]{"plan", "fresh_rings", ""}), "plan next");
+        assertEquals(List.of("live", "idle"), admin.tab(console, new String[]{"tp", "fresh_rings", ""}), "tp where");
+        assertEquals(List.of("confirm"), admin.tab(console, new String[]{"clear", "fresh_rings", "c"}),
+                "clear confirm");
+        assertEquals(List.of("EEE"), admin.tab(console, new String[]{"mix", "fresh_tiny_golf", ""}), "the shipped mix");
+        assertEquals(List.of("live"), admin.tab(console, new String[]{"pin", "fresh_rings", "l"}), "pin live");
         assertEquals(List.of(), admin.tab(console, new String[]{"nonsense", ""}), "nothing for an unknown verb");
         assertEquals("gen", admin.name(), "it is /hcm games gen");
         assertEquals(GenAdmin.VERBS.size() - 2, admin.help().size(), "one help line per verb (on/off and pin/unpin share one)");

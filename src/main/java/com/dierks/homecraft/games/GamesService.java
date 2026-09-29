@@ -341,7 +341,8 @@ public final class GamesService {
         if (!guard(game, game::configEnabled, false)) {
             GameSpec<?> spec = spec(game.id());
             Object on = spec == null ? null : PlayGate.component(cfg.settings(spec), "enabled");
-            return Boolean.FALSE.equals(on) ? "games." + game.id() + ".enabled is false"
+            return Boolean.FALSE.equals(on)
+                    ? GamesConfig.PATH + "." + GamesConfig.block(game.id()) + ".enabled is false"
                     : "not ready (not built yet, or no stake fits 85-95 - see the console)";
         }
         return null;

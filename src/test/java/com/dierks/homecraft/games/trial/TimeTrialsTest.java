@@ -32,7 +32,7 @@ class TimeTrialsTest {
         assertFalse(TimeTrials.featured(Set.of("test_snake")::contains, "river_run"), "another game pinned: no course");
     }
 
-    private static final GenTag RINGS = new GenTag("sky_rings", "rings", 1, 20_725, 0, 1L, 'A', "abcabcabcabc",
+    private static final GenTag RINGS = new GenTag("fresh_rings", "rings", 1, 20_725, 0, 1L, 'A', "abcabcabcabc",
             30_000, 60_000, 90_000, List.of(), List.of(), 1L);
 
     private static Course course(String id, TrialKind kind, Tier tier, String name, GenTag gen) {
@@ -49,32 +49,33 @@ class TimeTrialsTest {
     void dailyCoursesComeFirstInSlotOrder() {
         Course cliffs = course("cliffs", TrialKind.PARKOUR, Tier.EASY, "Cliffs", null);
         Course river = course("river_run", TrialKind.BOAT, Tier.MEDIUM, "River Run", null);
-        Course hard = course("daily_parkour_hard", TrialKind.PARKOUR, Tier.HARD, "Hard Parkour",
-                tag("daily_parkour_hard", 0));
-        Course easy = course("daily_parkour_easy", TrialKind.PARKOUR, Tier.EASY, "Easy Parkour",
-                tag("daily_parkour_easy", 0));
-        Course rings = course("sky_rings", TrialKind.ELYTRA, Tier.EASY, "Sky Rings", RINGS);
+        Course hard = course("fresh_parkour_hard", TrialKind.PARKOUR, Tier.HARD, "Hard Parkour",
+                tag("fresh_parkour_hard", 0));
+        Course easy = course("fresh_parkour_easy", TrialKind.PARKOUR, Tier.EASY, "Easy Parkour",
+                tag("fresh_parkour_easy", 0));
+        Course rings = course("fresh_rings", TrialKind.ELYTRA, Tier.EASY, "Sky Rings", RINGS);
         assertEquals(List.of(easy, hard, rings, cliffs, river), TimeTrials.sorted(List.of(river, rings, cliffs, hard,
                 easy)), "the daily ones in slot order, then the rest easiest first as before");
     }
 
     @Test
     void aDailyCoursesTimesGoOnItsLayoutsBoard() {
-        Course easy = course("daily_parkour_easy", TrialKind.PARKOUR, Tier.EASY, "Easy Parkour",
-                tag("daily_parkour_easy", 2));
-        assertEquals(GenBoards.day("daily_parkour_easy", "20725r2"), TimeTrials.board(easy), "the layout's own board");
+        Course easy = course("fresh_parkour_easy", TrialKind.PARKOUR, Tier.EASY, "Easy Parkour",
+                tag("fresh_parkour_easy", 2));
+        assertEquals(GenBoards.day("fresh_parkour_easy", "1:267r2"), TimeTrials.board(easy),
+                "the layout's own board: a daily edition's key, reroll and all");
         assertEquals("course:cliffs", TimeTrials.board(course("cliffs", TrialKind.PARKOUR, Tier.EASY, "Cliffs", null)),
                 "a hand-built course keeps its all-time board");
     }
 
     @Test
     void onlySkyRingsGetsTheWingsTip() {
-        assertTrue(TimeTrials.wingsTipFor(course("sky_rings", TrialKind.ELYTRA, Tier.EASY, "Sky Rings", RINGS)),
+        assertTrue(TimeTrials.wingsTipFor(course("fresh_rings", TrialKind.ELYTRA, Tier.EASY, "Sky Rings", RINGS)),
                 "a generated elytra course: the tip");
         assertFalse(TimeTrials.wingsTipFor(course("canyon", TrialKind.ELYTRA, Tier.EASY, "Canyon", null)),
                 "a hand-built elytra course: as before");
-        assertFalse(TimeTrials.wingsTipFor(course("daily_parkour_easy", TrialKind.PARKOUR, Tier.EASY, "Easy Parkour",
-                tag("daily_parkour_easy", 0))), "parkour has no wings");
+        assertFalse(TimeTrials.wingsTipFor(course("fresh_parkour_easy", TrialKind.PARKOUR, Tier.EASY, "Easy Parkour",
+                tag("fresh_parkour_easy", 0))), "parkour has no wings");
         assertFalse(TimeTrials.wingsTipFor(null), "no course");
     }
 }

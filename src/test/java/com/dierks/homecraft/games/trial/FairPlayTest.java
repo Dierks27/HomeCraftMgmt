@@ -332,17 +332,17 @@ class FairPlayTest {
     // ---- the still-standing rule ------------------------------------------------------------------
 
     private static GenTag layout(long day, char half, String hash) {
-        return new GenTag("daily_parkour_easy", "parkour", 1, day, 0, 7L, half, hash, 22_500, 45_000, 70_000,
+        return new GenTag("fresh_parkour_easy", "parkour", 1, day, 0, 7L, half, hash, 22_500, 45_000, 70_000,
                 List.of(), List.of(), 1L);
     }
 
     /** Yesterday's Easy Parkour in half A, as a run started on it saw it. */
-    private static final Course YESTERDAY = new Course("daily_parkour_easy", TrialKind.PARKOUR, "Easy Parkour",
+    private static final Course YESTERDAY = new Course("fresh_parkour_easy", TrialKind.PARKOUR, "Easy Parkour",
             Tier.EASY, "games", new Course.Spot(4100.5, 170, 4100.5, 0, 0),
             List.of(new Course.Mark(4110.5, 170, 4100.5, 2.2)), new Course.Mark(4120.5, 171, 4100.5, 3.0), 167.0, 17,
             true, false, 11, layout(20_724, 'A', "aaaaaaaaaaaa"));
     /** Today's, flipped in while the run was going: half B, the next rev. */
-    private static final Course TODAY = new Course("daily_parkour_easy", TrialKind.PARKOUR, "Easy Parkour",
+    private static final Course TODAY = new Course("fresh_parkour_easy", TrialKind.PARKOUR, "Easy Parkour",
             Tier.EASY, "games", new Course.Spot(4196.5, 180, 4100.5, 0, 0),
             List.of(new Course.Mark(4206.5, 180, 4100.5, 2.2)), new Course.Mark(4216.5, 181, 4100.5, 3.0), 177.0, 17,
             true, false, 12, layout(20_725, 'B', "bbbbbbbbbbbb"));

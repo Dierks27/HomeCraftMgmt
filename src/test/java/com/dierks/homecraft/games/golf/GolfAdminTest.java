@@ -28,8 +28,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * line and never thrown, since it runs inside the game's guard, where a throw would switch golf
  * off and end every round.
  *
- * <p>And Daily Courses (GEN-SPEC §2.4, §5.5): Daily Golf and Tiny Golf allow only info and tp
- * here; and no tee, cup or bound of a hand-built hole goes inside a Daily Courses half or within 16
+ * <p>And Fresh Courses (GEN-SPEC §2.4, §5.5): Golf of the Week and Tiny Golf allow only info and tp
+ * here; and no tee, cup or bound of a hand-built hole goes inside a Fresh Courses half or within 16
  * blocks of one.
  */
 class GolfAdminTest {
@@ -74,14 +74,14 @@ class GolfAdminTest {
                 "a golf course called auto could never be pinned as today's pick, so the id is refused");
     }
 
-    // ---- Daily Courses -------------------------------------------------------------------------
+    // ---- Fresh Courses -------------------------------------------------------------------------
 
     private static GolfCourse dailyGolf() {
         GolfCourse.Hole h = new GolfCourse.Hole(new GolfCourse.Tee(4870.5, 164, 4100.5, 0f),
                 new GolfCourse.Spot(4870, 162, 4115), 3, new GolfCourse.Spot(4866, 161, 4097),
                 new GolfCourse.Spot(4874, 168, 4119));
-        return new GolfCourse("daily_golf", "Daily Golf", "games", true, 4, List.of(h),
-                new GenTag("daily_golf", "golf", 1, 20_725, 0, 1L, 'A', "abcabcabcabc", 0, 0, 0, List.of(0),
+        return new GolfCourse("fresh_golf", "Golf of the Week", "games", true, 4, List.of(h),
+                new GenTag("fresh_golf", "golf", 1, 20_725, 0, 1L, 'A', "abcabcabcabc", 0, 0, 0, List.of(0),
                         List.of(), 1L));
     }
 
@@ -95,7 +95,7 @@ class GolfAdminTest {
             assertEquals(GenCopy.MADE_BY_DAILY, GolfAdmin.dailyRefusal(c, verb), verb + " points to /hcm games gen");
         }
         assertEquals(GenCopy.MADE_BY_DAILY, GolfAdmin.dailyRefusal(c.withGen(null), "hole"),
-                "a row with a slot's id is Daily Courses' even without its tag");
+                "a row with a slot's id is Fresh Courses' even without its tag");
         GolfCourse handBuilt = GolfCourse.create("meadow", "Meadow Links", "games");
         for (String verb : List.of("info", "tp", "hole", "name", "enable", "disable", "delete")) {
             assertNull(GolfAdmin.dailyRefusal(handBuilt, verb), "a hand-built course is untouched: " + verb);

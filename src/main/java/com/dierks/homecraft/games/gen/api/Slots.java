@@ -8,20 +8,28 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * The generated courses, fixed in code (GEN-SPEC §1.1, §2.2).
+ * The generated courses, fixed in code (GEN-SPEC §1.1, §2.2; the weekly addendum §2 for the ids).
  *
  * <p>A slot is one generated course with a fixed id, which is also its {@code /hcm play} id, its
  * {@code game_courses} row id and its board name. Config can tune a slot or switch it off
- * ({@code games.daily.slots.<id>}), but never add one: every id here is reserved from the day it
+ * ({@code games.fresh.slots.<id>}), but never add one: every id here is reserved from the day it
  * ships ({@link #RESERVED}), so no hand-built course can ever take one, and the half sizes are the
  * generators' own, so a config typo can't make a course that doesn't fit its area.
+ *
+ * <p>The constants keep their first names ({@code DAILY_GOLF}, {@code DAILY}...) so every package
+ * written against them still compiles; their ids are the Fresh Courses ones ({@code fresh_golf},
+ * {@code fresh_courses}...), and so are the names players read. Golf's name follows the cadence
+ * ("Golf of the Week" / "Golf of the Day"): {@link GenCopy#slotName}.
  */
 public final class Slots {
 
-    /** The play id of the Today's Courses screen. */
-    public static final String DAILY = "daily";
-    /** The play id of the parkour tier picker. */
-    public static final String DAILY_PARKOUR = "daily_parkour";
+    /** The game's id and the play id of its screen (Fresh Courses). */
+    public static final String DAILY = "fresh_courses";
+    /**
+     * The play id of the parkour level picker. Not {@code fresh_parkour}: that is the middle
+     * parkour course itself.
+     */
+    public static final String DAILY_PARKOUR = "fresh_parkour_tiers";
 
     /** Generator ids ({@link Planner#id()}). */
     public static final String PARKOUR = "parkour";
@@ -56,11 +64,14 @@ public final class Slots {
      * @param originX     the shipped origin: half A's min corner (multiples of 16)
      * @param originY     ...
      * @param originZ     ...
-     * @param dailyClear  the shipped {@code daily_clear} tokens
+     * @param dailyClear  the shipped first-finish tokens of an edition when the cadence is daily
+     *                    ({@code games.fresh.rewards.clear_daily.<id>})
+     * @param weeklyClear the same when the cadence is weekly or longer
+     *                    ({@code games.fresh.rewards.clear_weekly.<id>})
      */
     public record Def(String id, String generator, String game, String kind, String name, String colour, int sizeX,
                       int sizeY, int sizeZ, int plots, boolean enabled, String tierOrMix, int originX, int originY,
-                      int originZ, int dailyClear) {
+                      int originZ, int dailyClear, int weeklyClear) {
 
         /** Whether it is a golf course (a {@code golf} row) rather than a time trial. */
         public boolean golf() {
@@ -120,26 +131,26 @@ public final class Slots {
 
     private static final Pattern MIX = Pattern.compile("[EMH]+");
 
-    public static final Def DAILY_PARKOUR_EASY = new Def("daily_parkour_easy", PARKOUR, GAME_TRIALS, "parkour",
-            "Easy Parkour", "&a", 64, 48, 64, 0, true, "easy", 4096, 160, 4096, 1);
-    public static final Def DAILY_PARKOUR_MEDIUM = new Def("daily_parkour_medium", PARKOUR, GAME_TRIALS,
-            "parkour", "Parkour", "&e", 64, 48, 64, 0, true, "medium", 4352, 160, 4096, 2);
-    public static final Def DAILY_PARKOUR_HARD = new Def("daily_parkour_hard", PARKOUR, GAME_TRIALS, "parkour",
-            "Hard Parkour", "&c", 64, 48, 64, 0, true, "hard", 4608, 160, 4096, 3);
-    public static final Def SKY_RINGS = new Def("sky_rings", RINGS, GAME_TRIALS, "elytra", "Sky Rings", "&b",
-            128, 176, 320, 0, true, "easy", 4096, 128, 4352, 2);
-    public static final Def DAILY_GOLF = new Def("daily_golf", GOLF, GAME_GOLF, "golf", "Daily Golf", "&d", 64,
-            16, 128, 9, true, "EEEMMMMHH", 4864, 160, 4096, 2);
-    public static final Def TINY_GOLF = new Def("tiny_golf", GOLF, GAME_GOLF, "golf", "Tiny Golf", "&d", 64, 16,
-            48, 3, true, "EEE", 5120, 160, 4096, 1);
-    public static final Def ICE_BOAT = new Def("ice_boat", BOAT, GAME_TRIALS, "boat", "Ice Boat", "&b", 128, 16,
-            128, 0, false, "medium", 4480, 160, 4352, 2);
+    public static final Def DAILY_PARKOUR_EASY = new Def("fresh_parkour_easy", PARKOUR, GAME_TRIALS, "parkour",
+            "Easy Parkour", "&a", 64, 48, 64, 0, true, "easy", 4096, 160, 4096, 1, 2);
+    public static final Def DAILY_PARKOUR_MEDIUM = new Def("fresh_parkour", PARKOUR, GAME_TRIALS, "parkour",
+            "Parkour", "&e", 64, 48, 64, 0, true, "medium", 4352, 160, 4096, 2, 3);
+    public static final Def DAILY_PARKOUR_HARD = new Def("fresh_parkour_hard", PARKOUR, GAME_TRIALS, "parkour",
+            "Hard Parkour", "&c", 64, 48, 64, 0, true, "hard", 4608, 160, 4096, 3, 5);
+    public static final Def SKY_RINGS = new Def("fresh_rings", RINGS, GAME_TRIALS, "elytra", "Sky Rings", "&b",
+            128, 176, 320, 0, true, "easy", 4096, 128, 4352, 2, 3);
+    public static final Def DAILY_GOLF = new Def("fresh_golf", GOLF, GAME_GOLF, "golf", "Golf of the Week", "&d",
+            64, 16, 128, 9, true, "EEEMMMMHH", 4864, 160, 4096, 2, 3);
+    public static final Def TINY_GOLF = new Def("fresh_tiny_golf", GOLF, GAME_GOLF, "golf", "Tiny Golf", "&d", 64,
+            16, 48, 3, true, "EEE", 5120, 160, 4096, 1, 2);
+    public static final Def ICE_BOAT = new Def("fresh_boat", BOAT, GAME_TRIALS, "boat", "Ice Boat", "&b", 128, 16,
+            128, 0, false, "medium", 4480, 160, 4352, 2, 3);
 
     /** Every slot, in display and config order. */
     public static final List<Def> ALL = List.of(DAILY_PARKOUR_EASY, DAILY_PARKOUR_MEDIUM, DAILY_PARKOUR_HARD,
             SKY_RINGS, DAILY_GOLF, TINY_GOLF, ICE_BOAT);
 
-    /** Every play id Daily Courses keeps: the slots, {@link #DAILY} and {@link #DAILY_PARKOUR}. */
+    /** Every play id Fresh Courses keeps: the slots, {@link #DAILY} and {@link #DAILY_PARKOUR}. */
     public static final Set<String> RESERVED;
 
     static {
@@ -174,7 +185,7 @@ public final class Slots {
         return of(id) != null;
     }
 
-    /** Whether Daily Courses keeps {@code id} (a slot, {@code daily} or {@code daily_parkour}). */
+    /** Whether Fresh Courses keeps {@code id} (a slot, {@code fresh_courses} or {@code fresh_parkour_tiers}). */
     public static boolean reserved(String id) {
         return id != null && RESERVED.contains(id.trim().toLowerCase(Locale.ROOT));
     }

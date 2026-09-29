@@ -62,7 +62,7 @@ class GolfRoundsTest {
     // ---- still standing ---------------------------------------------------------------------------
 
     private static GenTag layout(long day, char half, String hash) {
-        return new GenTag("daily_golf", "golf", 1, day, 0, 9L, half, hash, 0, 0, 0, List.of(0), List.of(), 1L);
+        return new GenTag("fresh_golf", "golf", 1, day, 0, 9L, half, hash, 0, 0, 0, List.of(0), List.of(), 1L);
     }
 
     private static GolfCourse daily(int rev, GenTag tag) {

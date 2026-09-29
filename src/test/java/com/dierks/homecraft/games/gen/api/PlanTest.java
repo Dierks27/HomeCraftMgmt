@@ -26,7 +26,7 @@ class PlanTest {
     private static final Box HALF = Slots.DAILY_PARKOUR_EASY.half('A');
 
     private static Course course(double finishX) {
-        return new Course("daily_parkour_easy", TrialKind.PARKOUR, "Easy Parkour", Tier.EASY, "games",
+        return new Course("fresh_parkour_easy", TrialKind.PARKOUR, "Easy Parkour", Tier.EASY, "games",
                 new Course.Spot(4100.5, 170, 4100.5, -90f, 0f), List.of(new Course.Mark(4110.5, 171, 4100.5, 2.2)),
                 new Course.Mark(finishX, 170, 4100.5, 3.0), 167.0, 5, true, false, 1);
     }
@@ -40,7 +40,7 @@ class PlanTest {
     }
 
     private static Plan plan(List<String> palette, List<BlockOp> ops, List<SignText> signs, PlannedCourse c) {
-        return Plan.of("daily_parkour_easy", 1, 42L, HALF, palette, ops, signs, List.of(), c, List.of("12 jumps"), 99);
+        return Plan.of("fresh_parkour_easy", 1, 42L, HALF, palette, ops, signs, List.of(), c, List.of("12 jumps"), 99);
     }
 
     private static final List<String> PALETTE = List.of(Palette.START, Palette.PATH_EASY);
@@ -97,7 +97,7 @@ class PlanTest {
         GolfCourse.Hole h = new GolfCourse.Hole(new GolfCourse.Tee(4870.5, 164, 4100.5, 0f),
                 new GolfCourse.Spot(4870, 162, 4112), 3, new GolfCourse.Spot(4866, 161, 4097),
                 new GolfCourse.Spot(4874, 168, 4115));
-        GolfCourse one = new GolfCourse("tiny_golf", "Tiny Golf", "games", true, 1, List.of(h));
+        GolfCourse one = new GolfCourse("fresh_tiny_golf", "Tiny Golf", "games", true, 1, List.of(h));
         PlannedGolf a = new PlannedGolf(one, List.of(0), List.of(List.of(new Putt(0f, 5))), List.of(2), List.of(3));
         PlannedGolf b = new PlannedGolf(one.withHole(1, h.withPar(4)), List.of(0), List.of(), List.of(3), List.of(4));
         assertNotEquals(Plan.hash(PALETTE, ops(3), List.of(), a), Plan.hash(PALETTE, ops(3), List.of(), b),

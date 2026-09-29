@@ -10,11 +10,12 @@ import java.util.Map;
  *
  * <pre>
  * gen:
- *   slot: daily_parkour_easy
+ *   slot: fresh_parkour_easy
  *   generator: parkour
  *   algo: 1
- *   day: 20725
- *   date: '2026-09-29'
+ *   day: 20724                       # the edition's first day
+ *   date: '2026-09-28'
+ *   cadence: 7                       # its length in days: the edition is 7:38
  *   reroll: 0
  *   seed: 3f2a91c07d1e55b0
  *   half: B
@@ -28,8 +29,9 @@ import java.util.Map;
  * </pre>
  *
  * Plain maps and lists in and out, so it needs no server and each codec keeps its own YAML
- * handling. {@code date} is for people reading the row; {@code day} is what counts. A yaw is
- * written as the shortest decimal of its float and read back to exactly that float.
+ * handling. {@code date} is for people reading the row; {@code day} is what counts. A block
+ * written before cadences (no {@code cadence}) reads as a daily edition. A yaw is written as the
+ * shortest decimal of its float and read back to exactly that float.
  *
  * <p>Reading never guesses: a block that is there but can't be read throws
  * {@link IllegalArgumentException} naming the part, so a damaged row is reported instead of
@@ -51,6 +53,7 @@ public final class GenTagCodec {
         m.put("algo", tag.algo());
         m.put("day", tag.day());
         m.put("date", tag.date().toString());
+        m.put("cadence", tag.cadence());
         m.put("reroll", tag.reroll());
         m.put("seed", GenSeed.hex(tag.seed()));
         m.put("half", String.valueOf(tag.half()));
@@ -85,6 +88,10 @@ public final class GenTagCodec {
         String generator = text(m, "generator");
         int algo = (int) whole(m.get("algo"), "algo");
         long day = whole(m.get("day"), "day");
+        int cadence = m.get("cadence") == null ? Edition.DAILY : (int) whole(m.get("cadence"), "cadence");
+        if (cadence < Edition.DAILY || cadence > Edition.MAX_CADENCE) {
+            throw new IllegalArgumentException("gen cadence is not 1-" + Edition.MAX_CADENCE);
+        }
         int reroll = m.get("reroll") == null ? 0 : (int) whole(m.get("reroll"), "reroll");
         Long seed = m.get("seed") instanceof String s ? GenSeed.parse(s) : null;
         if (seed == null) {
@@ -128,7 +135,7 @@ public final class GenTagCodec {
         }
         return new GenTag(slot, generator, algo, day, reroll, seed, half.charAt(0), plan,
                 optionalWhole(m, "ref_ms"), optionalWhole(m, "gold_ms"), optionalWhole(m, "silver_ms"), attempts,
-                witness, optionalWhole(m, "built_at"));
+                witness, optionalWhole(m, "built_at"), cadence);
     }
 
     private static String text(Map<?, ?> m, String key) {

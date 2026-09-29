@@ -1,9 +1,9 @@
 package com.dierks.homecraft.games.gen.api;
 
 /**
- * Stars, the kid-facing score of a daily course (GEN-SPEC §5.2): one for finishing, two for a good
- * run, three for a great one. Finishing is always worth a star, so the youngest player who just
- * gets round Easy Parkour every day fills their Star Chart too.
+ * Stars, the kid-facing score of a Fresh Course (GEN-SPEC §5.2): one for finishing, two for a good
+ * run, three for a great one, per player per edition (the best run counts). Finishing is always
+ * worth a star, so the youngest player who just gets round Easy Parkour fills their Star Chart too.
  *
  * <p>Only a counted run earns stars (a test, voided or stale run earns none): that is the caller's
  * to decide; these only turn a counted result into stars.
@@ -44,7 +44,7 @@ public final class Stars {
     }
 
     /**
-     * A star time: the reference time times the tier's factor ({@code games.daily.stars}), rounded
+     * A star time: the reference time times the tier's factor ({@code games.fresh.stars}), rounded
      * UP to a whole second, so the time on the screen is one a player can really make.
      */
     public static long threshold(long refMs, double factor) {

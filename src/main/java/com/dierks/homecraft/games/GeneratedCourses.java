@@ -43,35 +43,38 @@ public interface GeneratedCourses {
     /** Whether block (x, y, z) of {@code world} is inside a Daily Courses half (anyone's edits are refused there). */
     boolean inArea(String world, int x, int y, int z);
 
-    // ---- what a finish pays (games.daily): the shipped values until the engine says otherwise ----
+    // ---- what a finish pays (games.fresh): the shipped values until the engine says otherwise ----
 
     /**
-     * The tokens the first counted finish of course {@code courseId} pays on its course day
-     * ({@code games.daily.slots.<id>.daily_clear}, GEN-SPEC §5.3): the slot's shipped amount by
-     * default, 0 for a course that isn't a slot.
+     * The tokens the first counted finish of course {@code courseId} pays in its set
+     * ({@code games.fresh.rewards}, GEN-SPEC §5.3, weekly addendum §4): the slot's shipped weekly
+     * amount by default, 0 for a course that isn't a slot.
      */
     default int dailyClear(String courseId) {
         Slots.Def slot = Slots.of(courseId);
-        return slot == null ? 0 : slot.dailyClear();
+        return slot == null ? 0 : slot.weeklyClear();
     }
 
-    /** The weekly Star Chart goals ({@code games.daily.star_goals}; shipped 10 and 25). */
+    /** This week's Star Chart goals ({@code games.fresh.star_goals}; shipped weekly 6 and 12). */
     default List<Integer> starGoals() {
         return SHIPPED_STAR_GOALS;
     }
 
-    /** Tokens per Star Chart goal, once a week each ({@code games.daily.star_goal_reward}; shipped 1). */
+    /**
+     * Tokens per Star Chart goal, once a week each, for a caller that pays every goal the same
+     * (the smallest goal's: shipped 1). The engine knows each goal's own ({@code star_goals}).
+     */
     default int starGoalReward() {
         return 1;
     }
 
-    /** The most star-goal tokens a day ({@code games.daily.daily_cap}; shipped 2). */
+    /** The most star-goal tokens a day ({@code games.fresh.daily_cap}; shipped 2). */
     default int starGoalCap() {
         return 2;
     }
 
-    /** {@code games.daily.star_goals} as shipped. */
-    List<Integer> SHIPPED_STAR_GOALS = List.of(10, 25);
+    /** {@code games.fresh.star_goals.weekly} as shipped. */
+    List<Integer> SHIPPED_STAR_GOALS = List.of(6, 12);
 
     /** No engine, or {@code daily} is off: nothing generated is live or standing; no area is kept. */
     GeneratedCourses NONE = new GeneratedCourses() {

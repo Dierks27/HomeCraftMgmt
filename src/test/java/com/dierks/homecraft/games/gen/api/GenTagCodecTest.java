@@ -110,12 +110,12 @@ class GenTagCodecTest {
     private static final GolfCourse.Hole EMPTY_HOLE = new GolfCourse.Hole(null, null, 2, null, null);
 
     static GenTag trialTag() {
-        return new GenTag("daily_parkour_easy", "parkour", 1, 20725, 0, 0x3F2A91C07D1E55B0L, 'B', "3c9e51aa07b2",
+        return new GenTag("fresh_parkour_easy", "parkour", 1, 20725, 0, 0x3F2A91C07D1E55B0L, 'B', "3c9e51aa07b2",
                 38_000, 76_000, 114_000, List.of(), List.of(), 1_790_661_730_000L);
     }
 
     static GenTag golfTag() {
-        return new GenTag("daily_golf", "golf", 2, 20725, 3, -7L, 'A', "0123456789ab", 0, 0, 0, List.of(0, 2, 0),
+        return new GenTag("fresh_golf", "golf", 2, 20725, 3, -7L, 'A', "0123456789ab", 0, 0, 0, List.of(0, 2, 0),
                 List.of(List.of(new Putt(12.5f, 5)), List.of(new Putt(270f, 4), new Putt(265.3f, 2)),
                         List.of(new Putt(-33.333f, 1), new Putt(0.1f, 3), new Putt(359.99f, 5))),
                 1_790_661_730_000L);
@@ -126,7 +126,7 @@ class GenTagCodecTest {
         Course c = FULL.withGen(trialTag());
         String text = com.dierks.homecraft.games.trial.CourseCodec.encode(c);
         assertTrue(text.startsWith(FULL_TRIAL_TEXT), "the course part is written as it always was, then gen:");
-        assertTrue(text.contains("\ngen:\n  slot: daily_parkour_easy\n  generator: parkour\n"),
+        assertTrue(text.contains("\ngen:\n  slot: fresh_parkour_easy\n  generator: parkour\n"),
                 "the block is readable, in the documented order:\n" + text);
         assertTrue(text.contains("seed: 3f2a91c07d1e55b0"), "the seed is hex");
         assertTrue(text.contains("date: '2026-09-29'"), "the date is there for people");
@@ -140,11 +140,11 @@ class GenTagCodecTest {
 
     @Test
     void aGeneratedGolfCourseComesBackWithItsAttemptsAndWitness() {
-        GolfCourse c = new GolfCourse("daily_golf", "Daily Golf", "games", true, 12, List.of(HOLE, HOLE, HOLE),
+        GolfCourse c = new GolfCourse("fresh_golf", "Daily Golf", "games", true, 12, List.of(HOLE, HOLE, HOLE),
                 golfTag());
         GamesDao.CourseRow row = CourseCodec.toRow(c, 1, 2);
         assertTrue(row.data().startsWith("format: 1\nholes:\n"), "the holes come first, as always");
-        assertTrue(row.data().contains("\ngen:\n  slot: daily_golf\n"), "then the gen: block");
+        assertTrue(row.data().contains("\ngen:\n  slot: fresh_golf\n"), "then the gen: block");
         GolfCourse back = CourseCodec.fromRow(row);
         assertEquals(c, back, "every hole, attempt and putt survives");
         assertEquals(265.3f, back.gen().witness().get(1).get(1).yaw(), "a yaw is exactly the float it was");
@@ -173,8 +173,8 @@ class GenTagCodecTest {
         for (GenTag t : List.of(trialTag(), golfTag())) {
             assertEquals(t, GenTagCodec.read(GenTagCodec.write(t)), "a tag comes back from its own map: " + t.slot());
         }
-        GenTag hex = new GenTag("tiny_golf", "golf", 1, 20725, 0, 0x1234567890123456L, 'a', "123456789012", 0, 0, 0,
-                List.of(), List.of(), 0);
+        GenTag hex = new GenTag("fresh_tiny_golf", "golf", 1, 20725, 0, 0x1234567890123456L, 'a', "123456789012", 0,
+                0, 0, List.of(), List.of(), 0);
         String text = com.dierks.homecraft.games.trial.CourseCodec.encode(FULL.withGen(hex));
         Course back = com.dierks.homecraft.games.trial.CourseCodec.decode("river_run", text).course();
         assertEquals(hex, back.gen(), "a seed and a hash made only of digits survive YAML as text");
@@ -192,8 +192,8 @@ class GenTagCodecTest {
             }
             lines.add(line);
         }
-        GenTag t = new GenTag("daily_golf", "golf", 1, 1, 0, 1, 'A', "x", 0, 0, 0, List.of(), lines, 0);
-        GolfCourse c = new GolfCourse("daily_golf", "Daily Golf", "games", true, 1, List.of(HOLE), t);
+        GenTag t = new GenTag("fresh_golf", "golf", 1, 1, 0, 1, 'A', "x", 0, 0, 0, List.of(), lines, 0);
+        GolfCourse c = new GolfCourse("fresh_golf", "Daily Golf", "games", true, 1, List.of(HOLE), t);
         assertEquals(lines, CourseCodec.fromRow(CourseCodec.toRow(c, 1, 1)).gen().witness(),
                 "two hundred random yaws and powers come back bit for bit");
     }
@@ -208,10 +208,10 @@ class GenTagCodecTest {
         assertFalse(d.course().enabled(), "and the course is closed: nothing vouches for it");
         assertTrue(d.problems().stream().anyMatch(p -> p.contains("gen") && p.contains("seed")),
                 "the problem names the block and the part: " + d.problems());
-        GolfCourse c = new GolfCourse("daily_golf", "Daily Golf", "games", true, 1, List.of(HOLE), golfTag());
+        GolfCourse c = new GolfCourse("fresh_golf", "Daily Golf", "games", true, 1, List.of(HOLE), golfTag());
         String golf = CourseCodec.toRow(c, 1, 1).data().replace("half: A", "half: C");
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> CourseCodec.fromRow(new GamesDao.CourseRow("daily_golf", "golf", "golf", "Daily Golf", "games",
+                () -> CourseCodec.fromRow(new GamesDao.CourseRow("fresh_golf", "golf", "golf", "Daily Golf", "games",
                         true, golf, 1, 1, 1)), "a golf row with a damaged tag can't be read");
         assertTrue(e.getMessage().contains("half"), "and says which part: " + e.getMessage());
     }
@@ -247,16 +247,49 @@ class GenTagCodecTest {
     @Test
     void theTagKnowsItsEditionAndLayout() {
         GenTag t = trialTag();
-        assertEquals("20725", t.editionKey(), "no reroll: the day");
-        assertEquals("20725r3", golfTag().editionKey(), "a reroll: day r n");
+        assertEquals(1, t.cadence(), "a tag made the old way is a daily edition");
+        assertEquals("1:267", t.editionKey(), "no reroll: N:<index>");
+        assertEquals("1:267r3", golfTag().editionKey(), "a reroll: N:<index>r<n>");
+        assertEquals("1:267", golfTag().edition(), "its edition has no reroll");
         assertEquals('A', t.otherHalf(), "B's other half is A");
         GenTag restamped = t.withEdition(20726, 0);
-        assertTrue(t.sameLayout(restamped), "a restamp is the same blocks on a new day");
-        assertEquals(20726, restamped.day(), "with the new day");
+        assertTrue(t.sameLayout(restamped), "a restamp is the same blocks in a new edition");
+        assertEquals(20726, restamped.day(), "with the new first day");
+        GenTag weekly = t.withEdition(7, 20724, 0);
+        assertEquals("7:38", weekly.editionKey(), "a weekly restamp is a weekly edition");
+        assertEquals(20731, weekly.endDay(), "which ends the next Monday");
+        assertTrue(t.sameLayout(weekly), "still the same blocks");
+        assertFalse(t.sameEdition(weekly), "but another edition");
+        assertTrue(weekly.sameEdition(weekly.withBuiltAt(9)), "the same edition whenever it was verified");
         assertFalse(t.sameLayout(golfTag()), "another slot is another layout");
         assertFalse(t.sameLayout(null), "nothing is not a layout");
         assertEquals(5L, t.withBuiltAt(5).builtAt(), "a new verified time");
+        assertEquals(7, t.withEdition(7, 20724, 0).withBuiltAt(5).cadence(), "which keeps the cadence");
         assertThrows(IllegalArgumentException.class, () -> new GenTag("x", "parkour", 1, 1, 0, 1, 'C', "", 0, 0, 0,
                 null, null, 0), "a half is A or B");
+    }
+
+    @Test
+    void theCadenceIsWrittenAndReadBackAndAnOldBlockIsDaily() {
+        GenTag weekly = trialTag().withEdition(7, 20724, 1);
+        Map<String, Object> m = GenTagCodec.write(weekly);
+        assertEquals(7, m.get("cadence"), "the block says the cadence");
+        assertEquals(List.of("slot", "generator", "algo", "day", "date", "cadence", "reroll"),
+                List.copyOf(m.keySet()).subList(0, 7), "right after the day and its date");
+        assertEquals(weekly, GenTagCodec.read(m), "and reads back exactly");
+        String text = com.dierks.homecraft.games.trial.CourseCodec.encode(FULL.withGen(weekly));
+        assertTrue(text.contains("  cadence: 7\n"), "in the row too:\n" + text);
+        assertEquals(weekly, com.dierks.homecraft.games.trial.CourseCodec.decode("river_run", text).course().gen(),
+                "and back");
+        Map<String, Object> old = new LinkedHashMap<>(m);
+        old.remove("cadence");
+        assertEquals(1, GenTagCodec.read(old).cadence(), "a block without a cadence is a daily edition");
+        for (Object bad : new Object[]{0, 29, "weekly", 7.5}) {
+            Map<String, Object> b = new LinkedHashMap<>(m);
+            b.put("cadence", bad);
+            IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> GenTagCodec.read(b),
+                    "a cadence of " + bad + " can't be read");
+            assertTrue(e.getMessage().contains("cadence"), "and says so: " + e.getMessage());
+        }
     }
 }

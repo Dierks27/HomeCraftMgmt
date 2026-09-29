@@ -34,10 +34,11 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Daily Courses as a game of the framework (GEN-SPEC §5.4, §6 S8): it is the catalog's {@code daily},
- * a TRIAL that is never today's pick; {@code /hcm play daily} opens it and {@code daily_parkour} is
- * its one playable; it follows {@code games.daily.enabled}; and anything its engine throws closes
- * Daily Courses alone — the gate goes with it, and the other games play on.
+ * Fresh Courses as a game of the framework (GEN-SPEC §5.4, §6 S8, weekly addendum §2): it is the
+ * catalog's {@code fresh_courses}, a TRIAL that is never today's pick; {@code /hcm play fresh_courses}
+ * opens it and {@code fresh_parkour_tiers} is its one playable; it follows {@code games.fresh.enabled};
+ * its rules and first-finish tokens follow the cadence; and anything its engine throws closes Fresh
+ * Courses alone — the gate goes with it, and the other games play on.
  */
 class DailyCoursesTest {
 
@@ -49,7 +50,7 @@ class DailyCoursesTest {
     void setUp() {
         host = new Host(GamesKit.at(2026, 9, 29, 15, 0));
         trials = new TestGame("test_trials", GameKind.TRIAL, "Test Trials", TokenService.Source.GAMES_PARKOUR);
-        host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6), "daily", on(true));
+        host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6), "fresh_courses", on(true));
         games = GamesKit.service(host, List.of(GamesKit.spec(trials, new SkillSettings(true, 4), null),
                 DailyCourses.SPEC));
     }
@@ -60,59 +61,68 @@ class DailyCoursesTest {
     }
 
     private static DailySettings on(boolean enabled) {
-        DailySettings d = DailySettings.defaults();
-        return new DailySettings(enabled, d.world(), d.rollover(), d.startupDelaySeconds(),
-                d.avoidBeforeRestartMinutes(), d.retryMinutes(), d.maxTriesPerDay(), d.clearWaitMinutes(),
-                d.keepDays(), d.worldRules(), d.safeSpot(), d.dailyCap(), d.starGoals(), d.starGoalReward(),
-                d.budget(), d.stars(), d.slots());
+        return DailySettings.defaults().withEnabled(enabled);
     }
 
     @Test
-    void dailyIsTheCatalogsLastGameAndPlaysThroughTheFramework() {
+    void freshCoursesIsTheCatalogsLastGameAndPlaysThroughTheFramework() {
         List<GameSpec<?>> specs = GameCatalog.SPECS;
-        assertSame(DailyCourses.SPEC, specs.get(specs.size() - 1), "daily is listed last");
-        assertEquals("daily", DailyCourses.SPEC.id(), "its id is daily");
+        assertSame(DailyCourses.SPEC, specs.get(specs.size() - 1), "Fresh Courses is listed last");
+        assertEquals("fresh_courses", DailyCourses.SPEC.id(), "its id is fresh_courses");
         assertEquals(GameKind.TRIAL, DailyCourses.SPEC.kind(), "a course game");
         assertEquals(DailySettings.KEYS, DailyCourses.SPEC.keys(), "it ships its own keys");
 
-        Game daily = games.game("daily");
-        assertInstanceOf(DailyCourses.class, daily, "the framework built it");
-        assertTrue(games.enabled(daily), "it follows games.daily.enabled");
-        assertFalse(daily.featurable(), "never today's pick");
-        assertEquals(TokenService.Source.GAMES_DAILY, daily.source(), "its own ledger source");
-        GamesService.Target t = games.resolve("Daily_Parkour");
-        assertNotNull(t, "/hcm play daily_parkour resolves");
-        assertSame(daily, t.game(), "to Daily Courses");
-        assertEquals("daily_parkour", t.playable().id(), "as its tier picker");
-        assertNull(games.resolve("daily").playable(), "/hcm play daily opens the game itself");
-        assertFalse(daily.play(null, "sky_rings", null), "it plays nothing else itself (slots are course rows)");
-        assertEquals(List.of("not running"), daily.statusLines(), "status says when its engine isn't running");
-        for (String line : daily.rules()) {
+        Game fresh = games.game("fresh_courses");
+        assertInstanceOf(DailyCourses.class, fresh, "the framework built it");
+        assertEquals("Fresh Courses", fresh.name(), "its name");
+        assertTrue(games.enabled(fresh), "it follows games.fresh.enabled");
+        assertFalse(fresh.featurable(), "never today's pick");
+        assertEquals(TokenService.Source.GAMES_DAILY, fresh.source(), "its own ledger source");
+        GamesService.Target t = games.resolve("Fresh_Parkour_Tiers");
+        assertNotNull(t, "/hcm play fresh_parkour_tiers resolves");
+        assertSame(fresh, t.game(), "to Fresh Courses");
+        assertEquals("fresh_parkour_tiers", t.playable().id(), "as its level picker");
+        assertNull(games.resolve("fresh_courses").playable(), "/hcm play fresh_courses opens the game itself");
+        assertNull(games.resolve("daily"), "and the old daily id is nothing");
+        assertFalse(fresh.play(null, "fresh_rings", null), "it plays nothing else itself (slots are course rows)");
+        assertEquals(List.of("not running"), fresh.statusLines(), "status says when its engine isn't running");
+        for (String line : fresh.rules()) {
             assertEquals(List.of(), com.dierks.homecraft.games.gen.api.GenCopy.copyProblems(line), line);
         }
+        assertEquals("New courses every Monday: parkour, Sky Rings and golf.", fresh.rules().get(0),
+                "the rules say when they change: weekly, on Monday");
 
-        host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6), "daily", on(false));
-        assertFalse(games.enabled(daily), "switched off in config it is closed");
-        assertEquals("games.daily.enabled is false", games.closedReason(daily), "and status says why");
-        assertNull(games.resolve("daily_parkour"), "and its playable is gone");
+        host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6), "fresh_courses", on(true).withCadence(3));
+        assertEquals("New courses every 3 days: parkour, Sky Rings and golf.", fresh.rules().get(0),
+                "and follow the cadence");
+        assertEquals(4, ((DailyCourses) fresh).dailyClear("fresh_parkour_hard"),
+                "the first finish pays for the cadence: round(3 + 2 * 2/6)");
+        host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6), "fresh_courses", on(true).withCadence(1));
+        assertEquals("New courses every day: parkour, Sky Rings and golf.", fresh.rules().get(0), "daily");
+
+        host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6), "fresh_courses", on(false));
+        assertFalse(games.enabled(fresh), "switched off in config it is closed");
+        assertEquals("games.fresh.enabled is false", games.closedReason(fresh),
+                "and status says why, with the key the owner edits");
+        assertNull(games.resolve("fresh_parkour_tiers"), "and its playable is gone");
     }
 
     @Test
     void anythingTheEngineThrowsClosesDailyAloneAndItsGateWithIt() {
-        Game daily = games.game("daily");
+        Game daily = games.game("fresh_courses");
         boolean[] broken = {false};
         GenService engine = new GenService(host(broken), Map.<String, Planner>of());
         engine.start();
         games.generated(engine);
         assertSame(engine, games.generated(), "while daily is open its engine is the gate");
-        GenTag tag = new GenTag("daily_golf", "golf", 1, 20725, 0, 1, 'A', "abc", 0, 0, 0, List.of(), List.of(), 0);
-        assertFalse(games.generated().live("daily_golf", tag), "nothing unverified is live");
+        GenTag tag = new GenTag("fresh_golf", "golf", 1, 20725, 0, 1, 'A', "abc", 0, 0, 0, List.of(), List.of(), 0);
+        assertFalse(games.generated().live("fresh_golf", tag), "nothing unverified is live");
 
         games.guard(daily, engine::check);
         assertFalse(games.failed(daily), "a quiet check is fine");
         broken[0] = true;
         games.guard(daily, engine::check);
-        assertTrue(games.failed(daily), "a throw from the engine switches Daily Courses off");
+        assertTrue(games.failed(daily), "a throw from the engine switches Fresh Courses off");
         assertSame(GeneratedCourses.NONE, games.generated(), "and with it the gate: nothing generated is live");
         assertTrue(games.generated().live("river_run", null), "hand-built courses are untouched");
         assertFalse(games.failed(trials), "the other games are not touched");
@@ -123,7 +133,7 @@ class DailyCoursesTest {
 
     @Test
     void switchedOffItRunsNothingWritesNothingAndLeavesEveryOtherGameAsBefore() throws Exception {
-        host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6), "daily", on(false));
+        host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6), "fresh_courses", on(false));
         games.start();
         Host without = new Host(GamesKit.at(2026, 9, 29, 15, 0));
         TestGame alone = new TestGame("test_trials", GameKind.TRIAL, "Test Trials", TokenService.Source.GAMES_PARKOUR);
@@ -132,11 +142,11 @@ class DailyCoursesTest {
         before.start();
         try {
             assertEquals(without.tasks.size(), host.tasks.size(),
-                    "games.daily.enabled: false schedules exactly what a plugin without Daily Courses does");
+                    "games.fresh.enabled: false schedules exactly what a plugin without Fresh Courses does");
             assertSame(GeneratedCourses.NONE, games.generated(), "no engine is installed: nothing generated is live");
             assertTrue(games.generated().live("river_run", null), "and a hand-built course plays as before");
             assertFalse(games.generated().inArea("games", 4100, 170, 4100), "no area is kept from anyone");
-            assertEquals(List.of("not running"), games.game("daily").statusLines(), "status says it isn't running");
+            assertEquals(List.of("not running"), games.game("fresh_courses").statusLines(), "status says it isn't running");
             host.runTasks();
             assertEquals(Map.of(), new com.dierks.homecraft.storage.GenMetaDao(host.db).like("gen."),
                     "not one hcm_meta row is written");

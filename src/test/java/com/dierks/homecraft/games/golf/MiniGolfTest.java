@@ -27,16 +27,19 @@ class MiniGolfTest {
     void dailyCoursesComeFirstInSlotOrder() {
         GolfCourse alpine = course("alpine", null);
         GolfCourse meadow = course("meadow", null);
-        GolfCourse tiny = course("tiny_golf", tag("tiny_golf", 0));
-        GolfCourse daily = course("daily_golf", tag("daily_golf", 0));
+        GolfCourse tiny = course("fresh_tiny_golf", tag("fresh_tiny_golf", 0));
+        GolfCourse daily = course("fresh_golf", tag("fresh_golf", 0));
         assertEquals(List.of(daily, tiny, alpine, meadow), MiniGolf.sorted(List.of(meadow, tiny, alpine, daily)),
-                "Daily Golf, Tiny Golf, then the rest by id");
+                "Golf of the Week, Tiny Golf, then the rest by id");
     }
 
     @Test
     void aDailyCoursesScoresGoOnItsLayoutsBoard() {
-        assertEquals(GenBoards.day("tiny_golf", "20725r1"), MiniGolf.board(course("tiny_golf", tag("tiny_golf", 1))),
-                "the layout's own board");
+        GenTag rerolled = tag("fresh_tiny_golf", 1);
+        assertEquals(GenBoards.day("fresh_tiny_golf", rerolled.editionKey()), MiniGolf.board(course("fresh_tiny_golf",
+                rerolled)), "the layout's own board");
+        assertEquals("gfresh:fresh_tiny_golf:1:267r1", MiniGolf.board(course("fresh_tiny_golf", rerolled)),
+                "a daily layout's edition key, reroll and all");
         assertEquals("golf:meadow", MiniGolf.board(course("meadow", null)), "a hand-built course keeps its board");
     }
 }

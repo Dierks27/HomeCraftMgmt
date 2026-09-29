@@ -1566,7 +1566,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             addMatches(out, args[2], "arcade", "arcade.quests", "arcade.prizes", "arcade.crates", "arcade.achievements",
                     "arcade.lotto", "games", "games.break", "packs", "minis.loot.natural", "minis.effects", "clock");
             for (com.dierks.homecraft.games.GameSpec<?> spec : com.dierks.homecraft.games.GameCatalog.SPECS) {
-                addMatches(out, args[2], "games." + spec.id());
+                addMatches(out, args[2], "games." + com.dierks.homecraft.config.GamesConfig.block(spec.id()));
             }
         } else if (args.length == 4 && args[0].equalsIgnoreCase("config") && sender.hasPermission("hcm.admin")) {
             addMatches(out, args[3], "confirm");

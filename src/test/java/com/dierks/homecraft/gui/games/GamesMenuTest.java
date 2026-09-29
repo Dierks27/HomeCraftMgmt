@@ -139,7 +139,7 @@ class GamesMenuTest {
                 "still reads with nothing known");
     }
 
-    // ---- Daily Courses first ------------------------------------------------------------------
+    // ---- Fresh Courses first ------------------------------------------------------------------
 
     private static GamesMenu.Tile tile(Game.Tab tab, String playId, int rank, int order) {
         return new GamesMenu.Tile(tab, GamesMenu.priority(playId), rank, order, null, null);
@@ -149,18 +149,18 @@ class GamesMenuTest {
     void generatedTilesComeFirstOnTheirTab() {
         GamesMenu.Tile river = tile(Game.Tab.COURSES, "river_run", 13, 0);
         GamesMenu.Tile cliffs = tile(Game.Tab.COURSES, "cliffs", 13, 1);
-        GamesMenu.Tile easy = tile(Game.Tab.COURSES, "daily_parkour_easy", 13, 2);
-        GamesMenu.Tile rings = tile(Game.Tab.COURSES, "sky_rings", 13, 3);
+        GamesMenu.Tile easy = tile(Game.Tab.COURSES, "fresh_parkour_easy", 13, 2);
+        GamesMenu.Tile rings = tile(Game.Tab.COURSES, "fresh_rings", 13, 3);
         GamesMenu.Tile today = tile(Game.Tab.COURSES, Slots.DAILY, 15, 0);
         GamesMenu.Tile meadow = tile(Game.Tab.GOLF, "meadow", 14, 0);
-        GamesMenu.Tile tiny = tile(Game.Tab.GOLF, "tiny_golf", 14, 1);
-        GamesMenu.Tile todayGolf = tile(Game.Tab.GOLF, "daily", 15, 1);
+        GamesMenu.Tile tiny = tile(Game.Tab.GOLF, "fresh_tiny_golf", 14, 1);
+        GamesMenu.Tile todayGolf = tile(Game.Tab.GOLF, "fresh_courses", 15, 1);
         GamesMenu.Tile snake = tile(Game.Tab.CABINETS, "snake", 7, 0);
         List<GamesMenu.Tile> in = List.of(river, cliffs, easy, rings, today, meadow, tiny, todayGolf, snake);
 
         assertEquals(List.of(today, easy, rings, river, cliffs), GamesMenu.arrange(in, Game.Tab.COURSES),
-                "Today's Courses, then the daily courses in their own order, then the hand-built ones as before, "
-                        + "even though Daily Courses sits later in the catalog");
+                "the Fresh Courses screen, then the fresh courses in their own order, then the hand-built ones as "
+                        + "before, even though Fresh Courses sits later in the catalog");
         assertEquals(List.of(todayGolf, tiny, meadow), GamesMenu.arrange(in, Game.Tab.GOLF), "the same on the Golf tab");
         assertEquals(List.of(snake, today, easy, rings, river, cliffs, todayGolf, tiny, meadow),
                 GamesMenu.arrange(in, null), "the tabs keep their order on All");
@@ -168,10 +168,11 @@ class GamesMenuTest {
 
     @Test
     void onlyDailyCoursesIdsJumpTheQueue() {
-        assertEquals(GamesMenu.TODAY, GamesMenu.priority("daily"), "Today's Courses");
-        assertEquals(GamesMenu.TODAY, GamesMenu.priority(" Daily_Parkour "), "the tier picker, any case");
+        assertEquals(GamesMenu.TODAY, GamesMenu.priority("fresh_courses"), "the Fresh Courses screen");
+        assertEquals(GamesMenu.TODAY, GamesMenu.priority(" Fresh_Parkour_Tiers "), "the tier picker, any case");
+        assertEquals(GamesMenu.OTHERS, GamesMenu.priority("daily"), "the old id is nothing now");
         for (String id : Slots.ids()) {
-            assertEquals(GamesMenu.DAILY, GamesMenu.priority(id), id + " is a daily course");
+            assertEquals(GamesMenu.DAILY, GamesMenu.priority(id), id + " is a fresh course");
         }
         assertEquals(GamesMenu.OTHERS, GamesMenu.priority("river_run"), "a hand-built course");
         assertEquals(GamesMenu.OTHERS, GamesMenu.priority(null), "no id");

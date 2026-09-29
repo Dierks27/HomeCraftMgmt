@@ -210,7 +210,7 @@ class ParkourValidatorTest {
         Course.Spot s = ((PlannedTrial) p.course()).course().start();
         Plan bad = with(p, (int) Math.floor(s.x()) + 1, (int) s.y() - 1, (int) Math.floor(s.z()), "minecraft:sand");
         List<String> problems = ParkourValidator.problems(bad, "easy", 6);
-        assertTrue(says(problems, "'minecraft:sand' isn't a Daily Courses block"), "sand falls: " + problems);
+        assertTrue(says(problems, "'minecraft:sand' isn't a Fresh Courses block"), "sand falls: " + problems);
     }
 
     @Test

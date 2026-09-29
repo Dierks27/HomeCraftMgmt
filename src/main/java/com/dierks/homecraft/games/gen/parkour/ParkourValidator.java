@@ -84,7 +84,7 @@ public final class ParkourValidator {
 
         // 9, 8, 6: the blocks themselves
         for (String p : Palette.problems(plan.palette())) {
-            out.add("'" + p + "' isn't a Daily Courses block");
+            out.add("'" + p + "' isn't a Fresh Courses block");
         }
         if (plan.ops().size() > MAX_OPS) {
             out.add(plan.ops().size() + " blocks is more than " + MAX_OPS);

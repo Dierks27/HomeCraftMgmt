@@ -6,11 +6,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The Star Chart's arithmetic (GEN-SPEC §5.2, §5.3): a run adds only how far it beat the day's
- * best; each weekly goal (10 and 25) is crossed exactly once however the week's total rises —
- * one star at a time or several goals in one jump — and never by a total that didn't rise.
+ * The Star Chart's arithmetic (GEN-SPEC §5.2, §5.3): a run adds only how far it beat the best so
+ * far; each weekly goal is crossed exactly once however the week's total rises — one star at a
+ * time or several goals in one jump — and never by a total that didn't rise.
+ *
+ * <p>And the cadence (weekly addendum §4): the first-finish reward is
+ * {@code round(daily + (weekly - daily) * (N - 1) / 6)}, the weekly table from N = 7, pinned for
+ * every N from 1 to 28; the goals scale the same way with the nearer end's tokens; and no goal is
+ * ever above 80% of what the week can give.
  */
 class DailyStarsTest {
 
@@ -54,6 +60,87 @@ class DailyStarsTest {
             }
         }
         assertEquals(List.of(10, 25), fired, "a week of play (" + week + " stars) crosses 10 and 25 once each");
+    }
+
+    // ---- the cadence (weekly addendum §4) --------------------------------------------------------
+
+    @Test
+    void theFirstFinishRewardScalesWithTheCadenceForEveryNFrom1To28() {
+        int[][] table = {{1, 2}, {2, 3}, {3, 5}, {2, 3}, {2, 3}, {1, 2}}; // the addendum's daily, weekly
+        for (int[] row : table) {
+            int daily = row[0];
+            int weekly = row[1];
+            for (int n = 1; n <= 28; n++) {
+                double exact = daily + (weekly - daily) * (Math.min(n, 7) - 1) / 6.0;
+                int expected = (int) Math.floor(exact + 0.5);
+                assertEquals(expected, DailyStars.scaled(n, daily, weekly), "N=" + n + " between " + daily + " and "
+                        + weekly + ": round(" + exact + ")");
+                if (n >= 7) {
+                    assertEquals(weekly, DailyStars.scaled(n, daily, weekly), "N=" + n + " uses the weekly table");
+                }
+            }
+            assertEquals(daily, DailyStars.scaled(1, daily, weekly), "N=1 is the daily table");
+        }
+        assertEquals(List.of(3, 3, 4, 4, 4, 5, 5), java.util.stream.IntStream.rangeClosed(1, 7)
+                .mapToObj(n -> DailyStars.scaled(n, 3, 5)).toList(), "Hard Parkour from 3 a day to 5 a week");
+        assertEquals(List.of(1, 1, 1, 2, 2, 2, 2), java.util.stream.IntStream.rangeClosed(1, 7)
+                .mapToObj(n -> DailyStars.scaled(n, 1, 2)).toList(), "Easy Parkour: halfway (N=4) rounds up");
+        assertEquals(3, DailyStars.scaled(4, 5, 1), "a daily end above the weekly one works too");
+        assertEquals(1, DailyStars.scaled(0, 1, 2), "a cadence below 1 reads as daily");
+        assertEquals(2, DailyStars.scaled(99, 1, 2), "and above 28 as 28");
+    }
+
+    private static final List<DailyStars.Goal> WEEKLY = List.of(new DailyStars.Goal(6, 1), new DailyStars.Goal(12, 2));
+    private static final List<DailyStars.Goal> DAILY = List.of(new DailyStars.Goal(10, 1), new DailyStars.Goal(25, 1));
+
+    private static List<DailyStars.Goal> goals(int... starsThenTokens) {
+        List<DailyStars.Goal> out = new ArrayList<>();
+        for (int i = 0; i < starsThenTokens.length; i += 2) {
+            out.add(new DailyStars.Goal(starsThenTokens[i], starsThenTokens[i + 1]));
+        }
+        return out;
+    }
+
+    @Test
+    void theStarGoalsScaleLikeTheRewardsWithTheNearerEndsTokens() {
+        assertEquals(WEEKLY, DailyStars.goals(7, DAILY, WEEKLY), "weekly: 6 (+1) and 12 (+2)");
+        assertEquals(WEEKLY, DailyStars.goals(14, DAILY, WEEKLY), "longer than a week: the weekly end");
+        assertEquals(DAILY, DailyStars.goals(1, DAILY, WEEKLY), "daily: 10 and 25 (+1 each)");
+        assertEquals(goals(9, 1, 23, 1), DailyStars.goals(2, DAILY, WEEKLY), "N=2: 9.3 and 22.8, daily tokens");
+        assertEquals(goals(9, 1, 21, 1), DailyStars.goals(3, DAILY, WEEKLY), "N=3: 8.7 and 20.7, daily tokens");
+        assertEquals(goals(8, 1, 19, 2), DailyStars.goals(4, DAILY, WEEKLY),
+                "N=4: 8 and 18.5 (up), halfway takes the weekly tokens");
+        assertEquals(goals(7, 1, 16, 2), DailyStars.goals(5, DAILY, WEEKLY), "N=5: weekly tokens");
+        assertEquals(goals(7, 1, 14, 2), DailyStars.goals(6, DAILY, WEEKLY), "N=6: weekly tokens");
+        assertEquals(DAILY, DailyStars.goals(2, DAILY, List.of(new DailyStars.Goal(6, 1))),
+                "ends of different lengths: the nearer end's list as it is");
+        assertTrue(DailyStars.nearerWeekly(4) && !DailyStars.nearerWeekly(3), "4 is halfway and counts as weekly");
+    }
+
+    @Test
+    void goalsAreNeverAbove80PercentOfWhatTheWeekCanGive() {
+        assertEquals(18, DailyStars.weekMax(6, 1), "six courses, one weekly edition: 18 stars");
+        assertEquals(126, DailyStars.weekMax(6, 7), "daily: 126");
+        assertEquals(WEEKLY, DailyStars.clamp(WEEKLY, 18), "weekly goals fit a weekly week (at most 14)");
+        assertEquals(DAILY, DailyStars.clamp(DAILY, 126), "daily goals fit a daily week (at most 100)");
+        assertEquals(goals(4, 2), DailyStars.clamp(WEEKLY, 6), "two courses on: both goals land on 4, paying the more");
+        assertEquals(goals(10, 1, 16, 1), DailyStars.clamp(DAILY, 21), "one course daily: 25 is lowered to 16");
+        assertEquals(List.of(), DailyStars.clamp(WEEKLY, 0), "a week that can give nothing has no goals");
+        for (int n = 1; n <= 28; n++) {
+            for (int courses = 0; courses <= 7; courses++) {
+                for (int editions = 0; editions <= 7; editions++) {
+                    int max = DailyStars.weekMax(courses, editions);
+                    for (DailyStars.Goal g : DailyStars.clamp(DailyStars.goals(n, DAILY, WEEKLY), max)) {
+                        assertTrue(g.stars() > 0 && g.stars() * 5 <= max * 4, "N=" + n + ", " + courses + " courses, "
+                                + editions + " editions: " + g + " is within 80% of " + max);
+                    }
+                }
+            }
+        }
+        List<DailyStars.Goal> week = DailyStars.clamp(WEEKLY, 18);
+        assertEquals(List.of(6, 12), DailyStars.stars(week), "the stars of each goal, for crossed and nextGoal");
+        assertEquals(2, DailyStars.tokens(week, 12), "what 12 pays");
+        assertEquals(0, DailyStars.tokens(week, 7), "a number that isn't a goal pays nothing");
     }
 
     @Test

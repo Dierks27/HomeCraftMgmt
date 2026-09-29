@@ -5,7 +5,7 @@ import com.dierks.homecraft.games.gen.api.Box;
 import java.util.List;
 
 /**
- * The only thing that writes a block for Daily Courses (GEN-SPEC §0.2 R4, §6 S1).
+ * The only thing that writes a block for Fresh Courses (GEN-SPEC §0.2 R4, §6 S1).
  *
  * <p>It holds one half and refuses — with an exception, before anything is written — any position
  * outside it. Plans are bounds-checked when they are made and again before a build, but this is
@@ -48,7 +48,7 @@ public final class HalfWriter {
 
     private void check(int x, int y, int z) {
         if (!half.contains(x, y, z)) {
-            throw new IllegalStateException("Daily Courses refused a write at " + x + "," + y + "," + z
+            throw new IllegalStateException("Fresh Courses refused a write at " + x + "," + y + "," + z
                     + ", outside its half (" + half.describe() + ")");
         }
     }

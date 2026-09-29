@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.golf;
 import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.ScoreResult;
 import com.dierks.homecraft.games.gen.api.DailyStars;
+import com.dierks.homecraft.games.gen.api.GenBoards;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.storage.GamesDao;
 import org.junit.jupiter.api.Test;
@@ -80,14 +81,14 @@ class GolfFinishTest {
     }
 
     private static GenTag tag(long day, int reroll) {
-        return new GenTag("daily_golf", "golf", 1, day, reroll, 5L, 'A', "0123456789ab", 0, 0, 0,
+        return new GenTag("fresh_golf", "golf", 1, day, reroll, 5L, 'A', "0123456789ab", 0, 0, 0,
                 List.of(0, 0, 0), List.of(), 1L);
     }
 
     /** A round of 3 holes, par 9, finished on the calendar day. */
     private static GolfFinish.Round round(int strokes, List<Integer> holesInOne, boolean featured, GenTag tag) {
         GolfFinish.Daily daily = tag == null ? null : new GolfFinish.Daily(tag, WEEK, 2, List.of(10, 25), 1);
-        String id = tag == null ? "meadow" : "daily_golf";
+        String id = tag == null ? "meadow" : "fresh_golf";
         return new GolfFinish.Round(id, "Mini Golf: X", strokes, 9, 3, strokes <= 9, holesInOne, CALENDAR_DAY, featured,
                 5, 2, 1, 3, daily);
     }
@@ -121,23 +122,23 @@ class GolfFinishTest {
     void aDailyRoundGoesOnItsLayoutsBoardOnly() {
         Ledger l = new Ledger();
         GolfFinish.settle(round(12, List.of(), false, tag(LAYOUT_DAY, 0)), l);
-        assertEquals(List.of("submit gday:daily_golf:" + LAYOUT_DAY + " 12"),
-                l.calls.stream().filter(c -> c.startsWith("submit")).toList(), "never golf:daily_golf");
+        assertEquals(List.of("submit " + GenBoards.day(tag(LAYOUT_DAY, 0)) + " 12"),
+                l.calls.stream().filter(c -> c.startsWith("submit")).toList(), "never golf:fresh_golf");
         assertEquals(List.of(true), l.announcedDaily, "announced as today's board");
         Ledger r = new Ledger();
         GolfFinish.settle(round(12, List.of(), false, tag(LAYOUT_DAY, 1)), r);
-        assertTrue(r.calls.contains("submit gday:daily_golf:" + LAYOUT_DAY + "r1 12"), "a reroll: a fresh board");
+        assertTrue(r.calls.contains("submit " + GenBoards.day(tag(LAYOUT_DAY, 1)) + " 12"), "a reroll: a fresh board");
     }
 
     @Test
     void parAndHolesInOnePayOnTheLayoutsDayAndTodaysPickOnTheCalendars() {
         Ledger l = new Ledger();
         GolfFinish.settle(round(8, List.of(1, 3), true, tag(LAYOUT_DAY, 0)), l);
-        assertTrue(l.calls.contains("pay PAR par:daily_golf:" + LAYOUT_DAY + " 2 Mini Golf: X at par or better"),
+        assertTrue(l.calls.contains("pay PAR par:fresh_golf:" + LAYOUT_DAY + " 2 Mini Golf: X at par or better"),
                 "par on the course day of the layout: " + l.calls);
-        assertTrue(l.calls.contains("pay HOLE_IN_ONE hio:daily_golf:1:" + LAYOUT_DAY + " 1 Mini Golf: X hole-in-one on hole 1"),
+        assertTrue(l.calls.contains("pay HOLE_IN_ONE hio:fresh_golf:1:" + LAYOUT_DAY + " 1 Mini Golf: X hole-in-one on hole 1"),
                 "a hole-in-one too");
-        assertTrue(l.calls.contains("pay HOLE_IN_ONE hio:daily_golf:3:" + LAYOUT_DAY + " 1 Mini Golf: X hole-in-one on hole 3"),
+        assertTrue(l.calls.contains("pay HOLE_IN_ONE hio:fresh_golf:3:" + LAYOUT_DAY + " 1 Mini Golf: X hole-in-one on hole 3"),
                 "each hole");
         assertTrue(l.calls.contains("pay FEATURED featured:" + CALENDAR_DAY + " 3 Mini Golf: X is today's pick"),
                 "today's pick is the calendar's, like every game's");
@@ -151,12 +152,12 @@ class GolfFinishTest {
         GolfFinish.Summary first = GolfFinish.settle(round(12, List.of(), false, tag(LAYOUT_DAY, 0)), l);
         GolfFinish.Summary reroll = GolfFinish.settle(round(12, List.of(), false, tag(LAYOUT_DAY, 1)), l);
         GolfFinish.Summary next = GolfFinish.settle(round(12, List.of(), false, tag(LAYOUT_DAY + 1, 0)), l);
-        assertEquals(2, l.calls.stream().filter(c -> c.startsWith("pay DAILY_CLEAR dclear:daily_golf:" + LAYOUT_DAY + " "))
+        assertEquals(2, l.calls.stream().filter(c -> c.startsWith("pay DAILY_CLEAR dclear:fresh_golf:" + LAYOUT_DAY + " "))
                 .count(), "the first finish and the reroll ask under one ref: " + l.calls);
         assertEquals(5 + 2, first.earned(), "the very first finish and the day's first finish");
         assertEquals(0, reroll.earned(), "a reroll that day pays neither again");
         assertEquals(2, next.earned(), "the next course day's first finish pays; the first clear doesn't");
-        assertEquals(3, l.calls.stream().filter(c -> c.startsWith("pay FIRST_CLEAR first_clear:daily_golf ")).count(),
+        assertEquals(3, l.calls.stream().filter(c -> c.startsWith("pay FIRST_CLEAR first_clear:fresh_golf ")).count(),
                 "one once-ever ref for every layout");
     }
 
@@ -170,7 +171,7 @@ class GolfFinishTest {
         GolfFinish.Summary three = GolfFinish.settle(round(9, List.of(), false, tag(LAYOUT_DAY, 0)), l);
         assertEquals(3, three.stars(), "at par: three");
         assertEquals(3, three.weekStars(), "the week has the day's best, 3, not 1 + 2 + 3");
-        assertTrue(l.calls.contains("stars gstars:daily_golf:" + LAYOUT_DAY + " gweek:" + WEEK + " 3"),
+        assertTrue(l.calls.contains("stars gstars:fresh_golf:" + LAYOUT_DAY + " gweek:" + WEEK + " 3"),
                 "kept on the layout's day and its week");
     }
 

@@ -26,11 +26,11 @@ class RewardKindTest {
 
     @Test
     void theDailyClearRefIsPerCourseAndCourseDay() {
-        assertEquals("dclear:daily_golf:20725", SkillRewards.dailyClearRef("daily_golf", 20725),
+        assertEquals("dclear:fresh_golf:20725", SkillRewards.dailyClearRef("fresh_golf", 20725),
                 "dclear:<course>:<day>");
-        assertEquals(SkillRewards.dailyClearRef("daily_golf", 20725), SkillRewards.dailyClearRef("daily_golf", 20725),
+        assertEquals(SkillRewards.dailyClearRef("fresh_golf", 20725), SkillRewards.dailyClearRef("fresh_golf", 20725),
                 "a reroll the same day has the same ref, so it pays no second one");
-        assertFalse(SkillRewards.dailyClearRef("daily_golf", 20725).equals(SkillRewards.dailyClearRef("tiny_golf",
+        assertFalse(SkillRewards.dailyClearRef("fresh_golf", 20725).equals(SkillRewards.dailyClearRef("fresh_tiny_golf",
                 20725)), "another course has its own");
         assertEquals("ms:gweek:20720:10", SkillRewards.milestoneRef("gweek:20720", 10),
                 "a Star Chart goal is a milestone on the week's board");

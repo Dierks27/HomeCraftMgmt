@@ -25,9 +25,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * (a throw there switched the whole game off); and a fall height must sit under the lowest point
  * of the course and not under the world's floor, whichever edit would break that.
  *
- * <p>And Daily Courses (GEN-SPEC §2.4, §5.5): a course it made allows only info, tp, test and
+ * <p>And Fresh Courses (GEN-SPEC §2.4, §5.5): a course it made allows only info, tp, test and
  * feature here, everything else pointing to {@code /hcm games gen}; and no point of a hand-built
- * course may go inside a Daily Courses half or within 16 blocks of one.
+ * course may go inside a Fresh Courses half or within 16 blocks of one.
  */
 class CourseAdminTest {
 
@@ -103,7 +103,7 @@ class CourseAdminTest {
                 "a world not loaded: only the course is checked");
     }
 
-    // ---- Daily Courses -------------------------------------------------------------------------
+    // ---- Fresh Courses -------------------------------------------------------------------------
 
     /** The engine as the editor sees it: Easy Parkour's half A in world "games" is kept. */
     static GeneratedCourses keeping(Box... halves) {
@@ -144,9 +144,9 @@ class CourseAdminTest {
     }
 
     private static Course daily() {
-        return new Course("daily_parkour_easy", TrialKind.PARKOUR, "Easy Parkour", Tier.EASY, "games",
+        return new Course("fresh_parkour_easy", TrialKind.PARKOUR, "Easy Parkour", Tier.EASY, "games",
                 new Course.Spot(4100.5, 170, 4100.5, 0, 0), List.of(), new Course.Mark(4150.5, 170, 4150.5, 3),
-                167.0, 17, true, false, 3, new GenTag("daily_parkour_easy", "parkour", 1, 20_725, 0, 1L, 'A',
+                167.0, 17, true, false, 3, new GenTag("fresh_parkour_easy", "parkour", 1, 20_725, 0, 1L, 'A',
                 "abcabcabcabc", 22_500, 45_000, 70_000, List.of(), List.of(), 1L));
     }
 
@@ -159,11 +159,11 @@ class CourseAdminTest {
         for (String verb : List.of("start", "checkpoint", "cp", "finish", "fall", "tier", "name", "minseconds",
                 "enable", "disable", "delete", "anything")) {
             assertEquals(GenCopy.MADE_BY_DAILY, CourseAdmin.dailyRefusal(c, verb),
-                    verb + " would change what Daily Courses rebuilds: it points to /hcm games gen");
+                    verb + " would change what Fresh Courses rebuilds: it points to /hcm games gen");
         }
         Course slotWithoutTag = c.withGen(null);
         assertEquals(GenCopy.MADE_BY_DAILY, CourseAdmin.dailyRefusal(slotWithoutTag, "start"),
-                "a row with a slot's id is Daily Courses' even when its tag was lost");
+                "a row with a slot's id is Fresh Courses' even when its tag was lost");
         Course handBuilt = new Course("cliffs", TrialKind.PARKOUR, "Cliffs", Tier.EASY, "games", null, List.of(),
                 null, null, null, false, false, 1);
         for (String verb : CourseAdmin.VERBS) {

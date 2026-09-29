@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EvacuatorTest {
 
-    private static final String SLOT = "daily_golf";
+    private static final String SLOT = "fresh_golf";
     private static final Box HALF = Slots.DAILY_GOLF.half('A');
     private static final long MIN = 60_000L;
 
@@ -55,7 +55,7 @@ class EvacuatorTest {
     @Test
     void anyoneElseIsMovedAtOnceAndNobodyOutsideIsTouched() {
         Person visitor = at(HALF.minX() - 7.5, HALF.minY() + 2, HALF.minZ() + 3, null);
-        Person player = at(HALF.minX() + 3, HALF.minY() + 2, HALF.minZ() + 3, "tiny_golf");
+        Person player = at(HALF.minX() + 3, HALF.minY() + 2, HALF.minZ() + 3, "fresh_tiny_golf");
         Person away = at(HALF.minX() - 9.5, HALF.minY() + 2, HALF.minZ() + 3, null);
         Person ours = at(HALF.minX() + 3, HALF.minY() + 2, HALF.minZ() + 3, SLOT);
         List<Action> out = new Evacuator().step(List.of(visitor, player, away, ours), "games", HALF, SLOT, false,

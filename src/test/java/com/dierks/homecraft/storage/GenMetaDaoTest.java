@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Daily Courses' {@code hcm_meta} keys (GEN-SPEC §5.5) against a real SQLite: the {@code gen.}
+ * Fresh Courses' {@code hcm_meta} keys (GEN-SPEC §5.5) against a real SQLite: the {@code gen.}
  * prefix is enforced on every method before the database is touched, so the schema version and the
  * games secret can never be overwritten from here; values round-trip; a write inside a transaction
  * rolls back with it.
@@ -65,31 +65,33 @@ class GenMetaDaoTest {
         assertEquals(Map.of(), meta.like("gen."), "listing every gen. key is allowed (there are none yet)");
         assertEquals(version, raw("schema_version"), "the schema version is untouched by every refused call");
         assertFalse(GenMetaDao.allowed("GEN.x"), "the prefix is case-sensitive, like the keys it guards");
-        assertTrue(GenMetaDao.allowed("gen.tiny_golf.enabled"), "a slot's key is allowed");
+        assertTrue(GenMetaDao.allowed("gen.fresh_tiny_golf.enabled"), "a slot's key is allowed");
+        assertTrue(GenMetaDao.allowed("gen.fresh_golf.reroll.7:38"), "an edition's reroll count is allowed");
+        assertTrue(GenMetaDao.allowed("gen.cadence"), "and the schedule");
     }
 
     @Test
     void valuesRoundTripAndAreListedByPrefix() throws Exception {
-        meta.set("gen.tiny_golf.enabled", "false");
-        meta.set("gen.tiny_golf.tier", "EEM");
-        meta.set("gen.sky_rings.pin", "3f2a:1:0");
-        assertEquals("false", meta.get("gen.tiny_golf.enabled"), "a value reads back");
-        meta.set("gen.tiny_golf.enabled", "true");
-        assertEquals("true", meta.get("gen.tiny_golf.enabled"), "a second write replaces the first");
-        assertEquals(Map.of("gen.tiny_golf.enabled", "true", "gen.tiny_golf.tier", "EEM"),
-                meta.like("gen.tiny_golf."), "like lists one slot's keys only");
-        meta.set("gen.tiny_golf.tier", null);
-        assertNull(meta.get("gen.tiny_golf.tier"), "a null value removes the key");
-        assertEquals(1, meta.deleteLike("gen.tiny_golf."), "deleteLike removes what is left of the slot");
-        assertEquals(Map.of("gen.sky_rings.pin", "3f2a:1:0"), meta.like("gen."), "and nothing of another slot");
+        meta.set("gen.fresh_tiny_golf.enabled", "false");
+        meta.set("gen.fresh_tiny_golf.tier", "EEM");
+        meta.set("gen.fresh_rings.pin", "3f2a:1:0");
+        assertEquals("false", meta.get("gen.fresh_tiny_golf.enabled"), "a value reads back");
+        meta.set("gen.fresh_tiny_golf.enabled", "true");
+        assertEquals("true", meta.get("gen.fresh_tiny_golf.enabled"), "a second write replaces the first");
+        assertEquals(Map.of("gen.fresh_tiny_golf.enabled", "true", "gen.fresh_tiny_golf.tier", "EEM"),
+                meta.like("gen.fresh_tiny_golf."), "like lists one slot's keys only");
+        meta.set("gen.fresh_tiny_golf.tier", null);
+        assertNull(meta.get("gen.fresh_tiny_golf.tier"), "a null value removes the key");
+        assertEquals(1, meta.deleteLike("gen.fresh_tiny_golf."), "deleteLike removes what is left of the slot");
+        assertEquals(Map.of("gen.fresh_rings.pin", "3f2a:1:0"), meta.like("gen."), "and nothing of another slot");
     }
 
     @Test
     void aWriteInsideATransactionRollsBackWithIt() throws Exception {
         assertThrows(IllegalStateException.class, () -> db.transaction(c -> {
-            meta.set("gen.daily_golf.mix", "abc:EEE");
+            meta.set("gen.fresh_golf.mix", "abc:EEE");
             throw new IllegalStateException("the course write failed");
         }), "the failure reaches the caller");
-        assertNull(meta.get("gen.daily_golf.mix"), "the meta write went back with the rest of the unit");
+        assertNull(meta.get("gen.fresh_golf.mix"), "the meta write went back with the rest of the unit");
     }
 }

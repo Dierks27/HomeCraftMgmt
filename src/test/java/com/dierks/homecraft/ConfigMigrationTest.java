@@ -1739,6 +1739,25 @@ class ConfigMigrationTest {
     }
 
     @Test
+    void aBareFreshSwitchIsFoundUnderItsBlockNameNotTheGameId() throws Exception {
+        for (boolean on : new boolean[]{true, false}) {
+            YamlConfiguration onDisk = yaml(bundledReplacing("\n  fresh:\n", null, "\n  fresh: " + on + "\n"));
+            List<String> added = new ArrayList<>();
+            List<String> log = startUp(onDisk, added);
+
+            assertEquals(1, log.size(), "games.fresh: " + on + " is migrated with one line: " + log);
+            assertTrue(log.get(0).contains("games.fresh.enabled: " + on), log.get(0));
+            assertEquals(on, onDisk.get("games.fresh.enabled", null),
+                    "games.fresh: " + on + " keeps the owner's switch (the game id is fresh_courses, the block fresh)");
+            assertFalse(added.contains("games.fresh.enabled"), "the switch is kept, not backfilled: " + added);
+            assertNull(onDisk.get("games.fresh_courses", null), "and nothing is written under the game id");
+            GameSpec<?> fresh = GameCatalog.spec("fresh_courses");
+            assertEquals(on, ((com.dierks.homecraft.games.gen.DailySettings) GamesConfig.parse(onDisk, w -> { })
+                    .settings(fresh)).enabled(), "and it reads as " + on);
+        }
+    }
+
+    @Test
     void aBareGamesTrueBecomesGamesEnabledAndTheRestIsShipped() throws Exception {
         YamlConfiguration shipped = bundled();
         YamlConfiguration onDisk = yaml(bundledReplacing("\ngames:\n", null, "\ngames: true\n"));

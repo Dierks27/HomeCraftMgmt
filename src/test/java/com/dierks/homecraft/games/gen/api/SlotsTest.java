@@ -23,16 +23,20 @@ class SlotsTest {
 
     @Test
     void theSlotsAreTheSpecsSevenInOrder() {
-        assertEquals(List.of("daily_parkour_easy", "daily_parkour_medium", "daily_parkour_hard", "sky_rings",
-                "daily_golf", "tiny_golf", "ice_boat"), Slots.ids(), "the slots in display and config order");
+        assertEquals(List.of("fresh_parkour_easy", "fresh_parkour", "fresh_parkour_hard", "fresh_rings",
+                "fresh_golf", "fresh_tiny_golf", "fresh_boat"), Slots.ids(), "the slots in display and config order");
         assertEquals(List.of("easy", "medium", "hard", "easy", "EEEMMMMHH", "EEE", "medium"),
                 Slots.ALL.stream().map(Slots.Def::tierOrMix).toList(), "their shipped tiers and mixes");
         assertEquals(List.of(1, 2, 3, 2, 2, 1, 2), Slots.ALL.stream().map(Slots.Def::dailyClear).toList(),
-                "their shipped daily_clear tokens");
+                "their shipped first-finish tokens at a daily cadence (the addendum's table)");
+        assertEquals(List.of(2, 3, 5, 3, 3, 2, 3), Slots.ALL.stream().map(Slots.Def::weeklyClear).toList(),
+                "and at a weekly one");
         assertEquals(List.of(true, true, true, true, true, true, false),
                 Slots.ALL.stream().map(Slots.Def::enabled).toList(), "every slot ships on but the ice boat");
-        assertEquals(List.of("Easy Parkour", "Parkour", "Hard Parkour", "Sky Rings", "Daily Golf", "Tiny Golf",
-                "Ice Boat"), Slots.ALL.stream().map(Slots.Def::name).toList(), "the names players see");
+        assertEquals(List.of("Easy Parkour", "Parkour", "Hard Parkour", "Sky Rings", "Golf of the Week", "Tiny Golf",
+                "Ice Boat"), Slots.ALL.stream().map(Slots.Def::name).toList(), "the names players see (weekly)");
+        assertEquals("fresh_courses", Slots.DAILY, "the game's id and screen");
+        assertEquals("fresh_parkour_tiers", Slots.DAILY_PARKOUR, "the level picker, not the middle course");
         assertEquals(List.of("trials", "trials", "trials", "trials", "golf", "golf", "trials"),
                 Slots.ALL.stream().map(Slots.Def::game).toList(), "the game each row belongs to");
         assertEquals(List.of("parkour", "parkour", "parkour", "elytra", "golf", "golf", "boat"),
@@ -46,13 +50,13 @@ class SlotsTest {
         record Row(String id, int ax, int bx, int z1, int z2, int y1, int y2) {
         }
         List<Row> table = List.of(
-                new Row("daily_parkour_easy", 4096, 4192, 4096, 4159, 160, 207),
-                new Row("daily_parkour_medium", 4352, 4448, 4096, 4159, 160, 207),
-                new Row("daily_parkour_hard", 4608, 4704, 4096, 4159, 160, 207),
-                new Row("daily_golf", 4864, 4960, 4096, 4223, 160, 175),
-                new Row("tiny_golf", 5120, 5216, 4096, 4143, 160, 175),
-                new Row("sky_rings", 4096, 4256, 4352, 4671, 128, 303),
-                new Row("ice_boat", 4480, 4640, 4352, 4479, 160, 175));
+                new Row("fresh_parkour_easy", 4096, 4192, 4096, 4159, 160, 207),
+                new Row("fresh_parkour", 4352, 4448, 4096, 4159, 160, 207),
+                new Row("fresh_parkour_hard", 4608, 4704, 4096, 4159, 160, 207),
+                new Row("fresh_golf", 4864, 4960, 4096, 4223, 160, 175),
+                new Row("fresh_tiny_golf", 5120, 5216, 4096, 4143, 160, 175),
+                new Row("fresh_rings", 4096, 4256, 4352, 4671, 128, 303),
+                new Row("fresh_boat", 4480, 4640, 4352, 4479, 160, 175));
         for (Row row : table) {
             Slots.Def s = Slots.of(row.id());
             Box a = s.half('A');
@@ -94,15 +98,16 @@ class SlotsTest {
 
     @Test
     void slotsAreFoundInAnyCaseAndTheirPlayIdsAreReserved() {
-        assertSame(Slots.DAILY_GOLF, Slots.of(" Daily_Golf "), "any case, trimmed");
+        assertSame(Slots.DAILY_GOLF, Slots.of(" Fresh_Golf "), "any case, trimmed");
         assertNull(Slots.of("river_run"), "a hand-built id is no slot");
         assertNull(Slots.of(null), "nor is nothing");
-        assertTrue(Slots.isSlot("sky_rings"), "sky_rings is a slot");
-        assertFalse(Slots.isSlot("daily"), "daily is a screen, not a slot");
-        assertEquals(Set.of("daily_parkour_easy", "daily_parkour_medium", "daily_parkour_hard", "sky_rings",
-                "daily_golf", "tiny_golf", "ice_boat", "daily", "daily_parkour"), Slots.RESERVED,
-                "every slot, the Today's Courses screen and the tier picker are reserved");
-        assertTrue(Slots.reserved("DAILY_PARKOUR"), "in any case");
+        assertTrue(Slots.isSlot("fresh_rings"), "fresh_rings is a slot");
+        assertFalse(Slots.isSlot("fresh_courses"), "fresh_courses is a screen, not a slot");
+        assertFalse(Slots.reserved("daily"), "the old daily id is free again: it never shipped");
+        assertEquals(Set.of("fresh_parkour_easy", "fresh_parkour", "fresh_parkour_hard", "fresh_rings",
+                "fresh_golf", "fresh_tiny_golf", "fresh_boat", "fresh_courses", "fresh_parkour_tiers"), Slots.RESERVED,
+                "every slot, the Fresh Courses screen and the level picker are reserved");
+        assertTrue(Slots.reserved("FRESH_PARKOUR_TIERS"), "in any case");
         assertFalse(Slots.reserved(null), "nothing is not reserved");
     }
 

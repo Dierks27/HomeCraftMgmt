@@ -7,21 +7,37 @@ import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.GenTag;
 
 /**
- * When a slot gets a new layout (GEN-SPEC §3.2), as one pure function: {@link #decide}.
+ * When a slot gets a new layout (GEN-SPEC §3.2, weekly addendum §1), as two pure functions:
+ * {@link #target} (which edition a slot should show now) and {@link #decide} (what to do about it).
  *
  * <p>The engine asks every second, for each slot in turn, and does what the answer says. Keeping
  * the decision pure keeps every rule in one place a test can walk through with a fake clock: a
- * slot builds when its live layout isn't today's (or an admin rerolled it, or it couldn't be
- * vouched for at boot, when its replacement, pinned or not, gets the next reroll and so a fresh
- * day board), and only while it is switched on, nothing else is being built, no scheduled
+ * slot builds when its live layout isn't the current edition's (or an admin rerolled it, or it
+ * couldn't be vouched for at boot, when its replacement, pinned or not, gets the next reroll and
+ * so fresh boards), and only while it is switched on, nothing else is being built, no scheduled
  * restart is due within {@code avoid_before_restart_minutes}, fewer than
- * {@code max_tries_per_day} tries were made today, and the last one was at least
+ * {@code max_tries_per_day} tries were made on this course day, and the last one was at least
  * {@code retry_minutes} ago. A pinned seed whose layout already stands is only restamped for the
- * new day (a new day board, no blocks). A job still running two minutes before a restart is given
+ * new edition (new boards, no blocks). A job still running two minutes before a restart is given
  * up ({@link #abandon}): nothing flips, and the half converges again after the boot.
  *
+ * <p><b>A cadence change never rebuilds mid-edition.</b> A live layout made under another cadence
+ * (or another {@code rebuild_day}) is off the current grid. It stays until the earlier of its own
+ * natural end and the first start of the new schedule after the change was first seen: switching
+ * weekly to daily keeps this week's courses until the next 4:00 AM, then they change daily;
+ * switching daily to weekly keeps today's until the next 4:00 AM, then the week's set goes up. The
+ * moment the change was seen is kept by the engine ({@code gen.cadence} in {@code hcm_meta}), so a
+ * restart in between doesn't move the switch. Only an admin's {@code reroll} replaces a layout
+ * sooner (a new layout of the same edition).
+ *
+ * <p><b>A moved {@code rebuild_day} never brings back the live key.</b> Keys are {@code N:<index>}
+ * with the index a function of the start date alone ({@link Edition#index}), so a grid moved later
+ * inside the live edition's N days (weekly, Monday to Friday) makes its next start carry the live
+ * key again. That start is not a change: the live layout stays through it, until the first start
+ * with a new key (a week later), and that is the change status and the countdown show.
+ *
  * <p>No secret, no build: when the database can't give the seed secret the slot keeps its layout
- * and waits. It never falls back to a temporary secret, which would change a layout mid-day.
+ * and waits. It never falls back to a temporary secret, which would change a layout mid-edition.
  */
 public final class GenScheduler {
 
@@ -33,47 +49,73 @@ public final class GenScheduler {
 
     /** What to do. */
     public enum Kind {
-        /** Nothing: the live layout is today's, or the slot is off. */
+        /** Nothing: the live layout is the current edition's, or the slot is off. */
         NONE,
-        /** Build a new layout ({@link Decision#day()}, {@link Decision#reroll()}, {@link Decision#seed()}). */
+        /**
+         * Build a new layout ({@link Decision#day()}, {@link Decision#cadence()}, {@link Decision#reroll()},
+         * {@link Decision#seed()}).
+         */
         BUILD,
-        /** A pinned layout that already stands: new day, no blocks. */
+        /** A pinned layout that already stands: a new edition, no blocks. */
         RESTAMP,
-        /** Empty the idle half (yesterday's layout, or leftovers after a boot). */
+        /** Empty the idle half (the last edition's layout, or leftovers after a boot). */
         CLEAR_OLD,
         /** A build is due but can't start yet ({@link Decision#reason()}). */
         WAIT
     }
 
     /**
+     * An edition a slot should show.
+     *
+     * @param cadence its length in days
+     * @param start   its first day (local epoch day)
+     * @param endsAt  when the slot moves on from it (epoch ms): its natural end, or for a layout kept
+     *                over a cadence change, the new schedule's first start with another key
+     * @param kept    a live layout of another schedule, kept until {@code endsAt}
+     */
+    public record Target(int cadence, long start, long endsAt, boolean kept) {
+
+        /** Its key without a reroll ({@code 7:38}): what rerolls are counted under. */
+        public String key() {
+            return Edition.editionKey(cadence, start, 0);
+        }
+
+        /** Whether {@code tag} is a layout of this edition (any reroll). */
+        public boolean holds(GenTag tag) {
+            return tag != null && tag.cadence() == cadence && tag.day() == start;
+        }
+    }
+
+    /**
      * The answer.
      *
-     * @param kind   what to do
-     * @param day    the course day to build or restamp for
-     * @param reroll the reroll to build
-     * @param seed   the seed to build from
-     * @param reason why it waits (admin words), or {@code ""}
+     * @param kind    what to do
+     * @param day     the first day of the edition to build or restamp for
+     * @param reroll  the reroll to build
+     * @param seed    the seed to build from
+     * @param reason  why it waits (admin words), or {@code ""}
+     * @param cadence the edition's length in days
      */
-    public record Decision(Kind kind, long day, int reroll, long seed, String reason) {
+    public record Decision(Kind kind, long day, int reroll, long seed, String reason, int cadence) {
 
         static Decision none() {
-            return new Decision(Kind.NONE, 0, 0, 0, "");
+            return new Decision(Kind.NONE, 0, 0, 0, "", 0);
         }
 
         static Decision clearOld() {
-            return new Decision(Kind.CLEAR_OLD, 0, 0, 0, "");
+            return new Decision(Kind.CLEAR_OLD, 0, 0, 0, "", 0);
         }
 
         static Decision waiting(String why) {
-            return new Decision(Kind.WAIT, 0, 0, 0, why);
+            return new Decision(Kind.WAIT, 0, 0, 0, why, 0);
         }
 
-        static Decision build(long day, int reroll, long seed) {
-            return new Decision(Kind.BUILD, day, reroll, seed, "");
+        static Decision build(Target t, int reroll, long seed) {
+            return new Decision(Kind.BUILD, t.start(), reroll, seed, "", t.cadence());
         }
 
-        static Decision restamp(long day) {
-            return new Decision(Kind.RESTAMP, day, 0, 0, "");
+        static Decision restamp(Target t) {
+            return new Decision(Kind.RESTAMP, t.start(), 0, 0, "", t.cadence());
         }
     }
 
@@ -82,18 +124,20 @@ public final class GenScheduler {
      *
      * @param seed  the seed
      * @param algo  the planner version it was pinned under; another version ignores it
-     * @param until the last course day it holds (inclusive), or 0 for no end
+     * @param until the last course day it holds for (inclusive: an edition starting on or before it
+     *              keeps the pin), or 0 for no end
      */
     public record Pin(long seed, int algo, long until) {
 
-        /** Whether it holds on course day {@code day}. */
+        /** Whether it holds for an edition that starts on local day {@code day}. */
         public boolean activeOn(long day) {
             return until <= 0 || day <= until;
         }
 
         /**
-         * Whether it applies on course day {@code day} with planner version {@code plannerAlgo}:
-         * not expired, and made for that version (GEN-SPEC §4.0); otherwise the daily seed is used.
+         * Whether it applies to an edition starting on local day {@code day} with planner version
+         * {@code plannerAlgo}: not expired, and made for that version (GEN-SPEC §4.0); otherwise the
+         * edition's own seed is used.
          */
         public boolean appliesOn(long day, int plannerAlgo) {
             return activeOn(day) && algo == plannerAlgo;
@@ -132,7 +176,7 @@ public final class GenScheduler {
      * @param liveOk      the live layout could be vouched for (false after a failed boot check)
      * @param liveMix     the tier or mix the live layout was made with
      * @param mix         the tier or mix a build would use now
-     * @param reroll      today's reroll count ({@code gen.<slot>.reroll.<day>})
+     * @param reroll      the current edition's reroll count ({@code gen.<slot>.reroll.<edition>})
      * @param pin         a pinned seed, or {@code null}
      * @param plannerAlgo the planner's version now
      * @param triesDay    the course day {@code tries} counts
@@ -140,10 +184,58 @@ public final class GenScheduler {
      * @param lastTryAt   when the last try started (epoch ms)
      * @param oldDirty    the idle half may still hold blocks
      * @param secret      the seed secret, or {@code null} when the database couldn't give it
+     * @param since       when the current schedule (cadence and rebuild day) was first seen (epoch ms),
+     *                    or 0 when unknown: a layout of another schedule then stays until its own end
      */
     public record SlotView(String slot, boolean enabled, boolean busy, GenTag live, boolean liveOk, String liveMix,
                            String mix, int reroll, Pin pin, int plannerAlgo, long triesDay, int tries,
-                           long lastTryAt, boolean oldDirty, Long secret) {
+                           long lastTryAt, boolean oldDirty, Long secret, long since) {
+
+        /** A view with the schedule's start unknown. */
+        public SlotView(String slot, boolean enabled, boolean busy, GenTag live, boolean liveOk, String liveMix,
+                        String mix, int reroll, Pin pin, int plannerAlgo, long triesDay, int tries, long lastTryAt,
+                        boolean oldDirty, Long secret) {
+            this(slot, enabled, busy, live, liveOk, liveMix, mix, reroll, pin, plannerAlgo, triesDay, tries, lastTryAt,
+                    oldDirty, secret, 0);
+        }
+    }
+
+    /**
+     * The edition a slot with {@code live} should show at {@code now}:
+     * <ul>
+     *   <li>normally the edition due now ({@link Edition#editionStart}); a live layout from a later
+     *       edition than that (a {@code rebuild_at} moved later) is kept, never replaced by an
+     *       older one;</li>
+     *   <li>a live layout of another cadence or rebuild day stays until the earlier of its own end
+     *       and the new schedule's first start after {@code since}; with {@code since} unknown (0),
+     *       until its own end;</li>
+     *   <li>and when the new schedule's edition due at that moment has the live layout's own key
+     *       (the same cadence and index: a {@code rebuild_day} moved later inside the index's N
+     *       days, Monday to Friday for a weekly set), it <em>is</em> the live edition carried on,
+     *       so the layout stays through it, until the first start with a new key. Building it would
+     *       give the same seed, board, stars and first-finish reward: nothing would really change,
+     *       and the countdown would have named a day on which nothing new goes up.</li>
+     * </ul>
+     */
+    public static Target target(GenTag live, long now, Edition ed, long since) {
+        long due = ed.editionStart(now);
+        Target current = new Target(ed.cadenceDays(), due, ed.endOf(due), false);
+        if (live == null) {
+            return current;
+        }
+        boolean onGrid = live.cadence() == ed.cadenceDays() && ed.starts(live.day());
+        if (onGrid) {
+            return live.day() > due ? new Target(live.cadence(), live.day(), ed.endOf(live.day()), false) : current;
+        }
+        long ownEnd = ed.startOf(live.endDay());
+        long newStart = since > 0 ? ed.nextChangeAt(Math.max(since, ed.startOf(live.day()))) : Long.MAX_VALUE;
+        long keepUntil = Math.min(ownEnd, newStart);
+        long takeover = ed.editionStart(keepUntil);
+        if (live.cadence() == ed.cadenceDays()
+                && Edition.index(ed.cadenceDays(), takeover) == Edition.index(live.cadence(), live.day())) {
+            keepUntil = ed.endOf(takeover); // the next start has a greater index: floorDiv moves on by one
+        }
+        return now < keepUntil ? new Target(live.cadence(), live.day(), keepUntil, true) : current;
     }
 
     /**
@@ -151,6 +243,7 @@ public final class GenScheduler {
      *
      * @param readyAt the first moment anything may be built (the worlds were ready, plus
      *                {@code startup_delay_seconds})
+     * @param edition the current schedule ({@link DailySettings#edition})
      */
     public static Decision decide(SlotView v, long now, long readyAt, DailySettings s, RestartHold hold,
                                   Edition edition) {
@@ -164,40 +257,42 @@ public final class GenScheduler {
             return Decision.waiting("another course is being built");
         }
         long day = edition.day(now);
-        Pin pin = v.pin() != null && v.pin().appliesOn(day, v.plannerAlgo()) ? v.pin() : null;
+        Target t = target(v.live(), now, edition, v.since());
+        Pin pin = v.pin() != null && v.pin().appliesOn(t.start(), v.plannerAlgo()) ? v.pin() : null;
         int reroll = pin != null ? 0 : Math.max(0, v.reroll());
         GenTag live = v.live();
-        if (live != null && !v.liveOk() && live.day() == day) {
-            // Today's layout couldn't be vouched for: its replacement may come out different (a
-            // new tier, a new fall depth, a pinned seed's too), so it goes on a fresh board, never
+        boolean current = t.holds(live);
+        if (current && !v.liveOk()) {
+            // This edition's layout couldn't be vouched for: its replacement may come out different
+            // (a new tier, a new fall depth, a pinned seed's too), so it goes on fresh boards, never
             // on the old one's.
             reroll = Math.max(reroll, live.reroll() + 1);
         }
-        boolean due = live == null || live.day() != day || live.reroll() < reroll || !v.liveOk();
+        boolean due = !current || live.reroll() < reroll || !v.liveOk();
         if (!due) {
             return v.oldDirty() ? Decision.clearOld() : Decision.none();
         }
         if (pin != null && live != null && v.liveOk() && live.seed() == pin.seed() && live.algo() == pin.algo()
-                && same(v.liveMix(), v.mix()) && live.day() != day) {
-            return Decision.restamp(day);
+                && same(v.liveMix(), v.mix()) && !current) {
+            return Decision.restamp(t);
         }
         if (nearRestart(now, hold, s.avoidBeforeRestartMinutes())) {
             return Decision.waiting("a restart is coming at " + hold.clock(hold.next(now)));
         }
         if (v.triesDay() == day && v.tries() >= s.maxTriesPerDay()) {
-            return Decision.waiting("gave up for today after " + v.tries() + " tries");
+            return Decision.waiting("gave up until tomorrow after " + v.tries() + " tries");
         }
         long retryAt = v.lastTryAt() + s.retryMinutes() * 60_000L;
         if (v.triesDay() == day && v.tries() > 0 && now < retryAt) {
             return Decision.waiting("next try at " + hold.clock(retryAt));
         }
         if (pin != null) {
-            return Decision.build(day, reroll, pin.seed());
+            return Decision.build(t, reroll, pin.seed());
         }
         if (v.secret() == null) {
             return Decision.waiting("the seed secret can't be read");
         }
-        return Decision.build(day, reroll, GenSeed.seed(v.secret(), day, v.slot(), reroll));
+        return Decision.build(t, reroll, GenSeed.seed(v.secret(), t.cadence(), t.start(), v.slot(), reroll));
     }
 
     /** Whether a scheduled restart is due within {@code minutes} of {@code now} (0: never). */

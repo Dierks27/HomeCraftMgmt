@@ -738,29 +738,29 @@ class ArcadeFeedTest {
     @Test
     void generatedEntriesCarryTheirDailyPart() {
         ArcadeFeed feed = new ArcadeFeed(false);
-        feed.course("daily_parkour_easy", "Easy Parkour", "parkour", "easy", 41_200L, 1_790_000_100_000L, STEVE,
+        feed.course("fresh_parkour_easy", "Easy Parkour", "parkour", "easy", 41_200L, 1_790_000_100_000L, STEVE,
                 EASY_TODAY);
-        feed.golf("tiny_golf", "Tiny Golf", 3, 8, 8, 1_790_000_200_000L, null,
+        feed.golf("fresh_tiny_golf", "Tiny Golf", 3, 8, 8, 1_790_000_200_000L, null,
                 new FeedWriter.Daily("2026-09-29", 1_790_060_400_000L, null, null));
-        feed.course("sky_rings", "Sky Rings", "elytra", "easy", null, null, null,
+        feed.course("fresh_rings", "Sky Rings", "elytra", "easy", null, null, null,
                 new FeedWriter.Daily("2026-09-29", -1, null, null));
         String json = feed.json(T, null, null, null, null, null);
         assertEquals("{\"generatedAt\":1790000000000,\"games\":["
-                + "{\"id\":\"daily_parkour_easy\",\"name\":\"Easy Parkour\",\"kind\":\"parkour\",\"tier\":\"easy\","
+                + "{\"id\":\"fresh_parkour_easy\",\"name\":\"Easy Parkour\",\"kind\":\"parkour\",\"tier\":\"easy\","
                 + "\"record\":{\"ms\":41200,\"at\":1790000100000},"
                 + "\"daily\":{\"day\":\"2026-09-29\",\"nextAt\":1790060400000,\"goldMs\":45000,\"silverMs\":70000}},"
-                + "{\"id\":\"tiny_golf\",\"name\":\"Tiny Golf\",\"kind\":\"golf\",\"holes\":3,\"par\":8,"
+                + "{\"id\":\"fresh_tiny_golf\",\"name\":\"Tiny Golf\",\"kind\":\"golf\",\"holes\":3,\"par\":8,"
                 + "\"record\":{\"strokes\":8,\"at\":1790000200000},"
                 + "\"daily\":{\"day\":\"2026-09-29\",\"nextAt\":1790060400000}},"
-                + "{\"id\":\"sky_rings\",\"name\":\"Sky Rings\",\"kind\":\"elytra\",\"tier\":\"easy\","
+                + "{\"id\":\"fresh_rings\",\"name\":\"Sky Rings\",\"kind\":\"elytra\",\"tier\":\"easy\","
                 + "\"daily\":{\"day\":\"2026-09-29\"}}]}", json,
                 "today's record, then daily: the day, when the next is due, the star times when set");
         Map<String, JsonObject> games = games(json);
-        assertEquals(Set.of("id", "name", "kind", "tier", "record", "daily"), keys(games.get("daily_parkour_easy")),
+        assertEquals(Set.of("id", "name", "kind", "tier", "record", "daily"), keys(games.get("fresh_parkour_easy")),
                 "a generated course: a course plus daily");
-        assertEquals(Set.of("day", "nextAt", "goldMs", "silverMs"), keys(games.get("daily_parkour_easy").get("daily")),
+        assertEquals(Set.of("day", "nextAt", "goldMs", "silverMs"), keys(games.get("fresh_parkour_easy").get("daily")),
                 "its daily part");
-        assertEquals(Set.of("day", "nextAt"), keys(games.get("tiny_golf").get("daily")), "golf has no star times");
+        assertEquals(Set.of("day", "nextAt"), keys(games.get("fresh_tiny_golf").get("daily")), "golf has no star times");
         assertFalse(json.toLowerCase().contains("seed") || json.contains("\"rev\"") || json.contains("half"),
                 "never a seed, a rev or a half");
         assertFalse(json.contains(STEVE), "no holder while names are off");

@@ -30,7 +30,7 @@ import java.util.function.Consumer;
 import java.util.logging.Logger;
 
 /**
- * {@link WorldPort} over a real Paper world: the ONLY file in Daily Courses that touches chunk
+ * {@link WorldPort} over a real Paper world: the ONLY file in Fresh Courses that touches chunk
  * loads, chunk tickets, snapshots, {@code setBlockData}, sign sides, waxing and game rules
  * (GEN-SPEC §8.8 risk 1), so an API difference between Paper versions lands here and nowhere else.
  *
@@ -252,7 +252,7 @@ public final class BukkitWorldPort implements WorldPort {
                 return true;
             }
         }
-        log.info("Daily Courses: this server has no game rule " + String.join(" or ", keys) + " - skipped");
+        log.info("Fresh Courses: this server has no game rule " + String.join(" or ", keys) + " - skipped");
         return false;
     }
 
@@ -269,7 +269,7 @@ public final class BukkitWorldPort implements WorldPort {
     public void distrustEmptySections() {
         if (trustEmpty) {
             trustEmpty = false;
-            log.warning("Daily Courses: a chunk snapshot said a section was empty that isn't; every section is"
+            log.warning("Fresh Courses: a chunk snapshot said a section was empty that isn't; every section is"
                     + " now read block by block (slower, still correct).");
         }
     }

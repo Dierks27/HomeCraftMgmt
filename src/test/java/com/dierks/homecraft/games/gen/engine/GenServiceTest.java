@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.gen.engine;
 
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.GenBoards;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenFailed;
@@ -46,10 +47,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * while the secret can't be read; tries and retries; a second quick reroll gives a player on the
  * old-old layout their 20 minutes; foreign blocks and hand-built courses are never touched; and
  * nothing is started, or left running, two minutes before a restart.
+ *
+ * <p>And the cadence (weekly addendum §6): weekly, status shows "weekly" and next Monday 4:00 AM and
+ * nothing changes on Tuesday; switched to daily on reload, the courses stay until the next 4:00 AM
+ * (even across a restart over that time) and then change daily; every 3 days, the next change in
+ * status is on the fixed grid and is when they change; a reroll in the kept time is a new layout of
+ * the kept week; the rewards and goals follow the cadence; and pruning keeps each course's last 8
+ * editions.
  */
 class GenServiceTest {
 
-    private static final String SLOT = "daily_parkour_easy";
+    private static final String SLOT = "fresh_parkour_easy";
     private static final Slots.Def DEF = Slots.DAILY_PARKOUR_EASY;
     private static final long DAY1 = 20725; // Tue 29 Sep 2026
     private static final Box A = DEF.half('A');
@@ -346,6 +354,258 @@ class GenServiceTest {
         assertTrue(host.logged(Level.SEVERE, "vouched") >= 1, "and says so");
     }
 
+    // ---- cadences (weekly addendum §1, §6) ------------------------------------------------------------
+
+    private static final long MON_28_SEP = 20724;
+
+    private String scheduleLine() {
+        return gen.status(null).get(0);
+    }
+
+    @Test
+    void weeklyByDefaultStatusSaysWeeklyAndNextMondayAndTheCoursesDontChangeOnTuesday() throws Exception {
+        host.settings = GenKit.weekly(SLOT);
+        boot();
+        drive(70);
+        GenTag week = tag();
+        assertNotNull(week, "the week's set is up");
+        assertEquals(MON_28_SEP, week.day(), "as the week that began on Monday 28 Sep");
+        assertEquals(7, week.cadence(), "a weekly edition");
+        assertEquals("7:38", week.editionKey(), "7:38");
+        assertEquals(DEF.name(), row().name(), "under the slot's name");
+        assertEquals(GenKit.at(2026, 10, 5, 4, 0), gen.nextChangeAt(), "the next set is due Monday 5 Oct 04:00");
+        assertTrue(scheduleLine().contains("weekly (Mondays at 4:00 AM)"), "status shows the cadence: "
+                + scheduleLine());
+        assertTrue(scheduleLine().contains("next: Mon 5 Oct 4:00 AM"), "and the next change: " + scheduleLine());
+        assertTrue(gen.summary().get(1).contains("weekly"), "so does /hcm games status: " + gen.summary());
+        assertTrue(gen.summary().get(0).contains("Mon 28 Sep-Sun 4 Oct"), "for the week: " + gen.summary());
+        assertTrue(gen.status(SLOT).stream().anyMatch(l -> l.contains("edition 7:38")), "a slot names its edition");
+        for (long t : new long[]{GenKit.at(2026, 9, 30, 12, 0), GenKit.at(2026, 10, 2, 9, 0),
+                GenKit.at(2026, 10, 4, 23, 0), GenKit.at(2026, 10, 5, 3, 58)}) {
+            host.now = t;
+            drive(20);
+            assertEquals(week, tag(), "the courses don't change before Monday (at " + t + ")");
+        }
+        host.now = GenKit.at(2026, 10, 5, 4, 0) + 40_000;
+        drive(20);
+        GenTag next = tag();
+        assertEquals(MON_28_SEP + 7, next.day(), "Monday 04:00: the next week's set");
+        assertEquals("7:39", next.editionKey(), "7:39");
+        assertEquals('B', next.half(), "in the other half");
+        assertNotEquals(GenBoards.day(week), GenBoards.day(next), "on its own board");
+        assertEquals(GenKit.at(2026, 10, 12, 4, 0), gen.nextChangeAt(), "and the next change is a week on");
+    }
+
+    @Test
+    void switchingToDailyOnReloadKeepsTheCoursesUntilTheNext400ThenTheyChangeDaily() throws Exception {
+        host.settings = GenKit.weekly(SLOT);
+        boot();
+        drive(70);
+        GenTag week = tag();
+        host.now = GenKit.at(2026, 9, 30, 15, 0);
+        host.settings = GenKit.settings(SLOT); // the owner sets cadence: daily and runs /hcm reload
+        drive(30);
+        assertEquals(week, tag(), "nothing is rebuilt at the reload");
+        assertTrue(gen.live(SLOT, week), "the week's course stays open");
+        assertEquals(GenKit.at(2026, 10, 1, 4, 0), gen.nextChangeAt(), "until the next 4:00 AM");
+        assertTrue(scheduleLine().startsWith("&7daily") && scheduleLine().contains("next: Thu 1 Oct 4:00 AM"),
+                "status says daily and when: " + scheduleLine());
+        assertTrue(scheduleLine().contains("made weekly and stay until then"), "and why: " + scheduleLine());
+        assertTrue(host.store.meta(GenAdminKeys.schedule()).startsWith("1|MONDAY|"), "the new schedule is kept");
+
+        gen.stop(); // the server is down over the 04:00 change and comes back at 04:30
+        host.now = GenKit.at(2026, 10, 1, 4, 30);
+        boot();
+        drive(3);
+        assertTrue(gen.live(SLOT, week), "at boot the old course is checked and opened first");
+        drive(80);
+        GenTag thu = tag();
+        assertEquals(20727, thu.day(), "then Thursday's daily course goes up (the switch didn't move with the boot)");
+        assertEquals(1, thu.cadence(), "a daily edition");
+        assertEquals("1:269", thu.editionKey(), "1:269");
+        host.now = GenKit.at(2026, 10, 2, 4, 0) + 40_000;
+        drive(20);
+        assertEquals(20728, tag().day(), "and from then on every day");
+    }
+
+    @Test
+    void everyThreeDaysStatusShowsTheNextChangeOnTheGridAndTheCoursesChangeThatDay() {
+        host.settings = GenKit.settings(SLOT).withCadence(3);
+        boot();
+        drive(70);
+        GenTag first = tag();
+        assertEquals(20725, first.day(), "Tue 29 Sep is on the 3-day grid");
+        assertEquals("3:89", first.editionKey(), "3:89");
+        long next = gen.nextChangeAt();
+        assertEquals(GenKit.at(2026, 10, 2, 4, 0), next, "the next is Fri 2 Oct");
+        assertTrue(scheduleLine().startsWith("&7every 3 days") && scheduleLine().contains("next: Fri 2 Oct 4:00 AM"),
+                "status says so: " + scheduleLine());
+        host.now = GenKit.at(2026, 10, 1, 12, 0);
+        drive(20);
+        assertEquals(first, tag(), "nothing changes on Thursday");
+        host.now = next + 40_000;
+        drive(20);
+        assertEquals(20728, tag().day(), "and it changes on the day status said");
+        assertEquals(3, tag().cadence(), "every 3 days");
+    }
+
+    @Test
+    void movingTheRebuildDayToFridayKeepsTheWeekThroughThisFridayAndStatusNamesTheFridayAfter() {
+        host.settings = GenKit.weekly(SLOT);
+        boot();
+        drive(70);
+        GenTag week = tag();
+        assertEquals("7:38", week.editionKey(), "the week of Mon 28 Sep is up");
+        host.now = GenKit.at(2026, 9, 30, 10, 0);
+        host.settings = GenKit.weekly(SLOT).withRebuild(LocalTime.of(4, 0), java.time.DayOfWeek.FRIDAY);
+        drive(5);
+        assertEquals(GenKit.at(2026, 10, 9, 4, 0), gen.nextChangeAt(),
+                "Fri 2 Oct would be 7:38 again, so the next real change is Fri 9 Oct");
+        assertTrue(scheduleLine().contains("weekly (Fridays at 4:00 AM)") && scheduleLine().contains(
+                "next: Fri 9 Oct 4:00 AM"), "status says so: " + scheduleLine());
+        assertTrue(scheduleLine().contains("made for the old change day and stay until then"),
+                "and why: " + scheduleLine());
+        assertEquals(1, host.logged(Level.INFO, "stay until Fri 9 Oct 4:00 AM"), "and so does the console");
+        host.now = GenKit.at(2026, 10, 2, 4, 0) + 40_000;
+        drive(80);
+        assertEquals(week, tag(), "nothing is rebuilt on Fri 2 Oct: the same key would be the same course");
+        assertEquals('A', tag().half(), "still in its own half");
+        host.now = GenKit.at(2026, 10, 9, 4, 0) + 40_000;
+        drive(80);
+        assertEquals("7:39", tag().editionKey(), "Fri 9 Oct: a new set under a new key");
+        assertEquals(20735, tag().day(), "that starts that Friday");
+        assertEquals(GenKit.at(2026, 10, 16, 4, 0), gen.nextChangeAt(), "and then every Friday");
+    }
+
+    @Test
+    void switchingToDailyAndRerollingBuildsANewLayoutOfTheKeptWeek() {
+        host.settings = GenKit.weekly(SLOT);
+        boot();
+        drive(70);
+        host.now = GenKit.at(2026, 9, 30, 15, 0);
+        host.settings = GenKit.settings(SLOT);
+        drive(5);
+        gen.reroll(SLOT, said::add);
+        drive(20);
+        assertEquals("7:38r1", tag().editionKey(), "a reroll is a new layout of the kept week, on a fresh board");
+        assertEquals(GenKit.at(2026, 10, 1, 4, 0), gen.nextChangeAt(), "which still ends at the next 4:00 AM");
+    }
+
+    @Test
+    void whatAFinishPaysFollowsTheCadenceAndTheWeeksGoalsStayWithinReach() {
+        String[] six = {"fresh_parkour_easy", "fresh_parkour", "fresh_parkour_hard", "fresh_rings", "fresh_golf",
+                "fresh_tiny_golf"};
+        host.settings = GenKit.weekly(six);
+        boot();
+        assertEquals(5, gen.dailyClear("fresh_parkour_hard"), "weekly: Hard Parkour's first finish pays 5");
+        assertEquals(0, gen.dailyClear("river_run"), "a hand-built course pays no first-finish reward here");
+        assertEquals(18, gen.weekMax(MON_28_SEP), "six courses, one edition a week: 18 stars");
+        assertEquals(List.of(6, 12), gen.starGoals(), "6 and 12 stars");
+        assertEquals(2, gen.starGoalReward(12), "12 pays 2");
+        assertEquals(1, gen.starGoalReward(6), "6 pays 1");
+        assertEquals(2, gen.starGoalCap(), "under daily_cap");
+        host.settings = GenKit.settings(six);
+        gen.check(); // a reload: the engine reads the settings at its next check
+        assertEquals(3, gen.dailyClear("fresh_parkour_hard"), "daily: 3");
+        assertEquals(5, gen.dailyClear("fresh_parkour_hard", 7),
+                "but a finish on a weekly layout kept over the change pays by its own edition: 5");
+        assertEquals(3, gen.dailyClear("fresh_parkour_hard", 1), "a daily one 3");
+        assertEquals(4, gen.dailyClear("fresh_parkour_hard", 3), "an every-3-days one 4");
+        assertEquals(0, gen.dailyClear("river_run", 7), "a hand-built course nothing, whatever the cadence");
+        assertEquals(126, gen.weekMax(MON_28_SEP), "seven editions a week: 126");
+        assertEquals(List.of(10, 25), DailyStars.stars(gen.goals(MON_28_SEP + 7)), "10 and 25 from next week");
+        assertEquals(List.of(6, 12), gen.starGoals(), "this week's goals stay as they were handed out");
+        host.settings = GenKit.weekly(SLOT);
+        gen.check();
+        assertEquals(List.of(new DailyStars.Goal(2, 2)), gen.goals(MON_28_SEP + 7),
+                "one course on: 3 stars a week, so the goals come down to 80% of it");
+        host.settings = GenKit.settings(SLOT).withCadence(14);
+        gen.check();
+        assertEquals(3, gen.weekMax(MON_28_SEP + 7), "every 14 days: a week without a start still has its edition");
+    }
+
+    @Test
+    void aWeeksStarChartGoalsAreFixedOnceHandedOutSoTheTopGoalCantBePaidTwiceUnderTwoNumbers() throws Exception {
+        String[] four = {"fresh_parkour_easy", "fresh_parkour", "fresh_parkour_hard", "fresh_rings"};
+        long ancient = MON_28_SEP - 7L * (GenService.KEEP_WEEKS + 1);
+        host.store.meta(GenAdminKeys.goals(ancient), "6:1,12:2");
+        host.settings = GenKit.weekly(four);
+        boot();
+        List<DailyStars.Goal> goals = gen.goals(MON_28_SEP);
+        assertEquals(List.of(new DailyStars.Goal(6, 1), new DailyStars.Goal(9, 2)), goals,
+                "four courses on: 12 stars a week, so 6 (+1) and the top goal clamped to 9 (+2)");
+        gen.enable("fresh_rings", false, said::add);
+        gen.check();
+        assertEquals(9, gen.weekMax(MON_28_SEP), "with Sky Rings off the week can give 9");
+        assertEquals(goals, gen.goals(MON_28_SEP), "but this week's goals stay 6 and 9: worked out again, the top one "
+                + "would be 7, paid under ms:gweek:<week>:7 to someone already paid under :9, or the other way round");
+        gen.enable("fresh_rings", true, said::add);
+        host.settings = GenKit.settings(four); // daily, on a reload
+        gen.check();
+        assertEquals(goals, gen.goals(MON_28_SEP), "nor does a cadence change move them");
+        assertEquals(GenAdminKeys.goalsText(goals), host.store.meta(GenAdminKeys.goals(MON_28_SEP)),
+                "they are kept in hcm_meta");
+        boot();
+        assertEquals(goals, gen.goals(MON_28_SEP), "so a restart reads them back");
+        drive(70); // the first build flips, and a flip prunes
+        assertNull(host.store.meta(GenAdminKeys.goals(ancient)), "a chart's goals go when the chart is pruned");
+        assertNotNull(host.store.meta(GenAdminKeys.goals(MON_28_SEP)), "this week's stay");
+        host.now = GenKit.at(2026, 10, 5, 4, 0) + 40_000;
+        gen.check();
+        assertEquals(List.of(10, 25), DailyStars.stars(gen.goals(MON_28_SEP + 7)),
+                "the next week's are worked out from the settings of that week (daily now)");
+    }
+
+    @Test
+    void goalsAreStoredAsStarsAndTokensAndJunkReadsAsUnset() {
+        List<DailyStars.Goal> goals = List.of(new DailyStars.Goal(6, 1), new DailyStars.Goal(9, 2));
+        assertEquals("6:1,9:2", GenAdminKeys.goalsText(goals), "stars:tokens, smallest first");
+        assertEquals(goals, GenAdminKeys.goalsOf("6:1,9:2"), "read back");
+        assertEquals(List.of(), GenAdminKeys.goalsOf(""), "a week with no goals is kept as none");
+        assertNull(GenAdminKeys.goalsOf(null), "unset");
+        for (String junk : new String[]{"6", "6:x", "0:1", "6:-1", ",6:1", "a:b:c"}) {
+            assertNull(GenAdminKeys.goalsOf(junk), "junk is worked out again: " + junk);
+        }
+        assertEquals(20724L, GenAdminKeys.goalsWeek(GenAdminKeys.goals(20724)), "the week back from the key");
+        assertNull(GenAdminKeys.goalsWeek("gen.goals.x"), "not a week");
+        assertNull(GenAdminKeys.goalsWeek("gen.cadence"), "not a goals key");
+    }
+
+    @Test
+    void prunedEditionBoardsKeepEachCoursesLastEightEditions() throws Exception {
+        List<String> boards = new ArrayList<>();
+        for (int i = 20; i <= 38; i++) {
+            boards.add(GenBoards.day("fresh_golf", "7:" + i));
+        }
+        boards.add(GenBoards.day("fresh_golf", "7:25r1"));
+        for (int i = 230; i <= 267; i++) {
+            boards.add(GenBoards.day("fresh_rings", "1:" + i));
+        }
+        boards.addAll(List.of("gfresh:broken", "course:river_run", GenBoards.stars("fresh_golf", "7:20")));
+        long keepFrom = 20725 - 35;
+        List<String> old = GenService.oldEditionBoards(boards, keepFrom, GenService.KEEP_EDITIONS);
+        List<String> expected = new ArrayList<>();
+        for (int i = 20; i <= 30; i++) {
+            expected.add(GenBoards.day("fresh_golf", "7:" + i));
+        }
+        expected.add(GenBoards.day("fresh_golf", "7:25r1"));
+        expected.add(GenBoards.day("fresh_rings", "1:230"));
+        expected.add(GenBoards.day("fresh_rings", "1:231"));
+        expected.sort(null);
+        assertEquals(expected, old, "weekly: the last 8 weeks stay though older than keep_days; daily: keep_days "
+                + "decides; nothing that isn't an edition board is picked");
+
+        host.dao.submit(UUID.randomUUID(), "golf", GenBoards.day("fresh_golf", "7:20"), 30, true, 1);
+        host.dao.submit(UUID.randomUUID(), "trials", GenBoards.day("fresh_rings", "1:230"), 30_000, true, 1);
+        host.dao.submit(UUID.randomUUID(), "golf", "course:meadow", 30, true, 1);
+        GenStore store = GenStore.of(host.db);
+        assertEquals(List.of(GenBoards.day("fresh_golf", "7:20"), GenBoards.day("fresh_rings", "1:230")).stream()
+                .sorted().toList(), store.editionBoards().stream().sorted().toList(), "the store lists edition boards");
+        assertEquals(2, store.dropEditionBoards(List.of(GenBoards.day("fresh_golf", "7:20"),
+                GenBoards.day("fresh_rings", "1:230"), "course:meadow")), "and drops them, and only them");
+        assertEquals(List.of("course:meadow"), host.dao.boards("golf"), "a board that isn't ours stays");
+    }
+
     // ---- pins, secrets, tries --------------------------------------------------------------------
 
     @Test
@@ -521,7 +781,7 @@ class GenServiceTest {
         assertNotNull(problem, "the slot is off");
         assertTrue(problem.contains("1 block that isn't") && problem.contains((A.minX() + 7) + "," + (A.minY() + 3)),
                 "naming the count and the first block: " + problem);
-        assertTrue(host.logged(Level.SEVERE, "Daily Courses' (first at") >= 1, "SEVERE in the log");
+        assertTrue(host.logged(Level.SEVERE, "Fresh Courses' (first at") >= 1, "SEVERE in the log");
 
         gen.claim(SLOT, true, said::add);
         drive(80);
@@ -549,7 +809,7 @@ class GenServiceTest {
                 CourseCodec.encode(mine), 1, 0, 0));
         boot();
         drive(90);
-        assertTrue(gen.slot(SLOT).problem.contains("wasn't made by Daily Courses"), gen.slot(SLOT).problem);
+        assertTrue(gen.slot(SLOT).problem.contains("wasn't made by Fresh Courses"), gen.slot(SLOT).problem);
         assertEquals("My Parkour", row().name(), "the hand-built row is never taken over");
     }
 
@@ -715,10 +975,11 @@ class GenServiceTest {
         boot();
         drive(120);
         GenTag second = tag();
-        assertEquals(DAY1, second.day(), "still today's course");
+        assertEquals(DAY1, second.day(), "still the current set's course");
+        assertEquals(first.edition(), second.edition(), "of the same edition");
         assertEquals(1, second.reroll(), "but under the next reroll");
-        assertNotEquals(first.editionKey(), second.editionKey(), "so the new layout gets its own day board");
-        assertEquals("1", host.store.meta("gen." + SLOT + ".reroll." + DAY1), "and the reroll is kept");
+        assertNotEquals(first.editionKey(), second.editionKey(), "so the new layout gets its own board");
+        assertEquals("1", host.store.meta(GenAdminKeys.reroll(SLOT, second.edition())), "and the reroll is kept");
         assertTrue(gen.live(SLOT, second), "it opens");
     }
 
@@ -750,32 +1011,33 @@ class GenServiceTest {
     }
 
     @Test
-    void whatAFinishPaysComesFromGamesDailyNotTheShippedAmounts() {
+    void whatAFinishPaysComesFromGamesFreshNotTheShippedAmounts() {
         com.dierks.homecraft.games.gen.DailySettings d = host.settings;
-        List<com.dierks.homecraft.games.gen.DailySettings.SlotConfig> slots = new ArrayList<>();
-        for (com.dierks.homecraft.games.gen.DailySettings.SlotConfig c : d.slots()) {
-            slots.add(new com.dierks.homecraft.games.gen.DailySettings.SlotConfig(c.id(), c.enabled(), c.tierOrMix(),
-                    c.origin(), c.id().equals(SLOT) ? 0 : 5));
+        Map<String, Integer> weekly = new LinkedHashMap<>();
+        Map<String, Integer> daily = new LinkedHashMap<>();
+        for (Slots.Def def : Slots.ALL) {
+            weekly.put(def.id(), def.id().equals(SLOT) ? 0 : 5);
+            daily.put(def.id(), def.id().equals(SLOT) ? 0 : 5);
         }
-        host.settings = new com.dierks.homecraft.games.gen.DailySettings(d.enabled(), d.world(), d.rollover(),
-                d.startupDelaySeconds(), d.avoidBeforeRestartMinutes(), d.retryMinutes(), d.maxTriesPerDay(),
-                d.clearWaitMinutes(), d.keepDays(), d.worldRules(), d.safeSpot(), 0, List.of(3), 0, d.budget(),
-                d.stars(), slots);
+        List<DailyStars.Goal> goals = List.of(new DailyStars.Goal(3, 0));
+        host.settings = new com.dierks.homecraft.games.gen.DailySettings(d.enabled(), d.world(), d.cadenceDays(),
+                d.rollover(), d.rebuildDay(), d.startupDelaySeconds(), d.avoidBeforeRestartMinutes(), d.retryMinutes(),
+                d.maxTriesPerDay(), d.clearWaitMinutes(), d.keepDays(), d.worldRules(), d.safeSpot(), 0,
+                new com.dierks.homecraft.games.gen.DailySettings.Goals(goals, goals), d.budget(), d.stars(),
+                new com.dierks.homecraft.games.gen.DailySettings.Rewards(weekly, daily), d.slots())
+                .withCadence(d.cadenceDays());
         boot();
-        assertEquals(0, gen.dailyClear(SLOT), "daily_clear: 0 pays nothing on the first finish of the day");
-        assertEquals(5, gen.dailyClear("daily_golf"), "and another slot's own amount is its own");
-        assertEquals(0, gen.dailyClear("river_run"), "a course that isn't a slot has no daily reward");
+        assertEquals(0, gen.dailyClear(SLOT), "rewards: 0 pays nothing on the first finish of a set");
+        assertEquals(5, gen.dailyClear("fresh_golf"), "and another slot's own amount is its own");
+        assertEquals(0, gen.dailyClear("river_run"), "a course that isn't a slot has no first-finish reward");
         assertEquals(List.of(3), gen.starGoals(), "star_goals as configured");
-        assertEquals(0, gen.starGoalReward(), "star_goal_reward as configured");
+        assertEquals(0, gen.starGoalReward(3), "and what the goal pays as configured");
+        assertEquals(0, gen.starGoalReward(), "the one-number form too");
         assertEquals(0, gen.starGoalCap(), "daily_cap as configured");
     }
 
     private static com.dierks.homecraft.games.gen.DailySettings withBudget(
             com.dierks.homecraft.games.gen.DailySettings d, int blocks) {
-        return new com.dierks.homecraft.games.gen.DailySettings(d.enabled(), d.world(), d.rollover(),
-                d.startupDelaySeconds(), d.avoidBeforeRestartMinutes(), d.retryMinutes(), d.maxTriesPerDay(),
-                d.clearWaitMinutes(), d.keepDays(), d.worldRules(), d.safeSpot(), d.dailyCap(), d.starGoals(),
-                d.starGoalReward(), new com.dierks.homecraft.games.gen.DailySettings.Budget(blocks, blocks, 4, 1, 1, 40),
-                d.stars(), d.slots());
+        return d.withBudget(new com.dierks.homecraft.games.gen.DailySettings.Budget(blocks, blocks, 4, 1, 1, 40));
     }
 }

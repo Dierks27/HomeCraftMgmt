@@ -19,22 +19,22 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * {@code /hcm games gen …}: running Daily Courses by hand (GEN-SPEC §5.5). The framework has already
+ * {@code /hcm games gen …}: running Fresh Courses by hand (GEN-SPEC §5.5). The framework has already
  * checked {@code hcm.games.admin}; {@code args} are the words after {@code gen}.
  *
  * <p>Why these verbs: the courses build themselves, so an admin only ever needs to look
  * ({@code status}, {@code plan}, {@code tp}), steer the next build ({@code tier}, {@code mix},
  * {@code pin}, {@code on}/{@code off}), try one out ({@code preview}, then {@code promote}), replace
- * today's ({@code reroll}), repair ({@code rebuild}), and hand an area over or take one back
+ * the current set's ({@code reroll}), repair ({@code rebuild}), and hand an area over or take one back
  * ({@code claim}, {@code clear}). The hand-built course tools refuse a generated course and point
  * here.
  *
  * <p>The rules around them: destructive verbs need {@code confirm} ({@code reroll}, {@code clear},
- * {@code claim} to clear an area; {@code promote} when today's board has times, which the engine
+ * {@code claim} to clear an area; {@code promote} when the course's board has times, which the engine
  * decides). {@code reroll}, {@code preview} and {@code promote} are refused within
  * {@code avoid_before_restart_minutes} of a scheduled restart. Every change is logged with who made
  * it, and a command that goes wrong answers "That didn't work - see the console." and never
- * reaches the framework's guard, which would switch Daily Courses off.
+ * reaches the framework's guard, which would switch Fresh Courses off.
  */
 public final class GenAdmin implements GameAdmin {
 
@@ -48,7 +48,7 @@ public final class GenAdmin implements GameAdmin {
     private final Logger log;
 
     /**
-     * @param ops the running engine, or {@code null} while Daily Courses is off
+     * @param ops the running engine, or {@code null} while Fresh Courses is off
      * @param log where changes are logged, with who made them
      */
     public GenAdmin(Supplier<GenOps> ops, Logger log) {
@@ -64,16 +64,16 @@ public final class GenAdmin implements GameAdmin {
     @Override
     public List<String> help() {
         return List.of(
-                "&e/hcm games gen status [course] &7- what is up, what is being built, and why not",
-                "&e/hcm games gen plan <course> [seed|tomorrow] &7- a dry run: what a build would make, no blocks",
+                "&e/hcm games gen status [course] &7- how often they change, when next, what is up, and why not",
+                "&e/hcm games gen plan <course> [seed|next] &7- a dry run: what a build would make, no blocks",
                 "&e/hcm games gen preview <course> [seed] &7- build into the spare half to walk it (no switch)",
-                "&e/hcm games gen promote <course> [confirm] &7- the preview becomes today's course",
-                "&e/hcm games gen reroll <course|all> confirm &7- a new course for today, on a fresh board",
-                "&e/hcm games gen rebuild <course> &7- check and repair today's course (same seed)",
+                "&e/hcm games gen promote <course> [confirm] &7- the preview becomes the current course",
+                "&e/hcm games gen reroll <course|all> confirm &7- a new course for this set, on a fresh board",
+                "&e/hcm games gen rebuild <course> &7- check and repair the current course (same seed)",
                 "&e/hcm games gen on|off <course> &7- open or close one (its blocks stay)",
                 "&e/hcm games gen tier <course> <easy|medium|hard> &7- its difficulty from the next build",
                 "&e/hcm games gen mix <golf course> <E, M and H> &7- the golf holes from the next build",
-                "&e/hcm games gen pin <course> <seed|today> [days] &7- keep a good course; unpin to let it change",
+                "&e/hcm games gen pin <course> <seed|live> [days] &7- keep a good course; unpin to let it change",
                 "&e/hcm games gen tp <course> [live|idle] &7- go and look",
                 "&e/hcm games gen claim <course> [confirm] &7- count what is in a new area; confirm clears foreign blocks and claims it",
                 "&e/hcm games gen clear <course> confirm &7- empty both halves and switch it off (before moving it)");
@@ -84,8 +84,8 @@ public final class GenAdmin implements GameAdmin {
         try {
             run(sender, args);
         } catch (RuntimeException e) {
-            // Never out to the framework's guard: that would switch Daily Courses off over a typo.
-            log.log(Level.SEVERE, "Daily Courses: /hcm games gen " + String.join(" ", args) + " failed", e);
+            // Never out to the framework's guard: that would switch Fresh Courses off over a typo.
+            log.log(Level.SEVERE, "Fresh Courses: /hcm games gen " + String.join(" ", args) + " failed", e);
             say(sender, "&cThat didn't work - see the console.");
         }
     }
@@ -101,7 +101,7 @@ public final class GenAdmin implements GameAdmin {
         }
         GenOps engine = ops.get();
         if (engine == null) {
-            say(sender, "&cDaily Courses isn't running. &7Set games.daily.enabled: true (and games.enabled), then"
+            say(sender, "&cFresh Courses isn't running. &7Set games.fresh.enabled: true (and games.enabled), then"
                     + " /hcm reload.");
             return;
         }
@@ -116,13 +116,13 @@ public final class GenAdmin implements GameAdmin {
             if (!rest.isEmpty() && id == null) {
                 return;
             }
-            say(sender, "&6Daily Courses");
+            say(sender, "&6Fresh Courses");
             engine.status(id).forEach(report);
             return;
         }
         if (verb.equals("reroll") && !rest.isEmpty() && rest.get(0).equalsIgnoreCase("all")) {
             if (refusedNearRestart(sender, engine) || !confirmed(sender, confirm, "reroll all",
-                    "This makes a new course of every daily course for today. Anyone playing one finishes on"
+                    "This makes a new course of every Fresh Course, for this set. Anyone playing one finishes on"
                             + " its old board.")) {
                 return;
             }
@@ -144,8 +144,9 @@ public final class GenAdmin implements GameAdmin {
         String arg = rest.size() > 1 ? rest.get(1) : null;
         switch (verb) {
             case "plan" -> {
-                if (arg != null && !arg.equalsIgnoreCase("tomorrow") && GenSeed.parse(arg) == null) {
-                    say(sender, "&cA seed is up to 16 hex digits (like 3f2a91c07d1e55b0), or &etomorrow&c.");
+                if (arg != null && !arg.equalsIgnoreCase("next") && !arg.equalsIgnoreCase("tomorrow")
+                        && GenSeed.parse(arg) == null) {
+                    say(sender, "&cA seed is up to 16 hex digits (like 3f2a91c07d1e55b0), or &enext&c.");
                     return;
                 }
                 engine.plan(id, arg, report);
@@ -170,7 +171,7 @@ public final class GenAdmin implements GameAdmin {
             }
             case "reroll" -> {
                 if (refusedNearRestart(sender, engine) || !confirmed(sender, confirm, "reroll " + id,
-                        "This makes a new " + def.name() + " for today, on a fresh board. Anyone playing it"
+                        "This makes a new " + def.name() + " for this set, on a fresh board. Anyone playing it"
                                 + " finishes on the old one.")) {
                     return;
                 }
@@ -208,11 +209,11 @@ public final class GenAdmin implements GameAdmin {
             }
             case "pin" -> {
                 if (arg == null) {
-                    say(sender, "&cUsage: /hcm games gen pin " + id + " <seed|today> [days]");
+                    say(sender, "&cUsage: /hcm games gen pin " + id + " <seed|live> [days]");
                     return;
                 }
-                if (!arg.equalsIgnoreCase("today") && GenSeed.parse(arg) == null) {
-                    say(sender, "&cA seed is up to 16 hex digits, or &etoday&c.");
+                if (!live(arg) && GenSeed.parse(arg) == null) {
+                    say(sender, "&cA seed is up to 16 hex digits, or &elive&c.");
                     return;
                 }
                 int days = 0;
@@ -224,7 +225,7 @@ public final class GenAdmin implements GameAdmin {
                     }
                 }
                 logChange(sender, args);
-                engine.pin(id, arg, days, report);
+                engine.pin(id, live(arg) ? "live" : arg, days, report);
             }
             case "unpin" -> {
                 logChange(sender, args);
@@ -266,7 +267,7 @@ public final class GenAdmin implements GameAdmin {
             return;
         }
         player.teleport(new Location(world, spot.x(), spot.y(), spot.z(), spot.yaw(), 0f));
-        say(sender, "&7" + (idle ? "The spare half" : "Today's course") + " of " + Slots.of(id).name() + ".");
+        say(sender, "&7" + (idle ? "The spare half" : "The current course") + " of " + Slots.of(id).name() + ".");
     }
 
     /** Whether a restart is too close for this (the sender is told). */
@@ -292,10 +293,15 @@ public final class GenAdmin implements GameAdmin {
     private static String slot(CommandSender sender, String typed) {
         Slots.Def def = Slots.of(typed);
         if (def == null) {
-            say(sender, "&cNo daily course called '" + typed + "'. &7" + String.join(", ", Slots.ids()));
+            say(sender, "&cNo Fresh Course called '" + typed + "'. &7" + String.join(", ", Slots.ids()));
             return null;
         }
         return def.id();
+    }
+
+    /** The live layout's seed: {@code live}, or {@code today} as it was first called. */
+    private static boolean live(String typed) {
+        return typed.equalsIgnoreCase("live") || typed.equalsIgnoreCase("today");
     }
 
     private static int days(String typed) {
@@ -310,7 +316,7 @@ public final class GenAdmin implements GameAdmin {
     private void logChange(CommandSender sender, String[] args) {
         String verb = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
         if (!LOOKS.contains(verb)) {
-            log.info("Daily Courses: " + sender.getName() + " ran /hcm games gen " + String.join(" ", args));
+            log.info("Fresh Courses: " + sender.getName() + " ran /hcm games gen " + String.join(" ", args));
         }
     }
 
@@ -349,10 +355,10 @@ public final class GenAdmin implements GameAdmin {
         Slots.Def def = Slots.of(args[1]);
         if (args.length == 3) {
             switch (verb) {
-                case "plan" -> match(out, last, List.of("tomorrow"));
+                case "plan" -> match(out, last, List.of("next"));
                 case "tier" -> match(out, last, Slots.TIERS);
                 case "mix" -> match(out, last, def == null ? List.of() : List.of(def.tierOrMix()));
-                case "pin" -> match(out, last, List.of("today"));
+                case "pin" -> match(out, last, List.of("live"));
                 case "tp" -> match(out, last, List.of("live", "idle"));
                 case "promote", "reroll", "claim", "clear" -> match(out, last, List.of("confirm"));
                 default -> {

@@ -73,9 +73,9 @@ class ScreensTest {
     @Test
     void aDailyCourseIsNotListedButTheStarChartIs() {
         Screens.Published p = new Screens.Published();
-        p.course("daily_parkour_easy", "Easy Parkour", "parkour", "easy", 40_000L, 1L, null,
+        p.course("fresh_parkour_easy", "Easy Parkour", "parkour", "easy", 40_000L, 1L, null,
                 new FeedWriter.Daily("2026-09-29", 1L, 45_000L, 70_000L));
-        p.golf("tiny_golf", "Tiny Golf", 3, 8, 8, 1L, null, new FeedWriter.Daily("2026-09-29", 1L, null, null));
+        p.golf("fresh_tiny_golf", "Tiny Golf", 3, 8, 8, 1L, null, new FeedWriter.Daily("2026-09-29", 1L, null, null));
         p.course("river", "River Run", "boat", "medium", null, null, null, null);
         p.starChart("2026-09-28", 14L, null);
         p.starChart("not a week", 3L, null);

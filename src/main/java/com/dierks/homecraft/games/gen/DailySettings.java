@@ -2,11 +2,15 @@ package com.dierks.homecraft.games.gen;
 
 import com.dierks.homecraft.config.GamesConfig;
 import com.dierks.homecraft.games.RestartHold;
+import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.Edition;
+import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.engine.Regions;
 
+import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -14,55 +18,74 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.TreeSet;
+import java.util.Objects;
 
 /**
- * Daily Courses' settings: {@code games.daily} (GEN-SPEC §2.3).
+ * Fresh Courses' settings: {@code games.fresh} (GEN-SPEC §2.3, weekly addendum §1 and §4).
  *
  * <p>{@link #defaults()} is the single source of the shipped values: the bundled config.yml block
  * parses to exactly it without a WARN ({@code GamesConfigTest}). {@link #parse} reads each key
  * over the defaults the way every game does: an out-of-range number is clamped with one WARN naming
- * its full key, and junk ({@code rollover: noon}, a word where a number belongs) closes Daily
- * Courses alone. A bad SLOT is different: an origin off the 16-block grid is rounded down, and a
- * slot whose tier, mix or region can't be used is switched off on its own with one WARN, so the
- * other courses still open ({@link Regions#validate}).
+ * its full key, and junk (a word where a number belongs) closes Fresh Courses alone. A bad SLOT is
+ * different: an origin off the 16-block grid is rounded down, and a slot whose tier, mix or region
+ * can't be used is switched off on its own with one WARN, so the other courses still open
+ * ({@link Regions#validate}).
+ *
+ * <p><b>The cadence keys never close anything.</b> {@code cadence}, {@code rebuild_at} and
+ * {@code rebuild_day} decide when courses change, so a typo in one gets one WARN and the shipped
+ * meaning (weekly, 04:00, the quests' week start) rather than switching every course off.
+ *
+ * <p><b>Rewards scale with the cadence.</b> The owner keeps two ends — what a daily cadence pays
+ * and what a weekly one pays — for each course's first finish and for the Star Chart's goals, and
+ * the amounts for the configured cadence are worked out from them ({@link DailyStars#scaled}), so
+ * switching the cadence needs no retuning. {@link SlotConfig#dailyClear()} is already the amount for
+ * the configured cadence.
  *
  * @param enabled                   the game's own switch (ships off)
  * @param world                     the world the courses are built in; {@code ""} = the first of
  *                                  {@code games.worlds}
- * @param rollover                  when a new course day starts ({@code clock.time_zone})
+ * @param cadenceDays               how many days an edition lasts: 7 (weekly, shipped), 1 (daily), or
+ *                                  any whole number of days from 1 to 28
+ * @param rollover                  when a new edition starts on its day ({@code rebuild_at},
+ *                                  {@code clock.time_zone})
+ * @param rebuildDay                the weekday editions are anchored on ({@code rebuild_day}), or
+ *                                  {@code null} for the quests' week start
  * @param startupDelaySeconds       after the server is up, before the first build
  * @param avoidBeforeRestartMinutes no build starts this close to one of {@code games.restart_times}
  * @param retryMinutes              a failed build is tried again after this
  * @param maxTriesPerDay            builds tried per slot per course day
  * @param clearWaitMinutes          how long someone still on a layout the next build needs gets
- * @param keepDays                  day boards and star rows older than this are pruned
+ * @param keepDays                  edition boards and star rows older than this are pruned (the
+ *                                  last 8 editions of each course are always kept)
  * @param worldRules                no mobs, fire, random ticks or weather; always noon
  * @param safeSpot                  where people in a building area are moved ({x, y, z}), or
  *                                  {@code null} for the world's spawn
  * @param dailyCap                  the most star-goal tokens a player earns a day
- * @param starGoals                 the weekly Star Chart goals, smallest first
- * @param starGoalReward            tokens per goal reached, once a week each
+ * @param goals                     the weekly Star Chart goals at both ends of the cadence
  * @param budget                    how much building a tick may do
  * @param stars                     the star times, as factors of a course's reference time
+ * @param rewards                   the first-finish tokens at both ends of the cadence
  * @param slots                     every slot's settings, in {@link Slots#ALL} order
  */
-public record DailySettings(boolean enabled, String world, LocalTime rollover, int startupDelaySeconds,
-                            int avoidBeforeRestartMinutes, int retryMinutes, int maxTriesPerDay, int clearWaitMinutes,
-                            int keepDays, boolean worldRules, double[] safeSpot, int dailyCap, List<Integer> starGoals,
-                            int starGoalReward, Budget budget, Stars stars, List<SlotConfig> slots) {
+public record DailySettings(boolean enabled, String world, int cadenceDays, LocalTime rollover, DayOfWeek rebuildDay,
+                            int startupDelaySeconds, int avoidBeforeRestartMinutes, int retryMinutes,
+                            int maxTriesPerDay, int clearWaitMinutes, int keepDays, boolean worldRules,
+                            double[] safeSpot, int dailyCap, Goals goals, Budget budget, Stars stars, Rewards rewards,
+                            List<SlotConfig> slots) {
 
     /** The tiers a star factor is set for. */
     public static final List<String> TIERS = Slots.TIERS;
 
-    /** The leaves under {@code games.daily}, in config order. */
+    /** The leaves under {@code games.fresh}, in config order. */
     public static final List<String> KEYS = keys();
 
     public DailySettings {
         world = world == null ? "" : world.trim();
+        cadenceDays = Edition.clampCadence(cadenceDays);
         rollover = rollover == null ? Edition.DEFAULT_ROLLOVER : rollover;
         safeSpot = safeSpot == null ? null : safeSpot.clone();
-        starGoals = List.copyOf(starGoals == null ? List.of() : starGoals);
+        goals = goals == null ? Goals.shipped() : goals;
+        rewards = rewards == null ? Rewards.shipped() : rewards;
         slots = List.copyOf(slots == null ? List.of() : slots);
     }
 
@@ -114,13 +137,76 @@ public record DailySettings(boolean enabled, String world, LocalTime rollover, i
     }
 
     /**
-     * One slot's settings ({@code games.daily.slots.<id>}).
+     * The first finish of each course in an edition ({@code rewards.clear_weekly} and
+     * {@code rewards.clear_daily}, by slot id): the two ends a cadence's amount is worked out
+     * from ({@link #clear}).
+     *
+     * @param clearWeekly tokens when the cadence is weekly or longer
+     * @param clearDaily  tokens when the cadence is daily
+     */
+    public record Rewards(Map<String, Integer> clearWeekly, Map<String, Integer> clearDaily) {
+
+        public Rewards {
+            clearWeekly = Collections.unmodifiableMap(new LinkedHashMap<>(clearWeekly));
+            clearDaily = Collections.unmodifiableMap(new LinkedHashMap<>(clearDaily));
+        }
+
+        /** The shipped tables (the addendum's: Easy 2/1, Parkour 3/2, Hard 5/3, Sky Rings 3/2, Golf 3/2, Tiny 2/1). */
+        public static Rewards shipped() {
+            Map<String, Integer> weekly = new LinkedHashMap<>();
+            Map<String, Integer> daily = new LinkedHashMap<>();
+            for (Slots.Def d : Slots.ALL) {
+                weekly.put(d.id(), d.weeklyClear());
+                daily.put(d.id(), d.dailyClear());
+            }
+            return new Rewards(weekly, daily);
+        }
+
+        /** What the first finish of {@code slotId} in an edition pays at an N-day cadence (0 for an unknown slot). */
+        public int clear(String slotId, int cadence) {
+            Slots.Def d = Slots.of(slotId);
+            if (d == null) {
+                return 0;
+            }
+            return DailyStars.scaled(cadence, clearDaily.getOrDefault(d.id(), d.dailyClear()),
+                    clearWeekly.getOrDefault(d.id(), d.weeklyClear()));
+        }
+    }
+
+    /**
+     * The weekly Star Chart goals at both ends of the cadence ({@code star_goals.*}): the stars
+     * and what each pays, smallest first.
+     *
+     * @param weekly the goals when the cadence is weekly or longer (shipped 6★ +1, 12★ +2)
+     * @param daily  the goals when the cadence is daily (shipped 10★ +1, 25★ +1)
+     */
+    public record Goals(List<DailyStars.Goal> weekly, List<DailyStars.Goal> daily) {
+
+        public Goals {
+            weekly = List.copyOf(weekly == null ? List.of() : weekly);
+            daily = List.copyOf(daily == null ? List.of() : daily);
+        }
+
+        public static Goals shipped() {
+            return new Goals(List.of(new DailyStars.Goal(6, 1), new DailyStars.Goal(12, 2)),
+                    List.of(new DailyStars.Goal(10, 1), new DailyStars.Goal(25, 1)));
+        }
+
+        /** The goals for an N-day cadence, before the week's ceiling ({@link DailyStars#goals}). */
+        public List<DailyStars.Goal> forCadence(int cadence) {
+            return DailyStars.goals(cadence, daily, weekly);
+        }
+    }
+
+    /**
+     * One slot's settings ({@code games.fresh.slots.<id>}).
      *
      * @param id         the slot
      * @param enabled    its switch (an admin's {@code /hcm games gen on|off} wins over it)
      * @param tierOrMix  a tier ({@code easy}) or, for golf, a mix ({@code EEEMMMMHH})
      * @param origin     half A's min corner {x, y, z}, on the 16-block grid
-     * @param dailyClear tokens for the first counted finish of a course day
+     * @param dailyClear tokens for the first counted finish of an edition, at the configured cadence
+     *                   (worked out from {@link Rewards})
      */
     public record SlotConfig(String id, boolean enabled, String tierOrMix, int[] origin, int dailyClear) {
 
@@ -154,9 +240,14 @@ public record DailySettings(boolean enabled, String world, LocalTime rollover, i
             return new SlotConfig(id, enabled, t, origin, dailyClear);
         }
 
-        /** The shipped settings of a slot. */
+        public SlotConfig withDailyClear(int tokens) {
+            return new SlotConfig(id, enabled, tierOrMix, origin, tokens);
+        }
+
+        /** The shipped settings of a slot (at the shipped, weekly, cadence). */
         public static SlotConfig shipped(Slots.Def d) {
-            return new SlotConfig(d.id(), d.enabled(), d.tierOrMix(), d.origin(), d.dailyClear());
+            return new SlotConfig(d.id(), d.enabled(), d.tierOrMix(), d.origin(),
+                    DailyStars.scaled(Edition.DEFAULT_CADENCE, d.dailyClear(), d.weeklyClear()));
         }
 
         @Override
@@ -184,16 +275,18 @@ public record DailySettings(boolean enabled, String world, LocalTime rollover, i
         for (Slots.Def d : Slots.ALL) {
             slots.add(SlotConfig.shipped(d));
         }
-        return new DailySettings(false, "", Edition.DEFAULT_ROLLOVER, 60, 15, 30, 4, 20, 35, true, null, 2,
-                List.of(10, 25), 1, new Budget(500, 5000, 4, 4, 2, 40),
-                new Stars(tiers(2.0, 1.5, 1.25), tiers(3.0, 2.2, 1.8)), slots);
+        return new DailySettings(false, "", Edition.DEFAULT_CADENCE, Edition.DEFAULT_ROLLOVER, null, 60, 15, 30, 4,
+                20, 35, true, null, 2, Goals.shipped(), new Budget(500, 5000, 4, 4, 2, 40),
+                new Stars(tiers(2.0, 1.5, 1.25), tiers(3.0, 2.2, 1.8)), Rewards.shipped(), slots);
     }
 
-    /** Read {@code games.daily} over {@code d}; never throws. */
+    /** Read {@code games.fresh} over {@code d}; never throws. */
     public static DailySettings parse(GamesConfig.Node n, DailySettings d) {
         boolean enabled = n.enabled(d.enabled());
         String world = n.text("world", d.world());
-        LocalTime rollover = rollover(n, d.rollover());
+        int cadence = cadence(n, d.cadenceDays());
+        LocalTime rebuildAt = rebuildAt(n, d.rollover());
+        DayOfWeek rebuildDay = rebuildDay(n, d.rebuildDay());
         int startupDelay = n.whole("startup_delay_seconds", d.startupDelaySeconds(), 0, 3600);
         int avoid = n.whole("avoid_before_restart_minutes", d.avoidBeforeRestartMinutes(), 0, 120);
         int retry = n.whole("retry_minutes", d.retryMinutes(), 1, 1440);
@@ -203,9 +296,13 @@ public record DailySettings(boolean enabled, String world, LocalTime rollover, i
         boolean worldRules = n.bool("world_rules", d.worldRules());
         double[] safeSpot = safeSpot(n, d.safeSpot());
         int dailyCap = n.whole("daily_cap", d.dailyCap(), 0, 100);
-        List<Integer> goals = n.has("star_goals")
-                ? List.copyOf(new TreeSet<>(n.intList("star_goals", d.starGoals(), 1, 1000))) : d.starGoals();
-        int goalReward = n.whole("star_goal_reward", d.starGoalReward(), 0, 100);
+
+        GamesConfig.Node r = n.child("rewards");
+        Rewards rewards = new Rewards(r.wholeMap("clear_weekly", d.rewards().clearWeekly(), 0, 100),
+                r.wholeMap("clear_daily", d.rewards().clearDaily(), 0, 100));
+
+        GamesConfig.Node g = n.child("star_goals");
+        Goals goals = new Goals(goals(g, "weekly", d.goals().weekly()), goals(g, "daily", d.goals().daily()));
 
         GamesConfig.Node b = n.child("budget");
         Budget db = d.budget();
@@ -222,19 +319,22 @@ public record DailySettings(boolean enabled, String world, LocalTime rollover, i
         GamesConfig.Node s = n.child("slots");
         for (Slots.Def def : Slots.ALL) {
             SlotConfig shipped = d.slot(def.id());
-            slots.add(slot(s, def, shipped == null ? SlotConfig.shipped(def) : shipped));
+            slots.add(slot(s, def, shipped == null ? SlotConfig.shipped(def) : shipped)
+                    .withDailyClear(rewards.clear(def.id(), cadence)));
         }
         slots = Regions.validate(slots, n::warn, s.path());
         if (enabled) {
             GamesConfig.Common common = n.common();
-            String note = Regions.rolloverNote(rollover, common == null ? List.of() : common.restartTimes());
+            String note = Regions.rolloverNote(rebuildAt, common == null ? List.of() : common.restartTimes());
             if (note != null) {
-                n.info(n.key("rollover") + ": " + note);
+                n.info(n.key("rebuild_at") + ": " + note);
             }
         }
-        return new DailySettings(enabled, world, rollover, startupDelay, avoid, retry, maxTries, clearWait, keepDays,
-                worldRules, safeSpot, dailyCap, goals, goalReward, budget, stars, slots);
+        return new DailySettings(enabled, world, cadence, rebuildAt, rebuildDay, startupDelay, avoid, retry, maxTries,
+                clearWait, keepDays, worldRules, safeSpot, dailyCap, goals, budget, stars, rewards, slots);
     }
+
+    // ---- what the engine and the screens ask ----------------------------------------------------
 
     /** One slot's settings, or {@code null} for an unknown id. */
     public SlotConfig slot(String id) {
@@ -250,10 +350,44 @@ public record DailySettings(boolean enabled, String world, LocalTime rollover, i
         return null;
     }
 
-    /** The {@code daily_clear} tokens of a slot (0 for an unknown one). */
+    /** What the first counted finish of {@code id} in an edition pays at the configured cadence (0: unknown id). */
     public int dailyClear(String id) {
         SlotConfig c = slot(id);
         return c == null ? 0 : c.dailyClear();
+    }
+
+    /**
+     * What the first counted finish of {@code id} pays in an edition of {@code cadence} days (the
+     * run's own {@code tag.cadence()}: a layout kept over a cadence change pays by its own edition),
+     * from {@code rewards} (0: unknown id).
+     */
+    public int dailyClear(String id, int cadence) {
+        return slot(id) == null ? 0 : rewards.clear(id, cadence);
+    }
+
+    /** The edition rules these settings make, in {@code zone} with the quests' {@code weekStart}. */
+    public Edition edition(ZoneId zone, DayOfWeek weekStart) {
+        return new Edition(zone, rollover, weekStart, cadenceDays, rebuildDay);
+    }
+
+    /** The Star Chart goals at the configured cadence, before the week's ceiling. */
+    public List<DailyStars.Goal> starGoalList() {
+        return goals.forCadence(cadenceDays);
+    }
+
+    /** The stars of each goal at the configured cadence, smallest first, before the week's ceiling. */
+    public List<Integer> starGoals() {
+        return DailyStars.stars(starGoalList());
+    }
+
+    /** The goals for a week that can give at most {@code weekMax} stars ({@link DailyStars#clamp}). */
+    public List<DailyStars.Goal> starGoals(int weekMax) {
+        return DailyStars.clamp(starGoalList(), weekMax);
+    }
+
+    /** The cadence as status shows it: "weekly", "daily", "every 3 days". */
+    public String cadenceName() {
+        return GenCopy.cadenceName(cadenceDays);
     }
 
     @Override
@@ -261,43 +395,173 @@ public record DailySettings(boolean enabled, String world, LocalTime rollover, i
         return safeSpot == null ? null : safeSpot.clone();
     }
 
+    // ---- withers (tests and admins) ---------------------------------------------------------------
+
+    public DailySettings withEnabled(boolean on) {
+        return new DailySettings(on, world, cadenceDays, rollover, rebuildDay, startupDelaySeconds,
+                avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
+                safeSpot, dailyCap, goals, budget, stars, rewards, slots);
+    }
+
+    public DailySettings withWorld(String w) {
+        return new DailySettings(enabled, w, cadenceDays, rollover, rebuildDay, startupDelaySeconds,
+                avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
+                safeSpot, dailyCap, goals, budget, stars, rewards, slots);
+    }
+
+    /** Another cadence; each slot's first-finish amount follows it. */
+    public DailySettings withCadence(int days) {
+        int n = Edition.clampCadence(days);
+        List<SlotConfig> out = new ArrayList<>();
+        for (SlotConfig c : slots) {
+            out.add(c.withDailyClear(rewards.clear(c.id(), n)));
+        }
+        return new DailySettings(enabled, world, n, rollover, rebuildDay, startupDelaySeconds,
+                avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
+                safeSpot, dailyCap, goals, budget, stars, rewards, out);
+    }
+
+    /** Another {@code rebuild_at} and {@code rebuild_day} ({@code null}: the quests' week start). */
+    public DailySettings withRebuild(LocalTime at, DayOfWeek day) {
+        return new DailySettings(enabled, world, cadenceDays, at, day, startupDelaySeconds, avoidBeforeRestartMinutes,
+                retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules, safeSpot, dailyCap, goals,
+                budget, stars, rewards, slots);
+    }
+
+    public DailySettings withBudget(Budget b) {
+        return new DailySettings(enabled, world, cadenceDays, rollover, rebuildDay, startupDelaySeconds,
+                avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
+                safeSpot, dailyCap, goals, b, stars, rewards, slots);
+    }
+
+    public DailySettings withSlots(List<SlotConfig> s) {
+        return new DailySettings(enabled, world, cadenceDays, rollover, rebuildDay, startupDelaySeconds,
+                avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
+                safeSpot, dailyCap, goals, budget, stars, rewards, s);
+    }
+
     @Override
     public boolean equals(Object o) {
         return o instanceof DailySettings x && enabled == x.enabled && world.equals(x.world)
-                && rollover.equals(x.rollover) && startupDelaySeconds == x.startupDelaySeconds
+                && cadenceDays == x.cadenceDays && rollover.equals(x.rollover)
+                && Objects.equals(rebuildDay, x.rebuildDay) && startupDelaySeconds == x.startupDelaySeconds
                 && avoidBeforeRestartMinutes == x.avoidBeforeRestartMinutes && retryMinutes == x.retryMinutes
                 && maxTriesPerDay == x.maxTriesPerDay && clearWaitMinutes == x.clearWaitMinutes
                 && keepDays == x.keepDays && worldRules == x.worldRules && Arrays.equals(safeSpot, x.safeSpot)
-                && dailyCap == x.dailyCap && starGoals.equals(x.starGoals) && starGoalReward == x.starGoalReward
-                && budget.equals(x.budget) && stars.equals(x.stars) && slots.equals(x.slots);
+                && dailyCap == x.dailyCap && goals.equals(x.goals) && budget.equals(x.budget)
+                && stars.equals(x.stars) && rewards.equals(x.rewards) && slots.equals(x.slots);
     }
 
     @Override
     public int hashCode() {
-        return ((world.hashCode() * 31 + rollover.hashCode()) * 31 + slots.hashCode()) * 31
-                + Arrays.hashCode(safeSpot) + (enabled ? 1 : 0);
+        return (((world.hashCode() * 31 + rollover.hashCode()) * 31 + slots.hashCode()) * 31
+                + Arrays.hashCode(safeSpot)) * 31 + cadenceDays + (enabled ? 1 : 0);
     }
 
     @Override
     public String toString() {
-        return "DailySettings[" + (enabled ? "on" : "off") + ", world '" + world + "', rollover " + rollover
-                + ", slots " + slots + "]";
+        return "DailySettings[" + (enabled ? "on" : "off") + ", world '" + world + "', " + cadenceName()
+                + " at " + rollover + (rebuildDay == null ? "" : " on " + rebuildDay) + ", slots " + slots + "]";
     }
 
     // ---- reading ------------------------------------------------------------------------------
 
-    /** {@code rollover}: "HH:mm"; anything else is junk (every day hangs off it). */
-    private static LocalTime rollover(GamesConfig.Node n, LocalTime d) {
-        Object raw = n.raw("rollover");
+    /**
+     * {@code cadence}: {@code weekly} (7), {@code daily} (1), or a whole number of days from 1 to
+     * {@value Edition#MAX_CADENCE} (quoted or not). Anything else gets one WARN and is weekly.
+     */
+    static int cadence(GamesConfig.Node n, int d) {
+        Object raw = n.raw("cadence");
+        if (raw == null) {
+            return d;
+        }
+        Integer days = null;
+        if (raw instanceof Number num && num.doubleValue() == Math.rint(num.doubleValue())
+                && Math.abs(num.doubleValue()) <= Edition.MAX_CADENCE) {
+            days = num.intValue();
+        } else if (raw instanceof String s) {
+            String t = s.trim().toLowerCase(Locale.ROOT);
+            if (t.equals("weekly")) {
+                days = Edition.WEEKLY;
+            } else if (t.equals("daily")) {
+                days = Edition.DAILY;
+            } else if (t.matches("\\d{1,2}")) {
+                days = Integer.parseInt(t);
+            }
+        }
+        if (days == null || days < Edition.DAILY || days > Edition.MAX_CADENCE) {
+            n.warn(n.key("cadence") + " should be weekly, daily or a whole number of days from 1 to "
+                    + Edition.MAX_CADENCE + ", not \"" + raw + "\" - using weekly");
+            return Edition.WEEKLY;
+        }
+        return days;
+    }
+
+    /** {@code rebuild_at}: "HH:mm" in quotes; anything else gets one WARN and is 04:00. */
+    static LocalTime rebuildAt(GamesConfig.Node n, LocalTime d) {
+        Object raw = n.raw("rebuild_at");
         if (raw == null) {
             return d;
         }
         LocalTime t = RestartHold.parseTime(raw instanceof String ? raw : null);
         if (t == null) {
-            n.invalid(n.key("rollover") + " should be a 24-hour time in quotes like \"04:00\", not \"" + raw + "\"");
-            return d;
+            n.warn(n.key("rebuild_at") + " should be a 24-hour time in quotes like \"04:00\", not \"" + raw
+                    + "\" - using 04:00");
+            return Edition.DEFAULT_ROLLOVER;
         }
         return t;
+    }
+
+    /**
+     * {@code rebuild_day}: {@code ""} for the quests' week start, or a day of the week ({@code monday}
+     * or {@code mon}, any case). Anything else gets one WARN and is the quests' week start.
+     */
+    static DayOfWeek rebuildDay(GamesConfig.Node n, DayOfWeek d) {
+        Object raw = n.raw("rebuild_day");
+        if (raw == null) {
+            return d;
+        }
+        if (raw instanceof String s) {
+            String t = s.trim().toUpperCase(Locale.ROOT);
+            if (t.isEmpty()) {
+                return null;
+            }
+            for (DayOfWeek day : DayOfWeek.values()) {
+                if (day.name().equals(t) || (t.length() == 3 && day.name().startsWith(t))) {
+                    return day;
+                }
+            }
+        }
+        n.warn(n.key("rebuild_day") + " should be a day of the week like \"monday\", or \"\" for the quests' week"
+                + " start, not \"" + raw + "\" - using the quests' week start");
+        return null;
+    }
+
+    /**
+     * {@code star_goals.<end>} and {@code star_goals.<end>_tokens}: the stars, and what each pays in
+     * the same order. A token list of another length gets one WARN: missing amounts repeat the last
+     * one, extra ones are dropped. Junk in either list closes Fresh Courses, like any list.
+     */
+    private static List<DailyStars.Goal> goals(GamesConfig.Node g, String end, List<DailyStars.Goal> d) {
+        List<Integer> stars = g.intList(end, DailyStars.stars(d), 1, 1000);
+        List<Integer> dTokens = new ArrayList<>();
+        for (DailyStars.Goal goal : d) {
+            dTokens.add(goal.tokens());
+        }
+        if (!g.has(end) && !g.has(end + "_tokens")) {
+            return d;
+        }
+        List<Integer> tokens = g.has(end + "_tokens") ? g.intList(end + "_tokens", dTokens, 0, 100) : dTokens;
+        if (tokens.size() != stars.size()) {
+            g.warn(g.key(end + "_tokens") + " " + tokens + " should list one amount for each of " + stars
+                    + " - the last amount is used for the rest");
+        }
+        List<DailyStars.Goal> out = new ArrayList<>();
+        for (int i = 0; i < stars.size(); i++) {
+            int t = tokens.isEmpty() ? 1 : tokens.get(Math.min(i, tokens.size() - 1));
+            out.add(new DailyStars.Goal(stars.get(i), t));
+        }
+        return DailyStars.tidy(out);
     }
 
     /** {@code safe_spot}: {@code ""} for the world's spawn, or "x y z"; anything else is junk. */
@@ -347,9 +611,9 @@ public record DailySettings(boolean enabled, String world, LocalTime rollover, i
     }
 
     /**
-     * {@code slots.<id>}: its switch, tier (or {@code mix} for golf), origin and daily-clear tokens.
-     * Anything here that can't be used switches this slot off with one WARN; it never closes the
-     * rest of Daily Courses.
+     * {@code slots.<id>}: its switch, tier (or {@code mix} for golf) and origin. Anything here that
+     * can't be used switches this slot off with one WARN; it never closes the rest of Fresh
+     * Courses. (Its first-finish tokens are in {@code rewards}.)
      */
     private static SlotConfig slot(GamesConfig.Node slots, Slots.Def def, SlotConfig d) {
         Object raw = slots.raw(def.id());
@@ -399,16 +663,7 @@ public record DailySettings(boolean enabled, String world, LocalTime rollover, i
             }
             origin = read;
         }
-        int dailyClear = d.dailyClear();
-        Object dc = n.raw("daily_clear");
-        if (dc != null) {
-            if (!(dc instanceof Number num) || num.doubleValue() != Math.rint(num.doubleValue())) {
-                n.warn(n.key("daily_clear") + " should be a whole number, not \"" + dc + "\" - that course is off");
-                return d.withEnabled(false);
-            }
-            dailyClear = (int) n.clamp("daily_clear", num.doubleValue(), 0, 100, false);
-        }
-        return new SlotConfig(def.id(), enabled, tierOrMix, origin, dailyClear);
+        return new SlotConfig(def.id(), enabled, tierOrMix, origin, d.dailyClear());
     }
 
     /** Three whole numbers, or {@code null}. */
@@ -436,11 +691,18 @@ public record DailySettings(boolean enabled, String world, LocalTime rollover, i
     }
 
     private static List<String> keys() {
-        List<String> out = new ArrayList<>(List.of("enabled", "world", "rollover", "startup_delay_seconds",
-                "avoid_before_restart_minutes", "retry_minutes", "max_tries_per_day", "clear_wait_minutes",
-                "keep_days", "world_rules", "safe_spot", "daily_cap", "star_goals", "star_goal_reward",
-                "budget.blocks_per_tick", "budget.blocks_per_tick_idle", "budget.max_ms_per_tick",
-                "budget.snapshots_per_tick", "budget.chunk_loads_in_flight", "budget.pause_above_mspt"));
+        List<String> out = new ArrayList<>(List.of("enabled", "world", "cadence", "rebuild_at", "rebuild_day",
+                "startup_delay_seconds", "avoid_before_restart_minutes", "retry_minutes", "max_tries_per_day",
+                "clear_wait_minutes", "keep_days", "world_rules", "safe_spot", "daily_cap"));
+        for (String table : List.of("clear_weekly", "clear_daily")) {
+            for (Slots.Def d : Slots.ALL) {
+                out.add("rewards." + table + "." + d.id());
+            }
+        }
+        out.addAll(List.of("star_goals.weekly", "star_goals.weekly_tokens", "star_goals.daily",
+                "star_goals.daily_tokens", "budget.blocks_per_tick", "budget.blocks_per_tick_idle",
+                "budget.max_ms_per_tick", "budget.snapshots_per_tick", "budget.chunk_loads_in_flight",
+                "budget.pause_above_mspt"));
         for (String kind : List.of("gold", "silver")) {
             for (String tier : TIERS) {
                 out.add("stars." + kind + "." + tier);
@@ -451,7 +713,6 @@ public record DailySettings(boolean enabled, String world, LocalTime rollover, i
             out.add(p + "enabled");
             out.add(p + (d.golf() ? "mix" : "tier"));
             out.add(p + "origin");
-            out.add(p + "daily_clear");
         }
         return List.copyOf(out);
     }

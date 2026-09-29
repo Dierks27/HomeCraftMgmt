@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.RestartHold;
 import com.dierks.homecraft.games.gen.DailySettings;
 import com.dierks.homecraft.games.gen.admin.GenOps;
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.Edition;
 import com.dierks.homecraft.games.gen.api.GenBoards;
 import com.dierks.homecraft.games.gen.api.GenCopy;
@@ -33,8 +34,11 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -49,8 +53,17 @@ import java.util.function.Consumer;
 import java.util.logging.Level;
 
 /**
- * The Daily Courses engine (GEN-SPEC §3): the schedule, the builds, and the gate the course engines
- * ask ({@link GeneratedCourses}).
+ * The Fresh Courses engine (GEN-SPEC §3, weekly addendum §1): the schedule, the builds, and the gate
+ * the course engines ask ({@link GeneratedCourses}).
+ *
+ * <p><b>Editions.</b> Everything here works on editions, not days: a slot shows the edition
+ * {@link GenScheduler#target} names (weekly by default, on the fixed grid of {@link Edition}), its
+ * rerolls, pins, boards and status are per edition, and a cadence change on reload keeps the live
+ * layouts until the new schedule's first start (never rebuilt mid-edition just because the
+ * setting changed). When the engine first sees a schedule it remembers the moment in
+ * {@code hcm_meta} ({@code gen.cadence}), so a restart in between doesn't move the switch. Tries are
+ * still counted per course day, so a failed build is tried again the next morning rather than a
+ * week later.
  *
  * <p><b>The gate (R5).</b> A generated course is playable only while this engine vouches for its
  * blocks: its live half was verified against its plan in this run. At every start the gate is
@@ -67,7 +80,7 @@ import java.util.logging.Level;
  * is stored: a stop at any point leaves the database before or after the flip, and the next start
  * converges from there.
  *
- * <p><b>Failure isolation (S8).</b> The engine runs inside the {@code daily} game's guard; a planner
+ * <p><b>Failure isolation (S8).</b> The engine runs inside the {@code fresh_courses} game's guard; a planner
  * exception is caught on its thread and becomes a failed try; a failed build leaves the old layout
  * up and says why in status. Nothing here ever reaches Time Trials or Mini Golf except through the
  * gate and {@code coursesChanged}.
@@ -88,6 +101,8 @@ public final class GenService implements GeneratedCourses, GenOps {
     public static final long VET_EVERY_MS = 300_000L;
     /** Star Charts are kept this many weeks. */
     public static final int KEEP_WEEKS = 12;
+    /** Each course always keeps its last this many editions' boards, however old. */
+    public static final int KEEP_EDITIONS = 8;
     /**
      * The counted work each generator may use per plan: each planner's own bound, which a plan
      * never needs more than (a smaller one would fail the same seed at every try of the day).
@@ -139,7 +154,10 @@ public final class GenService implements GeneratedCourses, GenOps {
         final Evacuator evac = new Evacuator();
         final BuildBudget budget = new BuildBudget(host::nanoTime);
         Stage stage = Stage.START;
+        /** The first day of the edition it builds for. */
         long day;
+        /** That edition's length in days. */
+        int cadence = Edition.DAILY;
         int reroll;
         long seed;
         String mix = "";
@@ -181,8 +199,13 @@ public final class GenService implements GeneratedCourses, GenOps {
     private long lastSecretWarn = Long.MIN_VALUE / 2;
     private long lastVet = Long.MIN_VALUE / 2;
     private long prunedDay = Long.MIN_VALUE;
-    /** The course day the build queue last started for (one INFO line a day). */
-    private long queueDay = Long.MIN_VALUE;
+    /** The edition the build queue last started for (one INFO line an edition). */
+    private String queueEdition = "";
+    /** The schedule ({@code <cadence>|<rebuild day>}) as last read, and when it was first seen (epoch ms). */
+    private String scheduleSig = "";
+    private long scheduleSince;
+    /** Each week's Star Chart goals once fixed ({@link #goals}), by the week's first day. */
+    private final Map<Long, List<DailyStars.Goal>> weekGoals = new HashMap<>();
     private volatile List<Object[]> areas = List.of();
 
     /**
@@ -199,7 +222,7 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     // ---- lifecycle ----------------------------------------------------------------------------
 
-    /** Start (enable, or {@code daily} opened): read every live row; the gate is shut until verified. */
+    /** Start (enable, or {@code fresh_courses} opened): read every live row; the gate is shut until verified. */
     public void start() {
         running = true;
         readyAt = -1;
@@ -207,7 +230,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         for (SlotState s : slots.values()) {
             readRow(s);
         }
-        host.logger().info("Daily Courses: started - every live course stays closed until its blocks are checked.");
+        host.logger().info("Fresh Courses: started (" + host.settings().cadenceName() + ") - every live course stays"
+                + " closed until its blocks are checked.");
     }
 
     /**
@@ -228,9 +252,9 @@ public final class GenService implements GeneratedCourses, GenOps {
                 WorldPort port = s.wanted() && done.add(s.world.toLowerCase(Locale.ROOT)) ? host.world(s.world) : null;
                 if (port != null) {
                     try {
-                        port.worldRules(line -> host.logger().info("Daily Courses: " + port.name() + ": " + line));
+                        port.worldRules(line -> host.logger().info("Fresh Courses: " + port.name() + ": " + line));
                     } catch (RuntimeException e) {
-                        host.logger().log(Level.WARNING, "Daily Courses: the world rules could not be set", e);
+                        host.logger().log(Level.WARNING, "Fresh Courses: the world rules could not be set", e);
                     }
                 }
             }
@@ -256,7 +280,7 @@ public final class GenService implements GeneratedCourses, GenOps {
     private void unclaimedLive(SlotState s) {
         s.verified = false;
         s.healFailed = true;
-        warnOnce(s, "Daily Courses: " + s.def.id() + "'s live course isn't in its claimed region "
+        warnOnce(s, "Fresh Courses: " + s.def.id() + "'s live course isn't in its claimed region "
                 + "- a new one will be built once the area is checked");
     }
 
@@ -264,7 +288,7 @@ public final class GenService implements GeneratedCourses, GenOps {
     public void stop() {
         running = false;
         if (job != null) {
-            cancel(job, "Daily Courses stopped");
+            cancel(job, "Fresh Courses stopped");
         }
         queue.clear();
         inbox.clear();
@@ -291,7 +315,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         try {
             tickJob(j);
         } catch (RuntimeException e) {
-            host.logger().log(Level.SEVERE, "Daily Courses: building " + j.slot.def.id() + " failed", e);
+            host.logger().log(Level.SEVERE, "Fresh Courses: building " + j.slot.def.id() + " failed", e);
             if (job == j) {
                 fail(j, "it threw " + e);
             }
@@ -358,19 +382,22 @@ public final class GenService implements GeneratedCourses, GenOps {
             s.waiting = d.kind() == GenScheduler.Kind.WAIT ? d.reason() : null;
             switch (d.kind()) {
                 case BUILD -> {
-                    if (queueDay != d.day()) {
-                        queueDay = d.day();
-                        host.logger().info("Daily Courses: building the courses for " + date(d.day()) + ".");
+                    String edition = Edition.editionKey(d.cadence(), d.day(), 0);
+                    if (!queueEdition.equals(edition)) {
+                        queueEdition = edition;
+                        host.logger().info("Fresh Courses: building the courses for "
+                                + editionName(d.cadence(), d.day()) + " (" + edition + ").");
                     }
                     Job j = new Job(Kind.BUILD, s, null);
                     j.day = d.day();
+                    j.cadence = d.cadence();
                     j.reroll = d.reroll();
                     j.seed = d.seed();
                     j.mix = s.mix;
                     begin(j);
                     return;
                 }
-                case RESTAMP -> restamp(s, d.day());
+                case RESTAMP -> restamp(s, d.cadence(), d.day());
                 case CLEAR_OLD -> {
                     if (clear == null && s.preview == null && now - s.lastClearCheck >= CLEAR_EVERY_MS) {
                         s.lastClearCheck = now;
@@ -387,7 +414,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 case WAIT -> {
                     if (secret == null && d.reason().contains("secret") && now - lastSecretWarn >= SECRET_WARN_MS) {
                         lastSecretWarn = now;
-                        host.logger().warning("Daily Courses: the seed secret can't be read from the database - "
+                        host.logger().warning("Fresh Courses: the seed secret can't be read from the database - "
                                 + "every course keeps its current layout until it can");
                     }
                 }
@@ -401,10 +428,13 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
     }
 
-    /** The slot's pin if it applies today (not expired, made for the planner running now), else {@code null}. */
+    /**
+     * The slot's pin if it applies to the edition it should show now (not expired, made for the
+     * planner running now), else {@code null}.
+     */
     private GenScheduler.Pin activePin(SlotState s) {
         Planner p = planners.get(s.def.generator());
-        return s.pin != null && p != null && s.pin.appliesOn(edition().day(host.now()), p.algo()) ? s.pin : null;
+        return s.pin != null && p != null && s.pin.appliesOn(target(s).start(), p.algo()) ? s.pin : null;
     }
 
     /** Why a stored pin is not used, or {@code null} when there is none or it applies. */
@@ -420,8 +450,8 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     /**
-     * §4.0: a pin made for another planner version is logged (once a day) and the daily seed is
-     * used; a pin whose days are over is forgotten, with one line.
+     * §4.0: a pin made for another planner version is logged (once a day) and the edition's own
+     * seed is used; a pin whose days are over is forgotten, with one line.
      */
     private void warnIgnoredPin(SlotState s) {
         String why = pinIgnored(s);
@@ -429,8 +459,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (why != null && p != null && s.pin.algo() == p.algo()) {
             try {
                 host.store().meta(GenAdminKeys.pin(s.def.id()), null);
-                host.logger().info("Daily Courses: " + s.def.id() + "'s pinned seed " + GenSeed.hex(s.pin.seed()) + " ended on "
-                        + date(s.pin.until()) + "; the daily seed is used from now on.");
+                host.logger().info("Fresh Courses: " + s.def.id() + "'s pinned seed " + GenSeed.hex(s.pin.seed())
+                        + " ended on " + date(s.pin.until()) + "; each set's own seed is used from now on.");
                 s.pin = null;
                 return;
             } catch (SQLException e) {
@@ -438,9 +468,10 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
         }
         if (why != null) {
-            warnOnce(s, "Daily Courses: " + s.def.id() + "'s pinned seed " + GenSeed.hex(s.pin.seed()) + " is not used on "
-                    + date(edition().day(host.now())) + " - " + why + "; the daily seed is used (/hcm games gen unpin "
-                    + s.def.id() + " forgets it)");
+            GenScheduler.Target t = target(s);
+            warnOnce(s, "Fresh Courses: " + s.def.id() + "'s pinned seed " + GenSeed.hex(s.pin.seed())
+                    + " is not used for " + editionName(t.cadence(), t.start()) + " - " + why + "; the set's own seed"
+                    + " is used (/hcm games gen unpin " + s.def.id() + " forgets it)");
         }
     }
 
@@ -448,7 +479,12 @@ public final class GenService implements GeneratedCourses, GenOps {
         Planner p = planners.get(s.def.generator());
         return new GenScheduler.SlotView(s.def.id(), s.on() && p != null, job != null, s.live, !s.healFailed,
                 s.liveMix, s.mix, s.reroll, s.pin, p == null ? 0 : p.algo(), s.triesDay, s.tries, s.lastTryAt,
-                s.oldDirty, secret());
+                s.oldDirty, secret(), scheduleSince);
+    }
+
+    /** The edition a slot should show now ({@link GenScheduler#target}). */
+    private GenScheduler.Target target(SlotState s) {
+        return GenScheduler.target(s.live, host.now(), edition(), scheduleSince);
     }
 
     /** The seed secret (kept once read), or {@code null} while the database can't give it. */
@@ -475,7 +511,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             meta = null;
         }
         String world = st.world().isBlank() ? first(host.gamesWorlds()) : st.world();
-        long day = edition().day(host.now());
+        noticeSchedule(meta);
         List<Object[]> kept = new ArrayList<>();
         for (SlotState s : slots.values()) {
             DailySettings.SlotConfig c = st.slot(s.def.id());
@@ -495,12 +531,12 @@ public final class GenService implements GeneratedCourses, GenOps {
                 String tier = meta.get(GenAdminKeys.tier(id));
                 s.mix = tier != null && s.def.tierProblem(tier) == null ? s.def.normalise(tier) : c.tierOrMix();
                 s.pin = GenScheduler.Pin.parse(meta.get(GenAdminKeys.pin(id)));
-                s.reroll = GenAdminKeys.whole(meta.get(GenAdminKeys.reroll(id, day)));
+                s.reroll = GenAdminKeys.whole(meta.get(GenAdminKeys.reroll(id, target(s).key())));
                 String claim = meta.get(GenAdminKeys.claim(id));
                 boolean claimed = Regions.claim(s.def, world, origin).equals(claim);
                 if (claim != null && !claimed) {
                     int[] old = Regions.claimOrigin(claim);
-                    warnOnce(s, "Daily Courses: " + id + " was claimed at another place ("
+                    warnOnce(s, "Fresh Courses: " + id + " was claimed at another place ("
                             + (old == null ? claim : Regions.describe(s.def, old)) + "). Those blocks are left"
                             + " as they are: clear them by hand. The new region is checked before it is used.");
                 }
@@ -515,13 +551,56 @@ public final class GenService implements GeneratedCourses, GenOps {
         areas = List.copyOf(kept);
     }
 
+    /**
+     * The schedule ({@code cadence} and the resolved {@code rebuild_day}) as the engine sees it now,
+     * and when it was first seen: read from {@code gen.cadence} when it matches, else recorded now.
+     * That moment is how long a layout of the old schedule is kept ({@link GenScheduler#target}).
+     */
+    private void noticeSchedule(Map<String, String> meta) {
+        Edition ed = edition();
+        String sig = ed.cadenceDays() + "|" + ed.rebuildDay();
+        if (sig.equals(scheduleSig)) {
+            return;
+        }
+        long now = host.now();
+        long since = now;
+        boolean announce = false;
+        String stored = meta == null ? null : meta.get(GenAdminKeys.schedule());
+        int bar = stored == null ? -1 : stored.lastIndexOf('|');
+        String was = bar > 0 ? stored.substring(0, bar) : null;
+        if (sig.equals(was)) {
+            try {
+                since = Long.parseLong(stored.substring(bar + 1));
+            } catch (NumberFormatException e) {
+                since = now;
+            }
+        } else if (meta != null) {
+            try {
+                host.store().meta(GenAdminKeys.schedule(), sig + "|" + now);
+            } catch (SQLException | RuntimeException e) {
+                host.logger().log(Level.WARNING, "Fresh Courses: could not record the new schedule", e);
+            }
+            announce = was != null;
+        }
+        scheduleSig = sig;
+        scheduleSince = since;
+        if (announce) {
+            // When the courses really change: the new schedule's first start, their own end if sooner,
+            // or a week on when that start would carry the live key again (GenScheduler#target).
+            long next = nextChangeAt();
+            host.logger().info("Fresh Courses: the courses now change " + GenCopy.cadenceName(ed.cadenceDays())
+                    + ". The ones up now stay until " + GenCopy.whenDated(next > 0 ? next : ed.nextChangeAt(now),
+                    host.zone()) + ".");
+        }
+    }
+
     /** A slot's region moved (config): nothing at the old place is vouched for or cleared. */
     private void moved(SlotState s, String world, int[] origin) {
         if (job != null && job.slot == s) {
             cancel(job, "its region moved");
         }
         queue.removeIf(j -> j.slot == s);
-        host.logger().warning("Daily Courses: " + s.def.id() + " moved from " + s.world + " "
+        host.logger().warning("Fresh Courses: " + s.def.id() + " moved from " + s.world + " "
                 + Regions.describe(s.def, s.origin) + " to " + world + " " + Regions.describe(s.def, origin)
                 + ". The old halves were not cleared (use /hcm games gen clear before moving a course).");
         s.verified = false;
@@ -551,7 +630,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             why = s.problem; // foreign blocks stay until a claim clears them
         }
         if (why != null && !why.equals(s.problem)) {
-            host.logger().severe("Daily Courses: " + s.def.id() + " is off: " + why);
+            host.logger().severe("Fresh Courses: " + s.def.id() + " is off: " + why);
         }
         s.problem = why;
         return why;
@@ -564,7 +643,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             return "no planner for " + s.def.generator();
         }
         if (s.world.isBlank()) {
-            return "no world: games.daily.world is empty and games.worlds lists none";
+            return "no world: games.fresh.world is empty and games.worlds lists none";
         }
         String tier = s.def.tierProblem(s.mix);
         if (tier != null) {
@@ -640,7 +719,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             String mix = host.store().meta(GenAdminKeys.mix(s.def.id()));
             s.liveMix = mixFor(tag, mix, s.mix);
         } catch (SQLException | RuntimeException e) {
-            host.logger().log(Level.WARNING, "Daily Courses: could not read " + s.def.id() + "'s course", e);
+            host.logger().log(Level.WARNING, "Fresh Courses: could not read " + s.def.id() + "'s course", e);
         }
     }
 
@@ -745,7 +824,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         if (!s.claimed) {
-            // Never converge a region Daily Courses doesn't hold: the next build scans it first.
+            // Never converge a region Fresh Courses doesn't hold: the next build scans it first.
             end(j);
             unclaimedLive(s);
             j.report.accept("&e" + s.def.name() + "'s area isn't claimed, so it isn't healed in place. &7A new"
@@ -755,6 +834,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         j.tag = s.live;
         j.half = s.live.half();
         j.day = s.live.day();
+        j.cadence = s.live.cadence();
         j.reroll = s.live.reroll();
         j.seed = s.live.seed();
         j.mix = s.liveMix;
@@ -850,7 +930,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         SlotState s = j.slot;
         if (error != null) {
             if (!(error instanceof GenFailed)) {
-                host.logger().log(Level.SEVERE, "Daily Courses: the " + s.def.generator() + " planner threw", error);
+                host.logger().log(Level.SEVERE, "Fresh Courses: the " + s.def.generator() + " planner threw", error);
             }
             fail(j, error instanceof GenFailed ? String.valueOf(error.getMessage()) : "the planner threw " + error);
             return;
@@ -914,7 +994,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (!j.budget.begin(cfg, online, host.mspt())) {
             if (!j.pauseWarned) {
                 j.pauseWarned = true;
-                host.logger().warning("Daily Courses: building " + s.def.id() + " paused - the server's ticks are"
+                host.logger().warning("Fresh Courses: building " + s.def.id() + " paused - the server's ticks are"
                         + " slow (over " + cfg.pauseAboveMspt() + " ms); it goes on below "
                         + (int) cfg.resumeBelowMspt() + " ms");
             }
@@ -939,7 +1019,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         if (j.build.deferring() && !j.deferWarned) {
             j.deferWarned = true;
-            host.logger().warning("Daily Courses: building " + s.def.id() + " is waiting for someone to step away");
+            host.logger().warning("Fresh Courses: building " + s.def.id() + " is waiting for someone to step away");
         }
         if (j.build.failed()) {
             String why = j.build.error();
@@ -982,14 +1062,14 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
             case PREVIEW -> {
                 if (proven(j)) {
-                    s.preview = new SlotState.Preview(j.half, j.plan, j.day, j.seed, j.mix);
+                    s.preview = new SlotState.Preview(j.half, j.plan, j.day, j.seed, j.mix, j.cadence);
                     s.oldDirty = true;
                     end(j);
-                    host.logger().info("Daily Courses: a preview of " + s.def.id() + " (seed " + GenSeed.hex(j.seed)
+                    host.logger().info("Fresh Courses: a preview of " + s.def.id() + " (seed " + GenSeed.hex(j.seed)
                             + ") stands in half " + j.half + ".");
                     j.report.accept("&aThe preview of " + s.def.name() + " is ready in half " + j.half
-                            + ". &7Walk it: &e/hcm games gen tp " + s.def.id() + " idle&7; make it today's: &e/hcm games"
-                            + " gen promote " + s.def.id());
+                            + ". &7Walk it: &e/hcm games gen tp " + s.def.id() + " idle&7; make it the current course:"
+                            + " &e/hcm games gen promote " + s.def.id());
                 }
             }
             case CLEAR_OLD -> {
@@ -997,7 +1077,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 s.previous = null;
                 s.clearing = false;
                 end(j);
-                host.logger().info("Daily Courses: " + s.def.id() + "'s old half " + j.steps.get(0).which()
+                host.logger().info("Fresh Courses: " + s.def.id() + "'s old half " + j.steps.get(0).which()
                         + " is empty (" + j.writes + " blocks cleared).");
             }
             case CLAIM -> {
@@ -1011,7 +1091,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 try {
                     host.store().meta(GenAdminKeys.claim(s.def.id()), null);
                 } catch (SQLException e) {
-                    host.logger().log(Level.WARNING, "Daily Courses: could not forget " + s.def.id() + "'s claim", e);
+                    host.logger().log(Level.WARNING, "Fresh Courses: could not forget " + s.def.id() + "'s claim", e);
                 }
                 s.claimed = false;
                 s.oldDirty = false;
@@ -1019,7 +1099,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 s.preview = null;
                 s.verified = false;
                 s.healFailed = s.live != null; // its blocks are gone: switched on again, it builds anew
-                host.logger().info("Daily Courses: " + s.def.id() + " is cleared (" + j.writes + " blocks) and off.");
+                host.logger().info("Fresh Courses: " + s.def.id() + " is cleared (" + j.writes + " blocks) and off.");
                 j.report.accept("&a" + s.def.name() + " is cleared and off. &7Move it now if you like, then &e/hcm"
                         + " games gen on " + s.def.id());
             }
@@ -1047,10 +1127,10 @@ public final class GenService implements GeneratedCourses, GenOps {
         end(j);
         String first = j.firstFound.isEmpty() ? "?" : j.firstFound.get(0);
         String why = FOREIGN + String.format(Locale.ROOT, "%,d", j.found) + (j.found == 1 ? " block that isn't"
-                : " blocks that aren't") + " Daily Courses' (first at " + first + ") - /hcm games gen claim "
+                : " blocks that aren't") + " Fresh Courses' (first at " + first + ") - /hcm games gen claim "
                 + s.def.id() + " confirm clears them";
         if (!why.equals(s.problem)) {
-            host.logger().severe("Daily Courses: " + s.def.id() + " is off: " + why);
+            host.logger().severe("Fresh Courses: " + s.def.id() + " is off: " + why);
         }
         s.problem = why;
         j.report.accept("&c" + s.def.name() + ": &7" + why);
@@ -1063,10 +1143,10 @@ public final class GenService implements GeneratedCourses, GenOps {
             if (s.problem != null && s.problem.startsWith(FOREIGN)) {
                 s.problem = null;
             }
-            host.logger().info("Daily Courses: " + s.def.id() + " claimed " + s.world + " "
+            host.logger().info("Fresh Courses: " + s.def.id() + " claimed " + s.world + " "
                     + Regions.describe(s.def, s.origin));
         } catch (SQLException e) {
-            host.logger().log(Level.WARNING, "Daily Courses: could not record " + s.def.id() + "'s claim", e);
+            host.logger().log(Level.WARNING, "Fresh Courses: could not record " + s.def.id() + "'s claim", e);
         }
     }
 
@@ -1079,8 +1159,8 @@ public final class GenService implements GeneratedCourses, GenOps {
                 fail(j, "its layout from an older version failed the check: " + String.join("; ", problems));
                 return;
             }
-            host.logger().warning("Daily Courses: " + s.def.id() + "'s course was made by an older version of its"
-                    + " planner, so only its structure was checked; the new version builds from the next day.");
+            host.logger().warning("Fresh Courses: " + s.def.id() + "'s course was made by an older version of its"
+                    + " planner, so only its structure was checked; the new version builds from the next set.");
         } else if (!proven(j)) {
             return;
         }
@@ -1090,10 +1170,10 @@ public final class GenService implements GeneratedCourses, GenOps {
         s.builtAt = host.now();
         String line = "checked " + s.def.id() + " in half " + j.half + " - " + j.writes + " blocks healed";
         if (j.writes > 0) {
-            host.logger().severe("Daily Courses: " + line + " (the world wasn't saved after the last change, or"
+            host.logger().severe("Fresh Courses: " + line + " (the world wasn't saved after the last change, or"
                     + " something edited it); it is open again.");
         } else {
-            host.logger().info("Daily Courses: " + line + "; it is open.");
+            host.logger().info("Fresh Courses: " + line + "; it is open.");
         }
         s.lastLine = lastLine(j);
         j.report.accept("&a" + s.def.name() + " checked: &7" + j.writes + " blocks healed.");
@@ -1110,7 +1190,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         List<String> problems = port == null ? List.of("the world isn't loaded")
                 : LiveProof.replay(port.ballBlocks(), g.course().holes(), witness);
         if (!problems.isEmpty()) {
-            host.logger().severe("Daily Courses: " + s.def.id() + "'s golf didn't replay on the real blocks: "
+            host.logger().severe("Fresh Courses: " + s.def.id() + "'s golf didn't replay on the real blocks: "
                     + String.join("; ", problems));
             fail(j, "the live replay failed: " + problems.get(0));
             return false;
@@ -1159,7 +1239,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         List<Integer> attempts = pc instanceof PlannedGolf g ? g.attempts() : List.of();
         List<List<Putt>> witness = pc instanceof PlannedGolf g ? g.witness() : List.of();
         GenTag tag = new GenTag(def.id(), planners.get(def.generator()).id(), j.plan.algo(), j.day, j.reroll, j.seed,
-                j.half, j.plan.hash(), ref, gold, silver, attempts, witness, now);
+                j.half, j.plan.hash(), ref, gold, silver, attempts, witness, now, j.cadence);
         int rev;
         try {
             GamesDao.CourseRow old = host.store().course(def.id());
@@ -1174,11 +1254,11 @@ public final class GenService implements GeneratedCourses, GenOps {
             meta.put(GenAdminKeys.mix(def.id()), j.plan.hash() + ":" + j.mix);
             if (j.kind == Kind.PROMOTE || j.reroll > s.reroll) {
                 // a promote, or a replacement for a layout nobody could vouch for, takes the next reroll
-                meta.put(GenAdminKeys.reroll(def.id(), j.day), Integer.toString(j.reroll));
+                meta.put(GenAdminKeys.reroll(def.id(), tag.edition()), Integer.toString(j.reroll));
             }
             rev = host.store().flip(row, meta);
         } catch (SQLException | RuntimeException e) {
-            host.logger().log(Level.WARNING, "Daily Courses: the flip of " + def.id() + " failed", e);
+            host.logger().log(Level.WARNING, "Fresh Courses: the flip of " + def.id() + " failed", e);
             fail(j, "the database refused the new course (" + e.getMessage() + ")");
             return;
         }
@@ -1202,10 +1282,10 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         s.lastLine = lastLine(j);
         host.coursesChanged(def.game());
-        host.logger().info("Daily Courses: built " + def.id() + " for " + date(j.day) + (j.reroll > 0 ? " (reroll "
-                + j.reroll + ")" : "") + " in half " + j.half + " - seed " + GenSeed.shortHex(j.seed) + ", "
+        host.logger().info("Fresh Courses: built " + def.id() + " for " + editionName(j.cadence, j.day) + " ("
+                + tag.editionKey() + ") in half " + j.half + " - seed " + GenSeed.shortHex(j.seed) + ", "
                 + s.lastLine.substring("last: ".length()));
-        j.report.accept("&a" + def.name() + " is live: &7" + date(j.day) + ", half " + j.half + ".");
+        j.report.accept("&a" + def.name() + " is live: &7" + editionName(j.cadence, j.day) + ", half " + j.half + ".");
         prune();
     }
 
@@ -1214,8 +1294,9 @@ public final class GenService implements GeneratedCourses, GenOps {
                                   GamesDao.CourseRow old, long now) {
         long created = old == null ? now : old.createdAt();
         int rev = old == null ? 1 : old.rev() + 1;
+        String name = GenCopy.slotName(def, tag.cadence());
         if (pc instanceof PlannedGolf g) {
-            GolfCourse c = new GolfCourse(def.id(), def.name(), world, true, rev, g.course().holes(), tag);
+            GolfCourse c = new GolfCourse(def.id(), name, world, true, rev, g.course().holes(), tag);
             return com.dierks.homecraft.games.golf.CourseCodec.toRow(c, created, now);
         }
         Course planned = ((PlannedTrial) pc).course();
@@ -1224,21 +1305,21 @@ public final class GenService implements GeneratedCourses, GenOps {
             Course was = CourseCodec.decode(old.id(), old.data()).course();
             pinned = was != null && was.pinned();
         }
-        Course c = new Course(def.id(), planned.kind(), def.name(), planned.tier(), world, planned.start(),
+        Course c = new Course(def.id(), planned.kind(), name, planned.tier(), world, planned.start(),
                 planned.checkpoints(), planned.finish(), planned.fallY(), planned.minSeconds(), true, pinned, rev, tag);
         return new GamesDao.CourseRow(c.id(), Slots.GAME_TRIALS, c.kind().id(), c.name(), c.world(), true,
                 CourseCodec.encode(c), rev, created, now);
     }
 
-    /** A pinned layout for a new day: a new day board, no blocks (§3.2). */
-    private void restamp(SlotState s, long day) {
+    /** A pinned layout for a new edition: new boards, no blocks (§3.2). */
+    private void restamp(SlotState s, int cadence, long day) {
         Slots.Def def = s.def;
-        GenTag tag = s.live.withEdition(day, 0);
+        GenTag tag = s.live.withEdition(cadence, day, 0);
         int rev;
         try {
             GamesDao.CourseRow old = host.store().course(def.id());
             if (old == null || Regions.takenByHand(def, old) != null) {
-                s.failedTry(day, host.now(), "its row is missing");
+                s.failedTry(edition().day(host.now()), host.now(), "its row is missing");
                 return;
             }
             GamesDao.CourseRow row;
@@ -1253,8 +1334,9 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
             rev = host.store().flip(row, Map.of());
         } catch (SQLException | RuntimeException e) {
-            host.logger().log(Level.WARNING, "Daily Courses: the restamp of " + def.id() + " failed", e);
-            s.failedTry(day, host.now(), "the database refused the new day (" + e.getMessage() + ")");
+            host.logger().log(Level.WARNING, "Fresh Courses: the restamp of " + def.id() + " failed", e);
+            s.failedTry(edition().day(host.now()), host.now(), "the database refused the new edition (" + e.getMessage()
+                    + ")");
             return;
         }
         s.live = tag;
@@ -1262,27 +1344,83 @@ public final class GenService implements GeneratedCourses, GenOps {
         s.tries = 0;
         s.lastError = null;
         host.coursesChanged(def.game());
-        host.logger().info("Daily Courses: " + def.id() + " is pinned - the same course for " + date(day)
-                + ", on a new day board.");
+        host.logger().info("Fresh Courses: " + def.id() + " is pinned - the same course for "
+                + editionName(cadence, day) + " (" + tag.editionKey() + "), on new boards.");
         prune();
     }
 
-    /** Day boards and star rows past keeping, once a course day (§5.2). */
+    /**
+     * Boards past keeping, once a course day (§5.2, weekly addendum §3): star rows older than
+     * {@code keep_days} (but never the current cadence's last {@value #KEEP_EDITIONS} editions), Star
+     * Charts older than {@value #KEEP_WEEKS} weeks (and their fixed goals, {@code gen.goals.<week>}),
+     * and edition leaderboards older than {@code keep_days} that aren't among their course's last
+     * {@value #KEEP_EDITIONS} editions.
+     */
     private void prune() {
-        long today = edition().day(host.now());
+        Edition ed = edition();
+        long now = host.now();
+        long today = ed.day(now);
         if (prunedDay == today) {
             return;
         }
         prunedDay = today;
         DailySettings st = host.settings();
+        int n = ed.cadenceDays();
+        long lastEditions = Edition.firstDayOf(n, Edition.index(n, ed.editionStart(now)) - (KEEP_EDITIONS - 1));
+        long keepFrom = today - st.keepDays();
+        long oldestWeek = ed.weekKey(today) - KEEP_WEEKS * 7L;
+        weekGoals.keySet().removeIf(week -> week < oldestWeek);
         try {
-            int n = host.store().pruneBoards(today - st.keepDays(), edition().weekKey(today) - KEEP_WEEKS * 7L);
-            if (n > 0) {
-                host.logger().info("Daily Courses: pruned " + n + " old day-board and star rows.");
+            for (String key : host.store().metaLike(GenAdminKeys.GOALS).keySet()) {
+                Long week = GenAdminKeys.goalsWeek(key);
+                if (week != null && week < oldestWeek) {
+                    host.store().meta(key, null); // a Star Chart's fixed goals go with its chart
+                }
             }
-        } catch (SQLException e) {
-            host.logger().log(Level.WARNING, "Daily Courses: could not prune old boards", e);
+        } catch (SQLException | RuntimeException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: could not prune old Star Chart goals", e);
         }
+        try {
+            int removed = host.store().pruneBoards(Math.min(keepFrom, lastEditions), oldestWeek);
+            removed += host.store().dropEditionBoards(oldEditionBoards(host.store().editionBoards(), keepFrom,
+                    KEEP_EDITIONS));
+            if (removed > 0) {
+                host.logger().info("Fresh Courses: pruned " + removed + " old course-board and star rows.");
+            }
+        } catch (SQLException | RuntimeException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: could not prune old boards", e);
+        }
+    }
+
+    /**
+     * The edition leaderboards ({@code gfresh:}) past keeping: an edition that may have started
+     * before {@code keepFrom} and isn't one of its course's last {@code keep} editions (by start,
+     * whatever their cadence). Anything that isn't an edition board is never picked.
+     */
+    static List<String> oldEditionBoards(List<String> boards, long keepFrom, int keep) {
+        Map<String, List<GenBoards.Board>> byCourse = new HashMap<>();
+        Map<GenBoards.Board, String> names = new HashMap<>();
+        for (String name : boards == null ? List.<String>of() : boards) {
+            GenBoards.Board b = GenBoards.parse(name);
+            if (b != null && b.kind() == GenBoards.Kind.DAY) {
+                byCourse.computeIfAbsent(b.courseId(), k -> new ArrayList<>()).add(b);
+                names.put(b, name);
+            }
+        }
+        List<String> out = new ArrayList<>();
+        for (List<GenBoards.Board> course : byCourse.values()) {
+            List<String> recent = course.stream()
+                    .sorted(Comparator.comparingLong(GenBoards.Board::day).reversed()
+                            .thenComparing(GenBoards.Board::edition, Comparator.reverseOrder()))
+                    .map(GenBoards.Board::edition).distinct().limit(Math.max(0, keep)).toList();
+            for (GenBoards.Board b : course) {
+                if (b.day() < keepFrom && !recent.contains(b.edition())) {
+                    out.add(names.get(b));
+                }
+            }
+        }
+        out.sort(null);
+        return out;
     }
 
     // ---- ending a job -----------------------------------------------------------------------------
@@ -1305,24 +1443,24 @@ public final class GenService implements GeneratedCourses, GenOps {
         String id = s.def.id();
         switch (j.kind) {
             case BUILD -> {
-                s.failedTry(j.day, host.now(), why);
-                host.logger().warning("Daily Courses: " + id + " couldn't be built - " + why + " (try " + s.tries
+                s.failedTry(edition().day(host.now()), host.now(), why);
+                host.logger().warning("Fresh Courses: " + id + " couldn't be built - " + why + " (try " + s.tries
                         + " of " + host.settings().maxTriesPerDay() + ")");
             }
             case HEAL -> {
                 s.verified = false;
                 s.healFailed = true;
                 s.lastError = why;
-                host.logger().severe("Daily Courses: " + id + "'s live course can't be vouched for - " + why
+                host.logger().severe("Fresh Courses: " + id + "'s live course can't be vouched for - " + why
                         + ". It stays closed; a new one is built.");
             }
             case CLEAR_OLD -> {
                 s.lastError = why;
-                host.logger().warning("Daily Courses: emptying " + id + "'s old half failed - " + why);
+                host.logger().warning("Fresh Courses: emptying " + id + "'s old half failed - " + why);
             }
             default -> {
                 s.lastError = why;
-                host.logger().warning("Daily Courses: " + j.kind.name().toLowerCase(Locale.ROOT) + " of " + id
+                host.logger().warning("Fresh Courses: " + j.kind.name().toLowerCase(Locale.ROOT) + " of " + id
                         + " failed - " + why);
             }
         }
@@ -1336,7 +1474,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (j.kind == Kind.HEAL && running) {
             queue.addFirst(new Job(Kind.HEAL, j.slot, j.report)); // the gate stays shut until it is done
         }
-        host.logger().info("Daily Courses: " + j.kind.name().toLowerCase(Locale.ROOT) + " of " + j.slot.def.id()
+        host.logger().info("Fresh Courses: " + j.kind.name().toLowerCase(Locale.ROOT) + " of " + j.slot.def.id()
                 + " stopped - " + why);
         j.report.accept("&7" + j.slot.def.name() + ": stopped - " + why);
     }
@@ -1394,7 +1532,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 case END -> host.endRun(a.player());
             }
         } catch (RuntimeException e) {
-            host.logger().log(Level.WARNING, "Daily Courses: could not move a player out of " + s.def.id(), e);
+            host.logger().log(Level.WARNING, "Fresh Courses: could not move a player out of " + s.def.id(), e);
         }
     }
 
@@ -1433,7 +1571,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (!running || s == null || !s.on() || !s.verified || s.live == null) {
             return false;
         }
-        return s.live.sameLayout(tag) && s.live.day() == tag.day() && s.live.reroll() == tag.reroll();
+        return s.live.sameLayout(tag) && s.live.sameEdition(tag);
     }
 
     @Override
@@ -1463,9 +1601,23 @@ public final class GenService implements GeneratedCourses, GenOps {
         return building ? GenCopy.building(s.def.name()) : GenCopy.closed(s.def.name());
     }
 
+    /**
+     * When the next set of courses goes up (epoch ms): the soonest end among the switched-on
+     * courses' current editions (a layout kept over a cadence change ends at the new schedule's
+     * first start), or the schedule's next start when nothing is up; -1 while stopped.
+     */
     @Override
     public long nextChangeAt() {
-        return running ? edition().nextChangeAt(host.now()) : -1;
+        if (!running) {
+            return -1;
+        }
+        long next = Long.MAX_VALUE;
+        for (SlotState s : slots.values()) {
+            if (s.on() && s.live != null) {
+                next = Math.min(next, target(s).endsAt());
+            }
+        }
+        return next == Long.MAX_VALUE ? edition().nextChangeAt(host.now()) : next;
     }
 
     @Override
@@ -1481,42 +1633,140 @@ public final class GenService implements GeneratedCourses, GenOps {
         return false;
     }
 
-    // ---- what a finish pays: games.daily, read on every use ----------------------------------------
+    /**
+     * The schedule: {@code clock.time_zone}, {@code games.fresh.cadence}, {@code rebuild_at} and
+     * {@code rebuild_day} (the quests' week start when empty), and the quests' week for the Star Chart.
+     */
+    public Edition edition() {
+        return host.settings().edition(host.zone(), host.weekStart());
+    }
 
-    /** {@code games.daily.slots.<id>.daily_clear} (0 for a course that isn't a slot). */
+    /**
+     * Whether the slot's live layout is its current edition's (a tile says "Last week's course"
+     * or the like otherwise: {@link GenCopy#previous}).
+     */
+    public boolean today(String slotId) {
+        SlotState s = slots.get(slotId);
+        return s != null && s.live != null && target(s).holds(s.live);
+    }
+
+    /** The edition a slot should be showing now (its key, first day, cadence and end). */
+    public GenScheduler.Target current(String slotId) {
+        SlotState s = slots.get(slotId);
+        return s == null ? GenScheduler.target(null, host.now(), edition(), scheduleSince) : target(s);
+    }
+
+    // ---- what a finish pays (the course engines read these; the addendum's §4) ------------------
+
+    /**
+     * What the first counted finish of {@code courseId} pays in an edition, at the configured cadence
+     * ({@code games.fresh.rewards}, scaled between the daily and weekly ends); 0 for a course that
+     * isn't a slot. A finish on a known layout pays by that layout's own cadence instead:
+     * {@link #dailyClear(String, int)}.
+     */
     @Override
     public int dailyClear(String courseId) {
-        Slots.Def def = Slots.of(courseId);
-        return def == null ? 0 : host.settings().dailyClear(def.id());
+        return host.settings().dailyClear(courseId);
     }
 
-    /** {@code games.daily.star_goals}. */
+    /**
+     * What the first counted finish of {@code courseId} pays in an edition of {@code cadence} days:
+     * pass the run's own {@code tag.cadence()}, so a layout kept over a cadence change pays by the
+     * edition it is (a kept daily edition pays the daily amount after a switch to weekly, and the
+     * other way round); 0 for a course that isn't a slot.
+     */
+    public int dailyClear(String courseId, int cadence) {
+        return host.settings().dailyClear(courseId, cadence);
+    }
+
+    /**
+     * The most stars the week starting {@code weekKey} can give: 3 × the courses that are on × the
+     * editions that start in it. A cadence longer than a week counts the edition running through a
+     * week without a start, so every week has goals.
+     */
+    public int weekMax(long weekKey) {
+        int on = 0;
+        for (SlotState s : slots.values()) {
+            if (s.on()) {
+                on++;
+            }
+        }
+        return DailyStars.weekMax(on, Math.max(1, edition().startsInWeek(weekKey)));
+    }
+
+    /**
+     * The Star Chart goals of the week starting {@code weekKey}: the cadence's, at most 80% of
+     * {@link #weekMax}, <b>fixed for the week</b> the first time they are asked for once it has
+     * begun (and the engine is up, its checks done, and something is on). They are kept in
+     * {@code hcm_meta} ({@code gen.goals.<week>}), so a restart doesn't move them either.
+     *
+     * <p>Why fixed: a goal's reward is once a week by its number of stars
+     * ({@code ms:gweek:<week>:<stars>}), and worked out afresh at every payment the top goal would
+     * move with the courses that are on (clamped 9 with four courses, 7 with three), or with the
+     * cadence and {@code star_goals} on a reload, and a player could be paid for it twice under two
+     * numbers in one week. A change counts from the next week. A week that hasn't begun, or a
+     * moment the goals can't be kept, gets them worked out now, unkept.
+     */
+    public List<DailyStars.Goal> goals(long weekKey) {
+        List<DailyStars.Goal> fixed = weekGoals.get(weekKey);
+        if (fixed != null) {
+            return fixed;
+        }
+        String key = GenAdminKeys.goals(weekKey);
+        List<DailyStars.Goal> kept;
+        try {
+            kept = GenAdminKeys.goalsOf(host.store().meta(key));
+        } catch (SQLException | RuntimeException e) {
+            return host.settings().starGoals(weekMax(weekKey));
+        }
+        if (kept != null) {
+            weekGoals.put(weekKey, kept);
+            return kept;
+        }
+        int max = weekMax(weekKey);
+        List<DailyStars.Goal> goals = host.settings().starGoals(max);
+        if (running && readyAt >= 0 && max > 0 && weekKey <= thisWeek()) {
+            try {
+                host.store().meta(key, GenAdminKeys.goalsText(goals));
+                weekGoals.put(weekKey, goals);
+            } catch (SQLException | RuntimeException e) {
+                host.logger().log(Level.WARNING, "Fresh Courses: could not keep this week's Star Chart goals", e);
+            }
+        }
+        return goals;
+    }
+
+    /** This week's Star Chart goals, in stars, smallest first. */
     @Override
     public List<Integer> starGoals() {
-        return host.settings().starGoals();
+        return DailyStars.stars(goals(thisWeek()));
     }
 
-    /** {@code games.daily.star_goal_reward}. */
+    /** What reaching {@code goal} stars pays this week (0 when it isn't one of this week's goals). */
+    public int starGoalReward(int goal) {
+        return DailyStars.tokens(goals(thisWeek()), goal);
+    }
+
+    /**
+     * One number for every goal, for a caller that doesn't yet pay each goal its own tokens: this
+     * week's smallest goal's ({@code star_goals}; 0 when the week has none). Pay by
+     * {@link #starGoalReward(int)} / {@link #goals} where the goal is known.
+     */
     @Override
     public int starGoalReward() {
-        return host.settings().starGoalReward();
+        List<DailyStars.Goal> goals = goals(thisWeek());
+        return goals.isEmpty() ? 0 : goals.get(0).tokens();
     }
 
-    /** {@code games.daily.daily_cap}. */
+    /** The most star-goal tokens a player earns a day ({@code games.fresh.daily_cap}). */
     @Override
     public int starGoalCap() {
         return host.settings().dailyCap();
     }
 
-    /** The course day's rules: {@code clock.time_zone}, {@code rollover}, {@code quests.week_starts_on}. */
-    public Edition edition() {
-        return new Edition(host.zone(), host.settings().rollover(), host.weekStart());
-    }
-
-    /** Whether the slot's live layout is today's (a tile says "Yesterday's course" otherwise). */
-    public boolean today(String slotId) {
-        SlotState s = slots.get(slotId);
-        return s != null && s.live != null && s.live.day() == edition().day(host.now());
+    private long thisWeek() {
+        Edition ed = edition();
+        return ed.weekKey(ed.day(host.now()));
     }
 
     /** The live tag of a slot, or {@code null}. */
@@ -1527,7 +1777,7 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     // ---- status (§8.6) ----------------------------------------------------------------------------
 
-    /** The lines under {@code daily} in {@code /hcm games status}. */
+    /** The lines under {@code fresh_courses} in {@code /hcm games status}. */
     public List<String> summary() {
         List<String> out = new ArrayList<>();
         long now = host.now();
@@ -1535,19 +1785,22 @@ public final class GenService implements GeneratedCourses, GenOps {
         int up = 0;
         long first = Long.MAX_VALUE;
         long last = 0;
+        GenScheduler.Target shown = null;
         for (SlotState s : slots.values()) {
-            if (s.on() && s.verified && s.live != null && s.live.day() == today) {
+            GenScheduler.Target t = target(s);
+            if (s.on() && s.verified && s.live != null && t.holds(s.live)) {
                 up++;
+                shown = shown == null ? t : shown;
                 if (s.builtAt > 0) {
                     first = Math.min(first, s.builtAt);
                     last = Math.max(last, s.builtAt);
                 }
             }
         }
-        long next = edition().nextChangeAt(now);
-        out.add(up + " course" + (up == 1 ? "" : "s") + " up for " + date(today)
-                + (last > 0 ? " · built " + clock(first) + (last - first >= 60_000 ? "-" + clock(last) : "") : "")
-                + " · next " + clock(next) + " (in " + GenCopy.span(next - now) + ")");
+        GenScheduler.Target t = shown == null ? current(null) : shown;
+        out.add(up + " course" + (up == 1 ? "" : "s") + " up for " + editionName(t.cadence(), t.start())
+                + (last > 0 ? " · built " + clock(first) + (last - first >= 60_000 ? "-" + clock(last) : "") : ""));
+        out.add(scheduleLine(now));
         for (SlotState s : slots.values()) {
             String line = trouble(s, today);
             if (line != null) {
@@ -1555,6 +1808,38 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
         }
         return out;
+    }
+
+    /**
+     * The cadence and the next change, as the owner reads it: "weekly (Mondays at 4:00 AM) · next:
+     * Mon 5 Oct 4:00 AM (in 6d 14h)", plus when the current courses were made under an older
+     * setting and stay until the new one starts.
+     */
+    private String scheduleLine(long now) {
+        Edition ed = edition();
+        long next = nextChangeAt();
+        String at = "at " + CLOCK.format(ed.rollover());
+        String when = ed.cadenceDays() == Edition.WEEKLY
+                ? ed.rebuildDay().getDisplayName(TextStyle.FULL, Locale.US) + "s " + at : at;
+        boolean kept = false;
+        for (SlotState s : slots.values()) {
+            kept |= s.on() && s.live != null && target(s).kept();
+        }
+        int was = keptCadence();
+        String made = was == ed.cadenceDays() ? "for the old change day" : GenCopy.cadenceName(was);
+        return GenCopy.cadenceName(ed.cadenceDays()) + " (" + when + ") · next: "
+                + GenCopy.whenDated(next, host.zone()) + " (in " + GenCopy.span(next - now) + ")"
+                + (kept ? " · the current courses were made " + made + " and stay until then" : "");
+    }
+
+    /** The cadence a kept layout was made with (the first one found). */
+    private int keptCadence() {
+        for (SlotState s : slots.values()) {
+            if (s.on() && s.live != null && target(s).kept()) {
+                return s.live.cadence();
+            }
+        }
+        return edition().cadenceDays();
     }
 
     /** What is wrong with a slot for the summary, or {@code null}. */
@@ -1568,8 +1853,9 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (job != null && job.slot == s) {
             return "being built";
         }
-        if (s.live != null && s.live.day() < today && s.lastError != null) {
-            return "showing yesterday's course - " + s.lastError + " (try " + s.triesOn(today) + " of "
+        boolean behind = s.live != null && !target(s).holds(s.live);
+        if (behind && s.lastError != null) {
+            return "showing the last course - " + s.lastError + " (try " + s.triesOn(today) + " of "
                     + host.settings().maxTriesPerDay() + nextTry(s) + ")";
         }
         if (s.live == null && s.lastError != null) {
@@ -1579,7 +1865,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (s.healFailed) {
             return "closed - " + (s.lastError == null ? "its course couldn't be checked" : s.lastError);
         }
-        if (s.waiting != null && (s.live == null || s.live.day() < today)) {
+        if (s.waiting != null && (s.live == null || behind)) {
             return "waiting - " + s.waiting;
         }
         return null;
@@ -1593,7 +1879,11 @@ public final class GenService implements GeneratedCourses, GenOps {
     @Override
     public List<String> status(String slotId) {
         List<String> out = new ArrayList<>();
-        long today = edition().day(host.now());
+        long now = host.now();
+        long today = edition().day(now);
+        if (slotId == null) {
+            out.add("&7" + scheduleLine(now));
+        }
         for (SlotState s : slots.values()) {
             if (slotId != null && !s.def.id().equals(slotId)) {
                 continue;
@@ -1609,6 +1899,10 @@ public final class GenService implements GeneratedCourses, GenOps {
                 out.add("  &c" + t);
             }
             if (slotId != null) {
+                GenScheduler.Target target = target(s);
+                out.add("  &7edition " + target.key() + " (" + editionName(target.cadence(), target.start())
+                        + ") until " + GenCopy.whenDated(target.endsAt(), host.zone())
+                        + (target.kept() ? " - kept from the old setting" : ""));
                 out.add("  &7region " + s.world + " " + Regions.describe(s.def, s.origin) + (s.claimed ? " (claimed)"
                         : " (not claimed yet)"));
                 if (s.pin != null) {
@@ -1621,7 +1915,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 }
             }
         }
-        if (out.isEmpty()) {
+        if (out.size() <= (slotId == null ? 1 : 0)) {
             out.add("&cNo slot called " + slotId + ".");
         }
         return out;
@@ -1639,10 +1933,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (s.live == null) {
             return b.append("&7no course yet").toString();
         }
-        b.append(s.verified ? "live " : "&cclosed &7").append(date(s.live.day()));
-        if (s.live.reroll() > 0) {
-            b.append(" r").append(s.live.reroll());
-        }
+        b.append(s.verified ? "live " : "&cclosed &7").append(editionName(s.live.cadence(), s.live.day()))
+                .append(" (").append(s.live.editionKey()).append(")");
         b.append("  half ").append(s.live.half()).append("  rev ").append(s.rev).append("  seed ")
                 .append(GenSeed.shortHex(s.live.seed())).append("…  ").append(playing(s)).append(" playing");
         return b.toString();
@@ -1696,15 +1988,19 @@ public final class GenService implements GeneratedCourses, GenOps {
     public void plan(String slotId, String arg, Consumer<String> report) {
         SlotState s = slots.get(slotId);
         Planner p = planners.get(s.def.generator());
-        long day = edition().day(host.now());
+        Edition ed = edition();
+        GenScheduler.Target t = target(s);
+        long day = t.start();
+        int cadence = t.cadence();
         long seed;
-        if (arg != null && arg.equalsIgnoreCase("tomorrow")) {
-            day++;
+        if (arg != null && (arg.equalsIgnoreCase("next") || arg.equalsIgnoreCase("tomorrow"))) {
+            day = ed.editionStart(t.endsAt());
+            cadence = ed.cadenceDays();
             if (secret() == null) {
                 report.accept("&cThe seed secret can't be read right now.");
                 return;
             }
-            seed = GenSeed.seed(secret, day, s.def.id(), 0);
+            seed = GenSeed.seed(secret, cadence, day, s.def.id(), 0);
         } else if (arg != null) {
             Long parsed = GenSeed.parse(arg);
             if (parsed == null) {
@@ -1717,21 +2013,21 @@ public final class GenService implements GeneratedCourses, GenOps {
                 report.accept("&cThe seed secret can't be read right now.");
                 return;
             }
-            seed = GenSeed.seed(secret, day, s.def.id(), s.reroll);
+            seed = GenSeed.seed(secret, cadence, day, s.def.id(), s.reroll);
         }
         char which = s.idleHalf();
         Box half = s.half(which);
         PlanInput in = new PlanInput(s.def, half, which, day, 0, seed, s.mix, host.fallDepth(),
                 WORK.getOrDefault(s.def.generator(), 200_000L), cancelled(new AtomicBoolean()));
-        long d = day;
-        report.accept("&7Planning " + s.def.name() + " for " + date(day) + " (seed " + GenSeed.hex(seed) + ")...");
+        String d = editionName(cadence, day);
+        report.accept("&7Planning " + s.def.name() + " for " + d + " (seed " + GenSeed.hex(seed) + ")...");
         host.planner().execute(() -> {
             long t0 = System.nanoTime();
             List<String> lines = new ArrayList<>();
             try {
                 Plan plan = p.plan(in);
                 long ms = (System.nanoTime() - t0) / 1_000_000L;
-                lines.add("&6" + s.def.name() + " &7- " + date(d) + ", seed " + GenSeed.hex(seed) + ": &f"
+                lines.add("&6" + s.def.name() + " &7- " + d + ", seed " + GenSeed.hex(seed) + ": &f"
                         + plan.ops().size() + " blocks, " + plan.signs().size() + " signs, hash " + plan.hash()
                         + ", " + ms + " ms, work " + plan.work());
                 for (String line : plan.summary()) {
@@ -1755,7 +2051,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (!ready(s, report)) {
             return;
         }
-        long day = edition().day(host.now());
+        GenScheduler.Target t = target(s);
         Long seed = seedText == null ? null : GenSeed.parse(seedText);
         if (seedText != null && seed == null) {
             report.accept("&cA seed is up to 16 hex digits, like 3f2a91c07d1e55b0.");
@@ -1766,10 +2062,11 @@ public final class GenService implements GeneratedCourses, GenOps {
                 report.accept("&cThe seed secret can't be read right now.");
                 return;
             }
-            seed = GenSeed.seed(secret, day, s.def.id(), s.reroll + 1);
+            seed = GenSeed.seed(secret, t.cadence(), t.start(), s.def.id(), s.reroll + 1);
         }
         Job j = new Job(Kind.PREVIEW, s, report);
-        j.day = day;
+        j.day = t.start();
+        j.cadence = t.cadence();
         j.reroll = s.reroll + 1;
         j.seed = seed;
         j.mix = s.mix;
@@ -1785,13 +2082,13 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         SlotState.Preview pv = s.preview;
-        long day = edition().day(host.now());
+        GenScheduler.Target t = target(s);
         if (pv == null) {
             report.accept("&cThere is no preview of " + s.def.name() + ". &7/hcm games gen preview " + slotId);
             return;
         }
-        if (pv.day() != day) {
-            report.accept("&cThat preview was made for " + date(pv.day()) + ". &7Make a new one.");
+        if (pv.day() != t.start() || pv.cadence() != t.cadence()) {
+            report.accept("&cThat preview was made for " + editionName(pv.cadence(), pv.day()) + ". &7Make a new one.");
             return;
         }
         if (activePin(s) != null) {
@@ -1799,17 +2096,18 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         if (!confirm && s.live != null && hasScores(s)) {
-            report.accept("&e" + s.def.name() + " already has times today. &7They stay on their own board. Type &e/hcm"
-                    + " games gen promote " + slotId + " confirm");
+            report.accept("&e" + s.def.name() + " already has times on this course. &7They stay on their own board."
+                    + " Type &e/hcm games gen promote " + slotId + " confirm");
             return;
         }
         Job j = new Job(Kind.PROMOTE, s, report);
-        j.day = day;
-        j.reroll = Math.max(s.reroll, s.live == null ? 0 : s.live.reroll()) + 1;
+        j.day = t.start();
+        j.cadence = t.cadence();
+        j.reroll = Math.max(s.reroll, t.holds(s.live) ? s.live.reroll() : 0) + 1;
         j.seed = pv.seed();
         j.mix = pv.mix();
         queue.add(j);
-        report.accept("&7Making the preview of " + s.def.name() + " today's course...");
+        report.accept("&7Making the preview of " + s.def.name() + " the current course...");
     }
 
     private boolean hasScores(SlotState s) {
@@ -1830,19 +2128,20 @@ public final class GenService implements GeneratedCourses, GenOps {
             report.accept("&c" + s.def.name() + " is pinned. &7/hcm games gen unpin " + slotId + " first.");
             return;
         }
-        long day = edition().day(host.now());
-        int next = Math.max(s.reroll, s.live == null || s.live.day() != day ? 0 : s.live.reroll()) + 1;
+        GenScheduler.Target t = target(s);
+        int next = Math.max(s.reroll, t.holds(s.live) ? s.live.reroll() : 0) + 1;
         try {
-            host.store().meta(GenAdminKeys.reroll(slotId, day), Integer.toString(next));
+            host.store().meta(GenAdminKeys.reroll(slotId, t.key()), Integer.toString(next));
         } catch (SQLException e) {
             report.accept("&cCouldn't reach the database - see the console.");
-            host.logger().log(Level.WARNING, "Daily Courses: could not store a reroll", e);
+            host.logger().log(Level.WARNING, "Fresh Courses: could not store a reroll", e);
             return;
         }
         s.reroll = next;
         s.tries = 0;
-        report.accept("&a" + s.def.name() + " gets a new course for today (reroll " + next + "). &7It is built at the"
-                + " next check; anyone on the old one finishes there, on its own board.");
+        report.accept("&a" + s.def.name() + " gets a new course for " + editionName(t.cadence(), t.start())
+                + " (reroll " + next + "). &7It is built at the next check; anyone on the old one finishes there, on"
+                + " its own board.");
     }
 
     @Override
@@ -1866,7 +2165,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             host.store().meta(GenAdminKeys.enabled(slotId), Boolean.toString(on));
         } catch (SQLException e) {
             report.accept("&cCouldn't reach the database - see the console.");
-            host.logger().log(Level.WARNING, "Daily Courses: could not store an on/off", e);
+            host.logger().log(Level.WARNING, "Fresh Courses: could not store an on/off", e);
             return;
         }
         s.override = on;
@@ -1906,8 +2205,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         s.mix = t;
-        report.accept("&a" + s.def.name() + " will be " + t + " &7from its next build (tomorrow, or &e/hcm games gen"
-                + " reroll " + slotId + "&7).");
+        report.accept("&a" + s.def.name() + " will be " + t + " &7from its next build (the next set, or &e/hcm games"
+                + " gen reroll " + slotId + "&7).");
     }
 
     @Override
@@ -1915,7 +2214,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         SlotState s = slots.get(slotId);
         Planner p = planners.get(s.def.generator());
         long seed;
-        if (seedText.equalsIgnoreCase("today")) {
+        if (seedText.equalsIgnoreCase("live") || seedText.equalsIgnoreCase("today")) {
             if (s.live == null) {
                 report.accept("&c" + s.def.name() + " has no course to pin yet.");
                 return;
@@ -1924,7 +2223,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         } else {
             Long parsed = GenSeed.parse(seedText);
             if (parsed == null) {
-                report.accept("&cA seed is up to 16 hex digits, or &etoday&c.");
+                report.accept("&cA seed is up to 16 hex digits, or &elive&c.");
                 return;
             }
             seed = parsed;
@@ -1939,7 +2238,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         s.pin = pin;
         report.accept("&a" + s.def.name() + " is pinned to seed " + GenSeed.hex(seed) + (days > 0 ? " for " + days
-                + " day" + (days == 1 ? "" : "s") : " until unpinned") + ". &7Each day gets a fresh day board.");
+                + " day" + (days == 1 ? "" : "s") : " until unpinned") + ". &7Each new set gets fresh boards.");
     }
 
     @Override
@@ -1952,7 +2251,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         s.pin = null;
-        report.accept("&a" + s.def.name() + " is unpinned. &7A new course comes with the next day.");
+        report.accept("&a" + s.def.name() + " is unpinned. &7A new course comes with the next set.");
     }
 
     @Override
@@ -2019,7 +2318,8 @@ public final class GenService implements GeneratedCourses, GenOps {
     public void clear(String slotId, Consumer<String> report) {
         SlotState s = slots.get(slotId);
         if (!s.claimed) {
-            report.accept("&c" + s.def.name() + "'s area isn't claimed, so there is nothing of Daily Courses' to clear.");
+            report.accept("&c" + s.def.name() + "'s area isn't claimed, so there is nothing of Fresh Courses' to"
+                    + " clear.");
             return;
         }
         enable(slotId, false, line -> { });
@@ -2043,7 +2343,7 @@ public final class GenService implements GeneratedCourses, GenOps {
     /** An admin job may start: running, the world is up, nothing else of this slot's is going. */
     private boolean ready(SlotState s, Consumer<String> report) {
         if (!running || readyAt < 0) {
-            report.accept("&cDaily Courses is still starting; try in a moment.");
+            report.accept("&cFresh Courses is still starting; try in a moment.");
             return false;
         }
         if (!s.on()) {
@@ -2071,6 +2371,11 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     static String date(long day) {
         return DATE.format(LocalDate.ofEpochDay(day));
+    }
+
+    /** An edition as admins read it: "Tue 29 Sep" (a day), or "Mon 28 Sep-Sun 4 Oct". */
+    static String editionName(int cadence, long startDay) {
+        return cadence <= Edition.DAILY ? date(startDay) : date(startDay) + "-" + date(startDay + cadence - 1);
     }
 
     private static String first(List<String> worlds) {

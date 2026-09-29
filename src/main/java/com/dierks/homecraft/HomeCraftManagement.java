@@ -1137,7 +1137,7 @@ public final class HomeCraftManagement extends JavaPlugin {
             return;
         }
         for (com.dierks.homecraft.games.GameSpec<?> spec : com.dierks.homecraft.games.GameCatalog.SPECS) {
-            String path = root + "." + spec.id();
+            String path = root + "." + com.dierks.homecraft.config.GamesConfig.block(spec.id());
             Object v = c.get(path, null);
             if (v != null && !(v instanceof org.bukkit.configuration.ConfigurationSection)) {
                 switchToSection(c, path, v, spec.id(), log);

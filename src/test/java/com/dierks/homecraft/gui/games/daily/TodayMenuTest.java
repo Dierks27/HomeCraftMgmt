@@ -43,7 +43,7 @@ class TodayMenuTest {
         assertEquals("&aEasy Parkour &7- ★★☆", DailyTiles.name(Slots.DAILY_PARKOUR_EASY, true, 2, 0, 0),
                 "the spec's own example");
         assertEquals("&cHard Parkour", DailyTiles.name(Slots.DAILY_PARKOUR_HARD, true, 0, 0, 0), "and before a finish");
-        assertEquals("&dDaily Golf &7- 9 holes, par 29", DailyTiles.name(Slots.DAILY_GOLF, true, 0, 9, 29),
+        assertEquals("&dGolf of the Week &7- 9 holes, par 29", DailyTiles.name(Slots.DAILY_GOLF, true, 0, 9, 29),
                 "golf says its holes and par");
         assertEquals("&dTiny Golf &7- 3 holes, par 8 ★★★", DailyTiles.name(Slots.TINY_GOLF, true, 3, 3, 8),
                 "then its stars");

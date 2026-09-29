@@ -40,8 +40,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class RealPlannersTest {
 
-    private static final List<String> SHIPPED = List.of("daily_parkour_easy", "daily_parkour_medium",
-            "daily_parkour_hard", "sky_rings", "daily_golf", "tiny_golf", "ice_boat");
+    private static final List<String> SHIPPED = List.of("fresh_parkour_easy", "fresh_parkour",
+            "fresh_parkour_hard", "fresh_rings", "fresh_golf", "fresh_tiny_golf", "fresh_boat");
 
     private Host host;
     private GenService gen;
@@ -116,8 +116,8 @@ class RealPlannersTest {
             }
         }
         assertEquals(SHIPPED, open(gen), "Time Trials and Mini Golf open every generated row, through the gate,"
-                + " daily courses first in slot order");
-        assertEquals(List.of(), open(GeneratedCourses.NONE), "and none of them without Daily Courses");
+                + " Fresh Courses first in slot order");
+        assertEquals(List.of(), open(GeneratedCourses.NONE), "and none of them without Fresh Courses");
         assertTrue(host.changed.getOrDefault("trials", 0) >= 5 && host.changed.getOrDefault("golf", 0) >= 2,
                 "each flip told Time Trials or Mini Golf to read its courses again: " + host.changed);
         List<String> status = adminSays("status");
@@ -147,7 +147,7 @@ class RealPlannersTest {
 
     /**
      * The ids Time Trials and Mini Golf would open now from the database's rows, read as they read
-     * them, with {@code gate} as the Daily Courses gate: their own filters, not a copy of them.
+     * them, with {@code gate} as the Fresh Courses gate: their own filters, not a copy of them.
      */
     private List<String> open(GeneratedCourses gate) throws Exception {
         List<Course> trials = new java.util.ArrayList<>();
@@ -188,38 +188,38 @@ class RealPlannersTest {
 
     @Test
     void aGolfLayoutIsReDerivedAfterTheAdminChangedItsMix() {
-        host = new Host(GenKit.at(2026, 9, 29, 4, 0) + 40_000, "daily_golf");
+        host = new Host(GenKit.at(2026, 9, 29, 4, 0) + 40_000, "fresh_golf");
         boot();
         drive(60 + 3 * 60);
-        GenTag live = gen.liveTag("daily_golf");
-        assertNotNull(live, "Daily Golf was built:" + problems());
+        GenTag live = gen.liveTag("fresh_golf");
+        assertNotNull(live, "the big golf course was built:" + problems());
         List<String> said = new java.util.ArrayList<>();
-        gen.tier("daily_golf", "EEEEEEEEE", said::add); // "from the next build"
+        gen.tier("fresh_golf", "EEEEEEEEE", said::add); // "from the next build"
         long writes = host.world().writes;
         host.now = GenKit.at(2026, 9, 29, 16, 0) + 40_000;
         boot();
         drive(3 * 60);
-        assertEquals(live, gen.liveTag("daily_golf"), "the same layout is live after the restart");
-        assertTrue(gen.live("daily_golf", live), "and it opens: it was re-derived with the mix it was made with,"
+        assertEquals(live, gen.liveTag("fresh_golf"), "the same layout is live after the restart");
+        assertTrue(gen.live("fresh_golf", live), "and it opens: it was re-derived with the mix it was made with,"
                 + " not the new one:" + problems());
         assertEquals(writes, host.world().writes, "with nothing to heal");
     }
 
     @Test
     void aParkourLayoutThatTodaysFallDepthNoLongerAllowsIsReplacedNotReOpened() throws Exception {
-        host = new Host(GenKit.at(2026, 9, 29, 4, 0) + 40_000, "daily_parkour_hard");
+        host = new Host(GenKit.at(2026, 9, 29, 4, 0) + 40_000, "fresh_parkour_hard");
         boot();
         drive(60 + 60);
-        GenTag first = gen.liveTag("daily_parkour_hard");
+        GenTag first = gen.liveTag("fresh_parkour_hard");
         assertNotNull(first, "Hard Parkour was built at fall_depth 6:" + problems());
         host.fallDepth = 1; // the admin lowers trials.fall_depth, then restarts
         host.now = GenKit.at(2026, 9, 29, 16, 0) + 40_000;
         boot();
         drive(3 * 60);
-        GenTag second = gen.liveTag("daily_parkour_hard");
+        GenTag second = gen.liveTag("fresh_parkour_hard");
         assertTrue(host.logged(Level.SEVERE, "can't be vouched for") >= 1,
                 "the layout made for fall_depth 6 fails the check at 1:" + problems());
-        assertEquals(first.reroll() + 1, second.reroll(), "its replacement is today's next reroll, on a fresh board");
-        assertTrue(gen.live("daily_parkour_hard", second), "and it opens, planned for fall_depth 1");
+        assertEquals(first.reroll() + 1, second.reroll(), "its replacement is the set's next reroll, on a fresh board");
+        assertTrue(gen.live("fresh_parkour_hard", second), "and it opens, planned for fall_depth 1");
     }
 }

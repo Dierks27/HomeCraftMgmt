@@ -26,7 +26,7 @@ public interface GenHost {
 
     Logger logger();
 
-    /** The live {@code games.daily} settings (read on every call). */
+    /** The live {@code games.fresh} settings (read on every call). */
     DailySettings settings();
 
     /** The scheduled restarts as configured now. */

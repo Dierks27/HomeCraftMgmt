@@ -55,6 +55,7 @@ public final class CupText {
             case DELETED -> "the course was removed";
             case CHANGED -> "the course changed";
             case CLOSED -> "the course closed";
+            case STOPPED -> "an admin stopped it";
         };
     }
 

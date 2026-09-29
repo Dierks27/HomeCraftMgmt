@@ -308,6 +308,10 @@ public final class ArcadeFeed implements FeedWriter {
     private record EventsPart(Events events) {
     }
 
+    /** The Weekly Cup's {@code cup} object for a course's entry ({@link FeedWriter#cup}; WP-C). */
+    private record CupPart(String id, Cup cup) {
+    }
+
     /** The states a live night and a past night may be published with (§A.7). */
     private static final Set<String> LIVE_STATES = Set.of("open", "racing", "break", "results");
     private static final Set<String> RECENT_STATES = Set.of("done", "called_off");
@@ -323,6 +327,8 @@ public final class ArcadeFeed implements FeedWriter {
     /** Everything written, in order: the entries and what goes with them (a mark for {@link #truncate}). */
     private final List<Object> writes = new ArrayList<>();
     private StarChart starChart;
+    /** The Weekly Cup's parts by course id, gathered by {@link #json} before the entries are written. */
+    private Map<String, Cup> cups = new HashMap<>();
 
     /** @param showNames {@code web.dashboard.arcade_show_names}: whether records carry a holder */
     public ArcadeFeed(boolean showNames) {
@@ -414,6 +420,13 @@ public final class ArcadeFeed implements FeedWriter {
         writes.add(new ArenaRow(id, name, shape));
     }
 
+    @Override
+    public void cup(String id, Cup cup) {
+        if (!blank(id) && cup != null) {
+            writes.add(new CupPart(id, cup));
+        }
+    }
+
     /** How many rows each {@code top} list has at most ({@code games.feed_top}). */
     public int topSize() {
         return topSize;
@@ -491,6 +504,7 @@ public final class ArcadeFeed implements FeedWriter {
         Map<String, BoardRef> refs = new HashMap<>();
         Map<String, FreshFeed.Fresh> fresh = new HashMap<>();
         Map<String, FreshFeed.Classic> classics = new HashMap<>();
+        cups = new HashMap<>();
         List<FreshFeed.Entry> history = List.of();
         Events events = null;
         for (Object w : writes) {
@@ -500,6 +514,7 @@ public final class ArcadeFeed implements FeedWriter {
                 case ClassicPart c -> classics.put(key(c.id()), c.classic());
                 case History h -> history = h.entries();
                 case EventsPart e -> events = e.events();
+                case CupPart p -> cups.put(key(p.id()), p.cup());
                 default -> {
                     // an entry: written below, in order
                 }
@@ -716,6 +731,7 @@ public final class ArcadeFeed implements FeedWriter {
         }
         daily(sb, r.daily());
         freshParts(sb, fresh, classic);
+        cup(sb, cups.get(key(r.id())));
         board(sb, ref);
         return sb.append('}').toString();
     }
@@ -887,6 +903,20 @@ public final class ArcadeFeed implements FeedWriter {
         if (classic != null && !blank(classic.code())) {
             sb.append(",\"classic\":").append(classic.json());
         }
+    }
+
+    /**
+     * {@code ,"cup":{entry,pool,entrants,endsAt}}: this week's Weekly Cup on a course (WP-C), or nothing.
+     * Only whole, sane numbers: a Cup with no entry or no end is left out.
+     */
+    private static void cup(StringBuilder sb, Cup c) {
+        if (c == null || c.entry() <= 0 || c.endsAt() <= 0) {
+            return;
+        }
+        sb.append(",\"cup\":{\"entry\":").append(c.entry())
+                .append(",\"pool\":").append(Math.max(0, c.pool()))
+                .append(",\"entrants\":").append(Math.max(0, c.entrants()))
+                .append(",\"endsAt\":").append(c.endsAt()).append('}');
     }
 
     /** The {@code top} list of the board behind a course or golf entry, when a game named one. */

@@ -2,11 +2,13 @@ package com.dierks.homecraft.gui.games.trial;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.cup.live.CupLink;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.DropperText;
+import com.dierks.homecraft.games.trial.PartyRaces;
 import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.games.trial.TimeTrialsSettings;
 import com.dierks.homecraft.games.trial.TrialKind;
@@ -29,9 +31,10 @@ import java.util.List;
  *
  * <p>4 the course ("River Run (Boat · Medium)"); 10 how to play; 11 your best; 12 its high
  * scores; 13 Start; 14 this week's best; 15 the record and who holds it; 16 what it pays (the
- * first finish's amount, or that it's done, in the name); 20 Race with friends (a party race, D4);
- * 22 the way out. Start runs the gate again (the screen may have been open a while) and then the
- * world session takes the player to the start line.
+ * first finish's amount, or that it's done, in the name); 20 Race with friends (a party race, D4;
+ * never on a Dropper); 22 the way out; 24 the Weekly Cup, when the course runs one. Start runs the
+ * gate again (the screen may have been open a while) and then the world session takes the player
+ * to the start line.
  *
  * <p>A Fresh course (GEN-SPEC §5.4) shows its set instead of all-time, in the set's words ("this
  * week" as shipped, "today" when daily): 4 its name and course code; 11 your best this week, 12
@@ -41,6 +44,11 @@ import java.util.List;
  * clock keeps running after a bonk, and Start says a practice drop comes first when warm-ups are on.
  */
 public final class CourseMenu extends GameMenu {
+
+    /** "Race with friends" (a party race, D4): the bottom row, left of the way out. */
+    public static final int PARTY_SLOT = 20;
+    /** The slots every course screen fills whatever the course (the way out is 22). */
+    public static final List<Integer> FIXED_SLOTS = List.of(4, 10, 11, 12, 13, 14, 15, 16, 22);
 
     private final TimeTrials trials;
     private final Course course;
@@ -87,7 +95,10 @@ public final class CourseMenu extends GameMenu {
         set(15, Menus.icon(Material.GOLD_INGOT, record == null ? "&7No record yet - set one!"
                 : "&6Record: &f" + TrialText.time(record.score()) + " &7by &f" + trials.holder(record.player())), null);
         set(16, rewards(week), null);
-        set(20, PartyMenu.tile(trials, viewer), e -> trials.raceWithFriends(viewer, course.id(), this::reopen)); // WP-R1 (D4)
+        if (PartyRaces.offered(course.kind())) { // WP-R1 (D4): never on a Dropper
+            set(PARTY_SLOT, PartyMenu.tile(trials, viewer), e -> trials.raceWithFriends(viewer, course.id(), this::reopen));
+        }
+        cupButton();
         exitTile();
     }
 
@@ -170,7 +181,10 @@ public final class CourseMenu extends GameMenu {
         set(15, Menus.icon(Material.GOLD_INGOT, trials.setBestLine(record, viewer, cadence).replaceFirst("^&7", "&6")),
                 null);
         set(16, dailyRewards(games, t, week), null);
-        set(20, PartyMenu.tile(trials, viewer), e -> trials.raceWithFriends(viewer, course.id(), this::reopen)); // WP-R1 (D4)
+        if (PartyRaces.offered(course.kind())) { // WP-R1 (D4): never on a Dropper
+            set(PARTY_SLOT, PartyMenu.tile(trials, viewer), e -> trials.raceWithFriends(viewer, course.id(), this::reopen));
+        }
+        cupButton();
         exitTile();
     }
 
@@ -222,6 +236,18 @@ public final class CourseMenu extends GameMenu {
             lore.add(DropperText.PRACTICE_ON_START);
         }
         return Menus.icon(Material.LIME_CONCRETE, "&aStart", lore.toArray(new String[0]));
+    }
+
+    /**
+     * The Weekly Cup's item (EVENTS-OWNER-DECISIONS D2, WP-C), when the course runs one and the viewer
+     * hasn't hidden it: "Enter this week's Cup: 5 tokens. Best time wins the pool." in its NAME, or
+     * that they're in with the pool. It opens the Cup screen, whose Back comes here.
+     */
+    private void cupButton() {
+        CupLink.Button b = CupLink.button(plugin.games(), viewer, course, this::reopen);
+        if (b != null) {
+            set(CupLink.SLOT, b.icon(), e -> b.click().run());
+        }
     }
 
     private void reopen() {

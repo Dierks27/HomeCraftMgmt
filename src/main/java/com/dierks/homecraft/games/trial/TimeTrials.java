@@ -17,6 +17,7 @@ import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.ScoreResult;
 import com.dierks.homecraft.games.Scores;
 import com.dierks.homecraft.games.SkillRewards;
+import com.dierks.homecraft.games.cup.live.CupLink;
 import com.dierks.homecraft.games.gen.api.GenBoards;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
@@ -687,10 +688,12 @@ public final class TimeTrials implements Game {
         if (c.id().equals(courseOfWeek)) {
             lore.add("&6★ Course of the week");
         }
+        lore.addAll(CupLink.tileLines(games(), viewer, c)); // Weekly Cup
         lore.add("&eClick to play");
         return Menus.icon(icon(c.kind()), "&e" + c.name() + " &7(" + TrialText.label(c) + ") &7- "
                 + (c.kind() == TrialKind.DROPPER ? TrialText.levels(DropperLayout.levels(c)) + " · " : "") // a kept dropper
-                + (best == null ? "no time yet" : "best " + TrialText.time(best)), lore.toArray(new String[0]));
+                + (best == null ? "no time yet" : "best " + TrialText.time(best)) + CupLink.tileSuffix(games(), viewer, c),
+                lore.toArray(new String[0]));
     }
 
     /**
@@ -728,13 +731,14 @@ public final class TimeTrials implements Game {
         if (c.id().equals(courseOfWeek)) {
             lore.add("&6★ Course of the week");
         }
+        lore.addAll(CupLink.tileLines(g, viewer, c)); // Weekly Cup
         lore.add("&eClick to play");
         String fact = (c.kind() == TrialKind.DROPPER ? DailyText.levels(DropperLayout.levels(c)) + " · " : "")
                 + DailyText.trialFact(cadence, stars);
         String name = t.recalled() ? "&6" + classicName(t, c.name()) + " &7- " + fact
                 : DailyText.tabName(Slots.of(t.slot()), c.name(), fact, DailyLookup.current(g, t.slot()), cadence);
-        return Menus.glint(Menus.icon(icon(c.kind()), name + DailyLookup.codeSuffix(code),
-                lore.toArray(new String[0])), stars >= 3);
+        return Menus.glint(Menus.icon(icon(c.kind()), name + DailyLookup.codeSuffix(code)
+                + CupLink.tileSuffix(g, viewer, c), lore.toArray(new String[0])), stars >= 3);
     }
 
     /**
@@ -1519,13 +1523,17 @@ public final class TimeTrials implements Game {
 
     /**
      * A counted run recorded and paid: the boards, the rewards and what they tell the quests
-     * ({@link TrialFinish}). A solo run's finish and a party race's finish (WP-R1, D4: each racer's run
-     * is also a normal counted run, once) both come through here, so anything a counted run does
-     * belongs here.
+     * ({@link TrialFinish}), then its Cup time. A solo run's finish and a party race's finish (WP-R1,
+     * D4: each racer's run is also a normal counted run, once) both come through here, so anything a
+     * counted run does belongs here. A Race Night heat never does.
      */
     TrialFinish.Summary settleCounted(Player p, TrialRun run, long ms, FairPlay.Verdict verdict) {
         TimeTrialsSettings s = settings();
-        return TrialFinish.settle(verdict, finishedRun(run, ms, s), ledger(p, run, s, ms));
+        TrialFinish.Summary summary = TrialFinish.settle(verdict, finishedRun(run, ms, s), ledger(p, run, s, ms));
+        // The Weekly Cup (WP-C): a counted, timed run, solo or a party race's. A Race Night heat never
+        // comes here (RaceMode.finish: its start is a grid spot), so it never sets a Cup time.
+        CupLink.finished(games(), p, run.course, ms, verdict, run.warmup);
+        return summary;
     }
 
     /**

@@ -150,6 +150,11 @@ public final class GamesDao {
         this.tokens = new TokenDao(database);
     }
 
+    /** The Weekly Cup's tables, on the same connection (EVENTS-OWNER-DECISIONS §D2; WP-C). */
+    public CupDao cup() {
+        return new CupDao(database);
+    }
+
     // ---- rounds -------------------------------------------------------------------------------
 
     /**

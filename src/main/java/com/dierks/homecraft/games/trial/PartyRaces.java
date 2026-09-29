@@ -670,6 +670,15 @@ public final class PartyRaces {
         return games != null && games.game(TimeTrials.SPEC.id()) instanceof TimeTrials t ? t : null;
     }
 
+    /**
+     * Whether a course of this kind has party races at all (the orchestrator's decision after the D
+     * review): every kind but the Dropper, whose only extra is its own practice drop. The course
+     * screen hides "Race with friends" on a Dropper by this.
+     */
+    public static boolean offered(TrialKind kind) {
+        return kind != null && kind != TrialKind.DROPPER;
+    }
+
     /** Whether {@code id} names a time-trial course (open or not: a closed one is refused with its reason). */
     public static boolean isCourse(GamesService games, String id) {
         TimeTrials t = trials(games);

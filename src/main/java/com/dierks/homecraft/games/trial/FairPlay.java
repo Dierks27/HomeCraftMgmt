@@ -1,8 +1,11 @@
 package com.dierks.homecraft.games.trial;
 
+import com.dierks.homecraft.games.gen.api.GenTag;
+
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 /**
  * The fair-play rules of a run (spec §11, R2.15), pure and tested: when a fall sends you back,
@@ -268,6 +271,26 @@ final class FairPlay {
      */
     static boolean stale(int rev, int layout, Course now) {
         return now == null || now.rev() != rev || now.layoutHash() != layout;
+    }
+
+    /**
+     * {@link #stale(int, int, Course)} with Daily Courses' "still standing" rule (GEN-SPEC §3.4):
+     * a run on a generated course is stale only if the old rule says so AND the layout it started
+     * on no longer stands. The next layout going live doesn't void a run on the previous one while
+     * its blocks are still there; once that half starts being cleared, it does. A hand-built
+     * course keeps the old rule exactly.
+     *
+     * @param then     the course as the run started (its snapshot, with its tag)
+     * @param layout   {@link Course#layoutHash()} when the run started
+     * @param now      the course as it is now, or {@code null} for deleted
+     * @param standing whether a layout still stands ({@code GeneratedCourses#standing})
+     */
+    static boolean stale(Course then, int layout, Course now, Predicate<GenTag> standing) {
+        boolean changed = stale(then.rev(), layout, now);
+        if (!changed || then.gen() == null) {
+            return changed;
+        }
+        return standing == null || !standing.test(then.gen());
     }
 
     /**

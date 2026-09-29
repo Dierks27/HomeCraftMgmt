@@ -1,5 +1,10 @@
 package com.dierks.homecraft.games.trial;
 
+import com.dierks.homecraft.games.GeneratedCourses;
+import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.GenCopy;
+import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.Slots;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -16,6 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * pointless ".0"; the words after the verb never throw, even with {@code confirm} and no verb
  * (a throw there switched the whole game off); and a fall height must sit under the lowest point
  * of the course and not under the world's floor, whichever edit would break that.
+ *
+ * <p>And Daily Courses (GEN-SPEC §2.4, §5.5): a course it made allows only info, tp, test and
+ * feature here, everything else pointing to {@code /hcm games gen}; and no point of a hand-built
+ * course may go inside a Daily Courses half or within 16 blocks of one.
  */
 class CourseAdminTest {
 
@@ -89,5 +98,84 @@ class CourseAdminTest {
         assertNull(CourseAdmin.fallProblem(STEPS.withFallY(-64.0), -64), "at the floor is fine");
         assertNull(CourseAdmin.fallProblem(STEPS.withFallY(-70.0), null),
                 "a world not loaded: only the course is checked");
+    }
+
+    // ---- Daily Courses -------------------------------------------------------------------------
+
+    /** The engine as the editor sees it: Easy Parkour's half A in world "games" is kept. */
+    static GeneratedCourses keeping(Box half) {
+        return new GeneratedCourses() {
+            @Override
+            public boolean live(String courseId, GenTag tag) {
+                return true;
+            }
+
+            @Override
+            public boolean standing(GenTag tag) {
+                return tag != null;
+            }
+
+            @Override
+            public String closedLine(String courseId) {
+                return "";
+            }
+
+            @Override
+            public long nextChangeAt() {
+                return -1;
+            }
+
+            @Override
+            public boolean inArea(String world, int x, int y, int z) {
+                return "games".equals(world) && half.contains(x, y, z);
+            }
+        };
+    }
+
+    private static Course daily() {
+        return new Course("daily_parkour_easy", TrialKind.PARKOUR, "Easy Parkour", Tier.EASY, "games",
+                new Course.Spot(4100.5, 170, 4100.5, 0, 0), List.of(), new Course.Mark(4150.5, 170, 4150.5, 3),
+                167.0, 17, true, false, 3, new GenTag("daily_parkour_easy", "parkour", 1, 20_725, 0, 1L, 'A',
+                "abcabcabcabc", 22_500, 45_000, 70_000, List.of(), List.of(), 1L));
+    }
+
+    @Test
+    void aDailyCourseAllowsOnlyLookingTryingAndFeaturing() {
+        Course c = daily();
+        for (String verb : List.of("info", "tp", "test", "feature", "INFO")) {
+            assertNull(CourseAdmin.dailyRefusal(c, verb), verb + " is allowed on a daily course");
+        }
+        for (String verb : List.of("start", "checkpoint", "cp", "finish", "fall", "tier", "name", "minseconds",
+                "enable", "disable", "delete", "anything")) {
+            assertEquals(GenCopy.MADE_BY_DAILY, CourseAdmin.dailyRefusal(c, verb),
+                    verb + " would change what Daily Courses rebuilds: it points to /hcm games gen");
+        }
+        Course slotWithoutTag = c.withGen(null);
+        assertEquals(GenCopy.MADE_BY_DAILY, CourseAdmin.dailyRefusal(slotWithoutTag, "start"),
+                "a row with a slot's id is Daily Courses' even when its tag was lost");
+        Course handBuilt = new Course("cliffs", TrialKind.PARKOUR, "Cliffs", Tier.EASY, "games", null, List.of(),
+                null, null, null, false, false, 1);
+        for (String verb : CourseAdmin.VERBS) {
+            assertNull(CourseAdmin.dailyRefusal(handBuilt, verb), "a hand-built course is untouched: " + verb);
+        }
+        assertTrue(CourseAdmin.VERBS.containsAll(CourseAdmin.DAILY_VERBS), "the daily verbs are real verbs");
+    }
+
+    @Test
+    void aPointInsideADailyAreaOrWithinSixteenBlocksOfOneIsRefused() {
+        Box half = Slots.DAILY_PARKOUR_EASY.half('A'); // x 4096-4159, y 160-207, z 4096-4159
+        GeneratedCourses g = keeping(half);
+        assertEquals(GenCopy.EDITOR_REFUSED, CourseAdmin.areaRefusal(g, "games", 4100.5, 170, 4100.5),
+                "inside the half");
+        assertEquals(GenCopy.EDITOR_REFUSED, CourseAdmin.areaRefusal(g, "games", 4080.2, 170, 4100), "16 west of it");
+        assertEquals(GenCopy.EDITOR_REFUSED, CourseAdmin.areaRefusal(g, "games", 4175.9, 223.5, 4175.0),
+                "16 past its far corner on every axis");
+        assertEquals(GenCopy.EDITOR_REFUSED, CourseAdmin.areaRefusal(g, "games", 4100, 144, 4100), "16 below it");
+        assertNull(CourseAdmin.areaRefusal(g, "games", 4079.9, 170, 4100), "17 west: fine");
+        assertNull(CourseAdmin.areaRefusal(g, "games", 4100, 224, 4100), "17 above: fine");
+        assertNull(CourseAdmin.areaRefusal(g, "games", 4176, 170, 4100), "17 east: fine");
+        assertNull(CourseAdmin.areaRefusal(g, "world", 4100, 170, 4100), "another world: fine");
+        assertNull(CourseAdmin.areaRefusal(GeneratedCourses.NONE, "games", 4100, 170, 4100),
+                "no engine, no areas");
     }
 }

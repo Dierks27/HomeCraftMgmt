@@ -7,8 +7,14 @@ import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GamesScreens;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.gen.api.GenBoards;
+import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.gui.games.daily.TierMenu;
+import com.dierks.homecraft.gui.games.daily.TodayMenu;
 import org.bukkit.entity.Player;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -17,7 +23,8 @@ import java.util.function.Predicate;
 
 /**
  * The shared games screens, as the framework and the games reach them (spec §8, R3.4): the Games
- * screen, one board's high scores, Take a break and the player picker. Installed once at enable
+ * screen, one board's high scores, Take a break, the player picker, and Daily Courses' Today's
+ * Courses and parkour tier picker (GEN-SPEC §5.4). Installed once at enable
  * with {@code games.screens(new Screens(plugin))}; until then the service says "Coming soon!".
  *
  * <p>It also reads, for the screens, what each game publishes about itself through
@@ -55,6 +62,22 @@ public final class Screens implements GamesScreens {
         new InvitePicker(plugin, game, player, eligible, chosen, 0, back).open(player);
     }
 
+    @Override
+    public void today(Player player, Runnable back) {
+        new TodayMenu(plugin, daily(), player, back).open(player);
+    }
+
+    @Override
+    public void parkourTiers(Player player, Runnable back) {
+        new TierMenu(plugin, daily(), player, back).open(player);
+    }
+
+    /** The {@code daily} game the daily screens belong to (their guard), or {@code null} without one. */
+    private Game daily() {
+        GamesService games = plugin.games();
+        return games == null ? null : games.game(Slots.DAILY);
+    }
+
     /**
      * What one game publishes (its {@link Game#feed} entries), read inside the game's guard. A
      * game that throws is switched off by the guard and reads as publishing nothing.
@@ -80,6 +103,10 @@ public final class Screens implements GamesScreens {
     /**
      * A {@link FeedWriter} that only listens: it keeps each game-of-chance give-back and each
      * published board, so a screen can show them. Pure (no Bukkit), so it is tested directly.
+     *
+     * <p>A daily course's board changes every day, so it isn't listed among the high-score boards
+     * (its own screen and Today's Courses show it); the weekly Star Chart is, counted in stars,
+     * higher is better.
      */
     static final class Published implements FeedWriter {
 
@@ -127,6 +154,32 @@ public final class Screens implements GamesScreens {
             }
         }
 
+        @Override
+        public void course(String id, String name, String kind, String tier, Long recordMs, Long recordAt,
+                           String holder, Daily daily) {
+            if (daily == null) {
+                course(id, name, kind, tier, recordMs, recordAt, holder);
+            }
+        }
+
+        @Override
+        public void golf(String id, String name, int holes, int par, Integer recordStrokes, Long recordAt,
+                         String holder, Daily daily) {
+            if (daily == null) {
+                golf(id, name, holes, par, recordStrokes, recordAt, holder);
+            }
+        }
+
+        @Override
+        public void starChart(String weekIso, Long best, String holder) {
+            try {
+                long week = LocalDate.parse(weekIso).toEpochDay();
+                boards.add(new Board(GenBoards.week(week), "Star Chart", "stars", false));
+            } catch (DateTimeParseException | NullPointerException e) {
+                // not a week: nothing to list
+            }
+        }
+
         /** The lowest give-back published, or NaN for none. */
         double lowestGiveBack() {
             double low = Double.NaN;
@@ -146,7 +199,7 @@ public final class Screens implements GamesScreens {
         /** The unit the game's cabinet boards are kept in ({@code ms}, {@code flips}...), or null. */
         String cabinetUnit() {
             for (Board b : boards) {
-                if (!b.board().startsWith("course:") && !b.board().startsWith("golf:")) {
+                if (!b.board().startsWith("course:") && !b.board().startsWith("golf:") && !GenBoards.generated(b.board())) {
                     return b.unit();
                 }
             }

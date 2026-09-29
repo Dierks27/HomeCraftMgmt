@@ -49,6 +49,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>And privacy: no UUID, balance, winner, command, permission or texture ever reaches the JSON,
  * and a record's holder only while {@code web.dashboard.arcade_show_names} is on.
+ *
+ * <p>And Daily Courses (GEN-SPEC §5.6): a hand-built course's entry is byte for byte what it was; a
+ * generated one carries {@code daily} (its day, when the next is due, its star times when it has
+ * them) and nothing else new; the Star Chart is its own section, its holder only while names are
+ * on; and no seed, rev, half or UUID is ever written.
  */
 class ArcadeFeedTest {
 
@@ -701,5 +706,83 @@ class ArcadeFeedTest {
         assertEquals("boat", games.get("r").get("kind").getAsString(), "a course kind reads lower case");
         assertEquals("medium", games.get("r").get("tier").getAsString());
         assertEquals("Steve", games.get("c").get("holder").getAsString());
+    }
+
+    // ---- Daily Courses ------------------------------------------------------------------------
+
+    private static final FeedWriter.Daily EASY_TODAY = new FeedWriter.Daily("2026-09-29", 1_790_060_400_000L, 45_000L,
+            70_000L);
+
+    @Test
+    void handBuiltEntriesAreByteIdenticalWhicheverWayTheyAreWritten() {
+        ArcadeFeed plain = new ArcadeFeed(true);
+        plain.course("river_run", "River Run", "boat", "medium", 61_234L, 1_789_990_000_000L, STEVE);
+        plain.golf("golf_meadow", "Meadow Links", 9, 27, 24, 1_789_980_000_000L, STEVE);
+        ArcadeFeed viaDaily = new ArcadeFeed(true);
+        viaDaily.course("river_run", "River Run", "boat", "medium", 61_234L, 1_789_990_000_000L, STEVE, null);
+        viaDaily.golf("golf_meadow", "Meadow Links", 9, 27, 24, 1_789_980_000_000L, STEVE, null);
+        String json = plain.json(T, null, null, null, null, null);
+        assertEquals(json, viaDaily.json(T, null, null, null, null, null), "no daily part: the same bytes");
+        assertEquals("{\"generatedAt\":1790000000000,\"games\":["
+                + "{\"id\":\"river_run\",\"name\":\"River Run\",\"kind\":\"boat\",\"tier\":\"medium\","
+                + "\"record\":{\"ms\":61234,\"at\":1789990000000,\"holder\":\"Steve\"}},"
+                + "{\"id\":\"golf_meadow\",\"name\":\"Meadow Links\",\"kind\":\"golf\",\"holes\":9,\"par\":27,"
+                + "\"record\":{\"strokes\":24,\"at\":1789980000000,\"holder\":\"Steve\"}}]}", json,
+                "the hand-built entries exactly as before Daily Courses");
+        assertEquals(new ArcadeFeed.CourseRow("x", "X", "parkour", "easy", null, null, null, null),
+                new ArcadeFeed.CourseRow("x", "X", "parkour", "easy", null, null, null), "the old row is a row with no daily part");
+        assertEquals(new ArcadeFeed.GolfRow("x", "X", 9, 27, null, null, null, null),
+                new ArcadeFeed.GolfRow("x", "X", 9, 27, null, null, null), "for golf too");
+    }
+
+    @Test
+    void generatedEntriesCarryTheirDailyPart() {
+        ArcadeFeed feed = new ArcadeFeed(false);
+        feed.course("daily_parkour_easy", "Easy Parkour", "parkour", "easy", 41_200L, 1_790_000_100_000L, STEVE,
+                EASY_TODAY);
+        feed.golf("tiny_golf", "Tiny Golf", 3, 8, 8, 1_790_000_200_000L, null,
+                new FeedWriter.Daily("2026-09-29", 1_790_060_400_000L, null, null));
+        feed.course("sky_rings", "Sky Rings", "elytra", "easy", null, null, null,
+                new FeedWriter.Daily("2026-09-29", -1, null, null));
+        String json = feed.json(T, null, null, null, null, null);
+        assertEquals("{\"generatedAt\":1790000000000,\"games\":["
+                + "{\"id\":\"daily_parkour_easy\",\"name\":\"Easy Parkour\",\"kind\":\"parkour\",\"tier\":\"easy\","
+                + "\"record\":{\"ms\":41200,\"at\":1790000100000},"
+                + "\"daily\":{\"day\":\"2026-09-29\",\"nextAt\":1790060400000,\"goldMs\":45000,\"silverMs\":70000}},"
+                + "{\"id\":\"tiny_golf\",\"name\":\"Tiny Golf\",\"kind\":\"golf\",\"holes\":3,\"par\":8,"
+                + "\"record\":{\"strokes\":8,\"at\":1790000200000},"
+                + "\"daily\":{\"day\":\"2026-09-29\",\"nextAt\":1790060400000}},"
+                + "{\"id\":\"sky_rings\",\"name\":\"Sky Rings\",\"kind\":\"elytra\",\"tier\":\"easy\","
+                + "\"daily\":{\"day\":\"2026-09-29\"}}]}", json,
+                "today's record, then daily: the day, when the next is due, the star times when set");
+        Map<String, JsonObject> games = games(json);
+        assertEquals(Set.of("id", "name", "kind", "tier", "record", "daily"), keys(games.get("daily_parkour_easy")),
+                "a generated course: a course plus daily");
+        assertEquals(Set.of("day", "nextAt", "goldMs", "silverMs"), keys(games.get("daily_parkour_easy").get("daily")),
+                "its daily part");
+        assertEquals(Set.of("day", "nextAt"), keys(games.get("tiny_golf").get("daily")), "golf has no star times");
+        assertFalse(json.toLowerCase().contains("seed") || json.contains("\"rev\"") || json.contains("half"),
+                "never a seed, a rev or a half");
+        assertFalse(json.contains(STEVE), "no holder while names are off");
+    }
+
+    @Test
+    void theStarChartIsItsOwnSectionItsHolderOnlyWhileNamesAreOn() {
+        ArcadeFeed off = new ArcadeFeed(false);
+        off.starChart("2026-09-28", 14L, STEVE);
+        assertEquals("{\"generatedAt\":1790000000000,\"starChart\":{\"week\":\"2026-09-28\",\"best\":14}}",
+                off.json(T, null, null, null, null, null), "the week and its best, no name");
+        ArcadeFeed on = new ArcadeFeed(true);
+        on.starChart("2026-09-28", 14L, STEVE);
+        assertEquals(Set.of("week", "best", "holder"), keys(root(on.json(T, null, null, null, null, null))
+                .get("starChart")), "the holder while names are on");
+        ArcadeFeed uuid = new ArcadeFeed(true);
+        uuid.starChart("2026-09-28", 14L, STEVE_UUID);
+        assertFalse(uuid.json(T, null, null, null, null, null).contains(STEVE_UUID), "never a UUID");
+        ArcadeFeed empty = new ArcadeFeed(true);
+        empty.starChart("2026-09-28", null, STEVE);
+        assertEquals("{\"generatedAt\":1790000000000,\"starChart\":{\"week\":\"2026-09-28\"}}",
+                empty.json(T, null, null, null, null, null), "no stars yet this week: just the week");
+        assertNull(root(full(filled(true))).get("starChart"), "a feed nobody wrote a chart into has none");
     }
 }

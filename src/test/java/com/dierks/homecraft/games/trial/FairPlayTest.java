@@ -1,9 +1,11 @@
 package com.dierks.homecraft.games.trial;
 
+import com.dierks.homecraft.games.gen.api.GenTag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -28,6 +30,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * stall counts — while a leg away from any stall still is, with a tick of slack; a changed walk
  * speed, a movement attribute off a player's own base or any modifier but vanilla sprinting voids
  * a run; and a course deleted and made again at the same layout number is still a changed course.
+ *
+ * <p>And Daily Courses' "still standing" rule (GEN-SPEC §3.4): a finish on the previous layout of
+ * a daily course counts while that layout stands, even though the row has moved on to the next
+ * one; once its half starts being cleared the finish is stale; with nothing vouching for it (the
+ * daily game off) the old rule decides; and a hand-built course keeps the old rule exactly.
  */
 class FairPlayTest {
 
@@ -320,5 +327,67 @@ class FairPlayTest {
         Course remade = PARKOUR.withFinish(new Course.Mark(40, 80, 0, 2));
         assertEquals(PARKOUR.rev(), remade.rev(), "made again, it came round to the same layout number");
         assertTrue(FairPlay.stale(PARKOUR.rev(), layout, remade), "but it is a different layout: nothing recorded");
+    }
+
+    // ---- the still-standing rule ------------------------------------------------------------------
+
+    private static GenTag layout(long day, char half, String hash) {
+        return new GenTag("daily_parkour_easy", "parkour", 1, day, 0, 7L, half, hash, 22_500, 45_000, 70_000,
+                List.of(), List.of(), 1L);
+    }
+
+    /** Yesterday's Easy Parkour in half A, as a run started on it saw it. */
+    private static final Course YESTERDAY = new Course("daily_parkour_easy", TrialKind.PARKOUR, "Easy Parkour",
+            Tier.EASY, "games", new Course.Spot(4100.5, 170, 4100.5, 0, 0),
+            List.of(new Course.Mark(4110.5, 170, 4100.5, 2.2)), new Course.Mark(4120.5, 171, 4100.5, 3.0), 167.0, 17,
+            true, false, 11, layout(20_724, 'A', "aaaaaaaaaaaa"));
+    /** Today's, flipped in while the run was going: half B, the next rev. */
+    private static final Course TODAY = new Course("daily_parkour_easy", TrialKind.PARKOUR, "Easy Parkour",
+            Tier.EASY, "games", new Course.Spot(4196.5, 180, 4100.5, 0, 0),
+            List.of(new Course.Mark(4206.5, 180, 4100.5, 2.2)), new Course.Mark(4216.5, 181, 4100.5, 3.0), 177.0, 17,
+            true, false, 12, layout(20_725, 'B', "bbbbbbbbbbbb"));
+
+    /** What the engine vouches for: the live layout and, until its half is being cleared, the one before. */
+    private static Predicate<GenTag> standing(boolean previousStands) {
+        return t -> t != null && (t.sameLayout(TODAY.gen()) || (previousStands && t.sameLayout(YESTERDAY.gen())));
+    }
+
+    @Test
+    void aFinishOnAStillStandingPreviousLayoutCounts() {
+        int hash = YESTERDAY.layoutHash();
+        assertTrue(FairPlay.stale(YESTERDAY.rev(), hash, TODAY), "by the old rule alone the row has moved on");
+        assertFalse(FairPlay.stale(YESTERDAY, hash, TODAY, standing(true)),
+                "but yesterday's blocks still stand, so the run on them counts");
+        assertFalse(FairPlay.stale(TODAY, TODAY.layoutHash(), TODAY, standing(true)), "a run on the live layout counts");
+    }
+
+    @Test
+    void onceClearingTheOldHalfHasStartedAFinishOnItIsStale() {
+        assertTrue(FairPlay.stale(YESTERDAY, YESTERDAY.layoutHash(), TODAY, standing(false)),
+                "CLEAR_OLD started on its half: the layout no longer stands, the finish records nothing");
+        assertTrue(FairPlay.stale(YESTERDAY, YESTERDAY.layoutHash(), null, standing(false)),
+                "deleted and not standing: stale");
+        assertFalse(FairPlay.stale(YESTERDAY, YESTERDAY.layoutHash(), null, standing(true)),
+                "the row gone but the blocks still standing: it counts");
+    }
+
+    @Test
+    void withNothingVouchingTheOldRuleDecides() {
+        Predicate<GenTag> none = t -> false;
+        assertFalse(FairPlay.stale(TODAY, TODAY.layoutHash(), TODAY, none),
+                "the daily game off mid-run: an unchanged course still counts");
+        assertTrue(FairPlay.stale(YESTERDAY, YESTERDAY.layoutHash(), TODAY, none),
+                "a changed one doesn't");
+        assertTrue(FairPlay.stale(YESTERDAY, YESTERDAY.layoutHash(), TODAY, null), "no gate at all: nothing stands");
+    }
+
+    @Test
+    void aHandBuiltCourseKeepsTheOldRuleWhateverStands() {
+        int hash = PARKOUR.layoutHash();
+        Predicate<GenTag> everything = t -> true;
+        assertTrue(FairPlay.stale(PARKOUR, hash, PARKOUR.withRev(2), everything),
+                "a hand-built layout edit is stale even if the gate says everything stands");
+        assertFalse(FairPlay.stale(PARKOUR, hash, PARKOUR, everything), "unchanged: counts");
+        assertTrue(FairPlay.stale(PARKOUR, hash, null, everything), "deleted: stale");
     }
 }

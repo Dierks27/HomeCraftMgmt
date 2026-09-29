@@ -48,9 +48,14 @@ import java.util.regex.Pattern;
  *       {@code spaces}/{@code of}; a row with neither — a payout without its odds — is left out,
  *       and so is a game with no stake left. Extra keys never replace a standard one.</li>
  *   <li>{@code cabinet}: {@code {id,name,kind:"cabinet",board,unit,lowerIsBetter,best?}}.</li>
- *   <li>a course: {@code {id,name,kind:"parkour"|"elytra"|"boat",tier?,record?:{ms,at?}}}.</li>
- *   <li>{@code golf}: {@code {id,name,kind:"golf",holes,par,record?:{strokes,at?}}}.</li>
+ *   <li>a course: {@code {id,name,kind:"parkour"|"elytra"|"boat",tier?,record?:{ms,at?},daily?}}.</li>
+ *   <li>{@code golf}: {@code {id,name,kind:"golf",holes,par,record?:{strokes,at?},daily?}}.</li>
  * </ul>
+ * A Daily Courses course (GEN-SPEC §5.6) is written the same way, its record taken from today's
+ * layout board, plus {@code daily:{day,nextAt?,goldMs?,silverMs?}}: the course day's date, when the
+ * next layout is due and, for a time trial, its star times. A course without it is written byte
+ * for byte as before. The week's Star Chart is a top-level {@code starChart:{week,best?}} (with
+ * its {@code holder} only while names are on). Never a seed, a rev, a half or a UUID.
  * Entries keep the order they were written in (the catalog's), after the Scratch Ticket's; a
  * second entry with an id already published is dropped, so the site can key on {@code id}.
  *
@@ -134,14 +139,36 @@ public final class ArcadeFeed implements FeedWriter {
                              String holder) implements GameRow {
     }
 
-    /** A time-trial course ({@link FeedWriter#course}). */
+    /** A time-trial course ({@link FeedWriter#course}); {@code daily} for a Daily Courses course, else null. */
     public record CourseRow(String id, String name, String kind, String tier, Long recordMs, Long recordAt,
-                            String holder) implements GameRow {
+                            String holder, Daily daily) implements GameRow {
+
+        /** A hand-built course. */
+        public CourseRow(String id, String name, String kind, String tier, Long recordMs, Long recordAt,
+                         String holder) {
+            this(id, name, kind, tier, recordMs, recordAt, holder, null);
+        }
     }
 
-    /** A mini golf course ({@link FeedWriter#golf}). */
+    /** A mini golf course ({@link FeedWriter#golf}); {@code daily} for a Daily Courses course, else null. */
     public record GolfRow(String id, String name, int holes, int par, Integer recordStrokes, Long recordAt,
-                          String holder) implements GameRow {
+                          String holder, Daily daily) implements GameRow {
+
+        /** A hand-built course. */
+        public GolfRow(String id, String name, int holes, int par, Integer recordStrokes, Long recordAt,
+                       String holder) {
+            this(id, name, holes, par, recordStrokes, recordAt, holder, null);
+        }
+    }
+
+    /**
+     * The week's Star Chart ({@link FeedWriter#starChart}).
+     *
+     * @param week   the week's first day ({@code 2026-09-28})
+     * @param best   the top total, or {@code null}
+     * @param holder who holds it, or {@code null} (published only while names are on)
+     */
+    public record StarChart(String week, Long best, String holder) {
     }
 
     /**
@@ -208,6 +235,7 @@ public final class ArcadeFeed implements FeedWriter {
 
     private final boolean showNames;
     private final List<GameRow> games = new ArrayList<>();
+    private StarChart starChart;
 
     /** @param showNames {@code web.dashboard.arcade_show_names}: whether records carry a holder */
     public ArcadeFeed(boolean showNames) {
@@ -236,6 +264,28 @@ public final class ArcadeFeed implements FeedWriter {
     public void golf(String id, String name, int holes, int par, Integer recordStrokes, Long recordAt,
                      String holder) {
         games.add(new GolfRow(id, name, holes, par, recordStrokes, recordAt, holder));
+    }
+
+    @Override
+    public void course(String id, String name, String kind, String tier, Long recordMs, Long recordAt,
+                       String holder, Daily daily) {
+        games.add(new CourseRow(id, name, kind, tier, recordMs, recordAt, holder, daily));
+    }
+
+    @Override
+    public void golf(String id, String name, int holes, int par, Integer recordStrokes, Long recordAt,
+                     String holder, Daily daily) {
+        games.add(new GolfRow(id, name, holes, par, recordStrokes, recordAt, holder, daily));
+    }
+
+    @Override
+    public void starChart(String weekIso, Long best, String holder) {
+        starChart = weekIso == null || weekIso.isBlank() ? null : new StarChart(weekIso, best, holder);
+    }
+
+    /** The Star Chart written so far, or {@code null}. */
+    public StarChart starChart() {
+        return starChart;
     }
 
     @Override
@@ -297,6 +347,14 @@ public final class ArcadeFeed implements FeedWriter {
                 && ids.contains(featured.game().toLowerCase(Locale.ROOT))) {
             sb.append(",\"featured\":{\"game\":").append(Json.string(featured.game()))
                     .append(",\"until\":").append(featured.until()).append('}');
+        }
+        if (starChart != null && !blank(Json.plain(starChart.week()))) {
+            sb.append(",\"starChart\":{\"week\":").append(Json.string(Json.plain(starChart.week())));
+            if (starChart.best() != null) {
+                sb.append(",\"best\":").append(Math.max(0, starChart.best()));
+                holder(sb, starChart.holder());
+            }
+            sb.append('}');
         }
         if (scratchEntry != null && scratch.pot() != null) {
             sb.append(",\"jackpots\":[{\"game\":").append(Json.string(SCRATCH_ID))
@@ -460,6 +518,7 @@ public final class ArcadeFeed implements FeedWriter {
             sb.append(",\"record\":{\"ms\":").append(r.recordMs());
             record(sb, r.recordAt(), r.holder());
         }
+        daily(sb, r.daily());
         return sb.append('}').toString();
     }
 
@@ -471,7 +530,29 @@ public final class ArcadeFeed implements FeedWriter {
             sb.append(",\"record\":{\"strokes\":").append(r.recordStrokes());
             record(sb, r.recordAt(), r.holder());
         }
+        daily(sb, r.daily());
         return sb.append('}').toString();
+    }
+
+    /**
+     * A Daily Courses course's {@code daily} object: its day, when the next layout is due (when
+     * known) and its star times (when set); nothing at all for a hand-built course.
+     */
+    private static void daily(StringBuilder sb, Daily d) {
+        if (d == null) {
+            return;
+        }
+        sb.append(",\"daily\":{\"day\":").append(Json.string(Json.plain(d.day())));
+        if (d.nextAt() > 0) {
+            sb.append(",\"nextAt\":").append(d.nextAt());
+        }
+        if (d.goldMs() != null && d.goldMs() > 0) {
+            sb.append(",\"goldMs\":").append(d.goldMs());
+        }
+        if (d.silverMs() != null && d.silverMs() > 0) {
+            sb.append(",\"silverMs\":").append(d.silverMs());
+        }
+        sb.append('}');
     }
 
     /** The rest of a {@code record} object: {@code at} when known, the holder when allowed, the brace. */

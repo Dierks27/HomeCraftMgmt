@@ -10,9 +10,15 @@ import com.dierks.homecraft.games.GameContext;
 import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GameSpec;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.GeneratedCourses;
 import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.api.Stars;
 import com.dierks.homecraft.games.world.WorldEntities;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.gui.games.daily.DailyLookup;
+import com.dierks.homecraft.gui.games.daily.DailyText;
 import com.dierks.homecraft.gui.games.golf.GolfCourseMenu;
 import com.dierks.homecraft.gui.games.golf.GolfCoursesMenu;
 import com.dierks.homecraft.mini.MiniDef;
@@ -57,6 +63,11 @@ import java.util.logging.Level;
  * better (once per course a day), each hole-in-one of a round that was finished (once per hole a
  * day) and today's featured bonus. A round played on a course that an admin changed meanwhile
  * counts for nothing — its board was cleared for the new layout.
+ *
+ * <p><b>Daily Golf and Tiny Golf</b> (GEN-SPEC §4.3, §5) are ordinary golf rows Daily Courses
+ * writes with a {@code gen:} tag, played by this same engine. They are open only while the Daily
+ * Courses engine vouches for their blocks, they come first on the Golf tab, and their scores go on
+ * each day's layout board with stars for the Star Chart ({@link GolfFinish}).
  */
 public final class MiniGolf implements Game {
 
@@ -143,6 +154,9 @@ public final class MiniGolf implements Game {
 
     /** A course's tile: "&amp;dMeadow Links &amp;7- 9 holes, par 27". */
     public ItemStack courseTile(Player viewer, GolfCourse c) {
+        if (c.generated()) {
+            return dailyTile(viewer, c);
+        }
         List<String> lore = new ArrayList<>();
         lore.add("&7" + rules().get(0));
         lore.add("&7" + rules().get(2));
@@ -157,6 +171,45 @@ public final class MiniGolf implements Game {
         lore.add("&eClick to play");
         return Menus.icon(Material.SNOWBALL, "&d" + c.name() + " &7- " + holes(c.holes().size()) + ", par " + c.par(),
                 lore.toArray(new String[0]));
+    }
+
+    /**
+     * A daily course's tile (GEN-SPEC §5.4): "&amp;dDaily Golf &amp;7- 9 holes, par 29 ★☆☆
+     * &amp;a(new today)", its star lines, your best and today's best, and what its first finish
+     * today pays.
+     */
+    private ItemStack dailyTile(Player viewer, GolfCourse c) {
+        GenTag t = c.gen();
+        GamesService g = games();
+        UUID id = viewer.getUniqueId();
+        int stars = DailyLookup.stars(g, id, c.id(), t.day());
+        List<String> lore = new ArrayList<>();
+        lore.add("&7A new course every morning.");
+        lore.add("&7" + rules().get(0));
+        lore.add(DailyText.starStrokes(c.par(), c.holes().size()));
+        Long best = best(id, c.id());
+        lore.add(DailyText.yourBestToday(best == null ? null : GolfRun.strokesText(best.intValue())));
+        lore.add(todaysBestLine(c, viewer));
+        String first = DailyText.firstToday(g.generated().dailyClear(c.id()),
+                DailyLookup.dailyClearPaid(g, id, id(), c.id(), t.day()));
+        if (first != null) {
+            lore.add(first);
+        }
+        lore.add("&eClick to play");
+        String fact = holes(c.holes().size()) + ", par " + c.par() + (stars > 0 ? " " + Stars.text(stars) : "");
+        return Menus.glint(Menus.icon(Material.SNOWBALL, DailyText.tabName(Slots.of(c.id()), c.name(), fact, t.day(),
+                DailyLookup.courseDay(g)), lore.toArray(new String[0])), stars >= Stars.MAX);
+    }
+
+    /** "&amp;7Today's best: 27 strokes by Alex" on a daily course, or that nobody has finished it today. */
+    public String todaysBestLine(GolfCourse c, Player viewer) {
+        GamesDao.ScoreRow r = record(c.id());
+        if (r == null) {
+            return DailyText.todaysBest(null, null, false);
+        }
+        boolean yours = viewer != null && viewer.getUniqueId().equals(r.player());
+        String who = yours ? null : Bukkit.getOfflinePlayer(r.player()).getName();
+        return DailyText.todaysBest(GolfRun.strokesText((int) r.score()), who, yours);
     }
 
     /** The course list. */
@@ -186,13 +239,23 @@ public final class MiniGolf implements Game {
         return true;
     }
 
+    /**
+     * One {@code /api/arcade} entry per playable course. A daily course's record is today's
+     * layout's, with its day and when the next one is due (never its seed, rev or half).
+     */
     @Override
     public void feed(FeedWriter out) {
         for (GolfCourse c : playable()) {
             GamesDao.ScoreRow record = record(c.id());
-            out.golf(c.id(), c.name(), c.holes().size(), c.par(),
-                    record == null ? null : (int) record.score(), record == null ? null : record.at(),
-                    record != null && out.showNames() ? Bukkit.getOfflinePlayer(record.player()).getName() : null);
+            Integer strokes = record == null ? null : (int) record.score();
+            Long at = record == null ? null : record.at();
+            String who = record != null && out.showNames() ? Bukkit.getOfflinePlayer(record.player()).getName() : null;
+            if (c.generated()) {
+                out.golf(c.id(), c.name(), c.holes().size(), c.par(), strokes, at, who,
+                        new FeedWriter.Daily(c.gen().date().toString(), games().generated().nextChangeAt(), null, null));
+            } else {
+                out.golf(c.id(), c.name(), c.holes().size(), c.par(), strokes, at, who);
+            }
         }
     }
 
@@ -313,37 +376,67 @@ public final class MiniGolf implements Game {
         return id == null ? null : courses().get(GolfCourse.normalise(id));
     }
 
-    /** The course if it can be played right now, else {@code null}. */
+    /**
+     * The course if it can be played right now (and, for a daily course, the Daily Courses engine
+     * vouches for its blocks), else {@code null}.
+     */
     public GolfCourse playableCourse(String id) {
         GolfCourse c = course(id);
-        return c != null && c.playable(worlds()) ? c : null;
+        return c != null && c.playable(worlds()) && games().generated().live(c.id(), c.gen()) ? c : null;
     }
 
-    /** Every course that can be played right now, by id. */
+    /** Every course that can be played right now: the daily ones first (slot order), then by id. */
     public List<GolfCourse> playable() {
         List<GolfCourse> out = new ArrayList<>();
         List<String> worlds = worlds();
+        GeneratedCourses gate = games().generated();
         for (GolfCourse c : courses().values()) {
-            if (c.playable(worlds)) {
+            if (c.playable(worlds) && gate.live(c.id(), c.gen())) {
                 out.add(c);
             }
         }
+        return sorted(out);
+    }
+
+    /** Daily courses first, in slot order ({@link Slots#ALL}); then the rest by id. */
+    static List<GolfCourse> sorted(List<GolfCourse> courses) {
+        List<GolfCourse> out = new ArrayList<>(courses);
+        out.sort(Comparator.comparingInt(MiniGolf::dailyOrder).thenComparing(GolfCourse::id));
         return out;
     }
 
-    /** The player's best on a course (strokes), or {@code null}. */
+    private static int dailyOrder(GolfCourse c) {
+        if (!c.generated()) {
+            return Integer.MAX_VALUE;
+        }
+        int i = Slots.ids().indexOf(c.id());
+        return i < 0 ? Slots.ALL.size() : i;
+    }
+
+    /** The board a course's scores go on: a daily course's layout board ("today's best"), else its own. */
+    public static String board(GolfCourse c) {
+        return GolfFinish.board(c.id(), c.gen());
+    }
+
+    /** The board of course {@code courseId} as it is now. */
+    private String board(String courseId) {
+        GolfCourse c = course(courseId);
+        return c == null ? Scores.golf(GolfCourse.normalise(courseId)) : board(c);
+    }
+
+    /** The player's best on a course (strokes; a daily course: on today's layout), or {@code null}. */
     public Long best(UUID player, String courseId) {
-        return games().scores().best(player, id(), Scores.golf(courseId));
+        return games().scores().best(player, id(), board(courseId));
     }
 
-    /** A course's record, or {@code null}. */
+    /** A course's record (a daily course: today's best), or {@code null}. */
     public GamesDao.ScoreRow record(String courseId) {
-        return games().scores().record(id(), Scores.golf(courseId), true);
+        return games().scores().record(id(), board(courseId), true);
     }
 
-    /** Open a course's high scores. */
+    /** Open a course's high scores (a daily course: today's layout board). */
     public void openScores(Player player, String courseId, Runnable back) {
-        games().screens().scores(player, this, Scores.golf(courseId), true, back);
+        games().screens().scores(player, this, board(courseId), true, back);
     }
 
     /** Players on each course right now, for the admin tool. */

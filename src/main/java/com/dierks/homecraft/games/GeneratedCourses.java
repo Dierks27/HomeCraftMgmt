@@ -4,6 +4,8 @@ import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Slots;
 
+import java.util.List;
+
 /**
  * What the course engines ask about generated courses (GEN-SPEC §0.2 R5, §3.4), through
  * {@link GamesService#generated()}.
@@ -40,6 +42,36 @@ public interface GeneratedCourses {
 
     /** Whether block (x, y, z) of {@code world} is inside a Daily Courses half (anyone's edits are refused there). */
     boolean inArea(String world, int x, int y, int z);
+
+    // ---- what a finish pays (games.daily): the shipped values until the engine says otherwise ----
+
+    /**
+     * The tokens the first counted finish of course {@code courseId} pays on its course day
+     * ({@code games.daily.slots.<id>.daily_clear}, GEN-SPEC §5.3): the slot's shipped amount by
+     * default, 0 for a course that isn't a slot.
+     */
+    default int dailyClear(String courseId) {
+        Slots.Def slot = Slots.of(courseId);
+        return slot == null ? 0 : slot.dailyClear();
+    }
+
+    /** The weekly Star Chart goals ({@code games.daily.star_goals}; shipped 10 and 25). */
+    default List<Integer> starGoals() {
+        return SHIPPED_STAR_GOALS;
+    }
+
+    /** Tokens per Star Chart goal, once a week each ({@code games.daily.star_goal_reward}; shipped 1). */
+    default int starGoalReward() {
+        return 1;
+    }
+
+    /** The most star-goal tokens a day ({@code games.daily.daily_cap}; shipped 2). */
+    default int starGoalCap() {
+        return 2;
+    }
+
+    /** {@code games.daily.star_goals} as shipped. */
+    List<Integer> SHIPPED_STAR_GOALS = List.of(10, 25);
 
     /** No engine, or {@code daily} is off: nothing generated is live or standing; no area is kept. */
     GeneratedCourses NONE = new GeneratedCourses() {

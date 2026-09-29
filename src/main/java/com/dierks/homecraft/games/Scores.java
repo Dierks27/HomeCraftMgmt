@@ -25,20 +25,41 @@ public final class Scores {
     public static final String CLASSIC = "classic";
 
     private final GamesService games;
+    /** Who hears that a score went on a board (the hub's leaderboard displays), or {@code null}. */
+    private volatile java.util.function.BiConsumer<String, String> submitted;
 
     public Scores(GamesService games) {
         this.games = games;
     }
 
+    /**
+     * Tell {@code listener} the game and board of every score recorded from now on ({@code null}:
+     * nobody). The leaderboard displays redraw from it (EXTRAS E3); a listener that throws is
+     * logged and never reaches a game.
+     */
+    public void onSubmit(java.util.function.BiConsumer<String, String> listener) {
+        this.submitted = listener;
+    }
+
     /** Record a score now; see {@link GamesDao#submit}. */
     public ScoreResult submit(UUID player, String gameId, String board, long score, boolean lowerIsBetter) {
+        ScoreResult result;
         try {
-            return games.dao().submit(player, gameId, board, score, lowerIsBetter,
+            result = games.dao().submit(player, gameId, board, score, lowerIsBetter,
                     games.host().clock().nowMillis());
         } catch (SQLException e) {
             games.host().logger().log(Level.SEVERE, "Could not record a " + gameId + " score", e);
             return ScoreResult.NONE;
         }
+        java.util.function.BiConsumer<String, String> l = submitted;
+        if (l != null) {
+            try {
+                l.accept(gameId, board);
+            } catch (RuntimeException e) {
+                games.host().logger().log(Level.WARNING, "A leaderboard display failed to hear a new score", e);
+            }
+        }
+        return result;
     }
 
     /** The player's best on the board, or {@code null}. */

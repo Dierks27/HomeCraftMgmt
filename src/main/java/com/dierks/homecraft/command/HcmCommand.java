@@ -1404,8 +1404,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         }
         String sub = args.length >= 2 ? args[1].toLowerCase(Locale.ROOT) : "";
         switch (sub) {
-            case "sign" -> bindSignDisplay(player);
-            case "hologram", "holo" -> bindHologramDisplay(player);
+            case "sign" -> bindSignDisplay(player, args);
+            case "hologram", "holo" -> bindHologramDisplay(player, args);
             case "tv" -> bindTvPanelDisplay(player, args);
             case "remove" -> removeDisplay(player);
             case "cleanup" -> cleanupDisplays(player);
@@ -1420,19 +1420,26 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 player.sendMessage(Text.of(news
                         ? "&e/hcm display tv [commodity|@news] [scale] &7- mount a flat price-screen panel (or the Market News board) on the wall you're looking at"
                         : "&e/hcm display tv [commodity] [scale] &7- mount a flat price-screen panel on the wall you're looking at"));
+                player.sendMessage(Text.of("&e/hcm display sign|hologram|tv @board:<game or course> &7- a leaderboard:"
+                        + " the top 5 (a sign: 3) of a game, a course, or a Fresh course's current set"));
                 player.sendMessage(Text.of("&e/hcm display remove &7- unbind the display block you're looking at"));
                 player.sendMessage(Text.of("&e/hcm display cleanup &7- despawn every plugin-owned display entity in loaded chunks (wipes strays)"));
             }
         }
     }
 
-    private void bindSignDisplay(Player player) {
+    private void bindSignDisplay(Player player, String[] args) {
         org.bukkit.block.Block target = player.getTargetBlockExact(6);
         if (target == null || !(target.getState() instanceof org.bukkit.block.Sign)) {
             player.sendMessage(Text.of("&cLook at a placed sign, then run &f/hcm display sign&c."));
             return;
         }
         org.bukkit.Location loc = target.getLocation();
+        if (args.length >= 3 && com.dierks.homecraft.display.BoardDisplay.is(args[2])) {
+            var r = plugin.displayService().bindSign(player, loc, args[2]);
+            player.sendMessage(r.ok() ? Text.of("&aSign bound to " + shows(args[2]) + "&a.") : Text.of("&c" + r.error()));
+            return;
+        }
         new com.dierks.homecraft.gui.display.CommodityPickerMenu(plugin, player, "Bind sign → commodity",
                 id -> {
                     var r = plugin.displayService().bindSign(player, loc, id);
@@ -1444,13 +1451,19 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 player::closeInventory).open(player);
     }
 
-    private void bindHologramDisplay(Player player) {
+    private void bindHologramDisplay(Player player, String[] args) {
         org.bukkit.block.Block target = player.getTargetBlockExact(6);
         if (target == null || target.getType().isAir()) {
             player.sendMessage(Text.of("&cLook at the block you want the hologram to float above, then run &f/hcm display hologram&c."));
             return;
         }
         org.bukkit.Location loc = target.getLocation();
+        if (args.length >= 3 && com.dierks.homecraft.display.BoardDisplay.is(args[2])) {
+            var r = plugin.displayService().bindHologram(player, loc, args[2]);
+            player.sendMessage(r.ok() ? Text.of("&aHologram floating above the block, showing " + shows(args[2]) + "&a.")
+                    : Text.of("&c" + r.error()));
+            return;
+        }
         // offerNews: a hologram can also be the Market News board (@news) - the picker offers it only
         // while the live market runs, and is 0.32's picker while it is off or paused.
         new com.dierks.homecraft.gui.display.CommodityPickerMenu(plugin, player, "Bind hologram → commodity",
@@ -1525,8 +1538,15 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         return com.dierks.homecraft.gui.MarketNewsMenu.live(plugin) != null;
     }
 
-    /** What a freshly bound display shows: {@code &fwheat}, or the Market News board for {@code @news}. */
+    /**
+     * What a freshly bound display shows: {@code &fwheat}, the Market News board for {@code @news},
+     * or a leaderboard for {@code @board:<id>}.
+     */
     private static String shows(String id) {
+        if (com.dierks.homecraft.display.BoardDisplay.is(id)) {
+            var t = com.dierks.homecraft.display.BoardDisplay.parse(id);
+            return "&fthe " + (t == null ? id : t.id()) + " leaderboard";
+        }
         return com.dierks.homecraft.display.DisplayService.NEWS_ID.equals(id) ? "&fthe Market News board" : "&f" + id;
     }
 
@@ -1711,10 +1731,18 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             if (newsBoardOffered()) {
                 addMatches(out, prefix, com.dierks.homecraft.display.DisplayService.NEWS_ID);
             }
+            for (String board : plugin.displayService().boardTargets()) {
+                addMatches(out, prefix, board);
+            }
             for (MarketItem item : plugin.market().catalog()) {
                 if (item.id().startsWith(prefix)) {
                     out.add(item.id());
                 }
+            }
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("display")
+                && List.of("sign", "hologram", "holo").contains(args[1].toLowerCase(Locale.ROOT))) {
+            for (String board : plugin.displayService().boardTargets()) {
+                addMatches(out, args[2], board);
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("market")) {
             addMatches(out, args[1], "list", "price", "history", "sell");

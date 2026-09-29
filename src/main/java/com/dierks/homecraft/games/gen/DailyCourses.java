@@ -340,7 +340,7 @@ public final class DailyCourses implements Game {
 
     /**
      * Pay the weekly Star Chart goals a counted run has reached (each goal's own tokens, once a week
-     * each, under {@code daily_cap}): the course engines call this with what
+     * each, all or nothing under {@code daily_cap}): the course engines call this with what
      * {@code GamesDao.addStars} returned. Every goal the week's total has reached is offered
      * ({@link DailyStars#reached}), so a goal the day's caps held back is paid by a later run that
      * week; its once-a-week ref keeps it from being paid twice.
@@ -357,9 +357,9 @@ public final class DailyCourses implements Game {
         List<Integer> paid = new ArrayList<>();
         for (int goal : DailyStars.reached(added.weekTotal(), DailyStars.stars(goals))) {
             int tokens = DailyStars.tokens(goals, goal);
-            if (tokens > 0 && games().rewards().pay(player, this, TokenService.Source.GAMES_DAILY, RewardKind.MILESTONE,
-                    SkillRewards.milestoneRef(GenBoards.week(weekKey), goal), tokens, st.dailyCap(),
-                    "Star Chart: " + goal + " stars this week") > 0) {
+            if (tokens > 0 && games().rewards().payWhole(player, this, TokenService.Source.GAMES_DAILY,
+                    RewardKind.MILESTONE, SkillRewards.milestoneRef(GenBoards.week(weekKey), goal), tokens,
+                    st.dailyCap(), "Star Chart: " + goal + " stars this week", GenCopy.GOAL_LIMIT) > 0) {
                 paid.add(goal);
             }
         }

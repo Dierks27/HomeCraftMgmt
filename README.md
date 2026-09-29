@@ -538,6 +538,7 @@ common keys turns the games off, junk in one game's block closes that game.
 | `skill_daily_cap` | `6` | Most tokens all skill games together pay a player in a day (first clears don't count) |
 | `featured` | `auto` | `auto` picks a skill game or course each day; a game or course id pins it (`/hcm games feature`). `trials` or `golf` pins every course of that game |
 | `featured_bonus` | `1` | Tokens for the first finish of today's pick (counts toward `skill_daily_cap`) |
+| `feed_top` | `5` | The website's leaderboards: how many of each game's and course's best scores `/api/arcade` lists as `top` (0-25; 0 = none). Past Fresh courses list at most 3. Names only with `web.dashboard.arcade_show_names` |
 | `restart_times` | `["04:00", "16:00"]` | When the host restarts the server each day: the minute it actually stops, not when its warnings start (quoted 24-hour times in `clock.time_zone`; midnight is `"00:00"`). Just before each one, nothing a restart would cut off starts: courses and golf, a new Twenty-One or Higher or Lower hand (an open one plays on), a cabinet's scored daily try (today's board isn't dealt until after, and the try is kept; practice after a used try and Classic play go on). Spins and flips aren't held, and the plugin sends no warnings of its own. `[]` = off; an entry that isn't a time is dropped with a WARN |
 | `restart_hold_minutes` | `5` | How many minutes before each restart that hold starts (1-60) |
 | `break.daily_choices` | `[10, 25, 50, 100]` | The daily limits a player can pick (they can also pick none) |
@@ -805,12 +806,13 @@ next. That's all.
   day. Daily to weekly: today's stay until the next 4:00 AM, then the week's set goes up and stays
   until the next Monday. This holds across a restart. `/hcm games gen reroll` still replaces one at
   once.
-- Moving `rebuild_day` works the same way, with one catch: sets are numbered (`7:38` is the week
-  of Mon 28 Sep), and a new day before the next Monday would give the set that is up its own
-  number again. That day is not a change, so the courses stay until the new day a week later. Monday
-  to Friday, changed on Wed 30 Sep: the week's courses stay through Fri 2 Oct, the new set goes up
-  on Fri 9 Oct, and from then on they change every Friday. `/hcm games gen status` always shows the
-  real date ("next: Fri 9 Oct 4:00 AM").
+- Moving `rebuild_day` works the same way, with one catch: **moving the change day later keeps
+  this set until the new day comes round.** Sets are numbered (`7:38` is the week of Mon 28 Sep),
+  and a new day before the next Monday would give the set that is up its own number again. That
+  day is not a change, so the courses stay until the new day a week later (up to six extra days;
+  accepted as is). Monday to Friday, changed on Wed 30 Sep: the week's courses stay through Fri 2
+  Oct, the new set goes up on Fri 9 Oct, and from then on they change every Friday.
+  `/hcm games gen status` always shows the real date ("next: Fri 9 Oct 4:00 AM").
 - Anything `cadence`, `rebuild_at` or `rebuild_day` can't use (a typo, `cadence: 30`) is one WARN in
   the console and the shipped value (weekly, 04:00, the quests' week start); it never switches the
   courses off.
@@ -854,23 +856,45 @@ and a run already going always counts. The old half is emptied once nobody is on
 (both fixed when the course is made, from its expert time: see `stars`), 1 for finishing. Golf: 3 at
 par or better, 2 within one stroke per three holes over par, 1 for finishing. Only a counted run
 earns stars. The first counted finish of each course in each set pays from `rewards`: weekly Easy 2,
-Parkour 3, Hard 5, Sky Rings 3, Golf 3, Tiny Golf 2; daily Easy 1, Parkour 2, Hard 3, Sky Rings 2,
+Parkour 3, Hard 4, Sky Rings 3, Golf 3, Tiny Golf 2; daily Easy 1, Parkour 2, Hard 3, Sky Rings 2,
 Golf 2, Tiny Golf 1; every 2 to 6 days, in between (`round(daily + (weekly - daily) * (days - 1) /
-6)`: every 3 days Hard pays 4). A course's first finish ever pays the usual first clear once; golf
-pays par and holes-in-one once per set. The Star Chart pays at 6 stars (+1) and 12 stars (+2) a week
-when weekly, 10 and 25 (+1 each) when daily, and in between for 2 to 6 days - never above 80% of
-what the week's courses can give. A week's goals are fixed the first time they are shown, so
-switching a course off (or the cadence) mid-week changes next week's goals, not this week's.
+6)`). A finish pays by its own set's length: after a switch from weekly to daily, a finish on the
+weekly set still up pays the weekly amount, and the first daily set pays the daily one. A second
+finish in the same set, or a finish on a reroll of it, pays no second first-finish token. A course's
+first finish ever pays the usual first clear once; golf pays par and holes-in-one once per set. The
+Star Chart pays each goal its own tokens: at 6 stars (+1) and 12 stars (+2) a week when weekly, 10
+and 25 (+1 each) when daily, and in between for 2 to 6 days - never above 80% of what the week's
+courses can give. A run's stars go on the chart of the week it is played in, even when its set
+began the week before. **A week's goals are fixed** the first time they are shown or paid, so
+switching a course off (or the cadence) mid-week changes next week's goals, not this week's - even
+when that leaves the top goal above 80% of what the courses still on can give (accepted: goals never
+move under a player's feet).
 
-The daily caps are unchanged and still apply to all of it, and a reward a cap cuts short is not
-paid later (that set's first-finish token, or that week's goal, is used up); one the caps held back
-entirely is still there, so a Star Chart goal reached on a day the caps are already full is paid by
-the player's next finish that week. The parkour and Sky Rings courses share
-`games.trials.daily_cap` (4 a day), the golf courses `games.golf.daily_cap` (4), the Star Chart
-`games.fresh.daily_cap` (2), and every skill game together `games.skill_daily_cap` (6). So as
-shipped Hard Parkour's weekly 5 pays at most 4; a player who plays a whole weekly set in one day
-earns at most 6 tokens that day (plus the once-ever first clears); and reaching both weekly goals
-on the same day pays 2, not 3. Played over several days, more of the set's amounts are paid.
+**All or nothing.** The daily caps are unchanged and still apply, and no weekly amount is above the
+cap of the game that pays it (Hard Parkour's weekly first finish is 4 for that reason). A set's
+first-finish token and a Star Chart goal are paid in full or not at all: if what is left of today's
+caps (the course game's or the server's) is smaller than the reward, nothing is paid and nothing is
+used up, and the player reads once "You've reached today's token limit - finish it again another day
+this week for its tokens." A finish on another day of the same set pays it (a goal: any counted
+finish later that week). Every other reward keeps paying what is left of the caps. The parkour and
+Sky Rings courses share `games.trials.daily_cap` (4 a day), the golf courses `games.golf.daily_cap`
+(4), the Star Chart `games.fresh.daily_cap` (2), and every skill game together
+`games.skill_daily_cap` (6). So a player who plays a whole weekly set in one day earns at most 6
+tokens that day (plus the once-ever first clears), and the rest is waiting on the other days of the
+week; reaching both weekly goals on the same day pays the 6 goal's 1, and the 12 goal's 2 the next
+day that player finishes a course.
+
+**What players see.** `/hcm play fresh_courses` (the Fresh Courses tile on the Courses and Golf
+tabs) opens "This week's courses - Mon 28 Sep-Sun 4 Oct" ("Today's courses" when daily, "The
+current courses" for any other cadence): one tile per course, whose NAME carries the player's stars
+in this set, a golf course's holes and par, and its **course code** ("Hard Parkour - ★★☆ · Course
+code HARD-40"); then the three Classics (a course an admin brought back, one being built, or empty
+with the tip "Loved an old course? Tell an admin its course code..."), the Star Chart (this week's
+stars, the next goal and what it pays) and How stars work. Every line follows the cadence: "This
+week's best", "Your best this week", "First finish this week: +2 tokens", "(new this week)" on a
+course's Courses-tab tile and "(last week's)" while the new set is still being built; "today" only
+when daily. A finish ends with the course code in chat ("Course code HARD-40"), and the course and
+result screens show it in their header's NAME. `/hcm play fresh_parkour_tiers` is "Parkour Levels".
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -878,7 +902,7 @@ on the same day pays 2, not 3. Played over several days, more of the set's amoun
 | `fresh.world` | `""` | The world they are built in; `""` = the first of `games.worlds` (it must be listed there) |
 | `fresh.cadence` | `weekly` | How often the courses change: `weekly`, `daily`, or a number of days from 1 to 28 (like `3`). Junk: one WARN, weekly |
 | `fresh.rebuild_at` | `"04:00"` | When a new set starts (`clock.time_zone`, in quotes); keep it at a restart |
-| `fresh.rebuild_day` | `""` | The day a weekly set starts (`"monday"`); `""` = the quests' week start (`arcade.quests.week_starts`). Other cadences count their days from it too. A new day before the next Monday keeps the current set a week longer (see above) |
+| `fresh.rebuild_day` | `""` | The day a weekly set starts (`"monday"`); `""` = the quests' week start (`arcade.quests.week_starts`). Other cadences count their days from it too. Moving the change day later keeps this set until the new day comes round (see above) |
 | `fresh.startup_delay_seconds` | `60` | After the server is up, before the first build |
 | `fresh.avoid_before_restart_minutes` | `15` | No build starts this close to one of `games.restart_times` |
 | `fresh.retry_minutes` | `30` | A failed build is tried again after this |
@@ -887,8 +911,8 @@ on the same day pays 2, not 3. Played over several days, more of the set's amoun
 | `fresh.keep_days` | `35` | Course boards and star rows older than this are pruned; each course always keeps its last 8 sets (Star Charts: 12 weeks) |
 | `fresh.world_rules` | `true` | No mobs, fire, random ticks or weather in that world; always noon |
 | `fresh.safe_spot` | `""` | "x y z" where people standing in a building area are moved; `""` = the world's spawn |
-| `fresh.daily_cap` | `2` | Most Star Chart tokens a player earns a day |
-| `fresh.rewards.clear_weekly.*` / `fresh.rewards.clear_daily.*` | see above | Each course's first-finish tokens at a weekly and at a daily cadence; other cadences are worked out from the two |
+| `fresh.daily_cap` | `2` | Most Star Chart tokens a player earns a day (a goal is paid whole or waits for another day that week) |
+| `fresh.rewards.clear_weekly.*` / `fresh.rewards.clear_daily.*` | see above | Each course's first-finish tokens at a weekly and at a daily cadence; other cadences are worked out from the two. Paid whole or not at all, so keep each at or under its game's `daily_cap` (4) |
 | `fresh.star_goals.weekly` / `.weekly_tokens` | `[6, 12]` / `[1, 2]` | The weekly Star Chart goals and what each pays, at a weekly cadence (a week's goals are fixed once shown: a change counts from the next week) |
 | `fresh.star_goals.daily` / `.daily_tokens` | `[10, 25]` / `[1, 1]` | The same at a daily cadence |
 | `fresh.budget.*` | `500` / `5000` / `4` / `4` / `2` / `40` | Blocks per tick online / idle, ms per tick, snapshots per tick, chunk loads at once, and the average tick time (ms) above which building pauses (it goes on below 3/4 of it) |
@@ -931,6 +955,55 @@ board for one set; the set is `<days>:<number>`, like `7:38` for the week of 28 
 and a weekly set never share one), `gstars:<course>:<set>` and `gweek:<week>` (the Star Chart). No
 new tables.
 
+#### Bring back or keep a course
+
+Every set that goes up is archived with its whole layout, its **course code** (`HARD-40`: the
+course's code word and how many sets it has had, never reused), its dates, seed and board.
+`games.fresh.archive.keep` (0 = forever) removes old ones after that many days; kept and recalled
+ones never go. Players see the code on every Fresh course's tile, on its screen and in the finish
+line, so they can ask for a favourite back.
+
+| Command | What |
+|---|---|
+| `/hcm games gen history <course\|all> [page]` | The archive, 8 a page, newest first: code, dates, short seed, record, plays, and whether it is kept or back now |
+| `/hcm games gen history <code>` | One set, with its top 5 |
+| `/hcm games gen recall <code> [days\|forever] [confirm]` | Bring it back into its Classics slot (Classic Parkour, Classic Sky Rings or Classic Golf) for `games.fresh.classics.days` (7) or as asked. `confirm` only when someone is playing that Classics slot |
+| `/hcm games gen recall <classic\|parkour\|rings\|golf> <course> <last\|number\|date 2026-10-05\|seed:<hex>> [days\|forever]` | The same by course and set; `seed:` makes it again from its seed with today's generator (marked "(re-made)") |
+| `/hcm games gen unrecall <classic> [confirm]` | Close a Classics slot |
+| `/hcm games gen keep <code> <new-id> [name…] [--fresh-board] confirm` | Keep it for good as a normal course (`/hcm play <new-id>`) in the next free plot of the keep area, with its records copied (not with `--fresh-board`) |
+| `/hcm games gen keep <course> [current\|last\|number\|date d\|seed:<hex>] <new-id> …` | The same by course and set |
+| `/hcm games gen plots`, `clear-plot <n> confirm`, `claim plot <n> [confirm]`, `tp plot <n>` | The keep area's plots |
+
+- A course up now can't be recalled (by `current`, its code, its number or its date): recall an older one.
+- A set is kept once: a second keep of it is refused and names the course it was kept as (clear
+  that plot to keep it again). `keep <course> last` without an id is refused ("Give the new course
+  an id too").
+- The keep area is hand-built territory that nothing guards, so every keep checks its plot is empty
+  first, however often it was cleared before; blocks there refuse it, and `claim plot <n> confirm`
+  clears them. `claim plot <n>` (and every plot job) is refused while keeping is off (the keep area
+  too near a Fresh Courses area), when the plot overlaps a kept course's old plot (the keep area
+  moved), or when a registered course stands in it or within 16 blocks: it says which, and changes
+  nothing.
+- Refused within `avoid_before_restart_minutes` of a restart: recall and keep. A keep, clear-plot or
+  claim plot still waiting when that window begins isn't started (its admin is told to run it again
+  after the restart); one cut off by the restart after it began building goes on after the restart.
+- **A recalled course plays on its original set's board**, so its old records are the ones to beat,
+  and its first-finish token is the original set's: whoever had it back then isn't paid again, a new
+  player is, once. Its stars are its own, so they count toward this week's Star Chart. A kept course
+  is a normal course: the usual boards and rewards, edited with `/hcm games course|golf`.
+- Example: kids loved HARD-40? `/hcm games gen recall HARD-40` puts it in Classic Parkour for a
+  week; `/hcm games gen keep HARD-40 dragon_run "Dragon Run" confirm` keeps it for good as
+  `/hcm play dragon_run`.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `fresh.archive.keep` | `0` | Days an old set stays in the archive after it was replaced; 0 = forever (kept and recalled sets never go) |
+| `fresh.feed_history` | `26` | The website's `freshHistory`: at most this many past sets per course |
+| `fresh.classics.days` | `7` | How long a recall lasts unless it says otherwise |
+| `fresh.classics.slots.<id>.origin` | see config.yml | Where each Classics slot is built (32 blocks from every other area) |
+| `fresh.keep.area` | `[4096, 128, 5376]` | Where kept courses go: plots 144 x 176 x 336, six to a row; 16 blocks from every Fresh Courses area, or keeping is off |
+| `fresh.keep.max_plots` | `24` | How many plots |
+
 **Verify in game** (on Java and on Bedrock, before switching it on for the family)
 
 1. `games.fresh.enabled: true`, `/hcm reload`. Within 3 minutes `/hcm games gen status` shows
@@ -958,6 +1031,24 @@ new tables.
 12. The big golf course's and Tiny Golf's ramp and island holes have walls two blocks above the
     approach (one above the raised green): check a ball can't leave and a player can step out from
     the green.
+13. `/hcm play fresh_courses`: the title says "This week's courses", the header the week's dates,
+    and each tile's name ends "Course code HARD-1" (and so on); finish Easy Parkour: the chat says
+    "Course code EASY-1" and "First finish this week", never "today".
+14. Set `games.trials.daily_cap: 1` and `/hcm reload`, then finish Hard Parkour for the first time
+    this week: no "first finish this week" token (the once-ever first clear, which no cap limits,
+    still pays), and one line "You've reached today's token limit - finish it again another day this
+    week for its tokens."; `/hcm tokens history <you>` shows no "first finish this week" line. Put
+    the cap back to 4; the next day a finish pays the week's 4.
+15. Finish a Fresh course twice on two days of the same week: the second pays no first-finish token.
+16. `/hcm games gen history fresh_parkour_hard` → the week's course is HARD-1 "(up now)" with its seed.
+17. `/hcm games gen recall HARD-1` (the next week) → "Bringing back HARD-1…"; within a minute
+    `/hcm games gen status` shows `fresh_classic_parkour holds HARD-1 …`; the Fresh Courses screen's
+    Classic Parkour tile is gold, "Classic: Hard Parkour (week of …) · Course code HARD-1", with
+    "Back until …"; `/hcm play fresh_classic_parkour` plays it, and its board shows last week's times.
+18. Finish it as someone who cleared it last week → no first-finish token; a new player → the token.
+19. `/hcm games gen unrecall parkour` → closed; its tile reads "Classic Parkour - empty" with the tip.
+20. `/hcm games gen keep HARD-1 dragon_run "Dragon Run"` → what it would do; add `confirm` → "Kept!";
+    `/hcm play dragon_run`; `/hcm games course dragon_run info` shows a normal course.
 
 ### Commands
 
@@ -1013,6 +1104,25 @@ clear times or high scores. A player in a world game can use only `/hcm play`, `
 | `/hcm games golf <id> delete confirm` | `hcm.games.admin` | Delete it and its high scores (anyone playing it is sent home) |
 | `/hcm arcade odds` | `hcm.arcade.use` | Players: one line per open game of chance. Admins: the per-stake detail, the Scratch Ticket and the crates |
 | `/hcm guide games` | `hcm.guide.use` | The Games page of How It Works |
+
+### Leaderboards on the hub (`@board`)
+
+The hub's displays can show the games' best, like `@news` shows the market's headlines. Look at a
+sign, a block or a wall and run `/hcm display sign|hologram|tv @board:<id>` (`hcm.admin`; tab
+completion lists the ids):
+
+- `<id>` is an arcade cabinet (`@board:snake`: the board it publishes, Classic for most; another of
+  its boards by name, `@board:creeper_sweeper:hard`), a hand-built course or golf course (its
+  all-time board), or a Fresh course (`@board:fresh_parkour_hard`: **its current set's board**, which
+  moves on to the new set by itself) or a Classics slot (the course it holds, with its old records).
+  A game of chance has no leaderboard, and an id nothing has is refused with a message.
+- A hologram or TV shows a title ("Hard Parkour - this week"), the top 5 as "1. Sam 0:42.1" (ties
+  share a rank; golf in strokes, cabinets in their own unit) and "/hcm play <id>"; a sign, the title
+  and the top 3. An empty board reads "No times yet - be the first!".
+- Names are shown: these are players on the server. `web.dashboard.arcade_show_names` is only the
+  website's rule.
+- They are drawn on the display timer (`displays.refresh_seconds`), and again within a second of a
+  new score on their board (a burst of finishes is one redraw). `/hcm display remove` unbinds one.
 
 ### Turning it on, and the Games world
 
@@ -1572,6 +1682,36 @@ or a time and a date. The one exception is **`web.dashboard.arcade_show_names`**
 `false`: only while it is `true` does a record carry its `holder`, the name of whoever set it. It
 is read on every refresh, so `/hcm reload` applies it. A game's extra keys that would name a
 person or a balance, and any UUID-shaped text, are dropped at any depth.
+
+**Leaderboards and Fresh Courses (0.35, final round).** Added fields, all optional, so a site that
+ignores them is unaffected; every existing field is unchanged:
+
+```json
+{ "id": "snake", "name": "Snake", "kind": "cabinet", "board": "classic", "unit": "apples",
+  "lowerIsBetter": false, "best": 31,
+  "top": [ { "rank": 1, "value": 31, "unit": "apples", "at": 1790100000000, "holder": "Sam" },
+           { "rank": 1, "value": 31, "unit": "apples", "at": 1790200000000 },
+           { "rank": 3, "value": 24, "unit": "apples", "at": 1790300000000 } ] }
+{ "id": "fresh_parkour_hard", "name": "Hard Parkour", "kind": "parkour", "tier": "hard",
+  "record": { "ms": 62300, "at": 1790100000000 },
+  "daily": { "day": "2026-09-28", "nextAt": 1790604800000, "goldMs": 45000, "silverMs": 70000,
+             "cadence": 7, "lastDay": "2026-10-04" },
+  "fresh": { "code": "HARD-40", "seed": "3f2a9c01b7de", "from": 1790000000000, "to": 1790604800000,
+             "cadenceDays": 7 },
+  "top": [ { "rank": 1, "value": 62300, "unit": "ms", "at": 1790100000000 } ] }
+{ "id": "fresh_classic_parkour", "…": "…", "classic": { "code": "HARD-40", "from": 1795000000000 } }
+```
+
+| Field | Meaning |
+|---|---|
+| `top` | On every entry with a board (a cabinet, a course, a golf course, a Fresh course, a Classic): its best `games.feed_top` (5) rows `{rank, value, unit, at, holder?}`, best first. Ties share a rank (1, 1, 3). `value` is in `unit` (`ms`, `strokes`, `points`, `flips`, `apples`, `wins`); `holder` only with `arcade_show_names: true`, and never a UUID. Absent for an empty board. `record` / `best` are unchanged |
+| `daily.cadence` / `daily.lastDay` | A Fresh course's set: its length in days and its last day (`day` is its first). `nextAt` is absent on a Classic |
+| `fresh` | A Fresh course's live set: its course code, short seed (12 hex), when it went up, when it changes (`to`, absent while pinned for good) and its cadence |
+| `classic` | A Classics slot's entry: the recalled course's code and the recall's window (`to` absent for "forever") |
+| `freshHistory` | Top-level, after `starChart`: every past (and the current) Fresh set, newest first, at most `games.fresh.feed_history` (26) per course: `{code, slot, name, kind, tier?, from, to?, seed, plays, record?: {ms or strokes, at, holder?}, kept?, classic?, top?}`. `to` is absent for a set up for good; `top` is its board's best 3 (as above). Never a set that isn't up yet |
+
+`holder` anywhere (a record, a cabinet's best, a `top` row, `freshHistory`) follows the one rule
+above: only while `arcade_show_names` is `true`, and no name is even looked up while it is `false`.
 
 ### The feed token
 

@@ -523,4 +523,43 @@ class RidersTest {
         riders.second();
         assertEquals(5, port.where.get(kid.id).getX(), 1e-9, "brought back by Dad");
     }
+
+    /** Race mode's stand rule for a stand at (5, 70, 5) with Race Night's {@code stand_radius}. */
+    private static boolean offStand(Location at, double radius) {
+        return Math.hypot(at.getX() - 5, at.getZ() - 5) > radius || Math.abs(at.getY() - 70) > radius + 2;
+    }
+
+    @Test
+    void aRiderIsHeldToTheStandByTheRacersOwnRuleNotJustNearTheDriver() {
+        riding();
+        dad.vehicle = null; // Dad finished and is parked on the stand
+        Location stand = new Location(null, 5, 70, 5);
+        port.where.put(dad.id, new Location(null, 9, 70, 5)); // at the stand's track-side edge: 4 blocks out
+        riders.follow(dad.player, stand);
+        port.where.put(kid.id, new Location(null, 12.5, 70, 5)); // 3.5 from Dad, 7.5 from the stand: the racing line
+        riders.second();
+        assertEquals(12.5, port.where.get(kid.id).getX(), 1e-9, "within 4 of Dad, so the once-a-second keep-near"
+                + " alone leaves Kid there, where the next heat's boats pass");
+        riders.onStand(dad.id, at -> offStand(at, 4), stand); // race mode's stand check, with the race's radius
+        assertEquals(5, port.where.get(kid.id).getX(), 1e-9, "the racers' own stand rule puts Kid back on the stand"
+                + " (the final gate's #15)");
+        assertTrue(port.last(kid).contains("stand"), "and Kid reads why: " + port.last(kid));
+        int before = port.teleports.size();
+        port.where.put(kid.id, new Location(null, 7, 70, 7)); // a few steps across the stand: fine
+        riders.onStand(dad.id, at -> offStand(at, 4), stand);
+        assertEquals(before, port.teleports.size(), "on the stand: left alone");
+        port.where.put(kid.id, new Location(null, 5, 63, 5)); // jumped down off it, 7 below
+        riders.onStand(dad.id, at -> offStand(at, 4), stand);
+        assertEquals(70, port.where.get(kid.id).getY(), 1e-9, "down off the stand is off it, as for a racer");
+    }
+
+    @Test
+    void theStandRuleLeavesAloneARiderWhoIsNotOnTheRide() {
+        riders.paired(dad.player, kid.player, "loop", null); // paired, but never got in: no session yet
+        port.where.put(kid.id, new Location(null, 60, 65, 0));
+        riders.onStand(dad.id, at -> true, new Location(null, 5, 70, 5));
+        assertTrue(port.teleports.isEmpty(), "a rider not in their ride's session is never moved by it");
+        riders.onStand(UUID.randomUUID(), at -> true, new Location(null, 5, 70, 5));
+        assertTrue(port.teleports.isEmpty(), "nor anyone for a driver with no rider");
+    }
 }

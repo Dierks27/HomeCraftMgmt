@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * Ride along (CLUBHOUSE-SPEC §12, the owner: "I have a 4 year old that loves to ride in the back of the
@@ -27,8 +28,8 @@ import java.util.function.Consumer;
  * session entered at the boat the first time, else their own session teleport, checked) and seats
  * them second. A boat removed ejects both (as the games' own dismount); the driver's teleport and
  * re-seat then brings the rider along on the next {@code seat}. On the stand the rider stands by the
- * driver ({@link #follow}). A rider out of the boat while the driver is seated is put back once a
- * second ({@link #second}).
+ * driver ({@link #follow}) and is held there by the racers' own stand rule ({@link #onStand}). A rider
+ * out of the boat while the driver is seated is put back once a second ({@link #second}).
  *
  * <p><b>Getting out.</b> A seated rider can't dismount mid-run (the session guard cancels it: the boat
  * is their game's). Their Leave game ends only THEIR session; the driver carries on. When the driver
@@ -148,8 +149,13 @@ public final class Riders {
         }
     }
 
-    /** A rider standing off the boat is kept this near their parked driver (the stand's radius). */
+    /**
+     * A rider standing off the boat is kept this near their parked driver (the stand's radius); on a
+     * race's stand, the racers' own stand rule holds them too ({@link #onStand}).
+     */
     static final double FOLLOW_RADIUS = 4;
+    /** What a rider who wandered off the stand reads (they are put back on it). */
+    static final String BACK_TO_STAND = "&7Please watch from the stand - the boats race past here.";
 
     private final Port port;
     /** Told a driver's id each time a rider sits down behind them (Time Trials latches it on the run). */
@@ -304,6 +310,34 @@ public final class Riders {
         Player rider = r == null ? null : port.online(r.rider);
         if (rider != null && port.riding(rider) && at != null) {
             port.teleport(rider, at);
+        }
+    }
+
+    /**
+     * Each of race mode's stand checks for a parked driver (every 10 ticks, with the race's own stand and
+     * {@code stand_radius}): their rider is held to the SAME stand by the SAME rule as the racers, and put
+     * back on it when off (the final gate's #15). Being unpushable doesn't stop a player-driven boat (the
+     * driver's client decides that), so keeping riders off the racing line is what keeps them safe; kept
+     * only within {@value #FOLLOW_RADIUS} blocks of the driver, once a second, a rider could stand some 8
+     * blocks from the stand and dash further.
+     *
+     * @param offStand the race's own rule: whether a spot is off its stand
+     * @param stand    the stand, where a rider off it is put back
+     */
+    void onStand(UUID driver, Predicate<Location> offStand, Location stand) {
+        Ride r = byDriver.get(driver);
+        if (r == null || r.inClub || !r.inSession || offStand == null || stand == null) {
+            return;
+        }
+        Player rider = port.online(r.rider);
+        if (rider == null || !port.riding(rider)) {
+            return; // not in the ride's session (on the way in, or gone): not ours to move
+        }
+        Location here = port.at(r.rider);
+        boolean off = here == null || !java.util.Objects.equals(here.getWorld(), stand.getWorld())
+                || offStand.test(here);
+        if (off && port.teleport(rider, stand)) {
+            port.tell(rider, BACK_TO_STAND);
         }
     }
 

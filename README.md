@@ -835,7 +835,8 @@ on the Golf tab ("Meadow Links - 9 holes, par 27") and its own `/hcm play <cours
 - **Golf together** (owner decision D4). The course screen (`/hcm play golf <course>` or
   `/hcm play <course>`) has **Play with friends**: a party of up to 4 through C1's parties (one party
   per player, shared with party races). Anyone in it can invite a friend (the usual invites:
-  [Accept] on Java, `/hcm play accept` on Bedrock; the pair cooldown and invite switches stay); only
+  [Accept] on Java, `/hcm play accept` on Bedrock; the pair cooldown stays, and `/hcm play invites off`
+  turns golf together invites off too, including for a player who turned them off earlier); only
   the host starts, and everyone goes to hole 1 at once. Everyone plays the same hole at the same
   time, each with their own ball; a player whose ball is in waits, and when every ball is in (or
   picked up) everyone moves to the next tee together. The first ball of a hole in starts a 2:00
@@ -1451,9 +1452,13 @@ every race and round works exactly as before**.
   the rider goes with them (to the Clubhouse after a party race or Race Night, home after a solo run),
   their things back. A ride that waits in the Clubhouse goes on at the driver's next race from there
   (Race Night on a track with no viewing stand, a party's Race again), and ends when either leaves
-  the Clubhouse or after 5 minutes with no race. A rider can't be pushed or hit by a racing boat, and
-  off the boat (the driver on the stand) is kept within 4 blocks of the driver. Nobody racing, watching, in a party or in another game can ride, and no new
-  rides start in the restart hold. A passenger doesn't change a boat's speed, so the driver's run
+  the Clubhouse or after 5 minutes with no race. A rider can't be pushed by other players. Off the
+  boat (the driver on the stand) the rider is held to the stand by the racers' own rule and radius
+  (`stand_radius`), so a rider is never on the racing line (being unpushable doesn't stop a boat a
+  player is driving), and elsewhere is kept within 4 blocks of the driver. Nobody racing, watching, in
+  a party or in another game can ride, nor anyone the play gate would refuse (no `hcm.games.play`, or
+  not in a world games are played in: the picker leaves them out, `/hcm play rider` refuses them, and
+  the gate is asked again on Accept and when they get in), and no new rides start in the restart hold. A passenger doesn't change a boat's speed, so the driver's run
   counts as normal; with `games.trials.rider_runs_count: false` a run with a rider (at any point of it)
   is just for fun (no board, record, rewards or Cup time, told before the invite and in the finish
   line; in a party race the driver's place still stands) and Race Night takes no riders. Ride along is
@@ -1536,7 +1541,7 @@ clear times or high scores. A player in a world game can use only `/hcm play`, `
 | `/hcm play <game\|course> <player>` | `hcm.games.admin` or the console | The same for someone else: NPCs, command blocks, a hub |
 | `/hcm play break` | `hcm.games.play` | The Take a break screen |
 | `/hcm play accept\|deny` | `hcm.games.play` | Answer your latest invite |
-| `/hcm play invites [on\|off]` | `hcm.games.play` | Your invite settings. `off` also turns Coin Flip invites off; only the Take a break screen turns them on |
+| `/hcm play invites [on\|off]` | `hcm.games.play` | Your invite settings: Connect Four, Tic-Tac-Toe, party races, Ride along and golf together (an older `off` covers any added since). `off` also turns Coin Flip invites off; only the Take a break screen turns them on |
 | `/hcm play news [on\|off]` | `hcm.games.play` | The one chat line that says new Fresh Courses are up ("New courses this week! ..."). On unless you turn it off |
 | `/hcm leave` | `hcm.games.play` | Leave the world game you're in; your things come back. Also finishes a trip home that didn't complete |
 | `/hcm games status` | `hcm.games.admin` | Every game, open or closed and why, with the odds of the open games of chance; players in world games, saved things waiting to go back, unfinished rounds, today's pick, and the next scheduled restart and when its hold starts |
@@ -1596,7 +1601,7 @@ clear times or high scores. A player in a world game can use only `/hcm play`, `
 | `/hcm games floors claim [confirm]` | `hcm.games.admin` | Whether its box is claimed; `confirm` claims it even with blocks in it (the next reset clears them) and opens it again |
 | `/hcm games floors tp` | `hcm.games.admin` | Into the gallery to watch (a plain teleport: not a game, nothing is taken); refused until the floors are built and checked, when there may be nothing to stand on |
 | `/hcm play clubhouse` | `hcm.games.play` | Visit the Clubhouse; while watching live, come back to it |
-| `/hcm play watch [<player>]` | `hcm.games.play` | Watch live, from the Clubhouse: the race going on (or that player's race or golf group) in spectator mode. While watching, with no name: back to the Clubhouse |
+| `/hcm play watch [<player>]` | `hcm.games.play` | Watch live, from the Clubhouse: the race going on (or that player's race or golf group) in spectator mode. While watching, with no name: back to the Clubhouse. From outside, only where `/hcm play clubhouse` works (a world games are played in) |
 | `/hcm play cheer` | `hcm.games.play` | Cheer the racers on (once every 10 seconds) |
 | `/hcm play cheers [on\|off]` | `hcm.games.play` | Whether cheers reach you |
 | `/hcm play rider <player>` | `hcm.games.play` | Take a friend in the back seat of your boat (an invite) |
@@ -1643,8 +1648,10 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
   week, with a viewing stand built in from its algo-2 layouts. Turn that on, then
   `games.race_night.enabled: true` and `/hcm reload`. `/hcm games check` says whether the schedule
   fits the restarts and whether the track can be raced.
-- **Joining.** 30 minutes before, one chat line (news on, not in a world game); 10 minutes before
-  (`join_minutes`), joining opens: a chat line, a draining bossbar for everyone with news on, the
+- **Joining.** Race Night's lines and bar never reach a player without `hcm.games.play` (a [Join]
+  they couldn't use). 30 minutes before, one chat line (news on, not in a world game); 10 minutes before
+  (`join_minutes`), joining opens: a chat line, a draining bossbar for everyone with news on who could
+  join (in a world games are played in, or joined already), the
   Together tab glints and the hub `@event` sign reads JOIN NOW!. Players join from the Race Night
   screen (`/hcm play race`, the Race Night tile on the **Together** tab, or an `[Arcade] race_night`
   sign): one tap on **Join**. Joining moves nobody; keep playing. Leaving the list before the racing

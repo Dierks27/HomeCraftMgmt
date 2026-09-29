@@ -408,6 +408,10 @@ final class RaceMode {
             toStand(p, run);
             p.sendMessage(Text.of(BACK_TO_STAND));
         }
+        if (rr.stand != null) { // final gate, group B (#15): their rider is held to the same stand, same rule
+            Location stand = new Location(p.getWorld(), rr.stand.x(), rr.stand.y(), rr.stand.z());
+            trials.riders().onStand(p.getUniqueId(), at -> rr.offStand(TimeTrials.point(at), radius), stand);
+        }
     }
 
     // ---- the line -------------------------------------------------------------------------------

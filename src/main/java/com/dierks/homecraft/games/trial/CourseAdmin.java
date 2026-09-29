@@ -102,11 +102,11 @@ final class CourseAdmin implements GameAdmin {
                 default -> course(sender, args);
             }
         } catch (SQLException e) {
-            trials.plugin().getLogger().log(Level.SEVERE, "Time trials: a course command failed", e);
+            log().log(Level.SEVERE, "Time trials: a course command failed", e);
             sender.sendMessage(Text.of("&cCouldn't reach the database - see the console."));
         } catch (RuntimeException e) {
             // Never out to the framework's guard: that would switch time trials off over a typo.
-            trials.plugin().getLogger().log(Level.SEVERE, "Time trials: /hcm games course "
+            log().log(Level.SEVERE, "Time trials: /hcm games course "
                     + String.join(" ", args) + " failed", e);
             sender.sendMessage(Text.of("&cThat didn't work - see the console."));
         }
@@ -199,6 +199,12 @@ final class CourseAdmin implements GameAdmin {
             case "minseconds" -> minSeconds(sender, c, rest, args);
             case "enable" -> enable(sender, c, args);
             case "disable" -> {
+                if (!confirm && c.enabled() && CupLink.entrants(trials.games(), c.id()) > 0) { // Weekly Cup: it is called off
+                    sender.sendMessage(Text.of("&eThat closes " + c.name() + ". &7Type &f/hcm games course " + c.id()
+                            + " disable confirm"));
+                    cupWarning(sender, c);
+                    return;
+                }
                 save(sender, c.withEnabled(false), args);
                 sender.sendMessage(Text.of("&a" + c.name() + " is closed. &7Runs already going finish as normal."));
                 CupLink.courseChanged(trials.games(), sender, c.id(), c.name(), CupPlan.VoidReason.CLOSED); // Weekly Cup
@@ -509,7 +515,13 @@ final class CourseAdmin implements GameAdmin {
     }
 
     private void changed(CommandSender sender, String[] args) {
-        trials.plugin().getLogger().info("Games: " + sender.getName() + " - /hcm games course " + String.join(" ", args));
+        log().info("Games: " + sender.getName() + " - /hcm games course " + String.join(" ", args));
+    }
+
+    /** The plugin's log (a plain one with no plugin: the Weekly Cup's tests drive this editor on a bench). */
+    private java.util.logging.Logger log() {
+        return trials.plugin() != null ? trials.plugin().getLogger()
+                : java.util.logging.Logger.getLogger("HomeCraftManagement");
     }
 
     /**
@@ -633,7 +645,7 @@ final class CourseAdmin implements GameAdmin {
                     match(out, last, "off");
                 }
             }
-            case "delete" -> {
+            case "delete", "disable" -> { // disable: confirm when it calls a Weekly Cup off
                 if (n == 3) {
                     match(out, last, "confirm");
                 }

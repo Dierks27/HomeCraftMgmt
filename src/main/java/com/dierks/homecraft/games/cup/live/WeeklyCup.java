@@ -57,8 +57,11 @@ import java.util.logging.Logger;
  *
  * <p><b>Why it stays open with {@code games.cup.enabled: false}.</b> That switch closes new entries and
  * hides the prompts at once, but a Cup already paid into must still end: its minute task keeps
- * settling (or refunding) the Cups that are running, at their own rollover. Only
- * {@code games.enabled: false} stops it, and then every Cup it missed is settled at the next start.
+ * settling (or refunding) the Cups that are running, at their own rollover. A {@code games.cup} block
+ * that can't be read (junk where a number or a switch belongs) does the same: it reads as
+ * {@code enabled: false} with the shipped numbers for anything unreadable ({@link #opensOnDefaults},
+ * {@link #settings}), so no entrant is left waiting on a typo. Only {@code games.enabled: false}
+ * stops it, and then every Cup it missed is settled at the next start.
  *
  * <p>All the money is in {@link CupDesk} and the SQL in {@code CupDao}; this class is the wiring.
  */
@@ -111,6 +114,15 @@ public final class WeeklyCup implements Game {
     @Override
     public boolean configEnabled() {
         return IMPLEMENTED;
+    }
+
+    /**
+     * Junk in {@code games.cup} doesn't close the Cup: it still settles the Cups already paid into,
+     * and takes no new entries ({@link #settings}).
+     */
+    @Override
+    public boolean opensOnDefaults() {
+        return true;
     }
 
     /** A week-long contest is never "today's pick". */
@@ -167,7 +179,8 @@ public final class WeeklyCup implements Game {
         List<String> out = new ArrayList<>();
         CupSettings s = settings();
         out.add((s.enabled() ? "entries open: " + CupText.tokens(s.entry()) + ", top-up " + s.serverTopup()
-                : "entries closed (games.cup.enabled: false); running Cups still finish their week")
+                : "entries closed (" + (readable() ? "games.cup.enabled: false"
+                : "games.cup can't be read - see the console") + "); running Cups still finish their week")
                 + " - /hcm games cup status");
         try {
             long week = desk().week();
@@ -212,9 +225,19 @@ public final class WeeklyCup implements Game {
 
     // ---- what the hooks and screens call ------------------------------------------------------
 
-    /** The live settings (read on every use). */
+    /**
+     * The live settings (read on every use). A {@code games.cup} block that can't be read takes no
+     * new entries, and the Cups already running settle on what could be read, the shipped numbers
+     * for the rest (see the class note).
+     */
     public CupSettings settings() {
-        return games().settings(SPEC);
+        CupSettings s = games().settings(SPEC);
+        return readable() ? s : new CupSettings(false, s.entry(), s.serverTopup());
+    }
+
+    /** Whether {@code games.cup} could be read. */
+    boolean readable() {
+        return games().config().readable(SPEC.id());
     }
 
     /** The desk: entries, Cup times, settling and calling off. */
@@ -296,14 +319,33 @@ public final class WeeklyCup implements Game {
         return true;
     }
 
-    /** A counted, timed run finished: it may set the player's Cup time ({@link CupLink#finished}). */
+    /**
+     * A counted, timed run finished: it may set the player's Cup time ({@link CupLink#finished}). An
+     * entrant whose run was on last week's layout of a Fresh course hears why it set none.
+     */
     void counted(Player player, Course ranOn, long ms) {
         try {
             if (desk().counted(player.getUniqueId(), ranOn, ms, games().clock().nowMillis())) {
                 player.sendMessage(Text.of(CupWords.newCupTime(ranOn.name(), ms)));
+            } else if (desk().onLastWeeksLayout(player.getUniqueId(), ranOn)) {
+                player.sendMessage(Text.of(CupWords.lastWeeksLayout()));
             }
         } catch (SQLException e) {
             logger().log(Level.WARNING, "Weekly Cup: a Cup time couldn't be written", e);
+        }
+    }
+
+    /**
+     * Forget a deleted course's Cup switch ({@code cup.course.<id>}), so a new course with its id
+     * starts from the default. Said in the log when it can't be.
+     */
+    void forgetSwitch(String courseId) {
+        try {
+            desk().dao().choose(courseId, null);
+        } catch (SQLException e) {
+            logger().log(Level.WARNING, "Weekly Cup: the deleted course " + courseId + "'s Cup switch couldn't be"
+                    + " cleared: a new course called " + courseId + " starts with it (/hcm games cup default "
+                    + courseId + " once it is made)", e);
         }
     }
 

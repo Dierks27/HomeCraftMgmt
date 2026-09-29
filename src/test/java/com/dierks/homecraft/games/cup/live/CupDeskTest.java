@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.cup.CupKey;
 import com.dierks.homecraft.games.cup.CupLayout;
 import com.dierks.homecraft.games.cup.CupPlan;
 import com.dierks.homecraft.games.cup.CupRefusal;
+import com.dierks.homecraft.games.cup.CupRules;
 import com.dierks.homecraft.games.cup.CupText;
 import com.dierks.homecraft.games.gen.api.Edition;
 import com.dierks.homecraft.games.gen.api.GenTag;
@@ -399,12 +400,87 @@ class CupDeskTest {
     }
 
     @Test
+    void aFreshCourseStillOnLastWeeksLayoutTakesNoEntryUntilThisWeeksIsUp() throws Exception {
+        host.now = at(2026, 9, 28, 4, 30); // Monday 04:30: the new week, but last week's layout still stands
+        Course lastWeeks = rings(W - 7, 0, "old");
+        host.put(lastWeeks);
+        CupDesk.View v = desk.view(lastWeeks, alice);
+        assertEquals(CupRefusal.NOT_UP_YET, v.refusal(), "no run on last week's layout can set a Cup time this week");
+        assertTrue(v.shown(), "the Cup still shows, saying when it starts");
+        assertEquals("&7Weekly Cup &8- &7starts when this week's course is up", CupWords.buttonName(v),
+                "the course screen's item NAME says why, for Bedrock");
+        assertEquals(" &7· Cup not open yet", CupWords.tileSuffix(v), "and the tile's NAME");
+        assertEquals("The Cup starts when this week's course is up.", v.refusal().message(5), "in plain words");
+        assertEquals(CupRefusal.NOT_UP_YET, desk.enter(alice, lastWeeks), "so the entry is refused");
+        assertEquals(20, balance(alice), "and takes nothing");
+        assertEquals(0, count("SELECT COUNT(*) FROM cup_entries"), "no entry row");
+
+        Course thisWeeks = rings(W, 0, "new");
+        host.put(thisWeeks); // the scheduled build flips the week's own layout in
+        assertNull(desk.view(thisWeeks, alice).refusal(), "this week's course is up: the Cup takes entries");
+        assertNull(desk.enter(alice, thisWeeks), "alice enters");
+        assertEquals(15, balance(alice), "for 5 tokens");
+        assertEquals(CupDesk.layout(thisWeeks).encode(), dao.layout(new CupKey("fresh_rings", W)),
+                "the Cup remembers the week's own layout from its first entry");
+        assertTrue(race(alice, thisWeeks, 40_000), "and a run on it counts");
+    }
+
+    @Test
+    void aRunOnLastWeeksLayoutSaysWhyItSetNoCupTime() throws Exception {
+        host.now = at(2026, 9, 28, 4, 30);
+        Course lastWeeks = rings(W - 7, 0, "old");
+        host.put(lastWeeks);
+        // A Cup entered while last week's layout still stood (an older build took such entries).
+        assertNull(dao.enter(new CupKey("fresh_rings", W), alice, 5, "Sky Rings", host.now, W,
+                CupDesk.layout(lastWeeks).encode()));
+        assertFalse(race(alice, lastWeeks, 40_000), "a run on last week's layout sets no Cup time");
+        assertTrue(desk.onLastWeeksLayout(alice, lastWeeks), "so the finish says why");
+        assertFalse(desk.onLastWeeksLayout(bob, lastWeeks), "but only to someone in the Cup");
+        Course thisWeeks = rings(W, 0, "new");
+        assertFalse(desk.onLastWeeksLayout(alice, thisWeeks), "never on this week's own layout");
+        switchOn(lava);
+        assertNull(desk.enter(alice, lava));
+        assertFalse(desk.onLastWeeksLayout(alice, lava), "nor on a hand-built course");
+    }
+
+    @Test
+    void aMovedWeekStartDoesntLetAPlayerEnterTheSameCourseTwice() throws Exception {
+        switchOn(lava);
+        assertNull(desk.enter(alice, lava), "Tuesday: alice enters the week of Monday 28 September");
+        host.edition = new Edition(CHICAGO, LocalTime.of(4, 0), DayOfWeek.SUNDAY, 7, DayOfWeek.MONDAY);
+        host.now = at(2026, 9, 30, 12, 0); // Wednesday, after the owner moved the week start to Sunday
+        assertEquals(W - 1, desk.week(), "the new week began on Sunday 27 September");
+
+        CupDesk.View v = desk.view(lava, alice);
+        assertEquals(CupRefusal.ALREADY_IN, v.refusal(), "her Cup of the old week start still runs its seven days");
+        assertEquals(CupRefusal.ALREADY_IN, desk.enter(alice, lava), "so the new week's Cup refuses her");
+        assertEquals(CupRefusal.ALREADY_IN, dao.enter(new CupKey("lava_leap", W - 1), alice, 5, "Lava Leap", host.now,
+                W - 1, null, CupRules.liveWeeks(host.edition, host.now)), "and so does the entry's own transaction");
+        assertEquals(15, balance(alice), "she paid once");
+        assertEquals(" &6· Cup pool 0", CupWords.tileSuffix(v), "her tile doesn't invite her to pay again");
+
+        assertNull(desk.enter(bob, lava), "bob, in no Cup on it, enters the new week's");
+        assertTrue(race(alice, lava, 40_000), "alice's run counts in the Cup she is in");
+        assertEquals(1, count("SELECT COUNT(*) FROM cup_entries WHERE best_ms = 40000"), "and only there");
+
+        host.courses.remove("lava_leap");
+        List<CupDesk.Closed> closed = desk.tick();
+        assertEquals(2, closed.size(), "a deleted course calls off both running Cups on it: " + closed);
+        assertEquals(20, balance(alice), "every entry back");
+        assertEquals(20, balance(bob), "every entry back");
+    }
+
+    @Test
     void onAFreshSlotOnlyTheWeeksOwnLayoutCountsAndItsFlipIsNotAVoid() throws Exception {
         host.now = at(2026, 9, 28, 4, 30); // Monday 04:30: the new week, but last week's layout still stands
         Course lastWeeks = rings(W - 7, 0, "old");
         host.put(lastWeeks);
-        assertNull(desk.enter(alice, lastWeeks), "the Cup can be entered as soon as the week starts");
-        assertNull(desk.enter(bob, lastWeeks));
+        // Cups entered while last week's layout still stood (an older build took such entries; the
+        // desk now waits for this week's course): the watch still treats the flip as the Cup going up.
+        for (UUID p : List.of(alice, bob)) {
+            assertNull(dao.enter(new CupKey("fresh_rings", W), p, 5, "Sky Rings", host.now, W,
+                    CupDesk.layout(lastWeeks).encode()));
+        }
         assertFalse(race(alice, lastWeeks, 40_000), "a run on last week's layout sets no time in this week's Cup");
         assertEquals(List.of(), desk.tick(), "nothing to settle or call off");
 

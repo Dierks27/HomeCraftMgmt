@@ -326,10 +326,15 @@ public final class GamesService {
             return false;
         }
         GamesConfig.Parsed cfg = config();
-        if (!cfg.enabled() || !cfg.readable(game.id())) {
+        if (!cfg.enabled() || !readable(cfg, game)) {
             return false;
         }
         return guard(game, game::configEnabled, false);
+    }
+
+    /** Its block could be read, or it runs on its defaults when it can't ({@link Game#opensOnDefaults}; the Weekly Cup). */
+    private boolean readable(GamesConfig.Parsed cfg, Game game) {
+        return cfg.readable(game.id()) || guard(game, game::opensOnDefaults, false);
     }
 
     /** Whether the game threw and is off until {@code /hcm reload}. */
@@ -352,7 +357,7 @@ public final class GamesService {
         if (!cfg.enabled()) {
             return "games.enabled is false";
         }
-        if (!cfg.readable(game.id())) {
+        if (!readable(cfg, game)) {
             return "its config block could not be read - see the console";
         }
         if (!guard(game, game::configEnabled, false)) {

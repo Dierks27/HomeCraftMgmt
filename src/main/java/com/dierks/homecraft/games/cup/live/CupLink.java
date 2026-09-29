@@ -94,6 +94,22 @@ public final class CupLink {
         return CupWords.tileLines(view(games, viewer, c));
     }
 
+    /**
+     * What a course's tile carries of the Cup: its NAME's suffix and its lore lines, from ONE reading
+     * of the Cup (a handful of queries), however many parts of the tile use it.
+     */
+    public record Tile(String suffix, List<String> lines) {
+
+        /** No Cup on the tile. */
+        public static final Tile NONE = new Tile("", List.of());
+    }
+
+    /** {@code c}'s tile's Cup parts for {@code viewer}: {@link #tileSuffix} and {@link #tileLines} in one. */
+    public static Tile tile(GamesService games, Player viewer, Course c) {
+        CupDesk.View v = view(games, viewer, c);
+        return v == null ? Tile.NONE : new Tile(CupWords.tileSuffix(v), CupWords.tileLines(v));
+    }
+
     /** The course screen's Cup item, with what a click does. */
     public record Button(ItemStack icon, Runnable click) {
     }
@@ -136,7 +152,10 @@ public final class CupLink {
 
     /**
      * An admin deleted, re-made or closed a course: call this week's Cup on it off now, every entry
-     * back with the reason, and tell the admin. The minute watch would find it too; this is at once.
+     * back with the reason, and tell the admin. The minute watch would find it too; this is at once,
+     * and when it can't be done now the admin is told the watch tries again. A deleted course also
+     * loses its Cup switch, so a new course that reuses its id starts from the default (a hand-built
+     * one off) instead of inheriting it.
      */
     public static void courseChanged(GamesService games, CommandSender admin, String courseId, String name,
                                      CupPlan.VoidReason reason) {
@@ -144,10 +163,20 @@ public final class CupLink {
         if (w == null) {
             return;
         }
+        int in = entrants(games, courseId);
         CupDesk.Closed closed = games.guard(w, () -> w.voidNow(courseId, reason, name), null);
-        if (closed != null && admin != null) {
+        if (reason == CupPlan.VoidReason.DELETED) {
+            games.guard(w, () -> w.forgetSwitch(courseId));
+        }
+        if (admin == null) {
+            return;
+        }
+        if (closed != null) {
             admin.sendMessage(Text.of("&6This week's Cup on " + name + " was called off: &7" + closed.plan().paidOut()
                     + " tokens went back to " + closed.plan().payouts().size() + " player(s)."));
+        } else if (in > 0 && entrants(games, courseId) > 0) {
+            admin.sendMessage(Text.of("&cThis week's Cup on " + name + " (" + in + " in) couldn't be called off right"
+                    + " now - see the console. &7The Cup's minute check tries again and refunds everyone."));
         }
     }
 

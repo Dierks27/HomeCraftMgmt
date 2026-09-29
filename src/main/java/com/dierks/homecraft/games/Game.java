@@ -47,6 +47,16 @@ public interface Game {
      */
     boolean configEnabled();
 
+    /**
+     * Whether the game stays open on its shipped settings when its own {@code games.<id>} block
+     * can't be read, instead of closing. Only for a game holding players' tokens across days that
+     * must still pay them out (the Weekly Cup, which then takes no new entries): junk in any other
+     * game's block closes it. (Weekly Cup fix #11.)
+     */
+    default boolean opensOnDefaults() {
+        return false;
+    }
+
     /** Two to five short plain lines: its tile lore and its rules screen. */
     List<String> rules();
 

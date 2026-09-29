@@ -111,9 +111,25 @@ public final class CupDao {
      */
     public CupRefusal enter(CupKey key, UUID player, int fee, String courseName, long now, long currentWeek,
                             String layout) throws SQLException {
+        return enter(key, player, fee, courseName, now, currentWeek, layout, null);
+    }
+
+    /**
+     * {@link #enter(CupKey, UUID, int, String, long, long, String)}, also refusing
+     * {@link CupRefusal#ALREADY_IN} when the player is in another open Cup on the same course whose
+     * week is in {@code live} ({@link CupRules#liveWeeks}: its seven days include now). That is the
+     * Cup of the week before the owner moved {@code quests.week_starts_on}: one entry per course is
+     * what a player pays for any seven days, however the week start moves.
+     *
+     * @param live the weeks whose Cups are still running now; {@code null} checks this key alone
+     */
+    public CupRefusal enter(CupKey key, UUID player, int fee, String courseName, long now, long currentWeek,
+                            String layout, CupRules.Weeks live) throws SQLException {
         if (fee < CupRules.MIN_ENTRY) {
             return CupRefusal.OFF;
         }
+        // The words first, so nothing but SQL runs between the first write and the commit.
+        String detail = plain(CupText.entryDetail(courseName));
         return database.transaction(c -> {
             if (key.week() != currentWeek) {
                 return CupRefusal.WEEK_OVER;
@@ -122,10 +138,10 @@ public final class CupDao {
             if (settled != null) {
                 return settled == CupPlan.Outcome.VOIDED ? CupRefusal.CALLED_OFF : CupRefusal.WEEK_OVER;
             }
-            if (entry(c, key, player) != null) {
+            if (entry(c, key, player) != null || (live != null && openCup(c, key.course(), player, live) != null)) {
                 return CupRefusal.ALREADY_IN;
             }
-            if (tokens.change(player, -fee, CupSource.GAMES_CUP_ENTRY.name(), plain(CupText.entryDetail(courseName)), now)
+            if (tokens.change(player, -fee, CupSource.GAMES_CUP_ENTRY.name(), detail, now)
                     == TokenDao.REFUSED) {
                 return CupRefusal.NOT_ENOUGH_TOKENS;
             }
@@ -231,9 +247,13 @@ public final class CupDao {
             if (!problems.isEmpty()) {
                 throw new Unsound("the Weekly Cup " + key.ref() + " would be paid wrongly: " + String.join("; ", problems));
             }
-            // Every word is worked out before the first write, so nothing but SQL runs between the
-            // first write and the commit.
+            // Every word is worked out before the first write (each line's notice and each payment's
+            // ledger detail), so nothing but SQL runs between the first write and the commit.
             List<Notice> notices = notices(key, plan, words, now);
+            List<String> details = new ArrayList<>(plan.payouts().size());
+            for (CupPayout l : plan.payouts()) {
+                details.add(plain(CupText.payoutDetail(l, courseName)));
+            }
             try (PreparedStatement ps = c.prepareStatement("INSERT INTO cup_settlements(course, week, settled_at, "
                     + "outcome, pool, payouts) VALUES(?,?,?,?,?,?)")) {
                 ps.setString(1, key.course());
@@ -244,9 +264,10 @@ public final class CupDao {
                 ps.setString(6, plan.json());
                 ps.executeUpdate();
             }
-            for (CupPayout l : plan.payouts()) {
-                String detail = CupText.payoutDetail(l, courseName);
-                tokens.change(l.player(), l.tokens(), l.kind().source().name(), plain(detail), now);
+            List<CupPayout> payouts = plan.payouts();
+            for (int i = 0; i < payouts.size(); i++) {
+                CupPayout l = payouts.get(i);
+                tokens.change(l.player(), l.tokens(), l.kind().source().name(), details.get(i), now);
             }
             for (Notice n : notices) {
                 try (PreparedStatement ps = c.prepareStatement("INSERT INTO game_prefs(player, pref, value) "
@@ -379,6 +400,17 @@ public final class CupDao {
                 }
                 return out;
             }
+        }
+    }
+
+    /**
+     * The open Cup (no settlement row) on {@code course} that {@code player} is in whose week is in
+     * {@code weeks}, or {@code null}: the oldest when there are two.
+     */
+    public CupKey openCup(String course, UUID player, CupRules.Weeks weeks) throws SQLException {
+        Connection c = database.connection();
+        synchronized (c) {
+            return openCup(c, course, player, weeks);
         }
     }
 
@@ -533,6 +565,23 @@ public final class CupDao {
             best = CupEntry.NO_TIME;
         }
         return new CupEntry(UUID.fromString(rs.getString(1)), rs.getInt(2), rs.getLong(3), best, rs.getLong(5));
+    }
+
+    private static CupKey openCup(Connection c, String course, UUID player, CupRules.Weeks weeks) throws SQLException {
+        if (course == null || weeks == null || weeks.isEmpty()) {
+            return null;
+        }
+        try (PreparedStatement ps = c.prepareStatement("SELECT e.week FROM cup_entries e WHERE e.course = ? "
+                + "AND e.player = ? AND e.week BETWEEN ? AND ? AND NOT EXISTS (SELECT 1 FROM cup_settlements s "
+                + "WHERE s.course = e.course AND s.week = e.week) ORDER BY e.week LIMIT 1")) {
+            ps.setString(1, course);
+            ps.setString(2, player.toString());
+            ps.setLong(3, weeks.first());
+            ps.setLong(4, weeks.last());
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? new CupKey(course, rs.getLong(1)) : null;
+            }
+        }
     }
 
     private static CupPlan.Outcome settledAs(Connection c, CupKey key) throws SQLException {

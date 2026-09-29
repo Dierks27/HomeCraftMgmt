@@ -302,13 +302,22 @@ final class CupAdmin implements GameAdmin {
                     + " confirm"));
             return;
         }
-        desk.dao().choose(id, chosen);
+        // This week's Cup is called off BEFORE the switch is saved: a Cup that couldn't be called off
+        // keeps running where its entrants can see it, and the admin is told, never that it was done.
+        CupDesk.Closed closed = null;
         if (!willRun && in > 0) {
-            desk.voidNow(id, CupPlan.VoidReason.STOPPED, c.name());
+            closed = desk.voidNow(id, CupPlan.VoidReason.STOPPED, c.name());
+            if (closed == null && cup.entrants(id) > 0) {
+                sender.sendMessage(Text.of("&cThis week's Cup on " + c.name() + " couldn't be called off - see the"
+                        + " console. &7Nothing changed: it still runs a Weekly Cup. Try again in a moment."));
+                return;
+            }
         }
+        desk.dao().choose(id, chosen);
         sender.sendMessage(Text.of(willRun ? "&a" + c.name() + " runs a Weekly Cup." + (cup.settings().enabled() ? ""
                 : " &7(once games.cup.enabled is true)")
-                : "&a" + c.name() + " runs no Weekly Cup." + (in > 0 ? " &7This week's was called off and refunded." : "")));
+                : "&a" + c.name() + " runs no Weekly Cup." + (closed != null ? " &7This week's was called off: "
+                + closed.plan().paidOut() + " tokens back to " + closed.plan().payouts().size() + " player(s)." : "")));
         logged(sender, args);
     }
 

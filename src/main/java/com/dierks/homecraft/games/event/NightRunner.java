@@ -349,9 +349,11 @@ public final class NightRunner implements RaceLink {
         }
         ports.tell(id, "&aYou're in Race Night! &7It starts at " + EventCopy.clock(plan.startsAt(), zone)
                 + ". Keep playing - we'll take you to the track.", false);
-        if (state.phase() == EventMachine.Phase.WARMUP) {
+        if (state.phase() == EventMachine.Phase.WARMUP
+                || (state.phase() == EventMachine.Phase.GRID && started < 0)) {
             Racer in = r;
-            queue.add(() -> seat(in, spotFor(in)));
+            inQueue.add(in.id);
+            queue.add(() -> seat(in, spotFor(in))); // a late joiner still makes race 1 (or its warm-up)
         }
         ports.changed();
         return null;
@@ -537,7 +539,7 @@ public final class NightRunner implements RaceLink {
             case GO -> go(a.race());
             case END_RACE -> endRace(a.race());
             case SETTLE -> settle(a.why(), false);
-            case CALL_OFF -> callOff(callOffLine(a.why()), a.why());
+            case CALL_OFF -> calledOff(callOffLine(a.why()), a.why()); // the machine already moved to CALLED_OFF
         }
     }
 
@@ -999,6 +1001,11 @@ public final class NightRunner implements RaceLink {
         if (state.phase().over()) {
             return;
         }
+        calledOff(line, why);
+    }
+
+    /** {@link #callOff}'s work, whatever the state says (the machine's own CALL_OFF has moved it already). */
+    private void calledOff(String line, String why) {
         ports.log("Race Night " + plan.id() + " called off: " + why, false);
         if (racesDone >= 1) {
             for (Racer r : racers.values()) {

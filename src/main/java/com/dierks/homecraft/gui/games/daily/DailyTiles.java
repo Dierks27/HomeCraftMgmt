@@ -11,6 +11,7 @@ import com.dierks.homecraft.games.golf.GolfCourse;
 import com.dierks.homecraft.games.golf.GolfRun;
 import com.dierks.homecraft.games.golf.MiniGolf;
 import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.DropperLayout;
 import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.games.trial.TrialText;
 import com.dierks.homecraft.gui.Menus;
@@ -113,7 +114,7 @@ final class DailyTiles {
         return out;
     }
 
-    /** The block a slot's tile shows: its colour's concrete (green easy ... magenta golf, orange a classic). */
+    /** The block a slot's tile shows: its colour's concrete (green easy ... magenta golf, blue the Dropper, orange a classic). */
     static Material icon(Slots.Def slot) {
         return switch (DailyText.colour(slot)) {
             case "&6" -> Material.ORANGE_CONCRETE;
@@ -122,6 +123,7 @@ final class DailyTiles {
             case "&c" -> Material.RED_CONCRETE;
             case "&b" -> Material.LIGHT_BLUE_CONCRETE;
             case "&d" -> Material.MAGENTA_CONCRETE;
+            case "&9" -> Material.BLUE_CONCRETE;
             default -> Material.WHITE_CONCRETE;
         };
     }
@@ -166,6 +168,9 @@ final class DailyTiles {
             lore.add(DailyText.yourBest(setCadence, best == null ? null : GolfRun.strokesText(best.intValue())));
             lore.add(DailyText.starStrokes(par, holes));
         } else if (v.trial() != null && v.game() instanceof TimeTrials trials) {
+            if (slot.dropper()) {
+                holes = DropperLayout.levels(v.trial()); // a dropper's key fact: its levels
+            }
             String board = TimeTrials.board(v.trial());
             lore.add(trials.setBestLine(trials.recordOn(board), viewer, setCadence));
             Long best = trials.bestOn(viewer, board);

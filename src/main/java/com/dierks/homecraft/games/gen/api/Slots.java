@@ -36,6 +36,8 @@ public final class Slots {
     public static final String RINGS = "rings";
     public static final String GOLF = "golf";
     public static final String BOAT = "boat";
+    /** The Dropper (EVENTS-DROPPER-SPEC §B.1.2): a {@code trials} row of kind {@code dropper}, set by a mix. */
+    public static final String DROPPER = "dropper";
 
     /** The course games a slot's row belongs to. */
     public static final String GAME_TRIALS = "trials";
@@ -50,17 +52,19 @@ public final class Slots {
      * One slot.
      *
      * @param id          its id: play id, row id, board name
-     * @param generator   which planner makes it ({@link #PARKOUR}, {@link #RINGS}, {@link #GOLF}, {@link #BOAT})
+     * @param generator   which planner makes it ({@link #PARKOUR}, {@link #RINGS}, {@link #GOLF}, {@link #BOAT},
+     *                    {@link #DROPPER})
      * @param game        the game its row belongs to ({@link #GAME_TRIALS} or {@link #GAME_GOLF})
-     * @param kind        the row's kind: {@code parkour}, {@code elytra}, {@code boat} or {@code golf}
+     * @param kind        the row's kind: {@code parkour}, {@code elytra}, {@code boat}, {@code dropper} or
+     *                    {@code golf}
      * @param name        the player-facing name, no colour codes
      * @param colour      the colour its name is shown in ({@code &a} easy ... {@code &d} golf)
      * @param sizeX       one half's size, fixed per generator
      * @param sizeY       ...
      * @param sizeZ       ...
-     * @param plots       golf: how many holes fit (the longest mix); 0 for the others
+     * @param plots       golf: how many holes fit (the longest mix); a dropper: how many levels; 0 for the others
      * @param enabled     shipped on
-     * @param tierOrMix   the shipped tier ({@code easy}) or golf mix ({@code EEEMMMMHH})
+     * @param tierOrMix   the shipped tier ({@code easy}), or golf or dropper mix ({@code EEEMMMMHH}, {@code EEMMH})
      * @param originX     the shipped origin: half A's min corner (multiples of 16)
      * @param originY     ...
      * @param originZ     ...
@@ -76,6 +80,19 @@ public final class Slots {
         /** Whether it is a golf course (a {@code golf} row) rather than a time trial. */
         public boolean golf() {
             return GOLF.equals(generator);
+        }
+
+        /** Whether it is a Dropper (a {@code trials} row of kind {@code dropper}, EVENTS-DROPPER-SPEC §B.1.2). */
+        public boolean dropper() {
+            return DROPPER.equals(generator);
+        }
+
+        /**
+         * Whether its difficulty is a mix of E, M and H (golf's holes, a Dropper's levels) rather
+         * than one tier: the config key is {@code mix}, admins use {@code /hcm games gen mix}.
+         */
+        public boolean mixed() {
+            return golf() || dropper();
         }
 
         /** The shipped origin, {x, y, z}. */
@@ -108,13 +125,15 @@ public final class Slots {
 
         /**
          * Why {@code tierOrMix} can't be this slot's difficulty, or {@code null} when it can: a
-         * tier is one of {@link #TIERS}; a golf mix is 1 to {@link #plots} of E, M and H.
+         * tier is one of {@link #TIERS}; a golf mix is 1 to {@link #plots} of E, M and H, and so is
+         * a Dropper's (one letter a level, the Dropper's own {@code DropRules.mixProblem}).
          */
         public String tierProblem(String tierOrMix) {
             String t = normalise(tierOrMix);
-            if (golf()) {
+            if (mixed()) {
                 return t.isEmpty() || t.length() > plots || !MIX.matcher(t).matches()
-                        ? "a golf mix is 1-" + plots + " of E, M and H (like " + this.tierOrMix + ")" : null;
+                        ? "a " + (golf() ? "golf" : "dropper") + " mix is 1-" + plots + " of E, M and H (like "
+                        + this.tierOrMix + ")" : null;
             }
             return TIERS.contains(t) ? null : "a tier is easy, medium or hard";
         }
@@ -125,7 +144,7 @@ public final class Slots {
                 return "";
             }
             String t = tierOrMix.trim();
-            return golf() ? t.toUpperCase(Locale.ROOT) : t.toLowerCase(Locale.ROOT);
+            return mixed() ? t.toUpperCase(Locale.ROOT) : t.toLowerCase(Locale.ROOT);
         }
     }
 
@@ -146,9 +165,22 @@ public final class Slots {
     public static final Def ICE_BOAT = new Def("fresh_boat", BOAT, GAME_TRIALS, "boat", "Ice Boat", "&b", 128, 16,
             128, 0, false, "medium", 4480, 160, 4352, 2, 3);
 
+    /*
+     * The Dropper (EVENTS-DROPPER-SPEC §B.1.2): a row of glass shafts, one per level of its mix (E, M,
+     * H), each 11 x 11 inside, so a half is 64 x 64 x 16 (4 x 1 chunks). The regions stand 48 apart in
+     * z past Tiny Golf (96 blocks from its half B), well inside the keep plot's size. Both ship off.
+     */
+
+    /** Easy Dropper: 3 easy levels, every hole ringed with light. */
+    public static final Def EASY_DROPPER = new Def("fresh_dropper_easy", DROPPER, GAME_TRIALS, "dropper",
+            "Easy Dropper", "&a", 64, 64, 16, 5, false, "EEE", 5376, 160, 4096, 1, 2);
+    /** Dropper: 5 levels, easy to hard. */
+    public static final Def FRESH_DROPPER = new Def("fresh_dropper", DROPPER, GAME_TRIALS, "dropper", "Dropper",
+            "&9", 64, 64, 16, 5, false, "EEMMH", 5376, 160, 4160, 2, 3);
+
     /** Every slot, in display and config order. */
     public static final List<Def> ALL = List.of(DAILY_PARKOUR_EASY, DAILY_PARKOUR_MEDIUM, DAILY_PARKOUR_HARD,
-            SKY_RINGS, DAILY_GOLF, TINY_GOLF, ICE_BOAT);
+            SKY_RINGS, DAILY_GOLF, TINY_GOLF, ICE_BOAT, EASY_DROPPER, FRESH_DROPPER);
 
     // ---- the Classics slots (GEN-SPEC-KEEP §3) -------------------------------------------------------
 
@@ -156,9 +188,10 @@ public final class Slots {
      * A Classics slot is empty and closed until an admin recalls an archived course into it. It is
      * NOT in ALL: the scheduler never builds one on its own, the Star Chart doesn't count it, and a
      * screen listing "this week's courses" doesn't show it. Its regions sit after the six normal
-     * slots (z 4736 on), each half the size of the largest course its kind can hold (a Classic Golf
-     * half is the big golf course's, so Tiny Golf fits too). Its tier or mix is the recalled
-     * course's own; the shipped one here only satisfies the region checks.
+     * slots (z 4736 on; Classic Dropper next to the droppers, z 4224), each half the size of the
+     * largest course its kind can hold (a Classic Golf half is the big golf course's, so Tiny Golf
+     * fits too). Its tier or mix is the recalled course's own; the shipped one here only satisfies
+     * the region checks.
      */
 
     /** Classic Parkour: holds any parkour tier. */
@@ -171,8 +204,12 @@ public final class Slots {
     public static final Def CLASSIC_GOLF = new Def("fresh_classic_golf", GOLF, GAME_GOLF, "golf", "Classic Golf",
             "&6", 64, 16, 128, 9, true, "EEEMMMMHH", 4352, 160, 4736, 0, 0);
 
+    /** Classic Dropper: holds a recalled dropper of any mix. */
+    public static final Def CLASSIC_DROPPER = new Def("fresh_classic_dropper", DROPPER, GAME_TRIALS, "dropper",
+            "Classic Dropper", "&6", 64, 64, 16, 5, true, "EEMMH", 5376, 160, 4224, 0, 0);
+
     /** The Classics slots, in display and config order. */
-    public static final List<Def> CLASSICS = List.of(CLASSIC_PARKOUR, CLASSIC_RINGS, CLASSIC_GOLF);
+    public static final List<Def> CLASSICS = List.of(CLASSIC_PARKOUR, CLASSIC_RINGS, CLASSIC_GOLF, CLASSIC_DROPPER);
 
     /** Every play id Fresh Courses keeps: the slots, the Classics slots, {@link #DAILY} and {@link #DAILY_PARKOUR}. */
     public static final Set<String> RESERVED;
@@ -262,8 +299,8 @@ public final class Slots {
 
     /**
      * The Classics slot a course of {@code def}'s generator is recalled into: parkour (any tier)
-     * into Classic Parkour, Sky Rings into Classic Sky Rings, both golf courses into Classic Golf.
-     * {@code null} for the ice boat, which has no Classics slot.
+     * into Classic Parkour, Sky Rings into Classic Sky Rings, both golf courses into Classic Golf,
+     * both droppers into Classic Dropper. {@code null} for the ice boat, which has no Classics slot.
      */
     public static Def classicFor(Def def) {
         if (def == null) {
@@ -279,7 +316,7 @@ public final class Slots {
 
     /**
      * The Classics slot a word names: its id, or its kind ({@code parkour}; {@code rings},
-     * {@code elytra} or {@code sky_rings}; {@code golf}). {@code null} for anything else.
+     * {@code elytra} or {@code sky_rings}; {@code golf}; {@code dropper}). {@code null} for anything else.
      */
     public static Def classicByWord(String word) {
         Def d = classic(word);
@@ -290,6 +327,7 @@ public final class Slots {
             case "parkour" -> CLASSIC_PARKOUR;
             case "rings", "elytra", "sky_rings", "skyrings" -> CLASSIC_RINGS;
             case "golf" -> CLASSIC_GOLF;
+            case "dropper", "droppers" -> CLASSIC_DROPPER;
             default -> null;
         };
     }

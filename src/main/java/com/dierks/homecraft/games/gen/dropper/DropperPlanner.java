@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.gen.dropper;
 
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.GenRandom;
 import com.dierks.homecraft.games.gen.api.GenSeed;
@@ -1096,6 +1097,6 @@ public final class DropperPlanner implements Planner {
 
     /** A level's sign: "LEVEL 2 of 5" / "Step off and" / "fall into the" / "WATER!". */
     public static List<String> signLines(int level, int levels) {
-        return List.of("LEVEL " + level + " of " + levels, "Step off and", "fall into the", "WATER!");
+        return GenCopy.dropperLevel(level, levels);
     }
 }

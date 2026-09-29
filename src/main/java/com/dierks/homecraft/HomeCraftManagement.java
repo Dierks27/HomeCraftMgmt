@@ -68,8 +68,9 @@ public final class HomeCraftManagement extends JavaPlugin {
      * achievements list. 15 = packs hold one Card and roll by rarity odds; the shipped prices
      * drop to $100 / $300. 16 = the Second/Third Home rows become one "+1 Home" row. 17 = the
      * skill games' quests and "Games" achievements join a pool and a list the owner hasn't edited.
+     * 18 = the Dropper's clean-drop achievement joins that list the same way.
      */
-    static final int CONFIG_REVISION = 17;
+    static final int CONFIG_REVISION = 18;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -1055,6 +1056,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (from < 17) {
             // The skill games' quests and achievements. See ArcadeConfigMigration#gamesRows.
             ArcadeConfigMigration.gamesRows(c, log);
+        }
+        if (from < 18) {
+            // The Dropper's clean-drop achievement. See ArcadeConfigMigration#dropperRows.
+            ArcadeConfigMigration.dropperRows(c, log);
         }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);

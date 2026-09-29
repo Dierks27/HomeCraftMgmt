@@ -21,6 +21,7 @@ import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.boat.BoatPlanner;
+import com.dierks.homecraft.games.gen.dropper.DropperPlanner;
 import com.dierks.homecraft.games.gen.engine.BukkitWorldPort;
 import com.dierks.homecraft.games.gen.engine.FreshFeed;
 import com.dierks.homecraft.games.gen.engine.GenHost;
@@ -61,7 +62,7 @@ import java.util.logging.Logger;
 
 /**
  * Fresh Courses (GEN-SPEC §0, §5.4 and the weekly addendum): parkour in three tiers, Sky Rings, the
- * big golf course and Tiny Golf, built by the plugin itself — a new set every week by default
+ * big golf course and Tiny Golf (and, switched on, the ice boat and the two droppers), built by the plugin itself — a new set every week by default
  * ({@code games.fresh.cadence}: weekly, daily, or every few days), the same for everyone, each with
  * its own board, and 1 to 3 stars per course per set for the weekly Star Chart.
  *
@@ -411,7 +412,7 @@ public final class DailyCourses implements Game {
     static Map<String, Planner> planners() {
         Map<String, Planner> out = new LinkedHashMap<>();
         for (Planner p : List.<Planner>of(new ParkourPlanner(), new RingsPlanner(), new GolfPlanner(),
-                new BoatPlanner())) {
+                new BoatPlanner(), new DropperPlanner())) {
             out.put(p.id(), p);
         }
         return out;

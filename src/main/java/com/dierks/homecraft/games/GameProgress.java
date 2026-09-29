@@ -51,6 +51,13 @@ public interface GameProgress {
         golfFinished(player, courseId, strokes, par, holesInOne, fresh);
     }
 
+    /**
+     * A counted Dropper run reached the bottom with no bonks (EVENTS-DROPPER-SPEC §B.1.8, the
+     * {@code game_dropper_clean} achievement). Never a test, void or stale run, nor a practice drop.
+     */
+    default void dropperClean(Player player, String courseId) {
+    }
+
     /** Fresh Courses stars were added to this week's chart. */
     default void starsEarned(Player player, int stars) {
     }

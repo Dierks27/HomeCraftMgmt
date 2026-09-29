@@ -49,6 +49,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.boat.OakBoat;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDismountEvent;
 import org.bukkit.event.entity.EntityToggleGlideEvent;
 import org.bukkit.event.inventory.InventoryType;
@@ -172,6 +173,8 @@ public final class TimeTrials implements Game {
     private long lastReadError;
     /** When the last trial tick ran ({@code System.nanoTime()}; 0 = none yet), to see server stalls. */
     private long lastTick;
+    /** The Dropper's hooks (EVENTS-DROPPER-SPEC §B.1.7): every dropper rule is in DropperRun. */
+    private final DropperHooks drops = new DropperHooks(this);
 
     public TimeTrials(GameContext ctx) {
         this.ctx = ctx;
@@ -193,9 +196,21 @@ public final class TimeTrials implements Game {
      * @param best         the player's best on the course after this run, or {@code null}
      * @param earned       tokens paid
      * @param daily        what a Fresh course's run showed besides, or {@code null} (hand-built)
+     * @param bonks        a dropper run's bonks (EVENTS-DROPPER-SPEC §B.1.1), or -1 for any other course
      */
     public record Result(String courseId, String courseName, long ms, boolean counted, boolean test, String reason,
-                         boolean personalBest, boolean record, Long best, int earned, Daily daily) {
+                         boolean personalBest, boolean record, Long best, int earned, Daily daily, int bonks) {
+
+        /** A result with no Dropper bonk count (any course but a dropper: {@code bonks} -1). */
+        public Result(String courseId, String courseName, long ms, boolean counted, boolean test, String reason,
+                      boolean personalBest, boolean record, Long best, int earned, Daily daily) {
+            this(courseId, courseName, ms, counted, test, reason, personalBest, record, best, earned, daily, -1);
+        }
+
+        /** Whether it was a dropper run (its bonks are counted). */
+        public boolean dropper() {
+            return bonks >= 0;
+        }
 
         /** A hand-built course's result. */
         public Result(String courseId, String courseName, long ms, boolean counted, boolean test, String reason,
@@ -368,6 +383,7 @@ public final class TimeTrials implements Game {
                 e -> triedToLeave(e.isCancelled(), e.getExited(), e.getVehicle()));
         g.on(this, EntityDismountEvent.class, EventPriority.MONITOR, false,
                 e -> triedToLeave(e.isCancelled(), e.getEntity(), e.getDismounted()));
+        g.on(this, EntityDamageEvent.class, EventPriority.MONITOR, false, drops::hurt); // a dropper's bonk
         g.every(this, 1, 1, this::tick);
     }
 
@@ -376,6 +392,7 @@ public final class TimeTrials implements Game {
     public void stop() {
         for (TrialRun run : new ArrayList<>(runs.values())) {
             removeBoat(run, Bukkit.getPlayer(run.player));
+            drops.end(run, Bukkit.getPlayer(run.player));
         }
         runs.clear();
         boats.clear();
@@ -397,6 +414,10 @@ public final class TimeTrials implements Game {
     @Override
     public void onVoid(Player player) {
         TrialRun run = runs.get(player.getUniqueId());
+        if (run != null && run.drop != null) {
+            drops.bonk(player, run, DropperRules.Why.VOID);
+            return;
+        }
         if (run != null && run.running() && sendBack(player, run, 0)) {
             wingsTip(player, run);
         }
@@ -405,7 +426,7 @@ public final class TimeTrials implements Game {
     @Override
     public void onKitUse(Player player, String action, boolean leftClick) {
         TrialRun run = runs.get(player.getUniqueId());
-        if (run == null) {
+        if (run == null || drops.kit(player, run, action)) {
             return;
         }
         switch (action) {
@@ -477,7 +498,8 @@ public final class TimeTrials implements Game {
     public static List<Course> open(Collection<Course> courses, Predicate<String> gamesWorld, GeneratedCourses gate) {
         List<Course> out = new ArrayList<>();
         for (Course c : courses) {
-            if (c.enabled() && c.ready() && gamesWorld.test(c.world()) && gate.live(c.id(), c.gen())) {
+            if (c.enabled() && c.ready() && gamesWorld.test(c.world()) && gate.live(c.id(), c.gen())
+                    && DropperLayout.problems(c).isEmpty()) { // a malformed dropper never opens
                 out.add(c);
             }
         }
@@ -689,9 +711,10 @@ public final class TimeTrials implements Game {
             lore.add("&6★ Course of the week");
         }
         lore.add("&eClick to play");
-        String name = t.recalled() ? "&6" + classicName(t, c.name()) + " &7- " + DailyText.trialFact(cadence, stars)
-                : DailyText.tabName(Slots.of(t.slot()), c.name(), DailyText.trialFact(cadence, stars),
-                DailyLookup.current(g, t.slot()), cadence);
+        String fact = (c.kind() == TrialKind.DROPPER ? DailyText.levels(DropperLayout.levels(c)) + " · " : "")
+                + DailyText.trialFact(cadence, stars);
+        String name = t.recalled() ? "&6" + classicName(t, c.name()) + " &7- " + fact
+                : DailyText.tabName(Slots.of(t.slot()), c.name(), fact, DailyLookup.current(g, t.slot()), cadence);
         return Menus.glint(Menus.icon(icon(c.kind()), name + DailyLookup.codeSuffix(code),
                 lore.toArray(new String[0])), stars >= 3);
     }
@@ -887,11 +910,19 @@ public final class TimeTrials implements Game {
         p.sendMessage(Text.of("&b" + course.name() + " &7(" + TrialText.label(course) + ")"
                 + (test ? " &d- test run: nothing is recorded" : "")));
         int n = course.checkpoints().size();
-        p.sendMessage(Text.of(n == 0 ? "&7Get to the finish. Ready..."
+        p.sendMessage(Text.of(course.kind() == TrialKind.DROPPER ? DropperText.ready(DropperLayout.levels(course))
+                : n == 0 ? "&7Get to the finish. Ready..."
                 : "&7Reach " + TrialText.checkpoints(n) + " in order, then the finish. Ready..."));
+        if (course.kind() == TrialKind.DROPPER) {
+            run.drop = drops.start(p, run); // not collidable, and the practice drop's offer
+        }
     }
 
     private void giveKit(Player p, TrialKind kind) {
+        if (kind == TrialKind.DROPPER) {
+            drops.giveKit(p, DropperRun.Kit.DROP);
+            return;
+        }
         PlayerInventory inv = p.getInventory();
         inv.setItem(0, KitItems.item(this, "checkpoint", Material.RECOVERY_COMPASS, "&eBack to checkpoint",
                 "&7Takes you back to your last checkpoint.", "&7The clock keeps running."));
@@ -947,6 +978,7 @@ public final class TimeTrials implements Game {
             if (s == null || !id().equals(s.gameId())) {
                 runs.remove(run.player);
                 removeBoat(run, p);
+                drops.end(run, p);
                 continue;
             }
             if (stall != null && run.running()) {
@@ -967,6 +999,9 @@ public final class TimeTrials implements Game {
     }
 
     private void countdown(Player p, TrialRun run, long now) {
+        if (drops.countdown(p, run)) {
+            return; // a dropper's practice drop is offered, or on: no 3-2-1 yet
+        }
         boolean boat = run.course.kind() == TrialKind.BOAT;
         if (boat) {
             if (seated(p, run)) {
@@ -1001,6 +1036,7 @@ public final class TimeTrials implements Game {
 
     private void running(Player p, TrialRun run, long now) {
         watch(p, run);
+        drops.running(p, run);
         if (run.suspended) {
             long waited = now - run.lastReset;
             if (waited >= (run.expect == null ? SUSPEND_TICKS : WAIT_TICKS)) {
@@ -1014,7 +1050,7 @@ public final class TimeTrials implements Game {
             sendBack(p, run, RESET_GAP);
         }
         if (run.phase == TrialRun.Phase.RUNNING && run.ticks % CLOCK_EVERY == 0) {
-            p.sendActionBar(Text.of(clockLine(run)));
+            p.sendActionBar(Text.of(run.drop != null ? run.drop.clockLine(System.nanoTime()) : clockLine(run)));
         }
     }
 
@@ -1075,7 +1111,7 @@ public final class TimeTrials implements Game {
         }
         TrialRun run = runs.get(e.getPlayer().getUniqueId());
         if (run == null || run.phase != TrialRun.Phase.COUNTDOWN || run.course.kind() == TrialKind.BOAT
-                || !e.hasExplicitlyChangedPosition()) {
+                || !e.hasExplicitlyChangedPosition() || (run.drop != null && run.drop.letsGo())) {
             return;
         }
         Location held = e.getFrom().clone();
@@ -1090,6 +1126,10 @@ public final class TimeTrials implements Game {
         }
         Player p = e.getPlayer();
         TrialRun run = runs.get(p.getUniqueId());
+        if (run != null && run.drop != null) {
+            drops.moved(p, run, e.getTo()); // splashes, hops and the floor: DropperRun
+            return;
+        }
         if (run == null || !run.running() || run.suspended || run.course.kind() == TrialKind.BOAT) {
             return;
         }
@@ -1224,6 +1264,10 @@ public final class TimeTrials implements Game {
         if (gap > 0 && now - run.lastReset < gap) {
             return false;
         }
+        if (run.drop != null) {
+            run.backDue = false;
+            return drops.back(p, run); // the top of the level it is on
+        }
         run.backDue = false;
         run.lastReset = now;
         int last = run.progress == null ? -1 : run.progress.lastCheckpoint();
@@ -1270,7 +1314,7 @@ public final class TimeTrials implements Game {
     }
 
     /** The run's own teleport (a re-seat for a boat), marked so it isn't taken for anyone else's. */
-    private boolean move(Player p, TrialRun run, Location at) {
+    boolean move(Player p, TrialRun run, Location at) {
         run.expect = at;
         run.suspended = true;
         boolean ok = run.course.kind() == TrialKind.BOAT ? reseat(p, run, at) : sessions().teleport(p, at);
@@ -1372,7 +1416,7 @@ public final class TimeTrials implements Game {
 
     // ---- the finish -------------------------------------------------------------------------
 
-    private void finish(Player p, TrialRun run, long nanos) {
+    void finish(Player p, TrialRun run, long nanos) {
         run.phase = TrialRun.Phase.DONE;
         long ms = run.elapsedMs(nanos);
         boolean stale = FairPlay.stale(run.course, run.layout, course(run.course.id()), games().generated()::standing);
@@ -1407,11 +1451,13 @@ public final class TimeTrials implements Game {
                 summary = TrialFinish.settle(verdict, counted, ledger(p, run, s, ms));
             }
         }
+        drops.finished(p, run, ms, verdict.counts(), summary.stars()); // bonks, the splash, a clean drop
         Long best = verdict.counts() ? bestOn(p, board(run.course)) : null;
         Daily daily = tag == null ? null : new Daily(board(run.course), summary.stars(), summary.weekStars(),
                 tag.goldMs(), tag.silverMs(), GenCopy.words(tag), code);
         Result result = new Result(run.course.id(), name, ms, verdict.counts(), run.test, verdict.reason(),
-                summary.course().personalBest(), summary.course().record(), best, summary.earned(), daily);
+                summary.course().personalBest(), summary.course().record(), best, summary.earned(), daily,
+                run.drop == null ? -1 : run.drop.bonks());
         UUID id = p.getUniqueId();
         games().later(this, 1, () -> {
             Player q = Bukkit.getPlayer(id);
@@ -1598,7 +1644,13 @@ public final class TimeTrials implements Game {
         TrialRun run = runs.remove(player.getUniqueId());
         if (run != null) {
             removeBoat(run, player);
+            drops.end(run, player);
         }
+    }
+
+    /** The player's run, or {@code null} (the Dropper's fall-damage hook finds it here). */
+    TrialRun run(UUID player) {
+        return runs.get(player);
     }
 
     /** Where the run is: the boat on a boat course, the player's feet otherwise. */
@@ -1665,7 +1717,7 @@ public final class TimeTrials implements Game {
         return new Point(l.getX(), l.getY(), l.getZ());
     }
 
-    private static void title(Player p, String big, String small, int stayTicks) {
+    static void title(Player p, String big, String small, int stayTicks) {
         try {
             p.showTitle(Title.title(Text.of(big), Text.of(small), Title.Times.times(Duration.ZERO,
                     Duration.ofMillis(stayTicks * 50L), Duration.ofMillis(200))));

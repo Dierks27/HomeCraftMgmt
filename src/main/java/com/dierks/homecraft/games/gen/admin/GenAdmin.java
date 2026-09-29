@@ -83,7 +83,7 @@ public final class GenAdmin implements GameAdmin {
                 "&e/hcm games gen rebuild <course> &7- check and repair the current course (same seed)",
                 "&e/hcm games gen on|off <course> &7- open or close one (its blocks stay)",
                 "&e/hcm games gen tier <course> <easy|medium|hard> &7- its difficulty from the next build",
-                "&e/hcm games gen mix <golf course> <E, M and H> &7- the golf holes from the next build",
+                "&e/hcm games gen mix <golf course|dropper> <E, M and H> &7- the holes or levels from the next build",
                 "&e/hcm games gen pin <course> <seed|live> [days] &7- keep a good course; unpin to let it change",
                 "&e/hcm games gen tp <course> [live|idle] &7- go and look",
                 "&e/hcm games gen claim <course|plot n> [confirm] &7- count what is in a new area; confirm clears"
@@ -226,15 +226,15 @@ public final class GenAdmin implements GameAdmin {
                 engine.enable(id, verb.equals("on"), report);
             }
             case "tier", "mix" -> {
-                boolean wants = def.golf() ? verb.equals("mix") : verb.equals("tier");
+                boolean wants = def.mixed() ? verb.equals("mix") : verb.equals("tier");
                 if (!wants) {
-                    say(sender, def.golf() ? "&c" + def.name() + " takes a mix of holes: &e/hcm games gen mix " + id
-                            + " " + def.tierOrMix() : "&c" + def.name() + " takes a tier: &e/hcm games gen tier " + id
-                            + " <easy|medium|hard>");
+                    say(sender, def.mixed() ? "&c" + def.name() + " takes a mix of " + (def.golf() ? "holes" : "levels")
+                            + ": &e/hcm games gen mix " + id + " " + def.tierOrMix() : "&c" + def.name()
+                            + " takes a tier: &e/hcm games gen tier " + id + " <easy|medium|hard>");
                     return;
                 }
                 if (arg == null) {
-                    say(sender, "&cUsage: /hcm games gen " + verb + " " + id + " " + (def.golf()
+                    say(sender, "&cUsage: /hcm games gen " + verb + " " + id + " " + (def.mixed()
                             ? "<E, M and H, like " + def.tierOrMix() + ">" : "<easy|medium|hard>"));
                     return;
                 }
@@ -479,9 +479,9 @@ public final class GenAdmin implements GameAdmin {
                 ids.add("plot");
             }
             if (verb.equals("tier")) {
-                ids.removeIf(id -> Slots.of(id).golf());
+                ids.removeIf(id -> Slots.of(id).mixed());
             } else if (verb.equals("mix")) {
-                ids.removeIf(id -> !Slots.of(id).golf());
+                ids.removeIf(id -> !Slots.of(id).mixed());
             }
             match(out, last, ids);
             return out;
@@ -524,7 +524,7 @@ public final class GenAdmin implements GameAdmin {
             case "recall" -> {
                 if (n == 2) {
                     List<String> words = new ArrayList<>(Slots.classicIds());
-                    words.addAll(List.of("parkour", "rings", "golf"));
+                    words.addAll(List.of("parkour", "rings", "golf", "dropper"));
                     match(out, last, words);
                 } else if (n == 3 && Slots.classicByWord(args[1]) != null) {
                     Slots.Def c = Slots.classicByWord(args[1]);

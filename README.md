@@ -655,8 +655,8 @@ Easy, Medium, Hard and "Why did we build this?".
   250 ms between two ticks) never voids an honest run: a leg it touched isn't checked. Nothing is
   recorded either for a run whose course changed layout while it ran, or was deleted and made
   again.
-- **Nobody else can touch a run.** For anyone in a world game, an effect from anything but the
-  game or the `/effect` command (a splash potion, a beacon, an arrow), all knockback (a wind
+- **Nobody else can touch a run.** For anyone in a world game, an effect from anything but a
+  plugin or the `/effect` command (a splash potion, a beacon, an arrow), all knockback (a wind
   charge, a hit) and a fishing rod reeling them in are cancelled. A bystander can't spoil a run,
   or carry it across a gap.
 - **The finish.** The time goes on the course's all-time board and this week's board. Chat shows
@@ -735,7 +735,8 @@ on the Golf tab ("Meadow Links - 9 holes, par 27") and its own `/hcm play <cours
   (once per course per day), each hole-in-one in a round you finish (once per hole per day; the
   title says "Hole in one!", with a harmless firework), and today's pick (the course, or any
   course while `golf` is pinned). A new personal best pays nothing. A round left early records
-  nothing, and nor does one on a course an admin closes or changes: that ends the round at once.
+  nothing, and nor does one on a course an admin closes or changes the layout of: either ends
+  the round at once.
 - **The ball is only a picture.** Entities follow the game's own physics to draw it: an item
   display for Java players, a small invisible marker stand for Bedrock players. Nobody can pick
   it up, push it or hit it; it is never saved with the world, and any left by a crash are swept at
@@ -778,7 +779,7 @@ to the first tee when the course is closed, changed or deleted goes straight hom
 ### Commands
 
 Admin actions on the Games are logged with who did them, mini golf course edits included. A
-course or golf command that goes wrong answers "That didn't work - see the console." and never
+bug in a course or golf command answers "That didn't work - see the console." and never
 switches the game off. `[confirm]` on a course command is needed only when a layout edit would
 clear times or high scores. A player in a world game can use only `/hcm play`, `/hcm leave`,
 `/hcm games` and `/hcm help`; anything else says "Finish or leave your game first — /hcm leave".
@@ -866,7 +867,7 @@ Leaving puts it all back exactly, however they leave: the kit's Leave item (clic
 `/hcm leave`, finishing, quitting, a restart or a teleport away. Anything that reached them
 during the game (an auction delivery, say) is handed over once they're home. They can't be hurt,
 get hungry, drop things or open other screens while they play, and the kit never leaves the game.
-Other players can't reach them either: effects from anything but the game or `/effect`, all
+Other players can't reach them either: effects from anything but a plugin or `/effect`, all
 knockback and fishing-rod pulls are cancelled.
 
 Things come back **exactly once**, even when something goes wrong. If what arrived during the

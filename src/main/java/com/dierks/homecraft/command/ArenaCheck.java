@@ -38,13 +38,21 @@ final class ArenaCheck {
      * @param claim       the claim's state
      * @param closed      why the running arena closed itself, or {@code null}
      * @param ready       its floors are built and verified (players may come in)
+     * @param roundSeconds {@code games.falling_floors.round_seconds}
+     * @param holdMinutes {@code games.restart_hold_minutes}, or 0 when no restart times are set
      */
     record Facts(boolean enabled, String world, boolean worldLoaded, String box, List<String> problems, Claim claim,
-                 String closed, boolean ready) {
+                 String closed, boolean ready, int roundSeconds, int holdMinutes) {
 
         Facts {
             world = world == null ? "" : world;
             problems = List.copyOf(problems == null ? List.of() : problems);
+        }
+
+        /** Without the restart facts (nothing to say about them). */
+        Facts(boolean enabled, String world, boolean worldLoaded, String box, List<String> problems, Claim claim,
+              String closed, boolean ready) {
+            this(enabled, world, worldLoaded, box, problems, claim, closed, ready, 0, 0);
         }
     }
 
@@ -59,6 +67,13 @@ final class ArenaCheck {
             out.add(Line.ok("Falling Floors is off - nothing to check (it needs games.enabled and "
                     + "games.falling_floors.enabled)"));
             return;
+        }
+        if (f.holdMinutes() > 0 && f.roundSeconds() > f.holdMinutes() * 60) {
+            // a round only starts when it can end before the next restart (F review #8)
+            out.add(Line.warn("Falling Floors' round_seconds (" + f.roundSeconds() + " s) is longer than the restart"
+                    + " hold (" + f.holdMinutes() + " min)", "a round only starts when it can end before the restart,"
+                    + " so rounds stop starting more than " + f.roundSeconds() + " s before each one: lower"
+                    + " games.falling_floors.round_seconds (or raise games.restart_hold_minutes)"));
         }
         if (f.world().isBlank()) {
             out.add(Line.fail("Falling Floors has no world", "list a Games world in games.worlds, or set games.fresh.world"));

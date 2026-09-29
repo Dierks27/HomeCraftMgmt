@@ -181,6 +181,21 @@ public final class ArenaRound {
         return true;
     }
 
+    /**
+     * A round player who never reached their spawn (the game couldn't move them there): out of the
+     * round before Go, but still in the gallery, where they watch it and play the next one. A round
+     * left with too few is called off, as when someone leaves on the spawns.
+     *
+     * @return whether they were dropped (false outside the teleports and the 3-2-1, or not a starter)
+     */
+    public boolean unseat(UUID player) {
+        if ((phase != Phase.TELEPORT && phase != Phase.HOLD) || !starters.contains(player)) {
+            return false;
+        }
+        dropBeforeGo(player);
+        return true;
+    }
+
     /** "Ready" on or off, in the lobby or during the countdown. Returns whether it changed. */
     public boolean ready(UUID player, boolean on) {
         if (!members.contains(player) || (phase != Phase.LOBBY && phase != Phase.COUNTDOWN)) {

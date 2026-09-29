@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.arena;
 
+import com.dierks.homecraft.games.NoPush;
 import com.dierks.homecraft.games.arena.rules.Feet;
 import com.dierks.homecraft.games.arena.rules.RoundResult;
 import com.dierks.homecraft.games.gen.api.Box;
@@ -95,17 +96,29 @@ public interface ArenaHost {
     /** Paper's average tick time, in milliseconds. */
     double mspt();
 
-    /** Whether a scheduled restart is minutes away (no new round starts). */
+    /** Whether a scheduled restart is minutes away: the games' own restart hold (no new round starts). */
     boolean holding();
 
-    /** The restart's time for players ("4:00 PM"), or {@code null}. */
+    /**
+     * The next scheduled restart (epoch ms), or {@code -1} when no restart times are set. A round
+     * whose worst-case end would come after it doesn't start (the F review's #8).
+     */
+    long nextRestart();
+
+    /** The next restart's time for players ("4:00 PM"), asked while a round is held for it; or {@code null}. */
     String heldFor();
 
     /** Where a player's feet are now, or {@code null} when they are offline. */
     Feet feet(UUID player);
 
-    /** The arena session's own teleport (the session's safe point becomes this spot). */
-    void teleport(UUID player, String world, ArenaSite.Spot spot);
+    /**
+     * The arena session's own teleport (the session's safe point becomes this spot).
+     *
+     * @return whether it was made: false for a player who is offline, a world that isn't loaded, or
+     *         a teleport the server refused (a player who never reached their spawn is dropped
+     *         from the round before Go)
+     */
+    boolean teleport(UUID player, String world, ArenaSite.Spot spot);
 
     /** Move someone who isn't in the arena's session out of the box: the safe spot, or the spawn. */
     void toSafety(UUID player, String world);
@@ -113,8 +126,17 @@ public interface ArenaHost {
     /** End the player's arena session: their things come back. */
     void endSession(UUID player);
 
-    /** Whether other players can push this one (a round turns it off, and every end path back on). */
+    /**
+     * Whether this player collides at all ({@code setCollidable}: it stops mobs pushing them; a round
+     * turns it off, and every end path back on). Players pushing players is {@link #noPush()}'s.
+     */
     void collidable(UUID player, boolean on);
+
+    /**
+     * The games' shared no-push team (the "player collisions" decision: only a scoreboard team's
+     * collision rule stops one player pushing another), or {@code null} for none.
+     */
+    NoPush noPush();
 
     void kit(UUID player, Kit kit);
 

@@ -3,6 +3,8 @@ package com.dierks.homecraft.games.arena;
 import com.dierks.homecraft.games.arena.rules.ArenaText;
 import com.dierks.homecraft.games.arena.rules.RoundEvent;
 
+import java.util.List;
+
 /**
  * The words Falling Floors says around a round (EVENTS-DROPPER-SPEC §B.3.3, §B.4): arriving, the
  * lobby, the kit, the bars, the tile. The round's own lines (out, results, countdown, lobby) are
@@ -76,6 +78,29 @@ public final class FloorsText {
 
     /** To the gallery when a round starts without them. */
     public static final String ROUND_WITHOUT_YOU = "&7A round started - you play the next one!";
+
+    /** To a round player the game couldn't move to their spawn: they watch this round instead. */
+    public static final String NO_SPAWN = "&7We couldn't get you to the floors - watch this round and play the next"
+            + " one!";
+
+    /**
+     * A solo milestone today's token limit can't pay whole: nothing is paid, and it waits for another
+     * day (the milestones are once ever, so they are never short-paid).
+     */
+    public static final String MILESTONE_LIMIT = "&7You've reached today's token limit - last that long again"
+            + " another day for its tokens.";
+
+    /** Anyone changing a block of the arena's box, admins included: it puts itself back. */
+    public static final String GUARDED = "&cThis is the Falling Floors arena - it puts itself back. Use &e/hcm games"
+            + " floors&c.";
+
+    /**
+     * The Ready item's lore: how many ready players start a round ({@code min_players}), or the
+     * 20 s after a second player arrives.
+     */
+    public static List<String> readyLore(int minPlayers) {
+        return List.of("&7A round starts when " + minPlayers + " are ready,", "&7or 20 seconds after a friend comes.");
+    }
 
     /** A round player's action bar: how long so far, and how many are still in. */
     public static String playing(long ticks, int stillIn, boolean solo) {

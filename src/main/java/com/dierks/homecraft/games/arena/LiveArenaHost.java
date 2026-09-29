@@ -3,6 +3,8 @@ package com.dierks.homecraft.games.arena;
 import com.dierks.homecraft.arcade.TokenService;
 import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.NoPush;
+import com.dierks.homecraft.games.RestartHold;
 import com.dierks.homecraft.games.ScoreResult;
 import com.dierks.homecraft.games.arena.rules.ArenaScoring;
 import com.dierks.homecraft.games.arena.rules.Feet;
@@ -47,8 +49,12 @@ import java.util.logging.Logger;
  * The running server as {@link ArenaService} sees it: the clock, the world, the database, the
  * players, and everything said and shown to them. Main thread only; nothing here throws on
  * purpose: a failure is logged, and a player who went offline is simply skipped.
+ *
+ * <p>The few server lookups the teleport and the kit route on ({@link #online}, {@link #bukkitWorld},
+ * {@link #inSession}, the two teleports and {@link #fill}) are package-private methods, so a test
+ * can answer them without a server.
  */
-final class LiveArenaHost implements ArenaHost {
+class LiveArenaHost implements ArenaHost {
 
     /** Where someone moved out of the box's way reads why. */
     static final String MOVED = "&7The Falling Floors arena is being fixed, so we moved you somewhere safe.";
@@ -209,8 +215,16 @@ final class LiveArenaHost implements ArenaHost {
     }
 
     @Override
+    public long nextRestart() {
+        return games().restartHold().next(now());
+    }
+
+    /** The next restart's time ("4:00 PM"): a round may be held for it before the games' own hold. */
+    @Override
     public String heldFor() {
-        return games().restartHeld();
+        RestartHold h = games().restartHold();
+        long next = h.next(now());
+        return next < 0 ? null : h.clock(next);
     }
 
     @Override
@@ -223,19 +237,44 @@ final class LiveArenaHost implements ArenaHost {
         return new Feet(l.getX(), l.getY(), l.getZ(), 0);
     }
 
+    /**
+     * A player in the arena's session goes through the session's own teleport (it also becomes
+     * their safe point); anyone else (an admin watching) through a plain one.
+     */
     @Override
-    public void teleport(UUID player, String world, ArenaSite.Spot spot) {
-        Player p = Bukkit.getPlayer(player);
-        World w = Bukkit.getWorld(world);
+    public boolean teleport(UUID player, String world, ArenaSite.Spot spot) {
+        Player p = online(player);
+        World w = world == null ? null : bukkitWorld(world);
         if (p == null || w == null || spot == null) {
-            return;
+            return false;
         }
         Location to = new Location(w, spot.x(), spot.y(), spot.z(), spot.yaw(), 0);
-        if (games().sessions().session(p) != null) {
-            games().sessions().teleport(p, to); // ours: it also becomes their safe point
-        } else {
-            p.teleport(to);
-        }
+        return inSession(p) ? sessionTeleport(p, to) : plainTeleport(p, to);
+    }
+
+    // ---- the server lookups (a test answers them) ----------------------------------------------
+
+    /** The player, when online. */
+    Player online(UUID player) {
+        return player == null ? null : Bukkit.getPlayer(player);
+    }
+
+    /** The world, when loaded. */
+    World bukkitWorld(String name) {
+        return Bukkit.getWorld(name);
+    }
+
+    /** Whether the player is in a world session (the arena's: a player is in one at a time). */
+    boolean inSession(Player p) {
+        return games().sessions().session(p) != null;
+    }
+
+    boolean sessionTeleport(Player p, Location to) {
+        return games().sessions().teleport(p, to);
+    }
+
+    boolean plainTeleport(Player p, Location to) {
+        return p.teleport(to);
     }
 
     /** To {@code games.fresh.safe_spot}, or the world's spawn, as Fresh Courses moves people. */
@@ -265,10 +304,15 @@ final class LiveArenaHost implements ArenaHost {
 
     @Override
     public void collidable(UUID player, boolean on) {
-        Player p = Bukkit.getPlayer(player);
+        Player p = online(player);
         if (p != null) {
             p.setCollidable(on);
         }
+    }
+
+    @Override
+    public NoPush noPush() {
+        return games().noPush();
     }
 
     // ---- the kit --------------------------------------------------------------------------------
@@ -280,16 +324,21 @@ final class LiveArenaHost implements ArenaHost {
      */
     @Override
     public void kit(UUID player, Kit kit) {
-        Player p = Bukkit.getPlayer(player);
-        if (p == null || kit == null || games().sessions().session(p) == null) {
-            return;
+        Player p = online(player);
+        if (p == null || kit == null || !inSession(p)) {
+            return; // only the arena's own players: nobody else's inventory is ever touched
         }
+        fill(p, kit);
+    }
+
+    /** Clear the player's inventory and hand out {@code kit}. */
+    void fill(Player p, Kit kit) {
         PlayerInventory inv = p.getInventory();
         inv.clear();
         if (kit.kind() == KitKind.LOBBY) {
             inv.setItem(0, KitItems.item(game, FallingFloors.READY, kit.ready() ? Material.LIME_DYE : Material.GRAY_DYE,
                     kit.ready() ? FloorsText.KIT_READY_ON : FloorsText.KIT_READY,
-                    "&7A round starts when two are ready,", "&7or 20 seconds after a friend comes."));
+                    FloorsText.readyLore(settings().minPlayers()).toArray(new String[0])));
             if (kit.solo()) {
                 inv.setItem(4, KitItems.item(game, FallingFloors.SOLO, Material.CLOCK, FloorsText.KIT_SOLO,
                         "&7A round just for you.", "&7Keep moving to last longer!"));
@@ -434,6 +483,13 @@ final class LiveArenaHost implements ArenaHost {
                 Player p = Bukkit.getPlayer(player);
                 return p == null ? 0 : g.rewards().pay(p, game, TokenService.Source.GAMES_FLOORS, c.kind(), c.ref(),
                         c.tokens(), s.dailyCap(), c.detail());
+            }
+
+            @Override
+            public int payWhole(UUID player, ArenaScoring.Claim c) {
+                Player p = Bukkit.getPlayer(player);
+                return p == null ? 0 : g.rewards().payWhole(p, game, TokenService.Source.GAMES_FLOORS, c.kind(),
+                        c.ref(), c.tokens(), s.dailyCap(), c.detail(), FloorsText.MILESTONE_LIMIT);
             }
 
             @Override

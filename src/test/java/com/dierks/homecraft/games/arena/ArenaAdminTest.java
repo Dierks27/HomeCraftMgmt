@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -58,6 +60,34 @@ class ArenaAdminTest {
         said = ArenaAdmin.lines(s, "claim", new String[]{"claim", "confirm"}, "");
         assertEquals("&aClaimed.", said.get(0), said.toString());
         assertEquals(s.claimText(), host.claim, "recorded");
+    }
+
+    /**
+     * F review #2: {@code tp} never drops an admin into a gallery that isn't there (y 207 over
+     * nothing, out of any session): only once a verify has passed, or when the walk is there anyway.
+     */
+    @Test
+    void tpIsRefusedUntilTheGalleryIsBuiltAndChecked() {
+        assertTrue(ArenaAdmin.tpRefusal(null, true, "games.enabled is false", () -> true).contains("isn't running"),
+                "not running: says so");
+        host.secret = null; // the week's floors can't be made yet
+        ArenaService unplanned = new ArenaService(host);
+        unplanned.start();
+        assertTrue(ArenaAdmin.tpRefusal(unplanned, true, "", () -> true).contains("isn't built yet"), "no floors yet");
+        host.secret = 12345L;
+
+        ArenaService s = new ArenaService(host);
+        s.start(); // planned; the boot verify hasn't run
+        assertFalse(s.verified(), "(not verified)");
+        assertEquals(ArenaAdmin.TP_NOT_BUILT, ArenaAdmin.tpRefusal(s, true, "", () -> false),
+                "nothing to stand on: refused, with a line saying why");
+        assertNull(ArenaAdmin.tpRefusal(s, true, "", () -> true),
+                "unless the walk under the spot is there anyway (a closed arena to go and look at)");
+        assertTrue(ArenaAdmin.tpRefusal(s, false, "", () -> true).contains("isn't built yet"), "no world loaded");
+
+        assertNull(ArenaAdmin.tpRefusal(running(), true, "", () -> {
+            throw new AssertionError("a verified gallery needs no look at the world");
+        }), "verified: in you go");
     }
 
     @Test

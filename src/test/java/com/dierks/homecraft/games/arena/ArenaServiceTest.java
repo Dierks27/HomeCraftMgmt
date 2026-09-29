@@ -1,13 +1,16 @@
 package com.dierks.homecraft.games.arena;
 
+import com.dierks.homecraft.games.NoPush;
 import com.dierks.homecraft.games.arena.FakeArenaHost.P;
 import com.dierks.homecraft.games.arena.rules.ArenaRound;
 import com.dierks.homecraft.games.arena.rules.ArenaText;
 import com.dierks.homecraft.games.arena.rules.Cell;
 import com.dierks.homecraft.games.arena.rules.RoundResult;
+import com.dierks.homecraft.games.arena.rules.RoundSettings;
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Plan;
+import com.dierks.homecraft.games.gen.engine.BuildJob;
 import com.dierks.homecraft.games.gen.engine.WorldPort;
 import org.junit.jupiter.api.Test;
 
@@ -21,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -212,6 +216,7 @@ class ArenaServiceTest {
         assertEquals(201.0, alex.y, "on the top floor");
         assertFalse(inGallery(alex), "on a spawn, not in the gallery");
         assertFalse(alex.collidable, "nobody can shove anybody");
+        assertEquals(NoPush.TEAM, host.teamOf(alex), "and on the no-push team, where no player pushes another");
         until(ArenaRound.Phase.PLAYING, 100);
         assertFalse(arena.held(alex.id), "Go lets go");
         assertTrue(alex.titles.contains(ArenaText.go()), "Go is shown");
@@ -229,6 +234,7 @@ class ArenaServiceTest {
         assertTrue(inGallery(alex), "out means back in the gallery");
         assertTrue(alex.heard().contains("You lasted"), "with the time: " + alex.heard());
         assertTrue(alex.collidable, "and collisions back");
+        assertNull(host.teamOf(alex), "and off the no-push team");
         assertEquals(1, host.scored.size(), "the round was scored once");
         RoundResult r = host.scored.get(0);
         assertTrue(r.solo(), "a solo round");
@@ -416,6 +422,7 @@ class ArenaServiceTest {
         ticks(1);
         for (P p : List.of(a, b)) {
             assertTrue(p.collidable, p.name + ": collisions back");
+            assertNull(host.teamOf(p), p.name + ": off the no-push team");
             assertEquals(1, p.sessionsEnded, p.name + " went home");
         }
         assertTrue(host.scored.isEmpty(), "a called-off round scores nothing");
@@ -429,8 +436,11 @@ class ArenaServiceTest {
         P b = join("Ben");
         playTogether(a, b);
         assertFalse(a.collidable || b.collidable, "(off for the round)");
+        assertEquals(NoPush.TEAM, host.teamOf(a), "(on the no-push team)");
         arena.stop();
         assertTrue(a.collidable && b.collidable, "a reload or a stop puts them back");
+        assertNull(host.teamOf(a), "Ann is off the no-push team");
+        assertNull(host.teamOf(b), "and so is Ben");
         assertNull(arena.job(), "and no reset is left running");
     }
 
@@ -445,10 +455,217 @@ class ArenaServiceTest {
         arena.left(b.id); // one of two leaves on the spawns: too few to play
         ticks(1);
         assertTrue(a.collidable && b.collidable, "collisions back for both");
+        assertNull(host.teamOf(a), "Ann is off the no-push team");
+        assertNull(host.teamOf(b), "and so is Ben");
         assertTrue(inGallery(a), "Ann is back in the gallery");
         assertTrue(a.heard().contains(ArenaText.calledOff()), a.heard());
         assertTrue(host.scored.isEmpty(), "nothing scored");
         until(ArenaRound.Phase.LOBBY, 200);
+    }
+
+    // ---- nobody can push anybody (F review #1) -------------------------------------------------
+
+    /**
+     * {@code setCollidable(false)} doesn't stop one player pushing another; only a scoreboard team's
+     * collision rule does. So every round player goes on the games' no-push team at the round's
+     * start, and every way off the floors takes them off it, back on the team they came from.
+     */
+    @Test
+    void roundPlayersGoOnTheNoPushTeamAndEveryWayOffPutsThemBackOnTheirOwn() {
+        booted();
+        P a = join("Ann");
+        P b = join("Ben");
+        P c = join("Cat");
+        P d = join("Dan");
+        host.teamNames.add("blue");
+        host.teams.put("Ben", "blue"); // another plugin's nametag colour
+        playTogether(a, b, c, d);
+        for (P p : List.of(a, b, c, d)) {
+            assertEquals(NoPush.TEAM, host.teamOf(p), p.name + " is on the no-push team for the round");
+            assertFalse(p.collidable, p.name + ": and no mob pushes them either");
+        }
+        a.at(a.x, 150, a.z);
+        ticks(1);
+        assertNull(host.teamOf(a), "out: Ann is off the team at once");
+        arena.left(b.id); // Leave game, /hcm leave or a quit
+        assertEquals("blue", host.teamOf(b), "leaving: Ben is back on his own team");
+        c.at(c.x, 150, c.z);
+        ticks(1);
+        assertEquals(1, host.scored.size(), "(Dan is the last one standing)");
+        for (P p : List.of(a, c, d)) {
+            assertNull(host.teamOf(p), p.name + " is off the team after the round");
+        }
+        assertFalse(host.noPush.isOn(d.id), "nobody is left on it");
+    }
+
+    // ---- a spawn nobody reached (F review #3) ---------------------------------------------------
+
+    @Test
+    void aPlayerWhoseSpawnTeleportFailedWatchesTheRoundAndCantWinIt() {
+        booted();
+        P a = join("Ann");
+        P b = join("Ben");
+        P c = join("Cat");
+        host.teleportFails.add(b.id); // the server refused it
+        playTogether(a, b, c);
+        assertEquals(List.of(a.id, c.id), arena.round().starters(), "Ben is out of the round before Go");
+        assertTrue(arena.round().isMember(b.id), "but still in the arena");
+        assertTrue(inGallery(b), "watching from the gallery, where he was");
+        assertTrue(b.heard().contains(FloorsText.NO_SPAWN), "he's told why: " + b.heard());
+        assertTrue(b.collidable, "his collisions are back");
+        assertNull(host.teamOf(b), "and he's off the no-push team");
+        assertEquals(ArenaHost.KitKind.WATCH, b.kit.kind(), "holding the watcher's kit");
+        a.at(a.x, 150, a.z);
+        ticks(1);
+        RoundResult r = host.scored.get(0);
+        assertEquals(List.of(c.id), r.winners(), "Cat won: the round was Ann's and Cat's");
+        assertTrue(r.standings().stream().noneMatch(st -> st.player().equals(b.id)), "Ben had no part in it");
+    }
+
+    @Test
+    void aRoundLeftWithTooFewOnTheSpawnsIsCalledOff() {
+        booted();
+        P a = join("Ann");
+        P b = join("Ben");
+        host.teleportFails.add(b.id);
+        arena.ready(a.id);
+        arena.ready(b.id);
+        until(ArenaRound.Phase.TELEPORT, TO_GO);
+        ticks(3);
+        assertTrue(a.heard().contains(ArenaText.calledOff()), "one player can't be a round: " + a.heard());
+        assertTrue(inGallery(a), "Ann is back in the gallery");
+        assertTrue(a.collidable && host.teamOf(a) == null, "with her collisions back");
+        assertTrue(host.scored.isEmpty(), "nothing scored");
+        until(ArenaRound.Phase.LOBBY, 300);
+    }
+
+    // ---- nobody arrives in a gallery that failed its check (F review #4) -------------------------
+
+    @Test
+    void anArrivalAfterAVerifyFailedIsNotLetIn() {
+        booted();
+        P kid = host.player("Kid");
+        assertNull(arena.joinRefusal(kid.id), "the gate is open: the kid's session starts");
+        Cell c = topCell(7);
+        world.put(c.x(), 200, c.z(), "minecraft:stone");
+        world.sticky.add(FakeWorldPort.pos(c.x(), 200, c.z()));
+        arena.requestReset();
+        for (int i = 0; i < 2000 && arena.verified(); i++) {
+            ticks(1);
+        }
+        assertFalse(arena.verified(), "(a verify failed while the kid was on the way)");
+        assertEquals(FloorsText.FIXING, arena.joined(kid.id), "so they aren't let in: their session ends");
+        assertFalse(arena.round().isMember(kid.id), "and they aren't in the arena");
+        world.sticky.clear();
+        until(ArenaRound.Phase.LOBBY, 2000);
+        assertNull(arena.joined(kid.id), "once the floors pass again, they are");
+    }
+
+    // ---- the restart (F review #8) --------------------------------------------------------------
+
+    @Test
+    void noCountdownStartsWhoseRoundCouldRunIntoTheNextRestart() {
+        booted();
+        long tail = ArenaService.tailTicks(host.settings.round(), arena.site().layout());
+        long roundMs = host.settings.roundSeconds() * 1000L;
+        long extra = tail * RoundSettings.MS_PER_TICK - roundMs;
+        assertTrue(extra > 30_000 && extra < 60_000, "a round's worst case is round_seconds and about 40 s: +" + extra);
+        long fromCountdown = (RoundSettings.COUNTDOWN_TICKS + tail) * RoundSettings.MS_PER_TICK
+                + ArenaService.RESTART_MARGIN_MS;
+        host.heldFor = "4:00 PM";
+        host.nextRestart = host.now + fromCountdown - 1_000; // a second short
+        ticks(20);
+        P a = join("Ann");
+        P b = join("Ben");
+        arena.ready(a.id);
+        arena.ready(b.id);
+        ticks(100);
+        assertEquals(ArenaRound.Phase.LOBBY, arena.round().phase(), "no countdown: its round might end after the restart");
+
+        host.nextRestart = host.now + fromCountdown + 3_000; // room for all of it, 3 s to spare
+        until(ArenaRound.Phase.COUNTDOWN, 40);
+        until(ArenaRound.Phase.PLAYING, TO_GO); // only what is left of a countdown counts: it isn't stopped as it runs
+        host.nextRestart = host.now + 1_000; // the restart is close now, but a round going finishes
+        ticks(100);
+        assertEquals(ArenaRound.Phase.PLAYING, arena.round().phase(), "the round going carries on");
+    }
+
+    @Test
+    void aSoloRoundOnlyStartsWhenItCanEndBeforeTheNextRestart() {
+        booted();
+        long solo = ArenaService.tailTicks(host.settings.round(), arena.site().layout()) * RoundSettings.MS_PER_TICK
+                + ArenaService.RESTART_MARGIN_MS;
+        host.heldFor = "4:00 PM";
+        host.nextRestart = host.now + solo - 1_000;
+        P a = join("Ann");
+        arena.solo(a.id);
+        assertTrue(a.heard().contains("The server restarts at 4:00 PM"), "held for the restart: " + a.heard());
+        assertEquals(ArenaRound.Phase.LOBBY, arena.round().phase(), "no solo round");
+        host.nextRestart = host.now + solo + 1_000;
+        arena.solo(a.id);
+        assertEquals(ArenaRound.Phase.TELEPORT, arena.round().phase(), "with time for all of it, it starts");
+    }
+
+    // ---- a reset a newer request replaced (F review #10) ----------------------------------------
+
+    /** Tick until the reset job running now is over; how many ticks it was driven. */
+    private int drivesLeft() {
+        BuildJob j = arena.job();
+        assertNotNull(j, "(a reset is running)");
+        int n = 0;
+        while (arena.job() == j) {
+            ticks(1);
+            assertTrue(++n < 2000, "(the reset ends)");
+        }
+        return n;
+    }
+
+    private String status() {
+        return String.join("\n", arena.statusLines());
+    }
+
+    @Test
+    void aResetANewerRequestReplacedNeverCountsAsOne() {
+        booted();
+        arena.requestReset();
+        ticks(1); // the request is taken: its job starts
+        int k = drivesLeft(); // a reset of whole floors takes k ticks
+        assertTrue(status().contains("resets: 2 done"), status());
+
+        arena.requestReset();
+        ticks(1);
+        BuildJob replaced = arena.job();
+        ticks(k - 1); // one tick from done
+        assertSame(replaced, arena.job(), "(still running)");
+        arena.requestReset(); // an admin's reset (or a new week's floors) replaces it
+        ticks(1);
+        assertTrue(replaced.done(), "(the replaced reset finished on this very tick)");
+        assertTrue(status().contains("resets: 2 done"), "its answer counts for nothing: " + status());
+        assertEquals(ArenaRound.Phase.RESET, arena.round().phase(), "the newer request's reset runs");
+        until(ArenaRound.Phase.LOBBY, 400);
+        assertTrue(status().contains("resets: 3 done"), "and counts once it's done: " + status());
+    }
+
+    @Test
+    void aFailedResetANewerRequestReplacedNeverCountsAsAFailure() {
+        booted();
+        Cell c = topCell(7);
+        world.put(c.x(), 200, c.z(), "minecraft:stone");
+        world.sticky.add(FakeWorldPort.pos(c.x(), 200, c.z())); // it won't be put back
+        arena.requestReset();
+        ticks(1);
+        int k = drivesLeft(); // a failing reset takes k ticks; the failure asks for try 2 at once
+        assertTrue(status().contains("1 failed"), status());
+        BuildJob replaced = arena.job();
+        assertNotNull(replaced, "(try 2 is running)");
+        ticks(k - 1);
+        assertSame(replaced, arena.job(), "(still running)");
+        arena.requestReset();
+        ticks(1);
+        assertTrue(replaced.failed(), "(the replaced reset failed on this very tick)");
+        assertTrue(status().contains("1 failed"), "its failure isn't counted: " + status());
+        assertEquals(1, host.logs.stream().filter(l -> l.contains("the reset failed")).count(),
+                "nor logged: " + host.logs);
     }
 
     @Test

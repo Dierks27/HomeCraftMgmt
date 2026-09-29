@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.arena;
 
+import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.arena.rules.ArenaScoring;
 import com.dierks.homecraft.games.arena.rules.ArenaText;
 import com.dierks.homecraft.games.arena.rules.RoundResult;
@@ -19,7 +20,9 @@ import java.util.UUID;
  *   <li><b>Rewards</b> go through {@code SkillRewards} (source {@code GAMES_FLOORS}, the game's
  *       {@code daily_cap}): the first full round of the day, the three solo milestones once ever,
  *       and today's pick. The database refuses a one-time ref paid before, which is what makes the
- *       daily once a day and the milestones once ever.</li>
+ *       daily once a day and the milestones once ever. A milestone is paid whole or not at all
+ *       ({@code payWhole}, as Fresh Courses pays its one-time rewards): one the caps can only pay
+ *       part of waits for another day instead of being recorded short for ever.</li>
  *   <li><b>A win pays nothing extra.</b> The winner's claims are exactly everyone else's, so
  *       siblings can't farm tokens by taking turns to lose.</li>
  *   <li><b>E4.</b> Lasting a whole minute counts toward the {@code game_floors_minute}
@@ -49,6 +52,14 @@ public final class FloorsRewards {
 
         /** Pay one reward (capped, once by its ref). @return the tokens paid, 0 when none */
         int pay(UUID player, ArenaScoring.Claim claim);
+
+        /**
+         * Pay one reward all or nothing ({@code SkillRewards.payWhole}): when today's caps can't pay
+         * it whole, nothing is paid and nothing recorded, so it waits for another day.
+         *
+         * @return the tokens paid, 0 when none
+         */
+        int payWhole(UUID player, ArenaScoring.Claim claim);
 
         /** The player lasted a whole minute (the E4 achievement). */
         void lastedMinute(UUID player);
@@ -85,7 +96,11 @@ public final class FloorsRewards {
                 }
             }
             for (ArenaScoring.Claim c : ps.claims()) {
-                ledger.pay(ps.player(), c);
+                if (c.kind() == RewardKind.MILESTONE) {
+                    ledger.payWhole(ps.player(), c); // once ever: never short-paid near the cap (F review #5)
+                } else {
+                    ledger.pay(ps.player(), c);
+                }
             }
             if (ps.lastedMinute()) {
                 ledger.lastedMinute(ps.player());

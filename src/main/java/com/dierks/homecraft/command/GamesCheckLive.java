@@ -261,7 +261,8 @@ final class GamesCheckLive implements GamesCheck.Facts {
         Game game = g == null ? null : g.game(FallingFloors.SPEC.id());
         FallingFloors running = game instanceof FallingFloors f && f.running() ? f : null;
         return new ArenaCheck.Facts(cfg.enabled() && ff.enabled(), world, w != null, box.describe(), problems, claim,
-                running == null ? null : running.closedWhy(), running != null && running.ready());
+                running == null ? null : running.closedWhy(), running != null && running.ready(), ff.roundSeconds(),
+                cfg.common().restartTimes().isEmpty() ? 0 : cfg.common().restartHoldMinutes());
     }
 
     // ---- end Falling Floors ----

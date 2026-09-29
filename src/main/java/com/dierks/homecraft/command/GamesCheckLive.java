@@ -177,7 +177,9 @@ final class GamesCheckLive implements GamesCheck.Facts {
                 w.getMinHeight(), w.getMaxHeight(), new BukkitWorldPort(plugin, w).border(),
                 new BukkitWorldPort(plugin, w).spawn(), st.safeSpot());
         List<GamesCheck.Region> regions = new ArrayList<>();
-        List<Regions.Extra> arenaBox = DailyCourses.arenaExtras(cfg.settings(FallingFloors.SPEC)); // WP-D fix
+        // WP-D fix, and WP-CH: the arena's box and the Clubhouse's, as Fresh Courses' vet and keep see them
+        List<Regions.Extra> extraBoxes = DailyCourses.extraBoxes(cfg.settings(FallingFloors.SPEC),
+                cfg.settings(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC));
         for (DailySettings.SlotConfig c : all) {
             Slots.Def def = Slots.any(c.id());
             if (def == null) {
@@ -195,9 +197,9 @@ final class GamesCheckLive implements GamesCheck.Facts {
             if (near != null) {
                 problems.add(near);
             }
-            String arena = Regions.extrasProblem(def, c.origin(), arenaBox); // WP-D fix: the arena's extra box
-            if (arena != null) {
-                problems.add(arena);
+            String extra = Regions.extrasProblem(def, c.origin(), extraBoxes); // the arena's or the Clubhouse's box
+            if (extra != null) {
+                problems.add(extra);
             }
             regions.add(new GamesCheck.Region(def.id(), GenCopy.slotName(def, st.cadenceDays()), Slots.isClassic(def.id()),
                     c.enabled(), problems, Regions.describe(def, c.origin())));
@@ -232,7 +234,7 @@ final class GamesCheckLive implements GamesCheck.Facts {
         return new GamesCheck.Fresh(st.enabled() && cfg.enabled(), st.cadenceName(),
                 GenCopy.schedule(ed.cadenceDays(), ed.rebuildDay(), null), world, w != null, listed, regions, slots,
                 next, st.archive().keepProblem() != null ? st.archive().keepProblem()
-                : Regions.keepExtrasProblem(st.archive().keep(), arenaBox), // WP-D fix: or it crowds the arena
+                : Regions.keepExtrasProblem(st.archive().keep(), extraBoxes), // or it crowds the arena or the Clubhouse
                 st.archive().keep().describe() + ", " + st.archive().keep().maxPlots() + " plots");
     }
 
@@ -252,8 +254,10 @@ final class GamesCheckLive implements GamesCheck.Facts {
         if (w != null) {
             BukkitWorldPort port = new BukkitWorldPort(plugin, w);
             boolean listed = cfg.common().worlds().stream().anyMatch(x -> x.equalsIgnoreCase(w.getName()));
-            problems = ArenaRegions.problems(box, st, Regions.handBuilt(rows()), new Regions.WorldFacts(w.getName(),
-                    listed, w.getMinHeight(), w.getMaxHeight(), port.border(), port.spawn(), st.safeSpot()));
+            problems = ArenaRegions.problems(box, st, com.dierks.homecraft.games.clubhouse.ClubhouseRegions.extras(
+                    cfg.settings(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC)), // WP-CH: apart from the Clubhouse
+                    Regions.handBuilt(rows()), new Regions.WorldFacts(w.getName(), listed, w.getMinHeight(),
+                            w.getMaxHeight(), port.border(), port.spawn(), st.safeSpot()));
         }
         ArenaCheck.Claim claim;
         try {
@@ -290,8 +294,7 @@ final class GamesCheckLive implements GamesCheck.Facts {
         if (w != null) {
             BukkitWorldPort port = new BukkitWorldPort(plugin, w);
             boolean listed = cfg.common().worlds().stream().anyMatch(x -> x.equalsIgnoreCase(w.getName()));
-            List<Regions.Extra> arena = List.of(new Regions.Extra(ArenaRegions.NAME, cfg.settings(FallingFloors.SPEC)
-                    .box()));
+            List<Regions.Extra> arena = DailyCourses.arenaExtras(cfg.settings(FallingFloors.SPEC));
             problems = com.dierks.homecraft.games.clubhouse.ClubhouseRegions.problems(box, st, arena,
                     Regions.handBuilt(rows()), new Regions.WorldFacts(w.getName(), listed, w.getMinHeight(),
                             w.getMaxHeight(), port.border(), port.spawn(), st.safeSpot()));

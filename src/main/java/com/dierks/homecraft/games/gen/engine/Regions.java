@@ -305,6 +305,26 @@ public final class Regions {
     }
 
     /**
+     * Why {@code extra} is within {@value #APART} blocks of one of {@code others} (another extra box:
+     * the arena's, the Clubhouse's), in {@link #extraProblems}' words, or {@code null}. Each pair is
+     * asked on its own, so a neighbour with a problem of its own (crowding a slot, say) still counts,
+     * since its blocks may stand; a neighbour with {@code extra}'s own name is skipped.
+     */
+    public static String extraApartProblem(Extra extra, List<Extra> others) {
+        for (Extra o : others == null ? List.<Extra>of() : others) {
+            if (o == null || extra == null || o.name().equals(extra.name())) {
+                continue;
+            }
+            int gap = extra.box().gap(o.box());
+            if (gap < APART) {
+                return extra.name() + " is " + (gap < 0 ? "on top of" : "only " + gap + " blocks from") + " "
+                        + o.name() + " (they must be " + APART + " apart)";
+            }
+        }
+        return null;
+    }
+
+    /**
      * Why {@code extra} in {@code world} is too close to a hand-built course, or {@code null} when
      * every one is at least {@value #CLEARANCE} blocks away ({@link #handBuilt} lists them).
      */

@@ -16,6 +16,9 @@ import com.dierks.homecraft.games.SkillRewards;
 import com.dierks.homecraft.games.arena.ArenaRegions;
 import com.dierks.homecraft.games.arena.FallingFloors;
 import com.dierks.homecraft.games.arena.FallingFloorsSettings;
+import com.dierks.homecraft.games.clubhouse.Clubhouse;
+import com.dierks.homecraft.games.clubhouse.ClubhouseRegions;
+import com.dierks.homecraft.games.clubhouse.ClubhouseSettings;
 import com.dierks.homecraft.games.gen.admin.GenAdmin;
 import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.Edition;
@@ -299,9 +302,9 @@ public final class DailyCourses implements Game {
     }
 
     /**
-     * The boxes Fresh Courses keeps its slots and keep area apart from ({@link GenHost#extras}): the
-     * Falling Floors arena as configured ({@code games.falling_floors.origin}), on or off, since its
-     * blocks may stand. None when the settings can't be read.
+     * The Falling Floors arena's box, one of those Fresh Courses keeps its slots and keep area apart
+     * from ({@link #extraBoxes}): as configured ({@code games.falling_floors.origin}), on or off, since
+     * its blocks may stand. None when the settings can't be read.
      */
     public static List<Regions.Extra> arenaExtras(FallingFloorsSettings ff) {
         try {
@@ -309,6 +312,18 @@ public final class DailyCourses implements Game {
         } catch (RuntimeException e) {
             return List.of();
         }
+    }
+
+    /**
+     * Every box Fresh Courses keeps its slots and keep area apart from ({@link GenHost#extras}, and
+     * {@code /hcm games check}): the Falling Floors arena ({@link #arenaExtras}) and the Clubhouse's
+     * generated room ({@link ClubhouseRegions#extras}, {@code games.clubhouse.origin}), each as
+     * configured, on or off, since its blocks may stand. A box whose settings can't be read is left out.
+     */
+    public static List<Regions.Extra> extraBoxes(FallingFloorsSettings ff, ClubhouseSettings clubhouse) {
+        List<Regions.Extra> out = new ArrayList<>(arenaExtras(ff));
+        out.addAll(ClubhouseRegions.extras(clubhouse)); // WP-CH: the Clubhouse's box
+        return List.copyOf(out);
     }
 
     /** The running engine, or {@code null} while Fresh Courses is off. */
@@ -468,7 +483,7 @@ public final class DailyCourses implements Game {
 
         @Override
         public List<Regions.Extra> extras() {
-            return arenaExtras(games().settings(FallingFloors.SPEC));
+            return extraBoxes(games().settings(FallingFloors.SPEC), games().settings(Clubhouse.SPEC));
         }
 
         @Override

@@ -9,6 +9,8 @@ import com.dierks.homecraft.games.ScoreResult;
 import com.dierks.homecraft.games.arena.rules.ArenaScoring;
 import com.dierks.homecraft.games.arena.rules.Feet;
 import com.dierks.homecraft.games.arena.rules.RoundResult;
+import com.dierks.homecraft.games.clubhouse.Clubhouse;
+import com.dierks.homecraft.games.clubhouse.ClubhouseRegions;
 import com.dierks.homecraft.games.gen.DailyCourses;
 import com.dierks.homecraft.games.gen.DailySettings;
 import com.dierks.homecraft.games.gen.api.Box;
@@ -170,7 +172,16 @@ class LiveArenaHost implements ArenaHost {
             facts = new Regions.WorldFacts(port.name(), listed, port.minHeight(), port.maxHeight(), port.border(),
                     port.spawn(), d == null ? null : d.safeSpot());
         }
-        return ArenaRegions.problems(box, d, handBuilt(), facts);
+        return ArenaRegions.problems(box, d, clubhouse(), handBuilt(), facts);
+    }
+
+    /** WP-CH: the Clubhouse's room as configured (on or off: its blocks may stand); none when unreadable. */
+    private List<Regions.Extra> clubhouse() {
+        try {
+            return ClubhouseRegions.extras(games().settings(Clubhouse.SPEC));
+        } catch (RuntimeException e) {
+            return List.of();
+        }
     }
 
     /** Every hand-built course's footprint, or {@code null} when the rows can't be read now. */

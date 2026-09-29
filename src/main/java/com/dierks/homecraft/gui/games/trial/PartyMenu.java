@@ -24,11 +24,13 @@ import java.util.UUID;
  *
  * <p>4 the party ("Party race: River Run - 3 of 8 in", free and just for fun); 11 the last race's
  * results; 13 Start (the host's; greyed with the reason in its NAME otherwise); 15 Leave the party;
- * 19-25 and 28-34 everyone in, in join order, the host marked and ready or not in each NAME; 38
- * Invite a friend; 40 Ready; 42 Warm up first (the host's choice); 44 this week's Cup on the course,
- * when it runs one ({@link CupLink#button}: "Enter this week's Cup: 5 tokens..." in its NAME, since a
- * party race's finish counts for the Cup like any run); 49 the way out. It repaints every second, so
- * a friend who joins shows up at once. Every key fact is in an item NAME for Bedrock.
+ * 19-25 and 28-34 everyone in, in join order, the host marked and ready or not in each NAME; 36 Go
+ * to the Clubhouse and 37 Watch, while the Clubhouse is open (WP-CH); 38 Invite a friend; 39 Take a
+ * rider, on a boat course while ride along is on (WP-CH); 40 Ready; 42 Warm up first (the host's
+ * choice); 44 this week's Cup on the course, when it runs one ({@link CupLink#button}: "Enter this
+ * week's Cup: 5 tokens..." in its NAME, since a party race's finish counts for the Cup like any run);
+ * 49 the way out; 45 and 53 stay filler. It repaints every second, so a friend who joins shows up at
+ * once. Every key fact is in an item NAME for Bedrock.
  */
 public final class PartyMenu extends GameMenu {
 

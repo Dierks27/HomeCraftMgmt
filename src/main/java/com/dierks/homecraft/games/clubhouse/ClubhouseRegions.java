@@ -7,7 +7,6 @@ import com.dierks.homecraft.games.gen.engine.Regions;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Whether the Clubhouse box may be used where it is (CLUBHOUSE-SPEC §1): the checks Fresh Courses
@@ -72,16 +71,14 @@ public final class ClubhouseRegions {
             }
             keep = settings.archive().keepProblem() == null ? settings.archive().keep() : null;
         }
-        List<Regions.Extra> all = new ArrayList<>();
-        for (Regions.Extra o : others == null ? List.<Regions.Extra>of() : others) {
-            if (o != null && !o.name().equals(NAME)) {
-                all.add(new Regions.Extra(o.name(), o.box()));
-            }
+        // WP-CH merge: each other box is asked on its own (Regions.extraApartProblem), so an arena that
+        // itself crowds a slot still keeps the Clubhouse away from its blocks
+        String near = Regions.extraProblem(extra, slots, keep);
+        if (near == null) {
+            near = Regions.extraApartProblem(extra, others);
         }
-        all.add(extra);
-        Map<String, String> near = Regions.extraProblems(all, slots, keep);
-        if (near.containsKey(NAME)) {
-            out.add(near.get(NAME));
+        if (near != null) {
+            out.add(near);
         }
         if (handBuilt != null && world != null) {
             String built = Regions.extraHandBuiltProblem(extra, world.name(), handBuilt);

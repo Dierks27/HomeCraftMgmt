@@ -29,6 +29,8 @@ import java.util.List;
  *  16 OAK_SIGN   "Last Race Night - won by Sam" (its results)
  *  20 NETHER_STAR "Season points - you: 12" (the season board)
  *  22 Back/Close          26 BELL "Race news: on"
+ *  24 OAK_DOOR/SPYGLASS "Wait in / Watch from the Clubhouse" and 25 OAK_BOAT "Take a rider (back seat)",
+ *     painted by the screen over filler while the Clubhouse and ride along take the night (WP-CH)
  * </pre>
  *
  * Every build paints every slot; the facts are in the item NAMES (Bedrock shows lore only on

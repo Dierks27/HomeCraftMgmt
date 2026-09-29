@@ -86,9 +86,10 @@ public interface GenHost {
 
     /**
      * The named boxes that share Fresh Courses' world but are nobody's slot (EVENTS-DROPPER-SPEC
-     * §B.3.2: the Falling Floors arena, as configured now). A slot's region, or the keep area, within
+     * §B.3.2: the Falling Floors arena; CLUBHOUSE-SPEC §1: the Clubhouse's room; each as configured
+     * now, {@code DailyCourses.extraBoxes}). A slot's region, or the keep area, within
      * {@value Regions#APART} blocks of one is refused ({@link Regions#extraProblem}), as the arena
-     * refuses itself near them: neither is ever built into the other.
+     * and the Clubhouse refuse themselves near them: none is ever built into another.
      */
     default List<Regions.Extra> extras() {
         return List.of();

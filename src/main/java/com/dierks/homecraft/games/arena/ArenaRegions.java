@@ -41,6 +41,18 @@ public final class ArenaRegions {
      */
     public static List<String> problems(Box box, DailySettings settings, List<Regions.Area> handBuilt,
                                         Regions.WorldFacts world) {
+        return problems(box, settings, List.of(), handBuilt, world);
+    }
+
+    /**
+     * {@link #problems(Box, DailySettings, List, Regions.WorldFacts)}, and also {@value Regions#APART}
+     * blocks from every other extra box in {@code others} (the Clubhouse's room, WP-CH), as that box
+     * keeps apart from the arena: neither is ever built into the other, whichever moved.
+     *
+     * @param others the other extra boxes, or {@code null} for none; one named {@link #NAME} is skipped
+     */
+    public static List<String> problems(Box box, DailySettings settings, List<Regions.Extra> others,
+                                        List<Regions.Area> handBuilt, Regions.WorldFacts world) {
         List<String> out = new ArrayList<>();
         if (box == null) {
             out.add("there is no box");
@@ -59,6 +71,9 @@ public final class ArenaRegions {
             keep = settings.archive().keepProblem() == null ? settings.archive().keep() : null;
         }
         String near = Regions.extraProblem(extra, slots, keep);
+        if (near == null) {
+            near = Regions.extraApartProblem(extra, others);
+        }
         if (near != null) {
             out.add(near);
         }

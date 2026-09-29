@@ -18,22 +18,35 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The course screen's bottom row once two packages both wanted slot 20: "Race with friends" (WP-R1,
  * D4) keeps 20, left of the way out, and the Weekly Cup (WP-C, D2) has 24, right of it, so each has
- * its own slot and neither covers anything the screen already shows. On a Dropper there is no
- * party race and no lap warm-up: its only extra is its practice drop.
+ * its own slot and neither covers anything the screen already shows; the Clubhouse's "Take a rider"
+ * (WP-CH, a boat course) has 26. On a Dropper there is no party race and no lap warm-up: its only
+ * extra is its practice drop.
+ *
+ * <p>The final maps after the events batch and the Clubhouse were merged:
+ * <ul>
+ *   <li>the course screen (27): 4, 10-16 and 22 fixed; 20 Race with friends; 24 the Cup; 26 Take a rider;</li>
+ *   <li>the party screen (54): 4 the party, 11 the last race, 13 Start, 15 Leave, 19-25 and 28-34 the
+ *       members, 36 Go to the Clubhouse, 37 Watch, 38 Invite, 39 Take a rider, 40 Ready, 42 Warm up
+ *       first, 44 the Cup, 49 the way out; 45 and 53 (the page arrows' slots) stay filler;</li>
+ *   <li>the Race Night screen (27): 24 the Clubhouse (wait or watch), 25 Take a rider, both on filler
+ *       ({@code RaceNightMenuTest}).</li>
+ * </ul>
  */
 class CourseMenuLayoutTest {
 
     @Test
-    void raceWithFriendsAndTheCupEachHaveTheirOwnSlotOnTheBottomRow() {
+    void raceWithFriendsTheCupAndTakeARiderEachHaveTheirOwnSlotOnTheBottomRow() {
         assertEquals(20, CourseMenu.PARTY_SLOT, "Race with friends: left of the way out");
         assertEquals(24, CupLink.SLOT, "the Cup: right of the way out");
+        assertEquals(26, CourseMenu.RIDER_SLOT, "Take a rider (a boat course): the bottom row's right end");
+        assertEquals(List.of(4, 10, 11, 12, 13, 14, 15, 16, 22), CourseMenu.FIXED_SLOTS, "the fixed tiles");
         assertTrue(CourseMenu.FIXED_SLOTS.contains(22), "the way out is the 27-slot screen's bottom middle (22)");
         Set<Integer> taken = new HashSet<>(CourseMenu.FIXED_SLOTS);
-        for (int slot : List.of(CourseMenu.PARTY_SLOT, CupLink.SLOT)) {
+        for (int slot : List.of(CourseMenu.PARTY_SLOT, CupLink.SLOT, CourseMenu.RIDER_SLOT)) {
             assertTrue(slot >= 18 && slot < 27, slot + " is on the bottom row of the 27-slot screen");
             assertTrue(taken.add(slot), slot + " is nobody else's");
         }
-        assertEquals(CourseMenu.FIXED_SLOTS.size() + 2, taken.size(), "eleven items, eleven slots");
+        assertEquals(CourseMenu.FIXED_SLOTS.size() + 3, taken.size(), "twelve items, twelve slots");
     }
 
     @Test
@@ -62,5 +75,30 @@ class CourseMenuLayoutTest {
         assertFalse(taken.contains(PartyMenu.CUP_SLOT), PartyMenu.CUP_SLOT + " is nobody else's on the party screen");
         assertTrue(PartyMenu.CUP_SLOT >= 0 && PartyMenu.CUP_SLOT < 54, "on the 54-slot screen");
         assertFalse(List.of(45, 49, 53).contains(PartyMenu.CUP_SLOT), "never a page arrow's or the way out's slot");
+    }
+
+    @Test
+    void thePartyScreensFinalMapGivesTheCupAndTheClubhouseEachASlotOfItsOwn() {
+        assertEquals(44, PartyMenu.CUP_SLOT, "the Cup at 44");
+        assertEquals(36, PartyMenu.CLUB_SLOT, "Go to the Clubhouse at 36");
+        assertEquals(37, PartyMenu.WATCH_SLOT, "Watch at 37");
+        assertEquals(39, PartyMenu.RIDER_SLOT, "Take a rider at 39");
+        assertEquals(List.of(19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34),
+                java.util.Arrays.stream(PartyMenu.MEMBER_SLOTS).boxed().toList(), "the members' two rows of seven");
+        // the party, last race, Start, Leave, Invite, Ready, Warm up first, and the way out (54 - 5)
+        List<Integer> map = new java.util.ArrayList<>(List.of(4, 11, 13, 15, 38, 40, 42, 49));
+        for (int m : PartyMenu.MEMBER_SLOTS) {
+            map.add(m);
+        }
+        map.addAll(List.of(PartyMenu.CUP_SLOT, PartyMenu.CLUB_SLOT, PartyMenu.WATCH_SLOT, PartyMenu.RIDER_SLOT));
+        Set<Integer> taken = new HashSet<>();
+        for (int slot : map) {
+            assertTrue(slot >= 0 && slot < 54, slot + " is on the 54-slot screen");
+            assertTrue(taken.add(slot), slot + " is used once: nothing on the party screen covers anything else");
+        }
+        assertFalse(taken.contains(45), "45 is only ever a page arrow's slot");
+        assertFalse(taken.contains(53), "53 is only ever a page arrow's slot");
+        assertTrue(taken.contains(49), "49 is the way out");
+        assertEquals(26, taken.size(), "twenty-six items, twenty-six slots; every other slot is filler");
     }
 }

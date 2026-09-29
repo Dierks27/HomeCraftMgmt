@@ -32,7 +32,8 @@ import java.util.List;
  * <p>4 the course ("River Run (Boat · Medium)"); 10 how to play; 11 your best; 12 its high
  * scores; 13 Start; 14 this week's best; 15 the record and who holds it; 16 what it pays (the
  * first finish's amount, or that it's done, in the name); 20 Race with friends (a party race, D4;
- * never on a Dropper); 22 the way out; 24 the Weekly Cup, when the course runs one. Start runs the
+ * never on a Dropper); 22 the way out; 24 the Weekly Cup, when the course runs one; 26 Take a rider,
+ * on a boat course while ride along is on (WP-CH). Start runs the
  * gate again (the screen may have been open a while) and then the world session takes the player
  * to the start line.
  *

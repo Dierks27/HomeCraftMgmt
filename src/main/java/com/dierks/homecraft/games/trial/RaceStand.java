@@ -4,6 +4,8 @@ import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Slots;
 
+import java.util.List;
+
 /**
  * Fresh Ice Boat's viewing stand (EVENTS-DROPPER-SPEC §A.4.2), where finishers wait while the
  * others race: pure, shared by the planner that builds it and the races that park racers on it.
@@ -25,6 +27,14 @@ public final class RaceStand {
     public static final int RAIL = 2;
     /** The first boat planner version that builds it. */
     public static final int FIRST_ALGO = 2;
+    /** The stand is at least this far (block to block, across the ground) from any ice. */
+    public static final double LANE_CLEARANCE = 12;
+    /** Its sign, on the platform facing the middle: "RACE NIGHT / Watch from / here!". */
+    public static final List<String> SIGN = List.of("RACE NIGHT", "Watch from", "here!");
+    /** The platform's block (white concrete). */
+    public static final String FLOOR = "minecraft:white_concrete";
+    /** The rail's block (glass), two high round the platform's edge. */
+    public static final String RAIL_BLOCK = "minecraft:glass";
 
     private RaceStand() {
     }
@@ -37,6 +47,21 @@ public final class RaceStand {
     /** The block row at the middle of the half. */
     public static int centreZ(Box half) {
         return (int) Math.floor(half.minZ() + half.sizeZ() / 2.0);
+    }
+
+    /** The platform's block height for a course starting at {@code startY}: one under where players stand. */
+    public static int floorY(double startY) {
+        return (int) Math.floor(startY) + ABOVE - 1;
+    }
+
+    /** Whether column (x, z) is on the platform of the stand centred on ({@code cx}, {@code cz}). */
+    public static boolean onPlatform(int x, int z, int cx, int cz) {
+        return Math.abs(x - cx) <= SIZE / 2 && Math.abs(z - cz) <= SIZE / 2;
+    }
+
+    /** Whether column (x, z) is on the platform's edge, where the rail stands. */
+    public static boolean onRail(int x, int z, int cx, int cz) {
+        return onPlatform(x, z, cx, cz) && (Math.abs(x - cx) == SIZE / 2 || Math.abs(z - cz) == SIZE / 2);
     }
 
     /** Where a player stands on the stand of a half whose course starts at height {@code startY}. */

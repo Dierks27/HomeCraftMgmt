@@ -15,6 +15,7 @@ import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.SignText;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.RaceStand;
 import com.dierks.homecraft.games.trial.Tier;
 import com.dierks.homecraft.games.trial.TrialKind;
 
@@ -42,13 +43,23 @@ import java.util.Locale;
  * repeated for two laps; the finish is on the start line, which the course ignores until every
  * checkpoint is behind (Time Trials' own rule), and the start is 4 blocks before it.
  *
+ * <p><b>The viewing stand</b> (algo 2, EVENTS-DROPPER-SPEC §A.4.2): Race Night and party races park
+ * finished racers where they can watch the rest. It is a 7 × 7 white platform at the half's middle,
+ * its top 5 above the race line (above the track's keep-clear space), with a two-high glass rail
+ * round its edge so everyone stands on the inner 5 × 5, and a sign. The loop's radius is at least
+ * 25.6 and the track at most 9 wide, so the stand is at least 12 blocks from any ice
+ * ({@link RaceStand}); races find it from the tag's half alone.
+ *
  * <p>Pure: no Bukkit, no clock, no {@code java.util.Random}; {@link BoatValidator} checks every plan
  * before it is returned.
  */
 public final class BoatPlanner implements Planner {
 
-    /** Its version; bump it whenever what it makes for a seed changes (golden hashes pin three seeds). */
-    public static final int ALGO = 1;
+    /**
+     * Its version; bump it whenever what it makes for a seed changes (golden hashes pin three seeds).
+     * 2 added the viewing stand; a layout of algo 1 keeps its stored plan and has no stand.
+     */
+    public static final int ALGO = 2;
 
     /** The three tiers: the track's width, the tightest bend, and the ice. */
     public enum Level {
@@ -128,6 +139,8 @@ public final class BoatPlanner implements Planner {
     public static final int TRIES = 20;
     /** The work one plan can take at most (loops drawn). */
     public static final long WORK_BUDGET = TRIES;
+    /** The top of the stand's rail, blocks above the ice (the half must reach it). */
+    public static final int STAND_TOP = RaceStand.ABOVE + RaceStand.RAIL;
     /** Reference speed round the track, blocks a second, and the fastest believable one. */
     public static final double REF_SPEED = 30;
     public static final double MIN_SPEED = 60;
@@ -150,7 +163,7 @@ public final class BoatPlanner implements Planner {
         }
         Box half = in.half();
         double reach = BASE_RADIUS * (1 + 3 * MAX_AMPLITUDE) + level.width() / 2.0 + 2;
-        if (half.sizeX() < 2 * reach || half.sizeZ() < 2 * reach || half.sizeY() < ICE_ABOVE_FLOOR + 4) {
+        if (half.sizeX() < 2 * reach || half.sizeZ() < 2 * reach || half.sizeY() < ICE_ABOVE_FLOOR + STAND_TOP + 1) {
             throw new GenFailed("the area " + half.describe() + " is too small for the Ice Boat");
         }
         double cx = half.minX() + half.sizeX() / 2.0;
@@ -474,11 +487,31 @@ public final class BoatPlanner implements Planner {
             }
         }
 
+        // the viewing stand (algo 2): a railed platform at the half's middle, above the keep-clear space
+        int standX = RaceStand.centreX(half);
+        int standZ = RaceStand.centreZ(half);
+        int floorY = RaceStand.floorY(top);
+        short floor = index(palette, RaceStand.FLOOR);
+        short rail = index(palette, RaceStand.RAIL_BLOCK);
+        int r = RaceStand.SIZE / 2;
+        for (int x = standX - r; x <= standX + r; x++) {
+            for (int z = standZ - r; z <= standZ + r; z++) {
+                ops.add(new BlockOp(x, floorY, z, floor));
+                if (RaceStand.onRail(x, z, standX, standZ)) {
+                    for (int h = 1; h <= RaceStand.RAIL; h++) {
+                        ops.add(new BlockOp(x, floorY + h, z, rail));
+                    }
+                }
+            }
+        }
+        signs.add(new SignText(standX, floorY + 1, standZ - 2, Palette.sign(0), RaceStand.SIGN));
+
         List<String> summary = new ArrayList<>();
         summary.add(slot.name() + " (" + level.id() + "): a " + Math.round(loop.length()) + "-block loop, " + LAPS
                 + " laps, " + lap.size() + " checkpoints a lap, reference " + Math.round(refMs / 100.0) / 10.0 + "s");
         summary.add("track " + level.width() + " wide, tightest bend " + Math.round(minRadius(loop))
                 + " blocks round, " + Palette.id(level.ice()));
+        summary.add("a viewing stand at " + standX + " " + (floorY + 1) + " " + standZ);
         summary.add("seed " + GenSeed.shortHex(in.seed()) + ", " + work + " loop(s) drawn");
         return Plan.of(slot.id(), ALGO, in.seed(), half, palette, ops, signs,
                 List.of(new Box(half.minX(), iceY + 1, half.minZ(), half.maxX(), Math.min(half.maxY(), iceY + 4),

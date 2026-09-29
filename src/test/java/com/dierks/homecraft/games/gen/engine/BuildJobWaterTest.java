@@ -32,6 +32,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * between the stages (or in the middle of one) is just the next converge, giving exactly a clean
  * build's world; and a missing water block heals like any other block, as does water where a wall
  * should be.
+ *
+ * <p>And only a half with water is staged (the WP-D review's #6): a plan with no water, or a clear of a
+ * half with none, is written chunk by chunk as each is read (one chunk's writes held at a time), as
+ * before the Dropper; water found in a chunk stages the pass from there, and a caller that knows the
+ * half may hold a Dropper's pools stages it from its first chunk, so water the chunks' edge cuts off
+ * still goes before the wall that holds it; and while a person holds up a drain, no wall goes.
  */
 class BuildJobWaterTest {
 
@@ -50,9 +56,11 @@ class BuildJobWaterTest {
         }
     }
 
-    /** A world that remembers the order of its writes. */
+    /** A world that remembers the order of its writes, and of its chunk reads among them. */
     static final class LoggingWorld extends FakeWorld {
         final List<Write> log = new ArrayList<>();
+        /** "read" for a chunk snapshot, "write" for a block, in order. */
+        final List<String> events = new ArrayList<>();
 
         LoggingWorld() {
             super("games");
@@ -64,6 +72,13 @@ class BuildJobWaterTest {
             String was = blocks.getOrDefault(p, AIR);
             super.set(x, y, z, state);
             log.add(new Write(p, was, state));
+            events.add("write");
+        }
+
+        @Override
+        public ChunkView snapshot(int cx, int cz) {
+            events.add("read");
+            return super.snapshot(cx, cz);
         }
     }
 
@@ -251,6 +266,107 @@ class BuildJobWaterTest {
         assertEquals(3, w.log.size(), "the stray water drained, the wall written, the pool filled: " + w.log.size());
         assertTrue(w.log.get(0).drains() && !w.log.get(1).fills() && w.log.get(2).fills(), "in that order");
         assertFalse(BuildJob.fluid(w.at(wall.x(), wall.y(), wall.z())), "no water where the wall is");
+    }
+
+    // ---- staged only when there is water (the WP-D review's #6) ----------------------------------------
+
+    /** How many chunks {@code b} spans. */
+    private static int chunks(Box b) {
+        return ((b.maxX() >> 4) - (b.minX() >> 4) + 1) * ((b.maxZ() >> 4) - (b.minZ() >> 4) + 1);
+    }
+
+    @Test
+    void aHalfWithNoWaterIsWrittenChunkByChunkAsItIsRead() {
+        Slots.Def parkour = Slots.DAILY_PARKOUR_EASY;
+        Box half = parkour.half('A');
+        Plan p = GenKit.plan(parkour, half, 3, 1);
+        LoggingWorld w = new LoggingWorld();
+        BuildJob job = new BuildJob(w, half, p, BuildJob.Mode.CONVERGE);
+        assertFalse(job.staged(), "a plan with no water isn't staged");
+        run(job);
+        job.release();
+        assertTrue(job.done(), "built: " + job.error());
+        int firstWrite = w.events.indexOf("write");
+        long readsBefore = w.events.subList(0, firstWrite).stream().filter("read"::equals).count();
+        assertTrue(readsBefore < chunks(half), "its first chunk's blocks are written before the other chunks are read ("
+                + readsBefore + " of " + chunks(half) + " read): nothing but one chunk's writes is held");
+        assertFalse(job.staged(), "and it never was");
+        for (BlockOp op : p.ops()) {
+            assertEquals(p.blockOf(op), w.at(op.x(), op.y(), op.z()), "the half is exactly the plan");
+        }
+
+        BuildJob clear = new BuildJob(w, half, null, BuildJob.Mode.CONVERGE);
+        run(clear);
+        assertTrue(clear.done() && w.count(half) == 0, "cleared: " + clear.error());
+        assertFalse(clear.staged(), "clearing a half with no water isn't staged either");
+    }
+
+    @Test
+    void aPlanWithWaterIsStagedOverTheWholeHalf() {
+        Plan p = plan(6);
+        LoggingWorld w = new LoggingWorld();
+        BuildJob job = new BuildJob(w, HALF, p, BuildJob.Mode.CONVERGE);
+        assertTrue(job.staged(), "a Dropper's plan is staged from the start");
+        run(job);
+        job.release();
+        int firstWrite = w.events.indexOf("write");
+        long readsBefore = w.events.subList(0, firstWrite).stream().filter("read"::equals).count();
+        assertEquals(chunks(HALF), readsBefore, "every chunk is read before the first solid is written");
+    }
+
+    @Test
+    void waterFoundInAChunkStagesTheRestAndTheCallerCanSayItFromTheStart() {
+        // a wall in the first chunk read, and the water it holds in the next one (a pool the chunks' edge cuts)
+        Box half = HALF;
+        int y = half.minY() + 20;
+        int edge = (half.minX() >> 4 << 4) + 16; // the first x of the second chunk
+        LoggingWorld w = new LoggingWorld();
+        w.put(edge - 1, y, half.minZ() + 5, "minecraft:blue_stained_glass");
+        w.put(edge, y, half.minZ() + 5, "minecraft:water[level=0]");
+        BuildJob found = run(new BuildJob(w, half, null, BuildJob.Mode.CONVERGE));
+        assertTrue(found.done() && found.staged(), "water found in a chunk stages the pass from there on");
+        assertEquals(0, w.count(half), "and the half is cleared");
+
+        LoggingWorld told = new LoggingWorld();
+        told.put(edge - 1, y, half.minZ() + 5, "minecraft:blue_stained_glass");
+        told.put(edge, y, half.minZ() + 5, "minecraft:water[level=0]");
+        BuildJob hinted = new BuildJob(told, half, null, BuildJob.Mode.CONVERGE, true);
+        assertTrue(hinted.staged(), "a Dropper's slot or plot, cleared: staged from its first chunk");
+        run(hinted);
+        int drained = lastIndex(told.log, Write::drains);
+        int wall = firstIndex(told.log, x -> !BuildJob.fluid(x.was()));
+        assertTrue(drained >= 0 && drained < wall, "so the water in the second chunk goes before the wall in the first");
+        assertEquals(0, told.count(half), "and the half is cleared");
+    }
+
+    @Test
+    void theBodyWaitsWhileAPersonHoldsUpADrain() {
+        Plan p = plan(7);
+        LoggingWorld w = new LoggingWorld();
+        build(w, p);
+        w.log.clear();
+        BlockOp water = p.ops().stream().filter(op -> BuildJob.fluid(p.blockOf(op))).findFirst().orElseThrow();
+        Person swimmer = new Person(java.util.UUID.randomUUID(), "Sam", "games", water.x() + 0.5, water.y(),
+                water.z() + 0.5, null, null);
+        BuildJob clear = new BuildJob(w, HALF, null, BuildJob.Mode.CONVERGE, true);
+        BuildBudget b = new BuildBudget(() -> nanos += 1_000);
+        for (int i = 0; i < 400; i++) {
+            b.begin(BUDGET, false, 10);
+            clear.tick(b, BUDGET.chunkLoadsInFlight(), List.of(swimmer), now);
+            b.end();
+            now += 50;
+        }
+        assertFalse(clear.done(), "the drain next to the swimmer waits");
+        assertTrue(w.log.stream().allMatch(Write::drains), "and no wall or floor goes meanwhile: only drains ("
+                + w.log.stream().filter(x -> !x.drains()).count() + " other writes)");
+        assertTrue(w.log.size() > 0, "(the other water did drain)");
+        assertTrue(BuildJob.fluid(w.at(water.x(), water.y(), water.z())), "the held-up block is still water");
+        run(clear);
+        assertTrue(clear.done(), "once they are gone the clear finishes: " + clear.error());
+        assertEquals(0, w.count(HALF), "the half is empty");
+        int lastDrain = lastIndex(w.log, Write::drains);
+        int firstWall = firstIndex(w.log, x -> !BuildJob.fluid(x.was()));
+        assertTrue(lastDrain < firstWall, "every drain, the held-up one too, came before the first wall");
     }
 
     @Test

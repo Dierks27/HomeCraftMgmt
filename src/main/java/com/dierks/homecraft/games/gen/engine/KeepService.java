@@ -102,6 +102,8 @@ final class KeepService {
         // CLEAR
         String courseId;
         String courseGame;
+        /** The plot may hold a Dropper's water: the clear drains it all before any wall goes. */
+        boolean wet;
 
         PlotJob(Kind kind, int plot, String world, Box box, Consumer<String> report) {
             this.kind = kind;
@@ -115,7 +117,7 @@ final class KeepService {
         String pending() {
             String where = plot + "|" + world + "|" + KeptPlot.boxText(box);
             if (kind != Kind.KEEP) {
-                return "clear|" + where;
+                return "clear|" + where + (wet ? "|wet" : "");
             }
             return "keep|" + where + "|" + row.slot() + "|" + row.edition() + "|" + id + "|" + (fresh ? 1 : 0) + "|"
                     + (remade ? "1" : "0") + "|" + (name == null ? "" : name);
@@ -199,6 +201,7 @@ final class KeepService {
         }
         PlotJob c = new PlotJob(Kind.CLEAR, n, world, box, null);
         c.resumed = true;
+        c.wet = p[0].equals("keep") ? dropper(p.length >= 5 ? p[4] : null) : p.length >= 5 && p[4].equals("wet");
         queue.addFirst(c);
     }
 
@@ -275,6 +278,7 @@ final class KeepService {
         c.plan = j.plan;
         c.courseId = j.courseId;
         c.courseGame = j.courseGame;
+        c.wet = j.wet;
         return c;
     }
 
@@ -360,7 +364,7 @@ final class KeepService {
             }
         }
         j.stage = Stage.CONVERGE;
-        j.build = new BuildJob(port, j.box, null, BuildJob.Mode.CONVERGE);
+        j.build = new BuildJob(port, j.box, null, BuildJob.Mode.CONVERGE, j.wet);
     }
 
     private void startBuild(PlotJob j, WorldPort port) {
@@ -672,6 +676,7 @@ final class KeepService {
         j.report.accept("&cPlot " + j.plot + ": &7" + why);
         if (j.kind == Kind.KEEP && (j.stage == Stage.CONVERGE || j.stage == Stage.PLANNING)) {
             PlotJob c = new PlotJob(Kind.CLEAR, j.plot, j.world, j.box, j.report);
+            c.wet = j.def != null && j.def.dropper();
             try {
                 host.store().meta(GenAdminKeys.KEEP_PENDING, c.pending());
                 c.resumed = true;
@@ -1055,6 +1060,7 @@ final class KeepService {
         }
         PlotJob j = new PlotJob(Kind.CLEAR, n, p.world(), p.box(), report);
         j.courseId = p.courseId();
+        j.wet = dropper(p.slot());
         try {
             GamesDao.CourseRow row = host.store().course(p.courseId());
             j.courseGame = row == null ? Slots.GAME_TRIALS : row.game();

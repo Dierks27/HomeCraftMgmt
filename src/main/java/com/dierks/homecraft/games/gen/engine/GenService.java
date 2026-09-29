@@ -1352,7 +1352,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
             Step st = j.steps.get(j.stepIndex);
             try {
-                j.build = new BuildJob(port, s.half(st.which()), st.plan(), st.mode());
+                // a Dropper's half may hold its pools: drained before any wall goes, even when clearing
+                j.build = new BuildJob(port, s.half(st.which()), st.plan(), st.mode(), s.def.dropper());
             } catch (IllegalArgumentException e) {
                 fail(j, e.getMessage());
                 return;

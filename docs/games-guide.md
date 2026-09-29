@@ -1582,7 +1582,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 **How to play**
 
 1. You arrive on a lime ledge at the top of the first glass shaft. The sign says LEVEL 1 of 3 and Step off and fall into the WATER!
-2. The course screen's Start button says "Start - one practice drop first". After you start, your hotbar offers two things: Practice drop (not timed) and Go straight to the timed run. A practice drop is one free try of level 1. It isn't timed and nothing counts. It ends when you splash, when you land on something, or when you click Start timed run. Then you are back on the ledge.
+2. The course screen's Start button says "Start - practice drop optional". After you start, your hotbar offers two things: Practice drop (not timed) and Go straight to the timed run. A practice drop is one free try of level 1. It isn't timed and nothing counts. It ends when you splash, when you land on something, or when you click Start timed run. Then you are back on the ledge.
 3. Wait for the countdown: 3, 2, 1, Go! The clock starts on Go.
 4. Walk off the ledge. While you fall, steer through the holes in the coloured floors. Steering works best near the top.
 5. Splash into the water to clear the level: Level 2! of 3 - keep going! A moment later you are on the next ledge. There is no countdown there: the clock is still running, so step off when you are ready.

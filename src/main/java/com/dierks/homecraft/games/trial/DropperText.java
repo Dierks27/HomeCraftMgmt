@@ -60,9 +60,9 @@ public final class DropperText {
     /** The course screen's extra rule. */
     public static final String CLOCK_RULE = "The clock keeps running after a bonk.";
     /** The course screen's Start lore when a practice drop is offered. */
-    public static final String PRACTICE_ON_START = "&7You can have one practice drop first.";
+    public static final String PRACTICE_ON_START = "&7You can have one practice drop first, or skip it.";
     /** The course screen's Start NAME when a practice drop is offered (Bedrock shows names, not lore). */
-    public static final String START_WITH_PRACTICE = "&aStart &7- one practice drop first";
+    public static final String START_WITH_PRACTICE = "&aStart &7- practice drop optional";
     /** Any other course's Start name. */
     public static final String START = "&aStart";
 

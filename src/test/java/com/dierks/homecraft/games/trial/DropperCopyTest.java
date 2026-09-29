@@ -63,6 +63,11 @@ class DropperCopyTest {
         String name = DropperText.startName(DropperCourses.hand(), on);
         assertTrue(plain(name).startsWith("Start") && plain(name).contains("practice drop"),
                 "a dropper's Start names its practice drop, for Bedrock: " + name);
+        assertEquals("Start - practice drop optional", plain(name),
+                "the owner's words: the practice drop is offered, never required");
+        assertEquals("You can have one practice drop first, or skip it.", plain(DropperText.PRACTICE_ON_START),
+                "its lore says it can be skipped");
+        assertFalse(plain(name).contains("first"), "nothing in the NAME reads as if the practice drop comes first by rule");
         assertEquals(DropperText.START, DropperText.startName(DropperCourses.hand(), off),
                 "with warm-ups off there is no practice drop to name");
         assertEquals(DropperText.START, DropperText.startName(DropperCourses.asParkour(), on),

@@ -1144,7 +1144,7 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
    reroll fresh_dropper confirm` (and the same for Easy): `/hcm games gen status` shows both live
    within about 2 minutes; the Fresh Courses screen shows "Easy Dropper - 3 levels" and "Dropper - 5
    levels · Course code DROP-1".
-2. Open Easy Dropper's screen: the Start tile reads "Start - one practice drop first" (Bedrock too).
+2. Open Easy Dropper's screen: the Start tile reads "Start - practice drop optional" (Bedrock too).
    Start it: the hotbar shows Practice drop (not timed) and Go straight to the timed run.
    Take the practice drop: nothing is timed, and the splash puts you back on the ledge for the 3-2-1.
 3. Finish Easy Dropper on a tablet without sprinting, following the lights.

@@ -444,6 +444,13 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
     }
 
     @Override
+    public void resetMode(Body p, String sessionMode) {
+        if (sessionMode != null && sessionMode.equals(p.gameMode)) {
+            p.gameMode = "ADVENTURE";
+        }
+    }
+
+    @Override
     public void tell(Body p, String line) {
         p.messages.add(line);
     }

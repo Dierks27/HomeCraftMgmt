@@ -6,6 +6,7 @@ import com.dierks.homecraft.util.Text;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
@@ -45,6 +46,44 @@ public final class KitItems {
             item.setItemMeta(meta);
         }
         return item;
+    }
+
+    /**
+     * Put a kit item in {@code slot} without ever overwriting the player's own things (the Clubhouse
+     * review, #3): a non-kit item there (an auction win or a Mini delivered mid-session) moves to an
+     * empty storage slot first, to be banked at the session's end. With no empty slot the kit item
+     * isn't placed and their item stays (Leave game is also {@code /hcm leave}).
+     *
+     * @return whether the kit item is in {@code slot} now
+     */
+    public static boolean put(PlayerInventory inv, int slot, ItemStack kit) {
+        ItemStack there = inv.getItem(slot);
+        boolean own = there != null && !there.getType().isAir() && !isKit(there);
+        int to = moveTo(own, own ? inv.firstEmpty() : -1);
+        if (to == NO_ROOM) {
+            return false;
+        }
+        if (to >= 0) {
+            inv.setItem(to, there);
+        }
+        inv.setItem(slot, kit);
+        return true;
+    }
+
+    /** {@link #moveTo}: nothing of theirs to move. */
+    static final int STAYS_PUT = -2;
+    /** {@link #moveTo}: theirs is there and there is nowhere to move it. */
+    static final int NO_ROOM = -1;
+
+    /**
+     * Where the player's own item in a kit slot goes: {@link #STAYS_PUT} when the slot holds none of
+     * theirs, the first empty storage slot, or {@link #NO_ROOM}.
+     */
+    static int moveTo(boolean ownThere, int firstEmpty) {
+        if (!ownThere) {
+            return STAYS_PUT;
+        }
+        return firstEmpty >= 0 ? firstEmpty : NO_ROOM;
     }
 
     /** Whether the item is any game's kit item. */

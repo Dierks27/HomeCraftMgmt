@@ -668,20 +668,20 @@ public final class Clubhouse implements Game, ClubDoor {
             return;
         }
         kits.put(id, sig);
+        games().sessions().stripKit(p); // the kit only: anything delivered mid-session stays, banked at the end (#3)
         PlayerInventory inv = p.getInventory();
-        inv.clear();
         if (party) {
-            inv.setItem(0, KitItems.item(this, PARTY, Material.CAKE, ClubhouseText.KIT_PARTY,
+            KitItems.put(inv, 0, KitItems.item(this, PARTY, Material.CAKE, ClubhouseText.KIT_PARTY,
                     "&7Who's in, who's ready,", "&7and the host's Start."));
         }
-        inv.setItem(2, KitItems.item(this, RESULTS, Material.BOOK, ClubhouseText.KIT_RESULTS,
+        KitItems.put(inv, 2, KitItems.item(this, RESULTS, Material.BOOK, ClubhouseText.KIT_RESULTS,
                 "&7The last race's results."));
         if (live != null) {
-            inv.setItem(4, KitItems.item(this, WATCH, Material.SPYGLASS, ClubhouseText.KIT_WATCH,
+            KitItems.put(inv, 4, KitItems.item(this, WATCH, Material.SPYGLASS, ClubhouseText.KIT_WATCH,
                     "&7" + Text.plain(live.title()), "&7Fly round and see who leads.",
                     "&7/hcm play clubhouse brings you back."));
         }
-        inv.setItem(8, KitItems.item(this, LEAVE, Material.OAK_DOOR, ClubhouseText.KIT_LEAVE,
+        KitItems.put(inv, 8, KitItems.item(this, LEAVE, Material.OAK_DOOR, ClubhouseText.KIT_LEAVE,
                 "&7Click twice to go home.", "&7Your things come back."));
         inv.setHeldItemSlot(2);
     }
@@ -1108,14 +1108,18 @@ public final class Clubhouse implements Game, ClubDoor {
             return false;
         }
         gone(id, p);
-        p.getInventory().clear(); // the Clubhouse's kit goes; the race gives its own
+        // the Clubhouse's kit goes and the race gives its own, in its own slots: anything else (an auction
+        // win, a Mini that arrived here) is banked in the session's carry first and comes home (#3)
+        if (!games().sessions().bankExtras(p)) {
+            games().sessions().stripKit(p);
+        }
         return true;
     }
 
     @Override
     public void handBack(Player p, ClubVisits.Kind kind) {
         if (games().sessions().passTo(p, this, REF)) {
-            p.getInventory().clear();
+            games().sessions().stripKit(p); // the race's kit only (#3)
             toSpawn(p);
             welcome(p, kind, false, ClubhouseText.NO_GRID);
         } else {
@@ -1142,7 +1146,7 @@ public final class Clubhouse implements Game, ClubDoor {
         if (!games().sessions().passTo(p, this, REF)) {
             return false;
         }
-        p.getInventory().clear();
+        games().sessions().stripKit(p); // the race's kit only (#3)
         p.setFallDistance(0f);
         welcome(p, kind, false, line);
         visits.recheck(p.getUniqueId(), now());

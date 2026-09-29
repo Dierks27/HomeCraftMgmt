@@ -277,6 +277,13 @@ final class SessionCore<P, I> {
         /** Leave and remove the game vehicle they ride (a race boat), if any. */
         void removeGameVehicle(P p);
 
+        /**
+         * WP-CH: a game had put the player in {@code sessionMode} for their session (a Clubhouse
+         * watcher's SPECTATOR) and the session ends with nothing put back: if they are still in it,
+         * ADVENTURE again, as our own change (the Clubhouse review, #6).
+         */
+        void resetMode(P p, String sessionMode);
+
         void tell(P p, String line);
     }
 
@@ -303,6 +310,11 @@ final class SessionCore<P, I> {
         List<I> deathStash;
         /** Extras the database refused to bank: handed back right after the restore instead. */
         final List<I> unbanked = new ArrayList<>();
+        /**
+         * WP-CH: a game mode a game set for this session (a Clubhouse watcher's SPECTATOR), or
+         * {@code null} for the games' ADVENTURE. It lives and dies with the session.
+         */
+        String mode;
 
         Live(P player, UUID uuid, long token, String sid, String gameId, String ref, Place start, Hooks<P> hooks) {
             this.player = player;
@@ -746,6 +758,7 @@ final class SessionCore<P, I> {
                 || (reason == EndReason.STOP && port.stopping());
         boolean sync = !inPlace && (reason == EndReason.GAME_OFF || reason == EndReason.STOP);
         ownDismount(p, () -> port.removeGameVehicle(p));
+        land(s, reason); // WP-CH: a watcher comes down to a floor first
         if (port.dead(p)) {
             // Never restore a dead player: the row stays ACTIVE for the respawn (or the next join).
             port.stripKit(p);
@@ -760,6 +773,7 @@ final class SessionCore<P, I> {
             log.log(Level.SEVERE, "Games: could not read " + port.name(p) + "'s saved state (session " + s.sid
                     + ") - leaving them as they are", e);
             port.stripKit(p);
+            noRestore(s);
             live.remove(id);
             port.tell(p, SAFE_WITH_ADMIN);
             s.hooks.ended(p, reason);
@@ -770,6 +784,7 @@ final class SessionCore<P, I> {
             log.warning("Games: no saved state for " + port.name(p) + "'s game (session " + s.sid
                     + ") - their things are left as they are");
             port.stripKit(p);
+            noRestore(s);
             live.remove(id);
             s.hooks.ended(p, reason);
             port.tell(p, ENDED);
@@ -809,6 +824,7 @@ final class SessionCore<P, I> {
         port.stripKit(p);
         Place back = s.start != null && row.sessionWorld().equals(s.start.world()) ? s.start : port.spawn(row.sessionWorld());
         if (back == null) {
+            noRestore(s);
             live.remove(id);
             giveBackUnbanked(s);
             failed(p, row, null, "its world is gone");
@@ -818,6 +834,7 @@ final class SessionCore<P, I> {
         try {
             port.prepare(row); // never back into the Games world for a snapshot that can't be put on
         } catch (RuntimeException e) {
+            noRestore(s);
             live.remove(id);
             giveBackUnbanked(s);
             failed(p, row, e, "the saved state can't be read");
@@ -838,6 +855,9 @@ final class SessionCore<P, I> {
                     return;
                 }
                 if (!ok || !port.online(p) || !row.sessionWorld().equals(port.world(p))) {
+                    if (port.online(p)) {
+                        noRestore(s);
+                    }
                     live.remove(id);
                     giveBackUnbanked(s);
                     if (port.online(p)) {
@@ -862,6 +882,7 @@ final class SessionCore<P, I> {
             // Nothing has changed: the snapshot stays for an admin, the extras go to the carry.
             s.unbanked.addAll(bank(p, row));
             port.stripKit(p);
+            noRestore(s);
             live.remove(id);
             giveBackUnbanked(s);
             failed(p, row, e, "the saved state can't be read");
@@ -873,6 +894,7 @@ final class SessionCore<P, I> {
             restore.applyTo(p);
         } catch (RuntimeException e) {
             port.stripKit(p);
+            noRestore(s); // only if the restore didn't get as far as their mode (it goes first)
             live.remove(id);
             giveBackUnbanked(s);
             failed(p, row, e, "putting it back failed");
@@ -1065,6 +1087,88 @@ final class SessionCore<P, I> {
         s.ref = ref == null ? "" : ref;
         s.hooks = hooks;
         return true;
+    }
+
+    /**
+     * WP-CH (the Clubhouse review, #3): empty a session player's inventory mid-session for another
+     * game's kit without losing anything. Every item that isn't a kit item (an auction win or a Mini
+     * delivered mid-session) is banked in the row's carry first, exactly as at the session's end, and
+     * comes home with them; what the database refuses goes straight back into the inventory.
+     *
+     * @return whether it was done (false: no ACTIVE session with a row of its own, and nothing changed)
+     */
+    boolean bankExtras(P p) {
+        UUID id = port.id(p);
+        Live s = live.get(id);
+        if (s == null || s.phase != Session.Phase.ACTIVE) {
+            return false;
+        }
+        SavedState row;
+        try {
+            row = dao.loadState(id);
+        } catch (SQLException | RuntimeException e) {
+            log.log(Level.SEVERE, "Games: could not read " + port.name(p) + "'s saved state to keep their things", e);
+            return false;
+        }
+        if (row == null || !s.sid.equals(row.sessionId())) {
+            return false;
+        }
+        give(p, bank(p, row));
+        return true;
+    }
+
+    /**
+     * WP-CH: the game mode the game wants for the player's ACTIVE session ({@code "SPECTATOR"} while a
+     * Clubhouse watcher watches live; {@code "ADVENTURE"} or {@code null} is the games' usual). The
+     * game-mode guard keeps them in it for THIS session only, and every restore puts back their own.
+     *
+     * @return whether it was recorded (false: no ACTIVE session)
+     */
+    boolean mode(P p, String mode) {
+        Live s = live.get(port.id(p));
+        if (s == null || s.phase != Session.Phase.ACTIVE) {
+            return false;
+        }
+        s.mode = mode == null || "ADVENTURE".equals(mode) ? null : mode;
+        return true;
+    }
+
+    /** The game mode a game set for the player's session now, or {@code null} (the games' ADVENTURE, or no session). */
+    String mode(UUID player) {
+        Live s = live.get(player);
+        return s == null ? null : s.mode;
+    }
+
+    /** A session ends with nothing put back: out of a game's own mode, if they are still in it (#6). */
+    private void noRestore(Live s) {
+        String m = s.mode;
+        s.mode = null;
+        if (m != null) {
+            try {
+                port.resetMode(s.player, m);
+            } catch (RuntimeException e) {
+                log.log(Level.WARNING, "Games: could not put " + port.name(s.player) + " back in adventure mode", e);
+            }
+        }
+    }
+
+    /**
+     * A watcher (a session in a game's own mode) is somewhere a restore in place would be unsafe
+     * (inside terrain, in mid-air where they were flying): first to the session's start, a floor
+     * (the Clubhouse's arrival spot), unless the server is stopping (no teleport then) or someone
+     * else's teleport is taking them away (the Clubhouse review, #7).
+     */
+    private void land(Live s, EndReason reason) {
+        if (s.mode == null || s.start == null || reason == EndReason.TELEPORT || reason == EndReason.WORLD_CHANGE
+                || port.stopping() || !s.start.world().equals(port.world(s.player))) {
+            return;
+        }
+        try {
+            port.teleportNow(s.player, s.start);
+        } catch (RuntimeException e) {
+            log.log(Level.WARNING, "Games: could not bring " + port.name(s.player) + " down before putting their"
+                    + " things back", e);
+        }
     }
 
     /** Run a dismount the game makes itself, past the dismount guard and the teleport rule. */

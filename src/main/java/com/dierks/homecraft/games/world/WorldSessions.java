@@ -288,6 +288,33 @@ public final class WorldSessions {
     }
 
     /**
+     * Empty a session player's inventory for another game's kit (a session handed over), keeping
+     * everything that isn't a kit item: it is banked in the saved-state row's carry, as at the
+     * session's end, and comes home with them (the Clubhouse review, #3). Never {@code clear()} a
+     * session inventory: an auction win or a Mini can arrive in it mid-session.
+     *
+     * @return whether it was done (false: no ACTIVE session; nothing changed)
+     */
+    public boolean bankExtras(Player player) {
+        if (player == null || !live()) {
+            return false;
+        }
+        boolean[] done = {false};
+        port().safely("keeping a player's things", () -> done[0] = core().bankExtras(player));
+        return done[0];
+    }
+
+    /**
+     * Take the kit items (and only those) off a player: the inventory, the cursor, the crafting grid
+     * and the ender chest. What else they hold stays, for the session's end to bank.
+     */
+    public void stripKit(Player player) {
+        if (player != null) {
+            port().safely("taking a kit off", () -> BukkitStateAdapter.stripKit(player));
+        }
+    }
+
+    /**
      * Put a session player in {@code mode} (a Clubhouse watcher's SPECTATOR, and ADVENTURE again), as
      * the session's own change: the game-mode guard keeps them in it for this session only, and every
      * way out puts back the mode they came in with (it is in their saved state).

@@ -682,16 +682,24 @@ public final class KitGuardListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onFlight(PlayerToggleFlightEvent e) {
         Player p = e.getPlayer();
-        if (!e.isFlying() || !playing(p) || p.getGameMode() == GameMode.SPECTATOR) { // WP-CH: a watcher flies
+        if (!groundsFlight(e.isFlying(), playing(p), p.getGameMode())) { // WP-CH: a watcher flies
             return;
         }
         e.setCancelled(true);
         port.later(1, () -> {
-            if (playing(p) && p.getGameMode() != GameMode.SPECTATOR) {
+            if (groundsFlight(true, playing(p), p.getGameMode())) {
                 p.setFlying(false);
                 p.setAllowFlight(false);
             }
         });
+    }
+
+    /**
+     * Whether a player taking off is grounded: a session player, unless they are in spectator mode (a
+     * Clubhouse watcher, WP-CH: flying is how they watch, and the session keeps that mode).
+     */
+    static boolean groundsFlight(boolean takingOff, boolean playing, GameMode mode) {
+        return takingOff && playing && mode != GameMode.SPECTATOR;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

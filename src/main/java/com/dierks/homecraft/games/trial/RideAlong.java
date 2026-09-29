@@ -304,11 +304,11 @@ public final class RideAlong {
 
             @Override
             public void kit(Player rider, String driverName) {
+                t.sessions().stripKit(rider); // the kit only: never their things (the Clubhouse review, #3)
                 PlayerInventory inv = rider.getInventory();
-                inv.clear();
-                inv.setItem(4, KitItems.item(t, "ride", Material.OAK_BOAT, "&bRiding with " + driverName
+                KitItems.put(inv, 4, KitItems.item(t, "ride", Material.OAK_BOAT, "&bRiding with " + driverName
                         + " &7- hold on tight!", "&7You're in the back seat.", "&7Your ride isn't timed or counted."));
-                inv.setItem(8, KitItems.item(t, "leave", Material.OAK_DOOR, "&cLeave game &7- the ride goes on",
+                KitItems.put(inv, 8, KitItems.item(t, "leave", Material.OAK_DOOR, "&cLeave game &7- the ride goes on",
                         "&7Click twice to go home.", "&7Your things come back."));
                 inv.setHeldItemSlot(4);
             }

@@ -231,6 +231,9 @@ public final class CupDao {
             if (!problems.isEmpty()) {
                 throw new Unsound("the Weekly Cup " + key.ref() + " would be paid wrongly: " + String.join("; ", problems));
             }
+            // Every word is worked out before the first write, so nothing but SQL runs between the
+            // first write and the commit.
+            List<Notice> notices = notices(key, plan, words, now);
             try (PreparedStatement ps = c.prepareStatement("INSERT INTO cup_settlements(course, week, settled_at, "
                     + "outcome, pool, payouts) VALUES(?,?,?,?,?,?)")) {
                 ps.setString(1, key.course());
@@ -245,31 +248,42 @@ public final class CupDao {
                 String detail = CupText.payoutDetail(l, courseName);
                 tokens.change(l.player(), l.tokens(), l.kind().source().name(), plain(detail), now);
             }
-            List<Notice> notices = new ArrayList<>();
-            if (words != null) {
-                for (CupPayout l : plan.lines()) {
-                    String line = words.line(plan, l);
-                    if (line == null || line.isBlank()) {
-                        continue;
-                    }
-                    String pref = ChanceRounds.NOTICE + now + "." + key.week() + "."
-                            + Integer.toHexString((key.course() + line).hashCode());
-                    try (PreparedStatement ps = c.prepareStatement("INSERT INTO game_prefs(player, pref, value) "
-                            + "VALUES(?,?,?) ON CONFLICT(player, pref) DO UPDATE SET value = excluded.value")) {
-                        ps.setString(1, l.player().toString());
-                        ps.setString(2, pref);
-                        ps.setString(3, line);
-                        ps.executeUpdate();
-                    }
-                    notices.add(new Notice(l.player(), pref, line));
+            for (Notice n : notices) {
+                try (PreparedStatement ps = c.prepareStatement("INSERT INTO game_prefs(player, pref, value) "
+                        + "VALUES(?,?,?) ON CONFLICT(player, pref) DO UPDATE SET value = excluded.value")) {
+                    ps.setString(1, n.player().toString());
+                    ps.setString(2, n.key());
+                    ps.setString(3, n.line());
+                    ps.executeUpdate();
                 }
             }
             try (PreparedStatement ps = c.prepareStatement("DELETE FROM hcm_meta WHERE key = ?")) {
                 ps.setString(1, layoutKey(key));
                 ps.executeUpdate();
             }
-            return new Settled(plan, List.copyOf(notices));
+            return new Settled(plan, notices);
         });
+    }
+
+    /**
+     * Each entrant's line for {@code plan} ({@code words}), with the {@code game_prefs} key it is kept
+     * under: the games' queued-notice prefix, so {@code GamesService} says it at their next join.
+     */
+    private static List<Notice> notices(CupKey key, CupPlan plan, Words words, long now) {
+        List<Notice> out = new ArrayList<>();
+        if (words == null) {
+            return out;
+        }
+        for (CupPayout l : plan.lines()) {
+            String line = words.line(plan, l);
+            if (line == null || line.isBlank()) {
+                continue;
+            }
+            String pref = ChanceRounds.NOTICE + now + "." + key.week() + "."
+                    + Integer.toHexString((key.course() + line).hashCode());
+            out.add(new Notice(l.player(), pref, line));
+        }
+        return List.copyOf(out);
     }
 
     /** Forget a queued line the player has now read ({@link Notice#key()}). */
@@ -476,7 +490,8 @@ public final class CupDao {
         }
     }
 
-    private static void check(String key) {
+    /** Refuses any key outside {@value #META}. */
+    static void check(String key) {
         if (key == null || !key.startsWith(META) || key.length() == META.length()) {
             throw new IllegalArgumentException("the Weekly Cup only keeps keys under " + META + ": " + key);
         }

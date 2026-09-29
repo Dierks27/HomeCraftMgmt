@@ -706,6 +706,31 @@ A fall height must be under the course's lowest point (the start, a checkpoint o
 or every run would go straight back, and not under the world's floor, where no run ever gets. A
 start, checkpoint or finish at or under the fall height is refused too.
 
+<!-- ---- cup (WP-C) ---- -->
+#### The Weekly Cup
+
+A course can run a **Weekly Cup**: a player pays a small entry once per course per week
+(`games.cup.entry`, 5 tokens: "Enter this week's Cup: 5 tokens. Best time wins the pool."), and
+their best counted time that week is their Cup time. Warm-ups, practice drops, test runs and runs
+that didn't count never set one. The course screen and tile show the pool live ("Cup pool: 35
+tokens · 5 in"). At the week's rollover (the quests' week start at 04:00, when Fresh Courses
+change) the pool is shared by Cup time: 70/30 between two, 50/30/20 among three or more, rounded
+down with the rest to 1st. It is settled once, and a rollover the server was down for is settled at
+the next start. The server keeps nothing: the pool is every entry, plus `games.cup.server_topup`
+(10) only when 2 or more are in. A lone entrant, fewer than 2 Cup times, or a course deleted,
+re-made or closed mid-week gets every entry back, with the reason. Cup prizes aren't under the
+daily skill caps: it's the players' own pool, and a cap would destroy tokens. Nothing in it is
+chance, so Take a break's chance rules don't apply; `/hcm play cup off` hides it for a player.
+Fresh parkour, Sky Rings, Ice Boat and Dropper courses run one by default (while Fresh Courses
+change once a week); a hand-built course only after `/hcm games cup on <course>`. Admins have
+`/hcm games cup status [course]`, `settle <course> confirm` and `void <course> confirm`.
+
+**For the owner:** an entry pool can mean the youngest players pay into a pool the oldest win.
+It is small, opt-in per player and refunded when a player is alone. To switch the Cup off
+server-wide, set `games.cup.enabled: false` and `/hcm reload`: nobody can enter, and Cups already
+paid into still finish their week and pay out or refund.
+<!-- ---- /cup ---- -->
+
 ### Mini golf
 
 Mini golf in the Games world, where **your Mini is the ball**. Each open course is its own tile

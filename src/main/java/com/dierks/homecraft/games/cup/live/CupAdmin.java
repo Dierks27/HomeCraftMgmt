@@ -20,6 +20,7 @@ import org.bukkit.command.CommandSender;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.logging.Level;
@@ -42,6 +43,14 @@ import java.util.logging.Level;
 final class CupAdmin implements GameAdmin {
 
     static final List<String> VERBS = List.of("status", "settle", "void", "on", "off", "default");
+
+    /**
+     * The order {@code status <course>} lists a Cup's entrants in: Cup times first, fastest first as
+     * the places go ({@link CupRules#BY_CUP_TIME}), then those with no Cup time yet in entry order.
+     * ({@link CupEntry#NO_TIME} is -1, so the Cup-time order alone would put them first.)
+     */
+    static final Comparator<CupEntry> STANDINGS = Comparator.comparing((CupEntry e) -> !e.hasTime())
+            .thenComparing((a, b) -> a.hasTime() ? CupRules.BY_CUP_TIME.compare(a, b) : CupRules.BY_ENTRY.compare(a, b));
 
     private final WeeklyCup cup;
 
@@ -139,9 +148,8 @@ final class CupAdmin implements GameAdmin {
             sender.sendMessage(Text.of("&6Weekly Cup on " + name + " &7(" + id + ") - " + switchState(c) + "; "
                     + state(c, v)));
         }
-        List<CupEntry> entries = desk.dao().entries(key);
-        entries = new ArrayList<>(entries);
-        entries.sort(CupRules.BY_CUP_TIME.thenComparing(CupRules.BY_ENTRY));
+        List<CupEntry> entries = new ArrayList<>(desk.dao().entries(key));
+        entries.sort(STANDINGS);
         int place = 0;
         for (CupEntry e : entries) {
             String who = holder(e);

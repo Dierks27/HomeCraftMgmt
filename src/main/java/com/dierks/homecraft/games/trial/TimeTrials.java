@@ -1409,9 +1409,9 @@ public final class TimeTrials implements Game {
             case COUNTED -> {
                 counted = finishedRun(run, ms, s);
                 summary = TrialFinish.settle(verdict, counted, ledger(p, run, s, ms));
+                CupLink.finished(games(), p, run.course, ms, verdict, run.warmup); // Weekly Cup: counted, timed runs only
             }
         }
-        CupLink.finished(games(), p, run.course, ms, verdict, run.warmup); // Weekly Cup: counted, timed runs only
         Long best = verdict.counts() ? bestOn(p, board(run.course)) : null;
         Daily daily = tag == null ? null : new Daily(board(run.course), summary.stars(), summary.weekStars(),
                 tag.goldMs(), tag.silverMs(), GenCopy.words(tag), code);

@@ -90,17 +90,23 @@ public final class CupWords {
     }
 
     /**
-     * What a course's tile adds to its NAME: " · in the Cup" once the viewer is in, the pool while
-     * others are, else " · Weekly Cup"; empty when the Cup isn't shown.
+     * What a course's tile adds to its NAME, the key facts for Bedrock (which shows lore only on
+     * tap-and-hold): " · in the Cup, pool 35" once the viewer is in; else what it costs, and the pool
+     * once anyone is in (" · Cup: 5 tokens, pool 35"), or only the pool while entries are closed;
+     * empty when the Cup isn't shown.
      */
     public static String tileSuffix(CupDesk.View v) {
         if (v == null || !v.shown()) {
             return "";
         }
+        String pool = "pool " + v.pool().tokens();
         if (v.in()) {
-            return " &6· in the Cup";
+            return " &6· in the Cup, " + pool;
         }
-        return v.pool().in() > 0 ? " &6· Cup pool " + v.pool().tokens() : " &6· Weekly Cup";
+        if (!v.open()) {
+            return " &6· Cup " + pool;
+        }
+        return " &6· Cup: " + CupText.tokens(v.fee()) + (v.pool().in() > 0 ? ", " + pool : "");
     }
 
     /** What a course's tile adds to its lore: the prompt (or that you're in) and the pool. */

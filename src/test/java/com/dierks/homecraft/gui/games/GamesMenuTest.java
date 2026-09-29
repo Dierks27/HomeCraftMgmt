@@ -100,6 +100,30 @@ class GamesMenuTest {
     }
 
     @Test
+    void theTogetherTabIsAtSevenAndShowsOnlyOnceItHasATile() {
+        // EVENTS-DROPPER-SPEC §A.6: row 0 is 0 balance, 2-7 the tabs, 8 an invite
+        assertEquals(2, GamesMenu.tabSlot(null), "All");
+        assertEquals(3, GamesMenu.tabSlot(Game.Tab.LUCK), "Luck");
+        assertEquals(4, GamesMenu.tabSlot(Game.Tab.CABINETS), "Cabinets");
+        assertEquals(5, GamesMenu.tabSlot(Game.Tab.COURSES), "Courses");
+        assertEquals(6, GamesMenu.tabSlot(Game.Tab.GOLF), "Golf");
+        assertEquals(7, GamesMenu.tabSlot(Game.Tab.TOGETHER), "Together takes the free slot 7");
+        java.util.Set<Integer> seen = new java.util.HashSet<>();
+        for (int slot : GamesMenu.TAB_SLOTS) {
+            assertTrue(slot > 0 && slot < 8, slot + " stays clear of the balance (0) and the invite (8)");
+            assertTrue(seen.add(slot), slot + " holds one tab");
+        }
+        assertFalse(GamesMenu.togetherShown(0, null), "with Race Night and Falling Floors off, slot 7 is as it was");
+        assertFalse(GamesMenu.togetherShown(0, Game.Tab.COURSES), "on another tab too");
+        assertTrue(GamesMenu.togetherShown(1, null), "one tile shows the tab");
+        assertTrue(GamesMenu.togetherShown(0, Game.Tab.TOGETHER), "and a viewer on it keeps it");
+        assertEquals(0, GamesMenu.counts(List.of(tile(Game.Tab.GOLF, 14, 0))).get(Game.Tab.TOGETHER),
+                "an empty Together tab counts 0, never null");
+        assertEquals(Game.Tab.COURSES, Game.Tab.of(com.dierks.homecraft.games.GameKind.TRIAL),
+                "no kind maps to Together: a game picks it for its tiles");
+    }
+
+    @Test
     void eachTabIsCountedAndEmptyTabsCountZero() {
         Map<Game.Tab, Integer> counts = GamesMenu.counts(List.of(tile(Game.Tab.LUCK, 0, 0),
                 tile(Game.Tab.LUCK, 1, 0), tile(Game.Tab.GOLF, 14, 0)));

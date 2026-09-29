@@ -1897,6 +1897,15 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     @Override
+    public Box half(GenTag tag) {
+        if (tag == null) {
+            return null;
+        }
+        SlotState s = slots.get(tag.holder());
+        return s == null ? null : s.half(tag.half());
+    }
+
+    @Override
     public String closedLine(String courseId) {
         SlotState s = courseId == null ? null : slots.get(courseId.trim().toLowerCase(Locale.ROOT));
         if (s == null) {

@@ -2001,3 +2001,84 @@ games:
       area: [4096, 128, 5376]
       # How many plots there are.
       max_plots: 24
+  # ---- race_night ----
+  # Race Night: boat races for everyone at once, at set times or when an admin starts one
+  # (/hcm games event start). Three short races on one track, points for everyone in every race.
+  # Free to enter. The server gives small token prizes (at most prize_events_per_week nights a week).
+  # Ships OFF: turn on the Ice Boat Fresh course (games.fresh.slots.fresh_boat) first - it is the
+  # default track and has a viewing stand built in.
+  race_night:
+    # false = no Race Night.
+    enabled: false
+    # When it runs: "<days> <HH:mm>" in clock.time_zone, like "FRI 19:00", "SAT,SUN 15:00",
+    # "DAILY 18:30", "WEEKDAYS 17:00" or "WEEKENDS 10:30". [] = only when an admin starts one.
+    schedule: ["FRI 19:00"]
+    # auto = take turns among the tracks it can race on; or a boat course's id.
+    course: auto
+    # Races a night, 1-5 (more than 1 needs a track with a viewing stand).
+    races: 3
+    # Laps a race: 0 = the course's own; 1-5 on a loop track.
+    laps: 0
+    # The heads-up in chat this many minutes before the start (0 = none).
+    announce_minutes: 30
+    # Joining opens this many minutes before a scheduled start...
+    join_minutes: 10
+    # ... and before one an admin starts.
+    admin_join_minutes: 5
+    # Fewer racers than this at the start calls the night off.
+    min_racers: 2
+    # The most racers (2-12), also limited by the track's starting grid.
+    max_racers: 8
+    # A race ends this many seconds after its first finisher...
+    finish_window_seconds: 60
+    # ... or after this many minutes.
+    max_race_minutes: 4
+    # Seconds on the stand between races.
+    break_seconds: 20
+    # Free warm-up laps before the grid, in seconds (0 = none). Racers can tap Ready to skip it; the
+    # grid waits for the time to run out or for everyone to be ready.
+    warmup_seconds: 180
+    # Points by place in each race.
+    points: [10, 8, 6, 5, 4, 3, 2]
+    # Points for a finisher beyond that list.
+    finish_points: 2
+    # Points for anyone still racing when a race ends.
+    still_racing_points: 1
+    # Tokens for the night's 1st, 2nd and 3rd (each 0-10). 2nd needs 3 racers, 3rd needs 4.
+    prizes: [5, 3, 2]
+    # Tokens for everyone else who finished a race (0-2).
+    finisher_prize: 1
+    # Nights a week that pay tokens, server-wide (0-7). Later nights that week are just for fun.
+    prize_events_per_week: 3
+    # month = points also go on a monthly season board; off = no season board.
+    season: month
+    # Watchers who wander further than this from the viewing stand are put back.
+    stand_radius: 4
+  # ---- falling_floors ----
+  # Falling Floors: every block you step on falls away. Last one standing wins - or play solo.
+  # Three glass floors in a box of its own, with a new shape every week. No TNT, no explosions.
+  falling_floors:
+    # Ships OFF. true + /hcm reload to open it.
+    enabled: false
+    # The box's corner (x y z; x and z a multiple of 16). It is 48 x 40 x 48 and must stay 32 blocks
+    # from every Fresh Courses area and the kept courses, and 16 from hand-built courses.
+    origin: [5376, 176, 4352]
+    # Ticks a stepped-on block stays red before it falls (6-20; 20 ticks is a second).
+    fade_ticks: 10
+    # Ready players that start a round at once.
+    min_players: 2
+    # The most players in the arena (2-16).
+    max_players: 12
+    # Whether a player alone can play a solo round ("how long can you last?").
+    solo: true
+    # After this many seconds the edges fall in, so every round ends.
+    round_seconds: 180
+    # Blocks the reset between rounds puts back each tick.
+    reset_blocks_per_tick: 400
+    # Tokens for the first full round of the day.
+    daily_reward: 1
+    # Solo seconds for the three milestones, and the tokens each pays (once ever).
+    milestones: [30, 60, 120]
+    milestone_rewards: [1, 2, 3]
+    # Most tokens Falling Floors pays a player per day.
+    daily_cap: 3

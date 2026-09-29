@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games;
 
+import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
@@ -43,6 +44,16 @@ public interface GeneratedCourses {
 
     /** Whether block (x, y, z) of {@code world} is inside a Fresh Courses half (anyone's edits are refused there). */
     boolean inArea(String world, int x, int y, int z);
+
+    /**
+     * The half the layout {@code tag} names stands in (its slot's, or for a recalled course its
+     * Classics slot's, {@code tag.half()}), or {@code null} when the engine doesn't know the slot or
+     * isn't installed. Race Night derives Fresh Boat's viewing stand from it (EVENTS-DROPPER-SPEC
+     * §A.4.2): the half's centre, 5 above the start, for a boat layout of algo 2 or later.
+     */
+    default Box half(GenTag tag) {
+        return null;
+    }
 
     // ---- what a finish pays (games.fresh): the shipped values until the engine says otherwise ----
 

@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -63,6 +64,8 @@ class GeneratedCoursesTest {
         assertEquals("&7Easy Parkour is closed for now.", none.closedLine("fresh_parkour_easy"),
                 "a closed slot is named");
         assertEquals("&7That course is closed for now.", none.closedLine("mystery"), "anything else isn't");
+        assertNull(none.half(TAG), "no engine knows no half (Race Night then has no Fresh stand)");
+        assertNull(none.half(null), "nor for no tag");
     }
 
     @Test

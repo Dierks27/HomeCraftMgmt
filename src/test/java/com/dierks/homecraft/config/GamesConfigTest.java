@@ -173,7 +173,7 @@ class GamesConfigTest {
         List<String> ids = GameCatalog.SPECS.stream().map(GameSpec::id).toList();
         assertEquals(List.of("ore_slots", "twenty_one", "wheel", "higher_lower", "coin_flip", "creeper_sweeper",
                 "ore_merge", "snake", "mini_match", "simon_says", "whack_a_zombie", "connect_four", "tic_tac_toe",
-                "trials", "golf", "fresh_courses"), ids);
+                "trials", "golf", "fresh_courses", "race_night", "falling_floors"), ids);
         assertEquals(5, GameCatalog.SPECS.stream().filter(s -> s.kind() == GameKind.CHANCE).count(),
                 "five games of chance");
         for (String reserved : GameCatalog.RESERVED) {
@@ -277,6 +277,15 @@ class GamesConfigTest {
         clamps.put("fresh.budget.blocks_per_tick", 0);
         clamps.put("fresh.stars.gold.hard", 0.5);
         clamps.put("fresh.rewards.clear_daily.fresh_tiny_golf", 500);
+        clamps.put("race_night.max_racers", 40);
+        clamps.put("race_night.min_racers", 20);
+        clamps.put("race_night.prizes", List.of(5, 3, 20));
+        clamps.put("race_night.finisher_prize", 5);
+        clamps.put("race_night.prize_events_per_week", 9);
+        clamps.put("race_night.warmup_seconds", 9_999);
+        clamps.put("falling_floors.fade_ticks", 2);
+        clamps.put("falling_floors.max_players", 30);
+        clamps.put("falling_floors.origin", List.of(5377, 176, 4352));
         for (Map.Entry<String, Object> c : clamps.entrySet()) {
             Map<String, Object> games = shipped();
             put(games, "enabled", true);
@@ -289,6 +298,54 @@ class GamesConfigTest {
             assertTrue(parsed.enabled(), key + ": a clamp is not junk, the games stay on");
             assertEquals(Set.of(), parsed.unreadable(), key + ": a clamp closes nothing");
         }
+    }
+
+    @Test
+    void raceNightAndFallingFloorsShipOffAndReadTheirOwnBlocks() throws Exception {
+        // EVENTS-DROPPER-SPEC §A.10 and §B.3.5, plus the owner's warm-up (D3)
+        GamesConfig.Parsed shipped = GamesConfig.parse(shipped(), w -> { }, null);
+        com.dierks.homecraft.games.event.RaceNightSettings rn =
+                shipped.settings(com.dierks.homecraft.games.event.RaceNight.SPEC);
+        assertFalse(rn.enabled(), "Race Night ships off");
+        assertEquals(List.of("FRI 19:00"), rn.schedule(), "Fridays at 7:00 PM");
+        assertTrue(rn.autoCourse(), "takes turns among the raceable tracks");
+        assertEquals(List.of(5, 3, 2), rn.prizes(), "the judged prizes, not D1's 15/10/5");
+        assertEquals(1, rn.finisherPrize(), "and 1 for every other finisher");
+        assertEquals(3, rn.prizeEventsPerWeek(), "at most 3 prize nights a week");
+        assertEquals(180, rn.warmupSeconds(), "a shared 3-minute warm-up before the grid");
+        assertTrue(rn.seasonOn(), "a monthly season board");
+        com.dierks.homecraft.games.arena.FallingFloorsSettings ff =
+                shipped.settings(com.dierks.homecraft.games.arena.FallingFloors.SPEC);
+        assertFalse(ff.enabled(), "Falling Floors ships off");
+        assertEquals(com.dierks.homecraft.games.arena.rules.RoundSettings.defaults(), ff.round(),
+                "its round knobs are the pure rules' shipped ones");
+        assertEquals(com.dierks.homecraft.games.arena.rules.ArenaScoring.Rewards.defaults(), ff.rewards(),
+                "and its rewards");
+        assertEquals("x 5376..5423, y 176..215, z 4352..4399", ff.box().describe(), "the box of §B.3.2");
+
+        for (Map.Entry<String, Object> junk : Map.<String, Object>of("race_night.season", "weekly",
+                "race_night.course", "Ice Boat!", "race_night.prizes", List.of(5, 3),
+                "falling_floors.solo", "sometimes", "falling_floors.milestones", List.of(60, 30, 120)).entrySet()) {
+            Map<String, Object> games = shipped();
+            put(games, "enabled", true);
+            put(games, junk.getKey(), junk.getValue());
+            List<String> warns = new ArrayList<>();
+            GamesConfig.Parsed parsed = GamesConfig.parse(games, warns::add, null);
+            String game = junk.getKey().startsWith("race_night") ? "race_night" : "falling_floors";
+            assertEquals(Set.of(game), parsed.unreadable(), junk + " closes " + game + " only: " + warns);
+            assertEquals(1, warnsNaming(warns, "games." + junk.getKey()), junk + ": " + warns);
+            assertTrue(parsed.enabled(), junk + ": the other games stay on");
+        }
+        Map<String, Object> games = shipped();
+        put(games, "race_night.course", "Fresh_Boat");
+        put(games, "falling_floors.origin", List.of(5376, 400, 4352));
+        List<String> warns = new ArrayList<>();
+        GamesConfig.Parsed parsed = GamesConfig.parse(games, warns::add, null);
+        assertEquals("fresh_boat", parsed.settings(com.dierks.homecraft.games.event.RaceNight.SPEC).course(),
+                "a course id is read in lower case");
+        assertEquals(List.of(5376, 273, 4352), parsed.settings(com.dierks.homecraft.games.arena.FallingFloors.SPEC)
+                .origin(), "the box is kept inside the world's heights");
+        assertEquals(1, warns.size(), "one WARN, for the height: " + warns);
     }
 
     @Test

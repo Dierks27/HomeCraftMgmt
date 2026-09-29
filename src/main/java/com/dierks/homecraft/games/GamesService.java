@@ -713,9 +713,11 @@ public final class GamesService {
 
     /**
      * Tell a player something that happened while they weren't looking (a round finished for
-     * them): now if they are online and {@code queue} is false, else kept for their next join.
+     * them, a Race Night prize waiting, a Weekly Cup paid out or called off): now if they are online
+     * and {@code queue} is false, else kept for their next join. {@code line} may carry colour codes
+     * ({@code &e...}). Public since EVENTS-DROPPER-SPEC C1, for the games outside this package.
      */
-    void notice(UUID player, String line, boolean queue) {
+    public void notice(UUID player, String line, boolean queue) {
         Player p = queue ? null : host.online(player);
         if (p != null) {
             p.sendMessage(Text.of(line));

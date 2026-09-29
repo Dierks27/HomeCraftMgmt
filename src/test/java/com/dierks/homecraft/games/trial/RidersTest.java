@@ -475,7 +475,8 @@ class RidersTest {
     void theRiderIsOffTheNoPushTeamAndCollidableAgainOnEveryEndOfTheRide() {
         riding();
         assertTrue(port.noPush.contains(kid.id), "on the no-push team for the ride");
-        assertTrue(port.notCollidable.contains(kid.id), "and not collidable: a racing boat can't hit them (#4)");
+        assertTrue(port.notCollidable.contains(kid.id),
+                "and not collidable (#4; the stand rule keeps them off the track, #15)");
         riders.sessionEnded(dad.id); // Dad finishes: the ride is over and the rider is sent home
         riders.sessionEnded(kid.id); // then the framework ends the rider's own session
         assertFalse(port.noPush.contains(kid.id), "off the no-push team after the driver's finish (#2)");

@@ -98,8 +98,9 @@ public final class Riders {
         void noPush(UUID id, String name, boolean on);
 
         /**
-         * Whether the player can be pushed (and so collide with a racing boat): off for a rider for the
-         * whole ride, back on at every end (the Clubhouse review, #4). Nothing for a player gone.
+         * Whether the player can be pushed: off for a rider for the whole ride, back on at every end (the
+         * Clubhouse review, #4). Nothing for a player gone. A server flag: a boat a player drives is moved
+         * on their client, so it doesn't stop a racing boat; {@link #onStand} keeps riders off the track.
          */
         void collidable(UUID id, boolean on);
 

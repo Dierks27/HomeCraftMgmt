@@ -1123,7 +1123,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             Throwable error = null;
             try {
                 made = heal ? p.rederive(in, tag) : p.plan(in);
-                refused = PlanCheck.generator(p, made, in); // §3.3 step 2, with today's settings
+                refused = PlanCheck.generator(p, made, in, heal); // §3.3 step 2, with today's settings
             } catch (Throwable e) {
                 error = e;
             }

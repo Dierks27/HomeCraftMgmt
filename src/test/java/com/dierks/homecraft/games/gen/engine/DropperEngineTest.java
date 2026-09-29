@@ -92,8 +92,31 @@ class DropperEngineTest {
         assertEquals(List.of(), PlanCheck.problems(p, Slots.FRESH_DROPPER, p.half()), "a real dropper plan passes");
         assertTrue(PlanCheck.problems(p, Slots.DAILY_PARKOUR_EASY, p.half()).stream()
                 .anyMatch(s -> s.contains("water")), "the same blocks as anyone else's plan are refused for the water");
-        assertEquals(List.of(), PlanCheck.generator(new DropperPlanner(), p, null),
+        assertEquals(List.of(), PlanCheck.generator(new DropperPlanner(), p, input(Slots.FRESH_DROPPER, "EEMMH", 1)),
                 "the dropper's own validator is run on the planner thread, and it passes");
+    }
+
+    private static PlanInput input(Slots.Def slot, String mix, int n) {
+        long day = 20_000 + n;
+        return new PlanInput(slot, slot.half('A'), 'A', day, 0, GenSeed.seed(0x5EC12E7L, day, slot.id(), 0), mix, 6, 0,
+                null);
+    }
+
+    @Test
+    void aPlanIsProvenAgainstTheMixItWasAskedForNotTheMixItsPoolsName() {
+        Plan hard = plan(Slots.EASY_DROPPER, "HHH", 1);
+        PlanInput easy = input(Slots.EASY_DROPPER, "EEE", 1);
+        assertEquals(List.of(), PlanCheck.problems(hard, Slots.EASY_DROPPER, hard.half()),
+                "(the shared checks can't tell: it is a sound dropper for this half)");
+        List<String> refused = PlanCheck.generator(new DropperPlanner(), hard, easy);
+        assertFalse(refused.isEmpty(), "but an HHH plan for a slot asked to make EEE is refused");
+        assertTrue(refused.stream().anyMatch(r -> r.contains("pool")), "for its pools, which aren't Easy's: " + refused);
+        assertEquals(List.of(), PlanCheck.generator(new DropperPlanner(), hard, input(Slots.EASY_DROPPER, "hhh", 1)),
+                "the mix it was asked for passes, however it is written");
+        assertFalse(PlanCheck.generator(new DropperPlanner(), plan(Slots.FRESH_DROPPER, "EEMMH", 3),
+                input(Slots.FRESH_DROPPER, "EEMM", 3)).isEmpty(), "and so is a plan with a level more than asked for");
+        assertEquals(List.of(), PlanCheck.generator(new DropperPlanner(), hard, easy, true),
+                "a heal's plan is its tag's own layout (its hash is checked next): its pools name its mix");
     }
 
     @Test

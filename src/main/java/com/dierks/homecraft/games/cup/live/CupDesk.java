@@ -13,6 +13,7 @@ import com.dierks.homecraft.games.cup.CupWatch;
 import com.dierks.homecraft.games.gen.api.Edition;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.TrialText;
 import com.dierks.homecraft.storage.CupDao;
 
 import java.sql.SQLException;
@@ -399,7 +400,7 @@ public final class CupDesk {
         };
     }
 
-    /** A course's name for the players: its row's, a Fresh slot's, or its id. */
+    /** A course's name for the players: its row's, a Fresh slot's, or one made from its id ("Lava Leap"). */
     String name(String courseId) {
         try {
             Course c = host.course(courseId);
@@ -410,7 +411,7 @@ public final class CupDesk {
             // its id will do
         }
         Slots.Def d = Slots.of(courseId);
-        return d != null ? d.name() : courseId;
+        return d != null ? d.name() : TrialText.defaultName(courseId);
     }
 
     // ---- players' own switch ----------------------------------------------------------------------

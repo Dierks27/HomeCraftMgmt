@@ -421,7 +421,12 @@ public final class WeeklyCup implements Game {
 
         @Override
         public boolean tellNow(UUID player, String line) {
-            Player p = Bukkit.getPlayer(player);
+            Player p;
+            try {
+                p = Bukkit.getPlayer(player);
+            } catch (RuntimeException e) {
+                return false; // no server to ask (a test): the line waits for their next join
+            }
             if (p == null || !p.isOnline()) {
                 return false;
             }

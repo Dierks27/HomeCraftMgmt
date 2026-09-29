@@ -313,10 +313,12 @@ final class GamesCheckLive implements GamesCheck.Facts {
         com.dierks.homecraft.games.clubhouse.Clubhouse running =
                 game instanceof com.dierks.homecraft.games.clubhouse.Clubhouse c && c.running() ? c : null;
         boolean hand = running != null && running.handBuilt();
+        String handWorld = hand ? running.handWorld() : null;
+        boolean handListed = handWorld != null && cfg.common().worlds().stream().anyMatch(x -> x.equalsIgnoreCase(handWorld));
         return new ClubhouseCheck.Facts(cfg.enabled() && cs.enabled(), hand, world, w != null, box.describe(),
                 hand ? List.of() : problems, claim, running == null ? null : running.closedWhy(),
                 running != null && running.ready(), running == null ? List.of() : running.handSpots(),
-                running != null && running.handComplete());
+                running != null && running.handComplete(), handWorld, !hand || handListed);
     }
 
     // ---- end the Clubhouse ----

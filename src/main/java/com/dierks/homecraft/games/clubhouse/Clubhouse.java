@@ -1399,6 +1399,12 @@ public final class Clubhouse implements Game, ClubDoor {
         return r != null && r.hand();
     }
 
+    /** The owner-built room's world, or {@code null} while the generated room is the Clubhouse. */
+    public String handWorld() {
+        ClubhouseRoom r = room;
+        return r == null || !r.hand() ? null : r.world();
+    }
+
     /** The owner-built room's spots ("arrival not set", ...), for the check. */
     public List<String> handSpots() {
         ClubhouseRoom r = room;

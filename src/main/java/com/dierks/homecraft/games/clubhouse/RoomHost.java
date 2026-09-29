@@ -30,6 +30,9 @@ public interface RoomHost {
     /** The world by name, or {@code null} when it isn't loaded. */
     WorldPort world(String name);
 
+    /** Whether {@code name} is one of {@code games.worlds} (where world sessions may take players). */
+    boolean gamesWorld(String name);
+
     /** A stored value ({@code hcm_meta}), or {@code null}. Throws when it can't be read. */
     String meta(String key) throws Exception;
 

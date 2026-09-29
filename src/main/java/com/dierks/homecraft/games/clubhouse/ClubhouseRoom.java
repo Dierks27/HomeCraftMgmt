@@ -441,6 +441,10 @@ public final class ClubhouseRoom {
         if (spawn == null) {
             return "&cStand in the room first.";
         }
+        if (!host.gamesWorld(spawn.world())) { // the Clubhouse review, #13: sessions only take players there
+            return "&cThe Clubhouse must be in a Games world, and " + spawn.world() + " isn't one &7(games.worlds)."
+                    + " Stand in a room in a Games world and try again.";
+        }
         if (!setMeta(SPAWN_KEY, spawn.text()) || !setMeta(MODE_KEY, "hand") || !setMeta(OFF_KEY, null)) {
             return "&cThat can't be saved to the database right now.";
         }

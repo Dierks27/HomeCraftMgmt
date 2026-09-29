@@ -29,13 +29,16 @@ final class ClubhouseCheck {
      * @param ready       open: built and checked (or the owner-built room's arrival spot set)
      * @param handSpots   the owner-built room's spots ("arrival not set", ...)
      * @param handComplete every owner-built spot is set
+     * @param handWorld   the owner-built room's world ({@code ""} for none)
+     * @param handListed  that world is one of {@code games.worlds}
      */
     record Facts(boolean enabled, boolean handBuilt, String world, boolean worldLoaded, String box,
                  List<String> problems, ArenaCheck.Claim claim, String closed, boolean ready, List<String> handSpots,
-                 boolean handComplete) {
+                 boolean handComplete, String handWorld, boolean handListed) {
 
         Facts {
             world = world == null ? "" : world;
+            handWorld = handWorld == null ? "" : handWorld;
             problems = List.copyOf(problems == null ? List.of() : problems);
             handSpots = List.copyOf(handSpots == null ? List.of() : handSpots);
         }
@@ -54,6 +57,11 @@ final class ClubhouseCheck {
             return;
         }
         if (f.handBuilt()) {
+            if (!f.handListed()) { // the Clubhouse review, #13: a room set before `here` checked the world
+                out.add(Line.warn("The Clubhouse is your own room in '" + f.handWorld() + "', which isn't a Games"
+                        + " world (games.worlds)", "stand in a room in a Games world and use /hcm games clubhouse here,"
+                        + " or go back to the generated room with /hcm games clubhouse generated"));
+            }
             if (f.closed() != null) {
                 out.add(Line.fail("The Clubhouse is closed: " + f.closed(), "see /hcm games clubhouse status"));
             } else if (!f.handComplete()) {

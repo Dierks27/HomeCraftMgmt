@@ -103,6 +103,14 @@ class ClubhouseRoomTest {
         public void toSafety(UUID player, String world) {
             moved.add(player);
         }
+
+        /** The worlds in games.worlds. */
+        final java.util.Set<String> gamesWorlds = new java.util.HashSet<>(java.util.Set.of("games"));
+
+        @Override
+        public boolean gamesWorld(String name) {
+            return name != null && gamesWorlds.contains(name);
+        }
     }
 
     private final Host host = new Host();
@@ -216,6 +224,16 @@ class ClubhouseRoomTest {
         assertTrue(reread.generated().contains("generated"), "back to the generated room");
         assertFalse(reread.hand(), "generated");
         assertEquals(ClubhouseRoom.Phase.SCANNING, reread.phase(), "built and checked first");
+    }
+
+    @Test
+    void theOwnerBuiltRoomMustBeInAGamesWorld() {
+        ClubhouseRoom r = room();
+        String no = r.here(new ClubhouseRoom.Place("hub", 0.5, 70, 0.5, 0f));
+        assertTrue(no.contains("Games world") && no.contains("hub"), "refused, with the world named: " + no);
+        assertFalse(r.hand(), "still the generated room");
+        assertTrue(r.here(new ClubhouseRoom.Place("games", 0.5, 70, 0.5, 0f)).contains("Clubhouse now"),
+                "a room in a Games world is fine");
     }
 
     @Test

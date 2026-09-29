@@ -123,6 +123,19 @@ final class LiveRoomHost implements RoomHost {
     }
 
     @Override
+    public boolean gamesWorld(String name) {
+        if (name == null) {
+            return false;
+        }
+        for (String w : games().config().common().worlds()) {
+            if (w != null && w.equalsIgnoreCase(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
     public List<String> regionProblems(Box box, String world) {
         DailySettings d = fresh();
         WorldPort port = world(world);

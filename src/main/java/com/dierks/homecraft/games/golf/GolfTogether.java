@@ -229,6 +229,9 @@ public final class GolfTogether {
             games().tell(host, Refusal.of(PartyLobby.Why.NOT_OPEN.message()));
             return;
         }
+        for (Player m : players) {
+            m.closeInventory(); // the party screen: a world game starts only with nothing open
+        }
         tellParty(l, "&dGolf together &7- everyone to hole 1 of " + c.name() + "!");
         if (!golf.rounds().startGroup(l.id(), c, players)) {
             l.finish(); // nobody could go: open again

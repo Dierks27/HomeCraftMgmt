@@ -74,20 +74,47 @@ final class Tracks {
         return new Found(new NightRunner.Track(c, c.name(), grid, stand), RaceTrack.races(races, stand), null);
     }
 
-    /** Every open boat course that could hold a night now, sorted by id. */
-    List<String> raceable(int minRacers, int maxRacers) {
+    /**
+     * The open boat courses with a start, sorted by id: what {@code course: auto} takes turns
+     * among. Cheap (no blocks are read), so the schedule, the screens and the feed can ask often;
+     * the grid is checked when a night is made ({@link #pick}).
+     */
+    List<String> candidates() {
         TimeTrials t = game.trials();
         List<String> out = new ArrayList<>();
         if (t == null) {
             return out;
         }
         for (Course c : t.openCourses()) {
-            if (c.kind() == TrialKind.BOAT && find(c.id(), 1, minRacers, maxRacers).problem() == null) {
+            if (c.kind() == TrialKind.BOAT && c.start() != null) {
                 out.add(c.id());
             }
         }
         out.sort(null);
         return out;
+    }
+
+    /**
+     * The track for night {@code eventId} under {@code course: auto}: its turn among the candidates
+     * ({@link RaceTrack#pick}, stable, never random), or the next one after it that can be raced when
+     * that one can't (a grid too small, no start). {@link Found#no} when none can.
+     */
+    Found pick(String eventId, int races, int minRacers, int maxRacers) {
+        List<String> ids = candidates();
+        String first = RaceTrack.pick(ids, eventId);
+        if (first == null) {
+            return Found.no(RaceNight.NO_TRACK);
+        }
+        int at = ids.indexOf(first);
+        Found last = null;
+        for (int i = 0; i < ids.size(); i++) {
+            Found f = find(ids.get((at + i) % ids.size()), races, minRacers, maxRacers);
+            if (f.problem() == null) {
+                return f;
+            }
+            last = last == null ? f : last;
+        }
+        return last;
     }
 
     /**

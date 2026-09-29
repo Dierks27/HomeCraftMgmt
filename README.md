@@ -421,6 +421,15 @@ player-facing guide, also in game with `/hcm guide`).
 | `/hcm trail [name\|off]` | all | Switch your particle trail |
 | `/hcm packs` | all / admin | The pack shop; admins get the pack editor |
 | `/hcm tokens` | all | Your token balance |
+| `/hcm play race` | `hcm.games.play` | The Race Night screen: when, the track, the prizes, Join/Leave, Watch, the season, race news |
+| `/hcm play golf <course>` | `hcm.games.play` | A golf course's screen, with **Play with friends** (golf together) |
+| `/hcm games event status\|list [days]` | `hcm.games.admin` | Race Night now (state, times, racers, prize nights, the next restart, the tick time); the scheduled nights, each fits or skipped with why |
+| `/hcm games event start [course] [races N] [laps N] [in M] [fun]` | `hcm.games.admin` | Open a Race Night (joining now or in M minutes; `fun` pays no tokens) |
+| `/hcm games event go\|cancel [confirm]` | `hcm.games.admin` | Start now (needs `min_racers`); call it off (`confirm` once racers are at the track) |
+| `/hcm games event skip <id\|next>\|unskip <id>\|pause\|resume` | `hcm.games.admin` | The schedule, without editing config |
+| `/hcm games event results [id]` | `hcm.games.admin` | A night's results, prizes and who is still owed |
+| `/hcm games event grid <course> show\|auto\|add\|remove <n>\|clear` | `hcm.games.admin` | A hand-built track's starting grid |
+| `/hcm games event stand <course> set\|clear` | `hcm.games.admin` | A hand-built track's viewing stand |
 | `/hcm arcade odds` | `hcm.arcade.use` | Players: one line per open game of chance (what it gives back). Admins: the per-stake detail, the Scratch Ticket RTP and each crate's value at counter prices |
 | `/hcm tokens give\|set\|take <player> <n>` | admin | Adjust tokens (ledger source `ADMIN`) |
 | `/hcm tokens audit [days] [player]` | admin | Tokens earned and spent, by source |
@@ -732,6 +741,18 @@ on the Golf tab ("Meadow Links - 9 holes, par 27") and its own `/hcm play <cours
   your score goes on the course's board (strokes, lower is better), the rewards are paid, you go
   home with your things, and the final scorecard offers Play again. Several players can play one
   course at once, each with their own ball; balls don't meet.
+- **Golf together** (owner decision D4). The course screen (`/hcm play golf <course>` or
+  `/hcm play <course>`) has **Play with friends**: a party of up to 4 through C1's parties (one party
+  per player, shared with party races). Anyone in it can invite a friend (the usual invites:
+  [Accept] on Java, `/hcm play accept` on Bedrock; the pair cooldown and invite switches stay); only
+  the host starts, and everyone goes to hole 1 at once. Everyone plays the same hole at the same
+  time, each with their own ball; a player whose ball is in waits, and when every ball is in (or
+  picked up) everyone moves to the next tee together. The kit's Scorecard (and the card between
+  holes) is the **shared scorecard**: one row per player, 8 holes a page, and at the end the group
+  ranking (fewest strokes first, level totals sharing a place). Each round is a normal round for
+  the boards and rewards, with nothing extra for being in a party. Leaving is fine at any time (your
+  row stays as "left" and the others carry on); if you were the last ball out, the hole ends. After
+  the round the party opens again: "Play again together". A restart hold refuses a new start.
 - **Rewards:** a course's first finish (once ever, outside every cap), finishing at par or better
   (once per course per day), each hole-in-one in a round you finish (once per hole per day; the
   title says "Hole in one!", with a harmless firework), and today's pick (the course, or any
@@ -1108,6 +1129,15 @@ clear times or high scores. A player in a world game can use only `/hcm play`, `
 | `/hcm games golf <id> name <name…>` | `hcm.games.admin` | Rename it |
 | `/hcm games golf <id> enable\|disable` | `hcm.games.admin` | Open it (only when nothing is missing) or close it (anyone playing it, or on the way in, is sent home) |
 | `/hcm games golf <id> delete confirm` | `hcm.games.admin` | Delete it and its high scores (anyone playing it is sent home) |
+| `/hcm play race` | `hcm.games.play` | The Race Night screen: when, the track, the prizes, Join/Leave, Watch, the season, race news |
+| `/hcm play golf <course>` | `hcm.games.play` | A golf course's screen, with **Play with friends** (golf together) |
+| `/hcm games event status\|list [days]` | `hcm.games.admin` | Race Night now (state, times, racers, prize nights, the next restart, the tick time); the scheduled nights, each fits or skipped with why |
+| `/hcm games event start [course] [races N] [laps N] [in M] [fun]` | `hcm.games.admin` | Open a Race Night (joining now or in M minutes; `fun` pays no tokens) |
+| `/hcm games event go\|cancel [confirm]` | `hcm.games.admin` | Start now (needs `min_racers`); call it off (`confirm` once racers are at the track) |
+| `/hcm games event skip <id\|next>\|unskip <id>\|pause\|resume` | `hcm.games.admin` | The schedule, without editing config |
+| `/hcm games event results [id]` | `hcm.games.admin` | A night's results, prizes and who is still owed |
+| `/hcm games event grid <course> show\|auto\|add\|remove <n>\|clear` | `hcm.games.admin` | A hand-built track's starting grid |
+| `/hcm games event stand <course> set\|clear` | `hcm.games.admin` | A hand-built track's viewing stand |
 | `/hcm arcade odds` | `hcm.arcade.use` | Players: one line per open game of chance. Admins: the per-stake detail, the Scratch Ticket and the crates |
 | `/hcm guide games` | `hcm.guide.use` | The Games page of How It Works |
 
@@ -1131,6 +1161,125 @@ completion lists the ids):
   website's rule.
 - They are drawn on the display timer (`displays.refresh_seconds`), and again within a second of a
   new score on their board (a burst of finishes is one redraw). `/hcm display remove` unbinds one.
+
+<!-- ---- race_night (WP-R2) ---- -->
+### Race Night
+
+Boat races for everyone at once (EVENTS-DROPPER-SPEC §A). **Three short races on one track**, points
+in every race, and small token prizes from the server. **Entry is free: nobody can lose tokens.** It
+runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts one. **Ships off.**
+
+- **Turning it on.** Race Night needs Time Trials and a boat track. The default track is Fresh
+  Courses' **Ice Boat** (`games.fresh.slots.fresh_boat`, which ships off): a new walled track every
+  week, with a viewing stand built in from its algo-2 layouts. Turn that on, then
+  `games.race_night.enabled: true` and `/hcm reload`. `/hcm games check` says whether the schedule
+  fits the restarts and whether the track can be raced.
+- **Joining.** 30 minutes before, one chat line (news on, not in a world game); 10 minutes before
+  (`join_minutes`), joining opens: a chat line, a draining bossbar for everyone with news on, the
+  Together tab glints and the hub `@event` sign reads JOIN NOW!. Players join from the Race Night
+  screen (`/hcm play race`, the Race Night tile on the **Together** tab, or an `[Arcade] race_night`
+  sign): one tap on **Join**. Joining moves nobody; keep playing. Leaving the list before the racing
+  is free. At most `max_racers` (8), fewer if the track's grid has fewer spots.
+- **The track.** 2 minutes before the start it is reserved (new solo runs on it are refused), and 1
+  minute before, solo runs still on it end. 15 seconds before, every joined racer who is free goes to
+  the track in their own oak boat, two a tick (their things are kept safe, as in every world game).
+  Anyone busy is asked every second to stand still or use Leave game, until just before Go, and is
+  then out of race 1 ("you'll be in the next one").
+- **The warm-up** (owner decision D3). With `warmup_seconds` above 0 (180 as shipped), racers first
+  get free warm-up laps, never timed; each can tap **Ready**. The grid waits for the window to run
+  out, or for everyone to be ready.
+- **A race.** Everyone on the grid, held still, "Race 1 of 3", 3-2-1-Go on one tick. The bossbar shows
+  your place ("2nd of 5 · Lap 1/2", yellow on the last lap). At the line: "You came 2nd! 0:41.2", then
+  onto the stand to watch. A race ends when everyone is in, 60 s after the first finisher, or after 4
+  minutes. Points `[10, 8, 6, 5, 4, 3, 2]` by place, 2 for a finisher beyond that list, **1 for anyone
+  still racing at the end** ("Race over - you still get a point. Great racing!"), 0 for leaving or a
+  voided run (flying, an effect, a changed game mode or speed). A 20 s break shows the standings; the
+  next grid puts the **fewest points tonight in front** (race 1: the fewest season points).
+- **Leaving.** Leave game (or `/hcm leave`) during the night is leaving for good: your points so far
+  stand, your things come back. A disconnect scores 0 in that race; back online and free before the
+  next grid, you are pulled back in.
+- **Prizes** (EVENTS-RECONCILED 1). After the last race the night is ranked by points, then
+  countback (more 1st places, then more 2nd places...); racers still level share the place. **1st 5,
+  2nd 3, 3rd 2 tokens, and 1 to everyone else who finished a race.** 2nd needs 3 or more racers at
+  race 1 and 3rd needs 4 or more, so nobody wins a podium prize for coming last (2 racers get 5 and
+  1; 3 get 5, 3 and 1). At most **5 tokens a player a night**, and at most **3 prize nights a week**
+  server-wide (`prize_events_per_week`, the week the weekly boards use). A 4th night that week says
+  "Just for fun tonight - points only" and pays nothing; so does an admin's `fun` night. Prizes are a
+  new reward kind (`EVENT_PRIZE`) **outside the daily skill cap**, paid once per player per night
+  (ledger source "Race Night"). A racer offline or somewhere tokens can't be earned is owed: it is
+  paid at their next join (and every 5 minutes while they're online), with a line that says so.
+- **The season.** Every race's points also go on the month's season board (`rnseason:2026-10`,
+  "Race Night · October" on the high-score screen); each night's result on its own board
+  (`rnnight:<id>`, "Race Night · Fri 2 Oct"). `season: off` turns the season board off.
+- **Hub displays.** Bind a sign, hologram or TV (`/hcm display sign|holo|tv @event`) for Race Night's
+  own board: `RACE NIGHT / Fri 7:00 PM / in 2h 14m / Ice Boat`, `JOIN NOW! / /hcm play race / 3 of 8
+  in / starts 7:00`, `RACE 2 OF 3 / 1. Sam 18 / 2. Ava 16 / 3. Lee 10`, then `WINNER / Sam / 2. Ava /
+  3. Lee` for 30 minutes (`RACE NIGHT / No race set / Ask an admin!` when nothing is set). It redraws
+  within a second of a change, never per tick. `@board:race_night` is the season table and
+  `@board:race_night:last` the last night.
+- **Watch.** The Race Night screen's **Watch** gives a bossbar with the leader and the finishes in
+  chat, from anywhere, until 30 s after the results (or a second tap).
+- **Crash safety** (§A.9). Each race is stored in one transaction (its rows, the night's points, the
+  season points, `races_done`). A stop, a reload that closes Race Night, or switching it (or Time
+  Trials) off while racers are at the track calls the night off at once: the races done stand, and
+  prizes are paid (or owed) if it held a prize slot. A crash does the same at the next boot. A night
+  still in its join window resumes after a restart if its start is at least 2 minutes away. Prizes
+  can never be paid twice (the payment's ref is the night's id).
+- **The restart hold.** A scheduled night runs only if its whole window, from joining to its worst
+  case (`races × (max_race_minutes + break) + 2 min`, plus the warm-up: 18 minutes as shipped), ends 2
+  minutes before a restart's hold; otherwise it is skipped, with the reason in `event list` and
+  `/hcm games check`. On a Fresh course it also keeps 15 minutes from `games.fresh.rebuild_at`.
+- **Boats bump.** Vanilla boats are solid to each other and that can't be switched off: race only on
+  tracks with walls on both sides. Java and Bedrock boats can feel slightly different on ice.
+- **Achievements:** "Race at Race Night" (10) and "Win a Race Night" (30), counters, so they unlock
+  back home (config revision 18 adds them to a shipped list).
+
+| Key | Default | Meaning |
+|---|---|---|
+| `race_night.enabled` | `false` | Race Night's switch (it also needs Time Trials) |
+| `race_night.schedule` | `["FRI 19:00"]` | `"<days> <HH:mm>"` in `clock.time_zone`: `FRI 19:00`, `SAT,SUN 15:00`, `DAILY 18:30`, `WEEKDAYS 17:00`, `WEEKENDS 10:30`. `[]` = admin-started only. A bad entry is dropped with one WARN |
+| `race_night.course` | `auto` | `auto` takes turns among the boat tracks it can race on (by the night's id, never at random), or a course id |
+| `race_night.races` | `3` | Races a night, 1-5 (a track without a stand holds 1) |
+| `race_night.laps` | `0` | 0 = the course's own laps; 1-5 on a loop track |
+| `race_night.announce_minutes` | `30` | The chat heads-up before the start (0 = none) |
+| `race_night.join_minutes` | `10` | Joining opens this long before a scheduled start |
+| `race_night.admin_join_minutes` | `5` | ... and before one an admin starts |
+| `race_night.min_racers` / `max_racers` | `2` / `8` | Fewer at the start calls it off; the most (2-12, and the grid's spots) |
+| `race_night.finish_window_seconds` | `60` | A race ends this long after its first finisher |
+| `race_night.max_race_minutes` | `4` | ... or after this long |
+| `race_night.break_seconds` | `20` | The break between races |
+| `race_night.warmup_seconds` | `180` | Free warm-up laps before the grid (0 = none); "Ready" skips |
+| `race_night.points` | `[10, 8, 6, 5, 4, 3, 2]` | Points by place in each race |
+| `race_night.finish_points` / `still_racing_points` | `2` / `1` | A finisher beyond the list; anyone still racing at the end |
+| `race_night.prizes` | `[5, 3, 2]` | Tokens for the night's 1st, 2nd, 3rd (each 0-10; never more than 5 a player a night) |
+| `race_night.finisher_prize` | `1` | Tokens for everyone else who finished a race (0-2) |
+| `race_night.prize_events_per_week` | `3` | Nights a week that pay tokens, server-wide (0-7) |
+| `race_night.season` | `month` | `month` (a monthly season board) or `off` |
+| `race_night.stand_radius` | `4` | How far a racer may wander from the stand |
+
+**Admin** (`/hcm games event ...`, `hcm.games.admin`):
+
+| Command | What it does |
+|---|---|
+| `status` | The night: state, times, racers with points, prize nights this week, the next restart, the night's tick time |
+| `list [days]` | The scheduled nights (7 days), each "fits" or "skipped: why" |
+| `start [course] [races N] [laps N] [in M] [fun]` | Open a join window now (or in M minutes); the start is `admin_join_minutes` later. `fun` = season points only. Refused while another night is on, near a restart, with Race Night or Time Trials closed, or on a track that can't be raced |
+| `go` | Close the window and start in 15 s (needs `min_racers`) |
+| `cancel [confirm]` | Call it off (`confirm` once racers are at the track; points so far count) |
+| `skip <id\|next>` / `unskip <id>` | Skip one scheduled night |
+| `pause` / `resume` | Stop or restart the schedule without editing config |
+| `results [id]` | A night's results (the last one) |
+| `grid <course> show\|auto\|add\|remove <n>\|clear` | A hand-built track's starting grid (add: where you stand, behind the start, 2.5 apart, at most 8). `auto` says how many the automatic grid seats. A layout change drops it with a WARN |
+| `stand <course> set\|clear` | A hand-built track's viewing stand (set: where you stand, 10+ blocks from the racing line, solid below and 2 air above). Without one a night there is 1 race |
+
+`/hcm games status` has a Race Night line ("waiting · next Fri 2 Oct 7:00 PM on Ice Boat (3 races) ·
+fits before the 4:00 AM restart · prize nights 1/3 this week").
+
+**Race mode (WP-R1).** The races are Time Trials runs in race mode (`TimeTrials.race`, `regrid`,
+`park`, `endRace`, `reserve`). Until that package is merged, Race Night can open a window but nobody
+can be seated ("Race mode isn't ready yet - ask an admin."), and the night is called off for too
+few racers; nothing throws.
+<!-- ---- end race_night ---- -->
 
 ### Turning it on, and the Games world
 
@@ -1802,6 +1951,7 @@ ignores them is unaffected; every existing field is unchanged:
 | `fresh` | A Fresh course's live set: its course code, short seed (12 hex), when it went up, when it changes (`to`, absent while pinned for good) and its cadence |
 | `classic` | A Classics slot's entry: the recalled course's code and the recall's window (`to` absent for "forever") |
 | `freshHistory` | Top-level, after `starChart`: every past (and the current) Fresh set, newest first, at most `games.fresh.feed_history` (26) per course: `{code, slot, name, kind, tier?, from, to?, seed, plays, record?: {ms or strokes, at, holder?}, kept?, classic?, top?}`. `to` is absent for a set up for good; `top` is its board's best 3 (as above). Never a set that isn't up yet |
+| `events` | Top-level, after `freshHistory` (Race Night, EVENTS-DROPPER-SPEC §A.7): `next {id, name, joinAt, startsAt, course: {id, name}, races, laps, entry: "free", prizes, finisherPrize, prizeNight, racers, maxRacers}`, `upcoming` (the next start times, at most 4), `live {id, state: open\|racing\|break\|results, race, of, racers, standings: [{rank, points, lap, laps, holder?}]}`, `recent` (the last 5 nights: `{id, at, course, racers, state: done\|called_off, top: [{rank, value, unit: "points", holder?}]}`, at most 8 rows each) and `season {key, name, until, top}` (this month's table). `racers` is a count; no prize, UUID or balance is ever published. Absent while Race Night is off, and empty parts are left out |
 
 `holder` anywhere (a record, a cabinet's best, a `top` row, `freshHistory`) follows the one rule
 above: only while `arcade_show_names` is `true`, and no name is even looked up while it is `false`.

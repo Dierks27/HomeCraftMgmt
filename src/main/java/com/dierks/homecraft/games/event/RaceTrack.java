@@ -298,6 +298,14 @@ public final class RaceTrack {
         return null;
     }
 
+    /**
+     * Whether someone this far from the stand's spot has wandered off it (§A.4.2): more than
+     * {@code radius} away sideways, or more than {@code radius} + 2 up or down.
+     */
+    public static boolean offStand(double dx, double dy, double dz, int radius) {
+        return Math.hypot(dx, dz) > radius || Math.abs(dy) > radius + 2;
+    }
+
     /** The races a night holds on a track: as asked with a stand, else 1 (finishers go home at the line). */
     public static int races(int want, Point stand) {
         return stand == null ? 1 : Math.max(1, want);

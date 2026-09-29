@@ -13,6 +13,7 @@ import com.dierks.homecraft.games.RestartHold;
 import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.gen.NewCoursesNudge;
 import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.daily.DailyLookup;
@@ -20,7 +21,9 @@ import com.dierks.homecraft.gui.games.event.RaceNightMenu;
 import com.dierks.homecraft.storage.EventDao;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
@@ -287,6 +290,10 @@ public final class RaceNight implements Game {
             drawBars();
         }
         if (ticks % 20 == 0) {
+            NightRunner on = night;
+            if (on != null && on.phase().running() && on.track().stand() != null) {
+                holdOnStand(on);
+            }
             for (UUID gone : watchers.expire(now())) {
                 bars.hide(gone);
             }
@@ -298,6 +305,32 @@ public final class RaceNight implements Game {
         if (ticks % OWED_TICKS == 0) {
             for (Player p : new ArrayList<>(Bukkit.getOnlinePlayers())) {
                 payOwed(p.getUniqueId(), false);
+            }
+        }
+    }
+
+    /**
+     * Racers waiting on the stand (done with this race, or in the break) stay within
+     * {@code stand_radius} of it (§A.4.2): anyone further is put back by the session's own teleport.
+     */
+    private void holdOnStand(NightRunner n) {
+        Point stand = n.track().stand();
+        World w = Bukkit.getWorld(n.track().base().world());
+        if (w == null) {
+            return;
+        }
+        int radius = settings().standRadius();
+        for (NightRunner.Racer r : n.joined()) {
+            boolean waiting = n.phase() == EventMachine.Phase.BREAK || r.leg() == NightRunner.Leg.FINISHED
+                    || r.leg() == NightRunner.Leg.VOID || r.leg() == NightRunner.Leg.STILL;
+            Player p = r.seated() && waiting ? Bukkit.getPlayer(r.id()) : null;
+            if (p == null || !w.equals(p.getWorld())) {
+                continue;
+            }
+            Location l = p.getLocation();
+            if (RaceTrack.offStand(l.getX() - stand.x(), l.getY() - stand.y(), l.getZ() - stand.z(), radius)) {
+                games().sessions().teleport(p, new Location(w, stand.x(), stand.y(), stand.z(), l.getYaw(), l.getPitch()));
+                p.sendMessage(Text.of("&7Please watch from the stand."));
             }
         }
     }
@@ -327,10 +360,8 @@ public final class RaceNight implements Game {
             log(Level.WARNING, "Race Night: could not check " + o.id(), e);
             return;
         }
-        String course = s.autoCourse() ? RaceTrack.pick(tracks.raceable(s.minRacers(), s.maxRacers()), o.id())
-                : s.course();
-        Tracks.Found t = course == null ? Tracks.Found.no(NO_TRACK)
-                : tracks.find(course, s.races(), s.minRacers(), s.maxRacers());
+        Tracks.Found t = s.autoCourse() ? tracks.pick(o.id(), s.races(), s.minRacers(), s.maxRacers())
+                : tracks.find(s.course(), s.races(), s.minRacers(), s.maxRacers());
         if (t.problem() != null) {
             if (warned.add(o.id())) {
                 log(Level.WARNING, "Race Night " + o.id() + " is skipped: " + t.problem(), null);
@@ -343,13 +374,30 @@ public final class RaceNight implements Game {
         begin(plan, t.track(), EventMachine.State.scheduled());
     }
 
-    /** The next scheduled night that runs (or {@code null}), as the schedule sees it now. */
+    /**
+     * The next scheduled night that runs (or {@code null}), as the schedule sees it now. Worked out
+     * at most every {@value #NEXT_MS} ms (or after a change: a skip, a pause, a night ending), since
+     * the screens, the hub and the feed all ask.
+     */
     EventSchedule.Occurrence next() {
-        if (ctx.plugin() == null || entries().isEmpty() || paused()) {
+        if (ctx.plugin() == null) {
             return null;
         }
-        return EventSchedule.next(entries(), now(), fit());
+        long now = now();
+        if (nextFor == version && now - nextAt < NEXT_MS && (nextCached == null || nextCached.startsAt() - 60_000L > now)) {
+            return nextCached;
+        }
+        nextCached = entries().isEmpty() || paused() ? null : EventSchedule.next(entries(), now, fit());
+        nextAt = now;
+        nextFor = version;
+        return nextCached;
     }
+
+    /** How long {@link #next()} is kept. */
+    static final long NEXT_MS = 30_000L;
+    private EventSchedule.Occurrence nextCached;
+    private long nextAt = Long.MIN_VALUE / 2;
+    private long nextFor = -1;
 
     /** Every scheduled night from now to {@code days} ahead, each "fits" or skipped with why. */
     List<EventSchedule.Occurrence> upcoming(int days) {
@@ -380,7 +428,7 @@ public final class RaceNight implements Game {
         boolean fresh = false;
         TimeTrials t = trials();
         if (s.autoCourse()) {
-            List<String> ids = tracks.raceable(s.minRacers(), s.maxRacers());
+            List<String> ids = tracks.candidates();
             if (ids.isEmpty()) {
                 problem = NO_TRACK;
             }
@@ -389,9 +437,10 @@ public final class RaceNight implements Game {
                 fresh |= c != null && c.generated();
             }
         } else {
-            Tracks.Found f = tracks.find(s.course(), s.races(), s.minRacers(), s.maxRacers());
-            problem = f.problem();
-            fresh = f.track() != null && f.track().base().generated();
+            Course c = t == null ? null : t.openCourse(s.course());
+            problem = c == null ? "the course " + s.course() + " isn't open" : RaceTrack.raceProblem(c, s.minRacers(),
+                    s.minRacers()); // the grid itself is checked when the night is made
+            fresh = c != null && c.generated();
         }
         NightRules rules = NightRules.of(s, s.races(), s.laps(), false, s.maxRacers());
         LocalTime rebuild = fresh ? DailyLookup.edition(games()).rollover() : null;
@@ -669,11 +718,10 @@ public final class RaceNight implements Game {
         long now = now();
         long joinAt = now + Math.max(0, inMinutes) * 60_000L;
         long startsAt = joinAt + s.adminJoinMinutes() * 60_000L;
-        String pick = course != null ? course : s.autoCourse()
-                ? RaceTrack.pick(tracks.raceable(s.minRacers(), s.maxRacers()), "admin-" + now) : s.course();
         int wantRaces = races == null ? s.races() : races;
-        Tracks.Found t = pick == null ? Tracks.Found.no(NO_TRACK)
-                : tracks.find(pick, wantRaces, s.minRacers(), s.maxRacers());
+        Tracks.Found t = course == null && s.autoCourse()
+                ? tracks.pick("admin-" + now, wantRaces, s.minRacers(), s.maxRacers())
+                : tracks.find(course != null ? course : s.course(), wantRaces, s.minRacers(), s.maxRacers());
         int wantLaps = laps == null ? s.laps() : laps;
         String lapsProblem = t.track() == null ? null : RaceTrack.lapsProblem(t.track().base(), wantLaps);
         NightRules rules = NightRules.of(s, t.track() == null ? wantRaces : t.races(), wantLaps, fun,
@@ -798,7 +846,7 @@ public final class RaceNight implements Game {
     /** The track a scheduled night will race on, or {@code null}. */
     Course nextTrack(EventSchedule.Occurrence o) {
         RaceNightSettings s = settings();
-        String id = s.autoCourse() ? RaceTrack.pick(tracks.raceable(s.minRacers(), s.maxRacers()), o.id()) : s.course();
+        String id = s.autoCourse() ? RaceTrack.pick(tracks.candidates(), o.id()) : s.course();
         TimeTrials t = trials();
         return t == null || id == null ? null : t.course(id);
     }
@@ -991,7 +1039,7 @@ public final class RaceNight implements Game {
                             : o.skip().startsWith("no track") ? "turn on Ice Boat (games.fresh.slots.fresh_boat) or set a grid"
                             : "see /hcm games event list"));
         }
-        List<String> ids = s.autoCourse() ? tracks.raceable(s.minRacers(), s.maxRacers()) : List.of(s.course());
+        List<String> ids = s.autoCourse() ? tracks.candidates() : List.of(s.course());
         if (ids.isEmpty()) {
             out.add(new Check("Race Night has no track it can race on",
                     "turn on the Ice Boat Fresh course, or set a boat course's grid: /hcm games event grid <course> auto"));

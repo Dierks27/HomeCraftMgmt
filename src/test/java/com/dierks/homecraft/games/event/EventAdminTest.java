@@ -167,5 +167,8 @@ class EventAdminTest {
         Course c = straight();
         assertNotNull(RaceTrack.standProblem(c, List.of(), new Point(5, 70, 40)), "5 from the line: too near");
         assertNull(RaceTrack.standProblem(c, List.of(), new Point(12, 70, 40)), "12 from the line: fine");
+        assertFalse(RaceTrack.offStand(3, 0, 2, 4), "3.6 blocks off the spot: still on the stand");
+        assertTrue(RaceTrack.offStand(4, 0, 2, 4), "4.5 blocks off: put back");
+        assertTrue(RaceTrack.offStand(0, -7, 0, 4), "dropped off the stand: put back");
     }
 }

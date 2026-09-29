@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class BoardDisplayTest {
 
     /** A world with Snake, Creeper Sweeper, Ore Slots, River Run, Meadow Links and Fresh Courses. */
-    private static final class World implements BoardDisplay.Lookup {
+    private static class World implements BoardDisplay.Lookup {
         final Map<String, GenTag> live = new HashMap<>();
         int cadence = 7;
 
@@ -237,5 +237,24 @@ class BoardDisplayTest {
         for (String line : List.of(BoardDisplay.EMPTY, BoardDisplay.EMPTY_SCORES)) {
             assertEquals(List.of(), GenCopy.copyProblems(line), "kid-safe: " + line);
         }
+    }
+
+    @Test
+    void raceNightsBoardsAreAskedForBeforeAnythingElse() {
+        World w = new World() {
+            @Override
+            public BoardDisplay.Result event(BoardDisplay.Target t) {
+                return t.id().equals("race_night") ? BoardDisplay.Result.ok(new BoardDisplay.Resolved("race_night",
+                        "rnseason:2026-10", false, "points", "Race Night - October", "race_night")) : null;
+            }
+        };
+        BoardDisplay.Result r = BoardDisplay.resolve("@board:race_night", w);
+        assertTrue(r.ok(), "Race Night's season board resolves");
+        assertEquals("rnseason:2026-10", r.resolved().board(), "this month's season");
+        assertFalse(r.resolved().lower(), "points: higher is better");
+        assertEquals("points", r.resolved().unit(), "in points");
+        assertTrue(BoardDisplay.resolve("@board:snake", w).ok(), "everything else resolves as before");
+        assertFalse(BoardDisplay.resolve("@board:race_night", new World()).ok(),
+                "a lookup without Race Night (the default) knows no such board");
     }
 }

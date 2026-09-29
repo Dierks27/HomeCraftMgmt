@@ -486,4 +486,25 @@ class GamesCheckTest {
             assertEquals(List.of(), GenCopy.copyProblems(line), "no banned word, nothing Bedrock can't draw: " + line);
         }
     }
+
+    @Test
+    void raceNightsRowsAreFineOrAWarningWithItsFixAndNothingWhenItIsntThere() {
+        List<Line> none = new ArrayList<>();
+        GamesCheck.raceNight(null, none);
+        assertTrue(none.isEmpty(), "no Race Night: no rows");
+        List<Line> off = new ArrayList<>();
+        GamesCheck.raceNight(new GamesCheck.RaceNight(false, List.of()), off);
+        assertEquals(1, off.size(), "switched off: one line");
+        assertEquals(Status.OK, off.get(0).status(), "off is fine");
+        List<Line> on = new ArrayList<>();
+        GamesCheck.raceNight(new GamesCheck.RaceNight(true, List.of(
+                new GamesCheck.RaceNightLine("Race Night Fri 7:00 PM fits", null),
+                new GamesCheck.RaceNightLine("Race Night Sat 3:40 PM is skipped: A restart is at 4:00 PM - Race Night "
+                        + "needs 15 minutes.", "move it in games.race_night.schedule, or the restart"))), on);
+        assertEquals(Status.OK, on.get(0).status(), "a night that fits");
+        assertEquals(Status.WARN, on.get(1).status(), "a skipped night warns");
+        assertTrue(on.get(1).fix().contains("games.race_night.schedule"), "with its fix");
+        assertTrue(new Good() instanceof GamesCheck.Facts f && f.raceNight() == null,
+                "a Facts without Race Night reports none (the default)");
+    }
 }

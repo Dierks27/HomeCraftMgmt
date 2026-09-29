@@ -210,7 +210,13 @@ public final class DisplayService {
         if (!(block.getState() instanceof Sign)) {
             return Result.fail("Look at a placed sign first.");
         }
-        if (BoardDisplay.is(itemId)) {
+        if (EventDisplay.is(itemId)) { // Race Night's @event (EVENTS-DROPPER-SPEC §A.6)
+            String error = EventDisplay.problem(plugin);
+            if (error != null) {
+                return Result.fail(error);
+            }
+            itemId = EventDisplay.TARGET;
+        } else if (BoardDisplay.is(itemId)) {
             String error = boardProblem(itemId);
             if (error != null) {
                 return Result.fail(error);
@@ -293,6 +299,9 @@ public final class DisplayService {
 
     /** The four sign lines for a commodity: name, price, trend, stock. Null if unknown. */
     private String[] signLines(String itemId) {
+        if (EventDisplay.is(itemId)) {
+            return EventDisplay.sign(plugin);
+        }
         if (BoardDisplay.is(itemId)) {
             return boardSign(itemId);
         }
@@ -323,6 +332,9 @@ public final class DisplayService {
 
     /** Bind a floating hologram above {@code loc} to a commodity and spawn it now. */
     public Result bindHologram(Player admin, Location loc, String itemId) {
+        if (EventDisplay.is(itemId)) {
+            itemId = EventDisplay.TARGET;
+        }
         if (BoardDisplay.is(itemId)) {
             String error = boardProblem(itemId);
             if (error != null) {
@@ -426,6 +438,9 @@ public final class DisplayService {
      * read "The Crate Market is calm today."
      */
     private boolean bindable(String itemId) {
+        if (EventDisplay.is(itemId)) {
+            return EventDisplay.problem(plugin) == null;
+        }
         if (NEWS_ID.equals(itemId)) {
             return MarketNewsMenu.live(plugin) != null;
         }
@@ -445,6 +460,9 @@ public final class DisplayService {
         }
         if (BoardDisplay.is(itemId)) {
             return new ItemStack(Material.GOLD_INGOT); // a leaderboard's trophy
+        }
+        if (EventDisplay.is(itemId)) {
+            return new ItemStack(Material.OAK_BOAT); // Race Night
         }
         MarketItem item = plugin.market().item(itemId);
         if (item != null && item.material().isItem()) {
@@ -492,6 +510,9 @@ public final class DisplayService {
     private net.kyori.adventure.text.Component holoText(String itemId) {
         if (NEWS_ID.equals(itemId)) {
             return Text.of(newsBoardText());
+        }
+        if (EventDisplay.is(itemId)) {
+            return Text.of(EventDisplay.screen(plugin));
         }
         if (BoardDisplay.is(itemId)) {
             return Text.of(boardScreen(itemId));
@@ -551,6 +572,9 @@ public final class DisplayService {
      * a rebind at the same block replaces it. Never spawns an ItemDisplay or a map.
      */
     public Result bindTvPanel(Player admin, Block wall, BlockFace face, String itemId, float scale) {
+        if (EventDisplay.is(itemId)) {
+            itemId = EventDisplay.TARGET;
+        }
         if (BoardDisplay.is(itemId)) {
             String error = boardProblem(itemId);
             if (error != null) {
@@ -653,6 +677,9 @@ public final class DisplayService {
         if (NEWS_ID.equals(itemId)) {
             return Text.of(newsBoardText());
         }
+        if (EventDisplay.is(itemId)) {
+            return Text.of(EventDisplay.screen(plugin));
+        }
         if (BoardDisplay.is(itemId)) {
             return Text.of(boardScreen(itemId));
         }
@@ -712,6 +739,10 @@ public final class DisplayService {
             for (String id : new BoardSource(games).ids()) {
                 out.add(BoardDisplay.PREFIX + id);
             }
+            if (EventDisplay.problem(plugin) == null) {
+                out.add(BoardDisplay.PREFIX + com.dierks.homecraft.games.event.RaceNight.SPEC.id() + ":" + EventDisplay.LAST);
+                out.add(EventDisplay.TARGET);
+            }
         } catch (RuntimeException e) {
             // no completions rather than an error in the admin's chat
         }
@@ -768,6 +799,11 @@ public final class DisplayService {
             hooked = games;
             games.scores().onSubmit(this::scoreSubmitted);
         }
+        long event = EventDisplay.version(plugin);
+        if (event != eventVersion) { // Race Night changed: its @event displays, at most once a second
+            eventVersion = event;
+            redrawEvent();
+        }
         if (dirtyBoards.isEmpty()) {
             return;
         }
@@ -818,6 +854,35 @@ public final class DisplayService {
             }
         }
         return out;
+    }
+
+    /** Race Night's last drawn version ({@link EventDisplay#version}). */
+    private long eventVersion = Long.MIN_VALUE;
+
+    /** Draw every {@code @event} display again (Race Night changed). */
+    private void redrawEvent() {
+        List<DisplayDao.Display> displays;
+        try {
+            displays = dao.all();
+        } catch (SQLException e) {
+            return;
+        }
+        for (DisplayDao.Display d : displays) {
+            if (d == null || !EventDisplay.is(d.itemId())) {
+                continue;
+            }
+            try {
+                switch (d.kind()) {
+                    case DisplayDao.SIGN -> renderSign(d);
+                    case DisplayDao.HOLOGRAM -> renderHologram(d);
+                    case DisplayDao.TV -> renderTvPanel(d);
+                    default -> {
+                    }
+                }
+            } catch (Throwable t) {
+                plugin.getLogger().warning("Failed to render the Race Night display " + d.id() + ": " + t.getMessage());
+            }
+        }
     }
 
     /** Remember which board a leaderboard display shows, so a score on it draws it again. */

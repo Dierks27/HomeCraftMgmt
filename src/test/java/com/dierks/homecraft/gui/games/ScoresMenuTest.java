@@ -70,6 +70,10 @@ class ScoresMenuTest {
         assertEquals("River Run this week", ScoresMenu.boardLabel("week:river:2900", 100, names), "a course's week");
         assertEquals("Meadow Links", ScoresMenu.boardLabel("golf:meadow", 100, names), "a golf course by its name");
         assertEquals("gone", ScoresMenu.boardLabel("course:gone", 100, names), "an unknown course shows its id");
+        assertEquals("Race Night · Fri 2 Oct", ScoresMenu.boardLabel("rnnight:rn-20261002-1900", 100, names),
+                "a Race Night by its day (EVENTS-DROPPER-SPEC §A.8)");
+        assertEquals("Race Night · October", ScoresMenu.boardLabel("rnseason:2026-10", 100, names),
+                "a Race Night season by its month");
     }
 
     // ---- Fresh Courses' boards -------------------------------------------------------------------

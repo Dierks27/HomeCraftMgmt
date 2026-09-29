@@ -815,6 +815,12 @@ public final class RaceNight implements Game {
         return p == null ? 0 : p;
     }
 
+    /** The last night's board ({@code rnnight:<id>}), or {@code null} before the first night. */
+    public String lastBoard() {
+        List<EventDao.EventRow> r = recent(1);
+        return r.isEmpty() ? null : EventCopy.nightBoard(r.get(0).id());
+    }
+
     /** The last few nights that ended, newest first. */
     List<EventDao.EventRow> recent(int n) {
         try {
@@ -944,6 +950,67 @@ public final class RaceNight implements Game {
                     + settings().races() + (settings().races() == 1 ? " race)" : " races)")
                     + (restart > 0 ? " · fits before the " + hold.clock(restart) + " restart" : ""))
                     + " · " + prizes);
+        }
+        return out;
+    }
+
+    /** One {@code /hcm games check} line: fine ({@code fix} {@code null}), or a warning with its fix. */
+    public record Check(String what, String fix) {
+    }
+
+    /** Whether {@code games.race_night.enabled} is on (Race Night may still be closed with Time Trials off). */
+    public boolean switchedOn() {
+        return settings().enabled();
+    }
+
+    /**
+     * E1's rows (§A.11): the schedule reads and fits the restarts, the track can be raced (its grid
+     * and its stand), and the stand is where the course is.
+     */
+    public List<Check> check() {
+        List<Check> out = new ArrayList<>();
+        RaceNightSettings s = settings();
+        if (!trialsOpen()) {
+            out.add(new Check("Race Night needs Time Trials, which is closed", "open games.trials, then /hcm reload"));
+        }
+        List<String> written = s.schedule();
+        List<EventSchedule.Entry> read = entries();
+        if (written.isEmpty()) {
+            out.add(new Check("Race Night has no schedule: nights only when an admin starts one", null));
+        } else if (read.size() < written.size()) {
+            out.add(new Check("Race Night: " + (written.size() - read.size()) + " schedule entr"
+                    + (written.size() - read.size() == 1 ? "y" : "ies") + " can't be read",
+                    "write each like \"FRI 19:00\" or \"SAT,SUN 15:00\" in games.race_night.schedule"));
+        } else {
+            out.add(new Check("Race Night's schedule reads: " + String.join(", ", written), null));
+        }
+        for (EventSchedule.Occurrence o : upcoming(7)) {
+            out.add(o.fits() ? new Check("Race Night " + EventCopy.when(o.startsAt(), zone()) + " fits", null)
+                    : new Check("Race Night " + EventCopy.when(o.startsAt(), zone()) + " is skipped: " + o.skip(),
+                    o.skip().startsWith("A restart") ? "move it in games.race_night.schedule, or the restart"
+                            : o.skip().startsWith("no track") ? "turn on Ice Boat (games.fresh.slots.fresh_boat) or set a grid"
+                            : "see /hcm games event list"));
+        }
+        List<String> ids = s.autoCourse() ? tracks.raceable(s.minRacers(), s.maxRacers()) : List.of(s.course());
+        if (ids.isEmpty()) {
+            out.add(new Check("Race Night has no track it can race on",
+                    "turn on the Ice Boat Fresh course, or set a boat course's grid: /hcm games event grid <course> auto"));
+        }
+        for (String id : ids) {
+            Tracks.Found f = tracks.find(id, s.races(), s.minRacers(), s.maxRacers());
+            if (f.problem() != null) {
+                out.add(new Check("Race Night can't race on " + id + ": " + f.problem(),
+                        "/hcm games event grid " + id + " auto, or pick another course"));
+                continue;
+            }
+            Course c = f.track().base();
+            out.add(new Check("Race Night can race on " + c.name() + ": " + f.track().grid().size() + " grid spots", null));
+            if (f.track().stand() == null && s.races() > 1) {
+                out.add(new Check(c.name() + " has no viewing stand, so nights there are 1 race",
+                        c.generated() ? "it comes with the next Ice Boat layout" : "/hcm games event stand " + c.id() + " set"));
+            } else if (f.track().stand() != null) {
+                out.add(new Check(c.name() + "'s viewing stand is in " + c.world() + ", with the course", null));
+            }
         }
         return out;
     }

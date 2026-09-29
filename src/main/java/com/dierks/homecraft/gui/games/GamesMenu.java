@@ -368,14 +368,20 @@ public final class GamesMenu extends GameMenu {
         tab(TAB_SLOTS[4], Game.Tab.GOLF, Material.SNOWBALL, "Golf", counts.get(Game.Tab.GOLF));
         int together = counts.getOrDefault(Game.Tab.TOGETHER, 0);
         if (togetherShown(together, tab)) {
-            tab(tabSlot(Game.Tab.TOGETHER), Game.Tab.TOGETHER, Material.CAKE, "Together", together);
+            // the tab glints while a Race Night join window is open (EVENTS-DROPPER-SPEC §A.6)
+            tab(tabSlot(Game.Tab.TOGETHER), Game.Tab.TOGETHER, Material.CAKE, "Together", together,
+                    !com.dierks.homecraft.games.event.RaceNight.hubSuffix(plugin.games()).isEmpty());
         }
     }
 
     private void tab(int slot, Game.Tab which, Material icon, String name, int count) {
+        tab(slot, which, icon, name, count, false);
+    }
+
+    private void tab(int slot, Game.Tab which, Material icon, String name, int count, boolean glint) {
         boolean here = which == tab;
         set(slot, Menus.glint(Menus.icon(icon, (here ? "&a&l" : "&e") + name + " &7(" + count + ")",
-                here ? "&7You're here." : "&eClick to see them"), here),
+                here ? "&7You're here." : "&eClick to see them"), here || glint),
                 here ? null : e -> new GamesMenu(plugin, viewer, which, 0, back).open(viewer));
     }
 

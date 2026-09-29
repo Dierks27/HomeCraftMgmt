@@ -3,8 +3,12 @@ package com.dierks.homecraft.games.clubhouse;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.engine.Person;
 import com.dierks.homecraft.games.gen.engine.WorldPort;
+import com.dierks.homecraft.storage.Database;
+import com.dierks.homecraft.storage.GenMetaDao;
 import org.junit.jupiter.api.Test;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -31,7 +35,7 @@ class ClubhouseRoomTest {
     private static final Box BOX = SETTINGS.box();
 
     /** The server as the room sees it: a fake world, a meta map, and who was moved out of the way. */
-    static final class Host implements RoomHost {
+    static class Host implements RoomHost {
         final FakeWorldPort world = new FakeWorldPort("games");
         final Map<String, String> meta = new HashMap<>();
         final List<String> problems = new ArrayList<>();
@@ -65,13 +69,20 @@ class ClubhouseRoomTest {
             return loaded && "games".equals(name) ? world : null;
         }
 
+        /**
+         * fx2-C #8: the live host keeps these in {@code hcm_meta} through {@link GenMetaDao}, which
+         * refuses any key outside {@code gen.}; the fake refuses the same keys, so no test can pass on a
+         * key the live server can't store.
+         */
         @Override
-        public String meta(String key) {
+        public String meta(String key) throws Exception {
+            requireStorable(key);
             return meta.get(key);
         }
 
         @Override
-        public void meta(String key, String value) {
+        public void meta(String key, String value) throws Exception {
+            requireStorable(key);
             if (value == null) {
                 meta.remove(key);
             } else {
@@ -102,6 +113,12 @@ class ClubhouseRoomTest {
         @Override
         public void toSafety(UUID player, String world) {
             moved.add(player);
+        }
+
+        private static void requireStorable(String key) {
+            if (!GenMetaDao.allowed(key)) {
+                throw new IllegalArgumentException("the live store refuses " + key);
+            }
         }
 
         /** The worlds in games.worlds. */
@@ -276,5 +293,62 @@ class ClubhouseRoomTest {
                 status.toString());
         assertTrue(ClubhouseAdmin.status(null, 0, "games.clubhouse.enabled is false").get(1).contains("Not running"),
                 "not running");
+    }
+
+    /**
+     * fx2-C #8: every setting the room keeps goes through the live store ({@link GenMetaDao} on a real
+     * SQLite, as {@code LiveRoomHost} does), which takes only keys under {@code gen.}: the start reads
+     * them, and off, here, the podium, the board, generated and rebuild confirm are all saved and read
+     * back after a restart.
+     */
+    @Test
+    void everySettingIsSavedAndReadBackThroughTheLiveStore() throws Exception {
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite::memory:")) {
+            GenMetaDao store = new GenMetaDao(Database.open(conn, Logger.getAnonymousLogger()));
+            Host live = new Host() {
+                @Override
+                public String meta(String key) throws Exception {
+                    return store.get(key);
+                }
+
+                @Override
+                public void meta(String key, String value) throws Exception {
+                    store.set(key, value);
+                }
+            };
+            for (String key : List.of(ClubhouseRoom.CLAIM_KEY, ClubhouseRoom.MODE_KEY, ClubhouseRoom.OFF_KEY,
+                    ClubhouseRoom.SPAWN_KEY, ClubhouseRoom.BOARD_KEY, ClubhouseRoom.PODIUM_KEY + "1")) {
+                assertTrue(GenMetaDao.allowed(key), key + " must be a key the live store keeps (gen.)");
+            }
+            ClubhouseRoom r = new ClubhouseRoom(live, SETTINGS);
+            r.start();
+            assertEquals(ClubhouseRoom.Phase.SCANNING, r.phase(), "its settings were read at the start: "
+                    + r.statusLines());
+            assertTrue(r.switchOff().startsWith("&aThe Clubhouse is off"), "off is saved");
+            ClubhouseRoom later = new ClubhouseRoom(live, SETTINGS);
+            later.start();
+            assertTrue(later.off() && later.phase() == ClubhouseRoom.Phase.CLOSED, "and still off after a restart");
+
+            ClubhouseRoom.Place spawn = new ClubhouseRoom.Place("games", 100.5, 70, -20.5, 90f);
+            assertTrue(later.here(spawn).contains("Clubhouse now"), "here is saved");
+            for (int n = 1; n <= 3; n++) {
+                assertTrue(later.podium(n, new ClubhouseRoom.Place("games", 100 + n, 71, -21, 0f))
+                        .contains("Podium place " + n), "podium " + n + " is saved");
+            }
+            assertTrue(later.board(new ClubhouseRoom.Place("games", 102, 73, -25, 0f)).startsWith("&aThe results"),
+                    "the board is saved");
+            ClubhouseRoom owners = new ClubhouseRoom(live, SETTINGS);
+            owners.start();
+            assertTrue(owners.hand() && owners.open() && owners.handComplete(),
+                    "the owner-built room and all its spots come back after a restart: " + owners.handSpots());
+
+            assertTrue(owners.generated().startsWith("&aBack to the generated"), "generated is saved");
+            assertTrue(owners.switchOff().startsWith("&aThe Clubhouse is off"), "off again");
+            assertTrue(owners.rebuild(true).get(0).contains("being built"), "rebuild confirm clears off and claims");
+            ClubhouseRoom rebuilt = new ClubhouseRoom(live, SETTINGS);
+            rebuilt.start();
+            assertFalse(rebuilt.off() || rebuilt.hand(), "rebuild confirm's switches are kept after a restart");
+            assertNull(store.get(ClubhouseRoom.OFF_KEY), "the off switch is gone from the store");
+        }
     }
 }

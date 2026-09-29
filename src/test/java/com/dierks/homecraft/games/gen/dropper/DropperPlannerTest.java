@@ -137,9 +137,9 @@ class DropperPlannerTest {
     void threeSeedsOfEachMixMakeExactlyThePinnedLayouts() {
         // Pinned with the stand-in kind (PARKOUR); TrialKind.DROPPER changes every hash: re-pin then (WIRING.md).
         Map<String, List<String>> golden = Map.of(
-                "EEE", List.of("9880c501e4fb", "4cefe34afd8d", "07ab6b7c7ff7"),
-                "EEMMH", List.of("ac23ceb2e5ec", "92baf6d32eb6", "b07cf771e7d4"),
-                "HHHHH", List.of("911fc86b24d2", "5d3a5417ca95", "094066be4c7a"));
+                "EEE", List.of("631609650161", "aad108267877", "a63067fc9a7a"),
+                "EEMMH", List.of("d8c0096019a5", "e7e007aa3e80", "953ced76fe2e"),
+                "HHHHH", List.of("b2b7ff48a76b", "c2440367f760", "e4c40aed7c99"));
         for (Map.Entry<String, List<String>> e : golden.entrySet()) {
             for (int n = 0; n < 3; n++) {
                 assertEquals(e.getValue().get(n), DropperFixtures.plan(e.getKey(), n).hash(), e.getKey() + " seed " + n
@@ -184,6 +184,70 @@ class DropperPlannerTest {
         }
         Collections.sort(out);
         return out;
+    }
+
+    // ---- between the sampled starts ---------------------------------------------------------------
+
+    /**
+     * The pilots leave from every 0.3 blocks of the ledge's edge and a few moments of the walking
+     * step, and a child leaves from anywhere: a proof flown from one exact moment passed levels that
+     * bonked a pilot stepping off two hundredths of a block later. So real plans are flown again from
+     * the starts halfway between the sampled ones and from both ends of the step, walking and jumping,
+     * at every delay, and sloppy: every one still reaches the water, keeping at least half the pilots'
+     * own clearance (r/4) from every block.
+     */
+    @Test
+    void pilotsLeavingBetweenTheSampledStartsStillReachTheWater() {
+        double[] timings = {0.001, 0.333, 0.667, 0.999};
+        double[] exits = {-1.05, -0.75, -0.45, -0.15, 0.15, 0.45, 0.75, 1.05};
+        List<String> missed = new ArrayList<>();
+        int flown = 0;
+        for (String mix : List.of("EEE", "EEMMH", "HHHHH")) {
+            List<DropRules.Level> tiers = DropRules.levels(mix);
+            for (int n = 0; n < 6; n++) {
+                Plan p = DropperFixtures.plan(mix, n);
+                DropWorld w = DropperFixtures.world(p);
+                for (int i = 0; i < tiers.size(); i++) {
+                    DropRules.Level tier = tiers.get(i);
+                    DropCheck.View v = DropperFixtures.view(p, i, tier);
+                    DropCheck.Flight f = DropCheck.witness(w, v, DropperFixtures.witness(p, i), tier.tube());
+                    List<DropPilot.Target> targets = DropCheck.targets(w, v, f.crossings());
+                    List<String> labels = new ArrayList<>();
+                    List<DropSim.Body> starts = new ArrayList<>();
+                    List<DropPilot> pilots = new ArrayList<>();
+                    for (double t : timings) {
+                        for (double e : exits) {
+                            for (int d : tier.delays()) {
+                                for (boolean jump : new boolean[]{false, true}) {
+                                    labels.add((jump ? "jump" : "walk") + " off at " + e + ", step " + t + ", " + d
+                                            + " ticks late");
+                                    starts.add(DropPilot.start(v.edgeX(), v.edgeZ(), v.fx(), v.fz(), -v.fz(), v.fx(),
+                                            e, t, v.ledgeTop(), jump));
+                                    pilots.add(new DropPilot(v.fx(), v.fz(), targets, d, 0));
+                                }
+                            }
+                            double aim = e < 0 ? tier.aimError() : -tier.aimError();
+                            labels.add("sloppy " + aim + " degrees off at " + e + ", step " + t);
+                            starts.add(DropPilot.start(v.edgeX(), v.edgeZ(), v.fx(), v.fz(), -v.fz(), v.fx(), e, t,
+                                    v.ledgeTop(), false));
+                            pilots.add(new DropPilot(v.fx(), v.fz(), targets, tier.delays()[1], aim));
+                        }
+                    }
+                    for (int k = 0; k < starts.size(); k++) {
+                        DropRun.Result r = DropRun.fly(w, starts.get(k), pilots.get(k), tier.tube() / 4,
+                                DropSim.MAX_TICKS, Double.NaN, false);
+                        flown++;
+                        if (!r.splashed()) {
+                            missed.add(mix + " seed " + n + " level " + (i + 1) + ": " + labels.get(k) + " "
+                                    + r.outcome());
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(flown > 15_000, "a real sample of starts was flown: " + flown);
+        assertTrue(missed.isEmpty(), missed.size() + " of " + flown + " pilots leaving between the sampled starts"
+                + " didn't reach the water with r/4 to spare: " + missed.stream().limit(5).toList());
     }
 
     // ---- never missing a level --------------------------------------------------------------------

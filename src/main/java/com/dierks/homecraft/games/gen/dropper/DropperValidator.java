@@ -22,8 +22,11 @@ import java.util.List;
  *       second one) never lets the hitbox grown by r touch an obstacle or the floor round the pool,
  *       never lands, and enters the pool's water. Walls and the ledge are checked with the plain
  *       hitbox: a scrape isn't a landing.</li>
- *   <li><b>The 33 pilots</b> ({@link DropPilot}) reach the water from every sampled start, never
- *       touching an obstacle with the hitbox grown by r/2 and never standing on a block.</li>
+ *   <li><b>The pilots</b> ({@link DropPilot}) reach the water from every sampled start (every 0.3
+ *       blocks along the ledge's edge and three moments of a walking step, walking or jumping off,
+ *       at each of the tier's reaction delays, and sloppy), never touching an obstacle with the
+ *       hitbox grown by r/2 and never standing on a block. The starts in between are flown by
+ *       {@code DropperPlannerTest}, which holds them to r/4.</li>
  *   <li><b>Enclosure:</b> each shaft's walls are glass from the pool floor to the ledge top + 4, it has
  *       a floor and no roof, and a flood fill from the ledge (as high as a jump can reach) stays inside
  *       its own shaft.</li>

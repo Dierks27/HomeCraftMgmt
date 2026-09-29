@@ -42,9 +42,11 @@ import java.util.Set;
  *       a second opening proven by its own witness, DECOY a hole the next layer blocks;</li>
  *   <li>the pool goes where the witness lands, the whole floor on Easy;</li>
  *   <li>then the level is flown ({@link DropCheck}): the witness again, through the real blocks,
- *       and the 33 pilots. A pilot that bonks on a layer widens that layer's opening by 1 (twice at
- *       most); after that the level is redrawn ({@code fork("level:i:try:t")}), up to 20 times; after
- *       that, or once the level has used its share of the work budget, it is <b>SAFE_STRAIGHT</b>:
+ *       and the pilots ({@link DropPilot}: every 0.3 blocks of the ledge's edge and three moments of
+ *       a walking step, walking or jumping off, at each reaction delay, and the sloppy runs). A
+ *       pilot that bonks on a layer widens that layer's opening by 1 (twice at most); after that
+ *       the level is redrawn ({@code fork("level:i:try:t")}), up to 20 times; after that, or once
+ *       the level has used its share of the work budget, it is <b>SAFE_STRAIGHT</b>:
  *       the tier's shallowest layers, every opening the tier's minimum + 2, stacked under a plain
  *       walk-off. So a course is never missing a level.</li>
  * </ol>

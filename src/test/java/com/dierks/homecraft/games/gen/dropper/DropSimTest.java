@@ -9,7 +9,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The Dropper's physics, pinned to vanilla (EVENTS-DROPPER-SPEC §B.1.4): every value of the spec's
  * table, ticks exactly and blocks to ±0.02, and the constants themselves, so nobody "tunes" the
- * proof away from the game it proves things about.
+ * proof away from the game it proves things about. One row of the table is corrected: the spec's
+ * 2.19-block coast assumed a walk-off leaves the ledge with air speed, and vanilla's two ledge ticks
+ * leave it with ground speed.
  */
 class DropSimTest {
 
@@ -23,6 +25,8 @@ class DropSimTest {
         assertEquals(0.98F, DropSim.VERTICAL_DRAG, 0, "vertical drag is vanilla's 0.98F, promoted as the game does");
         assertEquals(0.91F, DropSim.AIR_DRAG, 0, "air drag is vanilla's 0.91F");
         assertEquals(0.42F, DropSim.JUMP_POWER, 0, "a jump starts at vanilla's 0.42F");
+        assertEquals(0.6F * 0.91F, DropSim.GROUND_DRAG, 0,
+                "a tick begun on the ground keeps f x 0.91 of the speed, the float product, with the ledge's f = 0.6");
         assertEquals(0.6, DropSim.WIDTH, 1e-12, "the hitbox is 0.6 wide");
         assertEquals(1.8, DropSim.HEIGHT, 1e-12, "and 1.8 tall");
     }
@@ -32,6 +36,8 @@ class DropSimTest {
         assertEquals(0.0196, DropSim.WALK_ACCEL, 1e-6,
                 "a = 0.02 x 0.98: the input is scaled by 0.98 before the flying speed (ROBUST's 0.02 was 2% too much)");
         assertEquals(0.02548, DropSim.SPRINT_ACCEL, 1e-6, "sprinting would be 0.026 x 0.98, which no pilot uses");
+        assertEquals(0.098, DropSim.GROUND_ACCEL, 1e-6,
+                "on the ground it is the movement speed 0.1 x 0.98 (0.216 / f^3 is 1 at friction 0.6)");
     }
 
     // ---- the table ----------------------------------------------------------------------------------
@@ -51,9 +57,10 @@ class DropSimTest {
     }
 
     @Test
-    void aWalkOffWithNoInputCoastsTwoPointOneNineBlocks() {
-        assertEquals(2.19, DropSim.coast(), BLOCKS,
-                "drag alone stops a walk-off after about 2.19 blocks (2.17 with vanilla's tiny-speed cut)");
+    void aWalkOffLetGoAtTheEdgeCoastsOnePointTwoEightBlocksNotTheSpecsTwoPointOneNine() {
+        assertEquals(1.28, DropSim.coast(), BLOCKS,
+                "the 0.118 the ledge leaves it with, kept 0.91 a tick until the tiny-speed cut: §B.1.4's 2.19 is the"
+                        + " coast of a body that left with the 0.198 of one already in the air, which no walker has");
     }
 
     @Test
@@ -139,12 +146,60 @@ class DropSimTest {
         assertEquals(fine, fine.settled(), "a speed over the cut is left alone");
     }
 
+    // ---- the ledge ticks -----------------------------------------------------------------------------
+
     @Test
-    void theWalkOffSpeedIsTheTopWalkingSpeedAfterOneDrag() {
-        assertEquals(DropSim.TOP_WALK * DropSim.AIR_DRAG, DropSim.WALK_OFF_SPEED, 1e-12,
-                "a walk-off starts at the speed a walking player carries into the tick");
+    void aWalkingPlayerMovesPointTwoOneSixATickAndCarriesPointOneOneEightIntoTheNext() {
+        assertEquals(4.317, DropSim.GROUND_WALK * 20, 0.001, "vanilla's walking speed, 4.317 blocks a second");
+        assertEquals(0.216, DropSim.GROUND_WALK, BLOCKS, "0.098 / (1 - 0.546): a step of 0.216 a tick");
+        assertEquals(0.118, DropSim.WALK_OFF_SPEED, 0.001, "and 0.216 x 0.546 = 0.118 carried into each tick");
+        assertEquals(DropSim.GROUND_WALK * DropSim.GROUND_DRAG, DropSim.WALK_OFF_SPEED, 1e-12,
+                "the constant is the step after the ground's drag");
+    }
+
+    @Test
+    void aWalkOffIsTwoGroundTicksTheLastOverTheLedgeAndTheEdgeTickThenAir() {
+        DropSim.Body b = DropSim.walkOff(0, 0, 0, 1, 0);
+        assertEquals(DropSim.WALK_OFF_LEDGE_TICKS, b.ground(), "a walk-off has two ledge ticks to come");
+        assertEquals(DropSim.WALK_OFF_SPEED, b.vx(), 0, "carrying a walker's 0.118 into the first");
+        assertEquals(0, b.vy(), 0, "with no vertical speed: the ledge holds it up that tick");
+        DropSim.Body t1 = b.tick(1, 0);
+        assertEquals(DropSim.GROUND_WALK, t1.x(), 1e-12, "the last tick over the ledge is a whole walking step");
+        assertEquals(0, t1.y(), 0, "and drops nothing");
+        assertEquals(1, t1.ground(), "one ledge tick left");
+        DropSim.Body t2 = t1.tick(1, 0);
+        assertEquals(DropSim.GROUND_WALK, t2.x() - t1.x(), 1e-12,
+                "the edge tick starts off the ledge but was begun on the ground: another whole step");
+        assertEquals(-0.0784, t2.y(), 1e-8, "dropping vanilla's 0.0784");
+        assertEquals(0, t2.ground(), "and after it the body is in the air");
+        assertEquals(DropSim.WALK_OFF_SPEED, t2.vx(), 1e-12,
+                "it leaves with the ground's 0.118, not the 0.198 a body already in the air would keep");
+        DropSim.Body t3 = t2.tick(1, 0);
+        assertEquals(DropSim.WALK_OFF_SPEED + DropSim.WALK_ACCEL, t3.x() - t2.x(), 1e-12,
+                "the first air tick moves 0.118 + 0.0196 = 0.137, with air acceleration");
+        assertEquals((DropSim.WALK_OFF_SPEED + DropSim.WALK_ACCEL) * DropSim.AIR_DRAG, t3.vx(), 1e-12,
+                "and air drag");
+    }
+
+    @Test
+    void aJumpOffIsOneGroundTickWithTheJumpsSpeed() {
         DropSim.Body j = DropSim.jumpOff(0, 0, 0, 0, 1);
-        assertEquals(DropSim.JUMP_POWER, j.vy(), 0, "a jump-off is a walk-off with the jump's speed up");
-        assertEquals(DropSim.WALK_OFF_SPEED, j.vz(), 0, "heading the way it was given");
+        assertEquals(DropSim.JUMP_OFF_LEDGE_TICKS, j.ground(), "the jump's own tick is its one ledge tick");
+        assertEquals(DropSim.JUMP_POWER, j.vy(), 0, "starting up at vanilla's 0.42");
+        assertEquals(DropSim.WALK_OFF_SPEED, j.vz(), 0, "heading the way it was given at a walker's 0.118");
+        DropSim.Body t1 = j.tick(0, 1);
+        assertEquals(DropSim.GROUND_WALK, t1.z(), 1e-12, "the jump tick is a whole walking step forward");
+        assertEquals(0.42, t1.y(), 1e-6, "and 0.42 up");
+        assertEquals(0, t1.ground(), "then the air");
+        assertEquals(DropSim.WALK_OFF_SPEED, t1.vz(), 1e-12, "carrying the ground's 0.118 out of it");
+    }
+
+    @Test
+    void aBodyInTheAirHasNoLedgeTicksAndNeverGetsThemBack() {
+        DropSim.Body air = new DropSim.Body(0, 10, 0, 0.1, 0, 0);
+        assertEquals(0, air.ground(), "a body made without ledge ticks is in the air");
+        DropSim.Body t = air.tick(1, 0).tick(1, 0);
+        assertEquals(0, t.ground(), "and stays there: the count never goes below 0");
+        assertEquals(0, new DropSim.Body(0, 0, 0, 0, 0, 0, -3).ground(), "a negative count is none");
     }
 }

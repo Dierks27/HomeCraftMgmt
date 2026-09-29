@@ -54,9 +54,10 @@ public final class DropCheck {
             return forward.uz();
         }
 
-        /** Where the witness starts: the middle exit, walking off. */
+        /** Where the witness starts: the middle exit, walking off in the middle of a step. */
         public DropSim.Body witnessStart() {
-            return DropPilot.start(edgeX, edgeZ, fx(), fz(), -fz(), fx(), 0, ledgeTop, false);
+            return DropPilot.start(edgeX, edgeZ, fx(), fz(), -fz(), fx(), 0, DropPilot.WITNESS_TIMING, ledgeTop,
+                    false);
         }
 
         /** How far block (x, z) is from the ledge's back wall, in blocks along forward (0-10). */
@@ -314,7 +315,7 @@ public final class DropCheck {
     }
 
     /**
-     * Fly the tier's 33 pilots at {@code targets} with half the clearance; every one that doesn't
+     * Fly the tier's pilots at {@code targets} with half the clearance; every one that doesn't
      * splash, the hardest first. {@code firstOnly} stops at the first miss (the planner's retry);
      * {@code work} gets the ticks flown added.
      */

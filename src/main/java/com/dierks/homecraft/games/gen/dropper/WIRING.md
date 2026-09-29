@@ -43,7 +43,8 @@ Time Trials would play a dropper as parkour.
   - Register `new DropperPlanner()` in `DailyCourses.planners()`.
 - **`gen/engine/GenService`**: add `WORK.put("dropper", 300_000L)`, which is
   `DropperPlanner.WORK_BUDGET`. The planner splits the budget evenly across the levels and counts
-  simulated ticks, so every host makes the same plan. A typical plan uses 4k-17k.
+  simulated ticks, so every host makes the same plan. A typical plan uses about 18k (EEE) to 45k
+  (HHHHH), most of it the pilots (§7).
 - **Admin mix**: `/hcm games gen mix fresh_dropper EEMHH` goes through `tierProblem`, which is
   `DropRules.mixProblem`.
 
@@ -64,15 +65,54 @@ Time Trials would play a dropper as parkour.
 
 ## 4. Time Trials (`trial/*`)
 
+- **`FairPlay`: skip the ledge legs, first** (§B.1.7, the `DROPPER` kind only). Without this,
+  every run of two or more levels is voided:
+  - The hop from pool i to ledge i+1 is the run's own teleport, 5 ticks after the splash. The gap
+    between the two spheres is about 31 blocks on Easy and about 46 on Hard, covered in about
+    0.3 s. That is over 100 blocks a second, and `TrialKind.DROPPER`'s `maxSpeed` is 80.
+  - So `tooFast` skips every leg that **ends at a ledge mark** (a target where
+    `DropMarks.isPool(index)` is false). The legs that end at a pool are real falls and stay
+    checked.
+  - `fallY` is always the course's own.
+  - `minSeconds` is already on the course: `DropRules.minSeconds(mix)` (90% of the walk-off falls,
+    rounded down).
+  - `movement()` is unchanged: a changed gravity or safe-fall attribute voids the run, and so does
+    any potion, slow falling included.
+  - `FairPlayTest`: dropper teleport legs are skipped, `minSeconds` holds, and the other kinds are
+    unchanged.
+- **Collisions** (§B.1.7): `setCollidable(false)` for the run's player, so two fallers in one shaft
+  can't push each other.
+  - Restore it on **every** end path: `end()` (finish, leave, void, stale) and session end (quit,
+    kick, shutdown). It isn't saved with the player, so a crash can't leave it stuck.
+  - TimeTrials test: `setCollidable` is restored on every end path.
 - **`trial/DropperLayout`** is a thin face on `DropMarks`, so the planner, the validator and the
   game read one encoding:
   - `levels`, `levelOf`, `isPool`, `backTo`, `currentLevel`, `poolBox`, `inPool`, `facing`;
   - `problems(course)`, which joins `Course.problems` for a `DROPPER` row.
 - **`trial/DropperRules`** holds the bonk and splash rules (pure, WP-D). A splash is the first move
   segment that enters `DropMarks.poolBox(mark)`. The validator's pool-box rule makes every block of
-  that box water.
-- **`FairPlay`**: the course already carries `minSeconds = DropRules.minSeconds(mix)` (90% of the
-  walk-off falls, rounded down).
+  that box water. Bonks are ignored during the hop.
+- **`TimeTrials` and `TrialRun`**: the splash title, the hop (`setVelocity(0)`,
+  `setFallDistance(0)`, `progress.jump(ledge)`), the bonk's `sendBack`, the countdown on level 1
+  only, and the clock line "&e0:12.4 &7· level 2 of 5 · 1 bonk". A run keeps its `Course` snapshot,
+  so a run in progress at the weekly flip still counts (still standing).
+- **`CourseAdmin`** (§B.1.2): the create refusal.
+  - `/hcm games course create <id> dropper` is refused with "Droppers are made by Fresh Courses;
+    keep one to make it permanent."
+  - A kept dropper is an ordinary trials row: `info`, `tp`, `test`, `name`, `tier`, `enable` and
+    `feature` work on it, and geometry edits are refused.
+  - `CourseAdminTest`: a hand-made dropper is refused; a kept dropper can be renamed; geometry edits
+    are refused.
+- **`TrialText` and the menus** (§B.1.1, §B.1.8), the wording:
+  - the rules lines and the WATER_BUCKET icon;
+  - CourseMenu, ResultMenu and CourseListMenu say "levels" for a dropper;
+  - the result reads "No bonks - perfect drop!" or "Bonks: 2";
+  - the FreshMenu tiles, and the course code in the item NAME ("Course code DROP-12") for Bedrock;
+  - `GenCopyTest`/`TrialTextTest`: "level 2 of 5"; sign lines at most 15 ASCII.
+- **E4**: a counted finish is `FINISH_COURSE` and its stars `EARN_STARS`, through the trials path as
+  for any trial. Add the achievement `game_dropper_clean`, "Reach the bottom of a Dropper with no
+  bonks" (20), with E4's backfill caution. Test, void and stale runs never count, and neither does a
+  practice drop (§5).
 - **Stars**: `PlannedTrial.refMs` is `DropRules.refMs(mix)`. The row's tier is `DropRules.tier(mix)`
   (the rounded mean), so `Stars.threshold(refMs, factor)` uses that tier's factor. EEE gives a
   9.8 s reference (gold 19.6 s, shown as 20 s), and EEMMH gives 17.4 s (gold 26.1 s, shown as 27 s).
@@ -113,9 +153,32 @@ only: the pure package already has every piece it needs.
 
 | Guarantee | Test |
 |---|---|
-| Vanilla's air physics, every number of §B.1.4 | `DropSimTest` |
+| Vanilla's physics: the air, and a walk-off's two ledge ticks (a jump-off's one); every number of §B.1.4, the coast corrected (§7) | `DropSimTest` |
 | The tier table and its relations (the opening fits the hitbox + 2r, r is more than a tick of drift) | `DropRulesTest` |
 | 2,000 seeds each of EEE, EEMMH and HHHHH plan and pass the validator; golden hashes; ops ≤ 20k inside the half | `DropperPlannerTest` |
+| Pilots leaving between the sampled starts (halfway exits, both ends and the middles of the step) still reach the water with r/4 to spare | `DropperPlannerTest` |
 | Every rule of §B.1.6 fails a hand-made bad plan | `DropperValidatorTest` |
-| The pilots: a straight stack passes, a plate fails, reaction delays, swept corner clips | `DropPilotTest` |
+| The pilots: every 0.3 blocks of the edge and the whole walking step, a straight stack passes, a plate fails, reaction delays, they settle over a target instead of swinging across it, swept corner clips | `DropPilotTest` |
 | The course encoding: alternation, `backTo`, the pool box, the rim never reaches a pool mark | `DropMarksTest` |
+
+## 7. Where this differs from the spec (for the owner and the docs)
+
+- **The coast row of §B.1.4 is wrong.** Vanilla decides "on the ground" at the end of each move, so a
+  walk-off is two ground ticks (the last tick over the ledge and the edge tick after it) with ground
+  acceleration (0.098) and ground drag (0.546). A walker leaves the edge with 0.118 blocks a tick,
+  not 0.198, and drifts about **1.28** blocks once it lets go, not 2.19. A jump-off is one ground
+  tick with the jump's 0.42. The fall times (32/37/40 and 38/42/46 ticks), the top air speeds, the
+  stop and the reaches are unchanged. `DropSim` models the ledge ticks and `DropSimTest` pins them.
+- **More pilots than 33.** A child leaves from anywhere along the edge and at any moment of a walking
+  step, and a proof flown from one moment passed levels that bonked a pilot stepping off 0.02 blocks
+  later. The pilots now leave every 0.3 blocks along the edge (9 exits) and at three moments of the
+  step (0.072 blocks apart), walking or jumping, at each of the tier's 3 delays, plus the 3 sloppy
+  runs at each moment: **171 a level**.
+- **The pilot settles over its target** (its deadband is now 0.12; it was 0.1). One push moves
+  where its drift ends by 0.218. With a band under half of that, a pilot could swing across its
+  target every tick, and which key it held while passing a layer was a coin toss. At 0.12 it
+  settles.
+- **What the sampling leaves.** Flown from a 17 × 20 grid of starts on 200 plans of each mix, no
+  pilot's hitbox grown by r/4 touches a block. A few graze the r/2 clearance between the sampled
+  starts (about 3% of Medium and Hard levels). The robustness proof is still a sampled one, as
+  §B.1.6 says.

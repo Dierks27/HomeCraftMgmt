@@ -186,34 +186,6 @@ public final class DropWorld {
         return null;
     }
 
-    /**
-     * Whether nothing but air can be in the box: no row it spans holds any of {@code rowKinds}, and no
-     * column it spans holds any of {@code columnKinds}. A quick test before the exact ones.
-     */
-    public boolean quiet(double x1, double y1, double z1, double x2, double y2, double z2, int rowKinds,
-                         int columnKinds) {
-        int by1 = Math.max((int) Math.floor(y1), half.minY());
-        int by2 = Math.min((int) Math.ceil(y2) - 1, half.maxY());
-        for (int y = by1; y <= by2; y++) {
-            if ((this.rowKinds[y - half.minY()] & rowKinds) != 0) {
-                return false;
-            }
-        }
-        int bx1 = Math.max((int) Math.floor(x1), half.minX());
-        int bx2 = Math.min((int) Math.ceil(x2) - 1, half.maxX());
-        int bz1 = Math.max((int) Math.floor(z1), half.minZ());
-        int bz2 = Math.min((int) Math.ceil(z2) - 1, half.maxZ());
-        int sz = half.sizeZ();
-        for (int x = bx1; x <= bx2; x++) {
-            for (int z = bz1; z <= bz2; z++) {
-                if ((this.columnKinds[(x - half.minX()) * sz + (z - half.minZ())] & columnKinds) != 0) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
     /** Whether the box overlaps a wall or the ledge (the blocks a body collides with). */
     public boolean blocks(double x1, double y1, double z1, double x2, double y2, double z2) {
         return overlapAny(x1, y1, z1, x2, y2, z2, COLLIDES) != null;

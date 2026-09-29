@@ -4,9 +4,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * One fall through real blocks (EVENTS-DROPPER-SPEC §B.1.6): {@link DropSim}'s tick, split into
- * {@value #SUB_STEPS} swept sub-steps so nothing tunnels through a one-block plate at two blocks a
- * tick, against a {@link DropWorld}.
+ * One fall through real blocks (EVENTS-DROPPER-SPEC §B.1.6): {@link DropSim}'s tick (its ledge
+ * ticks included: ground acceleration and ground drag while {@link DropSim.Body#ground} lasts),
+ * split into {@value #SUB_STEPS} swept sub-steps so nothing tunnels through a one-block plate at two
+ * blocks a tick, against a {@link DropWorld}.
  *
  * <p><b>What stops a fall.</b>
  * <ul>
@@ -26,8 +27,11 @@ import java.util.List;
  */
 public final class DropRun {
 
-    /** The kinds whose rows a quiet sub-step must be clear of: obstacles and water. */
-    private static final int QUIET_ROWS = 1 << DropWorld.SOLID | 1 << DropWorld.WATER;
+    /**
+     * The kinds a quiet sub-step's box must be clear of: everything that can stop, touch or splash a
+     * body (walls, the ledge, obstacles and water).
+     */
+    private static final int QUIET_KINDS = DropWorld.COLLIDES | 1 << DropWorld.SOLID | 1 << DropWorld.WATER;
 
     /** Sub-steps a tick: at 2.2 blocks a tick, each is under 0.6, far less than a plate plus a body. */
     public static final int SUB_STEPS = 4;
@@ -99,10 +103,12 @@ public final class DropRun {
                 double dx = vx / SUB_STEPS;
                 double dz = vz / SUB_STEPS;
                 double reachOut = Math.max(inflate, 0) + 1e-6;
-                if (world.quiet(Math.min(x0, x0 + dx) - h - reachOut, Math.min(y0, y0 + dy) - reachOut,
+                // the sub-step's swept box, grown by the clearance and a hair: it holds every box the
+                // exact checks below look at, so with nothing in it they would find nothing either
+                if (world.overlapAny(Math.min(x0, x0 + dx) - h - reachOut, Math.min(y0, y0 + dy) - reachOut,
                         Math.min(z0, z0 + dz) - h - reachOut, Math.max(x0, x0 + dx) + h + reachOut,
                         Math.max(y0, y0 + dy) + DropSim.HEIGHT + reachOut, Math.max(z0, z0 + dz) + h + reachOut,
-                        QUIET_ROWS, DropWorld.COLLIDES)) {
+                        QUIET_KINDS) == null) {
                     // open air: nothing to hit, land on or splash into
                     y += dy;
                     x += dx;
@@ -116,8 +122,8 @@ public final class DropRun {
                         lastBox = box(x0, y0, z0, x, y, z);
                     }
                     if (end != null) {
-                        return new Result(end, tick, new DropSim.Body(x, y, z, vx, vy, vz), null, path, work,
-                                lastBox);
+                        return new Result(end, tick, new DropSim.Body(x, y, z, vx, vy, vz, b.ground()), null, path,
+                                work, lastBox);
                     }
                     continue;
                 }
@@ -127,7 +133,7 @@ public final class DropRun {
                     if (dy < 0) {
                         y += my;
                         int[] under = world.overlapAny(x - h, y - 0.01, z - h, x + h, y, z + h, DropWorld.COLLIDES);
-                        DropSim.Body at = new DropSim.Body(x, y, z, vx, 0, vz);
+                        DropSim.Body at = new DropSim.Body(x, y, z, vx, 0, vz, b.ground());
                         record(path, at, tick);
                         return new Result(Outcome.LANDED, tick, at, under, path, work, box(x0, y0, z0, x, y, z));
                     }
@@ -183,10 +189,12 @@ public final class DropRun {
                     lastBox = new double[]{sx1, sy1, sz1, sx2, sy2, sz2};
                 }
                 if (end != null) {
-                    return new Result(end, tick, new DropSim.Body(x, y, z, vx, vy, vz), touched, path, work, lastBox);
+                    return new Result(end, tick, new DropSim.Body(x, y, z, vx, vy, vz, b.ground()), touched, path,
+                            work, lastBox);
                 }
             }
-            b = new DropSim.Body(x, y, z, vx, vy, vz).dragged();
+            // the drag the tick began under: ground drag on a ledge tick, air drag after
+            b = new DropSim.Body(x, y, z, vx, vy, vz, b.ground()).dragged();
         }
         return new Result(Outcome.TIMEOUT, maxTicks, b, null, path, work, lastBox);
     }

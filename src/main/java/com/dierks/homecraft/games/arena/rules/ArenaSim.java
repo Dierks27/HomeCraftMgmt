@@ -176,10 +176,10 @@ public final class ArenaSim {
     /** One tick: the floors and the round (through the game's own driver), then every body moves. */
     public ArenaTick.Output step() {
         tick++;
-        Map<UUID, Feet> feet = new LinkedHashMap<>();
+        Map<UUID, List<Feet>> feet = new LinkedHashMap<>();
         for (Body b : bodies.values()) {
             if (b.inPlay) {
-                feet.put(b.id, b.feet());
+                feet.put(b.id, List.of(b.feet())); // a body moves once a tick: one position each
             }
         }
         ArenaTick.Output out = driver.tick(feet, Set.of(), hold);
@@ -260,9 +260,9 @@ public final class ArenaSim {
             case RoundEvent.ResetNeeded r -> {
                 if (failResets > 0) {
                     failResets--;
-                    round.resetDone(false);
+                    round.resetDone(r.ticket(), false);
                 } else {
-                    round.resetDone(true);
+                    round.resetDone(r.ticket(), true);
                 }
             }
             default -> {

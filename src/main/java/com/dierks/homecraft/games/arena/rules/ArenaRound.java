@@ -25,10 +25,17 @@ import java.util.UUID;
  * nobody knows what a crash left behind. The gate is simply "not in RESET": the first verify opens
  * it, and every round ends by going back through it, so no round is ever played on half a floor.
  *
+ * <p>Why every reset has a ticket: a reset is a job that runs for a few ticks, and a new one can be
+ * asked for while one is still running (a new week's shape, an admin reset, a reopen). Only the
+ * answer to the latest request counts ({@link #resetDone(int, boolean)}), so a job that verified the
+ * box against last week's plan can never open the gate for this week's, and a superseded job's
+ * failure never counts against the one that replaced it.
+ *
  * <p>Why places are settled once a tick: players out on the same tick share their place, and the
  * game learns about them one by one. {@link #out} only notes it; {@link #tick} settles everyone
  * noted that tick together, so the order the server happened to check players in never decides who
- * came 2nd.
+ * came 2nd. Leaving is not playing it out: a player who left on the same tick never makes a faller's
+ * place "shared", and never makes their 1st place a win.
  *
  * <p>Pure: players are UUIDs, time is ticks, and everything the game must do comes out of
  * {@link #drain} as {@link RoundEvent}s. Not thread-safe (the main thread drives it).
@@ -92,6 +99,7 @@ public final class ArenaRound {
     private int countdownLeft;
     private int holdLeft;
     private int resetAttempt;
+    private int resetTicket;
     private int roundNo;
     private String closedReason = "";
 
@@ -301,24 +309,46 @@ public final class ArenaRound {
         playTicks++;
     }
 
-    /** Everyone noted out this tick goes out together, sharing the place: 1 + how many are still in. */
+    /**
+     * Everyone noted out this tick goes out together, sharing the place: 1 + how many are still in.
+     * Only those who fell share it with each other ({@code tied}); a leaver on the same tick doesn't.
+     * When the last ones go out together their 1st place is a win only if the round was contested,
+     * worked out here exactly as {@link #end} does, so the Out line never claims a win the result
+     * doesn't count.
+     */
     private void settle() {
         if (pendingOut.isEmpty()) {
             return;
         }
         List<UUID> group = new ArrayList<>();
+        int fell = 0;
         for (UUID p : starters) {
-            if (pendingOut.containsKey(p)) {
+            OutReason r = pendingOut.get(p);
+            if (r != null) {
                 group.add(p);
+                if (r != OutReason.LEFT) {
+                    fell++;
+                }
             }
         }
         alive.removeAll(group);
         int place = 1 + alive.size();
-        boolean tied = group.size() > 1;
+        boolean wins = false;
+        if (!solo && place == 1) {
+            int playedOut = fell;
+            for (Standing s : outs) {
+                if (!s.left()) {
+                    playedOut++;
+                }
+            }
+            wins = playedOut >= 2;
+        }
         for (UUID p : group) {
             OutReason r = pendingOut.get(p);
+            boolean left = r == OutReason.LEFT;
+            boolean tied = !left && fell > 1;
             outs.add(new Standing(p, place, playTicks, r, tied, false));
-            outbox.add(new RoundEvent.Out(p, playTicks, place, starters.size(), tied, r, solo));
+            outbox.add(new RoundEvent.Out(p, playTicks, place, starters.size(), tied, r, solo, wins && !left));
         }
         pendingOut.clear();
     }
@@ -351,14 +381,16 @@ public final class ArenaRound {
     // ---- the reset and the gate -----------------------------------------------------------------
 
     /**
-     * The reset asked for by {@link RoundEvent.ResetNeeded} is over: {@code verified} when the box
-     * now equals the week's plan. Verified opens the lobby; a failure asks again, and the third
-     * failure in a row closes the game.
+     * The reset asked for by {@link RoundEvent.ResetNeeded} {@code ticket} is over: {@code verified}
+     * when the box now equals the week's plan. Verified opens the lobby; a failure asks again, and
+     * the third failure in a row closes the game.
      *
-     * @return false when no reset was waiting (a late answer is ignored)
+     * @param ticket the {@link RoundEvent.ResetNeeded#ticket()} of the request this job answers
+     * @return false when it was ignored: no reset is waiting, or this answers a request that a newer
+     *         one replaced (a late answer, perhaps verified against last week's plan)
      */
-    public boolean resetDone(boolean verified) {
-        if (phase != Phase.RESET) {
+    public boolean resetDone(int ticket, boolean verified) {
+        if (phase != Phase.RESET || ticket != resetTicket) {
             return false;
         }
         if (verified) {
@@ -372,7 +404,7 @@ public final class ArenaRound {
             return true;
         }
         resetAttempt++;
-        outbox.add(new RoundEvent.ResetNeeded(resetAttempt));
+        askForReset();
         return true;
     }
 
@@ -380,18 +412,25 @@ public final class ArenaRound {
      * The floors must be rebuilt now (a new week's shape, an admin reset): from the lobby or the
      * countdown at once; mid-round it waits for the reset every round ends with anyway.
      *
+     * <p>During a reset it replaces the one running: a new {@link RoundEvent.ResetNeeded} with a new
+     * ticket and the same attempt (failed verifies so far still count, so resetting again and again
+     * never hides a box that can't be put back). The running job's answer is ignored from now on;
+     * the wiring cancels it, so two jobs never write the box at once.
+     *
      * @return whether a reset was asked for now
      */
     public boolean requestReset() {
         switch (phase) {
-            case COUNTDOWN -> cancel(RoundEvent.Why.RESET);
-            case LOBBY, RESET -> {
+            case COUNTDOWN -> {
+                cancel(RoundEvent.Why.RESET);
+                resetNeeded();
             }
+            case LOBBY -> resetNeeded();
+            case RESET -> askForReset();
             default -> {
                 return false;
             }
         }
-        resetNeeded();
         return true;
     }
 
@@ -496,7 +535,13 @@ public final class ArenaRound {
     private void resetNeeded() {
         phase = Phase.RESET;
         resetAttempt = 1;
-        outbox.add(new RoundEvent.ResetNeeded(1));
+        askForReset();
+    }
+
+    /** A new request, with a new ticket: any answer to an older one is ignored from now on. */
+    private void askForReset() {
+        resetTicket++;
+        outbox.add(new RoundEvent.ResetNeeded(resetTicket, resetAttempt));
     }
 
     private void clearRound() {
@@ -604,6 +649,15 @@ public final class ArenaRound {
     /** Which try of the reset this is (1-3), while in RESET. */
     public int resetAttempt() {
         return resetAttempt;
+    }
+
+    /**
+     * The ticket of the latest reset request. Package-private on purpose: the game answers with the
+     * ticket its {@link RoundEvent.ResetNeeded} carried, never with this (that would let a stale job
+     * answer for a newer request).
+     */
+    int resetTicket() {
+        return resetTicket;
     }
 
     /** Why it is closed ("" when it isn't). */

@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.arena.rules;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -75,6 +76,19 @@ final class ArenaFixtures {
     /** A player's id for the tests: p(1), p(2) ... */
     static UUID p(int n) {
         return new UUID(0xABCD, n);
+    }
+
+    /**
+     * The game's answer to the latest reset request: the verify passed ({@code ok}) or failed. (The
+     * game itself answers with the ticket its ResetNeeded carried.)
+     */
+    static boolean verify(ArenaRound r, boolean ok) {
+        return r.resetDone(r.resetTicket(), ok);
+    }
+
+    /** One player's one position this tick, as the game hands positions over. */
+    static Map<UUID, List<Feet>> at(UUID who, Feet f) {
+        return Map.of(who, List.of(f));
     }
 
     /** Feet standing still at the middle of cell (x, z) on floor top {@code top}. */

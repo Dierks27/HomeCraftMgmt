@@ -27,8 +27,10 @@ public record RoundSettings(int fadeTicks, int minPlayers, int maxPlayers, boole
     public static final int DEFAULT_MIN_PLAYERS = 2;
     public static final int DEFAULT_MAX_PLAYERS = 12;
     /**
-     * The most a config may allow. At 16 players the worst tick is 16 x 4 cells x 2 writes = 128,
-     * exactly the FloorWriter's per-tick cap, so a full arena never queues a write behind a fall.
+     * The most a config may allow. At 16 players moving a step a tick the worst tick is 16 x 4 cells
+     * x 2 writes = 128, exactly the FloorWriter's per-tick cap, so a full arena never queues a write
+     * behind a fall. (Positions bunched up by lag can mark a few more cells in one tick; the writer
+     * queues those in order.)
      */
     public static final int MAX_PLAYERS_LIMIT = 16;
     public static final int DEFAULT_ROUND_SECONDS = 180;

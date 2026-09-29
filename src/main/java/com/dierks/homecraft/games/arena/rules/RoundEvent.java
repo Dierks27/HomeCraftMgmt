@@ -58,17 +58,29 @@ public sealed interface RoundEvent {
      *
      * @param place the place they share with anyone out on the same tick
      * @param of    how many started
+     * @param tied  someone else fell on the same tick, so the place is shared (a leaver never ties)
+     * @param won   this 1st place is a win that counts: multiplayer, not left, and contested (the
+     *              same as the result's {@link Standing#winner()}), so "You won" is never said
+     *              when no win is recorded
      */
-    record Out(UUID player, long survivedTicks, int place, int of, boolean tied, OutReason reason, boolean solo)
-            implements RoundEvent {
+    record Out(UUID player, long survivedTicks, int place, int of, boolean tied, OutReason reason, boolean solo,
+               boolean won) implements RoundEvent {
     }
 
     /** The round is over (results to the gallery, then the reset). */
     record Ended(RoundResult result) implements RoundEvent {
     }
 
-    /** Converge the box to the week's plan and verify it, then call {@link ArenaRound#resetDone}. */
-    record ResetNeeded(int attempt) implements RoundEvent {
+    /**
+     * Converge the box to the week's plan and verify it, then call
+     * {@link ArenaRound#resetDone(int, boolean)} with this {@code ticket}. A newer ResetNeeded
+     * replaces this one: cancel its job (its answer would be ignored anyway), so two jobs never
+     * write the box at once.
+     *
+     * @param ticket  this request's number, the one its answer must carry
+     * @param attempt which try this is (1-3): the third failed verify in a row closes the game
+     */
+    record ResetNeeded(int ticket, int attempt) implements RoundEvent {
     }
 
     /** The floors are whole and verified: the gallery is a lobby again. */

@@ -86,7 +86,8 @@ public final class FloorRules {
      * One tick of play. {@code playTick} counts from 0 at the first tick after Go and must go up
      * each call; a skipped tick is caught up (every fade and ring that fell due is applied).
      *
-     * @param feet the players still in, in a fixed order (the round's starter order)
+     * @param feet every position of the players still in this tick, in a fixed order (by the
+     *             round's starter order, then oldest first): each one on a floor marks it
      * @return the blocks to write, in order
      */
     public List<FloorWrite> step(long playTick, Collection<Feet> feet) {
@@ -243,6 +244,14 @@ public final class FloorRules {
     /** The play tick at which the last ring falls: after it, and one fade, nothing is left. */
     public long lastRingAt() {
         return suddenDeathAt + (long) Math.max(0, layout.maxRings() - 1) * ringTicks;
+    }
+
+    /**
+     * The play tick by which every cell of every floor is air: the last ring's fade. Whatever the
+     * players did, {@link #allGone()} holds from the step for this tick on.
+     */
+    public long goneBy() {
+        return lastRingAt() + fadeTicks;
     }
 
     /** Cells turned red so far. */

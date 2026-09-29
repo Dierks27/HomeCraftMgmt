@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static com.dierks.homecraft.games.arena.rules.ArenaFixtures.p;
+import static com.dierks.homecraft.games.arena.rules.ArenaFixtures.verify;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -24,7 +25,7 @@ class ArenaRoundTest {
     /** An arena whose boot verify has passed: an open lobby. */
     private static ArenaRound open(RoundSettings s, int spawns) {
         ArenaRound r = new ArenaRound(s, spawns);
-        r.resetDone(true);
+        verify(r, true);
         r.drain();
         return r;
     }
@@ -91,36 +92,88 @@ class ArenaRoundTest {
     void theGateIsShutAtBootUntilAVerifyPasses() {
         ArenaRound r = new ArenaRound(RoundSettings.defaults(), 12);
         assertEquals(ArenaRound.Phase.RESET, r.phase(), "nobody knows what a crash left: it starts by resetting");
-        assertEquals(List.of(new RoundEvent.ResetNeeded(1)), r.drain(), "and asks for the boot verify at once");
+        assertEquals(List.of(new RoundEvent.ResetNeeded(1, 1)), r.drain(), "and asks for the boot verify at once");
         assertEquals(ArenaRound.Join.JOINED, r.join(p(1)), "players may wait in the gallery meanwhile");
         assertEquals(ArenaRound.Solo.NOT_READY, r.solo(p(1), false), "but no round starts on unverified floors");
         ticks(r, 1000, false);
         assertEquals(ArenaRound.Phase.RESET, r.phase(), "time alone never opens the gate");
-        assertTrue(r.resetDone(true), "a passing verify is taken");
+        assertTrue(r.resetDone(1, true), "a passing verify is taken");
         assertEquals(ArenaRound.Phase.LOBBY, r.phase(), "and opens the lobby");
         assertEquals(List.of(new RoundEvent.LobbyOpen()), r.drain(), "announced");
-        assertFalse(r.resetDone(true), "a late or second answer is ignored");
+        assertFalse(r.resetDone(1, true), "a late or second answer is ignored");
     }
 
     @Test
     void aResetThatFailsItsVerifyThreeTimesClosesTheGame() {
         ArenaRound r = new ArenaRound(RoundSettings.defaults(), 12);
         r.drain();
-        r.resetDone(false);
-        assertEquals(List.of(new RoundEvent.ResetNeeded(2)), r.drain(), "the first failure tries again");
-        r.resetDone(false);
-        assertEquals(List.of(new RoundEvent.ResetNeeded(3)), r.drain(), "and the second");
-        r.resetDone(false);
+        r.resetDone(1, false);
+        assertEquals(List.of(new RoundEvent.ResetNeeded(2, 2)), r.drain(), "the first failure tries again");
+        r.resetDone(2, false);
+        assertEquals(List.of(new RoundEvent.ResetNeeded(3, 3)), r.drain(), "and the second");
+        r.resetDone(3, false);
         assertEquals(ArenaRound.Phase.CLOSED, r.phase(), "the third closes the game");
         List<RoundEvent> closed = r.drain();
         assertEquals(1, only(closed, RoundEvent.Closed.class).size(), "with a Closed event for the status line");
         assertTrue(r.closedReason().contains("3"), "saying how many tries: " + r.closedReason());
         assertEquals(ArenaRound.Join.CLOSED, r.join(p(1)), "nobody can join a closed game");
         assertTrue(r.reopen(), "an admin can open it again");
-        assertEquals(List.of(new RoundEvent.ResetNeeded(1)), r.drain(), "starting with a fresh reset, like a boot");
-        r.resetDone(false);
-        r.resetDone(false);
+        assertEquals(List.of(new RoundEvent.ResetNeeded(4, 1)), r.drain(),
+                "starting with a fresh reset (a new ticket, attempt 1), like a boot");
+        r.resetDone(4, false);
+        r.resetDone(5, false);
         assertEquals(ArenaRound.Phase.RESET, r.phase(), "the count starts again after a reopen");
+    }
+
+    @Test
+    void aLateAnswerToAResetThatWasReplacedNeverOpensTheGate() {
+        ArenaRound r = new ArenaRound(RoundSettings.defaults(), 12);
+        assertEquals(List.of(new RoundEvent.ResetNeeded(1, 1)), r.drain(), "the boot reset: job A, on last week's plan");
+        assertTrue(r.requestReset(), "the week turns over while job A runs: a reset on the new plan is asked for");
+        assertEquals(List.of(new RoundEvent.ResetNeeded(2, 1)), r.drain(),
+                "job B, with a new ticket (and still the first try: nothing has failed)");
+        assertFalse(r.resetDone(1, true), "job A verified the box against the OLD plan: its answer is ignored");
+        assertEquals(ArenaRound.Phase.RESET, r.phase(), "so the gate stays shut");
+        assertTrue(r.drain().isEmpty(), "and no LobbyOpen is sent");
+        r.join(p(1));
+        assertEquals(ArenaRound.Solo.NOT_READY, r.solo(p(1), false),
+                "no solo round on a box nobody has verified against this week's plan");
+        assertTrue(r.resetDone(2, false), "job B's failure is the answer that counts");
+        assertEquals(List.of(new RoundEvent.ResetNeeded(3, 2)), r.drain(), "and it is tried again, as attempt 2");
+        assertFalse(r.resetDone(2, true), "job B can't answer twice");
+        assertTrue(r.resetDone(3, true), "the retry verifies");
+        assertEquals(ArenaRound.Phase.LOBBY, r.phase(), "and only then does the gate open");
+    }
+
+    @Test
+    void askingForAResetAgainAndAgainNeverRestartsTheCountOfFailedVerifies() {
+        ArenaRound r = new ArenaRound(RoundSettings.defaults(), 12);
+        r.drain();
+        verify(r, false);
+        verify(r, false);
+        assertEquals(List.of(new RoundEvent.ResetNeeded(2, 2), new RoundEvent.ResetNeeded(3, 3)), r.drain(),
+                "two failed verifies: the third try is running");
+        assertTrue(r.requestReset(), "an admin resets during it");
+        assertEquals(List.of(new RoundEvent.ResetNeeded(4, 3)), r.drain(),
+                "the running job is replaced, and it is still the third try");
+        assertFalse(r.resetDone(3, false), "the replaced job's failure doesn't count twice");
+        assertEquals(ArenaRound.Phase.RESET, r.phase(), "still resetting");
+        assertTrue(r.resetDone(4, false), "the replacement fails as well");
+        assertEquals(ArenaRound.Phase.CLOSED, r.phase(), "three failed verifies in a row close the game");
+    }
+
+    @Test
+    void anAnswerFromBeforeACloseCannotOpenTheReopenedGate() {
+        ArenaRound r = new ArenaRound(RoundSettings.defaults(), 12);
+        r.drain(); // the boot reset, ticket 1, is running
+        r.close("The game was switched off");
+        assertTrue(r.reopen(), "an admin opens it again");
+        assertEquals(List.of(new RoundEvent.Closed("The game was switched off"), new RoundEvent.ResetNeeded(2, 1)),
+                r.drain(), "the reopen asks for its own reset");
+        assertFalse(r.resetDone(1, true), "the job from before the close is not the reopen's verify");
+        assertEquals(ArenaRound.Phase.RESET, r.phase(), "the gate stays shut until ticket 2 answers");
+        assertTrue(r.resetDone(2, true), "its own answer");
+        assertEquals(ArenaRound.Phase.LOBBY, r.phase(), "opens it");
     }
 
     @Test
@@ -129,12 +182,12 @@ class ArenaRoundTest {
         r.out(p(1), OutReason.FELL);
         List<RoundEvent> end = ticks(r, 1, false);
         assertEquals(1, only(end, RoundEvent.Ended.class).size(), "the round ended");
-        assertEquals(List.of(new RoundEvent.ResetNeeded(1)), only(end, RoundEvent.ResetNeeded.class),
-                "and asked for the reset straight after the results");
+        assertEquals(List.of(new RoundEvent.ResetNeeded(2, 1)), only(end, RoundEvent.ResetNeeded.class),
+                "and asked for the reset straight after the results (the boot's was ticket 1)");
         assertEquals(ArenaRound.Phase.RESET, r.phase(), "the gate is shut while the floors come back");
         ticks(r, 500, false);
         assertEquals(ArenaRound.Phase.RESET, r.phase(), "no round starts before the floors are verified whole");
-        r.resetDone(true);
+        verify(r, true);
         assertEquals(ArenaRound.Phase.LOBBY, r.phase(), "then back to the lobby");
         assertEquals(2, r.members().size(), "with everyone still in the gallery");
     }
@@ -256,7 +309,7 @@ class ArenaRoundTest {
         assertTrue(r.out(p(1), OutReason.FELL), "then they fall");
         List<RoundEvent> end = ticks(r, 1, false);
         RoundEvent.Out out = only(end, RoundEvent.Out.class).get(0);
-        assertEquals(new RoundEvent.Out(p(1), 840, 1, 1, false, OutReason.FELL, true), out,
+        assertEquals(new RoundEvent.Out(p(1), 840, 1, 1, false, OutReason.FELL, true, false), out,
                 "out after 840 ticks, 1st of 1, solo");
         RoundResult res = only(end, RoundEvent.Ended.class).get(0).result();
         assertTrue(res.solo(), "a solo round");
@@ -316,7 +369,7 @@ class ArenaRoundTest {
         List<RoundEvent> first = ticks(r, 1, false);
         assertEquals(0, only(first, RoundEvent.TeleportTo.class).get(0).spawn(), "round 1's first spawn is 0");
         r.leave(p(1)); // before Go: called off, reset
-        r.resetDone(true);
+        verify(r, true);
         r.join(p(1));
         r.solo(p(1), false);
         List<RoundEvent> second = ticks(r, 1, false);
@@ -332,16 +385,16 @@ class ArenaRoundTest {
         play(r, 10);
         r.out(p(1), OutReason.FELL);
         List<RoundEvent> first = ticks(r, 1, false);
-        assertEquals(List.of(new RoundEvent.Out(p(1), 10, 4, 4, false, OutReason.FELL, false)), first,
+        assertEquals(List.of(new RoundEvent.Out(p(1), 10, 4, 4, false, OutReason.FELL, false, false)), first,
                 "the first out is 4th of 4 at 10 ticks");
         play(r, 9);
         r.out(p(3), OutReason.FELL);
         List<RoundEvent> second = ticks(r, 1, false);
-        assertEquals(List.of(new RoundEvent.Out(p(3), 20, 3, 4, false, OutReason.FELL, false)), second,
+        assertEquals(List.of(new RoundEvent.Out(p(3), 20, 3, 4, false, OutReason.FELL, false, false)), second,
                 "the next is 3rd at 20 ticks");
         r.out(p(2), OutReason.FELL);
         List<RoundEvent> last = ticks(r, 1, false);
-        assertEquals(new RoundEvent.Out(p(2), 21, 2, 4, false, OutReason.FELL, false),
+        assertEquals(new RoundEvent.Out(p(2), 21, 2, 4, false, OutReason.FELL, false, false),
                 only(last, RoundEvent.Out.class).get(0), "2nd at 21 ticks");
         RoundResult res = only(last, RoundEvent.Ended.class).get(0).result();
         assertEquals(21, res.ticks(), "one player left: the round ends on that tick");
@@ -361,8 +414,8 @@ class ArenaRoundTest {
         r.out(p(3), OutReason.FELL); // seen in this order...
         r.out(p(1), OutReason.FELL);
         List<RoundEvent> outs = ticks(r, 1, false);
-        assertEquals(List.of(new RoundEvent.Out(p(1), 30, 3, 4, true, OutReason.FELL, false),
-                        new RoundEvent.Out(p(3), 30, 3, 4, true, OutReason.FELL, false)), outs,
+        assertEquals(List.of(new RoundEvent.Out(p(1), 30, 3, 4, true, OutReason.FELL, false, false),
+                        new RoundEvent.Out(p(3), 30, 3, 4, true, OutReason.FELL, false, false)), outs,
                 "...but both are joint 3rd, listed in start order: the server's checking order decides nothing");
         play(r, 5);
         r.out(p(2), OutReason.FELL);
@@ -378,11 +431,45 @@ class ArenaRoundTest {
         r.out(p(1), OutReason.FELL);
         r.out(p(2), OutReason.FELL);
         r.out(p(3), OutReason.FELL);
-        RoundResult res = only(ticks(r, 1, false), RoundEvent.Ended.class).get(0).result();
+        List<RoundEvent> end = ticks(r, 1, false);
+        assertTrue(only(end, RoundEvent.Out.class).stream().allMatch(o -> o.won() && o.tied() && o.place() == 1),
+                "each hears they won together: " + end);
+        RoundResult res = only(end, RoundEvent.Ended.class).get(0).result();
         assertEquals(List.of(1, 1, 1), res.standings().stream().map(Standing::place).toList(),
                 "nobody was left standing: all three share 1st");
         assertEquals(List.of(p(1), p(2), p(3)), res.winners(), "and all three won together");
         assertTrue(res.standings().get(0).tied(), "marked as a shared place");
+    }
+
+    @Test
+    void aPlayerWhoLeavesOnTheTickAnotherFallsNeitherSharesTheirPlaceNorMakesItAWin() {
+        ArenaRound two = playing(p(1), p(2));
+        play(two, 100);
+        two.out(p(1), OutReason.FELL);
+        two.leave(p(2));
+        List<RoundEvent> end = ticks(two, 1, false);
+        assertEquals(List.of(new RoundEvent.Out(p(1), 100, 1, 2, false, OutReason.FELL, false, false),
+                        new RoundEvent.Out(p(2), 100, 1, 2, false, OutReason.LEFT, false, false)),
+                only(end, RoundEvent.Out.class),
+                "p1 fell as p2 left: 1st, but not shared with a leaver, and not a win (nobody else played it out)");
+        RoundResult res = only(end, RoundEvent.Ended.class).get(0).result();
+        assertFalse(res.contested(), "the result agrees: not contested");
+        assertTrue(res.winners().isEmpty(), "and no winner");
+        assertFalse(res.standing(p(1)).tied(), "p1's standing isn't marked as shared either");
+
+        ArenaRound three = playing(p(1), p(2), p(3));
+        play(three, 50);
+        three.out(p(3), OutReason.FELL);
+        ticks(three, 1, false);
+        play(three, 49);
+        three.out(p(1), OutReason.FELL);
+        three.leave(p(2));
+        end = ticks(three, 1, false);
+        assertEquals(new RoundEvent.Out(p(1), 100, 1, 3, false, OutReason.FELL, false, true),
+                only(end, RoundEvent.Out.class).get(0),
+                "with p3 out-lasted it is contested: p1's 1st is a win, and theirs alone, not shared with the leaver");
+        assertEquals(List.of(p(1)), only(end, RoundEvent.Ended.class).get(0).result().winners(),
+                "the result counts exactly that win");
     }
 
     @Test
@@ -391,7 +478,7 @@ class ArenaRoundTest {
         play(r, 50);
         assertTrue(r.leave(p(2)), "a player leaves mid-round");
         List<RoundEvent> end = ticks(r, 1, false);
-        assertEquals(new RoundEvent.Out(p(2), 50, 2, 2, false, OutReason.LEFT, false),
+        assertEquals(new RoundEvent.Out(p(2), 50, 2, 2, false, OutReason.LEFT, false, false),
                 only(end, RoundEvent.Out.class).get(0), "they are out, as having left");
         RoundResult res = only(end, RoundEvent.Ended.class).get(0).result();
         assertFalse(res.contested(), "only one player played it out");
@@ -484,15 +571,15 @@ class ArenaRoundTest {
     void aResetRequestFromTheLobbyOrTheCountdownHappensNowAndMidRoundWaits() {
         ArenaRound r = open();
         assertTrue(r.requestReset(), "from the lobby");
-        assertEquals(List.of(new RoundEvent.ResetNeeded(1)), r.drain(), "at once");
-        r.resetDone(true);
+        assertEquals(List.of(new RoundEvent.ResetNeeded(2, 1)), r.drain(), "at once");
+        verify(r, true);
         r.join(p(1));
         r.join(p(2));
         r.ready(p(1), true);
         r.ready(p(2), true);
         ticks(r, 1, false);
         assertTrue(r.requestReset(), "from the countdown");
-        assertEquals(List.of(new RoundEvent.CountdownCancelled(RoundEvent.Why.RESET), new RoundEvent.ResetNeeded(1)),
+        assertEquals(List.of(new RoundEvent.CountdownCancelled(RoundEvent.Why.RESET), new RoundEvent.ResetNeeded(3, 1)),
                 r.drain(), "the bar stops and the reset starts");
         ArenaRound going = playing(p(1), p(2));
         assertFalse(going.requestReset(), "mid-round it waits: every round ends with a reset anyway");

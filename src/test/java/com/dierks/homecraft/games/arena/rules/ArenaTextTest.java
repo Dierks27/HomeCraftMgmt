@@ -8,7 +8,9 @@ import java.util.Map;
 import java.util.UUID;
 
 import static com.dierks.homecraft.games.arena.rules.ArenaFixtures.p;
+import static com.dierks.homecraft.games.arena.rules.ArenaFixtures.verify;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -43,15 +45,75 @@ class ArenaTextTest {
     @Test
     void theOutLineIsTheSpecsLine() {
         assertEquals("&eYou lasted 0:42 - 3rd of 6!", ArenaText.outLine(new RoundEvent.Out(p(1), 840, 3, 6, false,
-                OutReason.FELL, false)), "the spec's own words");
+                OutReason.FELL, false, false)), "the spec's own words");
         assertEquals("&eYou lasted 0:42 - joint 3rd of 6!", ArenaText.outLine(new RoundEvent.Out(p(1), 840, 3, 6,
-                true, OutReason.FELL, false)), "a shared place says so");
+                true, OutReason.FELL, false, false)), "a shared place says so");
         assertEquals("&eYou lasted 0:42!", ArenaText.outLine(new RoundEvent.Out(p(1), 840, 1, 1, false,
-                OutReason.FELL, true)), "solo: just the time");
+                OutReason.FELL, true, false)), "solo: just the time");
         assertEquals("&aYou won together - joint 1st of 3! You lasted 1:12.", ArenaText.outLine(new RoundEvent.Out(
-                p(1), 1440, 1, 3, true, OutReason.FELL, false)), "the last ones out together won together");
+                p(1), 1440, 1, 3, true, OutReason.FELL, false, true)), "the last ones out together won together");
         assertEquals("&7You left the round after 0:05.", ArenaText.outLine(new RoundEvent.Out(p(1), 100, 4, 4, false,
-                OutReason.LEFT, false)), "leaving is said plainly, with no place");
+                OutReason.LEFT, false, false)), "leaving is said plainly, with no place");
+    }
+
+    /**
+     * A multiplayer round of {@code players} (p1..pn) in which p3 (if there is one) falls at 50
+     * ticks, then p1 falls on the very tick p2 leaves, at 100: the events of that last tick.
+     */
+    private static List<RoundEvent> fallAsTheLastRivalLeaves(int players) {
+        ArenaRound r = new ArenaRound(RoundSettings.defaults(), 12);
+        verify(r, true);
+        for (int i = 1; i <= players; i++) {
+            r.join(p(i));
+            r.ready(p(i), true);
+        }
+        for (int i = 0; i < 1000 && r.phase() != ArenaRound.Phase.PLAYING; i++) {
+            r.tick(false);
+        }
+        r.drain();
+        for (int t = 0; t < 100; t++) {
+            if (t == 50 && players >= 3) {
+                r.out(p(3), OutReason.FELL);
+            }
+            r.tick(false);
+        }
+        r.drain();
+        r.out(p(1), OutReason.FELL);
+        r.leave(p(2));
+        r.tick(false);
+        return r.drain();
+    }
+
+    private static RoundResult ended(List<RoundEvent> events) {
+        return events.stream().filter(e -> e instanceof RoundEvent.Ended).map(e -> ((RoundEvent.Ended) e).result())
+                .findFirst().orElseThrow(() -> new AssertionError("the round didn't end: " + events));
+    }
+
+    private static String lineFor(List<RoundEvent> events, UUID who) {
+        for (RoundEvent e : events) {
+            if (e instanceof RoundEvent.Out o && o.player().equals(who)) {
+                return ArenaText.outLine(o);
+            }
+        }
+        throw new AssertionError("no Out for " + who + " in " + events);
+    }
+
+    @Test
+    void fallingOnTheTickTheLastRivalLeftIsOnlyCalledAWinWhenTheWinCounts() {
+        List<RoundEvent> two = fallAsTheLastRivalLeaves(2);
+        RoundResult twoResult = ended(two);
+        assertTrue(twoResult.winners().isEmpty(), "two players, one left: no win is recorded");
+        String line = lineFor(two, p(1));
+        assertFalse(line.contains("won"), "so p1 is not told they won: " + line);
+        assertEquals("&eEveryone else left, so the round is over. You lasted 0:05.", line,
+                "they hear what the one left standing hears");
+
+        List<RoundEvent> three = fallAsTheLastRivalLeaves(3);
+        RoundResult threeResult = ended(three);
+        assertEquals(List.of(p(1)), threeResult.winners(), "three players, p3 out-lasted: p1's win counts");
+        assertEquals("&aYou won - 1st of 3! You lasted 0:05.", lineFor(three, p(1)),
+                "a win of their own, not 'together' with the player who left");
+        assertEquals("&7You left the round after 0:05.", lineFor(three, p(2)), "the leaver's line is unchanged");
     }
 
     @Test
@@ -108,10 +170,20 @@ class ArenaTextTest {
         assertEquals("&eFalling Floors starts in 10", ArenaText.countdown(181), "still 10 until 9 s are left");
         assertEquals("&eFalling Floors starts in 9", ArenaText.countdown(180), "9");
         assertEquals("&eFalling Floors starts in 1", ArenaText.countdown(1), "1, never 0");
-        assertEquals("&e2/12 here &7- &a1 ready &7- starts in 0:20", ArenaText.lobby(2, 1, 12, 400),
+        assertEquals("&e2/12 here &7- &a1 ready &7- starts in 0:20", ArenaText.lobby(2, 1, 12, 400, true),
                 "the lobby's bar with its 20 s wait");
-        assertEquals("&e1/12 here &7- &a0 ready &7- waiting for a friend (or play solo)", ArenaText.lobby(1, 0, 12, -1),
+        assertEquals("&e1/12 here &7- &a0 ready &7- waiting for a friend (or play solo)", ArenaText.lobby(1, 0, 12, -1, true),
                 "alone");
+    }
+
+    @Test
+    void theLobbyOnlyOffersSoloPlayWhenSoloIsOn() {
+        assertEquals("&e1/12 here &7- &a0 ready &7- waiting for a friend (or play solo)",
+                ArenaText.lobby(1, 0, 12, -1, true), "solo: true offers it, like the 'Play solo' item");
+        assertEquals("&e1/12 here &7- &a0 ready &7- waiting for a friend", ArenaText.lobby(1, 0, 12, -1, false),
+                "solo: false has no 'Play solo' item, so the bar doesn't invite it");
+        assertEquals(ArenaText.lobby(2, 1, 12, 400, true), ArenaText.lobby(2, 1, 12, 400, false),
+                "with two here solo isn't offered either way");
     }
 
     @Test
@@ -137,7 +209,10 @@ class ArenaTextTest {
     @Test
     void noLineUsesAnythingAboveUffff() {
         List<String> all = new ArrayList<>(List.of(ArenaText.go(), ArenaText.suddenDeath(), ArenaText.calledOff(),
-                ArenaText.closed(), ArenaText.hold("4:00 PM"), ArenaText.countdown(100), ArenaText.lobby(3, 2, 12, 100)));
+                ArenaText.closed(), ArenaText.hold("4:00 PM"), ArenaText.countdown(100), ArenaText.lobby(3, 2, 12, 100, true),
+                ArenaText.lobby(1, 0, 12, -1, true), ArenaText.lobby(1, 0, 12, -1, false),
+                ArenaText.outLine(new RoundEvent.Out(p(1), 1440, 1, 12, false, OutReason.FELL, false, true)),
+                ArenaText.outLine(new RoundEvent.Out(p(1), 1440, 1, 12, false, OutReason.FELL, false, false))));
         for (ArenaRound.Solo s : ArenaRound.Solo.values()) {
             if (ArenaText.solo(s) != null) {
                 all.add(ArenaText.solo(s));

@@ -44,7 +44,11 @@ public final class ArenaText {
         return n + suffix;
     }
 
-    /** The line for a player going out, sent as they reach the gallery. */
+    /**
+     * The line for a player going out, sent as they reach the gallery. "You won" only when the win
+     * counts ({@link RoundEvent.Out#won()}); a 1st place that isn't a win means everyone else left,
+     * and it says so, as {@link #standingLine} does for the one left standing.
+     */
     public static String outLine(RoundEvent.Out e) {
         String lasted = clock(e.survivedTicks());
         if (e.reason() == OutReason.LEFT) {
@@ -53,11 +57,19 @@ public final class ArenaText {
         if (e.solo()) {
             return "&eYou lasted " + lasted + "!";
         }
-        if (e.place() == 1 && e.tied()) {
-            return "&aYou won together - joint 1st of " + e.of() + "! You lasted " + lasted + ".";
+        if (e.won()) {
+            return e.tied() ? "&aYou won together - joint 1st of " + e.of() + "! You lasted " + lasted + "."
+                    : "&aYou won - 1st of " + e.of() + "! You lasted " + lasted + ".";
+        }
+        if (e.place() == 1) {
+            return walkover(lasted);
         }
         return "&eYou lasted " + lasted + " - " + (e.tied() ? "joint " : "") + ordinal(e.place()) + " of " + e.of()
                 + "!";
+    }
+
+    private static String walkover(String lasted) {
+        return "&eEveryone else left, so the round is over. You lasted " + lasted + ".";
     }
 
     /**
@@ -69,7 +81,7 @@ public final class ArenaText {
             return null;
         }
         if (!r.contested()) {
-            return "&eEveryone else left, so the round is over. You lasted " + clock(s.survivedTicks()) + ".";
+            return walkover(clock(s.survivedTicks()));
         }
         return "&aLast one standing - you won! You lasted " + clock(s.survivedTicks()) + ".";
     }
@@ -120,12 +132,16 @@ public final class ArenaText {
         return "&e" + NAME + " starts in " + seconds;
     }
 
-    /** The lobby's action bar: who is here and ready, and when it starts by itself. */
-    public static String lobby(int here, int ready, int max, long autoStartTicks) {
+    /**
+     * The lobby's action bar: who is here and ready, and when it starts by itself. It only offers
+     * solo play when {@code soloOn} ({@code games.falling_floors.solo}), the same rule as the
+     * "Play solo" item.
+     */
+    public static String lobby(int here, int ready, int max, long autoStartTicks, boolean soloOn) {
         StringBuilder sb = new StringBuilder("&e").append(here).append('/').append(max).append(" here &7- &a")
                 .append(ready).append(" ready");
         if (here < 2) {
-            sb.append(" &7- waiting for a friend (or play solo)");
+            sb.append(soloOn ? " &7- waiting for a friend (or play solo)" : " &7- waiting for a friend");
         } else if (autoStartTicks >= 0) {
             sb.append(" &7- starts in ").append(clock(autoStartTicks + RoundSettings.TICKS_PER_SECOND - 1));
         }

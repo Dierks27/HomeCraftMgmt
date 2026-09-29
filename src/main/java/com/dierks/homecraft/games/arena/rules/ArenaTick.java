@@ -16,10 +16,29 @@ import java.util.UUID;
  * runs. {@code FallingFloors} calls {@link #tick} once a tick with the players' feet and writes
  * what comes back; the simulation does the same with fake players.
  *
+ * <p>Why every position and not one a tick: a player holding jump touches the floor for exactly one
+ * client tick before jumping again, and when two of their movement packets are handled in one
+ * server tick (lag, jitter), reading {@code getLocation()} once a tick sees only the take-off. So
+ * the game hands over every position the server accepted from each player this tick, in order,
+ * and each one marks the floor; the last one is where they are now, and decides whether they are
+ * out.
+ *
+ * <p>Why a backstop: "every round ends" must not depend on the wiring being perfect. Sudden death
+ * clears every floor by {@link FloorRules#goneBy()}; anyone still in {@link #FALL_TICKS} after that
+ * (their feet never came, or never dropped below {@code out_y}) is out then, together, so the
+ * arena can never be held by a round that doesn't end.
+ *
  * <p>The floors of a round are made at its Go from the layout in force then, so a new week's
  * layout ({@link #layout(FloorLayout)}) never changes a round already going.
  */
 public final class ArenaTick {
+
+    /**
+     * How long after the last floor cell is gone anyone still in is out anyway: 5 s. A fall from the
+     * top floor to below {@code out_y} takes about 1.3 s, so only a player the game isn't seeing
+     * (or one hovering) is ever out this way.
+     */
+    public static final int FALL_TICKS = 5 * RoundSettings.TICKS_PER_SECOND;
 
     /**
      * What one tick did.
@@ -65,11 +84,13 @@ public final class ArenaTick {
     /**
      * One tick.
      *
-     * @param feet   where the round's players' feet are (anyone missing is skipped this tick)
+     * @param feet   every position the server accepted from each of the round's players since the
+     *               last tick, oldest first (each with its own {@code vy}); the last is where they are
+     *               now. Anyone missing, or with an empty list, is skipped this tick.
      * @param voided players the void took this tick (the game's {@code onVoid}): out, whatever their feet say
      * @param hold   the restart hold
      */
-    public Output tick(Map<UUID, Feet> feet, Set<UUID> voided, boolean hold) {
+    public Output tick(Map<UUID, List<Feet>> feet, Set<UUID> voided, boolean hold) {
         if (next != null && !round.phase().inRound()) {
             layout = next;
             next = null;
@@ -82,17 +103,18 @@ public final class ArenaTick {
                 floorsRound = round.roundNo();
             }
             List<UUID> alive = round.alive();
-            List<Feet> standing = new ArrayList<>(alive.size());
+            List<Feet> steps = new ArrayList<>(alive.size());
             for (UUID p : alive) {
-                Feet f = feet == null ? null : feet.get(p);
-                if (f != null) {
-                    standing.add(f);
+                for (Feet f : samples(feet, p)) {
+                    if (f != null) {
+                        steps.add(f);
+                    }
                 }
             }
-            writes = floors.step(round.playTicks(), standing);
+            writes = floors.step(round.playTicks(), steps);
+            boolean backstop = round.playTicks() >= floors.goneBy() + FALL_TICKS;
             for (UUID p : alive) {
-                Feet f = feet == null ? null : feet.get(p);
-                if ((voided != null && voided.contains(p)) || floors.isOut(f)) {
+                if (backstop || (voided != null && voided.contains(p)) || floors.isOut(now(feet, p))) {
                     round.out(p, OutReason.FELL);
                 }
             }
@@ -103,6 +125,17 @@ public final class ArenaTick {
             floorsRound = -1;
         }
         return new Output(writes, round.drain());
+    }
+
+    private static List<Feet> samples(Map<UUID, List<Feet>> feet, UUID p) {
+        List<Feet> l = feet == null ? null : feet.get(p);
+        return l == null ? List.of() : l;
+    }
+
+    /** Where a player is now: the last position given this tick, or {@code null}. */
+    private static Feet now(Map<UUID, List<Feet>> feet, UUID p) {
+        List<Feet> l = samples(feet, p);
+        return l.isEmpty() ? null : l.get(l.size() - 1);
     }
 
     /** The round. */

@@ -13,7 +13,7 @@ import java.util.UUID;
  * @param place         1 = last standing (or out on the round's last tick together)
  * @param survivedTicks play ticks from Go to when they went out (or the round ended)
  * @param reason        how they went out; {@code null} for the one still standing at the end
- * @param tied          whether someone else went out on the same tick (the place is shared)
+ * @param tied          whether someone else fell on the same tick (the place is shared; a leaver never ties)
  * @param winner        a multiplayer win that counts: 1st, not left, in a contested round
  */
 public record Standing(UUID player, int place, long survivedTicks, OutReason reason, boolean tied, boolean winner) {

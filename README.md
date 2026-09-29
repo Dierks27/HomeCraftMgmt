@@ -1828,7 +1828,11 @@ Things come back **exactly once**, even when something goes wrong. If what arriv
 game doesn't all fit at home, the rest waits in their saved row: "Some of your things didn't fit.
 Make room, then type /hcm leave to get the rest." If the database refuses a write partway, they
 stay where they are with their things ("Type /hcm leave in a moment to go home") and nothing is
-applied twice. A game refuses to start while they hold something on the cursor ("Put down what
+applied twice. Something delivered in the middle of a game (an auction win, a Mini) is never
+written over by a game's items: it moves to a free slot and comes home with them. Nobody lands
+home with a fall from a game: leaving, being sent home or disconnecting halfway down a drop ends
+with no fall damage. After a crash, a Clubhouse watcher whose things can't be put back yet is never
+left in spectator mode. A game refuses to start while they hold something on the cursor ("Put down what
 you're holding first."). `/hcm leave` and `/hcm games saved` work even while the games are off,
 and an admin's `restore` or `return` says what really happened.
 

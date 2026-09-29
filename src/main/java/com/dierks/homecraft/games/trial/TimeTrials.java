@@ -17,6 +17,7 @@ import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.ScoreResult;
 import com.dierks.homecraft.games.Scores;
 import com.dierks.homecraft.games.SkillRewards;
+import com.dierks.homecraft.games.cup.live.CupLink;
 import com.dierks.homecraft.games.gen.api.GenBoards;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
@@ -648,9 +649,11 @@ public final class TimeTrials implements Game {
         if (c.id().equals(courseOfWeek)) {
             lore.add("&6★ Course of the week");
         }
+        lore.addAll(CupLink.tileLines(games(), viewer, c)); // Weekly Cup
         lore.add("&eClick to play");
         return Menus.icon(icon(c.kind()), "&e" + c.name() + " &7(" + TrialText.label(c) + ") &7- "
-                + (best == null ? "no time yet" : "best " + TrialText.time(best)), lore.toArray(new String[0]));
+                + (best == null ? "no time yet" : "best " + TrialText.time(best)) + CupLink.tileSuffix(games(), viewer, c),
+                lore.toArray(new String[0]));
     }
 
     /**
@@ -688,12 +691,13 @@ public final class TimeTrials implements Game {
         if (c.id().equals(courseOfWeek)) {
             lore.add("&6★ Course of the week");
         }
+        lore.addAll(CupLink.tileLines(g, viewer, c)); // Weekly Cup
         lore.add("&eClick to play");
         String name = t.recalled() ? "&6" + classicName(t, c.name()) + " &7- " + DailyText.trialFact(cadence, stars)
                 : DailyText.tabName(Slots.of(t.slot()), c.name(), DailyText.trialFact(cadence, stars),
                 DailyLookup.current(g, t.slot()), cadence);
-        return Menus.glint(Menus.icon(icon(c.kind()), name + DailyLookup.codeSuffix(code),
-                lore.toArray(new String[0])), stars >= 3);
+        return Menus.glint(Menus.icon(icon(c.kind()), name + DailyLookup.codeSuffix(code)
+                + CupLink.tileSuffix(g, viewer, c), lore.toArray(new String[0])), stars >= 3);
     }
 
     /**
@@ -1407,6 +1411,7 @@ public final class TimeTrials implements Game {
                 summary = TrialFinish.settle(verdict, counted, ledger(p, run, s, ms));
             }
         }
+        CupLink.finished(games(), p, run.course, ms, verdict, run.warmup); // Weekly Cup: counted, timed runs only
         Long best = verdict.counts() ? bestOn(p, board(run.course)) : null;
         Daily daily = tag == null ? null : new Daily(board(run.course), summary.stars(), summary.weekStars(),
                 tag.goldMs(), tag.silverMs(), GenCopy.words(tag), code);

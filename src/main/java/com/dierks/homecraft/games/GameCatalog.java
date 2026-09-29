@@ -14,6 +14,7 @@ import com.dierks.homecraft.games.chance.hilo.HigherLower;
 import com.dierks.homecraft.games.chance.slots.OreSlots;
 import com.dierks.homecraft.games.chance.twentyone.TwentyOne;
 import com.dierks.homecraft.games.chance.wheel.Wheel;
+import com.dierks.homecraft.games.cup.live.WeeklyCup;
 import com.dierks.homecraft.games.event.RaceNight;
 import com.dierks.homecraft.games.gen.DailyCourses;
 import com.dierks.homecraft.games.gen.api.Slots;
@@ -36,12 +37,13 @@ public final class GameCatalog {
 
     /**
      * Every game, in display order. Race Night and Falling Floors (EVENTS-DROPPER-SPEC C1) come last,
-     * as "Coming soon" stubs until their packages are built.
+     * as "Coming soon" stubs until their packages are built. The Weekly Cup (EVENTS-OWNER-DECISIONS
+     * D2) follows the course games it runs on and has no tile of its own.
      */
     public static final List<GameSpec<?>> SPECS = List.of(OreSlots.SPEC, TwentyOne.SPEC, Wheel.SPEC,
             HigherLower.SPEC, CoinFlip.SPEC, CreeperSweeper.SPEC, OreMerge.SPEC, Snake.SPEC, MiniMatch.SPEC,
             SimonSays.SPEC, WhackAZombie.SPEC, ConnectFour.SPEC, TicTacToe.SPEC, TimeTrials.SPEC, MiniGolf.SPEC,
-            DailyCourses.SPEC, RaceNight.SPEC, FallingFloors.SPEC);
+            WeeklyCup.SPEC, DailyCourses.SPEC, RaceNight.SPEC, FallingFloors.SPEC);
 
     /**
      * Words {@code /hcm play} keeps for itself, so no course may take them as its id

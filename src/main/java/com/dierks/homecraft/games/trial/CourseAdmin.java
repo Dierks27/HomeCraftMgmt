@@ -2,6 +2,8 @@ package com.dierks.homecraft.games.trial;
 
 import com.dierks.homecraft.games.GameAdmin;
 import com.dierks.homecraft.games.GeneratedCourses;
+import com.dierks.homecraft.games.cup.CupPlan;
+import com.dierks.homecraft.games.cup.live.CupLink;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Slots;
@@ -196,6 +198,7 @@ final class CourseAdmin implements GameAdmin {
             case "disable" -> {
                 save(sender, c.withEnabled(false), args);
                 sender.sendMessage(Text.of("&a" + c.name() + " is closed. &7Runs already going finish as normal."));
+                CupLink.courseChanged(trials.games(), sender, c.id(), c.name(), CupPlan.VoidReason.CLOSED); // Weekly Cup
             }
             case "info" -> info(sender, c);
             case "tp" -> tp(sender, c);
@@ -443,12 +446,14 @@ final class CourseAdmin implements GameAdmin {
         if (!confirm) {
             sender.sendMessage(Text.of("&eThis deletes " + c.name() + " and all its times. &7Type &f/hcm games course "
                     + c.id() + " delete confirm"));
+            cupWarning(sender, c); // Weekly Cup
             return;
         }
         trials.store().delete(c.id());
         trials.forget();
         changed(sender, args);
         sender.sendMessage(Text.of("&aDeleted &f" + c.name() + " &aand its times."));
+        CupLink.courseChanged(trials.games(), sender, c.id(), c.name(), CupPlan.VoidReason.DELETED); // Weekly Cup
     }
 
     // ---- saving -------------------------------------------------------------------------------
@@ -466,10 +471,12 @@ final class CourseAdmin implements GameAdmin {
         }
         long week = trials.weekKey();
         boolean times = trials.store().hasTimes(before.id(), week);
-        if (times && !confirm) {
+        boolean cup = CupLink.entrants(trials.games(), before.id()) > 0; // Weekly Cup: it is called off
+        if ((times || cup) && !confirm) {
             sender.sendMessage(Text.of("&eThat changes the layout of " + before.name() + ", so its times are cleared "
                     + "(all-time and this week). &7Type it again with &fconfirm &7on the end: &e/hcm games course "
                     + String.join(" ", args) + " confirm"));
+            cupWarning(sender, before);
             return;
         }
         Course saved = trials.store().save(after, true, week, now());
@@ -480,6 +487,15 @@ final class CourseAdmin implements GameAdmin {
         trials.forget();
         changed(sender, args);
         sender.sendMessage(Text.of("&a" + done + " &7(layout " + saved.rev() + (times ? ", times cleared)" : ")")));
+        CupLink.courseChanged(trials.games(), sender, before.id(), before.name(), CupPlan.VoidReason.CHANGED); // Weekly Cup
+    }
+
+    /** The confirm prompt's Weekly Cup line: this week's Cup on the course is called off (WP-C). */
+    private void cupWarning(CommandSender sender, Course c) {
+        String line = CupLink.warning(trials.games(), c.id());
+        if (line != null) {
+            sender.sendMessage(Text.of(line));
+        }
     }
 
     /** Anything else: no new layout, the times stay. */

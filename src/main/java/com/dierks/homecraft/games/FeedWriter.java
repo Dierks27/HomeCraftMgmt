@@ -180,6 +180,27 @@ public interface FeedWriter {
     default void arena(String id, String name, String shape) {
     }
 
+    // ---- the Weekly Cup (EVENTS-OWNER-DECISIONS §D2; WP-C) ---------------------------------------
+
+    /**
+     * The {@code cup} object on course {@code id}'s entry: this week's Weekly Cup on it, live. The Cup
+     * writes it from its own game; the writer joins it to the course's entry by id and drops it when
+     * no course of that id was written. Never a player: only the entry, the pool and a head count.
+     */
+    default void cup(String id, Cup cup) {
+    }
+
+    /**
+     * This week's Weekly Cup on one course.
+     *
+     * @param entry    tokens to enter
+     * @param pool     the pool now: every entry, plus the server's top-up once 2 or more are in
+     * @param entrants how many are in
+     * @param endsAt   when it is paid out (epoch ms): the quests' week start at 04:00
+     */
+    record Cup(int entry, int pool, int entrants, long endsAt) {
+    }
+
     /**
      * What Race Night publishes (§A.7). Every part may be {@code null} or empty: it is then left out.
      *

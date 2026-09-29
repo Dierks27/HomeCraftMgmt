@@ -1865,6 +1865,23 @@ games:
     daily_cap: 4
     # Strokes over par before a hole is picked up.
     max_over_par: 3
+  # ---- cup ----
+  # The Weekly Cup: on a time-trial course that runs one, a player pays a small entry once a week and
+  # their best counted time that week is their Cup time. At the week's rollover (the quests' week
+  # start at 04:00) the pool - every entry, plus the top-up once 2 or more are in - is shared by Cup
+  # time: 70/30 between two, 50/30/20 among three or more. Alone, or when the course is deleted,
+  # changed or closed mid-week, every entry comes back. The server keeps nothing. Fresh parkour, Sky
+  # Rings, Ice Boat and Dropper courses run one; a hand-built course only after /hcm games cup on <id>.
+  # Players hide it with /hcm play cup off. The youngest may pay into a pool the oldest win: false
+  # below switches it off.
+  cup:
+    # false = no new entries and no Cup on the screens. Cups already paid into still finish their
+    # week and pay out (or refund) at the rollover.
+    enabled: true
+    # Tokens to enter one course's Cup for one week (1-100).
+    entry: 5
+    # Tokens the server adds to a pool that 2 or more players entered (0-100). Never with one.
+    server_topup: 10
   # ---- fresh ----
   # Fresh Courses: parkour, Sky Rings and mini golf the plugin builds itself - a new set every week
   # (or every day, or every few days: cadence), the same for everyone. Nothing to build by hand.

@@ -52,7 +52,12 @@ public record CupPlan(CupKey key, Outcome outcome, VoidReason reason, int entrie
         /** The course's layout changed (an edit, or a new Fresh layout mid-week). */
         CHANGED,
         /** The course was closed. */
-        CLOSED
+        CLOSED,
+        /**
+         * An admin stopped this course's Cup ({@code /hcm games cup void}, or the Cup switched off for
+         * the course) while the course itself stays open.
+         */
+        STOPPED
     }
 
     public CupPlan {

@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.games.trial;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.cup.live.CupLink;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Slots;
@@ -27,7 +28,8 @@ import java.util.List;
  *
  * <p>4 the course ("River Run (Boat · Medium)"); 10 how to play; 11 your best; 12 its high
  * scores; 13 Start; 14 this week's best; 15 the record and who holds it; 16 what it pays (the
- * first finish's amount, or that it's done, in the name); 22 the way out. Start runs the gate
+ * first finish's amount, or that it's done, in the name); 20 the Weekly Cup, when the course runs
+ * one; 22 the way out. Start runs the gate
  * again (the screen may have been open a while) and then the world session takes the player to
  * the start line.
  *
@@ -86,6 +88,7 @@ public final class CourseMenu extends GameMenu {
         set(15, Menus.icon(Material.GOLD_INGOT, record == null ? "&7No record yet - set one!"
                 : "&6Record: &f" + TrialText.time(record.score()) + " &7by &f" + trials.holder(record.player())), null);
         set(16, rewards(week), null);
+        cupButton();
         exitTile();
     }
 
@@ -170,6 +173,7 @@ public final class CourseMenu extends GameMenu {
         set(15, Menus.icon(Material.GOLD_INGOT, trials.setBestLine(record, viewer, cadence).replaceFirst("^&7", "&6")),
                 null);
         set(16, dailyRewards(games, t, week), null);
+        cupButton();
         exitTile();
     }
 
@@ -211,6 +215,18 @@ public final class CourseMenu extends GameMenu {
                 : freshDone ? "&eTokens for finishing &7- " + firstWords + " &a✔ done"
                 : "&eTokens for finishing &7- " + firstWords + " &6" + TrialText.tokens(fresh);
         return Menus.icon(Material.GOLD_NUGGET, name, lore.toArray(new String[0]));
+    }
+
+    /**
+     * The Weekly Cup's item (EVENTS-OWNER-DECISIONS D2, WP-C), when the course runs one and the viewer
+     * hasn't hidden it: "Enter this week's Cup: 5 tokens. Best time wins the pool." in its NAME, or
+     * that they're in with the pool. It opens the Cup screen, whose Back comes here.
+     */
+    private void cupButton() {
+        CupLink.Button b = CupLink.button(plugin.games(), viewer, course, this::reopen);
+        if (b != null) {
+            set(CupLink.SLOT, b.icon(), e -> b.click().run());
+        }
     }
 
     private void reopen() {

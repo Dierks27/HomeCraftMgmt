@@ -30,7 +30,8 @@ import java.util.Locale;
  *       one {@value #UNDER_PAR};</li>
  *   <li>Fresh Courses stars are {@link QuestType#EARN_STARS} (one step a star); finishing every
  *       course of a set is one {@value #FRESH_SETS}; the week's top Star Chart goal is one
- *       {@value #STAR_CHART_TOPS}.</li>
+ *       {@value #STAR_CHART_TOPS};</li>
+ *   <li>lasting a whole minute in a Falling Floors round is one {@value #FLOORS_MINUTES}.</li>
  * </ul>
  *
  * <p><b>Why counters.</b> Courses are played in the Games world, which is not an economy world, so
@@ -67,10 +68,12 @@ public final class GamesProgress implements GameProgress {
     public static final String FRESH_SETS = "fresh_sets";
     /** Weeks the top Star Chart goal was reached. */
     public static final String STAR_CHART_TOPS = "star_chart_tops";
+    /** Falling Floors rounds lasted a whole minute (EVENTS-DROPPER-SPEC §B.3.4). */
+    public static final String FLOORS_MINUTES = "floors_minutes";
 
     /** Every counter the "Games" achievements read. */
     public static final List<String> COUNTERS = List.of(CABINET_FINISHES, CABINET_GOLDS, CABINETS, COURSE_FINISHES,
-            COURSE_RECORDS, HOLES_IN_ONE, UNDER_PAR, FRESH_SETS, STAR_CHART_TOPS);
+            COURSE_RECORDS, HOLES_IN_ONE, UNDER_PAR, FRESH_SETS, STAR_CHART_TOPS, FLOORS_MINUTES);
 
     /** Where the finishes go: the live quests and achievements, or a test's fake. */
     public interface Sink {
@@ -152,6 +155,14 @@ public final class GamesProgress implements GameProgress {
         if (underPar(strokes, par)) {
             sink.count(player, UNDER_PAR, 1);
         }
+    }
+
+    @Override
+    public void floorsLastedMinute(Player player) {
+        if (player == null || !sink.countsHere(player)) {
+            return;
+        }
+        sink.count(player, FLOORS_MINUTES, 1);
     }
 
     @Override

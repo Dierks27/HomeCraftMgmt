@@ -80,7 +80,7 @@ class GameAchievementsTest {
     }
 
     @Test
-    void theGamesGroupShipsExactlyTheNineAchievementsWithTheirRewards() throws Exception {
+    void theGamesGroupShipsExactlyItsAchievementsWithTheirRewards() throws Exception {
         Map<String, Object[]> expected = new LinkedHashMap<>();
         expected.put("game_first_cabinet", new Object[]{"Finish an arcade cabinet game", 10, "cabinet_finishes", 1});
         expected.put("game_gold", new Object[]{"Earn a gold medal in a cabinet", 20, "cabinet_golds", 1});
@@ -91,6 +91,8 @@ class GameAchievementsTest {
         expected.put("game_fresh_all", new Object[]{"Finish every Fresh Course in one set", 40, "fresh_sets", 1});
         expected.put("game_star_chart", new Object[]{"Reach the top Star Chart goal in a week", 30, "star_chart_tops", 1});
         expected.put("game_record", new Object[]{"Set a course record", 30, "course_records", 1});
+        // EVENTS-DROPPER-SPEC §B.3.4 (E4): Falling Floors' one achievement
+        expected.put("game_floors_minute", new Object[]{"Last a whole minute on Falling Floors", 15, "floors_minutes", 1});
         List<Map<String, Object>> rows = gamesRows();
         assertEquals(new ArrayList<>(expected.keySet()), rows.stream().map(r -> String.valueOf(r.get("id"))).toList(),
                 "the Games group, in the spec's order");
@@ -212,7 +214,7 @@ class GameAchievementsTest {
                 }
             }
         }
-        assertEquals(9 + 5, words.size(), "every new line is checked");
+        assertEquals(10 + 5, words.size(), "every new line is checked (game_floors_minute among them)");
         for (String w : words) {
             assertEquals(List.of(), GenCopy.copyProblems(w), "no banned word and nothing Bedrock can't draw: " + w);
             String lower = " " + w.toLowerCase(Locale.ROOT) + " ";

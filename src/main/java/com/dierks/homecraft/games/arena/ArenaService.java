@@ -559,8 +559,21 @@ public final class ArenaService {
 
     /** The claim's text: the world, the box's corner and its size. */
     String claimText() {
-        return world.toLowerCase(Locale.ROOT) + "," + box.minX() + "," + box.minY() + "," + box.minZ() + ","
-                + box.sizeX() + "," + box.sizeY() + "," + box.sizeZ();
+        return claimText(world, box);
+    }
+
+    /** What {@value #CLAIM_KEY} holds for a box in a world: the world, the box's corner and its size. */
+    public static String claimText(String world, Box box) {
+        return (world == null ? "" : world.trim().toLowerCase(Locale.ROOT)) + "," + box.minX() + "," + box.minY() + ","
+                + box.minZ() + "," + box.sizeX() + "," + box.sizeY() + "," + box.sizeZ();
+    }
+
+    /** Why the arena is closed (with where a failed reset found its first differences), or {@code null}. */
+    public String closedWhy() {
+        if (round == null || round.phase() != ArenaRound.Phase.CLOSED) {
+            return null;
+        }
+        return round.closedReason() + (closedNote == null ? "" : " (" + closedNote + ")");
     }
 
     /** Everyone in the arena's world (the reset waits for a write next to one of them). */
@@ -981,6 +994,16 @@ public final class ArenaService {
     /** Whether a verify has passed in this run (players may come in). */
     public boolean verified() {
         return verified;
+    }
+
+    /** Whether players may come in now: a verify has passed and the arena isn't closed. */
+    public boolean open() {
+        return verified && round != null && round.phase() != ArenaRound.Phase.CLOSED;
+    }
+
+    /** Whether the floors are falling now (the move listener's quick test). */
+    public boolean inPlay() {
+        return round != null && round.phase() == ArenaRound.Phase.PLAYING;
     }
 
     /** How many are in the arena. */

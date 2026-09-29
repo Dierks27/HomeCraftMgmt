@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.FeedWriter;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.arena.FallingFloors;
 import com.dierks.homecraft.games.cabinet.CabinetGame;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Slots;
@@ -49,11 +50,19 @@ final class BoardSource implements BoardDisplay.Lookup {
     @Override
     public BoardDisplay.Cabinet cabinet(String id) {
         Game g = games.game(id);
-        if (g == null || g.kind() != GameKind.CABINET || !g.id().equalsIgnoreCase(id)) {
+        boolean arena = g instanceof FallingFloors; // WP-F: its published board (this week's solo times)
+        if (g == null || (g.kind() != GameKind.CABINET && !arena) || !g.id().equalsIgnoreCase(id)) {
             return null;
         }
         BoardDisplay.Cabinet[] seen = new BoardDisplay.Cabinet[1];
         FeedWriter capture = new FeedWriter() {
+            @Override
+            public void board(String bid, String game, String board, boolean lowerIsBetter, String unit) {
+                if (arena && seen[0] == null && board != null && !board.isBlank()) {
+                    seen[0] = new BoardDisplay.Cabinet(g.name(), board, unit, lowerIsBetter);
+                }
+            }
+
             @Override
             public void chance(String cid, String name, List<Integer> stakes, Map<Integer, Double> rtpByStake,
                                Integer dailyLimit, List<PayRow> paytable, String rules, Map<String, ?> extra) {
@@ -161,7 +170,7 @@ final class BoardSource implements BoardDisplay.Lookup {
             if (g.kind().chance()) {
                 continue;
             }
-            if (g.kind() == GameKind.CABINET) {
+            if (g.kind() == GameKind.CABINET || g instanceof FallingFloors) {
                 out.add(g.id());
             } else if (g.kind() == GameKind.TRIAL || g.kind() == GameKind.GOLF) {
                 Collection<Game.Playable> ps = games.guard(g, g::playables, List.of());

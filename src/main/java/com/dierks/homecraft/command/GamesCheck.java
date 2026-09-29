@@ -27,7 +27,8 @@ import java.util.regex.Pattern;
  * profiles; {@code games.restart_times} reads, with the next restart and hold; Fresh Courses (on,
  * the cadence, every area inside the world and clear of hand-built courses and each other, the
  * claims and foreign blocks, the next change, each course live or why not, the keep area and the
- * Classics); every hand-built course is ready and its world loaded; the website feed; and how to take
+ * Classics); Falling Floors (its box and claim, {@link ArenaCheck}); every hand-built course is ready
+ * and its world loaded; the website feed; and how to take
  * games of chance away from one player.
  */
 public final class GamesCheck {
@@ -162,6 +163,13 @@ public final class GamesCheck {
         List<Course> courses();
 
         Web web();
+
+        // ---- Falling Floors (EVENTS-DROPPER-SPEC §C.2 WP-F) ----
+        /** Falling Floors' box and claim ({@link ArenaCheck}); {@code null} reads as switched off. */
+        default ArenaCheck.Facts arena() {
+            return null;
+        }
+        // ---- end Falling Floors ----
     }
 
     /** The LuckPerms line that takes games of chance away from one player. */
@@ -185,6 +193,7 @@ public final class GamesCheck {
         section(out, "Multiverse-Inventories", () -> inventories(f.mvInventories(), worlds, economy, out));
         section(out, "games.restart_times", () -> restarts(f, out));
         section(out, "Fresh Courses", () -> fresh(f.fresh(), out));
+        section(out, "Falling Floors", () -> ArenaCheck.rows(f.arena(), out)); // WP-F
         section(out, "the hand-built courses", () -> courses(f.courses(), out));
         section(out, "the website feed", () -> web(f.web(), out));
         out.add(Line.ok("Games of chance need hcm.games.chance. To take them away from one player: " + LUCKPERMS));

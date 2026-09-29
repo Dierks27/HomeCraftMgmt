@@ -51,6 +51,15 @@ public interface GameProgress {
         golfFinished(player, courseId, strokes, par, holesInOne, fresh);
     }
 
+    // ---- Falling Floors (EVENTS-DROPPER-SPEC §B.3.4, E4) ----
+    /**
+     * A Falling Floors player lasted a whole minute in a round they played out (not one they left):
+     * the {@code game_floors_minute} achievement.
+     */
+    default void floorsLastedMinute(Player player) {
+    }
+    // ---- end Falling Floors ----
+
     /** Fresh Courses stars were added to this week's chart. */
     default void starsEarned(Player player, int stars) {
     }

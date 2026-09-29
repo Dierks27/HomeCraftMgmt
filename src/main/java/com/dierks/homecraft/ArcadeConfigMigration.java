@@ -414,7 +414,7 @@ final class ArcadeConfigMigration {
     /** The "Games" achievements revision 17 adds. */
     static final List<String> GAME_ACHIEVEMENTS = List.of("game_first_cabinet", "game_gold", "game_all_cabinets",
             "game_first_course", "game_hole_in_one", "game_under_par", "game_fresh_all", "game_star_chart",
-            "game_record");
+            "game_record", "game_floors_minute");
 
     /**
      * Config revision 17: the skill games' quests join the daily and weekly pools, and the "Games"

@@ -5,7 +5,11 @@ import com.dierks.homecraft.games.Breaks;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.gen.api.GenBoards;
+import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.gui.games.daily.DailyLookup;
+import com.dierks.homecraft.gui.games.daily.DailyText;
 import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.util.Bedrock;
 import com.dierks.homecraft.util.Text;
@@ -42,6 +46,10 @@ import java.util.logging.Level;
  * and how a score reads (a time, flips, apples...) comes from what the game publishes about its
  * boards, never from a guess about its internals. {@link Boards} is the list of every board,
  * reached from the Games screen.
+ *
+ * <p>Daily Courses' boards read the same way (GEN-SPEC §5.2): a layout's own board is "Easy
+ * Parkour · today" (or its date), a player's stars that day "Easy Parkour stars · today", and the
+ * weekly Star Chart "Star Chart · this week", counted in stars, higher is better.
  */
 public final class ScoresMenu extends GameMenu {
 
@@ -78,6 +86,19 @@ public final class ScoresMenu extends GameMenu {
         }
         String word = value == 1 && u.endsWith("s") ? u.substring(0, u.length() - 1) : u;
         return value + " " + word;
+    }
+
+    /**
+     * The unit a board of a game of {@code kind} is kept in: a daily layout's board is a time, or
+     * strokes for golf; the Star Chart and a day's stars are stars; anything else as
+     * {@link #unitFor(String, String)}.
+     */
+    static String unitFor(String board, String cabinetUnit, GameKind kind) {
+        GenBoards.Board b = GenBoards.parse(board);
+        if (b != null) {
+            return b.kind() == GenBoards.Kind.DAY ? (kind == GameKind.GOLF ? "strokes" : "ms") : "stars";
+        }
+        return unitFor(board, cabinetUnit);
     }
 
     /** The unit a board is kept in: courses are times, golf is strokes, a cabinet's is its own. */
@@ -119,6 +140,34 @@ public final class ScoresMenu extends GameMenu {
         return Character.toUpperCase(board.charAt(0)) + board.substring(1).replace('_', ' ');
     }
 
+    /**
+     * {@link #boardLabel(String, long, Function)}, and Daily Courses' boards: "Easy Parkour ·
+     * today", "Easy Parkour · Mon 28 Sep", "Easy Parkour stars · today", "Star Chart · this week".
+     *
+     * @param courseDay the course day now (a daily board's "today")
+     * @param thisWeek  the Star Chart week now
+     */
+    static String boardLabel(String board, long today, long courseDay, long thisWeek,
+                             Function<String, String> courseName) {
+        GenBoards.Board b = GenBoards.parse(board);
+        if (b == null) {
+            return boardLabel(board, today, courseName);
+        }
+        return switch (b.kind()) {
+            case WEEK -> DailyText.chartLabel(b.day(), thisWeek);
+            case DAY -> dailyName(b.courseId(), courseName) + " · " + DailyText.dayText(b.day(), courseDay)
+                    + (b.reroll() > 0 ? " (layout " + (b.reroll() + 1) + ")" : "");
+            case STARS -> dailyName(b.courseId(), courseName) + " stars · " + DailyText.dayText(b.day(), courseDay);
+        };
+    }
+
+    /** A daily course's name: the live course's, else its slot's, else the id. */
+    private static String dailyName(String id, Function<String, String> courseName) {
+        String name = courseName.apply(id);
+        Slots.Def slot = Slots.of(id);
+        return (name == null || name.equals(id)) && slot != null ? slot.name() : name == null ? id : name;
+    }
+
     private static long parse(String s, long fallback) {
         try {
             return Long.parseLong(s);
@@ -149,8 +198,10 @@ public final class ScoresMenu extends GameMenu {
             set(22, Menus.icon(Material.GRAY_DYE, "&7The games are closed right now"), null);
             return;
         }
-        String unit = unitFor(board, Screens.published(games, game).cabinetUnit());
-        String label = boardLabel(board, plugin.clock().dayKey(), id -> courseName(games, game, id));
+        String unit = unitFor(board, Screens.published(games, game).cabinetUnit(), game.kind());
+        long courseDay = DailyLookup.courseDay(games);
+        String label = boardLabel(board, plugin.clock().dayKey(), courseDay, DailyLookup.weekKey(games, courseDay),
+                id -> courseName(games, game, id));
 
         Long best = games.scores().best(viewer.getUniqueId(), game.id(), board);
         set(BEST, Menus.glint(Menus.icon(Material.GOLD_INGOT,
@@ -239,10 +290,12 @@ public final class ScoresMenu extends GameMenu {
                 set(22, Menus.icon(Material.PAPER, "&7No boards yet", "&7Play a game to start one!"), null);
             }
             long today = plugin.clock().dayKey();
+            long courseDay = games == null ? today : DailyLookup.courseDay(games);
+            long thisWeek = games == null ? -1 : DailyLookup.weekKey(games, courseDay);
             for (int i = 0; i < onPage.size(); i++) {
                 Entry en = onPage.get(i);
-                set(9 + i, tile(games, en, today), e -> new ScoresMenu(plugin, en.game(), viewer, en.board(),
-                        en.lowerIsBetter(), this::reopen).open(viewer));
+                set(9 + i, tile(games, en, today, courseDay, thisWeek), e -> new ScoresMenu(plugin, en.game(), viewer,
+                        en.board(), en.lowerIsBetter(), this::reopen).open(viewer));
             }
             if (p > 0) {
                 set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
@@ -300,8 +353,8 @@ public final class ScoresMenu extends GameMenu {
             return out;
         }
 
-        private ItemStack tile(GamesService games, Entry en, long today) {
-            String label = boardLabel(en.board(), today, id -> courseName(games, en.game(), id));
+        private ItemStack tile(GamesService games, Entry en, long today, long courseDay, long thisWeek) {
+            String label = boardLabel(en.board(), today, courseDay, thisWeek, id -> courseName(games, en.game(), id));
             boolean course = en.board().contains(":");
             String name = course ? "&e" + label + " &7(" + en.game().name() + ")"
                     : "&b" + en.game().name() + " &7- " + label;
@@ -311,15 +364,16 @@ public final class ScoresMenu extends GameMenu {
                 lore.add("&7No scores yet.");
             } else {
                 String who = Bukkit.getOfflinePlayer(record.player()).getName();
-                lore.add("&7Best: &f" + score(unitFor(en.board(), en.unit()), record.score())
+                lore.add("&7Best: &f" + score(unitFor(en.board(), en.unit(), en.game().kind()), record.score())
                         + (who == null ? "" : " &7by &f" + who));
             }
             lore.add("&eClick to see the top 10");
-            Material m = switch (en.game().kind()) {
-                case TRIAL -> Material.FEATHER;
-                case GOLF -> Material.SNOWBALL;
-                default -> Material.JUKEBOX;
-            };
+            Material m = en.board().startsWith(GenBoards.WEEK_PREFIX) ? Material.NETHER_STAR
+                    : switch (en.game().kind()) {
+                        case TRIAL -> Material.FEATHER;
+                        case GOLF -> Material.SNOWBALL;
+                        default -> Material.JUKEBOX;
+                    };
             return Menus.icon(m, name, lore.toArray(new String[0]));
         }
 

@@ -1,12 +1,18 @@
 package com.dierks.homecraft.gui.games.trial;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.gen.api.GenCopy;
+import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.games.trial.TimeTrialsSettings;
 import com.dierks.homecraft.games.trial.TrialText;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
+import com.dierks.homecraft.gui.games.daily.DailyLookup;
+import com.dierks.homecraft.gui.games.daily.DailyText;
 import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -24,6 +30,10 @@ import java.util.List;
  * first finish's amount, or that it's done, in the name); 22 the way out. Start runs the gate
  * again (the screen may have been open a while) and then the world session takes the player to
  * the start line.
+ *
+ * <p>A daily course (GEN-SPEC §5.4) shows today's layout instead of all-time: 11 your best today,
+ * 12 today's board, 14 your stars today and the star times, 15 today's best, 16 what its first
+ * finish today pays.
  */
 public final class CourseMenu extends GameMenu {
 
@@ -39,6 +49,10 @@ public final class CourseMenu extends GameMenu {
 
     @Override
     protected void build() {
+        if (course.generated()) {
+            buildDaily();
+            return;
+        }
         fill();
         boolean week = course.id().equals(trials.courseOfWeek());
         List<String> head = new ArrayList<>();
@@ -99,6 +113,85 @@ public final class CourseMenu extends GameMenu {
         String name = first <= 0 ? "&eTokens for finishing"
                 : done ? "&eTokens for finishing &7- first finish &a✔ done"
                 : "&eTokens for finishing &7- first finish &6" + TrialText.tokens(first);
+        return Menus.icon(Material.GOLD_NUGGET, name, lore.toArray(new String[0]));
+    }
+
+    /** A daily course: today's layout, its stars and its board (GEN-SPEC §5.4). */
+    private void buildDaily() {
+        fill();
+        GamesService games = plugin.games();
+        GenTag t = course.gen();
+        Slots.Def slot = Slots.of(course.id());
+        long today = DailyLookup.courseDay(games);
+        boolean week = course.id().equals(trials.courseOfWeek());
+        List<String> head = new ArrayList<>();
+        head.add("&7" + TrialText.checkpoints(course.checkpoints().size()) + ", then the finish");
+        head.add("&7A new course every morning.");
+        long now = games.clock().nowMillis();
+        long next = trials.generated().nextChangeAt();
+        if (t.day() < today) {
+            head.add(GenCopy.YESTERDAY);
+        } else if (next > now) {
+            head.add(GenCopy.newIn(next - now));
+        }
+        if (week) {
+            head.add("&6★ Course of the week");
+        }
+        if (trials.featured(course.id())) {
+            head.add("&6★ Today's pick");
+        }
+        set(4, Menus.icon(TimeTrials.icon(course.kind()), DailyText.colour(slot) + course.name() + " &7("
+                + TrialText.label(course) + ")", head.toArray(new String[0])), null);
+        List<String> rules = new ArrayList<>(course.kind().rules());
+        rules.add("The clock keeps running when you go back.");
+        set(10, rulesTile(rules), null);
+        String board = TimeTrials.board(course);
+        Long best = trials.bestOn(viewer, board);
+        set(11, Menus.icon(Material.CLOCK, best == null ? "&7No time today yet"
+                : "&eYour best today: &f" + TrialText.time(best)), null);
+        set(12, Menus.icon(Material.OAK_SIGN, "&eToday's times", "&7The fastest times on today's " + course.name()
+                + "."), e -> trials.showScores(viewer, course.id(), this::reopen));
+        set(13, Menus.icon(Material.LIME_CONCRETE, "&aStart", "&7You go to the start line",
+                "&7with only the course kit.", "&7Your things come back when", "&7you finish or leave."),
+                e -> trials.startFromScreen(viewer, course.id()));
+        int stars = DailyLookup.stars(games, viewer.getUniqueId(), course.id(), t.day());
+        long weekStars = DailyLookup.weekStars(games, viewer.getUniqueId(), DailyLookup.weekKey(games, t.day()));
+        set(14, Menus.glint(Menus.icon(Material.NETHER_STAR, DailyText.starsToday(stars),
+                DailyText.starTimes(t.goldMs(), t.silverMs()), "&7Star Chart this week: &6" + weekStars + "★"),
+                false), null);
+        GamesDao.ScoreRow record = trials.recordOn(board);
+        set(15, Menus.icon(Material.GOLD_INGOT, trials.todaysBestLine(record, viewer).replaceFirst("^&7Today", "&6Today")),
+                null);
+        set(16, dailyRewards(games, t, week), null);
+        exitTile();
+    }
+
+    /** A daily course's rewards: its first finish today in the name (Bedrock), the rest in the lore. */
+    private ItemStack dailyRewards(GamesService games, GenTag t, boolean week) {
+        TimeTrialsSettings s = trials.settings();
+        int daily = trials.generated().dailyClear(course.id());
+        boolean dailyDone = daily > 0 && DailyLookup.dailyClearPaid(games, viewer.getUniqueId(), trials.id(),
+                course.id(), t.day());
+        List<String> lore = new ArrayList<>();
+        String today = DailyText.firstToday(daily, dailyDone);
+        if (today != null) {
+            lore.add(today);
+        }
+        int first = trials.firstClear(course);
+        if (first > 0) {
+            lore.add(trials.firstClearDone(viewer, course) ? "&a✔ Very first finish"
+                    : "&7Very first finish: &6" + TrialText.tokens(first));
+        }
+        if (week && s.courseOfWeekBonus() > 0) {
+            lore.add("&7Course of the week: &6" + TrialText.tokens(s.courseOfWeekBonus()) + " &7a day");
+        }
+        if (trials.featured(course.id()) && trials.featuredBonus() > 0) {
+            lore.add("&7Today's pick: &6" + TrialText.tokens(trials.featuredBonus()));
+        }
+        lore.add("&7Stars fill your Star Chart.");
+        String name = daily <= 0 ? "&eTokens for finishing"
+                : dailyDone ? "&eTokens for finishing &7- first finish today &a✔ done"
+                : "&eTokens for finishing &7- first finish today &6" + TrialText.tokens(daily);
         return Menus.icon(Material.GOLD_NUGGET, name, lore.toArray(new String[0]));
     }
 

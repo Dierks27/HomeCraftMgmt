@@ -16,10 +16,10 @@ import java.util.Set;
  * colour, the rainbow across levels: red, orange, yellow, blue, purple glass walls with plates of
  * the same colour's concrete.
  *
- * <p><b>Pending C1.</b> Glass, stained glass and sea lanterns join {@link Palette#ALLOWED}, and water
- * gets its own {@code Palette.POOL_WATER}, in the C1 contracts package. Until then they are listed
- * here ({@link #PENDING_C1}, {@link #POOL_WATER}); the wiring swaps these for Palette's (WIRING.md).
- * Water is never in {@code ALLOWED}: only the dropper validator's sealed-pool rule admits it.
+ * <p><b>From C1.</b> Glass, stained glass and sea lanterns are in {@link Palette#ALLOWED}
+ * ({@link Palette#GLASS_AND_LIGHTS}), and water has its own {@link Palette#POOL_WATER}; the two sets
+ * here are those, under the names this package already used. Water is never in {@code ALLOWED}:
+ * only the dropper validator's sealed-pool rule admits it.
  */
 public final class DropBlocks {
 
@@ -37,13 +37,10 @@ public final class DropBlocks {
     /** A still water source: the only fluid a plan may place. */
     public static final String WATER = "minecraft:water[level=0]";
 
-    /** The blocks C1 adds to {@link Palette#ALLOWED} for the Dropper. */
-    public static final Set<String> PENDING_C1 = Set.of("minecraft:glass", "minecraft:red_stained_glass",
-            "minecraft:orange_stained_glass", "minecraft:yellow_stained_glass", "minecraft:blue_stained_glass",
-            "minecraft:purple_stained_glass", "minecraft:pink_stained_glass", "minecraft:light_blue_stained_glass",
-            "minecraft:sea_lantern");
-    /** The fluid C1 lists as {@code Palette.POOL_WATER}: water sources only, and only in sealed pools. */
-    public static final Set<String> POOL_WATER = Set.of(WATER);
+    /** The blocks C1 added to {@link Palette#ALLOWED} for the Dropper: {@link Palette#GLASS_AND_LIGHTS}. */
+    public static final Set<String> PENDING_C1 = Palette.GLASS_AND_LIGHTS;
+    /** Water sources only, and only in sealed pools: {@link Palette#POOL_WATER}. */
+    public static final Set<String> POOL_WATER = Palette.POOL_WATER;
 
     private DropBlocks() {
     }

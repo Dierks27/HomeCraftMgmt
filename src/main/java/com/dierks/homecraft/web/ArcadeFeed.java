@@ -35,8 +35,8 @@ import java.util.regex.Pattern;
  * thread alongside the other feeds and cached; the HTTP handler only serves the string.
  *
  * <pre>{"generatedAt":ms[,"games":[…]][,"featured":{"game":…,"until":ms}][,"starChart":{…}]
- * [,"freshHistory":[…]][,"jackpots":[{"game":"scratch_ticket","tokens":N}]][,"prizes":[…]][,"packs":[…]]
- * [,"achievements":[…]]}</pre>
+ * [,"freshHistory":[…]][,"events":{…}][,"jackpots":[{"game":"scratch_ticket","tokens":N}]][,"prizes":[…]]
+ * [,"packs":[…]][,"achievements":[…]]}</pre>
  *
  * <p><b>How the games get in.</b> This class is the games' {@link FeedWriter}: the server hands one
  * instance to every open game's {@code Game.feed}, each game writes its entries from the SAME
@@ -57,6 +57,8 @@ import java.util.regex.Pattern;
  *       classic?,top?}}.</li>
  *   <li>{@code golf}: {@code {id,name,kind:"golf",holes,par,record?:{strokes,at?},daily?,fresh?,classic?,
  *       top?}}.</li>
+ *   <li>{@code arena} (Falling Floors, EVENTS-DROPPER-SPEC §B.3.4): {@code {id,name,kind:"arena",shape?,
+ *       top?}}, its {@code top} from the board the game names.</li>
  * </ul>
  * A Fresh Courses course (GEN-SPEC §5.6, the weekly addendum) is written the same way, its record
  * taken from its set's board, plus {@code daily:{day,nextAt?,goldMs?,silverMs?,cadence?,lastDay?}}:
@@ -93,7 +95,17 @@ import java.util.regex.Pattern;
  * <p><b>The other sections.</b> {@code prizes}: the visible Prize Counter rows except Trade In,
  * Quest Reroll and the Rare Card ({@link #prizes}). {@code packs}: packs sold for tokens with the
  * rarity odds they roll with, as percents ({@link #packs}). {@code achievements}: the enabled rows
- * minus the ones won by a game of chance ({@link #chanceWin}). Nothing about events yet.
+ * minus the ones won by a game of chance ({@link #chanceWin}).
+ *
+ * <p><b>Race Night</b> (EVENTS-DROPPER-SPEC §A.7) is the top-level {@code events} object, written
+ * by the writer from what Race Night hands {@link #events}: {@code next:{id,name,joinAt,startsAt,
+ * course?:{id,name},races,laps,entry:"free",prizes,finisherPrize,prizeNight,racers,maxRacers}},
+ * {@code upcoming:[ms…]}, {@code live:{id,state,race,of,racers,standings?:[{rank,points,lap,laps,
+ * holder?}]}}, {@code recent:[{id,at,course?,racers,state,top?:[{rank,value,unit,holder?}]}]} (at most
+ * {@value FeedWriter.Events#RECENT} nights of {@value FeedWriter.Events#ROWS} rows) and
+ * {@code season:{key,name,until,top?}} (E3's {@code top}, read from its board). A state the site
+ * doesn't know is not published; empty parts are left out, and the whole object while it has
+ * nothing. {@code racers} is only ever a count.
  *
  * <p><b>Omission.</b> {@code generatedAt} is always first; every other key is written with a
  * leading comma only when it has something in it, so an empty or switched-off section is absent,
@@ -141,7 +153,7 @@ public final class ArcadeFeed implements FeedWriter {
     // ---- the rows ---------------------------------------------------------------------------
 
     /** One {@code games[]} entry as a game wrote it. */
-    public sealed interface GameRow permits ChanceRow, CabinetRow, CourseRow, GolfRow {
+    public sealed interface GameRow permits ChanceRow, CabinetRow, CourseRow, GolfRow, ArenaRow {
         String id();
     }
 
@@ -187,6 +199,10 @@ public final class ArcadeFeed implements FeedWriter {
                        String holder) {
             this(id, name, holes, par, recordStrokes, recordAt, holder, null);
         }
+    }
+
+    /** An arena game ({@link FeedWriter#arena}): Falling Floors, with this week's floor shape. */
+    public record ArenaRow(String id, String name, String shape) implements GameRow {
     }
 
     /**
@@ -288,6 +304,17 @@ public final class ArcadeFeed implements FeedWriter {
     private record History(List<FreshFeed.Entry> entries) {
     }
 
+    /** Race Night's {@code events} ({@link FeedWriter#events}); the last one written wins. */
+    private record EventsPart(Events events) {
+    }
+
+    /** The states a live night and a past night may be published with (§A.7). */
+    private static final Set<String> LIVE_STATES = Set.of("open", "racing", "break", "results");
+    private static final Set<String> RECENT_STATES = Set.of("done", "called_off");
+    /** The most start times and live standings published. */
+    private static final int UPCOMING = 8;
+    private static final int STANDINGS = 12;
+
     // ---- the writer -------------------------------------------------------------------------
 
     private final boolean showNames;
@@ -375,6 +402,18 @@ public final class ArcadeFeed implements FeedWriter {
         writes.add(new History(entries == null ? List.of() : List.copyOf(entries)));
     }
 
+    @Override
+    public void events(Events events) {
+        if (events != null) {
+            writes.add(new EventsPart(events));
+        }
+    }
+
+    @Override
+    public void arena(String id, String name, String shape) {
+        writes.add(new ArenaRow(id, name, shape));
+    }
+
     /** How many rows each {@code top} list has at most ({@code games.feed_top}). */
     public int topSize() {
         return topSize;
@@ -453,12 +492,14 @@ public final class ArcadeFeed implements FeedWriter {
         Map<String, FreshFeed.Fresh> fresh = new HashMap<>();
         Map<String, FreshFeed.Classic> classics = new HashMap<>();
         List<FreshFeed.Entry> history = List.of();
+        Events events = null;
         for (Object w : writes) {
             switch (w) {
                 case BoardRef b -> refs.put(key(b.id()), b);
                 case FreshPart f -> fresh.put(key(f.id()), f.fresh());
                 case ClassicPart c -> classics.put(key(c.id()), c.classic());
                 case History h -> history = h.entries();
+                case EventsPart e -> events = e.events();
                 default -> {
                     // an entry: written below, in order
                 }
@@ -499,6 +540,10 @@ public final class ArcadeFeed implements FeedWriter {
             }
         }
         array(sb, "freshHistory", past);
+        String eventsJson = events == null ? null : eventsJson(events);
+        if (eventsJson != null) {
+            sb.append(",\"events\":").append(eventsJson);
+        }
         if (scratchEntry != null && scratch.pot() != null) {
             sb.append(",\"jackpots\":[{\"game\":").append(Json.string(SCRATCH_ID))
                     .append(",\"tokens\":").append(Math.max(0, scratch.pot())).append("}]");
@@ -547,6 +592,7 @@ public final class ArcadeFeed implements FeedWriter {
             case CabinetRow c -> cabinet(c);
             case CourseRow c -> course(c, fresh.get(k), classics.get(k), refs.get(k));
             case GolfRow g -> golf(g, fresh.get(k), classics.get(k), refs.get(k));
+            case ArenaRow a -> arena(a, refs.get(k));
         };
     }
 
@@ -686,6 +732,151 @@ public final class ArcadeFeed implements FeedWriter {
         freshParts(sb, fresh, classic);
         board(sb, ref);
         return sb.append('}').toString();
+    }
+
+    private String arena(ArenaRow r, BoardRef ref) {
+        StringBuilder sb = new StringBuilder(128);
+        head(sb, r.id(), r.name(), "arena");
+        if (!blank(Json.plain(r.shape()))) {
+            sb.append(",\"shape\":").append(Json.string(Json.plain(r.shape()).toLowerCase(Locale.ROOT)));
+        }
+        board(sb, ref);
+        return sb.append('}').toString();
+    }
+
+    // ---- Race Night's events (§A.7) ------------------------------------------------------------
+
+    /** The {@code events} object, or {@code null} when none of its parts has anything in it. */
+    private String eventsJson(Events e) {
+        StringBuilder sb = new StringBuilder(512);
+        String next = e.next() == null || blank(e.next().id()) ? null : next(e.next());
+        if (next != null) {
+            sb.append("\"next\":").append(next);
+        }
+        List<String> upcoming = new ArrayList<>();
+        for (Long at : e.upcoming()) {
+            if (at != null && at > 0 && upcoming.size() < UPCOMING) {
+                upcoming.add(Long.toString(at));
+            }
+        }
+        if (!upcoming.isEmpty()) {
+            sb.append(sb.isEmpty() ? "" : ",").append("\"upcoming\":[").append(String.join(",", upcoming)).append(']');
+        }
+        String live = e.live() == null || blank(e.live().id()) ? null : live(e.live());
+        if (live != null) {
+            sb.append(sb.isEmpty() ? "" : ",").append("\"live\":").append(live);
+        }
+        List<String> recent = new ArrayList<>();
+        for (Events.Recent r : e.recent()) {
+            String row = r == null || blank(r.id()) || recent.size() >= Events.RECENT ? null : recent(r);
+            if (row != null) {
+                recent.add(row);
+            }
+        }
+        if (!recent.isEmpty()) {
+            sb.append(sb.isEmpty() ? "" : ",").append("\"recent\":[").append(String.join(",", recent)).append(']');
+        }
+        String season = e.season() == null || blank(Json.plain(e.season().key())) ? null : season(e.season());
+        if (season != null) {
+            sb.append(sb.isEmpty() ? "" : ",").append("\"season\":").append(season);
+        }
+        return sb.isEmpty() ? null : "{" + sb + "}";
+    }
+
+    private static String next(Events.Next n) {
+        StringBuilder sb = new StringBuilder(256);
+        sb.append("{\"id\":").append(Json.string(Json.plain(n.id())));
+        sb.append(",\"name\":").append(Json.string(blank(Json.plain(n.name())) ? "Race Night" : Json.plain(n.name())));
+        sb.append(",\"joinAt\":").append(Math.max(0, n.joinAt()));
+        sb.append(",\"startsAt\":").append(Math.max(0, n.startsAt()));
+        eventCourse(sb, n.courseId(), n.courseName());
+        sb.append(",\"races\":").append(Math.max(0, n.races()));
+        sb.append(",\"laps\":").append(Math.max(0, n.laps()));
+        sb.append(",\"entry\":\"free\"");
+        List<String> prizes = new ArrayList<>();
+        for (Integer p : n.prizes()) {
+            prizes.add(Integer.toString(p == null ? 0 : Math.max(0, p)));
+        }
+        sb.append(",\"prizes\":[").append(String.join(",", prizes)).append(']');
+        sb.append(",\"finisherPrize\":").append(Math.max(0, n.finisherPrize()));
+        sb.append(",\"prizeNight\":").append(n.prizeNight());
+        sb.append(",\"racers\":").append(Math.max(0, n.racers()));
+        sb.append(",\"maxRacers\":").append(Math.max(0, n.maxRacers()));
+        return sb.append('}').toString();
+    }
+
+    /** The live night, or {@code null} for a state the site doesn't know. */
+    private String live(Events.Live l) {
+        String state = Json.plain(l.state()).toLowerCase(Locale.ROOT);
+        if (!LIVE_STATES.contains(state)) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder(256);
+        sb.append("{\"id\":").append(Json.string(Json.plain(l.id())));
+        sb.append(",\"state\":").append(Json.string(state));
+        sb.append(",\"race\":").append(Math.max(0, l.race()));
+        sb.append(",\"of\":").append(Math.max(0, l.of()));
+        sb.append(",\"racers\":").append(Math.max(0, l.racers()));
+        List<String> rows = new ArrayList<>();
+        for (Events.Standing st : l.standings()) {
+            if (st != null && rows.size() < STANDINGS) {
+                StringBuilder row = new StringBuilder(96);
+                row.append("{\"rank\":").append(Math.max(1, st.rank()));
+                row.append(",\"points\":").append(Math.max(0, st.points()));
+                row.append(",\"lap\":").append(Math.max(0, st.lap()));
+                row.append(",\"laps\":").append(Math.max(0, st.laps()));
+                holder(row, st.holder());
+                rows.add(row.append('}').toString());
+            }
+        }
+        array(sb, "standings", rows);
+        return sb.append('}').toString();
+    }
+
+    /** A past night, or {@code null} for a state the site doesn't know. */
+    private String recent(Events.Recent r) {
+        String state = Json.plain(r.state()).toLowerCase(Locale.ROOT);
+        if (!RECENT_STATES.contains(state)) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder(256);
+        sb.append("{\"id\":").append(Json.string(Json.plain(r.id())));
+        sb.append(",\"at\":").append(Math.max(0, r.at()));
+        eventCourse(sb, r.courseId(), r.courseName());
+        sb.append(",\"racers\":").append(Math.max(0, r.racers()));
+        sb.append(",\"state\":").append(Json.string(state));
+        List<String> rows = new ArrayList<>();
+        for (Events.Top t : r.top()) {
+            if (t != null && rows.size() < Events.ROWS) {
+                StringBuilder row = new StringBuilder(96);
+                row.append("{\"rank\":").append(Math.max(1, t.rank()));
+                row.append(",\"value\":").append(Math.max(0, t.value()));
+                row.append(",\"unit\":\"points\"");
+                holder(row, t.holder());
+                rows.add(row.append('}').toString());
+            }
+        }
+        array(sb, "top", rows);
+        return sb.append('}').toString();
+    }
+
+    private String season(Events.Season s) {
+        StringBuilder sb = new StringBuilder(256);
+        sb.append("{\"key\":").append(Json.string(Json.plain(s.key())));
+        sb.append(",\"name\":").append(Json.string(Json.plain(s.name())));
+        sb.append(",\"until\":").append(Math.max(0, s.until()));
+        top(sb, s.game(), s.board(), false, "points", topSize);
+        return sb.append('}').toString();
+    }
+
+    /** {@code ,"course":{"id","name"}}, or nothing while no track is chosen. */
+    private static void eventCourse(StringBuilder sb, String id, String name) {
+        if (blank(Json.plain(id))) {
+            return;
+        }
+        String plain = Json.plain(name);
+        sb.append(",\"course\":{\"id\":").append(Json.string(Json.plain(id)));
+        sb.append(",\"name\":").append(Json.string(blank(plain) ? Json.plain(id) : plain)).append('}');
     }
 
     /** Fresh Courses' {@code fresh} and {@code classic} objects (no player in either). */

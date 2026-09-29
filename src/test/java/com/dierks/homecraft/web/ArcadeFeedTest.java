@@ -1011,4 +1011,136 @@ class ArcadeFeedTest {
                 empty.json(T, null, null, null, null, null), "no stars yet this week: just the week");
         assertNull(root(full(filled(true))).get("starChart"), "a feed nobody wrote a chart into has none");
     }
+
+    // ---- Race Night's events and the arena (EVENTS-DROPPER-SPEC §A.7, §B.3.4) --------------------
+
+    /** A Race Night feed as Race Night would write it: a live night, the next, two past and a season. */
+    private static FeedWriter.Events night(String holder) {
+        FeedWriter.Events.Next next = new FeedWriter.Events.Next("rn-20261009-1900", "&6Race Night", 1_790_500_000_000L,
+                1_790_500_600_000L, "fresh_boat", "&bIce Boat", 3, 2, List.of(5, 3, 2), 1, true, 3, 8);
+        FeedWriter.Events.Live live = new FeedWriter.Events.Live("rn-20261002-1900", "racing", 2, 3, 5,
+                List.of(new FeedWriter.Events.Standing(1, 18, 2, 2, holder),
+                        new FeedWriter.Events.Standing(2, 16, 1, 2, STEVE_UUID)));
+        FeedWriter.Events.Recent done = new FeedWriter.Events.Recent("rn-20260925-1900", 1_789_400_000_000L,
+                "fresh_boat", "Ice Boat", 5, "done", List.of(new FeedWriter.Events.Top(1, 26, holder)));
+        FeedWriter.Events.Recent off = new FeedWriter.Events.Recent("rn-20260918-1900", 1_788_800_000_000L,
+                null, null, 1, "called_off", List.of());
+        FeedWriter.Events.Season season = new FeedWriter.Events.Season("2026-10", "October", 1_793_000_000_000L,
+                "race_night", "rnseason:2026-10");
+        return new FeedWriter.Events(next, List.of(1_791_100_000_000L, 1_791_700_000_000L), live,
+                List.of(done, off), season);
+    }
+
+    @Test
+    void theGoldenEventsSection() {
+        ArcadeFeed feed = new ArcadeFeed(true, 5, new FakeBoards());
+        feed.events(night("Sam"));
+        assertEquals("{\"generatedAt\":1790000000000,\"events\":{"
+                + "\"next\":{\"id\":\"rn-20261009-1900\",\"name\":\"Race Night\",\"joinAt\":1790500000000,"
+                + "\"startsAt\":1790500600000,\"course\":{\"id\":\"fresh_boat\",\"name\":\"Ice Boat\"},\"races\":3,"
+                + "\"laps\":2,\"entry\":\"free\",\"prizes\":[5,3,2],\"finisherPrize\":1,\"prizeNight\":true,"
+                + "\"racers\":3,\"maxRacers\":8},"
+                + "\"upcoming\":[1791100000000,1791700000000],"
+                + "\"live\":{\"id\":\"rn-20261002-1900\",\"state\":\"racing\",\"race\":2,\"of\":3,\"racers\":5,"
+                + "\"standings\":[{\"rank\":1,\"points\":18,\"lap\":2,\"laps\":2,\"holder\":\"Sam\"},"
+                + "{\"rank\":2,\"points\":16,\"lap\":1,\"laps\":2}]},"
+                + "\"recent\":[{\"id\":\"rn-20260925-1900\",\"at\":1789400000000,"
+                + "\"course\":{\"id\":\"fresh_boat\",\"name\":\"Ice Boat\"},\"racers\":5,\"state\":\"done\","
+                + "\"top\":[{\"rank\":1,\"value\":26,\"unit\":\"points\",\"holder\":\"Sam\"}]},"
+                + "{\"id\":\"rn-20260918-1900\",\"at\":1788800000000,\"racers\":1,\"state\":\"called_off\"}],"
+                + "\"season\":{\"key\":\"2026-10\",\"name\":\"October\",\"until\":1793000000000,"
+                + "\"top\":[{\"rank\":1,\"value\":40,\"unit\":\"points\",\"at\":1789000000001,\"holder\":\"Ann\"},"
+                + "{\"rank\":1,\"value\":40,\"unit\":\"points\",\"at\":1789000000002,\"holder\":\"Bob\"},"
+                + "{\"rank\":3,\"value\":45,\"unit\":\"points\",\"at\":1789000000003}]}}}",
+                feed.json(T, null, null, null, null, null),
+                "the exact shape, names on: a UUID-shaped name is never written, colour codes go");
+    }
+
+    @Test
+    void withNamesOffNoEventHolderAppearsAtAnyDepthAndNoNameIsLookedUp() {
+        FakeBoards boards = new FakeBoards();
+        ArcadeFeed feed = new ArcadeFeed(false, 5, boards);
+        feed.events(night("Sam"));
+        String json = feed.json(T, null, null, null, null, null);
+        assertFalse(json.contains("holder") || json.contains("Sam") || json.contains("Ann"),
+                "names off: no holder anywhere in events: " + json);
+        assertFalse(json.contains(STEVE_UUID), "never a UUID");
+        assertEquals(0, boards.named, "no name was even looked up for the season's top");
+        assertTrue(boards.asked.contains("race_night|rnseason:2026-10|false|5"),
+                "the season's top is its board, higher is better: " + boards.asked);
+        JsonObject events = root(json).getAsJsonObject("events");
+        assertEquals(Set.of("next", "upcoming", "live", "recent", "season"), keys(events), "every part");
+        assertEquals(Set.of("id", "name", "joinAt", "startsAt", "course", "races", "laps", "entry", "prizes",
+                "finisherPrize", "prizeNight", "racers", "maxRacers"), keys(events.get("next")), "next's keys");
+        assertEquals(Set.of("rank", "points", "lap", "laps"),
+                keys(events.getAsJsonObject("live").getAsJsonArray("standings").get(0)), "a standing, no holder");
+        for (JsonElement r : events.getAsJsonArray("recent")) {
+            for (String k : keys(r)) {
+                assertTrue(Set.of("id", "at", "course", "racers", "state", "top").contains(k), "a past night's " + k);
+            }
+        }
+    }
+
+    @Test
+    void theEventsSectionIsLeftOutWhenOffOrEmptyAndTheRestIsByteIdentical() {
+        String before = full(filled(false));
+        ArcadeFeed none = filled(false);
+        none.events(null);
+        assertEquals(before, full(none), "no events written: the feed is byte for byte what it was");
+        ArcadeFeed empty = filled(false);
+        empty.events(new FeedWriter.Events(null, List.of(), null, List.of(), null));
+        assertEquals(before, full(empty), "an events object with nothing in it is left out entirely");
+        ArcadeFeed blank = filled(false);
+        blank.events(new FeedWriter.Events(null, java.util.Arrays.asList(0L, null, -5L),
+                new FeedWriter.Events.Live("rn-1", "exploded", 1, 3, 2, List.of()),
+                List.of(new FeedWriter.Events.Recent("rn-0", 1, null, null, 2, "who_knows", List.of())),
+                new FeedWriter.Events.Season(" ", "October", 1, "race_night", "rnseason:2026-10")));
+        assertEquals(before, full(blank), "unknown states, empty times and a blank season are not published");
+
+        ArcadeFeed one = new ArcadeFeed(false);
+        one.events(new FeedWriter.Events(null, List.of(1_791_100_000_000L), null, null, null));
+        assertEquals("{\"generatedAt\":1790000000000,\"events\":{\"upcoming\":[1791100000000]}}",
+                one.json(T, null, null, null, null, null), "only the parts that have something");
+        ArcadeFeed placed = new ArcadeFeed(false);
+        placed.freshHistory(history(false));
+        placed.events(new FeedWriter.Events(null, List.of(7L), null, null, null));
+        String json = placed.json(T, null, ArcadeFeed.scratch(shippedLotto(), 137), null, null, null);
+        assertTrue(json.indexOf("\"freshHistory\"") < json.indexOf("\"events\"")
+                && json.indexOf("\"events\"") < json.indexOf("\"jackpots\""),
+                "events sits after freshHistory and before jackpots: " + json);
+    }
+
+    @Test
+    void aGameThatThrowsHalfwayTakesItsEventsWithIt() {
+        ArcadeFeed feed = new ArcadeFeed(false);
+        int mark = feed.size();
+        feed.events(night(null));
+        feed.truncate(mark);
+        assertEquals("{\"generatedAt\":1790000000000}", feed.json(T, null, null, null, null, null),
+                "Race Night threw after writing its events: nothing of them is published");
+        ArcadeFeed twice = new ArcadeFeed(false);
+        twice.events(new FeedWriter.Events(null, List.of(1L), null, null, null));
+        twice.events(new FeedWriter.Events(null, List.of(2L), null, null, null));
+        assertEquals("{\"generatedAt\":1790000000000,\"events\":{\"upcoming\":[2]}}",
+                twice.json(T, null, null, null, null, null), "a second call replaces the first");
+    }
+
+    @Test
+    void theGoldenArenaEntryWithItsTopList() {
+        ArcadeFeed feed = new ArcadeFeed(false, 5, new FakeBoards());
+        feed.arena("falling_floors", "&eFalling Floors", "Ring");
+        feed.board("falling_floors", "falling_floors", "ffsolo:20724", false, "ms");
+        assertEquals("{\"generatedAt\":1790000000000,\"games\":[{\"id\":\"falling_floors\",\"name\":\"Falling Floors\","
+                + "\"kind\":\"arena\",\"shape\":\"ring\","
+                + "\"top\":[{\"rank\":1,\"value\":40,\"unit\":\"ms\",\"at\":1789000000001},"
+                + "{\"rank\":1,\"value\":40,\"unit\":\"ms\",\"at\":1789000000002},"
+                + "{\"rank\":3,\"value\":45,\"unit\":\"ms\",\"at\":1789000000003}]}]}",
+                feed.json(T, null, null, null, null, null), "{id,name,kind:arena,shape,top}, names off");
+        assertTrue(feed.json(T, new ArcadeFeed.Featured("falling_floors", T + 5), null, null, null, null)
+                .contains("\"featured\":{\"game\":\"falling_floors\""), "it can be today's pick");
+        ArcadeFeed plain = new ArcadeFeed(false);
+        plain.arena("falling_floors", "Falling Floors", null);
+        assertEquals("{\"generatedAt\":1790000000000,\"games\":[{\"id\":\"falling_floors\",\"name\":\"Falling Floors\","
+                + "\"kind\":\"arena\"}]}", plain.json(T, null, null, null, null, null), "no shape, no board: just its head");
+    }
 }

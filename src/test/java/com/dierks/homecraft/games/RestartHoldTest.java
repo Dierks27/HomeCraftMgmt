@@ -19,8 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The scheduled-restart hold's clock arithmetic ({@link RestartHold}), with no server.
  *
- * <p>Pinned here: the next restart is the nearest configured time strictly after now, over
- * several times a day and across midnight; the hold is exactly {@code [restart - hold, restart)};
+ * <p>Pinned here: the next restart is the nearest configured time whose minute isn't over yet, over
+ * several times a day and across midnight; the hold is exactly {@code [restart - hold, restart + 1
+ * minute)}, since the server stops some seconds into the restart's minute;
  * an empty list never holds; the times stay on the wall clock in America/Chicago on both DST days,
  * a time a spring-forward day skips happens at the first instant after the gap, and a time a
  * fall-back day repeats happens once, the first time; the times read the way players read them;
@@ -58,12 +59,12 @@ class RestartHoldTest {
     }
 
     @Test
-    void aRestartHappeningRightNowIsNoLongerTheNextOne() {
+    void aRestartWhoseMinuteIsOverIsNoLongerTheNextOne() {
         RestartHold owner = hold(5, "04:00", "16:00");
-        assertEquals(at(2026, 6, 11, 4, 0), owner.next(at(2026, 6, 10, 16, 0)),
-                "at 16:00 exactly the restart is happening, so the next is tomorrow's 04:00");
-        assertEquals(at(2026, 6, 10, 16, 0), owner.next(at(2026, 6, 10, 16, 0) - 1),
-                "a millisecond earlier it is still this afternoon's");
+        assertEquals(at(2026, 6, 11, 4, 0), owner.next(at(2026, 6, 10, 16, 1)),
+                "at 16:01 the restart's minute is over, so the next is tomorrow's 04:00");
+        assertEquals(at(2026, 6, 10, 16, 0), owner.next(at(2026, 6, 10, 16, 1) - 1),
+                "a millisecond earlier it is still this afternoon's (the server stops some time in 16:00)");
     }
 
     @Test
@@ -88,7 +89,8 @@ class RestartHoldTest {
         assertFalse(owner.holding(restart - 5 * MINUTE - 1), "a millisecond before 15:55 nothing is held yet");
         assertTrue(owner.holding(restart - 5 * MINUTE), "from 15:55 exactly, new things are held");
         assertTrue(owner.holding(restart - 1), "right up to the restart");
-        assertFalse(owner.holding(restart), "at the restart the window closes (the server is going down)");
+        assertTrue(owner.holding(restart), "and through the restart's own minute, before the server has stopped");
+        assertFalse(owner.holding(restart + MINUTE), "once that minute is over the window closes");
         assertFalse(owner.holding(at(2026, 6, 10, 10, 0)), "the rest of the day plays as normal");
         assertEquals("4:00 PM", owner.heldFor(restart - MINUTE), "while held, the restart's time for players");
         assertNull(owner.heldFor(restart - 6 * MINUTE), "and nothing when not held");
@@ -100,7 +102,8 @@ class RestartHoldTest {
         assertFalse(late.holding(at(2026, 6, 10, 23, 56)), "23:56 is outside the hold");
         assertTrue(late.holding(at(2026, 6, 10, 23, 57)), "the 00:02 restart holds from 23:57 the day before");
         assertTrue(late.holding(at(2026, 6, 11, 0, 1)), "and across midnight");
-        assertFalse(late.holding(at(2026, 6, 11, 0, 2)), "until the restart itself");
+        assertTrue(late.holding(at(2026, 6, 11, 0, 2)), "and through the restart's own minute");
+        assertFalse(late.holding(at(2026, 6, 11, 0, 3)), "until that minute is over");
         assertEquals("12:02 AM", late.heldFor(at(2026, 6, 10, 23, 58)), "players read it as 12:02 AM");
         assertEquals("Next restart: 12:02 AM (new runs held from 11:57 PM)", late.status(at(2026, 6, 10, 20, 0)),
                 "the status line shows the hold starting the evening before");
@@ -112,7 +115,7 @@ class RestartHoldTest {
         assertTrue(twice.holding(at(2026, 6, 10, 3, 56)), "held before the first");
         assertTrue(twice.holding(at(2026, 6, 10, 4, 1)), "and still held between them: the second is 2 minutes off");
         assertEquals("4:03 AM", twice.heldFor(at(2026, 6, 10, 4, 1)), "naming the one that is next");
-        assertFalse(twice.holding(at(2026, 6, 10, 4, 3)), "free again once both are past");
+        assertFalse(twice.holding(at(2026, 6, 10, 4, 4)), "free again once both minutes are past");
     }
 
     // ---- DST in America/Chicago ------------------------------------------------------------------
@@ -131,7 +134,7 @@ class RestartHoldTest {
                 "across fall-back night the 04:00 restart is at 4:00 CST (10:00 UTC)");
         assertTrue(owner.holding(utc(2026, 11, 1, 9, 55)), "held from 3:55 CST");
         assertFalse(owner.holding(utc(2026, 11, 1, 8, 55)), "not an hour early");
-        assertEquals(at(2026, 11, 1, 16, 0), owner.next(utc(2026, 11, 1, 10, 0)),
+        assertEquals(at(2026, 11, 1, 16, 0), owner.next(utc(2026, 11, 1, 10, 1)),
                 "and the afternoon one follows at 4:00 PM");
     }
 
@@ -146,7 +149,8 @@ class RestartHoldTest {
         assertFalse(skipped.holding(utc(2026, 3, 8, 7, 54)), "not before");
         assertEquals("Next restart: 3:00 AM (new runs held from 1:55 AM)", skipped.status(at(2026, 3, 8, 0, 0)),
                 "the hold reads 1:55 AM: the gap is not counted as time to wait");
-        assertEquals(at(2026, 3, 9, 2, 30), skipped.next(next), "the next day 02:30 exists again and is used as is");
+        assertEquals(at(2026, 3, 9, 2, 30), skipped.next(next + MINUTE),
+                "the next day 02:30 exists again and is used as is");
     }
 
     @Test
@@ -202,5 +206,23 @@ class RestartHoldTest {
                 960, 4, null, List.of("04:00"))) {
             assertNull(RestartHold.parseTime(junk), "\"" + junk + "\" is not a 24-hour HH:mm time");
         }
+    }
+
+    /**
+     * fx2-C #11: {@code restart_times} names the minute the server actually stops, and a host's
+     * scheduler stops it some seconds into that minute (its cron, the save), so the restart is still
+     * coming, and new runs still held, until that minute is over.
+     */
+    @Test
+    void theRestartsOwnMinuteIsHeldUntilItIsOver() {
+        RestartHold owner = hold(5, "04:00", "16:00");
+        long restart = at(2026, 6, 10, 16, 0);
+        assertEquals(restart, owner.next(restart + 10_000),
+                "10 s into 4:00 PM the server hasn't stopped yet: it is still the next restart");
+        assertTrue(owner.holding(restart), "held at 4:00:00");
+        assertTrue(owner.holding(restart + MINUTE - 1), "and to the very end of that minute");
+        assertEquals("4:00 PM", owner.heldFor(restart + 25_000), "players still read 4:00 PM");
+        assertFalse(owner.holding(restart + MINUTE), "from 4:01 PM the restart has happened: nothing is held");
+        assertEquals(at(2026, 6, 11, 4, 0), owner.next(restart + MINUTE), "and the next is tomorrow's 04:00");
     }
 }

@@ -286,10 +286,11 @@ final class SessionCore<P, I> {
         final UUID uuid;
         final long token;
         final String sid;
-        final String gameId;
-        final String ref;
+        /** The game running it: changed only by {@link #passTo} (WP-CH), never mid-entry. */
+        String gameId;
+        String ref;
         final Place start;
-        final Hooks<P> hooks;
+        Hooks<P> hooks;
         final long startedAt;
         final long enteredTick;
         Session.Phase phase = Session.Phase.ENTERING;
@@ -1041,6 +1042,28 @@ final class SessionCore<P, I> {
         }
         go(p, to, false, done -> {
         });
+        return true;
+    }
+
+    // ---- WP-CH (the Clubhouse): a session handed from one game to another ---------------------
+
+    /**
+     * Hand the player's ACTIVE session to another game ({@code gameId}, with its {@code ref} and its
+     * {@code hooks}), in place: nothing is restored, saved or cleared, and the player stays where
+     * they are. The saved-state row keeps the game the session began with (it is only what the next
+     * join restores, whatever the game). A racer seated from the Clubhouse, or back in it after a
+     * race, is one session all along, so their things are saved once and come back once.
+     *
+     * @return whether it was handed over (false: no ACTIVE session)
+     */
+    boolean passTo(P p, String gameId, String ref, Hooks<P> hooks) {
+        Live s = live.get(port.id(p));
+        if (s == null || s.phase != Session.Phase.ACTIVE || gameId == null || gameId.isBlank() || hooks == null) {
+            return false;
+        }
+        s.gameId = gameId;
+        s.ref = ref == null ? "" : ref;
+        s.hooks = hooks;
         return true;
     }
 

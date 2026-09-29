@@ -1814,6 +1814,14 @@ public final class TimeTrials implements Game {
     }
 
     /**
+     * WP-CH: end a racer's race run into the Clubhouse (their session handed there in place), reading
+     * {@code line}; home as {@link #endRace} when the Clubhouse can't take them.
+     */
+    public void endRaceToClubhouse(UUID racer, EndReason why, String line) {
+        race.endRace(racer, why, line, true);
+    }
+
+    /**
      * Hold a course for a race: new solo runs and party races on it are refused with {@code line}
      * until {@link #release}, and a party race already on it is called off (its racers go home with a
      * clear line; nothing unfinished counts). {@code holder} is the race (a course is held by at most

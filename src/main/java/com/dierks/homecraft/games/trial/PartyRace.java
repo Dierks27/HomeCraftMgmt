@@ -421,6 +421,19 @@ public final class PartyRace implements RaceLink {
         return "&7The party race is over.";
     }
 
+    /** WP-CH: its racers go to the Clubhouse when done with the race (set at the start). */
+    private boolean clubhouse;
+
+    /** WP-CH: racers done with this race go to the Clubhouse instead of home. */
+    void clubhouse(boolean on) {
+        this.clubhouse = on;
+    }
+
+    @Override
+    public boolean clubhouseAfter() {
+        return clubhouse;
+    }
+
     // ---- positions and results --------------------------------------------------------------------
 
     private int finishers() {

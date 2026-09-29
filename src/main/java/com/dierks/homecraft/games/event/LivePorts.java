@@ -70,6 +70,9 @@ final class LivePorts implements NightPorts {
     @Override
     public boolean free(UUID player) {
         Player p = Bukkit.getPlayer(player);
+        if (p != null && ClubNight.waiting(games(), player)) {
+            return true; // WP-CH: waiting in the Clubhouse: seated from there
+        }
         return p != null && games().sessions().session(p) == null && games().sessions().home(p);
     }
 
@@ -147,6 +150,35 @@ final class LivePorts implements NightPorts {
             }
         }
     }
+
+    // ---- WP-CH: the Clubhouse ----------------------------------------------------------------------
+
+    @Override
+    public boolean clubhouse(String trackWorld) {
+        return ClubNight.takes(games(), trackWorld);
+    }
+
+    @Override
+    public void toClubhouse(UUID racer, String line) {
+        TimeTrials t = game.trials();
+        if (t != null) {
+            t.endRaceToClubhouse(racer, EndReason.FINISH, line);
+            return;
+        }
+        home(racer, EndReason.FINISH, line);
+    }
+
+    @Override
+    public void clubhouseResults(NightRunner night) {
+        ClubNight.results(games(), night);
+    }
+
+    @Override
+    public void offerClubhouse(UUID racer) {
+        ClubNight.offer(games(), Bukkit.getPlayer(racer));
+    }
+
+    // ---- end WP-CH ------------------------------------------------------------------------------
 
     @Override
     public boolean reserve(String courseId, Object holder, String line) {

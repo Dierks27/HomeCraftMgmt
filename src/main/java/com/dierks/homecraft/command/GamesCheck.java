@@ -193,6 +193,13 @@ public final class GamesCheck {
             return null;
         }
         // ---- end Falling Floors ----
+
+        // ---- the Clubhouse (WP-CH) ----
+        /** The Clubhouse's box, claim and room ({@link ClubhouseCheck}); {@code null} reads as switched off. */
+        default ClubhouseCheck.Facts clubhouse() {
+            return null;
+        }
+        // ---- end the Clubhouse ----
     }
 
     /** The LuckPerms line that takes games of chance away from one player. */
@@ -217,6 +224,7 @@ public final class GamesCheck {
         section(out, "games.restart_times", () -> restarts(f, out));
         section(out, "Fresh Courses", () -> fresh(f.fresh(), out));
         section(out, "Falling Floors", () -> ArenaCheck.rows(f.arena(), out)); // WP-F
+        section(out, "the Clubhouse", () -> ClubhouseCheck.rows(f.clubhouse(), out)); // WP-CH
         section(out, "the hand-built courses", () -> courses(f.courses(), out));
         section(out, "Race Night", () -> raceNight(f.raceNight(), out));
         section(out, "the website feed", () -> web(f.web(), out));

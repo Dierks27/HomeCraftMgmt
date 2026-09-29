@@ -269,6 +269,42 @@ public final class WorldSessions {
         return made[0];
     }
 
+    // ---- WP-CH (the Clubhouse) ----------------------------------------------------------------------
+
+    /**
+     * Hand the player's ACTIVE session to {@code to} ({@code ref} its course, or {@code ""}), in place:
+     * nothing is restored, saved or cleared, and from now on its end, void and kit go to {@code to}.
+     * A racer seated from the Clubhouse, or back in it after a race, stays in one session.
+     *
+     * @return whether it was handed over
+     */
+    public boolean passTo(Player player, Game to, String ref) {
+        if (player == null || to == null || !live()) {
+            return false;
+        }
+        boolean[] done = {false};
+        port().safely("handing a session over", () -> done[0] = core().passTo(player, to.id(), ref, hooks(to, null)));
+        return done[0];
+    }
+
+    /**
+     * Put a session player in {@code mode} (a Clubhouse watcher's SPECTATOR, and ADVENTURE again), as
+     * the session's own change: the game-mode guard keeps them in it for this session only, and every
+     * way out puts back the mode they came in with (it is in their saved state).
+     *
+     * @return whether it was done (false: no ACTIVE session)
+     */
+    public boolean gameMode(Player player, org.bukkit.GameMode mode) {
+        if (player == null || mode == null || !live()) {
+            return false;
+        }
+        boolean[] done = {false};
+        port().safely("a game's game mode", () -> done[0] = port().gameMode(player, mode));
+        return done[0];
+    }
+
+    // ---- end WP-CH --------------------------------------------------------------------------------
+
     /** Run {@code action}, a dismount the game makes itself (re-seating in a boat), past the guard. */
     public void ownDismount(Player player, Runnable action) {
         if (player == null) {

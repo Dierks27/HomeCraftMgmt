@@ -9,6 +9,7 @@ import com.dierks.homecraft.games.cabinet.snake.Snake;
 import com.dierks.homecraft.games.cabinet.sweeper.CreeperSweeper;
 import com.dierks.homecraft.games.cabinet.tictactoe.TicTacToe;
 import com.dierks.homecraft.games.cabinet.whack.WhackAZombie;
+import com.dierks.homecraft.games.clubhouse.Clubhouse;
 import com.dierks.homecraft.games.chance.coinflip.CoinFlip;
 import com.dierks.homecraft.games.chance.hilo.HigherLower;
 import com.dierks.homecraft.games.chance.slots.OreSlots;
@@ -38,19 +39,22 @@ public final class GameCatalog {
     /**
      * Every game, in display order. Race Night and Falling Floors (EVENTS-DROPPER-SPEC C1) come last,
      * as "Coming soon" stubs until their packages are built. The Weekly Cup (EVENTS-OWNER-DECISIONS
-     * D2) follows the course games it runs on and has no tile of its own.
+     * D2) follows the course games it runs on and has no tile of its own. The Clubhouse (WP-CH) is
+     * last: a place, not a game to play, with no tile of its own either.
      */
     public static final List<GameSpec<?>> SPECS = List.of(OreSlots.SPEC, TwentyOne.SPEC, Wheel.SPEC,
             HigherLower.SPEC, CoinFlip.SPEC, CreeperSweeper.SPEC, OreMerge.SPEC, Snake.SPEC, MiniMatch.SPEC,
             SimonSays.SPEC, WhackAZombie.SPEC, ConnectFour.SPEC, TicTacToe.SPEC, TimeTrials.SPEC, MiniGolf.SPEC,
-            WeeklyCup.SPEC, DailyCourses.SPEC, RaceNight.SPEC, FallingFloors.SPEC);
+            WeeklyCup.SPEC, DailyCourses.SPEC, RaceNight.SPEC, FallingFloors.SPEC, Clubhouse.SPEC);
 
     /**
      * Words {@code /hcm play} keeps for itself, so no course may take them as its id
      * ({@code /hcm play accept}, {@code /hcm play break}, ... and {@code /hcm play cup off}, the
-     * Weekly Cup's switch, EVENTS-OWNER-DECISIONS D2).
+     * Weekly Cup's switch, EVENTS-OWNER-DECISIONS D2; and the Clubhouse's {@code watch}, {@code cheer},
+     * {@code cheers} and {@code rider}, WP-CH).
      */
-    public static final Set<String> RESERVED = Set.of("accept", "deny", "break", "leave", "invites", "news", "cup");
+    public static final Set<String> RESERVED = Set.of("accept", "deny", "break", "leave", "invites", "news", "cup",
+            "watch", "cheer", "cheers", "rider");
 
     private GameCatalog() {
     }

@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.Invite;
 import com.dierks.homecraft.games.Refusal;
+import com.dierks.homecraft.games.clubhouse.ClubDoor;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.gui.games.trial.PartyMenu;
 import com.dierks.homecraft.gui.games.trial.PartyResultsMenu;
@@ -139,6 +140,10 @@ public final class PartyRaces {
      */
     public void open(Player player, String courseId, Runnable back) {
         GamesService g = games();
+        if (inClub(player) && lobby(player.getUniqueId()) != null) {
+            openLobby(player, back); // WP-CH: in the Clubhouse, their party's screen
+            return;
+        }
         Refusal r = g.canOpen(player, trials);
         if (r != null) {
             g.tell(player, r);
@@ -206,8 +211,10 @@ public final class PartyRaces {
             return false;
         }
         GamesService g = games();
-        return g.parties().of(other.getUniqueId()) == null && g.canOpen(other, trials) == null
-                && trials.sessions().session(other) == null;
+        if (g.parties().of(other.getUniqueId()) != null) {
+            return false;
+        }
+        return inClub(other) || (g.canOpen(other, trials) == null && trials.sessions().session(other) == null); // WP-CH
     }
 
     private void send(Player from, Player to) {
@@ -250,7 +257,7 @@ public final class PartyRaces {
             to.sendMessage(Text.of("&7That party has ended."));
             return;
         }
-        Refusal r = games().canOpen(to, trials);
+        Refusal r = inClub(to) ? null : games().canOpen(to, trials); // WP-CH: from the Clubhouse too
         if (r != null) {
             games().tell(to, r);
             return;
@@ -389,9 +396,18 @@ public final class PartyRaces {
             return;
         }
         List<Player> free = new ArrayList<>();
+        ClubDoor club = trials.raceMode().door(); // WP-CH
         for (UUID id : lobby.members()) {
             Player p = Bukkit.getPlayer(id);
             if (p == null) {
+                continue;
+            }
+            if (club != null && club.spectator(id)) {
+                say(lobby, "&7" + p.getName() + " is watching this one from the Clubhouse.");
+                continue; // WP-CH: a spectator is never seated
+            }
+            if (club != null && club.seatable(id)) {
+                free.add(p); // WP-CH: waiting in the Clubhouse: seated from there
                 continue;
             }
             if (games().canOpen(p, trials) != null || trials.sessions().session(p) != null
@@ -420,6 +436,7 @@ public final class PartyRaces {
         int warm = warmup(lobby) ? trials.settings().warmupSeconds() : 0;
         PartyRace race = new PartyRace(lobby.id(), base, racers, warm, Bukkit::getCurrentTick,
                 line -> say(lobby, line));
+        race.clubhouse(club != null && club.partyAfter() && base.world().equalsIgnoreCase(club.world())); // WP-CH
         races.put(lobby.id(), race);
         results.remove(lobby.id());
         Location stand = stand(base, world);
@@ -604,7 +621,11 @@ public final class PartyRaces {
                 PartyRace.Line mine = lineOf(lines, id);
                 String bye = line != null ? line : mine != null && mine.result() == PartyRace.Result.STILL_RACING
                         ? "&7Race over - great racing!" : null;
-                trials.endRace(id, why, bye);
+                if (line == null && race.clubhouseAfter()) {
+                    trials.endRaceToClubhouse(id, why, bye); // WP-CH: back to the Clubhouse
+                } else {
+                    trials.endRace(id, why, bye);
+                }
             }
         }
         PartyLobby lobby = games().parties().get(race.lobbyId());
@@ -630,7 +651,36 @@ public final class PartyRaces {
                 showResults(id, race.base().name(), lines, RESULT_TRIES);
             }
         }
+        clubResults(race, lines, lobby); // WP-CH
     }
+
+    // ---- WP-CH: the Clubhouse ------------------------------------------------------------------------
+
+    /** Whether the player is in the Clubhouse now (their session is its own). */
+    private boolean inClub(Player p) {
+        ClubDoor club = trials.raceMode().door();
+        return club != null && p != null && club.seatable(p.getUniqueId());
+    }
+
+    /**
+     * A party race that went back to the Clubhouse: its results on the board (and on the kit's
+     * Results), and the host reads how to race again.
+     */
+    private void clubResults(PartyRace race, List<PartyRace.Line> lines, PartyLobby lobby) {
+        ClubDoor club = race.clubhouseAfter() ? trials.raceMode().door() : null;
+        if (club == null) {
+            return;
+        }
+        String course = race.base().name();
+        club.result(ClubRaces.partySheet(course, lines, ++clubResults),
+                p -> new PartyResultsMenu(trials.plugin(), trials, p, course, lines).open(p));
+        Player host = lobby == null ? null : Bukkit.getPlayer(lobby.host());
+        if (host != null && club.seatable(host.getUniqueId())) {
+            host.sendMessage(Text.of(com.dierks.homecraft.games.clubhouse.ClubhouseText.RACE_AGAIN));
+        }
+    }
+
+    private long clubResults;
 
     private static PartyRace.Line lineOf(List<PartyRace.Line> lines, UUID id) {
         for (PartyRace.Line l : lines) {

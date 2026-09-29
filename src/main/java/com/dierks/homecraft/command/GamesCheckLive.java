@@ -266,6 +266,51 @@ final class GamesCheckLive implements GamesCheck.Facts {
 
     // ---- end Falling Floors ----
 
+    // ---- the Clubhouse (WP-CH) ----
+
+    /** The Clubhouse from its config, the world, the claim and the running room; read-only. */
+    @Override
+    public ClubhouseCheck.Facts clubhouse() {
+        GamesConfig.Parsed cfg = config();
+        com.dierks.homecraft.games.clubhouse.ClubhouseSettings cs =
+                cfg.settings(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC);
+        DailySettings st = cfg.settings(DailyCourses.SPEC);
+        String world = st.world().isBlank() ? (cfg.common().worlds().isEmpty() ? "" : cfg.common().worlds().get(0))
+                : st.world();
+        World w = world.isBlank() ? null : Bukkit.getWorld(world);
+        Box box = cs.box();
+        List<String> problems = List.of();
+        if (w != null) {
+            BukkitWorldPort port = new BukkitWorldPort(plugin, w);
+            boolean listed = cfg.common().worlds().stream().anyMatch(x -> x.equalsIgnoreCase(w.getName()));
+            List<Regions.Extra> arena = List.of(new Regions.Extra(ArenaRegions.NAME, cfg.settings(FallingFloors.SPEC)
+                    .box()));
+            problems = com.dierks.homecraft.games.clubhouse.ClubhouseRegions.problems(box, st, arena,
+                    Regions.handBuilt(rows()), new Regions.WorldFacts(w.getName(), listed, w.getMinHeight(),
+                            w.getMaxHeight(), port.border(), port.spawn(), st.safeSpot()));
+        }
+        ArenaCheck.Claim claim;
+        try {
+            String c = new GenMetaDao(plugin.database()).get(com.dierks.homecraft.games.clubhouse.ClubhouseRoom.CLAIM_KEY);
+            claim = c == null ? ArenaCheck.Claim.UNCLAIMED
+                    : c.equals(com.dierks.homecraft.games.clubhouse.ClubhouseRoom.claimText(world, box))
+                    ? ArenaCheck.Claim.CLAIMED : ArenaCheck.Claim.MOVED;
+        } catch (SQLException | RuntimeException e) {
+            claim = ArenaCheck.Claim.UNKNOWN;
+        }
+        GamesService g = games();
+        Game game = g == null ? null : g.game(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC.id());
+        com.dierks.homecraft.games.clubhouse.Clubhouse running =
+                game instanceof com.dierks.homecraft.games.clubhouse.Clubhouse c && c.running() ? c : null;
+        boolean hand = running != null && running.handBuilt();
+        return new ClubhouseCheck.Facts(cfg.enabled() && cs.enabled(), hand, world, w != null, box.describe(),
+                hand ? List.of() : problems, claim, running == null ? null : running.closedWhy(),
+                running != null && running.ready(), running == null ? List.of() : running.handSpots(),
+                running != null && running.handComplete());
+    }
+
+    // ---- end the Clubhouse ----
+
     @Override
     public GamesCheck.RaceNight raceNight() {
         GamesService g = games();

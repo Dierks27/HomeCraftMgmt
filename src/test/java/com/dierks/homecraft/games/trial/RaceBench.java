@@ -67,6 +67,10 @@ final class RaceBench {
     final Map<UUID, Integer> parked = new HashMap<>();
     /** Who went home, with the line they read ("" for none). */
     final Map<UUID, String> home = new LinkedHashMap<>();
+    /** WP-CH: the Clubhouse's door (race mode's too), or {@code null} for none (off, not built). */
+    com.dierks.homecraft.games.clubhouse.ClubDoor door;
+    /** WP-CH: who was seated from the Clubhouse, how often. */
+    final Map<UUID, Integer> fromClub = new HashMap<>();
 
     RaceBench(TimeTrials trials) {
         this.trials = trials;
@@ -99,6 +103,12 @@ final class RaceBench {
         }
         if (trials.run(id) != null) {
             return Refusal.IN_SESSION.message();
+        }
+        if (door != null && door.seatable(id)) { // RaceMode.race -> ClubRaces.seat: the session handed over
+            if (!door.handOut(p, trials, base.id())) {
+                return "Couldn't take you from the Clubhouse right now.";
+            }
+            fromClub.merge(id, 1, Integer::sum);
         }
         boolean warm = mode.call(link, () -> link.warmupUntil() > tick, false);
         Course.Spot spot = grid != null ? grid : raced.start();
@@ -178,6 +188,9 @@ final class RaceBench {
                 case HOME -> {
                     rr.due = RaceRun.Due.NONE;
                     rr.ended = true;
+                    if (rr.toClub && ClubRaces.toClub(trials, mode, door, players.get(run.player), run, rr.line)) {
+                        continue; // WP-CH: race mode's own trip to the Clubhouse (the real one)
+                    }
                     leave(run.player, rr.line, rr.why == null ? EndReason.FINISH : rr.why);
                 }
                 case CALLED_OFF -> {

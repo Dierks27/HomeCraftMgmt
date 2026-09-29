@@ -147,7 +147,11 @@ public final class CreeperSweeperMenu extends GameMenu {
         if (!sweeper.mayPlay(viewer)) {
             return;
         }
-        run = how.get();
+        CreeperSweeper.Run next = how.get();
+        if (next == null) {
+            return; // today's board is held for a restart (told): the screen stays as it was
+        }
+        run = next;
         board = sweeper.deal(run);
         flagMode = false;
         quitArmed = false;

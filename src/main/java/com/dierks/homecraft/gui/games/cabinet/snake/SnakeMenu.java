@@ -139,7 +139,11 @@ public final class SnakeMenu extends GameMenu {
         if (!snake.mayPlay(viewer)) {
             return;
         }
-        run = how.get();
+        Snake.Run next = how.get();
+        if (next == null) {
+            return; // today's board is held for a restart (told): the screen stays as it was
+        }
+        run = next;
         field = snake.deal(run);
         bestBefore = snake.best(viewer, run.board());
         started = false;

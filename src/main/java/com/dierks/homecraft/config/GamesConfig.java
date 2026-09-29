@@ -360,7 +360,8 @@ public final class GamesConfig {
             } else if (o instanceof Number num) {
                 n.warn(n.key(k) + " " + o + " is not a time - dropped (" + unquoted(num) + ")");
             } else if (o == null || !String.valueOf(o).isBlank()) {
-                n.warn(n.key(k) + " \"" + o + "\" is not a 24-hour time like \"16:00\" - dropped");
+                n.warn(n.key(k) + " \"" + o + "\" is not a 24-hour time like \"16:00\" - dropped"
+                        + ("24:00".equals(String.valueOf(o).trim()) ? " (midnight is \"00:00\")" : ""));
             }
         }
         return List.copyOf(out);
@@ -382,9 +383,13 @@ public final class GamesConfig {
      * What to say about a number where a restart time belongs. YAML 1.1 reads an unquoted
      * {@code 16:00} as the base-60 number 960, so a whole number of minutes in a day is named back
      * as the time it probably was - in the WARN only, never as a value (no guessing what was meant).
+     * An unquoted {@code 24:00} (1440) meant midnight, which quotes alone won't fix: it is "00:00".
      */
     static String unquoted(Number n) {
         double v = n.doubleValue();
+        if (v == 24 * 60) {
+            return "YAML reads an unquoted 24:00 as 1440: midnight is \"00:00\", in quotes";
+        }
         if (v == Math.rint(v) && v >= 60 && v < 24 * 60) {
             int m = (int) v;
             String time = String.format(Locale.ROOT, "%d:%02d", m / 60, m % 60);

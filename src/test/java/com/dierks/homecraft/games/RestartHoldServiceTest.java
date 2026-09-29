@@ -32,15 +32,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Pinned here: entering a world game is refused while held, with the restart's time, and a
  * closed game still says it is closed; a new multi-step round of chance is refused before anything
  * is taken, while an OPEN round resumes, moves, takes a Double and settles as normal, and an
- * instant play isn't held at all; today's cabinet board is practice while held, with the try kept
- * and one line saying why, and is the scored try again after the restart; the hold follows the
- * live config (none set, nothing held) and the status line reads it in the players' zone.
+ * instant play isn't held at all; today's cabinet board isn't dealt while held to a player whose
+ * scored try is unused (told once, the try kept, the board never seen before the try), even when
+ * the restart is past midnight, and is the scored try after the restart, while practice after a
+ * used try carries on; the hold follows the live config (none set, nothing held) and the status
+ * line reads it in the players' zone.
  */
 class RestartHoldServiceTest {
 
     private static final String HELD = "The server restarts at 4:00 PM. New runs open again after it.";
-    private static final String DAILY_HELD =
-            "The server restarts at 4:00 PM, so today's board is practice for now. Your scored try waits until after.";
 
     private Host host;
     private TestGame slots;
@@ -150,31 +150,79 @@ class RestartHoldServiceTest {
     // ---- c. today's cabinet board ----------------------------------------------------------------
 
     @Test
-    void todaysBoardIsPracticeWhileHeldAndTheScoredTryWaits() throws Exception {
+    void todaysBoardIsNotDealtWhileHeldAndTheScoredTryIsKept() throws Exception {
         CabinetGame snake = cabinet();
         clockTo(15, 57);
-        CabinetGame.DailyStart held = snake.startDaily(alex.player);
-        assertFalse(held.scored(), "a scored try the restart would cut off is dealt as practice");
-        assertFalse(games.dao().dailyAttempt(alex.id, "test_snake", held.day()), "and the try is not used up");
-        assertEquals(List.of(DAILY_HELD), alex.said, "the player is told once why, with the restart's time");
-        assertEquals(snake.dailySeed(held.day()), held.seed(), "it is still today's board, the same as everyone's");
+        long day = games.clock().dayKey();
+        assertNull(snake.startDaily(alex.player), "a scored try the restart would cut off is not dealt at all");
+        assertFalse(games.dao().dailyAttempt(alex.id, "test_snake", day), "so the try is not used up");
+        assertEquals(List.of(HELD), alex.said, "the player is told once, with the restart's time, like any new run");
 
         alex.said.clear();
         clockTo(16, 5);
         CabinetGame.DailyStart after = snake.startDaily(alex.player);
-        assertTrue(after.scored(), "after the restart the first deal is the scored try");
-        assertTrue(games.dao().dailyAttempt(alex.id, "test_snake", after.day()), "and now it is written");
-        assertEquals(List.of(), alex.said, "with nothing said about practice");
+        assertNotNull(after, "after the restart today's board is dealt again");
+        assertTrue(after.scored(), "and the first deal is the scored try");
+        assertTrue(games.dao().dailyAttempt(alex.id, "test_snake", after.day()), "which is written now");
+        assertEquals(List.of(), alex.said, "with nothing said about the restart");
     }
 
     @Test
-    void aUsedTryDuringTheHoldIsPlainPracticeWithNothingSaidAboutWaiting() throws Exception {
+    void theHoldNeverShowsTodaysBoardBeforeTheScoredTry() {
+        CabinetGame snake = cabinet();
+        clockTo(15, 55);
+        for (int i = 0; i < 3; i++) {
+            assertNull(snake.startDaily(alex.player),
+                    "no practice deal of today's board: its layout would be known before the scored try");
+        }
+        clockTo(16, 1);
+        CabinetGame.DailyStart first = snake.startDaily(alex.player);
+        assertTrue(first != null && first.scored(), "so the first board of today the player sees is the scored one");
+    }
+
+    @Test
+    void aHoldAcrossMidnightPromisesNothingAboutYesterdaysTry() throws Exception {
+        host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6)
+                .withRestarts(List.of(LocalTime.of(0, 0)), 5));
+        CabinetGame snake = cabinet();
+        clockTo(23, 57);
+        long day = games.clock().dayKey();
+        assertNull(snake.startDaily(alex.player), "a midnight restart holds the last minutes of the day too");
+        assertEquals(List.of("The server restarts at 12:00 AM. New runs open again after it."), alex.said,
+                "the line says what is true: after the restart it is a new day, so it promises no waiting try");
+        assertFalse(games.dao().dailyAttempt(alex.id, "test_snake", day), "nothing was written for the old day");
+
+        alex.said.clear();
+        host.time.now = GamesKit.at(2026, 6, 11, 0, 3);
+        CabinetGame.DailyStart next = snake.startDaily(alex.player);
+        assertNotNull(next, "after the restart the new day's board is dealt");
+        assertEquals(day + 1, next.day(), "it is the new day's board");
+        assertTrue(next.scored(), "and its first deal is the new day's scored try");
+    }
+
+    @Test
+    void aTwoMinutesPastMidnightRestartStartsHoldingAt2357TheDayBefore() {
+        host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6)
+                .withRestarts(List.of(LocalTime.of(0, 2)), 5));
+        CabinetGame snake = cabinet();
+        clockTo(23, 56);
+        CabinetGame.DailyStart before = snake.startDaily(alex.player);
+        assertTrue(before != null && before.scored(), "at 11:56 PM the day's try still starts");
+        clockTo(23, 57);
+        assertEquals("The server restarts at 12:02 AM. New runs open again after it.",
+                games.sessions().entryRefusal(course).message(), "from 11:57 PM the 12:02 AM restart holds");
+    }
+
+    @Test
+    void practiceAfterAUsedTryIsNotHeldBecauseItHasNothingToLose() throws Exception {
         CabinetGame snake = cabinet();
         clockTo(10, 0);
         assertTrue(snake.startDaily(alex.player).scored(), "the morning's first deal is the scored try");
         clockTo(15, 57);
-        assertFalse(snake.startDaily(alex.player).scored(), "later deals are practice anyway");
-        assertEquals(List.of(), alex.said, "no scored try is waiting, so the restart line would not be true");
+        CabinetGame.DailyStart again = snake.startDaily(alex.player);
+        assertNotNull(again, "today's board again is dealt during the hold: the scored try is already played");
+        assertFalse(again.scored(), "as practice, as at any other time");
+        assertEquals(List.of(), alex.said, "and nothing is said about the restart");
     }
 
     @Test

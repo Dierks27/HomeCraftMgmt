@@ -85,7 +85,10 @@ public final class WhackAZombieMenu extends GameMenu {
 
     private void daily() {
         if (whack.mayPlay(viewer)) {
-            play(whack.startDaily(viewer));
+            CabinetGame.DailyStart start = whack.startDaily(viewer);
+            if (start != null) { // null: held for a restart (told)
+                play(start);
+            }
         }
     }
 

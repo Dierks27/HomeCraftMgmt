@@ -42,9 +42,13 @@ import java.util.concurrent.ThreadLocalRandom;
  *
  * <p><b>Where it can't pay, it doesn't use the try.</b> A player who can't earn where they are
  * (creative, a world without games) is dealt today's board as practice and told why: the scored try
- * is kept for when it can count. The same goes for the last few minutes before a scheduled restart
- * (the restart hold, {@code games.restart_times}): a scored try the restart cut off would be gone,
- * so the board is practice until after it. Classic play is never held.
+ * is kept for when it can count.
+ *
+ * <p><b>The restart hold.</b> In the last few minutes before a scheduled restart
+ * ({@code games.restart_times}) a scored try the restart cut off would be gone, so a player whose
+ * try is unused is dealt nothing and told when the server restarts, like any new run. Not today's
+ * board as practice: that would show them the layout before their scored try. Practice after a
+ * used try, and Classic play, have no try to lose and are never held.
  */
 public abstract class CabinetGame implements Game {
 
@@ -54,15 +58,6 @@ public abstract class CabinetGame implements Game {
      */
     public static final String NOT_HERE_DAILY =
             "&7No tokens can be earned here, so today's board is practice. Your scored try waits for later.";
-
-    /**
-     * Why a daily board is practice in the last minutes before a scheduled restart ({@code when}
-     * already formatted: "4:00 PM"): the restart would cut the scored try off, so it waits.
-     */
-    public static String restartDaily(String when) {
-        return "&7The server restarts at " + when + ", so today's board is practice for now. "
-                + "Your scored try waits until after.";
-    }
 
     protected final GameContext ctx;
     /** Read once from the database; a per-run random stand-in if that ever fails. */
@@ -104,23 +99,28 @@ public abstract class CabinetGame implements Game {
     /**
      * Deal today's board to {@code player}: the first deal of the day is the scored try (recorded
      * now, so closing the screen can't earn a second one); every later one is practice. A player
-     * who can't earn here ({@link SkillRewards#canEarnHere}), or who deals in the last minutes
-     * before a scheduled restart ({@link GamesService#restartHeld}), gets practice without the try
-     * being used, and is told once why.
+     * who can't earn here ({@link SkillRewards#canEarnHere}) gets practice without the try being
+     * used, and is told once why.
+     *
+     * @return {@code null} when refused (told): the player's scored try is unused and a scheduled
+     *         restart is minutes away ({@link GamesService#restartRefusal}). Nothing is dealt, so
+     *         today's board isn't seen before the try, and the try is kept.
      */
     public DailyStart startDaily(Player player) {
         long day = today();
-        long seed = dailySeed(day);
         boolean canEarn = games().rewards().canEarnHere(player);
-        String held = canEarn ? games().restartHeld() : null;
-        // Held, a used try is practice anyway: there is no scored try left to say is waiting.
-        String why = practiceWhy(canEarn, held != null && !usedTry(player, day) ? held : null);
-        if (why != null) {
-            player.sendMessage(Text.of(why));
+        Refusal held = canEarn ? games().restartRefusal() : null;
+        if (held != null && !usedTry(player, day)) {
+            games().tell(player, held);
+            return null;
+        }
+        long seed = dailySeed(day);
+        if (!canEarn) {
+            player.sendMessage(Text.of(NOT_HERE_DAILY));
         }
         try {
-            return deal(day, seed, canEarn && held == null, () -> games().dao().markDailyAttempt(player.getUniqueId(),
-                    id(), day, seed, "", games().clock().nowMillis()));
+            return deal(day, seed, canEarn, () -> games().dao().markDailyAttempt(player.getUniqueId(), id(), day,
+                    seed, "", games().clock().nowMillis()));
         } catch (SQLException e) {
             ctx.plugin().getLogger().warning("Could not record " + id() + "'s daily try for "
                     + player.getName() + " - it is practice: " + e.getMessage());
@@ -128,7 +128,10 @@ public abstract class CabinetGame implements Game {
         }
     }
 
-    /** Whether the player's scored try at {@code day}'s board is used (false if it can't be read). */
+    /**
+     * Whether the player's scored try at {@code day}'s board is used (false if it can't be read,
+     * so a hold keeps it rather than showing the board).
+     */
     private boolean usedTry(Player player, long day) {
         try {
             return games().dao().dailyAttempt(player.getUniqueId(), id(), day);
@@ -144,24 +147,11 @@ public abstract class CabinetGame implements Game {
     }
 
     /**
-     * A daily deal: the scored try only where it can count (the player can earn here, and no
-     * restart is about to cut it off), and only then is the attempt row written — practice that
-     * couldn't count never uses the try up.
+     * A daily deal: the scored try only where the player can earn, and only then is the attempt
+     * row written — practice somewhere it can't count never uses the try up.
      */
-    static DailyStart deal(long day, long seed, boolean canCount, Attempt attempt) throws SQLException {
-        return new DailyStart(day, seed, canCount && attempt.mark());
-    }
-
-    /**
-     * Why today's board would be practice, said once as it is dealt, or {@code null} when the deal
-     * can be the scored try: somewhere nothing can be earned ({@link #NOT_HERE_DAILY}) comes first;
-     * then a restart minutes away ({@code restartAt}, "4:00 PM", or {@code null} when none is).
-     */
-    static String practiceWhy(boolean canEarn, String restartAt) {
-        if (!canEarn) {
-            return NOT_HERE_DAILY;
-        }
-        return restartAt == null ? null : restartDaily(restartAt);
+    static DailyStart deal(long day, long seed, boolean canEarn, Attempt attempt) throws SQLException {
+        return new DailyStart(day, seed, canEarn && attempt.mark());
     }
 
     // ---- finishing ----------------------------------------------------------------------------

@@ -216,6 +216,9 @@ public final class SimonSaysPlayMenu extends GameMenu {
             new SimonSaysPlayMenu(plugin, simon, viewer, back, null, simon.classicSeed()).open(viewer);
         } else {
             CabinetGame.DailyStart next = simon.startDaily(viewer);
+            if (next == null) {
+                return; // held for a restart (told): this screen stays
+            }
             new SimonSaysPlayMenu(plugin, simon, viewer, back, next, next.seed()).open(viewer);
         }
     }

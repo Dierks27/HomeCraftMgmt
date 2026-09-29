@@ -368,6 +368,30 @@ class GamesConfigTest {
                 "a number that can't be a time of day gets the plain advice");
     }
 
+    @Test
+    void midnightWrittenAs2400PointsTo0000QuotedOrNot() {
+        // Unquoted, YAML reads 24:00 as 1440; quoted, it is text but not a 24-hour time.
+        List<String> warns = new ArrayList<>();
+        GamesConfig.Parsed unquoted = GamesConfig.parse(yaml("games:\n  restart_times: [24:00]\n"), warns::add);
+        assertEquals(List.of(), unquoted.common().restartTimes(), "1440 is never guessed back into midnight");
+        assertEquals(1, warns.size(), "one WARN: " + warns);
+        assertTrue(warns.get(0).contains("\"00:00\""),
+                "the owner is told midnight is \"00:00\", not only to add quotes that won't help: " + warns);
+
+        warns.clear();
+        GamesConfig.Parsed quoted = GamesConfig.parse(yaml("games:\n  restart_times: [\"24:00\"]\n"), warns::add);
+        assertEquals(List.of(), quoted.common().restartTimes(), "\"24:00\" is not a time of day either");
+        assertEquals(1, warns.size(), "one WARN: " + warns);
+        assertTrue(warns.get(0).startsWith("games.restart_times \"24:00\""), "it names the key and the entry: " + warns);
+        assertTrue(warns.get(0).contains("\"00:00\""), "and says midnight is \"00:00\": " + warns);
+
+        warns.clear();
+        assertEquals(List.of(LocalTime.MIDNIGHT),
+                GamesConfig.parse(yaml("games:\n  restart_times: [\"00:00\"]\n"), warns::add).common().restartTimes(),
+                "which is read as midnight");
+        assertEquals(List.of(), warns, "without a WARN");
+    }
+
     // ---- junk -------------------------------------------------------------------------------
 
     @Test

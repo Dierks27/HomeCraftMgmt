@@ -84,7 +84,10 @@ public final class MiniMatchMenu extends GameMenu {
 
     private void daily() {
         if (match.mayPlay(viewer)) {
-            play(match.startDaily(viewer));
+            CabinetGame.DailyStart start = match.startDaily(viewer);
+            if (start != null) { // null: held for a restart (told)
+                play(start);
+            }
         }
     }
 

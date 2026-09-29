@@ -437,15 +437,17 @@ final class ArcadeConfigMigration {
                 log);
     }
 
-    // ---- revision 18: the events batch's achievements (EVENTS-DROPPER-SPEC §A.8, §B.1.8) ----------
+    // ---- revision 18: the events batch's achievements (EVENTS-DROPPER-SPEC §A.8, §B.1.8, §B.3.4) --
 
     /**
-     * The "Games" achievements revision 18 adds, in the order they ship: the Dropper's clean drop and
-     * Race Night's two. ONE revision for the whole events batch, so an upgraded server gains them all
-     * in one step. Revision 17's step leaves them out of the list it compares with (they weren't
-     * shipped yet when it was the newest), so it still adds exactly what it always did.
+     * The "Games" achievements revision 18 adds, in the order they ship: the Dropper's clean drop,
+     * Race Night's two and Falling Floors' whole minute. ONE revision for the whole events batch, so
+     * an upgraded server gains them all in one step. Revision 17's step leaves them out of the list
+     * it compares with (they weren't shipped yet when it was the newest), so it still adds exactly
+     * what it always did.
      */
-    static final List<String> EVENT_ACHIEVEMENTS = List.of("game_dropper_clean", "game_race_first", "game_race_win");
+    static final List<String> EVENT_ACHIEVEMENTS = List.of("game_dropper_clean", "game_race_first", "game_race_win",
+            "game_floors_minute");
 
     /**
      * Config revision 18: the events batch's "Games" achievements join the list, exactly as revision

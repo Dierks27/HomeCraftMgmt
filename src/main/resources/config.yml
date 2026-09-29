@@ -1440,7 +1440,7 @@ arcade:
   #               cabinet_finishes | cabinet_golds | cabinets (different cabinet games) |
   #               course_finishes (courses and golf rounds) | course_records | holes_in_one |
   #               golf_under_par | fresh_sets | star_chart_tops | dropper_clean | race_nights |
-  #               race_night_wins (nothing counts a game of chance)
+  #               race_night_wins | floors_minutes (nothing counts a game of chance)
   #   COLLECTION  distinct Minis owned right now; `target`
   #   GRADE       print a Mini of `grade:` (MINT)
   #   FINISH      own a Mini with `finish:` (SHINY)
@@ -1488,6 +1488,7 @@ arcade:
     - { id: game_dropper_clean, group: "Games", type: COUNTER, counter: dropper_clean, target: 1, reward: 20, display: "Reach the bottom of a Dropper with no bonks" }
     - { id: game_race_first, group: "Games", type: COUNTER, counter: race_nights, target: 1, reward: 10, display: "Race at Race Night" }
     - { id: game_race_win, group: "Games", type: COUNTER, counter: race_night_wins, target: 1, reward: 30, display: "Win a Race Night" }
+    - { id: game_floors_minute, group: "Games", type: COUNTER, counter: floors_minutes, target: 1, reward: 15, display: "Last a whole minute on Falling Floors" }
   # Daily/weekly quests. Each player DRAWS their own `daily_draw` / `weekly_draw` from the
   # pools the first time they're needed in a day/week (local time) — no two of one type.
   # A Quest Reroll (Prize Counter) swaps one unfinished daily. Each row:

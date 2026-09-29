@@ -202,6 +202,20 @@ class GamesProgressTest {
     }
 
     @Test
+    void aWholeMinuteOnFallingFloorsCountsOnceAndOnlyWhereTheGamesPay() {
+        progress.floorsLastedMinute(alex);
+        assertEquals(List.of("count " + GamesProgress.FLOORS_MINUTES + " 1"), sink.events,
+                "one minute-long round: one count toward game_floors_minute, and no quest step");
+        sink.events.clear();
+        sink.here = false;
+        progress.floorsLastedMinute(alex);
+        progress.floorsLastedMinute(null);
+        assertEquals(List.of(), sink.events, "nothing where the games pay no tokens, and nothing for nobody");
+        assertTrue(GameProgress.NONE != null, "(the default listener ignores it)");
+        GameProgress.NONE.floorsLastedMinute(alex);
+    }
+
+    @Test
     void theCountersAreTheOnesTheAchievementsRead() throws Exception {
         Set<String> used = new HashSet<>();
         for (var row : GameAchievementsTest.gamesRows()) {

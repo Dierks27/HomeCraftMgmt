@@ -6,8 +6,13 @@ import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.RestartHold;
+import com.dierks.homecraft.games.arena.ArenaRegions;
+import com.dierks.homecraft.games.arena.ArenaService;
+import com.dierks.homecraft.games.arena.FallingFloors;
+import com.dierks.homecraft.games.arena.FallingFloorsSettings;
 import com.dierks.homecraft.games.gen.DailyCourses;
 import com.dierks.homecraft.games.gen.DailySettings;
+import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Edition;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
@@ -18,6 +23,7 @@ import com.dierks.homecraft.games.gen.engine.Regions;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.mini.MiniService;
 import com.dierks.homecraft.storage.GamesDao;
+import com.dierks.homecraft.storage.GenMetaDao;
 import com.dierks.homecraft.web.ArcadeFeed;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
@@ -223,6 +229,42 @@ final class GamesCheckLive implements GamesCheck.Facts {
                 next, st.archive().keepProblem(), st.archive().keep().describe() + ", " + st.archive().keep().maxPlots()
                 + " plots");
     }
+
+    // ---- Falling Floors (EVENTS-DROPPER-SPEC §C.2 WP-F) ----
+
+    /** Falling Floors from its config, the world, the claim and the running arena; read-only. */
+    @Override
+    public ArenaCheck.Facts arena() {
+        GamesConfig.Parsed cfg = config();
+        FallingFloorsSettings ff = cfg.settings(FallingFloors.SPEC);
+        DailySettings st = cfg.settings(DailyCourses.SPEC);
+        String world = st.world().isBlank() ? (cfg.common().worlds().isEmpty() ? "" : cfg.common().worlds().get(0))
+                : st.world();
+        World w = world.isBlank() ? null : Bukkit.getWorld(world);
+        Box box = ff.box();
+        List<String> problems = List.of();
+        if (w != null) {
+            BukkitWorldPort port = new BukkitWorldPort(plugin, w);
+            boolean listed = cfg.common().worlds().stream().anyMatch(x -> x.equalsIgnoreCase(w.getName()));
+            problems = ArenaRegions.problems(box, st, Regions.handBuilt(rows()), new Regions.WorldFacts(w.getName(),
+                    listed, w.getMinHeight(), w.getMaxHeight(), port.border(), port.spawn(), st.safeSpot()));
+        }
+        ArenaCheck.Claim claim;
+        try {
+            String c = new GenMetaDao(plugin.database()).get(ArenaService.CLAIM_KEY);
+            claim = c == null ? ArenaCheck.Claim.UNCLAIMED
+                    : c.equals(ArenaService.claimText(world, box)) ? ArenaCheck.Claim.CLAIMED : ArenaCheck.Claim.MOVED;
+        } catch (SQLException | RuntimeException e) {
+            claim = ArenaCheck.Claim.UNKNOWN;
+        }
+        GamesService g = games();
+        Game game = g == null ? null : g.game(FallingFloors.SPEC.id());
+        FallingFloors running = game instanceof FallingFloors f && f.running() ? f : null;
+        return new ArenaCheck.Facts(cfg.enabled() && ff.enabled(), world, w != null, box.describe(), problems, claim,
+                running == null ? null : running.closedWhy(), running != null && running.ready());
+    }
+
+    // ---- end Falling Floors ----
 
     @Override
     public GamesCheck.RaceNight raceNight() {

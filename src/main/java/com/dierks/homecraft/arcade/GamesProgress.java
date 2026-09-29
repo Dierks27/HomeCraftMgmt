@@ -34,7 +34,8 @@ import java.util.Locale;
  *   <li>a counted Dropper run with no bonks is one {@value #DROPPER_CLEAN} (its finish is a course
  *       finish as for any trial);</li>
  *   <li>a Race Night raced is one {@value #RACE_NIGHTS}, and a Race Night won one
- *       {@value #RACE_NIGHT_WINS} (EVENTS-DROPPER-SPEC §A.8).</li>
+ *       {@value #RACE_NIGHT_WINS} (EVENTS-DROPPER-SPEC §A.8);</li>
+ *   <li>lasting a whole minute in a Falling Floors round is one {@value #FLOORS_MINUTES}.</li>
  * </ul>
  *
  * <p><b>Why counters.</b> Courses are played in the Games world, which is not an economy world, so
@@ -77,11 +78,13 @@ public final class GamesProgress implements GameProgress {
     public static final String RACE_NIGHTS = "race_nights";
     /** Race Nights won. */
     public static final String RACE_NIGHT_WINS = "race_night_wins";
+    /** Falling Floors rounds lasted a whole minute (EVENTS-DROPPER-SPEC §B.3.4). */
+    public static final String FLOORS_MINUTES = "floors_minutes";
 
     /** Every counter the "Games" achievements read. */
     public static final List<String> COUNTERS = List.of(CABINET_FINISHES, CABINET_GOLDS, CABINETS, COURSE_FINISHES,
             COURSE_RECORDS, HOLES_IN_ONE, UNDER_PAR, FRESH_SETS, STAR_CHART_TOPS, DROPPER_CLEAN, RACE_NIGHTS,
-            RACE_NIGHT_WINS);
+            RACE_NIGHT_WINS, FLOORS_MINUTES);
 
     /** Where the finishes go: the live quests and achievements, or a test's fake. */
     public interface Sink {
@@ -171,6 +174,14 @@ public final class GamesProgress implements GameProgress {
             return;
         }
         sink.count(player, DROPPER_CLEAN, 1);
+    }
+
+    @Override
+    public void floorsLastedMinute(Player player) {
+        if (player == null || !sink.countsHere(player)) {
+            return;
+        }
+        sink.count(player, FLOORS_MINUTES, 1);
     }
 
     @Override

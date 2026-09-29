@@ -681,6 +681,15 @@ public final class RaceNight implements Game {
         });
     }
 
+    /**
+     * Whether the join window's bar is for {@code p}: the same {@link Announcer.Who} the chat lines ask
+     * (final gate, group B #1: never for a player without {@code hcm.games.play}, nor one where games aren't
+     * played unless they joined).
+     */
+    boolean joinBar(Player p, boolean racer) {
+        return Announcer.joinBar(LivePorts.who(games(), p, newsOn(p.getUniqueId()), racer));
+    }
+
     /** The screen's news bell: turn Race Night news (and the other game news) on or off. */
     public void setNews(UUID player, boolean on) {
         try {
@@ -694,7 +703,10 @@ public final class RaceNight implements Game {
         }
     }
 
-    /** The join window's bar for everyone with news on; the watchers' bar; nothing for anyone else. */
+    /**
+     * The join window's bar for everyone {@link Announcer#joinBar} lets see it; the watchers' bar; nothing
+     * for anyone else.
+     */
     private void drawBars() {
         NightRunner n = night;
         long now = now();
@@ -709,7 +721,7 @@ public final class RaceNight implements Game {
                 NightRunner shown = n != null ? n : last;
                 bars.show(id, shown == null ? "&bRace Night" : Watchers.bar(shown.phase(), shown.race(),
                         shown.plan().races(), shown.leader(), shown.joined().size()), 1f, RaceBars.Tone.WATCH);
-            } else if (open && newsOn(id)) {
+            } else if (open && joinBar(p, r != null)) {
                 long window = Math.max(1, n.startsAt() - n.plan().joinAt());
                 bars.show(id, EventCopy.joinBar(n.startsAt() - now, n.joined().size()),
                         (n.startsAt() - now) / (float) window, RaceBars.Tone.JOIN);

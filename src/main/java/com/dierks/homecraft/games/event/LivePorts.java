@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.event;
 
 import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.PlayGate;
 import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.gen.NewCoursesNudge;
 import com.dierks.homecraft.games.trial.Course;
@@ -272,8 +273,7 @@ final class LivePorts implements NightPorts {
     public void announce(Announcer.Line line, String text, Collection<UUID> racers) {
         for (Player p : new ArrayList<>(Bukkit.getOnlinePlayers())) {
             UUID id = p.getUniqueId();
-            Announcer.Who who = new Announcer.Who(newsOn(id), games().gate().worldAllowed(p.getWorld()),
-                    games().sessions().session(p) != null, racers.contains(id));
+            Announcer.Who who = who(games(), p, newsOn(id), racers.contains(id));
             if (!game.announcer().tell(nightId, id, line, who)) {
                 continue;
             }
@@ -283,6 +283,15 @@ final class LivePorts implements NightPorts {
             }
             p.sendMessage(c);
         }
+    }
+
+    /**
+     * Who {@code p} is to Race Night's news: the one place a chat line and the join bar ask (the final
+     * gate's #1: a player without {@code hcm.games.play} is never nudged, as by every other games nudge).
+     */
+    static Announcer.Who who(GamesService games, Player p, boolean newsOn, boolean racer) {
+        return new Announcer.Who(newsOn, p.hasPermission(PlayGate.PERMISSION_PLAY),
+                games.gate().worldAllowed(p.getWorld()), games.sessions().session(p) != null, racer);
     }
 
     /** The player's news toggle ({@code /hcm play news off} silences Race Night too). */

@@ -39,6 +39,8 @@ public final class PartyMenu extends GameMenu {
     /** WP-CH: "Go to the Clubhouse" and "Watch", while the Clubhouse is open. */
     public static final int CLUB_SLOT = 36;
     public static final int WATCH_SLOT = 37;
+    /** WP-CH: "Take a rider (back seat)" on a boat course's party. */
+    public static final int RIDER_SLOT = 39;
     /** The Cup item is read again at most this often (it reads the Cup's rows), not on every repaint. */
     static final long CUP_EVERY_MS = 5_000;
 
@@ -148,6 +150,7 @@ public final class PartyMenu extends GameMenu {
             }
         }
         clubButtons(); // WP-CH
+        riderButton(); // WP-CH
         exitTile();
     }
 
@@ -166,6 +169,18 @@ public final class PartyMenu extends GameMenu {
             viewer.closeInventory();
             Clubhouse.watch(plugin.games(), viewer);
         });
+    }
+
+    /** WP-CH: "Take a rider (back seat)" for a member of a boat course's party, while ride along is on. */
+    private void riderButton() {
+        PartyLobby lobby = party.lobby(viewer.getUniqueId());
+        Course c = lobby == null ? null : trials.course(lobby.course());
+        if (c != null && com.dierks.homecraft.games.trial.RideAlong.offered(plugin.games(), c.kind())) {
+            set(RIDER_SLOT, Menus.icon(Material.OAK_BOAT, com.dierks.homecraft.games.trial.RideAlong.BUTTON,
+                    "&7A friend rides in the back of your", "&7boat: not a racer, not counted."),
+                    e -> com.dierks.homecraft.games.trial.RideAlong.take(plugin.games(), viewer, c.id(),
+                            com.dierks.homecraft.games.trial.RideAlong.Purpose.PARTY, this::reopen));
+        }
     }
 
     /** The Cup's item for the party's course, read again every few seconds; {@code null} when none runs. */

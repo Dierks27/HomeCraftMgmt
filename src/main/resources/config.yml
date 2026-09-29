@@ -1855,6 +1855,10 @@ games:
     warmup_seconds: 180
     # "Race with friends": the most racers in one party race on a course (2-12).
     party_max: 8
+    # Ride along: a boat driver may take one passenger in the back seat. A passenger doesn't change a
+    # boat's speed, so a run with a rider counts as normal. false = runs with a rider are just for fun
+    # (no board, record, rewards or Cup time), and Race Night takes no riders.
+    rider_runs_count: true
   # ---- golf ----
   # Mini golf: your Mini is the ball. Courses are built with /hcm games golf.
   golf:

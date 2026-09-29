@@ -36,6 +36,33 @@ public final class WorldEntities {
                 game.id() + ":" + (owner == null ? "" : owner.toString()));
     }
 
+    // ---- WP-CH: ride along (one passenger in the back of a driver's game boat) ----------------------
+
+    /** Owner to the one player allowed into their game vehicle besides them. */
+    private static final java.util.Map<UUID, UUID> PASSENGERS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Allow {@code rider} into {@code owner}'s game vehicles ({@code null}: nobody any more). */
+    public static void passenger(UUID owner, UUID rider) {
+        if (owner == null) {
+            return;
+        }
+        if (rider == null) {
+            PASSENGERS.remove(owner);
+        } else {
+            PASSENGERS.put(owner, rider);
+        }
+    }
+
+    /** Whether {@code entered} may get into {@code vehicle}: its owner, or the owner's rider. */
+    public static boolean mayEnter(Entity vehicle, UUID entered) {
+        return mayEnter(owner(vehicle), entered);
+    }
+
+    /** Whether {@code entered} may get into a game vehicle spawned for {@code owner}: them, or their rider. */
+    public static boolean mayEnter(UUID owner, UUID entered) {
+        return entered != null && (entered.equals(owner) || (owner != null && entered.equals(PASSENGERS.get(owner))));
+    }
+
     /** The game that spawned {@code entity}, or {@code null} if no game did. */
     public static String gameId(Entity entity) {
         String tag = tag(entity);

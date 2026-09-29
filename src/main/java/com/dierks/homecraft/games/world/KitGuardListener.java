@@ -620,7 +620,7 @@ public final class KitGuardListener implements Listener {
         if (!on() || WorldEntities.gameId(e.getVehicle()) == null) {
             return;
         }
-        if (!e.getEntered().getUniqueId().equals(WorldEntities.owner(e.getVehicle()))) {
+        if (!WorldEntities.mayEnter(e.getVehicle(), e.getEntered().getUniqueId())) { // WP-CH: or the owner's rider
             e.setCancelled(true);
         }
     }

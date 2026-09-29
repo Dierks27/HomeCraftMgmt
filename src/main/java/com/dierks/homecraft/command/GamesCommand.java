@@ -72,7 +72,7 @@ public final class GamesCommand {
     static final List<String> SAVED_VERBS = List.of("show", "restore", "return", "discard");
     /** Words {@code /hcm play} keeps for itself. */
     static final List<String> PLAY_WORDS = List.of("break", "accept", "deny", "invites", "news", "leave", "cup",
-            "watch", "cheer", "cheers"); // WP-CH: the Clubhouse's
+            "watch", "cheer", "cheers", "rider"); // WP-CH: the Clubhouse's
 
     private final HomeCraftManagement plugin;
 
@@ -141,7 +141,7 @@ public final class GamesCommand {
             case "leave" -> leave(sender, args);
             case "race" -> race(sender, args); // WP-R1 (D4): /hcm play race <course> is a party race
             case "cup" -> cup(sender, args);
-            case "watch", "cheer", "cheers" -> clubhouse(sender, args); // WP-CH
+            case "watch", "cheer", "cheers", "rider" -> clubhouse(sender, args); // WP-CH
             default -> open(sender, args);
         }
     }
@@ -161,6 +161,8 @@ public final class GamesCommand {
             case "watch" -> com.dierks.homecraft.games.clubhouse.Clubhouse.watchCommand(games, player,
                     args.length >= 3 ? args[2] : null);
             case "cheer" -> com.dierks.homecraft.games.clubhouse.Clubhouse.cheerCommand(games, player);
+            case "rider" -> com.dierks.homecraft.games.trial.RideAlong.command(games, player,
+                    args.length >= 3 ? args[2] : null);
             default -> com.dierks.homecraft.games.clubhouse.Clubhouse.cheersCommand(games, player, args);
         }
     }
@@ -359,7 +361,7 @@ public final class GamesCommand {
 
     private static String inviteState(GamesService games, UUID player, String gameId) {
         Game g = games.game(gameId);
-        String name = g == null ? gameId : g.name();
+        String name = g != null ? g.name() : "rider".equals(gameId) ? "Ride along" : gameId; // WP-CH
         return "&f" + name + " " + (games.invites().accepts(player, gameId) ? "&aon" : "&7off");
     }
 
@@ -811,6 +813,7 @@ public final class GamesCommand {
             out.add("&e/hcm play clubhouse &7- hang out in the Clubhouse (and back from watching)"); // WP-CH
             out.add("&e/hcm play watch [player] &7- watch a race live from the Clubhouse");
             out.add("&e/hcm play cheer &7- cheer the racers on; &e/hcm play cheers [on|off] &7- see cheers");
+            out.add("&e/hcm play rider <player> &7- take a friend in the back of your boat");
             out.add("&e/hcm leave &7- leave the world game you're in (your things come back)");
         }
         if (sender.hasPermission(ADMIN)) {
@@ -863,7 +866,7 @@ public final class GamesCommand {
             } else if (n == 3 && (args[1].equalsIgnoreCase("invites") || args[1].equalsIgnoreCase("news")
                     || args[1].equalsIgnoreCase("cup") || args[1].equalsIgnoreCase("cheers"))) {
                 match(out, last, "on", "off");
-            } else if (n == 3 && args[1].equalsIgnoreCase("watch")) { // WP-CH
+            } else if (n == 3 && (args[1].equalsIgnoreCase("watch") || args[1].equalsIgnoreCase("rider"))) { // WP-CH
                 players(out, last);
             } else if (n == 3 && args[1].equalsIgnoreCase("race") && games != null) { // WP-R1 (D4)
                 match(out, last, com.dierks.homecraft.games.trial.PartyRaces.courseIds(games).toArray(new String[0]));

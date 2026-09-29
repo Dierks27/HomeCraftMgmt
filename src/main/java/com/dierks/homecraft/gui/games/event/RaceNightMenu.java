@@ -49,6 +49,8 @@ public final class RaceNightMenu extends GameMenu {
     public static final int NEWS = 26;
     /** WP-CH: "Wait in the Clubhouse" (joined) or "Watch from the Clubhouse", while it takes the night. */
     public static final int CLUB = 24;
+    /** WP-CH: "Take a rider (back seat)", once joined, while riders race at Race Night. */
+    public static final int RIDER = 25;
 
     /** What the Join tile can do for the viewer. */
     public enum Join {
@@ -129,6 +131,16 @@ public final class RaceNightMenu extends GameMenu {
                 } else {
                     com.dierks.homecraft.games.clubhouse.Clubhouse.watch(plugin.games(), viewer);
                 }
+            });
+        }
+        com.dierks.homecraft.games.event.NightRunner night = game.night();
+        if (v.join() == Join.IN && night != null && com.dierks.homecraft.games.trial.RideAlong.nightOffered(
+                plugin.games(), night.track().base())) { // WP-CH
+            set(RIDER, Menus.icon(Material.OAK_BOAT, com.dierks.homecraft.games.trial.RideAlong.BUTTON,
+                    "&7A friend rides in the back of your", "&7boat: not a racer, never scored."), e -> {
+                viewer.closeInventory();
+                com.dierks.homecraft.games.trial.RideAlong.take(plugin.games(), viewer, night.track().base().id(),
+                        com.dierks.homecraft.games.trial.RideAlong.Purpose.NIGHT, null);
             });
         }
     }

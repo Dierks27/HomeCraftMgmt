@@ -180,6 +180,8 @@ public final class TimeTrials implements Game {
     private final RaceMode race = new RaceMode(this);
     private final Warmups warmups = new Warmups(this);
     private final PartyRaces party = new PartyRaces(this);
+    // ---- WP-CH: ride along (one passenger in the back of a boat); its logic is in Riders ----
+    private final Riders riders = new Riders(RideAlong.live(this));
 
     public TimeTrials(GameContext ctx) {
         this.ctx = ctx;
@@ -401,6 +403,7 @@ public final class TimeTrials implements Game {
     public void stop() {
         race.stop(); // WP-R1
         party.stop();
+        riders.stop(); // WP-CH
         for (TrialRun run : new ArrayList<>(runs.values())) {
             removeBoat(run, Bukkit.getPlayer(run.player));
             drops.end(run, Bukkit.getPlayer(run.player));
@@ -423,6 +426,7 @@ public final class TimeTrials implements Game {
     public void onSessionEnd(Player player, EndReason reason) {
         race.left(player, reason); // WP-R1: RaceLink.left
         end(player);
+        riders.sessionEnded(player.getUniqueId()); // WP-CH: a driver's rider goes too; a rider's driver carries on
     }
 
     /** Fell out of the world, or someone else moved the player a little way: back to the last checkpoint. */
@@ -1005,6 +1009,9 @@ public final class TimeTrials implements Game {
         FairPlay.Stall stall = FairPlay.stall(lastTick, nanos);
         lastTick = nanos;
         race.sweepArrivals(); // WP-R1: a racer whose entry was dropped on the way in never holds a race up
+        if (++riderTicks % 20 == 0) {
+            riders.second(); // WP-CH: a rider out of the boat is put back
+        }
         if (runs.isEmpty()) {
             return;
         }
@@ -1407,6 +1414,9 @@ public final class TimeTrials implements Game {
         boat.addPassenger(p);
         // Seated: done. Not seated (another plugin stopped the spawn or the ride): try again in a second, not every tick.
         run.reseatUntil = seated(p, run) ? 0 : Bukkit.getCurrentTick() + 20;
+        if (seated(p, run)) {
+            riders.seated(p, boat, run.course.id()); // WP-CH: the rider behind the driver, on every seat
+        }
     }
 
     /** Re-seat (R3.13): our own dismount, the old boat gone, our teleport, a new boat, seated. */
@@ -1448,10 +1458,12 @@ public final class TimeTrials implements Game {
         }
         run.boat = null;
         boats.remove(b.getUniqueId());
-        Runnable gone = () -> {
+        Runnable boatGone = () -> {
             b.eject();
             b.remove();
         };
+        Player rider = p == null ? null : riders.riderIn(b, p.getUniqueId()); // WP-CH: their getting out is ours too
+        Runnable gone = rider == null ? boatGone : () -> sessions().ownDismount(rider, boatGone);
         if (p != null && p.isOnline()) {
             sessions().ownDismount(p, gone);
         } else {
@@ -1483,6 +1495,7 @@ public final class TimeTrials implements Game {
                 run.progress.reachedTargets(), run.stalls);
         FairPlay.Verdict verdict = FairPlay.judge(run.test, run.voided, stale, ms,
                 run.course.minSecondsOr(s.minSeconds()), tooFast);
+        verdict = withRider(p, verdict); // WP-CH: rider_runs_count false makes a ride just for fun
         String name = run.course.name();
         GenTag tag = run.course.gen();
         String code = tag == null ? null : DailyLookup.code(games(), tag);
@@ -1724,6 +1737,21 @@ public final class TimeTrials implements Game {
     /** Race mode's server side (WP-R1). */
     RaceMode raceMode() {
         return race;
+    }
+
+    /** WP-CH: ride along (one passenger in the back of a boat). */
+    Riders riders() {
+        return riders;
+    }
+
+    private long riderTicks;
+
+    /** WP-CH: a run with a rider aboard is just for fun while {@code rider_runs_count} is false. */
+    FairPlay.Verdict withRider(Player p, FairPlay.Verdict verdict) {
+        if (verdict.counts() && riders.funOnly(p.getUniqueId(), settings().riderRunsCount())) {
+            return new FairPlay.Verdict(FairPlay.Kind.VOID, Riders.FUN_ONLY);
+        }
+        return verdict;
     }
 
     /** The warm-ups (WP-R1, D3). */

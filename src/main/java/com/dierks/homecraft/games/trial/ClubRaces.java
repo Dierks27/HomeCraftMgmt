@@ -107,7 +107,11 @@ public final class ClubRaces {
         rr.due = RaceRun.Due.NONE;
         trials.end(p);
         String text = line == null || line.isBlank() ? null : line;
-        return club.takeIn(p, kind(rr.link), text);
+        if (!club.takeIn(p, kind(rr.link), text)) {
+            return false;
+        }
+        trials.riders().toClub(p.getUniqueId(), kind(rr.link)); // a rider comes along
+        return true;
     }
 
     /**

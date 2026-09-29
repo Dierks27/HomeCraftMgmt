@@ -46,7 +46,7 @@ public final class Invites {
      * {@code trials}: party races (WP-R1, owner decision D4), so {@code /hcm play invites off}
      * covers them too.
      */
-    public static final List<String> FRIEND_GAMES = List.of("connect_four", "tic_tac_toe", "trials");
+    public static final List<String> FRIEND_GAMES = List.of("connect_four", "tic_tac_toe", "trials", "rider");
     /** The same two players can't be asked again for this long after an invite. */
     public static final long PAIR_COOLDOWN_MS = 30_000L;
     /** The shortest and longest an invite may wait. */
@@ -80,7 +80,20 @@ public final class Invites {
      */
     public Invite send(Player from, Player to, Game game, String summary, int seconds,
                        BiConsumer<Invite, Boolean> answer) {
-        if (from == null || to == null || game == null || from.getUniqueId().equals(to.getUniqueId())) {
+        if (game == null) {
+            return null;
+        }
+        return send(from, to, game.id(), game.name(), summary, seconds, answer);
+    }
+
+    /**
+     * {@link #send(Player, Player, Game, String, int, BiConsumer)} under an invite key of its own that
+     * isn't a game's id (WP-CH: {@code rider}, a ride in the back of someone's boat), with the same
+     * switches, cooldown and one-at-a-time rules.
+     */
+    public Invite send(Player from, Player to, String key, String name, String summary, int seconds,
+                       BiConsumer<Invite, Boolean> answer) {
+        if (from == null || to == null || key == null || from.getUniqueId().equals(to.getUniqueId())) {
             return null;
         }
         expireLapsed();
@@ -88,12 +101,12 @@ public final class Invites {
         UUID b = to.getUniqueId();
         long now = now();
         Long last = lastPair.get(pair(a, b));
-        if (!accepts(b, game.id()) || pending.containsKey(b) || outgoing(a) != null
+        if (!accepts(b, key) || pending.containsKey(b) || outgoing(a) != null
                 || (last != null && now - last < PAIR_COOLDOWN_MS)) {
             return null;
         }
         int secs = Math.max(MIN_SECONDS, Math.min(MAX_SECONDS, seconds));
-        Invite invite = new Invite(nextId++, a, b, game.id(), summary == null ? game.name() : summary, now,
+        Invite invite = new Invite(nextId++, a, b, key, summary == null ? name : summary, now,
                 now + secs * 1000L);
         Runnable cancel = games.host().later(secs * 20L + 1, () -> expire(invite));
         pending.put(b, new Pending(invite, answer, cancel == null ? () -> {
@@ -180,7 +193,7 @@ public final class Invites {
     public boolean accepts(UUID player, String gameId) {
         try {
             String v = games.dao().pref(player, prefKey(gameId));
-            if (v == null && "trials".equals(gameId)) { // WP-R1 fix (R1 review #3): an older "off" still holds
+            if (v == null && ("trials".equals(gameId) || "rider".equals(gameId))) { // WP-R1 fix (R1 #3); WP-CH riders
                 v = games.dao().pref(player, prefKey("connect_four"));
             }
             if (v == null) {

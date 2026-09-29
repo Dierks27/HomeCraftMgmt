@@ -56,6 +56,11 @@
 | `/hcm play golf` | Shows the list of mini golf courses. |
 | `/hcm play golf <course id>` | Opens that golf course's screen, where Play with friends makes a golf party. |
 | `/hcm play race` | Opens the Race Night screen: when the next one is, Join, Watch and your season points. |
+| `/hcm play clubhouse` | Takes you to the Clubhouse, to wait, watch or hang out. While you're watching live, it brings you back. If it isn't open: "The Clubhouse isn't open right now." |
+| `/hcm play watch` | Watch live: fly round the course of the race going on, in spectator mode. `/hcm play watch <player>` watches that player's race or golf group. |
+| `/hcm play cheer` | Cheers the racers on: "<your name> cheers for you!". Once every 10 seconds. |
+| `/hcm play cheers off` | No more cheers on your screen (`on` brings them back; with no word it says which). |
+| `/hcm play rider <player>` | Invites a friend to ride in the back seat of your boat. |
 | `/hcm play break` | Opens Take a break, where you can set your own daily limit or a pause for games of chance. Works even while the games are off. |
 | `/hcm play accept` | Says yes to the invite waiting for you. Bedrock players type this. Java players can also click [Accept] in chat. If nothing is waiting: "You have no invite waiting." |
 | `/hcm play deny` | Says no to the invite waiting for you ("Invite turned down."). If nothing is waiting: "You have no invite waiting." |
@@ -1600,6 +1605,30 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - **Between rounds** the floors are put back, and the next round starts on whole floors a couple of seconds later. Just before a planned restart, no new round starts; a round already going finishes.
 - **Website feed:** `falling_floors` is in `games` with `kind: "arena"`, this week's `shape` (the top floor's: `disc`, `square`, `ring`, `plus` or `diamond`) and `top`: this week's longest solo times, in ms, longest first.
 <!-- ---- end Falling Floors ---- -->
+
+## The Clubhouse
+
+<!-- ---- The Clubhouse (CLUBHOUSE-SPEC, WP-CH) ---- -->
+*A room in the Games world to wait in before a race and hang out in after it: chat, joke around and talk about what happened.*
+
+- **Open it:** `/hcm play clubhouse` any time it's open. It's free, and nothing in it pays or costs tokens. Your things are kept safe and come back when you leave, like every world game.
+- **The room:** a big glass-floored hall with windows, lanterns, benches, two tables, a podium for the top three and a board with the results. You can't fall out or get hurt, nobody can push anybody, and nobody can break or place blocks.
+- **The kit:** Results (the last race's results), Party (while you're in a party race's lobby) and Leave game (click twice).
+- **Before a party race:** on the party screen, tap **Go to the Clubhouse** to wait there. When the host starts the race, you go straight to the grid. You don't have to go.
+- **Before Race Night:** tap **Wait in the Clubhouse** on the Race Night screen, or in the join message. You go to the track when the night starts.
+- **After a party race:** you come back to the Clubhouse instead of going home. The board shows the order, times and gaps. The host can tap **Race again** on the party screen, and everyone still in the Clubhouse goes back to the grid.
+- **After Race Night:** everyone comes to the Clubhouse. The top three of the night stand on the podium: "Photo time!", and a firework goes off over 1st (it can't hurt anyone). The board shows the night's points.
+- **After golf together:** your group comes to the Clubhouse and the board shows how the group did.
+- **Solo runs** go home as always.
+- **The board** shows the positions while a race or golf group is going, then the final result.
+- **Just watching:** anyone can come and watch without racing. Tap **Watch** on the party screen or the Race Night screen, or use `/hcm play clubhouse`. A watcher is never put in a race, never counted and never paid.
+- **Watch live:** while a race or golf group is going, tap **Watch live** in the Clubhouse, or use `/hcm play watch` (or `/hcm play watch <player>` for that player's race). You fly round the course in spectator mode and can click a racer to see what they see. You stay near the course, the racers can't see you, and you can't touch anything. The bar at the bottom shows the positions and "Watching live - /hcm play clubhouse to go back". When the race ends you come back to the Clubhouse by yourself, just in time for the results and the photo. However you leave, your own game mode comes back.
+- **Cheer!** `/hcm play cheer` shows the racers "<your name> cheers for you!". Once every 10 seconds. Racers who'd rather not see cheers: `/hcm play cheers off` (and `on` to see them again).
+- **Ride along:** in a boat, a driver can take one friend in the back seat, on a solo boat run, a party race or Race Night. Tap **Take a rider (back seat)** on a boat course's screen, the party screen or the Race Night screen once you've joined, or use `/hcm play rider <player>`. Your friend gets an invite ([Accept] in chat, or `/hcm play accept` on Bedrock). They hop in behind you at every start, hold "Riding with Dad - hold on tight!" and can't fall out during the run. Their Leave game takes only them home; you carry on. When you finish or leave, they come with you: to the Clubhouse after a party race or Race Night, home after a solo run. A rider is never timed or paid and isn't on any board. A passenger doesn't make a boat faster, so your run counts as normal (unless the owner has set rides with a rider to be just for fun; then you're told first).
+- **Time limits:** after 30 minutes with no race or party going you're sent home, with a warning a minute before. Just before a planned restart, nobody new comes in and everyone is sent home with a warning.
+- **One thing at a time:** from the Clubhouse, a solo run, another game or golf says "Finish your game first (/hcm leave)".
+- **When it's off** (the owner's switch, or while it's being built), races and golf work exactly as before and the Clubhouse buttons aren't shown.
+<!-- ---- end the Clubhouse ---- -->
 
 ## The older Arcade games
 

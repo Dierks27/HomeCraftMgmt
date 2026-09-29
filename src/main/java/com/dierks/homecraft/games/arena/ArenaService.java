@@ -363,6 +363,9 @@ public final class ArenaService {
         for (UUID p : new ArrayList<>(uncollided)) {
             restoreCollision(p);
         }
+        if (round.phase() != ArenaRound.Phase.CLOSED) {
+            toGallery(); // the one left standing (or a round called off on its spawns) watches from there
+        }
         if (r.calledOff()) {
             if (round.phase() != ArenaRound.Phase.CLOSED) {
                 tellMembers(ArenaText.calledOff());
@@ -388,6 +391,7 @@ public final class ArenaService {
     private void closed(String reason) {
         cancelJob();
         pendingTicket = -1;
+        verified = false; // opening again starts with a reset, like a boot
         if (writer != null) {
             writer.clear();
         }
@@ -460,6 +464,7 @@ public final class ArenaService {
             host.logger().warning("Falling Floors: the world " + world + " went away during a reset");
             cancelJob();
             failedResets++;
+            verified = false;
             lastResetError = "the world " + world + " went away";
             round.resetDone(jobTicket, false);
             return;
@@ -492,6 +497,7 @@ public final class ArenaService {
             job = null;
             failed.release();
             failedResets++;
+            verified = false; // nobody new comes in until a verify passes again
             lastResetError = failed.error();
             closedNote = failed.firstFound().isEmpty() ? null : "first at " + String.join(" ", failed.firstFound());
             host.logger().warning("Falling Floors: the reset failed (try " + round.resetAttempt() + " of "
@@ -566,6 +572,16 @@ public final class ArenaService {
             }
         }
         return out;
+    }
+
+    /** Every arena player on or over the floors goes to the gallery (a round ended). */
+    private void toGallery() {
+        for (Person p : host.people()) {
+            if (round.isMember(p.id()) && p.in(world, box) && !site.inGallery(p.x(), p.y(), p.z())) {
+                moves.remove(p.id());
+                host.teleport(p.id(), world, nextGallerySpot());
+            }
+        }
     }
 
     /** Before a reset: anyone in the box who isn't in the gallery is moved out of its way. */

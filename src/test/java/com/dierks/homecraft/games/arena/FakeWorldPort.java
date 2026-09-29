@@ -24,6 +24,8 @@ final class FakeWorldPort implements WorldPort {
     final Map<Long, String> blocks = new HashMap<>();
     final Set<Long> tickets = new HashSet<>();
     final Set<Long> failLoads = new HashSet<>();
+    /** Blocks a write never changes (something in the world keeps putting them back): a verify that can't pass. */
+    final Set<Long> sticky = new HashSet<>();
     long writes;
     long released;
     /** Every write, "x,y,z=block", in order. */
@@ -176,6 +178,9 @@ final class FakeWorldPort implements WorldPort {
     public void set(int x, int y, int z, String state) {
         writes++;
         log.add(x + "," + y + "," + z + "=" + state);
+        if (sticky.contains(pos(x, y, z))) {
+            return;
+        }
         if (AIR.equals(state)) {
             blocks.remove(pos(x, y, z));
         } else {

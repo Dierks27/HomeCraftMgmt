@@ -561,6 +561,11 @@ public final class RaceNight implements Game {
             case CALL_OFF -> callOffStored(row, RESTARTED, now);
             case CALL_OFF_SETTLE -> {
                 StoredNight.settle(dao(), row, rules, "called off: " + RESTARTED, now);
+                // fx2-C #6: the races done count for the achievements, as for a night called off live
+                for (Map.Entry<UUID, Boolean> r : StoredNight.raced(dao().races(row.id()), dao().entries(row.id()))
+                        .entrySet()) {
+                    games().tellProgress(g -> g.raceNightFinished(r.getKey(), r.getValue()));
+                }
                 int owed = payLoop().payNight(row.id());
                 tellEntrants(row.id(), "&7Race Night was called off - " + RESTARTED + ". The races you finished "
                         + "still count" + (owed > 0 ? ", and prizes are paid when you're back in a world with tokens."

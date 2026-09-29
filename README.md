@@ -1680,8 +1680,9 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
   server-wide (`prize_events_per_week`, the week the weekly boards use). A 4th night that week says
   "Just for fun tonight - points only" and pays nothing; so does an admin's `fun` night. Prizes are a
   new reward kind (`EVENT_PRIZE`) **outside the daily skill cap**, paid once per player per night
-  (ledger source "Race Night"). A racer offline or somewhere tokens can't be earned is owed: it is
-  paid at their next join (and every 5 minutes while they're online), with a line that says so.
+  (ledger source "Race Night"). A racer offline or somewhere tokens can't be earned (watching live,
+  creative) is owed, and reads a line that says so (at once, or at their next join): it is paid at
+  their next join and every minute while they're online, even after Race Night is switched off.
 - **The season.** Every race's points also go on the month's season board (`rnseason:2026-10`,
   "Race Night · October" on the high-score screen); each night's result on its own board
   (`rnnight:<id>`, "Race Night · Fri 2 Oct"). `season: off` turns the season board off.
@@ -1709,7 +1710,9 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
 - **Boats bump.** Vanilla boats are solid to each other and that can't be switched off: race only on
   tracks with walls on both sides. Java and Bedrock boats can feel slightly different on ice.
 - **Achievements:** "Race at Race Night" (10) and "Win a Race Night" (30), counters, so they unlock
-  back home (config revision 18 adds them to a shipped list).
+  back home (config revision 18 adds them to a shipped list). Every racer who started a race of the
+  night is counted when it ends, wherever they are then (offline, or watching the others live), and so
+  is a night settled at the next boot after a crash.
 
 | Key | Default | Meaning |
 |---|---|---|

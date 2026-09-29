@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.SkillRewards;
 import com.dierks.homecraft.storage.EventDao;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.LongSupplier;
@@ -56,11 +57,26 @@ public final class PayLoop {
 
     /** Pay a night's unpaid prizes to whoever can be paid now. @return how many are still owed */
     public int payNight(String eventId) {
+        List<UUID> owed = payNightOwed(eventId);
+        return owed == null ? -1 : owed.size();
+    }
+
+    /**
+     * {@link #payNight}, saying who is still owed (each owed racer once), or {@code null} when the
+     * prizes can't be read: the night tells exactly those racers their prize is waiting (fx2-C #6).
+     */
+    public List<UUID> payNightOwed(String eventId) {
         try {
-            return pay(dao.unpaid(eventId));
+            List<UUID> owed = new ArrayList<>();
+            for (UUID u : payAll(dao.unpaid(eventId))) {
+                if (!owed.contains(u)) {
+                    owed.add(u);
+                }
+            }
+            return owed;
         } catch (SQLException e) {
             log.log(Level.SEVERE, "Race Night: could not read the prizes of " + eventId, e);
-            return -1;
+            return null;
         }
     }
 
@@ -75,7 +91,12 @@ public final class PayLoop {
     }
 
     private int pay(List<EventDao.EntryRow> rows) {
-        int owed = 0;
+        return payAll(rows).size();
+    }
+
+    /** Pay each row that can be paid now; the players of the rows still owed, one per row. */
+    private List<UUID> payAll(List<EventDao.EntryRow> rows) {
+        List<UUID> owed = new ArrayList<>();
         for (EventDao.EntryRow r : rows) {
             if (r.prize() <= 0 || r.paidAt() != null) {
                 continue;
@@ -90,7 +111,7 @@ public final class PayLoop {
                             + "payment)", e);
                 }
             } else {
-                owed++;
+                owed.add(r.player());
             }
         }
         return owed;

@@ -536,6 +536,29 @@ class NightRunnerTest {
         assertEquals(1, payer.paid.values().stream().filter(v -> v == 1).count(), "once");
     }
 
+    /**
+     * fx2-C #6: a racer who is online but can't be paid where they are when the night settles (watching
+     * live in spectator from the Clubhouse, in creative) reads that their prize is waiting, as an
+     * offline one does at their next join; a racer who was paid reads nothing of the kind.
+     */
+    @Test
+    void anOnlineRacerWhosePrizeIsOwedIsToldItIsWaiting() throws Exception {
+        open();
+        join(A, B, C);
+        runUntil(T + 250);
+        payer.canEarn.remove(A); // Ava is watching the others live when the night settles
+        race(A, B, C);
+        runUntil(ports.now + 21_000);
+        race(A, B, C);
+        runUntil(ports.now + 21_000);
+        race(A, B, C);
+        runUntil(ports.now + 1_000);
+        assertEquals(EventMachine.Phase.DONE, runner.phase(), "settled");
+        assertEquals(1, dao.owed(A).size(), "Ava's prize is owed");
+        assertTrue(ports.heard(A, "Your Race Night prize is waiting"), "and she is told so: " + ports.told.get(A));
+        assertFalse(ports.heard(B, "Your Race Night prize is waiting"), "Ben was paid: nothing is waiting for him");
+    }
+
     @Test
     void aLateJoinerIsSeatedBeforeGoAndAFullNightSaysSo() throws Exception {
         runner = night(new NightRules(1, 0, 2, 3, List.of(10, 8, 6), 2, 1, List.of(5, 3, 2), 1, false, 0, 60, 4, 20));

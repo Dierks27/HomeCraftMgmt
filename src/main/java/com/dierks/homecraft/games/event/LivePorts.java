@@ -305,11 +305,11 @@ final class LivePorts implements NightPorts {
         return best == null ? 0L : best;
     }
 
+    /** By id: the racer may be offline or watching live when the night settles (fx2-C #6). */
     @Override
     public void progress(UUID player, boolean won) {
-        Player p = Bukkit.getPlayer(player);
-        if (p != null) {
-            games().tellProgress(g -> g.raceNightFinished(p, won));
+        if (player != null) {
+            games().tellProgress(g -> g.raceNightFinished(player, won));
         }
     }
 

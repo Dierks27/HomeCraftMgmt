@@ -1028,10 +1028,12 @@ public final class NightRunner implements RaceLink {
         } catch (SQLException e) {
             ports.log("Race Night: could not settle " + plan.id() + ": " + e.getMessage(), true);
         }
-        int owed = pay.payNight(plan.id());
-        for (Map.Entry<UUID, RacePrizes.Prize> e : prizes.entrySet()) {
-            if (!ports.online(e.getKey()) && owed > 0) {
-                ports.tell(e.getKey(), PayLoop.WAITING, true);
+        // fx2-C #6: each racer whose prize can't be paid now (offline, or watching live, in creative, in a
+        // world without tokens) reads that it is waiting: now if online, else at their next join
+        List<UUID> owed = pay.payNightOwed(plan.id());
+        for (UUID u : owed == null ? List.<UUID>of() : owed) {
+            if (prizes.containsKey(u)) {
+                ports.tell(u, PayLoop.WAITING, true);
             }
         }
         String results = finishers.isEmpty() ? NOBODY_FINISHED : resultsLine(ranked);

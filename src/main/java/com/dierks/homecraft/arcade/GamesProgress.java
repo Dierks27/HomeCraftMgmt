@@ -13,6 +13,7 @@ import org.bukkit.entity.Player;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 /**
  * Where the skill games' finishes become quests and achievements (EXTRAS E4): the one
@@ -44,7 +45,9 @@ import java.util.Locale;
  * ({@link QuestService#settle}).
  *
  * <p><b>Where it counts.</b> Only where the games pay tokens ({@link #countsHere}: an economy world,
- * a Games world or a play world, and never in creative or spectator), the games' own rule.
+ * a Games world or a play world, and never in creative or spectator), the games' own rule. The one
+ * exception is Race Night, which settles after the racing: it is counted by id, wherever the racer
+ * is when it settles ({@link #raceNightFinished(UUID, boolean)}).
  *
  * <p><b>Never a game of chance.</b> The games of chance never call {@link GameProgress}; as a second
  * lock, a cabinet finish is taken only from a game the catalog lists as a {@link GameKind#CABINET}.
@@ -103,6 +106,10 @@ public final class GamesProgress implements GameProgress {
 
         /** True only the first time ever the player does {@code marker}. */
         boolean firstTime(Player player, String marker);
+
+        /** Add to an achievement counter by player id, online or not. */
+        default void count(UUID player, String counter, long by) {
+        }
     }
 
     private final Sink sink;
@@ -208,9 +215,25 @@ public final class GamesProgress implements GameProgress {
         sink.count(player, STAR_CHART_TOPS, 1);
     }
 
+    /** {@link #raceNightFinished(UUID, boolean)} for the player's id. */
     @Override
     public void raceNightFinished(Player player, boolean won) {
-        if (player == null || !sink.countsHere(player)) {
+        if (player != null) {
+            raceNightFinished(player.getUniqueId(), won);
+        }
+    }
+
+    /**
+     * A Race Night raced (and won), counted by id wherever the racer is now (fx2-C #6). The night
+     * settles after its last race, or at the next boot from its stored rows, and it has already said
+     * who raced it (a racer who started a race of it, in a Games world, in adventure): a racer who is
+     * watching the others live in spectator then, is offline or went home still raced it. So
+     * {@link #countsHere}, which is about where a finish happens, isn't asked; the count is kept, and
+     * what it reaches unlocks at once where tokens are paid, else at the next sweep back home.
+     */
+    @Override
+    public void raceNightFinished(UUID player, boolean won) {
+        if (player == null) {
             return;
         }
         sink.count(player, RACE_NIGHTS, 1);
@@ -331,6 +354,27 @@ public final class GamesProgress implements GameProgress {
         @Override
         public boolean firstTime(Player player, String marker) {
             return plugin.achievements() != null && plugin.achievements().firstTime(player, marker);
+        }
+
+        /**
+         * Online: as {@link #count(Player, String, long)} (it unlocks now where tokens are paid, else at
+         * the next sweep). Offline: the count is kept, and their join's sweep unlocks what it reaches.
+         */
+        @Override
+        public void count(UUID player, String counter, long by) {
+            if (player == null || counter == null || by <= 0 || plugin.achievements() == null) {
+                return;
+            }
+            Player online = plugin.getServer().getPlayer(player);
+            if (online != null) {
+                count(online, counter, by);
+                return;
+            }
+            try {
+                new com.dierks.homecraft.storage.AchievementDao(plugin.database()).addCounter(player, counter, by);
+            } catch (java.sql.SQLException | RuntimeException e) {
+                plugin.getLogger().warning("Failed to count '" + counter + "' for an offline player: " + e.getMessage());
+            }
         }
     }
 }

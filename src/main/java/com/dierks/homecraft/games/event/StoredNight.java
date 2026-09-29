@@ -36,6 +36,40 @@ public final class StoredNight {
      */
     public static List<EventDao.Placed> placed(List<EventDao.RaceRow> races, List<EventDao.EntryRow> entries,
                                                NightRules rules, boolean prized) {
+        Night n = night(races, entries);
+        Map<UUID, RacePrizes.Prize> prizes = RacePrizes.plan(n.standings(), n.startedRace1().size(), n.finishers(),
+                rules.prizes(), rules.finisherPrize(), prized && !races.isEmpty());
+        List<EventDao.Placed> out = new ArrayList<>();
+        for (NightStandings.Ranked s : n.standings()) {
+            RacePrizes.Prize p = prizes.get(s.player());
+            out.add(new EventDao.Placed(s.player(), s.place(), s.points(), p == null ? 0 : p.tokens()));
+        }
+        return out;
+    }
+
+    /**
+     * Who raced a stored night, and whether they won it, for the achievements (fx2-C #6), in place
+     * order: everyone with a race they started (not a DNS), as a night that ran to the end tells it
+     * ({@code NightRunner} counts a racer who started a race); won by its 1st with points, a finish
+     * and someone below ({@link RacePrizes#won}). Pure.
+     */
+    public static Map<UUID, Boolean> raced(List<EventDao.RaceRow> races, List<EventDao.EntryRow> entries) {
+        Night n = night(races, entries);
+        Map<UUID, Boolean> out = new LinkedHashMap<>();
+        for (NightStandings.Ranked s : n.standings()) {
+            if (n.raced().contains(s.player())) {
+                out.put(s.player(), RacePrizes.won(s, n.standings(), n.finishers()));
+            }
+        }
+        return out;
+    }
+
+    /** A stored night summed up: the standings, and who started race 1, finished a race, raced at all. */
+    private record Night(List<NightStandings.Ranked> standings, Set<UUID> startedRace1, Set<UUID> finishers,
+                         Set<UUID> raced) {
+    }
+
+    private static Night night(List<EventDao.RaceRow> races, List<EventDao.EntryRow> entries) {
         Map<UUID, Integer> points = new LinkedHashMap<>();
         Map<UUID, List<Integer>> places = new HashMap<>();
         for (EventDao.EntryRow e : entries) {
@@ -66,15 +100,7 @@ public final class StoredNight {
                 ranked.put(e.getKey(), e.getValue());
             }
         }
-        List<NightStandings.Ranked> standings = NightStandings.rank(ranked, places);
-        Map<UUID, RacePrizes.Prize> prizes = RacePrizes.plan(standings, startedRace1.size(), finishers,
-                rules.prizes(), rules.finisherPrize(), prized && !races.isEmpty());
-        List<EventDao.Placed> out = new ArrayList<>();
-        for (NightStandings.Ranked s : standings) {
-            RacePrizes.Prize p = prizes.get(s.player());
-            out.add(new EventDao.Placed(s.player(), s.place(), s.points(), p == null ? 0 : p.tokens()));
-        }
-        return out;
+        return new Night(NightStandings.rank(ranked, places), startedRace1, finishers, raced);
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.event;
 
 import com.dierks.homecraft.games.GamesBench;
+import com.dierks.homecraft.games.GameProgress;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.CourseCodec;
@@ -17,7 +18,9 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -168,6 +171,30 @@ class RaceNightRecoverTest {
         assertEquals(5, ava.prize(), "and her prize is kept");
         assertEquals(1, dao.owed(A).size(), "owed until she is online where tokens can be earned");
         assertTrue(dao.event(id).prized(), "a night with a race stored keeps its prize slot");
+    }
+
+    /**
+     * fx2-C #6: a night settled at boot from its stored rows still tells the achievements, by id (the
+     * racers are offline then): everyone who started a race raced it, and its 1st won it.
+     */
+    @Test
+    void aNightSettledAtBootStillTellsTheAchievementsWhoRacedAndWhoWon() throws Exception {
+        Map<UUID, Boolean> told = new LinkedHashMap<>();
+        games.progress(new GameProgress() {
+            @Override
+            public void raceNightFinished(UUID player, boolean won) {
+                told.put(player, won);
+            }
+        });
+        String id = "rn-20260929-1140";
+        left(id, T0 - 30 * MIN, T0 - 20 * MIN, EventDao.RUNNING, true);
+        dao.storeRace(id, 1, List.of(new EventDao.RaceRow(id, 1, A, 1, 45_000L, 9, 10, "FINISHED"),
+                new EventDao.RaceRow(id, 1, B, 2, 46_000L, 9, 8, "FINISHED"),
+                new EventDao.RaceRow(id, 1, C, null, null, 0, 0, "DNS")), null, T0 - 15 * MIN);
+        night.recover();
+        assertEquals(EventDao.CALLED_OFF, dao.event(id).state(), "called off, settled on race 1");
+        assertEquals(Map.of(A, true, B, false), told,
+                "Ava won it and Ben raced it; Cal never started a race, so it isn't his Race Night");
     }
 
     @Test

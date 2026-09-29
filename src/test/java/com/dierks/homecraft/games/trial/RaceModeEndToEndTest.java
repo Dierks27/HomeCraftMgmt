@@ -278,10 +278,7 @@ class RaceModeEndToEndTest {
 
         @Override
         public void progress(UUID player, boolean won) {
-            Player p = race.player(player);
-            if (p != null) {
-                games.tellProgress(g -> g.raceNightFinished(p, won)); // LivePorts.progress
-            }
+            games.tellProgress(g -> g.raceNightFinished(player, won)); // LivePorts.progress: by id (fx2-C #6)
         }
 
         @Override

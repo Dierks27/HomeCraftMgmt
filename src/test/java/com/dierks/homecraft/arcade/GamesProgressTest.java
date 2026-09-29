@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -56,7 +57,14 @@ class GamesProgressTest {
         public boolean firstTime(Player player, String marker) {
             return firsts.add(marker);
         }
+
+        @Override
+        public void count(UUID player, String counter, long by) {
+            events.add("count " + (player == ALEX ? "alex " : player + " ") + counter + " " + by);
+        }
     }
+
+    private static final UUID ALEX = new UUID(0, 42);
 
     private static Player player() {
         return (Player) Proxy.newProxyInstance(Player.class.getClassLoader(), new Class<?>[]{Player.class},
@@ -64,6 +72,7 @@ class GamesProgressTest {
                     case "hashCode" -> 7;
                     case "equals" -> proxy == args[0];
                     case "toString" -> "Alex";
+                    case "getUniqueId" -> ALEX;
                     default -> null;
                 });
     }
@@ -180,13 +189,34 @@ class GamesProgressTest {
     @Test
     void aRaceNightRacedCountsAndAWinCountsAgainButNoQuestStep() {
         progress.raceNightFinished(alex, false);
-        assertEquals(List.of("count race_nights 1"), sink.events, "raced a Race Night: one count");
+        assertEquals(List.of("count alex race_nights 1"), sink.events, "raced a Race Night: one count (by id)");
         sink.events.clear();
         progress.raceNightFinished(alex, true);
-        assertEquals(List.of("count race_nights 1", "count race_night_wins 1"), sink.events,
+        assertEquals(List.of("count alex race_nights 1", "count alex race_night_wins 1"), sink.events,
                 "won one: the win counts too (its races already stepped FINISH_COURSE where they counted)");
         sink.events.clear();
-        progress.raceNightFinished(null, true);
+        progress.raceNightFinished((Player) null, true);
+        assertEquals(List.of(), sink.events, "nobody is nothing");
+    }
+
+    /**
+     * fx2-C #6: a Race Night is counted where it was raced. It settles after the last race (or at the
+     * next boot), when the racer may be watching live in spectator, offline or anywhere else, so it is
+     * counted by id whatever {@code countsHere} says then; the next sweep in an economy world unlocks it.
+     */
+    @Test
+    void aRaceNightIsCountedByIdWhereverTheRacerIsWhenItSettles() {
+        sink.here = false; // watching live in spectator, or offline
+        UUID sam = new UUID(0, 7);
+        progress.raceNightFinished(sam, true);
+        assertEquals(List.of("count " + sam + " race_nights 1", "count " + sam + " race_night_wins 1"), sink.events,
+                "Sam won the night he raced, wherever he is when it settles");
+        sink.events.clear();
+        progress.raceNightFinished(alex, false);
+        assertEquals(List.of("count alex race_nights 1"), sink.events,
+                "told with a player, it is counted by their id the same way");
+        sink.events.clear();
+        progress.raceNightFinished((UUID) null, true);
         assertEquals(List.of(), sink.events, "nobody is nothing");
     }
 

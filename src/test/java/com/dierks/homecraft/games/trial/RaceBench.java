@@ -43,8 +43,8 @@ final class RaceBench {
         }
 
         @Override
-        public void raceNightFinished(Player player, boolean won) {
-            nights.computeIfAbsent(player.getUniqueId(), k -> new ArrayList<>()).add(won);
+        public void raceNightFinished(UUID player, boolean won) { // by id, as LivePorts tells it (fx2-C #6)
+            nights.computeIfAbsent(player, k -> new ArrayList<>()).add(won);
         }
 
         int courses(UUID id) {

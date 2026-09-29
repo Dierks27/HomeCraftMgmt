@@ -18,7 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * is in or picked up, then everyone moves to the next tee together; leaving at any time is fine and
  * never holds the others up (a leaver who was the last one out ends the hole); the shared card shows
  * every player with their strokes; the ranking puts the fewest strokes first, level totals sharing a
- * place and anyone who left after the finishers; and a group is at most 4.
+ * place and anyone who left after the finishers; a group is at most 4; and the hole clock (the R2
+ * review's #6): the first ball in starts it while any ball is out, it counts down a second at a time,
+ * says "pick up" only once it has run out with a ball still out, and moving on stops it.
  */
 class GolfGroupTest {
 
@@ -163,5 +165,50 @@ class GolfGroupTest {
         assertEquals("Sam", GolfRounds.names(List.of("Sam")), "one");
         assertEquals("Sam and Ava", GolfRounds.names(List.of("Sam", "Ava")), "two");
         assertEquals("Sam, Ava and Lee", GolfRounds.names(List.of("Sam", "Ava", "Lee")), "three");
+    }
+
+    // ---- the hole clock (R2 review #6) -----------------------------------------------------------
+
+    @Test
+    void theFirstBallInStartsTheHoleClockForTheBallsStillOut() {
+        GolfGroup g = group(SAM, AVA, LEE);
+        assertEquals(-1, g.clock(), "no clock before any ball is in");
+        assertFalse(g.second(), "and nothing to pick up");
+        g.holeDone(SAM, score(3, 2));
+        assertEquals(GolfGroup.HOLE_CLOCK_SECONDS, g.clock(), "Sam's ball is in: the clock starts for Ava and Lee");
+        assertEquals(List.of(AVA, LEE), g.out(), "the balls still out, in join order");
+        assertEquals(GolfGroup.HOLE_CLOCK_SECONDS, g.card().clock(), "the card carries the clock");
+        g.holeDone(AVA, score(3, 3));
+        assertEquals(GolfGroup.HOLE_CLOCK_SECONDS, g.clock(), "a second ball in doesn't restart it");
+        for (int i = 1; i < GolfGroup.HOLE_CLOCK_SECONDS; i++) {
+            assertFalse(g.second(), "second " + i + ": Lee still has time");
+        }
+        assertEquals(1, g.clock(), "one second left");
+        assertTrue(g.second(), "the clock ran out with Lee's ball out: pick it up");
+        assertTrue(g.second(), "and it keeps saying so until Lee's ball is up");
+        assertTrue(g.holeDone(LEE, new GolfRun.HoleScore(3, 6, true)), "picked up: the hole is over");
+        assertFalse(g.second(), "nothing more to pick up");
+        assertTrue(g.advance(), "on to hole 2");
+        assertEquals(-1, g.clock(), "moving on stops the clock");
+        assertEquals(-1, g.card().clock(), "and the card shows none");
+    }
+
+    @Test
+    void aHoleEveryoneFinishesAtOnceNeverStartsTheClock() {
+        GolfGroup alone = group(SAM);
+        assertTrue(alone.holeDone(SAM, score(3, 3)), "a group of one: the hole is over at once");
+        assertEquals(-1, alone.clock(), "nobody is out, so no clock");
+        GolfGroup two = group(SAM, AVA);
+        two.holeDone(SAM, score(3, 3));
+        assertTrue(two.left(AVA), "Ava leaves: the hole is over");
+        assertFalse(two.second(), "the clock has nobody to pick up");
+    }
+
+    @Test
+    void theClockReadsInMinutesAndSeconds() {
+        assertEquals("2:00", GolfGroup.clockText(120), "two minutes");
+        assertEquals("1:45", GolfGroup.clockText(105), "one forty-five");
+        assertEquals("0:09", GolfGroup.clockText(9), "seconds get a leading zero");
+        assertEquals("0:00", GolfGroup.clockText(-3), "never below zero");
     }
 }

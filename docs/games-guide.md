@@ -1471,9 +1471,11 @@ These are played in the Games world, on courses the server's builders make. Each
 - The host clicks **Start**, and everyone goes to hole 1 together.
 - Everyone plays the same hole at once, each with their own ball. Balls don't bump into each other.
 - When your ball is in, you wait for the others. When every ball is in (or picked up), everyone goes to the next tee together.
+- Once the first ball of a hole is in, a 2-minute hole clock starts for everyone still playing that hole. You see it on your action bar, and the Scorecard shows it too. When it runs out, any ball still out is picked up.
 - The Scorecard shows everyone's holes. At the end it shows who took the fewest strokes.
 - Each player's round is a normal round: it goes on the high scores and earns the normal tokens. Playing together doesn't cost or pay anything extra.
 - You can leave any time with Leave game. Your things come back and the others carry on.
+- Your round counts as soon as you finish your last hole, even if you leave before the others finish.
 
 ## Race Night
 

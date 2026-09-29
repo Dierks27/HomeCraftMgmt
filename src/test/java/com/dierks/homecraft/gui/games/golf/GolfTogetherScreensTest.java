@@ -106,7 +106,8 @@ class GolfTogetherScreensTest {
         assertEquals(Material.LIGHT_BLUE_CONCRETE, t.get(19).material(), "Ava's hole 1 is being played");
         assertEquals(Material.GRAY_CONCRETE, t.get(20).material(), "hole 2 not played yet");
         assertEquals(Material.GRAY_STAINED_GLASS_PANE, t.get(27).material(), "no third player");
-        assertEquals("&7Still playing: Ava", t.get(GolfGroupCardMenu.STATUS).name(), "who is still out");
+        assertEquals("&7Still playing: Ava &8- &epicked up in 2:00", t.get(GolfGroupCardMenu.STATUS).name(),
+                "who is still out, and when the hole clock picks their ball up, in the NAME for Bedrock");
         assertEquals(Material.BARRIER, t.get(GolfGroupCardMenu.EXIT).material(), "the way out at 49");
         assertEquals(Material.GRAY_STAINED_GLASS_PANE, t.get(GolfGroupCardMenu.PREV).material(), "9 holes: one page");
         assertEquals(Material.ARROW, t.get(GolfGroupCardMenu.NEXT).material(), "hole 9 is on the next page");

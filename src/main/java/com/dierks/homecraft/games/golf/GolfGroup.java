@@ -23,6 +23,10 @@ import java.util.UUID;
  * and the others carry on. If everyone still playing has finished the hole when someone leaves, the
  * hole ends there and then. A group with nobody left in it is over.
  *
+ * <p><b>The hole clock</b> keeps one slow or away player from holding everyone up: the first ball of
+ * a hole in starts it ({@value #HOLE_CLOCK_SECONDS} seconds) while any ball is still out, and when it
+ * runs out ({@link #second}) every ball still out is picked up. Moving on to the next hole stops it.
+ *
  * <p><b>The shared scorecard</b> ({@link #card}) shows every player's holes, and the ranking
  * ({@link #ranking}) orders the players who finished by total strokes (fewest first), level totals
  * sharing a place; anyone who left is listed after them, unplaced.
@@ -31,6 +35,8 @@ public final class GolfGroup {
 
     /** The most in a group: golf's party limit. */
     public static final int MAX = PartyLobby.Kind.GOLF.limit();
+    /** How long the balls still out have once the first ball of a hole is in (seconds). */
+    public static final int HOLE_CLOCK_SECONDS = 120;
 
     /** Where a player is on the hole being played. */
     public enum Seat {
@@ -77,9 +83,13 @@ public final class GolfGroup {
     public record Standing(int place, UUID player, String name, int total, int vsPar, boolean finished) {
     }
 
-    /** A snapshot of the shared scorecard. */
+    /**
+     * A snapshot of the shared scorecard.
+     *
+     * @param clock seconds left on the hole clock, or -1 when it isn't running
+     */
     public record Card(String courseId, String courseName, List<Integer> pars, int hole, List<Row> rows,
-                       boolean over) {
+                       boolean over, int clock) {
 
         public Card {
             pars = List.copyOf(pars);
@@ -115,6 +125,8 @@ public final class GolfGroup {
     private final List<Integer> pars;
     private final Map<UUID, Member> members = new LinkedHashMap<>();
     private int hole;
+    /** Seconds left on the hole clock, or -1 when it isn't running. */
+    private int clock = -1;
 
     /**
      * A group starting hole 1 together.
@@ -190,6 +202,17 @@ public final class GolfGroup {
         return out;
     }
 
+    /** Those whose ball is still out on this hole, in join order. */
+    public List<UUID> out() {
+        List<UUID> out = new ArrayList<>();
+        for (Member m : members.values()) {
+            if (m.seat == Seat.PLAYING) {
+                out.add(m.id);
+            }
+        }
+        return out;
+    }
+
     /** The strokes a player has on the hole being played (for the live card). */
     public void strokes(UUID player, int strokes) {
         Member m = members.get(player);
@@ -214,7 +237,29 @@ public final class GolfGroup {
         m.scores.add(score);
         m.strokes = 0;
         m.seat = Seat.WAITING;
-        return allDone();
+        boolean all = allDone();
+        if (!all && clock < 0) {
+            clock = HOLE_CLOCK_SECONDS; // the first ball in: the others have the hole clock
+        }
+        return all;
+    }
+
+    /** Seconds left on the hole clock, or -1 when it isn't running. */
+    public int clock() {
+        return clock;
+    }
+
+    /**
+     * A second passes: the hole clock, if it is running, counts down.
+     *
+     * @return whether it has run out with a ball still out: every ball still out is picked up now
+     *         (and it keeps saying so until none is)
+     */
+    public boolean second() {
+        if (clock > 0) {
+            clock--;
+        }
+        return clock == 0 && !allDone() && !over();
     }
 
     /**
@@ -257,6 +302,7 @@ public final class GolfGroup {
             return false;
         }
         hole++;
+        clock = -1;
         if (hole < pars.size()) {
             for (Member m : members.values()) {
                 if (m.seat == Seat.WAITING) {
@@ -279,7 +325,8 @@ public final class GolfGroup {
         for (Member m : members.values()) {
             rows.add(new Row(m.id, m.name, m.scores, m.seat == Seat.PLAYING ? m.strokes : 0, m.seat));
         }
-        return new Card(courseId, courseName, pars, Math.min(hole, pars.size() - 1), rows, over());
+        boolean over = over();
+        return new Card(courseId, courseName, pars, Math.min(hole, pars.size() - 1), rows, over, over ? -1 : clock);
     }
 
     /**
@@ -312,6 +359,12 @@ public final class GolfGroup {
             result.add(new Standing(0, r.player(), r.name(), r.total(), r.vsPar(), false));
         }
         return result;
+    }
+
+    /** A clock's time left: "2:00", "0:09". */
+    public static String clockText(int seconds) {
+        int s = Math.max(0, seconds);
+        return s / 60 + ":" + (s % 60 < 10 ? "0" : "") + s % 60;
     }
 
     /** "1st", "2nd", "3rd", "4th". */

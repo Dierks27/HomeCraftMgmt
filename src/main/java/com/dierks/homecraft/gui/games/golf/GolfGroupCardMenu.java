@@ -25,7 +25,8 @@ import java.util.List;
  *  rows 1-4  one per player: the player (their place and total at the end, where they are before),
  *            then 8 holes (the stack count is the hole number): green under par, white par, yellow
  *            over, red picked up, a star for a hole-in-one, light blue being played, grey not yet
- *  row 5     45 / 53 more holes (18-hole courses), 47 who is still out, 49 Back/Close,
+ *  row 5     45 / 53 more holes (18-hole courses), 47 who is still out (with the hole clock's
+ *            "picked up in 1:45" in its NAME), 49 Back/Close,
  *            51 "Play again together" at the end, once you're home
  * </pre>
  *
@@ -162,9 +163,12 @@ public final class GolfGroupCardMenu extends GameMenu {
             out[STATUS] = new Tile(STATUS, Material.GOLD_INGOT, winner == null ? "&7The round is over"
                     : "&6Fewest strokes: " + winner, List.of("&7Every round counts on its own board."));
         } else {
+            String clock = card.clock() >= 0 ? " &8- &epicked up in " + GolfGroup.clockText(card.clock()) : "";
             out[STATUS] = new Tile(STATUS, Material.CLOCK, out1.isEmpty() ? "&aEveryone's done with this hole"
-                    : "&7Still playing: " + String.join(", ", out1),
-                    List.of("&7Everyone moves to the next tee", "&7together when all balls are in."));
+                    : "&7Still playing: " + String.join(", ", out1) + clock,
+                    List.of("&7Everyone moves to the next tee", "&7together when all balls are in.",
+                            "&7The first ball in starts a " + GolfGroup.clockText(GolfGroup.HOLE_CLOCK_SECONDS),
+                            "&7hole clock. Balls still out when", "&7it runs out are picked up."));
         }
         out[EXIT] = new Tile(EXIT, Material.BARRIER, "&cClose", List.of());
         if (again) {

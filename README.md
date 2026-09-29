@@ -820,11 +820,18 @@ on the Golf tab ("Meadow Links - 9 holes, par 27") and its own `/hcm play <cours
   [Accept] on Java, `/hcm play accept` on Bedrock; the pair cooldown and invite switches stay); only
   the host starts, and everyone goes to hole 1 at once. Everyone plays the same hole at the same
   time, each with their own ball; a player whose ball is in waits, and when every ball is in (or
-  picked up) everyone moves to the next tee together. The kit's Scorecard (and the card between
+  picked up) everyone moves to the next tee together. The first ball of a hole in starts a 2:00
+  **hole clock** (on the action bar of anyone still out, and "picked up in 1:45" in the card's
+  Still playing name); when it runs out, every ball still out is picked up at par +
+  `max_over_par`. The kit's Scorecard (and the card between
   holes) is the **shared scorecard**: one row per player, 8 holes a page, and at the end the group
   ranking (fewest strokes first, level totals sharing a place). Each round is a normal round for
-  the boards and rewards, with nothing extra for being in a party. Leaving is fine at any time (your
-  row stays as "left" and the others carry on); if you were the last ball out, the hole ends. After
+  the boards and rewards, with nothing extra for being in a party, recorded once at the player's
+  own last hole (on the day and set it was played); after that they stay only for the shared card.
+  Leaving is fine at any time (your row stays as "left" and the others carry on; after your last
+  hole it stays as played and your round is kept); if you were the last ball out, the hole ends. A
+  friend whose trip to the course never arrives stops being waited for within a second, and the
+  others are told. After
   the round the party opens again: "Play again together". A restart hold refuses a new start.
 - **Rewards:** a course's first finish (once ever, outside every cap), finishing at par or better
   (once per course per day), each hole-in-one in a round you finish (once per hole per day; the

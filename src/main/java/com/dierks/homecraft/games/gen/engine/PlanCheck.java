@@ -30,11 +30,12 @@ import java.util.Set;
  * The engine's own look at a plan before a single block is set (GEN-SPEC §3.3 step 2).
  *
  * <p>Each generator proves its plan solvable with its own independent validator ({@link #generator},
- * run against the live inputs); this is the part every generator shares and the engine must be sure of whatever a planner returns: the plan is
- * for this slot and this half, every block and sign is inside the half and on the palette, no two
- * writes land on one block, the course's points are inside the half, and the stored hash really
- * names these blocks (so the tag written at the flip names the layout that stands). A plan with a
- * problem is a failed try; the old layout stays up.
+ * run against the live inputs); this is the part every generator shares and the engine must be
+ * sure of whatever a planner returns: the plan is for this slot and this half, every block and
+ * sign is inside the half and on the palette, no two writes land on one block, the course's
+ * points are inside the half, and the stored hash really names these blocks (so the tag written
+ * at the flip names the layout that stands). A plan with a problem is a failed try; the old
+ * layout stays up.
  */
 public final class PlanCheck {
 

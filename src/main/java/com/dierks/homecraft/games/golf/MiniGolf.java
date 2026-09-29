@@ -387,10 +387,18 @@ public final class MiniGolf implements Game {
 
     /** Every course that can be played right now: the daily ones first (slot order), then by id. */
     public List<GolfCourse> playable() {
+        return playable(courses().values(), worlds(), games().generated());
+    }
+
+    /**
+     * {@link #playable()} as a pure filter, so a test can hand it the real rows and the real Daily
+     * Courses gate: every course of {@code courses} that can be played in {@code worlds} and, when
+     * generated, is {@code gate}-vouched, in {@link #sorted} order.
+     */
+    public static List<GolfCourse> playable(Collection<GolfCourse> courses, Collection<String> worlds,
+                                            GeneratedCourses gate) {
         List<GolfCourse> out = new ArrayList<>();
-        List<String> worlds = worlds();
-        GeneratedCourses gate = games().generated();
-        for (GolfCourse c : courses().values()) {
+        for (GolfCourse c : courses) {
             if (c.playable(worlds) && gate.live(c.id(), c.gen())) {
                 out.add(c);
             }

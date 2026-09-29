@@ -121,6 +121,33 @@ class DailyCoursesTest {
         assertEquals(1, trials.coursesChanged, "and still hear about their courses");
     }
 
+    @Test
+    void switchedOffItRunsNothingWritesNothingAndLeavesEveryOtherGameAsBefore() throws Exception {
+        host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6), "daily", on(false));
+        games.start();
+        Host without = new Host(GamesKit.at(2026, 9, 29, 15, 0));
+        TestGame alone = new TestGame("test_trials", GameKind.TRIAL, "Test Trials", TokenService.Source.GAMES_PARKOUR);
+        without.config = GamesKit.config(GamesKit.common(true, 100, 600, 6));
+        GamesService before = GamesKit.service(without, List.of(GamesKit.spec(alone, new SkillSettings(true, 4), null)));
+        before.start();
+        try {
+            assertEquals(without.tasks.size(), host.tasks.size(),
+                    "games.daily.enabled: false schedules exactly what a plugin without Daily Courses does");
+            assertSame(GeneratedCourses.NONE, games.generated(), "no engine is installed: nothing generated is live");
+            assertTrue(games.generated().live("river_run", null), "and a hand-built course plays as before");
+            assertFalse(games.generated().inArea("games", 4100, 170, 4100), "no area is kept from anyone");
+            assertEquals(List.of("not running"), games.game("daily").statusLines(), "status says it isn't running");
+            host.runTasks();
+            assertEquals(Map.of(), new com.dierks.homecraft.storage.GenMetaDao(host.db).like("gen."),
+                    "not one hcm_meta row is written");
+            assertEquals(List.of(), host.dao.courses("trials"), "nor a course row");
+            assertEquals(List.of(), host.dao.courses("golf"), "of either game");
+            assertTrue(games.enabled(trials), "the other games are open as before");
+        } finally {
+            without.connection.close();
+        }
+    }
+
     /** The engine's host over the kit's database; {@code broken[0]} makes its settings throw. */
     private GenHost host(boolean[] broken) {
         GenStore store = GenStore.of(host.db);

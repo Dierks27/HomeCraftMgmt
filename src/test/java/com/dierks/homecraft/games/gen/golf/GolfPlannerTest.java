@@ -152,8 +152,8 @@ class GolfPlannerTest {
                     + " threads)");
             assertTrue(p95Work <= GolfPlanner.COURSE_BUDGET / 10, slot.id() + ": p95 work " + p95Work
                     + " is well inside the course budget of " + GolfPlanner.COURSE_BUDGET);
-            assertTrue(work[work.length - 1] <= GolfPlanner.COURSE_BUDGET + GolfPlanner.ATTEMPT_BUDGET,
-                    slot.id() + ": no course goes past its budget (and one fallback)");
+            assertTrue(work[work.length - 1] <= GolfPlanner.COURSE_BUDGET,
+                    slot.id() + ": no course goes past its budget, fallbacks included");
             assertTrue(p95Ms < 30_000, slot.id() + ": p95 plan time " + p95Ms + " ms, far under the 120 s kill");
         }
     }
@@ -182,7 +182,7 @@ class GolfPlannerTest {
     @Test
     void goldenPlansArePinned() throws GenFailed {
         // A change here means the planner makes different courses for the same seed: bump ALGO.
-        assertEquals(1, GolfPlanner.ALGO, "the version these hashes belong to");
+        assertEquals(2, GolfPlanner.ALGO, "the version these hashes belong to");
         Map<Long, String> daily = Map.of(1L, "3c87c264a106", 20725L, "e7264a985157",
                 0x3f2a91c07d1e55b0L, "655b02693a68");
         for (Map.Entry<Long, String> e : new TreeMap<>(daily).entrySet()) {
@@ -211,9 +211,12 @@ class GolfPlannerTest {
                 int[] p = GolfPlanner.plot(half, i);
                 HoleLayout l = HoleTemplate.SAFE_STRAIGHT.draw(new GenRandom(i), 'S', p[0], p[1],
                         half.minY() + GolfPlanner.TURF_ABOVE_FLOOR);
-                GolfPlanner.Solved s = GolfPlanner.solve(l, 'S', GolfPlanner.ATTEMPTS, Work.unlimited());
+                Work spent = Work.unlimited();
+                GolfPlanner.Solved s = GolfPlanner.solve(l, 'S', GolfPlanner.ATTEMPTS, spent);
                 String what = "the fallback at " + p[0] + "," + p[1];
                 assertNotNull(s, what + " is solved, the kid within par + 1");
+                assertTrue(spent.used() * 2 <= GolfPlanner.FALLBACK_RESERVE, what + " takes " + spent.used()
+                        + " putts, well inside the " + GolfPlanner.FALLBACK_RESERVE + " kept back for it");
                 assertEquals(List.of(), GolfValidator.holeProblems(GolfKit.grid(l), l.hole(s.par()), 1),
                         what + " is sound");
                 assertTrue(s.par() <= 3 && s.kid() <= s.par() + 1, what + ": par " + s.par() + ", K " + s.kid());
@@ -221,11 +224,17 @@ class GolfPlannerTest {
             }
         }
         assertEquals(2 * 9 + 2 * 3 + 7 * 9, checked, "every plot of both golf halves at both origins, and 7 far ones");
-        Plan spent = new GolfPlanner().plan(GolfKit.input(Slots.DAILY_GOLF, 5, "EEEMMMMHH", 1));
+        long least = GolfPlanner.leastBudget(9);
+        Plan spent = new GolfPlanner().plan(GolfKit.input(Slots.DAILY_GOLF, 5, "EEEMMMMHH", least));
         PlannedGolf g = golf(spent);
-        assertEquals(List.of(12, 12, 12, 12, 12, 12, 12, 12, 12), g.attempts(),
-                "with no work to spare every hole is the fallback: the course is never missing one");
+        assertEquals(9, g.attempts().size(), "with no work to spare the course is still never missing a hole");
+        assertEquals(12, g.attempts().get(0), "the first is the fallback: only the fallbacks' work was there");
+        assertTrue(spent.work() <= least, "and it keeps to its budget: " + spent.work() + " of " + least);
         assertEquals(List.of(), GolfValidator.problems(spent), "and that course passes the full check");
+        GenFailed tooLittle = assertThrows(GenFailed.class, () -> new GolfPlanner().plan(GolfKit.input(Slots.DAILY_GOLF,
+                5, "EEEMMMMHH", least - 1)), "below a fallback for every hole there is no plan");
+        assertTrue(tooLittle.getMessage().contains(Long.toString(least)), "and it says what the least is: "
+                + tooLittle.getMessage());
     }
 
     @Test
@@ -251,8 +260,10 @@ class GolfPlannerTest {
                 tag(r.plan(), g.attempts(), g.witness(), GolfPlanner.ALGO + 1)), "another version can't rebuild it");
         PlanInput otherMix = new PlanInput(r.slot(), r.slot().half('A'), 'A', 1, 0, r.plan().seed(), "EEEMMMMHM", 8,
                 0, null);
-        assertThrows(GenFailed.class, () -> planner.rederive(otherMix, tag(r.plan(), g.attempts(), g.witness(),
-                GolfPlanner.ALGO)), "a changed mix doesn't rebuild the stored layout");
+        GenFailed mixed = assertThrows(GenFailed.class, () -> planner.rederive(otherMix, tag(r.plan(), g.attempts(),
+                g.witness(), GolfPlanner.ALGO)), "a changed mix doesn't rebuild the stored layout");
+        assertTrue(mixed.getMessage().contains("mix"), "and the admin reads that the mix may be why: "
+                + mixed.getMessage());
         List<List<Putt>> wrong = new ArrayList<>(g.witness());
         wrong.set(0, List.of(new Putt(180, 1)));
         GenFailed missed = assertThrows(GenFailed.class, () -> planner.rederive(input(r.slot(), r.n()),
@@ -263,6 +274,27 @@ class GolfPlannerTest {
         assertThrows(GenFailed.class, () -> planner.rederive(input(r.slot(), r.n()), tag(r.plan(), bent,
                 g.witness(), GolfPlanner.ALGO)), "there is no attempt 13");
         assertThrows(GenFailed.class, () -> planner.rederive(input(r.slot(), r.n()), null), "no tag, nothing");
+    }
+
+    @Test
+    void aTightBudgetIsACapThatKeepsBackOnlyTheFallbacks() throws GenFailed {
+        GolfPlanner planner = new GolfPlanner();
+        Plan free = planner.plan(GolfKit.input(Slots.DAILY_GOLF, 3, "EEEMMMMHH", 0));
+        long least = GolfPlanner.leastBudget(9);
+        for (long budget : new long[]{free.work() + least, 50_000, 150_000}) {
+            assertTrue(free.work() + least <= budget, "seed 3 takes " + free.work() + " putts, so " + budget
+                    + " is room for all of it and every fallback");
+            assertEquals(free.hash(), planner.plan(GolfKit.input(Slots.DAILY_GOLF, 3, "EEEMMMMHH", budget)).hash(),
+                    "budget " + budget + " makes the course a free budget makes: only a fallback's worth is kept"
+                            + " back a hole, so the first holes are never starved into fallbacks");
+        }
+        for (long budget : new long[]{least, least + 500, least + free.work() / 3, least + free.work() / 2}) {
+            Plan p = planner.plan(GolfKit.input(Slots.DAILY_GOLF, 3, "EEEMMMMHH", budget));
+            String what = "budget " + budget + " (" + golf(p).attempts() + ")";
+            assertTrue(p.work() <= budget, what + ": the plan keeps to its budget, fallbacks and all: " + p.work());
+            assertEquals(9, golf(p).attempts().size(), what + ": never missing a hole");
+            assertEquals(List.of(), GolfValidator.problems(p), what + ": and a sound course");
+        }
     }
 
     @Test

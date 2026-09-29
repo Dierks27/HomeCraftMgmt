@@ -75,7 +75,7 @@ public final class GenAdmin implements GameAdmin {
                 "&e/hcm games gen mix <golf course> <E, M and H> &7- the golf holes from the next build",
                 "&e/hcm games gen pin <course> <seed|today> [days] &7- keep a good course; unpin to let it change",
                 "&e/hcm games gen tp <course> [live|idle] &7- go and look",
-                "&e/hcm games gen claim <course> [confirm] &7- count what is in a new area; confirm clears and claims it",
+                "&e/hcm games gen claim <course> [confirm] &7- count what is in a new area; confirm clears foreign blocks and claims it",
                 "&e/hcm games gen clear <course> confirm &7- empty both halves and switch it off (before moving it)");
     }
 

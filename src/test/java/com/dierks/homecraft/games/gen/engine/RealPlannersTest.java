@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.gen.engine;
 
+import com.dierks.homecraft.games.GeneratedCourses;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.Slots;
@@ -9,8 +10,10 @@ import com.dierks.homecraft.games.gen.golf.GolfPlanner;
 import com.dierks.homecraft.games.gen.parkour.ParkourPlanner;
 import com.dierks.homecraft.games.gen.rings.RingsPlanner;
 import com.dierks.homecraft.games.golf.GolfCourse;
+import com.dierks.homecraft.games.golf.MiniGolf;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.CourseCodec;
+import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.storage.GamesDao;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -29,9 +32,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The engine with the four real planners (WP2, WP3) over the fake world: the packages wired
  * together end to end (GEN-SPEC §3.3, §3.5). Every slot (the ice boat switched on too) plans with
  * its generator's real work budget, passes the checks and its generator's validator, converges,
- * verifies (golf replays its witness lines on the blocks), flips and opens; a restart re-derives
- * every live layout from its tag and finds nothing to heal, even after the admin changed the golf
- * mix; and a layout that today's {@code trials.fall_depth} no longer allows is never re-opened.
+ * verifies (golf replays its witness lines on the blocks), flips and opens: Time Trials' and Mini
+ * Golf's own filters open every row through the gate, and {@code /hcm games gen status} shows each
+ * live. A restart shuts them all until it re-derives every live layout from its tag and finds
+ * nothing to heal, even after the admin changed the golf mix; and a layout that today's
+ * {@code trials.fall_depth} no longer allows is never re-opened.
  */
 class RealPlannersTest {
 
@@ -100,7 +105,9 @@ class RealPlannersTest {
             if (Slots.of(id).golf()) {
                 GolfCourse g = com.dierks.homecraft.games.golf.CourseCodec.fromRow(row);
                 assertEquals(g.holes().size(), tag.witness().size(), id + " keeps a witness line per hole");
-                assertTrue(g.problems(null).isEmpty(), id + "'s golf course is well formed: " + g.problems(null));
+                assertTrue(g.playable(List.of(GenKit.WORLD)), id + " is a playable golf course in the Games world: "
+                        + g.problems(List.of(GenKit.WORLD)));
+                assertEquals(tag, g.gen(), id + "'s row carries the tag the gate vouches for");
             } else {
                 Course c = CourseCodec.decode(row.id(), row.data()).course();
                 assertNotNull(c, id + "'s row decodes as a course");
@@ -108,7 +115,18 @@ class RealPlannersTest {
                 assertTrue(tag.goldMs() > 0 && tag.silverMs() > tag.goldMs(), id + " has its star times");
             }
         }
-        assertFalse(gen.status(null).isEmpty(), "status has a line per slot");
+        assertEquals(SHIPPED, open(gen), "Time Trials and Mini Golf open every generated row, through the gate,"
+                + " daily courses first in slot order");
+        assertEquals(List.of(), open(GeneratedCourses.NONE), "and none of them without Daily Courses");
+        assertTrue(host.changed.getOrDefault("trials", 0) >= 5 && host.changed.getOrDefault("golf", 0) >= 2,
+                "each flip told Time Trials or Mini Golf to read its courses again: " + host.changed);
+        List<String> status = adminSays("status");
+        for (String id : SHIPPED) {
+            assertTrue(status.stream().anyMatch(l -> l.startsWith(id) && l.contains(" live ")),
+                    "/hcm games gen status shows " + id + " live: " + status);
+        }
+        assertTrue(gen.summary().get(0).startsWith(SHIPPED.size() + " courses up for Tue 29 Sep"),
+                "/hcm games status sums them up: " + gen.summary());
 
         // A restart the same day: every live half is re-derived from its tag and verified untouched.
         long writes = host.world().writes;
@@ -117,12 +135,55 @@ class RealPlannersTest {
         for (String id : SHIPPED) {
             assertFalse(gen.live(id, gen.liveTag(id)), id + " stays shut at boot until it is checked");
         }
+        assertEquals(List.of(), open(gen), "so neither Time Trials nor Mini Golf opens one then");
         drive(5 * 60);
+        assertEquals(SHIPPED, open(gen), "and both open them all again once checked");
         for (String id : SHIPPED) {
             assertTrue(gen.live(id, gen.liveTag(id)), id + " was re-derived and verified after the restart:"
                     + problems() + "\n" + gen.status(id));
         }
         assertEquals(writes, host.world().writes, "a clean restart heals nothing");
+    }
+
+    /**
+     * The ids Time Trials and Mini Golf would open now from the database's rows, read as they read
+     * them, with {@code gate} as the Daily Courses gate: their own filters, not a copy of them.
+     */
+    private List<String> open(GeneratedCourses gate) throws Exception {
+        List<Course> trials = new java.util.ArrayList<>();
+        for (GamesDao.CourseRow row : host.dao.courses("trials")) {
+            trials.add(CourseCodec.decode(row.id(), row.data()).course().withRev(row.rev()));
+        }
+        List<GolfCourse> golf = new java.util.ArrayList<>();
+        for (GamesDao.CourseRow row : host.dao.courses("golf")) {
+            golf.add(com.dierks.homecraft.games.golf.CourseCodec.fromRow(row));
+        }
+        List<String> out = new java.util.ArrayList<>();
+        TimeTrials.open(trials, GenKit.WORLD::equalsIgnoreCase, gate).forEach(c -> out.add(c.id()));
+        MiniGolf.playable(golf, List.of(GenKit.WORLD), gate).forEach(c -> out.add(c.id()));
+        out.sort(java.util.Comparator.comparingInt(SHIPPED::indexOf));
+        return out;
+    }
+
+    /** What {@code /hcm games gen <line>} tells a console, colour codes stripped. */
+    private List<String> adminSays(String line) {
+        List<String> said = new java.util.ArrayList<>();
+        org.bukkit.command.CommandSender console = (org.bukkit.command.CommandSender) java.lang.reflect.Proxy
+                .newProxyInstance(getClass().getClassLoader(), new Class<?>[]{org.bukkit.command.CommandSender.class},
+                        (proxy, m, a) -> switch (m.getName()) {
+                            case "sendMessage" -> {
+                                if (a[0] instanceof net.kyori.adventure.text.Component c) {
+                                    said.add(net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+                                            .legacyAmpersand().serialize(c).replaceAll("&[0-9a-fk-or]", "").trim());
+                                }
+                                yield null;
+                            }
+                            case "getName" -> "Console";
+                            case "hasPermission" -> true;
+                            default -> null;
+                        });
+        new com.dierks.homecraft.games.gen.admin.GenAdmin(() -> gen, host.logger).handle(console, line.split(" "));
+        return said;
     }
 
     @Test

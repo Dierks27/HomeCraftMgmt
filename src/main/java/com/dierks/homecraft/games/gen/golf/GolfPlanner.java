@@ -52,10 +52,12 @@ import java.util.Map;
  * {@link GolfValidator#quickProblems}.
  *
  * <p><b>Counted work.</b> Every simulated putt counts: at most {@value #ATTEMPT_BUDGET} an attempt
- * and {@link PlanInput#workBudget()} (default {@value #COURSE_BUDGET}) a course, with enough kept
- * back for a fallback hole for every hole still to come. Counting, not timing, makes a seed give the
- * same course on a slow host and in CI. The job's {@code cancelled} check is asked every few hundred
- * putts, so a reload stops a plan within milliseconds.
+ * and {@link PlanInput#workBudget()} (default {@value #COURSE_BUDGET}) a course, a cap the whole
+ * plan keeps to, fallbacks included. Only a fallback's cost ({@value #FALLBACK_RESERVE}) is kept
+ * back for this hole and each one still to come, so a tight budget gives up the last holes'
+ * attempts, never the first ones'; below {@link #leastBudget} there is no plan. Counting, not
+ * timing, makes a seed give the same course on a slow host and in CI. The job's {@code cancelled}
+ * check is asked every few hundred putts, so a reload stops a plan within milliseconds.
  *
  * <p><b>Re-deriving.</b> The row's {@code gen:} block stores each hole's winning attempt number and
  * witness line. {@link #rederive} draws the same holes from those without searching, replays each
@@ -64,8 +66,11 @@ import java.util.Map;
  */
 public final class GolfPlanner implements Planner {
 
-    /** Its version; bumped whenever what it makes for a seed changes (the golden tests pin it). */
-    public static final int ALGO = 1;
+    /**
+     * Its version; bumped whenever what it makes for a seed changes (the golden tests pin it). 2: the
+     * work kept back for fallbacks is a fallback's cost, so a course near its budget plans differently.
+     */
+    public static final int ALGO = 2;
     /** Most simulated putts for one attempt at one hole. */
     public static final long ATTEMPT_BUDGET = 100_000L;
     /** Most simulated putts for a course when the input doesn't say. */
@@ -74,8 +79,12 @@ public final class GolfPlanner implements Planner {
     public static final int ATTEMPTS = 12;
     /** Attempts on a hole's own template before the next one of its tier. */
     public static final int SWITCH_AFTER = 6;
-    /** Kept back per hole still to come, for its fallback. */
-    static final long FALLBACK_RESERVE = 20_000L;
+    /**
+     * Kept back for the fallback of this hole and of each one still to come: a proven
+     * {@link HoleTemplate#SAFE_STRAIGHT} takes a few hundred putts in any plot (a test pins it
+     * under half of this).
+     */
+    static final long FALLBACK_RESERVE = 1_000L;
     /** Blocks between plots. */
     public static final int GAP_X = 2;
     public static final int GAP_Z = 4;
@@ -131,15 +140,20 @@ public final class GolfPlanner implements Planner {
     private Plan planChecked(PlanInput in) throws GenFailed {
         String mix = mix(in);
         Course c = new Course(in, mix);
+        int n = mix.length();
         long cap = in.workBudget() > 0 ? in.workBudget() : COURSE_BUDGET;
+        if (cap < leastBudget(n)) {
+            throw new GenFailed("a golf course of " + n + " holes needs a work budget of at least " + leastBudget(n)
+                    + " putts, not " + cap);
+        }
         long used = 0;
         List<Solved> holes = new ArrayList<>();
-        for (int i = 0; i < mix.length(); i++) {
+        for (int i = 0; i < n; i++) {
             char tier = mix.charAt(i);
             Solved solved = null;
             for (int t = 0; t < ATTEMPTS && solved == null; t++) {
                 in.checkCancelled();
-                long left = cap - used - FALLBACK_RESERVE * (mix.length() - i - 1);
+                long left = spendable(cap, used, n - i); // this hole's fallback is kept back too
                 if (left <= 0) {
                     break; // spent: on to the fallback, which was kept back for
                 }
@@ -149,7 +163,7 @@ public final class GolfPlanner implements Planner {
             }
             if (solved == null) {
                 in.checkCancelled();
-                Work work = new Work(ATTEMPT_BUDGET, in.cancelled());
+                Work work = new Work(Math.min(ATTEMPT_BUDGET, spendable(cap, used, n - i - 1)), in.cancelled());
                 solved = solve(c.draw(i, ATTEMPTS), 'S', ATTEMPTS, work);
                 used += work.used();
                 if (solved == null) {
@@ -166,6 +180,20 @@ public final class GolfPlanner implements Planner {
                     + (problems.size() > 1 ? " (and " + (problems.size() - 1) + " more)" : ""));
         }
         return plan;
+    }
+
+    /**
+     * What the next search may spend of a course's {@code cap}: what isn't {@code used} yet, less the
+     * fallbacks of {@code kept} holes and the few putts a witness's replay may run over a spent
+     * {@link Work}. Keeping to it, a plan never uses more than its cap.
+     */
+    private static long spendable(long cap, long used, int kept) {
+        return cap - used - FALLBACK_RESERVE * kept - ExpertSearch.MAX_DEPTH;
+    }
+
+    /** The least work budget a course of {@code holes} holes can be planned in: a fallback for each. */
+    public static long leastBudget(int holes) {
+        return FALLBACK_RESERVE * holes + ExpertSearch.MAX_DEPTH;
     }
 
     /** Prove one drawn hole for its tier ('S' for the fallback: any par the search finds), or null. */
@@ -247,7 +275,8 @@ public final class GolfPlanner implements Planner {
             GolfShot.Replay replay = GolfShot.replay(layout.grid(plotBox(layout)), layout.hole(par), witness);
             used += witness.size();
             if (!replay.holed() || replay.putts() != expert || replay.strokes() != expert) {
-                throw new GenFailed("hole " + (i + 1) + "'s stored line doesn't hole out in " + expert);
+                throw new GenFailed("hole " + (i + 1) + "'s stored line doesn't hole out in " + expert + " with the"
+                        + " mix " + mix + " (was the layout planned with another mix, or edited?)");
             }
             holes.add(new Solved(t, layout, expert, par, -1, witness));
         }

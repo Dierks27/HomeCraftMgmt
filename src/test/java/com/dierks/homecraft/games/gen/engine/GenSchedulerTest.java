@@ -175,7 +175,19 @@ class GenSchedulerTest {
         SlotView brokenYesterday = new SlotView(SLOT, true, false, tag(DAY - 1, 0, 1), false, "easy", "easy", 0, null,
                 1, 0, 0, 0, false, SECRET);
         assertEquals(0, at(brokenYesterday, now).reroll(), "yesterday's layout is simply today's build");
-        SlotView dirty = new SlotView(SLOT, true, false, tag(DAY, 0, 1), true, "easy", "easy", 0, null, 1, 0, 0, 0,
+        long seed = 0x3f2a91c07d1e55b0L;
+        Pin pin = new Pin(seed, 1, 0);
+        SlotView brokenPinned = new SlotView(SLOT, true, false, tag(DAY, 0, seed), false, "easy", "hard", 0, pin, 1, 0,
+                0, 0, false, SECRET);
+        Decision pinnedAgain = at(brokenPinned, now);
+        assertEquals(Kind.BUILD, pinnedAgain.kind(), "a pinned layout the boot check couldn't vouch for is replaced");
+        assertEquals(seed, pinnedAgain.seed(), "from its pinned seed");
+        assertEquals(1, pinnedAgain.reroll(), "under the next reroll too: made with today's tier or fall depth it may"
+                + " come out different, so it gets its own day board, not the one the old layout's times are on");
+        SlotView pinnedReplaced = new SlotView(SLOT, true, false, tag(DAY, 1, seed), true, "hard", "hard", 1, pin, 1,
+                0, 0, 0, false, SECRET);
+        assertEquals(Kind.NONE, at(pinnedReplaced, now).kind(), "and once that stands, nothing more is due today");
+        SlotView dirty =new SlotView(SLOT, true, false, tag(DAY, 0, 1), true, "easy", "easy", 0, null, 1, 0, 0, 0,
                 true, SECRET);
         assertEquals(Kind.CLEAR_OLD, at(dirty, now).kind(), "with nothing due, the idle half is emptied");
     }

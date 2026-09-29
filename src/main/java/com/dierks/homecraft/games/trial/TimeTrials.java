@@ -449,10 +449,18 @@ public final class TimeTrials implements Game {
      * slot order; then easiest first, then by name.
      */
     public List<Course> openCourses() {
+        return open(courses(), this::gamesWorld, games().generated());
+    }
+
+    /**
+     * {@link #openCourses()} as a pure filter, so a test can hand it the real rows and the real
+     * Daily Courses gate: every course of {@code courses} that is open, complete, in a Games world
+     * and, when generated, {@code gate}-vouched, in {@link #sorted} order.
+     */
+    public static List<Course> open(Collection<Course> courses, Predicate<String> gamesWorld, GeneratedCourses gate) {
         List<Course> out = new ArrayList<>();
-        GeneratedCourses gate = games().generated();
-        for (Course c : courses()) {
-            if (c.enabled() && c.ready() && gamesWorld(c.world()) && gate.live(c.id(), c.gen())) {
+        for (Course c : courses) {
+            if (c.enabled() && c.ready() && gamesWorld.test(c.world()) && gate.live(c.id(), c.gen())) {
                 out.add(c);
             }
         }

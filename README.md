@@ -800,7 +800,8 @@ and a run already going always counts. Yesterday's half is emptied once nobody i
   that aren't Daily Courses' (first at x,y,z)". Then either run `/hcm games gen claim <course>
   confirm` to clear that area, or use a flat world (below). A course is also refused, with a line in
   the console and in status, when a hand-built course is within 16 blocks of its area, when the
-  world's spawn (or `safe_spot`) is, or when a hand-built course already uses its id.
+  world's spawn (or `safe_spot`) is, or when a hand-built course already uses its id; `claim` is
+  refused then too, so it never clears one of your courses or the spawn.
 - **A flat world instead** (the fallback when your Games world has hills; no extra plugin needed):
   1. `/mv create games_daily normal --world-type flat --no-structures` (Multiverse-Core 5; on 4.x
      it was `-t flat -a false`; check `/mv create --help`).
@@ -815,7 +816,9 @@ and a run already going always counts. Yesterday's half is emptied once nobody i
   next restart (or `/hcm games gen rebuild`) puts the blocks back.
 - **After a crash** every course is checked against its plan before it opens, and anything the
   world didn't save is put back first (the console says so). A build a restart interrupts simply
-  carries on after it.
+  carries on after it. A course that can't be vouched for (say `trials.fall_depth` was lowered and
+  one of its jumps would now send players back) stays closed and is replaced by a new one for the
+  day (a pinned course is built again from its seed), on a fresh board.
 - **In that world** (`world_rules: true`): no mobs, fire or weather, no random ticks, always noon.
 
 **Stars and tokens.** Parkour and Sky Rings: 3 stars under the gold time, 2 under the silver time
@@ -825,7 +828,8 @@ earns stars. The first counted finish of each course each day pays `daily_clear`
 Hard 3, Sky Rings 2, Daily Golf 2, Tiny Golf 1); a course's first finish ever pays the usual first
 clear once; golf pays par and holes-in-one as usual; the Star Chart pays `star_goal_reward` (+1) at
 10 and at 25 stars a week. All of it is inside today's caps (`daily_cap`, and
-`games.skill_daily_cap`, 6 a day across every skill game).
+`games.skill_daily_cap`, 6 a day across every skill game); a Star Chart goal reached on a day the caps
+are already full is paid by the player's next finish that week.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -851,7 +855,8 @@ clear once; golf pays par and holes-in-one as usual; the Star Chart pays `star_g
 `promote` needs it when today's board already has times. `reroll`, `preview` and `promote` are
 refused within `avoid_before_restart_minutes` of a restart. Every change is logged with who made it.
 The course and golf editors refuse a generated course ("This course is made by Daily Courses - use
-/hcm games gen.") and any point inside a Daily Courses area.
+/hcm games gen.") and anything of a hand-built course within 16 blocks of a Daily Courses area: a
+point, a checkpoint or finish with its radius, a golf hole's whole bounds box.
 
 | Command | What |
 |---|---|
@@ -860,13 +865,13 @@ The course and golf editors refuse a generated course ("This course is made by D
 | `/hcm games gen preview <course> [seed]` | Build a new course into the spare half without switching, to walk it (`tp <course> idle`). The next scheduled build clears it away |
 | `/hcm games gen promote <course> [confirm]` | The preview becomes today's course, on a fresh board |
 | `/hcm games gen reroll <course\|all> confirm` | A new course for today, on a fresh board; anyone playing the old one finishes there. No second daily-clear token |
-| `/hcm games gen rebuild <course>` | Check today's course against its plan and put back anything missing (same course) |
+| `/hcm games gen rebuild <course>` | Check today's course against its plan and put back anything missing (same course). After a `clear`, its area is checked for other blocks first and a new course is built |
 | `/hcm games gen on\|off <course>` | Open or close one (kept across restarts). `off` ends runs on it ("Easy Parkour is closed for now."); its blocks stay |
 | `/hcm games gen tier <course> <easy\|medium\|hard>` | Its difficulty from the next build (kept across restarts) |
 | `/hcm games gen mix <golf course> <E, M and H>` | Daily Golf's or Tiny Golf's holes from the next build (like `EEEMMMMHH`) |
-| `/hcm games gen pin <course> <seed\|today> [days]` / `unpin <course>` | Keep a good course: the same blocks every day, each day on a fresh day board |
+| `/hcm games gen pin <course> <seed\|today> [days]` / `unpin <course>` | Keep a good course: the same blocks every day, each day on a fresh day board. A pin ends by itself after its days; one made before a plugin update that changed that course's generator is ignored (the console and status say so) |
 | `/hcm games gen tp <course> [live\|idle]` | Go to today's course, or the spare half |
-| `/hcm games gen claim <course> [confirm]` | Count what is in a new area; with `confirm`, clear it and let the course use it |
+| `/hcm games gen claim <course> [confirm]` | Count what is in a new area; with `confirm`, clear it and let the course use it (refused while a hand-built course or the spawn is within 16 blocks) |
 | `/hcm games gen clear <course> confirm` | Empty both halves and switch the course off (do this before moving a course's `origin`) |
 
 The overrides (`on`/`off`, `tier`/`mix`, `pin`, rerolls, the claimed area) live in `hcm_meta` under
@@ -891,6 +896,10 @@ are ordinary `game_scores` rows: `gday:<course>:<day>` (that course's board for 
    course is being built here, so we moved you somewhere safe.").
 8. Try to break a block of a course as an admin: "This area is built by Daily Courses - use /hcm
    games gen".
+9. In Easy Parkour, land on the outside corner of a blue checkpoint where the path turns and hop on
+   at once: the checkpoint still counts (and the finish after it).
+10. Daily Golf's and Tiny Golf's ramp and island holes have walls two blocks above the approach (one
+    above the raised green): check a ball can't leave and a player can step out from the green.
 
 ### Commands
 

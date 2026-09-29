@@ -318,9 +318,17 @@ public final class Clubhouse implements Game, ClubDoor {
         gone(player.getUniqueId(), player);
     }
 
-    /** Fell out of the world (or was nudged): back to an arrival spot. */
+    /**
+     * Fell out of the world (or was nudged): back to an arrival spot. A watcher is never sent to the
+     * Clubhouse from here (they are still watching, in spectator mode): they are put back inside the
+     * area they watch, by the session's own teleport (review #1).
+     */
     @Override
     public void onVoid(Player player) {
+        if (watch != null && watch.watching(player.getUniqueId())) {
+            watch.putBack(player);
+            return;
+        }
         if (visits.in(player.getUniqueId())) {
             toSpawn(player);
         }

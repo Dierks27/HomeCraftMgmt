@@ -88,4 +88,20 @@ class WatchAreaTest {
                 out[1], out[2]));
         assertEquals(31.7, out[0], 1e-9, "at the edge");
     }
+    @Test
+    void theAreaIsKeptInsideTheWorldsHeightsWithItsViewInsideToo() {
+        WatchArea fits = WatchArea.view(new Box(0, 60, 0, 40, 100, 40), 10, 65, 10, 0f);
+        assertTrue(fits == fits.within(-64, 320), "an area that fits is itself");
+        WatchArea deep = WatchArea.view(new Box(0, -90, 0, 40, 330, 40), 10, -85, 10, 0f);
+        WatchArea held = deep.within(-64, 320);
+        assertEquals(new Box(0, -64, 0, 40, 319, 40), held.box(), "feet from the floor, head under the ceiling");
+        assertTrue(held.contains(held.viewX(), held.viewY(), held.viewZ()), "the first view moved inside too");
+        assertEquals(-64, held.viewY(), 1e-9, "at the floor, not in the void");
+        WatchArea outside = WatchArea.view(new Box(0, -200, 0, 4, -100, 4), 1, -150, 1, 0f);
+        assertTrue(outside == outside.within(-64, 320), "a box the world can't hold at all is left as it is");
+        assertEquals(WatchArea.Keep.LET, fits.keep(1, 61, 1, 2, 61, 2), "inside to inside");
+        assertEquals(WatchArea.Keep.CANCEL, fits.keep(1, 61, 1, -5, 61, 2), "inside to outside: cancelled");
+        assertEquals(WatchArea.Keep.PULL, fits.keep(-6, 61, 1, -5, 61, 2), "outside to outside: pulled back in");
+        assertTrue(fits.putBack(1, 61, 1) == null, "nothing to put back inside");
+    }
 }

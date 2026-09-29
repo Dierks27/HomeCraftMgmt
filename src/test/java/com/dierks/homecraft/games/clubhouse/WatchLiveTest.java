@@ -73,6 +73,8 @@ class WatchLiveTest {
     private static final World GAMES = (World) Proxy.newProxyInstance(World.class.getClassLoader(),
             new Class<?>[]{World.class}, (proxy, m, args) -> switch (m.getName()) {
                 case "getName" -> "games";
+                case "getMinHeight" -> -64;
+                case "getMaxHeight" -> 320;
                 case "hashCode" -> 7;
                 case "equals" -> proxy == args[0];
                 default -> null;
@@ -116,20 +118,97 @@ class WatchLiveTest {
         bench.close();
     }
 
+    /** The session's own teleports the keeper asked for (a test's own, so nothing else can move them). */
+    private final List<Location> armed = new ArrayList<>();
+    private final List<Runnable> nextTicks = new ArrayList<>();
+
+    private void ownTeleports() {
+        watch.teleport = (p, at) -> {
+            armed.add(at);
+            if (p == watcher.player) {
+                watcher.at = at.clone();
+            }
+            return true;
+        };
+        watch.nextTick = nextTicks::add;
+    }
+
+    private void runNextTicks() {
+        List<Runnable> due = new ArrayList<>(nextTicks);
+        nextTicks.clear();
+        due.forEach(Runnable::run);
+    }
+
     @Test
-    void theKeeperHoldsAWatcherInsideTheArea() {
+    void theKeeperCancelsAMoveOutAndNeverRedirectsIt() {
+        ownTeleports();
         Location from = new Location(GAMES, 62, 70, 30);
-        PlayerMoveEvent out = new PlayerMoveEvent(watcher.player, from, new Location(GAMES, 70, 70, 30, 90f, 10f));
+        Location outside = new Location(GAMES, 70, 70, 30, 90f, 10f);
+        PlayerMoveEvent out = new PlayerMoveEvent(watcher.player, from, outside);
         watch.moved(out);
-        assertTrue(AREA.contains(out.getTo().getX(), out.getTo().getY(), out.getTo().getZ()), "put back inside: "
-                + out.getTo());
-        assertEquals(90f, out.getTo().getYaw(), "free to look round");
+        assertTrue(out.isCancelled(), "a move out is cancelled: the server puts them back where they were, inside,"
+                + " with no teleport event the world session could take as someone else's");
+        assertEquals(outside, out.getTo(), "never a changed destination (that is an unarmed PLUGIN teleport, review #1)");
+        runNextTicks();
+        assertTrue(armed.isEmpty(), "from inside, nothing more: cancelling is enough");
+
         PlayerMoveEvent in = new PlayerMoveEvent(watcher.player, from, new Location(GAMES, 40, 70, 30));
         watch.moved(in);
-        assertEquals(40, in.getTo().getX(), 1e-9, "a move inside is left alone");
+        assertFalse(in.isCancelled(), "a move inside is left alone");
+        assertEquals(40, in.getTo().getX(), 1e-9, "and goes where it went");
         PlayerMoveEvent racerMove = new PlayerMoveEvent(racer.player, from, new Location(GAMES, 500, 70, 30));
         watch.moved(racerMove);
-        assertEquals(500, racerMove.getTo().getX(), 1e-9, "racers are never held by the keeper");
+        assertFalse(racerMove.isCancelled(), "racers are never held by the keeper");
+    }
+
+    @Test
+    void aWatcherAlreadyOutsideIsPutBackBySessionsOwnTeleportOnceNextTick() {
+        ownTeleports();
+        watcher.at = new Location(GAMES, 90, 70, 30); // the area moved under them
+        for (int i = 0; i < 3; i++) {
+            PlayerMoveEvent out = new PlayerMoveEvent(watcher.player, watcher.at.clone(), new Location(GAMES, 91 + i, 70, 30));
+            watch.moved(out);
+            assertTrue(out.isCancelled(), "each move out is cancelled");
+        }
+        assertTrue(armed.isEmpty(), "nothing is moved from inside the move event");
+        assertEquals(1, nextTicks.size(), "one put-back on its way, not one per move packet");
+        runNextTicks();
+        assertEquals(1, armed.size(), "the session's own (armed) teleport, next tick");
+        assertTrue(AREA.contains(armed.getFirst().getX(), armed.getFirst().getY(), armed.getFirst().getZ()),
+                "to the nearest point inside: " + armed.getFirst());
+        assertEquals(63.7, armed.getFirst().getX(), 1e-9, "the edge nearest them");
+    }
+
+    @Test
+    void theVoidPutsAWatcherBackInTheAreaNeverInTheClubhouse() {
+        ownTeleports();
+        watcher.at = new Location(GAMES, 20, 120, 20); // nudged above the area by someone else's short hop
+        club.onVoid(watcher.player);
+        assertEquals(1, armed.size(), "put back by the session's own teleport");
+        Location back = armed.getFirst();
+        assertTrue(AREA.contains(back.getX(), back.getY(), back.getZ()) && back.getX() == 20 && back.getZ() == 20,
+                "straight down into the area they watch, not the Clubhouse's arrival spot: " + back);
+        assertTrue(watch.watching(watcher.id), "still watching (still in spectator mode, where they belong)");
+        watcher.at = new Location(GAMES, 20, 70, 20);
+        club.onVoid(watcher.player);
+        assertEquals(1, armed.size(), "inside already: nothing to do");
+    }
+
+    @Test
+    void theAreaStaysInsideTheWorldsHeights() {
+        ownTeleports();
+        WatchArea deep = WatchArea.view(new Box(0, -90, 0, 40, 40, 40), 10, 20, 10, 0f); // a hand-built course grown by 16
+        LiveRace low = new LiveRace("party:8", "&dParty race: &fPit", "games", deep, Set.of(racer.id), List.of(), "",
+                true);
+        watch.refresh(List.of(race, low));
+        watch.watching(watcher.id, low.key());
+        Location from = new Location(GAMES, 10, -60, 10);
+        PlayerMoveEvent under = new PlayerMoveEvent(watcher.player, from, new Location(GAMES, 10, -70, 10));
+        watch.moved(under);
+        assertTrue(under.isCancelled(), "below the world's floor (-64) is outside the area, whatever the box says");
+        watcher.at = new Location(GAMES, 10, -80, 10);
+        assertTrue(watch.putBack(watcher.player), "theirs to handle");
+        assertEquals(-64, armed.getLast().getY(), 1e-9, "put back on the world's floor, never into the void");
     }
 
     @Test

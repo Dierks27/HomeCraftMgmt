@@ -96,6 +96,53 @@ public record WatchArea(Box box, double viewX, double viewY, double viewZ, float
         return new WatchArea(area, v[0], v[1], v[2], yaw);
     }
 
+    /**
+     * This area inside a world's heights: feet from {@code minHeight}, head below {@code maxHeight}
+     * (review #1: a hand-built course's box grown by 16 can reach below the world's floor, and a
+     * watcher held there would be in the void). Itself when it fits already, or when the world can't
+     * hold two blocks of it at all (a course outside its world, which a course never is).
+     */
+    public WatchArea within(int minHeight, int maxHeight) {
+        int lo = Math.max(box.minY(), minHeight);
+        int hi = Math.min(box.maxY(), maxHeight - 1);
+        if ((lo == box.minY() && hi == box.maxY()) || hi < lo + 1) {
+            return this;
+        }
+        Box b = new Box(box.minX(), lo, box.minZ(), box.maxX(), hi, box.maxZ());
+        double[] v = nearest(b, viewX, viewY, viewZ);
+        return new WatchArea(b, v[0], v[1], v[2], viewYaw);
+    }
+
+    /** What the keeper does with a watcher's move (review #1). */
+    public enum Keep {
+        /** Inside: the move goes ahead. */
+        LET,
+        /** Out of the area from inside it: the move is cancelled (they stay where they were, inside). */
+        CANCEL,
+        /**
+         * Out of the area from outside it too (the area changed under them, say): cancelled, and the
+         * session's own (armed) teleport puts them at the nearest point inside, next tick.
+         */
+        PULL
+    }
+
+    /**
+     * The keeper's rule for a move from (fx, fy, fz) to (tx, ty, tz). Never a changed destination: on
+     * the server a move event's new {@code to} is an unarmed PLUGIN teleport, which the world session
+     * takes as someone else's (a short hop voids, a long one ends the session).
+     */
+    public Keep keep(double fx, double fy, double fz, double tx, double ty, double tz) {
+        if (contains(tx, ty, tz)) {
+            return Keep.LET;
+        }
+        return contains(fx, fy, fz) ? Keep.CANCEL : Keep.PULL;
+    }
+
+    /** Where a watcher at (x, y, z) must be put back to, or {@code null} when they are inside already. */
+    public double[] putBack(double x, double y, double z) {
+        return contains(x, y, z) ? null : nearestInside(x, y, z);
+    }
+
     /** Whether feet at (x, y, z) are inside. */
     public boolean contains(double x, double y, double z) {
         return box.contains(x, y, z);

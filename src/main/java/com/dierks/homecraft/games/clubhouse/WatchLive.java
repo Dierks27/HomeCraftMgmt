@@ -28,9 +28,11 @@ import java.util.UUID;
  *       the Clubhouse's world, then SPECTATOR as the session's own game mode (the game-mode guard
  *       keeps it, and every way out puts back the mode they came in with: it is in their saved
  *       state). Coming back always sets ADVENTURE again.</li>
- *   <li><b>The keeper.</b> Leaving the course's {@link WatchArea} (moving, or the spectator menu's
- *       teleport) puts them back at the nearest point inside, or cancels a teleport whose target is
- *       outside; riding along in a racer's view is only for players in THAT race or group.</li>
+ *   <li><b>The keeper.</b> A move out of the course's {@link WatchArea} is cancelled (never redirected:
+ *       a changed destination is a foreign teleport to the world session), and one already outside is
+ *       put back at the nearest point inside by the session's own armed teleport; a spectator-menu
+ *       teleport whose target is outside is cancelled; the area stays inside the world's heights; and
+ *       riding along in a racer's view is only for players in THAT race or group.</li>
  *   <li><b>Never in the way.</b> A watcher is hidden from every player who isn't watching
  *       ({@link WatchVisibility}), and shown again on every way out.</li>
  *   <li><b>What they see.</b> The race's live positions on the action bar, with
@@ -68,10 +70,18 @@ final class WatchLive {
         this.visibility = visibility;
         this.online = online;
         this.nextTick = task -> club.games().later(club, 1, task);
+        this.teleport = (p, at) -> club.games().sessions().teleport(p, at);
     }
 
     /** Runs a task on the next tick (the framework's, inside the Clubhouse's guard; a test's own). */
     java.util.function.Consumer<Runnable> nextTick;
+    /**
+     * The session's own teleport, armed and checked (a test's own): the ONLY way the keeper moves a
+     * watcher. Anything else (a move event's changed {@code to}) is a foreign teleport to the session.
+     */
+    java.util.function.BiPredicate<Player, Location> teleport;
+    /** Watchers a put-back is already on its way for (one at a time, not one per move packet). */
+    private final java.util.Set<UUID> pulling = new java.util.HashSet<>();
 
     /** A test's watcher: {@code player} watches the race {@code key} (as {@link #start} leaves them). */
     void watching(UUID player, String key) {
@@ -137,9 +147,9 @@ final class WatchLive {
         if (w == null || !w.getName().equals(s.world())) {
             return ELSEWHERE;
         }
-        WatchArea a = race.area();
+        WatchArea a = area(race, w);
         Location at = new Location(w, a.viewX(), a.viewY(), a.viewZ(), a.viewYaw(), 20f);
-        if (!club.games().sessions().teleport(p, at)) {
+        if (!teleport.test(p, at)) {
             return "&cCouldn't take you there right now.";
         }
         if (!club.games().sessions().gameMode(p, GameMode.SPECTATOR)) {
@@ -159,6 +169,7 @@ final class WatchLive {
         if (watching.remove(id) == null) {
             return;
         }
+        pulling.remove(id);
         try {
             p.setSpectatorTarget(null);
         } catch (RuntimeException | LinkageError ignored) {
@@ -176,12 +187,14 @@ final class WatchLive {
     /** Gone (any way out of the Clubhouse): seen by everyone again; the session's end puts their mode back. */
     void gone(UUID id) {
         watching.remove(id);
+        pulling.remove(id);
         visibility.gone(id);
     }
 
     /** The Clubhouse stops: everyone seen again. */
     void clear() {
         watching.clear();
+        pulling.clear();
         visibility.clear();
     }
 
@@ -201,17 +214,7 @@ final class WatchLive {
                 stop(p, OVER);
                 continue;
             }
-            Location l = p.getLocation();
-            if (!r.area().contains(l.getX(), l.getY(), l.getZ())) {
-                try {
-                    p.setSpectatorTarget(null);
-                } catch (RuntimeException | LinkageError ignored) {
-                    // nothing to stop
-                }
-                double[] in = r.area().nearestInside(l.getX(), l.getY(), l.getZ());
-                club.games().sessions().teleport(p, new Location(l.getWorld(), in[0], in[1], in[2], l.getYaw(),
-                        l.getPitch()));
-            }
+            putBack(p); // drifted out (riding along with a racer who left it): the session's own teleport
             p.sendActionBar(Text.of((r.positions().isEmpty() ? "&7Watching live" : r.positions()) + " " + HINT));
         }
         visibility.reconcile();
@@ -219,22 +222,87 @@ final class WatchLive {
 
     // ---- the keeper -------------------------------------------------------------------------------
 
-    /** A watcher's move out of the area stops at its edge. */
+    /**
+     * A watcher's move out of the area is CANCELLED (review #1): the server puts them back where they
+     * were, with no teleport event. It is never a changed {@code to}: that is an unarmed PLUGIN teleport,
+     * which the world session takes as someone else's (a short hop sends them to the Clubhouse through
+     * {@code onVoid}, a long one ends their session where they float). A watcher already outside (the
+     * area moved under them) is also put back inside by the session's own armed teleport, next tick.
+     */
     void moved(PlayerMoveEvent e) {
         if (watching.isEmpty()) {
             return;
         }
-        LiveRace r = watched(e.getPlayer().getUniqueId());
+        Player p = e.getPlayer();
+        LiveRace r = watched(p.getUniqueId());
         Location to = e.getTo();
-        if (r == null || r.area().contains(to.getX(), to.getY(), to.getZ())) {
+        Location from = e.getFrom();
+        if (r == null || to == null) {
             return;
         }
-        double[] in = r.area().nearestInside(to.getX(), to.getY(), to.getZ());
-        Location held = to.clone();
-        held.setX(in[0]);
-        held.setY(in[1]);
-        held.setZ(in[2]);
-        e.setTo(held);
+        WatchArea a = area(r, to.getWorld());
+        WatchArea.Keep keep = from == null ? (a.contains(to.getX(), to.getY(), to.getZ()) ? WatchArea.Keep.LET
+                : WatchArea.Keep.PULL) : a.keep(from.getX(), from.getY(), from.getZ(), to.getX(), to.getY(), to.getZ());
+        if (keep == WatchArea.Keep.LET) {
+            return;
+        }
+        e.setCancelled(true);
+        if (keep == WatchArea.Keep.PULL) {
+            pullSoon(p);
+        }
+    }
+
+    /** Next tick, the session's own teleport to the nearest point inside the watched area (once). */
+    private void pullSoon(Player p) {
+        UUID id = p.getUniqueId();
+        if (!pulling.add(id)) {
+            return;
+        }
+        nextTick.accept(() -> {
+            pulling.remove(id);
+            if (watching(id)) {
+                putBack(p);
+            }
+        });
+    }
+
+    /**
+     * A watcher outside their area is put back at the nearest point inside, by the session's own armed
+     * teleport (never the Clubhouse's arrival spot: they are still watching, in spectator mode).
+     *
+     * @return whether {@code p} is watching (then this was theirs to handle, moved or not)
+     */
+    boolean putBack(Player p) {
+        LiveRace r = watched(p.getUniqueId());
+        if (r == null) {
+            return watching(p.getUniqueId());
+        }
+        Location l = p.getLocation();
+        if (l == null) {
+            return true;
+        }
+        double[] in = area(r, l.getWorld()).putBack(l.getX(), l.getY(), l.getZ());
+        if (in != null) {
+            try {
+                p.setSpectatorTarget(null);
+            } catch (RuntimeException | LinkageError ignored) {
+                // nothing to stop
+            }
+            teleport.test(p, new Location(l.getWorld(), in[0], in[1], in[2], l.getYaw(), l.getPitch()));
+        }
+        return true;
+    }
+
+    /** The race's area inside its world's heights (review #1); as it is when the world can't be read. */
+    static WatchArea area(LiveRace r, World w) {
+        if (w == null) {
+            return r.area();
+        }
+        try {
+            return r.area().within(w.getMinHeight(), w.getMaxHeight());
+        } catch (RuntimeException | LinkageError e) {
+            return r.area();
+        }
     }
 
     /**
@@ -253,14 +321,14 @@ final class WatchLive {
         e.setCancelled(true);
         Location to = e.getTo();
         if (to == null || to.getWorld() == null || !to.getWorld().getName().equals(r.world())
-                || !r.area().contains(to.getX(), to.getY(), to.getZ())) {
+                || !area(r, to.getWorld()).contains(to.getX(), to.getY(), to.getZ())) {
             p.sendActionBar(Text.of(OUTSIDE));
             return;
         }
         Location target = to.clone();
         nextTick.accept(() -> {
             if (watching(p.getUniqueId())) {
-                club.games().sessions().teleport(p, target);
+                teleport.test(p, target);
             }
         });
     }

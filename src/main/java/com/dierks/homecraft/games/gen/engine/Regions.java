@@ -483,6 +483,38 @@ public final class Regions {
                 + def.sizeX() + "," + def.sizeY() + "," + def.sizeZ();
     }
 
+    /** The world a claim was made in, or {@code null} when it can't be read. */
+    public static String claimWorld(String claim) {
+        if (claim == null || claimOrigin(claim) == null) {
+            return null;
+        }
+        String w = claim.substring(0, claim.indexOf(',')).trim();
+        return w.isEmpty() ? null : w;
+    }
+
+    /**
+     * The claims a stored wet list names ({@link GenAdminKeys#wet}): ';' between them, each a whole
+     * claim; blanks, unreadable ones and repeats dropped, in order.
+     */
+    public static List<String> wetClaims(String stored) {
+        List<String> out = new ArrayList<>();
+        if (stored == null) {
+            return out;
+        }
+        for (String c : stored.split(";")) {
+            String t = c.trim();
+            if (claimOrigin(t) != null && claimWorld(t) != null && !out.contains(t)) {
+                out.add(t);
+            }
+        }
+        return out;
+    }
+
+    /** A wet list as stored, or {@code null} (the key unset) when it is empty. */
+    public static String wetText(List<String> claims) {
+        return claims == null || claims.isEmpty() ? null : String.join(";", claims);
+    }
+
     /** The origin a claim was made at, or {@code null} when it can't be read. */
     public static int[] claimOrigin(String claim) {
         if (claim == null) {

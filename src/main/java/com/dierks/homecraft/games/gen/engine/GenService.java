@@ -234,6 +234,37 @@ public final class GenService implements GeneratedCourses, GenOps {
     /** Each week's Star Chart goals once fixed ({@link #goals}), by the week's first day. */
     private final Map<Long, List<DailyStars.Goal>> weekGoals = new HashMap<>();
     private volatile List<Object[]> areas = List.of();
+    /**
+     * The flow-only boxes {world, {@link Box}}: every kept Dropper's plot and a plot job's in flight
+     * ({@link #wetPlots}), whose water must never flow out though nothing else there is guarded.
+     */
+    private volatile List<Object[]> wetPlots = List.of();
+    /** Every world {@link #areas} and {@link #wetPlots} touch: a flow anywhere else is a quick no. */
+    private volatile List<String> guardWorlds = List.of();
+    /** The guard's areas as {@link GenRegionGuard} asks them: every change refused in {@link #areas}... */
+    private final GenRegionGuard.Area guardArea = new GenRegionGuard.Area() {
+        @Override
+        public boolean in(String world, int x, int y, int z) {
+            return inArea(world, x, y, z);
+        }
+
+        @Override
+        public boolean covers(String world) {
+            return guarded(world);
+        }
+    };
+    /** ...and no fluid flowing out of {@link #wetPlots} or a Dropper keep in flight. */
+    private final GenRegionGuard.Area wetArea = new GenRegionGuard.Area() {
+        @Override
+        public boolean in(String world, int x, int y, int z) {
+            return inWet(world, x, y, z);
+        }
+
+        @Override
+        public boolean covers(String world) {
+            return guarded(world) || keeper.wetJobIn(world);
+        }
+    };
     /** Kept courses and their plots (GEN-SPEC-KEEP §4); it builds only while this engine doesn't. */
     private final KeepService keeper;
     /** Course codes already looked up, by {@code slot|edition}. */
@@ -335,6 +366,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         queue.clear();
         inbox.clear();
         areas = List.of();
+        wetPlots = List.of();
+        guardWorlds = List.of();
     }
 
     /** Whether it is running. */
@@ -728,6 +761,9 @@ public final class GenService implements GeneratedCourses, GenOps {
         String world = st.world().isBlank() ? first(host.gamesWorlds()) : st.world();
         noticeSchedule(meta);
         List<Object[]> kept = new ArrayList<>();
+        if (meta != null) {
+            wetPlots = List.copyOf(wetPlots(meta));
+        }
         for (SlotState s : slots.values()) {
             DailySettings.SlotConfig c = s.classic ? st.archive().classic(s.def.id()) : st.slot(s.def.id());
             if (c == null) {
@@ -746,6 +782,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                     s.want = ClassicWant.parse(meta.get(GenAdminKeys.recall(s.def.id())));
                     s.claimed = Regions.claim(s.def, world, origin).equals(meta.get(GenAdminKeys.claim(s.def.id())));
                 }
+                wetRegions(s, meta, world, origin, kept);
                 if (s.wanted() || s.claimed) {
                     for (char h : new char[]{'A', 'B'}) {
                         kept.add(new Object[]{world, s.half(h)});
@@ -764,12 +801,14 @@ public final class GenService implements GeneratedCourses, GenOps {
                 boolean claimed = Regions.claim(s.def, world, origin).equals(claim);
                 if (claim != null && !claimed) {
                     int[] old = Regions.claimOrigin(claim);
-                    warnOnce(s, "Fresh Courses: " + id + " was claimed at another place ("
-                            + (old == null ? claim : Regions.describe(s.def, old)) + "). Those blocks are left"
-                            + " as they are: clear them by hand. The new region is checked before it is used.");
+                    String where = old == null ? claim : Regions.describe(s.def, old);
+                    warnOnce(s, "Fresh Courses: " + id + " was claimed at another place (" + where + "). "
+                            + (s.def.dropper() ? drainFirst(s) : "Those blocks are left as they are: clear them by"
+                            + " hand.") + " The new region is checked before it is used.");
                 }
                 s.claimed = claimed;
             }
+            wetRegions(s, meta, world, origin, kept);
             if (s.wanted() || s.claimed) {
                 for (char h : new char[]{'A', 'B'}) {
                     kept.add(new Object[]{world, s.half(h)});
@@ -777,6 +816,93 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
         }
         areas = List.copyOf(kept);
+        List<String> worlds = new ArrayList<>();
+        for (List<Object[]> boxes : List.of(areas, wetPlots)) {
+            for (Object[] a : boxes) {
+                String w = (String) a[0];
+                if (worlds.stream().noneMatch(w::equalsIgnoreCase)) {
+                    worlds.add(w);
+                }
+            }
+        }
+        guardWorlds = List.copyOf(worlds);
+    }
+
+    /**
+     * A Dropper slot's old regions that may still hold its pools though it stands elsewhere now
+     * ({@link GenAdminKeys#wet}), added to the guarded {@code kept}: the claim it held when its
+     * origin (or the world) moved is remembered the first time it is seen, before a claim at the new
+     * place can overwrite it. Each stays guarded (nothing changes there, and nothing flows out) until
+     * the slot is claimed there again, which puts it under the claim's guard and lets a {@code clear}
+     * drain it (a CLEAR empties the pools before anything else). Any other slot: nothing.
+     */
+    private void wetRegions(SlotState s, Map<String, String> meta, String world, int[] origin, List<Object[]> kept) {
+        if (!s.def.dropper()) {
+            return;
+        }
+        if (meta != null) {
+            String key = GenAdminKeys.wet(s.def.id());
+            List<String> stored = Regions.wetClaims(meta.get(key));
+            List<String> now = new ArrayList<>(stored);
+            String here = Regions.claim(s.def, world, origin);
+            String claim = meta.get(GenAdminKeys.claim(s.def.id()));
+            if (claim != null && !claim.equals(here) && Regions.claimOrigin(claim) != null && !now.contains(claim)) {
+                now.add(claim);
+            }
+            if (s.claimed) {
+                now.remove(here); // claimed here again: the claim guards it, and a clear drains it
+            }
+            if (!now.equals(stored)) {
+                try {
+                    host.store().meta(key, Regions.wetText(now));
+                } catch (SQLException | RuntimeException e) {
+                    host.logger().log(Level.WARNING, "Fresh Courses: could not record " + s.def.id()
+                            + "'s old region", e);
+                }
+            }
+            s.wet = List.copyOf(now);
+        }
+        for (String c : s.wet) {
+            String w = Regions.claimWorld(c);
+            int[] o = Regions.claimOrigin(c);
+            if (w != null && o != null) {
+                for (Box h : Regions.halves(s.def, o)) {
+                    kept.add(new Object[]{w, h});
+                }
+            }
+        }
+    }
+
+    /**
+     * What a moved Dropper's admin reads: its pools may still stand in the old place, which stays
+     * guarded until they are drained there.
+     */
+    private static String drainFirst(SlotState s) {
+        return "Its pools may still be there, so that area stays guarded: drain first - move it back and use"
+                + " /hcm games gen clear " + s.def.id() + " (it empties the pools before anything else).";
+    }
+
+    /**
+     * The flow-only boxes {world, {@link Box}} {@code meta} names: every plot holding a kept Dropper,
+     * and a plot job the server stopped halfway ({@link KeepService#wetPending}). The keep area is
+     * hand-built ground the guard leaves alone, but a Dropper's water must never flow out of its plot.
+     */
+    static List<Object[]> wetPlots(Map<String, String> meta) {
+        List<Object[]> out = new ArrayList<>();
+        for (Map.Entry<String, String> e : meta.entrySet()) {
+            if (!e.getKey().startsWith(GenAdminKeys.PLOTS)) {
+                continue;
+            }
+            KeptPlot p = KeptPlot.parse(GenAdminKeys.plotOf(e.getKey()), e.getValue());
+            if (p != null && KeepService.dropper(p.slot())) {
+                out.add(new Object[]{p.world(), p.box()});
+            }
+        }
+        Object[] pending = KeepService.wetPending(meta.get(GenAdminKeys.KEEP_PENDING));
+        if (pending != null) {
+            out.add(pending);
+        }
+        return out;
     }
 
     /**
@@ -830,7 +956,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         queue.removeIf(j -> j.slot == s);
         host.logger().warning("Fresh Courses: " + s.def.id() + " moved from " + s.world + " "
                 + Regions.describe(s.def, s.origin) + " to " + world + " " + Regions.describe(s.def, origin)
-                + ". The old halves were not cleared (use /hcm games gen clear before moving a course).");
+                + ". The old halves were not cleared (use /hcm games gen clear before moving a course)."
+                + (s.def.dropper() ? " " + drainFirst(s) : ""));
         s.verified = false;
         s.healFailed = s.live != null;
         s.previous = null;
@@ -1980,15 +2107,50 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     @Override
     public boolean inArea(String world, int x, int y, int z) {
+        return in(areas, world, x, y, z);
+    }
+
+    /**
+     * Whether a block is in a flow-only box: a kept Dropper's plot, a plot job the server stopped
+     * halfway, or the plot a Dropper keep (or any clearing) is working in now.
+     */
+    boolean inWet(String world, int x, int y, int z) {
+        return in(wetPlots, world, x, y, z) || keeper.inWetJob(world, x, y, z);
+    }
+
+    /** Whether a world holds anything {@link #areas} or {@link #wetPlots} name. */
+    private boolean guarded(String world) {
         if (world == null) {
             return false;
         }
-        for (Object[] a : areas) {
+        for (String w : guardWorlds) {
+            if (w.equalsIgnoreCase(world)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean in(List<Object[]> boxes, String world, int x, int y, int z) {
+        if (world == null) {
+            return false;
+        }
+        for (Object[] a : boxes) {
             if (((String) a[0]).equalsIgnoreCase(world) && ((Box) a[1]).contains(x, y, z)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** Every change refused: every wanted or claimed half, and a moved Dropper's old ones ({@link GenRegionGuard}). */
+    public GenRegionGuard.Area guardArea() {
+        return guardArea;
+    }
+
+    /** No fluid flowing out: kept Droppers' plots and a Dropper keep in flight ({@link GenRegionGuard}). */
+    public GenRegionGuard.Area wetArea() {
+        return wetArea;
     }
 
     /**
@@ -2201,6 +2363,14 @@ public final class GenService implements GeneratedCourses, GenOps {
         for (SlotState s : slots.values()) {
             if (s.classic && s.live != null) {
                 out.add(s.def.id() + ": " + classicHolds(s));
+            }
+        }
+        for (SlotState s : slots.values()) {
+            for (String c : s.wet) {
+                int[] o = Regions.claimOrigin(c);
+                out.add(s.def.id() + ": its old area in " + Regions.claimWorld(c) + " (" + (o == null ? c
+                        : Regions.describe(s.def, o)) + ") is still guarded - drain first: move it back and /hcm"
+                        + " games gen clear " + s.def.id());
             }
         }
         return out;
@@ -2905,12 +3075,46 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         j.planBox = box;
         Plan moved = PlanShift.to(read.plan(), box);
-        List<String> problems = new ArrayList<>(PlanCheck.problems(moved, orig, box));
-        if (problems.isEmpty()) {
-            problems.addAll(PlanCheck.movedProblems(moved, orig)); // a moved dropper is proven again where it stands
-        }
+        List<String> problems = PlanCheck.problems(moved, orig, box);
         if (!problems.isEmpty()) {
             fail(j, "its plan was refused: " + String.join("; ", problems));
+            return;
+        }
+        if (!orig.dropper()) {
+            recallProven(j, moved, List.of(), null);
+            return;
+        }
+        // A moved dropper is proven again where it stands: its whole validator, on the planner thread
+        // (like PlanCheck.generator: tens of milliseconds), the answer back through the inbox.
+        j.stage = Stage.PLANNING;
+        j.planStarted = host.now();
+        host.planner().execute(() -> {
+            List<String> refused = List.of();
+            Throwable error = null;
+            try {
+                refused = PlanCheck.movedProblems(moved, orig);
+            } catch (Throwable e) {
+                error = e;
+            }
+            List<String> checked = refused;
+            Throwable failure = error;
+            inbox.add(() -> {
+                if (job == j && j.stage == Stage.PLANNING) {
+                    recallProven(j, moved, checked, failure);
+                } // cancelled, killed or superseded meanwhile: dropped
+            });
+        });
+    }
+
+    /** A recall's moved plan came through its checks ({@code refused} empty, no {@code error}): build it. */
+    private void recallProven(Job j, Plan moved, List<String> refused, Throwable error) {
+        if (error != null) {
+            host.logger().log(Level.SEVERE, "Fresh Courses: checking " + j.slot.def.id() + "'s recall threw", error);
+            fail(j, "its plan couldn't be checked (" + error + ")");
+            return;
+        }
+        if (!refused.isEmpty()) {
+            fail(j, "its plan was refused: " + String.join("; ", refused));
             return;
         }
         j.plan = moved;

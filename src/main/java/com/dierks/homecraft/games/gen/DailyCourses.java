@@ -256,7 +256,7 @@ public final class DailyCourses implements Game {
         GamesService g = games();
         g.generated(engine);
         GenService running = engine;
-        GenRegionGuard.register(g, this, () -> running::inArea, log());
+        GenRegionGuard.register(g, this, running::guardArea, running::wetArea, log());
         g.every(this, 1, 1, running::tick);
         g.every(this, 20, 20, running::check);
         g.later(this, 1, running::worldsReady);

@@ -36,7 +36,8 @@ import java.util.logging.Level;
  * <p><b>The same guarantees as a build.</b> A plot is built in only right after it was found empty
  * (or cleared with {@code claim plot <n> confirm}), like a half the first time. Unlike a half, a
  * free plot is NOT guarded ({@link GenRegionGuard} leaves the keep area alone: it is hand-built
- * territory, and admins may build there), so a plot found empty once proves nothing later: every
+ * territory, and admins may build there; only a Dropper's plot is guarded against its water flowing
+ * out, see {@link #wetPending}), so a plot found empty once proves nothing later: every
  * keep scans its plot first. Only a keep the server stopped halfway skips the scan: its
  * {@code gen.keep.pending} record proves the blocks there are its own. No plot is scanned, cleared
  * or built while keeping is off, while it overlaps another plot's kept course (the area moved), or
@@ -371,6 +372,53 @@ final class KeepService {
         }
         if (j.plan == null) {
             planRemade(j);
+            return;
+        }
+        if (j.def != null && j.def.dropper()) {
+            proveMoved(j);
+            return;
+        }
+        j.stage = Stage.CONVERGE;
+        j.build = new BuildJob(port, j.box, j.plan, BuildJob.Mode.CONVERGE);
+    }
+
+    /**
+     * A Dropper's archived plan, moved into its plot, is proven again where it will stand (its whole
+     * validator: sealed and solvable) before a block is set, on the planner thread like any plan (it
+     * takes tens of milliseconds), under the same kill rule; refused, the keep fails and nothing is
+     * built.
+     */
+    private void proveMoved(PlotJob j) {
+        Plan moved = j.plan;
+        Slots.Def def = j.def;
+        j.stage = Stage.PLANNING;
+        j.planStarted = host.now();
+        host.planner().execute(() -> {
+            List<String> refused = List.of();
+            Throwable error = null;
+            try {
+                refused = PlanCheck.movedProblems(moved, def);
+            } catch (Throwable e) {
+                error = e;
+            }
+            List<String> checked = refused;
+            Throwable failure = error;
+            inbox.add(() -> movedProven(j, checked, failure));
+        });
+    }
+
+    private void movedProven(PlotJob j, List<String> refused, Throwable error) {
+        if (job != j || j.stage != Stage.PLANNING) {
+            return; // cancelled or killed meanwhile
+        }
+        if (error != null || !refused.isEmpty()) {
+            fail(j, error != null ? "its plan couldn't be checked (" + error + ")"
+                    : "its plan was refused: " + String.join("; ", refused));
+            return;
+        }
+        WorldPort port = host.world(j.world);
+        if (port == null) {
+            fail(j, "the world " + j.world + " isn't loaded");
             return;
         }
         j.stage = Stage.CONVERGE;
@@ -765,10 +813,9 @@ final class KeepService {
             return "it doesn't fit a plot";
         }
         Plan moved = PlanShift.to(read.plan(), build);
-        List<String> problems = new ArrayList<>(PlanCheck.problems(moved, j.def, build));
-        if (problems.isEmpty()) {
-            problems.addAll(PlanCheck.movedProblems(moved, j.def)); // a moved dropper is proven again in its plot
-        }
+        // (a moved Dropper is proven again in its plot too, on the planner thread as the job starts
+        // building: proveMoved)
+        List<String> problems = PlanCheck.problems(moved, j.def, build);
         if (!problems.isEmpty()) {
             return "its plan was refused: " + String.join("; ", problems);
         }
@@ -1061,6 +1108,62 @@ final class KeepService {
         }
         DailySettings.Archive a = host.settings().archive();
         return n >= 1 && n <= a.keep().maxPlots() ? a.keep().plot(n) : null;
+    }
+
+    // ---- the flow guard ---------------------------------------------------------------------------
+
+    /** Whether the slot {@code id} a course was kept from makes Droppers (its plot may hold water). */
+    static boolean dropper(String id) {
+        Slots.Def d = id == null ? null : Slots.of(id);
+        if (d == null && id != null) {
+            d = Slots.classic(id);
+        }
+        return d != null && d.dropper();
+    }
+
+    /**
+     * The plot a {@code gen.keep.pending} record names, {world, {@link Box}}, when it may hold a
+     * Dropper's water: a keep of a Dropper, or any clearing (whose course isn't in the record). Else
+     * {@code null}. The record is written before the first block, so a keep the server stopped
+     * halfway is covered until the next start finishes it or clears its plot.
+     */
+    static Object[] wetPending(String text) {
+        if (text == null) {
+            return null;
+        }
+        String[] p = text.split("\\|", -1);
+        Box box = p.length >= 4 ? KeptPlot.box(p[3]) : null;
+        if (box == null || p[2].isBlank()) {
+            return null;
+        }
+        boolean wet = p[0].equals("clear") || (p[0].equals("keep") && p.length >= 5 && dropper(p[4]));
+        return wet ? new Object[]{p[2], box} : null;
+    }
+
+    /**
+     * The running plot job's box when it may hold a Dropper's water (a keep of a Dropper, or any
+     * clearing), {world, {@link Box}}, or {@code null}: guarded from its first block, before any
+     * record of it is read back.
+     */
+    private Object[] wetJob() {
+        PlotJob j = job;
+        if (j == null || j.world == null || j.box == null) {
+            return null;
+        }
+        boolean wet = j.kind == Kind.CLEAR || (j.kind == Kind.KEEP && j.def != null && j.def.dropper());
+        return wet ? new Object[]{j.world, j.box} : null;
+    }
+
+    /** Whether the running plot job may hold a Dropper's water in {@code world}. */
+    boolean wetJobIn(String world) {
+        Object[] w = wetJob();
+        return w != null && world != null && ((String) w[0]).equalsIgnoreCase(world);
+    }
+
+    /** Whether a block is in the running plot job's box when it may hold a Dropper's water. */
+    boolean inWetJob(String world, int x, int y, int z) {
+        Object[] w = wetJob();
+        return w != null && world != null && ((String) w[0]).equalsIgnoreCase(world) && ((Box) w[1]).contains(x, y, z);
     }
 
     /** For tests: the running job's kind, or {@code null}. */

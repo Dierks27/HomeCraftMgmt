@@ -50,6 +50,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.boat.OakBoat;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDismountEvent;
 import org.bukkit.event.entity.EntityToggleGlideEvent;
@@ -392,6 +393,7 @@ public final class TimeTrials implements Game {
         g.on(this, EntityDismountEvent.class, EventPriority.MONITOR, false,
                 e -> triedToLeave(e.isCancelled(), e.getEntity(), e.getDismounted()));
         g.on(this, EntityDamageEvent.class, EventPriority.MONITOR, false, drops::hurt); // a dropper's bonk
+        g.on(this, BlockFromToEvent.class, EventPriority.LOW, true, drops::flow); // a dropper's pools never flow out
         g.every(this, 1, 1, this::tick);
         party.start(); // WP-R1 (D4)
     }

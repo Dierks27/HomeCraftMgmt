@@ -84,6 +84,8 @@ public final class GamesService {
     private final WorldSessions sessions;
     private final Invites invites;
     private final Featured featured;
+    /** Who hears about skill-game finishes (quests, achievements); {@link GameProgress#NONE} until registered. */
+    private volatile GameProgress progress = GameProgress.NONE;
     private final List<GameSpec<?>> specs;
     private volatile List<Game> games = List.of();
     /** The shared screens (gui/games); "Coming soon!" until installed. */
@@ -612,6 +614,31 @@ public final class GamesService {
 
     public Featured featured() {
         return featured;
+    }
+
+    /** Who hears about skill-game finishes; never {@code null}. */
+    public GameProgress progress() {
+        return progress;
+    }
+
+    /**
+     * Register who hears about skill-game finishes ({@code null} = nobody). A game calls it through
+     * {@link #tellProgress}, which guards the call.
+     */
+    public void progress(GameProgress listener) {
+        this.progress = listener == null ? GameProgress.NONE : listener;
+    }
+
+    /** Tell the progress listener something, guarded: a listener that throws can't break a game. */
+    public void tellProgress(java.util.function.Consumer<GameProgress> call) {
+        if (call == null) {
+            return;
+        }
+        try {
+            call.accept(progress);
+        } catch (RuntimeException | LinkageError e) {
+            host.logger().log(java.util.logging.Level.WARNING, "Games: a quest/achievement listener failed", e);
+        }
     }
 
     /** The shared games screens (Games screen, high scores, Take a break, player picker). */

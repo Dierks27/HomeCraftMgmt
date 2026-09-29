@@ -234,4 +234,27 @@ class GamesServiceTest {
         assertFalse(games.open(alex.player, "test_slots", null), "with the round finished, the pause applies again");
         assertEquals(1, slots.opened, "and the game isn't opened");
     }
+
+    @Test
+    void progressIsNobodyUntilRegisteredAndAThrowingListenerNeverReachesTheGame() {
+        assertSame(GameProgress.NONE, games.progress(), "nobody listens until the Arcade registers");
+        AtomicInteger heard = new AtomicInteger();
+        games.progress(new GameProgress() {
+            @Override
+            public void starsEarned(org.bukkit.entity.Player player, int stars) {
+                heard.addAndGet(stars);
+            }
+        });
+        games.tellProgress(p -> p.starsEarned(alex.player, 3));
+        assertEquals(3, heard.get(), "the registered listener hears it");
+        games.progress(new GameProgress() {
+            @Override
+            public void starsEarned(org.bukkit.entity.Player player, int stars) {
+                throw new IllegalStateException("boom");
+            }
+        });
+        games.tellProgress(p -> p.starsEarned(alex.player, 1)); // must not throw
+        games.progress(null);
+        assertSame(GameProgress.NONE, games.progress(), "null goes back to nobody");
+    }
 }

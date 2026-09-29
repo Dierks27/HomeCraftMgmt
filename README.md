@@ -1906,8 +1906,9 @@ cabinet's scored daily try), `game_breaks` (Take a break), `game_scores`, `game_
 `game_saved_state` (a player's things during a world game), `game_courses` and `game_prefs`
 (invites, the golf ball, lines waiting for the next join). No `config_revision` bump: every
 `games` key is new and back-filled with its comments. A bare `games: false` (or
-`games.<id>: false`) is first rewritten as its `enabled` key, so a game you switched off stays
-off. Every token a game moves is in the ledger under that game's own source, so
+`games.<id>: false`, or a Fresh course's `games.fresh.slots.<id>: false`) is first rewritten as its
+`enabled` key, so a game or course you switched off stays off (and one you switched on stays on);
+the backfill never replaces a single value you wrote where a section belongs, it warns instead. Every token a game moves is in the ledger under that game's own source, so
 `/hcm tokens audit` shows each game's real flow.
 
 ### Verify in game

@@ -1155,6 +1155,19 @@ public final class HomeCraftManagement extends JavaPlugin {
                 switchToSection(c, path, v, spec.id(), log);
             }
         }
+        // fx2-C #9: a bare Fresh course switch (games.fresh.slots.<id>: false), which DailySettings
+        // reads as that course's enabled, is the same trap one level down.
+        String slots = root + "." + com.dierks.homecraft.config.GamesConfig.block(
+                com.dierks.homecraft.games.gen.DailyCourses.SPEC.id()) + ".slots";
+        if (c.get(slots, null) instanceof org.bukkit.configuration.ConfigurationSection) {
+            for (com.dierks.homecraft.games.gen.api.Slots.Def def : com.dierks.homecraft.games.gen.api.Slots.ALL) {
+                String path = slots + "." + def.id();
+                Object v = c.get(path, null);
+                if (v != null && !(v instanceof org.bukkit.configuration.ConfigurationSection)) {
+                    switchToSection(c, path, v, "the " + def.name() + " course", log);
+                }
+            }
+        }
     }
 
     /** Replace the scalar at {@code path} with a section holding only {@code enabled}, keeping its comments. */
@@ -1600,7 +1613,12 @@ public final class HomeCraftManagement extends JavaPlugin {
             return;
         }
 
-        java.util.List<String> added = backfillConfig(onDisk, defaults);
+        java.util.List<String> kept = new java.util.ArrayList<>();
+        java.util.List<String> added = backfillConfig(onDisk, defaults, kept);
+        for (String path : kept) { // fx2-C #9
+            getLogger().warning("Config backfill: " + path + " holds a single value where a section of settings "
+                    + "belongs - left as you wrote it; the settings under it use their shipped values.");
+        }
         if (added.isEmpty()) {
             return;
         }
@@ -1632,6 +1650,21 @@ public final class HomeCraftManagement extends JavaPlugin {
     static java.util.List<String> backfillConfig(
             org.bukkit.configuration.file.FileConfiguration current,
             org.bukkit.configuration.file.FileConfiguration defaults) {
+        return backfillConfig(current, defaults, new java.util.ArrayList<>());
+    }
+
+    /**
+     * {@link #backfillConfig(org.bukkit.configuration.file.FileConfiguration,
+     * org.bukkit.configuration.file.FileConfiguration)}, adding to {@code kept} every path where the
+     * owner has a single value and the bundled file a section (fx2-C #9). That value is never
+     * replaced by the shipped section: writing the leaves under it would swap the owner's
+     * {@code false} for the shipped {@code enabled: true}. The switches the plugin reads that way
+     * ({@code games}, {@code games.<block>}, {@code games.fresh.slots.<id>}, {@code market.sim}) are
+     * rewritten as sections by the migration first; anything else is left for the owner.
+     */
+    static java.util.List<String> backfillConfig(
+            org.bukkit.configuration.file.FileConfiguration current,
+            org.bukkit.configuration.file.FileConfiguration defaults, java.util.List<String> kept) {
         java.util.List<String> added = new java.util.ArrayList<>();
         java.util.Set<String> touchedSections = new java.util.LinkedHashSet<>();
         for (String key : defaults.getKeys(true)) {
@@ -1642,6 +1675,13 @@ public final class HomeCraftManagement extends JavaPlugin {
                 continue;
             }
             if (has(current, key)) {
+                continue;
+            }
+            String scalar = scalarAncestor(current, key);
+            if (scalar != null) {
+                if (!kept.contains(scalar)) {
+                    kept.add(scalar);
+                }
                 continue;
             }
             if ("config_revision".equals(key)) {
@@ -1931,6 +1971,25 @@ public final class HomeCraftManagement extends JavaPlugin {
      */
     private static boolean has(org.bukkit.configuration.ConfigurationSection c, String path) {
         return c.get(path, null) != null;
+    }
+
+    /**
+     * The nearest enclosing path of {@code key} that holds a single value (not a section) in
+     * {@code c}, or {@code null}: the owner wrote a value where the bundled file has a section.
+     */
+    private static String scalarAncestor(org.bukkit.configuration.ConfigurationSection c, String key) {
+        char sep = c.getRoot() == null ? '.' : c.getRoot().options().pathSeparator();
+        for (int i = key.indexOf(sep); i > 0; i = key.indexOf(sep, i + 1)) {
+            String path = key.substring(0, i);
+            Object v = c.get(path, null);
+            if (v == null) {
+                return null; // missing here: nothing further down can be the owner's
+            }
+            if (!(v instanceof org.bukkit.configuration.ConfigurationSection)) {
+                return path;
+            }
+        }
+        return null;
     }
 
     /** {@code isConfigurationSection()} that can never be answered by attached defaults. */

@@ -608,13 +608,42 @@ final class GenKit {
         /** {@code trials.fall_depth}. */
         int fallDepth = 6;
 
+        /** Another bench's clock (the cross-feature journeys: one clock for both), or {@code null}: {@link #now}. */
+        java.util.function.LongSupplier clock;
+        /** Who is online, from another bench (the journeys' world sessions), or {@code null}: {@link #people}. */
+        java.util.function.Supplier<List<Person>> peopleSource;
+        /** Where {@link #coursesChanged} is passed on to (the framework's own), besides the count. */
+        Consumer<String> onCoursesChanged = id -> {
+        };
+
         Host(long now, String... on) {
+            this(open(), now, on);
+        }
+
+        /**
+         * A host over another bench's database and clock (the cross-feature journeys: Fresh Courses,
+         * Time Trials and the Weekly Cup read and write one database, at one time).
+         */
+        Host(Database db, java.util.function.LongSupplier clock, String... on) {
+            this(new Opened(null, db), 0L, on);
+            this.clock = clock;
+        }
+
+        private record Opened(Connection connection, Database db) {
+        }
+
+        private static Opened open() {
             try {
-                connection = DriverManager.getConnection("jdbc:sqlite::memory:");
-                db = Database.open(connection, Logger.getAnonymousLogger());
+                Connection c = DriverManager.getConnection("jdbc:sqlite::memory:");
+                return new Opened(c, Database.open(c, Logger.getAnonymousLogger()));
             } catch (SQLException e) {
                 throw new IllegalStateException(e);
             }
+        }
+
+        private Host(Opened opened, long now, String... on) {
+            connection = opened.connection();
+            db = opened.db();
             dao = new GamesDao(db);
             store = new FlakyStore(GenStore.of(db));
             worlds.put(WORLD, new FakeWorld(WORLD));
@@ -653,7 +682,7 @@ final class GenKit {
 
         @Override
         public long now() {
-            return now;
+            return clock != null ? clock.getAsLong() : now;
         }
 
         @Override
@@ -720,16 +749,17 @@ final class GenKit {
         @Override
         public void coursesChanged(String gameId) {
             changed.merge(gameId, 1, Integer::sum);
+            onCoursesChanged.accept(gameId);
         }
 
         @Override
         public List<Person> people() {
-            return new ArrayList<>(people);
+            return new ArrayList<>(peopleSource != null ? peopleSource.get() : people);
         }
 
         @Override
         public boolean anyoneOnline() {
-            return !people.isEmpty();
+            return !people().isEmpty();
         }
 
         @Override

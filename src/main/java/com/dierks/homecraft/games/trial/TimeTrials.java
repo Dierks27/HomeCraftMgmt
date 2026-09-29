@@ -181,6 +181,8 @@ public final class TimeTrials implements Game {
     private final RaceMode race = new RaceMode(this);
     private final Warmups warmups = new Warmups(this);
     private final PartyRaces party = new PartyRaces(this);
+    /** WP-ADM: an admin's test runs of a Fresh Courses preview ("Play again" plays the preview again). */
+    private final PreviewTests previews = new PreviewTests();
 
     public TimeTrials(GameContext ctx) {
         this.ctx = ctx;
@@ -885,6 +887,11 @@ public final class TimeTrials implements Game {
     /** "Play again" on the result screen: the same course (a test again, for a test). */
     public void again(Player player, Result result) {
         if (result.test()) {
+            Runnable preview = previews.again(player.getUniqueId()); // WP-ADM: a preview's test, again
+            if (preview != null && player.hasPermission("hcm.games.admin")) {
+                preview.run();
+                return;
+            }
             Course c = course(result.courseId());
             if (c != null && player.hasPermission("hcm.games.admin")) {
                 startTest(player, c);
@@ -898,6 +905,7 @@ public final class TimeTrials implements Game {
 
     /** An admin's test run: any complete course, open or not; records nothing. */
     void startTest(Player player, Course c) {
+        previews.forget(player.getUniqueId()); // WP-ADM: "Play again" is this course's now
         if (!games().enabled(this)) {
             player.sendMessage(Text.of("&cTime trials are closed &7- games.enabled and games.trials.enabled must be on."));
             return;
@@ -913,6 +921,17 @@ public final class TimeTrials implements Game {
             return;
         }
         begin(player, c, true);
+    }
+
+    /**
+     * WP-ADM ({@code /hcm games gen test}): an admin's test run on a Fresh Courses preview, a course
+     * with no row that stands in its slot's spare half. The same test run as any other (its start,
+     * checkpoints, finish, clock and kit, the Dropper's practice drop offered), recording nothing;
+     * "Play again" runs {@code again}.
+     */
+    public void testPreview(Player player, Course preview, Runnable again) {
+        startTest(player, preview);
+        previews.started(player.getUniqueId(), again);
     }
 
     /** Take the player to the course's start in a world session; the run begins when they're in. */

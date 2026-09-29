@@ -360,8 +360,15 @@ public final class GamesCommand {
     }
 
     private static String inviteState(GamesService games, UUID player, String gameId) {
-        Game g = games.game(gameId);
-        String name = g != null ? g.name() : "rider".equals(gameId) ? "Ride along" : gameId; // WP-CH
+        String name = switch (gameId) { // what the invite is for, as the player knows it
+            case "trials" -> "Party races";
+            case "rider" -> "Ride along"; // WP-CH
+            case "golf" -> "Golf together"; // final gate: /hcm play invites on|off covers it
+            default -> {
+                Game g = games.game(gameId);
+                yield g != null ? g.name() : gameId;
+            }
+        };
         return "&f" + name + " " + (games.invites().accepts(player, gameId) ? "&aon" : "&7off");
     }
 
@@ -861,7 +868,7 @@ public final class GamesCommand {
             if (n == 2) {
                 match(out, last, PLAY_WORDS.toArray(new String[0]));
                 if (games != null) {
-                    playIds(out, games, last);
+                    playIds(out, games, last, sender);
                 }
             } else if (n == 3 && (args[1].equalsIgnoreCase("invites") || args[1].equalsIgnoreCase("news")
                     || args[1].equalsIgnoreCase("cup") || args[1].equalsIgnoreCase("cheers"))) {
@@ -981,10 +988,15 @@ public final class GamesCommand {
         }
     }
 
-    /** Every open game's id and every open course's id. */
-    private static void playIds(List<String> out, GamesService games, String prefix) {
+    /**
+     * Every open game's id and every open course's id. The games of chance only for a sender they are
+     * open to (the final gate's #3): a player without {@code hcm.games.chance}, or on a Take a break pause
+     * (or whose break can't be read), doesn't see them at all, as on the Games screen. The console gets all.
+     */
+    static void playIds(List<String> out, GamesService games, String prefix, CommandSender sender) {
+        boolean chance = chanceOffered(games, sender);
         for (Game g : games.games()) {
-            if (!games.enabled(g)) {
+            if (!games.enabled(g) || (g.kind().chance() && !chance)) {
                 continue;
             }
             match(out, prefix, g.id());
@@ -992,6 +1004,22 @@ public final class GamesCommand {
                 match(out, prefix, p.id());
             }
         }
+    }
+
+    /**
+     * Whether the games of chance are offered to {@code sender} now: the Games screen's rule (its Luck is
+     * OPEN), so a name the screen hides is never offered on Tab either.
+     */
+    static boolean chanceOffered(GamesService games, CommandSender sender) {
+        if (!(sender instanceof Player p)) {
+            return true;
+        }
+        if (!p.hasPermission(Breaks.PERMISSION_CHANCE)) {
+            return false;
+        }
+        Breaks breaks = games.breaks();
+        Breaks.Today today = breaks == null ? null : games.guard(null, () -> breaks.today(p.getUniqueId()), null);
+        return today != null && !today.paused(games.clock().nowMillis());
     }
 
     // ---------------------------------------------------------------------

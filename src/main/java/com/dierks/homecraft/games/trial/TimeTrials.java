@@ -735,6 +735,7 @@ public final class TimeTrials implements Game {
             case PARKOUR -> Material.FEATHER;
             case ELYTRA -> Material.ELYTRA;
             case BOAT -> Material.OAK_BOAT;
+            case DROPPER -> Material.WATER_BUCKET;
         };
     }
 
@@ -1604,6 +1605,60 @@ public final class TimeTrials implements Game {
     private static Point position(Player p, TrialRun run) {
         Entity where = run.boat != null && run.boat.isValid() ? run.boat : p;
         return point(where.getLocation());
+    }
+
+    // ---- race mode (EVENTS-DROPPER-SPEC §A.4.11, EVENTS-OWNER-DECISIONS D3-D4) ------------------
+    //
+    // The C1 contract Race Night (WP-R2) and party races (WP-R1) code against; WP-R1 builds the
+    // bodies. Until then each throws, and nothing calls them: a normal run is byte for byte unchanged.
+
+    /** What the race-mode entry points throw until WP-R1 builds them. */
+    public static final String NOT_BUILT = "not built yet";
+
+    /**
+     * Seat a racer: a {@code trials} session with ref = {@code base}'s id at the {@code grid} spot (a
+     * fresh tagged oak boat on a boat course), held until {@code link.goTick()}. The run is judged
+     * against {@code raced} (the base course from the grid spot, with its laps) but its staleness
+     * against {@code base} and the still-standing rule; at the line it calls {@code link.finished},
+     * and only when {@link RaceLink#normalRun()} also the course's normal finish. With a shared
+     * warm-up ({@link RaceLink#warmupUntil()}) the racer starts on free laps instead.
+     *
+     * @param stand where finishers wait (a viewing stand), or {@code null}: finishers go home
+     * @return why the racer can't be seated (not standing still and safe, in another game, a restart
+     *         due), or {@code null} when they are on the grid
+     */
+    public Refusal race(Player p, Course base, Course raced, Course.Spot grid, Location stand, RaceLink link) {
+        throw new UnsupportedOperationException("race mode is " + NOT_BUILT);
+    }
+
+    /** The next race: a new boat on the racer's new {@code grid} spot, held to the link's next {@code goTick}. */
+    public void regrid(Player p, Course raced, Course.Spot grid) {
+        throw new UnsupportedOperationException("race mode is " + NOT_BUILT);
+    }
+
+    /** A racer is done for this race: the boat goes, the run's own teleport takes them to the stand, the run idles. */
+    public void park(Player p) {
+        throw new UnsupportedOperationException("race mode is " + NOT_BUILT);
+    }
+
+    /** End a racer's race run: home with their things, reading {@code line} (colour codes allowed). */
+    public void endRace(UUID racer, EndReason why, String line) {
+        throw new UnsupportedOperationException("race mode is " + NOT_BUILT);
+    }
+
+    /**
+     * Hold a course for a race: new solo runs on it are refused with {@code line} until
+     * {@link #release}. {@code holder} is the race (a course is held by at most one).
+     *
+     * @return false when another holder has it
+     */
+    public boolean reserve(String courseId, Object holder, String line) {
+        throw new UnsupportedOperationException("race mode is " + NOT_BUILT);
+    }
+
+    /** Let the course go again (only its own holder can). */
+    public void release(String courseId, Object holder) {
+        throw new UnsupportedOperationException("race mode is " + NOT_BUILT);
     }
 
     private static Point point(Location l) {

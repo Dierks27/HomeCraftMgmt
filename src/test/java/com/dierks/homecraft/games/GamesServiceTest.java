@@ -197,6 +197,20 @@ class GamesServiceTest {
     }
 
     @Test
+    void everyPartyIsSharedAcrossTheGamesAndDroppedWhenTheyStop() {
+        // EVENTS-OWNER-DECISIONS D4: party races and golf together share one registry
+        games.start();
+        com.dierks.homecraft.games.trial.PartyLobby lobby = games.parties().create(
+                com.dierks.homecraft.games.trial.PartyLobby.Kind.RACE, "river_run", alex.id, 8);
+        assertNotNull(lobby, "Alex hosts a party race");
+        assertNull(games.parties().create(com.dierks.homecraft.games.trial.PartyLobby.Kind.GOLF, "meadow",
+                alex.id, 4), "and can't host golf together at the same time: one party a player");
+        games.stop();
+        assertEquals(0, games.parties().size(), "a stop drops every party, like the invites");
+        assertNull(games.parties().of(alex.id), "and Alex is in none");
+    }
+
+    @Test
     void theGamesScreenStaysShutWhileTheGamesAreOffOrElsewhere() {
         host.config = GamesKit.config(GamesKit.common(false, 100, 600, 6));
         games.openGamesScreen(alex.player, null);

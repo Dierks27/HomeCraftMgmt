@@ -12,6 +12,10 @@ import java.util.UUID;
  * layout edit can't change), where the countdown is, the {@link Progress} once the clock runs,
  * and the few server things a run holds — its boat, the teleport it is waiting for.
  *
+ * <p>A run may begin with one warm-up (owner decision D3): {@link #warmup} is set while it lasts,
+ * and nothing done in it is ever recorded. The flags start false, so a run that never warms up is
+ * exactly the run it always was.
+ *
  * <p>Main thread only; {@link TimeTrials} owns every instance.
  */
 final class TrialRun {
@@ -60,6 +64,24 @@ final class TrialRun {
     /** Sky Rings: the "open your wings" tip was shown (once per run, at the first fall-reset). */
     boolean wingsTip;
 
+    // ---- the warm-up (owner decision D3; C1 contract, WP-R1 and WP-D play it) ------------------
+
+    /**
+     * The run is in its warm-up: free laps (or the Dropper's practice drop), checkpoints still guiding
+     * and Back to checkpoint working, but NEVER timed for the record, submitted, paid or counted for
+     * the Weekly Cup. The action bar says "Warm-up 2:14 left - not counted".
+     */
+    boolean warmup;
+    /** The run has had its one warm-up: a run gets at most one ({@link #beginWarmup}). */
+    boolean warmupUsed;
+    /**
+     * The server tick the warm-up ends at (then the player goes to the start and the normal 3-2-1
+     * begins), or 0 for no time limit (the Dropper's practice drop ends on its first splash or bonk).
+     */
+    long warmupEnds;
+    /** A race's shared warm-up: the racer tapped "Ready" ({@code RaceLink#ready}). */
+    boolean warmupReady;
+
     TrialRun(UUID player, Course course, boolean test, int countdown) {
         this.player = player;
         this.course = course;
@@ -71,6 +93,41 @@ final class TrialRun {
     /** Whether the clock is running. */
     boolean running() {
         return phase == Phase.RUNNING && progress != null;
+    }
+
+    /**
+     * Start the run's one warm-up, ending at server tick {@code endsAt} (0: no time limit). False,
+     * and nothing changes, when the run already had one (at most one per run) or its clock is running.
+     */
+    boolean beginWarmup(long endsAt) {
+        if (warmupUsed || phase != Phase.COUNTDOWN) {
+            return false;
+        }
+        warmup = true;
+        warmupUsed = true;
+        warmupEnds = Math.max(0, endsAt);
+        warmupReady = false;
+        return true;
+    }
+
+    /** End the warm-up ("Start timed run", or its time ran out); the run can't have another. */
+    void endWarmup() {
+        warmup = false;
+        warmupEnds = 0;
+        warmupReady = false;
+    }
+
+    /** Whether the warm-up's time ran out at server tick {@code tick} (never for one without a limit). */
+    boolean warmupOver(long tick) {
+        return warmup && warmupEnds > 0 && tick >= warmupEnds;
+    }
+
+    /**
+     * Whether a finish now may be recorded at all: not in a warm-up. (A test, a void and a stale
+     * course are judged by {@code FairPlay.judge} as before.)
+     */
+    boolean timed() {
+        return !warmup;
     }
 
     /** Milliseconds on the clock at {@code nanos}. */

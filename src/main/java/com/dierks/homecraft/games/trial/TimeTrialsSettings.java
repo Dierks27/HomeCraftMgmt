@@ -22,17 +22,37 @@ import java.util.Map;
  * @param dailyCap the most tokens the courses pay a player a day
  * @param fallDepth parkour: this far below the checkpoints sends you back to the last one
  * @param minSeconds a run faster than this never counts
+ * @param warmupSeconds the warm-up a run may start with (owner decision D3): "Warm up (3:00)" or
+ *                      "Go straight to the timed run"; 0 turns warm-ups off (and the Dropper's
+ *                      practice drop with them)
+ * @param partyMax the most racers in a party race (D4, "Race with friends"), 2 to
+ *                 {@link PartyLobby.Kind#limit()}
  */
 public record TimeTrialsSettings(boolean enabled, Map<String, Integer> firstClear, int weeklyBestBonus,
-                                 int courseOfWeekBonus, int dailyCap, int fallDepth, int minSeconds) {
+                                 int courseOfWeekBonus, int dailyCap, int fallDepth, int minSeconds,
+                                 int warmupSeconds, int partyMax) {
 
     /** The leaves under {@code games.trials}, in config order. */
     public static final List<String> KEYS = List.of("enabled", "first_clear.easy", "first_clear.medium",
             "first_clear.hard", "first_clear.extreme", "weekly_best_bonus", "course_of_week_bonus",
-            "daily_cap", "fall_depth", "min_seconds");
+            "daily_cap", "fall_depth", "min_seconds", "warmup_seconds", "party_max");
+
+    /** The shipped warm-up: 3 minutes. */
+    public static final int WARMUP_SECONDS = 180;
+    /** The shipped party size: 8 racers. */
+    public static final int PARTY_MAX = 8;
 
     public TimeTrialsSettings {
         firstClear = Collections.unmodifiableMap(new LinkedHashMap<>(firstClear));
+        warmupSeconds = Math.max(0, Math.min(600, warmupSeconds));
+        partyMax = Math.max(PartyLobby.MIN_PLAYERS, Math.min(PartyLobby.Kind.RACE.limit(), partyMax));
+    }
+
+    /** The settings before warm-ups and party races: those at their shipped values. */
+    public TimeTrialsSettings(boolean enabled, Map<String, Integer> firstClear, int weeklyBestBonus,
+                              int courseOfWeekBonus, int dailyCap, int fallDepth, int minSeconds) {
+        this(enabled, firstClear, weeklyBestBonus, courseOfWeekBonus, dailyCap, fallDepth, minSeconds,
+                WARMUP_SECONDS, PARTY_MAX);
     }
 
     /** The shipped settings. */
@@ -44,7 +64,9 @@ public record TimeTrialsSettings(boolean enabled, Map<String, Integer> firstClea
                 2,
                 4,
                 6,
-                5);
+                5,
+                WARMUP_SECONDS,
+                PARTY_MAX);
     }
 
     /** Read {@code games.trials} over {@code d}; never throws. */
@@ -56,8 +78,15 @@ public record TimeTrialsSettings(boolean enabled, Map<String, Integer> firstClea
         int dailyCap = n.whole("daily_cap", d.dailyCap(), 0, 1000);
         int fallDepth = n.whole("fall_depth", d.fallDepth(), 1, 64);
         int minSeconds = n.whole("min_seconds", d.minSeconds(), 0, 3600);
+        int warmupSeconds = n.whole("warmup_seconds", d.warmupSeconds(), 0, 600);
+        int partyMax = n.whole("party_max", d.partyMax(), PartyLobby.MIN_PLAYERS, PartyLobby.Kind.RACE.limit());
         return new TimeTrialsSettings(enabled, firstClear, weeklyBestBonus,
-                courseOfWeekBonus, dailyCap, fallDepth, minSeconds);
+                courseOfWeekBonus, dailyCap, fallDepth, minSeconds, warmupSeconds, partyMax);
+    }
+
+    /** Whether a run may start with a warm-up (and a dropper with a practice drop): {@code warmup_seconds > 0}. */
+    public boolean warmupsOn() {
+        return warmupSeconds > 0;
     }
 
     /** The first-clear reward for a tier ({@code easy}...), 0 for an unknown one. */

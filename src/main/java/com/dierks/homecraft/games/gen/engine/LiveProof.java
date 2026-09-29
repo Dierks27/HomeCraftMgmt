@@ -1,10 +1,12 @@
 package com.dierks.homecraft.games.gen.engine;
 
 import com.dierks.homecraft.games.gen.api.Putt;
+import com.dierks.homecraft.games.gen.dropper.DropMarks;
 import com.dierks.homecraft.games.golf.BallPhysics;
 import com.dierks.homecraft.games.golf.GolfCourse;
 import com.dierks.homecraft.games.golf.GolfShot;
 import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.TrialKind;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -74,6 +76,19 @@ public final class LiveProof {
      * span the track, so only the start is checked). Empty = fine.
      */
     public static List<String> structure(Course c, Solid solid) {
+        return structure(c, solid, null);
+    }
+
+    /**
+     * {@link #structure(Course, Solid)} with a way to see water (EVENTS-DROPPER-SPEC §B.1.9, the C1
+     * hook): a dropper is proven by a solid block under every ledge and still water at every pool's
+     * surface centre ({@link DropMarks#probes}). Without {@code water} (a caller that can't see it) a
+     * dropper gets the start check only, as every other kind. For every other kind {@code water} is
+     * ignored.
+     *
+     * @param water whether block (x, y, z) is water, or {@code null}
+     */
+    public static List<String> structure(Course c, Solid solid, Solid water) {
         List<String> out = new ArrayList<>();
         if (c == null || c.start() == null) {
             out.add("it has no start");
@@ -82,12 +97,25 @@ public final class LiveProof {
         if (!under(solid, c.start().x(), c.start().y(), c.start().z())) {
             out.add("nothing solid under the start");
         }
-        if (c.kind() == com.dierks.homecraft.games.trial.TrialKind.PARKOUR) {
+        if (c.kind() == TrialKind.PARKOUR) {
             int i = 0;
             for (Course.Mark m : c.targets()) {
                 i++;
                 if (!under(solid, m.x(), m.y(), m.z())) {
                     out.add("nothing solid under " + (i > c.checkpoints().size() ? "the finish" : "checkpoint " + i));
+                }
+            }
+        }
+        if (c.kind() == TrialKind.DROPPER && water != null) {
+            int level = 0;
+            for (DropMarks.Probe p : DropMarks.probes(c)) {
+                if (p.water()) {
+                    level++;
+                    if (!water.at(p.x(), p.y(), p.z())) {
+                        out.add("level " + level + "'s pool has no water at its centre");
+                    }
+                } else if (!solid.at(p.x(), p.y(), p.z())) {
+                    out.add("nothing solid under level " + (level + 1) + "'s ledge");
                 }
             }
         }

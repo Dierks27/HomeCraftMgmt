@@ -11,6 +11,16 @@ Time Trials would play a dropper as parkour.
 
 ## 1. Contracts (C1)
 
+**Done in C1 (games/ev):** everything in this section. Glass, the stained glass colours and the sea
+lantern are in `Palette.ALLOWED` (`Palette.GLASS_AND_LIGHTS`), `Palette.POOL_WATER` is its own set,
+and `DropBlocks.PENDING_C1` / `DropBlocks.POOL_WATER` now point at them. `TrialKind.DROPPER` exists
+(refused by `/hcm games course create`, icon WATER_BUCKET), so `DropperPlanner.KIND` is DROPPER and
+the golden hashes are re-pinned (ALGO stays 1). `LiveProof.structure(course, solid, water)` already
+checks `DropMarks.probes` for a dropper; WP-D only has to pass it a water predicate from
+`GenService.structure`. `TrialRun` has the warm-up flags the practice drop uses (§5), and
+`games.trials.warmup_seconds` (180) is parsed (`TimeTrialsSettings.warmupSeconds()`, `warmupsOn()`).
+The slot rows (§2) are still WP-D's: they come with their config rows and the planner's registration.
+
 - **`gen/api/Palette`**
   - Add `minecraft:glass`, the stained glass `red`, `orange`, `yellow`, `blue`, `purple`, `pink` and
     `light_blue`, and `minecraft:sea_lantern` to `ALLOWED`. This is exactly `DropBlocks.PENDING_C1`.

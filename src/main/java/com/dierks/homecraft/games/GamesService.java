@@ -3,6 +3,7 @@ package com.dierks.homecraft.games;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.GamesConfig;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.trial.Parties;
 import com.dierks.homecraft.games.world.Session;
 import com.dierks.homecraft.games.world.WorldSessions;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -83,6 +84,8 @@ public final class GamesService {
     private final Scores scores;
     private final WorldSessions sessions;
     private final Invites invites;
+    /** Every play-together party (EVENTS-OWNER-DECISIONS D4): one per player across the games. */
+    private final Parties parties = new Parties();
     private final Featured featured;
     /** Who hears about skill-game finishes (quests, achievements); {@link GameProgress#NONE} until registered. */
     private volatile GameProgress progress = GameProgress.NONE;
@@ -212,6 +215,7 @@ public final class GamesService {
             stopGame(g);
         }
         invites.clear();
+        parties.clear();
         featured.forget();
         // Anyone still in a session ends it the right way for a stop, and the guards come off.
         quietly(sessions::stop);
@@ -610,6 +614,16 @@ public final class GamesService {
 
     public Invites invites() {
         return invites;
+    }
+
+    /**
+     * The play-together parties (EVENTS-OWNER-DECISIONS D4): party races and golf together share
+     * this one registry, so a player is in at most one party at a time. The games that run them
+     * add and remove players themselves (a quit is theirs to see first: it is a DNF); every party
+     * is dropped when the games stop.
+     */
+    public Parties parties() {
+        return parties;
     }
 
     public Featured featured() {

@@ -135,17 +135,19 @@ class DropperPlannerTest {
 
     @Test
     void threeSeedsOfEachMixMakeExactlyThePinnedLayouts() {
-        // Pinned with the stand-in kind (PARKOUR); TrialKind.DROPPER changes every hash: re-pin then (WIRING.md).
+        // Re-pinned in C1 for TrialKind.DROPPER (the kind is part of the plan hash); ALGO stays 1, since
+        // no dropper had been built with the stand-in kind (WIRING.md §1).
         Map<String, List<String>> golden = Map.of(
-                "EEE", List.of("631609650161", "aad108267877", "a63067fc9a7a"),
-                "EEMMH", List.of("d8c0096019a5", "e7e007aa3e80", "953ced76fe2e"),
-                "HHHHH", List.of("b2b7ff48a76b", "c2440367f760", "e4c40aed7c99"));
-        for (Map.Entry<String, List<String>> e : golden.entrySet()) {
-            for (int n = 0; n < 3; n++) {
-                assertEquals(e.getValue().get(n), DropperFixtures.plan(e.getKey(), n).hash(), e.getKey() + " seed " + n
-                        + ": a change to what the planner makes for a seed bumps ALGO and re-pins these");
-            }
+                "EEE", List.of("ae04f1bbb4f0", "001bcd1cdc57", "32bc511dd1f2"),
+                "EEMMH", List.of("85276ccc6388", "2bf1c8ef5950", "6587e2722bd9"),
+                "HHHHH", List.of("38d96b8dac98", "fd9a863103f6", "b24172a9cb4a"));
+        Map<String, List<String>> made = new java.util.TreeMap<>();
+        for (String mix : golden.keySet()) {
+            made.put(mix, List.of(DropperFixtures.plan(mix, 0).hash(), DropperFixtures.plan(mix, 1).hash(),
+                    DropperFixtures.plan(mix, 2).hash()));
         }
+        assertEquals(new java.util.TreeMap<>(golden), made,
+                "a change to what the planner makes for a seed bumps ALGO and re-pins these");
     }
 
     @Test
@@ -369,7 +371,9 @@ class DropperPlannerTest {
         Course c = DropperFixtures.course(p);
         PlannedTrial t = (PlannedTrial) p.course();
         assertEquals("fresh_dropper", c.id(), "the row is the slot");
-        assertEquals(DropperPlanner.KIND, c.kind(), "a dropper kind (PARKOUR stands in until the wiring)");
+        assertEquals(DropperPlanner.KIND, c.kind(), "the planner's kind");
+        assertEquals(com.dierks.homecraft.games.trial.TrialKind.DROPPER, c.kind(),
+                "a dropper row (C1 added TrialKind.DROPPER, so the stand-in is gone)");
         assertEquals(DropRules.tier("EEMMH"), c.tier(), "the mix's rounded mean: medium");
         assertEquals(8, c.checkpoints().size(), "pool, ledge four times: at most 8 for 5 levels");
         assertEquals(5, DropMarks.levels(c), "five levels");

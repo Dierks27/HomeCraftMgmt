@@ -1845,6 +1845,11 @@ games:
     fall_depth: 6
     # A run faster than this many seconds doesn't count (a course can set its own).
     min_seconds: 5
+    # Starting a course offers "Warm up (3:00)" or "Go straight to the timed run": free laps first,
+    # never timed or rewarded (a Dropper offers one practice drop). Seconds; 0 = no warm-ups.
+    warmup_seconds: 180
+    # "Race with friends": the most racers in one party race on a course (2-12).
+    party_max: 8
   # ---- golf ----
   # Mini golf: your Mini is the ball. Courses are built with /hcm games golf.
   golf:

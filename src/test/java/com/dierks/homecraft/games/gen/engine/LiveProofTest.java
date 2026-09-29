@@ -105,4 +105,34 @@ class LiveProofTest {
         w.blocks.remove(GenKit.pos(30, 99, 10));
         assertEquals(List.of("hole 1's cup block is missing"), LiveProof.structure(golf, solid), "a missing cup");
     }
+
+    @Test
+    void aDropperWantsSolidUnderEveryLedgeAndWaterInEveryPool() {
+        // EVENTS-DROPPER-SPEC §B.1.9, the C1 hook: two levels, easy pools (11 a side: radius 6)
+        FakeWorld w = new FakeWorld("games");
+        Course.Spot ledge1 = new Course.Spot(10.5, 216, 3.5, 0f, 30f);
+        Course.Mark pool1 = new Course.Mark(10.5, 184 - 5.5, 8.5, 6);   // surface at y 184
+        Course.Mark ledge2 = new Course.Mark(22.5, 216, 3.5, 2.5);
+        Course.Mark pool2 = new Course.Mark(22.5, 176 - 5.5, 8.5, 6);   // surface at y 176
+        Course drop = new Course("fresh_dropper", TrialKind.DROPPER, "Dropper", Tier.EASY, "games", ledge1,
+                List.of(pool1, ledge2), pool2, 160.0, null, true, false, 1);
+        w.put(10, 215, 3, "minecraft:lime_concrete");
+        w.put(22, 215, 3, "minecraft:lime_concrete");
+        w.put(10, 183, 8, "minecraft:water[level=0]");
+        w.put(22, 175, 8, "minecraft:water[level=0]");
+        LiveProof.Solid solid = (x, y, z) -> w.at(x, y, z) != null;
+        LiveProof.Solid water = (x, y, z) -> w.at(x, y, z) != null && w.at(x, y, z).startsWith("minecraft:water");
+        assertEquals(List.of(), LiveProof.structure(drop, solid, water), "both ledges and both pools stand");
+        w.blocks.remove(GenKit.pos(22, 175, 8));
+        w.blocks.remove(GenKit.pos(22, 215, 3));
+        assertEquals(List.of("nothing solid under level 2's ledge", "level 2's pool has no water at its centre"),
+                LiveProof.structure(drop, solid, water), "a missing ledge and a drained pool, by level");
+        assertEquals(List.of(), LiveProof.structure(drop, solid),
+                "without a way to see water a dropper gets the start check only, as before");
+        Course c = new Course("fresh_parkour_easy", TrialKind.PARKOUR, "Easy Parkour", Tier.EASY, "games",
+                new Course.Spot(10.5, 216, 3.5, 0f, 0f), List.of(), new Course.Mark(10.5, 216, 3.5, 2), null, null,
+                true, false, 1);
+        assertEquals(LiveProof.structure(c, solid), LiveProof.structure(c, solid, water),
+                "every other kind ignores the water check");
+    }
 }

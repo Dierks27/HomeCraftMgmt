@@ -57,6 +57,8 @@ final class CourseAdmin implements GameAdmin {
             "enable", "disable", "info", "tp", "test", "feature", "delete");
     /** What can follow a course id when Fresh Courses made the course: looking, trying, featuring. */
     static final List<String> DAILY_VERBS = List.of("info", "tp", "test", "feature");
+    /** Why {@code create <id> dropper} is refused (EVENTS-DROPPER-SPEC §B.1.2). */
+    static final String HAND_MADE_DROPPER = "Droppers are made by Fresh Courses; keep one to make it permanent.";
 
     private final TimeTrials trials;
 
@@ -140,6 +142,10 @@ final class CourseAdmin implements GameAdmin {
         TrialKind kind = TrialKind.of(args[2]);
         if (kind == null) {
             sender.sendMessage(Text.of("&cA course is parkour, elytra or boat."));
+            return;
+        }
+        if (!kind.handMade()) {
+            sender.sendMessage(Text.of("&c" + HAND_MADE_DROPPER));
             return;
         }
         Tier tier = args.length >= 4 ? Tier.of(args[3]) : Tier.EASY;
@@ -539,7 +545,7 @@ final class CourseAdmin implements GameAdmin {
         }
         if (args[0].equalsIgnoreCase("create")) {
             if (n == 3) {
-                match(out, last, TrialKind.ids().toArray(new String[0]));
+                match(out, last, TrialKind.handMadeIds().toArray(new String[0]));
             } else if (n == 4) {
                 match(out, last, Tier.ids().toArray(new String[0]));
             }

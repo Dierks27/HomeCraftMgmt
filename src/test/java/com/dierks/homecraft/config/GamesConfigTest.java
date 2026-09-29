@@ -277,6 +277,8 @@ class GamesConfigTest {
         clamps.put("fresh.budget.blocks_per_tick", 0);
         clamps.put("fresh.stars.gold.hard", 0.5);
         clamps.put("fresh.rewards.clear_daily.fresh_tiny_golf", 500);
+        clamps.put("trials.warmup_seconds", 9_999);
+        clamps.put("trials.party_max", 40);
         clamps.put("race_night.max_racers", 40);
         clamps.put("race_night.min_racers", 20);
         clamps.put("race_night.prizes", List.of(5, 3, 20));
@@ -314,6 +316,11 @@ class GamesConfigTest {
         assertEquals(3, rn.prizeEventsPerWeek(), "at most 3 prize nights a week");
         assertEquals(180, rn.warmupSeconds(), "a shared 3-minute warm-up before the grid");
         assertTrue(rn.seasonOn(), "a monthly season board");
+        com.dierks.homecraft.games.trial.TimeTrialsSettings trials =
+                shipped.settings(com.dierks.homecraft.games.trial.TimeTrials.SPEC);
+        assertEquals(180, trials.warmupSeconds(), "Warm up (3:00) before a timed run (D3)");
+        assertTrue(trials.warmupsOn(), "warm-ups ship on");
+        assertEquals(8, trials.partyMax(), "a party race holds up to 8 (D4)");
         com.dierks.homecraft.games.arena.FallingFloorsSettings ff =
                 shipped.settings(com.dierks.homecraft.games.arena.FallingFloors.SPEC);
         assertFalse(ff.enabled(), "Falling Floors ships off");

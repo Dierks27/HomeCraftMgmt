@@ -56,9 +56,9 @@ import java.util.Set;
  * <p><b>Work</b> is counted in simulated ticks (witnesses and pilots), never time, so every host makes
  * the same plan. A typical plan needs under 50k; the engine's budget is {@value #WORK_BUDGET}.
  *
- * <p><b>The course kind.</b> The row is a {@code dropper} trial ({@code TrialKind.DROPPER}, which the
- * wiring adds). Until that constant exists the course carries {@link TrialKind#PARKOUR} as a stand-in
- * ({@link #KIND}); the golden hashes are pinned for the stand-in and re-pinned by the wiring.
+ * <p><b>The course kind.</b> The row is a {@code dropper} trial ({@link TrialKind#DROPPER}, added by
+ * the C1 contracts, which re-pinned the golden hashes). {@link #KIND} still falls back to
+ * {@link TrialKind#PARKOUR} if that constant is ever missing, so the package compiles on its own.
  *
  * <p>Pure: no Bukkit, no clock, no {@code java.util.Random}.
  */
@@ -80,7 +80,7 @@ public final class DropperPlanner implements Planner {
     public static final int DECOY_DRAWS = 12;
     /** The fewest solid blocks a layer keeps once its openings are cut. */
     public static final int MIN_SOLID = 12;
-    /** The course's kind: DROPPER once the wiring adds it; PARKOUR as the stand-in until then. */
+    /** The course's kind: {@link TrialKind#DROPPER} (PARKOUR only if that were ever missing). */
     public static final TrialKind KIND = TrialKind.of(DropperSlots.DROPPER) != null
             ? TrialKind.of(DropperSlots.DROPPER) : TrialKind.PARKOUR;
     /** The start spot looks this far down into the shaft. */

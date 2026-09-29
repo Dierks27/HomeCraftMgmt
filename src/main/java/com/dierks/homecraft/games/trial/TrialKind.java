@@ -7,13 +7,17 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * The three kinds of course (spec §11): what you race in, how fast anyone could possibly go
- * between two checkpoints, how big a checkpoint is unless the builder says otherwise, and which
- * ledger line its rewards are written under — so {@code /hcm tokens audit} shows parkour, elytra
- * and boat courses apart.
+ * The kinds of course (spec §11): what you race in, how fast anyone could possibly go between two
+ * checkpoints, how big a checkpoint is unless the builder says otherwise, and which ledger line its
+ * rewards are written under — so {@code /hcm tokens audit} shows parkour, elytra, boat and dropper
+ * courses apart.
  *
  * <p>The top speeds are deliberately generous (a sprint-jump is about 7 blocks a second, a boat
  * on blue ice about 70): they catch a teleport or a hacked client, never a good run.
+ *
+ * <p>{@link #DROPPER} (EVENTS-DROPPER-SPEC §B.1.7) is made only by Fresh Courses: a hand-made one is
+ * refused ({@link #handMade()}), and a kept one is an ordinary row whose geometry isn't edited. Its
+ * levels are encoded in the ordinary marks (ledge, pool, ledge, ...), so no course field changes.
  */
 public enum TrialKind {
     PARKOUR("parkour", "Parkour", 14, 1.5, TokenService.Source.GAMES_PARKOUR,
@@ -27,7 +31,12 @@ public enum TrialKind {
     BOAT("boat", "Boat", 75, 3.0, TokenService.Source.GAMES_BOAT,
             List.of("Row from the start to the finish.",
                     "Pass every checkpoint in order.",
-                    "Getting out takes you back to your last checkpoint."));
+                    "Getting out takes you back to your last checkpoint.")),
+    /** A Fresh Courses dropper: terminal fall is 78.4 blocks a second, so 80 catches only a teleport. */
+    DROPPER("dropper", "Dropper", 80, 2.5, TokenService.Source.GAMES_DROPPER,
+            List.of("Step off the ledge.",
+                    "Steer through the holes.",
+                    "Land in the water to clear a level."));
 
     private final String id;
     private final String label;
@@ -95,6 +104,22 @@ public enum TrialKind {
         List<String> out = new ArrayList<>();
         for (TrialKind k : values()) {
             out.add(k.id);
+        }
+        return out;
+    }
+
+    /** Whether an admin may build one by hand ({@code /hcm games course create}): every kind but the dropper. */
+    public boolean handMade() {
+        return this != DROPPER;
+    }
+
+    /** The words of the kinds an admin may build by hand ({@code parkour}, {@code elytra}, {@code boat}). */
+    public static List<String> handMadeIds() {
+        List<String> out = new ArrayList<>();
+        for (TrialKind k : values()) {
+            if (k.handMade()) {
+                out.add(k.id);
+            }
         }
         return out;
     }

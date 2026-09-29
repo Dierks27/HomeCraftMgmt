@@ -707,8 +707,9 @@ start and the normal 3-2-1 begins; that run is timed and counted as usual. A run
 warm-up. An admin's test run never warms up, and the Dropper has its own practice drop instead.
 
 **Race with friends (party races).** Any open time-trial course (hand-built, Fresh or Classic;
-parkour, elytra or boat) can be raced together, any time, free and just for fun. Click **Race with
-friends** on the course screen, or type `/hcm play race <course>`, to open your party. Anyone in it
+parkour, elytra or boat, never a Dropper) can be raced together, any time, free and just for fun.
+Click **Race with friends** on the course screen (bottom row, left of the way out; the Weekly Cup's
+item is right of it), or type `/hcm play race <course>`, to open your party. Anyone in it
 can invite through the usual invites ([Accept] on Java, `/hcm play accept` on Bedrock; the 30 s
 cooldown stays, and `/hcm play invites off` turns party invites off too), up to `party_max`. The
 party screen shows who's in and who's ready. Only the host starts, and the host chooses whether

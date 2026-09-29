@@ -79,9 +79,13 @@ final class Warmups {
         }
     }
 
-    /** The run just began at the start: its warm-up, if the player chose one. */
+    /**
+     * The run just began at the start: its warm-up, if the player chose one and the course offers
+     * one now (never a Dropper, whose practice drop plays that part, whatever choice was left over).
+     */
     void begin(Player p, TrialRun run) {
-        if (!wanted.remove(p.getUniqueId()) || run.test || run.race != null) {
+        if (!wanted.remove(p.getUniqueId()) || run.test || run.race != null
+                || !Warmup.offered(trials.settings(), run.test, run.course.kind())) {
             return;
         }
         int seconds = trials.settings().warmupSeconds();

@@ -26,7 +26,7 @@ import java.util.UUID;
  * off on arrival) leaves the group, and the others are told. A round alone never starts while its
  * player is still listed in a group: they leave it first, so it never waits for them.
  *
- * <p><b>Nobody is waited for for ever.</b> The first ball of a hole in starts the hole clock
+ * <p><b>Nobody is waited for forever.</b> The first ball of a hole in starts the hole clock
  * ({@value GolfGroup#HOLE_CLOCK_SECONDS} seconds, on the action bar of anyone still out and on the
  * shared card); when it runs out, every ball still out is picked up at the course's pick-up score
  * (par + {@code max_over_par}), exactly as if the strokes had reached it.

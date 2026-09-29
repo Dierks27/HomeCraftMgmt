@@ -3175,7 +3175,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (pv == null) {
             return PreviewRun.refused("&cNo preview yet - /hcm games gen preview " + slotId + " first");
         }
-        if (!(pv.plan().course() instanceof PlannedTrial)) {
+        if (s.def.golf() || !(pv.plan().course() instanceof PlannedTrial)) { // no golf test round exists (yet)
             return PreviewRun.refused("&cWalk it with /hcm games gen tp " + slotId + " idle - golf previews can't be"
                     + " test-played yet.");
         }

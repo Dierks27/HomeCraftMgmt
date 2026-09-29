@@ -319,16 +319,30 @@ public final class RideAlong {
             }
 
             @Override
-            public void noPush(Player p, boolean on) {
+            public void noPush(UUID id, String name, boolean on) {
                 NoPush np = t.games().noPush();
                 if (np == null) {
                     return;
                 }
                 if (on) {
-                    np.on(p);
+                    np.on(id, name);
                 } else {
-                    np.off(p);
+                    np.off(id, name);
                 }
+            }
+
+            @Override
+            public void collidable(UUID id, boolean on) {
+                Player p = online(id);
+                if (p != null) {
+                    p.setCollidable(on);
+                }
+            }
+
+            @Override
+            public Location at(UUID id) {
+                Player p = online(id);
+                return p == null ? null : p.getLocation();
             }
 
             @Override

@@ -136,10 +136,16 @@ class RidersTest {
             return riding.contains(p.getUniqueId());
         }
 
+        /** Whether the session's own teleports work (a chunk that won't load, say). */
+        boolean teleportOk = true;
+
         @Override
         public boolean teleport(Player p, Location at) {
             teleports.add(p.getName() + "@" + (int) at.getX());
-            return true;
+            if (teleportOk) {
+                where.put(p.getUniqueId(), at.clone());
+            }
+            return teleportOk;
         }
 
         @Override
@@ -177,12 +183,31 @@ class RidersTest {
         }
 
         @Override
-        public void noPush(Player p, boolean on) {
+        public void noPush(UUID id, String name, boolean on) {
             if (on) {
-                noPush.add(p.getUniqueId());
+                noPush.add(id);
             } else {
-                noPush.remove(p.getUniqueId());
+                noPush.remove(id);
             }
+        }
+
+        /** Who can't be pushed (or collide with a racing boat) now. */
+        final Set<UUID> notCollidable = new HashSet<>();
+        /** Where each player stands. */
+        final Map<UUID, Location> where = new HashMap<>();
+
+        @Override
+        public void collidable(UUID id, boolean on) {
+            if (on) {
+                notCollidable.remove(id);
+            } else {
+                notCollidable.add(id);
+            }
+        }
+
+        @Override
+        public Location at(UUID id) {
+            return where.get(id);
         }
 
         @Override
@@ -367,5 +392,57 @@ class RidersTest {
         riders.stop(); // Time Trials stopping: the framework ends the sessions
         assertTrue(riders.rides().isEmpty(), "every ride forgotten");
         assertFalse(WorldEntities.mayEnter(dad.id, kid.id), "and the back seat closed");
+    }
+    @Test
+    void theRiderIsOffTheNoPushTeamAndCollidableAgainOnEveryEndOfTheRide() {
+        riding();
+        assertTrue(port.noPush.contains(kid.id), "on the no-push team for the ride");
+        assertTrue(port.notCollidable.contains(kid.id), "and not collidable: a racing boat can't hit them (#4)");
+        riders.sessionEnded(dad.id); // Dad finishes: the ride is over and the rider is sent home
+        riders.sessionEnded(kid.id); // then the framework ends the rider's own session
+        assertFalse(port.noPush.contains(kid.id), "off the no-push team after the driver's finish (#2)");
+        assertFalse(port.notCollidable.contains(kid.id), "collidable again");
+        assertFalse(riders.shielded(kid.id), "forgotten");
+
+        riding();
+        riders.stop(); // Time Trials stopping
+        assertFalse(port.noPush.contains(kid.id), "off the no-push team when Time Trials stops (#2)");
+        assertFalse(port.notCollidable.contains(kid.id), "collidable again");
+
+        riding();
+        riders.toClub(dad.id, ClubVisits.Kind.PARTY);
+        assertFalse(port.noPush.contains(kid.id) || port.notCollidable.contains(kid.id),
+                "handed to the Clubhouse (which puts them on its own team)");
+
+        riding();
+        port.online.remove(dad.id); // Dad disconnects
+        riders.second();
+        assertFalse(port.noPush.contains(kid.id) || port.notCollidable.contains(kid.id), "the driver's quit");
+
+        port.online.put(dad.id, dad.player);
+        riding();
+        riders.sessionEnded(kid.id); // their own Leave
+        assertFalse(port.noPush.contains(kid.id) || port.notCollidable.contains(kid.id), "their own Leave");
+    }
+
+    @Test
+    void aRiderOffTheBoatIsKeptByTheirParkedDriverEvenWhenATeleportFailed() {
+        riding();
+        dad.vehicle = null; // Dad is parked on the stand: his boat is gone
+        Location stand = new Location(null, 5, 70, 5);
+        port.where.put(dad.id, stand);
+        port.teleportOk = false;
+        riders.follow(dad.player, stand); // onto the stand with him... but the teleport failed
+        port.where.put(kid.id, new Location(null, 60, 65, 0)); // still on the track
+        port.teleportOk = true;
+        riders.second();
+        assertEquals(5, port.where.get(kid.id).getX(), 1e-9, "brought to Dad on the stand, off the track");
+        int before = port.teleports.size();
+        port.where.put(kid.id, new Location(null, 7, 70, 6)); // a few steps away: fine
+        riders.second();
+        assertEquals(before, port.teleports.size(), "within " + Riders.FOLLOW_RADIUS + " blocks: left alone");
+        port.where.put(kid.id, new Location(null, 30, 70, 5)); // wandered off the stand
+        riders.second();
+        assertEquals(5, port.where.get(kid.id).getX(), 1e-9, "brought back by Dad");
     }
 }

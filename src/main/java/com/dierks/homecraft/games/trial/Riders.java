@@ -83,7 +83,17 @@ public final class Riders {
         /** Allow (or, with {@code null}, stop allowing) {@code rider} into {@code driver}'s game boat. */
         void passenger(UUID driver, UUID rider);
 
-        void noPush(Player p, boolean on);
+        /** On (or off) the no-push team, by id: a rider who already left comes off too. */
+        void noPush(UUID id, String name, boolean on);
+
+        /**
+         * Whether the player can be pushed (and so collide with a racing boat): off for a rider for the
+         * whole ride, back on at every end (the Clubhouse review, #4). Nothing for a player gone.
+         */
+        void collidable(UUID id, boolean on);
+
+        /** Where the player is, or {@code null}. */
+        Location at(UUID id);
 
         void tell(Player p, String line);
 
@@ -111,9 +121,18 @@ public final class Riders {
         }
     }
 
+    /** A rider standing off the boat is kept this near their parked driver (the stand's radius). */
+    static final double FOLLOW_RADIUS = 4;
+
     private final Port port;
     private final Map<UUID, Ride> byDriver = new HashMap<>();
     private final Map<UUID, Ride> byRider = new HashMap<>();
+    /**
+     * Riders on the no-push team and not collidable, by id to their name: from their arrival to EVERY
+     * end of the ride, kept apart from the pairing (which ends first when the driver goes), so the
+     * rider's own session end still finds them (the Clubhouse review, #2).
+     */
+    private final Map<UUID, String> shielded = new HashMap<>();
 
     Riders(Port port) {
         this.port = port;
@@ -194,7 +213,7 @@ public final class Riders {
             return;
         }
         port.kit(rider, r.driverName);
-        port.noPush(rider, true);
+        shield(rider.getUniqueId(), rider.getName());
         port.tell(rider, "&bRiding with " + r.driverName + " &7- hold on tight! Leave game takes you home.");
         Player driver = port.online(r.driver);
         Entity boat = driver == null ? null : driver.getVehicle();
@@ -219,13 +238,37 @@ public final class Riders {
         return false;
     }
 
-    /** The driver was moved without a boat (onto the stand): the rider stands by them. */
+    /**
+     * The driver was moved without a boat (onto the stand): the rider stands by them. A teleport that
+     * fails is tried again each second ({@link #second}) while the driver is parked.
+     */
     void follow(Player driver, Location at) {
         Ride r = byDriver.get(driver.getUniqueId());
         Player rider = r == null ? null : port.online(r.rider);
         if (rider != null && port.riding(rider) && at != null) {
             port.teleport(rider, at);
         }
+    }
+
+    /** On the no-push team and not collidable, for the whole ride. */
+    private void shield(UUID id, String name) {
+        shielded.put(id, name);
+        port.noPush(id, name, true);
+        port.collidable(id, false);
+    }
+
+    /** Off the no-push team and collidable again (once: every end calls this). */
+    private void unshield(UUID id) {
+        String name = shielded.remove(id);
+        if (name != null) {
+            port.noPush(id, name, false);
+            port.collidable(id, true);
+        }
+    }
+
+    /** Whether the rider is on the no-push team and not collidable now (tests). */
+    boolean shielded(UUID rider) {
+        return shielded.containsKey(rider);
     }
 
     /** The rider in the driver's boat now (their dismount is the games' own when the boat goes), or {@code null}. */
@@ -247,6 +290,7 @@ public final class Riders {
             return;
         }
         drop(r);
+        unshield(r.rider); // the rider's own session end won't find the pairing any more (#2)
         Player rider = port.online(r.rider);
         if (rider != null && r.inSession && port.riding(rider)) {
             port.tell(rider, "&7Your ride is over - thanks for riding along! Your things are back.");
@@ -264,11 +308,11 @@ public final class Riders {
             return;
         }
         drop(r);
+        unshield(r.rider); // the Clubhouse puts them on its own no-push team
         Player rider = port.online(r.rider);
         if (rider == null || !r.inSession || !port.riding(rider)) {
             return;
         }
-        port.noPush(rider, false); // the Clubhouse puts them on its own
         if (!port.takeIn(rider, kind, "&7Back in the Clubhouse with " + r.driverName + "!")) {
             port.tell(rider, "&7Your ride is over - thanks for riding along! Your things are back.");
             port.leave(rider, EndReason.FINISH);
@@ -282,10 +326,7 @@ public final class Riders {
             return;
         }
         drop(r);
-        Player p = port.online(rider);
-        if (p != null) {
-            port.noPush(p, false);
-        }
+        unshield(rider);
         Player driver = port.online(r.driver);
         if (driver != null) {
             port.tell(driver, "&7" + r.riderName + " hopped out - you carry on.");
@@ -294,6 +335,7 @@ public final class Riders {
 
     /** A session ended: the driver's (the rider goes too) or the rider's (the driver carries on). */
     void sessionEnded(UUID player) {
+        unshield(player); // a rider whose ride ended first (the driver's finish) comes off here at the latest
         if (byRider.containsKey(player)) {
             riderGone(player);
         } else if (byDriver.containsKey(player)) {
@@ -330,16 +372,45 @@ public final class Riders {
                 continue;
             }
             Entity boat = driver.getVehicle();
-            if (r.inSession && boat != null && port.riding(rider) && !port.aboard(boat, rider)) {
-                board(r, rider, boat);
+            if (!r.inSession || !port.riding(rider)) {
+                continue;
+            }
+            if (boat != null) {
+                if (!port.aboard(boat, rider)) {
+                    board(r, rider, boat);
+                }
+            } else if (r.seated) {
+                keepNear(rider, r.driver); // the driver is parked (the stand): the rider stays by them (#4)
             }
         }
     }
 
-    /** Time Trials is stopping: every pairing ends (the framework ends the sessions). */
+    /** A rider more than {@value #FOLLOW_RADIUS} blocks from their parked driver is brought back to them. */
+    private void keepNear(Player rider, UUID driver) {
+        Location d = port.at(driver);
+        Location here = port.at(rider.getUniqueId());
+        if (d == null) {
+            return;
+        }
+        boolean far = here == null || !java.util.Objects.equals(here.getWorld(), d.getWorld())
+                || square(here.getX() - d.getX()) + square(here.getY() - d.getY()) + square(here.getZ() - d.getZ())
+                > FOLLOW_RADIUS * FOLLOW_RADIUS;
+        if (far) {
+            port.teleport(rider, d);
+        }
+    }
+
+    private static double square(double v) {
+        return v * v;
+    }
+
+    /** Time Trials is stopping: every pairing ends (the framework ends the sessions), every rider off no-push. */
     void stop() {
         for (Ride r : new ArrayList<>(byDriver.values())) {
             drop(r);
+        }
+        for (UUID id : new ArrayList<>(shielded.keySet())) {
+            unshield(id);
         }
     }
 

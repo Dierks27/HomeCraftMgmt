@@ -105,6 +105,7 @@
   - "Finish every Fresh Course in one set" (40 tokens)
   - "Reach the top Star Chart goal in a week" (30 tokens)
   - "Set a course record" (30 tokens; a time trial's or a golf course's)
+  - "Reach the bottom of a Dropper with no bonks" (20 tokens)
 - When a new set of Fresh Courses is up, you read one line in chat, once for each set: "New courses this week! Easy, Parkour, Hard, Sky Rings and Golf - /hcm play". It waits while you are on a course, and until you close a screen. Don't want it? /hcm play news off.
 
 ## The fairness promises
@@ -1452,9 +1453,44 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - Tokens: your first finish of each course each week pays a few tokens (by default Easy 2, Parkour 3, Hard 4, Sky Rings 3, Golf 3, Tiny Golf 2). A second finish that week, even on another day, pays nothing more. Your very first finish of each course ever pays the usual first finish too. Golf pays for par or better and each hole-in-one once per course each week.
 - Daily limits: if today's limit can't pay the whole first-finish reward or a whole goal, none of it is paid and none of it is used up: "You've reached today's token limit - finish it again another day this week for its tokens." Finish it on another day this week and it pays.
 - Course codes: every course has a code, like HARD-40. You see it on its tile, on its screen and in chat when you finish. Loved an old course? Tell an admin its course code, and they can bring it back for a week, or keep it forever.
-- Classic courses: the owner can bring back a past course; its old records are the ones to beat. It shows up as Classic Parkour, Classic Sky Rings or Classic Golf on the Fresh Courses screen, like "Classic: Hard Parkour (week of 5 Oct)", with when it goes away again. If you got a course's first-finish tokens back when it first came, you don't get them again; if you didn't, you do. Stars on a classic count toward this week's Star Chart.
+- Classic courses: the owner can bring back a past course; its old records are the ones to beat. It shows up as Classic Parkour, Classic Sky Rings, Classic Golf or Classic Dropper on the Fresh Courses screen, like "Classic: Hard Parkour (week of 5 Oct)", with when it goes away again. If you got a course's first-finish tokens back when it first came, you don't get them again; if you didn't, you do. Stars on a classic count toward this week's Star Chart.
 - A kept course becomes a normal course with its own name, played like any other course.
 - High scores: each course has its own board for its week, shown as "Hard Parkour · this week" (older weeks by their date). The Star Chart has its own board.
+
+<!-- ---- dropper (WP-D) ---- -->
+### The Dropper
+
+*Step off a ledge, steer through the holes as you fall, and land in the water. Then do it again, one level lower.*
+
+- **Open it:** the Easy Dropper and Dropper tiles on the Fresh Courses screen (/hcm play fresh_courses), or /hcm play fresh_dropper_easy and /hcm play fresh_dropper. The owner has to switch them on first.
+- **Costs:** Free, like every Fresh Course.
+- **The courses:** Easy Dropper has 3 easy levels, and every hole on the way down glows ("follow the light"), with the whole floor water. Dropper has 5 levels that get harder, with smaller pools. Both are new with every set.
+
+**How to play**
+
+1. You arrive on a lime ledge at the top of the first glass shaft. The sign says LEVEL 1 of 3 and Step off and fall into the WATER!
+2. Your hotbar offers two things: Practice drop (not timed) and Go straight to the timed run. A practice drop is one free try of level 1. It isn't timed and nothing counts. It ends when you splash, when you land on something, or when you click Start timed run. Then you are back on the ledge.
+3. Wait for the countdown: 3, 2, 1, Go! The clock starts on Go.
+4. Walk off the ledge. While you fall, steer through the holes in the coloured floors. Steering works best near the top.
+5. Splash into the water to clear the level: Level 2! of 3 - keep going! A moment later you are on the next ledge. There is no countdown there: the clock is still running, so step off when you are ready.
+6. Landing on anything but water is a bonk: Bonk! Back to the top of level 2. The clock keeps running. It's not a fail, just a few seconds.
+7. The last splash is the finish: Splash! with your time and your stars. The result screen says No bonks - perfect drop! or how many bonks you had.
+
+**On the screen**
+
+- Hotbar slot 1: Back to the top - of this level (a recovery compass). It counts as a bonk.
+- Hotbar slot 9: Leave game. Your things come back.
+- The bar above your hotbar shows your time, the level and your bonks: 0:12.4 · level 2 of 5 · 1 bonk.
+- Other players in the same shaft can't push you.
+
+**Winning and scoring**
+
+- Your score is your time from Go to the last splash. The lowest time is best. Falling takes the same time for everyone, so fewer bonks and less waiting on ledges make a faster time.
+- Stars like any Fresh Course: 1 for finishing, 2 and 3 for good and great times.
+- First finish in a set: Easy Dropper 2 tokens, Dropper 3 (weekly sets; 1 and 2 when the courses change every day).
+- A run with no bonks earns the achievement "Reach the bottom of a Dropper with no bonks" (20 tokens), once.
+- Slow falling (any potion), flying or a changed game mode means the run won't count.
+<!-- ---- end dropper ---- -->
 
 ## The older Arcade games
 

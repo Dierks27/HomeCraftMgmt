@@ -178,6 +178,9 @@ final class CourseAdmin implements GameAdmin {
             return;
         }
         String daily = dailyRefusal(c, args[1]);
+        if (daily == null) {
+            daily = DropperLayout.editRefusal(c, args[1]); // a kept dropper's layout is the proven one
+        }
         if (daily != null) {
             sender.sendMessage(Text.of(daily));
             return;
@@ -556,8 +559,9 @@ final class CourseAdmin implements GameAdmin {
         }
         Course c = trials.course(args[0]);
         if (n == 2) {
-            match(out, last, (c != null && dailyRefusal(c, "start") != null ? DAILY_VERBS : VERBS)
-                    .toArray(new String[0]));
+            List<String> verbs = c != null && dailyRefusal(c, "start") != null ? DAILY_VERBS : VERBS;
+            match(out, last, verbs.stream().filter(v -> DropperLayout.editRefusal(c, v) == null)
+                    .toArray(String[]::new));
             return out;
         }
         String verb = args[1].toLowerCase(Locale.ROOT);

@@ -141,7 +141,7 @@ public final class Regions {
     static String problem(Slots.Def def, SlotConfig c) {
         String tier = def.tierProblem(c.tierOrMix());
         if (tier != null) {
-            return (def.golf() ? "mix" : "tier") + " '" + c.tierOrMix() + "': " + tier;
+            return (def.mixed() ? "mix" : "tier") + " '" + c.tierOrMix() + "': " + tier;
         }
         int[] o = c.origin();
         Box region = def.region(o[0], o[1], o[2]);

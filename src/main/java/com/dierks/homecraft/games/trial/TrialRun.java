@@ -82,6 +82,11 @@ final class TrialRun {
     /** A race's shared warm-up: the racer tapped "Ready" ({@code RaceLink#ready}). */
     boolean warmupReady;
 
+    // ---- the Dropper (EVENTS-DROPPER-SPEC §B.1.7; WP-D) ------------------------------------------
+
+    /** A dropper run's own rules and state (its practice drop, splashes, hops, bonks), else {@code null}. */
+    DropperRun drop;
+
     TrialRun(UUID player, Course course, boolean test, int countdown) {
         this.player = player;
         this.course = course;

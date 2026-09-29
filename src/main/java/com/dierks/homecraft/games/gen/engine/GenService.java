@@ -26,6 +26,8 @@ import com.dierks.homecraft.games.gen.api.Putt;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.api.Stars;
 import com.dierks.homecraft.games.gen.boat.BoatPlanner;
+import com.dierks.homecraft.games.gen.dropper.DropRules;
+import com.dierks.homecraft.games.gen.dropper.DropperPlanner;
 import com.dierks.homecraft.games.gen.golf.GolfPlanner;
 import com.dierks.homecraft.games.gen.parkour.ParkourPlanner;
 import com.dierks.homecraft.games.gen.rings.RingsPlanner;
@@ -122,7 +124,8 @@ public final class GenService implements GeneratedCourses, GenOps {
      * never needs more than (a smaller one would fail the same seed at every try of the day).
      */
     static final Map<String, Long> WORK = Map.of(Slots.PARKOUR, ParkourPlanner.WORK_BUDGET, Slots.RINGS,
-            RingsPlanner.WORK_BUDGET, Slots.GOLF, GolfPlanner.COURSE_BUDGET, Slots.BOAT, BoatPlanner.WORK_BUDGET);
+            RingsPlanner.WORK_BUDGET, Slots.GOLF, GolfPlanner.COURSE_BUDGET, Slots.BOAT, BoatPlanner.WORK_BUDGET,
+            Slots.DROPPER, DropperPlanner.WORK_BUDGET);
 
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("EEE d MMM", Locale.US);
     private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("h:mm a", Locale.US);
@@ -1468,6 +1471,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             WorldPort.ChunkView v = port.snapshot(x >> 4, z >> 4);
             return v != null && !v.air(x, y, z);
         };
+        LiveProof.Solid water = (x, y, z) -> water(port.snapshot(x >> 4, z >> 4), x, y, z);
         try {
             GamesDao.CourseRow row = host.store().course(s.def.id());
             if (row == null) {
@@ -1476,10 +1480,18 @@ public final class GenService implements GeneratedCourses, GenOps {
             if (s.def.golf()) {
                 return LiveProof.structure(com.dierks.homecraft.games.golf.CourseCodec.fromRow(row), solid);
             }
-            return LiveProof.structure(CourseCodec.decode(row.id(), row.data()).course(), solid);
+            return LiveProof.structure(CourseCodec.decode(row.id(), row.data()).course(), solid, water);
         } catch (SQLException | RuntimeException e) {
             return List.of("its row can't be read (" + e.getMessage() + ")");
         }
+    }
+
+    /**
+     * Whether block (x, y, z) of a chunk snapshot is water (a Dropper's pool, for
+     * {@link LiveProof#structure(Course, LiveProof.Solid, LiveProof.Solid)}); false for no snapshot.
+     */
+    static boolean water(WorldPort.ChunkView v, int x, int y, int z) {
+        return v != null && !v.air(x, y, z) && BuildJob.fluid(v.block(x, y, z));
     }
 
     // ---- the flip -------------------------------------------------------------------------------
@@ -1492,8 +1504,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         PlannedCourse pc = j.plan.course();
         long ref = pc instanceof PlannedTrial t ? t.refMs() : 0;
         DailySettings.Stars factors = host.settings().stars();
-        long gold = def.golf() ? 0 : Stars.threshold(ref, factors.gold(j.mix));
-        long silver = def.golf() ? 0 : Stars.threshold(ref, factors.silver(j.mix));
+        long gold = def.golf() ? 0 : Stars.threshold(ref, factors.gold(starTier(def, j.mix)));
+        long silver = def.golf() ? 0 : Stars.threshold(ref, factors.silver(starTier(def, j.mix)));
         List<Integer> attempts = pc instanceof PlannedGolf g ? g.attempts() : List.of();
         List<List<Putt>> witness = pc instanceof PlannedGolf g ? g.witness() : List.of();
         GenTag tag = new GenTag(def.id(), planners.get(def.generator()).id(), j.plan.algo(), j.day, j.reroll, j.seed,
@@ -1550,6 +1562,15 @@ public final class GenService implements GeneratedCourses, GenOps {
                 + s.lastLine.substring("last: ".length()));
         j.report.accept("&a" + def.name() + " is live: &7" + editionName(j.cadence, j.day) + ", half " + j.half + ".");
         prune();
+    }
+
+    /**
+     * The tier whose star factors a trial's times use: the slot's tier, or a Dropper's mix's rounded
+     * mean ({@link DropRules#tier}, EVENTS-DROPPER-SPEC §B.1.8), so EEE takes easy's factors and
+     * EEMMH medium's.
+     */
+    static String starTier(Slots.Def def, String tierOrMix) {
+        return def != null && def.dropper() ? DropRules.tier(tierOrMix).id() : tierOrMix;
     }
 
     /** The row for a new layout: the planned course with the slot's id and name, in the gen world. */
@@ -2884,7 +2905,10 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         j.planBox = box;
         Plan moved = PlanShift.to(read.plan(), box);
-        List<String> problems = PlanCheck.problems(moved, orig, box);
+        List<String> problems = new ArrayList<>(PlanCheck.problems(moved, orig, box));
+        if (problems.isEmpty()) {
+            problems.addAll(PlanCheck.movedProblems(moved, orig)); // a moved dropper is proven again where it stands
+        }
         if (!problems.isEmpty()) {
             fail(j, "its plan was refused: " + String.join("; ", problems));
             return;
@@ -2968,8 +2992,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         long silver = src.silverMs();
         if (w.remade() && !orig.golf()) {
             DailySettings.Stars factors = host.settings().stars();
-            gold = Stars.threshold(ref, factors.gold(src.tierOrMix()));
-            silver = Stars.threshold(ref, factors.silver(src.tierOrMix()));
+            gold = Stars.threshold(ref, factors.gold(starTier(orig, src.tierOrMix())));
+            silver = Stars.threshold(ref, factors.silver(starTier(orig, src.tierOrMix())));
         }
         List<Integer> attempts = pc instanceof PlannedGolf g ? g.attempts() : List.of();
         List<List<Putt>> witness = pc instanceof PlannedGolf g ? g.witness() : List.of();

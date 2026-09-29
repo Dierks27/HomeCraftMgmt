@@ -33,7 +33,8 @@ import java.util.function.Predicate;
  * whether it would have counted.
  *
  * <p>Public (EVENTS-DROPPER-SPEC C1), so the race mode and the Dropper's pure rules judge a race or
- * a drop with these same checks instead of copies of them. The rules themselves are unchanged.
+ * a drop with these same checks instead of copies of them. The one Dropper rule: the speed check
+ * skips the legs that end at a ledge, which are the game's own hops ({@link #ownTeleport}).
  */
 public final class FairPlay {
 
@@ -202,7 +203,7 @@ public final class FairPlay {
             Course.Mark cur = targets.get(i);
             double seconds = (times[i] - prevAt) / 1e9 + LEG_SLACK;
             double d = prev.distance(cur.center());
-            if (!stalled(stalls, prevAt, times[i])
+            if (!stalled(stalls, prevAt, times[i]) && !ownTeleport(course, i)
                     && tooFast(d, prevRadius, cur.radius(), seconds, course.kind().maxSpeed())) {
                 return i;
             }
@@ -211,6 +212,15 @@ public final class FairPlay {
             prevAt = times[i];
         }
         return -1;
+    }
+
+    /**
+     * Whether the leg ending at target {@code i} is the game's own teleport, never a player's move: a
+     * Dropper's hop from a pool up to the next level's ledge (EVENTS-DROPPER-SPEC §B.1.7), some 30
+     * to 46 blocks in a quarter of a second. The legs that end at a pool are real falls, still checked.
+     */
+    static boolean ownTeleport(Course course, int i) {
+        return course.kind() == TrialKind.DROPPER && !DropperLayout.isPool(i);
     }
 
     private static boolean stalled(List<Stall> stalls, long start, long end) {

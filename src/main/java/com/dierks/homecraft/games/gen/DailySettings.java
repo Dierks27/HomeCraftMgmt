@@ -232,7 +232,10 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             clearDaily = Collections.unmodifiableMap(new LinkedHashMap<>(clearDaily));
         }
 
-        /** The shipped tables (the addendum's: Easy 2/1, Parkour 3/2, Hard 5/3, Sky Rings 3/2, Golf 3/2, Tiny 2/1). */
+        /**
+         * The shipped tables (the addendum's: Easy 2/1, Parkour 3/2, Hard 5/3, Sky Rings 3/2, Golf 3/2, Tiny 2/1;
+         * and EVENTS-DROPPER-SPEC §B.1.8's Easy Dropper 2/1, Dropper 3/2).
+         */
         public static Rewards shipped() {
             Map<String, Integer> weekly = new LinkedHashMap<>();
             Map<String, Integer> daily = new LinkedHashMap<>();
@@ -284,7 +287,7 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
      *
      * @param id         the slot
      * @param enabled    its switch (an admin's {@code /hcm games gen on|off} wins over it)
-     * @param tierOrMix  a tier ({@code easy}) or, for golf, a mix ({@code EEEMMMMHH})
+     * @param tierOrMix  a tier ({@code easy}) or, for golf and the droppers, a mix ({@code EEEMMMMHH}, {@code EEMMH})
      * @param origin     half A's min corner {x, y, z}, on the 16-block grid
      * @param dailyClear tokens for the first counted finish of an edition, at the configured cadence
      *                   (worked out from {@link Rewards})
@@ -776,7 +779,7 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
     }
 
     /**
-     * {@code slots.<id>}: its switch, tier (or {@code mix} for golf) and origin. Anything here that
+     * {@code slots.<id>}: its switch, tier (or {@code mix} for golf and the droppers) and origin. Anything here that
      * can't be used switches this slot off with one WARN; it never closes the rest of Fresh
      * Courses. (Its first-finish tokens are in {@code rewards}.)
      */
@@ -807,7 +810,7 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             }
             enabled = on;
         }
-        String which = def.golf() ? "mix" : "tier";
+        String which = def.mixed() ? "mix" : "tier";
         String tierOrMix = d.tierOrMix();
         Object t = n.raw(which);
         if (t != null) {
@@ -876,7 +879,7 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         for (Slots.Def d : Slots.ALL) {
             String p = "slots." + d.id() + ".";
             out.add(p + "enabled");
-            out.add(p + (d.golf() ? "mix" : "tier"));
+            out.add(p + (d.mixed() ? "mix" : "tier"));
             out.add(p + "origin");
         }
         out.addAll(List.of("archive.keep", "feed_history", "classics.days"));

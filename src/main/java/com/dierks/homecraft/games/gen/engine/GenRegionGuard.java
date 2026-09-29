@@ -49,12 +49,12 @@ import java.util.logging.Logger;
  * existing Games-world guard (which exempts admins) is unchanged; this one only covers the halves.
  *
  * <p>Covered: placing and breaking, buckets, sign edits, hanging and taking down, placing boats,
- * carts and stands, fluids flowing in, blocks forming, spreading and fading, mobs and falling
+ * carts and stands, fluids flowing in and out (a Dropper's pools never leak), blocks forming, spreading and fading, mobs and falling
  * blocks changing blocks, fire, pistons touching a half, and explosions (the blocks inside a half
  * are taken out of the list; the rest still go). WorldEdit can't be intercepted: the next boot or
  * {@code /hcm games gen rebuild} heals what it did.
  *
- * <p>The decisions are pure ({@link #refused}, {@link #pistonRefused}, {@link #spared}); the
+ * <p>The decisions are pure ({@link #refused}, {@link #pistonRefused}, {@link #flowRefused}, {@link #spared}); the
  * handlers are registered through the game ({@link #register}), so they live and die with it.
  */
 public final class GenRegionGuard {
@@ -71,7 +71,9 @@ public final class GenRegionGuard {
     /** A kind of change the guard sees. */
     public enum Change {
         PLACE, BREAK, BUCKET, SIGN, HANG, UNHANG, ENTITY_PLACE, FLOW_INTO, FORM, SPREAD, FADE, ENTITY_CHANGE, PISTON,
-        EXPLODE, BURN, IGNITE
+        EXPLODE, BURN, IGNITE,
+        /** A fluid flowing OUT of a half (EVENTS-DROPPER-SPEC §B.1.9): a Dropper's pool never leaks. */
+        FLOW_OUT
     }
 
     private final Map<UUID, Long> told = new HashMap<>();
@@ -112,6 +114,19 @@ public final class GenRegionGuard {
         return false;
     }
 
+    /**
+     * Whether a fluid's flow is refused (EVENTS-DROPPER-SPEC §B.1.9): its source is in a half
+     * ({@link Change#FLOW_OUT}: a Dropper's pool never spills out, even through a gap a bug left), or
+     * where it flows to is ({@link Change#FLOW_INTO}).
+     *
+     * @param from the flowing block {x, y, z}
+     * @param to   where it would flow {x, y, z}
+     */
+    public static boolean flowRefused(Area area, String world, int[] from, int[] to) {
+        return (from != null && refused(Change.FLOW_OUT, area.in(world, from[0], from[1], from[2]), false))
+                || (to != null && refused(Change.FLOW_INTO, area.in(world, to[0], to[1], to[2]), false));
+    }
+
     /** Which of an explosion's blocks are spared: those inside a half. */
     public static List<int[]> spared(Area area, String world, List<int[]> blocks) {
         List<int[]> out = new ArrayList<>();
@@ -148,7 +163,7 @@ public final class GenRegionGuard {
                 e -> g.block(area, e, Change.UNHANG, e.getEntity().getLocation().getBlock(), log));
         games.on(daily, EntityPlaceEvent.class, p, true,
                 e -> g.player(area, e, Change.ENTITY_PLACE, e.getPlayer(), e.getEntity().getLocation().getBlock(), log));
-        games.on(daily, BlockFromToEvent.class, p, true, e -> g.block(area, e, Change.FLOW_INTO, e.getToBlock(), log));
+        games.on(daily, BlockFromToEvent.class, p, true, e -> g.flow(area, e, e.getBlock(), e.getToBlock(), log));
         games.on(daily, BlockFormEvent.class, p, true, e -> g.block(area, e, Change.FORM, e.getBlock(), log));
         games.on(daily, BlockSpreadEvent.class, p, true, e -> g.block(area, e, Change.SPREAD, e.getBlock(), log));
         games.on(daily, BlockFertilizeEvent.class, p, true, e -> {
@@ -193,6 +208,21 @@ public final class GenRegionGuard {
     private void block(Supplier<Area> area, Cancellable e, Change change, Block block, Logger log) {
         try {
             if (block != null && refused(change, in(area, block), false)) {
+                e.setCancelled(true);
+            }
+        } catch (RuntimeException ex) {
+            log.warning("Fresh Courses: the area guard failed: " + ex);
+        }
+    }
+
+    /** A fluid flowing: refused when it flows out of a half or into one ({@link #flowRefused}). */
+    private void flow(Supplier<Area> area, Cancellable e, Block from, Block to, Logger log) {
+        try {
+            Area a = area.get();
+            int[] f = from == null ? null : new int[]{from.getX(), from.getY(), from.getZ()};
+            int[] t = to == null ? null : new int[]{to.getX(), to.getY(), to.getZ()};
+            Block any = from != null ? from : to;
+            if (any != null && flowRefused(a, any.getWorld().getName(), f, t)) {
                 e.setCancelled(true);
             }
         } catch (RuntimeException ex) {

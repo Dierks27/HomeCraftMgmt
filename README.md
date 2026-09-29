@@ -820,7 +820,7 @@ next. That's all.
   week whatever the cadence.
 
 **Where they are.** In your existing Games world (`games.fresh.world: ""` means the first of
-`games.worlds`), far from spawn and high in the sky: x 4096-5279, z 4096-4671, y 128-303. Each
+`games.worlds`), far from spawn and high in the sky: x 4096-5535, z 4096-4671, y 128-303. Each
 course owns two halves side by side: the current course stands in one while the next is built and
 checked in the other, and the switch is one database write, so nobody ever plays a half-built course
 and a run already going always counts. The old half is emptied once nobody is on it.
@@ -921,7 +921,8 @@ result screens show it in their header's NAME. `/hcm play fresh_parkour_tiers` i
 | `fresh.slots.<course>` | see config.yml | Each course: `enabled`, `tier` (or `mix` of golf holes, E/M/H) and `origin` (x y z of its area, x and z a multiple of 16) |
 
 The courses (their ids are also their `/hcm play` ids): `fresh_parkour_easy`, `fresh_parkour`,
-`fresh_parkour_hard`, `fresh_rings`, `fresh_golf`, `fresh_tiny_golf` and `fresh_boat` (off).
+`fresh_parkour_hard`, `fresh_rings`, `fresh_golf`, `fresh_tiny_golf`, `fresh_boat` (off), and the
+droppers `fresh_dropper_easy` and `fresh_dropper` (off; see "The Dropper" below).
 `/hcm play fresh_courses` opens the Fresh Courses screen and `/hcm play fresh_parkour_tiers` the
 parkour level picker.
 
@@ -942,7 +943,7 @@ point, a checkpoint or finish with its radius, a golf hole's whole bounds box.
 | `/hcm games gen rebuild <course>` | Check the current course against its plan and put back anything missing (same course). After a `clear`, its area is checked for other blocks first and a new course is built |
 | `/hcm games gen on\|off <course>` | Open or close one (kept across restarts). `off` ends runs on it ("Easy Parkour is closed for now."); its blocks stay |
 | `/hcm games gen tier <course> <easy\|medium\|hard>` | Its difficulty from the next build (kept across restarts) |
-| `/hcm games gen mix <golf course> <E, M and H>` | The big golf course's or Tiny Golf's holes from the next build (like `EEEMMMMHH`) |
+| `/hcm games gen mix <golf course\|dropper> <E, M and H>` | The big golf course's or Tiny Golf's holes, or a dropper's levels, from the next build (like `EEEMMMMHH`, `EEMHH`) |
 | `/hcm games gen pin <course> <seed\|live> [days]` / `unpin <course>` | Keep a good course: the same blocks in every new set (each on fresh boards) until unpinned, or for that many days. A pin ends by itself after its days; one made before a plugin update that changed that course's generator is ignored (the console and status say so) |
 | `/hcm games gen tp <course> [live\|idle]` | Go to the current course, or the spare half |
 | `/hcm games gen claim <course> [confirm]` | Count what is in a new area; with `confirm`, clear it and let the course use it (refused while a hand-built course or the spawn is within 16 blocks) |
@@ -956,6 +957,81 @@ board for one set; the set is `<days>:<number>`, like `7:38` for the week of 28 
 and a weekly set never share one), `gstars:<course>:<set>` and `gweek:<week>` (the Star Chart). No
 new tables.
 
+<!-- ---- dropper (EVENTS-DROPPER-SPEC §B.1, WP-D) ---- -->
+#### The Dropper
+
+Two more Fresh Courses, new with every set and **shipped off**: **Easy Dropper** (3 easy levels) and
+**Dropper** (5 levels, easy to hard). A level is a glass shaft in its own colour: step off a lime
+ledge ("LEVEL 2 of 5 / Step off and / fall into the / WATER!"), steer through the holes in the
+coloured floors below, and land in the water at the bottom. On Easy every hole on the way down is
+ringed with glowing sea lanterns ("follow the light") and the whole floor is water. A splash clears
+the level ("Level 2! of 5 - keep going!") and a quarter of a second later you are on the next ledge;
+the last splash is the finish ("Splash! 0:21.4 · ★★★"). Landing on anything but water is a **bonk**:
+"Bonk! Back to the top of level 2.", the clock keeps running, and the first one adds the tip "Steer
+while you fall to go through the holes!". The result screen says "No bonks - perfect drop!" or
+"Bonks: 2". Every level is proven solvable before it is built: a walk-only witness path with room to
+spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physics.
+
+- **Practice drop** (the owner's warm-up, D3): before the timed drop, the hotbar offers **Practice
+  drop (not timed)** and **Go straight to the timed run**. A practice drop is one untimed drop of
+  level 1 ("Practice drop - not counted"); it ends at its first splash, its first bonk, or **Start
+  timed run**, then you are back on the ledge for the 3-2-1. It is never timed, recorded, paid or
+  counted for the Weekly Cup, and its bonks don't count. One per run; `games.trials.warmup_seconds: 0`
+  turns it off with the other warm-ups.
+- **Score and rewards:** the time from Go to the last splash, lower is better, on the set's board.
+  Stars use the mix's rounded tier (EEE is easy, EEMMH medium): 3-star times of about 20 s on Easy
+  Dropper and 27 s on the Dropper. First finish in a set: Easy Dropper 2 tokens a week (1 a day),
+  Dropper 3 (2 a day), under `games.trials.daily_cap` like the other trials; the first clear once ever
+  by tier; the Star Chart counts its stars. A clean counted run unlocks the achievement "Reach the
+  bottom of a Dropper with no bonks" (20 tokens; config revision 18 adds it to an unedited list, or
+  WARNs with the line to paste).
+- **Fair play:** as any time trial (flying, potions - slow falling too - or a changed gravity or
+  safe-fall attribute void the run). The game's own hops to the next ledge are never speed-checked;
+  a run quicker than 90% of the levels' walk-off falls doesn't count. A run going at the weekly change
+  finishes and counts on its own set's board. Two fallers in one shaft can't push each other.
+- **Water, safely:** water only ever sits in sealed pools at least a block inside the area, written
+  with no physics, after every wall of the area is up, and drained before any wall is taken down; the
+  area guard stops water flowing into an area **and out of one**; verify puts back a missing water
+  block like any other.
+- **Where:** x 5376-5535, y 160-223, z 4096-4111 (Easy Dropper) and 4160-4175 (Dropper); Classic
+  Dropper (recalls of either) at z 4224-4239. Each half is 64 x 64 x 16. The keep plot size is
+  unchanged.
+- **Admin:** `/hcm games gen on fresh_dropper` (or `slots.fresh_dropper.enabled: true`) and it is built
+  with the next set, or at once with `/hcm games gen reroll fresh_dropper confirm`. `/hcm games gen mix
+  fresh_dropper EMHHH` changes the levels (1-5 of E, M and H) from the next build. Droppers can't be
+  made by hand (`/hcm games course create <id> dropper` is refused); keep one instead. A kept dropper
+  can be renamed, re-tiered, enabled, tested and featured, but not re-shaped.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `fresh.slots.fresh_dropper_easy` | `{enabled: false, mix: EEE, origin: [5376, 160, 4096]}` | Easy Dropper |
+| `fresh.slots.fresh_dropper` | `{enabled: false, mix: EEMMH, origin: [5376, 160, 4160]}` | The Dropper (at most 5 levels) |
+| `fresh.rewards.clear_weekly.fresh_dropper_easy` / `.fresh_dropper` | `2` / `3` | First finish in a weekly set |
+| `fresh.rewards.clear_daily.fresh_dropper_easy` / `.fresh_dropper` | `1` / `2` | First finish in a daily set |
+| `fresh.classics.slots.fresh_classic_dropper.origin` | `[5376, 160, 4224]` | Where Classic Dropper is built |
+| `trials.warmup_seconds` | `180` | 0 turns off the practice drop (and the other warm-ups) |
+
+**Verify in game** (Java and Bedrock):
+
+1. `/hcm games gen on fresh_dropper_easy` and `/hcm games gen on fresh_dropper`, then `/hcm games gen
+   reroll fresh_dropper confirm` (and the same for Easy): `/hcm games gen status` shows both live
+   within about 2 minutes; the Fresh Courses screen shows "Easy Dropper - 3 levels" and "Dropper - 5
+   levels · Course code DROP-1".
+2. Start Easy Dropper: the hotbar shows Practice drop (not timed) and Go straight to the timed run.
+   Take the practice drop: nothing is timed, and the splash puts you back on the ledge for the 3-2-1.
+3. Finish Easy Dropper on a tablet without sprinting, following the lights.
+4. Finish the Dropper on Java cleanly: 3 stars (under the gold time) and "No bonks - perfect drop!".
+5. Land on a coloured floor on purpose: "Bonk!", back on that level's ledge, the clock still running,
+   and the result says "Bonks: 1".
+6. Stand on the light-blue floor beside a Medium pool: bonk.
+7. `/effect give @s slow_falling` mid-run: "This run won't count".
+8. Stand in a pool during `/hcm games gen preview fresh_dropper`: you are moved out. After the build
+   there is no flowing water anywhere near the area.
+9. `/hcm games gen reroll fresh_dropper confirm` while someone is mid-run: their run finishes and
+   counts on the old board.
+10. Set `games.trials.warmup_seconds: 0` and `/hcm reload`: the practice drop is no longer offered.
+<!-- ---- end dropper ---- -->
+
 #### Bring back or keep a course
 
 Every set that goes up is archived with its whole layout, its **course code** (`HARD-40`: the
@@ -968,8 +1044,8 @@ line, so they can ask for a favourite back.
 |---|---|
 | `/hcm games gen history <course\|all> [page]` | The archive, 8 a page, newest first: code, dates, short seed, record, plays, and whether it is kept or back now |
 | `/hcm games gen history <code>` | One set, with its top 5 |
-| `/hcm games gen recall <code> [days\|forever] [confirm]` | Bring it back into its Classics slot (Classic Parkour, Classic Sky Rings or Classic Golf) for `games.fresh.classics.days` (7) or as asked. `confirm` only when someone is playing that Classics slot |
-| `/hcm games gen recall <classic\|parkour\|rings\|golf> <course> <last\|number\|date 2026-10-05\|seed:<hex>> [days\|forever]` | The same by course and set; `seed:` makes it again from its seed with today's generator (marked "(re-made)") |
+| `/hcm games gen recall <code> [days\|forever] [confirm]` | Bring it back into its Classics slot (Classic Parkour, Classic Sky Rings, Classic Golf or Classic Dropper) for `games.fresh.classics.days` (7) or as asked. `confirm` only when someone is playing that Classics slot |
+| `/hcm games gen recall <classic\|parkour\|rings\|golf\|dropper> <course> <last\|number\|date 2026-10-05\|seed:<hex>> [days\|forever]` | The same by course and set; `seed:` makes it again from its seed with today's generator (marked "(re-made)") |
 | `/hcm games gen unrecall <classic> [confirm]` | Close a Classics slot |
 | `/hcm games gen keep <code> <new-id> [name…] [--fresh-board] confirm` | Keep it for good as a normal course (`/hcm play <new-id>`) in the next free plot of the keep area, with its records copied (not with `--fresh-board`) |
 | `/hcm games gen keep <course> [current\|last\|number\|date d\|seed:<hex>] <new-id> …` | The same by course and set |

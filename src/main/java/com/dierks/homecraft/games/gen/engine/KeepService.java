@@ -765,7 +765,10 @@ final class KeepService {
             return "it doesn't fit a plot";
         }
         Plan moved = PlanShift.to(read.plan(), build);
-        List<String> problems = PlanCheck.problems(moved, j.def, build);
+        List<String> problems = new ArrayList<>(PlanCheck.problems(moved, j.def, build));
+        if (problems.isEmpty()) {
+            problems.addAll(PlanCheck.movedProblems(moved, j.def)); // a moved dropper is proven again in its plot
+        }
         if (!problems.isEmpty()) {
             return "its plan was refused: " + String.join("; ", problems);
         }

@@ -433,7 +433,33 @@ final class ArcadeConfigMigration {
         }
         appendRows(c, defaults, "arcade.quests.daily_pool", GAME_DAILY, "daily game quests", log);
         appendRows(c, defaults, "arcade.quests.weekly_pool", GAME_WEEKLY, "weekly game quests", log);
-        appendRows(c, defaults, "arcade.achievements", GAME_ACHIEVEMENTS, "\"Games\" achievements", log);
+        appendRows(c, defaults, "arcade.achievements", GAME_ACHIEVEMENTS, LATER_ACHIEVEMENTS,
+                "\"Games\" achievements", log);
+    }
+
+    // ---- revision 18: the Dropper's achievement (EVENTS-DROPPER-SPEC §B.1.8) -------------------
+
+    /** The achievements revision 18 adds: a counted Dropper run with no bonks. */
+    static final List<String> DROPPER_ACHIEVEMENTS = List.of("game_dropper_clean");
+    /**
+     * Achievement rows a LATER revision adds: an earlier revision's step neither adds them nor counts
+     * them as part of the list it compares with (they weren't shipped yet when it was the newest).
+     */
+    static final List<String> LATER_ACHIEVEMENTS = DROPPER_ACHIEVEMENTS;
+
+    /**
+     * Config revision 18: the Dropper's "Reach the bottom of a Dropper with no bonks" joins the
+     * achievements, by the same rule as revision 17 (a list still as shipped gains it at its end; an
+     * edited one is kept, with the line to paste).
+     */
+    static void dropperRows(FileConfiguration c, List<String> log) {
+        YamlConfiguration defaults = bundled();
+        if (defaults == null) {
+            log.add(WARN + "Config migration: could not read the bundled config.yml, so the Dropper achievement was"
+                    + " not added. Reinstall the jar, or copy it from the jar's config.yml.");
+            return;
+        }
+        appendRows(c, defaults, "arcade.achievements", DROPPER_ACHIEVEMENTS, List.of(), "Dropper achievement", log);
     }
 
     /**
@@ -443,10 +469,22 @@ final class ArcadeConfigMigration {
      */
     static void appendRows(FileConfiguration c, YamlConfiguration defaults, String path, List<String> ids,
                            String what, List<String> log) {
+        appendRows(c, defaults, path, ids, List.of(), what, log);
+    }
+
+    /**
+     * {@link #appendRows(FileConfiguration, YamlConfiguration, String, List, String, List)} for a
+     * revision older than the newest: the bundled rows {@code later} names belong to a later
+     * revision, so they are left out of the shipped list this one compares with (and never added
+     * here).
+     */
+    static void appendRows(FileConfiguration c, YamlConfiguration defaults, String path, List<String> ids,
+                           List<String> later, String what, List<String> log) {
         if (!(c.get(path, null) instanceof List<?> raw)) {
             return;
         }
         List<Map<String, Object>> bundledRows = mapRows(defaults.getList(path));
+        bundledRows.removeIf(r -> later.contains(idOf(r)));
         List<Map<String, Object>> current = mapRows(raw);
         Set<String> have = new HashSet<>();
         for (Map<String, Object> r : current) {

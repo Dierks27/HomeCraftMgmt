@@ -59,7 +59,7 @@ clock:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 17
+config_revision: 18
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -1484,6 +1484,7 @@ arcade:
     - { id: game_fresh_all, group: "Games", type: COUNTER, counter: fresh_sets, target: 1, reward: 40, display: "Finish every Fresh Course in one set" }
     - { id: game_star_chart, group: "Games", type: COUNTER, counter: star_chart_tops, target: 1, reward: 30, display: "Reach the top Star Chart goal in a week" }
     - { id: game_record, group: "Games", type: COUNTER, counter: course_records, target: 1, reward: 30, display: "Set a course record" }
+    - { id: game_dropper_clean, group: "Games", type: COUNTER, counter: dropper_clean, target: 1, reward: 20, display: "Reach the bottom of a Dropper with no bonks" }
   # Daily/weekly quests. Each player DRAWS their own `daily_draw` / `weekly_draw` from the
   # pools the first time they're needed in a day/week (local time) — no two of one type.
   # A Quest Reroll (Prize Counter) swaps one unfinished daily. Each row:
@@ -1866,14 +1867,14 @@ games:
     # Strokes over par before a hole is picked up.
     max_over_par: 3
   # ---- fresh ----
-  # Fresh Courses: parkour, Sky Rings and mini golf the plugin builds itself - a new set every week
-  # (or every day, or every few days: cadence), the same for everyone. Nothing to build by hand.
+  # Fresh Courses: parkour, Sky Rings, mini golf and droppers the plugin builds itself - a new set every
+  # week (or every day, or every few days: cadence), the same for everyone. Nothing to build by hand.
   # Check with /hcm games gen status.
   fresh:
     # Ships OFF. true + /hcm reload and the first set is up in about two minutes.
     enabled: false
     # The world they are built in: "" = the first of games.worlds (it must be listed there).
-    # They sit far out and high up (x 4096-5279, z 4096-4671, y 128-303), away from anything built.
+    # They sit far out and high up (x 4096-5535, z 4096-4671, y 128-303), away from anything built.
     world: ""
     # How often the courses change: weekly, daily, or a number of days from 1 to 28 (like 3).
     # The dates are fixed: counted from rebuild_day, so they never depend on when you changed it.
@@ -1932,6 +1933,8 @@ games:
         fresh_golf: 3
         fresh_tiny_golf: 2
         fresh_boat: 3
+        fresh_dropper_easy: 2
+        fresh_dropper: 3
       clear_daily:
         fresh_parkour_easy: 1
         fresh_parkour: 2
@@ -1940,6 +1943,8 @@ games:
         fresh_golf: 2
         fresh_tiny_golf: 1
         fresh_boat: 2
+        fresh_dropper_easy: 1
+        fresh_dropper: 2
     # Star Chart goals: stars a player collects in a week, and the tokens each goal pays (once a
     # week). Weekly and daily ends like the rewards; never above 80% of what the week can give.
     # A week's goals are fixed the first time they are shown or paid: a change counts from the next.
@@ -1967,9 +1972,11 @@ games:
     stars:
       gold: {easy: 2.0, medium: 1.5, hard: 1.25}
       silver: {easy: 3.0, medium: 2.2, hard: 1.8}
-    # Each course: on or off, its difficulty (tier, or mix of golf holes: E easy, M medium, H hard)
-    # and where its area starts (x y z, x and z a multiple of 16; two halves side by side along x).
-    # /hcm games gen on|off|tier|mix wins over these.
+    # Each course: on or off, its difficulty (tier, or mix of golf holes or dropper levels: E easy,
+    # M medium, H hard) and where its area starts (x y z, x and z a multiple of 16; two halves side by
+    # side along x). /hcm games gen on|off|tier|mix wins over these.
+    # The droppers ship OFF: glass shafts with water pools at the bottom, one level per letter of
+    # their mix (at most 5). Turn one on and it is built with the next set (or /hcm games gen reroll).
     slots:
       fresh_parkour_easy: {enabled: true, tier: easy, origin: [4096, 160, 4096]}
       fresh_parkour: {enabled: true, tier: medium, origin: [4352, 160, 4096]}
@@ -1978,6 +1985,8 @@ games:
       fresh_golf: {enabled: true, mix: EEEMMMMHH, origin: [4864, 160, 4096]}
       fresh_tiny_golf: {enabled: true, mix: EEE, origin: [5120, 160, 4096]}
       fresh_boat: {enabled: false, tier: medium, origin: [4480, 160, 4352]}
+      fresh_dropper_easy: {enabled: false, mix: EEE, origin: [5376, 160, 4096]}
+      fresh_dropper: {enabled: false, mix: EEMMH, origin: [5376, 160, 4160]}
     # Every set that was ever up is archived with its whole layout, so a past course can be brought
     # back exactly (/hcm games gen recall) or kept for good (/hcm games gen keep), and its board with it.
     # A course is a few KB: a year of weekly sets for every course is well under 5 MB.
@@ -1987,7 +1996,7 @@ games:
       keep: 0
     # The website's list of past courses (with their course codes and seeds): at most this many per course.
     feed_history: 26
-    # The Classics: three empty courses an admin can bring an old course back into
+    # The Classics: four empty courses an admin can bring an old course back into
     # (/hcm games gen recall HARD-40). Its old records are the ones to beat.
     classics:
       # How long a recalled course stays up unless the recall says otherwise ("forever" keeps it).
@@ -1998,6 +2007,7 @@ games:
         fresh_classic_parkour: {origin: [4096, 160, 4736]}
         fresh_classic_rings: {origin: [4608, 128, 4736]}
         fresh_classic_golf: {origin: [4352, 160, 4736]}
+        fresh_classic_dropper: {origin: [5376, 160, 4224]}
     # Kept courses (/hcm games gen keep): each becomes a normal course with a lasting board, built in
     # its own plot of this area and never touched by the generator again.
     keep:

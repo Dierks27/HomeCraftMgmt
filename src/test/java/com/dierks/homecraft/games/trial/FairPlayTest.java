@@ -35,6 +35,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * a daily course counts while that layout stands, even though the row has moved on to the next
  * one; once its half starts being cleared the finish is stale; with nothing vouching for it (the
  * daily game off) the old rule decides; and a hand-built course keeps the old rule exactly.
+ *
+ * <p>And the Dropper (EVENTS-DROPPER-SPEC §B.1.7): the legs that end at a ledge are the game's own
+ * hops and are never speed-checked, while its falls still are and every other kind is checked as
+ * before; its shortest time is 90% of its walk-off falls; its fall height is its own; and a drop in
+ * progress at the weekly flip counts while its half stands.
  */
 class FairPlayTest {
 
@@ -389,5 +394,74 @@ class FairPlayTest {
                 "a hand-built layout edit is stale even if the gate says everything stands");
         assertFalse(FairPlay.stale(PARKOUR, hash, PARKOUR, everything), "unchanged: counts");
         assertTrue(FairPlay.stale(PARKOUR, hash, null, everything), "deleted: stale");
+    }
+
+    // ---- the Dropper (EVENTS-DROPPER-SPEC §B.1.7) ---------------------------------------------------
+
+    /**
+     * A clean drop of the hand-made dropper: 1.6 s to pool 1, the hop a quarter second later onto ledge 2
+     * (some 30 blocks up and across: the game's own teleport), and so on down.
+     */
+    private static long[] dropTimes(long start) {
+        long s = 1_000_000_000L;
+        return new long[]{start + 16 * s / 10, start + 185 * s / 100, start + 37 * s / 10, start + 395 * s / 100,
+                start + 6 * s};
+    }
+
+    @Test
+    void aDroppersOwnHopsAreNeverSpeedCheckedButItsFallsAre() {
+        Course drop = DropperCourses.hand();
+        long start = 10_000_000_000L;
+        long[] times = dropTimes(start);
+        assertEquals(-1, FairPlay.tooFast(drop, start, times, 5), "a clean drop counts: its hops are its own teleports");
+        Course elytra = new Course("x", TrialKind.ELYTRA, "X", Tier.EASY, "games", DropperCourses.START,
+                drop.checkpoints(), drop.finish(), null, null, true, false, 1);
+        assertEquals(TrialKind.ELYTRA.maxSpeed(), TrialKind.DROPPER.maxSpeed(), 1e-9, "the same top speed as elytra");
+        assertEquals(1, FairPlay.tooFast(elytra, start, times, 5),
+                "the same legs on an elytra course: the 30-block hop in a quarter second is too fast");
+        assertTrue(FairPlay.ownTeleport(drop, 1) && FairPlay.ownTeleport(drop, 3), "the legs that end at a ledge");
+        assertFalse(FairPlay.ownTeleport(drop, 0) || FairPlay.ownTeleport(drop, 2) || FairPlay.ownTeleport(drop, 4),
+                "the legs that end at a pool are real falls");
+        long[] quick = times.clone();
+        quick[2] = times[1] + 100_000_000L; // 40 blocks down in a tenth of a second
+        quick[3] = quick[2] + 250_000_000L;
+        quick[4] = quick[3] + 2_000_000_000L;
+        assertEquals(2, FairPlay.tooFast(drop, start, quick, 5), "a fall faster than gravity is still caught");
+        for (TrialKind k : List.of(TrialKind.PARKOUR, TrialKind.ELYTRA, TrialKind.BOAT)) {
+            Course other = new Course("x", k, "X", Tier.EASY, "games", DropperCourses.START, drop.checkpoints(),
+                    drop.finish(), null, null, true, false, 1);
+            for (int i = 0; i < 5; i++) {
+                assertFalse(FairPlay.ownTeleport(other, i), k + ": no leg is skipped, as before");
+            }
+        }
+    }
+
+    @Test
+    void aDroppersShortestTimeHoldsAndItsFallHeightIsItsOwn() {
+        Course real = DropperCourses.planned("EEMMH", 3);
+        int min = com.dierks.homecraft.games.gen.dropper.DropRules.minSeconds("EEMMH");
+        assertEquals(Integer.valueOf(min), real.minSeconds(), "the planner puts 90% of the walk-off falls on the course");
+        assertEquals(min, real.minSecondsOr(5), "and it wins over the server's min_seconds");
+        assertEquals(FairPlay.TOO_QUICK, FairPlay.judge(false, null, false, min * 1000L - 1, min, -1).reason(),
+                "nobody falls faster than gravity: quicker doesn't count");
+        assertTrue(FairPlay.judge(false, null, false, min * 1000L, min, -1).counts(), "exactly it does");
+        assertEquals(real.fallY(), FairPlay.fallY(real, 2, 6), 1e-9, "the fall height is always the course's own");
+    }
+
+    @Test
+    void aDropperRunInProgressAtTheWeeklyFlipStillCounts() {
+        GenTag old = new GenTag("fresh_dropper", "dropper", 1, 20_724, 0, 7L, 'A', "aaaaaaaaaaaa", 17_400, 26_100,
+                38_280, List.of(), List.of(), 1L);
+        GenTag flipped = new GenTag("fresh_dropper", "dropper", 1, 20_731, 0, 8L, 'B', "bbbbbbbbbbbb", 17_400, 26_100,
+                38_280, List.of(), List.of(), 1L);
+        Course then = DropperCourses.hand(old);
+        Course now = new Course("fresh_dropper", TrialKind.DROPPER, "Dropper", Tier.MEDIUM, "games",
+                new Course.Spot(106.5, 100, 10.5, 0, 30), then.checkpoints(), then.finish(), 44.0, 4, true, false, 2,
+                flipped);
+        Predicate<GenTag> bothStand = t -> t != null && (t.sameLayout(flipped) || t.sameLayout(old));
+        Predicate<GenTag> onlyNew = t -> t != null && t.sameLayout(flipped);
+        assertFalse(FairPlay.stale(then, then.layoutHash(), now, bothStand),
+                "the run keeps its snapshot: while its half stands, its finish counts on the old board");
+        assertTrue(FairPlay.stale(then, then.layoutHash(), now, onlyNew), "once its half is being cleared it doesn't");
     }
 }

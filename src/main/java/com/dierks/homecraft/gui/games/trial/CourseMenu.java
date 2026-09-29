@@ -6,8 +6,10 @@ import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.DropperText;
 import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.games.trial.TimeTrialsSettings;
+import com.dierks.homecraft.games.trial.TrialKind;
 import com.dierks.homecraft.games.trial.TrialText;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -35,7 +37,8 @@ import java.util.List;
  * week" as shipped, "today" when daily): 4 its name and course code; 11 your best this week, 12
  * this week's board, 14 your stars this week and the star times, 15 this week's best, 16 what its
  * first finish this week pays. A course recalled into Classic Parkour or Classic Sky Rings shows
- * its original set's board, with its old records to beat.
+ * its original set's board, with its old records to beat. A dropper says "levels" and that its
+ * clock keeps running after a bonk, and Start says a practice drop comes first when warm-ups are on.
  */
 public final class CourseMenu extends GameMenu {
 
@@ -58,7 +61,7 @@ public final class CourseMenu extends GameMenu {
         fill();
         boolean week = course.id().equals(trials.courseOfWeek());
         List<String> head = new ArrayList<>();
-        head.add("&7" + TrialText.checkpoints(course.checkpoints().size()) + ", then the finish");
+        head.add("&7" + TrialText.route(course));
         if (week) {
             head.add("&6★ Course of the week");
         }
@@ -68,16 +71,14 @@ public final class CourseMenu extends GameMenu {
         set(4, Menus.icon(TimeTrials.icon(course.kind()), "&e" + course.name() + " &7(" + TrialText.label(course) + ")",
                 head.toArray(new String[0])), null);
         List<String> rules = new ArrayList<>(course.kind().rules());
-        rules.add("The clock keeps running when you go back.");
+        rules.add(course.kind() == TrialKind.DROPPER ? DropperText.CLOCK_RULE : "The clock keeps running when you go back.");
         set(10, rulesTile(rules), null);
         Long best = trials.best(viewer, course.id());
         set(11, Menus.icon(Material.CLOCK, best == null ? "&7No time yet" : "&eYour best: &f" + TrialText.time(best)),
                 null);
         set(12, Menus.icon(Material.OAK_SIGN, "&eHigh scores", "&7The fastest times on " + course.name() + "."),
                 e -> trials.showScores(viewer, course.id(), this::reopen));
-        set(13, Menus.icon(Material.LIME_CONCRETE, "&aStart", "&7You go to the start line",
-                "&7with only the course kit.", "&7Your things come back when", "&7you finish or leave."),
-                e -> trials.startFromScreen(viewer, course.id()));
+        set(13, startTile(), e -> trials.startFromScreen(viewer, course.id()));
         GamesDao.ScoreRow weekBest = trials.weekRecord(course.id());
         set(14, Menus.icon(Material.IRON_INGOT, weekBest == null ? "&7No time this week yet"
                 : "&eThis week: &f" + TrialText.time(weekBest.score()) + " &7by &f" + trials.holder(weekBest.player())),
@@ -127,7 +128,7 @@ public final class CourseMenu extends GameMenu {
         Slots.Def slot = Slots.of(t.slot());
         boolean week = course.id().equals(trials.courseOfWeek());
         List<String> head = new ArrayList<>();
-        head.add("&7" + TrialText.checkpoints(course.checkpoints().size()) + ", then the finish");
+        head.add("&7" + TrialText.route(course));
         long now = games.clock().nowMillis();
         long next = trials.generated().nextChangeAt();
         if (t.recalled()) {
@@ -149,7 +150,7 @@ public final class CourseMenu extends GameMenu {
         set(4, Menus.icon(TimeTrials.icon(course.kind()), headerName(course, slot, DailyLookup.code(games, t)),
                 head.toArray(new String[0])), null);
         List<String> rules = new ArrayList<>(course.kind().rules());
-        rules.add("The clock keeps running when you go back.");
+        rules.add(course.kind() == TrialKind.DROPPER ? DropperText.CLOCK_RULE : "The clock keeps running when you go back.");
         set(10, rulesTile(rules), null);
         String board = TimeTrials.board(course);
         Long best = trials.bestOn(viewer, board);
@@ -158,9 +159,7 @@ public final class CourseMenu extends GameMenu {
         String whose = cadence == 1 ? "today's " : cadence == 7 ? "this week's " : "this ";
         set(12, Menus.icon(Material.OAK_SIGN, "&e" + GenCopy.times(cadence), "&7The fastest times on " + whose
                 + course.name() + "."), e -> trials.showScores(viewer, course.id(), this::reopen));
-        set(13, Menus.icon(Material.LIME_CONCRETE, "&aStart", "&7You go to the start line",
-                "&7with only the course kit.", "&7Your things come back when", "&7you finish or leave."),
-                e -> trials.startFromScreen(viewer, course.id()));
+        set(13, startTile(), e -> trials.startFromScreen(viewer, course.id()));
         int stars = DailyLookup.stars(games, viewer.getUniqueId(), t);
         long weekStars = DailyLookup.weekStars(games, viewer.getUniqueId(), DailyLookup.weekKey(games));
         set(14, Menus.glint(Menus.icon(Material.NETHER_STAR, DailyText.starsNow(cadence, stars),
@@ -211,6 +210,16 @@ public final class CourseMenu extends GameMenu {
                 : freshDone ? "&eTokens for finishing &7- " + firstWords + " &a✔ done"
                 : "&eTokens for finishing &7- " + firstWords + " &6" + TrialText.tokens(fresh);
         return Menus.icon(Material.GOLD_NUGGET, name, lore.toArray(new String[0]));
+    }
+
+    /** Start: the start line with only the course kit (and, for a dropper, its one practice drop). */
+    private ItemStack startTile() {
+        List<String> lore = new ArrayList<>(List.of("&7You go to the start line", "&7with only the course kit.",
+                "&7Your things come back when", "&7you finish or leave."));
+        if (course.kind() == TrialKind.DROPPER && trials.settings().warmupsOn()) {
+            lore.add(DropperText.PRACTICE_ON_START);
+        }
+        return Menus.icon(Material.LIME_CONCRETE, "&aStart", lore.toArray(new String[0]));
     }
 
     private void reopen() {

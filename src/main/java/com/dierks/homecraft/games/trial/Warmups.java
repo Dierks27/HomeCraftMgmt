@@ -44,8 +44,9 @@ final class Warmups {
      * it); false to start at once, as before.
      */
     boolean offer(Player player, Course c) {
-        if (player == null || c == null || !Warmup.offered(trials.settings(), false)) {
-            return false;
+        if (player == null || c == null || !Warmup.offered(trials.settings(), false, c.kind())
+                || trials.raceMode().holds().refusal(c.id()) != null) {
+            return false; // no choice to make: the start goes ahead (or is refused) as before
         }
         new WarmupChoiceMenu(trials.plugin(), trials, c, player).open(player);
         return true;
@@ -63,7 +64,7 @@ final class Warmups {
             trials.games().tell(player, Refusal.of("That course is closed right now."));
             return;
         }
-        if (warmUp && Warmup.offered(trials.settings(), false)) {
+        if (warmUp && Warmup.offered(trials.settings(), false, c.kind())) {
             wanted.add(player.getUniqueId());
         } else {
             wanted.remove(player.getUniqueId());
@@ -84,11 +85,9 @@ final class Warmups {
             return;
         }
         int seconds = trials.settings().warmupSeconds();
-        if (seconds <= 0 || !run.beginWarmup(Warmup.endsAt(Bukkit.getCurrentTick(), seconds))) {
+        if (!Warmup.begin(run, Bukkit.getCurrentTick(), seconds, TimeTrials.position(p, run), System.nanoTime())) {
             return;
         }
-        run.progress = new Progress(run.course, TimeTrials.position(p, run), System.nanoTime());
-        run.phase = TrialRun.Phase.RUNNING;
         p.getInventory().setItem(Warmup.KIT_SLOT, KitItems.item(trials, Warmup.TIMED, Material.LIME_DYE,
                 Warmup.TIMED_NAME, "&7Ends the warm-up now.", "&7Then the 3-2-1 at the start,",
                 "&7and your timed run."));
@@ -152,23 +151,12 @@ final class Warmups {
         p.sendMessage(Text.of(Warmup.lap(time)));
         TimeTrials.title(p, "&f" + time, "&7Warm-up lap - not counted", 30);
         TimeTrials.ping(p, 1.2f);
-        run.progress = new Progress(run.course, run.course.start().point(), System.nanoTime());
-        // nothing counts until the run's own teleport lands at the start (sent on the next tick)
-        run.suspended = true;
-        run.expect = null;
-        run.lastReset = Long.MIN_VALUE / 2;
+        Warmup.lapDone(run, System.nanoTime()); // round again from the start, sent there on the next tick
     }
 
     /** The warm-up is over: back to the start, and the normal 3-2-1. */
     private void end(Player p, TrialRun run, boolean early) {
-        run.endWarmup();
-        run.phase = TrialRun.Phase.COUNTDOWN;
-        run.countdown = TimeTrials.COUNTDOWN_TICKS + 1;
-        run.progress = null;
-        run.voided = null;
-        run.stalls.clear();
-        run.backDue = false;
-        run.suspended = false;
+        Warmup.toCountdown(run);
         p.getInventory().setItem(Warmup.KIT_SLOT, null);
         p.sendMessage(Text.of(Warmup.ended(early)));
         trials.toStart(p, run);

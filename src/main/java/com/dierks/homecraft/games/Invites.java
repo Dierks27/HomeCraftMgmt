@@ -41,8 +41,12 @@ public final class Invites {
 
     /** The game whose invites a player must turn on (from the Take a break screen). */
     public static final String COIN_FLIP = "coin_flip";
-    /** The games you can invite a friend to (their invites are on until a player turns them off). */
-    public static final List<String> FRIEND_GAMES = List.of("connect_four", "tic_tac_toe");
+    /**
+     * The games you can invite a friend to (their invites are on until a player turns them off).
+     * {@code trials}: party races (WP-R1, owner decision D4), so {@code /hcm play invites off}
+     * covers them too.
+     */
+    public static final List<String> FRIEND_GAMES = List.of("connect_four", "tic_tac_toe", "trials");
     /** The same two players can't be asked again for this long after an invite. */
     public static final long PAIR_COOLDOWN_MS = 30_000L;
     /** The shortest and longest an invite may wait. */

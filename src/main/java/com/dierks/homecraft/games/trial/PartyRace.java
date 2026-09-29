@@ -350,6 +350,31 @@ public final class PartyRace implements RaceLink {
         }
         int place = finishers();
         say.accept("&6" + e.name + " came " + RaceStandings.ordinal(place) + "! &f" + TrialText.time(raceMs));
+        Entry ahead = place > 1 ? finisher(place - 1) : null;
+        if (ahead != null && raceMs - ahead.ms <= PHOTO_FINISH_MS) {
+            say.accept(photoFinish(ahead.name, raceMs - ahead.ms));
+        }
+    }
+
+    /** Two finishes this close (ms) are a photo finish. */
+    static final long PHOTO_FINISH_MS = 200;
+
+    /** "&amp;ePhoto finish! &amp;fSam by 0.12 s". */
+    static String photoFinish(String winner, long byMs) {
+        return "&ePhoto finish! &f" + winner + " by " + String.format(java.util.Locale.ROOT, "%.2f", byMs / 1000.0)
+                + " s";
+    }
+
+    /** The finisher in {@code place} (1 up, by finish time), or {@code null}. */
+    private Entry finisher(int place) {
+        List<Entry> in = new ArrayList<>();
+        for (Entry o : entries.values()) {
+            if (o.result == Result.FINISHED) {
+                in.add(o);
+            }
+        }
+        in.sort(Comparator.comparingLong((Entry o) -> o.ms).thenComparingInt(o -> o.order));
+        return place >= 1 && place <= in.size() ? in.get(place - 1) : null;
     }
 
     @Override
@@ -368,7 +393,7 @@ public final class PartyRace implements RaceLink {
     @Override
     public void ready(UUID racer) {
         Entry e = entries.get(racer);
-        if (e == null || e.ready || state != State.WARMUP) {
+        if (e == null || e.ready || (state != State.WARMUP && state != State.SEATING)) {
             return;
         }
         e.ready = true;
@@ -433,6 +458,17 @@ public final class PartyRace implements RaceLink {
         int place = RaceStandings.placeOf(standings(), racer);
         String lap = laps > 1 ? " &7· Lap " + Laps.lapOf(e.reached, perLap, laps) + "/" + laps : "";
         return "&e" + RaceStandings.ordinal(place) + " &7of " + started() + lap;
+    }
+
+    /** The lap the racer is on (1 up; 1 on a one-lap course). */
+    int lap(UUID racer) {
+        Entry e = entries.get(racer);
+        return e == null ? 1 : Laps.lapOf(e.reached, perLap, laps);
+    }
+
+    /** How many laps the race is. */
+    int laps() {
+        return laps;
     }
 
     /** The share of the course the racer has done (the bar's fill), 0 to 1. */

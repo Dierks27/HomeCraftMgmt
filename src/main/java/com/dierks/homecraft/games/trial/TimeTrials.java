@@ -1411,13 +1411,18 @@ public final class TimeTrials implements Game {
     // ---- the finish -------------------------------------------------------------------------
 
     private void finish(Player p, TrialRun run, long nanos) {
-        if (run.warmup) { // WP-R1 (D3): a warm-up lap is never timed, recorded, paid or counted
-            warmups.lap(p, run, nanos);
-            return;
-        }
-        if (run.race != null) { // WP-R1: the race's own finish (a party race also counts it, once)
-            race.finish(p, run, nanos);
-            return;
+        switch (RaceRun.route(run)) { // WP-R1: a warm-up lap (D3) and a race's line never reach the normal finish
+            case WARMUP_LAP -> {
+                warmups.lap(p, run, nanos);
+                return;
+            }
+            case RACE -> {
+                race.finish(p, run, nanos);
+                return;
+            }
+            default -> {
+                // a solo run: as it always was
+            }
         }
         run.phase = TrialRun.Phase.DONE;
         long ms = run.elapsedMs(nanos);

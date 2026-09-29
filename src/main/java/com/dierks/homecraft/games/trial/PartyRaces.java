@@ -71,6 +71,8 @@ public final class PartyRaces {
     private final Map<Long, List<PartyRace.Line>> results = new HashMap<>();
     /** Racer → their position bar. */
     private final Map<UUID, BossBar> bars = new HashMap<>();
+    /** Racer → the lap their bar last showed (a new lap gets a title). */
+    private final Map<UUID, Integer> laps = new HashMap<>();
     private long ticks;
 
     PartyRaces(TimeTrials trials) {
@@ -103,6 +105,7 @@ public final class PartyRaces {
         warmups.clear();
         invites.clear();
         results.clear();
+        laps.clear();
     }
 
     /** A player quit: a DNF in their race, and out of their party (the host passes on). */
@@ -491,19 +494,29 @@ public final class PartyRaces {
                 hideBar(id);
                 continue;
             }
+            int lap = race.lap(id);
+            boolean last = race.laps() > 1 && lap == race.laps();
+            BossBar.Color colour = last ? BossBar.Color.YELLOW : BossBar.Color.BLUE;
+            String shown = last && race.racing(id) ? line + " &e- LAST LAP!" : line;
             BossBar bar = bars.get(id);
             if (bar == null) {
-                bar = BossBar.bossBar(Text.of(line), race.share(id), BossBar.Color.YELLOW, BossBar.Overlay.PROGRESS);
+                bar = BossBar.bossBar(Text.of(shown), race.share(id), colour, BossBar.Overlay.PROGRESS);
                 bars.put(id, bar);
                 p.showBossBar(bar);
             } else {
-                bar.name(Text.of(line));
+                bar.name(Text.of(shown));
                 bar.progress(race.share(id));
+                bar.color(colour);
+            }
+            Integer was = laps.put(id, lap);
+            if (was != null && lap > was && race.racing(id)) {
+                TimeTrials.title(p, "&aLap " + lap + " of " + race.laps() + "!", last ? "&eLast lap!" : "", 30);
             }
         }
     }
 
     private void hideBar(UUID id) {
+        laps.remove(id);
         BossBar bar = bars.remove(id);
         Player p = bar == null ? null : Bukkit.getPlayer(id);
         if (p != null) {
@@ -642,5 +655,35 @@ public final class PartyRaces {
 
     private GamesService games() {
         return trials.games();
+    }
+
+    // ---- /hcm play race <course> ----------------------------------------------------------------
+
+    /** Time Trials, when it is loaded. */
+    private static TimeTrials trials(GamesService games) {
+        return games != null && games.game(TimeTrials.SPEC.id()) instanceof TimeTrials t ? t : null;
+    }
+
+    /** Whether {@code id} names a time-trial course (open or not: a closed one is refused with its reason). */
+    public static boolean isCourse(GamesService games, String id) {
+        TimeTrials t = trials(games);
+        return t != null && games.guard(t, () -> t.course(id) != null, false);
+    }
+
+    /** The open courses' ids, for tab completion. */
+    public static List<String> courseIds(GamesService games) {
+        TimeTrials t = trials(games);
+        if (t == null || !games.enabled(t)) {
+            return List.of();
+        }
+        return games.guard(t, () -> t.openCourses().stream().map(Course::id).toList(), List.of());
+    }
+
+    /** {@code /hcm play race <course>}: "Race with friends" on that course, inside Time Trials' guard. */
+    public static void fromCommand(GamesService games, Player player, String courseId) {
+        TimeTrials t = trials(games);
+        if (t != null) {
+            games.guard(t, () -> t.raceWithFriends(player, courseId, null));
+        }
     }
 }

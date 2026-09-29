@@ -32,9 +32,13 @@ public final class Warmup {
     private Warmup() {
     }
 
-    /** Whether starting {@code test} (an admin's test run) on these settings offers a warm-up. */
-    public static boolean offered(TimeTrialsSettings s, boolean test) {
-        return s != null && s.warmupsOn() && !test;
+    /**
+     * Whether starting a course of {@code kind} offers a warm-up: warm-ups on
+     * ({@code games.trials.warmup_seconds} above 0), never for an admin's {@code test} run, and never
+     * for the Dropper, whose own practice drop plays that part (WP-D).
+     */
+    public static boolean offered(TimeTrialsSettings s, boolean test, TrialKind kind) {
+        return s != null && s.warmupsOn() && !test && kind != TrialKind.DROPPER;
     }
 
     /** The server tick a warm-up of {@code seconds} started at tick {@code now} ends. */
@@ -87,6 +91,52 @@ public final class Warmup {
     public static String ended(boolean early) {
         return early ? "&aTimed run! &7Back to the start for the 3-2-1."
                 : "&eWarm-up over! &7Back to the start for the 3-2-1.";
+    }
+
+    // ---- what a warm-up does to the run (pure: the tests pin exactly what the server does) --------
+
+    /**
+     * Start the run's one warm-up at tick {@code now} for {@code seconds}: the clock of free laps
+     * runs from where the player is ({@code at}, the start) at {@code nanos}. False, and nothing
+     * changes, when the run can't warm up (it already had one, or its clock runs).
+     */
+    static boolean begin(TrialRun run, long now, int seconds, Point at, long nanos) {
+        if (seconds <= 0 || !run.beginWarmup(endsAt(now, seconds))) {
+            return false;
+        }
+        run.progress = new Progress(run.course, at, nanos);
+        run.phase = TrialRun.Phase.RUNNING;
+        return true;
+    }
+
+    /**
+     * A warm-up lap crossed the line: nothing is judged or kept. The lap starts again from the
+     * course's start at {@code nanos}, and until the run's own teleport lands there nothing counts
+     * (the next tick sends the player back: a suspended run long past its last reset).
+     */
+    static void lapDone(TrialRun run, long nanos) {
+        run.progress = new Progress(run.course, run.course.start().point(), nanos);
+        run.suspended = true;
+        run.expect = null;
+        run.backDue = false;
+        run.lastReset = Long.MIN_VALUE / 2;
+    }
+
+    /**
+     * The warm-up is over (its time ran out, or "Start timed run"): the run is exactly a new run at
+     * its countdown, the normal 3-2-1 from the start, timed and counted as always, and it can't
+     * warm up again.
+     */
+    static void toCountdown(TrialRun run) {
+        run.endWarmup();
+        run.phase = TrialRun.Phase.COUNTDOWN;
+        run.countdown = TimeTrials.COUNTDOWN_TICKS + 1;
+        run.progress = null;
+        run.voided = null;
+        run.stalls.clear();
+        run.backDue = false;
+        run.suspended = false;
+        run.expect = null;
     }
 
     /** The kit item's NAME that ends a solo warm-up. */

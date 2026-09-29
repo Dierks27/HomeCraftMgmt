@@ -137,8 +137,26 @@ public final class GamesCommand {
             case "invites" -> invites(sender, args);
             case "news" -> news(sender, args);
             case "leave" -> leave(sender, args);
+            case "race" -> race(sender, args); // WP-R1 (D4): /hcm play race <course> is a party race
             default -> open(sender, args);
         }
+    }
+
+    /**
+     * {@code /hcm play race <course>}: a party race on that time-trial course (owner decision D4).
+     * Anything else ({@code /hcm play race}, or an admin's {@code /hcm play race <player>}) opens
+     * Race Night as before.
+     */
+    private void race(CommandSender sender, String[] args) {
+        GamesService games = args.length == 3 && sender instanceof Player ? plugin.games() : null;
+        if (games == null || !com.dierks.homecraft.games.trial.PartyRaces.isCourse(games, args[2])) {
+            open(sender, args);
+            return;
+        }
+        if (deny(sender, PLAY) || running(sender) == null) {
+            return;
+        }
+        com.dierks.homecraft.games.trial.PartyRaces.fromCommand(games, (Player) sender, args[2]);
     }
 
     /** {@code /hcm play <id> [player]}. */
@@ -723,6 +741,7 @@ public final class GamesCommand {
             out.add("&e/hcm play break &7- Take a break: your own limits on games of chance");
             out.add("&e/hcm play accept|deny &7- answer a game invite");
             out.add("&e/hcm play invites [on|off] &7- invites to friend games");
+            out.add("&e/hcm play race <course> &7- race a course with friends (free, just for fun)"); // WP-R1 (D4)
             out.add("&e/hcm play news [on|off] &7- a line in chat when new courses are up");
             out.add("&e/hcm leave &7- leave the world game you're in (your things come back)");
         }
@@ -775,6 +794,11 @@ public final class GamesCommand {
                 }
             } else if (n == 3 && (args[1].equalsIgnoreCase("invites") || args[1].equalsIgnoreCase("news"))) {
                 match(out, last, "on", "off");
+            } else if (n == 3 && args[1].equalsIgnoreCase("race") && games != null) { // WP-R1 (D4)
+                match(out, last, com.dierks.homecraft.games.trial.PartyRaces.courseIds(games).toArray(new String[0]));
+                if (!(sender instanceof Player) || sender.hasPermission(ADMIN)) {
+                    players(out, last);
+                }
             } else if (n == 3 && !PLAY_WORDS.contains(args[1].toLowerCase(Locale.ROOT))
                     && (!(sender instanceof Player) || sender.hasPermission(ADMIN))) {
                 players(out, last);

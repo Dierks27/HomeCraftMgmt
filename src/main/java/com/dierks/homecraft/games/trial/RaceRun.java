@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.trial;
 
 import com.dierks.homecraft.games.EndReason;
+import com.dierks.homecraft.games.gen.api.GenTag;
 
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -8,6 +9,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.LongSupplier;
+import java.util.function.Predicate;
 
 /**
  * A racer's side of a Time Trials run in race mode (EVENTS-DROPPER-SPEC §A.4.11), pure and tested.
@@ -27,6 +29,11 @@ import java.util.function.LongSupplier;
  * (owner decision D3), {@link State#GRID} held on the grid, {@link State#RACING}, and
  * {@link State#PARKED}: finished (or the race is over) and waiting on the stand. The coordinator
  * {@link #regrid re-grids} a parked or warming-up racer for the next race.
+ *
+ * <p><b>Every decision is made here.</b> What a race run's tick does ({@link #next}), when it is
+ * released and on which clock ({@link #release}), what crossing the line does ({@link #line}), which
+ * course staleness is judged on ({@link #stale}) and where a finish goes at all ({@link #route}) are
+ * plain methods, so the tests pin exactly what {@link RaceMode} does on the server.
  */
 final class RaceRun {
 
@@ -75,8 +82,8 @@ final class RaceRun {
     int normalDone;
     /** The coordinator ended the run itself ({@code endRace}): its session end is not a "left". */
     boolean ended;
-    /** The stand's collisions were switched off for this racer (restored when the run ends). */
-    boolean standing;
+    /** The racer's collisions were switched off (racers never shove each other; restored when the run ends). */
+    boolean noShove;
     /** What the next trial tick does ({@link Due}). */
     Due due = Due.NONE;
     /** Going home: why, and the line they read (or {@code null}). */
@@ -165,6 +172,133 @@ final class RaceRun {
     /** Whether a parked racer at {@code at} has wandered off the stand. */
     boolean offStand(Point at) {
         return state == State.PARKED && stand != null && at != null && stand.distance(at) > STAND_RADIUS;
+    }
+
+    // ---- the decisions RaceMode acts on -----------------------------------------------------------
+
+    /** Where a finish in Time Trials goes: a warm-up lap, a race's line, or a solo run's finish. */
+    enum Route {
+        /** A warm-up lap (solo or a race's shared warm-up): never judged, recorded, paid or reported. */
+        WARMUP_LAP,
+        /** A race run's line: the link hears it ({@link RaceMode#finish}). */
+        RACE,
+        /** A normal run's finish, exactly as it always was. */
+        SOLO
+    }
+
+    /** Where {@code run}'s finish goes: a warm-up comes first, then a race, else the normal finish. */
+    static Route route(TrialRun run) {
+        if (run.warmup) {
+            return Route.WARMUP_LAP;
+        }
+        return run.race != null ? Route.RACE : Route.SOLO;
+    }
+
+    /** What a race run's tick does. */
+    enum Act {
+        /** Already on the way home: nothing. */
+        ENDED,
+        /** Home now: the coordinator ended it, or the line with no stand. */
+        HOME,
+        /** The race is over (its link is no longer alive, or it failed): home with its called-off line. */
+        CALLED_OFF,
+        /** Onto the stand now. */
+        PARK,
+        /** Held on the grid: 3-2-1, then Go on the shared tick. */
+        GRID,
+        /** Waiting on the stand. */
+        STAND,
+        /** Racing: the normal tick runs it, and the link hears where the racer is. */
+        RACE,
+        /** The shared warm-up's free laps: the normal tick runs it, with the warm-up bar. */
+        WARMUP
+    }
+
+    /**
+     * What the tick does with this racer, given whether the race still runs. A trip home the
+     * coordinator asked for comes before "called off", so a racer the race sent home reads the
+     * coordinator's own line.
+     */
+    Act next(boolean alive) {
+        if (ended) {
+            return Act.ENDED;
+        }
+        if (due == Due.HOME) {
+            return Act.HOME;
+        }
+        if (!alive) {
+            return Act.CALLED_OFF;
+        }
+        if (due == Due.PARK) {
+            return Act.PARK;
+        }
+        return switch (state) {
+            case GRID -> Act.GRID;
+            case PARKED -> Act.STAND;
+            case RACING -> Act.RACE;
+            case WARMUP -> Act.WARMUP;
+        };
+    }
+
+    /**
+     * What the grid does at server tick {@code now}.
+     *
+     * @param hold  still held (the go tick hasn't come)
+     * @param count the countdown number to show now (3, 2, 1), or 0 for none this tick
+     * @param go    the clock starts now (the go tick has come and the racer is in place)
+     * @param nanos the shared start instant, once the go tick has come (0 before)
+     */
+    record Release(boolean hold, int count, boolean go, long nanos) {
+    }
+
+    /**
+     * The grid at tick {@code now}: held until the link's go tick, "3", "2", "1" on the last three
+     * whole seconds, then released on the shared clock. A racer not in place yet at Go ({@code arrived}
+     * false: a slow chunk, a boat not seated) isn't held and isn't started; it starts the moment it is
+     * in, on the same shared instant, so its clock already shows the time since Go.
+     */
+    Release release(long now, boolean arrived, Clock clock, LongSupplier nanos) {
+        long goTick = link.goTick();
+        if (now < goTick) {
+            long left = goTick - now;
+            int count = left <= TimeTrials.COUNTDOWN_TICKS && left % 20 == 0 ? (int) (left / 20) : 0;
+            return new Release(true, count, false, 0);
+        }
+        long go = clock.goNanos(link, goTick, nanos);
+        return new Release(false, 0, arrived, go);
+    }
+
+    /**
+     * What crossing the line does.
+     *
+     * @param report tell the link (false: this race's line was already crossed, nothing at all)
+     * @param normal also the course's normal counted finish (a party race), exactly once a race
+     * @param e4     a counted race finish that isn't a normal run: tell the quests once (E4 FINISH_COURSE)
+     * @param next   then park on the stand, or go home at the line when there is no stand
+     */
+    record Line(boolean report, boolean normal, boolean e4, Due next) {
+    }
+
+    /**
+     * The racer crossed the line with a finish that {@code counted} (fair play, the shortest
+     * believable time, the speed check; stale only on the base course). A Race Night finish never
+     * touches the course's boards or rewards; a party race's also counts as the normal run, once.
+     */
+    Line line(boolean counted) {
+        if (!crossed()) {
+            return new Line(false, false, false, Due.NONE);
+        }
+        boolean normal = normalFinish(counted);
+        return new Line(true, normal, counted && !normal, stand != null ? Due.PARK : Due.HOME);
+    }
+
+    /**
+     * Whether a finish now is stale: judged on the BASE course (its rev and layout, and the
+     * still-standing rule), never on the course derived from the grid spot and the laps, whose
+     * layout differs by design.
+     */
+    boolean stale(Course now, Predicate<GenTag> standing) {
+        return FairPlay.stale(base, baseLayout, now, standing);
     }
 
     /** The shared Go of every race: one {@code System.nanoTime()} per link and go tick. */

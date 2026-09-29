@@ -951,8 +951,9 @@ and a run already going always counts. The old half is emptied once nobody is on
   confirm` to clear that area, or use a flat world (below). A course is also refused, with a line in
   the console and in status, when a hand-built course is within 16 blocks of its area, when the
   world's spawn (or `safe_spot`) is, when a hand-built course already uses its id, or when its area
-  comes within 32 blocks of the Falling Floors arena (`games.falling_floors.origin`, on or off);
-  `claim` is refused then too, so it never clears one of your courses, the spawn or the arena.
+  comes within 32 blocks of the Falling Floors arena (`games.falling_floors.origin`) or the Clubhouse
+  (`games.clubhouse.origin`), on or off; `claim` is refused then too, so it never clears one of your
+  courses, the spawn, the arena or the Clubhouse.
 - **A flat world instead** (the fallback when your Games world has hills; no extra plugin needed):
   1. `/mv create games_fresh normal --world-type flat --no-structures` (Multiverse-Core 5; on 4.x
      it was `-t flat -a false`; check `/mv create --help`).
@@ -1187,10 +1188,9 @@ line, so they can ask for a favourite back.
 - The keep area is hand-built territory that nothing guards, so every keep checks its plot is empty
   first, however often it was cleared before; blocks there refuse it, and `claim plot <n> confirm`
   clears them. `claim plot <n>` (and every plot job) is refused while keeping is off (the keep area
-  too near a Fresh Courses area, or within 32 blocks of the Falling Floors arena), when the plot
-  overlaps a kept course's old plot (the keep area
-  moved), or when a registered course stands in it or within 16 blocks: it says which, and changes
-  nothing.
+  too near a Fresh Courses area, or within 32 blocks of the Falling Floors arena or the Clubhouse),
+  when the plot overlaps a kept course's old plot (the keep area moved), or when a registered course
+  stands in it or within 16 blocks: it says which, and changes nothing.
 - Refused within `avoid_before_restart_minutes` of a restart: recall and keep. A keep, clear-plot or
   claim plot still waiting when that window begins isn't started (its admin is told to run it again
   after the restart); one cut off by the restart after it began building goes on after the restart.
@@ -1307,17 +1307,17 @@ off (`games.falling_floors.enabled: false`).
   it might still be going at the next restart (at its longest: the 10-second countdown,
   `round_seconds`, then about 40 seconds more while the edges fall in), and `/hcm games check` warns
   when `round_seconds` is longer than `games.restart_hold_minutes`.
-- **Safety.** The arena is one box, 48 x 40 x 48 at `origin` (shipped x 5376-5423, y 176-215,
-  z 4352-4399). Before anything is written it must be 32 blocks from every Fresh Courses area
-  (switched on or not) and the kept courses, 16 from every hand-built course and from the world's
-  spawn and `games.fresh.safe_spot`, and inside the world's heights and border. The first time, the
-  box must be empty: anything in it closes the game, touching nothing, until `/hcm games floors claim
-  confirm`. After that nobody, admins included, can change a block in the box while the game is on
-  ("This is the Falling Floors arena - it puts itself back. Use /hcm games floors."),
-  and during a round the only blocks that change are floor blocks turning red, then air (at most 128
-  a tick). After a crash, the next start puts every floor back before anyone comes in, and everyone's
-  things come back as from any world game. A reset that can't put the floors back three times closes
-  the game and names where; `/hcm games floors reset` opens it again.
+- **Safety.** The arena is one box, 48 x 40 x 48 at `origin` (shipped x 5376-5423, y 176-215, z
+  4352-4399). Before anything is written it must be 32 blocks from every Fresh Courses area
+  (switched on or not), the kept courses and the Clubhouse, 16 from every hand-built course and from
+  the world's spawn and `games.fresh.safe_spot`, and inside the world's heights and border. The
+  first time, the box must be empty: anything in it closes the game, touching nothing, until `/hcm
+  games floors claim confirm`. After that nobody, admins included, can change a block in the box
+  while the game is on ("This is the Falling Floors arena - it puts itself back. Use /hcm games
+  floors."), and during a round the only blocks that change are floor blocks turning red, then air
+  (at most 128 a tick). After a crash, the next start puts every floor back before anyone comes in,
+  and everyone's things come back as from any world game. A reset that can't put the floors back
+  three times closes the game and names where; `/hcm games floors reset` opens it again.
 
 | Key | Default | Meaning |
 |---|---|---|

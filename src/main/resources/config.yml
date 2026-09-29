@@ -2102,7 +2102,8 @@ games:
     # Ships OFF. true + /hcm reload to open it.
     enabled: false
     # The box's corner (x y z; x and z a multiple of 16). It is 48 x 40 x 48 and must stay 32 blocks
-    # from every Fresh Courses area and the kept courses, and 16 from hand-built courses.
+    # from every Fresh Courses area, the kept courses and the Clubhouse, and 16 from hand-built
+    # courses.
     origin: [5376, 176, 4352]
     # Ticks a stepped-on block stays red before it falls (6-20; 20 ticks is a second).
     fade_ticks: 10

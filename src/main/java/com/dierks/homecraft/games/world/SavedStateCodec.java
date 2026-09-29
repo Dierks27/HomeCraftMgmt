@@ -13,7 +13,8 @@ import java.util.regex.Pattern;
  * <p>The order is the part that matters. Restoring sets the game mode first (changing it resets
  * flight, and a game-mode profile in Multiverse-Inventories would otherwise swap items in under
  * us), then the effects (Health Boost raises max health), then health clamped to the max health as
- * it now stands, absorption, food, XP, speeds, flight, fire and air, and the inventory last.
+ * it now stands, absorption, food, XP, speeds, flight, no fall and no speed, fire and air, and the
+ * inventory last.
  * Clearing for a game sets ADVENTURE before touching the inventory for the same reason. The Bukkit
  * adapter only implements {@link Body} over a {@code Player}; the order lives here, where a test
  * can hold it still.
@@ -158,6 +159,13 @@ public final class SavedStateCodec {
 
         void flight(boolean allowFlight, boolean flying);
 
+        /**
+         * No fall distance and no speed. A game cancels fall damage but not the fall itself (a Dropper
+         * level is a drop of 24 blocks or more), and the server keeps a fall through a teleport: a
+         * snapshot put on in mid-air must never carry one home, where nothing cancels it (final gate #18).
+         */
+        void still();
+
         void fire(int ticks);
 
         void air(int ticks);
@@ -171,8 +179,8 @@ public final class SavedStateCodec {
 
     /**
      * Put {@code s} back on {@code body}, overwriting: game mode, effects, health (clamped to max
-     * health once the effects are back), absorption, food, XP, speeds, flight, fire, air, and the
-     * inventory last.
+     * health once the effects are back), absorption, food, XP, speeds, flight, no fall and no speed,
+     * fire, air, and the inventory last.
      */
     public static void apply(SavedState s, List<Effect> effects, Body body) {
         body.gameMode(s.gameMode() == null || s.gameMode().isBlank() ? "SURVIVAL" : s.gameMode());
@@ -190,6 +198,7 @@ public final class SavedStateCodec {
         body.xp(Math.max(0, s.xpLevel()), clamp(s.xpProgress(), 0f, 1f, 0f), Math.max(0, s.xpTotal()));
         body.speeds(clamp(s.walkSpeed(), -1f, 1f, WALK), clamp(s.flySpeed(), -1f, 1f, FLY));
         body.flight(s.allowFlight(), s.allowFlight() && s.flying());
+        body.still();
         body.fire(s.fireTicks());
         body.air(s.air());
         body.contents();
@@ -198,8 +207,8 @@ public final class SavedStateCodec {
     /**
      * Ready a player for a world game: ADVENTURE first (our own change, before anything else, so
      * no game-mode profile can swap items in), then an empty inventory, no effects, no fire, no
-     * flight, full health and food, and no XP. Speeds, attributes and air are left alone — a world
-     * session never changes them.
+     * flight and no fall, full health and food, and no XP. Walk and fly speeds, attributes and air
+     * are left alone — a world session never changes them.
      */
     public static void clearForGame(Body body) {
         body.gameMode("ADVENTURE");
@@ -207,6 +216,7 @@ public final class SavedStateCodec {
         body.clearEffects();
         body.fire(0);
         body.flight(false, false);
+        body.still();
         body.health(body.maxHealth());
         body.food(FULL_FOOD, FRESH_SATURATION, 0f);
         body.xp(0, 0f, 0);

@@ -16,6 +16,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -86,6 +87,12 @@ final class BukkitStateAdapter {
         ItemStack[] contents = ItemStack.deserializeItemsFromBytes(s.items());
         List<SavedStateCodec.Effect> effects = SavedStateCodec.decodeEffects(s.effects());
         return player -> SavedStateCodec.apply(s, effects, new Body(player, contents));
+    }
+
+    /** No fall distance and no speed (final gate #18): what a game built up never lands with them. */
+    static void still(Player p) {
+        p.setFallDistance(0f);
+        p.setVelocity(new Vector());
     }
 
     /** ADVENTURE first, then an empty, healthy, fed player with no effects or XP. */
@@ -179,6 +186,11 @@ final class BukkitStateAdapter {
             if (allowFlight) {
                 p.setFlying(flying);
             }
+        }
+
+        @Override
+        public void still() {
+            BukkitStateAdapter.still(p);
         }
 
         @Override

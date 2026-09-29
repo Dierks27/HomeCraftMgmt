@@ -72,6 +72,10 @@ class WatchModeRestoreTest {
         }
 
         @Override
+        public void still() {
+        }
+
+        @Override
         public void fire(int ticks) {
         }
 

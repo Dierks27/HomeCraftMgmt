@@ -109,6 +109,8 @@ final class SessionCore<P, I> {
     static final String CLEARED = "cleared:";
     /** The player's own data after a restore: the snapshot is on them. */
     static final String APPLIED = "applied:";
+    /** A Clubhouse watcher's mode: the session's own, never left on anyone (#6, final gate #19). */
+    static final String SPECTATOR = "SPECTATOR";
 
     // What an admin is told ({@code /hcm games saved <player> restore|return}).
     static final String ADMIN_BUSY = "&7Their things are already on the way back.";
@@ -270,6 +272,12 @@ final class SessionCore<P, I> {
 
         /** Write the player's data to disk now, so a crash can't undo a restore. */
         void save(P p);
+
+        /**
+         * No fall distance and no speed. The server keeps a fall through a teleport, and outside a
+         * session nothing cancels its damage: every teleport of ours lands with none (final gate #18).
+         */
+        void still(P p);
 
         /** Leave any vehicle. */
         void dismount(P p);
@@ -976,7 +984,17 @@ final class SessionCore<P, I> {
             try {
                 SavedState row = dao.loadState(id);
                 if (row != null && s.sid.equals(row.sessionId())) {
-                    s.unbanked.addAll(addCarry(p, row.sessionId(), stash));
+                    List<I> left = addCarry(p, row.sessionId(), stash);
+                    s.unbanked.addAll(left);
+                    if (left.size() < stash.size()) {
+                        // Write, then save (final gate #17): once the server has emptied the inventory
+                        // (after this event), their file must stop holding what is in the carry now.
+                        port.later(1, () -> {
+                            if (port.online(p)) {
+                                port.save(p);
+                            }
+                        });
+                    }
                 }
             } catch (SQLException e) {
                 log.log(Level.SEVERE, "Games: could not keep " + port.name(p) + "'s things from a death", e);
@@ -1093,7 +1111,8 @@ final class SessionCore<P, I> {
      * WP-CH (the Clubhouse review, #3): empty a session player's inventory mid-session for another
      * game's kit without losing anything. Every item that isn't a kit item (an auction win or a Mini
      * delivered mid-session) is banked in the row's carry first, exactly as at the session's end, and
-     * comes home with them; what the database refuses goes straight back into the inventory.
+     * comes home with them; what the database refuses goes straight back into the inventory. The
+     * player is saved straight after, so a crash can't bring back what was banked (final gate #17).
      *
      * @return whether it was done (false: no ACTIVE session with a row of its own, and nothing changed)
      */
@@ -1114,6 +1133,10 @@ final class SessionCore<P, I> {
             return false;
         }
         give(p, bank(p, row));
+        // Write, then save (final gate #17), as every restore does: from here their own data file must
+        // stop holding what is in the carry now, or a hard crash brings it back next to the "cleared"
+        // mark and the crash-join banks it a second time (two copies of one numbered Mini).
+        port.save(p);
         return true;
     }
 
@@ -1149,6 +1172,30 @@ final class SessionCore<P, I> {
             } catch (RuntimeException e) {
                 log.log(Level.WARNING, "Games: could not put " + port.name(s.player) + " back in adventure mode", e);
             }
+        }
+    }
+
+    /**
+     * A recovery outside a session that fails in place leaves the player as they are, but never in
+     * spectator mode that wasn't their own (final gate #19). A Clubhouse watcher's SPECTATOR is the
+     * session's, and after a crash there is no session left to take it back ({@link #noRestore} only
+     * runs for a live one): with their world not loaded yet or a snapshot that no longer reads, they
+     * would fly through every base until an admin helped. So, still in spectator mode while the mode
+     * they came in with ({@code row}) isn't, they are put in adventure mode, as our own change. With
+     * no row to read (the database is failing) that is done only in a Games world, where a live row
+     * says a game put them there.
+     */
+    private void unstick(P p, SavedState row) {
+        if (!port.online(p)) {
+            return;
+        }
+        if (row == null ? !port.gamesWorld(port.world(p)) : SPECTATOR.equals(row.gameMode())) {
+            return;
+        }
+        try {
+            port.resetMode(p, SPECTATOR);
+        } catch (RuntimeException e) {
+            log.log(Level.WARNING, "Games: could not take " + port.name(p) + " out of spectator mode", e);
         }
     }
 
@@ -1257,6 +1304,7 @@ final class SessionCore<P, I> {
             row = dao.loadState(id);
         } catch (SQLException e) {
             log.log(Level.SEVERE, "Games: could not read " + port.name(p) + "'s saved state", e);
+            unstick(p, null);
             return ADMIN_READ;
         }
         if (row == null) {
@@ -1275,6 +1323,7 @@ final class SessionCore<P, I> {
         }
         if (!port.worldExists(row.sessionWorld())) {
             port.stripKit(p);
+            unstick(p, row);
             failed(p, row, null, "its world " + row.sessionWorld() + " is gone");
             return "&cTheir game's world (" + row.sessionWorld() + ") is gone. &7Nothing was changed - see the server log.";
         }
@@ -1282,6 +1331,7 @@ final class SessionCore<P, I> {
             port.prepare(row); // read it all BEFORE anyone is moved: an unreadable one fails in place
         } catch (RuntimeException e) {
             port.stripKit(p);
+            unstick(p, row);
             failed(p, row, e, "the saved state can't be read");
             return ADMIN_UNREADABLE;
         }
@@ -1299,6 +1349,7 @@ final class SessionCore<P, I> {
             if (!ok || !port.online(p) || !row.sessionWorld().equals(port.world(p))) {
                 recovering.remove(id);
                 if (port.online(p)) {
+                    unstick(p, row);
                     port.tell(p, NOT_RESTORED);
                 }
                 return;
@@ -1348,6 +1399,7 @@ final class SessionCore<P, I> {
         } catch (SQLException e) {
             recovering.remove(id);
             log.log(Level.SEVERE, "Games: could not read " + port.name(p) + "'s saved state", e);
+            unstick(p, null);
             return ADMIN_READ;
         }
         if (fresh == null || !fresh.sessionId().equals(row.sessionId()) || !SavedState.ACTIVE.equals(fresh.phase())) {
@@ -1364,6 +1416,7 @@ final class SessionCore<P, I> {
         } catch (RuntimeException e) {
             recovering.remove(id);
             port.stripKit(p);
+            unstick(p, fresh);
             failed(p, fresh, e, "the saved state can't be read");
             return ADMIN_UNREADABLE;
         }
@@ -1379,6 +1432,7 @@ final class SessionCore<P, I> {
         } catch (RuntimeException e) {
             recovering.remove(id);
             give(p, unbanked);
+            unstick(p, fresh); // only if the restore didn't get as far as their mode (it goes first)
             failed(p, fresh, e, "putting it back failed");
             return ADMIN_APPLY;
         }
@@ -1613,15 +1667,34 @@ final class SessionCore<P, I> {
 
     // ---- helpers --------------------------------------------------------------------------------
 
-    /** Every teleport of ours: off any vehicle, armed, then sent. */
+    /**
+     * Every teleport of ours: off any vehicle, armed, then sent; it lands with no fall and no speed
+     * (final gate #18: a Dropper player sent home 30 blocks into a drop would take the whole fall at
+     * home, where nothing cancels it, with their real things on them).
+     */
     private void go(P p, Place to, boolean sync, Consumer<Boolean> done) {
         UUID id = port.id(p);
         ownDismount(p, () -> port.dismount(p));
         arm(id, to);
+        Consumer<Boolean> landed = ok -> {
+            if (Boolean.TRUE.equals(ok) && port.online(p)) {
+                still(p);
+            }
+            done.accept(ok);
+        };
         if (sync) {
-            done.accept(port.teleportNow(p, to));
+            landed.accept(port.teleportNow(p, to));
         } else {
-            port.teleport(p, to, done);
+            port.teleport(p, to, landed);
+        }
+    }
+
+    /** {@link Port#still}, never a throw into the step that called it. */
+    private void still(P p) {
+        try {
+            port.still(p);
+        } catch (RuntimeException e) {
+            log.log(Level.WARNING, "Games: could not stop " + port.name(p) + "'s fall", e);
         }
     }
 

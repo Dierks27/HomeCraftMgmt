@@ -88,6 +88,16 @@ public final class GamesBench {
         return host.balanceOf(player);
     }
 
+    /**
+     * Scheduled restarts at {@code times} (the kit's zone), each held {@code holdMinutes} before
+     * (the restart hold: no new world games, warm-ups end). An empty list: none.
+     */
+    public void restarts(List<java.time.LocalTime> times, int holdMinutes) {
+        com.dierks.homecraft.config.GamesConfig.Parsed c = host.config;
+        host.config = new com.dierks.homecraft.config.GamesConfig.Parsed(c.common().withRestarts(times, holdMinutes),
+                c.settings(), c.unreadable());
+    }
+
     /** Run the framework's scheduled tasks that are due (all of them). */
     public void runTasks() {
         host.runTasks();

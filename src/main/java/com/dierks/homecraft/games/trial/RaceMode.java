@@ -1,6 +1,8 @@
 package com.dierks.homecraft.games.trial;
 
 import com.dierks.homecraft.games.EndReason;
+import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.NoPush;
 import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.world.KitItems;
 import com.dierks.homecraft.games.world.Session;
@@ -21,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 
@@ -51,11 +54,16 @@ import java.util.logging.Level;
  *   <li>{@link RaceRun.Holds} refuses new solo runs on a course held for a race.</li>
  * </ol>
  * Finishers are parked on the stand (the boat goes, the run idles) or, with no stand, sent home at
- * the line. A racer's collisions are off for the whole race run (runners share the start spot,
- * finishers the stand), so nobody shoves anybody; boats still bump, as the owner chose. Every
- * teleport a finish causes happens on the next trial tick, never inside the move event that saw the
- * line. A racer the coordinator ends while still on the way in goes straight home on arrival, and a
- * race's end never touches anybody's solo run.
+ * the line; race mode is the stand's one keeper (a racer who wanders off it is put back once, here,
+ * within the link's {@link RaceLink#standRadius()}). A racer's collisions are off for the whole race
+ * run (runners share the start spot, finishers the stand), and a parkour or elytra racer is on the
+ * games' no-push team ({@link NoPush}) from seating until the run ends by any way at all, so nobody
+ * shoves anybody; boats still bump, as the owner chose. Every teleport a finish causes happens on the
+ * next trial tick, never inside the move event that saw the line. A racer the coordinator ends while
+ * still on the way in goes straight home on arrival; a racer whose entry is dropped on the way (hands
+ * not free, hurt, can't be reached: nothing tells the game) is swept once a tick and the race hears
+ * {@link RaceLink#left}, so it never waits on a ghost; and a race's end never touches anybody's solo
+ * run.
  *
  * <p><b>A coordinator can't break Time Trials.</b> Every call into a {@link RaceLink} is caught
  * here: a link that throws is logged once and treated as over, so its racers go home and every
@@ -67,6 +75,8 @@ final class RaceMode {
     static final String PARKED_BAR = "&7You're done - watch the others finish!";
     /** What a parked racer who wandered off reads. */
     static final String BACK_TO_STAND = "&7Please watch from the stand.";
+    /** What a racer who left their grid spot before Go reads (they are put back on it). */
+    static final String BACK_TO_SPOT = "&eStay on your grid spot until it says Go!";
 
     private final TimeTrials trials;
     private final RaceRun.Clock clock = new RaceRun.Clock();
@@ -79,6 +89,8 @@ final class RaceMode {
      * and nobody else's run (a solo run started later) is ever touched by a race's end.
      */
     private final Map<UUID, Arrival> arriving = new HashMap<>();
+    /** The no-push team a test passes; {@code null}: the games' own ({@code GamesService.noPush()}). */
+    private NoPush pushes;
 
     /** A racer on the way in: their race, and whether (and how) the race sent them home meanwhile. */
     private static final class Arrival {
@@ -124,12 +136,12 @@ final class RaceMode {
         long now = Bukkit.getCurrentTick();
         boolean warm = call(link, () -> link.warmupUntil() > now, false);
         Course.Spot spot = grid != null ? grid : raced.start();
-        Course.Spot at = warm ? base.start() : spot;
+        Course.Spot at = entrySpot(base, spot, warm);
         Point standAt = stand != null && stand.getWorld() != null && stand.getWorld().equals(world)
                 ? TimeTrials.point(stand) : null;
         Location to = new Location(world, at.x(), at.y(), at.z(), at.yaw(), at.pitch());
         UUID id = p.getUniqueId();
-        arriving.put(id, new Arrival(link));
+        expect(id, link);
         boolean in = trials.sessions().enter(p, trials, base.id(), to,
                 q -> seated(q, new RaceRun(link, base, spot, standAt, warm), raced));
         if (!in) {
@@ -137,6 +149,70 @@ final class RaceMode {
             return Refusal.of("Stand still somewhere safe to join the race.");
         }
         return null;
+    }
+
+    /**
+     * Where a racer's world session enters them: their grid spot, or for the shared warm-up the
+     * course's start, except a boat, which warms up from its own grid spot too (up to 8 boats spawned
+     * on one point would sit inside each other).
+     */
+    static Course.Spot entrySpot(Course base, Course.Spot spot, boolean warm) {
+        return warm && base.kind() != TrialKind.BOAT ? base.start() : spot;
+    }
+
+    /** A racer is on the way in for {@code link}'s race (their entry started). */
+    void expect(UUID id, RaceLink link) {
+        arriving.put(id, new Arrival(link));
+    }
+
+    /** Whether {@code id} is on the way in (for the tests). */
+    boolean arriving(UUID id) {
+        return arriving.containsKey(id);
+    }
+
+    /** Whether {@code id} is on the way in for {@code link}'s race. */
+    boolean arrivingFor(UUID id, RaceLink link) {
+        Arrival a = id == null ? null : arriving.get(id);
+        return a != null && a.link == link;
+    }
+
+    /**
+     * Once a tick (Time Trials' tick): a racer whose entry was dropped on the way in never arrives,
+     * and nothing tells the game (the hands weren't free at the depart, they were hurt or jumped, the
+     * start couldn't be reached, a saved-state row turned up). Anyone on the way in who is offline or
+     * no longer entering a Time Trials session is forgotten, and unless their race already sent them
+     * home it hears {@link RaceLink#left} (ADMIN), once: a party race or Race Night never waits on a
+     * ghost. A session still ENTERING is still coming, so there is no false alarm.
+     */
+    void sweepArrivals() {
+        if (!arriving.isEmpty()) {
+            sweepArrivals(this::stillComing);
+        }
+    }
+
+    /** {@link #sweepArrivals()} with who is still on the way in decided by {@code stillComing}. */
+    void sweepArrivals(Predicate<UUID> stillComing) {
+        for (UUID id : new ArrayList<>(arriving.keySet())) {
+            if (stillComing.test(id)) {
+                continue;
+            }
+            Arrival a = arriving.remove(id);
+            if (a != null && !a.sentHome) {
+                call(a.link, () -> {
+                    a.link.left(id, EndReason.ADMIN);
+                    return null;
+                }, null);
+            }
+        }
+    }
+
+    private boolean stillComing(UUID id) {
+        Player p = online(id);
+        if (p == null || !p.isOnline()) {
+            return false;
+        }
+        Session s = trials.sessions().session(p);
+        return s != null && trials.id().equals(s.gameId()) && s.phase() == Session.Phase.ENTERING;
     }
 
     /**
@@ -164,7 +240,7 @@ final class RaceMode {
         trials.replaceRun(run);
         trials.giveKit(p, run.course.kind());
         p.setFallDistance(0f);
-        noShoving(p, rr);
+        inRace(p, rr);
         if (run.course.kind() == TrialKind.BOAT) {
             trials.seat(p, run, p.getLocation());
         }
@@ -183,7 +259,8 @@ final class RaceMode {
         boolean late = rr.state == RaceRun.State.WARMUP; // the warm-up ended while they were on the way
         rr.state = RaceRun.State.GRID;
         p.sendMessage(Text.of("&b" + rr.base.name() + " &7- on the grid. Wait for Go!"));
-        Location spot = late ? spot(raced.world(), rr.grid) : null;
+        boolean atStart = late && entrySpot(rr.base, rr.grid, true) != rr.grid; // a boat warms up on its spot
+        Location spot = atStart ? spot(raced.world(), rr.grid) : null;
         if (spot != null) {
             trials.move(p, run, spot); // they arrived at the course's start: onto their grid spot
         }
@@ -228,7 +305,7 @@ final class RaceMode {
             }
             case STAND -> {
                 if (run.ticks % 10 == 0) {
-                    onStand(p, run);
+                    onStand(p, run); // race mode is the stand's one keeper (Race Night's radius comes through its link)
                 }
                 return true;
             }
@@ -256,8 +333,12 @@ final class RaceMode {
             }
         }
         boolean arrived = boat ? TimeTrials.seated(p, run) : run.expect == null;
-        RaceRun.Release r = call(rr.link, () -> rr.release(now, arrived, clock, System::nanoTime),
+        boolean offSpot = arrived && rr.offSpot(TimeTrials.position(p, run));
+        RaceRun.Release r = call(rr.link, () -> rr.release(now, arrived, offSpot, clock, System::nanoTime),
                 new RaceRun.Release(true, 0, false, 0));
+        if (r.back()) {
+            backToSpot(p, run); // drifted off the spot: back on it, and never released from where it drifted to
+        }
         if (r.hold()) {
             if (r.count() > 0) {
                 TimeTrials.title(p, "&e" + r.count(), "&7Get ready", 20);
@@ -266,7 +347,7 @@ final class RaceMode {
             return;
         }
         if (!r.go()) {
-            return; // still arriving: starts the moment it is in, on the shared clock
+            return; // still arriving (or going back to the spot): starts once in, on the shared clock
         }
         run.progress = new Progress(run.course, TimeTrials.position(p, run), r.nanos());
         run.phase = TrialRun.Phase.RUNNING;
@@ -276,6 +357,14 @@ final class RaceMode {
         trials.watch(p, run);
         if (clock.size() > 16) {
             clock.keepOnly(liveLinks());
+        }
+    }
+
+    /** A racer off their grid spot goes back onto it (a boat is re-seated there), once the last move landed. */
+    private void backToSpot(Player p, TrialRun run) {
+        Location at = spot(run.course.world(), run.race.grid);
+        if (at != null && run.expect == null && trials.move(p, run, at)) {
+            p.sendActionBar(Text.of(BACK_TO_SPOT));
         }
     }
 
@@ -305,7 +394,8 @@ final class RaceMode {
         if (run.ticks % 20 == 0) {
             p.sendActionBar(Text.of(PARKED_BAR));
         }
-        if (run.expect == null && rr.offStand(TimeTrials.point(p.getLocation()))) {
+        double radius = call(rr.link, rr.link::standRadius, RaceRun.STAND_RADIUS);
+        if (run.expect == null && rr.offStand(TimeTrials.point(p.getLocation()), radius)) {
             toStand(p, run);
             p.sendMessage(Text.of(BACK_TO_STAND));
         }
@@ -328,7 +418,8 @@ final class RaceMode {
                 run.progress.reachedTargets(), run.stalls);
         FairPlay.Verdict verdict = FairPlay.judge(false, run.voided, stale, ms,
                 run.course.minSecondsOr(s.minSeconds()), tooFast);
-        RaceRun.Line line = rr.line(verdict.counts());
+        boolean normalRun = call(rr.link, rr.link::normalRun, false); // guarded: a link that throws is over
+        RaceRun.Line line = rr.line(verdict.counts(), normalRun);
         if (!line.report()) {
             return; // this race's line was crossed already
         }
@@ -391,7 +482,7 @@ final class RaceMode {
         }
         if (rr.stand != null) {
             toStand(p, run);
-            noShoving(p, rr); // nobody shoves anybody off the stand; restored when the run ends
+            inRace(p, rr); // nobody shoves anybody off the stand; restored when the run ends
         }
         p.sendActionBar(Text.of(PARKED_BAR));
     }
@@ -478,7 +569,7 @@ final class RaceMode {
             return;
         }
         RaceRun rr = run.race;
-        restore(p, rr);
+        restore(p.getUniqueId(), p, rr);
         boolean told = rr.ended || rr.due == RaceRun.Due.HOME;
         rr.ended = true;
         rr.due = RaceRun.Due.NONE;
@@ -497,9 +588,7 @@ final class RaceMode {
             return;
         }
         RaceRun rr = run.race;
-        if (p != null) {
-            restore(p, rr);
-        }
+        restore(run.player, p, rr); // off the no-push team even when they are gone (by id)
         if (!rr.ended && rr.due != RaceRun.Due.HOME) {
             rr.ended = true;
             call(rr.link, () -> {
@@ -526,7 +615,12 @@ final class RaceMode {
     }
 
     private static Location spot(String worldName, Course.Spot s) {
-        World w = s == null ? null : Bukkit.getWorld(worldName);
+        World w;
+        try {
+            w = s == null ? null : Bukkit.getWorld(worldName);
+        } catch (RuntimeException | LinkageError e) {
+            w = null; // no server (a test): nowhere to put them
+        }
         return w == null ? null : new Location(w, s.x(), s.y(), s.z(), s.yaw(), s.pitch());
     }
 
@@ -567,17 +661,60 @@ final class RaceMode {
         return new Location(at.getWorld(), p.x(), p.y(), p.z(), at.getYaw(), at.getPitch());
     }
 
-    /** Time Trials is stopping: collisions back on for everyone on a stand, nothing held. */
+    /** Time Trials is stopping: collisions back on (and off the no-push team) for every racer, nothing held. */
     void stop() {
         for (TrialRun run : new ArrayList<>(trials.liveRuns())) {
             if (run.race != null) {
-                restore(Bukkit.getPlayer(run.player), run.race);
+                restore(run.player, online(run.player), run.race);
             }
         }
         clock.clear();
         holds.clear();
         broken.clear();
         arriving.clear();
+    }
+
+    /**
+     * Seated in a race (its warm-up or the grid), and again on the stand: nobody shoves anybody
+     * ({@link #noShoving}), and a parkour or elytra racer joins the games' no-push team, which is what
+     * really stops one player pushing another ({@code setCollidable} only stops mobs). Never a boat
+     * race: boats bump, as the owner chose. Every way the run ends {@link #restore}s both.
+     */
+    void inRace(Player p, RaceRun rr) {
+        noShoving(p, rr);
+        if (!rr.noPush && rr.base.kind() != TrialKind.BOAT) {
+            NoPush np = noPush();
+            if (np != null && np.on(p)) {
+                rr.noPush = true;
+            }
+        }
+    }
+
+    /** The games' no-push team (or the one a test passed). */
+    private NoPush noPush() {
+        if (pushes != null) {
+            return pushes;
+        }
+        try {
+            GamesService g = trials.games();
+            return g == null ? null : g.noPush();
+        } catch (RuntimeException e) {
+            return null; // no framework (a test): nothing to join
+        }
+    }
+
+    /** A test's own no-push team (over a fake scoreboard). */
+    void pushes(NoPush team) {
+        this.pushes = team;
+    }
+
+    /** The player if online, or {@code null} (never a throw: no server in a test). */
+    private static Player online(UUID id) {
+        try {
+            return Bukkit.getPlayer(id);
+        } catch (RuntimeException | LinkageError e) {
+            return null;
+        }
     }
 
     /**
@@ -598,7 +735,18 @@ final class RaceMode {
         }
     }
 
-    private static void restore(Player p, RaceRun rr) {
+    /**
+     * The run ended (left, gone, Time Trials stopping): off the no-push team (by id, so a racer who is
+     * already gone comes off too) and collisions back on.
+     */
+    private void restore(UUID id, Player p, RaceRun rr) {
+        if (rr.noPush) {
+            rr.noPush = false;
+            NoPush np = noPush();
+            if (np != null) {
+                np.off(id, p == null ? null : p.getName());
+            }
+        }
         if (p != null && rr.noShove) {
             rr.noShove = false;
             try {

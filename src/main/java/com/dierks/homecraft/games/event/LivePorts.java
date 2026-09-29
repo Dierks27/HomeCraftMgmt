@@ -74,6 +74,11 @@ final class LivePorts implements NightPorts {
     }
 
     @Override
+    public boolean restartHeld() {
+        return games().restartHeld() != null;
+    }
+
+    @Override
     public String name(UUID player) {
         Player p = Bukkit.getPlayer(player);
         if (p != null) {

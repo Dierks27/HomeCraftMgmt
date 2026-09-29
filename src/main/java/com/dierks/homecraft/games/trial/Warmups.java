@@ -8,8 +8,8 @@ import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -28,12 +28,19 @@ import java.util.UUID;
  *
  * <p>A race's shared warm-up (D3, D4) uses the same laps and action bar; it ends when the
  * coordinator sends everyone to the grid ({@link RaceMode#regrid}), and its kit item is "Ready".
+ *
+ * <p><b>A restart due soon ends every warm-up.</b> While the restart hold is on (the server restarts
+ * in a few minutes), a solo warm-up goes straight to its 3-2-1, and a party race's or Race Night's
+ * shared warm-up goes straight to the grid, so the counted run isn't eaten by free laps.
+ *
+ * <p>The choice is kept for the course it was made on only, and forgotten when the start doesn't
+ * happen or the player leaves the server, so a leftover choice never starts a warm-up elsewhere.
  */
 final class Warmups {
 
     private final TimeTrials trials;
-    /** Players who chose "Warm up" and are on their way to the start. */
-    private final Set<UUID> wanted = new HashSet<>();
+    /** Players who chose "Warm up" and are on their way to the start → the course they chose it on. */
+    private final Map<UUID, String> wanted = new HashMap<>();
 
     Warmups(TimeTrials trials) {
         this.trials = trials;
@@ -65,11 +72,23 @@ final class Warmups {
             return;
         }
         if (warmUp && Warmup.offered(trials.settings(), false, c.kind())) {
-            wanted.add(player.getUniqueId());
+            want(player.getUniqueId(), c.id());
         } else {
             wanted.remove(player.getUniqueId());
         }
         trials.begin(player, c, false);
+    }
+
+    /** The player chose "Warm up" on {@code courseId} and is on the way to its start. */
+    void want(UUID player, String courseId) {
+        if (player != null && courseId != null) {
+            wanted.put(player, courseId);
+        }
+    }
+
+    /** The course the player chose a warm-up on and is on the way to, or {@code null}. */
+    String wanted(UUID player) {
+        return wanted.get(player);
     }
 
     /** The start didn't happen: forget the choice. */
@@ -84,8 +103,7 @@ final class Warmups {
      * one now (never a Dropper, whose practice drop plays that part, whatever choice was left over).
      */
     void begin(Player p, TrialRun run) {
-        if (!wanted.remove(p.getUniqueId()) || run.test || run.race != null
-                || !Warmup.offered(trials.settings(), run.test, run.course.kind())) {
+        if (!wants(wanted.remove(p.getUniqueId()), run, trials.settings())) {
             return;
         }
         int seconds = trials.settings().warmupSeconds();
@@ -100,15 +118,39 @@ final class Warmups {
     }
 
     /**
-     * A warm-up tick (from the running tick): a solo warm-up whose time is up goes back to the start
-     * for the 3-2-1. True when it ended here. A race's ends only when the racers go to the grid.
+     * Whether a run just begun at its start warms up: the player chose it ON THIS COURSE
+     * ({@code wantedCourse}), it isn't a test or a race, and the course offers one now (never a
+     * Dropper, whatever choice was left over).
+     */
+    static boolean wants(String wantedCourse, TrialRun run, TimeTrialsSettings s) {
+        return wantedCourse != null && run != null && !run.test && run.race == null
+                && wantedCourse.equalsIgnoreCase(run.course.id()) && Warmup.offered(s, run.test, run.course.kind());
+    }
+
+    /**
+     * A warm-up tick (from the running tick): a solo warm-up whose time is up, or with a restart due
+     * soon (the restart hold), goes back to the start for the 3-2-1. True when it ended here. A
+     * race's ends only when the racers go to the grid (its coordinator watches the hold).
      */
     boolean tick(Player p, TrialRun run, long now) {
-        if (run.race != null || !run.warmupOver(now)) {
+        if (run.race != null) {
             return false;
         }
-        end(p, run, false);
+        String restart = restartHeld();
+        if (!Warmup.over(run, now, restart != null)) {
+            return false;
+        }
+        end(p, run, restart != null && !run.warmupOver(now) ? Warmup.endedForRestart(restart) : Warmup.ended(false));
         return true;
+    }
+
+    /** The restart the hold is for ("4:00 PM"), or {@code null} when none is minutes away. */
+    private String restartHeld() {
+        try {
+            return trials.games().restartHeld();
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     /** The action bar in a warm-up: "Warm-up 2:14 left - not counted". */
@@ -125,7 +167,7 @@ final class Warmups {
     /** "Start timed run": end a solo warm-up early. */
     void timed(Player p, TrialRun run) {
         if (run != null && run.warmup && run.race == null) {
-            end(p, run, true);
+            end(p, run, Warmup.ended(true));
         }
     }
 
@@ -159,10 +201,10 @@ final class Warmups {
     }
 
     /** The warm-up is over: back to the start, and the normal 3-2-1. */
-    private void end(Player p, TrialRun run, boolean early) {
+    private void end(Player p, TrialRun run, String line) {
         Warmup.toCountdown(run);
         p.getInventory().setItem(Warmup.KIT_SLOT, null);
-        p.sendMessage(Text.of(Warmup.ended(early)));
+        p.sendMessage(Text.of(line));
         trials.toStart(p, run);
     }
 }

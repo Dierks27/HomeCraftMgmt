@@ -109,6 +109,7 @@ final class RaceBench {
         TrialRun run = new TrialRun(id, warmNow ? rr.base : raced, false, 0);
         run.race = rr;
         trials.replaceRun(run);
+        mode.inRace(p, rr); // collisions off, and a runner on the no-push team
         if (warmNow && run.beginWarmup(until)) {
             run.progress = new Progress(run.course, base.start().point(), nanos); // free laps from the start
             run.phase = TrialRun.Phase.RUNNING;

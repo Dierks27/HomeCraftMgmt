@@ -30,6 +30,14 @@ public interface NightPorts {
     /** Whether the player is online and not in any world game (so they can be taken to the track). */
     boolean free(UUID player);
 
+    /**
+     * Whether a scheduled restart is minutes away (the restart hold): the shared warm-up then ends at
+     * once, so the racing isn't eaten by free laps.
+     */
+    default boolean restartHeld() {
+        return false;
+    }
+
     /** The player's name (for chat, results and the hub), or {@code null}. */
     String name(UUID player);
 

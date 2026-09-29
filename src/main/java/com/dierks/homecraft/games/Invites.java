@@ -171,10 +171,18 @@ public final class Invites {
         return false;
     }
 
-    /** Whether the player takes invites to this game (Coin Flip off by default, friend games on). */
+    /**
+     * Whether the player takes invites to this game (Coin Flip off by default, friend games on).
+     * Party races ({@code trials}) joined the friend games later: a player with no choice stored for
+     * them yet follows their Connect Four choice, so an earlier {@code /hcm play invites off} (which
+     * wrote rows only for the games there were then) still keeps party invites away.
+     */
     public boolean accepts(UUID player, String gameId) {
         try {
             String v = games.dao().pref(player, prefKey(gameId));
+            if (v == null && "trials".equals(gameId)) { // WP-R1 fix (R1 review #3): an older "off" still holds
+                v = games.dao().pref(player, prefKey("connect_four"));
+            }
             if (v == null) {
                 return !COIN_FLIP.equals(gameId);
             }

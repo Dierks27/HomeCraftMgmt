@@ -18,6 +18,10 @@ import java.util.UUID;
  *   <li><b>The podium rule:</b> place k pays its prize only when at least k + 1 racers started race
  *       1, so 2nd needs 3 racers and 3rd needs 4, and nobody wins a podium prize for coming last.
  *       Two racers get 5 and 1; three get 5, 3 and 1.</li>
+ *   <li><b>A podium needs a finish, and someone behind.</b> Only a racer who finished at least one
+ *       race tonight can win a podium prize (still-racing points alone never do), and a place pays
+ *       its podium prize only when someone is ranked strictly below it (distinct places: racers tied
+ *       for last came last). A night where nobody finished pays nothing at all.</li>
  *   <li><b>Ties</b> (level on points and countback) share the place: each gets that place's prize.</li>
  *   <li>At most {@value NightRules#MAX_PRIZE_PER_NIGHT} tokens a player a night.</li>
  *   <li>Only on a <b>prize night</b>: one of the week's {@code prize_events_per_week} (3) slots,
@@ -56,22 +60,23 @@ public final class RacePrizes {
     public static Map<UUID, Prize> plan(List<NightStandings.Ranked> standings, int started, Collection<UUID> finishers,
                                         List<Integer> prizes, int finisherPrize, boolean prizeNight) {
         Map<UUID, Prize> out = new LinkedHashMap<>();
-        if (!prizeNight || standings == null) {
-            return out;
+        if (!prizeNight || standings == null || finishers == null || finishers.isEmpty()) {
+            return out; // nobody finished a race: no podium, and no finisher either
         }
-        Set<UUID> finished = finishers == null ? Set.of() : Set.copyOf(finishers);
+        Set<UUID> finished = Set.copyOf(finishers);
         for (NightStandings.Ranked r : standings) {
-            if (r.points() <= 0) {
-                continue;
+            if (r.points() <= 0 || !finished.contains(r.player())) {
+                continue; // every prize needs a finish tonight
             }
             int place = r.place();
             int tokens = 0;
             String detail = null;
-            if (podium(place, started) && prizes != null && place <= prizes.size() && prizes.get(place - 1) > 0) {
+            if (podium(place, started) && someoneBelow(place, standings) && prizes != null && place <= prizes.size()
+                    && prizes.get(place - 1) > 0) {
                 tokens = prizes.get(place - 1);
                 detail = "Race Night: " + NightStandings.ordinal(place) + " place";
             }
-            if (tokens == 0 && finished.contains(r.player()) && finisherPrize > 0) {
+            if (tokens == 0 && finisherPrize > 0) {
                 tokens = finisherPrize;
                 detail = "Race Night: finished a race";
             }
@@ -81,6 +86,25 @@ public final class RacePrizes {
             }
         }
         return out;
+    }
+
+    /** Whether anyone is ranked strictly below {@code place} (a place nobody is behind is the last one). */
+    static boolean someoneBelow(int place, List<NightStandings.Ranked> standings) {
+        for (NightStandings.Ranked r : standings) {
+            if (r.place() > place) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether {@code r} won the night (the {@code game_race_win} achievement): 1st, with points, a
+     * finish tonight, and someone ranked behind them. Still-racing points alone never win it.
+     */
+    public static boolean won(NightStandings.Ranked r, List<NightStandings.Ranked> standings, Collection<UUID> finishers) {
+        return r != null && r.place() == 1 && r.points() > 0 && finishers != null && finishers.contains(r.player())
+                && someoneBelow(1, standings);
     }
 
     /** Whether place {@code place} (1-3) may pay a podium prize with {@code started} racers: k needs k + 1. */

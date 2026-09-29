@@ -84,6 +84,10 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 if (denyUnless(sender, "hcm.admin")) {
                     return true;
                 }
+                String raceNight = com.dierks.homecraft.games.event.RaceNight.reloadWarning(plugin.games()); // EV fix: §A.9
+                if (raceNight != null) {
+                    sender.sendMessage(Text.of(raceNight));
+                }
                 plugin.reloadAll();
                 sender.sendMessage(Text.of("&aHomeCraft Management configuration reloaded."));
             }

@@ -84,6 +84,12 @@ final class RaceRun {
     boolean ended;
     /** The racer's collisions were switched off (racers never shove each other; restored when the run ends). */
     boolean noShove;
+    /**
+     * The racer is on the games' no-push team ({@code GamesService.noPush()}): a parkour or elytra
+     * racer, from seating until the run ends, by any way at all. Never a boat racer: boats bump, as the
+     * owner chose.
+     */
+    boolean noPush;
     /** What the next trial tick does ({@link Due}). */
     Due due = Due.NONE;
     /** Going home: why, and the line they read (or {@code null}). */
@@ -138,7 +144,15 @@ final class RaceRun {
      * done, so it happens exactly once.
      */
     boolean normalFinish(boolean counted) {
-        if (!counted || !link.normalRun() || normalDone == race) {
+        return normalFinish(counted, link.normalRun());
+    }
+
+    /**
+     * {@link #normalFinish(boolean)} with the link's {@link RaceLink#normalRun()} already asked (race
+     * mode asks it through its guard, so a link that throws never throws out of a move event).
+     */
+    boolean normalFinish(boolean counted, boolean normalRun) {
+        if (!counted || !normalRun || normalDone == race) {
             return false;
         }
         normalDone = race;
@@ -169,9 +183,32 @@ final class RaceRun {
         state = State.GRID;
     }
 
-    /** Whether a parked racer at {@code at} has wandered off the stand. */
+    /** Whether a parked racer at {@code at} has wandered off the stand ({@value #STAND_RADIUS} blocks). */
     boolean offStand(Point at) {
-        return state == State.PARKED && stand != null && at != null && stand.distance(at) > STAND_RADIUS;
+        return offStand(at, STAND_RADIUS);
+    }
+
+    /**
+     * Whether a parked racer at {@code at} has wandered more than {@code radius} blocks across (or
+     * more than {@code radius} + 2 up or down) from the stand: the one rule for every race's stand
+     * (Race Night's {@code stand_radius} comes through {@link RaceLink#standRadius()}).
+     */
+    boolean offStand(Point at, double radius) {
+        if (state != State.PARKED || stand == null || at == null) {
+            return false;
+        }
+        double r = radius > 0 ? radius : STAND_RADIUS;
+        return Math.hypot(at.x() - stand.x(), at.z() - stand.z()) > r || Math.abs(at.y() - stand.y()) > r + 2;
+    }
+
+    /**
+     * Whether a racer on the grid at {@code at} has left their spot: more than
+     * {@link FairPlay#START_RADIUS} across from it, the solo start's own rule. A boat held at zero
+     * speed still creeps while W is held; released there, it would start ahead of its spot.
+     */
+    boolean offSpot(Point at) {
+        return grid != null && at != null
+                && Math.hypot(at.x() - grid.x(), at.z() - grid.z()) > FairPlay.START_RADIUS;
     }
 
     // ---- the decisions RaceMode acts on -----------------------------------------------------------
@@ -247,8 +284,14 @@ final class RaceRun {
      * @param count the countdown number to show now (3, 2, 1), or 0 for none this tick
      * @param go    the clock starts now (the go tick has come and the racer is in place)
      * @param nanos the shared start instant, once the go tick has come (0 before)
+     * @param back  the racer left their grid spot: put them back on it now (and, at Go, not started:
+     *              they start on the shared clock once back, losing the time it took)
      */
-    record Release(boolean hold, int count, boolean go, long nanos) {
+    record Release(boolean hold, int count, boolean go, long nanos, boolean back) {
+
+        Release(boolean hold, int count, boolean go, long nanos) {
+            this(hold, count, go, nanos, false);
+        }
     }
 
     /**
@@ -258,14 +301,25 @@ final class RaceRun {
      * in, on the same shared instant, so its clock already shows the time since Go.
      */
     Release release(long now, boolean arrived, Clock clock, LongSupplier nanos) {
+        return release(now, arrived, false, clock, nanos);
+    }
+
+    /**
+     * {@link #release(long, boolean, Clock, LongSupplier)} for a racer who may have left their grid
+     * spot ({@code offSpot}, {@link #offSpot}): while held they are put back on it; at Go they are put
+     * back and not started, and start on the shared clock once back on it, so drifting forward never
+     * gains a head start (the solo start's "Stay at the start until it says Go!").
+     */
+    Release release(long now, boolean arrived, boolean offSpot, Clock clock, LongSupplier nanos) {
+        boolean back = arrived && offSpot;
         long goTick = link.goTick();
         if (now < goTick) {
             long left = goTick - now;
             int count = left <= TimeTrials.COUNTDOWN_TICKS && left % 20 == 0 ? (int) (left / 20) : 0;
-            return new Release(true, count, false, 0);
+            return new Release(true, count, false, 0, back);
         }
         long go = clock.goNanos(link, goTick, nanos);
-        return new Release(false, 0, arrived, go);
+        return new Release(false, 0, arrived && !back, go, back);
     }
 
     /**
@@ -285,10 +339,19 @@ final class RaceRun {
      * touches the course's boards or rewards; a party race's also counts as the normal run, once.
      */
     Line line(boolean counted) {
+        return line(counted, link.normalRun());
+    }
+
+    /**
+     * {@link #line(boolean)} with the link's {@link RaceLink#normalRun()} already asked, through race
+     * mode's guard ({@code RaceMode.finish}): a link that throws there is over, never a throw out of
+     * the move event that saw the line.
+     */
+    Line line(boolean counted, boolean normalRun) {
         if (!crossed()) {
             return new Line(false, false, false, Due.NONE);
         }
-        boolean normal = normalFinish(counted);
+        boolean normal = normalFinish(counted, normalRun);
         return new Line(true, normal, counted && !normal, stand != null ? Due.PARK : Due.HOME);
     }
 

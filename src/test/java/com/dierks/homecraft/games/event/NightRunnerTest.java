@@ -496,7 +496,9 @@ class NightRunnerTest {
         runUntil(ports.now + 500);
         assertEquals(EventMachine.Phase.GRID, runner.phase(), "everyone ready: to the grid");
         assertEquals(0L, runner.warmupUntil(), "the warm-up is over");
-        runUntil(ports.now + 6_000);
+        runUntil(T - 1_000);
+        assertEquals(EventMachine.Phase.GRID, runner.phase(), "but race 1 never goes before the advertised start");
+        runUntil(T + 250);
         assertEquals(EventMachine.Phase.RACING, runner.phase(), "then the countdown and Go");
     }
 

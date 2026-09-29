@@ -196,6 +196,14 @@ public final class EventDao {
         });
     }
 
+    /**
+     * Give the night's prize slot back (EV fix, R2 review #12): a night that ended with no race stored
+     * (called off, or a crash, during race 1) never used up one of the week's prize nights.
+     */
+    public void releasePrizeSlot(String id) throws SQLException {
+        update("UPDATE game_events SET prized = 0 WHERE id = ?", id);
+    }
+
     /** How many nights of {@code week} hold a prize slot. */
     public int prizedIn(String week) throws SQLException {
         return count("SELECT COUNT(*) FROM game_events WHERE week = ? AND prized = 1", week);

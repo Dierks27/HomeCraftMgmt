@@ -415,6 +415,7 @@ public final class TimeTrials implements Game {
     public void onQuit(Player player) {
         party.quit(player); // WP-R1: a disconnect is a DNF, and the party passes on
         race.left(player, EndReason.DISCONNECT);
+        warmups.forget(player); // WP-R1 (D3): a warm-up chosen before the quit never carries over
         end(player);
     }
 
@@ -1003,6 +1004,7 @@ public final class TimeTrials implements Game {
         long nanos = System.nanoTime();
         FairPlay.Stall stall = FairPlay.stall(lastTick, nanos);
         lastTick = nanos;
+        race.sweepArrivals(); // WP-R1: a racer whose entry was dropped on the way in never holds a race up
         if (runs.isEmpty()) {
             return;
         }
@@ -1724,6 +1726,11 @@ public final class TimeTrials implements Game {
         return race;
     }
 
+    /** The warm-ups (WP-R1, D3). */
+    Warmups warmups() {
+        return warmups;
+    }
+
     /**
      * The player's live run, or {@code null} (the Dropper's fall-damage hook finds it here; race mode
      * and warm-ups work on it).
@@ -1807,13 +1814,20 @@ public final class TimeTrials implements Game {
     }
 
     /**
-     * Hold a course for a race: new solo runs on it are refused with {@code line} until
-     * {@link #release}. {@code holder} is the race (a course is held by at most one).
+     * Hold a course for a race: new solo runs and party races on it are refused with {@code line}
+     * until {@link #release}, and a party race already on it is called off (its racers go home with a
+     * clear line; nothing unfinished counts). {@code holder} is the race (a course is held by at most
+     * one). Holds are memory only and a Time Trials stop drops them: the holder reserves again on its
+     * next tick (Race Night does, every step while it needs the track), which is idempotent.
      *
      * @return false when another holder has it
      */
     public boolean reserve(String courseId, Object holder, String line) {
-        return race.holds().reserve(courseId, holder, line);
+        boolean held = race.holds().reserve(courseId, holder, line);
+        if (held) {
+            party.callOff(courseId, null); // WP-R1: a party race on a held track is called off, its racers home
+        }
+        return held;
     }
 
     /** Let the course go again (only its own holder can). */

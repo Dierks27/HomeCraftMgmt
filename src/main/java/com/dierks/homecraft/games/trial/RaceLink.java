@@ -88,4 +88,12 @@ public interface RaceLink {
     default String calledOffLine() {
         return "&7Race Night was called off.";
     }
+
+    /**
+     * How far (blocks across) a racer waiting on the stand may wander before race mode puts them
+     * back on it. Race mode is the stand's one keeper; Race Night passes its {@code stand_radius}.
+     */
+    default double standRadius() {
+        return 4;
+    }
 }

@@ -66,9 +66,18 @@ final class TrialFakes {
 
     /** A player who is {@code id}, called {@code name}, whose chat lines (plain) go to {@code said}. */
     static Player player(UUID id, String name, List<String> said) {
+        return player(id, name, said, () -> null);
+    }
+
+    /** {@link #player(UUID, String, List)} standing where {@code where} says (read on every ask). */
+    static Player player(UUID id, String name, List<String> said, java.util.function.Supplier<org.bukkit.Location> where) {
         return (Player) Proxy.newProxyInstance(Player.class.getClassLoader(), new Class<?>[]{Player.class},
                 (proxy, method, args) -> {
                     switch (method.getName()) {
+                        case "getLocation" -> {
+                            org.bukkit.Location l = where.get();
+                            return l == null ? null : l.clone();
+                        }
                         case "getUniqueId" -> {
                             return id;
                         }

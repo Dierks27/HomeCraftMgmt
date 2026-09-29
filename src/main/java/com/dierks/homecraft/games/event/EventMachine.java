@@ -23,8 +23,10 @@ import java.util.List;
  *       runs); at T − 1 min solo runs still on it end. At T − 15 s racers are taken to the track, or
  *       the night is called off when fewer than {@code min_racers} joined.</li>
  *   <li><b>WARMUP</b> (D3, {@code warmup_seconds} &gt; 0): free laps, never timed. Anyone not seated yet
- *       is tried again every second. It ends when the window runs out or every seated racer tapped
- *       Ready; then everyone goes to the grid.</li>
+ *       is tried again every second. It ends when the window runs out, when every joined racer who is
+ *       online is at the track and tapped Ready, or at once when a restart is minutes away (the
+ *       restart hold); then everyone goes to the grid. Race 1 never goes before the advertised
+ *       start, so a late joiner is still in time.</li>
  *   <li><b>GRID</b>: boats held on their spots for the 5-second countdown (race 1 without a warm-up:
  *       until T, retrying the unseated until T − 3 s). At Go, race 1 needs {@code min_racers}
  *       seated or the night is called off; the unseated are DNS for that race.</li>
@@ -184,9 +186,15 @@ public final class EventMachine {
      * @param seated        racers at the track now
      * @param racing        seated racers still on the track this race (not finished, left or voided)
      * @param firstFinishAt when this race's first racer crossed the line, or -1
-     * @param allReady      every seated racer tapped Ready in the warm-up
+     * @param allReady      every joined racer who is online is at the track and tapped Ready (the warm-up)
+     * @param restartHeld   a scheduled restart is minutes away (the restart hold): the warm-up ends now
      */
-    public record Facts(long now, int joined, int seated, int racing, long firstFinishAt, boolean allReady) {
+    public record Facts(long now, int joined, int seated, int racing, long firstFinishAt, boolean allReady,
+                        boolean restartHeld) {
+
+        public Facts(long now, int joined, int seated, int racing, long firstFinishAt, boolean allReady) {
+            this(now, joined, seated, racing, firstFinishAt, allReady, false);
+        }
     }
 
     /** Where the night is after a step, and what to do, in order. */
@@ -237,8 +245,8 @@ public final class EventMachine {
                 }
             }
             case WARMUP -> {
-                if (now >= s.warmupEnds() || (f.allReady() && f.seated() >= 1)) {
-                    long go = now + COUNTDOWN_MS;
+                if (now >= s.warmupEnds() || (f.allReady() && f.seated() >= 1) || f.restartHeld()) {
+                    long go = Math.max(now + COUNTDOWN_MS, t.startsAt()); // never before the advertised start
                     out.add(new Action(Do.GRID, 1, go, null));
                     n = new State(Phase.GRID, 1, now, go, s.warmupEnds(), n.flags());
                 } else {

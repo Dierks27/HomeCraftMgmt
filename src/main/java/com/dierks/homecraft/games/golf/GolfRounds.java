@@ -229,13 +229,101 @@ public final class GolfRounds {
         inv.setHeldItemSlot(1);
     }
 
-    /** The ball on the current hole's tee; the player there too unless it's the first (they're already there). */
+    /**
+     * The chunks a hole reads before its ball goes down (fx2-C #4), seen through the least of a world
+     * so the rule is tested without a server.
+     */
+    interface ChunkLoader {
+        /** Whether the chunk is in memory now. */
+        boolean loaded(int cx, int cz);
+
+        /** Load the chunk off the main thread; {@code done} runs on the main thread once it is in (or failed). */
+        void loadAsync(int cx, int cz, Runnable done);
+    }
+
+    /** The chunks a hole reads when its ball goes on the tee: the tee's, and the cup's (how high it is), once each. */
+    static java.util.List<int[]> holeChunks(GolfCourse.Hole h) {
+        int tx = (int) Math.floor(h.tee().x()) >> 4;
+        int tz = (int) Math.floor(h.tee().z()) >> 4;
+        int cx = h.cup().x() >> 4;
+        int cz = h.cup().z() >> 4;
+        return tx == cx && tz == cz ? java.util.List.of(new int[]{tx, tz})
+                : java.util.List.of(new int[]{tx, tz}, new int[]{cx, cz});
+    }
+
+    /**
+     * Run {@code then} once the hole's chunks are loaded: at once when they are (the player stands at
+     * the tee: the usual case), else after each missing one has come in asynchronously. A chunk is never
+     * loaded here on the main thread: "Play again together" from the Clubhouse starts hole 1 while the
+     * player's own teleport is still on its way, hundreds of blocks from a tee nobody has loaded, and
+     * World.getChunkAt would stall the server on a disk read there.
+     */
+    static void whenLoaded(ChunkLoader chunks, GolfCourse.Hole h, Runnable then) {
+        java.util.List<int[]> missing = new ArrayList<>();
+        for (int[] c : holeChunks(h)) {
+            if (!chunks.loaded(c[0], c[1])) {
+                missing.add(c);
+            }
+        }
+        if (missing.isEmpty()) {
+            then.run();
+            return;
+        }
+        int[] left = {missing.size()};
+        for (int[] c : missing) {
+            chunks.loadAsync(c[0], c[1], () -> {
+                if (--left[0] == 0) {
+                    then.run();
+                }
+            });
+        }
+    }
+
+    /** {@link ChunkLoader} on the server: Paper's async load, back on the main thread inside golf's guard. */
+    private ChunkLoader chunks(World world) {
+        return new ChunkLoader() {
+            @Override
+            public boolean loaded(int cx, int cz) {
+                return world.isChunkLoaded(cx, cz);
+            }
+
+            @Override
+            public void loadAsync(int cx, int cz, Runnable done) {
+                world.getChunkAtAsync(cx, cz, true).whenComplete((chunk, error) -> {
+                    Runnable back = () -> games().guard(golf, done);
+                    if (org.bukkit.Bukkit.isPrimaryThread()) {
+                        back.run();
+                    } else if (golf.plugin().isEnabled()) {
+                        org.bukkit.Bukkit.getScheduler().runTask(golf.plugin(), back);
+                    }
+                });
+            }
+        };
+    }
+
+    /**
+     * The ball on the current hole's tee; the player there too unless it's the first (they're already
+     * there, or on their way). It waits for the hole's chunks ({@link #whenLoaded}): meanwhile the round
+     * is between holes, so nothing is putted and a stale start can't run, and the hole starts once they
+     * are in, if the round is still this player's.
+     */
     private void startHole(Player p, LiveRound r, boolean teleport) {
+        r.state = LiveRound.State.BETWEEN;
+        long token = ++r.between;
+        UUID id = p.getUniqueId();
+        whenLoaded(chunks(p.getWorld()), r.hole(), () -> {
+            Player now = golf.plugin().getServer().getPlayer(id);
+            if (now != null && live.get(id) == r && r.state == LiveRound.State.BETWEEN && r.between == token) {
+                teeOff(now, r, teleport);
+            }
+        });
+    }
+
+    /** The hole's chunks are in: the ball on the tee, the player too when asked, and the hole's title. */
+    private void teeOff(Player p, LiveRound r, boolean teleport) {
         r.state = LiveRound.State.PLAYING;
         World world = p.getWorld();
         GolfCourse.Hole h = r.hole();
-        world.getChunkAt((int) Math.floor(h.tee().x()) >> 4, (int) Math.floor(h.tee().z()) >> 4); // the tee's chunk
-        world.getChunkAt(h.cup().x() >> 4, h.cup().z() >> 4); // and the cup's, to read how high it is
         LiveBlocks blocks = new LiveBlocks(world);
         r.tee(blocks);
         BallPhysics.settle(r.ball, blocks);

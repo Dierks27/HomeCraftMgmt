@@ -1023,6 +1023,10 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (apart != null) {
             return apart;
         }
+        String extra = Regions.extrasProblem(s.def, s.origin, extras());
+        if (extra != null) {
+            return extra; // the Falling Floors arena: neither is ever built into the other
+        }
         if (built != null) {
             String near = Regions.handBuiltProblem(s.def, s.origin, s.world, built);
             if (near != null) {
@@ -2117,6 +2121,16 @@ public final class GenService implements GeneratedCourses, GenOps {
      */
     boolean inWet(String world, int x, int y, int z) {
         return in(wetPlots, world, x, y, z) || keeper.inWetJob(world, x, y, z);
+    }
+
+    /** The host's extra boxes ({@link GenHost#extras}); none when they can't be read. */
+    List<Regions.Extra> extras() {
+        try {
+            List<Regions.Extra> e = host.extras();
+            return e == null ? List.of() : e;
+        } catch (RuntimeException ex) {
+            return List.of();
+        }
     }
 
     /** Whether a world holds anything {@link #areas} or {@link #wetPlots} name. */

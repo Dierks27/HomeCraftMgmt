@@ -240,6 +240,42 @@ public final class Regions {
     }
 
     /**
+     * Why {@code def}'s region at {@code origin} crowds one of {@code extras} (Fresh Courses' side of
+     * {@link #extraProblem}: the same rule, asked for one slot), or {@code null} when it keeps
+     * {@value #APART} blocks from every one. Whether the slot is switched on doesn't matter.
+     */
+    public static String extrasProblem(Slots.Def def, int[] origin, List<Extra> extras) {
+        if (def == null || origin == null) {
+            return null;
+        }
+        List<SlotConfig> one = List.of(SlotConfig.shipped(def).withOrigin(origin).withEnabled(true));
+        for (Extra e : extras == null ? List.<Extra>of() : extras) {
+            String p = e == null ? null : extraProblem(e, one, null);
+            if (p != null) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Why the keep area crowds one of {@code extras} ({@link #extraProblem} for the keep area), or
+     * {@code null}: keeping is refused while it does.
+     */
+    public static String keepExtrasProblem(KeepArea keep, List<Extra> extras) {
+        if (keep == null) {
+            return null;
+        }
+        for (Extra e : extras == null ? List.<Extra>of() : extras) {
+            String p = e == null ? null : extraProblem(e, List.of(), keep);
+            if (p != null) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    /**
      * {@link #extraProblem} for several boxes, which must also be {@value #APART} apart from each
      * other: each box's problem by its name (in order), only for the boxes that have one.
      */

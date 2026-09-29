@@ -84,6 +84,16 @@ public interface GenHost {
         return false;
     }
 
+    /**
+     * The named boxes that share Fresh Courses' world but are nobody's slot (EVENTS-DROPPER-SPEC
+     * §B.3.2: the Falling Floors arena, as configured now). A slot's region, or the keep area, within
+     * {@value Regions#APART} blocks of one is refused ({@link Regions#extraProblem}), as the arena
+     * refuses itself near them: neither is ever built into the other.
+     */
+    default List<Regions.Extra> extras() {
+        return List.of();
+    }
+
     /** A player's name for admins (history, records); the start of their id when unknown. */
     default String playerName(UUID player) {
         return player == null ? "someone" : player.toString().substring(0, 8);

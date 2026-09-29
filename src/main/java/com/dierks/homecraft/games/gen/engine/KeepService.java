@@ -704,9 +704,9 @@ final class KeepService {
     void keep(GenArchiveDao.Row row, boolean remade, String id, String name, boolean fresh, boolean confirm,
               Consumer<String> report) {
         DailySettings.Archive a = host.settings().archive();
-        if (a.keepProblem() != null) {
-            report.accept("&cKeeping is off: &7the keep area " + a.keep().describe() + " " + a.keepProblem()
-                    + ". Move games.fresh.keep.area and /hcm reload.");
+        String off = keepOff(a);
+        if (off != null) {
+            report.accept("&cKeeping is off: &7" + off + ". Move games.fresh.keep.area and /hcm reload.");
             return;
         }
         String world = gen.genWorld();
@@ -917,8 +917,9 @@ final class KeepService {
 
     private String plotProblem(int n, String world, Box box, Map<Integer, KeptPlot> used, List<Regions.Area> courses) {
         DailySettings.Archive a = host.settings().archive();
-        if (a.keepProblem() != null) {
-            return "keeping is off: the keep area " + a.keep().describe() + " " + a.keepProblem();
+        String off = keepOff(a);
+        if (off != null) {
+            return "keeping is off: " + off;
         }
         Map<String, Integer> keptIn = new java.util.HashMap<>();
         for (KeptPlot p : used.values()) {
@@ -970,6 +971,18 @@ final class KeepService {
         return false;
     }
 
+    /**
+     * Why keeping is off now, in admin words, or {@code null}: the keep area's own problem (read at
+     * config load), or an extra box it crowds (the Falling Floors arena: {@link Regions#keepExtrasProblem}),
+     * so no plot is scanned, cleared or built next to the arena.
+     */
+    private String keepOff(DailySettings.Archive a) {
+        if (a.keepProblem() != null) {
+            return "the keep area " + a.keep().describe() + " " + a.keepProblem();
+        }
+        return Regions.keepExtrasProblem(a.keep(), gen.extras());
+    }
+
     /** Every plot holding a kept course, by number. */
     Map<Integer, KeptPlot> kept() {
         Map<Integer, KeptPlot> out = new java.util.TreeMap<>();
@@ -992,9 +1005,9 @@ final class KeepService {
         DailySettings.Archive a = host.settings().archive();
         Map<Integer, KeptPlot> used = kept();
         List<String> out = new ArrayList<>();
+        String off = keepOff(a);
         out.add("&6Kept courses &7- " + used.size() + " of " + a.keep().maxPlots() + " plots used, in "
-                + gen.genWorld() + " " + a.keep().describe() + (a.keepProblem() == null ? ""
-                : " &c(keeping is off: " + a.keepProblem() + ")"));
+                + gen.genWorld() + " " + a.keep().describe() + (off == null ? "" : " &c(keeping is off: " + off + ")"));
         for (KeptPlot p : used.values()) {
             String from = p.slot();
             try {

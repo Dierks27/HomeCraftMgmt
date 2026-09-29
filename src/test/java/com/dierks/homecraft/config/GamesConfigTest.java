@@ -172,7 +172,7 @@ class GamesConfigTest {
         List<String> ids = GameCatalog.SPECS.stream().map(GameSpec::id).toList();
         assertEquals(List.of("ore_slots", "twenty_one", "wheel", "higher_lower", "coin_flip", "creeper_sweeper",
                 "ore_merge", "snake", "mini_match", "simon_says", "whack_a_zombie", "connect_four", "tic_tac_toe",
-                "trials", "golf"), ids);
+                "trials", "golf", "daily"), ids);
         assertEquals(5, GameCatalog.SPECS.stream().filter(s -> s.kind() == GameKind.CHANCE).count(),
                 "five games of chance");
         for (String reserved : GameCatalog.RESERVED) {
@@ -249,6 +249,10 @@ class GamesConfigTest {
         clamps.put("golf.max_over_par", 99);
         clamps.put("trials.fall_depth", 0);
         clamps.put("higher_lower.rtp", 99);
+        clamps.put("daily.retry_minutes", 0);
+        clamps.put("daily.budget.blocks_per_tick", 0);
+        clamps.put("daily.stars.gold.hard", 0.5);
+        clamps.put("daily.slots.tiny_golf.daily_clear", 500);
         for (Map.Entry<String, Object> c : clamps.entrySet()) {
             Map<String, Object> games = shipped();
             put(games, "enabled", true);

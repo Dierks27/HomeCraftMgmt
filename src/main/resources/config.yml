@@ -1833,3 +1833,68 @@ games:
     daily_cap: 4
     # Strokes over par before a hole is picked up.
     max_over_par: 3
+  # ---- daily ----
+  # Daily Courses: parkour, Sky Rings and mini golf the plugin builds itself - a fresh set every
+  # day, the same for everyone. Nothing to build by hand. Check with /hcm games gen status.
+  daily:
+    # Ships OFF. true + /hcm reload and the first set is up in about two minutes.
+    enabled: false
+    # The world they are built in: "" = the first of games.worlds (it must be listed there).
+    # They sit far out and high up (x 4096-5279, z 4096-4671, y 128-303), away from anything built.
+    world: ""
+    # A new course day starts at this time (clock.time_zone, 24-hour, in quotes). Keep it at a
+    # restart: the courses are rebuilt while nobody plays.
+    rollover: "04:00"
+    # Seconds after the server is up before the first build.
+    startup_delay_seconds: 60
+    # No build starts this many minutes before one of games.restart_times.
+    avoid_before_restart_minutes: 15
+    # A build that failed is tried again after this many minutes.
+    retry_minutes: 30
+    # Builds tried per course per day before it keeps yesterday's course.
+    max_tries_per_day: 4
+    # Minutes someone still on a course the next build needs gets to finish (after an admin's
+    # second quick reroll only).
+    clear_wait_minutes: 20
+    # Day boards and star rows older than this many days are pruned.
+    keep_days: 35
+    # No mobs, fire, random ticks or weather in that world, and always noon.
+    world_rules: true
+    # "x y z" where people standing in a building area are moved; "" = the world's spawn.
+    safe_spot: ""
+    # Most Star Chart tokens a player earns a day (games.skill_daily_cap still applies).
+    daily_cap: 2
+    # Weekly Star Chart goals: stars a player collects in a week for a token each.
+    star_goals: [10, 25]
+    # Tokens for each weekly goal reached (once a week each).
+    star_goal_reward: 1
+    # How much building one server tick may do.
+    budget:
+      # Blocks per tick while anyone is online.
+      blocks_per_tick: 500
+      # Blocks per tick while nobody is.
+      blocks_per_tick_idle: 5000
+      # Milliseconds of building per tick.
+      max_ms_per_tick: 4
+      # Chunk snapshots per tick.
+      snapshots_per_tick: 4
+      # Chunks waiting to load at once.
+      chunk_loads_in_flight: 2
+      # Building pauses while the average tick takes longer than this (ms); it goes on below 3/4 of it.
+      pause_above_mspt: 40
+    # Star times, as a factor of each course's expert time: gold = 3 stars, silver = 2 stars.
+    # Finishing is always 1 star. Tune after the first week if they feel too hard or too easy.
+    stars:
+      gold: {easy: 2.0, medium: 1.5, hard: 1.25}
+      silver: {easy: 3.0, medium: 2.2, hard: 1.8}
+    # Each course: on or off, its difficulty (tier, or mix of golf holes: E easy, M medium, H hard),
+    # where its area starts (x y z, x and z a multiple of 16; two halves side by side along x) and
+    # the tokens for its first finish each day. /hcm games gen on|off|tier|mix wins over these.
+    slots:
+      daily_parkour_easy: {enabled: true, tier: easy, origin: [4096, 160, 4096], daily_clear: 1}
+      daily_parkour_medium: {enabled: true, tier: medium, origin: [4352, 160, 4096], daily_clear: 2}
+      daily_parkour_hard: {enabled: true, tier: hard, origin: [4608, 160, 4096], daily_clear: 3}
+      sky_rings: {enabled: true, tier: easy, origin: [4096, 128, 4352], daily_clear: 2}
+      daily_golf: {enabled: true, mix: EEEMMMMHH, origin: [4864, 160, 4096], daily_clear: 2}
+      tiny_golf: {enabled: true, mix: EEE, origin: [5120, 160, 4096], daily_clear: 1}
+      ice_boat: {enabled: false, tier: medium, origin: [4480, 160, 4352], daily_clear: 2}

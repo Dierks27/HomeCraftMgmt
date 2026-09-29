@@ -1160,29 +1160,24 @@ final class KeepService {
     }
 
     /**
-     * The running plot job's box when it may hold a Dropper's water (a keep of a Dropper, or any
-     * clearing), {world, {@link Box}}, or {@code null}: guarded from its first block, before any
-     * record of it is read back.
+     * Whether plot job {@code j} may hold a Dropper's water (a keep of a Dropper, or any clearing):
+     * its plot is guarded from its first block, before any record of it is read back.
      */
-    private Object[] wetJob() {
-        PlotJob j = job;
-        if (j == null || j.world == null || j.box == null) {
-            return null;
-        }
-        boolean wet = j.kind == Kind.CLEAR || (j.kind == Kind.KEEP && j.def != null && j.def.dropper());
-        return wet ? new Object[]{j.world, j.box} : null;
+    private static boolean wet(PlotJob j) {
+        return j != null && j.world != null && j.box != null
+                && (j.kind == Kind.CLEAR || (j.kind == Kind.KEEP && j.def != null && j.def.dropper()));
     }
 
     /** Whether the running plot job may hold a Dropper's water in {@code world}. */
     boolean wetJobIn(String world) {
-        Object[] w = wetJob();
-        return w != null && world != null && ((String) w[0]).equalsIgnoreCase(world);
+        PlotJob j = job;
+        return world != null && wet(j) && j.world.equalsIgnoreCase(world);
     }
 
-    /** Whether a block is in the running plot job's box when it may hold a Dropper's water. */
+    /** Whether a block is in the running plot job's plot when it may hold a Dropper's water. */
     boolean inWetJob(String world, int x, int y, int z) {
-        Object[] w = wetJob();
-        return w != null && world != null && ((String) w[0]).equalsIgnoreCase(world) && ((Box) w[1]).contains(x, y, z);
+        PlotJob j = job;
+        return world != null && wet(j) && j.world.equalsIgnoreCase(world) && j.box.contains(x, y, z);
     }
 
     /** For tests: the running job's kind, or {@code null}. */

@@ -173,10 +173,14 @@ final class DropperHooks {
         long now = System.nanoTime();
         if (poolsRead == 0 || now - poolsRead >= POOLS_EVERY_NANOS) {
             poolsRead = now;
-            List<Course> courses = trials == null ? List.of() : trials.courses();
-            if (courses != poolsFrom) {
-                poolsFrom = courses;
-                pools = DropperPools.of(courses);
+            try {
+                List<Course> courses = trials == null ? List.of() : trials.courses();
+                if (courses != poolsFrom) {
+                    poolsFrom = courses;
+                    pools = DropperPools.of(courses);
+                }
+            } catch (RuntimeException e) {
+                // the courses can't be read now: the pools last read stay held (a flow never closes Time Trials)
             }
         }
         return pools;

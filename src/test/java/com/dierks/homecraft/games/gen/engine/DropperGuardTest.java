@@ -172,6 +172,30 @@ class DropperGuardTest {
     }
 
     @Test
+    void aPlotBeingClearedKeepsAnyWaterInWhileItRuns() {
+        boot();
+        gen.worldsReady();
+        Box plot = host.settings.archive().keep().plot(1);
+        GenRegionGuard.Area wet = gen.wetArea();
+        assertFalse(wet.in(W, plot.minX() + 3, plot.minY() + 3, plot.minZ() + 3), "a free plot is nobody's to guard");
+        List<String> said = new ArrayList<>();
+        gen.claimPlot(1, true, said::add);
+        gen.check();
+        assertEquals(KeepService.Kind.CLEAR, gen.keeper().jobKind(), "clearing plot 1: " + said);
+        assertTrue(wet.covers(W) && wet.in(W, plot.minX() + 3, plot.minY() + 3, plot.minZ() + 3),
+                "while it is cleared (it may hold a Dropper's pools), nothing flows out of it");
+        for (int s = 0; s < 120 && gen.keeper().jobKind() != null; s++) {
+            for (int t = 0; t < 20; t++) {
+                gen.tick();
+                host.now += 50;
+            }
+            gen.check();
+        }
+        assertNull(gen.keeper().jobKind(), "the clear is done");
+        assertFalse(wet.in(W, plot.minX() + 3, plot.minY() + 3, plot.minZ() + 3), "and the plot is left alone again");
+    }
+
+    @Test
     void aPendingPlotJobIsWetWhenItMayHoldADroppersWater() {
         Box b = Box.sized(100, 64, 100, 64, 64, 16);
         String box = KeptPlot.boxText(b);

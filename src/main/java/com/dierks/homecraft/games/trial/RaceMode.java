@@ -604,7 +604,11 @@ final class RaceMode {
             return what.get();
         } catch (RuntimeException | LinkageError e) {
             broken.add(link);
-            trials.log().log(Level.WARNING, "Time trials: a race's coordinator failed; its racers go home", e);
+            try {
+                trials.log().log(Level.WARNING, "Time trials: a race's coordinator failed; its racers go home", e);
+            } catch (RuntimeException ignored) {
+                // no logger (a test): the link is over all the same
+            }
             return fallback;
         }
     }

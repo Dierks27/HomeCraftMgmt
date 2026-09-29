@@ -1506,9 +1506,11 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
 fits before the 4:00 AM restart · prize nights 1/3 this week").
 
 **Race mode (WP-R1).** The races are Time Trials runs in race mode (`TimeTrials.race`, `regrid`,
-`park`, `endRace`, `reserve`). Until that package is merged, Race Night can open a window but nobody
-can be seated ("Race mode isn't ready yet - ask an admin."), and the night is called off for too
-few racers; nothing throws.
+`park`, `endRace`, `reserve`), the same race mode party races use: one automatic grid (rows of two
+behind the start, else single file) and, on Fresh Ice Boat from boat planner algo 2, the one
+built-in stand (used only while it really stands; otherwise finishers go home at the line). A heat
+never goes on the course's boards or records and never counts for the Weekly Cup (its start is a
+grid spot), but each finished race counts once toward "finish a course" quests.
 <!-- ---- end race_night ---- -->
 
 ### Turning it on, and the Games world

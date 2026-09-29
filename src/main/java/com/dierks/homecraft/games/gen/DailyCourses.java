@@ -287,8 +287,20 @@ public final class DailyCourses implements Game {
     }
 
     /**
+     * Tokens for the first counted finish of {@code slotId} in an edition of {@code cadence} days:
+     * what a finish pays, with the run's own {@code tag.cadence()}, so a layout kept over a cadence
+     * change pays by the edition it is.
+     */
+    public int dailyClear(String slotId, int cadence) {
+        GenService e = engine;
+        return e != null ? e.dailyClear(slotId, cadence) : settings().dailyClear(slotId, cadence);
+    }
+
+    /**
      * The Star Chart goals of the week starting {@code weekKey}: the cadence's goals and tokens
-     * ({@code star_goals}), never above 80% of what the week can give.
+     * ({@code star_goals}), never above 80% of what the week can give, and fixed for the week once
+     * the engine has handed them out ({@link GenService#goals}): pay and show only these. With the
+     * engine off they are worked out from the settings (nothing generated can be finished then).
      */
     public List<DailyStars.Goal> goals(long weekKey) {
         GenService e = engine;

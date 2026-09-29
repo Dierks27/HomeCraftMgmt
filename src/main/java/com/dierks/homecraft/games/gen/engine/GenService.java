@@ -197,6 +197,8 @@ public final class GenService implements GeneratedCourses, GenOps {
     /** The schedule ({@code <cadence>|<rebuild day>}) as last read, and when it was first seen (epoch ms). */
     private String scheduleSig = "";
     private long scheduleSince;
+    /** Each week's Star Chart goals once fixed ({@link #goals}), by the week's first day. */
+    private final Map<Long, List<DailyStars.Goal>> weekGoals = new HashMap<>();
     private volatile List<Object[]> areas = List.of();
 
     /**
@@ -487,6 +489,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         long now = host.now();
         long since = now;
+        boolean announce = false;
         String stored = meta == null ? null : meta.get(GenAdminKeys.schedule());
         int bar = stored == null ? -1 : stored.lastIndexOf('|');
         String was = bar > 0 ? stored.substring(0, bar) : null;
@@ -502,14 +505,18 @@ public final class GenService implements GeneratedCourses, GenOps {
             } catch (SQLException | RuntimeException e) {
                 host.logger().log(Level.WARNING, "Fresh Courses: could not record the new schedule", e);
             }
-            if (was != null) {
-                host.logger().info("Fresh Courses: the courses now change " + GenCopy.cadenceName(ed.cadenceDays())
-                        + " (from " + GenCopy.whenDated(ed.nextChangeAt(now), host.zone()) + "); the current"
-                        + " ones stay until then, or until their own end if that is sooner.");
-            }
+            announce = was != null;
         }
         scheduleSig = sig;
         scheduleSince = since;
+        if (announce) {
+            // When the courses really change: the new schedule's first start, their own end if sooner,
+            // or a week on when that start would carry the live key again (GenScheduler#target).
+            long next = nextChangeAt();
+            host.logger().info("Fresh Courses: the courses now change " + GenCopy.cadenceName(ed.cadenceDays())
+                    + ". The ones up now stay until " + GenCopy.whenDated(next > 0 ? next : ed.nextChangeAt(now),
+                    host.zone()) + ".");
+        }
     }
 
     /** A slot's region moved (config): nothing at the old place is vouched for or cleared. */
@@ -1227,8 +1234,9 @@ public final class GenService implements GeneratedCourses, GenOps {
     /**
      * Boards past keeping, once a course day (§5.2, weekly addendum §3): star rows older than
      * {@code keep_days} (but never the current cadence's last {@value #KEEP_EDITIONS} editions), Star
-     * Charts older than {@value #KEEP_WEEKS} weeks, and edition leaderboards older than
-     * {@code keep_days} that aren't among their course's last {@value #KEEP_EDITIONS} editions.
+     * Charts older than {@value #KEEP_WEEKS} weeks (and their fixed goals, {@code gen.goals.<week>}),
+     * and edition leaderboards older than {@code keep_days} that aren't among their course's last
+     * {@value #KEEP_EDITIONS} editions.
      */
     private void prune() {
         Edition ed = edition();
@@ -1242,9 +1250,20 @@ public final class GenService implements GeneratedCourses, GenOps {
         int n = ed.cadenceDays();
         long lastEditions = Edition.firstDayOf(n, Edition.index(n, ed.editionStart(now)) - (KEEP_EDITIONS - 1));
         long keepFrom = today - st.keepDays();
+        long oldestWeek = ed.weekKey(today) - KEEP_WEEKS * 7L;
+        weekGoals.keySet().removeIf(week -> week < oldestWeek);
         try {
-            int removed = host.store().pruneBoards(Math.min(keepFrom, lastEditions),
-                    ed.weekKey(today) - KEEP_WEEKS * 7L);
+            for (String key : host.store().metaLike(GenAdminKeys.GOALS).keySet()) {
+                Long week = GenAdminKeys.goalsWeek(key);
+                if (week != null && week < oldestWeek) {
+                    host.store().meta(key, null); // a Star Chart's fixed goals go with its chart
+                }
+            }
+        } catch (SQLException | RuntimeException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: could not prune old Star Chart goals", e);
+        }
+        try {
+            int removed = host.store().pruneBoards(Math.min(keepFrom, lastEditions), oldestWeek);
             removed += host.store().dropEditionBoards(oldEditionBoards(host.store().editionBoards(), keepFrom,
                     KEEP_EDITIONS));
             if (removed > 0) {
@@ -1522,10 +1541,21 @@ public final class GenService implements GeneratedCourses, GenOps {
     /**
      * What the first counted finish of {@code courseId} pays in an edition, at the configured cadence
      * ({@code games.fresh.rewards}, scaled between the daily and weekly ends); 0 for a course that
-     * isn't a slot.
+     * isn't a slot. A finish on a known layout pays by that layout's own cadence instead:
+     * {@link #dailyClear(String, int)}.
      */
     public int dailyClear(String courseId) {
         return host.settings().dailyClear(courseId);
+    }
+
+    /**
+     * What the first counted finish of {@code courseId} pays in an edition of {@code cadence} days:
+     * pass the run's own {@code tag.cadence()}, so a layout kept over a cadence change pays by the
+     * edition it is (a kept daily edition pays the daily amount after a switch to weekly, and the
+     * other way round); 0 for a course that isn't a slot.
+     */
+    public int dailyClear(String courseId, int cadence) {
+        return host.settings().dailyClear(courseId, cadence);
     }
 
     /**
@@ -1543,9 +1573,46 @@ public final class GenService implements GeneratedCourses, GenOps {
         return DailyStars.weekMax(on, Math.max(1, edition().startsInWeek(weekKey)));
     }
 
-    /** The Star Chart goals of the week starting {@code weekKey}: the cadence's, at most 80% of {@link #weekMax}. */
+    /**
+     * The Star Chart goals of the week starting {@code weekKey}: the cadence's, at most 80% of
+     * {@link #weekMax}, <b>fixed for the week</b> the first time they are asked for once it has
+     * begun (and the engine is up, its checks done, and something is on). They are kept in
+     * {@code hcm_meta} ({@code gen.goals.<week>}), so a restart doesn't move them either.
+     *
+     * <p>Why fixed: a goal's reward is once a week by its number of stars
+     * ({@code ms:gweek:<week>:<stars>}), and worked out afresh at every payment the top goal would
+     * move with the courses that are on (clamped 9 with four courses, 7 with three), or with the
+     * cadence and {@code star_goals} on a reload, and a player could be paid for it twice under two
+     * numbers in one week. A change counts from the next week. A week that hasn't begun, or a
+     * moment the goals can't be kept, gets them worked out now, unkept.
+     */
     public List<DailyStars.Goal> goals(long weekKey) {
-        return host.settings().starGoals(weekMax(weekKey));
+        List<DailyStars.Goal> fixed = weekGoals.get(weekKey);
+        if (fixed != null) {
+            return fixed;
+        }
+        String key = GenAdminKeys.goals(weekKey);
+        List<DailyStars.Goal> kept;
+        try {
+            kept = GenAdminKeys.goalsOf(host.store().meta(key));
+        } catch (SQLException | RuntimeException e) {
+            return host.settings().starGoals(weekMax(weekKey));
+        }
+        if (kept != null) {
+            weekGoals.put(weekKey, kept);
+            return kept;
+        }
+        int max = weekMax(weekKey);
+        List<DailyStars.Goal> goals = host.settings().starGoals(max);
+        if (running && readyAt >= 0 && max > 0 && weekKey <= thisWeek()) {
+            try {
+                host.store().meta(key, GenAdminKeys.goalsText(goals));
+                weekGoals.put(weekKey, goals);
+            } catch (SQLException | RuntimeException e) {
+                host.logger().log(Level.WARNING, "Fresh Courses: could not keep this week's Star Chart goals", e);
+            }
+        }
+        return goals;
     }
 
     /** This week's Star Chart goals, in stars, smallest first. */
@@ -1624,10 +1691,11 @@ public final class GenService implements GeneratedCourses, GenOps {
         for (SlotState s : slots.values()) {
             kept |= s.on() && s.live != null && target(s).kept();
         }
+        int was = keptCadence();
+        String made = was == ed.cadenceDays() ? "for the old change day" : GenCopy.cadenceName(was);
         return GenCopy.cadenceName(ed.cadenceDays()) + " (" + when + ") · next: "
                 + GenCopy.whenDated(next, host.zone()) + " (in " + GenCopy.span(next - now) + ")"
-                + (kept ? " · the current courses were made " + GenCopy.cadenceName(keptCadence())
-                + " and stay until then" : "");
+                + (kept ? " · the current courses were made " + made + " and stay until then" : "");
     }
 
     /** The cadence a kept layout was made with (the first one found). */

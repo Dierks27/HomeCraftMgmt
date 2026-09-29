@@ -1,5 +1,10 @@
 package com.dierks.homecraft.games.gen.engine;
 
+import com.dierks.homecraft.games.gen.api.DailyStars;
+
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * The one spelling of every Fresh Courses key in {@code hcm_meta} (GEN-SPEC §5.5), all under
  * {@code gen.<slot>.}:
@@ -14,7 +19,10 @@ package com.dierks.homecraft.games.gen.engine;
  * </ul>
  * And one key for every slot: {@code gen.cadence} — {@code <cadence>|<rebuild day>|<epoch ms>}, the
  * schedule and when the engine first saw it, so a cadence change keeps the current courses until
- * the new schedule's first start even across a restart ({@link GenScheduler#target}).
+ * the new schedule's first start even across a restart ({@link GenScheduler#target}); and
+ * {@code gen.goals.<week>} — {@code <stars>:<tokens>,...}, a week's Star Chart goals as they were
+ * fixed the first time they were asked for that week, so every goal of a week is paid against the
+ * same list whatever is switched on or off later ({@link GenService#goals}).
  */
 public final class GenAdminKeys {
 
@@ -49,6 +57,63 @@ public final class GenAdminKeys {
 
     public static String mix(String slot) {
         return "gen." + slot + ".mix";
+    }
+
+    /** Every week's fixed goals start with this. */
+    public static final String GOALS = "gen.goals.";
+
+    /** The Star Chart goals of the week starting on local epoch day {@code week}. */
+    public static String goals(long week) {
+        return GOALS + week;
+    }
+
+    /** The week a {@link #goals(long)} key is for, or {@code null} when it isn't one. */
+    public static Long goalsWeek(String key) {
+        if (key == null || !key.startsWith(GOALS)) {
+            return null;
+        }
+        try {
+            return Long.parseLong(key.substring(GOALS.length()));
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** Goals as stored: {@code 6:1,9:2} (stars:tokens, smallest first); {@code ""} for a week with none. */
+    public static String goalsText(List<DailyStars.Goal> goals) {
+        StringBuilder sb = new StringBuilder();
+        for (DailyStars.Goal g : goals == null ? List.<DailyStars.Goal>of() : goals) {
+            sb.append(sb.isEmpty() ? "" : ",").append(g.stars()).append(':').append(g.tokens());
+        }
+        return sb.toString();
+    }
+
+    /** Stored goals read back, or {@code null} when unset or unreadable (then they are worked out again). */
+    public static List<DailyStars.Goal> goalsOf(String v) {
+        if (v == null) {
+            return null;
+        }
+        if (v.isBlank()) {
+            return List.of();
+        }
+        List<DailyStars.Goal> out = new ArrayList<>();
+        for (String part : v.split(",")) {
+            String[] p = part.trim().split(":");
+            if (p.length != 2) {
+                return null;
+            }
+            try {
+                int stars = Integer.parseInt(p[0].trim());
+                int tokens = Integer.parseInt(p[1].trim());
+                if (stars <= 0 || tokens < 0) {
+                    return null;
+                }
+                out.add(new DailyStars.Goal(stars, tokens));
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        return List.copyOf(out);
     }
 
     /** A stored switch, or {@code null} when unset or unreadable. */

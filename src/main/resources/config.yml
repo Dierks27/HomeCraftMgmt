@@ -1845,13 +1845,16 @@ games:
     world: ""
     # How often the courses change: weekly, daily, or a number of days from 1 to 28 (like 3).
     # The dates are fixed: counted from rebuild_day, so they never depend on when you changed it.
-    # A change here keeps the current courses until the next change day of the new setting.
+    # A change here keeps the courses that are up until the new setting's first change day (or
+    # their own end, if sooner). /hcm games gen status shows the date.
     cadence: weekly
     # The time a new set starts (clock.time_zone, 24-hour, in quotes). Keep it at a restart:
     # the courses are rebuilt while nobody plays.
     rebuild_at: "04:00"
     # The day a weekly set starts, like "monday"; "" = the quests' week start (arcade.quests.week_starts).
-    # Every other cadence counts its days from this day too.
+    # Every other cadence counts its days from this day too. After a change the courses that are up
+    # stay until the new day. A new day that would still be the same numbered set (weekly: one before
+    # the next Monday) is not a change, so they stay until the one after. Status shows the date.
     rebuild_day: ""
     # Seconds after the server is up before the first build.
     startup_delay_seconds: 60
@@ -1871,10 +1874,13 @@ games:
     world_rules: true
     # "x y z" where people standing in a building area are moved; "" = the world's spawn.
     safe_spot: ""
-    # Most Star Chart tokens a player earns a day (games.skill_daily_cap still applies).
+    # Most Star Chart tokens a player earns a day (games.skill_daily_cap still applies). Both weekly
+    # goals on one day (1 + 2) pay 2: a goal a cap cuts short is not paid later.
     daily_cap: 2
     # Tokens for each course's first finish in each set: one table for a weekly cadence and one for
     # a daily one. Anything in between is worked out from the two, so a new cadence needs no retuning.
+    # They count toward games.trials.daily_cap / games.golf.daily_cap (4) and skill_daily_cap (6),
+    # and a reward a cap cuts short is not paid later: Hard Parkour's weekly 5 pays at most 4.
     rewards:
       clear_weekly:
         fresh_parkour_easy: 2
@@ -1894,6 +1900,7 @@ games:
         fresh_boat: 2
     # Star Chart goals: stars a player collects in a week, and the tokens each goal pays (once a
     # week). Weekly and daily ends like the rewards; never above 80% of what the week can give.
+    # A week's goals are fixed the first time they are shown or paid: a change counts from the next.
     star_goals:
       weekly: [6, 12]
       weekly_tokens: [1, 2]

@@ -11,8 +11,9 @@ import java.util.Map;
  * Fresh Courses' admin overrides and bookkeeping in {@code hcm_meta} (GEN-SPEC §5.5): a slot
  * switched on or off, its tier or golf mix, a pinned seed, each edition's reroll count
  * ({@code gen.<slot>.reroll.<edition>}, like {@code reroll.7:38}), the region it has claimed, the
- * difficulty its live layout was made with, and the schedule with when it was first seen
- * ({@code gen.cadence}).
+ * difficulty its live layout was made with, the schedule with when it was first seen
+ * ({@code gen.cadence}), and each week's Star Chart goals as they were fixed
+ * ({@code gen.goals.<week>}).
  *
  * <p>Why {@code hcm_meta} and not a table of its own: there is no schema migration for Fresh
  * Courses (v34 is the last one, and a v35 would clash with any other branch), and these are a

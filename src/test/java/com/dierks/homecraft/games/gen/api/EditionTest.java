@@ -23,7 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the anchor being the first rebuild day on or after 2026-01-05; the key is {@code N:<index>} and
  * changes only on a start day; Monday 03:59 vs 04:00 and the Sunday-to-Monday rollover; DST weeks in
  * America/Chicago; days before the anchor (floorMod); and moving the rebuild day never brings back an
- * earlier key.
+ * earlier key: at most the running edition's own, once, on the new schedule's first start (which the
+ * engine then treats as that edition carried on).
  */
 class EditionTest {
 
@@ -256,7 +257,7 @@ class EditionTest {
     }
 
     @Test
-    void anIndexDependsOnTheStartDateAloneSoMovingTheRebuildDayNeverReusesAKey() {
+    void anIndexDependsOnTheStartDateAloneSoAMovedRebuildDayCanRepeatOnlyTheRunningKeyAndOnlyOnce() {
         for (DayOfWeek rebuild : DayOfWeek.values()) {
             Edition daily = new Edition(CHICAGO, LocalTime.of(4, 0), DayOfWeek.MONDAY, 1, rebuild);
             assertEquals("1:267", daily.key(at(2026, 9, 29, 12, 0)), "a daily key is the same whatever the "
@@ -266,8 +267,13 @@ class EditionTest {
             assertEquals((start - weekly.anchor()) / 7, Edition.index(7, start),
                     "weekly and longer: exactly (start - anchor) / N (" + rebuild + ")");
         }
+        Edition monday = new Edition(CHICAGO, LocalTime.of(4, 0), DayOfWeek.MONDAY, 7, DayOfWeek.MONDAY);
+        Edition friday = new Edition(CHICAGO, LocalTime.of(4, 0), DayOfWeek.MONDAY, 7, DayOfWeek.FRIDAY);
+        assertEquals(monday.key(at(2026, 9, 28, 12, 0)), friday.key(at(2026, 10, 2, 12, 0)),
+                "Monday to Friday: the Friday after Mon 28 Sep carries the same key (7:38); the engine keeps the "
+                        + "live layout through it instead of building it again (GenScheduler#target)");
         long switchDay = day(2026, 9, 20);
-        for (int n : new int[]{1, 2, 3, 5}) {
+        for (int n : new int[]{1, 2, 3, 5, 7, 14}) {
             for (DayOfWeek from : DayOfWeek.values()) {
                 for (DayOfWeek to : DayOfWeek.values()) {
                     Edition before = new Edition(CHICAGO, LocalTime.of(4, 0), DayOfWeek.MONDAY, n, from);
@@ -278,12 +284,22 @@ class EditionTest {
                         running = before.key(before.startOf(d) + 3_600_000L);
                         used.add(running);
                     }
-                    // The running edition is kept until its own end (the engine's rule); from then on:
-                    long end = before.startOfEditionOn(switchDay - 1) + n;
-                    for (long d = end; d < switchDay + 40; d++) {
+                    // From the new schedule's first start after the change (noon on switchDay - 1), every
+                    // key is new, except that the first may be the running one: GenScheduler#target then
+                    // keeps the running layout through it (GenSchedulerTest walks that through the engine).
+                    long first = after.day(after.nextChangeAt(at(2026, 9, 19, 12, 0)));
+                    long previous = Long.MIN_VALUE;
+                    for (long d = first; d < switchDay + 60; d++) {
+                        if (!after.starts(d)) {
+                            continue;
+                        }
                         String key = after.key(after.startOf(d) + 3_600_000L);
-                        assertTrue(key.equals(running) || !used.contains(key), "N=" + n + ", " + from + " -> " + to
-                                + ": " + key + " on day " + d + " was already used");
+                        long index = Edition.index(n, d);
+                        String what = "N=" + n + ", " + from + " -> " + to + ": " + key + " on day " + d;
+                        assertTrue(index > previous, what + " goes back or repeats");
+                        previous = index;
+                        assertTrue(!used.contains(key) || (key.equals(running) && d == first),
+                                what + " was already used (only the running key, on the first new start, may be)");
                     }
                 }
             }

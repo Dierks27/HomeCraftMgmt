@@ -194,6 +194,11 @@ class DailySettingsTest {
         assertEquals(5, s.dailyClear("fresh_golf"), "the owner's own tables: round(4 + 6 * 1/6)");
         assertEquals(10, s.withCadence(7).dailyClear("fresh_golf"), "and switching the cadence needs no retuning");
         assertEquals(4, s.withCadence(1).dailyClear("fresh_golf"), "either way");
+        assertEquals(10, s.dailyClear("fresh_golf", 7), "a finish on a weekly layout kept after the switch to 2 days "
+                + "pays by its own edition");
+        assertEquals(4, s.dailyClear("fresh_golf", 1), "a daily one likewise");
+        assertEquals(5, s.dailyClear("fresh_golf", 2), "the configured cadence is the same as dailyClear(id)");
+        assertEquals(0, s.dailyClear("river_run", 7), "a course that isn't a slot pays nothing here");
         assertEquals(List.of(10, 25), with("cadence", "daily", new ArrayList<>()).starGoals(), "daily goals");
         assertEquals(List.of(new DailyStars.Goal(9, 1), new DailyStars.Goal(21, 1)),
                 with("cadence", 3, new ArrayList<>()).starGoalList(), "every 3 days: in between, daily tokens");

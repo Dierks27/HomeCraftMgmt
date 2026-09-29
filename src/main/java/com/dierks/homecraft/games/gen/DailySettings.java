@@ -356,6 +356,15 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         return c == null ? 0 : c.dailyClear();
     }
 
+    /**
+     * What the first counted finish of {@code id} pays in an edition of {@code cadence} days (the
+     * run's own {@code tag.cadence()}: a layout kept over a cadence change pays by its own edition),
+     * from {@code rewards} (0: unknown id).
+     */
+    public int dailyClear(String id, int cadence) {
+        return slot(id) == null ? 0 : rewards.clear(id, cadence);
+    }
+
     /** The edition rules these settings make, in {@code zone} with the quests' {@code weekStart}. */
     public Edition edition(ZoneId zone, DayOfWeek weekStart) {
         return new Edition(zone, rollover, weekStart, cadenceDays, rebuildDay);

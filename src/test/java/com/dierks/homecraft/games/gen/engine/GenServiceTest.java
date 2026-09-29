@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.gen.engine;
 
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.GenBoards;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenFailed;
@@ -449,6 +450,34 @@ class GenServiceTest {
     }
 
     @Test
+    void movingTheRebuildDayToFridayKeepsTheWeekThroughThisFridayAndStatusNamesTheFridayAfter() {
+        host.settings = GenKit.weekly(SLOT);
+        boot();
+        drive(70);
+        GenTag week = tag();
+        assertEquals("7:38", week.editionKey(), "the week of Mon 28 Sep is up");
+        host.now = GenKit.at(2026, 9, 30, 10, 0);
+        host.settings = GenKit.weekly(SLOT).withRebuild(LocalTime.of(4, 0), java.time.DayOfWeek.FRIDAY);
+        drive(5);
+        assertEquals(GenKit.at(2026, 10, 9, 4, 0), gen.nextChangeAt(),
+                "Fri 2 Oct would be 7:38 again, so the next real change is Fri 9 Oct");
+        assertTrue(scheduleLine().contains("weekly (Fridays at 4:00 AM)") && scheduleLine().contains(
+                "next: Fri 9 Oct 4:00 AM"), "status says so: " + scheduleLine());
+        assertTrue(scheduleLine().contains("made for the old change day and stay until then"),
+                "and why: " + scheduleLine());
+        assertEquals(1, host.logged(Level.INFO, "stay until Fri 9 Oct 4:00 AM"), "and so does the console");
+        host.now = GenKit.at(2026, 10, 2, 4, 0) + 40_000;
+        drive(80);
+        assertEquals(week, tag(), "nothing is rebuilt on Fri 2 Oct: the same key would be the same course");
+        assertEquals('A', tag().half(), "still in its own half");
+        host.now = GenKit.at(2026, 10, 9, 4, 0) + 40_000;
+        drive(80);
+        assertEquals("7:39", tag().editionKey(), "Fri 9 Oct: a new set under a new key");
+        assertEquals(20735, tag().day(), "that starts that Friday");
+        assertEquals(GenKit.at(2026, 10, 16, 4, 0), gen.nextChangeAt(), "and then every Friday");
+    }
+
+    @Test
     void switchingToDailyAndRerollingBuildsANewLayoutOfTheKeptWeek() {
         host.settings = GenKit.weekly(SLOT);
         boot();
@@ -478,15 +507,68 @@ class GenServiceTest {
         host.settings = GenKit.settings(six);
         gen.check(); // a reload: the engine reads the settings at its next check
         assertEquals(3, gen.dailyClear("fresh_parkour_hard"), "daily: 3");
+        assertEquals(5, gen.dailyClear("fresh_parkour_hard", 7),
+                "but a finish on a weekly layout kept over the change pays by its own edition: 5");
+        assertEquals(3, gen.dailyClear("fresh_parkour_hard", 1), "a daily one 3");
+        assertEquals(4, gen.dailyClear("fresh_parkour_hard", 3), "an every-3-days one 4");
+        assertEquals(0, gen.dailyClear("river_run", 7), "a hand-built course nothing, whatever the cadence");
         assertEquals(126, gen.weekMax(MON_28_SEP), "seven editions a week: 126");
-        assertEquals(List.of(10, 25), gen.starGoals(), "10 and 25");
+        assertEquals(List.of(10, 25), DailyStars.stars(gen.goals(MON_28_SEP + 7)), "10 and 25 from next week");
+        assertEquals(List.of(6, 12), gen.starGoals(), "this week's goals stay as they were handed out");
         host.settings = GenKit.weekly(SLOT);
         gen.check();
-        assertEquals(List.of(new com.dierks.homecraft.games.gen.api.DailyStars.Goal(2, 2)), gen.goals(MON_28_SEP),
+        assertEquals(List.of(new DailyStars.Goal(2, 2)), gen.goals(MON_28_SEP + 7),
                 "one course on: 3 stars a week, so the goals come down to 80% of it");
         host.settings = GenKit.settings(SLOT).withCadence(14);
         gen.check();
         assertEquals(3, gen.weekMax(MON_28_SEP + 7), "every 14 days: a week without a start still has its edition");
+    }
+
+    @Test
+    void aWeeksStarChartGoalsAreFixedOnceHandedOutSoTheTopGoalCantBePaidTwiceUnderTwoNumbers() throws Exception {
+        String[] four = {"fresh_parkour_easy", "fresh_parkour", "fresh_parkour_hard", "fresh_rings"};
+        long ancient = MON_28_SEP - 7L * (GenService.KEEP_WEEKS + 1);
+        host.store.meta(GenAdminKeys.goals(ancient), "6:1,12:2");
+        host.settings = GenKit.weekly(four);
+        boot();
+        List<DailyStars.Goal> goals = gen.goals(MON_28_SEP);
+        assertEquals(List.of(new DailyStars.Goal(6, 1), new DailyStars.Goal(9, 2)), goals,
+                "four courses on: 12 stars a week, so 6 (+1) and the top goal clamped to 9 (+2)");
+        gen.enable("fresh_rings", false, said::add);
+        gen.check();
+        assertEquals(9, gen.weekMax(MON_28_SEP), "with Sky Rings off the week can give 9");
+        assertEquals(goals, gen.goals(MON_28_SEP), "but this week's goals stay 6 and 9: worked out again, the top one "
+                + "would be 7, paid under ms:gweek:<week>:7 to someone already paid under :9, or the other way round");
+        gen.enable("fresh_rings", true, said::add);
+        host.settings = GenKit.settings(four); // daily, on a reload
+        gen.check();
+        assertEquals(goals, gen.goals(MON_28_SEP), "nor does a cadence change move them");
+        assertEquals(GenAdminKeys.goalsText(goals), host.store.meta(GenAdminKeys.goals(MON_28_SEP)),
+                "they are kept in hcm_meta");
+        boot();
+        assertEquals(goals, gen.goals(MON_28_SEP), "so a restart reads them back");
+        drive(70); // the first build flips, and a flip prunes
+        assertNull(host.store.meta(GenAdminKeys.goals(ancient)), "a chart's goals go when the chart is pruned");
+        assertNotNull(host.store.meta(GenAdminKeys.goals(MON_28_SEP)), "this week's stay");
+        host.now = GenKit.at(2026, 10, 5, 4, 0) + 40_000;
+        gen.check();
+        assertEquals(List.of(10, 25), DailyStars.stars(gen.goals(MON_28_SEP + 7)),
+                "the next week's are worked out from the settings of that week (daily now)");
+    }
+
+    @Test
+    void goalsAreStoredAsStarsAndTokensAndJunkReadsAsUnset() {
+        List<DailyStars.Goal> goals = List.of(new DailyStars.Goal(6, 1), new DailyStars.Goal(9, 2));
+        assertEquals("6:1,9:2", GenAdminKeys.goalsText(goals), "stars:tokens, smallest first");
+        assertEquals(goals, GenAdminKeys.goalsOf("6:1,9:2"), "read back");
+        assertEquals(List.of(), GenAdminKeys.goalsOf(""), "a week with no goals is kept as none");
+        assertNull(GenAdminKeys.goalsOf(null), "unset");
+        for (String junk : new String[]{"6", "6:x", "0:1", "6:-1", ",6:1", "a:b:c"}) {
+            assertNull(GenAdminKeys.goalsOf(junk), "junk is worked out again: " + junk);
+        }
+        assertEquals(20724L, GenAdminKeys.goalsWeek(GenAdminKeys.goals(20724)), "the week back from the key");
+        assertNull(GenAdminKeys.goalsWeek("gen.goals.x"), "not a week");
+        assertNull(GenAdminKeys.goalsWeek("gen.cadence"), "not a goals key");
     }
 
     @Test

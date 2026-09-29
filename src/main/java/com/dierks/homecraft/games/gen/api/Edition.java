@@ -35,9 +35,15 @@ import java.util.Locale;
  * edition never share one. The index counts N-day steps from {@link #EPOCH}:
  * {@code floorDiv(start - EPOCH, N)}. That is exactly {@code (start - anchor) / N} whenever N is 7 or
  * more, or the rebuild day is Monday; for a shorter cadence with another rebuild day it is the same
- * number plus a constant, chosen so that an index is a function of the start date alone: moving
- * {@code rebuild_day} can then never hand out a key an earlier edition already used (which would
- * bring back an old layout, its old board and an already-paid first-finish reward).
+ * number plus a constant, chosen so that an index is a function of the start date alone and never
+ * goes down as the start date goes up. Moving {@code rebuild_day} can then never hand out the key of
+ * an edition <em>before</em> the running one (which would bring back an old layout, its old board and
+ * an already-paid first-finish reward). It can hand out the running edition's own key once: a grid
+ * moved later inside the running edition's N days (weekly, Monday to Friday: Mon 28 Sep and Fri 2
+ * Oct are both {@code 7:38}) starts with the same index. That start is the running edition carried
+ * on, not a new one: the engine keeps the live layout through it, to the first start with a new key
+ * ({@code GenScheduler.target}). Any fixed-width {@code N:<index>} key has this property, the
+ * addendum's {@code (d - anchor) / N} included.
  *
  * <p>A week (the Star Chart's) is still the quests' week ({@code quests.week_starts_on}), whatever
  * the cadence.

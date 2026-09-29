@@ -29,6 +29,12 @@ import com.dierks.homecraft.games.gen.api.GenTag;
  * restart in between doesn't move the switch. Only an admin's {@code reroll} replaces a layout
  * sooner (a new layout of the same edition).
  *
+ * <p><b>A moved {@code rebuild_day} never brings back the live key.</b> Keys are {@code N:<index>}
+ * with the index a function of the start date alone ({@link Edition#index}), so a grid moved later
+ * inside the live edition's N days (weekly, Monday to Friday) makes its next start carry the live
+ * key again. That start is not a change: the live layout stays through it, until the first start
+ * with a new key (a week later), and that is the change status and the countdown show.
+ *
  * <p>No secret, no build: when the database can't give the seed secret the slot keeps its layout
  * and waits. It never falls back to a temporary secret, which would change a layout mid-edition.
  */
@@ -63,7 +69,7 @@ public final class GenScheduler {
      * @param cadence its length in days
      * @param start   its first day (local epoch day)
      * @param endsAt  when the slot moves on from it (epoch ms): its natural end, or for a layout kept
-     *                over a cadence change, the new schedule's first start
+     *                over a cadence change, the new schedule's first start with another key
      * @param kept    a live layout of another schedule, kept until {@code endsAt}
      */
     public record Target(int cadence, long start, long endsAt, boolean kept) {
@@ -192,7 +198,13 @@ public final class GenScheduler {
      *       older one;</li>
      *   <li>a live layout of another cadence or rebuild day stays until the earlier of its own end
      *       and the new schedule's first start after {@code since}; with {@code since} unknown (0),
-     *       until its own end.</li>
+     *       until its own end;</li>
+     *   <li>and when the new schedule's edition due at that moment has the live layout's own key
+     *       (the same cadence and index: a {@code rebuild_day} moved later inside the index's N
+     *       days, Monday to Friday for a weekly set), it <em>is</em> the live edition carried on,
+     *       so the layout stays through it, until the first start with a new key. Building it would
+     *       give the same seed, board, stars and first-finish reward: nothing would really change,
+     *       and the countdown would have named a day on which nothing new goes up.</li>
      * </ul>
      */
     public static Target target(GenTag live, long now, Edition ed, long since) {
@@ -208,6 +220,11 @@ public final class GenScheduler {
         long ownEnd = ed.startOf(live.endDay());
         long newStart = since > 0 ? ed.nextChangeAt(Math.max(since, ed.startOf(live.day()))) : Long.MAX_VALUE;
         long keepUntil = Math.min(ownEnd, newStart);
+        long takeover = ed.editionStart(keepUntil);
+        if (live.cadence() == ed.cadenceDays()
+                && Edition.index(ed.cadenceDays(), takeover) == Edition.index(live.cadence(), live.day())) {
+            keepUntil = ed.endOf(takeover); // the next start has a greater index: floorDiv moves on by one
+        }
         return now < keepUntil ? new Target(live.cadence(), live.day(), keepUntil, true) : current;
     }
 

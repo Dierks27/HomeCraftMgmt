@@ -316,6 +316,93 @@ class GenSchedulerTest {
                 "a week starting after its last day builds from the edition's own seed");
     }
 
+    private static Edition weeklyOn(DayOfWeek rebuildDay) {
+        return new Edition(GenKit.ZONE, LocalTime.of(4, 0), DayOfWeek.MONDAY, 7, rebuildDay);
+    }
+
+    @Test
+    void movingTheRebuildDayFromMondayToFridayKeepsTheWeekThroughTheFridayThatWouldReuseItsKey() {
+        Edition friday = weeklyOn(DayOfWeek.FRIDAY);
+        GenTag week = edition(7, MON_28_SEP, 0, 1); // 7:38, up since Monday 28 Sep
+        long since = GenKit.at(2026, 9, 30, 10, 0); // the owner sets rebuild_day: friday on Wednesday
+        assertEquals("7:38", Edition.editionKey(7, 20728, 0), "Fri 2 Oct would be 7:38 again (the same seed)");
+        for (long t = since; t < GenKit.at(2026, 10, 9, 4, 0); t += 3_600_000L) {
+            Decision d = GenScheduler.decide(view(week, since), t, 0, WEEKLY, HOLD, friday);
+            assertEquals(Kind.NONE, d.kind(), "the week's courses are never rebuilt under their own key (at "
+                    + java.time.Instant.ofEpochMilli(t) + ")");
+        }
+        GenScheduler.Target kept = GenScheduler.target(week, GenKit.at(2026, 10, 2, 12, 0), friday, since);
+        assertTrue(kept.holds(week) && kept.kept(), "on Friday the live week is still the one to show");
+        assertEquals(GenKit.at(2026, 10, 9, 4, 0), kept.endsAt(),
+                "and status and nextChangeAt say the courses change on Fri 9 Oct, when a new key goes up");
+        assertEquals(GenKit.at(2026, 10, 9, 4, 0), GenScheduler.target(week, since, friday, since).endsAt(),
+                "already on Wednesday");
+        Decision next = GenScheduler.decide(view(week, since), GenKit.at(2026, 10, 9, 4, 0), 0, WEEKLY, HOLD, friday);
+        assertEquals(Kind.BUILD, next.kind(), "Fri 9 Oct 04:00 builds");
+        assertEquals(20735, next.day(), "the week that starts that Friday");
+        assertEquals("7:39", Edition.editionKey(next.cadence(), next.day(), 0), "under a new key");
+    }
+
+    @Test
+    void movingTheRebuildDayFromMondayToSundayKeepsTheWeekUntilTheSundayAfterAndSoDoesAnUnknownMoment() {
+        Edition sunday = weeklyOn(DayOfWeek.SUNDAY);
+        GenTag week = edition(7, MON_28_SEP, 0, 1);
+        for (long since : new long[]{GenKit.at(2026, 9, 29, 9, 0), 0}) {
+            for (long t = GenKit.at(2026, 9, 29, 10, 0); t < GenKit.at(2026, 10, 11, 4, 0); t += 3_600_000L) {
+                assertEquals(Kind.NONE, GenScheduler.decide(view(week, since), t, 0, WEEKLY, HOLD, sunday).kind(),
+                        "7:38 is not rebuilt as 7:38 on Sun 4 Oct (since " + since + ", at "
+                                + java.time.Instant.ofEpochMilli(t) + ")");
+            }
+            assertEquals(GenKit.at(2026, 10, 11, 4, 0),
+                    GenScheduler.target(week, GenKit.at(2026, 10, 4, 12, 0), sunday, since).endsAt(),
+                    "the reported change is Sun 11 Oct (since " + since + ")");
+            Decision d = GenScheduler.decide(view(week, since), GenKit.at(2026, 10, 11, 4, 0), 0, WEEKLY, HOLD, sunday);
+            assertEquals(Kind.BUILD, d.kind(), "and it happens then");
+            assertEquals("7:39", Edition.editionKey(d.cadence(), d.day(), 0), "as 7:39");
+        }
+        Edition monday = weeklyOn(DayOfWeek.MONDAY);
+        GenTag sundayWeek = edition(7, MON_28_SEP + 6, 0, 1); // 7:38 on the Sunday grid, started Sun 4 Oct
+        long since = GenKit.at(2026, 10, 4, 12, 0);
+        assertEquals(GenKit.at(2026, 10, 5, 4, 0), GenScheduler.target(sundayWeek, since, monday, since).endsAt(),
+                "back to Monday: Mon 5 Oct is 7:39, a new key, so the switch is the next day as before");
+    }
+
+    @Test
+    void aRebuildDayMoveNeverBuildsTheLiveKeyAgainAndEveryReportedChangeIsWhenTheCoursesChange() {
+        for (int n : new int[]{1, 2, 3, 5, 7, 14}) {
+            for (DayOfWeek from : DayOfWeek.values()) {
+                for (DayOfWeek to : DayOfWeek.values()) {
+                    Edition before = new Edition(GenKit.ZONE, LocalTime.of(4, 0), DayOfWeek.MONDAY, n, from);
+                    Edition after = new Edition(GenKit.ZONE, LocalTime.of(4, 0), DayOfWeek.MONDAY, n, to);
+                    DailySettings st = GenKit.settings(SLOT).withCadence(n);
+                    for (int k = 0; k < Math.min(n, 7); k++) {
+                        long since = before.startOf(DAY + k) + 6 * 3_600_000L; // a reload at 10:00
+                        long start = before.startOfEditionOn(DAY + k);
+                        GenTag live = edition(n, start, 0, 1);
+                        long reported = GenScheduler.target(live, since, after, since).endsAt();
+                        String what = "N=" + n + ", " + from + " -> " + to + ", reload on day " + (DAY + k);
+                        for (long d = DAY + k + 1; d < DAY + k + 3L * n + 8; d++) {
+                            long t = after.startOf(d) + 60_000L;
+                            Decision dec = GenScheduler.decide(view(live, since), t, 0, st, HOLD, after);
+                            if (dec.kind() == Kind.BUILD) {
+                                String key = Edition.editionKey(dec.cadence(), dec.day(), 0);
+                                assertFalse(key.equals(live.edition()), what + ": " + key + " rebuilt under the live key"
+                                        + " on day " + d);
+                                assertEquals(reported, after.startOf(d), what + ": the change reported for "
+                                        + reported + " came on day " + d);
+                                live = edition(dec.cadence(), dec.day(), 0, 1);
+                            } else {
+                                assertEquals(Kind.NONE, dec.kind(), what + " on day " + d);
+                            }
+                            reported = GenScheduler.target(live, t, after, since).endsAt();
+                            assertTrue(reported > t, what + ": the next change is ahead (day " + d + ")");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     @Test
     void aJobTwoMinutesBeforeARestartIsAbandoned() {
         assertFalse(GenScheduler.abandon(GenKit.at(2026, 9, 29, 15, 57), HOLD), "three minutes before: keep going");

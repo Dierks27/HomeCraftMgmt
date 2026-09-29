@@ -805,6 +805,12 @@ next. That's all.
   day. Daily to weekly: today's stay until the next 4:00 AM, then the week's set goes up and stays
   until the next Monday. This holds across a restart. `/hcm games gen reroll` still replaces one at
   once.
+- Moving `rebuild_day` works the same way, with one catch: sets are numbered (`7:38` is the week
+  of Mon 28 Sep), and a new day before the next Monday would give the set that is up its own
+  number again. That day is not a change, so the courses stay until the new day a week later. Monday
+  to Friday, changed on Wed 30 Sep: the week's courses stay through Fri 2 Oct, the new set goes up
+  on Fri 9 Oct, and from then on they change every Friday. `/hcm games gen status` always shows the
+  real date ("next: Fri 9 Oct 4:00 AM").
 - Anything `cadence`, `rebuild_at` or `rebuild_day` can't use (a typo, `cadence: 30`) is one WARN in
   the console and the shipped value (weekly, 04:00, the quests' week start); it never switches the
   courses off.
@@ -850,8 +856,16 @@ Golf 2, Tiny Golf 1; every 2 to 6 days, in between (`round(daily + (weekly - dai
 6)`: every 3 days Hard pays 4). A course's first finish ever pays the usual first clear once; golf
 pays par and holes-in-one once per set. The Star Chart pays at 6 stars (+1) and 12 stars (+2) a week
 when weekly, 10 and 25 (+1 each) when daily, and in between for 2 to 6 days - never above 80% of
-what the week's courses can give. All of it is inside today's caps (`daily_cap`, and
-`games.skill_daily_cap`, 6 a day across every skill game).
+what the week's courses can give. A week's goals are fixed the first time they are shown, so
+switching a course off (or the cadence) mid-week changes next week's goals, not this week's.
+
+The daily caps are unchanged and still apply to all of it, and a reward a cap cuts short is not
+paid later (that set's first-finish token, or that week's goal, is used up). The parkour and Sky
+Rings courses share `games.trials.daily_cap` (4 a day), the golf courses `games.golf.daily_cap` (4),
+the Star Chart `games.fresh.daily_cap` (2), and every skill game together `games.skill_daily_cap`
+(6). So as shipped Hard Parkour's weekly 5 pays at most 4; a player who plays a whole weekly set in
+one day earns at most 6 tokens that day (plus the once-ever first clears); and reaching both weekly
+goals on the same day pays 2, not 3. Played over several days, more of the set's amounts are paid.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -859,7 +873,7 @@ what the week's courses can give. All of it is inside today's caps (`daily_cap`,
 | `fresh.world` | `""` | The world they are built in; `""` = the first of `games.worlds` (it must be listed there) |
 | `fresh.cadence` | `weekly` | How often the courses change: `weekly`, `daily`, or a number of days from 1 to 28 (like `3`). Junk: one WARN, weekly |
 | `fresh.rebuild_at` | `"04:00"` | When a new set starts (`clock.time_zone`, in quotes); keep it at a restart |
-| `fresh.rebuild_day` | `""` | The day a weekly set starts (`"monday"`); `""` = the quests' week start (`arcade.quests.week_starts`). Other cadences count their days from it too |
+| `fresh.rebuild_day` | `""` | The day a weekly set starts (`"monday"`); `""` = the quests' week start (`arcade.quests.week_starts`). Other cadences count their days from it too. A new day before the next Monday keeps the current set a week longer (see above) |
 | `fresh.startup_delay_seconds` | `60` | After the server is up, before the first build |
 | `fresh.avoid_before_restart_minutes` | `15` | No build starts this close to one of `games.restart_times` |
 | `fresh.retry_minutes` | `30` | A failed build is tried again after this |
@@ -870,7 +884,7 @@ what the week's courses can give. All of it is inside today's caps (`daily_cap`,
 | `fresh.safe_spot` | `""` | "x y z" where people standing in a building area are moved; `""` = the world's spawn |
 | `fresh.daily_cap` | `2` | Most Star Chart tokens a player earns a day |
 | `fresh.rewards.clear_weekly.*` / `fresh.rewards.clear_daily.*` | see above | Each course's first-finish tokens at a weekly and at a daily cadence; other cadences are worked out from the two |
-| `fresh.star_goals.weekly` / `.weekly_tokens` | `[6, 12]` / `[1, 2]` | The weekly Star Chart goals and what each pays, at a weekly cadence |
+| `fresh.star_goals.weekly` / `.weekly_tokens` | `[6, 12]` / `[1, 2]` | The weekly Star Chart goals and what each pays, at a weekly cadence (a week's goals are fixed once shown: a change counts from the next week) |
 | `fresh.star_goals.daily` / `.daily_tokens` | `[10, 25]` / `[1, 1]` | The same at a daily cadence |
 | `fresh.budget.*` | `500` / `5000` / `4` / `4` / `2` / `40` | Blocks per tick online / idle, ms per tick, snapshots per tick, chunk loads at once, and the average tick time (ms) above which building pauses (it goes on below 3/4 of it) |
 | `fresh.stars.gold.*` / `fresh.stars.silver.*` | easy 2.0 / 3.0, medium 1.5 / 2.2, hard 1.25 / 1.8 | The 3-star and 2-star times as a factor of each course's expert time (tune after the first week) |

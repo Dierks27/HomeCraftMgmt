@@ -1,0 +1,237 @@
+package com.dierks.homecraft.games.gen.dropper;
+
+import com.dierks.homecraft.games.gen.api.Box;
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * The pilots and the fall through real blocks (EVENTS-DROPPER-SPEC §B.1.6 rules 1-2): a straight
+ * stack of openings lets all 33 through, a wall-to-wall plate stops every one, a late pilot really
+ * is late, and the swept box catches the clips a point-by-point check would miss.
+ */
+class DropPilotTest {
+
+    /** The hand-built Easy shaft's two layers: 13 and 23 below the ledge top. */
+    private static final int ROW1 = 56 - 13 - 1;
+    private static final int ROW2 = 56 - 23 - 1;
+
+    private static DropperFixtures.Shaft straightStack() {
+        // 7 x 7 openings stacked in front of the ledge (x 6-8, z 2-4), where a walk-off falls
+        return new DropperFixtures.Shaft().plate(ROW1, 4, 4, 10, 10).plate(ROW2, 4, 4, 10, 10);
+    }
+
+    private static List<DropPilot.Target> targets(DropCheck.View v) {
+        return List.of(new DropPilot.Target(7.5, 7.5, ROW1), new DropPilot.Target(7.5, 7.5, ROW2),
+                new DropPilot.Target(v.pool().x(), v.pool().z(), Double.NaN));
+    }
+
+    // ---- the 33 -------------------------------------------------------------------------------------
+
+    @Test
+    void thereAreThirtyThreePilotsFiveExitsTimesWalkOrJumpTimesThreeDelaysPlusThreeSloppy() {
+        DropperFixtures.Shaft sh = straightStack();
+        DropCheck.View v = sh.view();
+        for (DropRules.Level tier : DropRules.Level.values()) {
+            List<DropPilot.Variant> all = DropPilot.variants(v.edgeX(), v.edgeZ(), v.fx(), v.fz(), v.ledgeTop(),
+                    targets(v), tier);
+            assertEquals(33, all.size(), tier + ": 5 x 2 x 3 + 3");
+            Set<String> labels = new HashSet<>();
+            int jumps = 0;
+            int sloppy = 0;
+            for (DropPilot.Variant p : all) {
+                labels.add(p.label());
+                jumps += p.start().vy() > 0 ? 1 : 0;
+                sloppy += p.label().startsWith("sloppy") ? 1 : 0;
+                assertTrue(Math.abs(p.start().x() - v.edgeX()) <= 1.2 + 1e-9,
+                        "every exit is on the ledge's 3-wide front edge: " + p.label());
+            }
+            assertEquals(33, labels.size(), tier + ": every pilot is a different one");
+            assertEquals(15, jumps, tier + ": half the 30 jump off");
+            assertEquals(3, sloppy, tier + ": three sloppy runs");
+            assertTrue(all.get(32).label().contains((tier.aimError() > 0 ? "+" : "") + tier.aimError() + " degrees"),
+                    tier + ": the sloppy runs hold the tier's aim error: " + all.get(32).label());
+        }
+    }
+
+    @Test
+    void aPilotLeavesTheLedgeOnItsFirstTick() {
+        DropperFixtures.Shaft sh = straightStack();
+        DropCheck.View v = sh.view();
+        DropSim.Body start = v.witnessStart();
+        assertTrue(start.z() - DropSim.HALF_WIDTH < v.edgeZ(), "it starts with its heels still over the ledge");
+        DropSim.Body after = start.tick(v.fx(), v.fz());
+        assertTrue(after.z() - DropSim.HALF_WIDTH > v.edgeZ(), "one tick of walking carries it past the front edge");
+        assertEquals(start.y(), after.y(), 1e-12, "without dropping: a walk-off starts with no vertical speed");
+    }
+
+    // ---- through the blocks -------------------------------------------------------------------------
+
+    @Test
+    void aStraightStackOfOpeningsLetsEveryPilotThrough() {
+        DropperFixtures.Shaft sh = straightStack();
+        DropCheck.View v = sh.view();
+        long[] work = {0};
+        List<DropCheck.Miss> misses = DropCheck.pilots(sh.w, v, targets(v), false, work);
+        assertTrue(misses.isEmpty(), "all 33 reach the water through 7 x 7 openings: " + labels(misses));
+        assertTrue(work[0] > 33 * 30, "and every tick they flew is counted work: " + work[0]);
+        DropCheck.Flight f = DropCheck.witness(sh.w, v, DropProgram.parse("-*"), sh.tier.tube());
+        assertTrue(f.result().splashed(), "walking off and letting go splashes with Easy's clearance: "
+                + f.result().outcome());
+        assertEquals(2, f.crossings().size(), "crossing both layers");
+    }
+
+    @Test
+    void aWallToWallPlateStopsEveryPilot() {
+        DropperFixtures.Shaft sh = straightStack().plate(ROW2, 99, 99, 99, 99);
+        DropCheck.View v = sh.view();
+        List<DropCheck.Miss> misses = DropCheck.pilots(sh.w, v, targets(v), false, null);
+        assertEquals(33, misses.size(), "nobody gets through a plate with no hole");
+        for (DropCheck.Miss m : misses) {
+            assertEquals(DropRun.Outcome.TOUCHED, m.result().outcome(), m.label() + " bonks on it");
+            assertEquals(ROW2, m.result().hit()[1], m.label() + " on the second layer's row");
+        }
+        List<DropCheck.Miss> first = DropCheck.pilots(sh.w, v, targets(v), true, null);
+        assertEquals(1, first.size(), "the planner's retry asks only for the first miss");
+    }
+
+    @Test
+    void aPilotHoldsForwardThroughItsReactionDelayThenSteers() {
+        DropPilot p = new DropPilot(0, 1, List.of(new DropPilot.Target(10, 5, Double.NaN)), 3, 0);
+        DropSim.Body at = new DropSim.Body(5, 50, 5, 0, 0, 0);
+        for (int t = 0; t <= 3; t++) {
+            assertArrayEquals(new double[]{0, 1}, p.input(t, at), 1e-12,
+                    "tick " + t + ": the walk-off, then 3 ticks late, still walking forward");
+        }
+        assertArrayEquals(new double[]{1, 0}, p.input(4, at), 1e-12, "tick 4: it turns toward the opening, east");
+        DropPilot quick = new DropPilot(0, 1, List.of(new DropPilot.Target(10, 5, Double.NaN)), 0, 0);
+        assertArrayEquals(new double[]{0, 1}, quick.input(0, at), 1e-12, "even with no delay tick 0 is the walk-off");
+        assertArrayEquals(new double[]{1, 0}, quick.input(1, at), 1e-12, "and it steers from tick 1");
+    }
+
+    @Test
+    void afterEachLayerAPilotKeepsItsOldKeyForItsDelayBeforeTurningToTheNext() {
+        List<DropPilot.Target> two = List.of(new DropPilot.Target(10, 5, 40), new DropPilot.Target(0, 5, Double.NaN));
+        DropPilot p = new DropPilot(0, 1, two, 2, 0);
+        DropSim.Body high = new DropSim.Body(5, 45, 5, 0, 0, 0);
+        DropSim.Body low = new DropSim.Body(5, 39, 5, 0, 0, 0);
+        for (int t = 0; t < 10; t++) {
+            p.input(t, high);
+        }
+        assertArrayEquals(new double[]{1, 0}, p.input(9, high), 1e-12, "above the layer it aims east, at its opening");
+        assertArrayEquals(new double[]{1, 0}, p.input(10, low), 1e-12, "tick 10: through the layer, still east");
+        assertArrayEquals(new double[]{1, 0}, p.input(11, low), 1e-12, "tick 11: 2 ticks late, still east");
+        assertArrayEquals(new double[]{-1, 0}, p.input(12, low), 1e-12, "tick 12: now west, at the next target");
+        DropPilot fresh = p.fresh();
+        assertArrayEquals(new double[]{0, 1}, fresh.input(0, high), 1e-12, "a fresh copy starts over at the ledge");
+    }
+
+    @Test
+    void aSloppyPilotHoldsEveryKeyAFewDegreesOff() {
+        DropPilot p = new DropPilot(0, 1, List.of(new DropPilot.Target(10, 5, Double.NaN)), 0, 10);
+        double[] u = p.input(1, new DropSim.Body(5, 50, 5, 0, 0, 0));
+        assertEquals(10, Math.toDegrees(Math.atan2(u[1], u[0])), 1e-9, "aiming east, it holds a key 10 degrees off");
+        assertEquals(1, Math.hypot(u[0], u[1]), 1e-12, "at full input");
+    }
+
+    @Test
+    void aPilotLetsGoWhenItsDriftAlreadyEndsOverTheOpening() {
+        DropPilot p = new DropPilot(0, 1, List.of(new DropPilot.Target(5 + 0.1 * DropPilot.COAST, 5, Double.NaN)),
+                0, 0);
+        DropSim.Body drifting = new DropSim.Body(5, 50, 5, 0.1, 0, 0);
+        double[] u = p.input(1, drifting);
+        assertArrayEquals(new double[]{0, 0}, u, 1e-12, "a drift that stops on the target needs no key");
+    }
+
+    // ---- the swept fall -----------------------------------------------------------------------------
+
+    @Test
+    void theSweptBoxCatchesACornerClipThatBothEndsMiss() {
+        DropWorld w = new DropWorld(Box.sized(0, 0, 0, 32, 64, 32));
+        w.set(10, 50, 10, DropWorld.SOLID);
+        DropSim.Body start = new DropSim.Body(9.6, 50, 10.5, 0.9 * DropRun.SUB_STEPS, 0, -0.9 * DropRun.SUB_STEPS);
+        assertNull(w.overlap(9.3, 50, 10.2, 9.9, 51.8, 10.8, DropWorld.SOLID), "where it starts is clear of the block");
+        assertNull(w.overlap(10.2, 50, 9.3, 10.8, 51.8, 9.9, DropWorld.SOLID), "where the sub-step ends is clear too");
+        DropRun.Result r = DropRun.fly(w, start, null, 0, 1, Double.NaN, false);
+        assertEquals(DropRun.Outcome.TOUCHED, r.outcome(), "but it passed across the corner in between");
+        assertArrayEquals(new int[]{10, 50, 10}, r.hit(), "the block it clipped");
+        assertEquals(1, r.subSteps(), "caught on the first sub-step, not after it had passed");
+    }
+
+    @Test
+    void aOneBlockPlateCantBeTunnelledAtTheFastestFall() {
+        DropperFixtures.Shaft sh = new DropperFixtures.Shaft().plate(ROW2, 99, 99, 99, 99);
+        DropSim.Body fast = new DropSim.Body(7.5, ROW2 + 3, 7.5, 0, -2.2, 0);
+        DropRun.Result r = DropRun.fly(sh.w, fast, null, 0, 5, Double.NaN, false);
+        assertEquals(DropRun.Outcome.TOUCHED, r.outcome(), "2.2 blocks a tick in 4 sub-steps still meets the plate");
+        assertEquals(ROW2, r.hit()[1], "the plate's own row");
+    }
+
+    @Test
+    void theTubeIsExactAPointOneBreachTouchesAndPointOneSpareDoesnt() {
+        for (DropRules.Level tier : DropRules.Level.values()) {
+            double r = tier.tube();
+            assertEquals(DropRun.Outcome.TOUCHED, pastABlock(r - 0.1, r).outcome(),
+                    tier + ": a block " + (r - 0.1) + " from the body is inside its clearance r = " + r);
+            assertEquals(DropRun.Outcome.SPLASH, pastABlock(r + 0.1, r).outcome(),
+                    tier + ": a block " + (r + 0.1) + " away is outside it");
+            assertEquals(DropRun.Outcome.SPLASH, pastABlock(r - 0.1, 0).outcome(),
+                    tier + ": the plain body never touches it at all");
+        }
+    }
+
+    /** A straight fall past a block at (11, 40, 10) with the body's side {@code gap} from its face. */
+    private static DropRun.Result pastABlock(double gap, double inflate) {
+        DropWorld w = new DropWorld(Box.sized(0, 0, 0, 32, 64, 32));
+        w.set(11, 40, 10, DropWorld.SOLID);
+        for (int x = 0; x < 32; x++) {
+            for (int z = 0; z < 32; z++) {
+                w.set(x, 20, z, DropWorld.WATER);
+            }
+        }
+        DropSim.Body start = new DropSim.Body(11 - gap - DropSim.HALF_WIDTH, 50, 10.5, 0, 0, 0);
+        return DropRun.fly(w, start, null, inflate, DropSim.MAX_TICKS, Double.NaN, false);
+    }
+
+    @Test
+    void aFaceTouchingABlockIsNotOverlappingIt() {
+        DropWorld w = new DropWorld(Box.sized(0, 0, 0, 16, 16, 16));
+        w.set(5, 5, 5, DropWorld.SOLID);
+        assertNull(w.overlap(4, 5, 5, 5, 6, 6, DropWorld.SOLID), "a box ending exactly at the block's face");
+        assertNotNull(w.overlap(4, 5, 5, 5.001, 6, 6, DropWorld.SOLID), "a hair further is inside it");
+        assertNull(w.overlap(5, 6, 5, 6, 8, 6, DropWorld.SOLID), "standing on its top face isn't inside it");
+        assertEquals(DropWorld.AIR, w.get(-1, 5, 5), "outside the half is air");
+    }
+
+    @Test
+    void aScrapeAlongTheGlassIsNotALandingButComingDownOnTheLedgeIs() {
+        DropperFixtures.Shaft sh = new DropperFixtures.Shaft();
+        // pressed against the west wall, walking into it, all the way down
+        DropSim.Body hugging = new DropSim.Body(sh.s.x1() + DropSim.HALF_WIDTH + 0.01, 50, 8.5, -0.2, 0, 0);
+        DropRun.Result r = DropRun.fly(sh.w, hugging, (t, b) -> new double[]{-1, 0}, 0, DropSim.MAX_TICKS,
+                Double.NaN, false);
+        assertEquals(DropRun.Outcome.SPLASH, r.outcome(), "the wall stops it sideways, never from falling");
+        DropSim.Body over = new DropSim.Body(sh.ledgeX + 1.5, sh.s.ledgeTop() + 1, sh.s.z1() + 1.5, 0, 0, 0);
+        DropRun.Result land = DropRun.fly(sh.w, over, null, 0, DropSim.MAX_TICKS, Double.NaN, false);
+        assertEquals(DropRun.Outcome.LANDED, land.outcome(), "dropping onto the ledge is a landing");
+        assertEquals(sh.s.ledgeTop(), land.body().y(), 1e-6, "on its top");
+        assertNotNull(land.hit(), "on a block it names");
+    }
+
+    private static List<String> labels(List<DropCheck.Miss> misses) {
+        List<String> out = new ArrayList<>();
+        for (DropCheck.Miss m : misses) {
+            out.add(m.label() + " " + m.result().outcome());
+        }
+        return out;
+    }
+}

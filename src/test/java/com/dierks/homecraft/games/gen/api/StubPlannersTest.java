@@ -37,6 +37,9 @@ class StubPlannersTest {
     @Test
     void everyStubSaysItIsNotBuiltYet() {
         for (Planner p : PLANNERS) {
+            if (p instanceof GolfPlanner) {
+                continue; // built (WP3): GolfPlannerTest covers it
+            }
             Slots.Def slot = Slots.ALL.stream().filter(s -> s.generator().equals(p.id())).findFirst().orElseThrow();
             PlanInput in = new PlanInput(slot, slot.half('A'), 'A', 20725, 0, 1L, slot.tierOrMix(), 8, 1000, null);
             GenFailed plan = assertThrows(GenFailed.class, () -> p.plan(in), p.id() + " can't plan yet");

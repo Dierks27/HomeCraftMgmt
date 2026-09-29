@@ -104,6 +104,8 @@ processResources {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // `gradle test -Pslow` also runs the long soaks (@EnabledIfSystemProperty hcm.slow).
+    systemProperty 'hcm.slow', project.hasProperty('slow') ? 'true' : 'false'
     // Log every test, so the CI transcript proves the regression tests actually ran —
     // a silently-undiscovered suite would let this fix go green without being checked.
     testLogging {

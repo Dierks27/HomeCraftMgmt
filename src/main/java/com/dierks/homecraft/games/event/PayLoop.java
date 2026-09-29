@@ -21,8 +21,9 @@ import java.util.logging.Logger;
  * and {@code paid_at} is set. Nobody is ever paid twice, and nobody's prize is lost.
  *
  * <p>A racer who is offline, or can't earn where they are (creative, a world without games), is
- * <b>owed</b>: the prize stays unpaid and is tried again when they join and every 5 minutes while
- * they are online, with a queued notice that explains.
+ * <b>owed</b>: the prize stays unpaid and is tried again a moment after they join and once a minute
+ * while they are online ({@code Game.settleOwed}, which the framework runs even while Race Night is
+ * switched off), with a notice that explains.
  */
 public final class PayLoop {
 

@@ -103,6 +103,11 @@ public final class GamesBench {
         host.runTasks();
     }
 
+    /** The framework's one-minute sweep, now (fx2-C #7). */
+    public void sweep() {
+        games.sweep();
+    }
+
     /** SEVERE lines logged so far (a game that threw). */
     public long severe() {
         return host.severe();

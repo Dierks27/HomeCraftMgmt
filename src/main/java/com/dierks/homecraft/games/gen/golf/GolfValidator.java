@@ -32,7 +32,9 @@ import java.util.Set;
  *       hole's bounds and never meets a drop into nothing;</li>
  *   <li>every wall beside the lane is solid from T - 1 up and stands exactly one block above the
  *       hole's highest lane cell: no ball rolls over it (not even one riding the top of a wall's
- *       lower block beside a raised green), and a player can always step out from there;</li>
+ *       lower block beside a raised green);</li>
+ *   <li>nobody is trapped: from every lane cell a player can walk to a wall at most one block
+ *       above the lane beside it and step out ({@link #trapped});</li>
  *   <li>nothing is above the lane except the flag, three over the cup;</li>
  *   <li>no hollow but the cup, which is exactly one block deep;</li>
  *   <li>the witness line replays from the tee into the cup in exactly E strokes, par is
@@ -253,7 +255,63 @@ public final class GolfValidator {
                 }
             }
         }
+        String trapped = trapped(grid, lane, turf);
+        if (trapped != null) {
+            out.add(name + ": a player at " + trapped + " can't step out (every wall they can walk to is more"
+                    + " than a block above them)");
+        }
         return out;
+    }
+
+    /**
+     * Nobody is trapped (S4): from every lane cell a player can walk, a step of at most one block
+     * at a time, to a cell beside a wall at most one block above it, and step out over that wall.
+     * Walls may stand two above the approach of a raised green (so a ball on the green can't ride
+     * a wall's lower block out), but then the green's edge is where a player steps out.
+     *
+     * @return the first cell with no way out ("x y z"), or {@code null} when every cell has one
+     */
+    static String trapped(BallPhysics.Blocks grid, LaneMap lane, int turf) {
+        int[][] four = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        java.util.ArrayDeque<int[]> queue = new java.util.ArrayDeque<>();
+        Set<Long> out = new HashSet<>();
+        for (int x = lane.minX; x < lane.minX + lane.sizeX; x++) {
+            for (int z = lane.minZ; z < lane.minZ + lane.sizeZ; z++) {
+                if (!lane.isLane(x, z)) {
+                    continue;
+                }
+                double s = lane.surface(x, z);
+                for (int[] d : four) {
+                    if (lane.isLane(x + d[0], z + d[1])) {
+                        continue;
+                    }
+                    double wall = highest(grid, x + d[0], z + d[1], turf);
+                    if (!Double.isNaN(wall) && wall - s <= 1 + EPS && out.add(key(x, 0, z))) {
+                        queue.add(new int[]{x, z});
+                        break;
+                    }
+                }
+            }
+        }
+        while (!queue.isEmpty()) {
+            int[] c = queue.poll();
+            double s = lane.surface(c[0], c[1]);
+            for (int[] d : four) {
+                int nx = c[0] + d[0];
+                int nz = c[1] + d[1];
+                if (lane.isLane(nx, nz) && Math.abs(lane.surface(nx, nz) - s) <= 1 + EPS && out.add(key(nx, 0, nz))) {
+                    queue.add(new int[]{nx, nz});
+                }
+            }
+        }
+        for (int x = lane.minX; x < lane.minX + lane.sizeX; x++) {
+            for (int z = lane.minZ; z < lane.minZ + lane.sizeZ; z++) {
+                if (lane.isLane(x, z) && !out.contains(key(x, 0, z))) {
+                    return at(x, (int) Math.floor(lane.surface(x, z)), z);
+                }
+            }
+        }
+        return null;
     }
 
     /**

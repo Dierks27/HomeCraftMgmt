@@ -122,6 +122,27 @@ class GolfValidatorTest {
     }
 
     @Test
+    void aHoleAPlayerCantStepOutOfIsCaught() {
+        HoleLayout island = GolfKit.island(6, 8, 10);
+        assertEquals(null, GolfValidator.trapped(GolfKit.grid(island), LaneMap.of(GolfKit.grid(island),
+                GolfKit.hole(island)), GolfKit.TURF), "walls two above an island's approach are fine: its green's "
+                + "edge is one below them, and the ramp leads there");
+        HoleTemplate.Sketch s = new HoleTemplate.Sketch();
+        s.lane(7, 11, 2, 16, 0);
+        s.lane(8, 10, 8, 10, 1); // a slab ring...
+        s.lane(9, 9, 9, 9, 2); // ...round a mound one block up, in the middle of the lane
+        s.tee(9, 3);
+        s.cup(9, 14);
+        HoleLayout mound = s.render(HoleTemplate.STRAIGHT, false, GolfKit.PLOT_X, GolfKit.PLOT_Z, GolfKit.TURF,
+                "mound");
+        List<String> problems = GolfValidator.holeProblems(GolfKit.grid(mound), GolfKit.hole(mound), 1);
+        assertTrue(problems.stream().anyMatch(p -> p.contains("can't step out")),
+                "walls one above the mound are two above every lane cell beside them: " + problems);
+        assertTrue(problems.stream().noneMatch(p -> p.contains("more than one block high") || p.contains("rolled over")),
+                "which the wall-height rules alone don't catch: " + problems);
+    }
+
+    @Test
     void aBlockOverTheLaneIsCaught() {
         caught(withOps(ops -> {
             ops.add(new BlockOp((int) Math.floor(first.tee().x()), turf + 2, teeZ() + 2, state(Palette.GOLF_WALL)));

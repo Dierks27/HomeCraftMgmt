@@ -2945,3 +2945,7 @@ src/main/resources/
   config.yml
   web/index.html               the dashboard page (asks for the feed token on a 401)
 ```
+
+## License
+
+Proprietary - all rights reserved. See [LICENSE](LICENSE). The bundled SQLite JDBC driver keeps its own Apache 2.0 license.

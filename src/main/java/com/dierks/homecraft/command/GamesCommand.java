@@ -331,6 +331,11 @@ public final class GamesCommand {
                     sender.sendMessage(Text.of("  &8" + Text.plain(line)));
                 }
             }
+            if (why == null) {
+                for (String line : games.guard(g, g::statusLines, List.<String>of())) {
+                    sender.sendMessage(Text.of("  &7" + line));
+                }
+            }
         }
         games.unbuilt().forEach((id, error) ->
                 sender.sendMessage(Text.of("&c" + id + " could not be built: &7" + error)));

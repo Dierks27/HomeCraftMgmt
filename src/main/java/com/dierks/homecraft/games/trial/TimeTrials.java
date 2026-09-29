@@ -422,6 +422,11 @@ public final class TimeTrials implements Game {
         cache = null;
     }
 
+    @Override
+    public void coursesChanged() {
+        forget();
+    }
+
     CourseStore store() {
         return store;
     }

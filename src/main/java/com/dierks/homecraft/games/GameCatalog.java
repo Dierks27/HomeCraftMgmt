@@ -13,6 +13,7 @@ import com.dierks.homecraft.games.chance.hilo.HigherLower;
 import com.dierks.homecraft.games.chance.slots.OreSlots;
 import com.dierks.homecraft.games.chance.twentyone.TwentyOne;
 import com.dierks.homecraft.games.chance.wheel.Wheel;
+import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.golf.MiniGolf;
 import com.dierks.homecraft.games.trial.TimeTrials;
 
@@ -59,12 +60,18 @@ public final class GameCatalog {
     }
 
     /**
-     * Whether {@code id} is taken by a game id or a reserved word. It can't see a game's aliases
-     * (Twenty-One's "blackjack" lives on the built game): a course id is checked with
-     * {@link #taken(String, GamesService)}.
+     * Whether {@code id} is taken by a game id, a reserved word, or a Daily Courses id (its slots,
+     * {@code daily} and {@code daily_parkour}: {@link Slots#RESERVED}), so no hand-built course can
+     * take one. It can't see a game's aliases (Twenty-One's "blackjack" lives on the built game): a
+     * course id is checked with {@link #taken(String, GamesService)}. {@code /hcm play} doesn't ask
+     * this: a slot's own course still resolves.
      */
     public static boolean taken(String id) {
-        return id != null && (spec(id) != null || RESERVED.contains(id.trim().toLowerCase(Locale.ROOT)));
+        if (id == null) {
+            return false;
+        }
+        String k = id.trim().toLowerCase(Locale.ROOT);
+        return spec(k) != null || RESERVED.contains(k) || Slots.reserved(k);
     }
 
     /**

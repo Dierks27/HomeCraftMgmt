@@ -75,6 +75,41 @@ public interface FeedWriter {
     void golf(String id, String name, int holes, int par, Integer recordStrokes, Long recordAt, String holder);
 
     /**
+     * What a Daily Courses entry adds (GEN-SPEC §5.6). Never a seed, a rev, a half or a UUID.
+     *
+     * @param day      the course day's date ({@code 2026-09-29})
+     * @param nextAt   when the next layout is due (epoch ms)
+     * @param goldMs   the 3-star time, or {@code null} (golf)
+     * @param silverMs the 2-star time, or {@code null} (golf)
+     */
+    record Daily(String day, long nextAt, Long goldMs, Long silverMs) {
+    }
+
+    /**
+     * A generated time-trial course: {@link #course} plus its {@link Daily} part, its record from
+     * today's board. Until the feed knows the daily part, it is written as a plain course.
+     */
+    default void course(String id, String name, String kind, String tier, Long recordMs, Long recordAt,
+                        String holder, Daily daily) {
+        course(id, name, kind, tier, recordMs, recordAt, holder);
+    }
+
+    /** A generated golf course: {@link #golf} plus its {@link Daily} part. */
+    default void golf(String id, String name, int holes, int par, Integer recordStrokes, Long recordAt,
+                      String holder, Daily daily) {
+        golf(id, name, holes, par, recordStrokes, recordAt, holder);
+    }
+
+    /**
+     * The Star Chart: this week's best total and who holds it ({@code null} unless
+     * {@link #showNames()}). Nothing until the feed knows it.
+     *
+     * @param weekIso the week's first day ({@code 2026-09-28})
+     */
+    default void starChart(String weekIso, Long best, String holder) {
+    }
+
+    /**
      * Whether record holders' names may be published ({@code web.dashboard.arcade_show_names},
      * shipped false). A game need not look names up when this is false.
      */

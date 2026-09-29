@@ -186,6 +186,14 @@ public final class SkillRewards {
         return "par:" + course + ":" + day;
     }
 
+    /**
+     * The first counted finish of a daily course on its course day (a reroll pays no second one):
+     * {@code dclear:<course>:<day>}.
+     */
+    public static String dailyClearRef(String course, long day) {
+        return "dclear:" + course + ":" + day;
+    }
+
     /** A hole-in-one on a hole today: {@code hio:<course>:<hole>:<day>}. */
     public static String holeInOneRef(String course, int hole, long day) {
         return "hio:" + course + ":" + hole + ":" + day;

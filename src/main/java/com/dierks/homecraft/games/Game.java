@@ -100,6 +100,21 @@ public interface Game {
     default void feed(FeedWriter out) {
     }
 
+    /**
+     * Extra lines for {@code /hcm games status} under the game's own line, plain words (Daily
+     * Courses: what is up and what is being built). Asked only while the game is open.
+     */
+    default List<String> statusLines() {
+        return List.of();
+    }
+
+    /**
+     * Its courses were changed outside its own admin commands (Daily Courses flipped a layout):
+     * forget any cached course so the next read sees the new rows.
+     */
+    default void coursesChanged() {
+    }
+
     /** Its {@code /hcm games <name> ...} admin commands, or {@code null} for none. */
     default GameAdmin admin() {
         return null;

@@ -1,5 +1,7 @@
 package com.dierks.homecraft.games.golf;
 
+import com.dierks.homecraft.games.gen.api.GenTag;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -23,8 +25,11 @@ import java.util.regex.Pattern;
  * @param rev     goes up with every change to a hole's layout, so a round can tell the course
  *                changed under it
  * @param holes   the holes in playing order
+ * @param gen     Daily Courses' tag when the course was generated (GEN-SPEC §5.1), or {@code null}
+ *                for a hand-built one, which behaves exactly as it always did
  */
-public record GolfCourse(String id, String name, String world, boolean enabled, int rev, List<Hole> holes) {
+public record GolfCourse(String id, String name, String world, boolean enabled, int rev, List<Hole> holes,
+                         GenTag gen) {
 
     /** A course has at most this many holes (a scorecard fits 18). */
     public static final int MAX_HOLES = 18;
@@ -36,6 +41,11 @@ public record GolfCourse(String id, String name, String world, boolean enabled, 
 
     public GolfCourse {
         holes = List.copyOf(holes);
+    }
+
+    /** A hand-built course (no {@code gen} tag): the constructor every course had before Daily Courses. */
+    public GolfCourse(String id, String name, String world, boolean enabled, int rev, List<Hole> holes) {
+        this(id, name, world, enabled, rev, holes, null);
     }
 
     /** Where a hole starts: the admin's feet and the way they faced. */
@@ -121,7 +131,7 @@ public record GolfCourse(String id, String name, String world, boolean enabled, 
 
     /** A new, empty, disabled course. */
     public static GolfCourse create(String id, String name, String world) {
-        return new GolfCourse(id, name, world, false, 1, List.of());
+        return new GolfCourse(id, name, world, false, 1, List.of(), null);
     }
 
     /** Why {@code id} can't be a course id as written, or {@code null} if it can. */
@@ -135,6 +145,11 @@ public record GolfCourse(String id, String name, String world, boolean enabled, 
     /** An id as typed, lower-cased. */
     public static String normalise(String id) {
         return id == null ? "" : id.trim().toLowerCase(Locale.ROOT);
+    }
+
+    /** Whether Daily Courses made it (it carries a {@code gen} tag). */
+    public boolean generated() {
+        return gen != null;
     }
 
     /** Par for the whole course. */
@@ -182,36 +197,41 @@ public record GolfCourse(String id, String name, String world, boolean enabled, 
     // ---- edits ------------------------------------------------------------------------------------
 
     public GolfCourse withName(String n) {
-        return new GolfCourse(id, n, world, enabled, rev, holes);
+        return new GolfCourse(id, n, world, enabled, rev, holes, gen);
     }
 
     public GolfCourse withEnabled(boolean on) {
-        return new GolfCourse(id, name, world, on, rev, holes);
+        return new GolfCourse(id, name, world, on, rev, holes, gen);
     }
 
     public GolfCourse withRev(int r) {
-        return new GolfCourse(id, name, world, enabled, r, holes);
+        return new GolfCourse(id, name, world, enabled, r, holes, gen);
+    }
+
+    /** The same course with Daily Courses' tag ({@code null}: hand-built). */
+    public GolfCourse withGen(GenTag g) {
+        return new GolfCourse(id, name, world, enabled, rev, holes, g);
     }
 
     /** Add a hole at the end. */
     public GolfCourse addHole(Hole h) {
         List<Hole> list = new ArrayList<>(holes);
         list.add(h);
-        return new GolfCourse(id, name, world, enabled, rev, list);
+        return new GolfCourse(id, name, world, enabled, rev, list, gen);
     }
 
     /** Replace hole {@code n} (1-based). */
     public GolfCourse withHole(int n, Hole h) {
         List<Hole> list = new ArrayList<>(holes);
         list.set(n - 1, h);
-        return new GolfCourse(id, name, world, enabled, rev, list);
+        return new GolfCourse(id, name, world, enabled, rev, list, gen);
     }
 
     /** Remove hole {@code n} (1-based); the ones after it move up. */
     public GolfCourse removeHole(int n) {
         List<Hole> list = new ArrayList<>(holes);
         list.remove(n - 1);
-        return new GolfCourse(id, name, world, enabled, rev, list);
+        return new GolfCourse(id, name, world, enabled, rev, list, gen);
     }
 
     /** Hole {@code n} (1-based), or {@code null} if there is none. */

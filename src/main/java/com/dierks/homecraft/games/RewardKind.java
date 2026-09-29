@@ -35,7 +35,12 @@ public enum RewardKind {
     /** Golf at par or better, once per course per day (ref {@code par:<course>:<day>}). */
     PAR,
     /** A golf hole-in-one in a finished run, once per hole per day (ref {@code hio:<course>:<hole>:<day>}). */
-    HOLE_IN_ONE;
+    HOLE_IN_ONE,
+    /**
+     * The first counted finish of a Daily Courses layout's course day, once per course per course
+     * day, a reroll included (ref {@code dclear:<course>:<day>}). Capped, per game.
+     */
+    DAILY_CLEAR;
 
     /** Whether it counts toward the daily caps (everything but a first clear). */
     public boolean capped() {

@@ -5,6 +5,9 @@ import com.dierks.homecraft.games.ChanceRounds;
 import com.dierks.homecraft.games.ChanceRounds.Round;
 import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.ScoreResult;
+import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.SkillRewards;
+import com.dierks.homecraft.games.gen.api.GenBoards;
 import com.dierks.homecraft.games.world.SavedState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -314,6 +317,86 @@ class GamesDaoTest {
         assertEquals(2, dao.rewardsToday(alice, "snake", DAY));
         assertEquals(1, dao.rewardsToday(alice, "ore_merge", DAY));
         assertEquals(0, dao.rewardsToday(alice, DAY + 1), "a new day");
+    }
+
+    @Test
+    void aDailyClearIsCappedPerGameAndPaidOncePerCourseDay() throws Exception {
+        String ref = SkillRewards.dailyClearRef("daily_golf", DAY);
+        assertEquals(2, dao.payReward(alice, "golf", Source.GAMES_GOLF, DAY, RewardKind.DAILY_CLEAR, ref, 2, 4, 6, true,
+                "Daily Golf: first finish today", NOW), "the first counted finish of the course day pays");
+        assertEquals(0, dao.payReward(alice, "golf", Source.GAMES_GOLF, DAY, RewardKind.DAILY_CLEAR, ref, 2, 4, 6, true,
+                "again", NOW), "a reroll the same day has the same ref: no second one");
+        assertEquals(2, dao.rewardsToday(alice, "golf", DAY), "it counts toward golf's own cap");
+        assertEquals(2, dao.rewardsToday(alice, DAY), "and the server's");
+        assertEquals(1, dao.payReward(alice, "trials", Source.GAMES_PARKOUR, DAY, RewardKind.DAILY_CLEAR,
+                SkillRewards.dailyClearRef("daily_parkour_hard", DAY), 3, 4, 3, true, "c", NOW),
+                "the server-wide cap leaves 1 of 3");
+        assertTrue(dao.rewardPaid(alice, "golf", RewardKind.DAILY_CLEAR, ref), "kept per game, not across games");
+        assertFalse(dao.rewardPaid(alice, "trials", RewardKind.DAILY_CLEAR, ref), "another game's row is its own");
+    }
+
+    // ---- Daily Courses' stars -------------------------------------------------------------------
+
+    @Test
+    void addingStarsKeepsTheDaysBestAndAddsOnlyTheRiseToTheWeek() throws Exception {
+        String day = GenBoards.stars("daily_parkour_easy", DAY);
+        String week = GenBoards.week(DAY - 1);
+        GamesDao.StarsAdded first = dao.addStars(alice, day, week, 1, NOW);
+        assertEquals(new GamesDao.StarsAdded(1, 1, 1), first, "the first finish: one star, one for the week");
+        assertEquals(0, first.weekBefore(), "the week had nothing before it");
+        assertEquals(new GamesDao.StarsAdded(1, 0, 1), dao.addStars(alice, day, week, 1, NOW + 1),
+                "the same stars again add nothing");
+        assertEquals(new GamesDao.StarsAdded(3, 2, 3), dao.addStars(alice, day, week, 3, NOW + 2),
+                "three stars add the two it rose by");
+        assertEquals(new GamesDao.StarsAdded(3, 0, 3), dao.addStars(alice, day, week, 2, NOW + 3),
+                "a worse run changes nothing");
+        assertEquals(new GamesDao.StarsAdded(2, 2, 5), dao.addStars(alice, GenBoards.stars("tiny_golf", DAY), week, 2,
+                NOW + 4), "another course adds to the same week");
+        assertEquals(new GamesDao.StarsAdded(1, 1, 1), dao.addStars(bob, day, week, 1, NOW), "every player has their own");
+        assertEquals(3L, dao.best(alice, GenBoards.GAME, day), "the day board keeps the best, under the daily game");
+        assertEquals(5L, dao.best(alice, GenBoards.GAME, week), "the Star Chart keeps the sum of bests");
+        assertEquals(new GamesDao.StarsAdded(3, 0, 5), dao.addStars(alice, day, week, 0, NOW + 5),
+                "no stars records nothing");
+        assertEquals(new GamesDao.StarsAdded(3, 0, 5), dao.addStars(alice, day, week, 4, NOW + 5),
+                "nor do stars that can't be");
+        assertEquals(new GamesDao.StarsAdded(1, 1, 1), dao.addStars(alice, GenBoards.stars("tiny_golf", DAY + 7),
+                GenBoards.week(DAY + 6), 1, NOW), "a new week starts from nothing");
+    }
+
+    @Test
+    void addingStarsIsOneTransaction() throws Exception {
+        try (java.sql.Statement st = conn.createStatement()) {
+            st.execute("CREATE TRIGGER no_week BEFORE INSERT ON game_scores WHEN substr(NEW.board, 1, 6) = 'gweek:' "
+                    + "BEGIN SELECT RAISE(ABORT, 'the week write failed'); END");
+        }
+        String day = GenBoards.stars("sky_rings", DAY);
+        assertThrows(java.sql.SQLException.class, () -> dao.addStars(alice, day, GenBoards.week(DAY), 2, NOW),
+                "the week's write fails");
+        assertNull(dao.best(alice, GenBoards.GAME, day), "so the day's best was rolled back with it");
+        assertEquals(0, count("SELECT COUNT(*) FROM game_scores"), "nothing was written at all");
+    }
+
+    @Test
+    void pruningRemovesOnlyOldDailyCoursesBoards() throws Exception {
+        long old = 100;
+        long kept = 200;
+        for (String board : List.of(GenBoards.day("daily_golf", "" + old), GenBoards.day("daily_golf", old + "r1"),
+                GenBoards.stars("daily_golf", old), GenBoards.week(old - 2))) {
+            dao.submit(alice, "golf", board, 30, true, NOW);
+        }
+        for (String board : List.of(GenBoards.day("daily_golf", "" + kept), GenBoards.day("daily_golf", kept + "r2"),
+                GenBoards.stars("daily_golf", kept), GenBoards.week(kept - 4), Scores.course("river_run"),
+                Scores.week("river_run", old), Scores.daily(old), "gday:broken", "gweek:x")) {
+            dao.submit(alice, "golf", board, 30, true, NOW);
+            dao.submit(bob, "golf", board, 31, true, NOW);
+        }
+        dao.submit(bob, "golf", GenBoards.day("daily_golf", "" + old), 29, true, NOW);
+        assertEquals(5, dao.pruneBoards(150, 150), "four old boards, one of them with two players' rows");
+        assertEquals(List.of(GenBoards.day("daily_golf", "" + kept), GenBoards.day("daily_golf", kept + "r2"),
+                GenBoards.stars("daily_golf", kept), GenBoards.week(kept - 4), Scores.course("river_run"),
+                Scores.daily(old), "gday:broken", "gweek:x", Scores.week("river_run", old)).stream().sorted().toList(),
+                dao.boards("golf"), "recent boards, other games' boards and names that aren't ours are never touched");
+        assertEquals(0, dao.pruneBoards(150, 150), "a second prune finds nothing");
     }
 
     // ---- scores -------------------------------------------------------------------------------

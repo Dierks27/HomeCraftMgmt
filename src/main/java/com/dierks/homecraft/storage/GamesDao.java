@@ -5,6 +5,9 @@ import com.dierks.homecraft.games.ChanceRounds;
 import com.dierks.homecraft.games.ChanceRounds.Round;
 import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.ScoreResult;
+import com.dierks.homecraft.games.gen.api.DailyStars;
+import com.dierks.homecraft.games.gen.api.GenBoards;
+import com.dierks.homecraft.games.gen.api.Stars;
 import com.dierks.homecraft.games.world.SavedState;
 
 import java.security.SecureRandom;
@@ -22,9 +25,9 @@ import java.util.function.BooleanSupplier;
 import java.util.regex.Pattern;
 
 /**
- * Every games table (schema v34): rounds of the games of chance, skill rewards, scores, Take a
- * break, the saved state of players in a world game, courses, per-player preferences, and the
- * server's daily-board secret.
+ * Every games table (schema v34): rounds of the games of chance, skill rewards, scores (Daily
+ * Courses' stars among them), Take a break, the saved state of players in a world game, courses,
+ * per-player preferences, and the server's daily-board secret.
  *
  * <p>The rule that shapes this class: <b>anything that moves tokens is ONE transaction</b>. The
  * tokens put in, the round row and the tokens back land together or not at all, through
@@ -97,6 +100,21 @@ public final class GamesDao {
      */
     public record CourseRow(String id, String game, String kind, String name, String world, boolean enabled,
                             String data, int rev, long createdAt, long updatedAt) {
+    }
+
+    /**
+     * What recording a daily course's stars did ({@link #addStars}).
+     *
+     * @param dayBest   the player's best stars on that course-day board now
+     * @param added     what the run added to the week: how far it beat the day's best, else 0
+     * @param weekTotal the player's Star Chart total for the week now
+     */
+    public record StarsAdded(int dayBest, int added, long weekTotal) {
+
+        /** The week's total before this run (a goal is crossed between the two). */
+        public long weekBefore() {
+            return weekTotal - added;
+        }
     }
 
     /**
@@ -622,6 +640,99 @@ public final class GamesDao {
                 }
                 return ps.executeUpdate();
             }
+        }
+    }
+
+    // ---- Daily Courses' stars ----------------------------------------------------------------
+
+    /**
+     * Record a counted run's stars on a daily course (GEN-SPEC §5.2), in ONE transaction: keep the
+     * best on the course-day board ({@code gstars:<id>:<day>}), and when that rose, add exactly the
+     * rise to the week's Star Chart ({@code gweek:<week>}). Both boards are the {@code daily}
+     * game's. So the chart only ever rises, a replay never inflates it, and a crash can't land one
+     * write without the other. Stars are 1 to 3; anything else records nothing.
+     */
+    public StarsAdded addStars(UUID player, String dayBoard, String weekBoard, int stars, long now)
+            throws SQLException {
+        String game = GenBoards.GAME;
+        return database.transaction(c -> {
+            Long best = best(c, player, game, dayBoard);
+            Long week = best(c, player, game, weekBoard);
+            long weekNow = week == null ? 0 : week;
+            if (stars < 1 || stars > Stars.MAX) {
+                return new StarsAdded(best == null ? 0 : best.intValue(), 0, weekNow);
+            }
+            int added = DailyStars.delta(best, stars);
+            writeScore(c, player, game, dayBoard, best, added > 0 ? stars : best, now);
+            if (added > 0) {
+                writeScore(c, player, game, weekBoard, week, weekNow + added, now);
+            }
+            return new StarsAdded((int) Math.max(best == null ? 0 : best, stars), added, weekNow + added);
+        });
+    }
+
+    /**
+     * Remove the Daily Courses boards past keeping (GEN-SPEC §5.2): day boards ({@code gday},
+     * {@code gstars}) of course days before {@code oldestDay}, and Star Charts ({@code gweek}) of
+     * weeks starting before {@code oldestWeek}. No other board is ever touched. One transaction.
+     *
+     * @return score rows removed
+     */
+    public int pruneBoards(long oldestDay, long oldestWeek) throws SQLException {
+        return database.transaction(c -> {
+            List<String> old = new ArrayList<>();
+            try (PreparedStatement ps = c.prepareStatement("SELECT DISTINCT board FROM game_scores WHERE "
+                    + "substr(board, 1, 5) = 'gday:' OR substr(board, 1, 7) = 'gstars:' "
+                    + "OR substr(board, 1, 6) = 'gweek:'");
+                 ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String board = rs.getString(1);
+                    GenBoards.Board b = GenBoards.parse(board);
+                    if (b != null && b.day() < (b.kind() == GenBoards.Kind.WEEK ? oldestWeek : oldestDay)) {
+                        old.add(board);
+                    }
+                }
+            }
+            int removed = 0;
+            try (PreparedStatement ps = c.prepareStatement("DELETE FROM game_scores WHERE board = ?")) {
+                for (String board : old) {
+                    ps.setString(1, board);
+                    removed += ps.executeUpdate();
+                }
+            }
+            return removed;
+        });
+    }
+
+    /** Set a player's score on a board (inserting it when {@code previous} is null), counting the run. */
+    private static void writeScore(Connection c, UUID player, String game, String board, Long previous, long score,
+                                   long now) throws SQLException {
+        if (previous == null) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "INSERT INTO game_scores(player, game, board, score, at, runs) VALUES(?,?,?,?,?,1)")) {
+                ps.setString(1, player.toString());
+                ps.setString(2, game);
+                ps.setString(3, board);
+                ps.setLong(4, score);
+                ps.setLong(5, now);
+                ps.executeUpdate();
+            }
+            return;
+        }
+        boolean changed = score != previous;
+        String where = " WHERE player = ? AND game = ? AND board = ?";
+        try (PreparedStatement ps = c.prepareStatement(changed
+                ? "UPDATE game_scores SET score = ?, at = ?, runs = runs + 1" + where
+                : "UPDATE game_scores SET runs = runs + 1" + where)) {
+            int i = 1;
+            if (changed) {
+                ps.setLong(i++, score);
+                ps.setLong(i++, now);
+            }
+            ps.setString(i++, player.toString());
+            ps.setString(i++, game);
+            ps.setString(i, board);
+            ps.executeUpdate();
         }
     }
 

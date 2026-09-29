@@ -20,8 +20,11 @@ import java.util.Map;
  * comes back to its last spot, rather than a lookup loading the chunk. One is made per ball per
  * tick and remembers each block it read, since a tick's sub-steps ask about the same few blocks
  * many times.
+ *
+ * <p>Public for Daily Courses (GEN-SPEC §4.3): its golf builds replay each hole's witness line on
+ * these, the real blocks, and its planner's block model is checked against {@link #surface}.
  */
-final class LiveBlocks implements BallPhysics.Blocks {
+public final class LiveBlocks implements BallPhysics.Blocks {
 
     private static final double EDGE = 1e-6;
 
@@ -34,7 +37,7 @@ final class LiveBlocks implements BallPhysics.Blocks {
     private final World world;
     private final Map<Long, Cell> seen = new HashMap<>();
 
-    LiveBlocks(World world) {
+    public LiveBlocks(World world) {
         this.world = world;
     }
 
@@ -62,7 +65,7 @@ final class LiveBlocks implements BallPhysics.Blocks {
     }
 
     /** What a block is to the ball. */
-    static BallPhysics.Surface surface(Material m) {
+    public static BallPhysics.Surface surface(Material m) {
         return switch (m) {
             case ICE, PACKED_ICE, BLUE_ICE, FROSTED_ICE -> BallPhysics.Surface.ICE;
             case SOUL_SAND, SOUL_SOIL, HONEY_BLOCK -> BallPhysics.Surface.SLOW;

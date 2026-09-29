@@ -34,6 +34,19 @@ public interface GamesScreens {
      */
     void pickPlayer(Player player, Game game, Predicate<Player> eligible, Consumer<Player> chosen, Runnable back);
 
+    /**
+     * Today's Courses (Daily Courses, GEN-SPEC §5.4): one tile per daily course, the Star Chart and
+     * how stars work. "Coming soon!" until the screen is built.
+     */
+    default void today(Player player, Runnable back) {
+        player.sendMessage(com.dierks.homecraft.util.Text.of("&7Coming soon!"));
+    }
+
+    /** The daily parkour tier picker ({@code /hcm play daily_parkour}). "Coming soon!" until it is built. */
+    default void parkourTiers(Player player, Runnable back) {
+        player.sendMessage(com.dierks.homecraft.util.Text.of("&7Coming soon!"));
+    }
+
     /** What the service uses until the real screens are installed: a plain "Coming soon!". */
     GamesScreens NONE = new GamesScreens() {
         private void soon(Player player) {

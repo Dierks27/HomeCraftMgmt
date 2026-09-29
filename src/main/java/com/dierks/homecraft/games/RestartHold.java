@@ -136,7 +136,7 @@ public record RestartHold(List<LocalTime> times, ZoneId zone, int holdMinutes) {
      * {@link ZonedDateTime} (the earlier of two on a fall-back day), or, for a time a
      * spring-forward day skips, the first instant after the gap.
      */
-    static long instant(LocalDate date, LocalTime time, ZoneId zone) {
+    public static long instant(LocalDate date, LocalTime time, ZoneId zone) {
         LocalDateTime local = date.atTime(time);
         ZoneOffsetTransition t = zone.getRules().getTransition(local);
         if (t != null && t.isGap()) {

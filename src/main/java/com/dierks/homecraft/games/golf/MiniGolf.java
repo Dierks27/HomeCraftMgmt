@@ -303,6 +303,11 @@ public final class MiniGolf implements Game {
         courses = null;
     }
 
+    @Override
+    public void coursesChanged() {
+        reloadCourses();
+    }
+
     /** The course, if it exists (enabled or not). */
     public GolfCourse course(String id) {
         return id == null ? null : courses().get(GolfCourse.normalise(id));

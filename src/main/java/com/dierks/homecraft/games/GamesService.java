@@ -2,6 +2,7 @@ package com.dierks.homecraft.games;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.world.Session;
 import com.dierks.homecraft.games.world.WorldSessions;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -87,6 +88,8 @@ public final class GamesService {
     private volatile List<Game> games = List.of();
     /** The shared screens (gui/games); "Coming soon!" until installed. */
     private GamesScreens screens = GamesScreens.NONE;
+    /** Daily Courses' gate over generated courses; nothing generated is live until it is installed. */
+    private volatile GeneratedCourses generated = GeneratedCourses.NONE;
     /** Ids and aliases, lower-case. */
     private final Map<String, Game> byName = new HashMap<>();
     /** Games that threw: off until {@code /hcm reload}. */
@@ -618,6 +621,37 @@ public final class GamesService {
     /** Install the real screens (done once at enable, after the service is built). */
     public void screens(GamesScreens screens) {
         this.screens = screens == null ? GamesScreens.NONE : screens;
+    }
+
+    /**
+     * What the course engines ask about generated courses (GEN-SPEC §0.2 R5): {@link
+     * GeneratedCourses#NONE} — nothing generated is live — until Daily Courses installs its engine,
+     * and whenever the {@code daily} game is closed (switched off, reloaded off, or failed), whatever
+     * its own stop managed to do. So the gate can't outlive the game that vouches for it.
+     */
+    public GeneratedCourses generated() {
+        GeneratedCourses g = generated;
+        if (g == GeneratedCourses.NONE) {
+            return g;
+        }
+        Game daily = byName.get(Slots.DAILY);
+        return daily == null || enabled(daily) ? g : GeneratedCourses.NONE;
+    }
+
+    /** Install (or, with {@code null}, remove) Daily Courses' engine. */
+    public void generated(GeneratedCourses generated) {
+        this.generated = generated == null ? GeneratedCourses.NONE : generated;
+    }
+
+    /**
+     * Tell the game {@code gameId} ({@code trials} or {@code golf}) that its courses changed
+     * outside its own commands, so it reads them again. Inside its guard; unknown ids are ignored.
+     */
+    public void coursesChanged(String gameId) {
+        Game g = gameId == null ? null : byId().get(gameId.trim().toLowerCase(Locale.ROOT));
+        if (g != null) {
+            guard(g, g::coursesChanged);
+        }
     }
 
     /** Every game's id, for {@code /hcm games status} and tab completion. */

@@ -32,7 +32,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The shipped game quests and "Games" achievements (EXTRAS E4): exactly the rows the spec names,
+ * The shipped game quests and "Games" achievements (EXTRAS E4, and the Dropper's clean drop of
+ * EVENTS-DROPPER-SPEC §B.1.8): exactly the rows the specs name,
  * each achievement a counter that unlocks at its target with its reward, "every cabinet" pinned to
  * the catalog's cabinets, nothing tied to a game of chance, the chance-won achievements left as they
  * were, kid-safe words; and a game quest is dealt only while its games are open.
@@ -80,7 +81,7 @@ class GameAchievementsTest {
     }
 
     @Test
-    void theGamesGroupShipsExactlyTheNineAchievementsWithTheirRewards() throws Exception {
+    void theGamesGroupShipsExactlyTheTenAchievementsWithTheirRewards() throws Exception {
         Map<String, Object[]> expected = new LinkedHashMap<>();
         expected.put("game_first_cabinet", new Object[]{"Finish an arcade cabinet game", 10, "cabinet_finishes", 1});
         expected.put("game_gold", new Object[]{"Earn a gold medal in a cabinet", 20, "cabinet_golds", 1});
@@ -91,6 +92,8 @@ class GameAchievementsTest {
         expected.put("game_fresh_all", new Object[]{"Finish every Fresh Course in one set", 40, "fresh_sets", 1});
         expected.put("game_star_chart", new Object[]{"Reach the top Star Chart goal in a week", 30, "star_chart_tops", 1});
         expected.put("game_record", new Object[]{"Set a course record", 30, "course_records", 1});
+        expected.put("game_dropper_clean", new Object[]{"Reach the bottom of a Dropper with no bonks", 20,
+                "dropper_clean", 1}); // EVENTS-DROPPER-SPEC §B.1.8, config revision 18
         List<Map<String, Object>> rows = gamesRows();
         assertEquals(new ArrayList<>(expected.keySet()), rows.stream().map(r -> String.valueOf(r.get("id"))).toList(),
                 "the Games group, in the spec's order");
@@ -212,7 +215,7 @@ class GameAchievementsTest {
                 }
             }
         }
-        assertEquals(9 + 5, words.size(), "every new line is checked");
+        assertEquals(10 + 5, words.size(), "every new line is checked (the Dropper's clean drop too)");
         for (String w : words) {
             assertEquals(List.of(), GenCopy.copyProblems(w), "no banned word and nothing Bedrock can't draw: " + w);
             String lower = " " + w.toLowerCase(Locale.ROOT) + " ";

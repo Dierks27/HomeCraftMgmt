@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.gen.api;
 
 import com.dierks.homecraft.games.gen.boat.BoatPlanner;
+import com.dierks.homecraft.games.gen.dropper.DropperPlanner;
 import com.dierks.homecraft.games.gen.golf.GolfPlanner;
 import com.dierks.homecraft.games.gen.parkour.ParkourPlanner;
 import com.dierks.homecraft.games.gen.rings.RingsPlanner;
@@ -17,19 +18,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The planners (GEN-SPEC §8): one per generator a slot names, each with its id and version. C0
- * shipped them as stubs failing with "not built yet"; WP2 and WP3 built every one, so this now
+ * shipped them as stubs failing with "not built yet"; WP2 and WP3 built every one (and the Dropper's
+ * came with EVENTS-DROPPER-SPEC), so this now
  * pins that none of them is still a stub (the per-planner tests cover what they build).
  */
 class StubPlannersTest {
 
     private static final List<Planner> PLANNERS = List.of(new ParkourPlanner(), new RingsPlanner(),
-            new BoatPlanner(), new GolfPlanner());
+            new BoatPlanner(), new GolfPlanner(), new DropperPlanner());
 
     @Test
     void thereIsAPlannerForEveryGeneratorASlotNames() {
         Set<String> generators = Slots.ALL.stream().map(Slots.Def::generator).collect(Collectors.toSet());
         assertEquals(generators, PLANNERS.stream().map(Planner::id).collect(Collectors.toSet()),
-                "parkour, rings, boat and golf, one each");
+                "parkour, rings, boat, golf and the dropper, one each");
         for (Planner p : PLANNERS) {
             assertTrue(p.algo() >= 1, p.id() + " has a version");
         }

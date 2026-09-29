@@ -52,6 +52,12 @@ class FreshMenuTest {
                 null), "golf says its holes and par");
         assertEquals("&dTiny Golf &7- 3 holes, par 8 ★★★", DailyTiles.name(Slots.TINY_GOLF, 7, true, 3, 3, 8, null),
                 "then its stars");
+        assertEquals("&aEasy Dropper &7- 3 levels · ★★☆", DailyTiles.name(Slots.EASY_DROPPER, 7, true, 2, 3, 0, null),
+                "a dropper says its levels, then its stars (EVENTS-DROPPER-SPEC §B.1.8)");
+        assertEquals("&9Dropper &7- 5 levels &8· &7Course code DROP-12", DailyTiles.name(Slots.FRESH_DROPPER, 7, true,
+                0, 5, 0, "DROP-12"), "and its course code in the NAME, for Bedrock");
+        assertEquals(Material.BLUE_CONCRETE, DailyTiles.icon(Slots.FRESH_DROPPER), "the Dropper's tile is blue");
+        assertEquals(Material.LIME_CONCRETE, DailyTiles.icon(Slots.EASY_DROPPER), "Easy Dropper's is easy's green");
     }
 
     @Test
@@ -124,7 +130,8 @@ class FreshMenuTest {
                 "HARD-40"), GenCopy.CLASSICS_TIP)) {
             assertEquals(List.of(), GenCopy.copyProblems(line), "kid-safe: " + line);
         }
-        assertEquals(3, FreshMenu.CLASSICS.length, "one tile per Classics slot");
+        assertEquals(Slots.CLASSICS.size(), FreshMenu.CLASSICS.length, "one tile per Classics slot (four, Classic Dropper too)");
+        assertEquals(4, FreshMenu.CLASSICS.length, "Classic Parkour, Sky Rings, Golf and Dropper");
     }
 
     @Test

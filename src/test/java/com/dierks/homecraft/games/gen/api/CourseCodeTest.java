@@ -20,7 +20,7 @@ class CourseCodeTest {
 
     @Test
     void everySlotHasItsOwnWord() {
-        assertEquals(List.of("EASY", "PARK", "HARD", "RINGS", "GOLF", "TINY", "BOAT"),
+        assertEquals(List.of("EASY", "PARK", "HARD", "RINGS", "GOLF", "TINY", "BOAT", "EDROP", "DROP"),
                 List.copyOf(CourseCode.SLOT_CODES.values()), "the owner's words, in slot order");
         Set<String> words = new HashSet<>(CourseCode.SLOT_CODES.values());
         assertEquals(Slots.ALL.size(), words.size(), "one word per slot, none shared");

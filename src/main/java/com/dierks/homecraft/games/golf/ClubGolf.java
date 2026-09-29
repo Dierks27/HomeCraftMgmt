@@ -10,6 +10,7 @@ import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Golf together's side of the Clubhouse (CLUBHOUSE-SPEC §3; WP-CH): when a group's round ends, the
@@ -45,6 +46,55 @@ public final class ClubGolf {
         forget.run();
         club.result(sheet(card), opener);
         return club.takeIn(p, ClubVisits.Kind.GOLF, ClubhouseText.BACK_GOLF);
+    }
+
+    /**
+     * Whether a golf party member is waiting in the Clubhouse, where "Play again together" takes them
+     * straight to hole 1 (their session handed over in place): in it, not a spectator, and the course in
+     * the Clubhouse's world (a session teleport stays in its world).
+     */
+    public static boolean waiting(ClubDoor club, UUID player, String courseWorld) {
+        return club != null && player != null && club.seatable(player) && courseWorld != null
+                && courseWorld.equalsIgnoreCase(club.world());
+    }
+
+    /** {@link #waiting(ClubDoor, UUID, String)} with the Clubhouse's own door. */
+    public static boolean waiting(com.dierks.homecraft.games.GamesService games, UUID player, String courseWorld) {
+        try {
+            return waiting(Clubhouse.door(games), player, courseWorld);
+        } catch (RuntimeException | LinkageError e) {
+            return false;
+        }
+    }
+
+    /**
+     * "Play again together" for a member waiting in the Clubhouse (the checklist pass: a group that ended
+     * there could never play again): their Clubhouse session is handed to golf in place (their things
+     * stay saved once; anything that arrived meanwhile is banked), the gate asked again, then the
+     * session's own teleport to hole 1. On any failure they are handed back to the Clubhouse.
+     *
+     * @return {@code null} when they aren't waiting in the Clubhouse (the usual entry applies), else
+     *         whether they are on their way to hole 1
+     */
+    static Boolean fromClubhouse(ClubDoor club, Player p, com.dierks.homecraft.games.Game golf, String courseId,
+                                 org.bukkit.Location tee, java.util.function.BiPredicate<Player, org.bukkit.Location> teleport,
+                                 java.util.function.Function<Player, com.dierks.homecraft.games.Refusal> gate,
+                                 java.util.function.BiConsumer<Player, com.dierks.homecraft.games.Refusal> tell) {
+        String world = tee == null || tee.getWorld() == null ? null : tee.getWorld().getName();
+        if (p == null || !waiting(club, p.getUniqueId(), world)) {
+            return null;
+        }
+        if (!club.handOut(p, golf, courseId)) {
+            tell.accept(p, com.dierks.homecraft.games.Refusal.of("Couldn't take you from the Clubhouse right now."));
+            return false;
+        }
+        com.dierks.homecraft.games.Refusal why = gate.apply(p);
+        if (why != null || !teleport.test(p, tee)) {
+            club.handBack(p, ClubVisits.Kind.GOLF);
+            tell.accept(p, why != null ? why : com.dierks.homecraft.games.Refusal.of("Couldn't take you to hole 1 right now."));
+            return false;
+        }
+        return true;
     }
 
     /**

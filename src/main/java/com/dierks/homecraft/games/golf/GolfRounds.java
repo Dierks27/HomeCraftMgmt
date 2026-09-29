@@ -138,11 +138,6 @@ public final class GolfRounds {
             games().tell(player, Refusal.of("That course is closed right now."));
             return false;
         }
-        Refusal refusal = games().canOpen(player, golf);
-        if (refusal != null) {
-            games().tell(player, refusal);
-            return false;
-        }
         World world = golf.plugin().getServer().getWorld(course.world());
         if (world == null) {
             games().tell(player, Refusal.of("That course's world isn't loaded right now."));
@@ -152,6 +147,22 @@ public final class GolfRounds {
         int maxOverPar = golf.settings().maxOverPar();
         GolfCourse.Tee tee = course.hole(1).tee();
         Location start = new Location(world, tee.x(), tee.y(), tee.z(), tee.yaw(), 0);
+        if (group != null) { // WP-CH: "Play again together" for a member waiting in the Clubhouse
+            Boolean fromClub = ClubGolf.fromClubhouse(com.dierks.homecraft.games.clubhouse.Clubhouse.door(games()),
+                    player, golf, course.id(), start, (q, at) -> games().sessions().teleport(q, at),
+                    q -> games().canOpen(q, golf), (q, r) -> games().tell(q, r));
+            if (fromClub != null) {
+                if (fromClub) {
+                    begin(player, course, look, maxOverPar, group);
+                }
+                return fromClub;
+            }
+        }
+        Refusal refusal = games().canOpen(player, golf);
+        if (refusal != null) {
+            games().tell(player, refusal);
+            return false;
+        }
         return games().sessions().enter(player, golf, course.id(), start,
                 p -> begin(p, course, look, maxOverPar, group));
     }

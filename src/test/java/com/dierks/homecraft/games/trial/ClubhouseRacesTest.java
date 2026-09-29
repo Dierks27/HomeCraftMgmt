@@ -347,6 +347,8 @@ class ClubhouseRacesTest {
         assertEquals(PartyRace.Result.STILL_RACING, party.results().get(1).result(), "Ben was still racing");
         assertTrue(door.in.containsKey(id(ben)), "and goes to the Clubhouse, not home");
         assertEquals("&7Race over - great racing!", door.lines.get(id(ben)), "reading the race's own line");
+        assertEquals(com.dierks.homecraft.games.clubhouse.ClubhouseText.BACK_PARTY, door.lines.get(id(ava)),
+                "a racer parked at their finish reads that they're back in the Clubhouse, with the board's results");
         assertEquals(0, told.courses(id(ben)), "an unfinished race never counts");
     }
 

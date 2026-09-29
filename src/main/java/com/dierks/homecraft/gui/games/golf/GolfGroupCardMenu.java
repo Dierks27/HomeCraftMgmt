@@ -84,8 +84,11 @@ public final class GolfGroupCardMenu extends GameMenu {
         fill();
         exitTile();
         PartyLobby party = golf.together().party(viewer.getUniqueId());
-        boolean again = card.over() && party != null && party.state() == PartyLobby.State.OPEN
-                && golf.games().sessions().home(viewer) && golf.playableCourse(card.courseId()) != null;
+        com.dierks.homecraft.games.golf.GolfCourse course = golf.playableCourse(card.courseId());
+        boolean again = offersAgain(card.over(), party != null && party.state() == PartyLobby.State.OPEN,
+                golf.games().sessions().home(viewer), course != null
+                        && com.dierks.homecraft.games.golf.ClubGolf.waiting(golf.games(), viewer.getUniqueId(), course.world()),
+                course != null);
         for (Tile t : tiles(card, page, again)) {
             if (t.slot() == EXIT || t.material() == Material.GRAY_STAINED_GLASS_PANE) {
                 continue;
@@ -108,6 +111,16 @@ public final class GolfGroupCardMenu extends GameMenu {
                 // looking only
             }
         }
+    }
+
+    /**
+     * Whether the card offers "Play again together": the round is over, the viewer's golf party is open
+     * again, the course still plays, and the viewer is home OR waiting in the Clubhouse, where the group
+     * went when the round ended (WP-CH: the host's Start takes them from there to hole 1).
+     */
+    public static boolean offersAgain(boolean over, boolean partyOpen, boolean home, boolean inClubhouse,
+                                      boolean coursePlays) {
+        return over && partyOpen && coursePlays && (home || inClubhouse);
     }
 
     // ---- the layout (pure) ------------------------------------------------------------------------

@@ -106,7 +106,11 @@ public final class ClubRaces {
         rr.ended = true;
         rr.due = RaceRun.Due.NONE;
         trials.end(p);
-        String text = line == null || line.isBlank() ? null : line;
+        // a party racer parked here at their finish reads where they are (the checklist pass: BACK_PARTY was never
+        // sent); Race Night's calls pass their own line
+        String text = line != null && !line.isBlank() ? line
+                : kind(rr.link) == ClubVisits.Kind.PARTY ? com.dierks.homecraft.games.clubhouse.ClubhouseText.BACK_PARTY
+                : null;
         if (!club.takeIn(p, kind(rr.link), text)) {
             return false;
         }

@@ -214,7 +214,7 @@ public final class GolfTogether {
             if (m == null) {
                 continue; // gone: they're dropped from the party when they quit
             }
-            String busy = startProblem(m);
+            String busy = startProblem(m, c);
             if (busy != null) {
                 games().tell(host, Refusal.of(busy));
                 return;
@@ -239,7 +239,10 @@ public final class GolfTogether {
     }
 
     /** Why a party member can't start now, or {@code null}. */
-    private String startProblem(Player m) {
+    private String startProblem(Player m, GolfCourse c) {
+        if (ClubGolf.waiting(games(), m.getUniqueId(), c.world())) {
+            return null; // WP-CH: waiting in the Clubhouse after the last round: handed straight to hole 1
+        }
         if (games().sessions().session(m) != null || !games().sessions().home(m)) {
             return m.getName() + " is still in another game.";
         }

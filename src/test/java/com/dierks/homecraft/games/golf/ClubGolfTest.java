@@ -36,6 +36,9 @@ class ClubGolfTest {
         final Map<UUID, ClubVisits.Kind> in = new LinkedHashMap<>();
         boolean golfAfter = true;
         ClubBoard.Sheet sheet;
+        final List<UUID> handedOut = new ArrayList<>();
+        final List<UUID> handedBack = new ArrayList<>();
+        boolean handOutOk = true;
 
         @Override
         public String world() {
@@ -54,11 +57,17 @@ class ClubGolfTest {
 
         @Override
         public boolean handOut(Player p, Game to, String ref) {
-            return false;
+            if (!handOutOk || in.remove(p.getUniqueId()) == null) {
+                return false;
+            }
+            handedOut.add(p.getUniqueId());
+            return true;
         }
 
         @Override
         public void handBack(Player p, ClubVisits.Kind kind) {
+            handedBack.add(p.getUniqueId());
+            in.put(p.getUniqueId(), kind);
         }
 
         @Override
@@ -148,5 +157,68 @@ class ClubGolfTest {
                 "a course in another world: home (a session only moves within its own world)");
         assertEquals(0, forgot[0], "nothing was forgotten: the caller does what it always did");
         assertNull(door.sheet, "and the board heard nothing");
+    }
+    private static org.bukkit.Location tee(String world) {
+        org.bukkit.World w = (org.bukkit.World) Proxy.newProxyInstance(org.bukkit.World.class.getClassLoader(),
+                new Class<?>[]{org.bukkit.World.class}, (proxy, m, args) -> switch (m.getName()) {
+                    case "getName" -> world;
+                    case "hashCode" -> world.hashCode();
+                    case "equals" -> proxy == args[0];
+                    default -> null;
+                });
+        return new org.bukkit.Location(w, 10.5, 65, 10.5);
+    }
+
+    @Test
+    void playAgainTogetherTakesAMemberWaitingInTheClubhouseStraightToHoleOne() {
+        Door door = new Door();
+        Player sam = player(SAM);
+        List<String> told = new ArrayList<>();
+        List<UUID> moved = new ArrayList<>();
+        door.in.put(SAM, ClubVisits.Kind.GOLF); // the group's last round ended in the Clubhouse
+        assertTrue(ClubGolf.waiting(door, SAM, "games"), "waiting there: the host's Start may take them");
+        Boolean went = ClubGolf.fromClubhouse(door, sam, null, "meadow", tee("games"), (p, at) -> moved.add(p.getUniqueId()),
+                p -> null, (p, r) -> told.add(r.message()));
+        assertEquals(Boolean.TRUE, went, "on their way to hole 1");
+        assertEquals(List.of(SAM), door.handedOut, "their Clubhouse session handed to golf, in place");
+        assertEquals(List.of(SAM), moved, "then the session's own teleport to the first tee");
+        assertTrue(told.isEmpty(), "nothing to say");
+
+        assertNull(ClubGolf.fromClubhouse(door, player(AVA), null, "meadow", tee("games"), (p, at) -> true, p -> null,
+                (p, r) -> told.add(r.message())), "not in the Clubhouse: the usual entry");
+        door.in.put(AVA, ClubVisits.Kind.GOLF);
+        assertNull(ClubGolf.fromClubhouse(door, player(AVA), null, "meadow", tee("other"), (p, at) -> true, p -> null,
+                (p, r) -> told.add(r.message())), "a course in another world: the usual entry (a session teleport stays"
+                + " in its world)");
+        assertFalse(ClubGolf.waiting(door, AVA, "other"), "so the Start doesn't count them as free");
+
+        Boolean refused = ClubGolf.fromClubhouse(door, player(AVA), null, "meadow", tee("games"), (p, at) -> true,
+                p -> com.dierks.homecraft.games.Refusal.of("You can't play golf right now."),
+                (p, r) -> told.add(r.message()));
+        assertEquals(Boolean.FALSE, refused, "the gate said no");
+        assertEquals(List.of(AVA), door.handedBack, "handed back to the Clubhouse, never left between the two");
+        assertTrue(told.getLast().contains("can't play golf"), told.toString());
+
+        Boolean noTee = ClubGolf.fromClubhouse(door, player(AVA), null, "meadow", tee("games"), (p, at) -> false,
+                p -> null, (p, r) -> told.add(r.message()));
+        assertEquals(Boolean.FALSE, noTee, "the teleport failed");
+        assertEquals(List.of(AVA, AVA), door.handedBack, "back in the Clubhouse again");
+        assertTrue(door.in.containsKey(AVA), "still in it");
+    }
+
+    @Test
+    void theCardOffersPlayAgainTogetherHomeOrInTheClubhouse() {
+        assertTrue(com.dierks.homecraft.gui.games.golf.GolfGroupCardMenu.offersAgain(true, true, true, false, true),
+                "home, as before");
+        assertTrue(com.dierks.homecraft.gui.games.golf.GolfGroupCardMenu.offersAgain(true, true, false, true, true),
+                "waiting in the Clubhouse, where the group went at the end (it never showed there before)");
+        assertFalse(com.dierks.homecraft.gui.games.golf.GolfGroupCardMenu.offersAgain(true, true, false, false, true),
+                "still in another game: not yet");
+        assertFalse(com.dierks.homecraft.gui.games.golf.GolfGroupCardMenu.offersAgain(false, true, true, true, true),
+                "the round isn't over");
+        assertFalse(com.dierks.homecraft.gui.games.golf.GolfGroupCardMenu.offersAgain(true, false, true, true, true),
+                "no open party");
+        assertFalse(com.dierks.homecraft.gui.games.golf.GolfGroupCardMenu.offersAgain(true, true, true, true, false),
+                "the course is closed");
     }
 }

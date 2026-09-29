@@ -162,6 +162,8 @@ class EventRowsMigrationTest {
         assertEquals(ids(bundled()), ids(onDisk), "exactly what a fresh install ships");
         everyRowOnce(ids(onDisk), "revision 17 upgraded");
         assertEquals(List.of(), warns(log), "nothing was the owner's: " + log);
+        assertTrue(log.stream().anyMatch(l -> l.contains("added the \"Games\" achievements to arcade.achievements ("
+                + String.join(", ", REVISION_18) + ")")), "the INFO line reads plainly too: " + log);
         assertEquals(18, onDisk.getInt("config_revision"), "stamped 18");
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"), "a second start is a no-op");
     }
@@ -211,6 +213,10 @@ class EventRowsMigrationTest {
             List<String> warns = warns(log);
             assertTrue(warns.stream().anyMatch(l -> l.contains("arcade.achievements") && l.contains("changed")),
                     from + ": a WARN names the list: " + warns);
+            // WP-ADM: revision 18's WARN once read "so the new new "Games" achievements were not added"
+            assertTrue(warns.stream().anyMatch(l -> l.contains("so the new \"Games\" achievements were not added")),
+                    from + ": the WARN says what wasn't added, in plain words: " + warns);
+            assertTrue(log.stream().noneMatch(l -> l.contains("new new")), from + ": never \"new new\": " + log);
             for (String id : REVISION_18) {
                 assertEquals(1, warns.stream().filter(l -> l.contains("- { id: " + id + ",")).count(),
                         from + ": the line to paste for " + id + ", once: " + warns);

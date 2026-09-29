@@ -59,7 +59,7 @@ public final class CupMenu extends GameMenu {
         pool.add("&7Paid " + cup.when(v.endsAt()) + ".");
         set(12, Menus.icon(Material.GOLD_INGOT, "&6" + CupText.poolLine(v.pool().tokens(), v.pool().in())
                 + " &7- paid " + cup.when(v.endsAt()), pool.toArray(new String[0])), null);
-        if (v.in()) {
+        if (v.in() && !v.settledEarly()) { // paid out early: the grey "already paid out" below
             set(14, Menus.glint(Menus.icon(Material.LIME_CONCRETE, CupWords.enterName(v), CupWords.yourTime(v.mine()),
                     "&7Every counted run this week can beat it."), true), null);
             return;

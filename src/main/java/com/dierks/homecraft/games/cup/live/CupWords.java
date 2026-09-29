@@ -51,6 +51,9 @@ public final class CupWords {
      */
     public static String buttonName(CupDesk.View v) {
         String pool = CupText.poolLine(v.pool().tokens(), v.pool().in());
+        if (v.settledEarly()) { // paid out already, even to those who were in it
+            return "&7Weekly Cup &8- &7" + shortWhy(CupRefusal.WEEK_OVER);
+        }
         if (v.in()) {
             return "&6You're in this week's Cup &7- " + timeWord(v.mine()) + " &7- " + pool;
         }
@@ -68,6 +71,11 @@ public final class CupWords {
     /** The course screen's Cup item lore. */
     public static List<String> buttonLore(CupDesk.View v, String endsAt) {
         List<String> out = new ArrayList<>();
+        if (v.settledEarly()) { // settled early: nothing is running, and it isn't paid at the week's end
+            out.add("&7" + CupRefusal.WEEK_OVER.message(v.fee()));
+            out.add("&eClick to see the Cup");
+            return out;
+        }
         out.add("&e" + CupText.poolLine(v.pool().tokens(), v.pool().in()));
         if (v.in()) {
             out.add(yourTime(v.mine()));
@@ -79,6 +87,9 @@ public final class CupWords {
 
     /** The Cup screen's enter item NAME: what a click does, or why it can't. */
     public static String enterName(CupDesk.View v) {
+        if (v.settledEarly()) {
+            return "&7" + CupRefusal.WEEK_OVER.message(v.fee());
+        }
         if (v.in()) {
             return "&aYou're in this week's Cup &7- " + timeWord(v.mine());
         }
@@ -115,7 +126,7 @@ public final class CupWords {
      * empty when the Cup isn't shown.
      */
     public static String tileSuffix(CupDesk.View v) {
-        if (v == null || !v.shown()) {
+        if (v == null || !v.shown() || v.settledEarly()) { // paid out early: only the course screen says so
             return "";
         }
         String pool = "pool " + v.pool().tokens();
@@ -134,7 +145,7 @@ public final class CupWords {
     /** What a course's tile adds to its lore: the prompt (or that you're in) and the pool. */
     public static List<String> tileLines(CupDesk.View v) {
         List<String> out = new ArrayList<>();
-        if (v == null || !v.shown()) {
+        if (v == null || !v.shown() || v.settledEarly()) {
             return out;
         }
         if (v.in()) {

@@ -112,9 +112,22 @@ public final class CupDesk {
             return mine != null;
         }
 
-        /** Whether the Cup is worth showing: it runs on the course and is taking entries, or already has some. */
+        /**
+         * Whether the Cup is worth showing on the course screen: it runs on the course and is taking
+         * entries, or already has some; or this week's was paid out early (an admin's {@code settle}),
+         * which the screen says ("Weekly Cup - already paid out this week") instead of the item going
+         * missing. A Cup called off stays hidden, as before.
+         */
         public boolean shown() {
-            return on && settledAs == null && (open || pool.in() > 0);
+            return on && (settledEarly() || settledAs == null && (open || pool.in() > 0));
+        }
+
+        /**
+         * Whether this week's Cup was settled early and paid ({@link CupRefusal#WEEK_OVER}): not called
+         * off. The tiles and the website leave it out (nothing is running); the course screen says so.
+         */
+        public boolean settledEarly() {
+            return settledAs != null && settledAs != CupPlan.Outcome.VOIDED;
         }
     }
 

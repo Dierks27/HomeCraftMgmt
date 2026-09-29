@@ -371,6 +371,20 @@ class ArcadeFeedTest {
     }
 
     @Test
+    void aWholeWorldGamePinnedAsTodaysPickIsPublishedWhileOneOfItsCoursesIs() {
+        ArcadeFeed withCourses = new ArcadeFeed(false);
+        withCourses.course("river_run", "River Run", "boat", "easy", null, null, null);
+        withCourses.golf("meadow", "Meadow Links", 9, 27, null, null, null);
+        assertTrue(root(withCourses.json(T, new ArcadeFeed.Featured("trials", T + 5), null, null, null, null))
+                .has("featured"), "pinning trials makes every time-trial course today's pick");
+        assertTrue(root(withCourses.json(T, new ArcadeFeed.Featured("golf", T + 5), null, null, null, null))
+                .has("featured"), "pinning golf makes every golf course today's pick");
+        ArcadeFeed noCourses = new ArcadeFeed(false);
+        assertFalse(root(noCourses.json(T, new ArcadeFeed.Featured("trials", T + 5), null, null, null, null))
+                .has("featured"), "with no course open, the pick points at nothing and is left out");
+    }
+
+    @Test
     void featuredIsPublishedOnlyForAGameTheFeedShows() {
         ArcadeFeed feed = filled(false);
         assertTrue(root(feed.json(T, new ArcadeFeed.Featured("RIVER_RUN", T + 5), null, null, null, null))

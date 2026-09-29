@@ -128,7 +128,7 @@
 - An admin can pin a pick instead of letting the day choose one.
 - If there is nothing to pick, the star says "No pick today".
 - If today's pick is a course, the star opens the course screen first, with a Start button.
-- For the website: the feed's featured field has today's pick and when it changes.
+- For the website: the feed's featured field has today's pick and when it changes. Its game is usually one entry's id, but it can be `trials` (every time-trial course is today's pick) or `golf` (every golf course is).
 
 ## High scores
 

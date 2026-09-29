@@ -60,6 +60,12 @@ import java.util.regex.Pattern;
  * ticket is not clamped to 85-95 in this release), its one stake is the ticket price, its rows pay
  * tokens, and it has no {@code dailyLimit}.
  *
+ * <p><b>Today's pick.</b> {@code featured.game} is the id of a {@code games[]} entry, or
+ * {@code "trials"} / {@code "golf"} when the owner pinned a whole world game: then every course of
+ * that kind ({@code parkour}/{@code elytra}/{@code boat}, or {@code golf}) is today's pick. It is
+ * written only when something it points at is in {@code games[]}; {@code until} is the next local
+ * midnight.
+ *
  * <p><b>The other sections.</b> {@code prizes}: the visible Prize Counter rows except Trade In,
  * Quest Reroll and the Rare Card ({@link #prizes}). {@code packs}: packs sold for tokens with the
  * rarity odds they roll with, as percents ({@link #packs}). {@code achievements}: the enabled rows
@@ -83,6 +89,9 @@ public final class ArcadeFeed implements FeedWriter {
 
     /** The Scratch Ticket's id in {@code games[]} and {@code jackpots}. */
     public static final String SCRATCH_ID = "scratch_ticket";
+    /** The pinned-whole ids of the world games (their courses publish under their own ids). */
+    static final String TRIALS_ID = "trials";
+    static final String GOLF_ID = "golf";
     /** Its name. */
     public static final String SCRATCH_NAME = "Scratch Ticket";
 
@@ -289,6 +298,13 @@ public final class ArcadeFeed implements FeedWriter {
             String entry = row == null || blank(row.id()) ? null : entry(row);
             if (entry != null && ids.add(row.id().toLowerCase(Locale.ROOT))) {
                 entries.add(entry);
+                // A world game pinned whole ("trials", "golf") makes every one of its courses
+                // today's pick: publish it when at least one of those courses is in games[].
+                if (row instanceof CourseRow) {
+                    ids.add(TRIALS_ID);
+                } else if (row instanceof GolfRow) {
+                    ids.add(GOLF_ID);
+                }
             }
         }
         array(sb, "games", entries);

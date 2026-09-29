@@ -1372,7 +1372,7 @@ is the test's (`ArcadeFeedTest`), shortened where it says `…`; a server publis
 | `maxMultiplier` / `maxGuesses` | Higher or Lower: where a run cashes out by itself |
 | `board` / `unit` / `lowerIsBetter` / `best` | A cabinet's published board, its unit (`ms`, `points`, `flips`, `apples` or `wins`) and the server record, `best` (absent until there is one) |
 | `tier` / `record` | A course's tier (`easy`…) and record `{ms, at}`. Golf has `holes`, `par` and `record` `{strokes, at}`. `at` is epoch ms |
-| `featured` | Today's pick (a game or course id) and `until`, the next local midnight. Only when that id is in `games` |
+| `featured` | Today's pick (a game or course id) and `until`, the next local midnight. Only when that id is in `games`, or `trials` / `golf` when the owner pinned a whole world game: then every course of that kind (`parkour`/`elytra`/`boat`, or `golf`) is the pick, and it is published while at least one of them is in `games` |
 | `jackpots` | The Scratch Ticket's pot now. Whenever it is there, `games` has the `scratch_ticket` entry too, so the site never shows a pot without its odds. Its `rtp` is the steady-state figure `/hcm arcade odds` prints |
 | `prizes` | The visible Prize Counter rows, without Trade In, Quest Reroll and the Rare Card. `category` is the counter's tab in lower case (`boosts`, `hunt`, `cosmetics`, `perks`, `trophies`, `minis`); the +1 Home gives its first price |
 | `packs` | Packs sold for tokens, with the rarity odds they roll with, as percents |

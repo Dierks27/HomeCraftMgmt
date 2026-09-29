@@ -636,11 +636,17 @@ public final class PartyRaces {
         return o.getName() == null ? "someone" : o.getName();
     }
 
-    /** The course's stand, where finishers wait: Fresh Ice Boat from algo 2, else none. */
+    /**
+     * The course's stand, where finishers wait: Fresh Ice Boat from algo 2 (checked in the world: a
+     * stand that isn't standing is never used), else none, and finishers go home at the line.
+     */
     private Location stand(Course base, World world) {
         Box half = base.gen() == null ? null : trials.generated().half(base.gen());
         Point at = RaceStand.of(base, half);
-        return at == null ? null : new Location(world, at.x(), at.y(), at.z());
+        if (at == null || !RaceStand.standable(new WorldSurface(world), at)) {
+            return null;
+        }
+        return new Location(world, at.x(), at.y(), at.z());
     }
 
     /** Tell every member of the party online. */

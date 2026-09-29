@@ -14,9 +14,10 @@ import java.util.List;
  * and tries spots in rows of two, {@value #SIDE} blocks either side of it, {@value #ROW_GAP} blocks
  * apart. A spot needs a floor a boat sits on (ice, water or a solid top), two blocks of air, at
  * least {@value #WALL_GAP} block to any wall, and nothing solid between it and the start. A spot
- * that fails is nudged sideways, up to {@value #NUDGE} blocks in {@value #NUDGE_STEP} steps. When
- * rows of two can't seat everyone the grid is single file, {@value #SINGLE_GAP} apart. About 60
- * block reads, on the main thread.
+ * that fails is nudged sideways, up to {@value #NUDGE} blocks in {@value #NUDGE_STEP} steps, but
+ * never across the path (a row of two stays two side by side). When rows of two can't seat everyone
+ * the grid is single file, {@value #SINGLE_GAP} apart, if that seats more. A few hundred block
+ * reads at most, on the main thread, once per race.
  *
  * <p><b>Runners share the start.</b> Players on foot or with wings can't push each other (the
  * session guard stops knockback), and a parkour start is often a small platform, so on a parkour
@@ -174,14 +175,24 @@ public final class RaceGrid {
         int want = Math.max(0, Math.min(MAX_SPOTS, n));
         List<String> notes = new ArrayList<>();
         Along along = new Along(path);
+        // rows of two: a row counts only when both its spots fit (each nudged, but never across the path)
         List<Course.Spot> two = new ArrayList<>();
         for (int row = 0; two.size() < want && row * ROW_GAP <= Math.min(REACH, along.length()); row++) {
-            for (int side = -1; side <= 1 && two.size() < want; side += 2) {
-                Course.Spot spot = fit(along, row * ROW_GAP, side * SIDE, y, surface, two, notes);
-                if (spot != null) {
-                    two.add(spot);
-                }
+            Course.Spot left = fit(along, row * ROW_GAP, -SIDE, y, surface, two, notes);
+            List<Course.Spot> taken = new ArrayList<>(two);
+            if (left != null) {
+                taken.add(left);
             }
+            Course.Spot right = fit(along, row * ROW_GAP, SIDE, y, surface, taken, notes);
+            if (left != null && right != null) {
+                two.add(left);
+                if (two.size() < want) {
+                    two.add(right);
+                }
+            } else if (want - two.size() == 1 && (left != null || right != null)) {
+                two.add(left != null ? left : right); // the last racer of an odd grid needs one spot, not two
+            }
+            // otherwise the row can't seat two side by side: it's skipped, never half used
         }
         if (two.size() >= want) {
             return new Grid(two, Mode.DOUBLE, notes);
@@ -214,6 +225,9 @@ public final class RaceGrid {
         String why = null;
         for (double nudge : nudges()) {
             double off = side + nudge;
+            if (side != 0 && off * side <= 0) {
+                continue; // a row of two stays a row of two: each spot keeps to its own side of the path
+            }
             Point p = new Point(base.x() + rx * off, y, base.z() + rz * off);
             String problem = problem(p, surface);
             if (problem == null && !clearToStart(p, base, along, back, y, surface)) {

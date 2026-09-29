@@ -80,6 +80,22 @@ public final class RaceStand {
         return spot(half, c.start().y());
     }
 
+    /**
+     * Whether players can stand at {@code spot} as the world is now (a solid floor under it and two
+     * blocks of air): a stand that isn't there (not built yet, or cleared) is never used, and
+     * finishers go home at the line instead.
+     */
+    public static boolean standable(RaceGrid.Surface surface, Point spot) {
+        if (surface == null || spot == null) {
+            return false;
+        }
+        int x = (int) Math.floor(spot.x());
+        int y = (int) Math.floor(spot.y());
+        int z = (int) Math.floor(spot.z());
+        return surface.at(x, y - 1, z) == RaceGrid.Cell.SOLID && surface.at(x, y, z) == RaceGrid.Cell.AIR
+                && surface.at(x, y + 1, z) == RaceGrid.Cell.AIR;
+    }
+
     /** Whether a layout's tag says it was built with a stand. */
     public static boolean has(GenTag tag) {
         return tag != null && Slots.BOAT.equals(tag.generator()) && tag.algo() >= FIRST_ALGO;

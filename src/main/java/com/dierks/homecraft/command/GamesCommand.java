@@ -71,7 +71,8 @@ public final class GamesCommand {
     /** The {@code /hcm games saved <player>} verbs (world sessions own them). */
     static final List<String> SAVED_VERBS = List.of("show", "restore", "return", "discard");
     /** Words {@code /hcm play} keeps for itself. */
-    static final List<String> PLAY_WORDS = List.of("break", "accept", "deny", "invites", "news", "leave", "cup");
+    static final List<String> PLAY_WORDS = List.of("break", "accept", "deny", "invites", "news", "leave", "cup",
+            "watch", "cheer", "cheers", "rider"); // WP-CH: the Clubhouse's
 
     private final HomeCraftManagement plugin;
 
@@ -140,7 +141,29 @@ public final class GamesCommand {
             case "leave" -> leave(sender, args);
             case "race" -> race(sender, args); // WP-R1 (D4): /hcm play race <course> is a party race
             case "cup" -> cup(sender, args);
+            case "watch", "cheer", "cheers", "rider" -> clubhouse(sender, args); // WP-CH
             default -> open(sender, args);
+        }
+    }
+
+    /**
+     * WP-CH: {@code /hcm play watch [<player>]} (watch a race live from the Clubhouse, or come back),
+     * {@code /hcm play cheer} (cheer the racers on) and {@code /hcm play cheers [on|off]} (the cheers a
+     * racer sees). The Clubhouse's own words, run inside its guard.
+     */
+    private void clubhouse(CommandSender sender, String[] args) {
+        Player player = self(sender, "Only players can do that.");
+        GamesService games = player == null || deny(sender, PLAY) ? null : running(sender);
+        if (games == null) {
+            return;
+        }
+        switch (args[1].toLowerCase(Locale.ROOT)) {
+            case "watch" -> com.dierks.homecraft.games.clubhouse.Clubhouse.watchCommand(games, player,
+                    args.length >= 3 ? args[2] : null);
+            case "cheer" -> com.dierks.homecraft.games.clubhouse.Clubhouse.cheerCommand(games, player);
+            case "rider" -> com.dierks.homecraft.games.trial.RideAlong.command(games, player,
+                    args.length >= 3 ? args[2] : null);
+            default -> com.dierks.homecraft.games.clubhouse.Clubhouse.cheersCommand(games, player, args);
         }
     }
 
@@ -338,7 +361,7 @@ public final class GamesCommand {
 
     private static String inviteState(GamesService games, UUID player, String gameId) {
         Game g = games.game(gameId);
-        String name = g == null ? gameId : g.name();
+        String name = g != null ? g.name() : "rider".equals(gameId) ? "Ride along" : gameId; // WP-CH
         return "&f" + name + " " + (games.invites().accepts(player, gameId) ? "&aon" : "&7off");
     }
 
@@ -787,6 +810,10 @@ public final class GamesCommand {
             out.add("&e/hcm play race <course> &7- race a course with friends (free, just for fun)"); // WP-R1 (D4)
             out.add("&e/hcm play news [on|off] &7- a line in chat when new courses are up");
             out.add("&e/hcm play cup [on|off] &7- the Weekly Cup on the course screens");
+            out.add("&e/hcm play clubhouse &7- hang out in the Clubhouse (and back from watching)"); // WP-CH
+            out.add("&e/hcm play watch [player] &7- watch a race live from the Clubhouse");
+            out.add("&e/hcm play cheer &7- cheer the racers on; &e/hcm play cheers [on|off] &7- see cheers");
+            out.add("&e/hcm play rider <player> &7- take a friend in the back of your boat");
             out.add("&e/hcm leave &7- leave the world game you're in (your things come back)");
         }
         if (sender.hasPermission(ADMIN)) {
@@ -837,8 +864,10 @@ public final class GamesCommand {
                     playIds(out, games, last);
                 }
             } else if (n == 3 && (args[1].equalsIgnoreCase("invites") || args[1].equalsIgnoreCase("news")
-                    || args[1].equalsIgnoreCase("cup"))) {
+                    || args[1].equalsIgnoreCase("cup") || args[1].equalsIgnoreCase("cheers"))) {
                 match(out, last, "on", "off");
+            } else if (n == 3 && (args[1].equalsIgnoreCase("watch") || args[1].equalsIgnoreCase("rider"))) { // WP-CH
+                players(out, last);
             } else if (n == 3 && args[1].equalsIgnoreCase("race") && games != null) { // WP-R1 (D4)
                 match(out, last, com.dierks.homecraft.games.trial.PartyRaces.courseIds(games).toArray(new String[0]));
                 if (!(sender instanceof Player) || sender.hasPermission(ADMIN)) {

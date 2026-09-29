@@ -1,6 +1,8 @@
 package com.dierks.homecraft.gui.games.trial;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.games.clubhouse.Clubhouse;
+import com.dierks.homecraft.games.clubhouse.ClubhouseText;
 import com.dierks.homecraft.games.cup.live.CupLink;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.PartyLobby;
@@ -34,6 +36,11 @@ public final class PartyMenu extends GameMenu {
     static final int[] MEMBER_SLOTS = {19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34};
     /** This week's Cup on the party's course (the course screen's own Cup item). */
     public static final int CUP_SLOT = 44;
+    /** WP-CH: "Go to the Clubhouse" and "Watch", while the Clubhouse is open. */
+    public static final int CLUB_SLOT = 36;
+    public static final int WATCH_SLOT = 37;
+    /** WP-CH: "Take a rider (back seat)" on a boat course's party. */
+    public static final int RIDER_SLOT = 39;
     /** The Cup item is read again at most this often (it reads the Cup's rows), not on every repaint. */
     static final long CUP_EVERY_MS = 5_000;
 
@@ -85,7 +92,8 @@ public final class PartyMenu extends GameMenu {
         } else if (host) {
             String problem = party.startProblem(viewer);
             if (problem == null) {
-                set(13, Menus.glint(Menus.icon(Material.LIME_CONCRETE, "&aStart the race!",
+                set(13, Menus.glint(Menus.icon(Material.LIME_CONCRETE, last.isEmpty() ? "&aStart the race!"
+                        : "&aRace again!",
                         "&7Everyone free goes to the grid.", "&7One 3-2-1 for all."), true), e -> {
                     viewer.closeInventory();
                     party.start(viewer);
@@ -141,7 +149,38 @@ public final class PartyMenu extends GameMenu {
                 set(CUP_SLOT, b.icon(), e -> b.click().run());
             }
         }
+        clubButtons(); // WP-CH
+        riderButton(); // WP-CH
         exitTile();
+    }
+
+    /** WP-CH: "Go to the Clubhouse" (wait there, seated from there) and "Watch" (a spectator), while it is open. */
+    private void clubButtons() {
+        if (!Clubhouse.offered(plugin.games())) {
+            return;
+        }
+        set(CLUB_SLOT, Menus.icon(Material.OAK_DOOR, ClubhouseText.GO_BUTTON, "&7Hang out with friends until",
+                "&7the race; you go straight to the grid."), e -> {
+            viewer.closeInventory();
+            Clubhouse.go(plugin.games(), viewer);
+        });
+        set(WATCH_SLOT, Menus.icon(Material.SPYGLASS, ClubhouseText.WATCH_BUTTON, "&7Watch the race and the results",
+                "&7without racing this time."), e -> {
+            viewer.closeInventory();
+            Clubhouse.watch(plugin.games(), viewer);
+        });
+    }
+
+    /** WP-CH: "Take a rider (back seat)" for a member of a boat course's party, while ride along is on. */
+    private void riderButton() {
+        PartyLobby lobby = party.lobby(viewer.getUniqueId());
+        Course c = lobby == null ? null : trials.course(lobby.course());
+        if (c != null && com.dierks.homecraft.games.trial.RideAlong.offered(plugin.games(), c.kind())) {
+            set(RIDER_SLOT, Menus.icon(Material.OAK_BOAT, com.dierks.homecraft.games.trial.RideAlong.BUTTON,
+                    "&7A friend rides in the back of your", "&7boat: not a racer, not counted."),
+                    e -> com.dierks.homecraft.games.trial.RideAlong.take(plugin.games(), viewer, c.id(),
+                            com.dierks.homecraft.games.trial.RideAlong.Purpose.PARTY, this::reopen));
+        }
     }
 
     /** The Cup's item for the party's course, read again every few seconds; {@code null} when none runs. */

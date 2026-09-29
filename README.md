@@ -1353,6 +1353,125 @@ off (`games.falling_floors.enabled: false`).
    to watch.
 <!-- ---- end Falling Floors ---- -->
 
+### The Clubhouse
+
+<!-- ---- The Clubhouse (CLUBHOUSE-SPEC, WP-CH) ---- -->
+One room in the Games world where racers wait before a race and hang out after it: "a waiting room,
+and the same room after the race so folks can hang out and joke around and talk about what
+happened." It is part of the world games, not a new game: you are in it inside your normal world-game
+session, so your things are kept safe and come back when you leave. It ships switched on
+(`games.clubhouse.enabled: true`), builds itself, and **while it is off, not built or not checked,
+every race and round works exactly as before**.
+
+- **The room.** A glass-floored hall, 32 x 16 x 32, with windows, a lit roof, lanterns, benches, two
+  tables, a three-step podium (1st in the middle and highest) and a results board. Sixteen spread-out
+  arrival spots, so nobody lands on top of anybody. The walls are high and the roof is closed: there
+  is no way out on foot, and nothing a mob can spawn on.
+- **Visit any time:** `/hcm play clubhouse`. The kit is **Leave game** (click twice), **Results**
+  (the last race's results) and, while in a party, **Party** (the party screen). No damage, no pushing,
+  and nobody can change a block of the room. Chat is normal chat.
+- **Before a party race** every member of the lobby can tap **Go to the Clubhouse** on the party
+  screen and wait there. When the host presses Start, everyone waiting is taken straight to the grid;
+  members who didn't go are seated exactly as before. It's optional.
+- **Before Race Night** the join message and the Race Night screen offer **Wait in the Clubhouse**;
+  racers there are taken to the grid at seating time. Nothing else about the night changes.
+- **After a party race** a racer who finishes (or doesn't) comes back to the Clubhouse instead of
+  going home. When the race is over the board shows the order, times and gaps, and the host's party
+  screen has **Race again**, which takes everyone still in the Clubhouse back to the grid.
+- **After Race Night** everyone goes to the Clubhouse. The night's top three stand on the podium,
+  "Photo time!" shows for 10 seconds, a firework (no damage) goes off over 1st, and the board shows
+  the night's standings. Ties on points follow the night's own ranking.
+- **After golf together** the group comes to the Clubhouse and the board shows the group's order.
+- **Solo runs** go home as always.
+- **The board** shows, while a party race, Race Night or golf group is going, the live positions
+  (place, name, lap or checkpoint, gap; golf: the group's card), at most once a second; after it ends,
+  the final result. It is one floating text, cleared and made again on every start.
+- **Watchers.** Anyone can come and watch without racing: **Watch** on the party screen and the Race
+  Night screen, or `/hcm play clubhouse`. A watcher is never put in a race, never counted and never
+  paid, and is on no racer list.
+- **Watch live.** **Watch live** in the Clubhouse kit (while a race or golf group is going), or
+  `/hcm play watch [<player>]`, takes you to the course being raced, in **spectator mode**: fly round
+  it, look into the Dropper's shafts, follow a racer by clicking them. You can't leave the course's
+  area (you're put back inside) and can only follow players in that race or group. Other players
+  don't see you at all; watchers see each other. The action bar shows the race's positions and
+  "Watching live - /hcm play clubhouse to go back"; `/hcm play clubhouse` brings you back in
+  adventure mode with the kit, and so does the race's end, in time for the results and the photo.
+  Every way out (Leave game, a quit, the restart hold, the games off, a crash) puts back the game
+  mode you came with.
+- **Cheer.** `/hcm play cheer` sends the racers "<name> cheers for you!" on the action bar, once
+  every 10 seconds. A racer who'd rather not: `/hcm play cheers off` (kept; `on` turns them back on).
+- **Ride along.** A boat driver can take **one** passenger in the back seat, on a solo boat run, a
+  party race or Race Night: **Take a rider (back seat)** on a boat course's screen, on the party screen
+  of a boat course, and on the Race Night screen once joined, or `/hcm play rider <player>`. It's an
+  invite (key `rider`: [Accept] on Java, `/hcm play accept` on Bedrock; `/hcm play invites off` covers
+  it). The rider hops in behind the driver at every start, grid and re-grid, holds the item "Riding
+  with Dad - hold on tight!", can't get out mid-run, and is never timed, counted, paid or on a board.
+  Their **Leave game** ends only their ride; when the driver finishes, stops, leaves or disconnects,
+  the rider goes with them (to the Clubhouse after a party race or Race Night, home after a solo run),
+  their things back. Nobody racing, watching, in a party or in another game can ride, and no new
+  rides start in the restart hold. A passenger doesn't change a boat's speed, so the driver's run
+  counts as normal; with `games.trials.rider_runs_count: false` a run with a rider is just for fun (no
+  board, record, rewards or Cup time, told before the invite and in the finish line) and Race Night
+  takes no riders. Ride along is part of the Clubhouse: with it off there's no Take a rider anywhere.
+- **Time limits.** Anyone in the Clubhouse for `max_minutes` (30) with no race or party going is sent
+  home, with a warning a minute before. In the restart hold nobody new comes in (except arriving from
+  a race already going), and everyone still there is sent home a minute after the hold starts, with a
+  warning. After a crash, their things come back at the next join as from any world game.
+- **One place at a time.** A solo run, another game or golf from the Clubhouse is refused, as from
+  any world game: "Finish your game first (/hcm leave)". Going from the Clubhouse to a race hands your
+  session over; nothing is saved or given back twice.
+- **Nothing here pays or counts.** The Clubhouse moves no tokens and counts toward no board, quest,
+  achievement or Cup; a race from it is the same race as always.
+- **Safety.** The generated room is one box, 32 x 16 x 32 at `origin` (shipped x 5376-5407, y
+  160-175, z 4448-4479), checked like the Falling Floors arena: 32 blocks from every Fresh Courses
+  area, the kept courses and the arena, 16 from hand-built courses, spawn and `games.fresh.safe_spot`,
+  inside the world's heights and border. The first time, the box must be empty: anything in it closes
+  the Clubhouse, touching nothing, until `/hcm games clubhouse rebuild confirm`. It is built with the
+  Fresh Courses writer (3 ms a tick, paused when the server is busy), checked block by block, and
+  nobody comes in until the check passes; a failed check closes it, and every flow goes back to
+  today's. Nobody, admins included, can change a block of the generated room while it's on.
+- **Your own room.** Build one by hand, stand where visitors should arrive and run `/hcm games
+  clubhouse here`; set the podium with `/hcm games clubhouse podium <1|2|3>` and the board with `/hcm
+  games clubhouse board`. Nothing is built or guarded then. `/hcm games clubhouse generated` goes back.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `clubhouse.enabled` | `true` | The Clubhouse's switch (and Watch, Watch live, cheers and Take a rider). Nothing happens while `games.enabled` is false |
+| `clubhouse.origin` | `[5376, 160, 4448]` | The box's lowest corner; x and z are multiples of 16 |
+| `clubhouse.max_minutes` | `30` | Minutes with no race or party going before a visitor is sent home |
+| `clubhouse.party_after` | `true` | Party racers come back here after the race |
+| `clubhouse.race_night_after` | `true` | Everyone comes here at the end of Race Night, the top three on the podium |
+| `clubhouse.golf_after` | `true` | A golf-together group comes here when its round ends |
+| `trials.rider_runs_count` | `true` | `false`: a run with a rider is just for fun, and Race Night takes no riders |
+
+A bad value logs a WARN and uses its shipped value. `/hcm games check` has Clubhouse rows: on or off,
+the box and its problems, the claim, built and checked, and an owner-built room's spots.
+
+**Verify in game** (on Java and on Bedrock)
+
+1. `/hcm reload`. Within a few seconds `/hcm games clubhouse status` shows "ready, built and checked"
+   and `/hcm games check` says "The Clubhouse: box fits (...), claimed, built and checked".
+2. `/hcm play clubhouse`: you're in the room holding Results and Leave game. Walk into a wall and jump
+   on a table: no way out. Leave game: home, your things back.
+3. Two players: one opens a boat course's **Race with friends**, both tap **Go to the Clubhouse**, the
+   host presses Start: both on the grid. Finish: both back in the Clubhouse, the board shows the
+   order and gaps. The host's **Race again** puts both on the grid again.
+4. A third player taps **Watch** on the party screen, then **Watch live**: they fly round the course
+   in spectator mode, the racers can't see them, they can't leave the course's area, and the race's
+   end brings them back to the Clubhouse in adventure mode. `/hcm play cheer` shows on the racers'
+   action bar.
+5. On a boat course's screen tap **Take a rider (back seat)** and choose a friend; they accept (on
+   Bedrock: `/hcm play accept`). Start: they're in the back seat. Fall off at a checkpoint: they come
+   back with you. Their Leave game: you carry on. Your finish: they go home with their things.
+6. Start a Race Night with `/hcm games event start`, wait in the Clubhouse, race it out: everyone ends
+   in the Clubhouse, the top three on the podium with "Photo time!".
+7. `/hcm games clubhouse off`: everyone in it goes home, and a party race ends at home as before.
+   `/hcm games clubhouse generated` opens it again.
+8. **Owner live checks:** a **Bedrock** player can Watch live (Geyser supports spectator mode) and
+   comes back in their own mode; with **Multiverse**, the Games world's game mode isn't forced back
+   while someone is watching (they stay in spectator mode until they come back).
+<!-- ---- end the Clubhouse ---- -->
+
 ### Commands
 
 Admin actions on the Games are logged with who did them, mini golf course edits included. A
@@ -1427,6 +1546,17 @@ clear times or high scores. A player in a world game can use only `/hcm play`, `
 | `/hcm games floors reset` | `hcm.games.admin` | Put the floors back and check them now (a round going finishes first); opens a closed arena again |
 | `/hcm games floors claim [confirm]` | `hcm.games.admin` | Whether its box is claimed; `confirm` claims it even with blocks in it (the next reset clears them) and opens it again |
 | `/hcm games floors tp` | `hcm.games.admin` | Into the gallery to watch (a plain teleport: not a game, nothing is taken); refused until the floors are built and checked, when there may be nothing to stand on |
+| `/hcm play clubhouse` | `hcm.games.play` | Visit the Clubhouse; while watching live, come back to it |
+| `/hcm play watch [<player>]` | `hcm.games.play` | Watch live, from the Clubhouse: the race going on (or that player's race or golf group) in spectator mode. While watching, with no name: back to the Clubhouse |
+| `/hcm play cheer` | `hcm.games.play` | Cheer the racers on (once every 10 seconds) |
+| `/hcm play cheers [on\|off]` | `hcm.games.play` | Whether cheers reach you |
+| `/hcm play rider <player>` | `hcm.games.play` | Take a friend in the back seat of your boat (an invite) |
+| `/hcm games clubhouse [status]` | `hcm.games.admin` | The Clubhouse: generated or owner-built, built and checked, why it is closed, who is in it |
+| `/hcm games clubhouse tp` | `hcm.games.admin` | Into the Clubhouse to look (a plain teleport); refused until it is built and checked |
+| `/hcm games clubhouse here\|podium <1\|2\|3>\|board` | `hcm.games.admin` | Use a room you built: its arrival spot (facing your way), podium places and board, where you stand |
+| `/hcm games clubhouse generated` | `hcm.games.admin` | Back to the generated room (built and checked first) |
+| `/hcm games clubhouse rebuild [confirm]` | `hcm.games.admin` | Build the generated room again and check it; claims the box even with blocks in it |
+| `/hcm games clubhouse off` | `hcm.games.admin` | Close it (kept across restarts): everyone in it goes home, every race works as before |
 | `/hcm arcade odds` | `hcm.arcade.use` | Players: one line per open game of chance. Admins: the per-stake detail, the Scratch Ticket and the crates |
 | `/hcm guide games` | `hcm.guide.use` | The Games page of How It Works |
 

@@ -100,4 +100,27 @@ public interface NightPorts {
 
     /** A line for the server log (INFO, or WARNING when {@code warn}). */
     void log(String line, boolean warn);
+
+    // ---- WP-CH: the Clubhouse (every default: the night as before) ------------------------------------
+
+    /**
+     * Whether the Clubhouse takes this night's racers when they are done (it is open, with
+     * {@code race_night_after} on, in the track's world). False: everyone goes home, as before.
+     */
+    default boolean clubhouse(String trackWorld) {
+        return false;
+    }
+
+    /** A racer done with the night goes to the Clubhouse, reading {@code line} (home if it can't take them). */
+    default void toClubhouse(UUID racer, String line) {
+        home(racer, EndReason.FINISH, line);
+    }
+
+    /** The night is over: its results on the Clubhouse's board, and its top three on the podium. */
+    default void clubhouseResults(NightRunner night) {
+    }
+
+    /** A racer just joined: offer to wait in the Clubhouse. */
+    default void offerClubhouse(UUID racer) {
+    }
 }

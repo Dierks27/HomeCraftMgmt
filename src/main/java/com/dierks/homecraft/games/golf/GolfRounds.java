@@ -801,6 +801,23 @@ public final class GolfRounds {
         groups.leave(r.player, r);
     }
 
+    /** WP-CH: golf together's groups playing now, with their shared cards (read-only). */
+    java.util.Map<GolfGroup, GolfGroup.Card> liveGroups() {
+        java.util.Map<GolfGroup, GolfGroup.Card> out = new java.util.LinkedHashMap<>();
+        for (GolfGroup g : groups.live()) {
+            out.put(g, groups.card(g));
+        }
+        return out;
+    }
+
+    /** WP-CH: the round is over and its player goes to the Clubhouse: the ball goes, the round is forgotten. */
+    void forget(LiveRound r) {
+        if (live.get(r.player) == r) {
+            live.remove(r.player);
+        }
+        r.view.remove();
+    }
+
     // ---- golf together (EVENTS-OWNER-DECISIONS D4): GolfGroups' server side -------------------------
 
     private Player online(UUID player) {
@@ -876,6 +893,9 @@ public final class GolfRounds {
             Player p = online(player);
             if (p == null) {
                 return;
+            }
+            if (ClubGolf.toClubhouse(golf, GolfRounds.this, p, round, card)) {
+                return; // WP-CH: the group goes to the Clubhouse
             }
             GolfCard own = round.card();
             games().sessions().leave(p, EndReason.FINISH);

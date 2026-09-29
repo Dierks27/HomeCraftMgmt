@@ -99,7 +99,21 @@ public final class CourseMenu extends GameMenu {
             set(PARTY_SLOT, PartyMenu.tile(trials, viewer), e -> trials.raceWithFriends(viewer, course.id(), this::reopen));
         }
         cupButton();
+        riderButton(); // WP-CH
         exitTile();
+    }
+
+    /** WP-CH: "Take a rider (back seat)" on a boat course, while ride along is on. */
+    public static final int RIDER_SLOT = 26;
+
+    private void riderButton() {
+        if (!com.dierks.homecraft.games.trial.RideAlong.offered(plugin.games(), course.kind())) {
+            return;
+        }
+        set(RIDER_SLOT, Menus.icon(Material.OAK_BOAT, com.dierks.homecraft.games.trial.RideAlong.BUTTON,
+                "&7A friend rides in the back of your", "&7boat: not timed, counted or paid.",
+                "&7Tap, then choose who."), e -> com.dierks.homecraft.games.trial.RideAlong.take(plugin.games(), viewer,
+                course.id(), com.dierks.homecraft.games.trial.RideAlong.Purpose.SOLO, this::reopen));
     }
 
     /**
@@ -185,6 +199,7 @@ public final class CourseMenu extends GameMenu {
             set(PARTY_SLOT, PartyMenu.tile(trials, viewer), e -> trials.raceWithFriends(viewer, course.id(), this::reopen));
         }
         cupButton();
+        riderButton(); // WP-CH
         exitTile();
     }
 

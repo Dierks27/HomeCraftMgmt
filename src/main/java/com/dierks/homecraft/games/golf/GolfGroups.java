@@ -360,6 +360,11 @@ final class GolfGroups {
         port.roundOver(g.id());
     }
 
+    /** WP-CH: the groups playing now (a read-only view for the Clubhouse's board and watchers). */
+    java.util.List<GolfGroup> live() {
+        return new ArrayList<>(new LinkedHashSet<>(groups.values()));
+    }
+
     /** The game stops: every group goes (the framework ends the sessions, golf closes the parties). */
     void stop() {
         groups.clear();

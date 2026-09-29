@@ -4,6 +4,8 @@ import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.NoPush;
 import com.dierks.homecraft.games.Refusal;
+import com.dierks.homecraft.games.clubhouse.ClubDoor;
+import com.dierks.homecraft.games.clubhouse.Clubhouse;
 import com.dierks.homecraft.games.world.KitItems;
 import com.dierks.homecraft.games.world.Session;
 import com.dierks.homecraft.util.Sounds;
@@ -125,6 +127,10 @@ final class RaceMode {
         World world = base.ready() ? Bukkit.getWorld(base.world()) : null;
         if (world == null || raced.start() == null) {
             return Refusal.of("That course isn't ready right now.");
+        }
+        ClubDoor club = door(); // WP-CH: a racer waiting in the Clubhouse is seated from there, in their session
+        if (club != null && club.seatable(p.getUniqueId())) {
+            return ClubRaces.seat(trials, this, club, p, base, raced, grid, stand, link, world);
         }
         Refusal closed = trials.sessions().entryRefusal(trials);
         if (closed != null) {
@@ -282,6 +288,9 @@ final class RaceMode {
             case HOME -> {
                 rr.due = RaceRun.Due.NONE;
                 rr.ended = true;
+                if (rr.toClub && ClubRaces.toClub(trials, this, door(), p, run, rr.line)) {
+                    return true; // WP-CH: to the Clubhouse instead of home
+                }
                 if (rr.line != null && !rr.line.isBlank()) {
                     p.sendMessage(Text.of(rr.line));
                 }
@@ -416,8 +425,8 @@ final class RaceMode {
         boolean stale = rr.stale(trials.course(rr.base.id()), trials.generated()::standing);
         int tooFast = FairPlay.tooFast(run.course, run.progress.startNanos(), run.progress.times(),
                 run.progress.reachedTargets(), run.stalls);
-        FairPlay.Verdict verdict = FairPlay.judge(false, run.voided, stale, ms,
-                run.course.minSecondsOr(s.minSeconds()), tooFast);
+        FairPlay.Verdict verdict = trials.withRider(p, FairPlay.judge(false, run.voided, stale, ms,
+                run.course.minSecondsOr(s.minSeconds()), tooFast)); // WP-CH: rider_runs_count
         boolean normalRun = call(rr.link, rr.link::normalRun, false); // guarded: a link that throws is over
         RaceRun.Line line = rr.line(verdict.counts(), normalRun);
         if (!line.report()) {
@@ -445,6 +454,7 @@ final class RaceMode {
                 rr.due = RaceRun.Due.PARK;
             } else {
                 rr.home(EndReason.FINISH, null); // no stand to wait on: home at the line
+                rr.toClub = call(rr.link, rr.link::clubhouseAfter, false); // WP-CH: or the Clubhouse
             }
         }
     }
@@ -503,6 +513,7 @@ final class RaceMode {
         } else {
             p.setVelocity(new Vector());
             p.setFallDistance(0f);
+            trials.riders().follow(p, at); // WP-CH: the rider stands on the stand with them
         }
     }
 
@@ -534,6 +545,11 @@ final class RaceMode {
 
     /** {@code TimeTrials.endRace}: home with their things, reading {@code line}, on the next trial tick. */
     void endRace(UUID racer, EndReason why, String line) {
+        endRace(racer, why, line, false);
+    }
+
+    /** {@link #endRace(UUID, EndReason, String)}, or with {@code toClub} to the Clubhouse instead of home (WP-CH). */
+    void endRace(UUID racer, EndReason why, String line, boolean toClub) {
         if (racer == null) {
             return;
         }
@@ -550,6 +566,7 @@ final class RaceMode {
         }
         run.phase = TrialRun.Phase.DONE;
         run.race.home(why, line);
+        run.race.toClub = toClub;
     }
 
     // ---- sessions ending --------------------------------------------------------------------------
@@ -708,6 +725,30 @@ final class RaceMode {
         this.pushes = team;
     }
 
+    // ---- WP-CH: the Clubhouse ------------------------------------------------------------------------
+
+    /** The door a test passes; {@code null}: the Clubhouse's own ({@link Clubhouse#door}), if it is open. */
+    private ClubDoor clubDoor;
+    private boolean clubDoorSet;
+
+    /** The Clubhouse's door, or {@code null} while it is off, closed or not built (every flow as before). */
+    ClubDoor door() {
+        if (clubDoorSet) {
+            return clubDoor;
+        }
+        try {
+            return Clubhouse.door(trials.games());
+        } catch (RuntimeException | LinkageError e) {
+            return null; // no framework (a test): no Clubhouse
+        }
+    }
+
+    /** A test's own Clubhouse door ({@code null}: none at all). */
+    void door(ClubDoor door) {
+        this.clubDoor = door;
+        this.clubDoorSet = true;
+    }
+
     /** The player if online, or {@code null} (never a throw: no server in a test). */
     private static Player online(UUID id) {
         try {
@@ -739,7 +780,7 @@ final class RaceMode {
      * The run ended (left, gone, Time Trials stopping): off the no-push team (by id, so a racer who is
      * already gone comes off too) and collisions back on.
      */
-    private void restore(UUID id, Player p, RaceRun rr) {
+    void restore(UUID id, Player p, RaceRun rr) {
         if (rr.noPush) {
             rr.noPush = false;
             NoPush np = noPush();

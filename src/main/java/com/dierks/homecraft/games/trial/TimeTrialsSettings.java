@@ -27,15 +27,18 @@ import java.util.Map;
  *                      practice drop with them)
  * @param partyMax the most racers in a party race (D4, "Race with friends"), 2 to
  *                 {@link PartyLobby.Kind#limit()}
+ * @param riderRunsCount WP-CH ride along: whether a boat run with a rider in the back counts as normal
+ *                       (a passenger doesn't change a boat's speed); false makes it just for fun, and
+ *                       Race Night refuses riders
  */
 public record TimeTrialsSettings(boolean enabled, Map<String, Integer> firstClear, int weeklyBestBonus,
                                  int courseOfWeekBonus, int dailyCap, int fallDepth, int minSeconds,
-                                 int warmupSeconds, int partyMax) {
+                                 int warmupSeconds, int partyMax, boolean riderRunsCount) {
 
     /** The leaves under {@code games.trials}, in config order. */
     public static final List<String> KEYS = List.of("enabled", "first_clear.easy", "first_clear.medium",
             "first_clear.hard", "first_clear.extreme", "weekly_best_bonus", "course_of_week_bonus",
-            "daily_cap", "fall_depth", "min_seconds", "warmup_seconds", "party_max");
+            "daily_cap", "fall_depth", "min_seconds", "warmup_seconds", "party_max", "rider_runs_count");
 
     /** The shipped warm-up: 3 minutes. */
     public static final int WARMUP_SECONDS = 180;
@@ -46,6 +49,14 @@ public record TimeTrialsSettings(boolean enabled, Map<String, Integer> firstClea
         firstClear = Collections.unmodifiableMap(new LinkedHashMap<>(firstClear));
         warmupSeconds = Math.max(0, Math.min(600, warmupSeconds));
         partyMax = Math.max(PartyLobby.MIN_PLAYERS, Math.min(PartyLobby.Kind.RACE.limit(), partyMax));
+    }
+
+    /** The settings before ride along: runs with a rider count. */
+    public TimeTrialsSettings(boolean enabled, Map<String, Integer> firstClear, int weeklyBestBonus,
+                              int courseOfWeekBonus, int dailyCap, int fallDepth, int minSeconds,
+                              int warmupSeconds, int partyMax) {
+        this(enabled, firstClear, weeklyBestBonus, courseOfWeekBonus, dailyCap, fallDepth, minSeconds, warmupSeconds,
+                partyMax, true);
     }
 
     /** The settings before warm-ups and party races: those at their shipped values. */
@@ -66,7 +77,8 @@ public record TimeTrialsSettings(boolean enabled, Map<String, Integer> firstClea
                 6,
                 5,
                 WARMUP_SECONDS,
-                PARTY_MAX);
+                PARTY_MAX,
+                true);
     }
 
     /** Read {@code games.trials} over {@code d}; never throws. */
@@ -80,8 +92,9 @@ public record TimeTrialsSettings(boolean enabled, Map<String, Integer> firstClea
         int minSeconds = n.whole("min_seconds", d.minSeconds(), 0, 3600);
         int warmupSeconds = n.whole("warmup_seconds", d.warmupSeconds(), 0, 600);
         int partyMax = n.whole("party_max", d.partyMax(), PartyLobby.MIN_PLAYERS, PartyLobby.Kind.RACE.limit());
+        boolean riderRunsCount = n.bool("rider_runs_count", d.riderRunsCount());
         return new TimeTrialsSettings(enabled, firstClear, weeklyBestBonus,
-                courseOfWeekBonus, dailyCap, fallDepth, minSeconds, warmupSeconds, partyMax);
+                courseOfWeekBonus, dailyCap, fallDepth, minSeconds, warmupSeconds, partyMax, riderRunsCount);
     }
 
     /** Whether a run may start with a warm-up (and a dropper with a practice drop): {@code warmup_seconds > 0}. */

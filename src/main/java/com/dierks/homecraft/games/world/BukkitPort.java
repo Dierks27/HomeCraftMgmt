@@ -87,9 +87,52 @@ final class BukkitPort implements SessionCore.Port<Player, ItemStack> {
         return state.ownModeChange(player);
     }
 
-    /** Set ADVENTURE again as our own change (the game-mode guard). */
+    /**
+     * Set the session's own game mode again as our own change (the game-mode guard): ADVENTURE, or
+     * SPECTATOR while a Clubhouse watcher watches live (WP-CH), for THIS session only.
+     */
     void adventure(Player p) {
-        state.gameMode(p, org.bukkit.GameMode.ADVENTURE);
+        state.gameMode(p, intended(p));
+    }
+
+    // ---- WP-CH: a session's own game mode (the Clubhouse's Watch live) -------------------------------
+
+    /** A game mode a game set for one session: the guard re-asserts it instead of ADVENTURE. */
+    private record Intent(String sid, org.bukkit.GameMode mode) {
+    }
+
+    private final java.util.Map<UUID, Intent> intents = new java.util.HashMap<>();
+
+    /**
+     * Put a session player in {@code mode} as our own change, and have the game-mode guard keep them
+     * in it for this session (a new session starts in ADVENTURE again). The saved state still holds
+     * the mode they came in with, and every way out puts that one back.
+     *
+     * @return whether it was done (false: no ACTIVE session)
+     */
+    boolean gameMode(Player p, org.bukkit.GameMode mode) {
+        Session s = p == null ? null : core.session(p.getUniqueId());
+        if (s == null || s.phase() != Session.Phase.ACTIVE || mode == null) {
+            return false;
+        }
+        if (mode == org.bukkit.GameMode.ADVENTURE) {
+            intents.remove(p.getUniqueId());
+        } else {
+            intents.put(p.getUniqueId(), new Intent(s.id(), mode));
+        }
+        state.gameMode(p, mode);
+        return true;
+    }
+
+    /** The mode the guard keeps a session player in: a game's own for this session, else ADVENTURE. */
+    private org.bukkit.GameMode intended(Player p) {
+        Intent i = intents.get(p.getUniqueId());
+        Session s = core.session(p.getUniqueId());
+        if (i == null || s == null || !i.sid().equals(s.id())) {
+            intents.remove(p.getUniqueId());
+            return org.bukkit.GameMode.ADVENTURE;
+        }
+        return i.mode();
     }
 
     /** The plugin is being disabled (PluginDisableEvent, just before onDisable). */

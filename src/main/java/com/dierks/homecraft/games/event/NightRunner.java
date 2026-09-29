@@ -376,6 +376,7 @@ public final class NightRunner implements RaceLink {
         }
         ports.tell(id, "&aYou're in Race Night! &7It starts at " + EventCopy.clock(plan.startsAt(), zone)
                 + ". Keep playing - we'll take you to the track.", false);
+        ports.offerClubhouse(id); // WP-CH: or wait in the Clubhouse
         if (state.phase() == EventMachine.Phase.WARMUP
                 || (state.phase() == EventMachine.Phase.GRID && started < 0)) {
             Racer in = r;
@@ -850,6 +851,10 @@ public final class NightRunner implements RaceLink {
     private void afterLine(Racer r) {
         if (track.stand() == null) {
             r.seated = false;
+            if (ports.clubhouse(track.base().world())) { // WP-CH: no stand: the Clubhouse, not home
+                toClubhouse(r, "&7Race Night: that was the race. &7Wait in the Clubhouse for the results!");
+                return;
+            }
             sendHome(r, EndReason.FINISH, "&7Race Night: that was the race. Your things are back.");
             return;
         }
@@ -1131,8 +1136,14 @@ public final class NightRunner implements RaceLink {
         } catch (SQLException e) {
             ports.log("Race Night: could not close " + plan.id() + ": " + e.getMessage(), true);
         }
+        boolean club = end == EventMachine.Phase.DONE && ports.clubhouse(track.base().world()); // WP-CH
+        if (club) {
+            ports.clubhouseResults(this);
+        }
         for (Racer r : racers.values()) {
-            if (r.seated) {
+            if (r.seated && club) {
+                toClubhouse(r, com.dierks.homecraft.games.clubhouse.ClubhouseText.NIGHT_OVER);
+            } else if (r.seated) {
                 sendHome(r, EndReason.FINISH, homeLine == null ? calledOffLine() : homeLine);
             }
             ports.bar(r.id, null, 0, false);
@@ -1162,6 +1173,13 @@ public final class NightRunner implements RaceLink {
         r.sentHome = true;
         r.seated = false;
         queue.add(() -> ports.home(r.id, why, line));
+    }
+
+    /** WP-CH: done with the night, to the Clubhouse (race mode hands their session there). */
+    private void toClubhouse(Racer r, String line) {
+        r.sentHome = true;
+        r.seated = false;
+        queue.add(() -> ports.toClubhouse(r.id, line));
     }
 
     private String callOffLine(String why) {

@@ -59,7 +59,7 @@ clock:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 16
+config_revision: 17
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -1436,7 +1436,10 @@ arcade:
   #   STAT        `stat:` a lifetime vanilla statistic, or CATCH_FISH | TRAVEL_ON_FOOT |
   #               KILL_HOSTILES | BREED_ANIMALS | TRADE_VILLAGER; `target`
   #   COUNTER     `counter:` wild_finds | rare_wild_finds | quests_done | deliveries |
-  #               crates | jackpots | biomes; `target`
+  #               crates | jackpots | biomes; `target`. The skill games count
+  #               cabinet_finishes | cabinet_golds | cabinets (different cabinet games) |
+  #               course_finishes (courses and golf rounds) | course_records | holes_in_one |
+  #               golf_under_par | fresh_sets | star_chart_tops (nothing counts a game of chance)
   #   COLLECTION  distinct Minis owned right now; `target`
   #   GRADE       print a Mini of `grade:` (MINT)
   #   FINISH      own a Mini with `finish:` (SHINY)
@@ -1470,6 +1473,17 @@ arcade:
     - { id: balance_1k, group: "Money", type: BALANCE, target: 1000, reward: 10, display: "Have $1,000" }
     - { id: rich_10k, group: "Money", type: BALANCE, target: 10000, reward: 50, display: "Have $10,000" }
     - { id: jackpot, group: "Arcade", type: EVENT, reward: 25, display: "Win the Scratch Ticket jackpot" }
+    # The skill games (never a game of chance). Counters, so a course finished in the Games world
+    # (no tokens there) unlocks as soon as the player is back home.
+    - { id: game_first_cabinet, group: "Games", type: COUNTER, counter: cabinet_finishes, target: 1, reward: 10, display: "Finish an arcade cabinet game" }
+    - { id: game_gold, group: "Games", type: COUNTER, counter: cabinet_golds, target: 1, reward: 20, display: "Earn a gold medal in a cabinet" }
+    - { id: game_all_cabinets, group: "Games", type: COUNTER, counter: cabinets, target: 8, reward: 30, display: "Finish every arcade cabinet game" }
+    - { id: game_first_course, group: "Games", type: COUNTER, counter: course_finishes, target: 1, reward: 15, display: "Finish a course" }
+    - { id: game_hole_in_one, group: "Games", type: COUNTER, counter: holes_in_one, target: 1, reward: 25, display: "Get a hole-in-one" }
+    - { id: game_under_par, group: "Games", type: COUNTER, counter: golf_under_par, target: 1, reward: 25, display: "Finish a golf course under par" }
+    - { id: game_fresh_all, group: "Games", type: COUNTER, counter: fresh_sets, target: 1, reward: 40, display: "Finish every Fresh Course in one set" }
+    - { id: game_star_chart, group: "Games", type: COUNTER, counter: star_chart_tops, target: 1, reward: 30, display: "Reach the top Star Chart goal in a week" }
+    - { id: game_record, group: "Games", type: COUNTER, counter: course_records, target: 1, reward: 30, display: "Set a course record" }
   # Daily/weekly quests. Each player DRAWS their own `daily_draw` / `weekly_draw` from the
   # pools the first time they're needed in a day/week (local time) — no two of one type.
   # A Quest Reroll (Prize Counter) swaps one unfinished daily. Each row:
@@ -1480,7 +1494,11 @@ arcade:
   #   FIND_WILD_MINI, SELL_MARKET (money), OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH.
   #   PULLED from statistics (every 30s) — CATCH_FISH, KILL_HOSTILES, BREED_ANIMALS,
   #   TRADE_VILLAGER, TRAVEL_ON_FOOT (blocks; walking/sprinting/sneaking only).
-  # Nothing counts in a world the economy is disabled in.
+  #   PUSHED by the skill games (never a game of chance) — FINISH_CABINET (a finished cabinet
+  #   run, practice too), FINISH_COURSE (a counted course run or a golf round), EARN_STARS
+  #   (Fresh Courses stars). They are only dealt while those games are open.
+  # Nothing counts in a world the economy is disabled in. The game quests count where the games
+  # pay tokens (the Games world too, never in creative); their tokens come once the player is home.
   quests:
     enabled: true
     # Which day a week rolls over on (local midnight).
@@ -1500,6 +1518,8 @@ arcade:
       - { id: mine_daily,     type: MINE_BLOCKS,       target: 200,  reward: 5, display: "Mine 200 stone or ore" }
       - { id: biome_daily,    type: VISIT_BIOMES,      target: 3,    reward: 5, display: "Visit 3 different biomes" }
       - { id: delivery_daily, type: COMPLETE_DELIVERY, target: 1,    reward: 5, display: "Finish a Courier delivery" }
+      - { id: cabinet_daily,  type: FINISH_CABINET,    target: 3,    reward: 4, display: "Play 3 arcade cabinets" }
+      - { id: course_daily,   type: FINISH_COURSE,     target: 1,    reward: 5, display: "Finish a course or a round of golf" }
     weekly_pool:
       - { id: hostiles_weekly, type: KILL_HOSTILES,     target: 150,  reward: 25, display: "Defeat 150 hostile mobs" }
       - { id: fish_weekly,     type: CATCH_FISH,        target: 40,   reward: 20, display: "Catch 40 fish" }
@@ -1510,6 +1530,9 @@ arcade:
       - { id: biome_weekly,    type: VISIT_BIOMES,      target: 8,    reward: 25, display: "Visit 8 different biomes" }
       - { id: delivery_weekly, type: COMPLETE_DELIVERY, target: 5,    reward: 25, display: "Finish 5 Courier deliveries" }
       - { id: wild_weekly,     type: FIND_WILD_MINI,    target: 1,    reward: 30, display: "Catch a wild Mini" }
+      - { id: cabinet_weekly,  type: FINISH_CABINET,    target: 15,   reward: 20, display: "Play 15 arcade cabinets" }
+      - { id: course_weekly,   type: FINISH_COURSE,     target: 5,    reward: 20, display: "Finish 5 courses or golf rounds" }
+      - { id: stars_weekly,    type: EARN_STARS,        target: 6,    reward: 20, display: "Earn 6 Fresh Courses stars" }
   # The Scratch Ticket: tokens in, tokens out, decided the moment you buy it. The pot
   # starts at `seed`, grows `per_ticket` with every ticket, tops out at `cap`, and goes
   # back to `seed` when someone wins it (with a shout to the whole server).
@@ -1884,6 +1907,11 @@ games:
     # that week. A week's goals are fixed the first time they are shown, even if a course is
     # switched off later that week.
     daily_cap: 2
+    # When a new set goes up, one chat line tells each player once ("New courses this week! Easy,
+    # Parkour, Hard, Sky Rings and Golf - /hcm play"): at login, or at once for anyone on (not while
+    # they play a world game, and after they close a screen). Players turn it off with
+    # /hcm play news off. false = no line for anyone.
+    announce: true
     # Tokens for each course's first finish in each set: one table for a weekly cadence and one for
     # a daily one. Anything in between is worked out from the two, so a new cadence needs no retuning.
     # They count toward games.trials.daily_cap / games.golf.daily_cap (4) and skill_daily_cap (6),

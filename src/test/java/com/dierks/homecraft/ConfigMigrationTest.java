@@ -1228,7 +1228,8 @@ class ConfigMigrationTest {
         for (Map<?, ?> row : onDisk.getMapList("arcade.achievements")) {
             ach.put(String.valueOf(row.get("id")), row);
         }
-        assertEquals(26, ach.size());
+        assertEquals(bundled().getMapList("arcade.achievements").size(), ach.size(),
+                "the map becomes the whole shipped list (26 rows, and the 9 \"Games\" rows of revision 17)");
         assertEquals(9, intAt(ach.get("first_mini"), "reward"), "their reward is kept");
         assertEquals(10, intAt(ach.get("first_pc"), "reward"), "ours is rescaled");
         assertEquals(Boolean.FALSE, ach.get("first_sale").get("enabled"));

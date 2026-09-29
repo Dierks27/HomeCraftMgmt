@@ -912,6 +912,7 @@ result screens show it in their header's NAME. `/hcm play fresh_parkour_tiers` i
 | `fresh.world_rules` | `true` | No mobs, fire, random ticks or weather in that world; always noon |
 | `fresh.safe_spot` | `""` | "x y z" where people standing in a building area are moved; `""` = the world's spawn |
 | `fresh.daily_cap` | `2` | Most Star Chart tokens a player earns a day (a goal is paid whole or waits for another day that week) |
+| `fresh.announce` | `true` | When a new set is up, each player reads one chat line about it, once per set: "New courses this week! Easy, Parkour, Hard, Sky Rings and Golf - /hcm play" ("today" when daily, "new every 3 days" for 3). It waits until every course of the set is up (or 15 minutes after the first), for players in a world the games are played in and not in a world game, and until a screen is closed (or a minute). Players who log in later read it a few seconds after joining. `/hcm play news off` turns it off for one player; `false` for everyone |
 | `fresh.rewards.clear_weekly.*` / `fresh.rewards.clear_daily.*` | see above | Each course's first-finish tokens at a weekly and at a daily cadence; other cadences are worked out from the two. Paid whole or not at all, so keep each at or under its game's `daily_cap` (4) |
 | `fresh.star_goals.weekly` / `.weekly_tokens` | `[6, 12]` / `[1, 2]` | The weekly Star Chart goals and what each pays, at a weekly cadence (a week's goals are fixed once shown: a change counts from the next week) |
 | `fresh.star_goals.daily` / `.daily_tokens` | `[10, 25]` / `[1, 1]` | The same at a daily cadence |
@@ -1066,8 +1067,10 @@ clear times or high scores. A player in a world game can use only `/hcm play`, `
 | `/hcm play break` | `hcm.games.play` | The Take a break screen |
 | `/hcm play accept\|deny` | `hcm.games.play` | Answer your latest invite |
 | `/hcm play invites [on\|off]` | `hcm.games.play` | Your invite settings. `off` also turns Coin Flip invites off; only the Take a break screen turns them on |
+| `/hcm play news [on\|off]` | `hcm.games.play` | The one chat line that says new Fresh Courses are up ("New courses this week! ..."). On unless you turn it off |
 | `/hcm leave` | `hcm.games.play` | Leave the world game you're in; your things come back. Also finishes a trip home that didn't complete |
 | `/hcm games status` | `hcm.games.admin` | Every game, open or closed and why, with the odds of the open games of chance; players in world games, saved things waiting to go back, unfinished rounds, today's pick, and the next scheduled restart and when its hold starts |
+| `/hcm games check` | `hcm.games.admin` or the console | Is the server set up for the games? One line per check, OK, WARN or FAIL with the fix, then "All good." or "N things to fix." It only looks, and works with the games on, off or failed to start (see "Turning it on, and the Games world") |
 | `/hcm games feature <game\|course\|auto>` | `hcm.games.admin` | Pin today's pick (writes `games.featured`), or let the day pick again. `trials` or `golf` makes every course of that game the pick. Never a game of chance |
 | `/hcm games break <player> show\|pause <days>\|limit <tokens\|none>\|clear\|clear-own confirm` | `hcm.games.admin` | A player's Take a break, online or not. `pause` (1-365 days) and `limit` set an admin pause or limit the player can't lift; `clear` removes only those; `clear-own confirm` lifts the player's OWN settings and logs a WARNING |
 | `/hcm games scores reset <game> [board\|all] [player] [confirm]` | `hcm.games.admin` | Clear high scores. Without `confirm` it only counts what it would clear |
@@ -1153,6 +1156,20 @@ Cabinets and games of chance need nothing more. **Courses and mini golf need a G
 5. **Build as an admin.** While the games are on, nobody without `hcm.games.admin` can change a
    Games world ("The Games world can't be changed."), so a friend can't bridge a shortcut across
    a course.
+6. **Check it: `/hcm games check`.** It only looks (nothing is changed, and it works with the games
+   on, off or failed to start), and prints one line per check, each OK, WARN or FAIL with the fix:
+   `games.enabled`; every `worlds.economy_enabled` world exists; every Games world is loaded, not
+   an economy world, and set to adventure in Multiverse (when Multiverse can't say, it tells you to
+   check `/mv info <world>`); Multiverse-Inventories gives the Games worlds a group of their own and
+   keeps no per-game-mode profiles (read from its `groups.yml` and `config.yml`; when they can't be
+   read, what to check by hand); `games.restart_times` reads, with the next restart and hold; Fresh
+   Courses (on and how often, every area inside the world border and height and clear of hand-built
+   courses and the other areas, each claimed, empty, or with foreign blocks and how many, the next
+   change, each course live or why not, the keep area and the Classics); every hand-built course is
+   ready and its world loaded; the website feed (the dashboard, a feed token, and `/api/arcade`
+   built in memory, never over the network); and the LuckPerms line that takes games of chance away
+   from one player (`/lp user <player> permission set hcm.games.chance false`). It ends "All good."
+   or "N things to fix." (every WARN and FAIL).
 
 Players take nothing in and lose nothing. Entering saves everything (inventory, XP, health,
 food, effects, game mode, where they stood) and hands them the game's kit.
@@ -1171,6 +1188,49 @@ applied twice. A game refuses to start while they hold something on the cursor (
 you're holding first."). `/hcm leave` and `/hcm games saved` work even while the games are off,
 and an admin's `restore` or `return` says what really happened.
 
+### Quests and achievements from the games
+
+The skill games count toward quests and achievements; **games of chance never do** (they never
+report a finish, and only a catalog cabinet is taken as a cabinet finish).
+
+- **Three quest types**, pushed by the games: `FINISH_CABINET` (a finished cabinet run, practice
+  included; a run closed early or a friend game someone quit is not a finish), `FINISH_COURSE` (a
+  counted time-trial run or a finished round of golf, hand-built or Fresh) and `EARN_STARS` (Fresh
+  Courses stars, one step a star). They count where the games pay tokens (an economy world, a Games
+  world or a play world, never in creative or spectator). A quest finished in the Games world, where
+  no tokens are paid, is paid as soon as the player is back in an economy world (at once on the world
+  change, or within 30 seconds). A game quest is dealt only while a game that can push it is open, so
+  nobody draws "Play 3 arcade cabinets" with the games off.
+- **The pool rows** (appended after the rows you had):
+
+  | Pool | id | type | target | reward | Says |
+  |---|---|---|---|---|---|
+  | daily | `cabinet_daily` | `FINISH_CABINET` | 3 | 4 | Play 3 arcade cabinets |
+  | daily | `course_daily` | `FINISH_COURSE` | 1 | 5 | Finish a course or a round of golf |
+  | weekly | `cabinet_weekly` | `FINISH_CABINET` | 15 | 20 | Play 15 arcade cabinets |
+  | weekly | `course_weekly` | `FINISH_COURSE` | 5 | 20 | Finish 5 courses or golf rounds |
+  | weekly | `stars_weekly` | `EARN_STARS` | 6 | 20 | Earn 6 Fresh Courses stars |
+
+- **The "Games" achievements**, all `COUNTER`s so one earned in the Games world unlocks once the
+  player is home (on the world change, at join, or at the five-minute check):
+
+  | id | counter | target | tokens | Says |
+  |---|---|---|---|---|
+  | `game_first_cabinet` | `cabinet_finishes` | 1 | 10 | Finish an arcade cabinet game |
+  | `game_gold` | `cabinet_golds` | 1 | 20 | Earn a gold medal in a cabinet (a scored run, not practice) |
+  | `game_all_cabinets` | `cabinets` (different cabinet games) | 8 | 30 | Finish every arcade cabinet game |
+  | `game_first_course` | `course_finishes` | 1 | 15 | Finish a course (a golf round counts) |
+  | `game_hole_in_one` | `holes_in_one` | 1 | 25 | Get a hole-in-one |
+  | `game_under_par` | `golf_under_par` | 1 | 25 | Finish a golf course under par |
+  | `game_fresh_all` | `fresh_sets` | 1 | 40 | Finish every Fresh Course in one set |
+  | `game_star_chart` | `star_chart_tops` | 1 | 30 | Reach the top Star Chart goal in a week |
+  | `game_record` | `course_records` | 1 | 30 | Set a course record |
+
+- **Upgrading (config revision 17).** A pool or achievements list still exactly as shipped gains
+  these rows at its end. One you have changed is yours and is left alone: the console WARNs once,
+  naming it, followed by the lines to paste at its end. A row already there by id is never added
+  twice.
+
 ### For the owner: the older games of chance
 
 The Scratch Ticket and Crates now follow the house rules' copy (no teasing lines, a part refund
@@ -1183,7 +1243,10 @@ unchanged and are **not** held to 85-95 in this release: the ticket gives back a
 - decide whether its jackpot still gets a server-wide shout;
 - the `first_crate` and `jackpot` achievements and the OPEN_CRATE and SCRATCH quest types still
   reward a game of chance (changing shipped quests and achievements needs a `config_revision`).
-  The website feed already leaves `jackpot` out; `first_crate` is still published.
+  The website feed already leaves `jackpot` out; `first_crate` is still published. Nothing new is
+  tied to a game of chance, and **you may remove the `jackpot` and `first_crate` rows** from
+  `arcade.achievements` if you prefer no chance-linked achievements at all (unlocks already earned
+  stay in the database; the rows just stop showing and paying).
 
 ### Data
 
@@ -1388,6 +1451,29 @@ off. Every token a game moves is in the ledger under that game's own source, so
     next Deal is refused the same way, and so is a cabinet's daily board if you haven't had
     today's try (Classic still deals). After 3:10 all of them work again. Put
     `["04:00", "16:00"]` back and reload.
+
+**The setup check, the new-courses line, and the games' quests and achievements**
+
+62. `/hcm games check` (in game and from the console): one line per check and "All good." on a
+    server set up as above. Put your Games world into `worlds.economy_enabled` and `/hcm reload`:
+    it says "[FAIL] Games world 'games' is also an economy world - take it out of
+    worlds.economy_enabled ..." and "1 thing to fix."; put it back. With `games.enabled: false` it
+    still runs, and says so as a WARN.
+63. Switch Fresh Courses on (or wait for Monday's new set): once every course is up, everyone in a
+    world the games are played in reads "New courses this week! Easy, Parkour, Hard, Sky Rings and
+    Golf - /hcm play" once; a player mid-course reads it after leaving the course, one on a screen
+    after closing it, one who logs in later a few seconds after joining. A relog doesn't repeat it,
+    and neither does `/hcm games gen reroll`: a reroll is the same set.
+64. `/hcm play news off`: "No more new-course lines in chat."; the next set says nothing to you.
+    `/hcm play news` shows the setting; `on` turns it back on. Tab completion offers `news`, then
+    `on`/`off`.
+65. With the games on, `/hcm quests` can deal "Play 3 arcade cabinets" or "Finish a course or a
+    round of golf" (with the games off it never does). Play three cabinet games (practice counts;
+    closing one early doesn't): "Quest complete" and the tokens. Finish a course in the Games
+    world: the quest's tokens come the moment you are back home.
+66. `/hcm achievements`: the Games group. Finish a cabinet game: "Achievement! Finish an arcade
+    cabinet game" (+10). Finish a course: that one unlocks when you get home. Games of chance never
+    move any of them.
 
 ---
 

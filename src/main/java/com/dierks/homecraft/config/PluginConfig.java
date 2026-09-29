@@ -340,7 +340,24 @@ public final class PluginConfig {
         SELL_MARKET, OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH, FIND_WILD_MINI,
         PLANT_CROPS, HARVEST_CROPS, COOK_FOOD, SMELT_ORE, MINE_BLOCKS, VISIT_BIOMES, COMPLETE_DELIVERY,
         // Pulled from vanilla statistics.
-        CATCH_FISH, KILL_HOSTILES, BREED_ANIMALS, TRADE_VILLAGER, TRAVEL_ON_FOOT
+        CATCH_FISH, KILL_HOSTILES, BREED_ANIMALS, TRADE_VILLAGER, TRAVEL_ON_FOOT,
+        // Pushed by the skill games (EXTRAS E4), through GameProgress. Games of chance never push one.
+        /** A finished run of any arcade cabinet, practice included (not a run closed early or a quit friend game). */
+        FINISH_CABINET,
+        /** A counted time-trial run or a finished round of golf, hand-built or Fresh. */
+        FINISH_COURSE,
+        /** Fresh Courses stars added to the week's Star Chart. */
+        EARN_STARS;
+
+        /**
+         * Whether a skill game pushes it. These count where the games pay tokens (an economy world,
+         * a Games world or a play world, never in creative), because courses are played in the Games
+         * world, which is not an economy world; the reward itself waits until the player is somewhere
+         * tokens can be paid. Every other type counts only where the economy runs.
+         */
+        public boolean game() {
+            return this == FINISH_CABINET || this == FINISH_COURSE || this == EARN_STARS;
+        }
     }
 
     /**

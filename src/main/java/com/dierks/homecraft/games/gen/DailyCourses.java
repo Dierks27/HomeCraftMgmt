@@ -256,6 +256,9 @@ public final class DailyCourses implements Game {
         g.every(this, 1, 1, running::tick);
         g.every(this, 20, 20, running::check);
         g.later(this, 1, running::worldsReady);
+        // "New courses this week!" once per player per set (EXTRAS E2), on the same one-second beat.
+        NewCoursesNudge nudge = NewCoursesNudge.live(g, () -> running, this::settings);
+        g.every(this, 20, 20, nudge::tickSafely);
     }
 
     /** Stop the engine; the gate goes with it (the framework already hands out NONE once closed). */

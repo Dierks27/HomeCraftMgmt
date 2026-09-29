@@ -58,19 +58,22 @@
 | `/hcm play invites` | Shows your invite settings, for example "Your invites: Connect Four on, Tic-Tac-Toe on, Coin Flip off". |
 | `/hcm play invites on` | Turns on invites to Connect Four and Tic-Tac-Toe. Coin Flip invites can only be turned on from the Take a break screen. |
 | `/hcm play invites off` | Turns off all game invites, Coin Flip too. |
+| `/hcm play news` | Shows whether you get the new-courses line in chat: "New courses in chat: on". |
+| `/hcm play news off` | No more "New courses this week!" line in chat ("No more new-course lines in chat."). |
+| `/hcm play news on` | The line is back: "You'll see a line in chat when new courses are up." |
 | `/hcm leave` | Leaves the course or golf round you are in and takes you home with all your things. It also finishes a trip home that didn't finish, and hands over things kept for you. Works even while the games are off. /hcm play leave does the same. With no game: "You're not in a game." |
 | `/hcm arcade` | Opens the Arcade: your Wallet, the crates, the Scratch Ticket, the Prize Counter, Card Packs, quests, achievements and (while the games are on) the Play row. |
 | `/hcm arcade odds` | Shows one line for each open game of chance: what it gives back and how many plays a day, like "Ore Slots — gives back about 89 of every 100 tokens · 50 plays a day". For Twenty-One and Higher or Lower it says "the best play gives back about…". If games of chance are switched off for you: "Games of chance aren't open to you." If none are open: "No games of chance are open right now." |
 | `/hcm guide games` | Opens the Games page of How It Works. It is the same page as the book on the Games screen. |
 | `/hcm tokens` | Shows how many tokens you have and your login streak. |
 | `/hcm help (or just /hcm)` | Lists the commands you can use. |
-| `Admin-only commands` | /hcm games ... (status, feature, break, scores, saved, course, golf) and /hcm play <game> <player> are for admins. A player who tries them reads "You don't have permission." Only admins can make [Arcade] join signs or build in the Games world. |
+| `Admin-only commands` | /hcm games ... (status, check, feature, break, scores, saved, course, golf) and /hcm play <game> <player> are for admins. A player who tries them reads "You don't have permission." Only admins can make [Arcade] join signs or build in the Games world. |
 
 ## Tokens and the games
 
 - The new games only use tokens. No game takes or pays dollars. No game takes or gives your Cards, Minis or anything you could sell. The only thing a course or golf round gives you is its kit, and the kit stays in the game.
 - Tokens never turn into dollars. Nothing you get with tokens can be sold for money.
-- Ways to earn tokens: log in every day (your streak pays 2, 2, 3, 3, 4, 4, then 5 a day). Play (1 token for every hour). Do quests (3 daily and 2 weekly). Get achievements (26 of them, each pays once). Catch wild Minis (they count toward quests and achievements). Trade in spare Cards.
+- Ways to earn tokens: log in every day (your streak pays 2, 2, 3, 3, 4, 4, then 5 a day). Play (1 token for every hour). Do quests (3 daily and 2 weekly). Get achievements (35 of them, each pays once). Catch wild Minis (they count toward quests and achievements). Trade in spare Cards. Cabinets, courses, golf and Fresh Courses stars count toward quests and achievements too (see below).
 - Skill games (cabinets, time trials and mini golf) are free to play, and they pay a few tokens. You can earn milestones (bronze, silver and gold, each pays once ever), today's challenge on each cabinet, today's pick, and course rewards like a first finish or a round of golf at par or under.
 - By default you can win up to 6 tokens a day from all skill games together. Each game also has its own smaller cap: 2 a day for most cabinets, 1 for Connect Four and Tic-Tac-Toe, 4 for time trials and 4 for mini golf.
 - The first time you finish a course pays extra, and it doesn't count toward the 6. By default that is 5, 10, 20 or 40 tokens for an Easy, Medium, Hard or "Why did we build this?" course, and 5 for a golf course.
@@ -81,6 +84,28 @@
 - The five new games of chance never earn quests, achievements, today's pick or skill rewards.
 - You can see your tokens in your Wallet (top of the Arcade), on the sunflower at the top-left of the Games screen, or with /hcm tokens.
 - Every daily limit and cap starts fresh at midnight, server time.
+
+## Quests and achievements from the games
+
+- Skill games count toward your quests: cabinets, time trials, mini golf and Fresh Courses. Games of chance never do.
+- The game quests you can be given (only while those games are open):
+  - Daily: "Play 3 arcade cabinets" (4 tokens) and "Finish a course or a round of golf" (5 tokens).
+  - Weekly: "Play 15 arcade cabinets" (20 tokens), "Finish 5 courses or golf rounds" (20 tokens) and "Earn 6 Fresh Courses stars" (20 tokens).
+- A cabinet counts when you play it to the end. Practice counts too. A game you close early, or a friend game someone quits, doesn't count.
+- A course counts when your run counts. A round of golf counts when you finish every hole. Each Fresh Courses star counts once.
+- Nothing counts in creative or spectator mode, or in a world without games.
+- Courses are in the Games world, and no tokens are paid there. A quest or achievement you finish there is paid as soon as you are back home.
+- The Games achievements, each paid once:
+  - "Finish an arcade cabinet game" (10 tokens)
+  - "Earn a gold medal in a cabinet" (20 tokens; practice has no medals)
+  - "Finish every arcade cabinet game" (30 tokens; all 8 of them)
+  - "Finish a course" (15 tokens; a round of golf counts)
+  - "Get a hole-in-one" (25 tokens)
+  - "Finish a golf course under par" (25 tokens)
+  - "Finish every Fresh Course in one set" (40 tokens)
+  - "Reach the top Star Chart goal in a week" (30 tokens)
+  - "Set a course record" (30 tokens)
+- When a new set of Fresh Courses is up, you read one line in chat, once for each set: "New courses this week! Easy, Parkour, Hard, Sky Rings and Golf - /hcm play". It waits while you are on a course, and until you close a screen. Don't want it? /hcm play news off.
 
 ## The fairness promises
 

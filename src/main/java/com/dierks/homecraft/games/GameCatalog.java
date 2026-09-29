@@ -42,7 +42,7 @@ public final class GameCatalog {
      * Words {@code /hcm play} keeps for itself, so no course may take them as its id
      * ({@code /hcm play accept}, {@code /hcm play break}, ...).
      */
-    public static final Set<String> RESERVED = Set.of("accept", "deny", "break", "leave", "invites");
+    public static final Set<String> RESERVED = Set.of("accept", "deny", "break", "leave", "invites", "news");
 
     private GameCatalog() {
     }

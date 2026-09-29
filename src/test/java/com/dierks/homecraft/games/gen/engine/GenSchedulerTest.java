@@ -165,7 +165,16 @@ class GenSchedulerTest {
         assertEquals(GenSeed.seed(SECRET, DAY, SLOT, 2), d.seed(), "with that reroll's seed");
         SlotView broken = new SlotView(SLOT, true, false, tag(DAY, 0, 1), false, "easy", "easy", 0, null, 1, 0, 0, 0,
                 false, SECRET);
-        assertEquals(Kind.BUILD, at(broken, now).kind(), "a live layout the boot check couldn't vouch for is replaced");
+        Decision replaced = at(broken, now);
+        assertEquals(Kind.BUILD, replaced.kind(), "a live layout the boot check couldn't vouch for is replaced");
+        assertEquals(1, replaced.reroll(), "under the next reroll, so its replacement gets a fresh day board");
+        assertEquals(GenSeed.seed(SECRET, DAY, SLOT, 1), replaced.seed(), "with that reroll's seed");
+        SlotView brokenReroll = new SlotView(SLOT, true, false, tag(DAY, 2, 1), false, "easy", "easy", 2, null, 1, 0, 0,
+                0, false, SECRET);
+        assertEquals(3, at(brokenReroll, now).reroll(), "after reroll 2 it is reroll 3");
+        SlotView brokenYesterday = new SlotView(SLOT, true, false, tag(DAY - 1, 0, 1), false, "easy", "easy", 0, null,
+                1, 0, 0, 0, false, SECRET);
+        assertEquals(0, at(brokenYesterday, now).reroll(), "yesterday's layout is simply today's build");
         SlotView dirty = new SlotView(SLOT, true, false, tag(DAY, 0, 1), true, "easy", "easy", 0, null, 1, 0, 0, 0,
                 true, SECRET);
         assertEquals(Kind.CLEAR_OLD, at(dirty, now).kind(), "with nothing due, the idle half is emptied");

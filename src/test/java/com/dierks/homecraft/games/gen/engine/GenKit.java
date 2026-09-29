@@ -352,6 +352,8 @@ final class GenKit {
         /** Thrown from the next plan (then cleared), or {@code null}. */
         Throwable fail;
         boolean failAlways;
+        /** Thrown from every rederive while set (a live layout that can't be vouched for). */
+        GenFailed rederiveFail;
 
         FakePlanner(String id) {
             this.id = id;
@@ -390,6 +392,9 @@ final class GenKit {
         @Override
         public Plan rederive(PlanInput in, GenTag tag) throws GenFailed {
             rederives++;
+            if (rederiveFail != null) {
+                throw rederiveFail;
+            }
             return GenKit.plan(in.slot(), in.half(), in.seed(), algo);
         }
     }
@@ -496,6 +501,8 @@ final class GenKit {
         long nanos;
         boolean holdPlans;
         double mspt = 10;
+        /** {@code trials.fall_depth}. */
+        int fallDepth = 6;
 
         Host(long now, String... on) {
             try {
@@ -582,7 +589,7 @@ final class GenKit {
 
         @Override
         public int fallDepth() {
-            return 6;
+            return fallDepth;
         }
 
         @Override

@@ -4,10 +4,20 @@ import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
+import com.dierks.homecraft.games.gen.api.PlanInput;
 import com.dierks.homecraft.games.gen.api.PlannedGolf;
 import com.dierks.homecraft.games.gen.api.PlannedTrial;
+import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.SignText;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.boat.BoatPlanner;
+import com.dierks.homecraft.games.gen.boat.BoatValidator;
+import com.dierks.homecraft.games.gen.golf.GolfPlanner;
+import com.dierks.homecraft.games.gen.golf.GolfValidator;
+import com.dierks.homecraft.games.gen.parkour.ParkourPlanner;
+import com.dierks.homecraft.games.gen.parkour.ParkourValidator;
+import com.dierks.homecraft.games.gen.rings.RingsPlanner;
+import com.dierks.homecraft.games.gen.rings.RingsValidator;
 import com.dierks.homecraft.games.golf.GolfCourse;
 import com.dierks.homecraft.games.trial.Course;
 
@@ -19,8 +29,8 @@ import java.util.Set;
 /**
  * The engine's own look at a plan before a single block is set (GEN-SPEC §3.3 step 2).
  *
- * <p>Each generator proves its plan solvable with its own independent validator; this is the part
- * every generator shares and the engine must be sure of whatever a planner returns: the plan is
+ * <p>Each generator proves its plan solvable with its own independent validator ({@link #generator},
+ * run against the live inputs); this is the part every generator shares and the engine must be sure of whatever a planner returns: the plan is
  * for this slot and this half, every block and sign is inside the half and on the palette, no two
  * writes land on one block, the course's points are inside the half, and the stored hash really
  * names these blocks (so the tag written at the flip names the layout that stands). A plan with a
@@ -96,6 +106,33 @@ public final class PlanCheck {
             out.add("the plan's hash doesn't match its blocks");
         }
         return out;
+    }
+
+    /**
+     * The generator's own independent validator (§4.x) run against the live inputs, so a layout
+     * that was fine when it was made but isn't under today's settings (a lower
+     * {@code trials.fall_depth}) is never built or re-opened: {@link ParkourValidator},
+     * {@link RingsValidator}, {@link BoatValidator}, and golf's quick check ({@link GolfValidator}
+     * without the sloppy-player tree, which the planner already ran). A planner that isn't one of
+     * the four (a test's) vouches for its own plans. Pure; run on the planner thread.
+     */
+    public static List<String> generator(Planner planner, Plan plan, PlanInput in) {
+        if (plan == null) {
+            return List.of();
+        }
+        if (planner instanceof ParkourPlanner) {
+            return ParkourValidator.problems(plan, in);
+        }
+        if (planner instanceof RingsPlanner) {
+            return RingsValidator.problems(plan, in);
+        }
+        if (planner instanceof BoatPlanner) {
+            return BoatValidator.problems(plan, in);
+        }
+        if (planner instanceof GolfPlanner) {
+            return GolfValidator.quickProblems(plan);
+        }
+        return List.of();
     }
 
     private static List<String> courseProblems(Plan plan, Slots.Def def, Box half) {

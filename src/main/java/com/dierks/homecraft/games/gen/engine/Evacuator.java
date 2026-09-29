@@ -21,7 +21,10 @@ import java.util.UUID;
  *       quick reroll: at the daily build nobody can be there) gets time: "A new course is coming
  *       here! Finish in the next 20 minutes - your time still counts.", a reminder on the action
  *       bar every 30 seconds, "1 minute left!", and when the time is up their run ends and their
- *       things come back. The build waits for them.</li>
+ *       things come back. The build waits for them. A run is known by its session on the slot,
+ *       not by where the feet are: a glider on that layout can be well outside its half for a
+ *       while, so anyone playing the slot who isn't on the live half (grown by the margin) counts
+ *       too.</li>
  *   <li><b>Anyone else</b> — an admin, a player who logged out there, a stray glider — is moved to
  *       the safe spot at once: "A new course is being built here, so we moved you somewhere
  *       safe."</li>
@@ -61,17 +64,20 @@ public final class Evacuator {
      * @param half     the half being built
      * @param slotId   its course
      * @param holdsRun whether the half still holds a layout runs may be on (a standing previous layout)
+     * @param live     the live layout's half, or {@code null}: someone playing the slot outside it is
+     *                 taken to be on the layout {@code half} holds
      * @param deadline when time is up for them (epoch ms)
      */
     public List<Action> step(List<Person> people, String world, Box half, String slotId, boolean holdsRun,
-                             long now, long deadline) {
+                             Box live, long now, long deadline) {
         List<Action> out = new ArrayList<>();
         Box area = half.expand(MARGIN);
         for (Person p : people) {
-            if (!p.in(world, area)) {
+            boolean runner = holdsRun && runner(p, world, area, slotId, live);
+            if (!runner && !p.in(world, area)) {
                 continue;
             }
-            if (holdsRun && p.playing(slotId)) {
+            if (runner) {
                 long left = deadline - now;
                 if (left <= 0) {
                     out.add(new Action(Action.Kind.END, p.id(), null));
@@ -97,18 +103,41 @@ public final class Evacuator {
         return out;
     }
 
-    /** Whether someone mid-run on the layout the half holds is still in it (the build waits). */
-    public static boolean waiting(List<Person> people, String world, Box half, String slotId, boolean holdsRun) {
+    /**
+     * Whether someone may still be mid-run on the layout the half holds (the build waits): playing
+     * the slot and in the half, or anywhere off the {@code live} half.
+     */
+    public static boolean waiting(List<Person> people, String world, Box half, String slotId, boolean holdsRun,
+                                  Box live) {
         if (!holdsRun) {
             return false;
         }
         Box area = half.expand(MARGIN);
         for (Person p : people) {
-            if (p.in(world, area) && p.playing(slotId)) {
+            if (runner(p, world, area, slotId, live)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Whether someone playing {@code slotId} is off its {@code live} half grown by {@value #MARGIN}
+     * (so they may be on the layout before it): CLEAR_OLD waits for them as for someone standing in
+     * the old half.
+     */
+    public static boolean strayRunner(List<Person> people, String world, String slotId, Box live) {
+        for (Person p : people) {
+            if (p.playing(slotId) && (live == null || !p.in(world, live.expand(MARGIN)))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** On the held layout: playing the slot, and in its half or off the live one. */
+    private static boolean runner(Person p, String world, Box area, String slotId, Box live) {
+        return p.playing(slotId) && (p.in(world, area) || (live != null && !p.in(world, live.expand(MARGIN))));
     }
 
     /** Whether anyone at all is in the half grown by {@value #MARGIN} (CLEAR_OLD waits for none). */

@@ -12,7 +12,7 @@ import com.dierks.homecraft.games.gen.api.GenTag;
  * <p>The engine asks every second, for each slot in turn, and does what the answer says. Keeping
  * the decision pure keeps every rule in one place a test can walk through with a fake clock: a
  * slot builds when its live layout isn't today's (or an admin rerolled it, or it couldn't be
- * vouched for at boot), and only while it is switched on, nothing else is being built, no
+ * vouched for at boot, when its replacement gets the next reroll and so a fresh day board), and only while it is switched on, nothing else is being built, no
  * scheduled restart is due within {@code avoid_before_restart_minutes}, fewer than
  * {@code max_tries_per_day} tries were made today, and the last one was at least
  * {@code retry_minutes} ago. A pinned seed whose layout already stands is only restamped for the
@@ -90,6 +90,14 @@ public final class GenScheduler {
             return until <= 0 || day <= until;
         }
 
+        /**
+         * Whether it applies on course day {@code day} with planner version {@code plannerAlgo}:
+         * not expired, and made for that version (GEN-SPEC §4.0); otherwise the daily seed is used.
+         */
+        public boolean appliesOn(long day, int plannerAlgo) {
+            return activeOn(day) && algo == plannerAlgo;
+        }
+
         /** As stored. */
         public String text() {
             return GenSeed.hex(seed) + ":" + algo + ":" + until;
@@ -155,9 +163,14 @@ public final class GenScheduler {
             return Decision.waiting("another course is being built");
         }
         long day = edition.day(now);
-        Pin pin = v.pin() != null && v.pin().activeOn(day) && v.pin().algo() == v.plannerAlgo() ? v.pin() : null;
+        Pin pin = v.pin() != null && v.pin().appliesOn(day, v.plannerAlgo()) ? v.pin() : null;
         int reroll = pin != null ? 0 : Math.max(0, v.reroll());
         GenTag live = v.live();
+        if (pin == null && live != null && !v.liveOk() && live.day() == day) {
+            // Today's layout couldn't be vouched for: its replacement may come out different (a
+            // new tier, a new fall depth), so it goes on a fresh board, never on the old one's.
+            reroll = Math.max(reroll, live.reroll() + 1);
+        }
         boolean due = live == null || live.day() != day || live.reroll() < reroll || !v.liveOk();
         if (!due) {
             return v.oldDirty() ? Decision.clearOld() : Decision.none();

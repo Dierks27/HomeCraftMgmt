@@ -599,6 +599,177 @@ class GenServiceTest {
         assertTrue(gen.live(SLOT, day1), "switched on again it opens (already verified)");
     }
 
+    // ---- review fixes ------------------------------------------------------------------------------
+
+    @Test
+    void claimConfirmNeverClearsAHandBuiltCourseOrTheSpawnInARegionRefusedForThem() throws Exception {
+        int sx = A.minX() + 20;
+        int sy = A.minY() + 5;
+        int sz = A.minZ() + 20;
+        Course hand = new Course("river_run", TrialKind.PARKOUR, "River Run", Tier.EASY, GenKit.WORLD,
+                new Course.Spot(sx + 0.5, sy + 1, sz + 0.5, 0f, 0f), List.of(), null, null, null, false, false, 1);
+        host.dao.saveCourse(new GamesDao.CourseRow("river_run", "trials", "parkour", "River Run", GenKit.WORLD, true,
+                CourseCodec.encode(hand), 1, 0, 0));
+        host.world().put(sx, sy, sz, "minecraft:gold_block"); // its start pad, inside half A
+        boot();
+        drive(90);
+        assertTrue(gen.slot(SLOT).problem.contains("river_run"), "refused for the course: " + gen.slot(SLOT).problem);
+
+        gen.claim(SLOT, true, said::add);
+        drive(60);
+        assertEquals("minecraft:gold_block", host.world().at(sx, sy, sz), "claim confirm never clears a hand-built course");
+        assertEquals(0, host.world().writes, "nothing at all is written");
+        assertTrue(said.stream().anyMatch(l -> l.contains("can't be claimed") && l.contains("river_run")),
+                "the admin is told why: " + said);
+        gen.claim(SLOT, false, said::add);
+        drive(10);
+        assertFalse(gen.slot(SLOT).claimed, "a plain claim (a scan) is refused too, so the region is never claimed");
+
+        host.dao.deleteCourse("river_run");
+        host.world().blocks.clear();
+        host.world().spawn = new int[]{A.minX() + 30, A.minY() + 10, A.minZ() + 30};
+        host.world().put(A.minX() + 30, A.minY() + 9, A.minZ() + 30, "minecraft:stone_bricks");
+        boot();
+        drive(90);
+        assertTrue(gen.slot(SLOT).problem.contains("spawn"), "refused for the spawn: " + gen.slot(SLOT).problem);
+        said.clear();
+        gen.claim(SLOT, true, said::add);
+        drive(60);
+        assertEquals("minecraft:stone_bricks", host.world().at(A.minX() + 30, A.minY() + 9, A.minZ() + 30),
+                "claim confirm never clears the spawn either");
+        assertTrue(said.stream().anyMatch(l -> l.contains("can't be claimed")), "and says why: " + said);
+    }
+
+    @Test
+    void aClearedSlotSwitchedOnAfterARestartIsScannedThenBuiltOnAFreshBoard() throws Exception {
+        boot();
+        drive(70);
+        GenTag first = tag();
+        assertNotNull(first, "built");
+        gen.clear(SLOT, said::add);
+        drive(30);
+        assertEquals(0, host.world().count(A), "cleared, and the claim is forgotten");
+        boot(); // a restart the same day
+        drive(5);
+        gen.enable(SLOT, true, said::add);
+        drive(120);
+        GenTag after = tag();
+        assertNotEquals(first.editionKey(), after.editionKey(), "a new course on a fresh board, not the old one's");
+        assertTrue(gen.live(SLOT, after), "and it opens within minutes, not tomorrow");
+        assertTrue(gen.slot(SLOT).claimed, "after the area was scanned and claimed again");
+        assertTrue(host.logged(Level.WARNING, "isn't in its claimed region") >= 1, "the log says why it was rebuilt");
+    }
+
+    @Test
+    void aRebuildOfALiveRowInAnUnclaimedRegionScansFirstAndNeverClearsSomeoneElsesBlock() {
+        boot();
+        drive(70);
+        assertNotNull(tag(), "built");
+        gen.clear(SLOT, said::add);
+        drive(30);
+        host.world().put(A.minX() + 40, A.minY() + 2, A.minZ() + 40, "minecraft:oak_planks"); // built while unguarded
+        boot();
+        drive(5);
+        gen.enable(SLOT, true, said::add);
+        gen.rebuild(SLOT, said::add);
+        drive(60);
+        assertEquals("minecraft:oak_planks", host.world().at(A.minX() + 40, A.minY() + 2, A.minZ() + 40),
+                "a block Daily Courses never owned is left alone");
+        assertFalse(gen.live(SLOT, tag()), "the course doesn't open in an area it hasn't claimed");
+        assertTrue(gen.slot(SLOT).problem != null && gen.slot(SLOT).problem.startsWith("Region has 1 block"),
+                "the scan found the block and says so: " + gen.slot(SLOT).problem);
+    }
+
+    @Test
+    void aRunnerOnThePreviousLayoutOffBothHalvesIsWaitedForByClearOldAndTheNextReroll() {
+        boot();
+        drive(70);
+        GenTag first = tag();
+        Person glider = new Person(UUID.randomUUID(), "Kid", GenKit.WORLD, A.minX() - 20.5, A.minY() + 20,
+                A.minZ() + 20.5, "trials", SLOT);
+        host.people.add(glider);
+        gen.reroll(SLOT, said::add);
+        drive(60);
+        assertEquals(1, tag().reroll(), "the reroll flipped");
+        assertTrue(gen.standing(first), "the runner's layout still stands while they are off its half");
+        assertEquals(planned(), host.world().count(A), "and CLEAR_OLD leaves its blocks alone");
+
+        gen.reroll(SLOT, said::add);
+        drive(5);
+        assertEquals(1, tag().reroll(), "the second reroll waits for them");
+        assertTrue(host.told.contains(GenCopy.comingHere(20)), "and they are told they have 20 minutes: " + host.told);
+        host.people.clear(); // they finish
+        drive(30);
+        assertEquals(2, tag().reroll(), "then the build goes on");
+        assertEquals('A', tag().half(), "into their old half");
+    }
+
+    @Test
+    void aFailedBootCheckRebuildsTodayOnAFreshBoardWithTheNewTier() throws Exception {
+        boot();
+        drive(70);
+        GenTag first = tag();
+        gen.tier(SLOT, "hard", said::add);
+        parkour.rederiveFail = new GenFailed("fall depth changed");
+        host.now = GenKit.at(2026, 9, 29, 16, 0) + 40_000; // the 16:00 restart
+        boot();
+        drive(120);
+        GenTag second = tag();
+        assertEquals(DAY1, second.day(), "still today's course");
+        assertEquals(1, second.reroll(), "but under the next reroll");
+        assertNotEquals(first.editionKey(), second.editionKey(), "so the new layout gets its own day board");
+        assertEquals("1", host.store.meta("gen." + SLOT + ".reroll." + DAY1), "and the reroll is kept");
+        assertTrue(gen.live(SLOT, second), "it opens");
+    }
+
+    @Test
+    void aPinThatNoLongerAppliesIsLoggedShownAsUnusedAndDoesntBlockAReroll() throws Exception {
+        boot();
+        drive(70);
+        gen.pin(SLOT, "today", 0, said::add);
+        parkour.algo = 2; // a plugin update
+        boot();
+        nextDay(30);
+        drive(120);
+        assertEquals(1, host.logs.stream().filter(r -> r.getLevel() == Level.WARNING
+                && r.getMessage().contains("pinned seed") && r.getMessage().contains("v1")).count(),
+                "one WARN says the pin is ignored and why");
+        assertTrue(gen.status(SLOT).stream().anyMatch(l -> l.contains("not used")), "status says so: " + gen.status(SLOT));
+        said.clear();
+        gen.reroll(SLOT, said::add);
+        assertTrue(said.get(0).contains("gets a new course"), "and a reroll isn't refused: " + said);
+
+        parkour.algo = 1;
+        gen.unpin(SLOT, said::add);
+        drive(70);
+        gen.pin(SLOT, "today", 1, said::add); // for today only
+        host.now = GenKit.at(2026, 10, 1, 4, 0) + 40_000;
+        drive(120);
+        assertNull(host.store.meta("gen." + SLOT + ".pin"), "a pin whose days are over is forgotten");
+        assertEquals(1, host.logged(Level.INFO, "ended on"), "with one line");
+    }
+
+    @Test
+    void whatAFinishPaysComesFromGamesDailyNotTheShippedAmounts() {
+        com.dierks.homecraft.games.gen.DailySettings d = host.settings;
+        List<com.dierks.homecraft.games.gen.DailySettings.SlotConfig> slots = new ArrayList<>();
+        for (com.dierks.homecraft.games.gen.DailySettings.SlotConfig c : d.slots()) {
+            slots.add(new com.dierks.homecraft.games.gen.DailySettings.SlotConfig(c.id(), c.enabled(), c.tierOrMix(),
+                    c.origin(), c.id().equals(SLOT) ? 0 : 5));
+        }
+        host.settings = new com.dierks.homecraft.games.gen.DailySettings(d.enabled(), d.world(), d.rollover(),
+                d.startupDelaySeconds(), d.avoidBeforeRestartMinutes(), d.retryMinutes(), d.maxTriesPerDay(),
+                d.clearWaitMinutes(), d.keepDays(), d.worldRules(), d.safeSpot(), 0, List.of(3), 0, d.budget(),
+                d.stars(), slots);
+        boot();
+        assertEquals(0, gen.dailyClear(SLOT), "daily_clear: 0 pays nothing on the first finish of the day");
+        assertEquals(5, gen.dailyClear("daily_golf"), "and another slot's own amount is its own");
+        assertEquals(0, gen.dailyClear("river_run"), "a course that isn't a slot has no daily reward");
+        assertEquals(List.of(3), gen.starGoals(), "star_goals as configured");
+        assertEquals(0, gen.starGoalReward(), "star_goal_reward as configured");
+        assertEquals(0, gen.starGoalCap(), "daily_cap as configured");
+    }
+
     private static com.dierks.homecraft.games.gen.DailySettings withBudget(
             com.dierks.homecraft.games.gen.DailySettings d, int blocks) {
         return new com.dierks.homecraft.games.gen.DailySettings(d.enabled(), d.world(), d.rollover(),

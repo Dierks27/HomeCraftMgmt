@@ -11,10 +11,7 @@ import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GameSpec;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.RestartHold;
-import com.dierks.homecraft.games.RewardKind;
-import com.dierks.homecraft.games.SkillRewards;
 import com.dierks.homecraft.games.gen.admin.GenAdmin;
-import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.Edition;
 import com.dierks.homecraft.games.gen.api.GenBoards;
 import com.dierks.homecraft.games.gen.api.GenCopy;
@@ -259,33 +256,6 @@ public final class DailyCourses implements Game {
     /** The course day's rules: {@code clock.time_zone}, {@code rollover}, {@code quests.week_starts_on}. */
     public Edition edition() {
         return new Edition(games().clock().zone(), settings().rollover(), weekStart());
-    }
-
-    /** Tokens for the first counted finish of {@code slotId}'s course day ({@code daily_clear}). */
-    public int dailyClear(String slotId) {
-        return settings().dailyClear(slotId);
-    }
-
-    /**
-     * Pay the weekly Star Chart goals a counted run just crossed ({@code star_goals}, +
-     * {@code star_goal_reward} each, once a week each, under {@code daily_cap}): the course engines
-     * call this with what {@code GamesDao.addStars} returned.
-     *
-     * @param weekKey the week of the layout the run was on
-     * @return the goals crossed, smallest first
-     */
-    public List<Integer> starGoals(Player player, GamesDao.StarsAdded added, long weekKey) {
-        if (added == null || added.added() <= 0) {
-            return List.of();
-        }
-        DailySettings st = settings();
-        List<Integer> crossed = DailyStars.crossed(added.weekBefore(), added.weekTotal(), st.starGoals());
-        for (int goal : crossed) {
-            games().rewards().pay(player, this, TokenService.Source.GAMES_DAILY, RewardKind.MILESTONE,
-                    SkillRewards.milestoneRef(GenBoards.week(weekKey), goal), st.starGoalReward(), st.dailyCap(),
-                    "Star Chart: " + goal + " stars this week");
-        }
-        return crossed;
     }
 
     // ---- helpers ----------------------------------------------------------------------------------

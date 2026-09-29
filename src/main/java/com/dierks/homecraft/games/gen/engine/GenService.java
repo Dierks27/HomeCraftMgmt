@@ -20,6 +20,10 @@ import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.Putt;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.api.Stars;
+import com.dierks.homecraft.games.gen.boat.BoatPlanner;
+import com.dierks.homecraft.games.gen.golf.GolfPlanner;
+import com.dierks.homecraft.games.gen.parkour.ParkourPlanner;
+import com.dierks.homecraft.games.gen.rings.RingsPlanner;
 import com.dierks.homecraft.games.golf.GolfCourse;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.CourseCodec;
@@ -84,9 +88,12 @@ public final class GenService implements GeneratedCourses, GenOps {
     public static final long VET_EVERY_MS = 300_000L;
     /** Star Charts are kept this many weeks. */
     public static final int KEEP_WEEKS = 12;
-    /** The counted work each generator may use per plan. */
-    static final Map<String, Long> WORK = Map.of(Slots.PARKOUR, 200_000L, Slots.RINGS, 200_000L, Slots.GOLF,
-            2_500_000L, Slots.BOAT, 200_000L);
+    /**
+     * The counted work each generator may use per plan: each planner's own bound, which a plan
+     * never needs more than (a smaller one would fail the same seed at every try of the day).
+     */
+    static final Map<String, Long> WORK = Map.of(Slots.PARKOUR, ParkourPlanner.WORK_BUDGET, Slots.RINGS,
+            RingsPlanner.WORK_BUDGET, Slots.GOLF, GolfPlanner.COURSE_BUDGET, Slots.BOAT, BoatPlanner.WORK_BUDGET);
 
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("EEE d MMM", Locale.US);
     private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("h:mm a", Locale.US);
@@ -236,11 +243,21 @@ public final class GenService implements GeneratedCourses, GenOps {
                 s.oldDirty = true; // unknown after a restart: emptied once nothing else is due
                 queue.add(new Job(Kind.HEAL, s, null));
             } else {
-                s.healFailed = true;
-                warnOnce(s, "Daily Courses: " + s.def.id() + "'s live course isn't in its claimed region "
-                        + "- a new one will be built");
+                unclaimedLive(s);
             }
         }
+    }
+
+    /**
+     * A live row whose region isn't claimed (it was cleared, or it moved): nothing there is vouched
+     * for, so it is never healed in place. It counts as a failed check, and the next build scans
+     * the region (and claims it only when it is empty) before building anew.
+     */
+    private void unclaimedLive(SlotState s) {
+        s.verified = false;
+        s.healFailed = true;
+        warnOnce(s, "Daily Courses: " + s.def.id() + "'s live course isn't in its claimed region "
+                + "- a new one will be built once the area is checked");
     }
 
     /** Stop: give up the running job (its tickets go), forget the queue. The blocks stay as they are. */
@@ -320,8 +337,13 @@ public final class GenService implements GeneratedCourses, GenOps {
         SlotState clear = null;
         for (SlotState s : slots.values()) {
             // A live course nobody has checked this run (the slot was off or its world missing at
-            // the boot check): check it now, before anything else.
-            if (s.on() && s.live != null && !s.verified && !s.healFailed && s.claimed) {
+            // the boot check): check it now, before anything else; one outside a claimed region
+            // can't be checked, so it is built anew.
+            if (s.on() && s.live != null && !s.verified && !s.healFailed) {
+                if (!s.claimed) {
+                    unclaimedLive(s);
+                    continue;
+                }
                 begin(new Job(Kind.HEAL, s, null));
                 return;
             }
@@ -331,6 +353,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 s.waiting = null;
                 continue;
             }
+            warnIgnoredPin(s);
             GenScheduler.Decision d = GenScheduler.decide(view(s), now, readyAt, st, hold, ed);
             s.waiting = d.kind() == GenScheduler.Kind.WAIT ? d.reason() : null;
             switch (d.kind()) {
@@ -351,7 +374,12 @@ public final class GenService implements GeneratedCourses, GenOps {
                 case CLEAR_OLD -> {
                     if (clear == null && s.preview == null && now - s.lastClearCheck >= CLEAR_EVERY_MS) {
                         s.lastClearCheck = now;
-                        if (!Evacuator.anyone(host.people(), s.world, s.half(s.idleHalf()))) {
+                        List<Person> people = host.people();
+                        // A runner on the standing previous layout may be off both halves for a
+                        // while (a glider): anyone playing the slot off the live half is waited for.
+                        boolean stray = s.previous != null && !s.clearing && s.live != null
+                                && Evacuator.strayRunner(people, s.world, s.def.id(), s.half(s.live.half()));
+                        if (!stray && !Evacuator.anyone(people, s.world, s.half(s.idleHalf()))) {
                             clear = s;
                         }
                     }
@@ -370,6 +398,49 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         if (clear != null) {
             begin(new Job(Kind.CLEAR_OLD, clear, null));
+        }
+    }
+
+    /** The slot's pin if it applies today (not expired, made for the planner running now), else {@code null}. */
+    private GenScheduler.Pin activePin(SlotState s) {
+        Planner p = planners.get(s.def.generator());
+        return s.pin != null && p != null && s.pin.appliesOn(edition().day(host.now()), p.algo()) ? s.pin : null;
+    }
+
+    /** Why a stored pin is not used, or {@code null} when there is none or it applies. */
+    private String pinIgnored(SlotState s) {
+        if (s.pin == null || activePin(s) != null) {
+            return null;
+        }
+        Planner p = planners.get(s.def.generator());
+        if (p != null && s.pin.algo() != p.algo()) {
+            return "it was made for " + s.def.generator() + " planner v" + s.pin.algo() + " and this is v" + p.algo();
+        }
+        return "it ended on " + date(s.pin.until());
+    }
+
+    /**
+     * §4.0: a pin made for another planner version is logged (once a day) and the daily seed is
+     * used; a pin whose days are over is forgotten, with one line.
+     */
+    private void warnIgnoredPin(SlotState s) {
+        String why = pinIgnored(s);
+        Planner p = planners.get(s.def.generator());
+        if (why != null && p != null && s.pin.algo() == p.algo()) {
+            try {
+                host.store().meta(GenAdminKeys.pin(s.def.id()), null);
+                host.logger().info("Daily Courses: " + s.def.id() + "'s pinned seed " + GenSeed.hex(s.pin.seed()) + " ended on "
+                        + date(s.pin.until()) + "; the daily seed is used from now on.");
+                s.pin = null;
+                return;
+            } catch (SQLException e) {
+                // kept (and logged below) until the database takes the change
+            }
+        }
+        if (why != null) {
+            warnOnce(s, "Daily Courses: " + s.def.id() + "'s pinned seed " + GenSeed.hex(s.pin.seed()) + " is not used on "
+                    + date(edition().day(host.now())) + " - " + why + "; the daily seed is used (/hcm games gen unpin "
+                    + s.def.id() + " forgets it)");
         }
     }
 
@@ -619,11 +690,17 @@ public final class GenService implements GeneratedCourses, GenOps {
                     j.stage = Stage.CONVERGE;
                 }
                 case SCAN -> {
+                    if (claimRefused(j)) {
+                        return;
+                    }
                     j.steps.add(new Step('A', null, BuildJob.Mode.SCAN));
                     j.steps.add(new Step('B', null, BuildJob.Mode.SCAN));
                     j.stage = Stage.SCANNING;
                 }
                 case CLAIM, DECOMMISSION -> {
+                    if (j.kind == Kind.CLAIM && claimRefused(j)) {
+                        return;
+                    }
                     j.steps.add(new Step('A', null, BuildJob.Mode.CONVERGE));
                     j.steps.add(new Step('B', null, BuildJob.Mode.CONVERGE));
                     j.stage = Stage.EVACUATE;
@@ -635,12 +712,44 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
     }
 
+    /** A claim job whose region fails §2.4 now ends at once, having touched nothing. */
+    private boolean claimRefused(Job j) {
+        String why = claimProblem(j.slot);
+        if (why == null) {
+            return false;
+        }
+        end(j);
+        j.report.accept("&c" + j.slot.def.name() + "'s area can't be claimed: &7" + why);
+        return true;
+    }
+
+    /**
+     * Why a slot's region may not be scanned or cleared for a claim, or {@code null}: the checks
+     * of §2.4 (the world, the spawn and safe spot, other slots, hand-built courses), which a claim
+     * must pass like a build. {@code claim confirm} clears only blocks nobody else has a course on.
+     */
+    private String claimProblem(SlotState s) {
+        List<Regions.Area> built = handBuilt();
+        if (built == null) {
+            return "the courses can't be read from the database, so the area can't be checked";
+        }
+        return vetProblem(s, built);
+    }
+
     private void beginHeal(Job j) {
         SlotState s = j.slot;
         String why = vet(s, handBuilt());
         if (why != null || s.live == null) {
             end(j);
             j.report.accept("&c" + s.def.name() + " can't be checked: &7" + (why == null ? "it has no course" : why));
+            return;
+        }
+        if (!s.claimed) {
+            // Never converge a region Daily Courses doesn't hold: the next build scans it first.
+            end(j);
+            unclaimedLive(s);
+            j.report.accept("&e" + s.def.name() + "'s area isn't claimed, so it isn't healed in place. &7A new"
+                    + " course is built there once the area is checked and found empty.");
             return;
         }
         j.tag = s.live;
@@ -690,16 +799,19 @@ public final class GenService implements GeneratedCourses, GenOps {
         host.planner().execute(() -> {
             long t0 = System.nanoTime();
             Plan made = null;
+            List<String> refused = List.of();
             Throwable error = null;
             try {
                 made = heal ? p.rederive(in, tag) : p.plan(in);
+                refused = PlanCheck.generator(p, made, in); // §3.3 step 2, with today's settings
             } catch (Throwable e) {
                 error = e;
             }
             long ms = (System.nanoTime() - t0) / 1_000_000L;
             Plan result = made;
+            List<String> checked = refused;
             Throwable failure = error;
-            inbox.add(() -> planned(j, result, failure, ms));
+            inbox.add(() -> planned(j, result, checked, failure, ms));
         });
     }
 
@@ -730,7 +842,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         };
     }
 
-    private void planned(Job j, Plan plan, Throwable error, long ms) {
+    private void planned(Job j, Plan plan, List<String> refused, Throwable error, long ms) {
         if (job != j || j.stage != Stage.PLANNING) {
             return; // cancelled, killed or superseded: dropped
         }
@@ -743,7 +855,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             fail(j, error instanceof GenFailed ? String.valueOf(error.getMessage()) : "the planner threw " + error);
             return;
         }
-        List<String> problems = PlanCheck.problems(plan, s.def, s.half(j.half));
+        List<String> problems = new ArrayList<>(PlanCheck.problems(plan, s.def, s.half(j.half)));
+        problems.addAll(refused);
         if (!problems.isEmpty()) {
             fail(j, "its plan was refused: " + String.join("; ", problems));
             return;
@@ -1059,7 +1172,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             GamesDao.CourseRow row = row(def, s.world, pc, tag, old, now);
             Map<String, String> meta = new LinkedHashMap<>();
             meta.put(GenAdminKeys.mix(def.id()), j.plan.hash() + ":" + j.mix);
-            if (j.kind == Kind.PROMOTE) {
+            if (j.kind == Kind.PROMOTE || j.reroll > s.reroll) {
+                // a promote, or a replacement for a layout nobody could vouch for, takes the next reroll
                 meta.put(GenAdminKeys.reroll(def.id(), j.day), Integer.toString(j.reroll));
             }
             rev = host.store().flip(row, meta);
@@ -1083,7 +1197,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         s.tries = 0;
         s.lastError = null;
         s.builtAt = now;
-        if (j.kind == Kind.PROMOTE) {
+        if (j.kind == Kind.PROMOTE || j.reroll > s.reroll) {
             s.reroll = j.reroll;
         }
         s.lastLine = lastLine(j);
@@ -1248,14 +1362,15 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
         }
         boolean waiting = false;
+        Box live = s.live == null ? null : s.half(s.live.half());
         for (char h : halves) {
             Box half = s.half(h);
             boolean holdsRun = j.stage == Stage.EVACUATE && (j.kind == Kind.BUILD || j.kind == Kind.PREVIEW)
                     && s.previous != null && !s.clearing && s.previous.half() == h;
-            for (Evacuator.Action a : j.evac.step(people, s.world, half, s.def.id(), holdsRun, now, deadline)) {
+            for (Evacuator.Action a : j.evac.step(people, s.world, half, s.def.id(), holdsRun, live, now, deadline)) {
                 act(s, people, a);
             }
-            waiting |= Evacuator.waiting(people, s.world, half, s.def.id(), holdsRun);
+            waiting |= Evacuator.waiting(people, s.world, half, s.def.id(), holdsRun, live);
         }
         if (j.stage == Stage.EVACUATE && !waiting) {
             if (s.previous != null && halves.contains(s.previous.half())) {
@@ -1342,7 +1457,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (s == null) {
             return GenCopy.closed("That course");
         }
-        boolean building = s.on() && ((job != null && job.slot == s && (job.kind == Kind.HEAL || s.live == null))
+        boolean building = s.on() && ((job != null && job.slot == s && (job.kind == Kind.HEAL || s.live == null
+                || (job.kind == Kind.BUILD && s.healFailed)))
                 || (s.live != null && !s.verified && !s.healFailed) || (s.live == null && s.claimed));
         return building ? GenCopy.building(s.def.name()) : GenCopy.closed(s.def.name());
     }
@@ -1363,6 +1479,33 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
         }
         return false;
+    }
+
+    // ---- what a finish pays: games.daily, read on every use ----------------------------------------
+
+    /** {@code games.daily.slots.<id>.daily_clear} (0 for a course that isn't a slot). */
+    @Override
+    public int dailyClear(String courseId) {
+        Slots.Def def = Slots.of(courseId);
+        return def == null ? 0 : host.settings().dailyClear(def.id());
+    }
+
+    /** {@code games.daily.star_goals}. */
+    @Override
+    public List<Integer> starGoals() {
+        return host.settings().starGoals();
+    }
+
+    /** {@code games.daily.star_goal_reward}. */
+    @Override
+    public int starGoalReward() {
+        return host.settings().starGoalReward();
+    }
+
+    /** {@code games.daily.daily_cap}. */
+    @Override
+    public int starGoalCap() {
+        return host.settings().dailyCap();
     }
 
     /** The course day's rules: {@code clock.time_zone}, {@code rollover}, {@code quests.week_starts_on}. */
@@ -1469,8 +1612,9 @@ public final class GenService implements GeneratedCourses, GenOps {
                 out.add("  &7region " + s.world + " " + Regions.describe(s.def, s.origin) + (s.claimed ? " (claimed)"
                         : " (not claimed yet)"));
                 if (s.pin != null) {
+                    String ignored = pinIgnored(s);
                     out.add("  &7pinned seed " + GenSeed.hex(s.pin.seed()) + (s.pin.until() > 0 ? " until "
-                            + date(s.pin.until()) : ""));
+                            + date(s.pin.until()) : "") + (ignored == null ? "" : " &c(not used: " + ignored + ")"));
                 }
                 if (s.preview != null) {
                     out.add("  &7preview in half " + s.preview.half() + ", seed " + GenSeed.hex(s.preview.seed()));
@@ -1650,7 +1794,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             report.accept("&cThat preview was made for " + date(pv.day()) + ". &7Make a new one.");
             return;
         }
-        if (s.pin != null) {
+        if (activePin(s) != null) {
             report.accept("&c" + s.def.name() + " is pinned. &7/hcm games gen unpin " + slotId + " first.");
             return;
         }
@@ -1682,7 +1826,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (!ready(s, report)) {
             return;
         }
-        if (s.pin != null) {
+        if (activePin(s) != null) {
             report.accept("&c" + s.def.name() + " is pinned. &7/hcm games gen unpin " + slotId + " first.");
             return;
         }
@@ -1859,6 +2003,11 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         if (busyWith(s)) {
             report.accept("&c" + s.def.name() + " is busy right now; try in a moment.");
+            return;
+        }
+        String why = claimProblem(s);
+        if (why != null) {
+            report.accept("&c" + s.def.name() + "'s area can't be claimed: &7" + why);
             return;
         }
         queue.add(new Job(confirm ? Kind.CLAIM : Kind.SCAN, s, report));

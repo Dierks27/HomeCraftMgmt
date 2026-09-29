@@ -50,15 +50,17 @@ public record CupEntry(UUID player, int paid, long enteredAt, long bestMs, long 
 
     /**
      * This entry after a counted run of {@code ms} that finished at {@code at}. Only a strictly
-     * faster time replaces the Cup time, so a tie keeps the earlier one. A run that finished before
-     * the entry doesn't count: a player can't look at their week first and enter afterwards with a
-     * time already in hand.
+     * faster time replaces the Cup time, so a tie keeps the earlier one. A run that started
+     * ({@code at - ms}) before the entry doesn't count, even when it finishes after it: a player can't
+     * look at their week first and enter afterwards with a time already in hand, nor start a free run,
+     * watch their splits, and pay the entry only once it is on record pace. Entering during the
+     * warm-up or the 3-2-1 is fine: the timed run starts after it.
      *
      * <p>Warm-up laps, voided runs and runs for another week never reach here (the caller only passes
-     * counted runs of this Cup's week).
+     * counted runs of this Cup's week, {@link CupRules#runWeeks}).
      */
     public CupEntry withRun(long ms, long at) {
-        if (ms <= 0 || at < enteredAt) {
+        if (ms <= 0 || at - ms < enteredAt) {
             return this;
         }
         if (hasTime() && ms >= bestMs) {

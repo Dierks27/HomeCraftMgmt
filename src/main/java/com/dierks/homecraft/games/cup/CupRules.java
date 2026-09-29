@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.cup;
 
 import com.dierks.homecraft.games.gen.api.Edition;
+import com.dierks.homecraft.games.gen.api.GenTag;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -10,7 +11,6 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
 
@@ -89,42 +89,115 @@ public final class CupRules {
         return edition.weekKey(edition.day(now));
     }
 
-    /** When the Cup week {@code week} ends and is settled (epoch ms): the next week's first rollover. */
+    /**
+     * When the Cup week {@code week} ends and is settled (epoch ms): the rollover seven days after its
+     * first one. It depends on the key's own day alone, never on {@code quests.week_starts_on}, so a
+     * Cup that is running when the owner moves the week start still runs its full seven days.
+     */
     public static long settlesAt(Edition edition, long week) {
         return edition.startOf(week + 7);
     }
 
     /**
-     * The Cup week a counted run belongs to, or empty when it started in one Cup week and finished in
-     * the next. Such a run was on the old week's course (Fresh Courses' "still standing" keeps it for
-     * the boards), but that week's Cup was settled while it ran, and the new week's may be on a new
-     * layout, so it counts for neither Cup.
+     * The Cup weeks a counted run may count for: each is a week's first local epoch day, from
+     * {@code first} to {@code last} (both included), and the run counts for every Cup the player is in
+     * on the course whose week is in that range. A range with no Cup's week in it (every run that
+     * counts for none, except the few that give an empty one) matches no entry row.
+     *
+     * <p><b>Inside the Cup's own seven days.</b> A run counts for Cup week {@code W} only when it
+     * started at or after {@code W}'s first rollover and finished before the rollover that ends it
+     * ({@link #settlesAt}). So a run that started in one Cup week and finished in the next counts for
+     * neither: that week's Cup was settled while it ran, and the new week's may be on a new layout.
+     * The range is worked out from each Cup's own days, not from the current week start, so after the
+     * owner moves {@code quests.week_starts_on} mid-week the Cup already running still takes its
+     * entrants' runs to its own end. With the setting unchanged the range holds at most one week
+     * start, the one {@link #week} gives.
+     *
+     * <p><b>Only on the week's own layout.</b> A Fresh slot's layout does NOT change at the Cup's
+     * 04:00: last week's verified layout stays live until the new one is built and flipped (the
+     * builds go one slot at a time, wait out a coming restart, and a failed one leaves the old layout
+     * live for hours or a day, GEN-SPEC §3). A run on it after the rollover is a run on the layout
+     * everyone practised all last week, so it must not set a time in the new week's Cup. A run on a
+     * slot's own layout ({@code layout} with no recall) counts only for the Cup weeks its edition was
+     * made for: {@code layout.day()} to {@code layout.endDay() - 1}. The scheduled flip into the
+     * week's own edition is therefore NOT a void: it is the Cup's layout going up. A hand-built
+     * course ({@code layout} null) and an archived course recalled into a Classics slot keep their
+     * blocks across the rollover, so their runs count by time alone; changing them is an admin's
+     * act, which voids the Cup.
+     *
+     * @param startedAt  when the timed run started (epoch ms): {@code finishedAt - ms}
+     * @param finishedAt when it finished (epoch ms)
+     * @param layout     the generated layout the run was on, as the run kept it when it started;
+     *                   {@code null} for a hand-built course
      */
-    public static OptionalLong runWeek(Edition edition, long startedAt, long finishedAt) {
-        long a = week(edition, startedAt);
-        return a == week(edition, finishedAt) ? OptionalLong.of(a) : OptionalLong.empty();
+    public static Weeks runWeeks(Edition edition, long startedAt, long finishedAt, GenTag layout) {
+        if (finishedAt < startedAt) {
+            return Weeks.NONE;
+        }
+        long first = edition.day(finishedAt) - 6;
+        long last = edition.day(startedAt);
+        if (layout != null && !layout.recalled()) {
+            first = Math.max(first, layout.day());
+            last = Math.min(last, layout.endDay() - 1);
+        }
+        return first > last ? Weeks.NONE : new Weeks(first, last);
+    }
+
+    /**
+     * The Cup weeks a run counts for ({@link #runWeeks}): every Cup whose week (its first day) is from
+     * {@code first} to {@code last}, both included; none when {@code first > last}. The range may hold
+     * days no Cup starts on: only the weeks of Cups that exist match. The storage code matches it
+     * with {@code week BETWEEN first AND last}.
+     */
+    public record Weeks(long first, long last) {
+
+        /** No Cup week. */
+        public static final Weeks NONE = new Weeks(1, 0);
+
+        /** Just {@code week}. */
+        public static Weeks of(long week) {
+            return new Weeks(week, week);
+        }
+
+        /** Whether the run counts for no Cup. */
+        public boolean isEmpty() {
+            return first > last;
+        }
+
+        /** Whether the run counts for the Cup of week {@code week}. */
+        public boolean contains(long week) {
+            return first <= week && week <= last;
+        }
     }
 
     /**
      * Whether a Fresh Courses slot keeps one layout for each whole Cup week, so it can run a Cup: its
      * editions last whole weeks ({@code games.fresh.cadence} 7, 14, 21 or 28) and start on the quests'
      * week start. Otherwise the layout would change mid-week and void the Cup every time (a daily
-     * cadence, or a {@code rebuild_day} that isn't the week start).
+     * cadence, or a {@code rebuild_day} that isn't the week start). The flip at the start of an
+     * edition (whenever the build gets there after 04:00) is the week's own layout going up, not a
+     * change: {@link #runWeeks} only counts runs on it, so it voids nothing.
      */
     public static boolean freshEligible(Edition edition) {
         return edition.cadenceDays() % 7 == 0 && edition.rebuildDay() == edition.weekStart();
     }
 
     /**
-     * The Cups to settle now, oldest first: every unsettled Cup with entries from a week before
-     * {@code currentWeek}. Run at the rollover AND at every boot, so a Cup whose rollover the server
-     * missed (down, or crashed mid-settlement before the transaction committed) is settled on the next
-     * start. A settled Cup is never in {@code unsettled}, so it is never paid twice.
+     * The Cups to settle now, oldest first: every unsettled Cup with entries whose own seven days are
+     * over ({@code key.week() + 7 <= today}, the instant {@link #settlesAt}). Run at the rollover AND
+     * at every boot, so a Cup whose rollover the server missed (down, or crashed mid-settlement before
+     * the transaction committed) is settled on the next start. A settled Cup is never in
+     * {@code unsettled}, so it is never paid twice.
+     *
+     * <p>It goes by each Cup's own end, not by comparing keys under the current week start, so moving
+     * {@code quests.week_starts_on} mid-week never settles a running Cup early.
+     *
+     * @param today the course day now, {@code edition.day(now)}
      */
-    public static List<CupKey> due(Collection<CupKey> unsettled, long currentWeek) {
+    public static List<CupKey> due(Collection<CupKey> unsettled, long today) {
         Set<CupKey> seen = new LinkedHashSet<>();
         for (CupKey k : unsettled) {
-            if (k != null && k.week() < currentWeek) {
+            if (k != null && k.week() + 7 <= today) {
                 seen.add(k);
             }
         }
@@ -137,25 +210,35 @@ public final class CupRules {
 
     /**
      * Whether a player may enter a Cup, or why not ({@code null} = go ahead). The checks, in order:
-     * the Cup is on server-wide with a sane entry; the course runs a Cup; this week's Cup on it
-     * wasn't voided or settled; the player isn't already in (once per course per week); they can
-     * pay.
+     * the Cup is on server-wide with a sane entry; the course runs a Cup; the Cup is this week's; this
+     * week's Cup on it wasn't voided or settled; the player isn't already in (once per course per
+     * week); they can pay.
      *
-     * @param cupsOn    {@code games.cup.enabled}
-     * @param courseOn  whether this course runs a Cup (opt-in per course)
-     * @param settledAs how this week's Cup ended, when it already has a settlement row; {@code null}
-     *                  while it is open
-     * @param alreadyIn whether the player already has an entry row for this course and week
-     * @param fee       {@code games.cup.entry}
-     * @param balance   the player's tokens
+     * <p>The week check matters between the 04:00 rollover and the settlement tick: a screen built at
+     * 03:59 still holds last week's key, and without it an entry clicked at 04:00:30 would go into a
+     * week that is over. Its entrant could never set a time there (every later run is the new
+     * week's), and their entry would be paid to the others.
+     *
+     * @param cupsOn      {@code games.cup.enabled}
+     * @param courseOn    whether this course runs a Cup (opt-in per course)
+     * @param key         the Cup the player asked to enter
+     * @param currentWeek the Cup week now, {@link #week}{@code (edition, now)}
+     * @param settledAs   how this week's Cup ended, when it already has a settlement row; {@code null}
+     *                    while it is open
+     * @param alreadyIn   whether the player already has an entry row for this course and week
+     * @param fee         {@code games.cup.entry}
+     * @param balance     the player's tokens
      */
-    public static CupRefusal refusal(boolean cupsOn, boolean courseOn, CupPlan.Outcome settledAs,
-                                     boolean alreadyIn, int fee, int balance) {
+    public static CupRefusal refusal(boolean cupsOn, boolean courseOn, CupKey key, long currentWeek,
+                                     CupPlan.Outcome settledAs, boolean alreadyIn, int fee, int balance) {
         if (!cupsOn || fee < MIN_ENTRY || fee > MAX_ENTRY) {
             return CupRefusal.OFF;
         }
         if (!courseOn) {
             return CupRefusal.NOT_ON_THIS_COURSE;
+        }
+        if (key == null || key.week() != currentWeek) {
+            return CupRefusal.WEEK_OVER;
         }
         if (settledAs == CupPlan.Outcome.VOIDED) {
             return CupRefusal.CALLED_OFF;

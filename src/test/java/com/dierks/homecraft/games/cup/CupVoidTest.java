@@ -8,6 +8,7 @@ import static com.dierks.homecraft.games.cup.CupFixtures.CUP;
 import static com.dierks.homecraft.games.cup.CupFixtures.assertSound;
 import static com.dierks.homecraft.games.cup.CupFixtures.field;
 import static com.dierks.homecraft.games.cup.CupFixtures.p;
+import static com.dierks.homecraft.games.cup.CupFixtures.race;
 import static com.dierks.homecraft.games.cup.CupFixtures.timed;
 import static com.dierks.homecraft.games.cup.CupFixtures.tokens;
 import static com.dierks.homecraft.games.cup.CupFixtures.untimed;
@@ -59,16 +60,16 @@ class CupVoidTest {
         CupBook book = new CupBook();
         assertNull(book.voidCup(CUP, CupPlan.VoidReason.CHANGED), "a course edited before anyone entered voids nothing");
         assertNull(book.settlement(CUP), "so the week isn't closed");
-        assertNull(book.enter(CUP, p(1), 5, 100, 10, true, true), "and entries on the new layout go in");
+        assertNull(book.enter(CUP, p(1), 5, 100, 10, CUP.week(), true, true), "and entries on the new layout go in");
     }
 
     @Test
     void aVoidedCupIsNeverSettledOrVoidedAgain() {
         CupBook book = new CupBook();
-        book.enter(CUP, p(1), 5, 100, 10, true, true);
-        book.enter(CUP, p(2), 5, 100, 11, true, true);
-        book.run(CUP, p(1), 40_000, 20);
-        book.run(CUP, p(2), 41_000, 21);
+        book.enter(CUP, p(1), 5, 100, 10, CUP.week(), true, true);
+        book.enter(CUP, p(2), 5, 100, 11, CUP.week(), true, true);
+        race(book, CUP, p(1), 40_000, 100_020);
+        race(book, CUP, p(2), 41_000, 100_021);
         CupPlan plan = book.voidCup(CUP, CupPlan.VoidReason.CHANGED);
         assertEquals(List.of(5, 5), tokens(plan), "both entries back");
         assertNull(book.voidCup(CUP, CupPlan.VoidReason.DELETED), "voiding twice refunds nothing twice");
@@ -80,7 +81,7 @@ class CupVoidTest {
     @Test
     void aSettledCupCanNoLongerBeVoided() {
         CupBook book = new CupBook();
-        book.enter(CUP, p(1), 5, 100, 10, true, true);
+        book.enter(CUP, p(1), 5, 100, 10, CUP.week(), true, true);
         CupPlan settled = book.settle(CUP, 10);
         assertNull(book.voidCup(CUP, CupPlan.VoidReason.DELETED), "a course deleted after the rollover can't refund a paid week");
         assertEquals(settled, book.settlement(CUP), "the settlement stands");

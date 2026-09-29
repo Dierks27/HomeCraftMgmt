@@ -48,6 +48,14 @@ final class CupFixtures {
         return out;
     }
 
+    /**
+     * A counted run of {@code ms} by {@code player} on {@code key}'s course, finished at {@code at},
+     * that counts for {@code key}'s week alone ({@link CupRules#runWeeks} worked out by the caller).
+     */
+    static boolean race(CupBook book, CupKey key, UUID player, long ms, long at) {
+        return book.run(key.course(), player, ms, at, CupRules.Weeks.of(key.week()));
+    }
+
     /** The tokens each line pays, in line order. */
     static List<Integer> tokens(CupPlan plan) {
         List<Integer> out = new ArrayList<>();

@@ -77,9 +77,11 @@ class CupPropertyTest {
 
     @Test
     void randomWeeksNeverDoubleEnterDoubleSettleOrKeepAToken() {
+        int paid = 0;
         for (long seed = 1; seed <= 60; seed++) {
-            runWeeks(new GenRandom(seed), "seed " + seed);
+            paid += runWeeks(new GenRandom(seed), "seed " + seed);
         }
+        assertTrue(paid > 60, "runs after entering set Cup times, so many random weeks pay prizes: " + paid);
     }
 
     /** Checks each tie group of a paid plan; returns how many groups were ties. */
@@ -142,7 +144,8 @@ class CupPropertyTest {
         return out;
     }
 
-    private static void runWeeks(GenRandom rnd, String at) {
+    /** One random run of weeks; returns how many Cups paid prizes. */
+    private static int runWeeks(GenRandom rnd, String at) {
         String[] courses = {"sky_rings", "lava_leap", "ice_boat"};
         long firstWeek = CupFixtures.CUP.week();
         int weeks = 6;
@@ -161,7 +164,7 @@ class CupPropertyTest {
             long week = firstWeek + 7L * w;
             int ops = rnd.nextInt(10, 60);
             for (int o = 0; o < ops; o++) {
-                now += rnd.nextInt(1, 1000);
+                now += rnd.nextInt(1, 60_000);
                 CupKey key = new CupKey(courses[rnd.nextInt(courses.length)], week);
                 UUID who = p(rnd.nextInt(1, players));
                 int roll = rnd.nextInt(100);
@@ -170,7 +173,7 @@ class CupPropertyTest {
                     boolean wasIn = book.in(key, who);
                     boolean closed = book.settlement(key) != null;
                     long before = balance.get(who);
-                    CupRefusal r = book.enter(key, who, fee, (int) before, now, true, true);
+                    CupRefusal r = book.enter(key, who, fee, (int) before, now, key.week(), true, true);
                     if (r == null) {
                         assertTrue(!wasIn && !closed && before >= fee, at + ": an entry goes in only when it may");
                         balance.put(who, before - fee);
@@ -178,7 +181,14 @@ class CupPropertyTest {
                         assertEquals(CupRefusal.ALREADY_IN, r, at + ": entering twice in a week is refused");
                     }
                 } else if (roll < 95) {
-                    book.run(key, who, 30_000 + rnd.nextInt(0, 6) * 250L, now);
+                    long ms = 30_000 + rnd.nextInt(0, 6) * 250L;
+                    CupEntry before = book.in(key, who) ? entryOf(book, key, who) : null;
+                    boolean changed = CupFixtures.race(book, key, who, ms, now);
+                    if (changed) {
+                        assertTrue(before != null && now - ms >= before.enteredAt(),
+                                at + ": only an entrant's run that started after entering sets a Cup time");
+                        assertEquals(ms, entryOf(book, key, who).bestMs(), at + ": and it is their new Cup time");
+                    }
                 } else if (roll < 98) {
                     List<CupEntry> entries = book.entries(key);
                     CupPlan v = book.voidCup(key, CupPlan.VoidReason.values()[rnd.nextInt(3)]);
@@ -205,16 +215,30 @@ class CupPropertyTest {
             total += b;
         }
         assertEquals(start + minted, total, at + ": the players hold exactly the top-ups more; the server kept nothing");
+        int prizes = 0;
         for (CupPlan plan : book.settlements()) {
             assertNull(book.settle(plan.key(), 10), at + ": every Cup refuses a second settlement");
             assertNull(book.voidCup(plan.key(), CupPlan.VoidReason.DELETED), at + ": and a late void");
+            if (plan.outcome() == CupPlan.Outcome.PRIZES) {
+                prizes++;
+            }
         }
+        return prizes;
     }
 
-    private static long settleDue(CupBook book, long currentWeek, GenRandom rnd, Map<UUID, Long> balance,
+    private static CupEntry entryOf(CupBook book, CupKey key, UUID who) {
+        for (CupEntry e : book.entries(key)) {
+            if (e.player().equals(who)) {
+                return e;
+            }
+        }
+        return null;
+    }
+
+    private static long settleDue(CupBook book, long today, GenRandom rnd, Map<UUID, Long> balance,
                                   Set<CupKey> settledKeys, String at) {
         long minted = 0;
-        for (CupKey key : book.due(currentWeek)) {
+        for (CupKey key : book.due(today)) {
             int topup = rnd.nextInt(0, 15);
             List<CupEntry> entries = book.entries(key);
             CupPlan plan = book.settle(key, topup);

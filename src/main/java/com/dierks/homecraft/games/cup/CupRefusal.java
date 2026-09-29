@@ -15,7 +15,10 @@ public enum CupRefusal {
     NOT_ON_THIS_COURSE,
     /** This week's Cup on this course was voided (course deleted, changed or closed). */
     CALLED_OFF,
-    /** This Cup's week is over: it was settled, or it isn't the current week any more. */
+    /**
+     * This Cup's week is over: it was settled, or its key isn't the current week's (a screen opened
+     * before the 04:00 rollover and clicked after it, before the settlement has run).
+     */
     WEEK_OVER,
     /** The player is already in this course's Cup this week (§D2: once per course per week). */
     ALREADY_IN,

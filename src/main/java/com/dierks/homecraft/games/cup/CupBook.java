@@ -13,11 +13,13 @@ import java.util.UUID;
  * written and tested against, and what the property tests drive with random weeks.
  *
  * <ul>
- *   <li>an entry is written once per player per Cup (course and week), and never into a Cup that is
- *       settled or voided;</li>
+ *   <li>an entry is written once per player per Cup (course and week), only into the current
+ *       week's Cup, and never into a Cup that is settled or voided;</li>
+ *   <li>a run counts for each open Cup the player is in on that course whose week is in the run's
+ *       {@link CupRules#runWeeks}, and only when it started after they entered;</li>
  *   <li>a Cup is settled or voided once: the second call returns {@code null} and pays nothing;</li>
- *   <li>{@link #due} lists every unsettled Cup of a past week, so a rollover the server missed is
- *       settled at the next boot.</li>
+ *   <li>{@link #due} lists every unsettled Cup whose week is over, so a rollover the server missed
+ *       is settled at the next boot.</li>
  * </ul>
  *
  * <p>Tokens are not kept here; {@link CupRules#ledger} gives the movements a plan makes. Not
@@ -32,13 +34,15 @@ public final class CupBook {
      * Enter {@code player} in {@code key}'s Cup, paying {@code fee}, if {@link CupRules#refusal}
      * allows it; the entry and the spend are one transaction in the plugin.
      *
+     * @param currentWeek the Cup week at {@code now} ({@link CupRules#week}): a key of any other week
+     *                    is refused, even before its settlement has run
      * @return {@code null} when they are in, or why not
      */
-    public CupRefusal enter(CupKey key, UUID player, int fee, int balance, long now, boolean cupsOn,
-                            boolean courseOn) {
+    public CupRefusal enter(CupKey key, UUID player, int fee, int balance, long now, long currentWeek,
+                            boolean cupsOn, boolean courseOn) {
         CupPlan s = settled.get(key);
-        CupRefusal r = CupRules.refusal(cupsOn, courseOn, s == null ? null : s.outcome(), in(key, player),
-                fee, balance);
+        CupRefusal r = CupRules.refusal(cupsOn, courseOn, key, currentWeek, s == null ? null : s.outcome(),
+                in(key, player), fee, balance);
         if (r != null) {
             return r;
         }
@@ -47,26 +51,34 @@ public final class CupBook {
     }
 
     /**
-     * A counted run by {@code player} on {@code key}'s course and week. It becomes their Cup time when
-     * they are in, the Cup is still open, and it beats their time ({@link CupEntry#withRun}).
+     * A counted run of {@code ms} by {@code player} on {@code course}, finished at {@code at}, for the
+     * Cup weeks {@code weeks} ({@link CupRules#runWeeks}). In every one of those Cups that the player
+     * is in and that is still open, it becomes their Cup time when it beats it and started after they
+     * entered ({@link CupEntry#withRun}).
      *
-     * @return whether their Cup time changed
+     * @return whether any Cup time changed
      */
-    public boolean run(CupKey key, UUID player, long ms, long at) {
-        if (settled.containsKey(key)) {
+    public boolean run(String course, UUID player, long ms, long at, CupRules.Weeks weeks) {
+        if (weeks == null || weeks.isEmpty()) {
             return false;
         }
-        Map<UUID, CupEntry> m = entries.get(key);
-        CupEntry e = m == null ? null : m.get(player);
-        if (e == null) {
-            return false;
+        boolean changed = false;
+        for (Map.Entry<CupKey, Map<UUID, CupEntry>> c : entries.entrySet()) {
+            CupKey key = c.getKey();
+            if (!key.course().equals(course) || !weeks.contains(key.week()) || settled.containsKey(key)) {
+                continue;
+            }
+            CupEntry e = c.getValue().get(player);
+            if (e == null) {
+                continue;
+            }
+            CupEntry next = e.withRun(ms, at);
+            if (next != e) {
+                c.getValue().put(player, next);
+                changed = true;
+            }
         }
-        CupEntry next = e.withRun(ms, at);
-        if (next == e) {
-            return false;
-        }
-        m.put(player, next);
-        return true;
+        return changed;
     }
 
     /**
@@ -100,15 +112,20 @@ public final class CupBook {
         return plan;
     }
 
-    /** The unsettled Cups with entries from weeks before {@code currentWeek}, oldest first. */
-    public List<CupKey> due(long currentWeek) {
+    /**
+     * The unsettled Cups with entries whose own seven days are over, oldest first
+     * ({@link CupRules#due}).
+     *
+     * @param today the course day now, {@code edition.day(now)}
+     */
+    public List<CupKey> due(long today) {
         List<CupKey> open = new ArrayList<>();
         for (Map.Entry<CupKey, Map<UUID, CupEntry>> e : entries.entrySet()) {
             if (!e.getValue().isEmpty() && !settled.containsKey(e.getKey())) {
                 open.add(e.getKey());
             }
         }
-        return CupRules.due(open, currentWeek);
+        return CupRules.due(open, today);
     }
 
     /** {@code key}'s settlement, or {@code null} while it is open. */

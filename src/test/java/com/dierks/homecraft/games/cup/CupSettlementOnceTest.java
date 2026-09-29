@@ -8,6 +8,7 @@ import static com.dierks.homecraft.games.cup.CupFixtures.CUP;
 import static com.dierks.homecraft.games.cup.CupFixtures.NEXT_WEEK;
 import static com.dierks.homecraft.games.cup.CupFixtures.OTHER_COURSE;
 import static com.dierks.homecraft.games.cup.CupFixtures.p;
+import static com.dierks.homecraft.games.cup.CupFixtures.race;
 import static com.dierks.homecraft.games.cup.CupFixtures.tokens;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -23,10 +24,10 @@ class CupSettlementOnceTest {
     @Test
     void aRolloverTheServerMissedIsSettledAtTheNextBootExactlyOnce() {
         CupBook book = new CupBook();
-        book.enter(CUP, p(1), 5, 100, 10, true, true);
-        book.enter(CUP, p(2), 5, 100, 11, true, true);
-        book.run(CUP, p(1), 40_000, 20);
-        book.run(CUP, p(2), 41_000, 21);
+        book.enter(CUP, p(1), 5, 100, 10, CUP.week(), true, true);
+        book.enter(CUP, p(2), 5, 100, 11, CUP.week(), true, true);
+        race(book, CUP, p(1), 40_000, 100_020);
+        race(book, CUP, p(2), 41_000, 100_021);
         assertEquals(List.of(), book.due(CUP.week()), "while the week runs nothing is due");
 
         // the server is down over the rollover (or crashed before the settlement committed): it boots
@@ -43,9 +44,9 @@ class CupSettlementOnceTest {
     @Test
     void severalMissedWeeksAreAllDueOldestFirst() {
         CupBook book = new CupBook();
-        book.enter(NEXT_WEEK, p(1), 5, 100, 50, true, true);
-        book.enter(CUP, p(1), 5, 100, 10, true, true);
-        book.enter(OTHER_COURSE, p(2), 5, 100, 11, true, true);
+        book.enter(NEXT_WEEK, p(1), 5, 100, 50, NEXT_WEEK.week(), true, true);
+        book.enter(CUP, p(1), 5, 100, 10, CUP.week(), true, true);
+        book.enter(OTHER_COURSE, p(2), 5, 100, 11, OTHER_COURSE.week(), true, true);
         assertEquals(List.of(OTHER_COURSE, CUP, NEXT_WEEK), book.due(NEXT_WEEK.week() + 7),
                 "two weeks late: last week's two Cups (by course) and then this one");
         assertEquals(List.of(OTHER_COURSE, CUP), book.due(NEXT_WEEK.week()),
@@ -63,6 +64,10 @@ class CupSettlementOnceTest {
         assertEquals(List.of(CUP), CupRules.due(List.of(CUP, CUP, NEXT_WEEK), NEXT_WEEK.week()),
                 "a Cup listed twice is due once; this week's is not due yet");
         assertEquals(List.of(), CupRules.due(List.of(NEXT_WEEK), NEXT_WEEK.week()), "the running week is never due");
+        assertEquals(List.of(), CupRules.due(List.of(CUP), CUP.week() + 6),
+                "on the last day of its week (Sunday, until the 04:00 that ends it) it is still running");
+        assertEquals(List.of(CUP), CupRules.due(List.of(CUP), CUP.week() + 7),
+                "from the day its seven days are over, it is due");
     }
 
     @Test
@@ -71,8 +76,8 @@ class CupSettlementOnceTest {
         CupBook b = new CupBook();
         for (CupBook book : List.of(a, b)) {
             for (int i = 1; i <= 5; i++) {
-                book.enter(CUP, p(i), 5, 100, i, true, true);
-                book.run(CUP, p(i), 40_000 + (i % 3) * 100, 100 + i);
+                book.enter(CUP, p(i), 5, 100, i, CUP.week(), true, true);
+                race(book, CUP, p(i), 40_000 + (i % 3) * 100, 100_000 + i);
             }
         }
         assertEquals(a.settle(CUP, 10), b.settle(CUP, 10),

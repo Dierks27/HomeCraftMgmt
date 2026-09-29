@@ -1677,7 +1677,8 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
   that night and someone ranked below you: racers tied for last came last, and a night where nobody
   finished pays nothing. A racer who only warmed up (never in a race) gets no place. At most **5
   tokens a player a night**, and at most **3 prize nights a week**
-  server-wide (`prize_events_per_week`, the week the weekly boards use). A 4th night that week says
+  server-wide (`prize_events_per_week`, the week the weekly boards use, counted in the week race 1
+  starts in, even for a night announced the evening before). A 4th night that week says
   "Just for fun tonight - points only" and pays nothing; so does an admin's `fun` night. Prizes are a
   new reward kind (`EVENT_PRIZE`) **outside the daily skill cap**, paid once per player per night
   (ledger source "Race Night"). A racer offline or somewhere tokens can't be earned (watching live,

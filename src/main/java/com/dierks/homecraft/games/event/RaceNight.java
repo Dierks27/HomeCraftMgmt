@@ -483,7 +483,7 @@ public final class RaceNight implements Game {
         String season = s.seasonOn() ? EventCopy.seasonBoard(EventCopy.seasonKey(plan.startsAt(), zone())) : null;
         NightRunner r = new NightRunner(plan, track, dao(), new LivePorts(this, plan.id()), payLoop(), zone(), season,
                 s.announceMinutes(), state);
-        r.prizeWeek(DailyLookup.weekKey(games()), s.prizeEventsPerWeek());
+        r.prizeWeek(() -> DailyLookup.weekKey(games()), s.prizeEventsPerWeek()); // the week at race 1's Go
         r.standRadius(s.standRadius()); // race mode keeps the stand, within this
         r.onEnd(this::ended);
         news.clear();

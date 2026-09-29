@@ -66,6 +66,7 @@ class CupWordsTest {
         views.add(view(true, true, 5, mine, null, CupRefusal.ALREADY_IN));
         views.add(view(true, false, 2, null, null, CupRefusal.OFF));
         views.add(view(true, true, 1, CupEntry.entered(ME, 5, 0), null, CupRefusal.ALREADY_IN));
+        views.add(view(true, true, 2, null, null, CupRefusal.NOT_UP_YET));
         for (CupDesk.View v : views) {
             out.add(CupWords.buttonName(v));
             out.addAll(CupWords.buttonLore(v, "Mon 4:00 AM"));
@@ -75,6 +76,8 @@ class CupWordsTest {
         }
         out.add(CupWords.entered("Lava Leap", 5));
         out.add(CupWords.newCupTime("Lava Leap", 41_230));
+        out.add(CupWords.lastWeeksLayout());
+        out.add(CupWords.SHARES_NAME);
         out.add(CupWords.promptsState(true));
         out.add(CupWords.promptsState(false));
         out.add(CupWords.promptsSet(true));
@@ -116,11 +119,11 @@ class CupWordsTest {
     @Test
     void theEntryPromptIsInTheItemName() {
         CupDesk.View open = view(true, true, 0, null, null, null);
-        assertEquals("&6Enter this week's Cup: 5 tokens. Best time wins the pool.", CupWords.buttonName(open),
-                "§D2's copy, in the course screen's item NAME for Bedrock");
-        assertEquals("&6Enter this week's Cup: 5 tokens. Best time wins the pool.",
-                CupWords.buttonName(view(true, true, 0, null, null, CupRefusal.NOT_ENOUGH_TOKENS)),
-                "the prompt stays when you can't pay yet; the Cup screen says why");
+        assertEquals("&6Enter this week's Cup: 5 tokens. Best time wins the pool. &eCup pool: 0 tokens · 0 in",
+                CupWords.buttonName(open), "§D2's copy, in the course screen's item NAME for Bedrock, with the pool");
+        assertEquals("&6Enter this week's Cup: 5 tokens. Best time wins the pool. &eCup pool: 20 tokens · 2 in",
+                CupWords.buttonName(view(true, true, 2, null, null, CupRefusal.NOT_ENOUGH_TOKENS)),
+                "the prompt and the live pool stay when you can't pay yet; the Cup screen says why");
         assertEquals("&aPay 5 tokens and enter this week's Cup", CupWords.enterName(open),
                 "the Cup screen's button says what a click does");
         assertEquals("&7Weekly Cup &8- &7called off this week",
@@ -130,8 +133,14 @@ class CupWordsTest {
     @Test
     void theLivePoolIsInTheNameOnceYoureIn() {
         CupDesk.View in = view(true, true, 5, new CupEntry(ME, 5, 0, 41_230, 50), null, CupRefusal.ALREADY_IN);
-        assertEquals("&6You're in this week's Cup &7- Cup pool: 35 tokens · 5 in", CupWords.buttonName(in),
-                "\"Cup pool: 35 tokens · 5 in\": 25 in, plus 10");
+        assertEquals("&6You're in this week's Cup &7- your time &f0:41.2 &7- Cup pool: 35 tokens · 5 in",
+                CupWords.buttonName(in), "your Cup time and \"Cup pool: 35 tokens · 5 in\" (25 in, plus 10) in the NAME");
+        assertEquals("&aYou're in this week's Cup &7- your time &f0:41.2", CupWords.enterName(in),
+                "and the Cup screen's NAME carries your time too");
+        CupDesk.View noTime = view(true, true, 2, CupEntry.entered(ME, 5, 0), null, CupRefusal.ALREADY_IN);
+        assertEquals("&6You're in this week's Cup &7- no Cup time yet &7- Cup pool: 20 tokens · 2 in",
+                CupWords.buttonName(noTime), "before a counted run");
+        assertEquals("&aYou're in this week's Cup &7- no Cup time yet", CupWords.enterName(noTime));
         assertTrue(CupWords.buttonLore(in, "Mon 4:00 AM").contains("&7Your Cup time: &f0:41.2"), "your Cup time");
         assertTrue(CupWords.buttonLore(in, "Mon 4:00 AM").contains("&7Paid Mon 4:00 AM."), "and when it is paid");
     }
@@ -153,6 +162,36 @@ class CupWordsTest {
         assertEquals("", CupWords.tileSuffix(null), "nor a Cup that is hidden or can't be read");
         assertEquals(List.of("&6Enter this week's Cup: 5 tokens. Best time wins the pool.", "&eCup pool: 0 tokens · 0 in"),
                 CupWords.tileLines(view(true, true, 0, null, null, null)), "the tile's lore: the prompt and the pool");
+    }
+
+    @Test
+    void theRulesOnTheScreenAreTheOnesThePoolIsPaidBy() {
+        assertEquals(List.of("2 Cup times: 70% and 30%.", "3 or more Cup times: 50%, 30% and 20%.",
+                "Fewer than 2 Cup times at the end? Every entry comes back.",
+                "No Cup time? No share: your entry stays in the pool.", "Warm-ups and test runs never count.",
+                "The server keeps nothing: every token is paid out."), CupWords.SHARES,
+                "shared by Cup times, not by who entered, and the rule for no Cup time stated");
+        assertTrue(CupWords.SHARES_NAME.contains("70/30 for 2 Cup times, 50/30/20 for 3 or more"),
+                "the shares in the Cup screen's item NAME, for Bedrock: " + CupWords.SHARES_NAME);
+        // What the lines say is what the rules do: two in, one Cup time, and it all comes back...
+        List<CupEntry> twoInOneTime = List.of(new CupEntry(new UUID(3, 1), 5, 1, 40_000, 10),
+                CupEntry.entered(new UUID(3, 2), 5, 2));
+        assertEquals(CupPlan.Outcome.REFUND_NO_CONTEST, CupRules.settle(KEY, twoInOneTime, 10).outcome(),
+                "fewer than 2 Cup times: every entry comes back");
+        // ...and three in with two Cup times is shared 70/30, the one with no time getting nothing.
+        List<CupEntry> threeInTwoTimes = List.of(new CupEntry(new UUID(3, 1), 5, 1, 40_000, 10),
+                new CupEntry(new UUID(3, 2), 5, 2, 41_000, 20), CupEntry.entered(new UUID(3, 3), 5, 3));
+        CupPlan plan = CupRules.settle(KEY, threeInTwoTimes, 10);
+        assertEquals(List.of(18, 7, 0), plan.lines().stream().map(CupPayout::tokens).toList(),
+                "2 Cup times: 70% and 30% of 25; no Cup time, no share");
+    }
+
+    @Test
+    void aCupPaidOutEarlySaysItIsBackNextWeek() {
+        assertEquals("This week's Cup on this course is already paid out. It's back next week.",
+                CupRefusal.WEEK_OVER.message(5), "not a loop back to the same screen");
+        assertEquals("&7Weekly Cup &8- &7already paid out this week",
+                CupWords.buttonName(view(true, true, 3, null, null, CupRefusal.WEEK_OVER)), "in the NAME too");
     }
 
     @Test

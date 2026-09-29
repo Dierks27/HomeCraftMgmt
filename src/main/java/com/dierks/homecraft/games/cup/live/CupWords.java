@@ -26,26 +26,43 @@ public final class CupWords {
             "Your best counted time this week is your Cup time.",
             "At the week's end the pool is shared by Cup time.");
 
-    /** How the pool is shared, line by line (the Cup screen's "How it works"). */
+    /**
+     * How the pool is shared, line by line (the Cup screen's "How it's paid"): by Cup times, not by
+     * who entered, exactly as {@code CupRules.settle} pays, with the rule for an entrant who sets no
+     * Cup time.
+     */
     public static final List<String> SHARES = List.of(
-            "2 in: 70% and 30%.",
-            "3 or more: 50%, 30% and 20%.",
-            "Alone? Your entry comes back.",
+            "2 Cup times: 70% and 30%.",
+            "3 or more Cup times: 50%, 30% and 20%.",
+            "Fewer than 2 Cup times at the end? Every entry comes back.",
+            "No Cup time? No share: your entry stays in the pool.",
             "Warm-ups and test runs never count.",
             "The server keeps nothing: every token is paid out.");
+
+    /** The Cup screen's "How it's paid" item NAME: the shares, for Bedrock. */
+    public static final String SHARES_NAME = "&eHow it's paid: 70/30 for 2 Cup times, 50/30/20 for 3 or more";
 
     private CupWords() {
     }
 
-    /** The course screen's Cup item NAME, by where the viewer stands. */
+    /**
+     * The course screen's Cup item NAME, by where the viewer stands, with the key facts for Bedrock
+     * (which shows lore only on tap-and-hold): the live pool, and once you're in your Cup time.
+     */
     public static String buttonName(CupDesk.View v) {
+        String pool = CupText.poolLine(v.pool().tokens(), v.pool().in());
         if (v.in()) {
-            return "&6You're in this week's Cup &7- " + CupText.poolLine(v.pool().tokens(), v.pool().in());
+            return "&6You're in this week's Cup &7- " + timeWord(v.mine()) + " &7- " + pool;
         }
         if (v.refusal() == null || v.refusal() == CupRefusal.NOT_ENOUGH_TOKENS) {
-            return "&6" + CupText.enterPrompt(v.fee());
+            return "&6" + CupText.enterPrompt(v.fee()) + " &e" + pool;
         }
         return "&7Weekly Cup &8- &7" + shortWhy(v.refusal());
+    }
+
+    /** Your Cup time for a NAME: "your time &amp;f0:40.0", or "no Cup time yet". */
+    static String timeWord(CupEntry mine) {
+        return mine == null || !mine.hasTime() ? "no Cup time yet" : "your time &f" + TrialText.time(mine.bestMs());
     }
 
     /** The course screen's Cup item lore. */
@@ -63,7 +80,7 @@ public final class CupWords {
     /** The Cup screen's enter item NAME: what a click does, or why it can't. */
     public static String enterName(CupDesk.View v) {
         if (v.in()) {
-            return "&aYou're in this week's Cup";
+            return "&aYou're in this week's Cup &7- " + timeWord(v.mine());
         }
         if (v.refusal() == null) {
             return "&aPay " + CupText.tokens(v.fee()) + " and enter this week's Cup";
@@ -83,16 +100,18 @@ public final class CupWords {
             case OFF -> "closed right now";
             case NOT_ON_THIS_COURSE -> "not on this course";
             case CALLED_OFF -> "called off this week";
-            case WEEK_OVER -> "this week's is over";
+            case WEEK_OVER -> "already paid out this week";
             case ALREADY_IN -> "you're in";
+            case NOT_UP_YET -> "starts when this week's course is up";
             case NOT_ENOUGH_TOKENS -> "not enough tokens";
         };
     }
 
     /**
      * What a course's tile adds to its NAME, the key facts for Bedrock (which shows lore only on
-     * tap-and-hold): " · in the Cup, pool 35" once the viewer is in; else what it costs, and the pool
-     * once anyone is in (" · Cup: 5 tokens, pool 35"), or only the pool while entries are closed;
+     * tap-and-hold): " · in the Cup, pool 35" once the viewer is in; " · Cup not open yet" while a
+     * Fresh course is still on last week's layout; only the pool while the viewer can't enter (entries
+     * closed); else what it costs, and the pool once anyone is in (" · Cup: 5 tokens, pool 35");
      * empty when the Cup isn't shown.
      */
     public static String tileSuffix(CupDesk.View v) {
@@ -103,7 +122,10 @@ public final class CupWords {
         if (v.in()) {
             return " &6· in the Cup, " + pool;
         }
-        if (!v.open()) {
+        if (v.refusal() == CupRefusal.NOT_UP_YET) {
+            return " &7· Cup not open yet";
+        }
+        if (!v.open() || (v.refusal() != null && v.refusal() != CupRefusal.NOT_ENOUGH_TOKENS)) {
             return " &6· Cup " + pool;
         }
         return " &6· Cup: " + CupText.tokens(v.fee()) + (v.pool().in() > 0 ? ", " + pool : "");
@@ -120,6 +142,8 @@ public final class CupWords {
             out.add(yourTime(v.mine()));
         } else if (v.open() && (v.refusal() == null || v.refusal() == CupRefusal.NOT_ENOUGH_TOKENS)) {
             out.add("&6" + CupText.enterPrompt(v.fee()));
+        } else if (v.refusal() == CupRefusal.NOT_UP_YET) {
+            out.add("&7" + CupRefusal.NOT_UP_YET.message(v.fee()));
         }
         out.add("&e" + CupText.poolLine(v.pool().tokens(), v.pool().in()));
         return out;
@@ -134,6 +158,15 @@ public final class CupWords {
     /** The line a finish adds when it set a new Cup time. */
     public static String newCupTime(String course, long ms) {
         return "&6New Cup time on " + course + ": &f" + TrialText.time(ms);
+    }
+
+    /**
+     * The line a finish adds when the player is in this week's Cup but the run was on last week's
+     * layout of a Fresh course (it still standing after the rollover): why it set no Cup time.
+     */
+    public static String lastWeeksLayout() {
+        return "&7That run was on last week's course, so it doesn't set a Cup time."
+                + " The Cup starts when this week's course is up.";
     }
 
     /** {@code /hcm play cup}: whether the prompts show. */

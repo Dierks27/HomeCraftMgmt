@@ -99,6 +99,19 @@ public final class CupRules {
     }
 
     /**
+     * The weeks whose Cups are running at {@code now}: every week whose seven days include now
+     * ({@code week <= today < week + 7}), from {@code today - 6} to {@code today}. With the week start
+     * unchanged only {@link #week} is a Cup's week in it; after the owner moves
+     * {@code quests.week_starts_on} mid-week, the Cup of the old week start is in it too, still
+     * running its own seven days ({@link #settlesAt}), so a player already in it isn't let into the
+     * new week's Cup on the same course as well.
+     */
+    public static Weeks liveWeeks(Edition edition, long now) {
+        long today = edition.day(now);
+        return new Weeks(today - 6, today);
+    }
+
+    /**
      * The Cup weeks a counted run may count for: each is a week's first local epoch day, from
      * {@code first} to {@code last} (both included), and the run counts for every Cup the player is in
      * on the course whose week is in that range. A range with no Cup's week in it (every run that
@@ -231,6 +244,21 @@ public final class CupRules {
      */
     public static CupRefusal refusal(boolean cupsOn, boolean courseOn, CupKey key, long currentWeek,
                                      CupPlan.Outcome settledAs, boolean alreadyIn, int fee, int balance) {
+        return refusal(cupsOn, courseOn, key, currentWeek, settledAs, alreadyIn, true, fee, balance);
+    }
+
+    /**
+     * {@link #refusal(boolean, boolean, CupKey, long, CupPlan.Outcome, boolean, int, int)}, and
+     * after the player isn't already in: {@link CupRefusal#NOT_UP_YET} while the course's layout
+     * isn't the week's own ({@code layoutUp} false: a Fresh slot still on last week's layout after the
+     * rollover, whose runs can set no Cup time this week, {@link #runWeeks}).
+     *
+     * @param layoutUp whether runs on the course as it is now count for this week's Cup
+     *                 ({@code CupLayout.covers}); always true for a hand-built or recalled course
+     */
+    public static CupRefusal refusal(boolean cupsOn, boolean courseOn, CupKey key, long currentWeek,
+                                     CupPlan.Outcome settledAs, boolean alreadyIn, boolean layoutUp, int fee,
+                                     int balance) {
         if (!cupsOn || fee < MIN_ENTRY || fee > MAX_ENTRY) {
             return CupRefusal.OFF;
         }
@@ -248,6 +276,9 @@ public final class CupRules {
         }
         if (alreadyIn) {
             return CupRefusal.ALREADY_IN;
+        }
+        if (!layoutUp) {
+            return CupRefusal.NOT_UP_YET;
         }
         if (balance < fee) {
             return CupRefusal.NOT_ENOUGH_TOKENS;

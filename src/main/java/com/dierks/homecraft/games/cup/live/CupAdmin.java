@@ -107,8 +107,8 @@ final class CupAdmin implements GameAdmin {
         CupDesk desk = cup.desk();
         CupSettings s = cup.settings();
         sender.sendMessage(Text.of("&6Weekly Cup &7- " + (s.enabled() ? "&aentries open" : "&centries closed "
-                + "&7(games.cup.enabled: false)") + "&7: " + CupText.tokens(s.entry()) + " to enter, top-up "
-                + s.serverTopup() + " with 2 or more; paid &f" + cup.whenDated(desk.endsAt())));
+                + "&7(" + cup.closedWhy() + ")") + "&7: " + CupText.tokens(s.entry()) + " to enter, top-up "
+                + s.serverTopup() + " with 2 or more Cup times; paid &f" + cup.whenDated(desk.endsAt())));
         sender.sendMessage(Text.of(desk.freshEligible() ? "&7Fresh courses run a Cup by default."
                 : "&7Fresh courses run no Cup: they change more often than once a week."));
         int shown = 0;
@@ -302,13 +302,22 @@ final class CupAdmin implements GameAdmin {
                     + " confirm"));
             return;
         }
-        desk.dao().choose(id, chosen);
+        // This week's Cup is called off BEFORE the switch is saved: a Cup that couldn't be called off
+        // keeps running where its entrants can see it, and the admin is told, never that it was done.
+        CupDesk.Closed closed = null;
         if (!willRun && in > 0) {
-            desk.voidNow(id, CupPlan.VoidReason.STOPPED, c.name());
+            closed = desk.voidNow(id, CupPlan.VoidReason.STOPPED, c.name());
+            if (closed == null && cup.entrants(id) > 0) {
+                sender.sendMessage(Text.of("&cThis week's Cup on " + c.name() + " couldn't be called off - see the"
+                        + " console. &7Nothing changed: it still runs a Weekly Cup. Try again in a moment."));
+                return;
+            }
         }
+        desk.dao().choose(id, chosen);
         sender.sendMessage(Text.of(willRun ? "&a" + c.name() + " runs a Weekly Cup." + (cup.settings().enabled() ? ""
                 : " &7(once games.cup.enabled is true)")
-                : "&a" + c.name() + " runs no Weekly Cup." + (in > 0 ? " &7This week's was called off and refunded." : "")));
+                : "&a" + c.name() + " runs no Weekly Cup." + (closed != null ? " &7This week's was called off: "
+                + closed.plan().paidOut() + " tokens back to " + closed.plan().payouts().size() + " player(s)." : "")));
         logged(sender, args);
     }
 

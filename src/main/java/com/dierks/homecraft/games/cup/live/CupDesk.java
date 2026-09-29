@@ -182,7 +182,14 @@ public final class CupDesk {
         return c != null && CupOptIn.on(dao.chosen(c.id()), optInView(c), freshEligible());
     }
 
-    /** {@code c}'s Cup this week as {@code viewer} sees it ({@code viewer} null: nobody in particular). */
+    /**
+     * {@code c}'s Cup this week as {@code viewer} sees it ({@code viewer} null: nobody in particular).
+     *
+     * <p>The viewer counts as in already ({@link CupRefusal#ALREADY_IN}) when they are in another Cup
+     * on this course that is still running its seven days (the owner moved the week start mid-week,
+     * {@link CupRules#liveWeeks}); and a Fresh course still on last week's layout takes no entry
+     * ({@link CupRefusal#NOT_UP_YET}), since no run on it can set a Cup time this week.
+     */
     public View view(Course c, UUID viewer) throws SQLException {
         CupSettings s = host.settings();
         long week = week();
@@ -199,9 +206,20 @@ public final class CupDesk {
         }
         CupPlan.Outcome settled = dao.settledAs(key);
         int balance = viewer == null ? 0 : dao.balance(viewer);
-        CupRefusal refusal = CupRules.refusal(s.enabled(), on, key, week, settled, mine != null, s.entry(), balance);
+        boolean in = mine != null || (viewer != null && on && settled == null
+                && dao.openCup(c.id(), viewer, CupRules.liveWeeks(host.edition(), host.now())) != null);
+        CupRefusal refusal = CupRules.refusal(s.enabled(), on, key, week, settled, in, layoutUp(c, week), s.entry(),
+                balance);
         return new View(key, on, s.enabled(), s.entry(), CupRules.livePool(entries, s.serverTopup()), mine, settled,
                 endsAt(key), refusal);
+    }
+
+    /**
+     * Whether runs on {@code c} as it is now count for the Cup of {@code week}: always on a hand-built
+     * or recalled course; on a Fresh slot only once the week's own layout is up ({@link CupLayout#covers}).
+     */
+    static boolean layoutUp(Course c, long week) {
+        return layout(c).covers(week);
     }
 
     // ---- entering -------------------------------------------------------------------------------
@@ -217,7 +235,8 @@ public final class CupDesk {
         if (v.refusal() != null) {
             return v.refusal();
         }
-        return dao.enter(v.key(), player, v.fee(), c.name(), host.now(), v.key().week(), layout(c).encode());
+        return dao.enter(v.key(), player, v.fee(), c.name(), host.now(), v.key().week(), layout(c).encode(),
+                CupRules.liveWeeks(host.edition(), host.now()));
     }
 
     // ---- Cup times ------------------------------------------------------------------------------
@@ -235,6 +254,18 @@ public final class CupDesk {
         }
         CupRules.Weeks weeks = CupRules.runWeeks(host.edition(), finishedAt - ms, finishedAt, ranOn.gen());
         return !weeks.isEmpty() && dao.run(ranOn.id(), player, ms, finishedAt, weeks) > 0;
+    }
+
+    /**
+     * Whether a counted run on {@code ranOn} that set no Cup time was on last week's layout while the
+     * player is in this week's Cup on the course: the finish then says why it didn't count.
+     */
+    public boolean onLastWeeksLayout(UUID player, Course ranOn) throws SQLException {
+        if (ranOn == null || !ranOn.generated()) {
+            return false;
+        }
+        CupKey key = key(ranOn.id());
+        return !layoutUp(ranOn, key.week()) && dao.settledAs(key) == null && dao.entry(key, player) != null;
     }
 
     // ---- settling and calling off ---------------------------------------------------------------
@@ -314,17 +345,18 @@ public final class CupDesk {
     }
 
     /**
-     * Compare each of this week's running Cups with its course ({@link CupWatch}) and call it off when
-     * the course is gone, closed or re-made. Never throws.
+     * Compare each running Cup with its course ({@link CupWatch}) and call it off when the course is
+     * gone, closed or re-made. Running: its seven days include now ({@link CupRules#liveWeeks}), so
+     * after the owner moves the week start mid-week the Cup of the old week start is watched too.
+     * Never throws.
      */
     public List<Closed> watch() {
         List<Closed> out = new ArrayList<>();
         List<CupKey> running = new ArrayList<>();
-        long week;
         try {
-            week = week();
+            CupRules.Weeks live = CupRules.liveWeeks(host.edition(), host.now());
             for (CupKey k : dao.openKeys()) {
-                if (k.week() == week) {
+                if (live.contains(k.week())) {
                     running.add(k);
                 }
             }

@@ -7,6 +7,8 @@ import com.dierks.homecraft.games.cup.CupPlan;
 import com.dierks.homecraft.games.cup.live.CupLink;
 import com.dierks.homecraft.games.cup.live.CupSettings;
 import com.dierks.homecraft.games.cup.live.WeeklyCup;
+import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.CourseCodec;
 import com.dierks.homecraft.games.trial.FairPlay;
@@ -21,6 +23,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -279,6 +282,67 @@ class WeeklyCupWiringTest {
         cup.admin().handle(admin.player, new String[]{"on", "nope"});
         assertTrue(said(admin).contains("No time-trial course called 'nope'"), said(admin));
         assertEquals(List.of("status", "settle"), cup.admin().tab(admin.player, new String[]{"s"}), "tab completion");
+    }
+
+    @Test
+    void aSwitchOffWhoseCallOffFailsSaysSoAndChangesNothing() throws Exception {
+        enterBoth();
+        try (var st = host.connection.createStatement()) { // the disk refuses the call-off's settlement row
+            st.execute("CREATE TRIGGER no_settle BEFORE INSERT ON cup_settlements BEGIN SELECT RAISE(ABORT, 'disk full');"
+                    + " END");
+        }
+        cup.admin().handle(admin.player, new String[]{"off", "lava_leap", "confirm"});
+        assertTrue(said(admin).contains("couldn't be called off"), "the admin is told it failed: " + said(admin));
+        assertFalse(said(admin).contains("runs no Weekly Cup"), "and never that it was done: " + said(admin));
+        assertTrue(cup.desk().runsCup(lava), "the switch wasn't saved: the Cup its entrants paid into stays in sight");
+        assertEquals(15, host.balanceOf(alex.id), "nothing was refunded");
+        try (var st = host.connection.createStatement()) {
+            st.execute("DROP TRIGGER no_settle");
+        }
+        admin.said.clear();
+        cup.admin().handle(admin.player, new String[]{"off", "lava_leap", "confirm"});
+        assertTrue(said(admin).contains("runs no Weekly Cup. This week's was called off: 10 tokens back to 2 player(s)."),
+                "tried again, it is done and says so: " + said(admin));
+        assertFalse(cup.desk().runsCup(lava), "off");
+        assertEquals(20, host.balanceOf(alex.id), "refunded");
+    }
+
+    @Test
+    void aFinishOnLastWeeksFreshLayoutSaysWhyItSetNoCupTime() throws Exception {
+        long w = W - 7;
+        GenTag old = new GenTag("fresh_rings", "gen", 1, w, 0, 42L, 'A', "old", 30_000, 34_000, 40_000, List.of(),
+                List.of(), 0L, 7, null);
+        Course rings = new Course("fresh_rings", TrialKind.ELYTRA, "Sky Rings", Tier.MEDIUM, "games",
+                new Course.Spot(0, 90, 0, 0, 0), List.of(new Course.Mark(40, 90, 0, 4)), new Course.Mark(80, 90, 0, 4),
+                null, null, true, false, 1, old);
+        host.time.now = GamesKit.at(2026, 9, 28, 4, 30); // Monday 04:30: last week's Sky Rings still stands
+        // A Cup entered while it stood (an older build took such entries; the Cup now waits for this week's).
+        assertNull(cup.desk().dao().enter(new CupKey("fresh_rings", W), alex.id, 5, "Sky Rings", host.time.now, W,
+                com.dierks.homecraft.games.cup.live.CupDesk.layout(rings).encode()));
+        host.move(41_000);
+        CupLink.finished(games, alex.player, rings, 40_000, counted(), false);
+        assertTrue(said(alex).contains("That run was on last week's course, so it doesn't set a Cup time."),
+                "the finish says why it set no Cup time: " + said(alex));
+        assertFalse(cup.desk().dao().entry(new CupKey("fresh_rings", W), alex.id).hasTime(), "and it set none");
+    }
+
+    @Test
+    void anUnreadableCupBlockTakesNoEntriesButStillSettlesTheCupsRunning() throws Exception {
+        enterBoth();
+        host.config = new GamesConfig.Parsed(host.config.common(), host.config.settings(), Set.of("cup"));
+        assertTrue(games.enabled(cup), "junk in games.cup doesn't close the Cup: " + games.closedReason(cup));
+        assertNull(games.closedReason(cup), "so its minute task (which checks exactly this) keeps running");
+        assertFalse(cup.settings().enabled(), "but it takes no new entries");
+        host.give(admin.id, 20);
+        assertEquals(com.dierks.homecraft.games.cup.CupRefusal.OFF, cup.desk().enter(admin.id, lava), "refused");
+        assertTrue(cup.statusLines().get(0).contains("games.cup can't be read"), "/hcm games status says why: "
+                + cup.statusLines());
+        finish(alex, 39_000, counted(), false);
+        assertEquals(39_000L, time(new CupKey("lava_leap", W)), "an entrant's counted run still sets a Cup time");
+        host.time.now = ROLLOVER;
+        cup.desk().tick();
+        assertEquals(15 + 14, host.balanceOf(alex.id), "and the Cup is paid at its rollover on the shipped numbers");
+        assertEquals(15 + 6, host.balanceOf(sam.id), "2nd: 30%");
     }
 
     @Test

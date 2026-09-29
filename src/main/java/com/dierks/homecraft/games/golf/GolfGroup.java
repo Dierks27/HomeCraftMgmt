@@ -204,8 +204,11 @@ public final class GolfGroup {
      * @return whether the hole is over for the whole group now (everyone still in has finished it)
      */
     public boolean holeDone(UUID player, GolfRun.HoleScore score) {
+        if (over()) {
+            return false;
+        }
         Member m = members.get(player);
-        if (m == null || m.seat != Seat.PLAYING || score == null || over()) {
+        if (m == null || m.seat != Seat.PLAYING || score == null) {
             return allDone();
         }
         m.scores.add(score);
@@ -244,13 +247,14 @@ public final class GolfGroup {
 
     /**
      * Everyone moves on together: the next hole, every player still in back to PLAYING. Only once the
-     * hole is over for everyone ({@link #allDone}); otherwise nothing changes.
+     * hole is over for everyone ({@link #allDone}); otherwise nothing changes and it says false.
      *
-     * @return whether there is a next hole to play (false: the round is over for the group)
+     * @return whether everyone moved to a next hole (false: a ball is still out, or that was the
+     *         last hole and the round is over for the group, {@link #over})
      */
     public boolean advance() {
-        if (!allDone()) {
-            return !over();
+        if (!allDone() || over()) {
+            return false;
         }
         hole++;
         if (hole < pars.size()) {

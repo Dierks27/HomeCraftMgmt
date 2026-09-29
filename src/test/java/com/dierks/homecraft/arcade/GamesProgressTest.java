@@ -178,6 +178,19 @@ class GamesProgressTest {
     }
 
     @Test
+    void aRaceNightRacedCountsAndAWinCountsAgainButNoQuestStep() {
+        progress.raceNightFinished(alex, false);
+        assertEquals(List.of("count race_nights 1"), sink.events, "raced a Race Night: one count");
+        sink.events.clear();
+        progress.raceNightFinished(alex, true);
+        assertEquals(List.of("count race_nights 1", "count race_night_wins 1"), sink.events,
+                "won one: the win counts too (its races already stepped FINISH_COURSE where they counted)");
+        sink.events.clear();
+        progress.raceNightFinished(null, true);
+        assertEquals(List.of(), sink.events, "nobody is nothing");
+    }
+
+    @Test
     void nobodyIsNothing() {
         progress.cabinetFinished(null, "snake", false, false);
         progress.courseFinished(null, "hill", false, false);

@@ -32,6 +32,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * answer; a player who can't be asked is simply not asked. What the INVITER hears after sending is
  * the game's answer callback's to say, so the framework says nothing to them on a deny, an expiry
  * or a quit — nobody reads the same news twice.
+ *
+ * <p>The final gate's group B: an invite under a key of its own ({@code rider}) is answered inside the
+ * guard of the game that sent it, however it ends, and is named for what it is (#0); and {@code /hcm play
+ * invites off} covers golf together and every invite key added later (the docs check).
  */
 class InvitesTest {
 
@@ -222,5 +226,74 @@ class InvitesTest {
         assertEquals(2, answers.size(), "both games heard no");
         assertTrue(sam.heard().contains("That invite was called off."), "Sam, who was invited, is told");
         assertTrue(kim.said.isEmpty(), "Kim, who invited Alex, hears it from the game only");
+    }
+
+    // ---- the final gate's group B -------------------------------------------------------------------
+
+    private Invite ride(Fake from, Fake to) {
+        return games.invites().send(from.player, to.player, connect, "rider", "Ride along",
+                "a ride in the back of " + from.name + "'s boat", 60,
+                (invite, yes) -> answers.add(invite.gameId() + ":" + yes));
+    }
+
+    @Test
+    void anInviteUnderAKeyOfItsOwnIsAnsweredHoweverItEnds() {
+        Invite invite = ride(alex, sam);
+        assertNotNull(invite, "sent under its own key");
+        assertEquals("rider", invite.gameId(), "its switch is its own key");
+        assertTrue(games.invites().accept(sam.player), "Sam accepts");
+        assertEquals(List.of("rider:true"), answers, "the answer runs although no game is called 'rider' (#0)");
+
+        host.move(Invites.PAIR_COOLDOWN_MS);
+        ride(kim, sam);
+        assertTrue(games.invites().deny(sam.player), "a no");
+        ride(alex, kim);
+        host.runTasks(); // it runs out
+        host.move(Invites.PAIR_COOLDOWN_MS);
+        ride(sam, alex);
+        games.invites().cancel(alex.id); // a quit
+        assertEquals(List.of("rider:true", "rider:false", "rider:false", "rider:false"), answers,
+                "a no, an expiry and a quit are answered too, once each");
+        assertEquals(0, host.severe(), "nothing failed");
+    }
+
+    @Test
+    void everyInviteIsNamedForWhatItIsForTheGamesScreensTile() {
+        assertEquals("Ride along", ride(alex, sam).name(), "a keyed invite: its own name");
+        assertEquals("Connect Four", send(kim, alex, connect).name(), "a game's invite: the game's name");
+    }
+
+    @Test
+    void aKeyedInviteNeedsTheGameThatSendsIt() {
+        assertNull(games.invites().send(alex.player, sam.player, null, "rider", "Ride along", "a ride", 60,
+                (invite, yes) -> answers.add("never")), "no owning game: never sent, so never an answer nobody runs");
+        assertNull(games.invites().pending(sam.id), "nothing waits");
+    }
+
+    @Test
+    void switchingOffTheGameThatSentAKeyedInviteCallsItOff() {
+        ride(alex, sam);
+        games.fail(connect, new IllegalStateException("test: the game broke"));
+        host.runTasks();
+        assertNull(games.invites().pending(sam.id), "the ride invite went with the game that sent it");
+        assertEquals(List.of("rider:false"), answers, "and was answered no, once");
+    }
+
+    @Test
+    void golfTogetherAndEveryInviteAddedLaterFollowTheOneSwitch() {
+        assertTrue(Invites.FRIEND_GAMES.contains("golf"), "/hcm play invites on|off writes golf together's row too");
+        assertTrue(games.invites().accepts(sam.id, "golf"), "golf together invites are on for a new player");
+        // /hcm play invites off before golf together (or any later key) was covered: rows for the first games only
+        games.invites().setAccepts(kim.id, "connect_four", false);
+        games.invites().setAccepts(kim.id, "tic_tac_toe", false);
+        assertFalse(games.invites().accepts(kim.id, "golf"), "Kim's 'off' keeps golf together invites away");
+        assertFalse(games.invites().accepts(kim.id, "a_later_game"), "and any invite key added later");
+        games.invites().setAccepts(kim.id, "golf", true);
+        assertTrue(games.invites().accepts(kim.id, "golf"), "once Kim chooses for golf, that choice rules");
+        games.invites().setAccepts(alex.id, "connect_four", false); // Connect Four's own screen, for itself
+        assertTrue(games.invites().accepts(alex.id, "tic_tac_toe"), "the first two friend games keep their own switch");
+        games.invites().setAccepts(alex.id, "coin_flip", true);
+        assertTrue(games.invites().accepts(alex.id, "coin_flip"), "and Coin Flip its own (off until turned on)");
+        assertFalse(games.invites().accepts(sam.id, "coin_flip"), "which starts off");
     }
 }

@@ -33,7 +33,10 @@ import java.util.function.Consumer;
  *
  * <p><b>Who can ride.</b> Anyone online who isn't racing, watching, riding, in a party race's lobby,
  * on tonight's Race Night list or in any other game, and not during the restart hold (refused with a
- * plain reason). Ride along is part of the Clubhouse: while it isn't open ({@code games.clubhouse.enabled}
+ * plain reason), and whom the play gate lets into Time Trials: {@code hcm.games.play}, in a world games
+ * are played in (the final gate's #2: never a player a parent took the Games away from, never someone
+ * pulled into a session from a creative build world). The gate is asked when the picker lists them, when
+ * the invite is answered, and again when their session is entered at the boat. Ride along is part of the Clubhouse: while it isn't open ({@code games.clubhouse.enabled}
  * off, or its room not built and checked) there is no "Take a rider" anywhere. With {@code games.trials.rider_runs_count: false} the driver is told
  * first that a run with a rider is just for fun, and Race Night takes no riders.
  */
@@ -45,6 +48,8 @@ public final class RideAlong {
     /** "Take a rider (back seat)": the key fact in the NAME. */
     public static final String BUTTON = "&bTake a rider &7(back seat) - invite a friend to ride along";
     static final String NO_NIGHT = "Race Night takes no riders on this server.";
+    /** Why a player can't ride, as the driver reads it (never more: the play gate's reason is the rider's). */
+    static final String CANT_RIDE = "That player can't ride with you.";
     static final String FUN_WARNING = "&eRides with a rider are just for fun on this server &7- no board, record,"
             + " rewards or Cup time for that run.";
 
@@ -179,7 +184,7 @@ public final class RideAlong {
      */
     static String riderRefusal(GamesService games, TimeTrials t, Player driver, Player rider, Purpose purpose) {
         if (rider == null || !rider.isOnline() || rider.getUniqueId().equals(driver.getUniqueId())) {
-            return "That player can't ride with you.";
+            return CANT_RIDE;
         }
         UUID id = rider.getUniqueId();
         if (t.riders().isRider(id) || t.riders().ofDriver(id) != null) {
@@ -195,6 +200,9 @@ public final class RideAlong {
         if (t.sessions().session(rider) != null || !t.sessions().home(rider)) {
             return rider.getName() + " is in a game right now.";
         }
+        if (games.canOpen(rider, t) != null) {
+            return CANT_RIDE; // the driver never reads the gate's reason: it is the rider's (a parent's choice)
+        }
         Refusal hold = games.restartRefusal();
         return hold == null ? null : hold.message();
     }
@@ -204,9 +212,9 @@ public final class RideAlong {
         Course c = t.course(courseId);
         String summary = "a ride in the back of " + driver.getName() + "'s boat" + (c == null ? "" : " on " + c.name())
                 + " - you ride, they drive";
-        Invite sent = games.invites().send(driver, rider, Riders.INVITE_KEY, "Ride along", summary,
+        Invite sent = games.invites().send(driver, rider, t, Riders.INVITE_KEY, "Ride along", summary,
                 Riders.INVITE_SECONDS, (invite, yes) -> games.guard(t, () -> answered(games, t, invite, yes, courseId,
-                        purpose)));
+                        purpose, driver, rider)));
         if (sent == null) {
             driver.sendMessage(Text.of("&cThat invite couldn't be sent right now. &7(One invite at a time.)"));
             try {
@@ -219,10 +227,14 @@ public final class RideAlong {
         driver.sendMessage(Text.of("&aRide invite sent to " + rider.getName() + ". &7Waiting for an answer..."));
     }
 
+    /**
+     * The rider's answer. {@code asked} and {@code asker} are the players as the invite went out: a quit or a
+     * world change calls the invite off first, so while it is answered they are the players online now.
+     */
     private static void answered(GamesService games, TimeTrials t, Invite invite, boolean yes, String courseId,
-                                 Purpose purpose) {
-        Player driver = Bukkit.getPlayer(invite.from());
-        Player rider = Bukkit.getPlayer(invite.to());
+                                 Purpose purpose, Player asker, Player asked) {
+        Player driver = online(asker, invite.from());
+        Player rider = online(asked, invite.to());
         if (!yes) {
             if (driver != null) {
                 driver.sendMessage(Text.of("&7" + (rider != null ? rider.getName() : "Your friend") + " didn't hop in."));
@@ -237,7 +249,8 @@ public final class RideAlong {
             why = riderRefusal(games, t, driver, rider, purpose);
         }
         if (why != null) {
-            games.tell(rider, Refusal.of(why));
+            Refusal gate = CANT_RIDE.equals(why) ? games.canOpen(rider, t) : null;
+            games.tell(rider, gate != null ? gate : Refusal.of(why)); // the rider reads the gate's own reason
             games.tell(driver, Refusal.of(why));
             return;
         }
@@ -245,6 +258,11 @@ public final class RideAlong {
         Entity boat = run != null && run.boat != null && run.boat.isValid() && TimeTrials.seated(driver, run)
                 ? run.boat : null;
         t.riders().paired(driver, rider, run == null ? courseId : run.course.id(), boat);
+    }
+
+    /** {@code p} while it is still that player and online, else {@code null}. */
+    private static Player online(Player p, UUID id) {
+        return p != null && id != null && id.equals(p.getUniqueId()) && p.isOnline() ? p : null;
     }
 
     private static NightRunner night(GamesService games) {
@@ -269,6 +287,13 @@ public final class RideAlong {
 
             @Override
             public boolean enter(Player rider, String courseId, Location at, Consumer<Player> ready) {
+                // The play gate first (the final gate's #2): a rider who went to another world since the
+                // invite, or lost hcm.games.play, is never pulled into the ride's session from there.
+                Refusal gate = t.games().canOpen(rider, t);
+                if (gate != null) {
+                    t.games().tell(rider, gate);
+                    return false;
+                }
                 return t.sessions().enter(rider, t, courseId, at, ready);
             }
 

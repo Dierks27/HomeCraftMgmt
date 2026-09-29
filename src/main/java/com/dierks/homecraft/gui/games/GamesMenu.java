@@ -213,7 +213,10 @@ public final class GamesMenu extends GameMenu {
         return session == null ? null : Refusal.IN_SESSION;
     }
 
-    /** The invite tile's name: the game, then who from ("&amp;eConnect Four invite &amp;7from Sam"). */
+    /**
+     * The invite tile's name: what it is for, then who from ("&amp;eConnect Four invite &amp;7from Sam",
+     * "&amp;eRide along invite &amp;7from Dad"): the key fact in the NAME, for Bedrock.
+     */
     static String inviteName(String game, String from) {
         return "&e" + (game == null ? "Game" : game) + " invite &7from " + (from == null ? "a player" : from);
     }
@@ -521,9 +524,8 @@ public final class GamesMenu extends GameMenu {
             return;
         }
         String from = Bukkit.getOfflinePlayer(inv.from()).getName();
-        Game invitedTo = games.game(inv.gameId());
-        set(INVITE, Menus.glint(Menus.icon(Material.WRITABLE_BOOK,
-                inviteName(invitedTo == null ? null : invitedTo.name(), from),
+        // The invite's own name, never a lookup of its key: "Ride along invite from Sam" (final gate, #0)
+        set(INVITE, Menus.glint(Menus.icon(Material.WRITABLE_BOOK, inviteName(inv.name(), from),
                 "&7" + inv.summary(), "&eClick to say yes", "&7Or type /hcm play deny"), true), e -> {
             if (!games.invites().accept(viewer)) {
                 viewer.sendMessage(Text.of("&cThat invite has ended."));

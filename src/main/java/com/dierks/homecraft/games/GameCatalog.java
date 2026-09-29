@@ -13,6 +13,7 @@ import com.dierks.homecraft.games.chance.hilo.HigherLower;
 import com.dierks.homecraft.games.chance.slots.OreSlots;
 import com.dierks.homecraft.games.chance.twentyone.TwentyOne;
 import com.dierks.homecraft.games.chance.wheel.Wheel;
+import com.dierks.homecraft.games.gen.DailyCourses;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.golf.MiniGolf;
 import com.dierks.homecraft.games.trial.TimeTrials;
@@ -34,7 +35,8 @@ public final class GameCatalog {
     /** Every game, in display order. */
     public static final List<GameSpec<?>> SPECS = List.of(OreSlots.SPEC, TwentyOne.SPEC, Wheel.SPEC,
             HigherLower.SPEC, CoinFlip.SPEC, CreeperSweeper.SPEC, OreMerge.SPEC, Snake.SPEC, MiniMatch.SPEC,
-            SimonSays.SPEC, WhackAZombie.SPEC, ConnectFour.SPEC, TicTacToe.SPEC, TimeTrials.SPEC, MiniGolf.SPEC);
+            SimonSays.SPEC, WhackAZombie.SPEC, ConnectFour.SPEC, TicTacToe.SPEC, TimeTrials.SPEC, MiniGolf.SPEC,
+            DailyCourses.SPEC);
 
     /**
      * Words {@code /hcm play} keeps for itself, so no course may take them as its id

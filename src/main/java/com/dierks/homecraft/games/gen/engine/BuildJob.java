@@ -70,6 +70,10 @@ public final class BuildJob {
         DRAIN, BODY, FILL
     }
 
+    /** Bottom-up, then along x, then z: the order solids (and the planned water) are written in. */
+    private static final Comparator<Op> UP = Comparator.comparingInt((Op o) -> o.y).thenComparingInt(o -> o.x)
+            .thenComparingInt(o -> o.z);
+
     /** The converge and up to three rounds of verify-and-heal. */
     public static final int MAX_PASSES = 4;
     /** A write kept waiting by a person this long gets them moved. */
@@ -293,6 +297,7 @@ public final class BuildJob {
             }
             if (stage == Stage.BODY) {
                 stage = Stage.FILL; // every solid of the half written: now the water
+                fills.sort(UP); // bottom-up over the whole half: each pool from its floor
                 pending.addAll(fills);
                 fills.clear();
                 continue;
@@ -440,13 +445,10 @@ public final class BuildJob {
                 }
             }
         }
-        Comparator<Op> up = Comparator.comparingInt((Op o) -> o.y).thenComparingInt(o -> o.x)
-                .thenComparingInt(o -> o.z);
-        out.sort(up);
+        out.sort(UP);
         out.addAll(signs);
         d.body.addAll(out);
-        d.drain.sort(up.reversed()); // a pool empties from the top
-        d.fill.sort(up); // and fills from its floor
+        d.drain.sort(UP.reversed()); // a pool empties from the top
         return d;
     }
 

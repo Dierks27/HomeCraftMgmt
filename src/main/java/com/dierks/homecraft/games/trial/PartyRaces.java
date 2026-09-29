@@ -511,9 +511,7 @@ public final class PartyRaces {
     private void bars(PartyRace race) {
         for (UUID id : race.racers()) {
             Player p = Bukkit.getPlayer(id);
-            TrialRun run = trials.run(id);
-            boolean onIt = run != null && run.race != null && run.race.link == race && !run.race.ended;
-            String line = onIt ? race.bar(id) : null; // gone home (a finisher with no stand): no bar, even on a solo run
+            String line = barFor(race, trials.run(id), id);
             if (p == null || line == null) {
                 hideBar(id);
                 continue;
@@ -537,6 +535,15 @@ public final class PartyRaces {
                 TimeTrials.title(p, "&aLap " + lap + " of " + race.laps() + "!", last ? "&eLast lap!" : "", 30);
             }
         }
+    }
+
+    /**
+     * The racer's bar line, or {@code null} to hide it: only while their run is still on this race (a
+     * finisher sent home at the line, or anyone gone, has no bar, even once on a solo run).
+     */
+    static String barFor(PartyRace race, TrialRun run, UUID id) {
+        boolean onIt = run != null && run.race != null && run.race.link == race && !run.race.ended;
+        return onIt ? race.bar(id) : null;
     }
 
     private void hideBar(UUID id) {

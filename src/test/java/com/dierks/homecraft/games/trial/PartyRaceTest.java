@@ -241,4 +241,58 @@ class PartyRaceTest {
                 "/hcm play invites off turns off party-race invites too; its cooldown and switches stay");
         assertEquals(8, TimeTrialsSettings.defaults().partyMax(), "games.trials.party_max ships at 8");
     }
+
+    // ---- the fixes (EV fix stage, R1 review) --------------------------------------------------------
+
+    @Test
+    void aRestartDueSoonEndsTheSharedWarmUpAtOnce() {
+        PartyRace r = race(180);
+        seatAll(r);
+        assertTrue(r.seatingDone(), "on");
+        assertEquals(PartyRace.State.WARMUP, r.state(), "warming up for 3 minutes");
+        assertEquals(PartyRace.Step.NONE, r.tick(tick.get() + 100, false), "no restart soon: the warm-up goes on");
+        assertEquals(PartyRace.Step.TO_GRID, r.tick(tick.get() + 120, true),
+                "the restart hold: everyone to the grid now, so the race isn't eaten by free laps");
+    }
+
+    @Test
+    void aRacerWhoHasntReportedYetIsBehindThoseWhoHave() {
+        PartyRace r = race(0);
+        seatAll(r);
+        r.seatingDone();
+        r.tick(r.goTick());
+        r.progress(SAM, 0, 12.5, 100);
+        r.progress(AVA, 0, 30.0, 100); // Lee's first report hasn't come yet
+        List<RaceStandings.Place> live = r.standings();
+        assertEquals(List.of(SAM, AVA, LEE), live.stream().map(p -> p.row().racer()).toList(),
+                "no report is no lead: Lee is behind the two who reported on the same target count");
+    }
+
+    @Test
+    void aBarIsShownOnlyWhileTheRacersRunIsOnThisRace() {
+        PartyRace r = race(0);
+        seatAll(r);
+        r.seatingDone();
+        r.tick(r.goTick());
+        TrialRun racing = new TrialRun(SAM, LOOP, false, 0);
+        racing.race = new RaceRun(r, LOOP, LOOP.start(), null, false);
+        assertTrue(PartyRaces.barFor(r, racing, SAM).contains("of 3"), "racing: the place bar");
+        r.finished(SAM, 40_000, true, null);
+        assertTrue(PartyRaces.barFor(r, racing, SAM) != null, "finished and still on the stand: the bar stays");
+        racing.race.ended = true;
+        assertNull(PartyRaces.barFor(r, racing, SAM), "on the way home: no bar");
+        assertNull(PartyRaces.barFor(r, null, SAM), "home: no bar");
+        assertNull(PartyRaces.barFor(r, new TrialRun(SAM, LOOP, false, 0), SAM), "and never over a solo run of their own");
+    }
+
+    @Test
+    void theDropperHasNoPartyRaces() {
+        assertFalse(PartyRaces.offered(TrialKind.DROPPER), "the Dropper's only extra is its practice drop");
+        Course dropper = new Course("drop", TrialKind.DROPPER, "Drop", Tier.EASY, "games", LOOP.start(), List.of(),
+                LOOP.finish(), null, 30, true, false, 1);
+        assertEquals(PartyRaces.NO_DROPPER, PartyRaces.courseProblem(dropper), "so a party on it is refused, with why");
+        assertNull(PartyRaces.courseProblem(LOOP), "a boat course has party races");
+        assertNull(PartyRaces.courseProblem(LapsTest.straight()), "and so does parkour");
+        assertEquals("That course is closed right now.", PartyRaces.courseProblem(null), "a closed course says so");
+    }
 }

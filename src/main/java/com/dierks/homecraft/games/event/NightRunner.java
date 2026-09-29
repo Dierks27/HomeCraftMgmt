@@ -562,6 +562,7 @@ public final class NightRunner implements RaceLink {
                 long now = ports.now();
                 for (Racer r : joined()) {
                     if (!r.seated && r.refused != null && !queued(r) && now - r.triedAt >= RETRY_MS) {
+                        r.triedAt = now;
                         inQueue.add(r.id);
                         queue.add(() -> seat(r, spotFor(r)));
                     }
@@ -617,7 +618,6 @@ public final class NightRunner implements RaceLink {
         if (r.left || r.seated || state.phase().over() || spot == null || racers.get(r.id) != r) {
             return;
         }
-        r.triedAt = ports.now();
         if (!ports.online(r.id)) {
             r.refused = "offline";
             return;

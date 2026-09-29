@@ -825,4 +825,45 @@ class RaceModeEndToEndTest {
         trials.onSessionEnd(ben, EndReason.QUIT_ITEM);
         assertEquals(0, bench.severe(), "nothing threw");
     }
+
+    @Test
+    void aSoloWarmUpLapThroughTheFinishNeverCountsAndAQuitForgetsAWarmUpChoice() throws Exception {
+        TrialRun solo = new TrialRun(id(ben), loop, false, TimeTrials.COUNTDOWN_TICKS + 1);
+        assertTrue(Warmup.begin(solo, race.tick, 180, loop.start().point(), race.nanos), "Ben chose a warm-up");
+        trials.replaceRun(solo);
+        race.cross(id(ben), 41_000); // TimeTrials.finish: a warm-up lap, before anything is judged
+        assertNull(best(ben, Scores.course(loop.id())), "a solo warm-up lap never reaches the board");
+        assertNull(cupTime(ben), "nor the Cup");
+        assertEquals(0, told.courses(id(ben)), "nor the quests (settleCounted never ran)");
+        assertTrue(bench.heard(id(ben)).contains("not counted"), "it says so: " + bench.heard(id(ben)));
+        trials.end(ben);
+
+        trials.warmups().want(id(cal), loop.id()); // Warm up chosen, on the way to the start
+        assertEquals(loop.id(), trials.warmups().wanted(id(cal)), "remembered for the loop");
+        trials.onQuit(cal); // and gone before arriving
+        assertNull(trials.warmups().wanted(id(cal)), "a quit forgets it: it never starts a warm-up later");
+    }
+
+    @Test
+    void aPartyStartIsRefusedDuringARestartHoldAndOnADropper() throws Exception {
+        PartyLobby lobby = games.parties().create(PartyLobby.Kind.RACE, loop.id(), id(ava), 8);
+        assertNull(games.parties().join(lobby.id(), id(ben)), "Ben joins");
+        assertNull(trials.party().startProblem(ava), "the loop, no restart soon: Ava may start");
+        bench.restarts(List.of(java.time.LocalTime.of(12, 3)), 5); // a restart at 12:03, held from 11:58
+        String held = trials.party().startProblem(ava);
+        assertNotNull(held, "the restart hold refuses a new start");
+        assertTrue(held.contains("12:03"), "and says when the restart is: " + held);
+        bench.restarts(List.of(), 5);
+        assertNull(trials.party().startProblem(ava), "no hold: fine again");
+
+        Course drop = DropperCourses.hand();
+        bench.dao().saveCourse(new GamesDao.CourseRow(drop.id(), "trials", drop.kind().id(), drop.name(), drop.world(),
+                drop.enabled(), CourseCodec.encode(drop), drop.rev(), 0, 0), false);
+        trials.forget();
+        assertNotNull(trials.openCourse(drop.id()), "the Dropper is open");
+        PartyLobby dropLobby = games.parties().create(PartyLobby.Kind.RACE, drop.id(), id(cal), 8);
+        Player dee = bench.player("Dee");
+        assertNull(games.parties().join(dropLobby.id(), dee.getUniqueId()), "Dee joins Cal's party");
+        assertEquals(PartyRaces.NO_DROPPER, trials.party().startProblem(cal), "a Dropper party can't start");
+    }
 }

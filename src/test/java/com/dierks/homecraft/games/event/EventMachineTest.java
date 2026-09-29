@@ -195,4 +195,27 @@ class EventMachineTest {
         assertTrue(EventMachine.Phase.BREAK.running(), "a break is part of the running night");
         assertFalse(EventMachine.Phase.OPEN.running(), "the join window isn't");
     }
+
+    @Test
+    void everyoneReadyEarlyStillGoesAtTheAdvertisedStart() {
+        EventMachine.Timing t = timing(3 * MIN);
+        EventMachine.Step seat = EventMachine.step(EventMachine.State.open(T - 10 * MIN), t,
+                facts(T - 15_000, 3, 0, 0, -1, false));
+        EventMachine.Step ready = EventMachine.step(seat.state(), t, facts(T - 10_000, 3, 3, 0, -1, true));
+        assertEquals(List.of(EventMachine.Do.GRID), did(ready), "everyone ready 10 s before the start: to the grid");
+        assertEquals(T, ready.state().goAt(), "but race 1 goes at the advertised start, never before (a join at T - 5 s is in time)");
+        EventMachine.Step late = EventMachine.step(seat.state(), t, facts(T + 60_000, 3, 3, 0, -1, true));
+        assertEquals(T + 60_000 + EventMachine.COUNTDOWN_MS, late.state().goAt(), "after the start: the usual countdown");
+    }
+
+    @Test
+    void aRestartDueSoonEndsTheWarmUpAtOnce() {
+        EventMachine.Timing t = timing(3 * MIN);
+        EventMachine.Step seat = EventMachine.step(EventMachine.State.open(T - 10 * MIN), t,
+                facts(T - 15_000, 3, 0, 0, -1, false));
+        EventMachine.Step held = EventMachine.step(seat.state(), t,
+                new EventMachine.Facts(T + 20_000, 3, 3, 0, -1, false, true));
+        assertEquals(List.of(EventMachine.Do.GRID), did(held), "the restart hold: straight to the grid, nobody ready or not");
+        assertEquals(EventMachine.Phase.GRID, held.state().phase(), "GRID");
+    }
 }

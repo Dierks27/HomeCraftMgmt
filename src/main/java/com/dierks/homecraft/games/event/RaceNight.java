@@ -599,7 +599,7 @@ public final class RaceNight implements Game {
         return new PayLoop(dao(), new PayLoop.Payer() {
             @Override
             public int pay(UUID player, String ref, int tokens, String detail) {
-                Player p = Bukkit.getPlayer(player);
+                Player p = online(player);
                 if (p == null || !games().rewards().canEarnHere(p)) {
                     return -1;
                 }
@@ -1121,6 +1121,20 @@ public final class RaceNight implements Game {
             dao = new EventDao(ctx.plugin().database(), games().dao());
         }
         return dao;
+    }
+
+    /** A test's own DAO (no plugin to open the database from). */
+    void dao(EventDao testDao) {
+        this.dao = testDao;
+    }
+
+    /** The player if online, or {@code null} (never a throw: no server in a test). */
+    private static Player online(UUID id) {
+        try {
+            return Bukkit.getPlayer(id);
+        } catch (RuntimeException | LinkageError e) {
+            return null;
+        }
     }
 
     long now() {

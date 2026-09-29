@@ -136,4 +136,56 @@ class RacePrizesTest {
         NightRules d = NightRules.of(RaceNightSettings.defaults(), 3, 0, false, 8);
         assertEquals(d, NightRules.decode("junk\nraces=lots\n", d), "a row it can't read keeps the fallback, never throws");
     }
+
+    @Test
+    void aPodiumNeedsAFinishTonightStillRacingPointsNeverWinOne() {
+        List<UUID> who = racers(3);
+        List<NightStandings.Ranked> night = List.of(
+                new NightStandings.Ranked(who.get(0), 1, 30), // finished all three
+                new NightStandings.Ranked(who.get(1), 2, 3),  // still racing each time: 1 point a race
+                new NightStandings.Ranked(who.get(2), 2, 3));
+        Map<UUID, RacePrizes.Prize> p = RacePrizes.plan(night, 3, List.of(who.get(0)), PRIZES, 1, true);
+        assertEquals(5, p.get(who.get(0)).tokens(), "the one finisher won: 5");
+        assertFalse(p.containsKey(who.get(1)), "tied 2nd on still-racing points: no podium, no finish, nothing");
+        assertFalse(p.containsKey(who.get(2)), "nor the other");
+        assertTrue(RacePrizes.won(night.get(0), night, List.of(who.get(0))), "and only the finisher won the night");
+        assertFalse(RacePrizes.won(new NightStandings.Ranked(who.get(1), 1, 3), night, List.of(who.get(0))),
+                "a 1st on still-racing points alone isn't a win");
+    }
+
+    @Test
+    void aNightWhereNobodyFinishedPaysNothingAtAll() {
+        List<UUID> who = racers(4);
+        List<NightStandings.Ranked> idle = List.of(new NightStandings.Ranked(who.get(0), 1, 3),
+                new NightStandings.Ranked(who.get(1), 1, 3), new NightStandings.Ranked(who.get(2), 1, 3),
+                new NightStandings.Ranked(who.get(3), 1, 3));
+        assertTrue(RacePrizes.plan(idle, 4, List.of(), PRIZES, 1, true).isEmpty(),
+                "idle racers tie 1st on still-racing points: no finisher, so no prize at all");
+        assertFalse(RacePrizes.won(idle.get(0), idle, List.of()), "and nobody won");
+    }
+
+    @Test
+    void racersTiedForLastCameLastSoThePodiumIsByDistinctPlaces() {
+        List<UUID> who = racers(3);
+        List<NightStandings.Ranked> night = List.of(
+                new NightStandings.Ranked(who.get(0), 1, 30),
+                new NightStandings.Ranked(who.get(1), 2, 20),
+                new NightStandings.Ranked(who.get(2), 2, 20));
+        Map<UUID, RacePrizes.Prize> p = RacePrizes.plan(night, 3, who, PRIZES, 1, true);
+        assertEquals(5, p.get(who.get(0)).tokens(), "1st, with racers behind: 5");
+        assertEquals(1, p.get(who.get(1)).tokens(), "tied 2nd is tied LAST: nobody is behind them, so the finisher's 1");
+        assertEquals(1, p.get(who.get(2)).tokens(), "the same for the other");
+        List<NightStandings.Ranked> allLevel = List.of(new NightStandings.Ranked(who.get(0), 1, 18),
+                new NightStandings.Ranked(who.get(1), 1, 18));
+        Map<UUID, RacePrizes.Prize> level = RacePrizes.plan(allLevel, 2, who.subList(0, 2), PRIZES, 1, true);
+        assertEquals(1, level.get(who.get(0)).tokens(), "two finishers level on everything: nobody beat anybody, 1 each");
+        assertFalse(RacePrizes.won(allLevel.get(0), allLevel, who), "and no winner");
+    }
+
+    @Test
+    void theLedgerSaysThePodiumPlaceOrAFinishedRace() {
+        assertEquals("Race Night: 2nd place", PayLoop.detail(2), "a podium prize says its place");
+        assertEquals("Race Night: finished a race", PayLoop.detail(4), "a finisher's 1 isn't a '4th place' prize");
+        assertEquals("Race Night prize", PayLoop.detail(null), "no place stored");
+    }
 }

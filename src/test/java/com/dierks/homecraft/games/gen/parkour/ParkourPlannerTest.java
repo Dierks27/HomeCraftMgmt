@@ -13,6 +13,8 @@ import com.dierks.homecraft.games.gen.api.PlannedTrial;
 import com.dierks.homecraft.games.gen.api.SignText;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.Progress;
+import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.games.trial.Tier;
 import com.dierks.homecraft.games.trial.TrialKind;
 import org.junit.jupiter.api.Test;
@@ -142,9 +144,9 @@ class ParkourPlannerTest {
     void goldenHashesPinThreeSeedsPerTier() throws GenFailed {
         // A change here means the planner makes different layouts: bump ParkourPlanner.ALGO.
         String[][] golden = {
-                {"easy", "c6e72a445830", "11896849cd44", "4d0bf45c9148"},
-                {"medium", "e27f6c176c16", "a99639c62fd7", "4e06463ee0b1"},
-                {"hard", "b11f8e194e88", "b688f090d5bf", "98fee89718f2"},
+                {"easy", "e69a705f00d6", "1a6684208d50", "6e70a086523d"},
+                {"medium", "00e4dc588604", "c0e8597fffad", "e7179450eab7"},
+                {"hard", "cccf12fa9329", "a3f54cb78eac", "c8d61be9a34d"},
         };
         long[] seeds = {1L, 0xC0FFEEL, 0x5EED5EEDL};
         for (int t = 0; t < 3; t++) {
@@ -154,7 +156,8 @@ class ParkourPlannerTest {
                         golden[t][0] + " seed " + Long.toHexString(seeds[s]) + " (if this changed, bump ALGO)");
             }
         }
-        assertEquals(1, ParkourPlanner.ALGO, "the version these hashes were pinned at");
+        assertEquals(2, ParkourPlanner.ALGO, "the version these hashes were pinned at (2: checkpoints cover where"
+                + " feet stand, and Easy turns are out of sprint reach)");
     }
 
     @Test
@@ -193,7 +196,7 @@ class ParkourPlannerTest {
             assertNotNull(c.start(), "a start");
             assertNotNull(c.finish(), "a finish");
             for (Course.Mark m : c.checkpoints()) {
-                assertEquals(ParkourPlanner.CHECKPOINT_RADIUS, m.radius(), 0.0, "checkpoints are 2.2");
+                assertEquals(ParkourPlanner.CHECKPOINT_RADIUS, m.radius(), 0.0, "checkpoints are 2.6");
             }
             assertEquals(ParkourPlanner.FINISH_RADIUS, c.finish().radius(), 0.0, "the finish is 3.0");
             assertEquals(Math.max(5, (int) Math.floor(0.4 * t.refMs() / 1000.0)), (int) c.minSeconds(),
@@ -283,6 +286,28 @@ class ParkourPlannerTest {
         assertEquals(six, PLANNER.plan(input(Slots.DAILY_PARKOUR_HARD, 'A', 3, "hard", 64)).hash(), "at 64 too");
     }
 
+    @Test
+    void everyCheckpointCountsWhereverFeetCanStandOnItsPad() throws GenFailed {
+        for (Slots.Def slot : SLOTS) {
+            for (int day = 0; day < 100; day++) {
+                Plan p = PLANNER.plan(input(slot, GenSeed.seed(SECRET, 20_000 + day, slot.id(), 0)));
+                for (Course.Mark m : ((PlannedTrial) p.course()).course().checkpoints()) {
+                    // a 3 x 3 pad under the mark; feet stand up to a half-width past its edges
+                    for (double dx = -1.79; dx <= 1.791; dx += 0.179) {
+                        for (double dz = -1.79; dz <= 1.791; dz += 0.179) {
+                            Progress run = new Progress(new Course(slot.id(), TrialKind.PARKOUR, slot.name(),
+                                    Tier.EASY, "", null, List.of(m), new Course.Mark(0, -100, 0, 1), null, null, true,
+                                    false, 1), new Point(m.x() + 9, m.y() + 3, m.z()), 0);
+                            run.move(new Point(m.x() + dx, m.y(), m.z() + dz), 1);
+                            assertEquals(1, run.reachedCheckpoints(), slot.id() + " day " + day + ": landing at "
+                                    + dx + "," + dz + " from the middle of the checkpoint counts it");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // ---- the boot check -------------------------------------------------------------------------
 
     private static GenTag tag(Plan p, int algo) {
@@ -310,6 +335,28 @@ class ParkourPlannerTest {
         Plan found = PLANNER.rederive(input(Slots.DAILY_PARKOUR_MEDIUM, 'A', 0, "easy", 6),
                 tag(hard, ParkourPlanner.ALGO));
         assertEquals(hard.hash(), found.hash(), "made hard, found after an admin set the slot to easy");
+    }
+
+    @Test
+    void theBootCheckRefusesALayoutTheLiveFallDepthNoLongerFits() throws GenFailed {
+        int refused = 0;
+        for (int day = 0; day < 40; day++) {
+            PlanInput at6 = new PlanInput(Slots.DAILY_PARKOUR_HARD, Slots.DAILY_PARKOUR_HARD.half('A'), 'A', 20725, 0,
+                    GenSeed.seed(0x5EC12E7L, 20_000 + day, Slots.DAILY_PARKOUR_HARD.id(), 0), "hard", 6, 0, null);
+            Plan live = PLANNER.plan(at6);
+            PlanInput at1 = new PlanInput(Slots.DAILY_PARKOUR_HARD, Slots.DAILY_PARKOUR_HARD.half('A'), 'A', 20725, 0,
+                    at6.seed(), "hard", 1, 0, null);
+            if (ParkourValidator.problems(live, "hard", 1).isEmpty()) {
+                assertEquals(live.hash(), PLANNER.rederive(at1, tag(live, ParkourPlanner.ALGO)).hash(),
+                        "day " + day + ": a layout that still fits fall_depth 1 is found as before");
+                continue;
+            }
+            refused++;
+            GenFailed e = assertThrows(GenFailed.class, () -> PLANNER.rederive(at1, tag(live, ParkourPlanner.ALGO)),
+                    "day " + day + ": made at fall_depth 6, it isn't re-opened at 1");
+            assertTrue(e.getMessage().contains("fall_depth 1"), "and says why: " + e.getMessage());
+        }
+        assertTrue(refused > 0, "some Hard layouts don't fit fall_depth 1 (the case this guards)");
     }
 
     @Test

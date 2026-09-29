@@ -143,7 +143,7 @@ class RingsPlannerTest {
         String[][] golden = {
                 {"easy", "15712bc2b54e", "3e3fad90d7b6", "7c1ce1ca2ea4"},
                 {"medium", "484bb189f55b", "ddf7bf273cb7", "6a3f2c9f2b91"},
-                {"hard", "d5501ad62188", "db2a5231db65", "512a7a0e400d"},
+                {"hard", "fd8fb8bb0278", "db2a5231db65", "512a7a0e400d"},
         };
         long[] seeds = {1L, 0xC0FFEEL, 0x5EED5EEDL};
         for (String[] tier : golden) {
@@ -152,7 +152,8 @@ class RingsPlannerTest {
                         tier[0] + " seed " + Long.toHexString(seeds[s]) + " (if this changed, bump ALGO)");
             }
         }
-        assertEquals(1, RingsPlanner.ALGO, "the version these hashes were pinned at");
+        assertEquals(2, RingsPlanner.ALGO, "the version these hashes were pinned at (2: flights are checked all"
+                + " along each tick's move, with a clearance)");
     }
 
     @Test

@@ -148,8 +148,14 @@ class JumpRulesTest {
                 assertTrue(need >= JumpRules.SKIP_FLOOR, "never closer than 6");
                 assertTrue(need >= 1 + JumpSim.sprintReach(dy), "and a block past sprinting reach at dy " + dy);
                 double turn = JumpRules.minSkipGap(level, dy, true, 2.5);
-                JumpSim.Mode mode = level == JumpRules.Level.EASY ? JumpSim.Mode.WALK : JumpSim.Mode.SPRINT;
-                assertTrue(turn >= 1 + JumpSim.reach(dy, mode), level + ": around a turn still out of reach");
+                if (level == JumpRules.Level.EASY) {
+                    assertTrue(turn >= 1 + JumpSim.walkReach(dy), "easy: around a turn a block past walking reach");
+                    assertTrue(turn >= JumpSim.sprintReach(dy) + JumpRules.EASY_TURN_SKIP_MARGIN,
+                            "and past a perfect sprint jump too at dy " + dy + ": a sprinting child can't skip the"
+                                    + " checkpoint");
+                } else {
+                    assertTrue(turn >= 1 + JumpSim.sprintReach(dy), level + ": around a turn still out of reach");
+                }
                 assertTrue(turn > 2.5, level + ": and further than the jump onto the turn pad");
                 assertTrue(turn <= need, level + ": the turn rule only ever relaxes the 6");
             }

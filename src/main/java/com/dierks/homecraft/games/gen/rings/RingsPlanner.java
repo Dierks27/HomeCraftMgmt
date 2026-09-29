@@ -58,7 +58,7 @@ import java.util.Set;
 public final class RingsPlanner implements Planner {
 
     /** Its version; bump it whenever what it makes for a seed changes (golden hashes pin three seeds). */
-    public static final int ALGO = 1;
+    public static final int ALGO = 2;
 
     /** The three tiers (the table in §4.2). */
     public enum Level {

@@ -26,8 +26,10 @@ import java.util.Locale;
  * and a player who lands anywhere is on the pad they aimed for. Around a turn the pads either side
  * of the turn pad are necessarily closer (a 3 x 3 checkpoint pad can't hold two pads 6 apart), so
  * there the 6 is waived but the physics isn't: they must still be out of jumping reach, with a
- * block to spare. Easy turns only on checkpoint pads, where a skip would miss the checkpoint and
- * gain nothing, so there it is walking reach that counts.
+ * block to spare. Easy turns only on checkpoint pads, where a skip would miss the checkpoint (and
+ * then nothing after it counts, the finish included). Easy needs no sprint, but a child may
+ * sprint, so there the pads must be out of a perfect sprint jump's reach too: with Easy's short
+ * gaps that takes a +1 step in or out of a turning checkpoint, which the planner finds.
  */
 public final class JumpRules {
 
@@ -158,6 +160,11 @@ public final class JumpRules {
     public static final double SKIP_FLOOR = 6;
     /** ...except either side of a turn pad, which need only this (and be out of reach). */
     public static final double TURN_SKIP_FLOOR = 3;
+    /**
+     * Around an Easy turn the pads either side of the checkpoint are kept this much beyond a
+     * perfect sprint jump's reach (a 3 x 3 checkpoint pad leaves no room for a whole block).
+     */
+    public static final double EASY_TURN_SKIP_MARGIN = 0.15;
     /** Easy lands on a pad that overlaps the one it left by at least this many rows. */
     public static final int EASY_OVERLAP = 2;
 
@@ -252,8 +259,12 @@ public final class JumpRules {
         if (!aroundTurn) {
             return Math.max(SKIP_FLOOR, 1 + JumpSim.sprintReach(dy));
         }
-        JumpSim.Mode mode = level == Level.EASY ? JumpSim.Mode.WALK : JumpSim.Mode.SPRINT;
-        return Math.max(Math.max(TURN_SKIP_FLOOR, dIn + 0.5), 1 + JumpSim.reach(dy, mode));
+        double floor = Math.max(TURN_SKIP_FLOOR, dIn + 0.5);
+        if (level == Level.EASY) {
+            // Easy needs no sprint, but a child may sprint: out of a perfect sprint jump's reach
+            return Math.max(floor, Math.max(1 + JumpSim.walkReach(dy), JumpSim.sprintReach(dy) + EASY_TURN_SKIP_MARGIN));
+        }
+        return Math.max(floor, 1 + JumpSim.sprintReach(dy));
     }
 
     /**

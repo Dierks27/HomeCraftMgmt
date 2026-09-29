@@ -128,4 +128,16 @@ class ElytraSimTest {
         assertTrue(Double.isNaN(ElytraSim.firstHit(-2, 3, 0, 2, 3, 0, 0, 0, 0, 1, 0)), "a move past it misses");
         assertEquals(0.0, ElytraSim.firstHit(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0), 0.0, "standing inside counts");
     }
+
+    @Test
+    void aFastMoveThatClipsACornerBetweenTwoTickEndsTouchesIt() {
+        ElytraSim.Solid block = (x, y, z) -> x == 0 && y == 0 && z == 0;
+        assertFalse(ElytraSim.touches(-0.5, 0.2, 0.5, block), "the hitbox at the start of the tick is clear");
+        assertFalse(ElytraSim.touches(0.5, 0.2, -0.5, block), "and at its end, 1.41 blocks on");
+        assertTrue(ElytraSim.touchesAlong(-0.5, 0.2, 0.5, new ElytraSim.Flyer(0.5, 0.2, -0.5, 0, 0, 0), block),
+                "but halfway the move cuts across the block's corner: a touch");
+        assertTrue(ElytraSim.touches(-0.35, 0.2, 0.5, block),
+                "and passing 0.05 from a face is a graze, which counts as a touch too");
+        assertFalse(ElytraSim.touches(-0.45, 0.2, 0.5, block), "while 0.15 away is clear");
+    }
 }

@@ -57,7 +57,8 @@ class ParkourValidatorTest {
         List<Course.Mark> cps = new ArrayList<>();
         for (int k : checkpoints) {
             P c = pads.get(k);
-            cps.add(new Course.Mark(c.x1() + c.sx() / 2.0, c.top(), c.z1() + c.sz() / 2.0, 2.2));
+            cps.add(new Course.Mark(c.x1() + c.sx() / 2.0, c.top(), c.z1() + c.sz() / 2.0,
+                    ParkourPlanner.CHECKPOINT_RADIUS));
         }
         P first = pads.get(1);
         Course.Spot start = new Course.Spot(s.x1() + s.sx() / 2.0, s.top(), s.z1() + s.sz() / 2.0,
@@ -274,5 +275,33 @@ class ParkourValidatorTest {
         Plan p = real(EASY, 13);
         assertTrue(says(ParkourValidator.problems(p, "EEE", 6), "isn't a parkour tier"), "a golf mix");
         assertFalse(ParkourValidator.problems(p, "hard", 6).isEmpty(), "an easy layout isn't a hard one");
+    }
+
+    @Test
+    void aCheckpointThatMissesTheCornersFeetCanStandOnIsRefused() throws GenFailed {
+        Plan p = real(EASY, 4);
+        Course c = ((PlannedTrial) p.course()).course();
+        List<Course.Mark> small = new ArrayList<>();
+        for (Course.Mark m : c.checkpoints()) {
+            small.add(new Course.Mark(m.x(), m.y(), m.z(), 2.2)); // covers the block corners (2.12), not the feet
+        }
+        Course narrow = new Course(c.id(), c.kind(), c.name(), c.tier(), c.world(), c.start(), small, c.finish(),
+                c.fallY(), c.minSeconds(), c.enabled(), c.pinned(), c.rev());
+        Plan bad = Plan.of(p.slot(), p.algo(), p.seed(), p.half(), p.palette(), p.ops(), p.signs(), p.keepClear(),
+                new PlannedTrial(narrow, ((PlannedTrial) p.course()).refMs()), p.summary(), p.work());
+        assertTrue(says(ParkourValidator.problems(bad, "easy", 6), "doesn't cover its pad"),
+                "a child who lands on a corner 2.4 from the middle and hops on would never be counted");
+        assertEquals(List.of(), ParkourValidator.problems(p, "easy", 6), "the planner's own 2.6 covers it");
+    }
+
+    @Test
+    void anEasyTurnWhosePadsASprintCouldJoinIsRefused() {
+        // start, a pad, a checkpoint the path turns on, a pad 4.24 from the first one a step down, the finish
+        List<P> pads = List.of(new P(4100, 4110, 5, 5, 172, Palette.START), new P(4107, 4111, 3, 3, 172,
+                Palette.PATH_EASY), new P(4112, 4112, 3, 3, 172, Palette.CHECKPOINT), new P(4113, 4117, 3, 3, 171,
+                Palette.PATH_EASY), new P(4112, 4122, 5, 5, 171, Palette.FINISH));
+        List<String> problems = ParkourValidator.problems(layout(EASY, "easy", 160.0, pads, 2), "easy", 6);
+        assertTrue(says(problems, "pads 1 and 3 are 4.24 apart: a player could skip"),
+                "walking can't cross 4.24 a step down, but a sprint can, missing the checkpoint: " + problems);
     }
 }

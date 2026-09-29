@@ -45,6 +45,10 @@ public final class ElytraSim {
     public static final int LEG_TICKS = 400;
     /** A gliding player's hitbox: 0.6 wide and 0.6 tall. */
     public static final double BOX = 0.6;
+    /** A flight must pass every block by at least this much: a graze is a touch. */
+    public static final double CLEARANCE = 0.1;
+    /** A tick's move is checked for touches every this many blocks of it. */
+    public static final double SWEEP_STEP = 0.25;
     /** A rocket fires once the ring is less than one block down for this many across. */
     public static final double SHORT_SLOPE = 8;
     /** A flight has missed its ring once it is this much further from it, across the ground, than its closest. */
@@ -342,10 +346,11 @@ public final class ElytraSim {
                 double ox = f.x;
                 double oy = f.y + BOX / 2;
                 double oz = f.z;
+                double feetY = f.y;
                 glide(f, lx, ly, lz);
                 ticks++;
                 sinceRing++;
-                if (solid != null && touches(f, solid)) {
+                if (solid != null && touchesAlong(ox, feetY, oz, f, solid)) {
                     return new Result(false, next, ticks, "touched a block at " + (int) Math.floor(f.x) + " "
                             + (int) Math.floor(f.y) + " " + (int) Math.floor(f.z) + " before ring " + (next + 1));
                 }
@@ -390,17 +395,38 @@ public final class ElytraSim {
         return new Pilot(f, rockets).fly(targets, solid);
     }
 
-    /** Whether the gliding hitbox at the flyer's position overlaps a solid block. */
-    static boolean touches(Flyer f, Solid solid) {
-        if (!solid.near(f.x, f.y + BOX / 2, f.z)) {
+    /**
+     * Whether the gliding hitbox, grown by {@value #CLEARANCE}, meets a solid block anywhere along
+     * the tick's move from feet (ox, oy, oz) to where the flyer is now: tested every
+     * {@value #SWEEP_STEP} blocks of the move, so a fast flight can't pass a ring's frame between
+     * two tick ends, and a graze counts as a touch.
+     */
+    static boolean touchesAlong(double ox, double oy, double oz, Flyer f, Solid solid) {
+        double dx = f.x - ox;
+        double dy = f.y - oy;
+        double dz = f.z - oz;
+        int steps = Math.max(1, (int) Math.ceil(Math.sqrt(dx * dx + dy * dy + dz * dz) / SWEEP_STEP));
+        for (int i = 1; i <= steps; i++) {
+            double t = (double) i / steps;
+            if (touches(ox + dx * t, oy + dy * t, oz + dz * t, solid)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether the gliding hitbox with feet at (x, y, z), grown by {@value #CLEARANCE}, overlaps a solid block. */
+    static boolean touches(double fx, double fy, double fz, Solid solid) {
+        if (!solid.near(fx, fy + BOX / 2, fz)) {
             return false;
         }
-        int x0 = (int) Math.floor(f.x - BOX / 2);
-        int x1 = (int) Math.floor(f.x + BOX / 2);
-        int y0 = (int) Math.floor(f.y);
-        int y1 = (int) Math.floor(f.y + BOX);
-        int z0 = (int) Math.floor(f.z - BOX / 2);
-        int z1 = (int) Math.floor(f.z + BOX / 2);
+        double g = BOX / 2 + CLEARANCE;
+        int x0 = (int) Math.floor(fx - g);
+        int x1 = (int) Math.floor(fx + g);
+        int y0 = (int) Math.floor(fy - CLEARANCE);
+        int y1 = (int) Math.floor(fy + BOX + CLEARANCE);
+        int z0 = (int) Math.floor(fz - g);
+        int z1 = (int) Math.floor(fz + g);
         for (int x = x0; x <= x1; x++) {
             for (int y = y0; y <= y1; y++) {
                 for (int z = z0; z <= z1; z++) {

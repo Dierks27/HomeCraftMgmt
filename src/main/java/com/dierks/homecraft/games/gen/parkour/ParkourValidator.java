@@ -34,7 +34,8 @@ import java.util.Set;
  *   <li>fall consistency: no pad sits within 2 of the height that sends a run back, using the live
  *       {@code trials.fall_depth};</li>
  *   <li>a checkpoint after exactly every N jumps, the finish after the last; every mark sits on
- *       its pad, covers it, and reaches no other pad;</li>
+ *       its pad and reaches no other pad; a checkpoint's covers every spot of its pad where feet
+ *       can stand (a half-width past its edges), so any landing on it counts;</li>
  *   <li>every block and sign inside the half;</li>
  *   <li>no enclosed walkable cell (the air over every pad reaches open sky);</li>
  *   <li>at most {@value #MAX_OPS} blocks;</li>
@@ -450,8 +451,9 @@ public final class ParkourValidator {
             Course.Mark m = marks.get(k);
             Pad p = on.get(k);
             double halfSide = Math.min(p.sx(), p.sz()) / 2.0;
-            double corner = Math.hypot(Math.max(m.x() - p.x1, p.x2 + 1 - m.x()),
-                    Math.max(m.z() - p.z1, p.z2 + 1 - m.z()));
+            // where feet can stand: the pad and a half-width past its edges
+            double corner = Math.hypot(Math.max(m.x() - p.x1, p.x2 + 1 - m.x()) + ParkourPlanner.STAND,
+                    Math.max(m.z() - p.z1, p.z2 + 1 - m.z()) + ParkourPlanner.STAND);
             if (wholePad ? m.radius() < corner - EPS : m.radius() < halfSide - EPS) {
                 out.add("the " + what + " at " + at(m.x(), m.y(), m.z()) + " doesn't cover its pad (radius "
                         + JumpRules.fmt(m.radius()) + ")");

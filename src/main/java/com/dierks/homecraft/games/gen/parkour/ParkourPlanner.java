@@ -52,7 +52,7 @@ import java.util.Locale;
 public final class ParkourPlanner implements Planner {
 
     /** Its version; bump it whenever what it makes for a seed changes (golden hashes pin three seeds). */
-    public static final int ALGO = 1;
+    public static final int ALGO = 2;
 
     /** Candidates tried for one jump before backing up. */
     public static final int TRIES_PER_JUMP = 20;
@@ -73,9 +73,17 @@ public final class ParkourPlanner implements Planner {
     public static final int HEADROOM = 3;
     /** Easy falls back this far below its lowest pad. */
     public static final int EASY_FALL = 3;
-    /** Checkpoint and finish radii. */
-    public static final double CHECKPOINT_RADIUS = 2.2;
+    /**
+     * Checkpoint and finish radii. A checkpoint's mark covers every spot on its 3 x 3 pad where
+     * feet can stand, and a player's feet can be {@link #STAND} past a pad's edge: its far corner
+     * is {@code hypot(1.8, 1.8) = 2.55} from the middle, so a child who lands on the corner of a
+     * turning checkpoint and hops on is counted. (The block corner, 2.12, isn't enough.) No
+     * checkpoint's mark reaches the pad before or after it ({@link Search#reachesNeighbour}).
+     */
+    public static final double CHECKPOINT_RADIUS = 2.6;
     public static final double FINISH_RADIUS = 3.0;
+    /** How far past a pad's edge feet can still stand on it: half a player's width. */
+    public static final double STAND = 0.3;
     /** The deepest {@code fall_depth} a layout is shaped for; deeper settings give the same layout. */
     public static final int FALL_DESIGN = 6;
     /** Reference time: seconds per jump, and running speed (blocks a second) walking and sprinting. */
@@ -104,7 +112,9 @@ public final class ParkourPlanner implements Planner {
     /**
      * The layout the tag names, made again: the same seed through the same planner. The tier and
      * {@code fall_depth} in {@code in} are tried first; a layout made under another tier, or for a
-     * shallower fall depth, is found by trying those too. It must hash the same as the tag.
+     * shallower fall depth, is found by trying those too. It must hash the same as the tag, and
+     * pass {@link ParkourValidator} under the live {@code fall_depth} of {@code in}: a layout the
+     * current setting would send players back from is refused, so the engine builds a new one.
      */
     @Override
     public Plan rederive(PlanInput in, GenTag tag) throws GenFailed {
@@ -143,6 +153,13 @@ public final class ParkourPlanner implements Planner {
                     continue;
                 }
                 if (anyHash || tag.planHash().equals(p.hash())) {
+                    // Found; but it must still be fair under the live fall_depth (a lower setting
+                    // can put a pad under a leg's fall floor): if not, a new layout is made instead.
+                    List<String> live = ParkourValidator.problems(p, tier, in.fallDepth());
+                    if (!live.isEmpty()) {
+                        throw new GenFailed("layout " + p.hash() + " was made for fall_depth " + depth + " and doesn't"
+                                + " fit fall_depth " + in.fallDepth() + ": " + live.get(0));
+                    }
                     return p;
                 }
             }
@@ -352,10 +369,20 @@ public final class ParkourPlanner implements Planner {
             if (!fits(to)) {
                 return null;
             }
-            if (!clear(i, from, to)) {
+            if (!clear(i, from, to) || reachesNeighbour(from, to)) {
                 return null;
             }
             return to;
+        }
+
+        /**
+         * Whether a checkpoint's mark on one of the two pads of this jump reaches the other: a mark
+         * must be reached on its own pad, never while standing on the pad before it, and never
+         * from the one after (a flat 1-block gap in or out of a checkpoint is too close).
+         */
+        boolean reachesNeighbour(Pad from, Pad to) {
+            return (to.kind() == Kind.CHECKPOINT && markReaches(to, CHECKPOINT_RADIUS, from))
+                    || (from.kind() == Kind.CHECKPOINT && markReaches(from, CHECKPOINT_RADIUS, to));
         }
 
         int[] size(Kind kind, GenRandom r) {
@@ -700,6 +727,17 @@ public final class ParkourPlanner implements Planner {
     /** How many rows two ranges share. */
     static int overlap(int a1, int a2, int b1, int b2) {
         return Math.max(0, Math.min(a2, b2) - Math.max(a1, b1) + 1);
+    }
+
+    /**
+     * Whether a mark of {@code radius} over the middle of {@code on} (at its top) reaches any block
+     * of {@code other}: the validator's measure.
+     */
+    static boolean markReaches(Pad on, double radius, Pad other) {
+        double ex = Math.max(0, Math.max(other.x1() - on.cx(), on.cx() - (other.x2() + 1)));
+        double ez = Math.max(0, Math.max(other.z1() - on.cz(), on.cz() - (other.z2() + 1)));
+        double ey = other.top() - on.top();
+        return ex * ex + ey * ey + ez * ez <= radius * radius + 1e-9;
     }
 
     static double gapBetween(Pad a, Pad b) {

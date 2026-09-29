@@ -198,9 +198,11 @@ final class TrialFinish {
     }
 
     /**
-     * Pay every Star Chart goal the week just crossed ({@link DailyStars#crossed}), smallest first,
-     * each under {@code ms:gweek:<week>:<goal>} so it is paid once a week whatever order the goals
-     * are listed in. Nothing when the stars weren't recorded or a goal pays nothing.
+     * Offer every Star Chart goal the week has reached ({@link DailyStars#reached}), smallest
+     * first, each under {@code ms:gweek:<week>:<goal>} so it is paid once a week whatever order the
+     * goals are listed in and whichever run pays it: a goal crossed while the day's caps were full
+     * pays nothing and records nothing, so the next counted run that week pays it. Nothing when the
+     * stars weren't recorded or a goal pays nothing.
      *
      * @return the tokens paid
      */
@@ -209,7 +211,7 @@ final class TrialFinish {
             return 0;
         }
         int earned = 0;
-        for (int goal : DailyStars.crossed(added.weekBefore(), added.weekTotal(), goals)) {
+        for (int goal : DailyStars.reached(added.weekTotal(), goals)) {
             earned += pay.pay(SkillRewards.milestoneRef(weekBoard, goal), reward, "Star Chart: " + goal + "★ this week");
         }
         return earned;

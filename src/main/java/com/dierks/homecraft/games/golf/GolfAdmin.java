@@ -350,6 +350,12 @@ final class GolfAdmin implements GameAdmin {
                 }
                 Location l = p.getLocation();
                 GolfCourse.Spot corner = new GolfCourse.Spot(l.getBlockX(), l.getBlockY(), l.getBlockZ());
+                GolfCourse.Spot other = which == 1 ? h.corner2() : h.corner1();
+                String box = boundsRefusal(golf.games().generated(), p.getWorld().getName(), corner, other);
+                if (box != null) {
+                    tell(sender, box);
+                    return;
+                }
                 layout(sender, c, c.withHole(n, h.withCorner(which, corner)), args,
                         "Hole " + n + "'s bounds corner " + which + " is at " + spot(corner) + "&a.");
             }
@@ -651,6 +657,17 @@ final class GolfAdmin implements GameAdmin {
      */
     static String areaRefusal(GeneratedCourses g, String world, int x, int y, int z) {
         return DailyLookup.nearArea(g, world, x, y, z) ? GenCopy.EDITOR_REFUSED : null;
+    }
+
+    /**
+     * Why a hand-built hole's bounds from corner {@code a} to corner {@code b} can't be, or
+     * {@code null}: the whole box, not only each corner, is kept out of the Daily Courses areas and
+     * {@value DailyLookup#EDITOR_MARGIN} blocks around them (as the engine measures a hand-built
+     * hole). With the other corner not set yet, only {@code a} is checked.
+     */
+    static String boundsRefusal(GeneratedCourses g, String world, GolfCourse.Spot a, GolfCourse.Spot b) {
+        GolfCourse.Spot o = b == null ? a : b;
+        return DailyLookup.nearBox(g, world, a.x(), a.y(), a.z(), o.x(), o.y(), o.z()) ? GenCopy.EDITOR_REFUSED : null;
     }
 
     /** A saved edit in the server log, as the trials editor keeps them: who, what, which course. */

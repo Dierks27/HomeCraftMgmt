@@ -38,7 +38,7 @@ class GolfFinishTest {
     private static final long WEEK = 20_727;
 
     /** Records every call; pays a once-only ref once; keeps stars like GamesDao.addStars. */
-    private static final class Ledger implements GolfFinish.Ledger {
+    private static class Ledger implements GolfFinish.Ledger {
         final List<String> calls = new ArrayList<>();
         final Set<String> paid = new HashSet<>();
         final Map<String, Long> boards = new HashMap<>();
@@ -182,6 +182,28 @@ class GolfFinishTest {
         assertTrue(l.calls.contains("goal ms:gweek:" + WEEK + ":10 1"), "9 to 12 crosses 10: " + l.calls);
         assertEquals(12, s.weekStars(), "the week after");
         GolfFinish.settle(round(9, List.of(), false, tag(LAYOUT_DAY + 1, 0)), l);
-        assertEquals(1, l.calls.stream().filter(c -> c.startsWith("goal")).count(), "12 to 15 crosses nothing");
+        assertEquals(1, l.paid.stream().filter(r -> r.startsWith("ms:gweek:")).count(),
+                "12 to 15: the 10 is offered again but never paid twice");
+    }
+
+    @Test
+    void aStarGoalTheCapsHeldBackIsPaidByTheNextRoundThatWeek() {
+        boolean[] capped = {true};
+        Ledger l = new Ledger() {
+            @Override
+            public int payGoal(String ref, int tokens, String detail) {
+                calls.add("goal " + ref + " " + tokens);
+                if (capped[0]) {
+                    return 0; // today's caps are full: nothing paid, nothing recorded
+                }
+                return paid.add(ref) ? tokens : 0;
+            }
+        };
+        l.boards.put("gweek:" + WEEK, 9L);
+        GolfFinish.settle(round(9, List.of(), false, tag(LAYOUT_DAY, 0)), l);
+        assertFalse(l.paid.contains("ms:gweek:" + WEEK + ":10"), "9 to 12 crosses 10 on a capped day: not paid");
+        capped[0] = false;
+        GolfFinish.settle(round(9, List.of(), false, tag(LAYOUT_DAY + 1, 0)), l);
+        assertTrue(l.paid.contains("ms:gweek:" + WEEK + ":10"), "the next round that week pays it: " + l.calls);
     }
 }

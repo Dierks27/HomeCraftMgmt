@@ -172,7 +172,7 @@ class TrialFinishTest {
      * A ledger that behaves like the database: a once-only ref pays once, and stars are kept as
      * each day board's best with the week moved by the difference (DailyStars, like addStars).
      */
-    private static final class DailyLedger implements TrialFinish.Ledger {
+    private static class DailyLedger implements TrialFinish.Ledger {
         final List<String> calls = new ArrayList<>();
         final Set<String> paidRefs = new HashSet<>();
         final Map<String, Long> boards = new HashMap<>();
@@ -336,9 +336,36 @@ class TrialFinishTest {
         assertEquals(11, s.weekStars(), "the week after the run");
         assertEquals(1 + 5 + 1, s.earned(), "the day's first finish, the very first finish and the goal");
 
-        TrialFinish.settle(counted(40_000), dailyRun(tag(LAYOUT_DAY + 1, 0), 40_000, false, false), ledger);
-        assertEquals(1, ledger.calls.stream().filter(c -> c.startsWith("goal ")).count(),
-                "11 to 14 crosses nothing: the 10 is never paid twice");
+        TrialFinish.Summary again = TrialFinish.settle(counted(40_000), dailyRun(tag(LAYOUT_DAY + 1, 0), 40_000, false,
+                false), ledger);
+        assertEquals(1, again.earned(), "11 to 14: only the day's first finish; the 10 is never paid twice");
+    }
+
+    @Test
+    void aStarChartGoalTheCapsHeldBackIsPaidByTheNextRunThatWeek() {
+        DailyLedger ledger = new DailyLedger() {
+            boolean capped = true;
+
+            @Override
+            public int payGoal(String ref, int tokens, String detail) {
+                calls.add("goal " + ref + " " + tokens + " " + detail);
+                if (capped) {
+                    capped = false; // today's caps are full: nothing paid, nothing recorded
+                    return 0;
+                }
+                return paidRefs.add(ref) ? tokens : 0;
+            }
+        };
+        ledger.boards.put("gweek:" + STAR_WEEK, 8L);
+        TrialFinish.Summary capped = TrialFinish.settle(counted(40_000), dailyRun(tag(LAYOUT_DAY, 0), 40_000, false,
+                false), ledger);
+        assertEquals(1 + 5, capped.earned(), "8 to 11 crosses 10 on a day the caps are full: the goal pays nothing");
+        TrialFinish.Summary later = TrialFinish.settle(counted(40_000), dailyRun(tag(LAYOUT_DAY + 1, 0), 40_000, false,
+                false), ledger);
+        assertEquals(1 + 1, later.earned(), "the next run that week (11 to 14) pays the 10 it reached: " + ledger.calls);
+        TrialFinish.Summary third = TrialFinish.settle(counted(40_000), dailyRun(tag(LAYOUT_DAY + 2, 0), 40_000, false,
+                false), ledger);
+        assertEquals(1, third.earned(), "and only once");
     }
 
     @Test

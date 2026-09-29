@@ -3,8 +3,11 @@ package com.dierks.homecraft.games.trial;
 import com.dierks.homecraft.games.GeneratedCourses;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenCopy;
+import com.dierks.homecraft.games.gen.api.GenRandom;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.engine.Regions;
+import com.dierks.homecraft.storage.GamesDao;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -103,7 +106,7 @@ class CourseAdminTest {
     // ---- Daily Courses -------------------------------------------------------------------------
 
     /** The engine as the editor sees it: Easy Parkour's half A in world "games" is kept. */
-    static GeneratedCourses keeping(Box half) {
+    static GeneratedCourses keeping(Box... halves) {
         return new GeneratedCourses() {
             @Override
             public boolean live(String courseId, GenTag tag) {
@@ -127,7 +130,15 @@ class CourseAdminTest {
 
             @Override
             public boolean inArea(String world, int x, int y, int z) {
-                return "games".equals(world) && half.contains(x, y, z);
+                if (!"games".equals(world)) {
+                    return false;
+                }
+                for (Box half : halves) {
+                    if (half.contains(x, y, z)) {
+                        return true;
+                    }
+                }
+                return false;
             }
         };
     }
@@ -177,5 +188,36 @@ class CourseAdminTest {
         assertNull(CourseAdmin.areaRefusal(g, "world", 4100, 170, 4100), "another world: fine");
         assertNull(CourseAdmin.areaRefusal(GeneratedCourses.NONE, "games", 4100, 170, 4100),
                 "no engine, no areas");
+    }
+
+    @Test
+    void aMarkIsKeptOutWithItsRadiusExactlyAsTheEngineMeasuresAHandBuiltCourse() {
+        Slots.Def d = Slots.DAILY_PARKOUR_EASY;
+        Box a = d.half('A');
+        Box b = d.half('B');
+        GeneratedCourses g = keeping(a, b);
+        double x = b.maxX() + 17.5;
+        assertNull(CourseAdmin.areaRefusal(g, "games", x, 180, b.minZ() + 20.5), "the point alone is 17 out");
+        assertEquals(GenCopy.EDITOR_REFUSED, CourseAdmin.areaRefusal(g, "games", x, 180, b.minZ() + 20.5, 4),
+                "but an elytra checkpoint of radius 4 there reaches within 16 of half B");
+        GenRandom r = new GenRandom(0x16);
+        int refused = 0;
+        for (int i = 0; i < 3000; i++) {
+            double px = r.nextDouble(a.minX() - 40, b.maxX() + 40);
+            double py = r.nextDouble(a.minY() - 40, a.maxY() + 40);
+            double pz = r.nextDouble(a.minZ() - 40, a.maxZ() + 40);
+            double radius = Course.radius(r.nextInt(0, 6) + (r.nextInt(2) == 0 ? 0 : 0.5)); // as the editor reads it
+            Course c = new Course("my_course", TrialKind.ELYTRA, "My Course", Tier.EASY, "games",
+                    new Course.Spot(0, 70, 0, 0f, 0f), List.of(new Course.Mark(px, py, pz, radius)), null, null, null,
+                    false, false, 1);
+            String engine = Regions.handBuiltProblem(d, d.origin(), "games", Regions.handBuilt(List.of(
+                    new GamesDao.CourseRow("my_course", "trials", "elytra", "My Course", "games", true,
+                            CourseCodec.encode(c), 1, 0, 0))));
+            String editor = CourseAdmin.areaRefusal(g, "games", px, py, pz, radius);
+            assertEquals(engine == null, editor == null, "the editor takes a checkpoint at " + px + "," + py + "," + pz
+                    + " r " + radius + " exactly when the engine would still build next to it: " + engine);
+            refused += editor == null ? 0 : 1;
+        }
+        assertTrue(refused > 100 && refused < 2900, "the sample has both kinds: " + refused);
     }
 }

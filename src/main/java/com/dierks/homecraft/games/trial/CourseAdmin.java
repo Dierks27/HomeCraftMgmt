@@ -225,7 +225,7 @@ final class CourseAdmin implements GameAdmin {
                     sender.sendMessage(Text.of("&cA radius is a number of blocks, like 3 or 2.5."));
                     return;
                 }
-                Location here = here(sender, c);
+                Location here = here(sender, c, r);
                 if (here == null) {
                     return;
                 }
@@ -266,7 +266,7 @@ final class CourseAdmin implements GameAdmin {
             sender.sendMessage(Text.of("&cA radius is a number of blocks, like 3 or 2.5."));
             return;
         }
-        Location here = here(sender, c);
+        Location here = here(sender, c, r);
         if (here == null) {
             return;
         }
@@ -491,6 +491,11 @@ final class CourseAdmin implements GameAdmin {
      * and the course's own world once it has any point.
      */
     private Location here(CommandSender sender, Course c) {
+        return here(sender, c, 0);
+    }
+
+    /** {@link #here(CommandSender, Course)} for a point with a {@code radius} (a checkpoint, the finish). */
+    private Location here(CommandSender sender, Course c, double radius) {
         if (!(sender instanceof Player p)) {
             sender.sendMessage(Text.of("&cStand in the world to do that."));
             return null;
@@ -506,7 +511,7 @@ final class CourseAdmin implements GameAdmin {
             sender.sendMessage(Text.of("&c" + c.name() + " is in '" + c.world() + "'. A course is all in one world."));
             return null;
         }
-        String near = areaRefusal(trials.generated(), world, here.getX(), here.getY(), here.getZ());
+        String near = areaRefusal(trials.generated(), world, here.getX(), here.getY(), here.getZ(), radius);
         if (near != null) {
             sender.sendMessage(Text.of(near));
             return null;
@@ -631,8 +636,18 @@ final class CourseAdmin implements GameAdmin {
      * inside a Daily Courses area or within {@value DailyLookup#EDITOR_MARGIN} blocks of one.
      */
     static String areaRefusal(GeneratedCourses g, String world, double x, double y, double z) {
-        return DailyLookup.nearArea(g, world, (int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z))
-                ? GenCopy.EDITOR_REFUSED : null;
+        return areaRefusal(g, world, x, y, z, 0);
+    }
+
+    /**
+     * {@link #areaRefusal(GeneratedCourses, String, double, double, double)} for a mark of
+     * {@code radius}: every block it covers is kept that far away, as the Daily Courses engine
+     * measures a hand-built checkpoint (its point ± its radius).
+     */
+    static String areaRefusal(GeneratedCourses g, String world, double x, double y, double z, double radius) {
+        double r = Math.max(0, radius);
+        return DailyLookup.nearBox(g, world, (int) Math.floor(x - r), (int) Math.floor(y - r), (int) Math.floor(z - r),
+                (int) Math.floor(x + r), (int) Math.floor(y + r), (int) Math.floor(z + r)) ? GenCopy.EDITOR_REFUSED : null;
     }
 
     /**

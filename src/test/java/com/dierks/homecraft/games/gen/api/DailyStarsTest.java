@@ -63,4 +63,12 @@ class DailyStarsTest {
         assertEquals(-1, DailyStars.nextGoal(25, GOALS), "at 25: none left");
         assertEquals(-1, DailyStars.nextGoal(0, null), "no goals: none");
     }
+
+    @Test
+    void everyGoalTheWeekHasReachedIsOfferedSmallestFirst() {
+        assertEquals(List.of(), DailyStars.reached(9, GOALS), "under 10: none");
+        assertEquals(List.of(10), DailyStars.reached(10, GOALS), "at 10: the 10");
+        assertEquals(List.of(10, 25), DailyStars.reached(30, List.of(25, 10, 25)), "past both: each once, smallest first");
+        assertEquals(List.of(), DailyStars.reached(30, null), "no goals: none");
+    }
 }

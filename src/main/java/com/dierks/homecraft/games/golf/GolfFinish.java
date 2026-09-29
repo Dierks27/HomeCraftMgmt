@@ -157,7 +157,8 @@ final class GolfFinish {
                     r.name() + " is today's pick");
         }
         if (daily != null && added != null && daily.goalReward() > 0) {
-            for (int goal : DailyStars.crossed(added.weekBefore(), added.weekTotal(), daily.goals())) {
+            // every goal reached, not only the one just crossed: one the caps held back pays now
+            for (int goal : DailyStars.reached(added.weekTotal(), daily.goals())) {
                 earned += ledger.payGoal(SkillRewards.milestoneRef(weekBoard, goal), daily.goalReward(),
                         "Star Chart: " + goal + "★ this week");
             }

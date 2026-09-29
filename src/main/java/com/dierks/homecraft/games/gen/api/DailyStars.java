@@ -15,7 +15,8 @@ import java.util.TreeSet;
  *
  * <p>A weekly goal ({@code star_goals}, shipped 10 and 25) is crossed once, by the run that takes
  * the week from under it to at or over it; its reward ref is {@code ms:gweek:<week>:<goal>}, so it
- * stays the same if the owner reorders the list.
+ * stays the same if the owner reorders the list, and is paid once a week whichever run pays it
+ * ({@link #reached}: a goal the day's caps held back is paid by a later run).
  */
 public final class DailyStars {
 
@@ -40,6 +41,21 @@ public final class DailyStars {
         }
         for (int g : sorted(goals)) {
             if (before < g && g <= after) {
+                out.add(g);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Every goal the week's {@code total} has reached, smallest first, once each. A counted finish
+     * offers each of them (its once-a-week ref pays it at most once), so a goal crossed on a day
+     * the caps were full is paid by a later run that week, like the cabinets' milestones.
+     */
+    public static List<Integer> reached(long total, List<Integer> goals) {
+        List<Integer> out = new ArrayList<>();
+        for (int g : sorted(goals)) {
+            if (g <= total) {
                 out.add(g);
             }
         }

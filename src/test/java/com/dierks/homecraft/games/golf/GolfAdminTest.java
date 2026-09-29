@@ -5,8 +5,10 @@ import com.dierks.homecraft.games.GameContext;
 import com.dierks.homecraft.games.GeneratedCourses;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenCopy;
+import com.dierks.homecraft.games.gen.api.GenRandom;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.engine.Regions;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.command.CommandSender;
@@ -136,5 +138,34 @@ class GolfAdminTest {
         assertNull(GolfAdmin.areaRefusal(g, "games", 5220, 192, 4100), "17 above: fine");
         assertNull(GolfAdmin.areaRefusal(g, "games", 5220, 143, 4100), "17 below: fine");
         assertNull(GolfAdmin.areaRefusal(GeneratedCourses.NONE, "games", 5220, 161, 4100), "no engine: no areas");
+    }
+
+    @Test
+    void aHolesBoundsAreKeptOutAsAWholeBoxNotCornerByCorner() {
+        Slots.Def d = Slots.DAILY_PARKOUR_EASY;
+        Box a = d.half('A');
+        Box b = d.half('B');
+        GeneratedCourses g = com.dierks.homecraft.games.trial.CourseAdminTestAccess.keeping(a, b);
+        GolfCourse.Spot west = new GolfCourse.Spot(a.minX() - 17, 170, a.minZ() + 10);
+        GolfCourse.Spot east = new GolfCourse.Spot(b.maxX() + 17, 173, a.minZ() + 20);
+        assertNull(GolfAdmin.boundsRefusal(g, "games", west, null), "one corner 17 west of half A is fine alone");
+        assertNull(GolfAdmin.boundsRefusal(g, "games", east, null), "and one 17 east of half B");
+        assertEquals(GenCopy.EDITOR_REFUSED, GolfAdmin.boundsRefusal(g, "games", east, west),
+                "but the box between them spans both halves");
+        GenRandom r = new GenRandom(0x60);
+        for (int i = 0; i < 2000; i++) {
+            GolfCourse.Spot c1 = new GolfCourse.Spot(r.nextInt(a.minX() - 60, b.maxX() + 60),
+                    r.nextInt(a.minY() - 30, a.maxY() + 30), r.nextInt(a.minZ() - 60, a.maxZ() + 60));
+            GolfCourse.Spot c2 = new GolfCourse.Spot(c1.x() + r.nextInt(-40, 40), c1.y() + r.nextInt(-6, 6),
+                    c1.z() + r.nextInt(-40, 40));
+            GolfCourse course = new GolfCourse("wide", "Wide", "games", true, 1, List.of(new GolfCourse.Hole(
+                    new GolfCourse.Tee(c1.x() + 0.5, c1.y(), c1.z() + 0.5, 0f), new GolfCourse.Spot(c1.x(), c1.y() - 1,
+                    c1.z()), 3, c1, c2)));
+            String engine = Regions.handBuiltProblem(d, d.origin(), "games",
+                    Regions.handBuilt(List.of(CourseCodec.toRow(course, 0, 0))));
+            String editor = GolfAdmin.boundsRefusal(g, "games", c1, c2);
+            assertEquals(engine == null, editor == null, "the editor takes bounds " + c1 + " to " + c2
+                    + " exactly when the engine would still build next to them: " + engine);
+        }
     }
 }

@@ -124,27 +124,57 @@ public final class DailyLookup {
     /**
      * Whether block (x, y, z) of {@code world} is inside a Daily Courses half expanded by
      * {@value #EDITOR_MARGIN} (where the course editors refuse points, GEN-SPEC §2.4).
-     *
-     * <p>{@link GeneratedCourses#inArea} answers for a half itself; a point is within the margin of
-     * a box exactly when, on each axis on its own, one of {@code -m}, 0 or {@code +m} moves it
-     * inside, as long as every half is at least {@code m} blocks on each side (the smallest is 16
-     * high). So the 27 moves answer it without knowing where the halves are.
      */
     public static boolean nearArea(GeneratedCourses g, String world, int x, int y, int z) {
+        return nearBox(g, world, x, y, z, x, y, z);
+    }
+
+    /**
+     * Whether any block of the box between (x1, y1, z1) and (x2, y2, z2), both included, is inside
+     * a Daily Courses half expanded by {@value #EDITOR_MARGIN}: a checkpoint with its radius, or a
+     * golf hole's bounds, is kept as far away as the Daily Courses engine keeps its halves from
+     * hand-built courses, so an edit the editor takes never switches a slot off.
+     *
+     * <p>{@link GeneratedCourses#inArea} answers for one block of a half. Every half is at least
+     * {@code m} blocks on each side (the smallest is 16 high), so on each axis the blocks of the
+     * box grown by {@code m} that a half covers are either at one of its ends or at least
+     * {@code m} in a row, and every run of {@code m} holds one of every {@code m}-th block: asking
+     * the grown box's ends and every {@code m}-th block between them, on all three axes, finds any
+     * half it meets without knowing where the halves are (for a single block, the 27 moves of
+     * {@code -m}, 0 and {@code +m}).
+     */
+    public static boolean nearBox(GeneratedCourses g, String world, int x1, int y1, int z1, int x2, int y2, int z2) {
         if (g == null || world == null) {
             return false;
         }
         int m = EDITOR_MARGIN;
-        for (int dx = -m; dx <= m; dx += m) {
-            for (int dy = -m; dy <= m; dy += m) {
-                for (int dz = -m; dz <= m; dz += m) {
-                    if (g.inArea(world, x + dx, y + dy, z + dz)) {
+        int[] xs = lattice(Math.min(x1, x2) - m, Math.max(x1, x2) + m, m);
+        int[] ys = lattice(Math.min(y1, y2) - m, Math.max(y1, y2) + m, m);
+        int[] zs = lattice(Math.min(z1, z2) - m, Math.max(z1, z2) + m, m);
+        for (int x : xs) {
+            for (int y : ys) {
+                for (int z : zs) {
+                    if (g.inArea(world, x, y, z)) {
                         return true;
                     }
                 }
             }
         }
         return false;
+    }
+
+    /** Every {@code step}-th block from {@code lo}, and {@code hi}. */
+    private static int[] lattice(int lo, int hi, int step) {
+        int n = (int) (((long) hi - lo) / step) + 1;
+        boolean end = lo + (long) (n - 1) * step != hi;
+        int[] out = new int[n + (end ? 1 : 0)];
+        for (int i = 0; i < n; i++) {
+            out[i] = lo + i * step;
+        }
+        if (end) {
+            out[n] = hi;
+        }
+        return out;
     }
 
     private static void log(GamesService games, Level level, String line, Throwable e) {

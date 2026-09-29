@@ -10,7 +10,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
   code is also compiled and tested against the 26.3 API with no errors or removals)
 - **Version:** `0.35.0-arcade-games`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
-- **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md)
+- **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
 ---
 

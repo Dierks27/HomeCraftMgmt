@@ -455,6 +455,18 @@ public final class GamesDao {
     public int payReward(UUID player, String game, TokenService.Source source, long day, RewardKind kind,
                          String ref, int tokens, int capGame, int capAll, boolean once, String detail,
                          long now) throws SQLException {
+        return payReward(player, game, source, day, kind, ref, tokens, capGame, capAll, once, false, detail, now);
+    }
+
+    /**
+     * {@link #payReward(UUID, String, TokenService.Source, long, RewardKind, String, int, int, int, boolean,
+     * String, long)}, optionally <b>all or nothing</b> ({@code whole}): when the caps leave less than
+     * {@code tokens}, it pays 0 and writes nothing, so a one-time reward stays there to earn on a
+     * later day (Fresh Courses' first finish of a set and its Star Chart goals).
+     */
+    public int payReward(UUID player, String game, TokenService.Source source, long day, RewardKind kind,
+                         String ref, int tokens, int capGame, int capAll, boolean once, boolean whole,
+                         String detail, long now) throws SQLException {
         if (tokens <= 0) {
             return 0;
         }
@@ -474,8 +486,8 @@ public final class GamesDao {
                     pay = Math.min(pay, capAll - cappedSum(c, player, day, null));
                 }
             }
-            if (pay <= 0) {
-                return 0;
+            if (pay <= 0 || (whole && pay < tokens)) {
+                return 0; // nothing written: capped away today, still there another day
             }
             try (PreparedStatement ps = c.prepareStatement(
                     (once ? "INSERT OR IGNORE" : "INSERT")
@@ -643,14 +655,15 @@ public final class GamesDao {
         }
     }
 
-    // ---- Daily Courses' stars ----------------------------------------------------------------
+    // ---- Fresh Courses' stars ----------------------------------------------------------------
 
     /**
-     * Record a counted run's stars on a daily course (GEN-SPEC §5.2), in ONE transaction: keep the
-     * best on the course-day board ({@code gstars:<id>:<day>}), and when that rose, add exactly the
-     * rise to the week's Star Chart ({@code gweek:<week>}). Both boards are the {@code daily}
-     * game's. So the chart only ever rises, a replay never inflates it, and a crash can't land one
-     * write without the other. Stars are 1 to 3; anything else records nothing.
+     * Record a counted run's stars on a Fresh Courses course (GEN-SPEC §5.2), in ONE transaction: keep
+     * the best on the course's stars board for its set ({@code gstars:<id>:<edition>}; a recalled
+     * course's own, {@code GenBoards.stars(tag)}), and when that rose, add exactly the
+     * rise to the week's Star Chart ({@code gweek:<week>}). Both boards are the
+     * {@code fresh_courses} game's. So the chart only ever rises, a replay never inflates it, and a
+     * crash can't land one write without the other. Stars are 1 to 3; anything else records nothing.
      */
     public StarsAdded addStars(UUID player, String dayBoard, String weekBoard, int stars, long now)
             throws SQLException {
@@ -672,9 +685,11 @@ public final class GamesDao {
     }
 
     /**
-     * Remove the Daily Courses boards past keeping (GEN-SPEC §5.2): day boards ({@code gday},
-     * {@code gstars}) of course days before {@code oldestDay}, and Star Charts ({@code gweek}) of
-     * weeks starting before {@code oldestWeek}. No other board is ever touched. One transaction.
+     * Remove the Fresh Courses star boards past keeping (GEN-SPEC §5.2): a course's stars
+     * ({@code gstars}) of sets that began before {@code oldestDay}, and Star Charts ({@code gweek})
+     * of weeks starting before {@code oldestWeek}. No other board is ever touched. One transaction.
+     * A set's own leaderboard ({@code gfresh}) is pruned by the engine
+     * ({@code GenStore.dropEditionBoards}), which keeps each course's last 8 sets.
      *
      * @return score rows removed
      */
@@ -682,8 +697,7 @@ public final class GamesDao {
         return database.transaction(c -> {
             List<String> old = new ArrayList<>();
             try (PreparedStatement ps = c.prepareStatement("SELECT DISTINCT board FROM game_scores WHERE "
-                    + "substr(board, 1, 5) = 'gday:' OR substr(board, 1, 7) = 'gstars:' "
-                    + "OR substr(board, 1, 6) = 'gweek:'");
+                    + "substr(board, 1, 7) = 'gstars:' OR substr(board, 1, 6) = 'gweek:'");
                  ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     String board = rs.getString(1);

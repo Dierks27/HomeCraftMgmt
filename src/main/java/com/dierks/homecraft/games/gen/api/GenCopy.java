@@ -218,6 +218,98 @@ public final class GenCopy {
         };
     }
 
+    /**
+     * When a course's boards and rewards run, as a line ends: "today" (daily), "this week"
+     * (weekly), "on this course" (any other cadence: each set is a new course).
+     */
+    public static String when(int cadence) {
+        return switch (cadence) {
+            case 1 -> "today";
+            case 7 -> "this week";
+            default -> "on this course";
+        };
+    }
+
+    /** A set's board as a line starts: "Today's best", "This week's best", "Best on this course". */
+    public static String bestOf(int cadence) {
+        return switch (cadence) {
+            case 1 -> "Today's best";
+            case 7 -> "This week's best";
+            default -> "Best on this course";
+        };
+    }
+
+    /** "Your best today", "Your best this week", "Your best on this course". */
+    public static String yourBest(int cadence) {
+        return "Your best " + when(cadence);
+    }
+
+    /** "First finish today", "First finish this week", "First finish on this course". */
+    public static String firstFinish(int cadence) {
+        return "First finish " + when(cadence);
+    }
+
+    /** The ledger's reason for a set's first finish: "first finish this week". */
+    public static String firstFinishReason(int cadence) {
+        return "first finish " + when(cadence);
+    }
+
+    /** A set's board as a tile names it: "Today's times", "This week's times", "This course's times". */
+    public static String times(int cadence) {
+        return switch (cadence) {
+            case 1 -> "Today's times";
+            case 7 -> "This week's times";
+            default -> "This course's times";
+        };
+    }
+
+    /** The mark on a course's tile while it is the current set's: "(new today)", "(new this week)", "(new)". */
+    public static String newMark(int cadence) {
+        return switch (cadence) {
+            case 1 -> "(new today)";
+            case 7 -> "(new this week)";
+            default -> "(new)";
+        };
+    }
+
+    /** The mark while it is still the last set's: "(yesterday's)", "(last week's)", "(the last one)". */
+    public static String oldMark(int cadence) {
+        return switch (cadence) {
+            case 1 -> "(yesterday's)";
+            case 7 -> "(last week's)";
+            default -> "(the last one)";
+        };
+    }
+
+    /** A leaderboard display's title: "Hard Parkour - this week", "Parkour - today", or the name alone. */
+    public static String boardTitle(String name, int cadence) {
+        return switch (cadence) {
+            case 1 -> name + " - today";
+            case 7 -> name + " - this week";
+            default -> name;
+        };
+    }
+
+    /**
+     * What a player reads when today's caps can't pay a set's first-finish tokens in full, so none
+     * are paid (CADENCE-UI-TODO §4c: all or nothing): the weekly words as the owner set them; a set
+     * of 2 to 6 days says "before the courses change"; a daily set can't be finished another day.
+     */
+    public static String clearLimit(int cadence) {
+        if (cadence >= Edition.WEEKLY) {
+            return GOAL_LIMIT;
+        }
+        if (cadence <= Edition.DAILY) {
+            return "&7You've reached today's token limit - your time and stars still count!";
+        }
+        return "&7You've reached today's token limit - finish it again another day before the courses change"
+                + " for its tokens.";
+    }
+
+    /** The same for a Star Chart goal (the chart is weekly whatever the cadence). */
+    public static final String GOAL_LIMIT =
+            "&7You've reached today's token limit - finish it again another day this week for its tokens.";
+
     // ---- the archive: course codes, Classics and kept courses (GEN-SPEC-KEEP) -----------------------
 
     /** The line that tells players old courses can come back (screens and the players' guide). */
@@ -352,13 +444,23 @@ public final class GenCopy {
         List<String> out = new ArrayList<>(List.of(NAME, TILE, YESTERDAY, MOVED, ONE_MINUTE, EDITOR_REFUSED, GUARDED,
                 MADE_BY_DAILY, WINGS_TIP, closed("Easy Parkour"), building("Sky Rings"), comingHere(20),
                 comingHere(1), timesUp("fresh_golf"), restartSoon("4:00 PM"), newIn(11 * 3_600_000L + 120_000L),
-                newIn(6 * 86_400_000L + 14 * 3_600_000L), CLASSICS_TIP, courseCode("HARD-40")));
+                newIn(6 * 86_400_000L + 14 * 3_600_000L), CLASSICS_TIP, courseCode("HARD-40"), GOAL_LIMIT));
         for (int cadence : new int[]{1, 2, 3, 7, 14, 28}) {
             out.add(cadenceName(cadence));
             out.add(current(cadence));
             out.add(schedule(cadence, DayOfWeek.MONDAY, "Thu 4:00 AM"));
             out.add(tile(cadence, DayOfWeek.THURSDAY));
             out.add(previous(cadence));
+            out.add(when(cadence));
+            out.add(bestOf(cadence));
+            out.add(yourBest(cadence));
+            out.add(firstFinish(cadence));
+            out.add(firstFinishReason(cadence));
+            out.add(times(cadence));
+            out.add(newMark(cadence));
+            out.add(oldMark(cadence));
+            out.add(boardTitle("Hard Parkour", cadence));
+            out.add(clearLimit(cadence));
             for (Slots.Def d : Slots.ALL) {
                 out.add(slotName(d, cadence));
                 out.add(classicName(slotName(d, cadence), cadence, 20731, false));

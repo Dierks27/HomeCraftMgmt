@@ -10,7 +10,7 @@ import com.dierks.homecraft.games.Scores;
 import com.dierks.homecraft.games.gen.api.GenBoards;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.gui.games.daily.TierMenu;
-import com.dierks.homecraft.gui.games.daily.TodayMenu;
+import com.dierks.homecraft.gui.games.daily.FreshMenu;
 import org.bukkit.entity.Player;
 
 import java.time.LocalDate;
@@ -23,8 +23,8 @@ import java.util.function.Predicate;
 
 /**
  * The shared games screens, as the framework and the games reach them (spec §8, R3.4): the Games
- * screen, one board's high scores, Take a break, the player picker, and Daily Courses' Today's
- * Courses and parkour tier picker (GEN-SPEC §5.4). Installed once at enable
+ * screen, one board's high scores, Take a break, the player picker, and Fresh Courses' own screen
+ * and parkour level picker (GEN-SPEC §5.4). Installed once at enable
  * with {@code games.screens(new Screens(plugin))}; until then the service says "Coming soon!".
  *
  * <p>It also reads, for the screens, what each game publishes about itself through
@@ -64,7 +64,7 @@ public final class Screens implements GamesScreens {
 
     @Override
     public void today(Player player, Runnable back) {
-        new TodayMenu(plugin, daily(), player, back).open(player);
+        new FreshMenu(plugin, daily(), player, back).open(player);
     }
 
     @Override
@@ -72,7 +72,7 @@ public final class Screens implements GamesScreens {
         new TierMenu(plugin, daily(), player, back).open(player);
     }
 
-    /** The {@code daily} game the daily screens belong to (their guard), or {@code null} without one. */
+    /** Fresh Courses, the game its screens belong to (their guard), or {@code null} without one. */
     private Game daily() {
         GamesService games = plugin.games();
         return games == null ? null : games.game(Slots.DAILY);
@@ -104,9 +104,9 @@ public final class Screens implements GamesScreens {
      * A {@link FeedWriter} that only listens: it keeps each game-of-chance give-back and each
      * published board, so a screen can show them. Pure (no Bukkit), so it is tested directly.
      *
-     * <p>A daily course's board changes every day, so it isn't listed among the high-score boards
-     * (its own screen and Today's Courses show it); the weekly Star Chart is, counted in stars,
-     * higher is better.
+     * <p>A Fresh course's board changes with every set, so it isn't listed among the high-score
+     * boards (its own screen and the Fresh Courses screen show it); the weekly Star Chart is,
+     * counted in stars, higher is better.
      */
     static final class Published implements FeedWriter {
 

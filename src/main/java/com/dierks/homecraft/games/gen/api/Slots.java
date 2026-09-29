@@ -136,7 +136,7 @@ public final class Slots {
     public static final Def DAILY_PARKOUR_MEDIUM = new Def("fresh_parkour", PARKOUR, GAME_TRIALS, "parkour",
             "Parkour", "&e", 64, 48, 64, 0, true, "medium", 4352, 160, 4096, 2, 3);
     public static final Def DAILY_PARKOUR_HARD = new Def("fresh_parkour_hard", PARKOUR, GAME_TRIALS, "parkour",
-            "Hard Parkour", "&c", 64, 48, 64, 0, true, "hard", 4608, 160, 4096, 3, 5);
+            "Hard Parkour", "&c", 64, 48, 64, 0, true, "hard", 4608, 160, 4096, 3, 4);
     public static final Def SKY_RINGS = new Def("fresh_rings", RINGS, GAME_TRIALS, "elytra", "Sky Rings", "&b",
             128, 176, 320, 0, true, "easy", 4096, 128, 4352, 2, 3);
     public static final Def DAILY_GOLF = new Def("fresh_golf", GOLF, GAME_GOLF, "golf", "Golf of the Week", "&d",

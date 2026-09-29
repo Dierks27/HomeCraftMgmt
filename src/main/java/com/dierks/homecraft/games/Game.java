@@ -109,7 +109,7 @@ public interface Game {
     }
 
     /**
-     * Its courses were changed outside its own admin commands (Daily Courses flipped a layout):
+     * Its courses were changed outside its own admin commands (Fresh Courses flipped a layout):
      * forget any cached course so the next read sees the new rows.
      */
     default void coursesChanged() {

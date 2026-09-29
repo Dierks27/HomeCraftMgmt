@@ -1,10 +1,12 @@
 package com.dierks.homecraft.gui.games.trial;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.games.trial.TrialText;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
+import com.dierks.homecraft.gui.games.daily.DailyLookup;
 import com.dierks.homecraft.gui.games.daily.DailyText;
 import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.util.Text;
@@ -23,8 +25,9 @@ import java.util.List;
  * a skill game, so a second go is about getting better); 15 the record; 16 tokens earned; 22 Back
  * to all the courses.
  *
- * <p>A daily course's run (GEN-SPEC §5.4) also shows 14 its stars ("★★☆ 2 stars!"), what the
- * next one needs and the week's Star Chart total, and 15 is today's best on that layout.
+ * <p>A Fresh course's run (GEN-SPEC §5.4) shows its course code in the header's NAME ("Course code
+ * HARD-40", for Bedrock), 14 its stars ("★★☆ 2 stars!"), what the next one needs and the week's
+ * Star Chart total, and 15 is the set's best on its board, in the set's words ("this week").
  */
 public final class ResultMenu extends GameMenu {
 
@@ -41,7 +44,7 @@ public final class ResultMenu extends GameMenu {
     @Override
     protected void build() {
         fill();
-        set(4, Menus.icon(Material.CLOCK, "&b" + result.courseName() + ": &f" + TrialText.time(result.ms())), null);
+        set(4, Menus.icon(Material.CLOCK, headerName(result)), null);
         set(11, verdict(), null);
         if (trials.home(viewer)) {
             set(13, Menus.icon(Material.LIME_CONCRETE, "&aPlay again", "&7Back to the start line."),
@@ -52,9 +55,8 @@ public final class ResultMenu extends GameMenu {
         TimeTrials.Daily daily = result.daily();
         if (daily != null) {
             GamesDao.ScoreRow record = trials.recordOn(daily.board());
-            set(15, Menus.icon(Material.GOLD_INGOT, record == null ? "&7No one has finished it today"
-                    : "&6Today's best: &f" + TrialText.time(record.score()) + " &7by &f"
-                    + trials.holder(record.player())), null);
+            set(15, Menus.icon(Material.GOLD_INGOT, trials.setBestLine(record, viewer, daily.cadence())
+                    .replaceFirst("^&7", "&6")), null);
             if (result.counted() && daily.stars() > 0) {
                 set(14, Menus.glint(Menus.icon(Material.NETHER_STAR, starsName(daily), starsLore(daily)),
                         daily.stars() >= 3), null);
@@ -67,10 +69,22 @@ public final class ResultMenu extends GameMenu {
         }
         if (result.counted()) {
             set(16, Menus.icon(Material.GOLD_NUGGET, result.earned() > 0 ? "&eEarned &6" + TrialText.tokens(result.earned())
-                    : "&7No tokens from this run", daily != null ? "&7Your time is on today's board."
-                    : "&7Your time is on the high scores."), null);
+                    : "&7No tokens from this run", daily != null ? "&7Your time is on " + boardWords(daily.cadence())
+                    + " board." : "&7Your time is on the high scores."), null);
         }
         exitTile();
+    }
+
+    /** The header's NAME: "&amp;bHard Parkour: &amp;f0:42.1 &amp;8· &amp;7Course code HARD-40" (no code: none). */
+    static String headerName(TimeTrials.Result result) {
+        TimeTrials.Daily d = result.daily();
+        return "&b" + result.courseName() + ": &f" + TrialText.time(result.ms())
+                + DailyLookup.codeSuffix(d == null ? null : d.code());
+    }
+
+    /** "today's", "this week's", "this course's". */
+    static String boardWords(int cadence) {
+        return cadence == 1 ? "today's" : cadence == 7 ? "this week's" : "this course's";
     }
 
     /** "&amp;e★★☆ 2 stars!" */
@@ -100,14 +114,16 @@ public final class ResultMenu extends GameMenu {
             return Menus.icon(Material.REDSTONE, "&cThat run didn't count", "&7" + capital(result.reason()) + ".");
         }
         boolean daily = result.daily() != null;
+        int cadence = daily ? result.daily().cadence() : 7;
         if (result.record()) {
-            return Menus.icon(Material.NETHER_STAR, daily ? "&6★ Today's best time!" : "&6★ New course record!");
+            return Menus.icon(Material.NETHER_STAR, daily ? "&6★ " + GenCopy.bestOf(cadence) + " time!"
+                    : "&6★ New course record!");
         }
         if (result.personalBest()) {
-            return Menus.icon(Material.EMERALD, daily ? "&e★ Your best today!" : "&e★ New best!");
+            return Menus.icon(Material.EMERALD, daily ? "&e★ " + GenCopy.yourBest(cadence) + "!" : "&e★ New best!");
         }
         return Menus.icon(Material.CLOCK, result.best() == null ? "&7Finished"
-                : (daily ? "&7Your best today: &f" : "&7Your best: &f") + TrialText.time(result.best()));
+                : (daily ? "&7" + GenCopy.yourBest(cadence) + ": &f" : "&7Your best: &f") + TrialText.time(result.best()));
     }
 
     private static String capital(String s) {

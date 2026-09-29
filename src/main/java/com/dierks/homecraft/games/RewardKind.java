@@ -32,13 +32,22 @@ public enum RewardKind {
     WEEKLY_BEST,
     /** Finishing the course of the week, once a day across games (ref {@code cotw:<day>}). */
     COURSE_OF_WEEK,
-    /** Golf at par or better, once per course per day (ref {@code par:<course>:<day>}). */
+    /**
+     * Golf at par or better, once per course per day (ref {@code par:<course>:<day>}); on a Fresh
+     * Courses layout once per set ({@code par:<slot>:<edition>}).
+     */
     PAR,
-    /** A golf hole-in-one in a finished run, once per hole per day (ref {@code hio:<course>:<hole>:<day>}). */
+    /**
+     * A golf hole-in-one in a finished run, once per hole per day (ref {@code hio:<course>:<hole>:<day>});
+     * on a Fresh Courses layout once per set ({@code hio:<slot>:<hole>:<edition>}).
+     */
     HOLE_IN_ONE,
     /**
-     * The first counted finish of a Daily Courses layout's course day, once per course per course
-     * day, a reroll included (ref {@code dclear:<course>:<day>}). Capped, per game.
+     * FRESH_CLEAR: the first counted finish of a Fresh Courses course in one set, once per course
+     * per set, a reroll included (ref {@code fresh:<slot>:<edition>}, {@link SkillRewards#freshClearRef}).
+     * Capped, per game, and paid all or nothing ({@link SkillRewards#payWhole}): a day whose caps
+     * can't pay all of it pays none and records none, so a later day of the set still can. The
+     * constant keeps its first name so nothing stored under it changes.
      */
     DAILY_CLEAR;
 

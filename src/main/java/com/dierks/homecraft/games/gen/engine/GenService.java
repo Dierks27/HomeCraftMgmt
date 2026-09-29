@@ -3104,8 +3104,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             String game = d == null ? Slots.GAME_TRIALS : d.game();
             try {
                 GenArchiveDao.BoardStats st = host.store().boardStats(game, r.board());
-                List<GamesDao.ScoreRow> top = host.store().top(game, r.board(), true, 1);
-                boards.put(r.board(), new FreshFeed.Board(st.plays(), top.isEmpty() ? null : top.get(0)));
+                List<GamesDao.ScoreRow> top = host.store().top(game, r.board(), true, FreshFeed.TOP);
+                boards.put(r.board(), new FreshFeed.Board(st.plays(), top.isEmpty() ? null : top.get(0), top));
             } catch (SQLException | RuntimeException e) {
                 boards.put(r.board(), new FreshFeed.Board(0, null));
             }

@@ -52,7 +52,7 @@ import java.util.logging.Level;
  * which runs the gate. A closed game shows no tile at all. The Luck tab also links to the Scratch
  * Ticket (with its "gives back about" line) and each crate, since Take a break covers them too.
  *
- * <p><b>Daily Courses come first</b> on their tabs (GEN-SPEC §5.4): the Today's Courses tile, then
+ * <p><b>Fresh Courses come first</b> on their tabs (GEN-SPEC §5.4): the the Fresh Courses screen tile, then
  * each daily course, then everything else in catalog order — the courses that are new every
  * morning are the ones worth a look.
  *
@@ -96,7 +96,7 @@ public final class GamesMenu extends GameMenu {
      * One tile on the grid.
      *
      * @param tab      the tab it shows on
-     * @param priority Daily Courses' tiles first: {@link #priority(String)} of its play id
+     * @param priority Fresh Courses' tiles first: {@link #priority(String)} of its play id
      * @param rank     the game's place in the catalog ({@link #LINK_RANK} for the Arcade's links)
      * @param order    its order among the game's own tiles
      * @param icon     what is shown
@@ -104,13 +104,13 @@ public final class GamesMenu extends GameMenu {
      */
     record Tile(Game.Tab tab, int priority, int rank, int order, ItemStack icon, Consumer<InventoryClickEvent> click) {
 
-        /** A tile that isn't Daily Courses'. */
+        /** A tile that isn't Fresh Courses'. */
         Tile(Game.Tab tab, int rank, int order, ItemStack icon, Consumer<InventoryClickEvent> click) {
             this(tab, OTHERS, rank, order, icon, click);
         }
     }
 
-    /** {@link #priority}: the Today's Courses screen and the parkour tier picker. */
+    /** {@link #priority}: the the Fresh Courses screen screen and the parkour tier picker. */
     static final int TODAY = 0;
     /** {@link #priority}: a daily course. */
     static final int DAILY = 1;
@@ -145,7 +145,7 @@ public final class GamesMenu extends GameMenu {
     }
 
     /**
-     * Where a tile with this play id sorts inside its tab: Today's Courses (and the tier picker)
+     * Where a tile with this play id sorts inside its tab: the Fresh Courses screen (and the tier picker)
      * first, then the daily courses, then everything else.
      */
     static int priority(String playId) {
@@ -160,7 +160,7 @@ public final class GamesMenu extends GameMenu {
     }
 
     /**
-     * The tiles for one tab ({@code null} = All), sorted by tab, Daily Courses first, then rank,
+     * The tiles for one tab ({@code null} = All), sorted by tab, Fresh Courses first, then rank,
      * then order; the input is untouched.
      */
     static List<Tile> arrange(List<Tile> tiles, Game.Tab only) {

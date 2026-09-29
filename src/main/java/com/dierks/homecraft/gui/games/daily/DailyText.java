@@ -2,22 +2,25 @@ package com.dierks.homecraft.gui.games.daily;
 
 import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.Edition;
+import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.api.Stars;
 
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 /**
- * The words the daily courses show a player (GEN-SPEC §5.4, §7), in one place and tested: a
- * course's tile name with the key fact in it (Bedrock shows lore only on tap-and-hold), the star
- * lines, the finish line, the Star Chart's lines and how a course day reads.
+ * The words the Fresh Courses show a player (GEN-SPEC §5.4, §7, the weekly addendum §2), in one
+ * place and tested: a course's tile name with the key fact in it (Bedrock shows lore only on
+ * tap-and-hold), the star lines, the finish line, the Star Chart's lines and how a set reads.
+ *
+ * <p><b>The words follow the cadence.</b> How often the courses change is a setting, so every line
+ * about a set takes its cadence in days and says "this week" (weekly, shipped), "today" (daily)
+ * or "on this course" (any other: each set is a new course), through {@link GenCopy}; nothing here
+ * says "today" on its own. The Star Chart is weekly whatever the cadence.
  *
  * <p>Pure: no Bukkit types, so the whole of it is checked for kid-safe words and for glyphs
  * Bedrock can draw (nothing above U+FFFF). Lines carry {@code &}-colour codes like the rest of the
@@ -26,26 +29,13 @@ import java.util.Locale;
  */
 public final class DailyText {
 
-    /** "Mon 28 Sep": a course day as players read it. */
+    /** "Mon 28 Sep": a day as players read it. */
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.US);
 
     private DailyText() {
     }
 
     // ---- days --------------------------------------------------------------------------------
-
-    /**
-     * The course day at {@code now}: the day before the next change when the engine has scheduled
-     * one ({@code nextChangeAt}, epoch ms), else the shipped 04:00 rollover in {@code zone}. So a
-     * screen agrees with the engine about "today" without knowing its rollover.
-     */
-    public static long courseDay(long now, long nextChangeAt, ZoneId zone) {
-        ZoneId z = zone == null ? ZoneOffset.UTC : zone;
-        if (nextChangeAt > now) {
-            return Instant.ofEpochMilli(nextChangeAt).atZone(z).toLocalDate().toEpochDay() - 1;
-        }
-        return new Edition(z, null, null).day(now);
-    }
 
     /** "today", or the day's date: "Mon 28 Sep". */
     public static String dayText(long day, long today) {
@@ -55,6 +45,19 @@ public final class DailyText {
     /** "Mon 28 Sep". */
     public static String date(long day) {
         return DAY.format(LocalDate.ofEpochDay(day));
+    }
+
+    /**
+     * A set's dates as a heading reads them: "Tue 29 Sep" for a day, "Mon 28 Sep-Sun 4 Oct" for a
+     * longer set (its first and last day).
+     */
+    public static String setDates(int cadence, long firstDay) {
+        return cadence <= Edition.DAILY ? date(firstDay) : date(firstDay) + "-" + date(firstDay + cadence - 1);
+    }
+
+    /** A set as a line names it: "the week of Mon 28 Sep" (weekly), "Tue 29 Sep" (daily), "Mon 28 Sep-Wed 30 Sep". */
+    public static String setName(int cadence, long firstDay) {
+        return cadence == Edition.WEEKLY ? "the week of " + date(firstDay) : setDates(cadence, firstDay);
     }
 
     /** A time in whole seconds, as a star time reads: "1:10", "0:45". */
@@ -73,17 +76,18 @@ public final class DailyText {
     }
 
     /**
-     * A daily course's tile name on Today's Courses and the tier picker, its key fact in the name:
-     * "&amp;aEasy Parkour &amp;7- ★★☆" once the player has stars today, "&amp;cHard Parkour" before;
-     * a golf course always says its holes and par ("&amp;dDaily Golf &amp;7- 9 holes, par 29"), then
-     * its stars.
+     * A Fresh course's tile name on the Fresh Courses screen and the tier picker, its key fact in
+     * the name: "&amp;aEasy Parkour &amp;7- ★★☆" once the player has stars in this set,
+     * "&amp;cHard Parkour" before; a golf course always says its holes and par ("&amp;dGolf of the
+     * Week &amp;7- 9 holes, par 29"), then its stars. Golf's big course is named for the cadence
+     * ({@link GenCopy#slotName}).
      *
-     * @param stars the player's best stars on it today (0 = none yet)
+     * @param stars the player's best stars on it in this set (0 = none yet)
      * @param holes golf: how many holes (ignored for a time trial)
      * @param par   golf: the course's par
      */
-    public static String slotName(Slots.Def slot, int stars, int holes, int par) {
-        String head = colour(slot) + (slot == null ? "Daily course" : slot.name());
+    public static String slotName(Slots.Def slot, int cadence, int stars, int holes, int par) {
+        String head = colour(slot) + (slot == null ? GenCopy.NAME : GenCopy.slotName(slot, cadence));
         String starText = stars > 0 ? Stars.text(stars) : null;
         if (slot != null && slot.golf()) {
             return head + " &7- " + holes(holes) + ", par " + par + (starText == null ? "" : " " + starText);
@@ -91,28 +95,30 @@ public final class DailyText {
         return starText == null ? head : head + " &7- " + starText;
     }
 
-    /** A daily course that can't be played right now: its name, being built (grey, GEN-SPEC §5.4). */
-    public static String closedName(Slots.Def slot) {
-        return "&7" + (slot == null ? "Daily course" : slot.name()) + " &8- being built, back soon";
+    /** A Fresh course that can't be played right now: its name, being built (grey, GEN-SPEC §5.4). */
+    public static String closedName(Slots.Def slot, int cadence) {
+        return GenCopy.building(slot == null ? GenCopy.NAME : GenCopy.slotName(slot, cadence));
     }
 
     /**
-     * A generated course's tile on the Courses or Golf tab: the name in its colour, the fact, and
-     * "(new today)" while it is today's layout ("(yesterday's)" until today's is up).
+     * A Fresh course's tile on the Courses or Golf tab: the name in its colour, the fact, and
+     * "(new this week)" while it is its set's current course ("(last week's)" until the new one is
+     * up), in the cadence's words ({@link GenCopy#newMark}, {@link GenCopy#oldMark}).
      */
-    public static String tabName(Slots.Def slot, String name, String fact, long layoutDay, long today) {
-        String n = colour(slot) + (name == null || name.isBlank() ? slot == null ? "Daily course" : slot.name() : name);
-        return n + (fact == null || fact.isBlank() ? "" : " &7- " + fact) + " " + mark(layoutDay, today);
+    public static String tabName(Slots.Def slot, String name, String fact, boolean current, int cadence) {
+        String n = colour(slot) + (name == null || name.isBlank() ? slot == null ? GenCopy.NAME
+                : GenCopy.slotName(slot, cadence) : name);
+        return n + (fact == null || fact.isBlank() ? "" : " &7- " + fact) + " " + mark(current, cadence);
     }
 
-    /** "&amp;a(new today)", or "&amp;8(yesterday's)" for a layout from an earlier day. */
-    public static String mark(long layoutDay, long today) {
-        return layoutDay >= today ? "&a(new today)" : "&8(yesterday's)";
+    /** "&amp;a(new this week)", or "&amp;8(last week's)" for the last set's course. */
+    public static String mark(boolean current, int cadence) {
+        return current ? "&a" + GenCopy.newMark(cadence) : "&8" + GenCopy.oldMark(cadence);
     }
 
-    /** A trial's fact on its tab tile: its stars today, or that there is no time yet today. */
-    public static String trialFact(int stars) {
-        return stars > 0 ? Stars.text(stars) : "no time today";
+    /** A trial's fact on its tab tile: its stars in this set, or that there is no time yet ("no time this week"). */
+    public static String trialFact(int cadence, int stars) {
+        return stars > 0 ? Stars.text(stars) : "no time " + GenCopy.when(cadence);
     }
 
     /** "1 hole", "9 holes". */
@@ -190,37 +196,55 @@ public final class DailyText {
         return out.toString();
     }
 
-    /** "&amp;eYour stars today: ★★☆", or that there are none yet. */
-    public static String starsToday(int stars) {
-        return stars > 0 ? "&eYour stars today: &6" + Stars.text(stars) : "&7No stars today yet - finish it for ★";
+    /** "&amp;eYour stars this week: ★★☆", or that there are none yet ("today", "on this course" by the cadence). */
+    public static String starsNow(int cadence, int stars) {
+        return stars > 0 ? "&eYour stars " + GenCopy.when(cadence) + ": &6" + Stars.text(stars)
+                : "&7No stars " + GenCopy.when(cadence) + " yet - finish it for ★";
     }
 
     // ---- boards and rewards --------------------------------------------------------------------
 
-    /** The finish line for a new best today: "&amp;e★ Your best today! &amp;7(was 1:02.3)"; the first time today. */
-    public static String bestToday(String previous) {
-        return previous == null ? "&e★ Your first finish today!" : "&e★ Your best today! &7(was " + previous + ")";
+    /**
+     * The finish line for a new best in the set: "&amp;e★ Your best this week! &amp;7(was 1:02.3)";
+     * "&amp;e★ Your first finish this week!" the first time.
+     */
+    public static String newBest(int cadence, String previous) {
+        return previous == null ? "&e★ Your first finish " + GenCopy.when(cadence) + "!"
+                : "&e★ " + GenCopy.yourBest(cadence) + "! &7(was " + previous + ")";
     }
 
-    /** "&amp;7Today's best: &amp;f0:58.1 &amp;7by &amp;fAlex" ("(yours)" for the viewer), or that there is none yet. */
-    public static String todaysBest(String score, String holder, boolean yours) {
+    /**
+     * "&amp;7This week's best: &amp;f0:58.1 &amp;7by &amp;fAlex" ("(yours)" for the viewer), or that
+     * nobody has finished it yet in this set.
+     */
+    public static String setBest(int cadence, String score, String holder, boolean yours) {
         if (score == null) {
-            return "&7No one has finished it today - be the first!";
+            return "&7No one has finished it " + (cadence == Edition.DAILY || cadence == Edition.WEEKLY
+                    ? GenCopy.when(cadence) : "yet") + " - be the first!";
         }
-        return "&7Today's best: &f" + score + (yours ? " &7(yours)" : " &7by &f" + (holder == null ? "someone" : holder));
+        return "&7" + GenCopy.bestOf(cadence) + ": &f" + score + (yours ? " &7(yours)"
+                : " &7by &f" + (holder == null ? "someone" : holder));
     }
 
-    /** "&amp;7Your best today: &amp;f1:02.3", or none yet. */
-    public static String yourBestToday(String score) {
-        return score == null ? "&7You haven't finished it today." : "&7Your best today: &f" + score;
+    /** "&amp;7Your best this week: &amp;f1:02.3", or none yet. */
+    public static String yourBest(int cadence, String score) {
+        if (score == null) {
+            return "&7You haven't finished it " + (cadence == Edition.DAILY || cadence == Edition.WEEKLY
+                    ? GenCopy.when(cadence) : "yet") + ".";
+        }
+        return "&7" + GenCopy.yourBest(cadence) + ": &f" + score;
     }
 
-    /** "&amp;7First finish today: &amp;6+1 token", or "&amp;a✔ First finish today done"; nothing for 0. */
-    public static String firstToday(int tokens, boolean done) {
+    /**
+     * "&amp;7First finish this week: &amp;6+1 token", or "&amp;a✔ First finish this week done";
+     * nothing for 0.
+     */
+    public static String firstFinish(int cadence, int tokens, boolean done) {
         if (tokens <= 0) {
             return null;
         }
-        return done ? "&a✔ First finish today done" : "&7First finish today: &6+" + tokens + " token" + (tokens == 1 ? "" : "s");
+        String first = GenCopy.firstFinish(cadence);
+        return done ? "&a✔ " + first + " done" : "&7" + first + ": &6+" + tokens + " token" + (tokens == 1 ? "" : "s");
     }
 
     // ---- the Star Chart ------------------------------------------------------------------------
@@ -230,39 +254,38 @@ public final class DailyText {
         return "&6Star Chart &7- you: " + Math.max(0, total) + "★ this week";
     }
 
-    /** "&amp;7Next goal: 25★ (+1 token)", or every goal reached; nothing when there are no goals. */
-    public static String nextGoal(long total, List<Integer> goals, int reward) {
-        int next = DailyStars.nextGoal(total, goals);
+    /** "&amp;7Next goal: 12★ (+2 tokens)" (each goal its own tokens), or every goal reached; nothing without goals. */
+    public static String nextGoal(long total, List<DailyStars.Goal> goals) {
+        List<Integer> stars = DailyStars.stars(goals == null ? List.of() : goals);
+        int next = DailyStars.nextGoal(total, stars);
         if (next < 0) {
-            return goals == null || goals.isEmpty() ? null : "&aEvery goal this week reached!";
+            return stars.isEmpty() ? null : "&aEvery goal this week reached!";
         }
+        int reward = DailyStars.tokens(goals, next);
         return "&7Next goal: &f" + next + "★" + (reward > 0 ? " &7(+" + reward + " token" + (reward == 1 ? "" : "s")
                 + ")" : "");
     }
 
-    /** How stars work, for its tile's lore. */
-    public static List<String> howStars(List<Integer> goals, int reward) {
+    /** How stars work, for its tile's lore: each goal of the week with its own tokens. */
+    public static List<String> howStars(List<DailyStars.Goal> goals) {
         List<String> out = new ArrayList<>(List.of(
                 "&7Finish a course: &6★",
                 "&7A good time: &6★★",
                 "&7A great time: &6★★★",
-                "&7Your best on each course each",
-                "&7day goes on the Star Chart.",
+                "&7Your best stars on each course",
+                "&7add up on the Star Chart.",
                 "&7A new chart every week!"));
-        List<Integer> shown = new ArrayList<>();
-        for (Integer g : goals == null ? List.<Integer>of() : goals) {
-            if (g != null && g > 0 && !shown.contains(g)) {
+        List<DailyStars.Goal> shown = new ArrayList<>();
+        List<Integer> seen = new ArrayList<>();
+        for (DailyStars.Goal g : goals == null ? List.<DailyStars.Goal>of() : goals) {
+            if (g != null && g.stars() > 0 && g.tokens() > 0 && !seen.contains(g.stars())) {
+                seen.add(g.stars());
                 shown.add(g);
             }
         }
-        shown.sort(Integer::compare);
-        if (!shown.isEmpty() && reward > 0) {
-            List<String> each = new ArrayList<>();
-            for (int g : shown) {
-                each.add(g + "★");
-            }
-            out.add("&7Reach " + String.join(" and ", each) + " in a week:");
-            out.add("&6+" + reward + " token" + (reward == 1 ? "" : "s") + " &7each.");
+        shown.sort((a, b) -> Integer.compare(a.stars(), b.stars()));
+        for (DailyStars.Goal g : shown) {
+            out.add("&7Reach " + g.stars() + "★ in a week: &6+" + g.tokens() + " token" + (g.tokens() == 1 ? "" : "s"));
         }
         return out;
     }
@@ -277,13 +300,30 @@ public final class DailyText {
     /** Every fixed line above with sample values, for the copy test. */
     static List<String> everyLine() {
         List<String> out = new ArrayList<>();
-        for (Slots.Def s : Slots.ALL) {
-            for (int stars = 0; stars <= Stars.MAX; stars++) {
-                out.add(slotName(s, stars, s.plots(), 29));
+        List<DailyStars.Goal> goals = List.of(new DailyStars.Goal(6, 1), new DailyStars.Goal(12, 2));
+        for (int cadence : new int[]{1, 3, 7, 14}) {
+            for (Slots.Def s : Slots.ALL) {
+                for (int stars = 0; stars <= Stars.MAX; stars++) {
+                    out.add(slotName(s, cadence, stars, s.plots(), 29));
+                }
+                out.add(closedName(s, cadence));
+                out.add(tabName(s, s.name(), trialFact(cadence, 2), true, cadence));
+                out.add(tabName(s, s.name(), trialFact(cadence, 0), false, cadence));
             }
-            out.add(closedName(s));
-            out.add(tabName(s, s.name(), trialFact(2), 10, 10));
-            out.add(tabName(s, s.name(), trialFact(0), 9, 10));
+            for (int stars = 0; stars <= Stars.MAX; stars++) {
+                out.add(starsNow(cadence, stars));
+            }
+            out.add(newBest(cadence, null));
+            out.add(newBest(cadence, "1:02.3"));
+            out.add(setBest(cadence, null, null, false));
+            out.add(setBest(cadence, "0:58.1", "Alex", false));
+            out.add(setBest(cadence, "0:58.1", "Alex", true));
+            out.add(yourBest(cadence, null));
+            out.add(yourBest(cadence, "1:02.3"));
+            out.add(firstFinish(cadence, 1, false));
+            out.add(firstFinish(cadence, 2, true));
+            out.add(setDates(cadence, 20_724));
+            out.add(setName(cadence, 20_724));
         }
         out.add(starTimes(45_000, 70_000));
         out.add(starTimes(0, 0));
@@ -291,22 +331,11 @@ public final class DailyText {
         for (int stars = 1; stars <= Stars.MAX; stars++) {
             out.add(trialFinish(stars, 45_000, 70_000, 9));
             out.add(golfFinish(stars, 29, 9, 9));
-            out.add(starsToday(stars));
         }
-        out.add(starsToday(0));
-        out.add(bestToday(null));
-        out.add(bestToday("1:02.3"));
-        out.add(todaysBest(null, null, false));
-        out.add(todaysBest("0:58.1", "Alex", false));
-        out.add(todaysBest("0:58.1", "Alex", true));
-        out.add(yourBestToday(null));
-        out.add(yourBestToday("1:02.3"));
-        out.add(firstToday(1, false));
-        out.add(firstToday(2, true));
         out.add(chartName(14));
-        out.add(nextGoal(3, List.of(10, 25), 1));
-        out.add(nextGoal(30, List.of(10, 25), 1));
-        out.addAll(howStars(List.of(10, 25), 1));
+        out.add(nextGoal(3, goals));
+        out.add(nextGoal(30, goals));
+        out.addAll(howStars(goals));
         out.add(chartLabel(20_724, 20_724));
         out.add(chartLabel(20_717, 20_724));
         return out;

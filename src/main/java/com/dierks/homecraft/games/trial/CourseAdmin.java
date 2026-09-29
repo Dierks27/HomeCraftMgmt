@@ -44,10 +44,10 @@ import java.util.logging.Level;
  * finish. Every change is logged with who made it, and a command that goes wrong says so here and
  * in the console — it never reaches the framework's guard, which would switch the game off.
  *
- * <p><b>Daily Courses keeps its own</b> (GEN-SPEC §2.4, §5.5). A course Daily Courses made is
+ * <p><b>Fresh Courses keeps its own</b> (GEN-SPEC §2.4, §5.5). A course Fresh Courses made is
  * rebuilt every day from its seed, so here it can only be looked at, gone to, tried and featured
  * ({@link #DAILY_VERBS}); anything else points to {@code /hcm games gen}. And no point of a
- * hand-built course may be placed inside a Daily Courses area or within {@value
+ * hand-built course may be placed inside a Fresh Courses area or within {@value
  * DailyLookup#EDITOR_MARGIN} blocks of one: that ground is rebuilt every day.
  */
 final class CourseAdmin implements GameAdmin {
@@ -55,7 +55,7 @@ final class CourseAdmin implements GameAdmin {
     /** What can follow a course id. */
     static final List<String> VERBS = List.of("start", "checkpoint", "finish", "tier", "name", "fall", "minseconds",
             "enable", "disable", "info", "tp", "test", "feature", "delete");
-    /** What can follow a course id when Daily Courses made the course: looking, trying, featuring. */
+    /** What can follow a course id when Fresh Courses made the course: looking, trying, featuring. */
     static final List<String> DAILY_VERBS = List.of("info", "tp", "test", "feature");
 
     private final TimeTrials trials;
@@ -122,7 +122,7 @@ final class CourseAdmin implements GameAdmin {
             sender.sendMessage(Text.of("&f" + c.id() + " &7- " + c.name() + " (" + TrialText.label(c) + "), "
                     + (c.enabled() ? "&aopen" : "&cclosed") + "&7, " + TrialText.checkpoints(c.checkpoints().size())
                     + ", layout " + c.rev() + (c.id().equals(week) ? " &6★ course of the week" : "")
-                    + (c.pinned() ? " &8(pinned)" : "") + (c.generated() ? " &d(Daily Courses)" : "")));
+                    + (c.pinned() ? " &8(pinned)" : "") + (c.generated() ? " &d(Fresh Courses)" : "")));
         }
     }
 
@@ -376,7 +376,8 @@ final class CourseAdmin implements GameAdmin {
                 + (c.id().equals(week) ? " &6★ course of the week" : "") + (c.pinned() ? " &8(pinned)" : "")));
         GenTag gen = c.gen();
         if (gen != null) {
-            sender.sendMessage(Text.of("&dMade by Daily Courses: &7the layout for " + DailyText.date(gen.day())
+            sender.sendMessage(Text.of("&dMade by Fresh Courses: &7the layout for "
+                    + DailyText.setName(gen.cadence(), gen.day())
                     + (gen.reroll() > 0 ? " (reroll " + gen.reroll() + ")" : "") + ", half " + gen.half()
                     + (trials.generated().live(c.id(), gen) ? ", &aopen" : ", &cclosed right now")
                     + " &7- &e/hcm games gen status"));
@@ -633,7 +634,7 @@ final class CourseAdmin implements GameAdmin {
 
     /**
      * Why a hand-built course's point can't be at (x, y, z) of {@code world}, or {@code null}: it is
-     * inside a Daily Courses area or within {@value DailyLookup#EDITOR_MARGIN} blocks of one.
+     * inside a Fresh Courses area or within {@value DailyLookup#EDITOR_MARGIN} blocks of one.
      */
     static String areaRefusal(GeneratedCourses g, String world, double x, double y, double z) {
         return areaRefusal(g, world, x, y, z, 0);
@@ -641,7 +642,7 @@ final class CourseAdmin implements GameAdmin {
 
     /**
      * {@link #areaRefusal(GeneratedCourses, String, double, double, double)} for a mark of
-     * {@code radius}: every block it covers is kept that far away, as the Daily Courses engine
+     * {@code radius}: every block it covers is kept that far away, as the Fresh Courses engine
      * measures a hand-built checkpoint (its point ± its radius).
      */
     static String areaRefusal(GeneratedCourses g, String world, double x, double y, double z, double radius) {

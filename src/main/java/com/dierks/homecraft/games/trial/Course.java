@@ -31,7 +31,7 @@ import java.util.Objects;
  * @param enabled     open to players (needs a start and a finish)
  * @param pinned      pinned as the course of the week
  * @param rev         the layout version: every geometry edit bumps it (R2.15)
- * @param gen         Daily Courses' tag when the course was generated (GEN-SPEC §5.1), or {@code null}
+ * @param gen         Fresh Courses' tag when the course was generated (GEN-SPEC §5.1), or {@code null}
  *                    for a hand-built one, which behaves exactly as it always did
  */
 public record Course(String id, TrialKind kind, String name, Tier tier, String world, Spot start,
@@ -73,7 +73,7 @@ public record Course(String id, TrialKind kind, String name, Tier tier, String w
         rev = Math.max(1, rev);
     }
 
-    /** A hand-built course (no {@code gen} tag): the constructor every course had before Daily Courses. */
+    /** A hand-built course (no {@code gen} tag): the constructor every course had before Fresh Courses. */
     public Course(String id, TrialKind kind, String name, Tier tier, String world, Spot start, List<Mark> checkpoints,
                   Mark finish, Double fallY, Integer minSeconds, boolean enabled, boolean pinned, int rev) {
         this(id, kind, name, tier, world, start, checkpoints, finish, fallY, minSeconds, enabled, pinned, rev, null);
@@ -148,7 +148,7 @@ public record Course(String id, TrialKind kind, String name, Tier tier, String w
         return low;
     }
 
-    /** Whether Daily Courses made it (it carries a {@code gen} tag). */
+    /** Whether Fresh Courses made it (it carries a {@code gen} tag). */
     public boolean generated() {
         return gen != null;
     }
@@ -231,7 +231,7 @@ public record Course(String id, TrialKind kind, String name, Tier tier, String w
                 r, gen);
     }
 
-    /** The same course with Daily Courses' tag ({@code null}: hand-built). */
+    /** The same course with Fresh Courses' tag ({@code null}: hand-built). */
     public Course withGen(GenTag g) {
         return new Course(id, kind, name, tier, world, start, checkpoints, finish, fallY, minSeconds, enabled, pinned,
                 rev, g);

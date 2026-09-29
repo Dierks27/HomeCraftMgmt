@@ -21,7 +21,7 @@ import java.util.Map;
  * tick and remembers each block it read, since a tick's sub-steps ask about the same few blocks
  * many times.
  *
- * <p>Public for Daily Courses (GEN-SPEC §4.3): its golf builds replay each hole's witness line on
+ * <p>Public for Fresh Courses (GEN-SPEC §4.3): its golf builds replay each hole's witness line on
  * these, the real blocks, and its planner's block model is checked against {@link #surface}.
  */
 public final class LiveBlocks implements BallPhysics.Blocks {

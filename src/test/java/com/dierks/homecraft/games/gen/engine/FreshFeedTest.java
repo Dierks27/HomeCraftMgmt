@@ -15,9 +15,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What the website gets (GEN-SPEC-KEEP §8): the golden {@code freshHistory} JSON (newest first, at
- * most {@code feed_history} per slot, short seeds, a time or strokes record, kept and classic marks);
- * a record's holder only when names may be shown; never an edition that isn't live yet; and the
+ * What the website gets (GEN-SPEC-KEEP §8, EXTRAS E3): the golden {@code freshHistory} JSON (newest
+ * first, at most {@code feed_history} per slot, short seeds, a time or strokes record, kept and
+ * classic marks, and each board's best 3 as {@code top}, ties sharing a rank); a record's and a top
+ * row's holder only when names may be shown; never an edition that isn't live yet; and the
  * per-course {@code fresh} and {@code classic} objects, with {@code to} left out for "forever".
  */
 class FreshFeedTest {
@@ -55,15 +56,39 @@ class FreshFeedTest {
         String json = FreshFeed.json(history(true, 26, 1_791_000_000_000L));
         assertEquals("[{\"code\":\"GOLF-3\",\"slot\":\"fresh_golf\",\"name\":\"Golf of the Week\",\"kind\":\"golf\","
                 + "\"from\":1790604900000,\"seed\":\"abcdef012345\",\"plays\":3,\"record\":{\"strokes\":27,"
-                + "\"at\":1790700000000,\"holder\":\"Sam \\\"the fast\\\"\"}},"
+                + "\"at\":1790700000000,\"holder\":\"Sam \\\"the fast\\\"\"},\"top\":[{\"rank\":1,\"value\":27,"
+                + "\"unit\":\"strokes\",\"at\":1790700000000,\"holder\":\"Sam \\\"the fast\\\"\"}]},"
                 + "{\"code\":\"HARD-41\",\"slot\":\"fresh_parkour_hard\",\"name\":\"Hard Parkour\",\"kind\":\"parkour\","
                 + "\"tier\":\"hard\",\"from\":1790604800000,\"to\":1791209600000,\"seed\":\"000000000000\",\"plays\":0},"
                 + "{\"code\":\"HARD-40\",\"slot\":\"fresh_parkour_hard\",\"name\":\"Hard Parkour\",\"kind\":\"parkour\","
                 + "\"tier\":\"hard\",\"from\":1790000000000,\"to\":1790604800000,\"seed\":\"3f2a9c01b7de\",\"plays\":14,"
                 + "\"record\":{\"ms\":62300,\"at\":1790100000000,\"holder\":\"Sam \\\"the fast\\\"\"},"
-                + "\"kept\":\"dragon_run\",\"classic\":true}]", json,
+                + "\"kept\":\"dragon_run\",\"classic\":true,\"top\":[{\"rank\":1,\"value\":62300,\"unit\":\"ms\","
+                + "\"at\":1790100000000,\"holder\":\"Sam \\\"the fast\\\"\"}]}]", json,
                 "newest first; golf has strokes and no tier; a live one ends at its scheduled change (none while"
                         + " pinned forever); a kept one names its course; a recalled one is marked classic");
+    }
+
+    @Test
+    void theTopThreeShareARankOnATieAndNeverListMore() {
+        UUID ann = UUID.fromString("00000000-0000-0000-0000-00000000000b");
+        UUID bob = UUID.fromString("00000000-0000-0000-0000-00000000000c");
+        UUID cy = UUID.fromString("00000000-0000-0000-0000-00000000000d");
+        List<GamesDao.ScoreRow> rows = List.of(new GamesDao.ScoreRow(SAM, 60_000, 1L),
+                new GamesDao.ScoreRow(ann, 60_000, 2L), new GamesDao.ScoreRow(bob, 61_000, 3L),
+                new GamesDao.ScoreRow(cy, 62_000, 4L));
+        List<FreshFeed.Entry> h = FreshFeed.history(List.of(rows().get(0)), board -> new FreshFeed.Board(9,
+                rows.get(0), rows), slot -> null, Set.of(), 26, 1_791_000_000_000L, false, id -> "x");
+        FreshFeed.Entry e = h.get(0);
+        assertEquals(3, e.top().size(), "at most 3 of a past course's best");
+        assertEquals(List.of(1, 1, 3), FreshFeed.ranks(List.of(60_000L, 60_000L, 61_000L)),
+                "a tie shares a rank, and the next one skips it");
+        String json = FreshFeed.json(e);
+        assertTrue(json.contains("\"top\":[{\"rank\":1,\"value\":60000,\"unit\":\"ms\",\"at\":1},"
+                + "{\"rank\":1,\"value\":60000,\"unit\":\"ms\",\"at\":2},{\"rank\":3,\"value\":61000,"
+                + "\"unit\":\"ms\",\"at\":3}]"), "the top list, no names when names are hidden: " + json);
+        assertFalse(json.contains("holder"), "no holder anywhere with names hidden: " + json);
+        assertTrue(FreshFeed.map(e).containsKey("top"), "the map has it too");
     }
 
     @Test

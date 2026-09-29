@@ -31,7 +31,7 @@ import java.util.Map;
  * error ({@link IllegalArgumentException}), so a broken row is reported and left alone rather
  * than quietly replaced by an empty course on the next edit.
  *
- * <p>A course Daily Courses made also has a {@code gen:} block after the holes ({@link GenTagCodec},
+ * <p>A course Fresh Courses made also has a {@code gen:} block after the holes ({@link GenTagCodec},
  * with each hole's attempt and witness line); a course without one is written exactly as it
  * always was.
  */

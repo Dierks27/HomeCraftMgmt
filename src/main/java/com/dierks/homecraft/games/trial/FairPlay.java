@@ -274,7 +274,7 @@ final class FairPlay {
     }
 
     /**
-     * {@link #stale(int, int, Course)} with Daily Courses' "still standing" rule (GEN-SPEC §3.4):
+     * {@link #stale(int, int, Course)} with Fresh Courses' "still standing" rule (GEN-SPEC §3.4):
      * a run on a generated course is stale only if the old rule says so AND the layout it started
      * on no longer stands. The next layout going live doesn't void a run on the previous one while
      * its blocks are still there; once that half starts being cleared, it does. A hand-built

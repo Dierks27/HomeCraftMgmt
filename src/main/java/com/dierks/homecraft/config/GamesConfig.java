@@ -55,7 +55,7 @@ public final class GamesConfig {
 
     /** The common keys, relative to {@code games}, in config order. */
     public static final List<String> COMMON = List.of("enabled", "worlds", "play_worlds", "click_cooldown_ms",
-            "chance_daily_tokens", "max_payout", "skill_daily_cap", "featured", "featured_bonus",
+            "chance_daily_tokens", "max_payout", "skill_daily_cap", "featured", "featured_bonus", "feed_top",
             "restart_times", "restart_hold_minutes",
             "break.daily_choices", "break.pause_days", "break.raise_delay_days");
 
@@ -105,11 +105,29 @@ public final class GamesConfig {
      * @param breakDailyChoices   the daily limits a player can pick
      * @param breakPauseDays      the pauses a player can pick, in days
      * @param breakRaiseDelayDays how long a raised limit waits before it starts (at least 1)
+     * @param feedTop             how many rows of each leaderboard the website's {@code /api/arcade}
+     *                            publishes as {@code top} (0 = none; at most {@value #MAX_FEED_TOP})
      */
     public record Common(boolean enabled, List<String> worlds, List<String> playWorlds, int clickCooldownMs,
                          int chanceDailyTokens, int maxPayout, int skillDailyCap, String featured, int featuredBonus,
                          List<LocalTime> restartTimes, int restartHoldMinutes,
-                         List<Integer> breakDailyChoices, List<Integer> breakPauseDays, int breakRaiseDelayDays) {
+                         List<Integer> breakDailyChoices, List<Integer> breakPauseDays, int breakRaiseDelayDays,
+                         int feedTop) {
+
+        /** The shipped {@code games.feed_top}. */
+        public static final int FEED_TOP = 5;
+        /** The most rows of a leaderboard the feed publishes, whatever config says. */
+        public static final int MAX_FEED_TOP = 25;
+
+        /** The common keys before {@code feed_top} (it is then {@value #FEED_TOP}). */
+        public Common(boolean enabled, List<String> worlds, List<String> playWorlds, int clickCooldownMs,
+                      int chanceDailyTokens, int maxPayout, int skillDailyCap, String featured, int featuredBonus,
+                      List<LocalTime> restartTimes, int restartHoldMinutes, List<Integer> breakDailyChoices,
+                      List<Integer> breakPauseDays, int breakRaiseDelayDays) {
+            this(enabled, worlds, playWorlds, clickCooldownMs, chanceDailyTokens, maxPayout, skillDailyCap, featured,
+                    featuredBonus, restartTimes, restartHoldMinutes, breakDailyChoices, breakPauseDays,
+                    breakRaiseDelayDays, FEED_TOP);
+        }
 
         public Common {
             worlds = worlds == null ? List.of() : List.copyOf(worlds);
@@ -125,6 +143,7 @@ public final class GamesConfig {
             breakDailyChoices = breakDailyChoices == null ? List.of() : List.copyOf(breakDailyChoices);
             breakPauseDays = breakPauseDays == null ? List.of() : List.copyOf(breakPauseDays);
             breakRaiseDelayDays = Math.max(com.dierks.homecraft.games.Breaks.MIN_RAISE_DELAY_DAYS, breakRaiseDelayDays);
+            feedTop = Math.max(0, Math.min(MAX_FEED_TOP, feedTop));
         }
 
         /**
@@ -140,14 +159,14 @@ public final class GamesConfig {
         public Common withEnabled(boolean on) {
             return new Common(on, worlds, playWorlds, clickCooldownMs, chanceDailyTokens, maxPayout, skillDailyCap,
                     featured, featuredBonus, restartTimes, restartHoldMinutes, breakDailyChoices, breakPauseDays,
-                    breakRaiseDelayDays);
+                    breakRaiseDelayDays, feedTop);
         }
 
         /** The same with these restart times and hold (for tests and admin tools). */
         public Common withRestarts(List<LocalTime> times, int holdMinutes) {
             return new Common(enabled, worlds, playWorlds, clickCooldownMs, chanceDailyTokens, maxPayout,
                     skillDailyCap, featured, featuredBonus, times, holdMinutes, breakDailyChoices, breakPauseDays,
-                    breakRaiseDelayDays);
+                    breakRaiseDelayDays, feedTop);
         }
 
         /** Whether the featured game is picked by the day ({@code featured: auto}). */
@@ -341,6 +360,7 @@ public final class GamesConfig {
         int skillCap = n.whole("skill_daily_cap", d.skillDailyCap(), 0, 1000);
         String featured = featured(n, d.featured());
         int featuredBonus = n.whole("featured_bonus", d.featuredBonus(), 0, 100);
+        int feedTop = n.whole("feed_top", d.feedTop(), 0, Common.MAX_FEED_TOP);
         List<LocalTime> restartTimes = restartTimes(n, d.restartTimes());
         int holdMinutes = n.whole("restart_hold_minutes", d.restartHoldMinutes(), RestartHold.MIN_MINUTES,
                 RestartHold.MAX_MINUTES);
@@ -350,7 +370,7 @@ public final class GamesConfig {
         int raiseDelay = b.whole("raise_delay_days", d.breakRaiseDelayDays(),
                 com.dierks.homecraft.games.Breaks.MIN_RAISE_DELAY_DAYS, 365, true);
         return new Common(enabled, worlds, playWorlds, cooldown, chanceTokens, maxPayout, skillCap, featured,
-                featuredBonus, restartTimes, holdMinutes, choices, pauses, raiseDelay);
+                featuredBonus, restartTimes, holdMinutes, choices, pauses, raiseDelay, feedTop);
     }
 
     /**

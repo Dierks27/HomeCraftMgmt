@@ -99,8 +99,9 @@ public final class EventFeed {
     /** The whole section now, from the live game. */
     static Events events(RaceNight game, boolean names) {
         NightRunner n = game.night();
+        NightRunner last = game.last();
         NightRunner shownLive = n != null && liveState(n.phase()) != null ? n
-                : game.last() != null ? game.last() : null;
+                : last != null && liveState(last.phase()) != null ? last : null; // results for 30 minutes
         Events.Live live = null;
         if (shownLive != null) {
             live = new Events.Live(shownLive.plan().id(), liveState(shownLive.phase()), Math.max(0, shownLive.race()),

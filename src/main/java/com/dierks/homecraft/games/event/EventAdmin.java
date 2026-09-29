@@ -363,13 +363,16 @@ final class EventAdmin implements GameAdmin {
         tell(sender, why == null ? "&aRace Night starts in 15 seconds." : "&c" + why);
     }
 
-    private void cancel(CommandSender sender, String[] args) {
+    private void cancel(CommandSender sender, String[] args) throws SQLException {
         NightRunner n = game.night();
         boolean confirm = args.length >= 2 && args[1].equalsIgnoreCase(CONFIRM);
         String why = cancelProblem(n == null ? null : n.phase(), confirm);
         if (why != null) {
             tell(sender, "&c" + why);
             return;
+        }
+        if (n.phase() == EventMachine.Phase.SCHEDULED && !n.plan().adminStarted()) {
+            game.dao().setMeta(RaceNight.SKIP + n.plan().id(), "1"); // not written yet: never made again
         }
         n.callOff("&7Race Night was called off by an admin" + (n.racesDone() > 0 ? " - points so far count." : "."),
                 "an admin called it off");

@@ -9,7 +9,6 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -18,7 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <ul>
  *   <li>a {@link RaceLink}'s defaults are Race Night's: not a normal run, no warm-up, and "Race Night
  *       was called off" when it ends;</li>
- *   <li>the race-mode entry points throw "not built yet" until WP-R1 builds them;</li>
+ *   <li>the race-mode entry points are built (WP-R1): a racer who isn't there is refused, never thrown
+ *       at, and a course is held by one holder at a time;</li>
  *   <li>a run's warm-up is at most one, never timed, and a run that never warms up is as it was;</li>
  *   <li>{@link TrialKind#DROPPER} is Fresh Courses' own: never made by hand, 80 blocks a second, radius
  *       2.5, paid under "Dropper".</li>
@@ -61,21 +61,23 @@ class RaceModeContractTest {
     }
 
     @Test
-    void theRaceModeEntryPointsThrowUntilTheyAreBuilt() {
+    void theRaceModeEntryPointsAreBuiltAndNeverThrow() {
         TimeTrials trials = new TimeTrials(null);
         Course c = Course.create("river_run", TrialKind.BOAT, Tier.EASY);
-        List<org.junit.jupiter.api.function.Executable> calls = List.of(
-                () -> trials.race(null, c, c, null, null, new NightLink()),
-                () -> trials.regrid(null, c, null),
-                () -> trials.park(null),
-                () -> trials.endRace(UUID.randomUUID(), EndReason.ADMIN, "&7Bye."),
-                () -> trials.reserve("river_run", this, "&7Race Night is on this track."),
-                () -> trials.release("river_run", this));
-        for (org.junit.jupiter.api.function.Executable call : calls) {
-            UnsupportedOperationException e = assertThrows(UnsupportedOperationException.class, call,
-                    "WP-R1 builds it");
-            assertTrue(e.getMessage().contains(TimeTrials.NOT_BUILT), "it says so: " + e.getMessage());
-        }
+        assertTrue(trials.race(null, c, c, null, null, new NightLink()) != null,
+                "a racer who isn't here is refused, never thrown at");
+        trials.regrid(null, c, null); // nobody to re-grid: nothing happens
+        trials.park(null); // nobody to park: nothing happens
+        Object night = new Object();
+        Object party = new Object();
+        assertTrue(trials.reserve("river_run", night, "&7Race Night is on this track."), "the first holder gets it");
+        assertTrue(trials.reserve("RIVER_RUN", night, "&7Race Night is on this track."), "and may hold it again");
+        assertFalse(trials.reserve("river_run", party, "&7A party race is on."), "a second holder is refused");
+        trials.release("river_run", party); // only its own holder lets it go
+        assertFalse(trials.reserve("river_run", party, null), "still held");
+        trials.release("river_run", night);
+        assertTrue(trials.reserve("river_run", party, null), "free once its holder let go");
+        assertEquals("not built yet", TimeTrials.NOT_BUILT, "the contract's word is kept");
     }
 
     @Test

@@ -1,0 +1,565 @@
+package com.dierks.homecraft.games.trial;
+
+import com.dierks.homecraft.games.EndReason;
+import com.dierks.homecraft.games.Refusal;
+import com.dierks.homecraft.games.world.KitItems;
+import com.dierks.homecraft.games.world.Session;
+import com.dierks.homecraft.util.Sounds;
+import com.dierks.homecraft.util.Text;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.World;
+import org.bukkit.entity.Player;
+import org.bukkit.util.Vector;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Supplier;
+import java.util.logging.Level;
+
+/**
+ * Race mode inside Time Trials (EVENTS-DROPPER-SPEC §A.4.11): the server side of a racer's run.
+ * Race Night (WP-R2) and party races ({@link PartyRaces}, owner decision D4) seat racers through
+ * {@code TimeTrials.race} and get their news back through their {@link RaceLink}; this class is
+ * where TimeTrials' hooks land, so the engine itself only gains a line at each place a race run
+ * differs from a normal one.
+ *
+ * <p><b>What differs from a normal run</b> ({@link RaceRun} holds the state, pure and tested):
+ * <ol>
+ *   <li>It is an ordinary {@code trials} session with ref = the course id, entered at the grid
+ *       spot, so Fresh Courses sees a player on the slot and waits (still standing, CLEAR_OLD).</li>
+ *   <li>The countdown ends at the link's shared go tick, not after 60 ticks: boats are held at zero
+ *       speed every tick until then, runners by the countdown hold. Every clock starts at one shared
+ *       instant ({@link RaceRun.Clock}), so a racer seated late starts at once on the shared clock.</li>
+ *   <li>Staleness is judged on the base course (its rev and layout, and the still-standing rule),
+ *       never the course derived from the grid spot and the laps.</li>
+ *   <li>At the line it calls {@link RaceLink#finished}, and never the course's normal finish unless
+ *       the link says it is also a normal run (a party race), and then exactly once: a grid start's
+ *       time isn't comparable with a solo one, so Race Night records nothing on the course. A
+ *       counted race finish still tells the quests and achievements once (E4 FINISH_COURSE).</li>
+ *   <li>The session ending (Leave game, a quit) calls {@link RaceLink#left}, unless the coordinator
+ *       ended it itself.</li>
+ *   <li>A run whose link is no longer {@link RaceLink#alive()} ends at its next tick with
+ *       {@link RaceLink#calledOffLine()}: that covers Race Night being switched off or failing.</li>
+ *   <li>{@link RaceRun.Holds} refuses new solo runs on a course held for a race.</li>
+ * </ol>
+ * Finishers are parked on the stand (the boat goes, the run idles, collisions off so nobody shoves
+ * anyone off it) or, with no stand, sent home at the line. Every teleport a finish causes happens on
+ * the next trial tick, never inside the move event that saw the line.
+ *
+ * <p><b>A coordinator can't break Time Trials.</b> Every call into a {@link RaceLink} is caught
+ * here: a link that throws is logged once and treated as over, so its racers go home and every
+ * solo run carries on.
+ */
+final class RaceMode {
+
+    /** What a parked racer reads on the action bar. */
+    static final String PARKED_BAR = "&7You're done - watch the others finish!";
+    /** What a parked racer who wandered off reads. */
+    static final String BACK_TO_STAND = "&7Please watch from the stand.";
+
+    private final TimeTrials trials;
+    private final RaceRun.Clock clock = new RaceRun.Clock();
+    private final RaceRun.Holds holds = new RaceRun.Holds();
+    /** Links that threw once: treated as over from then on. */
+    private final Set<RaceLink> broken = Collections.newSetFromMap(new IdentityHashMap<>());
+
+    RaceMode(TimeTrials trials) {
+        this.trials = trials;
+    }
+
+    RaceRun.Holds holds() {
+        return holds;
+    }
+
+    // ---- seating ------------------------------------------------------------------------------
+
+    /** {@code TimeTrials.race}: seat a racer (see there). {@code null} when they are on their way in. */
+    Refusal race(Player p, Course base, Course raced, Course.Spot grid, Location stand, RaceLink link) {
+        if (p == null || !p.isOnline() || base == null || raced == null || link == null) {
+            return Refusal.of("That racer isn't here.");
+        }
+        if (!alive(link)) {
+            return Refusal.of("That race is over.");
+        }
+        World world = base.ready() ? Bukkit.getWorld(base.world()) : null;
+        if (world == null || raced.start() == null) {
+            return Refusal.of("That course isn't ready right now.");
+        }
+        Refusal closed = trials.sessions().entryRefusal(trials);
+        if (closed != null) {
+            return closed;
+        }
+        if (trials.sessions().session(p) != null || !trials.sessions().home(p)) {
+            return Refusal.IN_SESSION;
+        }
+        long now = Bukkit.getCurrentTick();
+        boolean warm = call(link, () -> link.warmupUntil() > now, false);
+        Course.Spot spot = grid != null ? grid : raced.start();
+        Course runOn = warm ? base : raced;
+        Course.Spot at = warm ? base.start() : spot;
+        Point standAt = stand != null && stand.getWorld() != null && stand.getWorld().equals(world)
+                ? TimeTrials.point(stand) : null;
+        Location to = new Location(world, at.x(), at.y(), at.z(), at.yaw(), at.pitch());
+        boolean in = trials.sessions().enter(p, trials, base.id(), to,
+                q -> seated(q, new RaceRun(link, base, spot, standAt, warm), runOn));
+        return in ? null : Refusal.of("Stand still somewhere safe to join the race.");
+    }
+
+    /** In, saved, cleared: the kit, the boat, and the grid (or the shared warm-up's free laps). */
+    private void seated(Player p, RaceRun rr, Course runOn) {
+        trials.end(p);
+        TrialRun run = new TrialRun(p.getUniqueId(), runOn, false, 0);
+        run.race = rr;
+        trials.replaceRun(run);
+        trials.giveKit(p, runOn.kind());
+        p.setFallDistance(0f);
+        if (runOn.kind() == TrialKind.BOAT) {
+            trials.seat(p, run, p.getLocation());
+        }
+        if (rr.state == RaceRun.State.WARMUP && run.beginWarmup(call(rr.link, rr.link::warmupUntil, 0L))) {
+            run.progress = new Progress(run.course, TimeTrials.position(p, run), System.nanoTime());
+            run.phase = TrialRun.Phase.RUNNING;
+            p.getInventory().setItem(Warmup.KIT_SLOT, KitItems.item(trials, Warmup.READY, Material.LIME_DYE,
+                    Warmup.READY_NAME, "&7Tap when you're set.", "&7The race starts when the warm-up",
+                    "&7ends, or everyone is ready."));
+            long left = Warmup.secondsLeft(Bukkit.getCurrentTick(), run.warmupEnds);
+            p.sendMessage(Text.of("&b" + rr.base.name() + " &7- race warm-up"));
+            p.sendMessage(Text.of(Warmup.started((int) left)));
+            p.sendMessage(Text.of(Warmup.HOW_TO_READY));
+        } else {
+            rr.state = RaceRun.State.GRID;
+            p.sendMessage(Text.of("&b" + rr.base.name() + " &7- on the grid. Wait for Go!"));
+        }
+    }
+
+    // ---- the tick -------------------------------------------------------------------------------
+
+    /**
+     * A race run's tick, before the normal one. True when it was handled here (the grid, the stand,
+     * a called-off race, a pending park or trip home); false lets the normal tick run it (racing, and
+     * the shared warm-up's free laps).
+     */
+    boolean tick(Player p, TrialRun run, long now) {
+        RaceRun rr = run.race;
+        if (rr.ended) {
+            return true; // on the way home
+        }
+        if (!alive(rr.link)) {
+            rr.ended = true;
+            p.sendMessage(Text.of(call(rr.link, rr.link::calledOffLine, "&7The race was called off.")));
+            trials.sessions().leave(p, EndReason.ADMIN);
+            return true;
+        }
+        if (rr.due == RaceRun.Due.PARK) {
+            rr.due = RaceRun.Due.NONE;
+            parkNow(p, run);
+            return true;
+        }
+        if (rr.due == RaceRun.Due.HOME) {
+            rr.due = RaceRun.Due.NONE;
+            rr.ended = true;
+            if (rr.line != null && !rr.line.isBlank()) {
+                p.sendMessage(Text.of(rr.line));
+            }
+            trials.sessions().leave(p, rr.why == null ? EndReason.FINISH : rr.why);
+            return true;
+        }
+        switch (rr.state) {
+            case GRID -> {
+                grid(p, run, now);
+                return true;
+            }
+            case PARKED -> {
+                if (run.ticks % 10 == 0) {
+                    onStand(p, run);
+                }
+                return true;
+            }
+            case RACING -> {
+                if (run.running() && run.ticks % RaceRun.PROGRESS_EVERY == 0) {
+                    report(p, run);
+                }
+                return false;
+            }
+            default -> {
+                return false; // the warm-up's free laps run as a normal run with the warm-up bar
+            }
+        }
+    }
+
+    /** On the grid: held still until the shared go tick, 3-2-1, then every clock starts at one instant. */
+    private void grid(Player p, TrialRun run, long now) {
+        RaceRun rr = run.race;
+        boolean boat = run.course.kind() == TrialKind.BOAT;
+        if (boat) {
+            if (TimeTrials.seated(p, run)) {
+                run.boat.setVelocity(new Vector());
+            } else if (now >= run.reseatUntil && run.expect == null) {
+                trials.seat(p, run, p.getLocation());
+            }
+        }
+        long left = rr.ticksToGo(now);
+        if (left > 0) {
+            if (left <= TimeTrials.COUNTDOWN_TICKS && left % 20 == 0) {
+                TimeTrials.title(p, "&e" + (left / 20), "&7Get ready", 20);
+                TimeTrials.ping(p, 1.0f);
+            }
+            return;
+        }
+        long goTick = call(rr.link, rr.link::goTick, now);
+        long go = clock.goNanos(rr.link, goTick, System::nanoTime); // the first racer to go fixes it for all
+        if (boat ? !TimeTrials.seated(p, run) : run.expect != null) {
+            return; // still arriving: starts the moment it is in, on the shared clock
+        }
+        run.progress = new Progress(run.course, TimeTrials.position(p, run), go);
+        run.phase = TrialRun.Phase.RUNNING;
+        rr.started();
+        TimeTrials.title(p, "&aGo!", "", 15);
+        TimeTrials.ping(p, 2.0f);
+        trials.watch(p, run);
+        if (clock.size() > 16) {
+            clock.keepOnly(liveLinks());
+        }
+    }
+
+    /** Where the racer is, for the coordinator's live positions. */
+    private void report(Player p, TrialRun run) {
+        RaceRun rr = run.race;
+        Progress pr = run.progress;
+        int reached = pr.reachedTargets();
+        List<Course.Mark> targets = run.course.targets();
+        double toNext = 0;
+        if (reached < targets.size()) {
+            Course.Mark next = targets.get(reached);
+            toNext = Math.max(0, TimeTrials.position(p, run).distance(next.center()) - next.radius());
+        }
+        long[] times = pr.times();
+        long at = reached > 0 ? times[reached - 1] : pr.startNanos();
+        double d = toNext;
+        call(rr.link, () -> {
+            rr.link.progress(p.getUniqueId(), reached, d, at);
+            return null;
+        }, null);
+    }
+
+    /** A parked racer: the action bar, and back onto the stand if they wandered off it. */
+    private void onStand(Player p, TrialRun run) {
+        RaceRun rr = run.race;
+        if (run.ticks % 20 == 0) {
+            p.sendActionBar(Text.of(PARKED_BAR));
+        }
+        if (run.expect == null && rr.offStand(TimeTrials.point(p.getLocation()))) {
+            toStand(p, run);
+            p.sendMessage(Text.of(BACK_TO_STAND));
+        }
+    }
+
+    // ---- the line -------------------------------------------------------------------------------
+
+    /**
+     * A racer crossed the line: judged as a solo run is (fair play, the shortest believable time, the
+     * speed check from the grid spot), stale only when the base course changed; reported to the link;
+     * for a party race, also the course's normal finish, once; then parked, or home at the line.
+     */
+    void finish(Player p, TrialRun run, long nanos) {
+        RaceRun rr = run.race;
+        if (!rr.crossed()) {
+            return;
+        }
+        run.phase = TrialRun.Phase.DONE;
+        long ms = run.elapsedMs(nanos);
+        TimeTrialsSettings s = trials.settings();
+        boolean stale = FairPlay.stale(rr.base, rr.baseLayout, trials.course(rr.base.id()),
+                trials.generated()::standing);
+        int tooFast = FairPlay.tooFast(run.course, run.progress.startNanos(), run.progress.times(),
+                run.progress.reachedTargets(), run.stalls);
+        FairPlay.Verdict verdict = FairPlay.judge(false, run.voided, stale, ms,
+                run.course.minSecondsOr(s.minSeconds()), tooFast);
+        p.sendMessage(Text.of("&b" + rr.base.name() + ": &f" + TrialText.time(ms)));
+        if (!verdict.counts()) {
+            p.sendMessage(Text.of(voidLine(verdict.reason())));
+            TimeTrials.title(p, "&f" + TrialText.time(ms), "&cThat race didn't count", 40);
+            Sounds.miss(p);
+        }
+        if (rr.normalFinish(verdict.counts())) {
+            trials.settleCounted(p, run, ms, verdict); // boards, rewards, the Cup and E4, as a solo run
+        } else if (verdict.counts()) {
+            Course c = rr.base;
+            trials.games().tellProgress(g -> g.courseFinished(p, c.id(), c.generated(), false)); // E4, once
+        }
+        UUID id = p.getUniqueId();
+        call(rr.link, () -> {
+            rr.link.finished(id, ms, verdict.counts(), verdict.reason());
+            return null;
+        }, null);
+        if (trials.run(id) == run && !rr.ended && rr.due == RaceRun.Due.NONE) {
+            if (rr.stand != null) {
+                rr.due = RaceRun.Due.PARK;
+            } else {
+                rr.home(EndReason.FINISH, null); // no stand to wait on: home at the line
+            }
+        }
+    }
+
+    /** "&amp;cThat race didn't count - flying." */
+    static String voidLine(String reason) {
+        return "&cThat race didn't count &7- " + (reason == null ? "it broke a rule" : reason) + ".";
+    }
+
+    // ---- the coordinator's calls ------------------------------------------------------------------
+
+    /** {@code TimeTrials.park}: done with this race; onto the stand on the next tick. */
+    void park(Player p) {
+        TrialRun run = p == null ? null : trials.run(p.getUniqueId());
+        if (run == null || run.race == null || run.race.ended) {
+            return;
+        }
+        if (run.race.state == RaceRun.State.PARKED && run.race.due == RaceRun.Due.NONE) {
+            return;
+        }
+        run.phase = TrialRun.Phase.DONE; // moves stop counting now
+        run.backDue = false;
+        run.race.due = RaceRun.Due.PARK;
+    }
+
+    private void parkNow(Player p, TrialRun run) {
+        RaceRun rr = run.race;
+        trials.removeBoat(run, p);
+        run.phase = TrialRun.Phase.PARKED;
+        run.backDue = false;
+        rr.parked();
+        if (run.warmup) {
+            run.endWarmup();
+            p.getInventory().setItem(Warmup.KIT_SLOT, null);
+        }
+        if (rr.stand != null) {
+            toStand(p, run);
+            try {
+                p.setCollidable(false); // nobody shoves anybody off the stand; restored when the run ends
+                rr.standing = true;
+            } catch (RuntimeException | LinkageError ignored) {
+                // cosmetic
+            }
+        }
+        p.sendActionBar(Text.of(PARKED_BAR));
+    }
+
+    private void toStand(Player p, TrialRun run) {
+        RaceRun rr = run.race;
+        World w = Bukkit.getWorld(run.course.world());
+        if (w == null || rr.stand == null) {
+            return;
+        }
+        Location here = p.getLocation();
+        Location at = new Location(w, rr.stand.x(), rr.stand.y(), rr.stand.z(), here.getYaw(), 0f);
+        run.expect = at;
+        run.suspended = true;
+        if (!trials.sessions().teleport(p, at)) {
+            run.expect = null;
+            run.suspended = false;
+        } else {
+            p.setVelocity(new Vector());
+            p.setFallDistance(0f);
+        }
+    }
+
+    /** {@code TimeTrials.regrid}: the next race (or the end of the shared warm-up), a new boat on the spot. */
+    void regrid(Player p, Course raced, Course.Spot grid) {
+        TrialRun old = p == null ? null : trials.run(p.getUniqueId());
+        if (old == null || old.race == null || old.race.ended || raced == null) {
+            return;
+        }
+        World w = Bukkit.getWorld(raced.world());
+        Course.Spot spot = grid != null ? grid : raced.start();
+        if (w == null || spot == null) {
+            return;
+        }
+        RaceRun rr = old.race;
+        trials.removeBoat(old, p);
+        restore(p, rr);
+        if (old.warmup) {
+            old.endWarmup();
+        }
+        p.getInventory().setItem(Warmup.KIT_SLOT, null);
+        rr.regrid(spot);
+        rr.due = RaceRun.Due.NONE;
+        TrialRun run = new TrialRun(p.getUniqueId(), raced, false, 0);
+        run.race = rr;
+        run.warmupUsed = old.warmupUsed;
+        trials.replaceRun(run);
+        trials.move(p, run, new Location(w, spot.x(), spot.y(), spot.z(), spot.yaw(), spot.pitch()));
+    }
+
+    /** {@code TimeTrials.endRace}: home with their things, reading {@code line}, on the next trial tick. */
+    void endRace(UUID racer, EndReason why, String line) {
+        if (racer == null) {
+            return;
+        }
+        TrialRun run = trials.run(racer);
+        Player p = Bukkit.getPlayer(racer);
+        if (run == null || run.race == null) {
+            // not seated yet (still on the way in), or a solo run: end its session now
+            Session s = p == null ? null : trials.sessions().session(p);
+            if (s != null && trials.id().equals(s.gameId())) {
+                if (line != null && !line.isBlank()) {
+                    p.sendMessage(Text.of(line));
+                }
+                trials.sessions().leave(p, why == null ? EndReason.ADMIN : why);
+            }
+            return;
+        }
+        if (run.race.ended) {
+            return;
+        }
+        run.phase = TrialRun.Phase.DONE;
+        run.race.home(why, line);
+    }
+
+    // ---- sessions ending --------------------------------------------------------------------------
+
+    /** The racer's session ended (Leave game, a quit, a kick): {@link RaceLink#left}, unless the coordinator ended it. */
+    void left(Player p, EndReason why) {
+        TrialRun run = p == null ? null : trials.run(p.getUniqueId());
+        if (run == null || run.race == null) {
+            return;
+        }
+        RaceRun rr = run.race;
+        restore(p, rr);
+        boolean told = rr.ended || rr.due == RaceRun.Due.HOME;
+        rr.ended = true;
+        rr.due = RaceRun.Due.NONE;
+        if (!told) {
+            UUID id = p.getUniqueId();
+            call(rr.link, () -> {
+                rr.link.left(id, why);
+                return null;
+            }, null);
+        }
+    }
+
+    /** The run's session vanished without an end (the backstop in the tick). */
+    void gone(TrialRun run, Player p) {
+        if (run.race == null) {
+            return;
+        }
+        RaceRun rr = run.race;
+        if (p != null) {
+            restore(p, rr);
+        }
+        if (!rr.ended && rr.due != RaceRun.Due.HOME) {
+            rr.ended = true;
+            call(rr.link, () -> {
+                rr.link.left(run.player, EndReason.ADMIN);
+                return null;
+            }, null);
+        }
+    }
+
+    /** A parked racer fell out of the world or was nudged: back on the stand. True when handled. */
+    boolean onVoid(Player p, TrialRun run) {
+        if (run.race == null || run.phase == TrialRun.Phase.RUNNING) {
+            return false;
+        }
+        if (run.phase == TrialRun.Phase.PARKED && run.race.stand != null) {
+            toStand(p, run);
+        }
+        return true;
+    }
+
+    /** A course held for a race refuses a new solo run: the holder's line. True when refused. */
+    boolean refuseSolo(Player p, String courseId) {
+        String line = holds.refusal(courseId);
+        if (line == null) {
+            return false;
+        }
+        p.sendMessage(Text.of(line));
+        try {
+            Sounds.refused(p);
+        } catch (RuntimeException | LinkageError ignored) {
+            // a sound is decoration
+        }
+        return true;
+    }
+
+    /**
+     * Where a race boat sent back to a checkpoint is re-seated: up to 1.5 blocks sideways for a spot
+     * with no other race boat within 2 ({@link RaceSeat}). Anything else goes back exactly as before.
+     */
+    Location reseat(TrialRun run, Location at) {
+        if (at == null || run.race == null || run.course.kind() != TrialKind.BOAT || at.getWorld() == null) {
+            return at;
+        }
+        List<Point> others = new ArrayList<>();
+        for (TrialRun r : trials.liveRuns()) {
+            if (r != run && r.race != null && r.race.link == run.race.link && r.boat != null && r.boat.isValid()) {
+                others.add(TimeTrials.point(r.boat.getLocation()));
+            }
+        }
+        if (others.isEmpty()) {
+            return at;
+        }
+        WorldSurface surface = new WorldSurface(at.getWorld());
+        Point p = RaceSeat.clear(TimeTrials.point(at), at.getYaw(), others, q -> RaceGrid.problem(q, surface) == null);
+        return new Location(at.getWorld(), p.x(), p.y(), p.z(), at.getYaw(), at.getPitch());
+    }
+
+    /** Time Trials is stopping: collisions back on for everyone on a stand, nothing held. */
+    void stop() {
+        for (TrialRun run : new ArrayList<>(trials.liveRuns())) {
+            if (run.race != null) {
+                restore(Bukkit.getPlayer(run.player), run.race);
+            }
+        }
+        clock.clear();
+        holds.clear();
+        broken.clear();
+    }
+
+    private static void restore(Player p, RaceRun rr) {
+        if (p != null && rr.standing) {
+            rr.standing = false;
+            try {
+                p.setCollidable(true);
+            } catch (RuntimeException | LinkageError ignored) {
+                // nothing to restore on a player who is gone
+            }
+        }
+    }
+
+    private Set<RaceLink> liveLinks() {
+        Set<RaceLink> out = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (TrialRun r : trials.liveRuns()) {
+            if (r.race != null) {
+                out.add(r.race.link);
+            }
+        }
+        return out;
+    }
+
+    // ---- calling a link safely --------------------------------------------------------------------
+
+    /** Whether the link's race still runs (a link that ever threw is over). */
+    boolean alive(RaceLink link) {
+        return !broken.contains(link) && call(link, link::alive, false);
+    }
+
+    /** Call into a link: what it returns, or {@code fallback} (and the link counted as over) if it throws. */
+    <T> T call(RaceLink link, Supplier<T> what, T fallback) {
+        if (broken.contains(link)) {
+            return fallback;
+        }
+        try {
+            return what.get();
+        } catch (RuntimeException | LinkageError e) {
+            broken.add(link);
+            trials.log().log(Level.WARNING, "Time trials: a race's coordinator failed; its racers go home", e);
+            return fallback;
+        }
+    }
+}

@@ -1047,7 +1047,9 @@ public final class Database {
     }
 
     /**
-     * Run {@code work} as one transaction: every statement lands or none does.
+     * Run {@code work} as one transaction: every statement lands or none does. Anything thrown
+     * inside it (an SQLException, a RuntimeException, or an Error such as OutOfMemoryError) rolls the
+     * whole unit back and is rethrown as it came.
      *
      * <p>Holds the connection's monitor for the whole unit, the same lock every DAO takes, so
      * nothing else can interleave a statement between a guarded UPDATE and the rows that depend
@@ -1065,10 +1067,14 @@ public final class Database {
                 T result = work.run(c);
                 c.commit();
                 return result;
-            } catch (SQLException | RuntimeException e) {
+            } catch (Throwable e) {
+                // ANY Throwable rolls back, an Error too (OutOfMemoryError, StackOverflowError, a
+                // LinkageError): otherwise the finally's setAutoCommit(true) makes sqlite-jdbc COMMIT
+                // the half-done work. Rethrown as it came (the compiler knows it is an SQLException or
+                // unchecked).
                 try {
                     c.rollback();
-                } catch (SQLException rollback) {
+                } catch (SQLException | RuntimeException rollback) {
                     e.addSuppressed(rollback);
                 }
                 throw e;

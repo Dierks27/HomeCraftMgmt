@@ -372,6 +372,57 @@ class CupDaoTest {
         assertEquals(0, cupNet(conn), "no contest, no top-up");
     }
 
+    /** The sum of one source's Weekly Cup ledger lines. */
+    private int sum(String source) throws SQLException {
+        return count("SELECT COALESCE(SUM(delta), 0) FROM token_ledger WHERE source = '" + source + "'");
+    }
+
+    @Test
+    void anEntryWithNoCupTimeStaysInThePoolAndTheLedgerBalancesToTheTopUp() throws Exception {
+        // Entries + prizes + refunds = the top-up, which is paid only when 2 or more set a Cup time.
+        field(alice, bob, carol);
+        give(dave, 20);
+        assertNull(enter(dave), "dave enters but never sets a Cup time");
+        CupDao.Settled s = cup.settle(CUP, 10, NAME, NOW + 1_000_000, words());
+        assertEquals(CupPlan.Outcome.PRIZES, s.plan().outcome(), "3 Cup times: prizes");
+        assertEquals(30, s.plan().pool(), "4 entries of 5 plus the top-up of 10: dave's entry stays in the pool");
+        assertEquals(15 + 15, balance(alice), "1st: 50% of 30");
+        assertEquals(15 + 9, balance(bob), "2nd: 30% of 30");
+        assertEquals(15 + 6, balance(carol), "3rd: 20% of 30");
+        assertEquals(15, balance(dave), "no Cup time, no share (the forfeit rule)");
+        assertEquals(-20, sum("GAMES_CUP_ENTRY"), "four entries taken");
+        assertEquals(30, sum("GAMES_CUP_PRIZE"), "the whole pool paid out");
+        assertEquals(0, sum("GAMES_CUP_REFUND"), "nothing refunded");
+        assertEquals(10, sum("GAMES_CUP_ENTRY") + sum("GAMES_CUP_PRIZE") + sum("GAMES_CUP_REFUND"),
+                "entries + prizes + refunds = the top-up: the server keeps nothing and adds only the top-up");
+    }
+
+    @Test
+    void theTopUpIsPaidOnlyWhenTwoOrMoreSetACupTime() throws Exception {
+        CupKey one = new CupKey("one_time", WEEK);
+        CupKey two = new CupKey("two_times", WEEK);
+        for (UUID p : List.of(alice, bob, carol, dave)) {
+            give(p, 20);
+        }
+        assertNull(cup.enter(one, alice, 5, NAME, NOW, WEEK, null), "alice enters the first Cup");
+        assertNull(cup.enter(one, bob, 5, NAME, NOW, WEEK, null), "and bob");
+        assertEquals(1, cup.run(one.course(), alice, 40_000, NOW + 140_000, CupRules.Weeks.of(WEEK)),
+                "only alice sets a Cup time");
+        assertNotNull(cup.settle(one, 10, NAME, NOW + 1_000_000, words()), "settled");
+        assertEquals(0, cupNet(conn), "one Cup time: every entry back, no top-up");
+        assertEquals(0, sum("GAMES_CUP_PRIZE"), "and no prize");
+        assertEquals(10, sum("GAMES_CUP_REFUND"), "both entries refunded");
+
+        assertNull(cup.enter(two, carol, 5, NAME, NOW, WEEK, null), "carol enters the second Cup");
+        assertNull(cup.enter(two, dave, 5, NAME, NOW, WEEK, null), "and dave");
+        cup.run(two.course(), carol, 40_000, NOW + 140_000, CupRules.Weeks.of(WEEK));
+        cup.run(two.course(), dave, 41_000, NOW + 141_000, CupRules.Weeks.of(WEEK));
+        assertNotNull(cup.settle(two, 10, NAME, NOW + 1_000_000, words()), "settled");
+        assertEquals(10, cupNet(conn), "two Cup times: over both Cups the ledger nets exactly one top-up");
+        assertEquals(20 - 5 + 14, balance(carol), "70% of 20");
+        assertEquals(20 - 5 + 6, balance(dave), "30% of 20");
+    }
+
     @Test
     void aCupIsSettledExactlyOnce() throws Exception {
         field(alice, bob, carol);

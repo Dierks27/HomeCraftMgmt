@@ -831,8 +831,12 @@ class RaceModeEndToEndTest {
         TrialRun solo = new TrialRun(id(ben), loop, false, TimeTrials.COUNTDOWN_TICKS + 1);
         assertTrue(Warmup.begin(solo, race.tick, 180, loop.start().point(), race.nanos), "Ben chose a warm-up");
         trials.replaceRun(solo);
+        assertNull(cup.desk().enter(id(ben), loop), "Ben is in this week's Cup, so a Cup time could be set");
+        int before = bench.balance(id(ben));
         race.cross(id(ben), 41_000); // TimeTrials.finish: a warm-up lap, before anything is judged
         assertNull(best(ben, Scores.course(loop.id())), "a solo warm-up lap never reaches the board");
+        assertEquals(List.of(), rewardKinds(ben), "nor a reward (not even the first clear)");
+        assertEquals(before, bench.balance(id(ben)), "and no tokens");
         assertNull(cupTime(ben), "nor the Cup");
         assertEquals(0, told.courses(id(ben)), "nor the quests (settleCounted never ran)");
         assertTrue(bench.heard(id(ben)).contains("not counted"), "it says so: " + bench.heard(id(ben)));

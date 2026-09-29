@@ -425,10 +425,14 @@ final class RaceMode {
         boolean stale = rr.stale(trials.course(rr.base.id()), trials.generated()::standing);
         int tooFast = FairPlay.tooFast(run.course, run.progress.startNanos(), run.progress.times(),
                 run.progress.reachedTargets(), run.stalls);
-        FairPlay.Verdict verdict = trials.withRider(p, FairPlay.judge(false, run.voided, stale, ms,
-                run.course.minSecondsOr(s.minSeconds()), tooFast)); // WP-CH: rider_runs_count
+        FairPlay.Verdict verdict = FairPlay.judge(false, run.voided, stale, ms,
+                run.course.minSecondsOr(s.minSeconds()), tooFast);
+        // WP-CH (the review's #12): with rider_runs_count false a ride with a rider is just for fun: the
+        // place in the race stands, but it is never the course's normal run (no board, record, rewards,
+        // Cup time or quest step)
+        boolean fun = verdict.counts() && trials.justForFun(p, run);
         boolean normalRun = call(rr.link, rr.link::normalRun, false); // guarded: a link that throws is over
-        RaceRun.Line line = rr.line(verdict.counts(), normalRun);
+        RaceRun.Line line = rr.line(verdict.counts(), normalRun && !fun);
         if (!line.report()) {
             return; // this race's line was crossed already
         }
@@ -437,10 +441,12 @@ final class RaceMode {
             p.sendMessage(Text.of(voidLine(verdict.reason())));
             TimeTrials.title(p, "&f" + TrialText.time(ms), "&cThat race didn't count", 40);
             Sounds.miss(p);
+        } else if (fun) {
+            p.sendMessage(Text.of(Riders.FUN_RACE));
         }
         if (line.normal()) {
             trials.settleCounted(p, run, ms, verdict); // boards, rewards, the Cup and E4, as a solo run
-        } else if (line.e4()) {
+        } else if (line.e4() && !fun) {
             Course c = rr.base;
             trials.games().tellProgress(g -> g.courseFinished(p, c.id(), c.generated(), false)); // E4, once
         }

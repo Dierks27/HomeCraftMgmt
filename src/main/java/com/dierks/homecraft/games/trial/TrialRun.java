@@ -77,6 +77,11 @@ final class TrialRun {
     /** The run has had its one warm-up: a run gets at most one ({@link #beginWarmup}). */
     boolean warmupUsed;
     /**
+     * WP-CH: a rider sat in the back at some point in this run (latched when they board), so a rider
+     * who hops out just before the line doesn't make a just-for-fun ride count (the Clubhouse review, #12).
+     */
+    boolean hadRider;
+    /**
      * The server tick the warm-up ends at (then the player goes to the start and the normal 3-2-1
      * begins), or 0 for no time limit (the Dropper's practice drop ends on its first splash or bonk).
      */

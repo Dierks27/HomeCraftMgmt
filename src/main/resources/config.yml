@@ -2141,7 +2141,8 @@ games:
     max_minutes: 30
     # Party racers come back here after the race, instead of going home.
     party_after: true
-    # Everyone at the track comes here at the end of Race Night (the top three on the podium).
+    # Everyone at the track comes here at the end of Race Night (the top three on the podium). On a
+    # track with no viewing stand, racers (and their riders) also wait here between races.
     race_night_after: true
     # A golf-together group comes here when its round ends.
     golf_after: true

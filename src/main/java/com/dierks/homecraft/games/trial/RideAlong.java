@@ -349,6 +349,22 @@ public final class RideAlong {
             }
 
             @Override
+            public boolean inClub(UUID id) {
+                return com.dierks.homecraft.games.clubhouse.Clubhouse.inside(t.games(), id);
+            }
+
+            @Override
+            public boolean fromClub(Player rider, String courseId) {
+                ClubDoor club = t.raceMode().door();
+                return club != null && club.handOut(rider, t, courseId);
+            }
+
+            @Override
+            public boolean driving(UUID id) {
+                return t.onRun(id);
+            }
+
+            @Override
             public void tell(Player p, String line) {
                 if (p != null && line != null) {
                     p.sendMessage(Text.of(line));

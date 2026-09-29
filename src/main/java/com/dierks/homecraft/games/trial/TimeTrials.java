@@ -398,6 +398,7 @@ public final class TimeTrials implements Game {
         g.on(this, BlockFromToEvent.class, EventPriority.LOW, true, drops::flow); // a dropper's pools never flow out
         g.every(this, 1, 1, this::tick);
         party.start(); // WP-R1 (D4)
+        riders.boarded(this::hadRider); // WP-CH: a run with a rider at any point (#12)
     }
 
     /** The framework ends the sessions; here the boats go and the runs are forgotten. */
@@ -1499,7 +1500,7 @@ public final class TimeTrials implements Game {
                 run.progress.reachedTargets(), run.stalls);
         FairPlay.Verdict verdict = FairPlay.judge(run.test, run.voided, stale, ms,
                 run.course.minSecondsOr(s.minSeconds()), tooFast);
-        verdict = withRider(p, verdict); // WP-CH: rider_runs_count false makes a ride just for fun
+        verdict = withRider(p, run, verdict); // WP-CH: rider_runs_count false makes a ride just for fun
         String name = run.course.name();
         GenTag tag = run.course.gen();
         String code = tag == null ? null : DailyLookup.code(games(), tag);
@@ -1752,10 +1753,34 @@ public final class TimeTrials implements Game {
 
     /** WP-CH: a run with a rider aboard is just for fun while {@code rider_runs_count} is false. */
     FairPlay.Verdict withRider(Player p, FairPlay.Verdict verdict) {
-        if (verdict.counts() && riders.funOnly(p.getUniqueId(), settings().riderRunsCount())) {
+        return withRider(p, null, verdict);
+    }
+
+    /**
+     * {@link #withRider(Player, FairPlay.Verdict)} for {@code run}: a rider aboard at any point of it
+     * counts (latched on the run), not only one aboard at the line.
+     */
+    FairPlay.Verdict withRider(Player p, TrialRun run, FairPlay.Verdict verdict) {
+        if (verdict.counts() && justForFun(p, run)) {
             return new FairPlay.Verdict(FairPlay.Kind.VOID, Riders.FUN_ONLY);
         }
         return verdict;
+    }
+
+    /**
+     * WP-CH: whether the run is just for fun: {@code rider_runs_count} is false and a rider rode in
+     * it (at any point: {@link TrialRun#hadRider}, or aboard now).
+     */
+    boolean justForFun(Player p, TrialRun run) {
+        return !settings().riderRunsCount() && ((run != null && run.hadRider) || riders.funOnly(p.getUniqueId(), false));
+    }
+
+    /** A rider sat down behind {@code driver}: their run had a rider (latched). */
+    private void hadRider(UUID driver) {
+        TrialRun r = driver == null ? null : runs.get(driver);
+        if (r != null) {
+            r.hadRider = true;
+        }
     }
 
     /** The warm-ups (WP-R1, D3). */

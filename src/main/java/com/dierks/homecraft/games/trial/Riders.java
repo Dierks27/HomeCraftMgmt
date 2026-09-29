@@ -33,7 +33,9 @@ import java.util.function.Consumer;
  * <p><b>Getting out.</b> A seated rider can't dismount mid-run (the session guard cancels it: the boat
  * is their game's). Their Leave game ends only THEIR session; the driver carries on. When the driver
  * finishes, is sent home, leaves or disconnects, the rider goes with them: to the Clubhouse when the
- * driver goes there (a party race, Race Night), else home ({@link #driverGone}, {@link #toClub}).
+ * driver goes there (a party race, Race Night), else home ({@link #driverGone}, {@link #toClub}). A
+ * ride that waits in the Clubhouse goes on at the driver's next race from there (Race Night's next
+ * race on a track with no stand, a party's Race again), handed back to Time Trials in place.
  *
  * <p><b>Counting.</b> A passenger doesn't change a boat's speed, so the driver's run counts as normal;
  * with {@code games.trials.rider_runs_count: false} a run with a rider is just for fun
@@ -49,8 +51,16 @@ public final class Riders {
     static final int INVITE_SECONDS = 60;
     /** A pairing nobody rode with lapses after this long. */
     static final long LAPSE_MS = 10 * 60_000L;
+    /**
+     * A ride waiting in the Clubhouse between races (a Race Night break, a party's Race again) lapses
+     * after this long with no next race.
+     */
+    static final long CLUB_LAPSE_MS = 5 * 60_000L;
     /** The reason a run with a rider is just for fun ({@code rider_runs_count: false}). */
     public static final String FUN_ONLY = "rides with a rider are just for fun on this server";
+    /** A race finish with a rider while rides are just for fun: the place stands, nothing else. */
+    public static final String FUN_RACE = "&eJust for fun: &7your place stands, but with a rider aboard the run"
+            + " doesn't go on the boards or pay.";
 
     /** What riding along needs from the server. */
     interface Port {
@@ -95,6 +105,18 @@ public final class Riders {
         /** Where the player is, or {@code null}. */
         Location at(UUID id);
 
+        /** Whether the player is in the Clubhouse now. */
+        boolean inClub(UUID id);
+
+        /**
+         * Hand the rider's Clubhouse session back to Time Trials ({@code courseId} its ref), in place,
+         * for the driver's next race; false: it couldn't (they stay in the Clubhouse).
+         */
+        boolean fromClub(Player rider, String courseId);
+
+        /** Whether the player is on a time-trial run now (racing, warming up, parked on a stand). */
+        boolean driving(UUID id);
+
         void tell(Player p, String line);
 
         long now();
@@ -111,6 +133,11 @@ public final class Riders {
         boolean inSession;
         /** Seated at least once. */
         boolean seated;
+        /**
+         * Both are in the Clubhouse between races (Race Night on a track with no stand, a party race):
+         * the ride goes on at the driver's next seat (the Clubhouse review, #11).
+         */
+        boolean inClub;
 
         Ride(UUID driver, String driverName, UUID rider, String riderName, long now) {
             this.driver = driver;
@@ -125,6 +152,9 @@ public final class Riders {
     static final double FOLLOW_RADIUS = 4;
 
     private final Port port;
+    /** Told a driver's id each time a rider sits down behind them (Time Trials latches it on the run). */
+    private Consumer<UUID> boarded = id -> {
+    };
     private final Map<UUID, Ride> byDriver = new HashMap<>();
     private final Map<UUID, Ride> byRider = new HashMap<>();
     /**
@@ -136,6 +166,12 @@ public final class Riders {
 
     Riders(Port port) {
         this.port = port;
+    }
+
+    /** Who hears that a rider sat down behind a driver (Time Trials: the run's {@code hadRider}). */
+    void boarded(Consumer<UUID> listener) {
+        this.boarded = listener == null ? id -> {
+        } : listener;
     }
 
     // ---- pairing --------------------------------------------------------------------------------
@@ -190,6 +226,10 @@ public final class Riders {
             return;
         }
         Location at = boat.getLocation();
+        if (r.inClub) {
+            backFromClub(r, driver, rider, boat, courseId);
+            return;
+        }
         if (!r.inSession) {
             r.inSession = true;
             boolean in = port.enter(rider, courseId, at, q -> arrived(q, driver.getUniqueId()));
@@ -202,6 +242,22 @@ public final class Riders {
         if (!port.riding(rider)) {
             return; // still on the way in: they board on arrival
         }
+        board(r, rider, boat);
+    }
+
+    /**
+     * The driver's next race after a Clubhouse stay: the rider's session is handed back to Time Trials
+     * in place (their things stay saved once), the rider's kit and team again, then the back seat.
+     */
+    private void backFromClub(Ride r, Player driver, Player rider, Entity boat, String courseId) {
+        if (!port.inClub(r.rider) || !port.fromClub(rider, courseId)) {
+            port.tell(driver, "&7" + r.riderName + " couldn't hop in this time.");
+            return;
+        }
+        r.inClub = false;
+        port.kit(rider, r.driverName);
+        shield(rider.getUniqueId(), rider.getName());
+        port.tell(rider, "&bRiding with " + r.driverName + " again &7- hold on tight!");
         board(r, rider, boat);
     }
 
@@ -233,6 +289,7 @@ public final class Riders {
         if (port.board(boat, rider)) {
             r.seated = true;
             r.since = port.now();
+            boarded.accept(r.driver);
             return true;
         }
         return false;
@@ -300,23 +357,30 @@ public final class Riders {
 
     /**
      * The driver went to the Clubhouse (a party race or Race Night): the rider goes too, their session
-     * handed there; home if the Clubhouse can't take them.
+     * handed there; home if the Clubhouse can't take them. The ride is KEPT for the driver's next race
+     * from the Clubhouse (Race Night's next race on a track with no stand, a party's Race again: the
+     * Clubhouse review, #11), and lapses after {@value #CLUB_LAPSE_MS} ms with none, or when either
+     * of them leaves the Clubhouse some other way ({@link #second}).
      */
     void toClub(UUID driver, ClubVisits.Kind kind) {
         Ride r = byDriver.get(driver);
         if (r == null) {
             return;
         }
-        drop(r);
         unshield(r.rider); // the Clubhouse puts them on its own no-push team
         Player rider = port.online(r.rider);
         if (rider == null || !r.inSession || !port.riding(rider)) {
+            drop(r);
             return;
         }
         if (!port.takeIn(rider, kind, "&7Back in the Clubhouse with " + r.driverName + "!")) {
+            drop(r);
             port.tell(rider, "&7Your ride is over - thanks for riding along! Your things are back.");
             port.leave(rider, EndReason.FINISH);
+            return;
         }
+        r.inClub = true;
+        r.since = port.now();
     }
 
     /** The rider's own session ended (their Leave game, a quit): off the ride; the driver carries on. */
@@ -366,6 +430,10 @@ public final class Riders {
                 drop(r);
                 continue;
             }
+            if (r.inClub) {
+                clubSecond(r, rider, now);
+                continue;
+            }
             if (!r.inSession && now - r.since >= LAPSE_MS) {
                 drop(r);
                 port.tell(rider, "&7Your ride with " + r.driverName + " didn't start, so it's off.");
@@ -382,6 +450,22 @@ public final class Riders {
             } else if (r.seated) {
                 keepNear(rider, r.driver); // the driver is parked (the stand): the rider stays by them (#4)
             }
+        }
+    }
+
+    /**
+     * A ride waiting in the Clubhouse: over when the rider left it, when the driver went home (not in
+     * the Clubhouse and not racing), or after {@value #CLUB_LAPSE_MS} ms with no next race.
+     */
+    private void clubSecond(Ride r, Player rider, long now) {
+        if (!port.inClub(r.rider)) {
+            drop(r); // they left the Clubhouse (their Leave game): their session end put their things back
+            return;
+        }
+        boolean driverAway = !port.inClub(r.driver) && !port.driving(r.driver);
+        if (driverAway || now - r.since >= CLUB_LAPSE_MS) {
+            drop(r);
+            port.tell(rider, "&7Your ride with " + r.driverName + " is over - thanks for riding along!");
         }
     }
 

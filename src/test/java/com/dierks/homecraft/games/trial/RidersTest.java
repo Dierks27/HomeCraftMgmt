@@ -169,6 +169,10 @@ class RidersTest {
         @Override
         public boolean takeIn(Player rider, ClubVisits.Kind kind, String line) {
             takenIn.add(rider.getName() + " " + kind);
+            if (clubOk) {
+                riding.remove(rider.getUniqueId()); // a Clubhouse session now
+                club.add(rider.getUniqueId());
+            }
             return clubOk;
         }
 
@@ -208,6 +212,34 @@ class RidersTest {
         @Override
         public Location at(UUID id) {
             return where.get(id);
+        }
+
+        /** Who is in the Clubhouse now. */
+        final Set<UUID> club = new HashSet<>();
+        /** Who is on a time-trial run now. */
+        final Set<UUID> driving = new HashSet<>();
+        boolean fromClubOk = true;
+        final List<String> fromClub = new ArrayList<>();
+
+        @Override
+        public boolean inClub(UUID id) {
+            return club.contains(id);
+        }
+
+        @Override
+        public boolean fromClub(Player rider, String courseId) {
+            fromClub.add(rider.getName() + " " + courseId);
+            if (!fromClubOk) {
+                return false;
+            }
+            club.remove(rider.getUniqueId());
+            riding.add(rider.getUniqueId());
+            return true;
+        }
+
+        @Override
+        public boolean driving(UUID id) {
+            return driving.contains(id);
         }
 
         @Override
@@ -333,12 +365,58 @@ class RidersTest {
         riders.toClub(dad.id, ClubVisits.Kind.PARTY);
         assertEquals(List.of("Kid PARTY"), port.takenIn, "the rider's session handed to the Clubhouse with Dad");
         assertTrue(port.left.isEmpty(), "not sent home");
-        assertFalse(riders.isRider(kid.id), "no longer a rider there");
+        assertTrue(riders.isRider(kid.id), "still Dad's rider there, for his next race (#11)");
+        assertTrue(riders.ofDriver(dad.id).inClub, "waiting in the Clubhouse");
 
+        riders.stop();
         port.clubOk = false; // the Clubhouse can't take them: home
         riding();
         riders.toClub(dad.id, ClubVisits.Kind.NIGHT);
         assertEquals(List.of("Kid FINISH"), port.left, "the Clubhouse couldn't: home, their things back");
+        assertFalse(riders.isRider(kid.id), "and the ride is over");
+    }
+
+    @Test
+    void aRideGoesOnFromTheClubhouseAtTheDriversNextRace() {
+        riding();
+        port.club.add(dad.id);
+        riders.toClub(dad.id, ClubVisits.Kind.NIGHT); // race 1 over, no stand: both wait in the Clubhouse
+        assertFalse(port.noPush.contains(kid.id), "off the ride's team: the Clubhouse has its own");
+        riders.second();
+        assertTrue(riders.isRider(kid.id), "the break: still riding with Dad");
+        port.club.remove(dad.id);
+        port.driving.add(dad.id); // race 2: Dad is seated from the Clubhouse
+        Entity race2 = seat(50);
+        assertEquals(List.of("Kid loop"), port.fromClub, "the rider's session handed back to the race, in place");
+        assertEquals(List.of(dad.id, kid.id), port.seats.get(race2), "behind Dad again for race 2 (#11)");
+        assertTrue(port.noPush.contains(kid.id) && port.notCollidable.contains(kid.id), "on the ride's team again");
+        assertEquals(1, port.entered.size(), "the same session all night: their things saved once");
+        assertFalse(riders.ofDriver(dad.id).inClub, "riding again");
+    }
+
+    @Test
+    void aRideWaitingInTheClubhouseEndsWhenEitherLeavesOrNoRaceComes() {
+        riding();
+        port.club.add(dad.id);
+        riders.toClub(dad.id, ClubVisits.Kind.PARTY);
+        port.club.remove(kid.id); // Kid's Leave game in the Clubhouse
+        riders.second();
+        assertFalse(riders.isRider(kid.id), "Kid left the Clubhouse: the ride is over");
+
+        riding();
+        riders.toClub(dad.id, ClubVisits.Kind.PARTY);
+        port.club.remove(dad.id); // Dad went home (not in the Clubhouse, not racing)
+        riders.second();
+        assertFalse(riders.isRider(kid.id), "Dad went home: the ride is over");
+        assertTrue(port.last(kid).contains("is over"), port.told.toString());
+        assertTrue(port.club.contains(kid.id), "Kid stays in the Clubhouse to hang out");
+
+        riding();
+        port.club.add(dad.id);
+        riders.toClub(dad.id, ClubVisits.Kind.PARTY);
+        port.now += Riders.CLUB_LAPSE_MS;
+        riders.second();
+        assertFalse(riders.isRider(kid.id), "no next race for five minutes: the ride lapses");
     }
 
     @Test

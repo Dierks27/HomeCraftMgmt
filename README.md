@@ -1440,7 +1440,7 @@ every race and round works exactly as before**.
 | `clubhouse.origin` | `[5376, 160, 4448]` | The box's lowest corner; x and z are multiples of 16 |
 | `clubhouse.max_minutes` | `30` | Minutes with no race or party going before a visitor is sent home |
 | `clubhouse.party_after` | `true` | Party racers come back here after the race |
-| `clubhouse.race_night_after` | `true` | Everyone comes here at the end of Race Night, the top three on the podium |
+| `clubhouse.race_night_after` | `true` | Everyone comes here at the end of Race Night, the top three on the podium; on a track with no viewing stand, racers (and their riders) also wait here between races |
 | `clubhouse.golf_after` | `true` | A golf-together group comes here when its round ends |
 | `trials.rider_runs_count` | `true` | `false`: a run with a rider is just for fun, and Race Night takes no riders |
 

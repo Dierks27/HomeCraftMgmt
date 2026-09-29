@@ -4,6 +4,8 @@ import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.Point;
+import com.dierks.homecraft.games.trial.RaceGrid;
+import com.dierks.homecraft.games.trial.RaceStand;
 import com.dierks.homecraft.games.trial.Tier;
 import com.dierks.homecraft.games.trial.TrialKind;
 import org.junit.jupiter.api.Test;
@@ -19,15 +21,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A track as Race Night sees it ({@link RaceTrack}, EVENTS-DROPPER-SPEC §A.4.1-§A.4.4), with no
- * server: the live blocks are a fake {@link RaceTrack.Probe}.
+ * server: the live blocks are a fake {@link RaceGrid.Surface}.
  *
  * <p>Pinned here: a stored 2-lap loop is found and can be raced over N laps (the 64-target limit
  * holds, a point-to-point course stays at 1); the raced course starts at the grid spot; the
- * automatic grid seats rows of two behind the start on an open track, nudges round an obstacle,
- * falls back to single file in a narrow lane, and never puts a spot through a wall; an admin's grid
- * and stand follow the spacing, reach and clearance rules; a stored grid or stand is dropped by a
- * layout change; and a Fresh Boat layout of algo 2 has its stand at the half's centre, 5 above the
- * start.
+ * automatic grid, which is Time Trials' own {@link RaceGrid} since the integration (one grid for
+ * party races and Race Night), still does everything Race Night's own grid was pinned to: rows of
+ * two behind the start on an open track, a nudge round an obstacle, single file in a narrow lane,
+ * never a spot in a wall, and on a loop back along the track; an admin's grid and stand follow the
+ * spacing, reach and clearance rules; a stored grid or stand is dropped by a layout change; and a
+ * Fresh Boat layout of algo 2 has its stand where {@link RaceStand} says, the half's centre block 5
+ * above the start.
  */
 class RaceTrackTest {
 
@@ -47,32 +51,17 @@ class RaceTrackTest {
                 List.of(new Course.Mark(0, 64, 40, 3)), new Course.Mark(0, 64, 80, 3), null, null, true, false, 1);
     }
 
-    /** Open ice everywhere. */
-    private static final RaceTrack.Probe OPEN = new RaceTrack.Probe() {
-        @Override
-        public boolean seat(double x, double y, double z) {
-            return true;
-        }
+    /** Open ice everywhere: a solid floor under the courses' height (64), air above it. */
+    private static final RaceGrid.Surface OPEN = (x, y, z) -> y < 64 ? RaceGrid.Cell.SOLID : RaceGrid.Cell.AIR;
 
-        @Override
-        public boolean open(Point a, Point b) {
-            return true;
-        }
-    };
+    /** An ice lane along z: blocks -{@code half}..{@code half} open, walls outside them at boat height. */
+    private static RaceGrid.Surface lane(int half) {
+        return (x, y, z) -> y < 64 || x < -half || x > half ? RaceGrid.Cell.SOLID : RaceGrid.Cell.AIR;
+    }
 
-    /** A lane |x| <= halfWidth along the z axis: walls outside it. */
-    private static RaceTrack.Probe lane(double halfWidth) {
-        return new RaceTrack.Probe() {
-            @Override
-            public boolean seat(double x, double y, double z) {
-                return Math.abs(x) <= halfWidth - 1.0; // a block from each wall
-            }
-
-            @Override
-            public boolean open(Point a, Point b) {
-                return Math.abs(a.x()) <= halfWidth && Math.abs(b.x()) <= halfWidth;
-            }
-        };
+    /** The spots of Time Trials' automatic grid for {@code n} racers on {@code c}. */
+    private static List<Course.Spot> autoGrid(Course c, int n, RaceGrid.Surface surface) {
+        return RaceGrid.forCourse(c, surface, n).spots();
     }
 
     // ---- laps -------------------------------------------------------------------------------------
@@ -118,7 +107,7 @@ class RaceTrackTest {
 
     @Test
     void anOpenTrackSeatsRowsOfTwoBehindTheStart() {
-        List<Course.Spot> grid = RaceTrack.autoGrid(straight(), 8, OPEN);
+        List<Course.Spot> grid = autoGrid(straight(), 8, OPEN);
         assertEquals(8, grid.size(), "eight spots");
         for (Course.Spot s : grid) {
             assertTrue(s.z() <= 0.01, "every spot is behind the start (z <= 0): " + s);
@@ -136,47 +125,33 @@ class RaceTrackTest {
 
     @Test
     void aNarrowLaneFallsBackToSingleFileAndNeverSeatsInAWall() {
-        List<Course.Spot> grid = RaceTrack.autoGrid(straight(), 4, lane(1.5));
+        List<Course.Spot> grid = autoGrid(straight(), 4, lane(1));
         assertEquals(4, grid.size(), "a 3-wide lane still seats 4, in single file");
         for (Course.Spot s : grid) {
             assertTrue(Math.abs(s.x()) <= 0.5, "every spot is clear of the walls: " + s);
         }
-        assertTrue(RaceTrack.autoGrid(straight(), 4, new RaceTrack.Probe() {
-            @Override
-            public boolean seat(double x, double y, double z) {
-                return false;
-            }
-
-            @Override
-            public boolean open(Point a, Point b) {
-                return false;
-            }
-        }).isEmpty(), "nowhere a boat can sit: no grid (the track isn't raceable)");
+        assertTrue(autoGrid(straight(), 4, (x, y, z) -> RaceGrid.Cell.SOLID).isEmpty(),
+                "nowhere a boat can sit: no grid (the track isn't raceable)");
     }
 
     @Test
     void aSpotBesideAnObstacleIsNudgedSideways() {
-        RaceTrack.Probe rock = new RaceTrack.Probe() {
-            @Override
-            public boolean seat(double x, double y, double z) {
-                return !(x > 1 && x < 2.5 && z > -1 && z < 1); // a rock where the pole's right spot would be
-            }
-
-            @Override
-            public boolean open(Point a, Point b) {
-                return true;
-            }
-        };
-        List<Course.Spot> grid = RaceTrack.autoGrid(straight(), 2, rock);
+        List<Course.Spot> open = autoGrid(straight(), 2, OPEN);
+        Course.Spot pole = open.get(0);
+        int rx = (int) Math.floor(pole.x());
+        int rz = (int) Math.floor(pole.z());
+        RaceGrid.Surface rock = (x, y, z) -> x == rx && z == rz && y == 64 ? RaceGrid.Cell.SOLID : OPEN.at(x, y, z);
+        List<Course.Spot> grid = autoGrid(straight(), 2, rock);
         assertEquals(2, grid.size(), "still two spots");
         for (Course.Spot s : grid) {
-            assertTrue(rock.seat(s.x(), s.y(), s.z()), "no spot on the rock: " + s);
+            assertTrue(RaceGrid.problem(s.point(), rock) == null, "no spot on the rock, each where a boat fits: " + s);
+            assertFalse(Math.floor(s.x()) == rx && Math.floor(s.z()) == rz, "nor on its block: " + s);
         }
     }
 
     @Test
     void aLoopsGridFollowsTheTrackBackFromTheStart() {
-        List<Course.Spot> grid = RaceTrack.autoGrid(loop(), 6, OPEN);
+        List<Course.Spot> grid = autoGrid(loop(), 6, OPEN);
         assertEquals(6, grid.size(), "six spots on the loop");
         for (Course.Spot s : grid) {
             assertTrue(s.z() <= -14, "behind the finish line, back towards the last checkpoint: " + s);
@@ -227,7 +202,9 @@ class RaceTrackTest {
                 1L);
         Course c = loop().withGen(algo2);
         Box half = new Box(-64, 60, -64, 63, 75, 63);
-        assertEquals(new Point(0, 69, 0), RaceTrack.freshStand(c, half), "the half's centre, 5 above the start");
+        assertEquals(new Point(0.5, 69, 0.5), RaceTrack.freshStand(c, half),
+                "the half's centre block, 5 above the start: where the boat planner builds it (RaceStand)");
+        assertEquals(RaceStand.of(c, half), RaceTrack.freshStand(c, half), "one stand for party races and Race Night");
         GenTag algo1 = new GenTag("fresh_boat", "boat", 1, 20_725, 0, 1L, 'A', "abc", 0, 0, 0, List.of(0), List.of(),
                 1L);
         assertNull(RaceTrack.freshStand(loop().withGen(algo1), half), "algo 1 has no stand");

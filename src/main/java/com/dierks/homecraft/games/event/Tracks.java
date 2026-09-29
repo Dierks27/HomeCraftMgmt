@@ -3,13 +3,14 @@ package com.dierks.homecraft.games.event;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.Point;
+import com.dierks.homecraft.games.trial.RaceGrid;
+import com.dierks.homecraft.games.trial.RaceStand;
 import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.games.trial.TrialKind;
+import com.dierks.homecraft.games.trial.WorldSurface;
 import com.dierks.homecraft.storage.EventDao;
 import org.bukkit.Bukkit;
-import org.bukkit.Material;
 import org.bukkit.World;
-import org.bukkit.block.Block;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -21,8 +22,9 @@ import java.util.logging.Level;
  * open boat course of Time Trials in a Games world, with enough grid spots for {@code min_racers},
  * and a viewing stand for more than one race. The rules are {@link RaceTrack}'s (pure); this class
  * reads the courses, the admin's stored grids and stands ({@code hcm_meta race.grid.<course>},
- * {@code race.stand.<course>}, each kept with the layout it was set for) and the live blocks the
- * automatic grid needs (about 60 reads, main thread).
+ * {@code race.stand.<course>}, each kept with the layout it was set for) and the live blocks. The
+ * automatic grid and a Fresh Boat's built-in stand are Time Trials' own ({@link RaceGrid},
+ * {@link RaceStand}), the same ones party races use, so there is one grid and one stand.
  */
 final class Tracks {
 
@@ -136,12 +138,13 @@ final class Tracks {
             }
             return List.of();
         }
-        List<Course.Spot> auto = RaceTrack.autoGrid(c, n, probe(w));
+        RaceGrid.Grid auto = RaceGrid.forCourse(c, new WorldSurface(w), n); // Time Trials' grid, as party races'
         if (why != null && auto.size() < n) {
             why.add("the automatic grid found " + auto.size() + " of " + n + " spots behind the start (walls, "
                     + "blocks or no room)");
+            why.addAll(auto.notes());
         }
-        return auto;
+        return auto.spots();
     }
 
     /** An admin's stored grid while the layout still matches; a stale one is dropped with a WARN. */
@@ -160,13 +163,16 @@ final class Tracks {
     }
 
     /**
-     * A course's viewing stand: built into a Fresh Boat layout of algo 2 or later, else an admin's
-     * (dropped with a WARN once the layout changes); {@code null} for none.
+     * A course's viewing stand: built into a Fresh Boat layout of algo 2 or later ({@link RaceStand},
+     * used only while it really stands in the world), else an admin's (dropped with a WARN once the
+     * layout changes); {@code null} for none (finishers go home at the line).
      */
     Point stand(Course c) {
         if (c.generated()) {
             Box half = game.games().generated().half(c.gen());
-            return RaceTrack.freshStand(c, half);
+            Point built = RaceTrack.freshStand(c, half);
+            World w = built == null ? null : Bukkit.getWorld(c.world());
+            return w != null && RaceStand.standable(new WorldSurface(w), built) ? built : null;
         }
         String key = STAND + c.id();
         String stored = meta(key);
@@ -198,50 +204,6 @@ final class Tracks {
             return "a stand needs a solid block under it and 2 blocks of air above";
         }
         return RaceTrack.standProblem(c, grid(c, RaceTrack.MAX_GRID, null), p);
-    }
-
-    /** The live blocks as the automatic grid reads them. */
-    static RaceTrack.Probe probe(World w) {
-        return new RaceTrack.Probe() {
-            @Override
-            public boolean seat(double x, double y, double z) {
-                int bx = (int) Math.floor(x);
-                int by = (int) Math.floor(y);
-                int bz = (int) Math.floor(z);
-                Block feet = w.getBlockAt(bx, by, bz);
-                Block head = w.getBlockAt(bx, by + 1, bz);
-                boolean floating = feet.getType() == Material.WATER;
-                Block below = w.getBlockAt(bx, by - 1, bz);
-                boolean floor = floating || below.getType() == Material.WATER || !below.isPassable();
-                if (!floor || !head.isPassable() || (!floating && !feet.isPassable())) {
-                    return false;
-                }
-                int[][] around = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-                for (int[] d : around) {
-                    Block side = w.getBlockAt((int) Math.floor(x + d[0]), by, (int) Math.floor(z + d[1]));
-                    if (!side.isPassable() && side.getType() != Material.WATER) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-
-            @Override
-            public boolean open(Point a, Point b) {
-                double len = a.flatDistance(b);
-                int steps = Math.max(1, (int) Math.ceil(len / 0.5));
-                int y = (int) Math.floor(a.y());
-                for (int i = 0; i <= steps; i++) {
-                    double t = i / (double) steps;
-                    Block at = w.getBlockAt((int) Math.floor(a.x() + (b.x() - a.x()) * t), y,
-                            (int) Math.floor(a.z() + (b.z() - a.z()) * t));
-                    if (!at.isPassable() && at.getType() != Material.WATER) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-        };
     }
 
     private String meta(String key) {

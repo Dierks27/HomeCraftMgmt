@@ -1,10 +1,9 @@
 package com.dierks.homecraft.games.event;
 
 import com.dierks.homecraft.games.gen.api.Box;
-import com.dierks.homecraft.games.gen.api.GenTag;
-import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.Point;
+import com.dierks.homecraft.games.trial.RaceStand;
 import com.dierks.homecraft.games.trial.TrialKind;
 
 import java.util.ArrayList;
@@ -13,8 +12,7 @@ import java.util.Locale;
 
 /**
  * A track as Race Night sees it (EVENTS-DROPPER-SPEC §A.4.1-§A.4.4): its laps, the course each
- * race is judged on, its grid spots and its viewing stand. Pure: no Bukkit, the live blocks come
- * through a {@link Probe}.
+ * race is judged on, an admin's grid spots and its viewing stand. Pure: no Bukkit.
  *
  * <p><b>Laps.</b> A <i>loop</i> has its finish within max(finish radius, 6) of its start and at
  * least 3 checkpoints; its natural laps are how many times its checkpoint list repeats (Fresh Boat
@@ -24,16 +22,14 @@ import java.util.Locale;
  *
  * <p><b>The grid.</b> An admin's stored grid (at most {@value #MAX_GRID} spots, {@value #SPACING}
  * apart, behind the start and within {@value #GRID_REACH} of it) wins while the course's layout is
- * the one it was set for; otherwise the automatic grid: rows of two, ±1.5 either side of the path
- * behind the start (on a loop, back along the last checkpoints), rows 4 apart, each spot on
- * something a boat sits on with 2 air above, clear of walls and with nothing solid back to the
- * start; a failing spot is nudged sideways up to 2 blocks; single file 5 apart when rows of two
- * can't seat enough. (WP-R1 builds the same plan as {@code trial/RaceGrid}; the integration may swap
- * {@link #autoGrid} for it.)
+ * the one it was set for; otherwise the automatic grid, which is Time Trials' own
+ * ({@code trial/RaceGrid}: rows of two behind the start, nudged round a wall, single file when rows
+ * of two can't seat enough), the same one party races use.
  *
- * <p><b>The stand.</b> A Fresh Boat layout of algo 2 or later has one built in: the half's centre, 5
- * above the start. A hand-built track needs an admin's ({@value #STAND_CLEAR} or more from the
- * racing line). Without a stand a night has one race and finishers go home at the line.
+ * <p><b>The stand.</b> A Fresh Boat layout of algo 2 or later has one built in, where Time Trials'
+ * {@code RaceStand} says (the half's centre block, 5 above the start). A hand-built track needs an
+ * admin's ({@value #STAND_CLEAR} or more from the racing line). Without a stand a night has one race
+ * and finishers go home at the line.
  */
 public final class RaceTrack {
 
@@ -47,28 +43,8 @@ public final class RaceTrack {
     public static final double STAND_CLEAR = 10;
     /** A loop's finish is within this (or its radius) of its start. */
     static final double LOOP_GAP = 6;
-    /** Rows of two: this far either side of the path. */
-    static final double SIDE = 1.5;
-    /** Rows this far apart along the path. */
-    static final double ROW_GAP = 4;
-    /** Single file this far apart. */
-    static final double FILE_GAP = 5;
-    /** How far a spot may be nudged sideways, in half-block steps. */
-    static final double NUDGE = 2;
-    /** How far back along the path the automatic grid looks. */
-    static final double PATH_REACH = 48;
 
     private RaceTrack() {
-    }
-
-    /** The live blocks, as the automatic grid reads them (about 60 reads on the main thread). */
-    public interface Probe {
-
-        /** Whether a boat can sit at (x, y, z): ice, water or a solid top under it, 2 air above, 1 block from any wall. */
-        boolean seat(double x, double y, double z);
-
-        /** Whether nothing solid stands between {@code a} and {@code b} at boat height. */
-        boolean open(Point a, Point b);
     }
 
     // ---- laps -----------------------------------------------------------------------------------
@@ -151,128 +127,10 @@ public final class RaceTrack {
         return out;
     }
 
-    // ---- the grid -------------------------------------------------------------------------------
-
-    /**
-     * The path behind the start, from the start backwards: on a loop the start then the last
-     * checkpoints in reverse; otherwise straight back along the start's facing.
-     */
-    static List<Point> pathBehind(Course c) {
-        List<Point> path = new ArrayList<>();
-        Point start = c.start().point();
-        path.add(start);
-        if (loop(c)) {
-            List<Course.Mark> cps = c.checkpoints();
-            for (int i = cps.size() - 1; i >= 0 && path.size() < 8; i--) {
-                path.add(cps.get(i).center());
-            }
-        } else {
-            double[] f = facing(c.start().yaw());
-            path.add(new Point(start.x() - f[0] * PATH_REACH, start.y(), start.z() - f[1] * PATH_REACH));
-        }
-        return path;
-    }
-
-    /**
-     * The automatic grid for {@code n} racers, pole first (at most {@code n}; fewer when the track
-     * can't seat them).
-     */
-    public static List<Course.Spot> autoGrid(Course c, int n, Probe probe) {
-        if (c == null || c.start() == null || n <= 0 || probe == null) {
-            return List.of();
-        }
-        List<Point> path = pathBehind(c);
-        List<Course.Spot> rows = spots(c, path, n, true, probe);
-        if (rows.size() >= n) {
-            return rows.subList(0, n);
-        }
-        List<Course.Spot> file = spots(c, path, n, false, probe);
-        return file.size() > rows.size() ? file : rows;
-    }
-
-    private static List<Course.Spot> spots(Course c, List<Point> path, int n, boolean doubled, Probe probe) {
-        List<Course.Spot> out = new ArrayList<>();
-        double gap = doubled ? ROW_GAP : FILE_GAP;
-        double y = c.start().y();
-        Point start = c.start().point();
-        for (double d = 0; d <= PATH_REACH && out.size() < n; d += gap) {
-            double[] at = along(path, d);
-            if (at == null) {
-                break;
-            }
-            // at: x, z, and the direction BACK along the path (dx, dz): racers face the other way
-            double fx = -at[2];
-            double fz = -at[3];
-            double sx = -fz; // the path's side
-            double sz = fx;
-            double[] sides = doubled ? new double[]{-SIDE, SIDE} : new double[]{0};
-            for (double side : sides) {
-                if (out.size() >= n) {
-                    break;
-                }
-                Course.Spot s = nudge(at[0] + sx * side, y, at[1] + sz * side, sx, sz, fx, fz, start, probe, out);
-                if (s != null) {
-                    out.add(s);
-                }
-            }
-        }
-        return out;
-    }
-
-    private static Course.Spot nudge(double x, double y, double z, double sx, double sz, double fx, double fz,
-                                     Point start, Probe probe, List<Course.Spot> taken) {
-        for (double k = 0; k <= NUDGE; k += 0.5) {
-            for (double sign : k == 0 ? new double[]{1} : new double[]{1, -1}) {
-                double px = x + sx * k * sign;
-                double pz = z + sz * k * sign;
-                Point p = new Point(px, y, pz);
-                if (probe.seat(px, y, pz) && probe.open(p, start) && apart(p, taken)) {
-                    return new Course.Spot(px, y, pz, yaw(fx, fz), 0);
-                }
-            }
-        }
-        return null;
-    }
-
-    private static boolean apart(Point p, List<Course.Spot> taken) {
-        for (Course.Spot s : taken) {
-            if (s.point().flatDistance(p) < SPACING) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /** The point {@code d} blocks along the polyline, and the unit direction of travel there; {@code null} past its end. */
-    static double[] along(List<Point> path, double d) {
-        double left = d;
-        for (int i = 0; i + 1 < path.size(); i++) {
-            Point a = path.get(i);
-            Point b = path.get(i + 1);
-            double len = a.flatDistance(b);
-            if (len <= 1e-6) {
-                continue;
-            }
-            if (left <= len) {
-                double t = left / len;
-                double dx = (b.x() - a.x()) / len;
-                double dz = (b.z() - a.z()) / len;
-                return new double[]{a.x() + (b.x() - a.x()) * t, a.z() + (b.z() - a.z()) * t, dx, dz};
-            }
-            left -= len;
-        }
-        return null;
-    }
-
     /** The horizontal unit vector a Minecraft yaw faces (0 is +z, 90 is -x). */
     static double[] facing(float yaw) {
         double r = Math.toRadians(yaw);
         return new double[]{-Math.sin(r), Math.cos(r)};
-    }
-
-    /** The yaw that faces along (dx, dz). */
-    static float yaw(double dx, double dz) {
-        return (float) Math.toDegrees(Math.atan2(-dx, dz));
     }
 
     // ---- raceable ------------------------------------------------------------------------------
@@ -381,16 +239,12 @@ public final class RaceTrack {
     }
 
     /**
-     * A Fresh Boat layout's built-in stand: the half's centre, 5 above the start, for algo 2 or
-     * later; {@code null} for anything else.
+     * A Fresh Boat layout's built-in stand, where the boat planner builds it ({@code RaceStand.of}:
+     * the half's centre block, 5 above the start, for algo 2 or later); {@code null} for anything
+     * else. Whether it really stands in the world is the caller's check ({@code RaceStand.standable}).
      */
     public static Point freshStand(Course c, Box half) {
-        GenTag t = c == null ? null : c.gen();
-        if (t == null || half == null || c.start() == null || c.kind() != TrialKind.BOAT
-                || !Slots.BOAT.equals(t.generator()) || t.algo() < 2) {
-            return null;
-        }
-        return new Point((half.minX() + half.maxX() + 1) / 2.0, c.start().y() + 5, (half.minZ() + half.maxZ() + 1) / 2.0);
+        return RaceStand.of(c, half);
     }
 
     // ---- how an admin's grid and stand are kept (hcm_meta race.grid.<course>, race.stand.<course>) ------

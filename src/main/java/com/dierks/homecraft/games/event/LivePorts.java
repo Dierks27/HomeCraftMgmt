@@ -32,17 +32,13 @@ import java.util.logging.Level;
  * online and free, Time Trials' race mode, and the chat, titles and bossbars. One per night.
  *
  * <p><b>Race mode</b> is Time Trials' ({@code TimeTrials.race}, {@code regrid}, {@code park},
- * {@code endRace}, {@code reserve}/{@code release}). Until that is built (WP-R1) each of them throws
- * {@link UnsupportedOperationException}: here that is a refusal ("race mode isn't ready yet") or a
- * no-op, never a throw into the games' guard, so an admin can switch Race Night on early and see
- * why nobody was seated instead of the game switching itself off.
+ * {@code endRace}, {@code reserve}/{@code release}), built by WP-R1: each call here goes straight to
+ * its {@code RaceMode}, which never throws into the caller (a link that fails is logged and treated
+ * as over). A refusal comes back as its plain line; Time Trials being closed is one too.
  *
  * <p>Everything runs on the main thread inside Race Night's guard; nothing here throws on purpose.
  */
 final class LivePorts implements NightPorts {
-
-    /** What a racer reads when Time Trials' race mode isn't there yet. */
-    static final String NOT_READY = "Race mode isn't ready yet - ask an admin.";
 
     private final RaceNight game;
     private final String nightId;
@@ -104,12 +100,8 @@ final class LivePorts implements NightPorts {
             return "The track's world isn't loaded.";
         }
         Location at = stand == null ? null : new Location(w, stand.x(), stand.y(), stand.z());
-        try {
-            Refusal r = t.race(p, base, raced, grid, at, link);
-            return r == null ? null : r.message();
-        } catch (UnsupportedOperationException e) {
-            return NOT_READY;
-        }
+        Refusal r = t.race(p, base, raced, grid, at, link);
+        return r == null ? null : r.message();
     }
 
     @Override
@@ -119,11 +111,7 @@ final class LivePorts implements NightPorts {
         if (p == null || t == null) {
             return;
         }
-        try {
-            t.regrid(p, raced, grid);
-        } catch (UnsupportedOperationException e) {
-            // race mode not built: the racer stays where they are
-        }
+        t.regrid(p, raced, grid);
     }
 
     @Override
@@ -133,25 +121,17 @@ final class LivePorts implements NightPorts {
         if (p == null || t == null) {
             return;
         }
-        try {
-            t.park(p);
-        } catch (UnsupportedOperationException e) {
-            // race mode not built
-        }
+        t.park(p);
     }
 
     @Override
     public void home(UUID racer, EndReason why, String line) {
         TimeTrials t = game.trials();
-        try {
-            if (t != null) {
-                t.endRace(racer, why, line);
-                return;
-            }
-        } catch (UnsupportedOperationException e) {
-            // race mode not built: end the session the plain way
+        if (t != null) {
+            t.endRace(racer, why, line); // home on its next tick, reading the line (or on arrival)
+            return;
         }
-        Player p = Bukkit.getPlayer(racer);
+        Player p = Bukkit.getPlayer(racer); // Time Trials closed: end the session the plain way
         if (p != null) {
             Session s = games().sessions().session(p);
             if (s != null && TimeTrials.SPEC.id().equals(s.gameId())) {
@@ -166,22 +146,14 @@ final class LivePorts implements NightPorts {
     @Override
     public boolean reserve(String courseId, Object holder, String line) {
         TimeTrials t = game.trials();
-        try {
-            return t != null && t.reserve(courseId, holder, line);
-        } catch (UnsupportedOperationException e) {
-            return true; // nothing to hold with yet
-        }
+        return t != null && t.reserve(courseId, holder, line);
     }
 
     @Override
     public void release(String courseId, Object holder) {
         TimeTrials t = game.trials();
-        try {
-            if (t != null) {
-                t.release(courseId, holder);
-            }
-        } catch (UnsupportedOperationException e) {
-            // nothing was held
+        if (t != null) {
+            t.release(courseId, holder);
         }
     }
 

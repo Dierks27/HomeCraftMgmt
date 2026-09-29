@@ -17,6 +17,7 @@ import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.ScoreResult;
 import com.dierks.homecraft.games.Scores;
 import com.dierks.homecraft.games.SkillRewards;
+import com.dierks.homecraft.games.cup.live.CupLink;
 import com.dierks.homecraft.games.gen.api.GenBoards;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
@@ -49,6 +50,8 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.boat.OakBoat;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.block.BlockFromToEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDismountEvent;
 import org.bukkit.event.entity.EntityToggleGlideEvent;
 import org.bukkit.event.inventory.InventoryType;
@@ -172,6 +175,12 @@ public final class TimeTrials implements Game {
     private long lastReadError;
     /** When the last trial tick ran ({@code System.nanoTime()}; 0 = none yet), to see server stalls. */
     private long lastTick;
+    /** The Dropper's hooks (EVENTS-DROPPER-SPEC §B.1.7): every dropper rule is in DropperRun. */
+    private final DropperHooks drops = new DropperHooks(this);
+    // ---- WP-R1: race mode, warm-ups and party races live in their own classes; these are hooks ----
+    private final RaceMode race = new RaceMode(this);
+    private final Warmups warmups = new Warmups(this);
+    private final PartyRaces party = new PartyRaces(this);
 
     public TimeTrials(GameContext ctx) {
         this.ctx = ctx;
@@ -193,9 +202,21 @@ public final class TimeTrials implements Game {
      * @param best         the player's best on the course after this run, or {@code null}
      * @param earned       tokens paid
      * @param daily        what a Fresh course's run showed besides, or {@code null} (hand-built)
+     * @param bonks        a dropper run's bonks (EVENTS-DROPPER-SPEC §B.1.1), or -1 for any other course
      */
     public record Result(String courseId, String courseName, long ms, boolean counted, boolean test, String reason,
-                         boolean personalBest, boolean record, Long best, int earned, Daily daily) {
+                         boolean personalBest, boolean record, Long best, int earned, Daily daily, int bonks) {
+
+        /** A result with no Dropper bonk count (any course but a dropper: {@code bonks} -1). */
+        public Result(String courseId, String courseName, long ms, boolean counted, boolean test, String reason,
+                      boolean personalBest, boolean record, Long best, int earned, Daily daily) {
+            this(courseId, courseName, ms, counted, test, reason, personalBest, record, best, earned, daily, -1);
+        }
+
+        /** Whether it was a dropper run (its bonks are counted). */
+        public boolean dropper() {
+            return bonks >= 0;
+        }
 
         /** A hand-built course's result. */
         public Result(String courseId, String courseName, long ms, boolean counted, boolean test, String reason,
@@ -318,6 +339,9 @@ public final class TimeTrials implements Game {
             new CourseMenu(ctx.plugin(), this, c, player, back).open(player);
             return true;
         }
+        if (warmups.offer(player, c)) { // WP-R1 (D3): "Warm up (3:00)" or "Go straight to the timed run"
+            return true;
+        }
         return begin(player, c, false);
     }
 
@@ -368,14 +392,20 @@ public final class TimeTrials implements Game {
                 e -> triedToLeave(e.isCancelled(), e.getExited(), e.getVehicle()));
         g.on(this, EntityDismountEvent.class, EventPriority.MONITOR, false,
                 e -> triedToLeave(e.isCancelled(), e.getEntity(), e.getDismounted()));
+        g.on(this, EntityDamageEvent.class, EventPriority.MONITOR, false, drops::hurt); // a dropper's bonk
+        g.on(this, BlockFromToEvent.class, EventPriority.LOW, true, drops::flow); // a dropper's pools never flow out
         g.every(this, 1, 1, this::tick);
+        party.start(); // WP-R1 (D4)
     }
 
     /** The framework ends the sessions; here the boats go and the runs are forgotten. */
     @Override
     public void stop() {
+        race.stop(); // WP-R1
+        party.stop();
         for (TrialRun run : new ArrayList<>(runs.values())) {
             removeBoat(run, Bukkit.getPlayer(run.player));
+            drops.end(run, Bukkit.getPlayer(run.player));
         }
         runs.clear();
         boats.clear();
@@ -385,11 +415,15 @@ public final class TimeTrials implements Game {
 
     @Override
     public void onQuit(Player player) {
+        party.quit(player); // WP-R1: a disconnect is a DNF, and the party passes on
+        race.left(player, EndReason.DISCONNECT);
+        warmups.forget(player); // WP-R1 (D3): a warm-up chosen before the quit never carries over
         end(player);
     }
 
     @Override
     public void onSessionEnd(Player player, EndReason reason) {
+        race.left(player, reason); // WP-R1: RaceLink.left
         end(player);
     }
 
@@ -397,6 +431,12 @@ public final class TimeTrials implements Game {
     @Override
     public void onVoid(Player player) {
         TrialRun run = runs.get(player.getUniqueId());
+        if (run != null && race.onVoid(player, run)) { // WP-R1: a parked racer goes back to the stand
+            return;
+        }
+        if (run != null && run.drop != null && drops.bonk(player, run, DropperRules.Why.VOID)) {
+            return; // a dropper's bonk: back to the top of this level
+        }
         if (run != null && run.running() && sendBack(player, run, 0)) {
             wingsTip(player, run);
         }
@@ -405,7 +445,7 @@ public final class TimeTrials implements Game {
     @Override
     public void onKitUse(Player player, String action, boolean leftClick) {
         TrialRun run = runs.get(player.getUniqueId());
-        if (run == null) {
+        if (run == null || drops.kit(player, run, action)) {
             return;
         }
         switch (action) {
@@ -417,6 +457,8 @@ public final class TimeTrials implements Game {
                 }
             }
             case "firework" -> player.sendActionBar(Text.of("&7Rockets work while you glide."));
+            case Warmup.TIMED -> warmups.timed(player, run); // WP-R1 (D3)
+            case Warmup.READY -> warmups.ready(player, run);
             default -> {
                 // the elytra and anything else: nothing to do
             }
@@ -477,7 +519,8 @@ public final class TimeTrials implements Game {
     public static List<Course> open(Collection<Course> courses, Predicate<String> gamesWorld, GeneratedCourses gate) {
         List<Course> out = new ArrayList<>();
         for (Course c : courses) {
-            if (c.enabled() && c.ready() && gamesWorld.test(c.world()) && gate.live(c.id(), c.gen())) {
+            if (c.enabled() && c.ready() && gamesWorld.test(c.world()) && gate.live(c.id(), c.gen())
+                    && DropperLayout.problems(c).isEmpty()) { // a malformed dropper never opens
                 out.add(c);
             }
         }
@@ -620,11 +663,11 @@ public final class TimeTrials implements Game {
         } catch (RuntimeException e) {
             // the default week
         }
-        return ctx.plugin().clock().weekKey(start);
+        return games().clock().weekKey(start); // the framework's clock: the plugin's, live
     }
 
     private long today() {
-        return ctx.plugin().clock().dayKey();
+        return games().clock().dayKey();
     }
 
     // ---- what the screens show --------------------------------------------------------------
@@ -648,9 +691,13 @@ public final class TimeTrials implements Game {
         if (c.id().equals(courseOfWeek)) {
             lore.add("&6★ Course of the week");
         }
+        CupLink.Tile cup = CupLink.tile(games(), viewer, c); // Weekly Cup: read once for the lore and the NAME
+        lore.addAll(cup.lines());
         lore.add("&eClick to play");
         return Menus.icon(icon(c.kind()), "&e" + c.name() + " &7(" + TrialText.label(c) + ") &7- "
-                + (best == null ? "no time yet" : "best " + TrialText.time(best)), lore.toArray(new String[0]));
+                + (c.kind() == TrialKind.DROPPER ? TrialText.levels(DropperLayout.levels(c)) + " · " : "") // a kept dropper
+                + (best == null ? "no time yet" : "best " + TrialText.time(best)) + cup.suffix(),
+                lore.toArray(new String[0]));
     }
 
     /**
@@ -688,12 +735,15 @@ public final class TimeTrials implements Game {
         if (c.id().equals(courseOfWeek)) {
             lore.add("&6★ Course of the week");
         }
+        CupLink.Tile cup = CupLink.tile(g, viewer, c); // Weekly Cup: read once for the lore and the NAME
+        lore.addAll(cup.lines());
         lore.add("&eClick to play");
-        String name = t.recalled() ? "&6" + classicName(t, c.name()) + " &7- " + DailyText.trialFact(cadence, stars)
-                : DailyText.tabName(Slots.of(t.slot()), c.name(), DailyText.trialFact(cadence, stars),
-                DailyLookup.current(g, t.slot()), cadence);
-        return Menus.glint(Menus.icon(icon(c.kind()), name + DailyLookup.codeSuffix(code),
-                lore.toArray(new String[0])), stars >= 3);
+        String fact = (c.kind() == TrialKind.DROPPER ? DailyText.levels(DropperLayout.levels(c)) + " · " : "")
+                + DailyText.trialFact(cadence, stars);
+        String name = t.recalled() ? "&6" + classicName(t, c.name()) + " &7- " + fact
+                : DailyText.tabName(Slots.of(t.slot()), c.name(), fact, DailyLookup.current(g, t.slot()), cadence);
+        return Menus.glint(Menus.icon(icon(c.kind()), name + DailyLookup.codeSuffix(code)
+                + cup.suffix(), lore.toArray(new String[0])), stars >= 3);
     }
 
     /**
@@ -735,6 +785,7 @@ public final class TimeTrials implements Game {
             case PARKOUR -> Material.FEATHER;
             case ELYTRA -> Material.ELYTRA;
             case BOAT -> Material.OAK_BOAT;
+            case DROPPER -> Material.WATER_BUCKET;
         };
     }
 
@@ -825,6 +876,9 @@ public final class TimeTrials implements Game {
             games().tell(player, Refusal.of("That course is closed right now."));
             return;
         }
+        if (warmups.offer(player, c)) { // WP-R1 (D3)
+            return;
+        }
         begin(player, c, false);
     }
 
@@ -862,15 +916,24 @@ public final class TimeTrials implements Game {
     }
 
     /** Take the player to the course's start in a world session; the run begins when they're in. */
-    private boolean begin(Player player, Course course, boolean test) {
+    boolean begin(Player player, Course course, boolean test) {
         World world = course.ready() ? Bukkit.getWorld(course.world()) : null;
         if (world == null) {
             games().tell(player, Refusal.of("That course isn't ready right now."));
+            warmups.forget(player);
+            return false;
+        }
+        if (race.refuseSolo(player, course.id())) { // WP-R1: a course held for a race
+            warmups.forget(player);
             return false;
         }
         Course.Spot s = course.start();
         Location start = new Location(world, s.x(), s.y(), s.z(), s.yaw(), s.pitch());
-        return sessions().enter(player, this, course.id(), start, p -> ready(p, course, test));
+        boolean in = sessions().enter(player, this, course.id(), start, p -> ready(p, course, test));
+        if (!in) {
+            warmups.forget(player);
+        }
+        return in;
     }
 
     /** In, saved, cleared: the kit, the boat, and the countdown. */
@@ -886,11 +949,20 @@ public final class TimeTrials implements Game {
         p.sendMessage(Text.of("&b" + course.name() + " &7(" + TrialText.label(course) + ")"
                 + (test ? " &d- test run: nothing is recorded" : "")));
         int n = course.checkpoints().size();
-        p.sendMessage(Text.of(n == 0 ? "&7Get to the finish. Ready..."
+        p.sendMessage(Text.of(course.kind() == TrialKind.DROPPER ? DropperText.ready(DropperLayout.levels(course))
+                : n == 0 ? "&7Get to the finish. Ready..."
                 : "&7Reach " + TrialText.checkpoints(n) + " in order, then the finish. Ready..."));
+        if (course.kind() == TrialKind.DROPPER) {
+            run.drop = drops.start(p, run); // not collidable, and the practice drop's offer
+        }
+        warmups.begin(p, run); // WP-R1 (D3): the warm-up chosen, if any (never on a Dropper)
     }
 
-    private void giveKit(Player p, TrialKind kind) {
+    void giveKit(Player p, TrialKind kind) {
+        if (kind == TrialKind.DROPPER) {
+            drops.giveKit(p, DropperRun.Kit.DROP);
+            return;
+        }
         PlayerInventory inv = p.getInventory();
         inv.setItem(0, KitItems.item(this, "checkpoint", Material.RECOVERY_COMPASS, "&eBack to checkpoint",
                 "&7Takes you back to your last checkpoint.", "&7The clock keeps running."));
@@ -936,6 +1008,7 @@ public final class TimeTrials implements Game {
         long nanos = System.nanoTime();
         FairPlay.Stall stall = FairPlay.stall(lastTick, nanos);
         lastTick = nanos;
+        race.sweepArrivals(); // WP-R1: a racer whose entry was dropped on the way in never holds a race up
         if (runs.isEmpty()) {
             return;
         }
@@ -945,7 +1018,9 @@ public final class TimeTrials implements Game {
             Session s = p == null ? null : sessions().session(p);
             if (s == null || !id().equals(s.gameId())) {
                 runs.remove(run.player);
+                race.gone(run, p); // WP-R1
                 removeBoat(run, p);
+                drops.end(run, p);
                 continue;
             }
             if (stall != null && run.running()) {
@@ -955,6 +1030,9 @@ public final class TimeTrials implements Game {
                 continue;
             }
             run.ticks++;
+            if (run.race != null && race.tick(p, run, now)) { // WP-R1: the grid, the stand, called off
+                continue;
+            }
             switch (run.phase) {
                 case COUNTDOWN -> countdown(p, run, now);
                 case RUNNING -> running(p, run, now);
@@ -966,6 +1044,9 @@ public final class TimeTrials implements Game {
     }
 
     private void countdown(Player p, TrialRun run, long now) {
+        if (drops.countdown(p, run)) {
+            return; // a dropper's practice drop is offered, or on: no 3-2-1 yet
+        }
         boolean boat = run.course.kind() == TrialKind.BOAT;
         if (boat) {
             if (seated(p, run)) {
@@ -999,7 +1080,11 @@ public final class TimeTrials implements Game {
     }
 
     private void running(Player p, TrialRun run, long now) {
+        if (run.warmup && warmups.tick(p, run, now)) { // WP-R1 (D3): its time ran out
+            return;
+        }
         watch(p, run);
+        drops.running(p, run);
         if (run.suspended) {
             long waited = now - run.lastReset;
             if (waited >= (run.expect == null ? SUSPEND_TICKS : WAIT_TICKS)) {
@@ -1013,7 +1098,8 @@ public final class TimeTrials implements Game {
             sendBack(p, run, RESET_GAP);
         }
         if (run.phase == TrialRun.Phase.RUNNING && run.ticks % CLOCK_EVERY == 0) {
-            p.sendActionBar(Text.of(clockLine(run)));
+            p.sendActionBar(Text.of(run.warmup ? warmups.bar(run, now) // WP-R1 (D3)
+                    : run.drop != null ? run.drop.clockLine(System.nanoTime()) : clockLine(run)));
         }
     }
 
@@ -1022,8 +1108,8 @@ public final class TimeTrials implements Game {
      * a changed walk speed or movement attribute — the run won't count, and the player hears it
      * once.
      */
-    private void watch(Player p, TrialRun run) {
-        if (run.voided != null) {
+    void watch(Player p, TrialRun run) {
+        if (run.voided != null || run.warmup) { // WP-R1 (D3): nothing in a warm-up counts anyway
             return;
         }
         String why = p.getGameMode() != GameMode.ADVENTURE ? FairPlay.GAME_MODE
@@ -1074,7 +1160,7 @@ public final class TimeTrials implements Game {
         }
         TrialRun run = runs.get(e.getPlayer().getUniqueId());
         if (run == null || run.phase != TrialRun.Phase.COUNTDOWN || run.course.kind() == TrialKind.BOAT
-                || !e.hasExplicitlyChangedPosition()) {
+                || !e.hasExplicitlyChangedPosition() || (run.drop != null && run.drop.letsGo())) {
             return;
         }
         Location held = e.getFrom().clone();
@@ -1089,6 +1175,10 @@ public final class TimeTrials implements Game {
         }
         Player p = e.getPlayer();
         TrialRun run = runs.get(p.getUniqueId());
+        if (run != null && run.drop != null) {
+            drops.moved(p, run, e.getTo()); // splashes, hops and the floor: DropperRun
+            return;
+        }
         if (run == null || !run.running() || run.suspended || run.course.kind() == TrialKind.BOAT) {
             return;
         }
@@ -1223,10 +1313,14 @@ public final class TimeTrials implements Game {
         if (gap > 0 && now - run.lastReset < gap) {
             return false;
         }
+        if (run.drop != null) {
+            run.backDue = false;
+            return drops.back(p, run); // the top of the level it is on
+        }
         run.backDue = false;
         run.lastReset = now;
         int last = run.progress == null ? -1 : run.progress.lastCheckpoint();
-        Location at = backTo(run, last);
+        Location at = race.reseat(run, backTo(run, last)); // WP-R1: clear of the other race boats
         if (at == null || !move(p, run, at)) {
             return false;
         }
@@ -1260,7 +1354,7 @@ public final class TimeTrials implements Game {
     }
 
     /** Back to the start for another countdown. */
-    private void toStart(Player p, TrialRun run) {
+    void toStart(Player p, TrialRun run) {
         Location at = backTo(run, -1);
         if (at != null) {
             run.lastReset = Bukkit.getCurrentTick();
@@ -1269,7 +1363,7 @@ public final class TimeTrials implements Game {
     }
 
     /** The run's own teleport (a re-seat for a boat), marked so it isn't taken for anyone else's. */
-    private boolean move(Player p, TrialRun run, Location at) {
+    boolean move(Player p, TrialRun run, Location at) {
         run.expect = at;
         run.suspended = true;
         boolean ok = run.course.kind() == TrialKind.BOAT ? reseat(p, run, at) : sessions().teleport(p, at);
@@ -1286,7 +1380,7 @@ public final class TimeTrials implements Game {
     }
 
     /** Where going back to checkpoint {@code last} (-1 = the start) puts the player, facing onward. */
-    private Location backTo(TrialRun run, int last) {
+    Location backTo(TrialRun run, int last) {
         World w = Bukkit.getWorld(run.course.world());
         Course c = run.course;
         if (w == null || c.start() == null) {
@@ -1305,7 +1399,7 @@ public final class TimeTrials implements Game {
     // ---- boats --------------------------------------------------------------------------------
 
     /** Seat the player in a fresh boat of their own at {@code at}. */
-    private void seat(Player p, TrialRun run, Location at) {
+    void seat(Player p, TrialRun run, Location at) {
         removeBoat(run, p);
         World w = at.getWorld();
         if (w == null) {
@@ -1346,12 +1440,12 @@ public final class TimeTrials implements Game {
         }
     }
 
-    private static boolean seated(Player p, TrialRun run) {
+    static boolean seated(Player p, TrialRun run) {
         return run.boat != null && run.boat.isValid() && run.boat.getPassengers().contains(p);
     }
 
     /** Remove the run's boat (never dropped as an item), letting its rider out as our own dismount. */
-    private void removeBoat(TrialRun run, Player p) {
+    void removeBoat(TrialRun run, Player p) {
         Entity b = run.boat;
         if (b == null) {
             return;
@@ -1371,7 +1465,20 @@ public final class TimeTrials implements Game {
 
     // ---- the finish -------------------------------------------------------------------------
 
-    private void finish(Player p, TrialRun run, long nanos) {
+    void finish(Player p, TrialRun run, long nanos) {
+        switch (RaceRun.route(run)) { // WP-R1: a warm-up lap (D3) and a race's line never reach the normal finish
+            case WARMUP_LAP -> {
+                warmups.lap(p, run, nanos);
+                return;
+            }
+            case RACE -> {
+                race.finish(p, run, nanos);
+                return;
+            }
+            default -> {
+                // a solo run: as it always was
+            }
+        }
         run.phase = TrialRun.Phase.DONE;
         long ms = run.elapsedMs(nanos);
         boolean stale = FairPlay.stale(run.course, run.layout, course(run.course.id()), games().generated()::standing);
@@ -1388,7 +1495,6 @@ public final class TimeTrials implements Game {
             p.sendMessage(Text.of("&7" + GenCopy.courseCode(code))); // so players can ask for it back
         }
         TrialFinish.Summary summary = TrialFinish.Summary.NONE;
-        TrialFinish.Run counted = null;
         switch (verdict.kind()) {
             case TEST -> {
                 p.sendMessage(Text.of("&dTest run &7- nothing was recorded. " + (verdict.reason() == null
@@ -1401,16 +1507,15 @@ public final class TimeTrials implements Game {
                 title(p, "&f" + TrialText.time(ms), "&cThat run didn't count", 40);
                 Sounds.miss(p);
             }
-            case COUNTED -> {
-                counted = finishedRun(run, ms, s);
-                summary = TrialFinish.settle(verdict, counted, ledger(p, run, s, ms));
-            }
+            case COUNTED -> summary = settleCounted(p, run, ms, verdict);
         }
+        drops.finished(p, run, ms, verdict.counts(), summary.stars()); // bonks, the splash, a clean drop
         Long best = verdict.counts() ? bestOn(p, board(run.course)) : null;
         Daily daily = tag == null ? null : new Daily(board(run.course), summary.stars(), summary.weekStars(),
                 tag.goldMs(), tag.silverMs(), GenCopy.words(tag), code);
         Result result = new Result(run.course.id(), name, ms, verdict.counts(), run.test, verdict.reason(),
-                summary.course().personalBest(), summary.course().record(), best, summary.earned(), daily);
+                summary.course().personalBest(), summary.course().record(), best, summary.earned(), daily,
+                run.drop == null ? -1 : run.drop.bonks());
         UUID id = p.getUniqueId();
         games().later(this, 1, () -> {
             Player q = Bukkit.getPlayer(id);
@@ -1420,6 +1525,21 @@ public final class TimeTrials implements Game {
             }
         });
         showResult(id, result, RESULT_TRIES);
+    }
+
+    /**
+     * A counted run recorded and paid: the boards, the rewards and what they tell the quests
+     * ({@link TrialFinish}), then its Cup time. A solo run's finish and a party race's finish (WP-R1,
+     * D4: each racer's run is also a normal counted run, once) both come through here, so anything a
+     * counted run does belongs here. A Race Night heat never does.
+     */
+    TrialFinish.Summary settleCounted(Player p, TrialRun run, long ms, FairPlay.Verdict verdict) {
+        TimeTrialsSettings s = settings();
+        TrialFinish.Summary summary = TrialFinish.settle(verdict, finishedRun(run, ms, s), ledger(p, run, s, ms));
+        // The Weekly Cup (WP-C): a counted, timed run, solo or a party race's. A Race Night heat never
+        // comes here (RaceMode.finish: its start is a grid spot), so it never sets a Cup time.
+        CupLink.finished(games(), p, run.course, ms, verdict, run.warmup);
+        return summary;
     }
 
     /**
@@ -1437,7 +1557,7 @@ public final class TimeTrials implements Game {
         }
     }
 
-    private TrialFinish.Run finishedRun(TrialRun run, long ms, TimeTrialsSettings s) {
+    TrialFinish.Run finishedRun(TrialRun run, long ms, TimeTrialsSettings s) {
         Course c = run.course;
         TrialFinish.Daily daily = null;
         if (c.generated()) { // the set of the layout the run started on (GEN-SPEC §3.1), the week of today
@@ -1452,7 +1572,7 @@ public final class TimeTrials implements Game {
     }
 
     /** Where a counted run is recorded and paid: the scores, the finish lines, the capped rewards. */
-    private TrialFinish.Ledger ledger(Player p, TrialRun run, TimeTrialsSettings s, long ms) {
+    TrialFinish.Ledger ledger(Player p, TrialRun run, TimeTrialsSettings s, long ms) {
         return new TrialFinish.Ledger() {
             @Override
             public ScoreResult submit(String board, long time) {
@@ -1531,10 +1651,14 @@ public final class TimeTrials implements Game {
             p.sendMessage(Text.of("&e★ Best time this week!"));
         }
         title(p, "&a" + TrialText.time(ms), sub, 40);
-        if (course.personalBest() || week.record()) {
-            Sounds.won(p);
-        } else {
-            Sounds.received(p);
+        try {
+            if (course.personalBest() || week.record()) {
+                Sounds.won(p);
+            } else {
+                Sounds.received(p);
+            }
+        } catch (RuntimeException | LinkageError ignored) {
+            // a sound is decoration (and has no registry off a server): the finish is recorded all the same
         }
     }
 
@@ -1593,24 +1717,147 @@ public final class TimeTrials implements Game {
     // ---- helpers ------------------------------------------------------------------------------
 
     /** Forget the player's run (their session ended, or they left). */
-    private void end(Player player) {
+    void end(Player player) {
         TrialRun run = runs.remove(player.getUniqueId());
         if (run != null) {
             removeBoat(run, player);
+            drops.end(run, player);
         }
     }
 
+    /** Race mode's server side (WP-R1). */
+    RaceMode raceMode() {
+        return race;
+    }
+
+    /** The warm-ups (WP-R1, D3). */
+    Warmups warmups() {
+        return warmups;
+    }
+
+    /**
+     * The player's live run, or {@code null} (the Dropper's fall-damage hook finds it here; race mode
+     * and warm-ups work on it).
+     */
+    TrialRun run(UUID player) {
+        return runs.get(player);
+    }
+
+    /** Replace the player's run (race mode's re-grid: a new course from a new spot, the same race). */
+    void replaceRun(TrialRun run) {
+        runs.put(run.player, run);
+    }
+
+    /** Every live run. */
+    Collection<TrialRun> liveRuns() {
+        return runs.values();
+    }
+
     /** Where the run is: the boat on a boat course, the player's feet otherwise. */
-    private static Point position(Player p, TrialRun run) {
+    static Point position(Player p, TrialRun run) {
         Entity where = run.boat != null && run.boat.isValid() ? run.boat : p;
         return point(where.getLocation());
     }
 
-    private static Point point(Location l) {
+    // ---- race mode (EVENTS-DROPPER-SPEC §A.4.11, EVENTS-OWNER-DECISIONS D3-D4) ------------------
+    //
+    // The C1 contract Race Night (WP-R2) and party races (WP-R1) code against. WP-R1 built the
+    // bodies in RaceMode (the race runs), Warmups (D3) and PartyRaces (D4); a run without a race and
+    // without a warm-up is byte for byte the run it always was.
+
+    /** What the race-mode entry points threw until WP-R1 built them (kept for the contract). */
+    public static final String NOT_BUILT = "not built yet";
+
+    /**
+     * Start {@code courseId} after the warm-up choice (D3): "Warm up (3:00)" first, or "Go straight to
+     * the timed run". The gate runs again, as for Start.
+     */
+    public void startRun(Player player, String courseId, boolean warmUp) {
+        warmups.choose(player, courseId, warmUp);
+    }
+
+    /** "Race with friends" on a course screen, or {@code /hcm play race <course>} (D4): the party's lobby. */
+    public void raceWithFriends(Player player, String courseId, Runnable back) {
+        party.open(player, courseId, back);
+    }
+
+    /** The party races (D4), for their screens. */
+    public PartyRaces party() {
+        return party;
+    }
+
+    /**
+     * Seat a racer: a {@code trials} session with ref = {@code base}'s id at the {@code grid} spot (a
+     * fresh tagged oak boat on a boat course), held until {@code link.goTick()}. The run is judged
+     * against {@code raced} (the base course from the grid spot, with its laps) but its staleness
+     * against {@code base} and the still-standing rule; at the line it calls {@code link.finished},
+     * and only when {@link RaceLink#normalRun()} also the course's normal finish. With a shared
+     * warm-up ({@link RaceLink#warmupUntil()}) the racer starts on free laps instead.
+     *
+     * @param stand where finishers wait (a viewing stand), or {@code null}: finishers go home
+     * @return why the racer can't be seated (not standing still and safe, in another game, a restart
+     *         due), or {@code null} when they are on the grid
+     */
+    public Refusal race(Player p, Course base, Course raced, Course.Spot grid, Location stand, RaceLink link) {
+        return race.race(p, base, raced, grid, stand, link);
+    }
+
+    /** The next race: a new boat on the racer's new {@code grid} spot, held to the link's next {@code goTick}. */
+    public void regrid(Player p, Course raced, Course.Spot grid) {
+        race.regrid(p, raced, grid);
+    }
+
+    /** A racer is done for this race: the boat goes, the run's own teleport takes them to the stand, the run idles. */
+    public void park(Player p) {
+        race.park(p);
+    }
+
+    /** End a racer's race run: home with their things, reading {@code line} (colour codes allowed). */
+    public void endRace(UUID racer, EndReason why, String line) {
+        race.endRace(racer, why, line);
+    }
+
+    /**
+     * Hold a course for a race: new solo runs and party races on it are refused with {@code line}
+     * until {@link #release}, and a party race already on it is called off (its racers go home with a
+     * clear line; nothing unfinished counts). {@code holder} is the race (a course is held by at most
+     * one). Holds are memory only and a Time Trials stop drops them: the holder reserves again on its
+     * next tick (Race Night does, every step while it needs the track), which is idempotent.
+     *
+     * @return false when another holder has it
+     */
+    public boolean reserve(String courseId, Object holder, String line) {
+        boolean held = race.holds().reserve(courseId, holder, line);
+        if (held) {
+            party.callOff(courseId, null); // WP-R1: a party race on a held track is called off, its racers home
+        }
+        return held;
+    }
+
+    /** Let the course go again (only its own holder can). */
+    public void release(String courseId, Object holder) {
+        race.holds().release(courseId, holder);
+    }
+
+    /**
+     * Who is on a solo run on {@code courseId} now (not racing): Race Night warms them that it needs
+     * the track, then ends their runs (EVENTS-DROPPER-SPEC §A.1).
+     */
+    public List<UUID> soloRunners(String courseId) {
+        List<UUID> out = new ArrayList<>();
+        for (TrialRun run : runs.values()) {
+            if (run.race == null && courseId != null && run.course.id().equalsIgnoreCase(courseId.trim())) {
+                out.add(run.player);
+            }
+        }
+        return out;
+    }
+
+    static Point point(Location l) {
         return new Point(l.getX(), l.getY(), l.getZ());
     }
 
-    private static void title(Player p, String big, String small, int stayTicks) {
+    static void title(Player p, String big, String small, int stayTicks) {
         try {
             p.showTitle(Title.title(Text.of(big), Text.of(small), Title.Times.times(Duration.ZERO,
                     Duration.ofMillis(stayTicks * 50L), Duration.ofMillis(200))));
@@ -1619,7 +1866,7 @@ public final class TimeTrials implements Game {
         }
     }
 
-    private static void ping(Player p, float pitch) {
+    static void ping(Player p, float pitch) {
         try {
             p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.6f, pitch);
         } catch (RuntimeException | LinkageError ignored) {
@@ -1635,11 +1882,11 @@ public final class TimeTrials implements Game {
         return ctx.plugin();
     }
 
-    private WorldSessions sessions() {
+    WorldSessions sessions() {
         return ctx.games().sessions();
     }
 
-    private Logger log() {
+    Logger log() {
         HomeCraftManagement plugin = ctx.plugin();
         return plugin != null ? plugin.getLogger() : Logger.getLogger("HomeCraftManagement");
     }

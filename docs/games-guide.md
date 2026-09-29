@@ -25,13 +25,17 @@
 | **Time Trials: Elytra** | Time trial (skill) | `/hcm play <course id>` (list: `/hcm play trials`) | Free. It costs no tokens, and you can play as many times as you like. | First finish: tokens the first time you finish each course, once ever. By default: Easy 5, Medium 10, Hard 20, and Why did we build this? 40. This does not… |
 | **Time Trials: Boat** | Time trial (skill) | `/hcm play <course id>` (list: `/hcm play trials`) | Free. It costs no tokens, and you can play as many times as you like. | First finish: tokens the first time you finish each course, once ever. By default: Easy 5, Medium 10, Hard 20, and Why did we build this? 40. This does not… |
 | **Mini Golf** | Mini golf (skill) | `/hcm play <course id>` (list: `/hcm play golf`) | Free. It costs no tokens, and you can play as many times as you like. | First finish: 5 tokens by default the first time you finish each course, once ever. This does not count toward any daily limit. |
+| **The Dropper** | Fresh Course, time trial (skill) | `/hcm play fresh_dropper_easy` or `/hcm play fresh_dropper` (with Fresh Courses) | Free. | A fall through glass shafts into water. First finish in a set: Easy Dropper 2 tokens, Dropper 3 (by default, weekly sets). A practice drop first, never counted. |
+| **Weekly Cup** | Time-trial contest (skill) | The gold block on a course's screen, on courses that run one | 5 tokens to enter a course's Cup for the week (by default). | Your best time that week is your Cup time. The pool (every entry, plus 10 from the server with 2 or more Cup times) is shared by the best Cup times: 70/30 for 2, 50/30/20 for 3 or more. Fewer than 2 Cup times: every entry comes back. |
+| **Race Night** | Boat races together (skill) | `/hcm play race` | Free. Nobody can lose tokens. | The night's 1st, 2nd and 3rd win 5, 3 and 2 tokens, and everyone else who finished a race wins 1 (2nd needs 3 racers, 3rd needs 4). At most 3 prize nights a week. |
+| **Falling Floors** | Together (skill) | `/hcm play falling_floors` (or `tnt_run`) | Free. No tokens go in. | Your first full round of the day pays 1 token, and lasting 30, 60 and 120 seconds solo pays 1, 2 and 3 tokens, once ever (by default). Winning pays nothing extra. |
 
 ## Getting to the games
 
 - The server owner switches the games on. They ship switched off. Until they are on, /hcm play says "The games are closed right now." Take a break (/hcm play break) and /hcm leave still work.
 - Type /hcm play to open the Games screen. It shows every game that is open right now. A closed game has no tile at all.
 - You can also open the Arcade (type /hcm arcade, or right-click an Arcade Machine) and use the Play row. It is the fifth row down. It has All games, Today's pick, Luck, Cabinets, Courses, Mini golf and Take a break. The Play row only shows while the games are on. If a kind of game is switched off, its button (Cabinets, Courses or Mini golf) turns grey and says "closed". If there is no pick, the star says "No pick today". While the games are on, the label at the start of the Arcade's second row says "Luck" instead of "Games". That row holds the crates and the Scratch Ticket.
-- Top row of the Games screen: a sunflower with your tokens ("You have 42 tokens"), then the tabs. The tabs are All games, Luck (games of chance, plus the Scratch Ticket and each crate), Cabinets (little video games), Courses (time trials) and Golf (mini golf). Each tab shows how many tiles are in it. If someone has invited you to a game, a glowing book shows in the top-right corner.
+- Top row of the Games screen: a sunflower with your tokens ("You have 42 tokens"), then the tabs. The tabs are All games, Luck (games of chance, plus the Scratch Ticket and each crate), Cabinets (little video games), Courses (time trials), Golf (mini golf) and Together (Race Night and Falling Floors; this tab only shows while one of them is open). Each tab shows how many tiles are in it. If someone has invited you to a game, a glowing book shows in the top-right corner.
 - Bottom row of the Games screen: Today's pick (a nether star), High scores (a sign), Take a break (a blue bed that shows your pause or your limit), Back or Close, and How the games work (a book that opens the Games page of the guide). Arrows show in the bottom corners when there is more than one page.
 - Click a tile to open that game. Every game shows its rules first. A game of chance also shows what it gives back and what each result pays, before you put any tokens in. A time-trial or golf tile opens the course screen first, with a Start button. One tile is different: the Scratch Ticket tile on the Luck tab buys a ticket (10 tokens) as soon as you click it. A crate tile opens the crate screen, which shows the chances first.
 - Type /hcm play <id> to open one game straight away. The ids are: ore_slots, twenty_one (blackjack works too), wheel, higher_lower, coin_flip, creeper_sweeper, ore_merge, snake, mini_match, simon_says, whack_a_zombie, connect_four, tic_tac_toe, trials (the list of time-trial courses, easiest first) and golf (the list of golf courses). Coin Flip is switched off unless the owner turns it on. Press Tab after /hcm play to see every open game and course.
@@ -52,6 +56,12 @@
 | `/hcm play blackjack` | Opens Twenty-One. It is another name for /hcm play twenty_one. |
 | `/hcm play trials` | Shows the list of time-trial courses, easiest first. |
 | `/hcm play golf` | Shows the list of mini golf courses. |
+| `/hcm play golf <course id>` | Opens that golf course's screen, where Play with friends makes a golf party. |
+| `/hcm play race` | Opens the Race Night screen: when the next one is, Join, Watch and your season points. |
+| `/hcm play race <course id>` | Makes a party to race your friends on that course (Race with friends). The Dropper has no party races. |
+| `/hcm play cup` | Shows your Weekly Cups this week: the pool and your Cup time on each, and when they are paid. |
+| `/hcm play cup off` | Hides the Weekly Cup on your course screens: "The Weekly Cup is hidden on the course screens." `/hcm play cup on` shows it again. |
+| `/hcm play falling_floors` | Takes you straight into the Falling Floors gallery (`/hcm play tnt_run` works too). |
 | `/hcm play break` | Opens Take a break, where you can set your own daily limit or a pause for games of chance. Works even while the games are off. |
 | `/hcm play accept` | Says yes to the invite waiting for you. Bedrock players type this. Java players can also click [Accept] in chat. If nothing is waiting: "You have no invite waiting." |
 | `/hcm play deny` | Says no to the invite waiting for you ("Invite turned down."). If nothing is waiting: "You have no invite waiting." |
@@ -67,7 +77,7 @@
 | `/hcm guide games` | Opens the Games page of How It Works. It is the same page as the book on the Games screen. |
 | `/hcm tokens` | Shows how many tokens you have and your login streak. |
 | `/hcm help (or just /hcm)` | Lists the commands you can use. |
-| `Admin-only commands` | /hcm games ... (status, check, feature, break, scores, saved, course, golf) and /hcm play <game> <player> are for admins. A player who tries them reads "You don't have permission." Only admins can make [Arcade] join signs or build in the Games world. |
+| `Admin-only commands` | /hcm games ... (status, check, feature, break, scores, saved, course, golf, gen, cup, event, floors) and /hcm play <game> <player> are for admins. A player who tries them reads "You don't have permission." Only admins can make [Arcade] join signs or build in the Games world. |
 
 ## Tokens and the games
 
@@ -105,7 +115,10 @@
   - "Finish every Fresh Course in one set" (40 tokens)
   - "Reach the top Star Chart goal in a week" (30 tokens)
   - "Set a course record" (30 tokens; a time trial's or a golf course's)
-- When a new set of Fresh Courses is up, you read one line in chat, once for each set: "New courses this week! Easy, Parkour, Hard, Sky Rings and Golf - /hcm play". It waits while you are on a course, and until you close a screen. Don't want it? /hcm play news off.
+  - "Reach the bottom of a Dropper with no bonks" (20 tokens)
+  - "Race at Race Night" (10 tokens) and "Win a Race Night" (30 tokens)
+  - "Last a whole minute on Falling Floors" (15 tokens; a round you play out, not one you leave)
+- When a new set of Fresh Courses is up, you read one line in chat, once for each set: "New courses this week! Easy, Parkour, Hard, Sky Rings, Golf and Dropper - /hcm play". It waits while you are on a course, and until you close a screen. Don't want it? /hcm play news off.
 
 ## The fairness promises
 
@@ -1137,6 +1150,42 @@ These are played in the Games world, on courses the server's builders make. Each
 - Bedrock players: the kits and rules are the same. High-score lists show numbered paper tiles instead of player heads. The time-trial course screen puts the first-finish reward in the Tokens for finishing tile's name, so no tap-and-hold is needed. In mini golf the ball is always a white block.
 - Numbers marked by default are settings the server owner can change later (config.yml, games.trials and games.golf, plus games.skill_daily_cap and games.featured_bonus).
 
+<!-- ---- WP-R1: warm-ups and party races ---- -->
+### Warm-ups and racing with friends
+
+- **Warm up first.** When you start a time-trial course, a small screen asks: Warm up (3:00), or Go straight to the timed run. Going straight is the run as it always was.
+- In a warm-up you run the course as much as you like. Checkpoints still guide you and Back to checkpoint works, but nothing is timed for the record, saved or paid, and it doesn't count for the Weekly Cup. The bar above your hotbar says Warm-up 2:14 left - not counted.
+- When you're ready, click Start timed run in your hotbar (or wait for the clock). You go back to the start for the normal 3, 2, 1, Go!, and that run counts as usual. Each run gets one warm-up. If the server restarts in a few minutes, the warm-up ends at once so your timed run still happens.
+- **Race with friends.** Open a course's screen and click Race with friends, or type /hcm play race <course id>. That makes your party. Invite friends from the party screen: they get [Accept] in chat, and Bedrock players type /hcm play accept. A party holds up to 8 by default.
+- The party screen shows who's in and who's ready. Only the host can start the race, and the host chooses if everyone warms up first. In a party warm-up, click Ready when you're set: the race starts when the warm-up ends or everyone is ready.
+- Everyone goes to the start together and gets one 3, 2, 1, Go! at the same moment. Boats line up in rows of two behind the start line. A bar at the top of the screen shows your place, like 2nd of 5 · Lap 1/2. Boats can bump into each other.
+- When the race is over, everyone goes home and a results screen shows the whole group. It ends when everyone is in, 2 minutes after the first person finishes, or after 10 minutes.
+- Party races are free and just for fun: no entry, no prizes. Your time also counts as a normal run on the course, once, with the usual rewards and high scores, and for the Weekly Cup if you're in it (the party screen shows the Cup's button too).
+- On foot or with wings, racers can't push each other. The Dropper has no party races.
+- When Race Night needs the track, a party race on it is called off: everyone goes home with their things, and a race you hadn't finished doesn't count.
+- You can leave any time with Leave game, or Leave the party on the party screen. The others carry on. If the host leaves, the next person who joined becomes the host.
+- /hcm play invites off turns off party race invites too.
+<!-- ---- end WP-R1 ---- -->
+
+<!-- ---- Weekly Cup (WP-C) ---- -->
+### The Weekly Cup
+
+*Pay a small entry on a course once a week, set your best time, and the best times share the pool.*
+
+- **Where:** a course that runs a Cup has a gold block on its course screen, right of the way out: "Enter this week's Cup: 5 tokens. Best time wins the pool. Cup pool: 20 tokens · 2 in". The course's tile shows the pool too, and so does the party screen when you race friends there. By default the Fresh parkour courses, Sky Rings, Ice Boat and the two Droppers run one. The owner can give other courses a Cup too.
+- **Entering:** click the gold block, then **Pay 5 tokens and enter this week's Cup**. You pay once for each course, each week (5 tokens by default). You need the tokens: "You need 5 tokens to enter the Cup."
+- **Your Cup time** is your best counted time on that course this week, from runs you start after entering: "New Cup time on Sky Rings: 0:40.0". Party races count, because each finish is a normal run. Warm-ups, the Dropper's practice drop, Race Night races and runs that didn't count never set one.
+- **When it's paid:** when the new week starts, Monday at 4:00 AM by default (the time the Fresh Courses change). The Cup screen says when, like "paid Mon 4:00 AM".
+- **How it's paid:** by Cup times. With 2 Cup times, 1st gets 70% of the pool and 2nd gets 30%. With 3 or more, 1st gets 50%, 2nd 30% and 3rd 20%. Amounts are rounded down and anything left over goes to 1st. Players with the same Cup time share their places' prizes.
+- **The pool** is every entry, plus 10 tokens from the server when 2 or more players set a Cup time. The server keeps nothing: every token in the pool is paid out.
+- **No Cup time? No share.** If you enter but never set a Cup time, your entry stays in the pool.
+- **Your entry comes back** when nobody else entered, when fewer than 2 Cup times were set, or when the course is removed, changed or closed during the week. The line says why, like "Nobody else entered the Weekly Cup on Sky Rings, so your 5 tokens came back."
+- When it's paid, a chat line tells you how you did: "Weekly Cup on Sky Rings: you came 1st with 0:40.0 - 15 tokens." If you're offline, you read it when you next join. Cup prizes don't count toward the daily token limits.
+- A Fresh course's Cup opens once that week's course is up: "The Cup starts when this week's course is up." A Cup that has been paid out early says "This week's Cup on this course is already paid out. It's back next week."
+- **Don't want to see it?** /hcm play cup off hides the Cup on your course screens, and /hcm play cup on brings it back. /hcm play cup shows the Cups you're in this week.
+- It isn't a game of chance: your time decides it. The owner can switch it off for everyone; Cups already paid into still finish their week and pay out.
+<!-- ---- end Weekly Cup ---- -->
+
 ### Time Trials: Parkour
 
 *Jump from the start to the finish through every checkpoint, as fast as you can.*
@@ -1440,21 +1489,143 @@ These are played in the Games world, on courses the server's builders make. Each
 - Only use Reset ball when your ball is stuck, like inside a cauldron. It costs a stroke.
 - Open the Scorecard any time to see how you're doing. Green is under par, white is par, yellow is over par, red is picked up, a star is a hole-in-one, light blue is the hole you're on, and grey is not played yet.
 
+### Playing golf together
+
+- On a golf course's screen (/hcm play golf <course>, or its tile), click **Play with friends**. That makes a party of up to 4.
+- Click **Invite a friend** and pick someone. On Java they click [Accept]; on Bedrock they type /hcm play accept.
+- The host clicks **Start**, and everyone goes to hole 1 together.
+- Everyone plays the same hole at once, each with their own ball. Balls don't bump into each other.
+- When your ball is in, you wait for the others. When every ball is in (or picked up), everyone goes to the next tee together.
+- Once the first ball of a hole is in, a 2-minute hole clock starts for everyone still playing that hole. You see it on your action bar, and the Scorecard shows it too. When it runs out, any ball still out is picked up.
+- The Scorecard shows everyone's holes. At the end it shows who took the fewest strokes.
+- Each player's round is a normal round: it goes on the high scores and earns the normal tokens. Playing together doesn't cost or pay anything extra.
+- You can leave any time with Leave game. Your things come back and the others carry on.
+- Your round counts as soon as you finish your last hole, even if you leave before the others finish.
+
+## Race Night
+
+*Boat races for everyone at once: three short races on one track, points in every race, and a few tokens for the top racers. It's free, so nobody can lose tokens.*
+
+- **Open it:** `/hcm play race`, the Race Night tile on the Together tab of the Games screen, or an [Arcade] Race Night sign.
+- **When:** at set times the owner picks (Fridays at 7:00 PM by default), or when an admin starts one. The Race Night tile's name says when the next one is. Race Night ships switched off: it shows up once the owner turns it on (with the Ice Boat course, its usual track).
+- **Costs:** Free.
+
+**How to play**
+
+1. About 30 minutes before, a chat line says Race Night is coming. 10 minutes before, joining opens: a line in chat and a bar at the top of the screen count down.
+2. Open the Race Night screen and click the green **Join Race Night** button. That's all. You can keep playing anything until it starts. Changed your mind? Click **Leave the race list**.
+3. Just before the start, you are taken to the track in your own boat. Your things are kept safe and come back at the end. If you're busy in another game, you're asked to stand still or use Leave game; if you can't in time, you join the next race.
+4. Warm-up: first you get a few minutes of free laps that don't count. Tap **Ready** when you're set. The race starts when the time is up, or when everyone who joined is at the track and ready, but never before the start time.
+5. Everyone starts together on a starting grid: "Race 1 of 3", then 3, 2, 1, Go! The bar at the top shows your place and lap, like "2nd of 5 · Lap 1/2".
+6. Cross the finish line: "You came 2nd!" Then you watch the others from the viewing stand.
+7. After a short break, the next race starts. Whoever has the fewest points starts at the front.
+8. After the last race, the winners are announced, prizes are paid, and everyone goes home with their things.
+
+**Points in every race**
+
+- 1st 10 points, 2nd 8, 3rd 6, 4th 5, 5th 4, 6th 3, 7th 2, and anyone else who finishes 2.
+- Still racing when the race ends? You still get 1 point. Great racing!
+- Leaving, or a race that didn't count (flying, a potion effect, a changed speed), is 0 points for that race.
+- The night's winner has the most points. If two racers have the same points, more 1st places wins, then more 2nd places. Still the same? They share the place.
+
+**Tokens you can win**
+
+- The night's 1st place wins 5 tokens, 2nd 3 tokens and 3rd 2 tokens. Everyone else who finished at least one race gets 1 token.
+- 2nd place needs at least 3 racers, and 3rd needs at least 4. So with 2 racers it's 5 and 1, and with 3 it's 5, 3 and 1.
+- A 1st, 2nd or 3rd place prize needs at least one finished race, and someone behind you. If nobody finishes a race all night, no tokens are won.
+- Nobody wins more than 5 tokens a night. Only 3 nights a week pay tokens; after that it's "Just for fun tonight" and only points count.
+- These prizes don't count toward the daily token limit.
+- Not somewhere you can earn tokens when it ends (or offline)? Your prize waits and is paid when you're back.
+
+**The season**
+
+- Every race's points also go on this month's Race Night table: "Race Night · October" in High scores, on the hub board, and on the website.
+
+**Watching**
+
+- Click **Watch** on the Race Night screen to see the leader in a bar at the top, and the finishes in chat, from anywhere. Click it again to stop.
+
+**Limits and rules**
+
+- Boats bump into each other, like in normal Minecraft. Give each other room!
+- Leave game (or /hcm leave) during Race Night means you're out for the night. Points you already won still count, and your things come back.
+- If you disconnect, that race scores 0 for you. Come back before the next race and you're pulled back in.
+- If the server restarts during Race Night, the races already finished still count, and prizes are paid.
+- Race news: the bell on the Race Night screen, or /hcm play news off, turns off Race Night's chat lines and the join bar.
+
 ## Fresh Courses
 
-New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sky Rings, Golf of the Week (9 holes) and Tiny Golf (3 holes). By default a new set goes up every Monday and stays all week. The owner can make them change every day (then the big golf course is Golf of the Day) or every few days, and every screen says which: "This week's courses", "Today's courses" or "The current courses".
+New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sky Rings, Golf of the Week (9 holes), Tiny Golf (3 holes), Easy Dropper and Dropper (see [The Dropper](#the-dropper)), plus Ice Boat when the owner turns it on. Fresh Courses ship switched off: they show up once the owner turns them on. By default a new set goes up every Monday and stays all week. The owner can make them change every day (then the big golf course is Golf of the Day) or every few days, and every screen says which: "This week's courses", "Today's courses" or "The current courses".
 
 - Open them with /hcm play fresh_courses, or the Fresh Courses tile on the Courses and Golf tabs. /hcm play fresh_parkour_tiers opens Parkour Levels, where the three parkour courses sit side by side.
 - They are free skill games, the same for everyone. They play like the time trials and mini golf above, with the same kit, rules and "your things come back".
 - Each tile's name shows your stars for this week's course and its course code, like "Hard Parkour - ★★☆ · Course code HARD-40". A golf tile also shows its holes and par. A course being built shows grey: "being built, back soon".
 - Stars: finishing a course gives 1 star. A good time (or a good golf score) gives 2, a great one 3. Your best stars on each course this week count. The Star Chart adds up your best stars from every course this week, and it starts again every week.
 - Star Chart goals: by default 6 stars pays 1 token and 12 stars pays 2 tokens, once each a week. The Star Chart tile shows your stars and the next goal. A week's goals stay the same all week.
-- Tokens: your first finish of each course each week pays a few tokens (by default Easy 2, Parkour 3, Hard 4, Sky Rings 3, Golf 3, Tiny Golf 2). A second finish that week, even on another day, pays nothing more. Your very first finish of each course ever pays the usual first finish too. Golf pays for par or better and each hole-in-one once per course each week.
+- Tokens: your first finish of each course each week pays a few tokens (by default Easy 2, Parkour 3, Hard 4, Sky Rings 3, Golf 3, Tiny Golf 2, Ice Boat 3, Easy Dropper 2, Dropper 3). A second finish that week, even on another day, pays nothing more. Your very first finish of each course ever pays the usual first finish too. Golf pays for par or better and each hole-in-one once per course each week.
 - Daily limits: if today's limit can't pay the whole first-finish reward or a whole goal, none of it is paid and none of it is used up: "You've reached today's token limit - finish it again another day this week for its tokens." Finish it on another day this week and it pays.
 - Course codes: every course has a code, like HARD-40. You see it on its tile, on its screen and in chat when you finish. Loved an old course? Tell an admin its course code, and they can bring it back for a week, or keep it forever.
-- Classic courses: the owner can bring back a past course; its old records are the ones to beat. It shows up as Classic Parkour, Classic Sky Rings or Classic Golf on the Fresh Courses screen, like "Classic: Hard Parkour (week of 5 Oct)", with when it goes away again. If you got a course's first-finish tokens back when it first came, you don't get them again; if you didn't, you do. Stars on a classic count toward this week's Star Chart.
+- Classic courses: the owner can bring back a past course; its old records are the ones to beat. It shows up as Classic Parkour, Classic Sky Rings, Classic Golf or Classic Dropper on the Fresh Courses screen, like "Classic: Hard Parkour (week of 5 Oct)", with when it goes away again. If you got a course's first-finish tokens back when it first came, you don't get them again; if you didn't, you do. Stars on a classic count toward this week's Star Chart.
 - A kept course becomes a normal course with its own name, played like any other course.
 - High scores: each course has its own board for its week, shown as "Hard Parkour · this week" (older weeks by their date). The Star Chart has its own board.
+- Weekly Cup: the parkour courses, Sky Rings, Ice Boat and the Droppers run a Weekly Cup by default (see [The Weekly Cup](#the-weekly-cup)).
+
+<!-- ---- dropper (WP-D) ---- -->
+### The Dropper
+
+*Step off a ledge, steer through the holes as you fall, and land in the water. Then do it again, one level lower.*
+
+- **Open it:** the Easy Dropper and Dropper tiles on the Fresh Courses screen (/hcm play fresh_courses), or /hcm play fresh_dropper_easy and /hcm play fresh_dropper. They come with Fresh Courses: once the owner switches Fresh Courses on, they are there.
+- **Costs:** Free, like every Fresh Course.
+- **The courses:** Easy Dropper has 3 easy levels, and every hole on the way down glows ("follow the light"), with the whole floor water. Dropper has 5 levels that get harder, with smaller pools. Both are new with every set.
+
+**How to play**
+
+1. You arrive on a lime ledge at the top of the first glass shaft. The sign says LEVEL 1 of 3 and Step off and fall into the WATER!
+2. The course screen's Start button says "Start - practice drop optional". After you start, your hotbar offers two things: Practice drop (not timed) and Go straight to the timed run. A practice drop is one free try of level 1. It isn't timed and nothing counts. It ends when you splash, when you land on something, or when you click Start timed run. Then you are back on the ledge.
+3. Wait for the countdown: 3, 2, 1, Go! The clock starts on Go.
+4. Walk off the ledge. While you fall, steer through the holes in the coloured floors. Steering works best near the top.
+5. Splash into the water to clear the level: Level 2! of 3 - keep going! A moment later you are on the next ledge. There is no countdown there: the clock is still running, so step off when you are ready.
+6. Landing on anything but water is a bonk: Bonk! Back to the top of level 2. The clock keeps running. It's not a fail, just a few seconds. The edge round a pool counts as landing too, even with half of you over the water: aim for the middle.
+7. The last splash is the finish: Splash! with your time and your stars. The result screen says No bonks - perfect drop! or how many bonks you had.
+
+**On the screen**
+
+- Hotbar slot 1: Back to the top - of this level (a recovery compass). It counts as a bonk.
+- Hotbar slot 9: Leave game. Your things come back.
+- The bar above your hotbar shows your time, the level and your bonks: 0:12.4 · level 2 of 5 · 1 bonk.
+- Other players in the same shaft can't push you.
+
+**Winning and scoring**
+
+- Your score is your time from Go to the last splash. The lowest time is best. Falling takes the same time for everyone, so fewer bonks and less waiting on ledges make a faster time.
+- Stars like any Fresh Course: 1 for finishing, 2 and 3 for good and great times.
+- First finish in a set: Easy Dropper 2 tokens, Dropper 3 (weekly sets; 1 and 2 when the courses change every day).
+- A run with no bonks earns the achievement "Reach the bottom of a Dropper with no bonks" (20 tokens), once.
+- Slow falling (any potion), flying or a changed game mode means the run won't count.
+<!-- ---- end dropper ---- -->
+
+## Falling Floors
+
+<!-- ---- Falling Floors (EVENTS-DROPPER-SPEC §B.3, WP-F) ---- -->
+*Every block you step on falls away. Keep moving! The last one standing wins, or play solo: how long can you last?*
+
+- **Open it:** `/hcm play falling_floors` (or `/hcm play tnt_run`), or its tile on the Together tab of the Games screen. The tile's name says how many are playing: "Falling Floors - 2 playing · join!". One tap takes you in. The owner switches it on; it ships switched off.
+- **Costs:** Free. No tokens go in. It is a skill game, not a game of chance.
+- **It's TNT Run without any TNT.** Nothing explodes. A block you stand on turns red, and half a second later it's gone.
+- **Where you go:** the gallery, a glass walkway with glass rails all round the edge of the arena. It's where you wait, where you watch, and where you go when you're out. Nobody can jump in or fall out. Your things are kept safe and come back when you leave, like every world game.
+- **The kit:** Ready (tap when you're set), Play solo (only when you're the only one there) and Leave game (click twice). Everyone in the gallery plays the next round.
+- **When a round starts:** when enough players press Ready (two, unless the owner changes it), a 10-second bar counts down. It also starts by itself 20 seconds after a second player arrives. Everyone goes to a spot on the top floor, waits 3-2-1, and then Go! Nobody can push anybody.
+- **The floors:** three glass floors, 8 blocks apart: yellow on top, then pink, then light blue. Standing still doesn't help, and nor does jumping in place: the block under you turns red and drops. Fall below the bottom floor and you're out. You go back to the gallery with your time: "You lasted 0:42 - 3rd of 6!". Three floors means three chances.
+- **Every round ends:** after 3 minutes (by default) the edges start falling in, one ring every 2 seconds.
+- **Winning:** the last one standing wins. Players who go out on the same moment share their place. Wins go on this week's wins board.
+- **Solo:** play alone and see how long you last. Your longest solo time goes on this week's solo board (the same arena for everyone all week).
+- **Tokens (by default):** 1 token for your first full round of the day (a round played out with others, or 20 seconds solo); solo milestones of 30, 60 and 120 seconds pay 1, 2 and 3 tokens, once ever; and the usual bonus when it's Today's pick. At most 3 tokens a day from Falling Floors. **Winning pays nothing extra.** Leaving a round early earns nothing.
+- **Achievement:** "Last a whole minute on Falling Floors" (15 tokens).
+- **A new arena every week:** each floor is a different shape: a disc, a rounded square, a ring with an island, a plus or a diamond.
+- **Between rounds** the floors are put back, and the next round starts on whole floors a couple of seconds later. Just before a planned restart, no new round starts (and none starts that couldn't finish before it); a round already going finishes.
+- **Website feed:** `falling_floors` is in `games` with `kind: "arena"`, this week's `shape` (the top floor's: `disc`, `square`, `ring`, `plus` or `diamond`) and `top`: this week's longest solo times, in ms, longest first.
+<!-- ---- end Falling Floors ---- -->
 
 ## The older Arcade games
 
@@ -1466,21 +1637,24 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 ## For the website
 
 - Endpoint: GET /api/arcade on the plugin's dashboard port (8080 by default; web.dashboard.enabled ships true). It is the same server as /api/market. Fetch it from the website's own server, the way the other feeds are read, not from players' browsers. The plugin rebuilds the feed every web.dashboard.refresh_seconds (30 by default). If web.dashboard.feed_token is set, send Authorization: Bearer <token>; without it the reply is 401 {"error":"unauthorized"}. web.dashboard.lan_skips_token ships false. Gzip is sent when asked for, and replies carry Cache-Control: no-store.
-- Top-level keys, in this order: generatedAt (always first, epoch ms), games, featured, starChart, freshHistory, jackpots, prizes, packs, achievements. A section with nothing in it is left out completely (never [] or null). Colour codes are stripped from names, combos, rules and descriptions.
+- Top-level keys, in this order: generatedAt (always first, epoch ms), games, featured, starChart, freshHistory, events, jackpots, prizes, packs, achievements. A section with nothing in it is left out completely (never [] or null). Colour codes are stripped from names, combos, rules and descriptions.
 - Leaderboards: every entry with a board (a cabinet, a hand-built course, a golf course, a Fresh course, a Classic) has top: [{rank, value, unit, at, holder?}], its best games.feed_top rows (5 by default), best first. Players who tie share a rank (1, 1, 3). value is in unit (ms, strokes, points, flips, apples or wins); holder appears only when the owner turns names on. top is absent for a board nobody has played. record and best are unchanged.
 - Fresh Courses: a Fresh course's entry has daily {day, nextAt?, goldMs?, silverMs?, cadence?, lastDay?} (its set's first day, when the next set comes, star times, the set's length in days and last day) and fresh {code, seed, from, to?, cadenceDays} (its course code, the first 12 hex digits of its seed, when it went up and when it changes; to is absent while it is kept up for good). A Classics slot's entry has classic {code, from, to?} (to absent for "forever"). freshHistory lists every past and current Fresh course, newest first, at most 26 per course: {code, slot, name, kind, tier?, from, to?, seed, plays, record?, kept?, classic?, top?}; its top has at most 3 rows. Nothing about a course that isn't up yet is ever published.
-- games[]: every open game in catalog order, with the Scratch Ticket first. Key on id, because each id appears only once. kind is chance, cabinet, parkour, elytra, boat or golf. Time trials and mini golf publish one entry per open course, using the course id (which is also its /hcm play id). Coin Flip ships off, so it is absent unless the owner turns it on.
+- games[]: every open game in catalog order, with the Scratch Ticket first. Key on id, because each id appears only once. kind is chance, cabinet, parkour, elytra, boat, dropper, golf or arena. Time trials (the Droppers too) and mini golf publish one entry per open course, using the course id (which is also its /hcm play id). Coin Flip ships off, so it is absent unless the owner turns it on.
 - Games of chance (kind chance) have these fields. stakes: the tokens a player can put in. rtp: the lowest of its stakes, floored to one decimal, the same number /hcm arcade odds gives admins. rtpByStake. dailyLimit: plays a day; the Scratch Ticket has none. paytable rows: {stake?, combo, pays, chance, oneIn}. chance has 4 significant digits and never reads 0. oneIn is the same "1 in N" the game screen shows (round(1/chance)). A row with stake pays that many tokens. A row without stake pays that multiple of the tokens put in. Ore Slots uses rows without stake while every stake pays the same multiples, as shipped. It switches to per-stake rows in tokens if max_payout ever cuts a line. A row without its odds is never published, and a game with no stake left is left out.
 - Per-game extras. The Wheel's rows use spaces and of (24) instead of chance/oneIn, one row per stake per result, including "your N back" and "nothing". Twenty-One has payouts per stake {win, twentyOne, doubleWin} and no paytable. Higher or Lower has maxMultiplier and maxGuesses (where a run cashes out by itself) and no paytable. Coin Flip has one "win the flip" row per stake with chance 0.5. rules is one plain line, where a game gives one.
 - To match the game's own words, show Math.floor(rtp) as "gives back about N of every 100 tokens" (89.7 becomes "about 89"). Never round up. Show the odds next to every game of chance, and never show a prize or pot on its own.
 - Cabinets (kind cabinet) have board, unit (ms, points, flips, apples or wins), lowerIsBetter, and best (the server record; absent until someone sets one). Creeper Sweeper publishes its normal board, Connect Four its hard board (hard wins), and Tic-Tac-Toe its wins board. Show ms as m:ss.t with tenths rounded down, like the game does (1:23.4).
 - Courses have kind parkour, elytra or boat; tier easy, medium, hard or extreme; and record {ms, at}. Golf has holes, par, and record {strokes, at}. at is epoch ms and is present when known. record is absent until someone sets one.
+- Weekly Cup: a time-trial course that runs this week's Cup (and it isn't paid out yet) carries cup {entry, pool, entrants, endsAt} on its own games[] entry. entry is the tokens to enter (5 by default). pool is the pool right now: every entry, plus the server's top-up (10 by default) once 2 or more are in; the top-up is only paid if 2 or more set a Cup time, so the paid pool can be smaller than the one shown. entrants is how many are in (a count, never who). endsAt is when it is paid out, in epoch ms (Monday 4:00 AM by default). No player, Cup time or prize is ever published. There is no cup on a course without one, and golf never has one. While the owner has the Cup switched off (games.cup.enabled: false), only a Cup that players already entered is still published, until it is paid out. Say "Cup pool: 35 tokens · 5 in" and "Best time wins the pool", like the game.
+- Falling Floors (only while the owner has it on; it ships off): an entry {id: "falling_floors", name, kind: "arena", shape?, top?}. shape is this week's top floor: disc, square, ring, plus or diamond. top is this week's longest solo times in ms, longest first (higher is better). There is no record field.
+- Race Night: the top-level events object, only while Race Night is on (it ships off), with only the parts that have something in them. next {id, name, joinAt, startsAt, course?: {id, name}, races, laps, entry: "free", prizes, finisherPrize, prizeNight, racers, maxRacers}: the next night (open or coming), its join and start times in epoch ms, its track (absent until the server has picked one), prizes [5, 3, 2] and finisherPrize 1 by default, prizeNight false when that week's prize nights are used up (then it's "Just for fun tonight"), and racers joined so far as a count. upcoming: the start times of the nights after it, at most 4. live {id, state, race, of, racers, standings?}: the night on now; state is open, racing, break or results (results stays for 30 minutes after the end); standings [{rank, points, lap, laps, holder?}], at most 8, best first. recent: the last 5 nights, newest first, {id, at, course?, racers, state: done or called_off, top?: [{rank, value, unit: "points", holder?}]} with at most 8 rows. season? {key: "2026-10", name: "October", until, top?}: this month's season table, with top like any board's (in points). entry is always "free": nobody pays to race, so never show a price.
 - featured {game, until}: game is today's pick (a game or course id that is in games[]). until is the next local midnight in epoch ms, good for a countdown. It is never a game of chance. It is absent while the games are off or when there is no pick.
 - jackpots [{game: "scratch_ticket", tokens}]: the Scratch Ticket's pot right now. Whenever it is there, games[] also has the scratch_ticket entry, so the pot can always be shown with its odds. That entry's rtp (77.6 as shipped) is the long-run figure with the pot at its steady state.
 - prizes: the visible Prize Counter rows {id, name, category, cost, description?}. category is boosts, hunt, cosmetics, perks, trophies or minis. Trade In, Quest Reroll and the Rare Card are left out, and the +1 Home shows its first price. packs: packs sold for tokens {id, name, cost, odds}, with odds as percents per rarity (COMMON, UNCOMMON, RARE, EPIC, LEGENDARY; only rarities above 0).
 - achievements: the enabled ones {id, name, description, tokens}. name and description are the same one line. The Scratch Ticket's jackpot achievement is left out. first_crate ("Open an Arcade Crate") is still published, because the owner hasn't decided about it yet.
 - While the games are off, games[] has only the scratch_ticket entry (plus the pot, prizes, packs and achievements), and there is no featured. With arcade.enabled false, scratch_ticket, jackpots, prizes, packs and achievements go too. If a game throws while writing its entry, that entry is dropped, and the game switches itself off in game like any failing game. The rest of the feed still goes out.
-- Privacy rule: no player data, ever. That means no UUIDs, balances, per-player limits, Take a break settings, winners or names. A record is only a score or time and a date. The one exception is web.dashboard.arcade_show_names (shipped false). Only while it is true does a record (or a cabinet's best) carry holder, the name of whoever set it. It is read on every refresh, so /hcm reload applies it. In a game's extra fields, keys that would name a person or a balance (uuid, player, owner, holder, winner, balance and their plurals) and any UUID-shaped text are dropped at any depth.
+- Privacy rule: no player data, ever. That means no UUIDs, balances, per-player limits, Take a break settings, winners or names. A record is only a score or time and a date. The one exception is web.dashboard.arcade_show_names (shipped false). Only while it is true does a record (or a cabinet's best, a top row, a Race Night standing or result row) carry holder, the name of whoever set it. The Weekly Cup's cup object and Falling Floors' entry never name anyone. It is read on every refresh, so /hcm reload applies it. In a game's extra fields, keys that would name a person or a balance (uuid, player, owner, holder, winner, balance and their plurals) and any UUID-shaped text are dropped at any depth.
 - In game, the high-score screens do show names. Only the website leaves them out. Don't add names to the site from anywhere else.
 - the games only exist once the owner turns them on (games.enabled is false in a fresh install). Every number marked "by default" is a setting the owner can change in config.yml under games:. The daily goals (15 apples, 24 flips, a pattern of 8, 20 points, make a diamond, clear the board) are fixed in the code; only their token amounts are settings.
 - the website feed /api/arcade lists each cabinet's server record on one board: Creeper Sweeper's Normal board (a time), Ore Merge Classic (points), Snake Classic (apples), Mini Match Classic (flips, lower wins), Simon Says Classic (points), Whack-a-Zombie Classic (points), Connect Four Hard (wins) and Tic-Tac-Toe Wins (wins). Record holders' names are left out of the feed unless the owner turns them on (web.dashboard.arcade_show_names). In game, names always show.

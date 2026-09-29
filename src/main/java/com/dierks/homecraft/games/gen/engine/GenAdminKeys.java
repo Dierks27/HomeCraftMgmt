@@ -66,6 +66,15 @@ public final class GenAdminKeys {
         return "gen." + slot + ".mix";
     }
 
+    /**
+     * A Dropper slot's old regions that may still hold its pools ({@link Regions#wetText}): the
+     * claims it had before it moved, guarded until it is claimed there again (and so drained by a
+     * clear). Unset when there are none.
+     */
+    public static String wet(String slot) {
+        return "gen." + slot + ".wet";
+    }
+
     /** What is recalled into a Classics slot ({@link ClassicWant#text()}); unset when it is empty. */
     public static String recall(String classicSlot) {
         return "gen." + classicSlot + ".recall";

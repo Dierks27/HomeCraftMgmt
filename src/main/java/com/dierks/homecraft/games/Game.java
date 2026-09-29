@@ -47,6 +47,16 @@ public interface Game {
      */
     boolean configEnabled();
 
+    /**
+     * Whether the game stays open on its shipped settings when its own {@code games.<id>} block
+     * can't be read, instead of closing. Only for a game holding players' tokens across days that
+     * must still pay them out (the Weekly Cup, which then takes no new entries): junk in any other
+     * game's block closes it. (Weekly Cup fix #11.)
+     */
+    default boolean opensOnDefaults() {
+        return false;
+    }
+
     /** Two to five short plain lines: its tile lore and its rules screen. */
     List<String> rules();
 
@@ -163,7 +173,13 @@ public interface Game {
         /** Time-trial courses. */
         COURSES,
         /** Mini golf courses. */
-        GOLF;
+        GOLF,
+        /**
+         * Playing with others at the same time (EVENTS-DROPPER-SPEC §A.6): Race Night and Falling
+         * Floors put their tiles here through {@link Game#tiles}. No {@link GameKind} maps to it
+         * ({@link #of}): a game chooses it for its own tiles.
+         */
+        TOGETHER;
 
         /** The tab a game of this kind shows on. */
         public static Tab of(GameKind kind) {

@@ -49,13 +49,37 @@ class GameCatalogTest {
             assertTrue(GameCatalog.taken(" " + id.toUpperCase() + " "), id + " in any case, with spaces");
             assertTrue(GameCatalog.taken(id, games), id + " with the service's check too");
         }
-        assertEquals(12, Slots.RESERVED.size(), "seven slots, three Classics slots, the Fresh Courses screen and the"
-                + " level picker");
+        assertEquals(15, Slots.RESERVED.size(), "nine slots (the two droppers too), four Classics slots, the Fresh"
+                + " Courses screen and the level picker");
         assertFalse(GameCatalog.taken("fresh_golf_2"), "a name that only starts like one is free");
         assertFalse(GameCatalog.taken("daily"), "the old daily id never shipped and is free");
         assertFalse(GameCatalog.taken("river_run"), "a hand-built id is free");
         assertTrue(GameCatalog.taken("accept"), "the old reserved words still are");
         assertTrue(GameCatalog.taken("snake"), "and the games' ids");
+    }
+
+    @Test
+    void raceNightAndFallingFloorsTakeTheirIdsAndAliases() {
+        // EVENTS-DROPPER-SPEC C1: the two new games' ids, their aliases race and tnt_run, and the
+        // Weekly Cup's /hcm play cup off, so no hand-built course can take one
+        GamesService withThem = GamesKit.service(host, List.of(GamesKit.spec(trials, new SkillSettings(true, 4), null),
+                com.dierks.homecraft.games.event.RaceNight.SPEC, com.dierks.homecraft.games.arena.FallingFloors.SPEC));
+        for (String id : List.of("race_night", "falling_floors", "cup")) {
+            assertTrue(GameCatalog.taken(id), id + " is taken without the service");
+        }
+        for (String id : List.of("race_night", "race", "RACE", "falling_floors", "tnt_run", "cup")) {
+            assertTrue(GameCatalog.taken(id, withThem), id + " is taken");
+        }
+        assertEquals("race_night", withThem.game("race").id(), "/hcm play race is Race Night");
+        assertEquals("falling_floors", withThem.game("tnt_run").id(), "/hcm play tnt_run is Falling Floors");
+        assertFalse(withThem.enabled(withThem.game("race_night")), "Race Night is coming soon: closed");
+        assertFalse(withThem.enabled(withThem.game("falling_floors")), "and so is Falling Floors");
+        assertFalse(withThem.game("race_night").featurable(), "a night at set times is never today's pick");
+        assertTrue(withThem.game("falling_floors").featurable(), "Falling Floors may be");
+        GamesService.Target t = withThem.resolve("fresh_golf");
+        assertNotNull(t, "resolving a course is unaffected");
+        assertSame(trials, t.game(), "it is still the trials' course");
+        assertFalse(GameCatalog.taken("racer"), "a word that only starts like one is free");
     }
 
     @Test

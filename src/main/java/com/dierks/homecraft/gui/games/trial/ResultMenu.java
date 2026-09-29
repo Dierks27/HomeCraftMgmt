@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.games.trial;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.gen.api.GenCopy;
+import com.dierks.homecraft.games.trial.DropperText;
 import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.games.trial.TrialText;
 import com.dierks.homecraft.gui.Menus;
@@ -21,7 +22,7 @@ import java.util.List;
  * How a run went (27, spec §11), opened once the player is back home.
  *
  * <p>4 the time; 11 how it was taken (a new best, your best, "That run didn't count" and why, or
- * a test run); 13 "Play again" — offered only once the return teleport has landed (a time trial is
+ * a test run); 12 a dropper's bonks ("No bonks - perfect drop!" or "Bonks: 2"); 13 "Play again" — offered only once the return teleport has landed (a time trial is
  * a skill game, so a second go is about getting better); 15 the record; 16 tokens earned; 22 Back
  * to all the courses.
  *
@@ -46,6 +47,10 @@ public final class ResultMenu extends GameMenu {
         fill();
         set(4, Menus.icon(Material.CLOCK, headerName(result)), null);
         set(11, verdict(), null);
+        if (result.dropper()) {
+            set(12, Menus.icon(Material.WATER_BUCKET, DropperText.bonks(result.bonks()),
+                    "&7Bonks send you back to the top of a level.", "&7Fewer bonks, faster time!"), null);
+        }
         if (trials.home(viewer)) {
             set(13, Menus.icon(Material.LIME_CONCRETE, "&aPlay again", "&7Back to the start line."),
                     e -> trials.again(viewer, result));

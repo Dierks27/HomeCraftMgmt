@@ -2,6 +2,8 @@ package com.dierks.homecraft.games;
 
 import com.dierks.homecraft.games.gen.engine.FreshFeed;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -154,6 +156,147 @@ public interface FeedWriter {
      * @param weekIso the week's first day ({@code 2026-09-28})
      */
     default void starChart(String weekIso, Long best, String holder) {
+    }
+
+    // ---- Race Night and Falling Floors (EVENTS-DROPPER-SPEC §A.7, §B.3.4) ------------------------
+
+    /**
+     * Race Night's top-level {@code events} section (§A.7): the next night, the next start times, the
+     * night on now, the last few nights and the season. Race Night writes it once from its own
+     * engine; a second call replaces the first. The writer publishes only the parts that have
+     * something in them, and nothing at all when none has; a holder's name only while
+     * {@link #showNames()}. Never a UUID, a balance or a player's prize.
+     */
+    default void events(Events events) {
+    }
+
+    /**
+     * An arena game's {@code games[]} entry (§B.3.4, Falling Floors):
+     * {@code {id,name,kind:"arena",shape?,top?}}. Its {@code top} comes from the board named for the
+     * same id with {@link #board}.
+     *
+     * @param shape this week's floor shape ({@code ring}, {@code disc}, ...), or {@code null}
+     */
+    default void arena(String id, String name, String shape) {
+    }
+
+    // ---- the Weekly Cup (EVENTS-OWNER-DECISIONS §D2; WP-C) ---------------------------------------
+
+    /**
+     * The {@code cup} object on course {@code id}'s entry: this week's Weekly Cup on it, live. The Cup
+     * writes it from its own game; the writer joins it to the course's entry by id and drops it when
+     * no course of that id was written. Never a player: only the entry, the pool and a head count.
+     */
+    default void cup(String id, Cup cup) {
+    }
+
+    /**
+     * This week's Weekly Cup on one course.
+     *
+     * @param entry    tokens to enter
+     * @param pool     the pool now: every entry, plus the server's top-up once 2 or more are in
+     * @param entrants how many are in
+     * @param endsAt   when it is paid out (epoch ms): the quests' week start at 04:00
+     */
+    record Cup(int entry, int pool, int entrants, long endsAt) {
+    }
+
+    /**
+     * What Race Night publishes (§A.7). Every part may be {@code null} or empty: it is then left out.
+     *
+     * @param next     the next night (open or upcoming), or {@code null}
+     * @param upcoming the start times (epoch ms) of the nights after it, soonest first
+     * @param live     the night on now, or {@code null}
+     * @param recent   the last nights, newest first (the writer keeps at most {@value #RECENT} of them)
+     * @param season   this month's season board, or {@code null}
+     */
+    record Events(Next next, List<Long> upcoming, Live live, List<Recent> recent, Season season) {
+
+        /** The most past nights published. */
+        public static final int RECENT = 5;
+        /** The most rows of one past night published. */
+        public static final int ROWS = 8;
+
+        public Events {
+            upcoming = upcoming == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(upcoming));
+            recent = recent == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(recent));
+        }
+
+        /**
+         * The next night.
+         *
+         * @param courseId      the track's course id ({@code fresh_boat}), or {@code null} while
+         *                      {@code course: auto} hasn't picked one
+         * @param prizes        the tokens for the night's 1st, 2nd and 3rd
+         * @param finisherPrize the tokens for every other racer who finished a race
+         * @param prizeNight    whether it has one of the week's prize-night slots (false: just for fun)
+         * @param racers        how many have joined (a count, never who)
+         */
+        public record Next(String id, String name, long joinAt, long startsAt, String courseId, String courseName,
+                           int races, int laps, List<Integer> prizes, int finisherPrize, boolean prizeNight,
+                           int racers, int maxRacers) {
+
+            public Next {
+                prizes = prizes == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(prizes));
+            }
+        }
+
+        /**
+         * The night on now.
+         *
+         * @param state     {@code open}, {@code racing}, {@code break} or {@code results}
+         * @param race      the race on now (1-based)
+         * @param of        races tonight
+         * @param standings the night's standings so far, best first
+         */
+        public record Live(String id, String state, int race, int of, int racers, List<Standing> standings) {
+
+            public Live {
+                standings = standings == null ? List.of()
+                        : Collections.unmodifiableList(new ArrayList<>(standings));
+            }
+        }
+
+        /**
+         * One racer's line in {@link Live}.
+         *
+         * @param lap    the lap they are on now (0 before the start)
+         * @param holder their name, or {@code null} (published only while names are shown)
+         */
+        public record Standing(int rank, int points, int lap, int laps, String holder) {
+        }
+
+        /**
+         * A past night.
+         *
+         * @param at    when it ended (epoch ms)
+         * @param state {@code done} or {@code called_off}
+         * @param top   its result, best first (the writer keeps at most {@value Events#ROWS})
+         */
+        public record Recent(String id, long at, String courseId, String courseName, int racers, String state,
+                             List<Top> top) {
+
+            public Recent {
+                top = top == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(top));
+            }
+        }
+
+        /** One row of a past night's result: its points, and who, while names are shown. */
+        public record Top(int rank, long value, String holder) {
+        }
+
+        /**
+         * This month's season. Its {@code top} is read by the writer itself from the board (in points,
+         * higher is better), so a name is only looked up while names may be shown.
+         *
+         * @param key   {@code 2026-10}
+         * @param name  {@code October}
+         * @param until when the season ends (epoch ms)
+         * @param game  the board's game ({@code race_night})
+         * @param board the board ({@code rnseason:2026-10})
+         */
+        public record Season(String key, String name, long until, String game, String board) {
+        }
     }
 
     /**

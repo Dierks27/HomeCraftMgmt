@@ -240,6 +240,14 @@ public final class SkillRewards {
         return "fresh:" + slot + ":" + edition;
     }
 
+    /**
+     * A Race Night prize ({@link RewardKind#EVENT_PRIZE}), once per player per night:
+     * {@code event:<id>} ({@code event:rn-20261002-1900}).
+     */
+    public static String eventRef(String eventId) {
+        return "event:" + (eventId == null ? "" : eventId.trim());
+    }
+
     /** A hole-in-one on a hole today: {@code hio:<course>:<hole>:<day>}. */
     public static String holeInOneRef(String course, int hole, long day) {
         return "hio:" + course + ":" + hole + ":" + day;

@@ -18,7 +18,8 @@ import java.util.List;
  * moves' times. So the finish time doesn't depend on where the tick happened to fall.
  *
  * <p>A teleport of the run's own (back to a checkpoint) is {@link #jump}: the next move starts from
- * there, and nothing between the two places counts.
+ * there, and nothing between the two places counts. A game whose target isn't a sphere (the Dropper's
+ * pool box) marks it reached with {@link #reachNext}.
  */
 public final class Progress {
 
@@ -79,6 +80,27 @@ public final class Progress {
     public void jump(Point to, long nanos) {
         last = to;
         lastNanos = nanos;
+    }
+
+    /**
+     * The game's own rule saw the NEXT target reached at {@code nanos}, where the sphere test can't
+     * (a Dropper's pool box, whose corners a splash reaches outside the pool mark's sphere,
+     * EVENTS-DROPPER-SPEC §B.1.7). Still in order, still one target: {@code null} once finished.
+     * Where the run is ({@link #last}) doesn't change.
+     */
+    public Reached reachNext(long nanos) {
+        if (next >= targets.size()) {
+            return null;
+        }
+        reached[next] = nanos;
+        Reached r = new Reached(next, next == targets.size() - 1, nanos);
+        next++;
+        return r;
+    }
+
+    /** When the last move (or jump) was. */
+    public long lastNanos() {
+        return lastNanos;
     }
 
     /** When the run started. */

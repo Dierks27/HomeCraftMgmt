@@ -82,6 +82,14 @@ public final class GenCopy {
         return List.of("ICE BOAT", "Go " + laps + " laps,", "follow the", "arrows!");
     }
 
+    /**
+     * A Dropper level's sign, on the wall over its ledge (EVENTS-DROPPER-SPEC §B.1.1): "LEVEL 2 of 5"
+     * / "Step off and" / "fall into the" / "WATER!".
+     */
+    public static List<String> dropperLevel(int level, int levels) {
+        return List.of("LEVEL " + level + " of " + levels, "Step off and", "fall into the", "WATER!");
+    }
+
     // ---- chat, titles and tiles ----------------------------------------------------------------
 
     /** The Fresh Courses tile on the Courses and Golf tabs at the shipped (weekly) cadence: {@link #tile}. */
@@ -498,6 +506,11 @@ public final class GenCopy {
                 parkourStart("hard"), finish(), ringsStart(), ringsHow(), boatStart(2)));
         for (int hole = 1; hole <= 18; hole++) {
             out.add(golfTee(hole, 6));
+        }
+        for (int levels = 1; levels <= 5; levels++) {
+            for (int level = 1; level <= levels; level++) {
+                out.add(dropperLevel(level, levels));
+            }
         }
         return out;
     }

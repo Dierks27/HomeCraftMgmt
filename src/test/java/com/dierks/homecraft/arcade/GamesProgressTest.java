@@ -178,6 +178,19 @@ class GamesProgressTest {
     }
 
     @Test
+    void aRaceNightRacedCountsAndAWinCountsAgainButNoQuestStep() {
+        progress.raceNightFinished(alex, false);
+        assertEquals(List.of("count race_nights 1"), sink.events, "raced a Race Night: one count");
+        sink.events.clear();
+        progress.raceNightFinished(alex, true);
+        assertEquals(List.of("count race_nights 1", "count race_night_wins 1"), sink.events,
+                "won one: the win counts too (its races already stepped FINISH_COURSE where they counted)");
+        sink.events.clear();
+        progress.raceNightFinished(null, true);
+        assertEquals(List.of(), sink.events, "nobody is nothing");
+    }
+
+    @Test
     void nobodyIsNothing() {
         progress.cabinetFinished(null, "snake", false, false);
         progress.courseFinished(null, "hill", false, false);
@@ -186,6 +199,20 @@ class GamesProgressTest {
         progress.freshSetFinished(null, "7:38");
         progress.starChartTopGoal(null, 1);
         assertEquals(List.of(), sink.events, "a finish with no player counts for nobody");
+    }
+
+    @Test
+    void aWholeMinuteOnFallingFloorsCountsOnceAndOnlyWhereTheGamesPay() {
+        progress.floorsLastedMinute(alex);
+        assertEquals(List.of("count " + GamesProgress.FLOORS_MINUTES + " 1"), sink.events,
+                "one minute-long round: one count toward game_floors_minute, and no quest step");
+        sink.events.clear();
+        sink.here = false;
+        progress.floorsLastedMinute(alex);
+        progress.floorsLastedMinute(null);
+        assertEquals(List.of(), sink.events, "nothing where the games pay no tokens, and nothing for nobody");
+        assertTrue(GameProgress.NONE != null, "(the default listener ignores it)");
+        GameProgress.NONE.floorsLastedMinute(alex);
     }
 
     @Test

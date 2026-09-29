@@ -2,12 +2,16 @@ package com.dierks.homecraft.gui.games.trial;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.cup.live.CupLink;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.DropperText;
+import com.dierks.homecraft.games.trial.PartyRaces;
 import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.games.trial.TimeTrialsSettings;
+import com.dierks.homecraft.games.trial.TrialKind;
 import com.dierks.homecraft.games.trial.TrialText;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -27,17 +31,24 @@ import java.util.List;
  *
  * <p>4 the course ("River Run (Boat · Medium)"); 10 how to play; 11 your best; 12 its high
  * scores; 13 Start; 14 this week's best; 15 the record and who holds it; 16 what it pays (the
- * first finish's amount, or that it's done, in the name); 22 the way out. Start runs the gate
- * again (the screen may have been open a while) and then the world session takes the player to
- * the start line.
+ * first finish's amount, or that it's done, in the name); 20 Race with friends (a party race, D4;
+ * never on a Dropper); 22 the way out; 24 the Weekly Cup, when the course runs one. Start runs the
+ * gate again (the screen may have been open a while) and then the world session takes the player
+ * to the start line.
  *
  * <p>A Fresh course (GEN-SPEC §5.4) shows its set instead of all-time, in the set's words ("this
  * week" as shipped, "today" when daily): 4 its name and course code; 11 your best this week, 12
  * this week's board, 14 your stars this week and the star times, 15 this week's best, 16 what its
  * first finish this week pays. A course recalled into Classic Parkour or Classic Sky Rings shows
- * its original set's board, with its old records to beat.
+ * its original set's board, with its old records to beat. A dropper says "levels" and that its
+ * clock keeps running after a bonk, and Start says a practice drop comes first when warm-ups are on.
  */
 public final class CourseMenu extends GameMenu {
+
+    /** "Race with friends" (a party race, D4): the bottom row, left of the way out. */
+    public static final int PARTY_SLOT = 20;
+    /** The slots every course screen fills whatever the course (the way out is 22). */
+    public static final List<Integer> FIXED_SLOTS = List.of(4, 10, 11, 12, 13, 14, 15, 16, 22);
 
     private final TimeTrials trials;
     private final Course course;
@@ -58,7 +69,7 @@ public final class CourseMenu extends GameMenu {
         fill();
         boolean week = course.id().equals(trials.courseOfWeek());
         List<String> head = new ArrayList<>();
-        head.add("&7" + TrialText.checkpoints(course.checkpoints().size()) + ", then the finish");
+        head.add("&7" + TrialText.route(course));
         if (week) {
             head.add("&6★ Course of the week");
         }
@@ -68,16 +79,14 @@ public final class CourseMenu extends GameMenu {
         set(4, Menus.icon(TimeTrials.icon(course.kind()), "&e" + course.name() + " &7(" + TrialText.label(course) + ")",
                 head.toArray(new String[0])), null);
         List<String> rules = new ArrayList<>(course.kind().rules());
-        rules.add("The clock keeps running when you go back.");
+        rules.add(course.kind() == TrialKind.DROPPER ? DropperText.CLOCK_RULE : "The clock keeps running when you go back.");
         set(10, rulesTile(rules), null);
         Long best = trials.best(viewer, course.id());
         set(11, Menus.icon(Material.CLOCK, best == null ? "&7No time yet" : "&eYour best: &f" + TrialText.time(best)),
                 null);
         set(12, Menus.icon(Material.OAK_SIGN, "&eHigh scores", "&7The fastest times on " + course.name() + "."),
                 e -> trials.showScores(viewer, course.id(), this::reopen));
-        set(13, Menus.icon(Material.LIME_CONCRETE, "&aStart", "&7You go to the start line",
-                "&7with only the course kit.", "&7Your things come back when", "&7you finish or leave."),
-                e -> trials.startFromScreen(viewer, course.id()));
+        set(13, startTile(), e -> trials.startFromScreen(viewer, course.id()));
         GamesDao.ScoreRow weekBest = trials.weekRecord(course.id());
         set(14, Menus.icon(Material.IRON_INGOT, weekBest == null ? "&7No time this week yet"
                 : "&eThis week: &f" + TrialText.time(weekBest.score()) + " &7by &f" + trials.holder(weekBest.player())),
@@ -86,6 +95,10 @@ public final class CourseMenu extends GameMenu {
         set(15, Menus.icon(Material.GOLD_INGOT, record == null ? "&7No record yet - set one!"
                 : "&6Record: &f" + TrialText.time(record.score()) + " &7by &f" + trials.holder(record.player())), null);
         set(16, rewards(week), null);
+        if (PartyRaces.offered(course.kind())) { // WP-R1 (D4): never on a Dropper
+            set(PARTY_SLOT, PartyMenu.tile(trials, viewer), e -> trials.raceWithFriends(viewer, course.id(), this::reopen));
+        }
+        cupButton();
         exitTile();
     }
 
@@ -127,7 +140,7 @@ public final class CourseMenu extends GameMenu {
         Slots.Def slot = Slots.of(t.slot());
         boolean week = course.id().equals(trials.courseOfWeek());
         List<String> head = new ArrayList<>();
-        head.add("&7" + TrialText.checkpoints(course.checkpoints().size()) + ", then the finish");
+        head.add("&7" + TrialText.route(course));
         long now = games.clock().nowMillis();
         long next = trials.generated().nextChangeAt();
         if (t.recalled()) {
@@ -149,7 +162,7 @@ public final class CourseMenu extends GameMenu {
         set(4, Menus.icon(TimeTrials.icon(course.kind()), headerName(course, slot, DailyLookup.code(games, t)),
                 head.toArray(new String[0])), null);
         List<String> rules = new ArrayList<>(course.kind().rules());
-        rules.add("The clock keeps running when you go back.");
+        rules.add(course.kind() == TrialKind.DROPPER ? DropperText.CLOCK_RULE : "The clock keeps running when you go back.");
         set(10, rulesTile(rules), null);
         String board = TimeTrials.board(course);
         Long best = trials.bestOn(viewer, board);
@@ -158,9 +171,7 @@ public final class CourseMenu extends GameMenu {
         String whose = cadence == 1 ? "today's " : cadence == 7 ? "this week's " : "this ";
         set(12, Menus.icon(Material.OAK_SIGN, "&e" + GenCopy.times(cadence), "&7The fastest times on " + whose
                 + course.name() + "."), e -> trials.showScores(viewer, course.id(), this::reopen));
-        set(13, Menus.icon(Material.LIME_CONCRETE, "&aStart", "&7You go to the start line",
-                "&7with only the course kit.", "&7Your things come back when", "&7you finish or leave."),
-                e -> trials.startFromScreen(viewer, course.id()));
+        set(13, startTile(), e -> trials.startFromScreen(viewer, course.id()));
         int stars = DailyLookup.stars(games, viewer.getUniqueId(), t);
         long weekStars = DailyLookup.weekStars(games, viewer.getUniqueId(), DailyLookup.weekKey(games));
         set(14, Menus.glint(Menus.icon(Material.NETHER_STAR, DailyText.starsNow(cadence, stars),
@@ -170,6 +181,10 @@ public final class CourseMenu extends GameMenu {
         set(15, Menus.icon(Material.GOLD_INGOT, trials.setBestLine(record, viewer, cadence).replaceFirst("^&7", "&6")),
                 null);
         set(16, dailyRewards(games, t, week), null);
+        if (PartyRaces.offered(course.kind())) { // WP-R1 (D4): never on a Dropper
+            set(PARTY_SLOT, PartyMenu.tile(trials, viewer), e -> trials.raceWithFriends(viewer, course.id(), this::reopen));
+        }
+        cupButton();
         exitTile();
     }
 
@@ -211,6 +226,32 @@ public final class CourseMenu extends GameMenu {
                 : freshDone ? "&eTokens for finishing &7- " + firstWords + " &a✔ done"
                 : "&eTokens for finishing &7- " + firstWords + " &6" + TrialText.tokens(fresh);
         return Menus.icon(Material.GOLD_NUGGET, name, lore.toArray(new String[0]));
+    }
+
+    /**
+     * Start: the start line with only the course kit (and, for a dropper, its one practice drop, said
+     * in the NAME so Bedrock shows it).
+     */
+    private ItemStack startTile() {
+        List<String> lore = new ArrayList<>(List.of("&7You go to the start line", "&7with only the course kit.",
+                "&7Your things come back when", "&7you finish or leave."));
+        TimeTrialsSettings s = trials.settings();
+        if (course.kind() == TrialKind.DROPPER && s.warmupsOn()) {
+            lore.add(DropperText.PRACTICE_ON_START);
+        }
+        return Menus.icon(Material.LIME_CONCRETE, DropperText.startName(course, s), lore.toArray(new String[0]));
+    }
+
+    /**
+     * The Weekly Cup's item (EVENTS-OWNER-DECISIONS D2, WP-C), when the course runs one and the viewer
+     * hasn't hidden it: "Enter this week's Cup: 5 tokens. Best time wins the pool." in its NAME, or
+     * that they're in with the pool. It opens the Cup screen, whose Back comes here.
+     */
+    private void cupButton() {
+        CupLink.Button b = CupLink.button(plugin.games(), viewer, course, this::reopen);
+        if (b != null) {
+            set(CupLink.SLOT, b.icon(), e -> b.click().run());
+        }
     }
 
     private void reopen() {

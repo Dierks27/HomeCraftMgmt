@@ -12,6 +12,7 @@ import com.dierks.homecraft.games.world.KitItems;
 import com.dierks.homecraft.gui.arcade.BigWin;
 import com.dierks.homecraft.gui.games.daily.DailyLookup;
 import com.dierks.homecraft.gui.games.daily.DailyText;
+import com.dierks.homecraft.gui.games.golf.GolfGroupCardMenu;
 import com.dierks.homecraft.gui.games.golf.GolfScorecardMenu;
 import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.util.Sounds;
@@ -58,6 +59,10 @@ import java.util.logging.Level;
  * <p>A Fresh course (GEN-SPEC §3.4) is played on the layout the round started on: a round keeps
  * counting while that layout still stands, even after the next set's layout went live, and what
  * it records and pays is {@link GolfFinish}'s.
+ *
+ * <p>Golf together's turn flow (D4) is {@link GolfGroups}'s; this class is its server side (the
+ * {@link GolfGroups.Port}): a group player's round is finished and recorded at their own last hole,
+ * and they go home when the group's round is over.
  */
 public final class GolfRounds {
 
@@ -69,6 +74,8 @@ public final class GolfRounds {
     static final long STATUS_TICKS = 40;
     /** How often Bedrock players near a ball are shown it (ticks). */
     static final long BEDROCK_TICKS = 20;
+    /** Golf together's once-a-second check (ticks). */
+    static final long SECOND_TICKS = 20;
 
     /** The clubs, power 1 to 5: their names and items (hoes look like clubs). */
     static final String[] CLUBS = {"Tap", "Putt", "Chip", "Swing", "Drive"};
@@ -83,10 +90,13 @@ public final class GolfRounds {
 
     private final MiniGolf golf;
     private final Map<UUID, LiveRound> live = new HashMap<>();
+    /** Golf together (D4): the groups being played and their turn flow. */
+    private final GolfGroups groups;
     private long tick;
 
     GolfRounds(MiniGolf golf) {
         this.golf = golf;
+        this.groups = new GolfGroups(new Server());
     }
 
     private GamesService games() {
@@ -118,6 +128,11 @@ public final class GolfRounds {
      * @return whether the trip started (the player has been told why not)
      */
     boolean start(Player player, String courseId) {
+        return start(player, courseId, null);
+    }
+
+    /** {@link #start(Player, String)}, into {@code group}'s round when it is golf together. */
+    private boolean start(Player player, String courseId, GolfGroup group) {
         GolfCourse course = golf.playableCourse(courseId);
         if (course == null) {
             games().tell(player, Refusal.of("That course is closed right now."));
@@ -138,14 +153,30 @@ public final class GolfRounds {
         GolfCourse.Tee tee = course.hole(1).tee();
         Location start = new Location(world, tee.x(), tee.y(), tee.z(), tee.yaw(), 0);
         return games().sessions().enter(player, golf, course.id(), start,
-                p -> begin(p, course, look, maxOverPar));
+                p -> begin(p, course, look, maxOverPar, group));
+    }
+
+    /**
+     * Golf together (D4): everyone in {@code players} goes to hole 1 of {@code course} at once, in one
+     * group. A player who can't go (told why) is simply not in it; the rest play.
+     *
+     * @return whether anyone went
+     */
+    boolean startGroup(long partyId, GolfCourse course, java.util.List<Player> players) {
+        java.util.Map<UUID, String> names = new java.util.LinkedHashMap<>();
+        for (Player p : players) {
+            if (names.size() < GolfGroup.MAX) {
+                names.put(p.getUniqueId(), p.getName());
+            }
+        }
+        return !names.isEmpty() && groups.start(partyId, course, names);
     }
 
     /**
      * They're in, saved and cleared: the kit, the ball on the first tee — unless an admin closed
      * the course or changed its layout while they were on their way, when they go straight home.
      */
-    private void begin(Player p, GolfCourse course, ItemStack look, int maxOverPar) {
+    private void begin(Player p, GolfCourse course, ItemStack look, int maxOverPar, GolfGroup group) {
         GolfCourse now = golf.playableCourse(course.id());
         boolean standing = course.generated() && games().generated().standing(course.gen());
         if ((now == null || now.rev() != course.rev()) && !standing) {
@@ -159,6 +190,10 @@ public final class GolfRounds {
         LiveRound old = live.put(p.getUniqueId(), r);
         if (old != null) {
             old.view.remove();
+        }
+        r.group = groups.joins(p.getUniqueId(), group); // a round alone: out of any old group first
+        if (group != null && r.group == null) {
+            p.sendMessage(Text.of("&7Your group went on without you, so this round is just yours."));
         }
         giveKit(p);
         p.sendMessage(Text.of("&d" + course.name() + " &7- " + MiniGolf.holes(course.holes().size()) + ", par "
@@ -209,9 +244,6 @@ public final class GolfRounds {
     /** Every tick: roll the moving balls, keep the still ones showing, tell Bedrock players what's near. */
     void tick() {
         tick++;
-        if (live.isEmpty()) {
-            return;
-        }
         for (LiveRound r : new ArrayList<>(live.values())) {
             Player p = golf.plugin().getServer().getPlayer(r.player);
             if (p == null) {
@@ -233,6 +265,9 @@ public final class GolfRounds {
             if (tick % BEDROCK_TICKS == 0 && live.get(r.player) == r) {
                 r.view.showToBedrock();
             }
+        }
+        if (tick % SECOND_TICKS == 0) {
+            groups.second(); // after the offline rounds went: nobody waited for who isn't there
         }
     }
 
@@ -265,8 +300,10 @@ public final class GolfRounds {
         double dx = h.cup().x() + 0.5 - r.ball.x();
         double dz = h.cup().z() + 0.5 - r.ball.z();
         long far = Math.round(Math.hypot(dx, dz));
+        int clock = r.group == null ? -1 : r.group.clock();
         p.sendActionBar(Text.of("&dHole " + (r.run.hole() + 1) + "/" + r.run.holes() + " &7· par " + h.par()
-                + " · &fstrokes " + r.run.strokes() + " &7· cup " + far + (far == 1 ? " block" : " blocks") + " away"));
+                + " · &fstrokes " + r.run.strokes() + " &7· cup " + far + (far == 1 ? " block" : " blocks") + " away"
+                + (clock >= 0 ? " &8· &e" + GolfGroup.clockText(clock) + " left" : "")));
     }
 
     // ---- the kit -----------------------------------------------------------------------------------
@@ -290,7 +327,13 @@ public final class GolfRounds {
         switch (action) {
             case GO -> goToBall(p, r);
             case RESET -> reset(p, r);
-            case CARD -> new GolfScorecardMenu(golf.plugin(), golf, p, r.card(), null).open(p);
+            case CARD -> {
+                if (r.group != null) {
+                    new GolfGroupCardMenu(golf.plugin(), golf, p, groups.card(r.group), null).open(p);
+                } else {
+                    new GolfScorecardMenu(golf.plugin(), golf, p, r.card(), null).open(p);
+                }
+            }
             default -> {
                 // "leave" is the kit guard's; anything else isn't ours
             }
@@ -299,7 +342,7 @@ public final class GolfRounds {
 
     private void putt(Player p, LiveRound r, int power) {
         if (r.state != LiveRound.State.PLAYING) {
-            p.sendActionBar(Text.of("&7The next hole is coming..."));
+            notNow(p, r);
             return;
         }
         if (r.ball.moving()) {
@@ -323,7 +366,7 @@ public final class GolfRounds {
     /** Teleport (ours) to a safe spot beside the ball, facing it. */
     private void goToBall(Player p, LiveRound r) {
         if (r.state != LiveRound.State.PLAYING) {
-            p.sendActionBar(Text.of("&7The next hole is coming..."));
+            notNow(p, r);
             return;
         }
         Location spot = besideBall(p.getWorld(), r);
@@ -384,9 +427,15 @@ public final class GolfRounds {
         return new Location(w, x, y, z, yaw, 30f);
     }
 
+    /** Between holes, or done and waiting for the group: nothing to putt. */
+    private static void notNow(Player p, LiveRound r) {
+        p.sendActionBar(Text.of(r.state == LiveRound.State.DONE ? "&7Your round is done - the others are finishing."
+                : "&7The next hole is coming..."));
+    }
+
     private void reset(Player p, LiveRound r) {
         if (r.state != LiveRound.State.PLAYING) {
-            p.sendActionBar(Text.of("&7The next hole is coming..."));
+            notNow(p, r);
             return;
         }
         if (r.atSpot()) {
@@ -421,6 +470,12 @@ public final class GolfRounds {
     }
 
     private void pickedUp(Player p, LiveRound r) {
+        showPickedUp(p, r);
+        afterHole(p, r);
+    }
+
+    /** A picked-up hole's title, sound and chat line. */
+    private void showPickedUp(Player p, LiveRound r) {
         r.view.remove();
         GolfRun.HoleScore s = r.last;
         p.showTitle(Title.title(Text.of("&7Picked up"), Text.of("&7Hole " + r.run.hole() + " scores "
@@ -428,7 +483,6 @@ public final class GolfRounds {
                 Title.Times.times(Duration.ofMillis(150), Duration.ofMillis(1800), Duration.ofMillis(400))));
         Sounds.miss(p);
         holeLine(p, r, s);
-        afterHole(p, r);
     }
 
     /** "&amp;dHole 3 &amp;7(par 4): &amp;f3 strokes &amp;7- Birdie!" */
@@ -439,6 +493,10 @@ public final class GolfRounds {
 
     /** The next hole in a moment, with the scorecard meanwhile; or the finish. */
     private void afterHole(Player p, LiveRound r) {
+        if (r.group != null) {
+            groups.holeDone(p.getUniqueId(), r);
+            return;
+        }
         if (r.run.finished()) {
             finish(p, r);
             return;
@@ -454,6 +512,12 @@ public final class GolfRounds {
     /** "Next hole" on the scorecard: don't wait (a tick later: the screen closes outside its own click). */
     public void nextHoleNow(Player p) {
         LiveRound r = live.get(p.getUniqueId());
+        if (r != null && r.group != null) {
+            if (!groups.nextNow(r.group)) {
+                p.sendActionBar(Text.of("&7Waiting for " + names(r.group.waitingFor()) + "..."));
+            }
+            return;
+        }
         if (r != null && r.state == LiveRound.State.BETWEEN) {
             UUID id = p.getUniqueId();
             long token = r.between;
@@ -475,8 +539,20 @@ public final class GolfRounds {
 
     // ---- the finish ----------------------------------------------------------------------------------
 
+    /** A round alone is over: its lines and record, then home, and the final scorecard there. */
     private void finish(Player p, LiveRound r) {
         r.state = LiveRound.State.DONE;
+        finishLines(p, r);
+        GolfCard card = r.card();
+        games().sessions().leave(p, EndReason.FINISH);
+        showWhenHome(p.getUniqueId(), card, null, 0);
+    }
+
+    /**
+     * A finished round's lines, then its score and rewards unless the course changed meanwhile: a
+     * round alone's at its end, a group player's at their own last hole ({@link GolfGroups}).
+     */
+    private void finishLines(Player p, LiveRound r) {
         GolfRun run = r.run;
         GolfCourse c = r.course;
         p.sendMessage(Text.of("&d" + c.name() + " &7done: &f" + GolfRun.strokesText(run.total()) + " &7("
@@ -491,9 +567,6 @@ public final class GolfRounds {
         } else {
             record(p, r);
         }
-        GolfCard card = r.card();
-        games().sessions().leave(p, EndReason.FINISH);
-        showWhenHome(p.getUniqueId(), card, 0);
     }
 
     /** Whether an admin changed (or closed) the course since the round began, and its layout no longer stands. */
@@ -641,16 +714,20 @@ public final class GolfRounds {
     }
 
     /** The final scorecard, with "Play again", once the player is back home (checked twice a second, up to 20 s). */
-    private void showWhenHome(UUID id, GolfCard card, int tries) {
+    private void showWhenHome(UUID id, GolfCard card, GolfGroup.Card together, int tries) {
         games().later(golf, 10, () -> {
             Player p = golf.plugin().getServer().getPlayer(id);
             if (p == null || live.containsKey(id)) {
                 return;
             }
             if (games().sessions().home(p) && games().sessions().session(p) == null) {
-                new GolfScorecardMenu(golf.plugin(), golf, p, card, null).open(p);
+                if (together != null) {
+                    new GolfGroupCardMenu(golf.plugin(), golf, p, together, null).open(p);
+                } else {
+                    new GolfScorecardMenu(golf.plugin(), golf, p, card, null).open(p);
+                }
             } else if (tries < 40) {
-                showWhenHome(id, card, tries + 1);
+                showWhenHome(id, card, together, tries + 1);
             }
         });
     }
@@ -660,6 +737,7 @@ public final class GolfRounds {
     /** The session ended (after the player's things came back): the round goes with it. */
     void ended(Player p, EndReason reason) {
         LiveRound r = live.remove(p.getUniqueId());
+        groups.leave(p.getUniqueId(), r); // a group round done at its last hole is recorded already
         if (r == null) {
             return;
         }
@@ -676,6 +754,7 @@ public final class GolfRounds {
         if (r != null) {
             r.view.remove();
         }
+        groups.leave(p.getUniqueId(), r);
     }
 
     /** They fell out of the world (and are back at their last safe spot): next to the ball again. */
@@ -713,10 +792,114 @@ public final class GolfRounds {
             r.view.remove();
         }
         live.clear();
+        groups.stop();
     }
 
     private void drop(LiveRound r) {
         live.remove(r.player);
         r.view.remove();
+        groups.leave(r.player, r);
+    }
+
+    // ---- golf together (EVENTS-OWNER-DECISIONS D4): GolfGroups' server side -------------------------
+
+    private Player online(UUID player) {
+        return golf.plugin().getServer().getPlayer(player);
+    }
+
+    /** {@link GolfGroups.Port} on this server. */
+    private final class Server implements GolfGroups.Port {
+
+        @Override
+        public LiveRound round(UUID player) {
+            return live.get(player);
+        }
+
+        @Override
+        public boolean inSession(UUID player) {
+            Player p = online(player);
+            return p != null && games().sessions().session(p) != null;
+        }
+
+        @Override
+        public boolean enter(UUID player, GolfGroup group) {
+            Player p = online(player);
+            return p != null && start(p, group.courseId(), group);
+        }
+
+        @Override
+        public void tell(UUID player, String line) {
+            Player p = online(player);
+            if (p != null) {
+                p.sendMessage(Text.of(line));
+            }
+        }
+
+        @Override
+        public void showCard(UUID player, GolfGroup.Card card) {
+            Player p = online(player);
+            if (p != null) {
+                new GolfGroupCardMenu(golf.plugin(), golf, p, card, null).open(p);
+            }
+        }
+
+        @Override
+        public void nextTee(UUID player, LiveRound round) {
+            Player p = online(player);
+            if (p == null) {
+                return;
+            }
+            if (p.getOpenInventory().getTopInventory().getHolder(false) instanceof GolfGroupCardMenu) {
+                p.closeInventory();
+            }
+            startHole(p, round, true);
+        }
+
+        @Override
+        public void finished(UUID player, LiveRound round) {
+            Player p = online(player);
+            if (p != null) {
+                finishLines(p, round); // each round is a normal round: its own board and rewards
+            }
+        }
+
+        @Override
+        public void pickedUp(UUID player, LiveRound round) {
+            Player p = online(player);
+            if (p != null) {
+                showPickedUp(p, round);
+            }
+        }
+
+        @Override
+        public void home(UUID player, LiveRound round, GolfGroup.Card card) {
+            Player p = online(player);
+            if (p == null) {
+                return;
+            }
+            GolfCard own = round.card();
+            games().sessions().leave(p, EndReason.FINISH);
+            showWhenHome(player, own, card, 0);
+        }
+
+        @Override
+        public void later(long ticks, Runnable task) {
+            games().later(golf, ticks, task);
+        }
+
+        @Override
+        public void roundOver(long partyId) {
+            golf.together().roundOver(partyId);
+        }
+
+        @Override
+        public String name(UUID player) {
+            return GolfTogether.name(player);
+        }
+    }
+
+    /** "Sam", "Sam and Ava", "Sam, Ava and Lee". */
+    static String names(java.util.List<String> names) {
+        return GolfGroups.names(names);
     }
 }

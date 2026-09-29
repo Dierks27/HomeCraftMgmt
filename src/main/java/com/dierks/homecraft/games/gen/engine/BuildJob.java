@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.gen.engine;
 
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.SignText;
 
@@ -36,6 +37,16 @@ import java.util.UUID;
  *       differ, written solids bottom-up, then signs (their text glowing and waxed). A write whose
  *       block meets a person (their box grown by one) waits and is tried again every tick; after
  *       {@value #STUCK_MS} ms {@link #stuckPeople} names who is in the way, to be moved.</li>
+ *   <li><b>Water last, and gone first</b> (EVENTS-DROPPER-SPEC §B.1.9, a Dropper's sealed pools): a
+ *       pass over a half that has water (the plan's, the caller's word that the half may hold some,
+ *       a Dropper's slot or plot, or water found in a chunk) writes in three stages over the WHOLE
+ *       half. First every water block the plan doesn't want is drained (while the chunks are read);
+ *       then the solids and signs of every chunk; and only when those are all written, the planned
+ *       water, bottom-up. So a pool is drained before its walls go (clearing a half), and filled only
+ *       once every wall round it stands. A stop between two stages is just the next converge. With
+ *       writes made without physics, sealed pools and the area guard's flow rules, water in a half
+ *       never moves. A half with no water is written chunk by chunk as it is read (only one
+ *       chunk's writes are ever held), as every generator but the Dropper always was.</li>
  *   <li><b>VERIFY</b>: the next pass. None differ: {@link Phase#DONE}. Otherwise the pass wrote
  *       them, and up to {@value #MAX_PASSES} passes in all are made before it is
  *       {@link Phase#FAILED} naming the first five.</li>
@@ -53,6 +64,18 @@ public final class BuildJob {
     public enum Phase {
         LOAD, WORK, DONE, FAILED
     }
+
+    /**
+     * A pass's write stages (EVENTS-DROPPER-SPEC §B.1.9): unwanted water drained while the chunks are
+     * read, then every solid and sign, then the planned water.
+     */
+    enum Stage {
+        DRAIN, BODY, FILL
+    }
+
+    /** Bottom-up, then along x, then z: the order solids (and the planned water) are written in. */
+    private static final Comparator<Op> UP = Comparator.comparingInt((Op o) -> o.y).thenComparingInt(o -> o.x)
+            .thenComparingInt(o -> o.z);
 
     /** The converge and up to three rounds of verify-and-heal. */
     public static final int MAX_PASSES = 4;
@@ -101,6 +124,18 @@ public final class BuildJob {
     private final Set<Long> ticketed = new LinkedHashSet<>();
     private final ArrayDeque<Op> pending = new ArrayDeque<>();
     private final List<Op> deferred = new ArrayList<>();
+    /** This pass's solids, air and signs, written once every chunk is read and drained. */
+    private final List<Op> body = new ArrayList<>();
+    /** This pass's planned water, written once every solid is. */
+    private final List<Op> fills = new ArrayList<>();
+    /** Which of a pass's three write stages it is on (drain while reading, then body, then fill). */
+    private Stage stage = Stage.DRAIN;
+    /**
+     * Whether the writes are staged over the whole half: the plan has water, the caller said the half
+     * may hold some, or a chunk showed some (from that chunk on, and every later pass). Otherwise each
+     * chunk is written as it is read.
+     */
+    private boolean staged;
     private final List<String> named = new ArrayList<>();
     private final Set<UUID> stuck = new LinkedHashSet<>();
     private Phase phase = Phase.LOAD;
@@ -119,10 +154,22 @@ public final class BuildJob {
      * @throws IllegalArgumentException when a plan block or sign is outside the half or isn't a block
      */
     public BuildJob(WorldPort port, Box half, Plan plan, Mode mode) {
+        this(port, half, plan, mode, false);
+    }
+
+    /**
+     * @param plan         what the half must hold, or {@code null} for nothing
+     * @param mayHoldWater the half may hold water the plan doesn't want (a Dropper's slot or plot being
+     *                     cleared): every pass is staged from its first chunk, so every pool is drained
+     *                     before any wall goes, wherever the chunks' edges cut it
+     * @throws IllegalArgumentException when a plan block or sign is outside the half or isn't a block
+     */
+    public BuildJob(WorldPort port, Box half, Plan plan, Mode mode, boolean mayHoldWater) {
         this.port = port;
         this.half = half;
         this.writer = new HalfWriter(port, half);
         this.mode = mode;
+        this.staged = mayHoldWater;
         for (int cx = half.minX() >> 4; cx <= half.maxX() >> 4; cx++) {
             for (int cz = half.minZ() >> 4; cz <= half.maxZ() >> 4; cz++) {
                 chunks.add(new int[]{cx, cz});
@@ -141,8 +188,10 @@ public final class BuildJob {
         for (BlockOp op : p.ops()) {
             inside(op.x(), op.y(), op.z());
             ChunkPlan cp = plan.computeIfAbsent(key(op.x() >> 4, op.z() >> 4), k -> new ChunkPlan());
-            cp.blocks.add(new Op(op.x(), op.y(), op.z(), states[op.state()], null));
+            String state = states[op.state()];
+            cp.blocks.add(new Op(op.x(), op.y(), op.z(), state, null));
             cp.at.add(pos(op.x(), op.y(), op.z()));
+            staged |= fluid(state); // a plan with water is written in stages over the whole half
         }
         for (SignText s : p.signs()) {
             inside(s.x(), s.y(), s.z());
@@ -240,26 +289,46 @@ public final class BuildJob {
                     fail("chunk " + c[0] + "," + c[1] + " is not loaded");
                     return;
                 }
-                List<Op> diffs = diff(v, c[0], c[1]);
-                if (diffs == null) {
+                Diff d = diff(v, c[0], c[1]);
+                if (d == null) {
                     continue; // the snapshot contradicted itself: read the same chunk again
                 }
                 chunkIndex++;
-                passDiffs += diffs.size();
-                totalDiffs += diffs.size();
-                for (Op op : diffs) {
+                passDiffs += d.blocks;
+                totalDiffs += d.blocks;
+                for (String at : d.at) {
                     if (named.size() >= NAMED) {
                         break;
                     }
-                    named.add(op.at());
+                    named.add(at);
                 }
                 if (mode == Mode.CONVERGE) {
-                    pending.addAll(diffs);
+                    staged |= !d.drain.isEmpty() || !d.fill.isEmpty(); // water here: staged from now on
+                    if (staged) {
+                        pending.addAll(d.drain); // stage 1 as the chunks are read: every other write waits
+                        body.addAll(d.body);
+                        fills.addAll(d.fill);
+                    } else {
+                        pending.addAll(d.body); // no water: this chunk's writes now, before the next is read
+                    }
                 }
                 continue;
             }
             if (!deferred.isEmpty()) {
                 return;
+            }
+            if (stage == Stage.DRAIN) {
+                stage = Stage.BODY; // every chunk read and every unwanted water block gone
+                pending.addAll(body);
+                body.clear();
+                continue;
+            }
+            if (stage == Stage.BODY) {
+                stage = Stage.FILL; // every solid of the half written: now the water
+                fills.sort(UP); // bottom-up over the whole half: each pool from its floor
+                pending.addAll(fills);
+                fills.clear();
+                continue;
             }
             endPass();
         }
@@ -279,6 +348,7 @@ public final class BuildJob {
         chunkIndex = 0;
         passDiffs = 0;
         named.clear();
+        stage = Stage.DRAIN;
     }
 
     /** Whether a person is in the way of {@code op}; notes who has kept it waiting too long. */
@@ -309,13 +379,42 @@ public final class BuildJob {
     }
 
     /**
+     * One chunk's differences, by write stage: unwanted water to drain, solids, air and signs, and
+     * planned water; {@code blocks} counts each differing block once, {@code at} names them.
+     */
+    private static final class Diff {
+        final List<Op> drain = new ArrayList<>();
+        final List<Op> body = new ArrayList<>();
+        final List<Op> fill = new ArrayList<>();
+        final List<String> at = new ArrayList<>();
+        long blocks;
+
+        void differs(Op op) {
+            blocks++;
+            if (at.size() < NAMED) {
+                at.add(op.at());
+            }
+        }
+    }
+
+    /**
+     * Whether a block-data text is a fluid a half's writes stage (EVENTS-DROPPER-SPEC §B.1.9): water,
+     * of any level. Only a Dropper's plan places it ({@code Palette.POOL_WATER}).
+     */
+    static boolean fluid(String state) {
+        return state != null && Palette.id(state).equals("minecraft:water");
+    }
+
+    /**
      * What differs in one chunk: planned blocks that aren't what the plan says, planned signs with
      * the wrong block or text, and anything that isn't air where the plan has nothing. Bottom-up,
-     * signs last. {@code null} when the snapshot's "empty section" answer is contradicted by a
+     * signs last; water the plan doesn't want is drained first, and planned water comes last
+     * (bottom-up). {@code null} when the snapshot's "empty section" answer is contradicted by a
      * planned block it holds (the port stops trusting those answers, and the chunk is read again).
      */
-    private List<Op> diff(WorldPort.ChunkView v, int cx, int cz) {
+    private Diff diff(WorldPort.ChunkView v, int cx, int cz) {
         ChunkPlan cp = plan.get(key(cx, cz));
+        Diff d = new Diff();
         List<Op> out = new ArrayList<>();
         List<Op> signs = new ArrayList<>();
         if (cp != null) {
@@ -327,12 +426,24 @@ public final class BuildJob {
                 }
                 String cur = air ? WorldPort.AIR : v.block(b.x, b.y, b.z);
                 if (!b.state.equals(cur)) {
+                    d.differs(b);
+                    if (fluid(b.state)) {
+                        d.fill.add(b);
+                        continue;
+                    }
+                    if (fluid(cur)) {
+                        d.drain.add(new Op(b.x, b.y, b.z, WorldPort.AIR, null));
+                    }
                     out.add(b);
                 }
             }
             for (Op s : cp.signs) {
                 String cur = v.air(s.x, s.y, s.z) ? WorldPort.AIR : v.block(s.x, s.y, s.z);
                 if (!s.state.equals(cur) || !s.sign.equals(pad(port.signLines(s.x, s.y, s.z)))) {
+                    d.differs(s);
+                    if (fluid(cur)) {
+                        d.drain.add(new Op(s.x, s.y, s.z, WorldPort.AIR, null));
+                    }
                     signs.add(s);
                 }
             }
@@ -354,15 +465,19 @@ public final class BuildJob {
                             continue;
                         }
                         if (!v.air(x, y, z)) {
-                            out.add(new Op(x, y, z, WorldPort.AIR, null));
+                            Op clear = new Op(x, y, z, WorldPort.AIR, null);
+                            d.differs(clear);
+                            (fluid(v.block(x, y, z)) ? d.drain : out).add(clear);
                         }
                     }
                 }
             }
         }
-        out.sort(Comparator.comparingInt((Op o) -> o.y).thenComparingInt(o -> o.x).thenComparingInt(o -> o.z));
+        out.sort(UP);
         out.addAll(signs);
-        return out;
+        d.body.addAll(out);
+        d.drain.sort(UP.reversed()); // a pool empties from the top
+        return d;
     }
 
     // ---- ending it ----------------------------------------------------------------------------
@@ -391,6 +506,11 @@ public final class BuildJob {
     }
 
     /** Whether it finished: the half now matches (converge), or the count is in (scan). */
+    /** Whether its writes are staged over the whole half (water: the plan's, the caller's word, or found). */
+    boolean staged() {
+        return staged;
+    }
+
     public boolean done() {
         return phase == Phase.DONE;
     }
@@ -436,7 +556,12 @@ public final class BuildJob {
 
     /** Writes still to make in this pass (for status: "converging 312/745"). */
     public int waiting() {
-        return pending.size() + deferred.size();
+        return pending.size() + deferred.size() + body.size() + fills.size();
+    }
+
+    /** The write stage this pass is on (drain while reading, then solids and signs, then water). */
+    Stage stage() {
+        return stage;
     }
 
     /** Whether some write is waiting for a person to move. */

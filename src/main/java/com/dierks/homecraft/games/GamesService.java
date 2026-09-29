@@ -3,6 +3,7 @@ package com.dierks.homecraft.games;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.GamesConfig;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.trial.Parties;
 import com.dierks.homecraft.games.world.Session;
 import com.dierks.homecraft.games.world.WorldSessions;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -83,6 +84,10 @@ public final class GamesService {
     private final Scores scores;
     private final WorldSessions sessions;
     private final Invites invites;
+    /** Every play-together party (EVENTS-OWNER-DECISIONS D4): one per player across the games. */
+    private final Parties parties = new Parties();
+    /** The shared no-push team (the "player collisions" decision): players in a crowd can't shove. */
+    private final NoPush noPush = NoPush.live();
     private final Featured featured;
     /** Who hears about skill-game finishes (quests, achievements); {@link GameProgress#NONE} until registered. */
     private volatile GameProgress progress = GameProgress.NONE;
@@ -138,6 +143,14 @@ public final class GamesService {
      */
     public void start() {
         cancelSweep();
+        quietly(() -> {
+            int left = noPush.clearAll(); // the team is saved with the world: a crash leaves its members on it
+            if (left > 0) {
+                host.logger().warning("Games: " + left + " player(s) were still on the no-push team " + NoPush.TEAM
+                        + " from the last run (it ended without stopping the games). They are off it now; any"
+                        + " other main-scoreboard team they were on before could not be restored.");
+            }
+        });
         try {
             int pruned = dao().pruneDone(host.clock().nowMillis() - DONE_KEPT_MS);
             if (pruned > 0) {
@@ -212,6 +225,8 @@ public final class GamesService {
             stopGame(g);
         }
         invites.clear();
+        parties.clear();
+        quietly(noPush::offAll); // anyone a game left on the no-push team goes back to their own team
         featured.forget();
         // Anyone still in a session ends it the right way for a stop, and the guards come off.
         quietly(sessions::stop);
@@ -311,10 +326,15 @@ public final class GamesService {
             return false;
         }
         GamesConfig.Parsed cfg = config();
-        if (!cfg.enabled() || !cfg.readable(game.id())) {
+        if (!cfg.enabled() || !readable(cfg, game)) {
             return false;
         }
         return guard(game, game::configEnabled, false);
+    }
+
+    /** Its block could be read, or it runs on its defaults when it can't ({@link Game#opensOnDefaults}; the Weekly Cup). */
+    private boolean readable(GamesConfig.Parsed cfg, Game game) {
+        return cfg.readable(game.id()) || guard(game, game::opensOnDefaults, false);
     }
 
     /** Whether the game threw and is off until {@code /hcm reload}. */
@@ -337,7 +357,7 @@ public final class GamesService {
         if (!cfg.enabled()) {
             return "games.enabled is false";
         }
-        if (!cfg.readable(game.id())) {
+        if (!readable(cfg, game)) {
             return "its config block could not be read - see the console";
         }
         if (!guard(game, game::configEnabled, false)) {
@@ -612,6 +632,25 @@ public final class GamesService {
         return invites;
     }
 
+    /**
+     * The play-together parties (EVENTS-OWNER-DECISIONS D4): party races and golf together share
+     * this one registry, so a player is in at most one party at a time. The games that run them
+     * add and remove players themselves (a quit is theirs to see first: it is a DNF); every party
+     * is dropped when the games stop.
+     */
+    public Parties parties() {
+        return parties;
+    }
+
+    /**
+     * The shared no-push team ({@link NoPush}): a game puts a player on it where players crowd (the
+     * Dropper's shafts, Falling Floors, a race's start and stand) and takes them off on every way
+     * out. Emptied at start; everyone put back at stop.
+     */
+    public NoPush noPush() {
+        return noPush;
+    }
+
     public Featured featured() {
         return featured;
     }
@@ -713,9 +752,11 @@ public final class GamesService {
 
     /**
      * Tell a player something that happened while they weren't looking (a round finished for
-     * them): now if they are online and {@code queue} is false, else kept for their next join.
+     * them, a Race Night prize waiting, a Weekly Cup paid out or called off): now if they are online
+     * and {@code queue} is false, else kept for their next join. {@code line} may carry colour codes
+     * ({@code &e...}). Public since EVENTS-DROPPER-SPEC C1, for the games outside this package.
      */
-    void notice(UUID player, String line, boolean queue) {
+    public void notice(UUID player, String line, boolean queue) {
         Player p = queue ? null : host.online(player);
         if (p != null) {
             p.sendMessage(Text.of(line));

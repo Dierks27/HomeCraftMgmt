@@ -148,6 +148,14 @@ public final class BoardDisplay {
 
         /** A hand-built golf course's name, or {@code null}. */
         String golfCourse(String id);
+
+        /**
+         * Race Night's boards ({@code @board:race_night} the season, {@code :last} the last night;
+         * EVENTS-DROPPER-SPEC §A.8), or {@code null} when {@code t} isn't Race Night's.
+         */
+        default Result event(Target t) {
+            return null;
+        }
     }
 
     // ---- parsing ----------------------------------------------------------------------------------
@@ -210,6 +218,10 @@ public final class BoardDisplay {
             int cadence = tag == null ? l.cadence() : tag.cadence();
             String title = GenCopy.boardTitle(GenCopy.slotName(slot, cadence), cadence);
             return Result.ok(new Resolved(game, tag == null ? null : GenBoards.day(tag), true, unit, title, slot.id()));
+        }
+        Result event = l.event(t); // Race Night's season and last night (EVENTS-DROPPER-SPEC §A.8)
+        if (event != null) {
+            return event;
         }
         if (l.chance(t.id())) {
             return Result.fail("Games of chance have no leaderboard.");

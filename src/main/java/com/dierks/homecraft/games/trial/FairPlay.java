@@ -31,37 +31,41 @@ import java.util.function.Predicate;
  * <p>A void is not a punishment: the player finishes the run, sees their time, and reads "That run
  * didn't count." with why. A test run is judged the same way but records nothing, and says
  * whether it would have counted.
+ *
+ * <p>Public (EVENTS-DROPPER-SPEC C1), so the race mode and the Dropper's pure rules judge a race or
+ * a drop with these same checks instead of copies of them. The one Dropper rule: the speed check
+ * skips the legs that end at a ledge, which are the game's own hops ({@link #ownTeleport}).
  */
-final class FairPlay {
+public final class FairPlay {
 
     /** How far from the start a run may begin (the countdown restarts beyond it). */
-    static final double START_RADIUS = 1.0;
+    public static final double START_RADIUS = 1.0;
     /** Around the start, a landing is fine (an elytra run takes off from there). */
-    static final double START_ZONE = 2.0;
+    public static final double START_ZONE = 2.0;
 
-    static final String FLYING = "flying";
-    static final String GAME_MODE = "your game mode changed";
-    static final String EFFECT = "a potion effect";
-    static final String TOO_QUICK = "quicker than this course allows";
-    static final String TOO_FAST = "too fast between two checkpoints";
-    static final String CHANGED = "the course changed during your run";
-    static final String WALK_SPEED = "your walk speed changed";
-    static final String MOVEMENT = "your movement changed";
+    public static final String FLYING = "flying";
+    public static final String GAME_MODE = "your game mode changed";
+    public static final String EFFECT = "a potion effect";
+    public static final String TOO_QUICK = "quicker than this course allows";
+    public static final String TOO_FAST = "too fast between two checkpoints";
+    public static final String CHANGED = "the course changed during your run";
+    public static final String WALK_SPEED = "your walk speed changed";
+    public static final String MOVEMENT = "your movement changed";
 
     /** A gap between two trial ticks longer than this is a server stall. */
-    static final long STALL_NANOS = 250_000_000L;
+    public static final long STALL_NANOS = 250_000_000L;
     /** Every leg gets this much more time before it counts as too fast (one tick of jitter). */
-    static final double LEG_SLACK = 0.05;
+    public static final double LEG_SLACK = 0.05;
 
     /** A player's walk speed when nothing has changed it. */
-    static final float DEFAULT_WALK_SPEED = 0.2f;
+    public static final float DEFAULT_WALK_SPEED = 0.2f;
     /** The movement modifiers an honest run has: vanilla sprinting, on the movement speed. */
-    static final String SPRINTING = "minecraft:sprinting";
+    public static final String SPRINTING = "minecraft:sprinting";
     /** Vanilla's powder-snow slow-down: it only slows, so a course built with powder snow is fair. */
-    static final String POWDER_SNOW = "minecraft:powder_snow";
-    static final String MOVEMENT_SPEED = "minecraft:movement_speed";
+    public static final String POWDER_SNOW = "minecraft:powder_snow";
+    public static final String MOVEMENT_SPEED = "minecraft:movement_speed";
     /** The movement attributes a run watches, and a player's own base value of each. */
-    static final Map<String, Double> PLAYER_BASES = Map.of(
+    public static final Map<String, Double> PLAYER_BASES = Map.of(
             MOVEMENT_SPEED, 0.1,
             "minecraft:jump_strength", 0.42,
             "minecraft:step_height", 0.6,
@@ -72,7 +76,7 @@ final class FairPlay {
     }
 
     /** How a finished run is taken. */
-    enum Kind {
+    public enum Kind {
         /** Recorded and rewarded. */
         COUNTED,
         /** Seen breaking a rule: shown, not recorded. */
@@ -89,10 +93,10 @@ final class FairPlay {
      * @param kind   how it is taken
      * @param reason why it doesn't count (for a test: why it wouldn't have), or {@code null}
      */
-    record Verdict(Kind kind, String reason) {
+    public record Verdict(Kind kind, String reason) {
 
         /** Whether it is recorded and rewarded. */
-        boolean counts() {
+        public boolean counts() {
             return kind == Kind.COUNTED;
         }
     }
@@ -101,10 +105,10 @@ final class FairPlay {
      * A time the server stood still, in {@code System.nanoTime()}: from the last trial tick before
      * it to a little after the first tick after it, when the moves that queued up are handled.
      */
-    record Stall(long from, long to) {
+    public record Stall(long from, long to) {
 
         /** Whether it overlaps {@code start}..{@code end}. */
-        boolean overlaps(long start, long end) {
+        public boolean overlaps(long start, long end) {
             return start <= to && end >= from;
         }
     }
@@ -115,7 +119,7 @@ final class FairPlay {
      * that queued up during it are handled in a burst around then. A {@code prevTick} of 0 means
      * there was no tick before this one.
      */
-    static Stall stall(long prevTick, long tick) {
+    public static Stall stall(long prevTick, long tick) {
         if (prevTick == 0 || tick - prevTick <= STALL_NANOS) {
             return null;
         }
@@ -132,7 +136,7 @@ final class FairPlay {
      * @param minSeconds the course's shortest believable time
      * @param tooFastAt  the first target reached too fast ({@link #tooFast}), or -1
      */
-    static Verdict judge(boolean test, String voided, boolean stale, long ms, int minSeconds, int tooFastAt) {
+    public static Verdict judge(boolean test, String voided, boolean stale, long ms, int minSeconds, int tooFastAt) {
         String reason = voided;
         if (reason == null && tooQuick(ms, minSeconds)) {
             reason = TOO_QUICK;
@@ -150,7 +154,7 @@ final class FairPlay {
     }
 
     /** Whether a run of {@code ms} beats the shortest believable time. */
-    static boolean tooQuick(long ms, int minSeconds) {
+    public static boolean tooQuick(long ms, int minSeconds) {
         return minSeconds > 0 && ms < minSeconds * 1000L;
     }
 
@@ -158,7 +162,7 @@ final class FairPlay {
      * Whether a leg was covered faster than {@code maxSpeed} allows: the distance that must really
      * be travelled between the two spheres, {@code max(0, d − rPrev − rCur)}, over the time taken.
      */
-    static boolean tooFast(double d, double rPrev, double rCur, double seconds, double maxSpeed) {
+    public static boolean tooFast(double d, double rPrev, double rCur, double seconds, double maxSpeed) {
         double gap = Math.max(0, d - rPrev - rCur);
         if (gap == 0) {
             return false;
@@ -175,7 +179,7 @@ final class FairPlay {
      * @param times      when each target was reached ({@link Progress#times()})
      * @param reached    how many targets were reached
      */
-    static int tooFast(Course course, long startNanos, long[] times, int reached) {
+    public static int tooFast(Course course, long startNanos, long[] times, int reached) {
         return tooFast(course, startNanos, times, reached, List.of());
     }
 
@@ -186,7 +190,7 @@ final class FairPlay {
      *
      * @param stalls the stalls seen while the run ran
      */
-    static int tooFast(Course course, long startNanos, long[] times, int reached, List<Stall> stalls) {
+    public static int tooFast(Course course, long startNanos, long[] times, int reached, List<Stall> stalls) {
         if (course.start() == null) {
             return -1;
         }
@@ -199,7 +203,7 @@ final class FairPlay {
             Course.Mark cur = targets.get(i);
             double seconds = (times[i] - prevAt) / 1e9 + LEG_SLACK;
             double d = prev.distance(cur.center());
-            if (!stalled(stalls, prevAt, times[i])
+            if (!stalled(stalls, prevAt, times[i]) && !ownTeleport(course, i)
                     && tooFast(d, prevRadius, cur.radius(), seconds, course.kind().maxSpeed())) {
                 return i;
             }
@@ -208,6 +212,15 @@ final class FairPlay {
             prevAt = times[i];
         }
         return -1;
+    }
+
+    /**
+     * Whether the leg ending at target {@code i} is the game's own teleport, never a player's move: a
+     * Dropper's hop from a pool up to the next level's ledge (EVENTS-DROPPER-SPEC §B.1.7), some 30
+     * to 46 blocks in a quarter of a second. The legs that end at a pool are real falls, still checked.
+     */
+    static boolean ownTeleport(Course course, int i) {
+        return course.kind() == TrialKind.DROPPER && !DropperLayout.isPool(i);
     }
 
     private static boolean stalled(List<Stall> stalls, long start, long end) {
@@ -228,7 +241,7 @@ final class FairPlay {
      * @param base      its base value
      * @param modifiers the keys of the modifiers on it
      */
-    record Stat(String key, double base, Collection<String> modifiers) {
+    public record Stat(String key, double base, Collection<String> modifiers) {
     }
 
     /**
@@ -238,7 +251,7 @@ final class FairPlay {
      * sprinting or powder snow's slow-down — another plugin's speed, jump, step, gravity or safe-fall boost. A value that
      * isn't a number counts as changed.
      */
-    static String movement(float walkSpeed, Collection<Stat> stats) {
+    public static String movement(float walkSpeed, Collection<Stat> stats) {
         if (!(Math.abs(walkSpeed - DEFAULT_WALK_SPEED) <= 1e-4)) {
             return WALK_SPEED;
         }
@@ -269,7 +282,7 @@ final class FairPlay {
      * @param layout {@link Course#layoutHash()} when the run started
      * @param now    the course as it is now, or {@code null} for deleted
      */
-    static boolean stale(int rev, int layout, Course now) {
+    public static boolean stale(int rev, int layout, Course now) {
         return now == null || now.rev() != rev || now.layoutHash() != layout;
     }
 
@@ -285,7 +298,7 @@ final class FairPlay {
      * @param now      the course as it is now, or {@code null} for deleted
      * @param standing whether a layout still stands ({@code GeneratedCourses#standing})
      */
-    static boolean stale(Course then, int layout, Course now, Predicate<GenTag> standing) {
+    public static boolean stale(Course then, int layout, Course now, Predicate<GenTag> standing) {
         boolean changed = stale(then.rev(), layout, now);
         if (!changed || then.gen() == null) {
             return changed;
@@ -302,7 +315,7 @@ final class FairPlay {
      *
      * @param lastCheckpoint the last checkpoint reached, 0-based, or -1 for none
      */
-    static double fallY(Course course, int lastCheckpoint, int fallDepth) {
+    public static double fallY(Course course, int lastCheckpoint, int fallDepth) {
         if (course.fallY() != null) {
             return course.fallY();
         }
@@ -323,7 +336,7 @@ final class FairPlay {
      * Whether {@code p} is somewhere a landing is fine: inside any checkpoint, the finish, or near
      * the start. An elytra run that lands anywhere else goes back to its last checkpoint.
      */
-    static boolean safeLanding(Course course, Point p) {
+    public static boolean safeLanding(Course course, Point p) {
         if (course.start() != null && course.start().point().distance(p) <= START_ZONE) {
             return true;
         }

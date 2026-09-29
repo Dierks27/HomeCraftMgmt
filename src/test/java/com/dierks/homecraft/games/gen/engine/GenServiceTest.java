@@ -169,6 +169,9 @@ class GenServiceTest {
         assertEquals(DAY1 + 1, day2.day(), "the next day's course is built");
         assertEquals('B', day2.half(), "into the other half");
         assertTrue(gen.live(SLOT, day2), "and is live");
+        assertEquals(B, gen.half(day2), "the half its tag names (C1: GeneratedCourses.half)");
+        assertEquals(A, gen.half(day1), "and yesterday's, still standing");
+        assertNull(gen.half(null), "no tag, no half");
         assertFalse(gen.live(SLOT, day1), "yesterday's can't be started any more");
         assertTrue(gen.standing(day1), "but it still stands: the run on it counts");
         assertEquals(planned(), host.world().count(A), "its blocks are all still there");

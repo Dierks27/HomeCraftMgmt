@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.gen.api;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -73,8 +74,36 @@ public final class Palette {
     public static final String TRACK_FAST = "minecraft:blue_ice";
     public static final String TRACK_WALL = "minecraft:stripped_spruce_wood";
 
+    // ---- glass and lights (EVENTS-DROPPER-SPEC C1: the Dropper's shafts, Falling Floors' floors) ----
+
+    /** Clear glass: Falling Floors' gallery rails. */
+    public static final String GLASS = "minecraft:glass";
+    /** A glowing guide light ("go here"): round a Dropper's path openings, and under an Easy pool. */
+    public static final String SEA_LANTERN = "minecraft:sea_lantern";
+    /**
+     * The stained glass colours a plan may use: each Dropper level's walls in rainbow order (red,
+     * orange, yellow, blue, purple), and Falling Floors' floors (yellow, pink, light blue) with its
+     * "about to fall" red. Glass is see-through, lets the sky light in and changes no light when it
+     * goes, and it never falls, flows, melts or ticks.
+     */
+    public static final List<String> GLASS_COLOURS = List.of("red", "orange", "yellow", "blue", "purple", "pink",
+            "light_blue");
+    /** Glass, the stained glass of {@link #GLASS_COLOURS} and the sea lantern: what C1 adds to {@link #ALLOWED}. */
+    public static final Set<String> GLASS_AND_LIGHTS = Set.of(GLASS, "minecraft:red_stained_glass",
+            "minecraft:orange_stained_glass", "minecraft:yellow_stained_glass", "minecraft:blue_stained_glass",
+            "minecraft:purple_stained_glass", "minecraft:pink_stained_glass", "minecraft:light_blue_stained_glass",
+            SEA_LANTERN);
+
+    /**
+     * Still water sources, as block-data text: the ONE fluid a plan may place, and only in a Dropper's
+     * sealed pools (EVENTS-DROPPER-SPEC §B.1.9). A separate set, never in {@link #ALLOWED}: every
+     * other generator's lint still refuses water, and only the dropper validator's sealed-pool rule
+     * admits it.
+     */
+    public static final Set<String> POOL_WATER = Set.of("minecraft:water[level=0]");
+
     /** Every block id a plan may use, without block states. Pinned by a test. */
-    public static final Set<String> ALLOWED = Set.of(
+    public static final Set<String> ALLOWED = union(Set.of(
             "minecraft:lime_concrete", "minecraft:green_concrete", "minecraft:light_blue_concrete",
             "minecraft:white_concrete", "minecraft:yellow_concrete", "minecraft:orange_concrete",
             "minecraft:red_concrete", "minecraft:blue_concrete", "minecraft:purple_concrete",
@@ -82,7 +111,7 @@ public final class Palette {
             "minecraft:magenta_glazed_terracotta", "minecraft:oak_sign", "minecraft:oak_wall_sign",
             "minecraft:quartz_pillar", "minecraft:stripped_spruce_wood", "minecraft:slime_block",
             "minecraft:packed_ice", "minecraft:blue_ice", "minecraft:soul_soil", "minecraft:smooth_stone_slab",
-            "minecraft:red_wool");
+            "minecraft:red_wool"), GLASS_AND_LIGHTS);
 
     private Palette() {
     }
@@ -103,9 +132,32 @@ public final class Palette {
         return s.indexOf(':') < 0 ? "minecraft:" + s : s;
     }
 
-    /** Whether a plan may use this block. */
+    /** Whether a plan may use this block. Water never: see {@link #poolWater}. */
     public static boolean allowed(String blockData) {
         return ALLOWED.contains(id(blockData));
+    }
+
+    /**
+     * Whether a block-data text is exactly a still water source of {@link #POOL_WATER} (any case,
+     * trimmed). Only the dropper validator asks this, for its sealed pools.
+     */
+    public static boolean poolWater(String blockData) {
+        return blockData != null && POOL_WATER.contains(blockData.trim().toLowerCase(Locale.ROOT));
+    }
+
+    /** The stained glass of one of {@link #GLASS_COLOURS} ({@code minecraft:blue_stained_glass}). */
+    public static String stainedGlass(String colour) {
+        String c = colour == null ? "" : colour.trim().toLowerCase(Locale.ROOT);
+        if (!GLASS_COLOURS.contains(c)) {
+            throw new IllegalArgumentException("not a glass colour of the palette: " + colour);
+        }
+        return "minecraft:" + c + "_stained_glass";
+    }
+
+    private static Set<String> union(Set<String> a, Set<String> b) {
+        Set<String> out = new HashSet<>(a);
+        out.addAll(b);
+        return Set.copyOf(out);
     }
 
     /** The palette entries a plan may not use, in order; empty when every one is allowed. */

@@ -115,6 +115,9 @@ public record Course(String id, TrialKind kind, String name, Tier tier, String w
         if (!world.isBlank() && !listed(gamesWorlds, world)) {
             out.add("its world '" + world + "' isn't in games.worlds");
         }
+        if (start != null && finish != null) {
+            out.addAll(DropperLayout.problems(this)); // a malformed dropper never opens
+        }
         return out;
     }
 

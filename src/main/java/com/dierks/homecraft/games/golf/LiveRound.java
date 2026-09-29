@@ -65,6 +65,8 @@ final class LiveRound {
     GolfRun.HoleScore last;
     /** What the last tick of the ball did (water or out of bounds, for the words). */
     BallPhysics.Outcome outcome;
+    /** The group this round plays in (golf together, D4), or {@code null} for a round alone. */
+    GolfGroup group;
 
     LiveRound(UUID player, GolfCourse course, GolfRun run, BallView view) {
         this.player = player;

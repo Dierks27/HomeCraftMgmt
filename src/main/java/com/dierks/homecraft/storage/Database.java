@@ -894,6 +894,89 @@ public final class Database {
             );
             CREATE UNIQUE INDEX IF NOT EXISTS idx_gen_editions_code ON gen_editions (code);
             CREATE INDEX IF NOT EXISTS idx_gen_editions_start ON gen_editions (slot, starts_at)
+            """,
+            // v36 — Race Night and the Weekly Cup (EVENTS-DROPPER-SPEC §A.9, EVENTS-OWNER-DECISIONS D2),
+            //   one block. Every token that moves is written in the same transaction as its row.
+            // game_events: one row per Race Night, written when its join window opens. id is
+            //   rn-<yyyyMMdd>-<HHmm> (an admin start adds -a<n>); state OPEN, RUNNING, SETTLING, DONE or
+            //   CALLED_OFF; settings the key=value lines it opened with (races, laps, prizes, min, max),
+            //   kept across a reload; races_done the races whose results are stored; prized = 1 once it
+            //   claimed one of the week's prize-night slots (week = the games clock's week key).
+            // game_event_entries: one row per racer and night. status IN or LEFT; points the night's
+            //   total; place its final place; prize the tokens it is owed, paid once (paid_at), retried
+            //   on join for a racer who was offline or couldn't earn where they were.
+            // game_event_races: one row per racer per race, inserted before the points are added so the
+            //   season board is only ever added to once (result FINISHED, STILL_RACING, LEFT, VOID, DNS).
+            // cup_entries: the Weekly Cup, one row per player per course per week (week = the local
+            //   epoch day the Cup week starts on, at the Fresh Courses rollover). paid is the entry,
+            //   taken in the same transaction; best_ms the Cup time (NULL until a counted run) and
+            //   best_at when it was set, for the tie-break.
+            // cup_settlements: one row per settled or voided Cup, written in the same transaction as
+            //   its payouts or refunds, so a Cup is settled exactly once (the primary key refuses a
+            //   second). outcome is the plan's (PRIZES, REFUND_ALONE, REFUND_NO_CONTEST, VOIDED ...),
+            //   pool its tokens, payouts the plan's JSON.
+            """
+            CREATE TABLE IF NOT EXISTS game_events (
+                id         TEXT    PRIMARY KEY,
+                course     TEXT    NOT NULL,
+                join_at    INTEGER NOT NULL,
+                starts_at  INTEGER NOT NULL,
+                state      TEXT    NOT NULL,
+                settings   TEXT    NOT NULL,
+                races_done INTEGER NOT NULL DEFAULT 0,
+                prized     INTEGER NOT NULL DEFAULT 0,
+                week       TEXT    NOT NULL DEFAULT '',
+                made_by    TEXT    NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL,
+                ended_at   INTEGER,
+                note       TEXT    NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_game_events_state ON game_events (state, starts_at);
+            CREATE INDEX IF NOT EXISTS idx_game_events_week ON game_events (week, prized);
+            CREATE TABLE IF NOT EXISTS game_event_entries (
+                event_id  TEXT    NOT NULL,
+                player    TEXT    NOT NULL,
+                name      TEXT    NOT NULL,
+                joined_at INTEGER NOT NULL,
+                status    TEXT    NOT NULL,
+                points    INTEGER NOT NULL DEFAULT 0,
+                place     INTEGER,
+                prize     INTEGER NOT NULL DEFAULT 0,
+                paid_at   INTEGER,
+                PRIMARY KEY (event_id, player)
+            );
+            CREATE INDEX IF NOT EXISTS idx_game_event_entries_owed ON game_event_entries (player, paid_at);
+            CREATE TABLE IF NOT EXISTS game_event_races (
+                event_id TEXT    NOT NULL,
+                race     INTEGER NOT NULL,
+                player   TEXT    NOT NULL,
+                place    INTEGER,
+                ms       INTEGER,
+                targets  INTEGER NOT NULL DEFAULT 0,
+                points   INTEGER NOT NULL,
+                result   TEXT    NOT NULL,
+                PRIMARY KEY (event_id, race, player)
+            );
+            CREATE TABLE IF NOT EXISTS cup_entries (
+                course     TEXT    NOT NULL,
+                week       INTEGER NOT NULL,
+                player     TEXT    NOT NULL,
+                paid       INTEGER NOT NULL,
+                entered_at INTEGER NOT NULL,
+                best_ms    INTEGER,
+                best_at    INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (course, week, player)
+            );
+            CREATE INDEX IF NOT EXISTS idx_cup_entries_player ON cup_entries (player, week);
+            CREATE TABLE IF NOT EXISTS cup_settlements (
+                course     TEXT    NOT NULL,
+                week       INTEGER NOT NULL,
+                settled_at INTEGER NOT NULL,
+                outcome    TEXT    NOT NULL,
+                pool       INTEGER NOT NULL DEFAULT 0,
+                payouts    TEXT    NOT NULL DEFAULT '',
+                PRIMARY KEY (course, week)
+            )
             """
     };
 
@@ -939,12 +1022,34 @@ public final class Database {
         return db;
     }
 
+    /**
+     * As {@link #open}, but only up to schema {@code version}: a database as an older build left it,
+     * so a test can apply the next migration to it the way a server upgrade does.
+     */
+    static Database openAt(Connection connection, java.util.logging.Logger log, int version) throws SQLException {
+        Database db = new Database(connection, log);
+        db.migrate(version);
+        return db;
+    }
+
+    /** The schema version this build migrates to: the number of migrations. */
+    static int latestVersion() {
+        return MIGRATIONS.length;
+    }
+
+    /** Migration {@code v}'s SQL (1-based), for the migration test. */
+    static String migration(int v) {
+        return MIGRATIONS[v - 1];
+    }
+
     public Connection connection() {
         return connection;
     }
 
     /**
-     * Run {@code work} as one transaction: every statement lands or none does.
+     * Run {@code work} as one transaction: every statement lands or none does. Anything thrown
+     * inside it (an SQLException, a RuntimeException, or an Error such as OutOfMemoryError) rolls the
+     * whole unit back and is rethrown as it came.
      *
      * <p>Holds the connection's monitor for the whole unit, the same lock every DAO takes, so
      * nothing else can interleave a statement between a guarded UPDATE and the rows that depend
@@ -962,10 +1067,14 @@ public final class Database {
                 T result = work.run(c);
                 c.commit();
                 return result;
-            } catch (SQLException | RuntimeException e) {
+            } catch (Throwable e) {
+                // ANY Throwable rolls back, an Error too (OutOfMemoryError, StackOverflowError, a
+                // LinkageError): otherwise the finally's setAutoCommit(true) makes sqlite-jdbc COMMIT
+                // the half-done work. Rethrown as it came (the compiler knows it is an SQLException or
+                // unchecked).
                 try {
                     c.rollback();
-                } catch (SQLException rollback) {
+                } catch (SQLException | RuntimeException rollback) {
                     e.addSuppressed(rollback);
                 }
                 throw e;
@@ -1003,16 +1112,22 @@ public final class Database {
     }
 
     private void migrate() throws SQLException {
+        migrate(MIGRATIONS.length);
+    }
+
+    /** Apply every migration after the stored version, up to {@code target}. */
+    private void migrate(int target) throws SQLException {
         synchronized (connection) {
             try (Statement st = connection.createStatement()) {
                 st.execute("CREATE TABLE IF NOT EXISTS hcm_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
             }
             int current = schemaVersion();
-            if (current < MIGRATIONS.length && current > 0 && plugin != null) {
+            int last = Math.min(target, MIGRATIONS.length);
+            if (current < last && current > 0 && plugin != null) {
                 // A schema change is about to run: keep a copy of the file first (§11 #6).
                 BackupService.preMigrationCopy(plugin, dbFile);
             }
-            for (int v = current + 1; v <= MIGRATIONS.length; v++) {
+            for (int v = current + 1; v <= last; v++) {
                 log.info("Applying database migration v" + v + "…");
                 try (Statement st = connection.createStatement()) {
                     for (String stmt : MIGRATIONS[v - 1].split(";")) {

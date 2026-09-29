@@ -12,6 +12,8 @@ import com.dierks.homecraft.games.gen.api.SignText;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.boat.BoatPlanner;
 import com.dierks.homecraft.games.gen.boat.BoatValidator;
+import com.dierks.homecraft.games.gen.dropper.DropperPlanner;
+import com.dierks.homecraft.games.gen.dropper.DropperValidator;
 import com.dierks.homecraft.games.gen.golf.GolfPlanner;
 import com.dierks.homecraft.games.gen.golf.GolfValidator;
 import com.dierks.homecraft.games.gen.parkour.ParkourPlanner;
@@ -59,7 +61,7 @@ public final class PlanCheck {
             out.add("the plan is for " + (plan.half() == null ? "no half" : plan.half().describe()) + ", not "
                     + half.describe());
         }
-        for (String bad : Palette.problems(plan.palette())) {
+        for (String bad : paletteProblems(plan.palette(), def)) {
             out.add("the palette has " + bad + ", which a course may not use");
         }
         if (plan.ops().size() > MAX_OPS) {
@@ -110,14 +112,56 @@ public final class PlanCheck {
     }
 
     /**
+     * The palette entries {@code def}'s plans may not use ({@link Palette#problems}): water never,
+     * except a still source ({@link Palette#POOL_WATER}) in a Dropper's plan, whose own validator
+     * proves every pool sealed (EVENTS-DROPPER-SPEC §B.1.9). Every other generator still refuses water.
+     */
+    public static List<String> paletteProblems(List<String> palette, Slots.Def def) {
+        List<String> out = new ArrayList<>();
+        boolean dropper = def != null && def.dropper();
+        for (String bad : Palette.problems(palette)) {
+            if (!(dropper && Palette.poolWater(bad))) {
+                out.add(bad);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The extra proof a plan MOVED from where it was made needs (a recall into a Classics slot, a
+     * keep into its plot), or empty: a Dropper's is its whole validator again
+     * ({@link DropperValidator#problems(Plan)}, which reads its mix back from its own pools), so a
+     * moved dropper is proven sealed and solvable where it will stand. The other generators' shared
+     * checks ({@link #problems}) are enough for a plan that is only translated.
+     */
+    public static List<String> movedProblems(Plan plan, Slots.Def def) {
+        if (plan == null || def == null || !def.dropper()) {
+            return List.of();
+        }
+        return DropperValidator.problems(plan);
+    }
+
+    /**
      * The generator's own independent validator (§4.x) run against the live inputs, so a layout
      * that was fine when it was made but isn't under today's settings (a lower
      * {@code trials.fall_depth}) is never built or re-opened: {@link ParkourValidator},
-     * {@link RingsValidator}, {@link BoatValidator}, and golf's quick check ({@link GolfValidator}
-     * without the sloppy-player tree, which the planner already ran). A planner that isn't one of
-     * the four (a test's) vouches for its own plans. Pure; run on the planner thread.
+     * {@link RingsValidator}, {@link BoatValidator}, golf's quick check ({@link GolfValidator}
+     * without the sloppy-player tree, which the planner already ran) and {@link DropperValidator}. A
+     * planner that isn't one of the five (a test's) vouches for its own plans. Pure; run on the
+     * planner thread.
      */
     public static List<String> generator(Planner planner, Plan plan, PlanInput in) {
+        return generator(planner, plan, in, false);
+    }
+
+    /**
+     * {@link #generator(Planner, Plan, PlanInput)}, told whether the plan was made again from a live
+     * tag ({@code rederived}, a heal). A new Dropper plan is proven against the mix it was asked for
+     * ({@code in.tierOrMix()}), so a plan whose pools name another mix is refused. A heal's plan is the
+     * tag's own layout (the engine checks its hash next), and the planner may have had to find the
+     * mix it was made with, so its pools name the mix it is proven against.
+     */
+    public static List<String> generator(Planner planner, Plan plan, PlanInput in, boolean rederived) {
         if (plan == null) {
             return List.of();
         }
@@ -132,6 +176,10 @@ public final class PlanCheck {
         }
         if (planner instanceof GolfPlanner) {
             return GolfValidator.quickProblems(plan);
+        }
+        if (planner instanceof DropperPlanner) {
+            return rederived || in == null ? DropperValidator.problems(plan)
+                    : DropperValidator.problems(plan, in.tierOrMix());
         }
         return List.of();
     }

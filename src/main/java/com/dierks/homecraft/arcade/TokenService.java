@@ -67,7 +67,18 @@ public final class TokenService {
         GAMES_BOAT("Boat race"),
         GAMES_GOLF("Mini golf"),
         // Fresh Courses' own rewards (the Star Chart goals); its courses pay under their course's source.
-        GAMES_DAILY("Fresh Courses");
+        GAMES_DAILY("Fresh Courses"),
+        // Race Night and the drop games (EVENTS-DROPPER-SPEC C1): the Dropper's courses, Race Night's
+        // server prizes and Falling Floors' rewards. Skill games: they never take tokens in.
+        GAMES_DROPPER("Dropper"),
+        GAMES_RACE_NIGHT("Race Night"),
+        GAMES_FLOORS("Falling Floors"),
+        // The Weekly Cup (EVENTS-OWNER-DECISIONS D2): a player's own entry into a course's week, the
+        // pool paid back by best time, and an entry given back. Not a game of chance: no chance
+        // element anywhere, so these never count as "tokens put into games of chance".
+        GAMES_CUP_ENTRY("Weekly Cup entry"),
+        GAMES_CUP_PRIZE("Weekly Cup prize"),
+        GAMES_CUP_REFUND("Weekly Cup refund");
 
         private final String label;
 

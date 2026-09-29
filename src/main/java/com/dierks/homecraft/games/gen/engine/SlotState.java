@@ -47,6 +47,11 @@ final class SlotState {
     int reroll;
     /** The claim matches this world and origin. */
     boolean claimed;
+    /**
+     * A Dropper's old regions that may still hold its pools ({@link GenAdminKeys#wet}), as last read:
+     * guarded until it is claimed there again.
+     */
+    java.util.List<String> wet = java.util.List.of();
     /** Why the slot can't be built or opened (world, hand-built course, foreign blocks), or {@code null}. */
     String problem;
 

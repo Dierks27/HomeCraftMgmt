@@ -33,6 +33,8 @@ public final class CourseCode {
         m.put(Slots.DAILY_GOLF.id(), "GOLF");
         m.put(Slots.TINY_GOLF.id(), "TINY");
         m.put(Slots.ICE_BOAT.id(), "BOAT");
+        m.put(Slots.EASY_DROPPER.id(), "EDROP");
+        m.put(Slots.FRESH_DROPPER.id(), "DROP");
         SLOT_CODES = java.util.Collections.unmodifiableMap(m);
     }
 

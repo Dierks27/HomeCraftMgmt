@@ -64,6 +64,93 @@ class RegionsTest {
         assertEquals(4256, rings.half('B').minX(), "and half B");
     }
 
+    // ---- named extra boxes (EVENTS-DROPPER-SPEC §B.3.2) ---------------------------------------------
+
+    /** Every shipped slot and Classics slot, switched on. */
+    private static List<SlotConfig> everySlotOn() {
+        List<SlotConfig> out = new ArrayList<>();
+        for (SlotConfig c : DailySettings.defaults().slots()) {
+            out.add(c.withEnabled(true));
+        }
+        for (SlotConfig c : DailySettings.defaults().archive().classics()) {
+            out.add(c.withEnabled(true));
+        }
+        return out;
+    }
+
+    @Test
+    void theShippedArenaBoxKeepsClearOfEveryAreaAndTheKeepPlots() {
+        Box arena = com.dierks.homecraft.games.arena.FallingFloorsSettings.defaults().box();
+        Regions.Extra extra = new Regions.Extra("falling_floors", arena);
+        assertNull(Regions.extraProblem(extra, everySlotOn(), DailySettings.defaults().archive().keep()),
+                "the shipped arena is 32 from every half (all switched on) and from the kept courses");
+        assertTrue(Regions.worldProblems(Slots.DAILY_PARKOUR_EASY, Slots.DAILY_PARKOUR_EASY.origin(), world()).isEmpty(),
+                "(the world itself is fine)");
+    }
+
+    @Test
+    void anExtraBoxMustBe32FromEveryHalfAndTheKeepArea() {
+        Slots.Def def = Slots.DAILY_PARKOUR_EASY;
+        List<SlotConfig> one = List.of(new SlotConfig(def.id(), true, "easy", def.origin(), 2));
+        Box b = def.half('B');
+        Box at32 = new Box(b.maxX() + 33, b.minY(), b.minZ(), b.maxX() + 40, b.minY() + 5, b.minZ() + 5);
+        Box at31 = at32.translate(-1, 0, 0);
+        assertEquals(32, at32.gap(b), "(32 blocks between them)");
+        assertNull(Regions.extraProblem(new Regions.Extra("arena", at32), one, null), "32 apart is fine");
+        String near = Regions.extraProblem(new Regions.Extra("arena", at31), one, null);
+        assertNotNull(near, "31 apart is too close");
+        assertTrue(near.contains("only 31 blocks from " + def.id() + "'s half B"), near);
+        assertTrue(near.contains("32 apart"), "it says how far: " + near);
+        assertNull(Regions.extraProblem(new Regions.Extra("arena", at31), List.of(one.get(0).withEnabled(false)), null),
+                "a switched-off slot is no neighbour");
+        assertTrue(Regions.extraProblem(new Regions.Extra("arena", b), one, null).contains("on top of"),
+                "inside a half is on top of it");
+
+        KeepArea keep = new KeepArea(100_000, 128, 100_000, 6);
+        Box k = keep.area();
+        Box nearKeep = new Box(k.minX(), k.minY(), k.maxZ() + 32, k.minX() + 8, k.minY() + 8, k.maxZ() + 40);
+        assertEquals(31, nearKeep.gap(k), "(31 blocks from the plots)");
+        String kept = Regions.extraProblem(new Regions.Extra("arena", nearKeep), List.of(), keep);
+        assertNotNull(kept, "31 from the kept courses is too close");
+        assertTrue(kept.contains("kept courses"), kept);
+        assertNull(Regions.extraProblem(new Regions.Extra("arena", nearKeep.translate(0, 0, 1)), List.of(), keep),
+                "32 is fine");
+
+        assertTrue(Regions.extraProblem(new Regions.Extra("arena", new Box(0, 300, 0, 10, 330, 10)), List.of(), null)
+                .contains("needs y"), "the world's heights are checked too");
+        assertTrue(Regions.extraProblem(new Regions.Extra("arena", new Box(29_000_000, 0, 0, 29_000_010, 5, 5)),
+                List.of(), null).contains("reaches past"), "and its reach");
+    }
+
+    @Test
+    void extraBoxesKeepApartFromEachOtherAndReportByName() {
+        Box first = new Box(200_000, 100, 200_000, 200_047, 139, 200_047);
+        Box close = first.translate(48 + 20, 0, 0);
+        Box far = first.translate(48 + 32, 0, 0);
+        java.util.Map<String, String> problems = Regions.extraProblems(List.of(new Regions.Extra("one", first),
+                new Regions.Extra("two", close), new Regions.Extra("three", far.translate(200, 0, 0))), List.of(), null);
+        assertEquals(java.util.Set.of("two"), problems.keySet(), "only the one too close to another: " + problems);
+        assertTrue(problems.get("two").contains("only 20 blocks from one"), problems.toString());
+        assertTrue(Regions.extraProblems(List.of(new Regions.Extra("one", first), new Regions.Extra("two", far)),
+                List.of(), null).isEmpty(), "32 apart is fine");
+    }
+
+    @Test
+    void anExtraBoxMustBe16FromEveryHandBuiltCourse() {
+        Box arena = new Box(1000, 100, 1000, 1047, 139, 1047);
+        Regions.Extra extra = new Regions.Extra("falling_floors", arena);
+        Regions.Area at16 = new Regions.Area("games", new Box(1064, 100, 1000, 1066, 102, 1002), "river_run");
+        Regions.Area at15 = new Regions.Area("games", new Box(1063, 100, 1000, 1065, 102, 1002), "river_run");
+        assertEquals(16, at16.box().gap(arena), "(16 blocks between them)");
+        assertNull(Regions.extraHandBuiltProblem(extra, "games", List.of(at16)), "16 away is fine");
+        String near = Regions.extraHandBuiltProblem(extra, "games", List.of(at15));
+        assertNotNull(near, "15 away is too close");
+        assertTrue(near.contains("river_run") && near.contains("only 15 blocks from falling_floors"), near);
+        assertNull(Regions.extraHandBuiltProblem(extra, "world", List.of(at15)), "another world's course is no neighbour");
+        assertTrue(Regions.extraHandBuiltProblem(extra, "GAMES", List.of(new Regions.Area("games", arena, "inside")))
+                .contains("inside"), "a course inside the box, in any case of the world's name");
+    }
+
     @Test
     void anOriginOffTheGridIsRoundedDownWithOneWarn() {
         List<SlotConfig> slots = shipped();

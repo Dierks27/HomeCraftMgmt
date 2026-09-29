@@ -30,8 +30,47 @@ class PaletteTest {
                 "minecraft:gold_block", "minecraft:magenta_glazed_terracotta", "minecraft:oak_sign",
                 "minecraft:oak_wall_sign", "minecraft:quartz_pillar", "minecraft:stripped_spruce_wood",
                 "minecraft:slime_block", "minecraft:packed_ice", "minecraft:blue_ice", "minecraft:soul_soil",
-                "minecraft:smooth_stone_slab", "minecraft:red_wool")), new TreeSet<>(Palette.ALLOWED),
+                "minecraft:smooth_stone_slab", "minecraft:red_wool",
+                // EVENTS-DROPPER-SPEC C1: the Dropper's shafts and lights, Falling Floors' floors
+                "minecraft:glass", "minecraft:red_stained_glass", "minecraft:orange_stained_glass",
+                "minecraft:yellow_stained_glass", "minecraft:blue_stained_glass", "minecraft:purple_stained_glass",
+                "minecraft:pink_stained_glass", "minecraft:light_blue_stained_glass", "minecraft:sea_lantern")),
+                new TreeSet<>(Palette.ALLOWED),
                 "adding a block to generated courses is a decision: change this test with it");
+    }
+
+    @Test
+    void waterIsOnlyInPoolWaterNeverOnTheAllowlist() {
+        // §B.1.9: the one fluid, only in a Dropper's sealed pools; every other generator refuses it
+        assertEquals(Set.of("minecraft:water[level=0]"), Palette.POOL_WATER, "still water sources only");
+        for (String water : List.of("minecraft:water[level=0]", "minecraft:water", "water", "minecraft:water[level=1]")) {
+            assertFalse(Palette.allowed(water), water + " is never on the shared allowlist");
+            assertTrue(Palette.problems(List.of(water)).contains(water), water + " fails every other generator's lint");
+        }
+        assertTrue(Palette.poolWater("minecraft:water[level=0]"), "a still source is pool water");
+        assertTrue(Palette.poolWater(" MINECRAFT:WATER[LEVEL=0] "), "in any case, trimmed");
+        assertFalse(Palette.poolWater("minecraft:water[level=1]"), "flowing water never is");
+        assertFalse(Palette.poolWater("minecraft:water"), "nor water without its level");
+        assertFalse(Palette.poolWater("minecraft:lava[level=0]"), "nor any other fluid");
+        assertFalse(Palette.poolWater(null), "nor nothing");
+        for (String b : Palette.GLASS_AND_LIGHTS) {
+            assertTrue(Palette.allowed(b), b + " is on the allowlist");
+            assertFalse(Palette.poolWater(b), b + " is no fluid");
+        }
+        assertTrue(Palette.ALLOWED.containsAll(Palette.GLASS_AND_LIGHTS), "C1's additions are all allowed");
+    }
+
+    @Test
+    void eachGlassColourIsAStainedGlassOnTheAllowlist() {
+        assertEquals(List.of("red", "orange", "yellow", "blue", "purple", "pink", "light_blue"), Palette.GLASS_COLOURS,
+                "the Dropper's rainbow, then Falling Floors' pink and light blue");
+        for (String c : Palette.GLASS_COLOURS) {
+            assertTrue(Palette.allowed(Palette.stainedGlass(c)), c + " glass is allowed");
+            assertNotNull(Material.matchMaterial(Palette.stainedGlass(c)), c + " glass is a real block");
+        }
+        assertEquals("minecraft:light_blue_stained_glass", Palette.stainedGlass(" Light_Blue "), "any case");
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> Palette.stainedGlass("black"), "a colour the palette doesn't have is refused");
     }
 
     @Test

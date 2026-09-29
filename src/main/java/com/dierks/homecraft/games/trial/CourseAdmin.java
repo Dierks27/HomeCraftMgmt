@@ -2,6 +2,8 @@ package com.dierks.homecraft.games.trial;
 
 import com.dierks.homecraft.games.GameAdmin;
 import com.dierks.homecraft.games.GeneratedCourses;
+import com.dierks.homecraft.games.cup.CupPlan;
+import com.dierks.homecraft.games.cup.live.CupLink;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Slots;
@@ -57,6 +59,8 @@ final class CourseAdmin implements GameAdmin {
             "enable", "disable", "info", "tp", "test", "feature", "delete");
     /** What can follow a course id when Fresh Courses made the course: looking, trying, featuring. */
     static final List<String> DAILY_VERBS = List.of("info", "tp", "test", "feature");
+    /** Why {@code create <id> dropper} is refused (EVENTS-DROPPER-SPEC §B.1.2). */
+    static final String HAND_MADE_DROPPER = "Droppers are made by Fresh Courses; keep one to make it permanent.";
 
     private final TimeTrials trials;
 
@@ -98,11 +102,11 @@ final class CourseAdmin implements GameAdmin {
                 default -> course(sender, args);
             }
         } catch (SQLException e) {
-            trials.plugin().getLogger().log(Level.SEVERE, "Time trials: a course command failed", e);
+            log().log(Level.SEVERE, "Time trials: a course command failed", e);
             sender.sendMessage(Text.of("&cCouldn't reach the database - see the console."));
         } catch (RuntimeException e) {
             // Never out to the framework's guard: that would switch time trials off over a typo.
-            trials.plugin().getLogger().log(Level.SEVERE, "Time trials: /hcm games course "
+            log().log(Level.SEVERE, "Time trials: /hcm games course "
                     + String.join(" ", args) + " failed", e);
             sender.sendMessage(Text.of("&cThat didn't work - see the console."));
         }
@@ -142,6 +146,10 @@ final class CourseAdmin implements GameAdmin {
             sender.sendMessage(Text.of("&cA course is parkour, elytra or boat."));
             return;
         }
+        if (!kind.handMade()) {
+            sender.sendMessage(Text.of("&c" + HAND_MADE_DROPPER));
+            return;
+        }
         Tier tier = args.length >= 4 ? Tier.of(args[3]) : Tier.EASY;
         if (tier == null) {
             sender.sendMessage(Text.of("&cThe tiers are " + String.join(", ", Tier.ids()) + "."));
@@ -172,6 +180,9 @@ final class CourseAdmin implements GameAdmin {
             return;
         }
         String daily = dailyRefusal(c, args[1]);
+        if (daily == null) {
+            daily = DropperLayout.editRefusal(c, args[1]); // a kept dropper's layout is the proven one
+        }
         if (daily != null) {
             sender.sendMessage(Text.of(daily));
             return;
@@ -188,8 +199,15 @@ final class CourseAdmin implements GameAdmin {
             case "minseconds" -> minSeconds(sender, c, rest, args);
             case "enable" -> enable(sender, c, args);
             case "disable" -> {
+                if (!confirm && c.enabled() && CupLink.entrants(trials.games(), c.id()) > 0) { // Weekly Cup: it is called off
+                    sender.sendMessage(Text.of("&eThat closes " + c.name() + ". &7Type &f/hcm games course " + c.id()
+                            + " disable confirm"));
+                    cupWarning(sender, c);
+                    return;
+                }
                 save(sender, c.withEnabled(false), args);
                 sender.sendMessage(Text.of("&a" + c.name() + " is closed. &7Runs already going finish as normal."));
+                CupLink.courseChanged(trials.games(), sender, c.id(), c.name(), CupPlan.VoidReason.CLOSED); // Weekly Cup
             }
             case "info" -> info(sender, c);
             case "tp" -> tp(sender, c);
@@ -437,12 +455,14 @@ final class CourseAdmin implements GameAdmin {
         if (!confirm) {
             sender.sendMessage(Text.of("&eThis deletes " + c.name() + " and all its times. &7Type &f/hcm games course "
                     + c.id() + " delete confirm"));
+            cupWarning(sender, c); // Weekly Cup
             return;
         }
         trials.store().delete(c.id());
         trials.forget();
         changed(sender, args);
         sender.sendMessage(Text.of("&aDeleted &f" + c.name() + " &aand its times."));
+        CupLink.courseChanged(trials.games(), sender, c.id(), c.name(), CupPlan.VoidReason.DELETED); // Weekly Cup
     }
 
     // ---- saving -------------------------------------------------------------------------------
@@ -460,10 +480,12 @@ final class CourseAdmin implements GameAdmin {
         }
         long week = trials.weekKey();
         boolean times = trials.store().hasTimes(before.id(), week);
-        if (times && !confirm) {
+        boolean cup = CupLink.entrants(trials.games(), before.id()) > 0; // Weekly Cup: it is called off
+        if ((times || cup) && !confirm) {
             sender.sendMessage(Text.of("&eThat changes the layout of " + before.name() + ", so its times are cleared "
                     + "(all-time and this week). &7Type it again with &fconfirm &7on the end: &e/hcm games course "
                     + String.join(" ", args) + " confirm"));
+            cupWarning(sender, before);
             return;
         }
         Course saved = trials.store().save(after, true, week, now());
@@ -474,6 +496,15 @@ final class CourseAdmin implements GameAdmin {
         trials.forget();
         changed(sender, args);
         sender.sendMessage(Text.of("&a" + done + " &7(layout " + saved.rev() + (times ? ", times cleared)" : ")")));
+        CupLink.courseChanged(trials.games(), sender, before.id(), before.name(), CupPlan.VoidReason.CHANGED); // Weekly Cup
+    }
+
+    /** The confirm prompt's Weekly Cup line: this week's Cup on the course is called off (WP-C). */
+    private void cupWarning(CommandSender sender, Course c) {
+        String line = CupLink.warning(trials.games(), c.id());
+        if (line != null) {
+            sender.sendMessage(Text.of(line));
+        }
     }
 
     /** Anything else: no new layout, the times stay. */
@@ -484,7 +515,13 @@ final class CourseAdmin implements GameAdmin {
     }
 
     private void changed(CommandSender sender, String[] args) {
-        trials.plugin().getLogger().info("Games: " + sender.getName() + " - /hcm games course " + String.join(" ", args));
+        log().info("Games: " + sender.getName() + " - /hcm games course " + String.join(" ", args));
+    }
+
+    /** The plugin's log (a plain one with no plugin: the Weekly Cup's tests drive this editor on a bench). */
+    private java.util.logging.Logger log() {
+        return trials.plugin() != null ? trials.plugin().getLogger()
+                : java.util.logging.Logger.getLogger("HomeCraftManagement");
     }
 
     /**
@@ -539,7 +576,7 @@ final class CourseAdmin implements GameAdmin {
         }
         if (args[0].equalsIgnoreCase("create")) {
             if (n == 3) {
-                match(out, last, TrialKind.ids().toArray(new String[0]));
+                match(out, last, TrialKind.handMadeIds().toArray(new String[0]));
             } else if (n == 4) {
                 match(out, last, Tier.ids().toArray(new String[0]));
             }
@@ -550,8 +587,9 @@ final class CourseAdmin implements GameAdmin {
         }
         Course c = trials.course(args[0]);
         if (n == 2) {
-            match(out, last, (c != null && dailyRefusal(c, "start") != null ? DAILY_VERBS : VERBS)
-                    .toArray(new String[0]));
+            List<String> verbs = c != null && dailyRefusal(c, "start") != null ? DAILY_VERBS : VERBS;
+            match(out, last, verbs.stream().filter(v -> DropperLayout.editRefusal(c, v) == null)
+                    .toArray(String[]::new));
             return out;
         }
         String verb = args[1].toLowerCase(Locale.ROOT);
@@ -607,7 +645,7 @@ final class CourseAdmin implements GameAdmin {
                     match(out, last, "off");
                 }
             }
-            case "delete" -> {
+            case "delete", "disable" -> { // disable: confirm when it calls a Weekly Cup off
                 if (n == 3) {
                     match(out, last, "confirm");
                 }

@@ -186,6 +186,32 @@ class SkillRewardsTest {
     }
 
     @Test
+    void anEventPrizeNeedsARefPaysOncePerNightAndIsOutsideTheCaps() {
+        // EVENTS-DROPPER-SPEC §A.3: a Race Night prize, capped by construction and never by the day
+        host.config = GamesKit.config(GamesKit.common(true, 100, 600, 2));
+        assertEquals(0, pay(snake, RewardKind.EVENT_PRIZE, "", 5), "a prize without a ref is refused");
+        assertEquals(0, pay(snake, RewardKind.EVENT_PRIZE, "  ", 5), "a blank ref is no ref");
+        assertEquals(0, host.balanceOf(alex.id), "and nothing moved");
+        assertEquals(2, pay(snake, RewardKind.MILESTONE, SkillRewards.milestoneRef("classic", 1), 2),
+                "the day's skill cap (2) is used up by Snake");
+        String night = SkillRewards.eventRef("rn-20261002-1900");
+        assertEquals(5, pay(snake, RewardKind.EVENT_PRIZE, night, 5), "the prize pays in full past every cap");
+        assertEquals(0, pay(snake, RewardKind.EVENT_PRIZE, night, 5), "once per night");
+        assertEquals(3, pay(snake, RewardKind.EVENT_PRIZE, SkillRewards.eventRef("rn-20261009-1900"), 3),
+                "another night is another prize");
+        long day = host.clock.dayKey();
+        try {
+            assertEquals(2, games.dao().rewardsToday(alex.id, day), "prizes aren't counted toward the server cap");
+            assertEquals(2, games.dao().rewardsToday(alex.id, snake.id(), day), "nor the game's own");
+        } catch (java.sql.SQLException e) {
+            throw new AssertionError(e);
+        }
+        assertEquals(0, pay(slots, RewardKind.EVENT_PRIZE, SkillRewards.eventRef("rn-20261016-1900"), 5),
+                "a game of chance never pays one");
+        assertEquals(10, host.balanceOf(alex.id), "2 + 5 + 3");
+    }
+
+    @Test
     void todaysPickCountsTowardTheServerCapButNotTheGamesOwn() {
         long day = host.clock.dayKey();
         assertEquals(1, pay(snake, RewardKind.FEATURED, SkillRewards.featuredRef(day), 1), "today's pick pays");

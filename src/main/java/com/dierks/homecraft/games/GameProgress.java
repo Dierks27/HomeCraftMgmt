@@ -51,6 +51,22 @@ public interface GameProgress {
         golfFinished(player, courseId, strokes, par, holesInOne, fresh);
     }
 
+    /**
+     * A counted Dropper run reached the bottom with no bonks (EVENTS-DROPPER-SPEC §B.1.8, the
+     * {@code game_dropper_clean} achievement). Never a test, void or stale run, nor a practice drop.
+     */
+    default void dropperClean(Player player, String courseId) {
+    }
+
+    // ---- Falling Floors (EVENTS-DROPPER-SPEC §B.3.4, E4) ----
+    /**
+     * A Falling Floors player lasted a whole minute in a round they played out (not one they left):
+     * the {@code game_floors_minute} achievement.
+     */
+    default void floorsLastedMinute(Player player) {
+    }
+    // ---- end Falling Floors ----
+
     /** Fresh Courses stars were added to this week's chart. */
     default void starsEarned(Player player, int stars) {
     }
@@ -61,5 +77,12 @@ public interface GameProgress {
 
     /** The player reached this week's top Star Chart goal. */
     default void starChartTopGoal(Player player, long week) {
+    }
+
+    /**
+     * A Race Night ended with the player among its racers (EVENTS-DROPPER-SPEC §A.8): they raced at
+     * least one race of it; {@code won} when they were the night's 1st (a shared 1st counts).
+     */
+    default void raceNightFinished(Player player, boolean won) {
     }
 }

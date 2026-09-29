@@ -37,13 +37,22 @@ class GamesRowsMigrationTest {
         }
     }
 
-    /** A revision-16 file: the bundled one without the revision-17 rows. */
+    /** A revision-16 file: the bundled one without the revision-17 rows (nor revision 18's Dropper row). */
     private static YamlConfiguration rev16() throws Exception {
         YamlConfiguration c = bundled();
         c.set("config_revision", 16);
         without(c, "arcade.quests.daily_pool", ArcadeConfigMigration.GAME_DAILY);
         without(c, "arcade.quests.weekly_pool", ArcadeConfigMigration.GAME_WEEKLY);
         without(c, "arcade.achievements", ArcadeConfigMigration.GAME_ACHIEVEMENTS);
+        without(c, "arcade.achievements", ArcadeConfigMigration.EVENT_ACHIEVEMENTS);
+        return c;
+    }
+
+    /** A revision-17 file: the bundled one without the revision-18 rows (the events batch's achievements). */
+    private static YamlConfiguration rev17() throws Exception {
+        YamlConfiguration c = bundled();
+        c.set("config_revision", 17);
+        without(c, "arcade.achievements", ArcadeConfigMigration.EVENT_ACHIEVEMENTS);
         return c;
     }
 
@@ -88,7 +97,7 @@ class GamesRowsMigrationTest {
         }
         assertEquals(List.of(), warns(log), "nothing was the owner's, so nothing to warn about: " + log);
         assertTrue(log.stream().anyMatch(l -> l.contains("cabinet_daily, course_daily")), "logged: " + log);
-        assertEquals(17, onDisk.getInt("config_revision"), "stamped");
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"), "stamped");
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"), "a second pass is a no-op");
     }
 
@@ -177,9 +186,24 @@ class GamesRowsMigrationTest {
         assertFalse(ids(onDisk, "arcade.achievements").contains("game_first_cabinet"), "their list isn't touched");
         List<String> warns = warns(log);
         assertTrue(warns.stream().anyMatch(l -> l.contains("arcade.achievements")), "named: " + warns);
-        assertEquals(1 + ArcadeConfigMigration.GAME_ACHIEVEMENTS.size(),
+        assertEquals(2 + ArcadeConfigMigration.GAME_ACHIEVEMENTS.size() + ArcadeConfigMigration.EVENT_ACHIEVEMENTS.size(),
                 warns.stream().filter(l -> l.contains("arcade.achievements") || l.contains("- { id: game_")).count(),
-                "one line naming the list and one line per achievement to paste: " + warns);
+                "one line naming the list per revision step, and one line per achievement to paste: " + warns);
+    }
+
+    @Test
+    void revisionEighteenAddsTheEventAchievementsToAShippedList() throws Exception {
+        YamlConfiguration onDisk = rev17();
+        YamlConfiguration shipped = bundled();
+
+        List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals(ids(shipped, "arcade.achievements"), ids(onDisk, "arcade.achievements"),
+                "a server at revision 17 gains the events batch's rows at the end of its list");
+        assertEquals(List.of(), warns(log), "nothing was the owner's: " + log);
+        assertTrue(log.stream().anyMatch(l -> l.contains(String.join(", ", ArcadeConfigMigration.EVENT_ACHIEVEMENTS))),
+                "logged: " + log);
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"), "a second pass is a no-op");
     }
 
     @Test

@@ -31,8 +31,10 @@ import java.util.List;
  * <pre>
  *  4        the set's dates, when the courses change and when next
  *  9-17     one tile per course, in slot order, in its tier's colour; the NAME carries the key facts
- *           (your stars in this set, a golf course's holes and par, its course code) for Bedrock
- *  19 Classic courses (the tip)   21 Classic Parkour   23 Classic Sky Rings   25 Classic Golf
+ *           (your stars in this set, a golf course's holes and par, a dropper's levels, its course
+ *           code) for Bedrock
+ *  18 Classic courses (the tip)   20 Classic Parkour   22 Classic Sky Rings   24 Classic Golf
+ *           26 Classic Dropper
  *  29 Star Chart (your stars this week)     31 Back/Close     33 How stars work
  * </pre>
  *
@@ -46,9 +48,9 @@ public final class FreshMenu extends GameMenu {
 
     private static final int HEADER = 4;
     private static final int ROW = 9;
-    private static final int TIP = 19;
-    /** Classic Parkour, Classic Sky Rings, Classic Golf. */
-    static final int[] CLASSICS = {21, 23, 25};
+    private static final int TIP = 18;
+    /** Classic Parkour, Classic Sky Rings, Classic Golf, Classic Dropper. */
+    static final int[] CLASSICS = {20, 22, 24, 26};
     private static final int CHART = 29;
     private static final int HOW = 33;
 

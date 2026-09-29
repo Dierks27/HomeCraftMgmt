@@ -41,7 +41,8 @@ import java.util.logging.Level;
  * The Games screen (spec §8.1, R1.16, R3.14): every open game in one place, in tabs.
  *
  * <pre>
- *  row 0    0 balance · 2 All · 3 Luck · 4 Cabinets · 5 Courses · 6 Golf · 8 an invite waiting
+ *  row 0    0 balance · 2 All · 3 Luck · 4 Cabinets · 5 Courses · 6 Golf · 7 Together (only once it
+ *           has a tile) · 8 an invite waiting
  *  rows 1-4 the tiles (36 a page), sorted by tab, then catalog order, then each game's own order
  *  row 5    45 ◀ · 46 Today's pick · 47 High scores · 48 Take a break · 49 Back/Close ·
  *           50 How the games work · 53 ▶
@@ -67,7 +68,8 @@ public final class GamesMenu extends GameMenu {
     /** Tiles on one page: rows 1-4. */
     static final int PER_PAGE = 36;
     private static final int GRID = 9;
-    private static final int[] TAB_SLOTS = {2, 3, 4, 5, 6};
+    /** All, Luck, Cabinets, Courses, Golf, Together (EVENTS-DROPPER-SPEC §A.6: slot 7). */
+    static final int[] TAB_SLOTS = {2, 3, 4, 5, 6, 7};
     private static final int INVITE = 8;
     private static final int PICK = 46;
     private static final int SCORES = 47;
@@ -319,7 +321,33 @@ public final class GamesMenu extends GameMenu {
         return Menus.icon(Material.PAPER, "&7Nothing to play here yet", "&7Try another tab.");
     }
 
-    /** All, Luck, Cabinets, Courses, Golf; the current one lit. Luck follows the break (R1.16). */
+    /**
+     * Which row-0 slot a tab sits in ({@link #TAB_SLOTS}): All ({@code null}) at 2 through Together
+     * at 7. Pure, for the tests.
+     */
+    static int tabSlot(Game.Tab tab) {
+        if (tab == null) {
+            return TAB_SLOTS[0];
+        }
+        return switch (tab) {
+            case LUCK -> TAB_SLOTS[1];
+            case CABINETS -> TAB_SLOTS[2];
+            case COURSES -> TAB_SLOTS[3];
+            case GOLF -> TAB_SLOTS[4];
+            case TOGETHER -> TAB_SLOTS[5];
+        };
+    }
+
+    /**
+     * Whether the Together tab shows: only while it has a tile (Race Night or Falling Floors is
+     * open), or while the viewer is on it. With both of those off, the screen is exactly as it was
+     * before they existed: slot 7 stays filler.
+     */
+    static boolean togetherShown(int count, Game.Tab current) {
+        return count > 0 || current == Game.Tab.TOGETHER;
+    }
+
+    /** All, Luck, Cabinets, Courses, Golf, Together; the current one lit. Luck follows the break (R1.16). */
     private void tabs(LuckView luck, Map<Game.Tab, Integer> counts) {
         int total = 0;
         for (int n : counts.values()) {
@@ -338,12 +366,22 @@ public final class GamesMenu extends GameMenu {
         tab(TAB_SLOTS[2], Game.Tab.CABINETS, Material.JUKEBOX, "Cabinets", counts.get(Game.Tab.CABINETS));
         tab(TAB_SLOTS[3], Game.Tab.COURSES, Material.FEATHER, "Courses", counts.get(Game.Tab.COURSES));
         tab(TAB_SLOTS[4], Game.Tab.GOLF, Material.SNOWBALL, "Golf", counts.get(Game.Tab.GOLF));
+        int together = counts.getOrDefault(Game.Tab.TOGETHER, 0);
+        if (togetherShown(together, tab)) {
+            // the tab glints while a Race Night join window is open (EVENTS-DROPPER-SPEC §A.6)
+            tab(tabSlot(Game.Tab.TOGETHER), Game.Tab.TOGETHER, Material.CAKE, "Together", together,
+                    !com.dierks.homecraft.games.event.RaceNight.hubSuffix(plugin.games()).isEmpty());
+        }
     }
 
     private void tab(int slot, Game.Tab which, Material icon, String name, int count) {
+        tab(slot, which, icon, name, count, false);
+    }
+
+    private void tab(int slot, Game.Tab which, Material icon, String name, int count, boolean glint) {
         boolean here = which == tab;
         set(slot, Menus.glint(Menus.icon(icon, (here ? "&a&l" : "&e") + name + " &7(" + count + ")",
-                here ? "&7You're here." : "&eClick to see them"), here),
+                here ? "&7You're here." : "&eClick to see them"), here || glint),
                 here ? null : e -> new GamesMenu(plugin, viewer, which, 0, back).open(viewer));
     }
 

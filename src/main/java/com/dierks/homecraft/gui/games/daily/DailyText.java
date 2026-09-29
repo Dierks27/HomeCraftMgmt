@@ -79,11 +79,12 @@ public final class DailyText {
      * A Fresh course's tile name on the Fresh Courses screen and the tier picker, its key fact in
      * the name: "&amp;aEasy Parkour &amp;7- ★★☆" once the player has stars in this set,
      * "&amp;cHard Parkour" before; a golf course always says its holes and par ("&amp;dGolf of the
-     * Week &amp;7- 9 holes, par 29"), then its stars. Golf's big course is named for the cadence
+     * Week &amp;7- 9 holes, par 29"), then its stars; a dropper its levels ("&amp;aEasy Dropper &amp;7-
+     * 3 levels · ★★☆", EVENTS-DROPPER-SPEC §B.1.8). Golf's big course is named for the cadence
      * ({@link GenCopy#slotName}).
      *
      * @param stars the player's best stars on it in this set (0 = none yet)
-     * @param holes golf: how many holes (ignored for a time trial)
+     * @param holes golf: how many holes; a dropper: how many levels (ignored for any other trial)
      * @param par   golf: the course's par
      */
     public static String slotName(Slots.Def slot, int cadence, int stars, int holes, int par) {
@@ -91,6 +92,9 @@ public final class DailyText {
         String starText = stars > 0 ? Stars.text(stars) : null;
         if (slot != null && slot.golf()) {
             return head + " &7- " + holes(holes) + ", par " + par + (starText == null ? "" : " " + starText);
+        }
+        if (slot != null && slot.dropper() && holes > 0) {
+            return head + " &7- " + levels(holes) + (starText == null ? "" : " · " + starText);
         }
         return starText == null ? head : head + " &7- " + starText;
     }
@@ -124,6 +128,11 @@ public final class DailyText {
     /** "1 hole", "9 holes". */
     public static String holes(int n) {
         return n + (n == 1 ? " hole" : " holes");
+    }
+
+    /** A dropper's "1 level", "5 levels". */
+    public static String levels(int n) {
+        return n + (n == 1 ? " level" : " levels");
     }
 
     // ---- stars ---------------------------------------------------------------------------------

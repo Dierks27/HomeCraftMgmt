@@ -27,7 +27,8 @@ import java.util.regex.Pattern;
  * profiles; {@code games.restart_times} reads, with the next restart and hold; Fresh Courses (on,
  * the cadence, every area inside the world and clear of hand-built courses and each other, the
  * claims and foreign blocks, the next change, each course live or why not, the keep area and the
- * Classics); every hand-built course is ready and its world loaded; the website feed; and how to take
+ * Classics); Falling Floors (its box and claim, {@link ArenaCheck}); every hand-built course is ready
+ * and its world loaded; the website feed; and how to take
  * games of chance away from one player.
  */
 public final class GamesCheck {
@@ -127,6 +128,24 @@ public final class GamesCheck {
     public record Web(boolean enabled, boolean tokenSet, String buildError, int games, int bytes) {
     }
 
+    /**
+     * Race Night as far as the check can read it (EVENTS-DROPPER-SPEC §A.11): each line is fine, or a
+     * warning with its fix; {@code enabled} false when it is switched off.
+     *
+     * @param lines what was checked: the schedule reads and fits the restarts, the track can be raced
+     *              (grid and stand), the stand is in the Games world
+     */
+    public record RaceNight(boolean enabled, List<RaceNightLine> lines) {
+
+        public RaceNight {
+            lines = lines == null ? List.of() : List.copyOf(lines);
+        }
+    }
+
+    /** One Race Night line: fine ({@code fix} is {@code null}), or a warning with its fix. */
+    public record RaceNightLine(String what, String fix) {
+    }
+
     /** Everything the check reads. Each is asked once; one that throws fails only its own section. */
     public interface Facts {
 
@@ -162,6 +181,18 @@ public final class GamesCheck {
         List<Course> courses();
 
         Web web();
+
+        /** Race Night's lines, or {@code null} when it isn't there to check. */
+        default RaceNight raceNight() {
+            return null;
+        }
+
+        // ---- Falling Floors (EVENTS-DROPPER-SPEC §C.2 WP-F) ----
+        /** Falling Floors' box and claim ({@link ArenaCheck}); {@code null} reads as switched off. */
+        default ArenaCheck.Facts arena() {
+            return null;
+        }
+        // ---- end Falling Floors ----
     }
 
     /** The LuckPerms line that takes games of chance away from one player. */
@@ -185,7 +216,9 @@ public final class GamesCheck {
         section(out, "Multiverse-Inventories", () -> inventories(f.mvInventories(), worlds, economy, out));
         section(out, "games.restart_times", () -> restarts(f, out));
         section(out, "Fresh Courses", () -> fresh(f.fresh(), out));
+        section(out, "Falling Floors", () -> ArenaCheck.rows(f.arena(), out)); // WP-F
         section(out, "the hand-built courses", () -> courses(f.courses(), out));
+        section(out, "Race Night", () -> raceNight(f.raceNight(), out));
         section(out, "the website feed", () -> web(f.web(), out));
         out.add(Line.ok("Games of chance need hcm.games.chance. To take them away from one player: " + LUCKPERMS));
         return out;
@@ -480,6 +513,20 @@ public final class GamesCheck {
                     + (c.enabled() ? ", or switch it off" : "");
             out.add(c.enabled() ? Line.fail(kind + " '" + c.id() + "': " + String.join("; ", problems), fix)
                     : Line.warn(kind + " '" + c.id() + "' (switched off): " + String.join("; ", problems), fix));
+        }
+    }
+
+    /** Race Night's rows (EVENTS-DROPPER-SPEC §A.11): nothing when it isn't there. */
+    static void raceNight(RaceNight r, List<Line> out) {
+        if (r == null) {
+            return;
+        }
+        if (!r.enabled()) {
+            out.add(Line.ok("Race Night is switched off (games.race_night.enabled) - nothing to check"));
+            return;
+        }
+        for (RaceNightLine l : r.lines()) {
+            out.add(l.fix() == null ? Line.ok(l.what()) : Line.warn(l.what(), l.fix()));
         }
     }
 

@@ -5,8 +5,8 @@ import java.util.regex.Pattern;
 
 /**
  * The words the time trials use, in one place and tested: how a time reads ("1:02.3"), how a
- * course is labelled ("Boat · Medium"), what a course id may look like, and how an admin's typed
- * name is cleaned before a player reads it.
+ * course is labelled ("Boat · Medium"), a Dropper's levels ("level 2 of 5"), what a course id may
+ * look like, and how an admin's typed name is cleaned before a player reads it.
  */
 public final class TrialText {
 
@@ -38,6 +38,32 @@ public final class TrialText {
     /** "1 checkpoint", "5 checkpoints". */
     public static String checkpoints(int n) {
         return n + " checkpoint" + (n == 1 ? "" : "s");
+    }
+
+    /** A Dropper's "1 level", "5 levels" (EVENTS-DROPPER-SPEC §B.1.8). */
+    public static String levels(int n) {
+        return n + " level" + (n == 1 ? "" : "s");
+    }
+
+    /** "level 2" (1-based). */
+    public static String level(int level) {
+        return "level " + level;
+    }
+
+    /** "level 2 of 5" (1-based), a Dropper's progress. */
+    public static String level(int level, int of) {
+        return "level " + level + " of " + of;
+    }
+
+    /**
+     * What a course asks of a run, as its screen says it: "5 checkpoints, then the finish", or a
+     * Dropper's "3 levels, down to the water".
+     */
+    public static String route(Course c) {
+        if (c.kind() == TrialKind.DROPPER) {
+            return levels(DropperLayout.levels(c)) + ", down to the water";
+        }
+        return checkpoints(c.checkpoints().size()) + ", then the finish";
     }
 
     /** "1 token", "10 tokens". */

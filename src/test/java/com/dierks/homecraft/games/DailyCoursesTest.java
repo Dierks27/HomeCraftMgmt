@@ -65,9 +65,16 @@ class DailyCoursesTest {
     }
 
     @Test
-    void freshCoursesIsTheCatalogsLastGameAndPlaysThroughTheFramework() {
+    void freshCoursesComesAfterTheCourseGamesAndPlaysThroughTheFramework() {
         List<GameSpec<?>> specs = GameCatalog.SPECS;
-        assertSame(DailyCourses.SPEC, specs.get(specs.size() - 1), "Fresh Courses is listed last");
+        // After the course games it builds for (it starts after them), and before the games that
+        // use its gate (Race Night races on Fresh Boat; EVENTS-DROPPER-SPEC C1 lists them after it).
+        assertTrue(specs.indexOf(DailyCourses.SPEC) > specs.indexOf(com.dierks.homecraft.games.trial.TimeTrials.SPEC)
+                && specs.indexOf(DailyCourses.SPEC) > specs.indexOf(com.dierks.homecraft.games.golf.MiniGolf.SPEC),
+                "Fresh Courses is listed after Time Trials and Mini Golf");
+        assertEquals(List.of(DailyCourses.SPEC, com.dierks.homecraft.games.event.RaceNight.SPEC,
+                        com.dierks.homecraft.games.arena.FallingFloors.SPEC), specs.subList(specs.size() - 3, specs.size()),
+                "then only Race Night and Falling Floors");
         assertEquals("fresh_courses", DailyCourses.SPEC.id(), "its id is fresh_courses");
         assertEquals(GameKind.TRIAL, DailyCourses.SPEC.kind(), "a course game");
         assertEquals(DailySettings.KEYS, DailyCourses.SPEC.keys(), "it ships its own keys");

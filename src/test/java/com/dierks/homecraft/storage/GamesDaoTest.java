@@ -435,6 +435,65 @@ class GamesDaoTest {
         assertEquals(0, count("SELECT COUNT(*) FROM game_scores"), "nothing was written at all");
     }
 
+    // ---- points boards (EVENTS-DROPPER-SPEC §A.3, §B.3.4) ------------------------------------------
+
+    @Test
+    void pointsAddUpOnTheirBoardAndRankHigherFirst() throws Exception {
+        String season = "rnseason:2026-10";
+        assertEquals(10, dao.addPoints(alice, "race_night", season, 10, NOW), "a first race makes the row");
+        assertEquals(18, dao.addPoints(alice, "race_night", season, 8, NOW + 1), "the next adds to it");
+        assertEquals(18L, dao.best(alice, "race_night", season), "the board holds the running total");
+        assertEquals(6, dao.addPoints(bob, "race_night", season, 6, NOW + 2), "each player keeps their own");
+        assertEquals(List.of(alice, bob), dao.top("race_night", season, false, 5).stream()
+                .map(GamesDao.ScoreRow::player).toList(), "higher is better");
+        assertEquals(2, count("SELECT runs FROM game_scores WHERE player = '" + alice + "'"),
+                "runs counts the additions");
+        assertEquals(NOW + 1, dao.top("race_night", season, false, 1).get(0).at(),
+                "at moves when the total does, so a tie goes to whoever got there first");
+        assertEquals(18, dao.addPoints(alice, "race_night", season, 0, NOW + 3), "0 changes nothing");
+        assertEquals(0, dao.addPoints(carol, "race_night", season, 0, NOW + 3), "and makes no row");
+        assertEquals(2, count("SELECT COUNT(*) FROM game_scores"), "only Alice's and Bob's rows exist");
+        assertThrows(IllegalArgumentException.class, () -> dao.addPoints(alice, "race_night", season, -1, NOW),
+                "a points board never falls");
+        assertEquals(0, count("SELECT COUNT(*) FROM game_scores WHERE game = 'falling_floors'"),
+                "another game's board is its own");
+    }
+
+    @Test
+    void pointsAreAddedOncePerNewRowAndRollBackWithTheirCallersTransaction() throws Exception {
+        // The Race Night pattern (§A.3, §A.9): the heat row first, the delta only when that row was new.
+        Database db = Database.open(conn, Logger.getAnonymousLogger());
+        try (java.sql.Statement st = conn.createStatement()) {
+            st.execute("CREATE TABLE heat (id TEXT PRIMARY KEY)");
+        }
+        java.util.function.Function<String, Long> race = id -> {
+            try {
+                return db.transaction(c -> {
+                    try (PreparedStatement ps = c.prepareStatement("INSERT OR IGNORE INTO heat(id) VALUES(?)")) {
+                        ps.setString(1, id);
+                        if (ps.executeUpdate() == 0) {
+                            return dao.best(alice, "race_night", "rnseason:2026-10");
+                        }
+                    }
+                    return dao.addPoints(alice, "race_night", "rnseason:2026-10", 10, NOW);
+                });
+            } catch (java.sql.SQLException e) {
+                throw new AssertionError(e);
+            }
+        };
+        assertEquals(10L, race.apply("rn-1:1"), "race 1 adds its points");
+        assertEquals(10L, race.apply("rn-1:1"), "the same race again (a crash, then the boot) adds nothing");
+        assertEquals(20L, race.apply("rn-1:2"), "race 2 adds its own");
+
+        assertThrows(IllegalStateException.class, () -> db.transaction(c -> {
+            dao.addPoints(alice, "race_night", "rnseason:2026-10", 8, NOW);
+            dao.addPoints(bob, "race_night", "rnseason:2026-10", 6, NOW);
+            throw new IllegalStateException("the race's last write failed");
+        }), "the caller's transaction fails after the points");
+        assertEquals(20L, dao.best(alice, "race_night", "rnseason:2026-10"), "so Alice's points were rolled back");
+        assertNull(dao.best(bob, "race_night", "rnseason:2026-10"), "and Bob's row was never made");
+    }
+
     @Test
     void pruningRemovesOnlyOldFreshCoursesStarBoards() throws Exception {
         long old = 100;

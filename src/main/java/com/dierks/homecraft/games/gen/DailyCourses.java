@@ -13,6 +13,9 @@ import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.RestartHold;
 import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.SkillRewards;
+import com.dierks.homecraft.games.arena.ArenaRegions;
+import com.dierks.homecraft.games.arena.FallingFloors;
+import com.dierks.homecraft.games.arena.FallingFloorsSettings;
 import com.dierks.homecraft.games.gen.admin.GenAdmin;
 import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.Edition;
@@ -21,6 +24,7 @@ import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.boat.BoatPlanner;
+import com.dierks.homecraft.games.gen.dropper.DropperPlanner;
 import com.dierks.homecraft.games.gen.engine.BukkitWorldPort;
 import com.dierks.homecraft.games.gen.engine.FreshFeed;
 import com.dierks.homecraft.games.gen.engine.GenHost;
@@ -29,6 +33,7 @@ import com.dierks.homecraft.games.gen.engine.GenService;
 import com.dierks.homecraft.games.gen.engine.GenStore;
 import com.dierks.homecraft.games.gen.engine.Person;
 import com.dierks.homecraft.games.gen.engine.PlannerThread;
+import com.dierks.homecraft.games.gen.engine.Regions;
 import com.dierks.homecraft.games.gen.engine.WorldPort;
 import com.dierks.homecraft.games.gen.golf.GolfPlanner;
 import com.dierks.homecraft.games.gen.parkour.ParkourPlanner;
@@ -61,7 +66,7 @@ import java.util.logging.Logger;
 
 /**
  * Fresh Courses (GEN-SPEC §0, §5.4 and the weekly addendum): parkour in three tiers, Sky Rings, the
- * big golf course and Tiny Golf, built by the plugin itself — a new set every week by default
+ * big golf course and Tiny Golf (and, switched on, the ice boat and the two droppers), built by the plugin itself — a new set every week by default
  * ({@code games.fresh.cadence}: weekly, daily, or every few days), the same for everyone, each with
  * its own board, and 1 to 3 stars per course per set for the weekly Star Chart.
  *
@@ -255,7 +260,7 @@ public final class DailyCourses implements Game {
         GamesService g = games();
         g.generated(engine);
         GenService running = engine;
-        GenRegionGuard.register(g, this, () -> running::inArea, log());
+        GenRegionGuard.register(g, this, running::guardArea, running::wetArea, log());
         g.every(this, 1, 1, running::tick);
         g.every(this, 20, 20, running::check);
         g.later(this, 1, running::worldsReady);
@@ -291,6 +296,19 @@ public final class DailyCourses implements Game {
     /** The live settings (read on every use). */
     public DailySettings settings() {
         return ctx.games().settings(SPEC);
+    }
+
+    /**
+     * The boxes Fresh Courses keeps its slots and keep area apart from ({@link GenHost#extras}): the
+     * Falling Floors arena as configured ({@code games.falling_floors.origin}), on or off, since its
+     * blocks may stand. None when the settings can't be read.
+     */
+    public static List<Regions.Extra> arenaExtras(FallingFloorsSettings ff) {
+        try {
+            return ff == null ? List.of() : List.of(new Regions.Extra(ArenaRegions.NAME, ff.box()));
+        } catch (RuntimeException e) {
+            return List.of();
+        }
     }
 
     /** The running engine, or {@code null} while Fresh Courses is off. */
@@ -411,7 +429,7 @@ public final class DailyCourses implements Game {
     static Map<String, Planner> planners() {
         Map<String, Planner> out = new LinkedHashMap<>();
         for (Planner p : List.<Planner>of(new ParkourPlanner(), new RingsPlanner(), new GolfPlanner(),
-                new BoatPlanner())) {
+                new BoatPlanner(), new DropperPlanner())) {
             out.put(p.id(), p);
         }
         return out;
@@ -446,6 +464,11 @@ public final class DailyCourses implements Game {
         @Override
         public DailySettings settings() {
             return DailyCourses.this.settings();
+        }
+
+        @Override
+        public List<Regions.Extra> extras() {
+            return arenaExtras(games().settings(FallingFloors.SPEC));
         }
 
         @Override

@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.gen.admin;
 
+import com.dierks.homecraft.games.gen.api.Slots;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.command.CommandSender;
@@ -252,7 +253,7 @@ class GenAdminTest {
                 "with confirm they go; claim counts first; promote asks the engine (it knows the board)");
         ops.calls.clear();
         run("reroll all confirm");
-        assertEquals(7, ops.calls.size(), "reroll all rerolls every slot");
+        assertEquals(Slots.ALL.size(), ops.calls.size(), "reroll all rerolls every slot (nine, the droppers too)");
     }
 
     @Test
@@ -395,8 +396,11 @@ class GenAdminTest {
     @Test
     void tabCompletionKnowsTheArchiveVerbs() {
         assertEquals(List.of("recall"), admin.tab(console, new String[]{"reca"}), "the verb");
-        assertEquals(List.of("fresh_classic_parkour", "fresh_classic_rings", "fresh_classic_golf", "parkour", "rings",
-                "golf"), admin.tab(console, new String[]{"recall", ""}), "Classics slots and kinds");
+        assertEquals(List.of("fresh_classic_parkour", "fresh_classic_rings", "fresh_classic_golf", "fresh_classic_dropper",
+                "parkour", "rings", "golf", "dropper"), admin.tab(console, new String[]{"recall", ""}),
+                "Classics slots and kinds");
+        assertEquals(List.of("fresh_dropper_easy", "fresh_dropper"), admin.tab(console, new String[]{"recall",
+                "dropper", ""}), "both droppers go into Classic Dropper");
         assertEquals(List.of("fresh_parkour_easy", "fresh_parkour", "fresh_parkour_hard"),
                 admin.tab(console, new String[]{"recall", "parkour", ""}), "the courses a kind can hold");
         assertEquals(List.of("fresh_golf", "fresh_tiny_golf"), admin.tab(console, new String[]{"recall",
@@ -425,8 +429,9 @@ class GenAdminTest {
                 "verbs by prefix");
         assertTrue(admin.tab(console, new String[]{"reroll", ""}).contains("all"), "reroll offers all");
         assertEquals(List.of("fresh_golf"), admin.tab(console, new String[]{"mix", "fresh_g"}), "mix offers golf only");
-        assertEquals(List.of("fresh_golf", "fresh_tiny_golf"), admin.tab(console, new String[]{"mix", ""}),
-                "both golf courses");
+        assertEquals(List.of("fresh_golf", "fresh_tiny_golf", "fresh_dropper_easy", "fresh_dropper"),
+                admin.tab(console, new String[]{"mix", ""}), "both golf courses and both droppers (EVENTS-DROPPER-SPEC §B.1.2)");
+        assertFalse(admin.tab(console, new String[]{"tier", ""}).contains("fresh_dropper"), "tier offers no dropper");
         assertFalse(admin.tab(console, new String[]{"tier", ""}).contains("fresh_tiny_golf"), "tier offers no golf");
         assertEquals(List.of("next"), admin.tab(console, new String[]{"plan", "fresh_rings", ""}), "plan next");
         assertEquals(List.of("live", "idle"), admin.tab(console, new String[]{"tp", "fresh_rings", ""}), "tp where");

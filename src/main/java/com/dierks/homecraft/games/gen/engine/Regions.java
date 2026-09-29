@@ -13,8 +13,10 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import java.time.Duration;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -35,7 +37,14 @@ import java.util.function.Consumer;
  *       {@value #CLEARANCE} blocks of one. A hand-built row using a slot's id is never taken over
  *       ({@link #takenByHand}).</li>
  * </ul>
- * No Bukkit server is needed: the world is described by {@link WorldFacts}, read by the caller.
+ * <b>Named extra boxes</b> ({@link Extra}, EVENTS-DROPPER-SPEC §B.3.2): an area that isn't a Fresh
+ * Courses slot but shares their part of the world (the Falling Floors arena) is checked by the same
+ * rules the other way round: at least {@value #APART} blocks from every half and the keep area, at
+ * least {@value #CLEARANCE} from every hand-built course ({@link #extraProblems},
+ * {@link #extraHandBuiltProblem}). The slots were there first, so an extra box that is too close is
+ * the one that stays shut.
+ *
+ * <p>No Bukkit server is needed: the world is described by {@link WorldFacts}, read by the caller.
  */
 public final class Regions {
 
@@ -132,7 +141,7 @@ public final class Regions {
     static String problem(Slots.Def def, SlotConfig c) {
         String tier = def.tierProblem(c.tierOrMix());
         if (tier != null) {
-            return (def.golf() ? "mix" : "tier") + " '" + c.tierOrMix() + "': " + tier;
+            return (def.mixed() ? "mix" : "tier") + " '" + c.tierOrMix() + "': " + tier;
         }
         int[] o = c.origin();
         Box region = def.region(o[0], o[1], o[2]);
@@ -173,6 +182,145 @@ public final class Regions {
             }
         }
         return min;
+    }
+
+    // ---- named extra boxes (EVENTS-DROPPER-SPEC §B.3.2) ---------------------------------------------
+
+    /**
+     * An area that isn't a Fresh Courses slot but must keep clear of them, and they of it: the
+     * Falling Floors arena box.
+     *
+     * @param name what an admin reads ({@code falling_floors})
+     * @param box  its blocks
+     */
+    public record Extra(String name, Box box) {
+
+        public Extra {
+            if (name == null || name.isBlank() || box == null) {
+                throw new IllegalArgumentException("an extra box needs a name and a box");
+            }
+        }
+    }
+
+    /**
+     * Why {@code extra} can't be used, or {@code null}: it must stay inside +-{@value #MAX_XZ} and y
+     * {@value #MIN_Y}..{@value #MAX_Y}, and be at least {@value #APART} blocks from every half of every
+     * switched-on slot in {@code slots} (Classics slots included, when the caller passes them) and from
+     * the keep area ({@code keep}, or {@code null} for none).
+     */
+    public static String extraProblem(Extra extra, List<SlotConfig> slots, KeepArea keep) {
+        Box b = extra.box();
+        if (Math.abs((long) b.minX()) > MAX_XZ || Math.abs((long) b.maxX()) > MAX_XZ
+                || Math.abs((long) b.minZ()) > MAX_XZ || Math.abs((long) b.maxZ()) > MAX_XZ) {
+            return extra.name() + " reaches past +-" + MAX_XZ + " (" + b.describe() + ")";
+        }
+        if (b.minY() < MIN_Y || b.maxY() > MAX_Y) {
+            return extra.name() + " needs y " + b.minY() + ".." + b.maxY() + ", outside " + MIN_Y + ".." + MAX_Y;
+        }
+        for (SlotConfig c : slots == null ? List.<SlotConfig>of() : slots) {
+            if (c == null || !c.enabled() || c.def() == null) {
+                continue;
+            }
+            for (char which : new char[]{'A', 'B'}) {
+                int gap = b.gap(half(c.def(), c.origin(), which));
+                if (gap < APART) {
+                    return extra.name() + " is " + (gap < 0 ? "on top of" : "only " + gap + " blocks from") + " "
+                            + c.id() + "'s half " + which + " (they must be " + APART + " apart)";
+                }
+            }
+        }
+        if (keep != null && keep.maxPlots() > 0) {
+            int gap = b.gap(keep.area());
+            if (gap < APART) {
+                return extra.name() + " is " + (gap < 0 ? "on top of" : "only " + gap + " blocks from")
+                        + " the kept courses' area (" + keep.describe() + "; they must be " + APART + " apart)";
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Why {@code def}'s region at {@code origin} crowds one of {@code extras} (Fresh Courses' side of
+     * {@link #extraProblem}: the same rule, asked for one slot), or {@code null} when it keeps
+     * {@value #APART} blocks from every one. Whether the slot is switched on doesn't matter.
+     */
+    public static String extrasProblem(Slots.Def def, int[] origin, List<Extra> extras) {
+        if (def == null || origin == null) {
+            return null;
+        }
+        List<SlotConfig> one = List.of(SlotConfig.shipped(def).withOrigin(origin).withEnabled(true));
+        for (Extra e : extras == null ? List.<Extra>of() : extras) {
+            String p = e == null ? null : extraProblem(e, one, null);
+            if (p != null) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Why the keep area crowds one of {@code extras} ({@link #extraProblem} for the keep area), or
+     * {@code null}: keeping is refused while it does.
+     */
+    public static String keepExtrasProblem(KeepArea keep, List<Extra> extras) {
+        if (keep == null) {
+            return null;
+        }
+        for (Extra e : extras == null ? List.<Extra>of() : extras) {
+            String p = e == null ? null : extraProblem(e, List.of(), keep);
+            if (p != null) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * {@link #extraProblem} for several boxes, which must also be {@value #APART} apart from each
+     * other: each box's problem by its name (in order), only for the boxes that have one.
+     */
+    public static Map<String, String> extraProblems(List<Extra> extras, List<SlotConfig> slots,
+                                                               KeepArea keep) {
+        Map<String, String> out = new LinkedHashMap<>();
+        List<Extra> seen = new ArrayList<>();
+        for (Extra e : extras == null ? List.<Extra>of() : extras) {
+            if (e == null) {
+                continue;
+            }
+            String problem = extraProblem(e, slots, keep);
+            for (int i = 0; problem == null && i < seen.size(); i++) {
+                int gap = e.box().gap(seen.get(i).box());
+                if (gap < APART) {
+                    problem = e.name() + " is " + (gap < 0 ? "on top of" : "only " + gap + " blocks from") + " "
+                            + seen.get(i).name() + " (they must be " + APART + " apart)";
+                }
+            }
+            if (problem != null) {
+                out.put(e.name(), problem);
+            } else {
+                seen.add(e);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Why {@code extra} in {@code world} is too close to a hand-built course, or {@code null} when
+     * every one is at least {@value #CLEARANCE} blocks away ({@link #handBuilt} lists them).
+     */
+    public static String extraHandBuiltProblem(Extra extra, String world, List<Area> areas) {
+        for (Area a : areas == null ? List.<Area>of() : areas) {
+            if (a.world() == null || !a.world().equalsIgnoreCase(world)) {
+                continue;
+            }
+            int gap = a.box().gap(extra.box());
+            if (gap < CLEARANCE) {
+                return "the hand-built course " + a.courseId() + " is " + (gap < 0 ? "inside" : "only " + gap
+                        + " blocks from") + " " + extra.name() + " (" + a.box().describe() + "; it must be "
+                        + CLEARANCE + " away)";
+            }
+        }
+        return null;
     }
 
     /**
@@ -369,6 +517,38 @@ public final class Regions {
     public static String claim(Slots.Def def, String world, int[] origin) {
         return world.toLowerCase(Locale.ROOT) + "," + origin[0] + "," + origin[1] + "," + origin[2] + ","
                 + def.sizeX() + "," + def.sizeY() + "," + def.sizeZ();
+    }
+
+    /** The world a claim was made in, or {@code null} when it can't be read. */
+    public static String claimWorld(String claim) {
+        if (claim == null || claimOrigin(claim) == null) {
+            return null;
+        }
+        String w = claim.substring(0, claim.indexOf(',')).trim();
+        return w.isEmpty() ? null : w;
+    }
+
+    /**
+     * The claims a stored wet list names ({@link GenAdminKeys#wet}): ';' between them, each a whole
+     * claim; blanks, unreadable ones and repeats dropped, in order.
+     */
+    public static List<String> wetClaims(String stored) {
+        List<String> out = new ArrayList<>();
+        if (stored == null) {
+            return out;
+        }
+        for (String c : stored.split(";")) {
+            String t = c.trim();
+            if (claimOrigin(t) != null && claimWorld(t) != null && !out.contains(t)) {
+                out.add(t);
+            }
+        }
+        return out;
+    }
+
+    /** A wet list as stored, or {@code null} (the key unset) when it is empty. */
+    public static String wetText(List<String> claims) {
+        return claims == null || claims.isEmpty() ? null : String.join(";", claims);
     }
 
     /** The origin a claim was made at, or {@code null} when it can't be read. */

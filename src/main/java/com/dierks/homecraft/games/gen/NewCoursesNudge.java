@@ -266,7 +266,10 @@ public final class NewCoursesNudge {
         return new NewSet(key, newest.cadence(), List.copyOf(names), complete);
     }
 
-    /** A course's name in the line: "Easy", "Parkour", "Hard", "Sky Rings", "Golf" (both golf courses), "Ice Boat". */
+    /**
+     * A course's name in the line: "Easy", "Parkour", "Hard", "Sky Rings", "Golf" (both golf courses),
+     * "Ice Boat", "Dropper" (both droppers).
+     */
     public static String shortName(String slotId) {
         String id = slotId == null ? "" : slotId;
         if (id.equals(Slots.DAILY_PARKOUR_EASY.id())) {
@@ -280,6 +283,9 @@ public final class NewCoursesNudge {
         }
         if (id.equals(Slots.DAILY_GOLF.id()) || id.equals(Slots.TINY_GOLF.id())) {
             return "Golf";
+        }
+        if (id.equals(Slots.EASY_DROPPER.id()) || id.equals(Slots.FRESH_DROPPER.id())) {
+            return "Dropper";
         }
         Slots.Def d = Slots.of(id);
         return d == null ? id : d.name();

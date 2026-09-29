@@ -36,7 +36,8 @@ import java.util.logging.Level;
  *   <li>{@code /hcm play} — the Games screen; {@code /hcm play <game|course>} — open a game (rules
  *       and odds first) or start a course; {@code /hcm play break} — Take a break;
  *       {@code /hcm play accept|deny} — answer an invite; {@code /hcm play invites [on|off]};
- *       {@code /hcm play news [on|off]} — the "New courses are up!" line (hcm.games.play)</li>
+ *       {@code /hcm play news [on|off]} — the "New courses are up!" line;
+ *       {@code /hcm play cup [on|off]} — the Weekly Cup's prompts (hcm.games.play)</li>
  *   <li>{@code /hcm play <game|course> <player>} — the same for someone else: NPC plugins, command
  *       blocks, the hub (hcm.games.admin, or the console)</li>
  *   <li>{@code /hcm leave} — leave the world game you are in (hcm.games.play)</li>
@@ -70,7 +71,7 @@ public final class GamesCommand {
     /** The {@code /hcm games saved <player>} verbs (world sessions own them). */
     static final List<String> SAVED_VERBS = List.of("show", "restore", "return", "discard");
     /** Words {@code /hcm play} keeps for itself. */
-    static final List<String> PLAY_WORDS = List.of("break", "accept", "deny", "invites", "news", "leave");
+    static final List<String> PLAY_WORDS = List.of("break", "accept", "deny", "invites", "news", "leave", "cup");
 
     private final HomeCraftManagement plugin;
 
@@ -137,13 +138,43 @@ public final class GamesCommand {
             case "invites" -> invites(sender, args);
             case "news" -> news(sender, args);
             case "leave" -> leave(sender, args);
+            case "race" -> race(sender, args); // WP-R1 (D4): /hcm play race <course> is a party race
+            case "cup" -> cup(sender, args);
             default -> open(sender, args);
         }
+    }
+
+    /**
+     * {@code /hcm play race <course>}: a party race on that time-trial course (owner decision D4).
+     * Anything else ({@code /hcm play race}, or an admin's {@code /hcm play race <player>}) opens
+     * Race Night as before.
+     */
+    private void race(CommandSender sender, String[] args) {
+        GamesService games = args.length == 3 && sender instanceof Player ? plugin.games() : null;
+        if (games == null || !com.dierks.homecraft.games.trial.PartyRaces.isCourse(games, args[2])) {
+            open(sender, args);
+            return;
+        }
+        if (deny(sender, PLAY) || running(sender) == null) {
+            return;
+        }
+        com.dierks.homecraft.games.trial.PartyRaces.fromCommand(games, (Player) sender, args[2]);
     }
 
     /** {@code /hcm play <id> [player]}. */
     private void open(CommandSender sender, String[] args) {
         String id = args[1];
+        if (args.length == 3 && sender instanceof Player self && golfCourse(args[1], args[2])) {
+            // /hcm play golf <course>: the course's screen, with "Play with friends" (EVENTS-OWNER-DECISIONS D4)
+            if (deny(sender, PLAY)) {
+                return;
+            }
+            GamesService games = running(sender);
+            if (games != null) {
+                games.open(self, args[2], null);
+            }
+            return;
+        }
         if (args.length >= 3) {
             if (sender instanceof Player && deny(sender, ADMIN)) {
                 return;
@@ -169,6 +200,24 @@ public final class GamesCommand {
         GamesService games = running(sender);
         if (games != null) {
             games.open(player, id, null);
+        }
+    }
+
+    /**
+     * Whether {@code /hcm play <first> <second>} names a golf course after {@code golf} (golf together,
+     * EVENTS-OWNER-DECISIONS D4) rather than a player: {@code first} is golf and {@code second} one
+     * of its open courses. Never throws.
+     */
+    private boolean golfCourse(String first, String second) {
+        GamesService games = plugin.games();
+        if (games == null || !"golf".equalsIgnoreCase(first)) {
+            return false;
+        }
+        try {
+            GamesService.Target t = games.resolve(second);
+            return t != null && t.playable() != null && "golf".equals(t.game().id());
+        } catch (RuntimeException e) {
+            return false;
         }
     }
 
@@ -273,6 +322,18 @@ public final class GamesCommand {
             plugin.getLogger().log(Level.WARNING, "Could not read or save a player's news setting", e);
             failed(sender);
         }
+    }
+
+    /**
+     * {@code /hcm play cup [on|off]}: show, or hide and show again, the Weekly Cup on the course
+     * screens and tiles (EVENTS-OWNER-DECISIONS D2). A player who is in a Cup still hears how it went.
+     */
+    private void cup(CommandSender sender, String[] args) {
+        Player player = self(sender, "Only players see the Weekly Cup.");
+        if (player == null || deny(sender, PLAY) || running(sender) == null) {
+            return;
+        }
+        com.dierks.homecraft.games.cup.live.CupLink.command(plugin, player, args);
     }
 
     private static String inviteState(GamesService games, UUID player, String gameId) {
@@ -723,7 +784,9 @@ public final class GamesCommand {
             out.add("&e/hcm play break &7- Take a break: your own limits on games of chance");
             out.add("&e/hcm play accept|deny &7- answer a game invite");
             out.add("&e/hcm play invites [on|off] &7- invites to friend games");
+            out.add("&e/hcm play race <course> &7- race a course with friends (free, just for fun)"); // WP-R1 (D4)
             out.add("&e/hcm play news [on|off] &7- a line in chat when new courses are up");
+            out.add("&e/hcm play cup [on|off] &7- the Weekly Cup on the course screens");
             out.add("&e/hcm leave &7- leave the world game you're in (your things come back)");
         }
         if (sender.hasPermission(ADMIN)) {
@@ -773,8 +836,14 @@ public final class GamesCommand {
                 if (games != null) {
                     playIds(out, games, last);
                 }
-            } else if (n == 3 && (args[1].equalsIgnoreCase("invites") || args[1].equalsIgnoreCase("news"))) {
+            } else if (n == 3 && (args[1].equalsIgnoreCase("invites") || args[1].equalsIgnoreCase("news")
+                    || args[1].equalsIgnoreCase("cup"))) {
                 match(out, last, "on", "off");
+            } else if (n == 3 && args[1].equalsIgnoreCase("race") && games != null) { // WP-R1 (D4)
+                match(out, last, com.dierks.homecraft.games.trial.PartyRaces.courseIds(games).toArray(new String[0]));
+                if (!(sender instanceof Player) || sender.hasPermission(ADMIN)) {
+                    players(out, last);
+                }
             } else if (n == 3 && !PLAY_WORDS.contains(args[1].toLowerCase(Locale.ROOT))
                     && (!(sender instanceof Player) || sender.hasPermission(ADMIN))) {
                 players(out, last);

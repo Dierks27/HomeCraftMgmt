@@ -17,7 +17,7 @@ import java.util.List;
  * {@link GolfRounds}'s group end ({@code Port.home}); a round alone still goes home as before, and
  * with the Clubhouse off or not built (or {@code golf_after} off) so does the group.
  */
-final class ClubGolf {
+public final class ClubGolf {
 
     private ClubGolf() {
     }
@@ -45,6 +45,38 @@ final class ClubGolf {
         forget.run();
         club.result(sheet(card), opener);
         return club.takeIn(p, ClubVisits.Kind.GOLF, ClubhouseText.BACK_GOLF);
+    }
+
+    /**
+     * Golf together's groups playing now, read-only, for the Clubhouse's live board and its watchers:
+     * the shared card's ranking so far and the hole being played.
+     */
+    public static List<com.dierks.homecraft.games.clubhouse.LiveRace> live(com.dierks.homecraft.games.GamesService games) {
+        List<com.dierks.homecraft.games.clubhouse.LiveRace> out = new ArrayList<>();
+        if (games == null || !(games.game(MiniGolf.SPEC.id()) instanceof MiniGolf golf) || !games.enabled(golf)) {
+            return out;
+        }
+        for (java.util.Map.Entry<GolfGroup, GolfGroup.Card> e : golf.rounds().liveGroups().entrySet()) {
+            GolfGroup g = e.getKey();
+            GolfGroup.Card card = e.getValue();
+            GolfCourse c = golf.course(g.courseId());
+            if (c == null || c.holes().isEmpty()) {
+                continue;
+            }
+            com.dierks.homecraft.games.gen.api.Box half = c.gen() == null ? null : games.generated().half(c.gen());
+            List<String> rows = new ArrayList<>();
+            List<String> names = new ArrayList<>();
+            for (GolfGroup.Standing s : GolfGroup.ranking(card.rows(), card.pars().size())) {
+                names.add(s.name());
+                rows.add(s.place() > 0 ? ClubBoard.strokesRow(s.place(), s.name(), s.total(), s.vsPar())
+                        : ClubBoard.noTimeRow(s.name(), "left"));
+            }
+            out.add(new com.dierks.homecraft.games.clubhouse.LiveRace("golf:" + g.id(), "&dGolf together: &f"
+                    + card.courseName() + " &7- hole " + (card.hole() + 1) + " of " + card.pars().size(), c.world(),
+                    com.dierks.homecraft.games.clubhouse.WatchArea.forGolf(c, half), new java.util.LinkedHashSet<>(g.active()),
+                    rows, com.dierks.homecraft.games.clubhouse.LiveRace.positions(names, 4), true));
+        }
+        return out;
     }
 
     /** The group ranking on the board: "1. Sam 24 strokes (-2)". */

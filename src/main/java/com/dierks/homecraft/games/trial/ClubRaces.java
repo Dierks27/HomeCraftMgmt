@@ -33,7 +33,7 @@ import java.util.List;
  * Clubhouse, which moves them there and checks the move. If the Clubhouse can't take them, they go
  * home exactly as before.
  */
-final class ClubRaces {
+public final class ClubRaces {
 
     private ClubRaces() {
     }
@@ -108,6 +108,46 @@ final class ClubRaces {
         trials.end(p);
         String text = line == null || line.isBlank() ? null : line;
         return club.takeIn(p, kind(rr.link), text);
+    }
+
+    /**
+     * The party races going on now, read-only, for the Clubhouse's live board and its watchers: the
+     * warm-up, the grid and the race itself (never one that is over).
+     */
+    public static List<com.dierks.homecraft.games.clubhouse.LiveRace> live(com.dierks.homecraft.games.GamesService games) {
+        List<com.dierks.homecraft.games.clubhouse.LiveRace> out = new ArrayList<>();
+        if (games == null || !(games.game(TimeTrials.SPEC.id()) instanceof TimeTrials t) || !games.enabled(t)) {
+            return out;
+        }
+        for (PartyRace r : t.party().running()) {
+            if (r.state() == PartyRace.State.DONE || r.state() == PartyRace.State.SEATING) {
+                continue;
+            }
+            Course base = r.base();
+            com.dierks.homecraft.games.gen.api.Box half = base.gen() == null ? null : games.generated().half(base.gen());
+            List<String> rows = new ArrayList<>();
+            List<String> names = new ArrayList<>();
+            int targets = Math.max(1, base.targets().size());
+            long winner = -1;
+            for (PartyRace.Live l : r.live()) {
+                names.add(l.name());
+                if (l.finished()) {
+                    winner = winner < 0 ? l.ms() : winner;
+                    rows.add(ClubBoard.timeRow(l.place(), l.name(), l.ms(), winner));
+                } else if (l.out()) {
+                    rows.add(ClubBoard.noTimeRow(l.name(), "out"));
+                } else {
+                    String where = r.laps() > 1 ? "lap " + l.lap() + "/" + r.laps()
+                            : "checkpoint " + Math.min(l.reached(), targets) + "/" + targets;
+                    rows.add(ClubBoard.liveRow(l.place(), l.name(), where, null));
+                }
+            }
+            out.add(new com.dierks.homecraft.games.clubhouse.LiveRace("party:" + r.lobbyId(), "&dParty race: &f"
+                    + base.name(), base.world(), com.dierks.homecraft.games.clubhouse.WatchArea.forCourse(base, half),
+                    new java.util.LinkedHashSet<>(r.racers()), rows,
+                    com.dierks.homecraft.games.clubhouse.LiveRace.positions(names, 5), r.clubhouseAfter()));
+        }
+        return out;
     }
 
     /** Why the Clubhouse has them: a party racer, or a Race Night racer. */

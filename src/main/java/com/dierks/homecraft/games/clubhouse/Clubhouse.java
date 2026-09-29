@@ -96,6 +96,7 @@ public final class Clubhouse implements Game, ClubDoor {
     /** The kit's actions ({@code leave} is the kit guard's own: two clicks end the session). */
     static final String PARTY = "party";
     static final String RESULTS = "results";
+    static final String WATCH = "watch";
     static final String LEAVE = "leave";
     /** "Photo time!" stays up this long (ticks), and waits at most this long for the podium (ms). */
     static final int PHOTO_TICKS = 200;
@@ -114,9 +115,16 @@ public final class Clubhouse implements Game, ClubDoor {
     private int nextSpot;
     private Results last;
     private Photo photo;
+    private WatchLive watch;
+    private final Cheers cheers = new Cheers();
+    private final Map<UUID, Boolean> cheersOn = new HashMap<>();
 
-    /** Someone on their way into the Clubhouse's own session: why they come. */
-    private record Arrival(ClubVisits.Kind kind, boolean spectator) {
+    /** Someone on their way into the Clubhouse's own session: why they come, and whether to watch live at once. */
+    private record Arrival(ClubVisits.Kind kind, boolean spectator, boolean watch) {
+
+        Arrival(ClubVisits.Kind kind, boolean spectator) {
+            this(kind, spectator, false);
+        }
     }
 
     /** The last event's result: the board's sheet, and what "Results" opens. */
@@ -197,6 +205,10 @@ public final class Clubhouse implements Game, ClubDoor {
     /** {@code /hcm play clubhouse}: come in (or, from Watch live, come back). */
     @Override
     public void open(Player player, Runnable back) {
+        if (watch != null && watch.watching(player.getUniqueId())) {
+            watch.stop(player, WatchLive.BACK);
+            return;
+        }
         visit(player);
     }
 
@@ -212,7 +224,8 @@ public final class Clubhouse implements Game, ClubDoor {
             return List.of("not running");
         }
         List<String> out = new ArrayList<>(r.statusLines());
-        out.add(visits.size() + " in the Clubhouse, " + arriving.size() + " on the way");
+        out.add(visits.size() + " in the Clubhouse (" + (watch == null ? 0 : watch.count()) + " watching live), "
+                + arriving.size() + " on the way");
         return out;
     }
 
@@ -230,6 +243,7 @@ public final class Clubhouse implements Game, ClubDoor {
         WorldEntities.sweep(this);
         host = new LiveRoomHost(this);
         display = new BoardDisplay(this);
+        watch = new WatchLive(this, new WatchVisibility(WatchLive.viewers(plugin())));
         room = newRoom();
         GenRegionGuard.register(g, this, () -> (world, x, y, z) -> guardedAt(world, x, y, z), log());
         guardEdits(g);
@@ -238,6 +252,13 @@ public final class Clubhouse implements Game, ClubDoor {
                 e.setCancelled(true); // the podium's firework never hurts anyone
             }
         });
+        g.on(this, org.bukkit.event.player.PlayerMoveEvent.class, EventPriority.HIGH, true, e -> watch.moved(e));
+        g.on(this, org.bukkit.event.player.PlayerTeleportEvent.class, EventPriority.LOW, true,
+                e -> watch.teleported(e));
+        g.on(this, com.destroystokyo.paper.event.player.PlayerStartSpectatingEntityEvent.class, EventPriority.NORMAL,
+                true, e -> watch.spectating(e));
+        g.on(this, org.bukkit.event.player.PlayerChangedWorldEvent.class, EventPriority.MONITOR, false,
+                e -> watch.arrived(e.getPlayer()));
         g.every(this, 1, 1, this::tick);
         g.every(this, 20, 20, this::second);
         room.start();
@@ -263,6 +284,9 @@ public final class Clubhouse implements Game, ClubDoor {
         if (display != null) {
             display.remove();
         }
+        if (watch != null) {
+            watch.clear(); // every watcher seen again
+        }
         for (ClubVisits.Visit v : visits.all()) {
             noPushOff(v.id(), online(v.id()));
         }
@@ -276,6 +300,16 @@ public final class Clubhouse implements Game, ClubDoor {
     @Override
     public void onQuit(Player player) {
         gone(player.getUniqueId(), player);
+        cheers.forget(player.getUniqueId());
+        cheersOn.remove(player.getUniqueId());
+    }
+
+    /** Someone joined: everyone sees them again (a crash boot, a quit while watching), and they don't see watchers. */
+    @Override
+    public void onJoin(Player player) {
+        if (watch != null) {
+            watch.joined(player);
+        }
     }
 
     /** Their Clubhouse session ended (any way at all): out of the Clubhouse, off the no-push team. */
@@ -300,6 +334,7 @@ public final class Clubhouse implements Game, ClubDoor {
         switch (action) {
             case PARTY -> openParty(player);
             case RESULTS -> openResults(player);
+            case WATCH -> watchNow(player, null);
             default -> {
                 // "leave" is the kit guard's
             }
@@ -335,12 +370,19 @@ public final class Clubhouse implements Game, ClubDoor {
         if (visits.in(id)) {
             visits.spectator(id, true);
             p.sendMessage(Text.of(ClubhouseText.SPECTATING));
+            if (raceFor(id) != null) {
+                watchNow(p, null); // a race is going: Watch live starts at once
+            }
             return;
         }
-        enter(p, kindFor(id), true);
+        enter(p, kindFor(id), true, raceFor(id) != null);
     }
 
     private void enter(Player p, ClubVisits.Kind kind, boolean spectator) {
+        enter(p, kind, spectator, false);
+    }
+
+    private void enter(Player p, ClubVisits.Kind kind, boolean spectator, boolean watchLive) {
         ClubhouseRoom r = room;
         if (r == null || !r.open()) {
             refuse(p, ClubhouseText.CLOSED);
@@ -353,7 +395,7 @@ public final class Clubhouse implements Game, ClubDoor {
             return;
         }
         UUID id = p.getUniqueId();
-        arriving.put(id, new Arrival(kind, spectator));
+        arriving.put(id, new Arrival(kind, spectator, watchLive));
         Location at = new Location(w, s.x(), s.y(), s.z(), s.yaw(), 0f);
         if (!games().sessions().enter(p, this, REF, at, this::arrived)) {
             arriving.remove(id); // refused (they were told why): nothing was taken or moved
@@ -375,6 +417,9 @@ public final class Clubhouse implements Game, ClubDoor {
             default -> ClubhouseText.WELCOME;
         };
         welcome(p, a.kind(), a.spectator(), line);
+        if (a.watch()) {
+            watchNow(p, null); // a Watch button while the race is going: straight on to Watch live
+        }
     }
 
     /** They are in the Clubhouse now: a visitor, on the no-push team, with the kit and a line. */
@@ -455,6 +500,9 @@ public final class Clubhouse implements Game, ClubDoor {
         arriving.remove(id);
         kits.remove(id);
         toldGuarded.remove(id);
+        if (watch != null) {
+            watch.gone(id); // seen by everyone again; the session's end puts their game mode back
+        }
         if (visits.leave(id) != null) {
             noPushOff(id, p);
         }
@@ -505,14 +553,18 @@ public final class Clubhouse implements Game, ClubDoor {
             board.forget();
             return;
         }
+        watch.refresh(liveRaces());
         for (ClubVisits.Visit v : visits.all()) {
             Player p = online(v.id());
             if (p == null || !inOurSession(p)) {
                 gone(v.id(), p);
                 continue;
             }
-            arrivalCheck(p, v, now);
+            if (!watch.watching(v.id())) {
+                arrivalCheck(p, v, now); // a watcher is on the course: the keeper holds them in its area
+            }
         }
+        watch.second();
         boolean holding = games().restartHold().holding(now);
         for (ClubVisits.Act a : visits.second(now, settings().maxMinutes(), this::busy, holding)) {
             Player p = online(a.player());
@@ -583,7 +635,7 @@ public final class Clubhouse implements Game, ClubDoor {
 
     /** Whether a race or a party is going for the visitor (their idle clock stands still). */
     private boolean busy(UUID id) {
-        if (games().parties().of(id) != null) {
+        if (games().parties().of(id) != null || (watch != null && watch.watching(id))) {
             return true;
         }
         NightRunner n = night();
@@ -598,8 +650,12 @@ public final class Clubhouse implements Game, ClubDoor {
      */
     private void giveKit(Player p) {
         UUID id = p.getUniqueId();
+        if (watch != null && watch.watching(id)) {
+            return; // spectator mode can't use items: the action bar says how to come back
+        }
         boolean party = raceLobby(id) != null;
-        String sig = (party ? "P" : "") + "R";
+        LiveRace live = followed();
+        String sig = (party ? "P" : "") + "R" + (live != null ? "W" + live.key() : "");
         if (sig.equals(kits.get(id)) || !inOurSession(p)) {
             return;
         }
@@ -612,6 +668,11 @@ public final class Clubhouse implements Game, ClubDoor {
         }
         inv.setItem(2, KitItems.item(this, RESULTS, Material.BOOK, ClubhouseText.KIT_RESULTS,
                 "&7The last race's results."));
+        if (live != null) {
+            inv.setItem(4, KitItems.item(this, WATCH, Material.SPYGLASS, ClubhouseText.KIT_WATCH,
+                    "&7" + Text.plain(live.title()), "&7Fly round and see who leads.",
+                    "&7/hcm play clubhouse brings you back."));
+        }
         inv.setItem(8, KitItems.item(this, LEAVE, Material.OAK_DOOR, ClubhouseText.KIT_LEAVE,
                 "&7Click twice to go home.", "&7Your things come back."));
         inv.setHeldItemSlot(2);
@@ -651,10 +712,199 @@ public final class Clubhouse implements Game, ClubDoor {
 
     // ---- the board and the podium ----------------------------------------------------------------
 
-    /** The board's sheet now: the last result, or the idle board. */
+    /** The board's sheet now: a race going on (live, at most once a second), else the last result, or the idle board. */
     ClubBoard.Sheet sheet() {
+        LiveRace live = followed();
+        if (live != null) {
+            return live.sheet();
+        }
         Results r = last;
         return r == null ? ClubBoard.idle() : r.sheet();
+    }
+
+    // ---- races going on: the live board, Watch live and cheers ------------------------------------
+
+    /** Every race and golf group going on now, read-only. */
+    private List<LiveRace> liveRaces() {
+        List<LiveRace> out = new ArrayList<>();
+        out.addAll(com.dierks.homecraft.games.event.ClubNight.live(games()));
+        out.addAll(com.dierks.homecraft.games.trial.ClubRaces.live(games()));
+        out.addAll(com.dierks.homecraft.games.golf.ClubGolf.live(games()));
+        return out;
+    }
+
+    /**
+     * The race the Clubhouse follows (the board, the kit's Watch live): Race Night, else a party race
+     * or golf group whose players come back here, else any in the Clubhouse's world; {@code null} for none.
+     */
+    LiveRace followed() {
+        return follow(watch == null ? List.of() : watch.live(), world());
+    }
+
+    /** {@link #followed()} over {@code live} in {@code world}. */
+    static LiveRace follow(List<LiveRace> live, String world) {
+        LiveRace linked = null;
+        LiveRace any = null;
+        for (LiveRace r : live) {
+            if (world == null || !world.equalsIgnoreCase(r.world())) {
+                continue;
+            }
+            if (r.key().startsWith("night:")) {
+                return r;
+            }
+            if (r.linked() && linked == null) {
+                linked = r;
+            }
+            if (any == null) {
+                any = r;
+            }
+        }
+        return linked != null ? linked : any;
+    }
+
+    /** The race for someone who taps Watch: their party's, Race Night, or the one the Clubhouse follows. */
+    private LiveRace raceFor(UUID id) {
+        if (watch == null) {
+            return null;
+        }
+        PartyLobby l = raceLobby(id);
+        if (l != null && watch.race("party:" + l.id()) != null) {
+            return watch.race("party:" + l.id());
+        }
+        return followed();
+    }
+
+    /** Watch live: the race {@code target} is in, or the one followed. */
+    void watchNow(Player p, UUID target) {
+        LiveRace r = target != null ? watch.raceOf(target) : raceFor(p.getUniqueId());
+        String why = watch.start(p, r);
+        if (why != null) {
+            p.sendMessage(Text.of(why));
+        } else {
+            kits.remove(p.getUniqueId());
+        }
+    }
+
+    /** Give the kit again (back from Watch live). */
+    void kitAgain(Player p) {
+        kits.remove(p.getUniqueId());
+        giveKit(p);
+    }
+
+    /**
+     * {@code /hcm play watch [<player>]}: in the Clubhouse, watch the race that player is in (or the one
+     * it follows), or come back from watching; from outside, in as a spectator who watches at once.
+     */
+    public static void watchCommand(GamesService games, Player p, String targetName) {
+        Clubhouse c = running(games);
+        if (c == null) {
+            refuse(p, ClubhouseText.CLOSED);
+            return;
+        }
+        games.guard(c, () -> c.watchCommand(p, targetName));
+    }
+
+    private void watchCommand(Player p, String targetName) {
+        UUID id = p.getUniqueId();
+        UUID target = null;
+        if (targetName != null && !targetName.isBlank()) {
+            Player t = Bukkit.getPlayerExact(targetName);
+            if (t == null) {
+                refuse(p, "&c" + targetName + " isn't online.");
+                return;
+            }
+            target = t.getUniqueId();
+            if (watch.raceOf(target) == null) {
+                refuse(p, "&7" + t.getName() + " isn't racing right now.");
+                return;
+            }
+        }
+        if (watch.watching(id) && target == null) {
+            watch.stop(p, WatchLive.BACK);
+            return;
+        }
+        if (!visits.in(id)) {
+            if (games().sessions().session(p) != null) {
+                refuse(p, "&cFinish or leave your game first - /hcm leave");
+                return;
+            }
+            enter(p, kindFor(id), true, true);
+            return;
+        }
+        if (watch.watching(id)) {
+            watch.stop(p, null);
+        }
+        watchNow(p, target);
+    }
+
+    /** {@code /hcm play cheer}: a cheer for the racers of the race being watched (once every 10 s). */
+    public static void cheerCommand(GamesService games, Player p) {
+        Clubhouse c = running(games);
+        if (c == null) {
+            refuse(p, ClubhouseText.CLOSED);
+            return;
+        }
+        games.guard(c, () -> c.cheer(p));
+    }
+
+    private void cheer(Player p) {
+        UUID id = p.getUniqueId();
+        if (!visits.in(id)) {
+            refuse(p, "&7Cheer from the Clubhouse, or while you watch live - /hcm play clubhouse");
+            return;
+        }
+        LiveRace r = watch.watching(id) ? watch.watched(id) : followed();
+        if (r == null) {
+            p.sendMessage(Text.of(WatchLive.NOTHING));
+            return;
+        }
+        long now = now();
+        if (!cheers.allow(id, now)) {
+            p.sendActionBar(Text.of("&7You can cheer again in " + cheers.waitSeconds(id, now) + " s."));
+            return;
+        }
+        int heard = 0;
+        for (UUID racer : r.racers()) {
+            Player q = online(racer);
+            if (q != null && !racer.equals(id) && cheersOn(racer)) {
+                q.sendActionBar(Text.of(Cheers.line(p.getName())));
+                heard++;
+            }
+        }
+        p.sendMessage(Text.of(heard > 0 ? "&dYou cheered for the racers!" : "&7Nobody racing has cheers on."));
+    }
+
+    /** Whether a racer sees cheers ({@code /hcm play cheers off} turns them off). */
+    boolean cheersOn(UUID racer) {
+        return cheersOn.computeIfAbsent(racer, r -> {
+            try {
+                return !"off".equalsIgnoreCase(games().dao().pref(r, Cheers.PREF));
+            } catch (java.sql.SQLException | RuntimeException e) {
+                return true;
+            }
+        });
+    }
+
+    /** {@code /hcm play cheers [on|off]}: show, or switch the cheers a racer sees. */
+    public static void cheersCommand(GamesService games, Player p, String[] args) {
+        UUID id = p.getUniqueId();
+        try {
+            if (args != null && args.length >= 3 && (args[2].equalsIgnoreCase("on") || args[2].equalsIgnoreCase("off"))) {
+                boolean on = args[2].equalsIgnoreCase("on");
+                games.dao().setPref(id, Cheers.PREF, on ? null : "off");
+                Clubhouse c = games.game(SPEC.id()) instanceof Clubhouse cc ? cc : null;
+                if (c != null) {
+                    c.cheersOn.put(id, on);
+                }
+                p.sendMessage(Text.of(on ? "&aYou'll see cheers while you race." : "&7No more cheers while you race."
+                        + " &8(/hcm play cheers on)"));
+                return;
+            }
+            boolean on = !"off".equalsIgnoreCase(games.dao().pref(id, Cheers.PREF));
+            p.sendMessage(Text.of("&eCheers while you race: " + (on ? "&aon" : "&7off") + " &7- /hcm play cheers on|off"));
+        } catch (java.sql.SQLException | RuntimeException e) {
+            p.sendMessage(Text.of("&cThat can't be done right now."));
+        }
     }
 
     /** Draw the board when its text changed (a new result), or when it had to be made again. */
@@ -843,6 +1093,9 @@ public final class Clubhouse implements Game, ClubDoor {
         if (!visits.in(id) || !inOurSession(p) || to == null) {
             return false;
         }
+        if (watch != null && watch.watching(id)) {
+            watch.stop(p, null); // off the course and back in adventure mode, then to the grid
+        }
         if (!games().sessions().passTo(p, to, ref)) {
             return false;
         }
@@ -966,7 +1219,7 @@ public final class Clubhouse implements Game, ClubDoor {
     // ---- helpers --------------------------------------------------------------------------------
 
     /** Back to an arrival spot (a session teleport). */
-    private void toSpawn(Player p) {
+    void toSpawn(Player p) {
         ClubhouseRoom r = room;
         World w = r == null ? null : Bukkit.getWorld(r.world());
         ClubhouseSite.Spot s = r == null ? null : r.spawn(nextSpot++);
@@ -1000,6 +1253,16 @@ public final class Clubhouse implements Game, ClubDoor {
     /** A test's own no-push team (over a fake scoreboard). */
     void pushes(NoPush team) {
         this.pushes = team;
+    }
+
+    /** A test's own Watch live (over fake viewers). */
+    void watch(WatchLive w) {
+        this.watch = w;
+    }
+
+    /** Watch live (for the tests). */
+    WatchLive watchLive() {
+        return watch;
     }
 
     private static void refuse(Player p, String line) {

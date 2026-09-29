@@ -83,6 +83,53 @@ public final class ClubNight {
         return out;
     }
 
+    /**
+     * Race Night going on now, read-only, for the Clubhouse's live board and its watchers: the warm-up,
+     * the grid, a race (its live places) and the breaks (the points so far).
+     */
+    public static List<com.dierks.homecraft.games.clubhouse.LiveRace> live(GamesService games) {
+        Game g = games == null ? null : games.game(RaceNight.SPEC.id());
+        NightRunner n = g instanceof RaceNight r && games.enabled(r) ? r.night() : null;
+        if (n == null || !n.phase().running()) {
+            return List.of();
+        }
+        List<String> rows = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        java.util.Set<UUID> racers = new java.util.LinkedHashSet<>();
+        for (NightRunner.Racer r : n.joined()) {
+            racers.add(r.id());
+        }
+        if (n.phase() == EventMachine.Phase.RACING) {
+            int targets = Math.max(1, n.targets());
+            int place = 0;
+            for (LivePlaces.Row row : n.live()) {
+                NightRunner.Racer r = n.racer(row.player());
+                String name = r == null ? null : r.name();
+                names.add(name);
+                place++;
+                String where = switch (row.state()) {
+                    case FINISHED -> "finished";
+                    case OUT -> "out";
+                    default -> n.laps() > 1 ? "lap " + LivePlaces.lap(row.reached(), targets, n.laps()) + "/" + n.laps()
+                            : "checkpoint " + Math.min(row.reached(), targets) + "/" + targets;
+                };
+                rows.add(ClubBoard.liveRow(place, name, where, null));
+            }
+        } else {
+            for (NightStandings.Ranked s : n.standings()) {
+                NightRunner.Racer r = n.racer(s.player());
+                names.add(r == null ? null : r.name());
+                rows.add(ClubBoard.pointsRow(s.place(), r == null ? null : r.name(), s.points()));
+            }
+        }
+        com.dierks.homecraft.games.trial.Course base = n.track().base();
+        com.dierks.homecraft.games.gen.api.Box half = base.gen() == null ? null : games.generated().half(base.gen());
+        return List.of(new com.dierks.homecraft.games.clubhouse.LiveRace("night:" + n.plan().id(), "&6Race Night: &f"
+                + n.track().name() + " &7- race " + Math.max(1, n.race()) + " of " + n.plan().races(), base.world(),
+                com.dierks.homecraft.games.clubhouse.WatchArea.forCourse(base, half), racers, rows,
+                com.dierks.homecraft.games.clubhouse.LiveRace.positions(names, 5), takes(games, base.world())));
+    }
+
     /** After joining: "[Wait in the Clubhouse]", while the Clubhouse is open in the track's world. */
     static void offer(GamesService games, Player p) {
         if (p == null || !offered(games)) {

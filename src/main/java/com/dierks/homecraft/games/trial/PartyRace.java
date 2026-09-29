@@ -421,6 +421,26 @@ public final class PartyRace implements RaceLink {
         return "&7The party race is over.";
     }
 
+    /**
+     * WP-CH: a read-only view of one racer for the Clubhouse's live board and its watchers: place,
+     * name, targets reached and lap, and a finisher's time (or out).
+     */
+    record Live(int place, UUID id, String name, int reached, int lap, boolean finished, long ms, boolean out) {
+    }
+
+    /** WP-CH: the live positions, first place first (the race's own standings), read-only. */
+    List<Live> live() {
+        List<Live> out = new ArrayList<>();
+        for (RaceStandings.Place p : standings()) {
+            Entry e = entries.get(p.row().racer());
+            if (e != null) {
+                out.add(new Live(p.rank(), e.id, e.name, e.reached, Laps.lapOf(e.reached, perLap, laps),
+                        e.result == Result.FINISHED, e.ms, p.row().state() == RaceStandings.State.OUT));
+            }
+        }
+        return out;
+    }
+
     /** WP-CH: its racers go to the Clubhouse when done with the race (set at the start). */
     private boolean clubhouse;
 

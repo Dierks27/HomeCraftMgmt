@@ -656,6 +656,11 @@ public final class PartyRaces {
 
     // ---- WP-CH: the Clubhouse ------------------------------------------------------------------------
 
+    /** The party races going on now (a read-only view for the Clubhouse's board and watchers). */
+    java.util.Collection<PartyRace> running() {
+        return List.copyOf(races.values());
+    }
+
     /** Whether the player is in the Clubhouse now (their session is its own). */
     private boolean inClub(Player p) {
         ClubDoor club = trials.raceMode().door();

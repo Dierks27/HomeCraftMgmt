@@ -452,6 +452,23 @@ class ArenaServiceTest {
     }
 
     @Test
+    void anArenaKnowsTheSettingsItWasMadeFor() {
+        start();
+        FallingFloorsSettings d = host.settings;
+        assertTrue(arena.builtWith(d, FakeArenaHost.WORLD), "the settings it was made with");
+        assertTrue(arena.builtWith(new FallingFloorsSettings(true, d.origin(), d.fadeTicks(), d.minPlayers(),
+                d.maxPlayers(), d.solo(), d.roundSeconds(), 800, 2, d.milestones(), d.milestoneRewards(), 5),
+                FakeArenaHost.WORLD), "the rewards and the reset's speed are read live: still the same arena");
+        assertFalse(arena.builtWith(new FallingFloorsSettings(true, List.of(6400, 176, 4352), d.fadeTicks(),
+                d.minPlayers(), d.maxPlayers(), d.solo(), d.roundSeconds(), d.resetBlocksPerTick(), d.dailyReward(),
+                d.milestones(), d.milestoneRewards(), d.dailyCap()), FakeArenaHost.WORLD), "a new origin: a new arena");
+        assertFalse(arena.builtWith(new FallingFloorsSettings(true, d.origin(), 15, d.minPlayers(), d.maxPlayers(),
+                d.solo(), d.roundSeconds(), d.resetBlocksPerTick(), d.dailyReward(), d.milestones(),
+                d.milestoneRewards(), d.dailyCap()), FakeArenaHost.WORLD), "a new fade: a new arena");
+        assertFalse(arena.builtWith(d, "other"), "another world: a new arena");
+    }
+
+    @Test
     void theStatusSaysWhatTheArenaIsDoing() {
         start();
         until(ArenaRound.Phase.LOBBY, 400);

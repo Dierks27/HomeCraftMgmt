@@ -996,6 +996,16 @@ public final class ArenaService {
         return verified;
     }
 
+    /**
+     * Whether this arena was made for these settings: the same box, world and round knobs (the
+     * rewards and the reset's speed are read live). {@code FallingFloors} starts a new arena when
+     * they change.
+     */
+    public boolean builtWith(FallingFloorsSettings s, String worldName) {
+        return s != null && box.equals(s.box()) && rs.equals(s.round())
+                && world.equals(worldName == null ? "" : worldName.trim());
+    }
+
     /** Whether players may come in now: a verify has passed and the arena isn't closed. */
     public boolean open() {
         return verified && round != null && round.phase() != ArenaRound.Phase.CLOSED;

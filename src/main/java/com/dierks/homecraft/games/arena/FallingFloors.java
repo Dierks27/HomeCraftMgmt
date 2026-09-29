@@ -30,6 +30,7 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.logging.Logger;
 
 /**
@@ -182,7 +183,8 @@ public final class FallingFloors implements Game {
     /**
      * Start the arena: the week's floors (the rules start with the boot verify, so the box is put
      * back before anyone comes in), the area guard over the box, the tick and the once-a-second
-     * check, and the move listeners.
+     * check, and the move listeners. Each reads the arena running now, so a settings change can
+     * start a new one without registering anything twice ({@link #settingsChanged}).
      */
     @Override
     public void start() {
@@ -192,15 +194,57 @@ public final class FallingFloors implements Game {
         }
         GamesService g = games();
         host = new LiveArenaHost(this);
-        ArenaService s = new ArenaService(host);
-        service = s;
-        GenRegionGuard.register(g, this, () -> (world, x, y, z) -> world != null && world.equalsIgnoreCase(s.world())
-                && s.box().contains(x, y, z), log());
+        service = new ArenaService(host);
+        GenRegionGuard.register(g, this, () -> (world, x, y, z) -> {
+            ArenaService s = service;
+            return s != null && world != null && world.equalsIgnoreCase(s.world()) && s.box().contains(x, y, z);
+        }, log());
         g.on(this, PlayerMoveEvent.class, EventPriority.HIGH, true, this::hold);
         g.on(this, PlayerMoveEvent.class, EventPriority.MONITOR, true, this::moved);
-        g.every(this, 1, 1, s::tick);
-        g.every(this, 20, 20, s::check);
-        s.start();
+        g.every(this, 1, 1, () -> {
+            ArenaService s = service;
+            if (s != null) {
+                s.tick();
+            }
+        });
+        g.every(this, 20, 20, () -> {
+            ArenaService s = service;
+            if (s != null && !settingsChanged(s)) {
+                s.check();
+            }
+        });
+        service.start();
+    }
+
+    /**
+     * {@code /hcm reload} changed where the arena is or how a round plays ({@code origin},
+     * {@code games.fresh.world}, the round knobs): once no round is going, everyone in the old arena
+     * goes home with their things and a new arena starts, with its own boot verify. The rewards and
+     * the reset's speed are read live and need nothing.
+     *
+     * @return whether a new arena was started
+     */
+    private boolean settingsChanged(ArenaService s) {
+        LiveArenaHost h = host;
+        if (h == null || s.builtWith(settings(), h.worldName())) {
+            return false;
+        }
+        if (s.round() != null && s.round().phase().inRound()) {
+            return false; // the round going finishes on the arena it started on
+        }
+        log().info("Falling Floors: its settings changed - starting its arena again");
+        List<UUID> members = s.round() == null ? List.of() : s.round().members();
+        s.stop();
+        service = new ArenaService(h);
+        for (UUID id : members) {
+            Player p = Bukkit.getPlayer(id);
+            if (p != null && games().sessions().session(p) != null) {
+                p.sendMessage(Text.of(FloorsText.MOVING));
+                games().sessions().leave(p, EndReason.FINISH);
+            }
+        }
+        service.start();
+        return true;
     }
 
     /** Stop: collisions back, bars away, no reset left running. Sessions are the framework's to end. */

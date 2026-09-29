@@ -25,6 +25,7 @@
 | **Time Trials: Elytra** | Time trial (skill) | `/hcm play <course id>` (list: `/hcm play trials`) | Free. It costs no tokens, and you can play as many times as you like. | First finish: tokens the first time you finish each course, once ever. By default: Easy 5, Medium 10, Hard 20, and Why did we build this? 40. This does not… |
 | **Time Trials: Boat** | Time trial (skill) | `/hcm play <course id>` (list: `/hcm play trials`) | Free. It costs no tokens, and you can play as many times as you like. | First finish: tokens the first time you finish each course, once ever. By default: Easy 5, Medium 10, Hard 20, and Why did we build this? 40. This does not… |
 | **Mini Golf** | Mini golf (skill) | `/hcm play <course id>` (list: `/hcm play golf`) | Free. It costs no tokens, and you can play as many times as you like. | First finish: 5 tokens by default the first time you finish each course, once ever. This does not count toward any daily limit. |
+| **Falling Floors** | Together (skill) | `/hcm play falling_floors` (or `tnt_run`) | Free. No tokens go in. | Your first full round of the day pays 1 token, and lasting 30, 60 and 120 seconds solo pays 1, 2 and 3 tokens, once ever (by default). Winning pays nothing extra. |
 
 ## Getting to the games
 
@@ -105,6 +106,7 @@
   - "Finish every Fresh Course in one set" (40 tokens)
   - "Reach the top Star Chart goal in a week" (30 tokens)
   - "Set a course record" (30 tokens; a time trial's or a golf course's)
+  - "Last a whole minute on Falling Floors" (15 tokens; a round you play out, not one you leave)
 - When a new set of Fresh Courses is up, you read one line in chat, once for each set: "New courses this week! Easy, Parkour, Hard, Sky Rings and Golf - /hcm play". It waits while you are on a course, and until you close a screen. Don't want it? /hcm play news off.
 
 ## The fairness promises
@@ -1455,6 +1457,28 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - Classic courses: the owner can bring back a past course; its old records are the ones to beat. It shows up as Classic Parkour, Classic Sky Rings or Classic Golf on the Fresh Courses screen, like "Classic: Hard Parkour (week of 5 Oct)", with when it goes away again. If you got a course's first-finish tokens back when it first came, you don't get them again; if you didn't, you do. Stars on a classic count toward this week's Star Chart.
 - A kept course becomes a normal course with its own name, played like any other course.
 - High scores: each course has its own board for its week, shown as "Hard Parkour · this week" (older weeks by their date). The Star Chart has its own board.
+
+## Falling Floors
+
+<!-- ---- Falling Floors (EVENTS-DROPPER-SPEC §B.3, WP-F) ---- -->
+*Every block you step on falls away. Keep moving! The last one standing wins, or play solo: how long can you last?*
+
+- **Open it:** `/hcm play falling_floors` (or `/hcm play tnt_run`), or its tile on the Together tab of the Games screen. The tile's name says how many are playing: "Falling Floors - 2 playing · join!". One tap takes you in. The owner switches it on; it ships switched off.
+- **Costs:** Free. No tokens go in. It is a skill game, not a game of chance.
+- **It's TNT Run without any TNT.** Nothing explodes. A block you stand on turns red, and half a second later it's gone.
+- **Where you go:** the gallery, a walkway with glass rails all round the edge of the arena. It's where you wait, where you watch, and where you go when you're out. Nobody can jump in or fall out. Your things are kept safe and come back when you leave, like every world game.
+- **The kit:** Ready (tap when you're set), Play solo (only when you're the only one there) and Leave game (click twice). Everyone in the gallery plays the next round.
+- **When a round starts:** when two players press Ready, a 10-second bar counts down. It also starts by itself 20 seconds after a second player arrives. Everyone goes to a spot on the top floor, waits 3-2-1, and then Go! Nobody can push anybody.
+- **The floors:** three glass floors, 8 blocks apart: yellow on top, then pink, then light blue. Standing still doesn't help, and nor does jumping in place: the block under you turns red and drops. Fall below the bottom floor and you're out. You go back to the gallery with your time: "You lasted 0:42 - 3rd of 6!". Three floors means three chances.
+- **Every round ends:** after 3 minutes (by default) the edges start falling in, one ring every 2 seconds.
+- **Winning:** the last one standing wins. Players who go out on the same moment share their place. Wins go on this week's wins board.
+- **Solo:** play alone and see how long you last. Your longest solo time goes on this week's solo board (the same arena for everyone all week).
+- **Tokens (by default):** 1 token for your first full round of the day (a round played out with others, or 20 seconds solo); solo milestones of 30, 60 and 120 seconds pay 1, 2 and 3 tokens, once ever; and the usual bonus when it's Today's pick. At most 3 tokens a day from Falling Floors. **Winning pays nothing extra.** Leaving a round early earns nothing.
+- **Achievement:** "Last a whole minute on Falling Floors" (15 tokens).
+- **A new arena every week:** each floor is a different shape: a disc, a rounded square, a ring with an island, a plus or a diamond.
+- **Between rounds** the floors are put back, and the next round starts on whole floors a couple of seconds later. Just before a planned restart, no new round starts; a round already going finishes.
+- **Website feed:** `falling_floors` is in `games` with `kind: "arena"`, this week's `shape` (the top floor's: `disc`, `square`, `ring`, `plus` or `diamond`) and `top`: this week's longest solo times, in ms, longest first.
+<!-- ---- end Falling Floors ---- -->
 
 ## The older Arcade games
 

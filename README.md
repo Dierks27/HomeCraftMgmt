@@ -1054,6 +1054,90 @@ line, so they can ask for a favourite back.
 20. `/hcm games gen keep HARD-1 dragon_run "Dragon Run"` → what it would do; add `confirm` → "Kept!";
     `/hcm play dragon_run`; `/hcm games course dragon_run info` shows a normal course.
 
+### Falling Floors
+
+<!-- ---- Falling Floors (EVENTS-DROPPER-SPEC §B.3, WP-F) ---- -->
+TNT Run without any TNT: three glass floors hang in the sky above the Games world, and every block
+you step on turns red and falls away half a second later. **Nothing explodes**: a block turns red,
+then it's gone. The last one standing wins; alone it's "how long can you last?". It ships switched
+off (`games.falling_floors.enabled: false`).
+
+- **Joining is one tap.** `/hcm play falling_floors` (or `/hcm play tnt_run`), or its tile on the
+  **Together** tab ("Falling Floors - 2 playing · join!"), takes you straight into the **gallery**, a
+  railed walkway round the arena's edge. As in every world game your things are kept safe and come
+  back when you leave. The gallery is the lobby, the stand and where you go when you're out; its
+  glass rails are 2 high on both sides, so nobody can jump in or fall out. The kit's **Leave game**
+  (click twice) or `/hcm leave` is the way home.
+- **A round.** In the gallery the kit has **Ready**, **Play solo** (only while you're alone, with
+  `solo` on) and **Leave game**. A round starts after a 10-second bar once `min_players` (2) press
+  Ready, or by itself 20 seconds after a second player arrives. Everyone in the gallery plays, up to
+  `max_players`. Players go to spread-out spots on the top floor two a tick, wait 3-2-1 (held in
+  place), then the floors start falling. Nobody can push anybody during a round.
+- **The floors.** Three floors 8 blocks apart: yellow on top, pink, light blue at the bottom. A block
+  you stand on turns red at once and is gone `fade_ticks` (10 ticks) later, so standing still or
+  jumping in place doesn't help: keep moving. Fall below the bottom floor and you're out, back in the
+  gallery with your time ("You lasted 0:42 - 3rd of 6!"). After `round_seconds` (180) the edges fall
+  in, one ring every 2 seconds, so every round ends. Players out on the same tick share their place.
+- **A new arena every week**, the same for everyone: each floor is a disc, a rounded square, a ring
+  with an island, a plus or a diamond, about 450 blocks, with no walls (a wall top would be a safe
+  spot).
+- **Between rounds** the arena puts itself back: every block of the box is checked against the
+  week's plan and fixed (about 1,400 blocks at `reset_blocks_per_tick` 400, at most 3 ms a tick,
+  paused above 40 MSPT), and the lobby opens on whole floors a couple of seconds after the results.
+  Anyone in the arena who isn't in the gallery is moved out of the way first.
+- **Scores and tokens.** Solo times go on this week's solo board (`ffsolo`, longest first) and
+  multiplayer wins on this week's wins board (`ffwins`, a count). Tokens are the normal skill rewards,
+  under `daily_cap` (3): **1** for your first full round of the day (a round played out with others,
+  or 20 seconds solo), the solo milestones of 30, 60 and 120 seconds (**1**, **2**, **3**, once ever),
+  and today's pick. **A win pays nothing extra**, so there's nothing to gain by taking turns to lose.
+  Leaving a round earns nothing. Lasting a whole minute counts toward the "Last a whole minute on
+  Falling Floors" achievement (15).
+- **The restart hold:** in the minutes before a scheduled restart no new round starts (and nobody
+  new comes in); a round already going finishes.
+- **Safety.** The arena is one box, 48 x 40 x 48 at `origin` (shipped x 5376-5423, y 176-215,
+  z 4352-4399). Before anything is written it must be 32 blocks from every Fresh Courses area
+  (switched on or not) and the kept courses, 16 from every hand-built course and from the world's
+  spawn and `games.fresh.safe_spot`, and inside the world's heights and border. The first time, the
+  box must be empty: anything in it closes the game, touching nothing, until `/hcm games floors claim
+  confirm`. After that nobody, admins included, can change a block in the box while the game is on,
+  and during a round the only blocks that change are floor blocks turning red, then air (at most 128
+  a tick). After a crash, the next start puts every floor back before anyone comes in, and everyone's
+  things come back as from any world game. A reset that can't put the floors back three times closes
+  the game and names where; `/hcm games floors reset` opens it again.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `falling_floors.enabled` | `false` | The game's switch |
+| `falling_floors.origin` | `[5376, 176, 4352]` | The box's lowest corner; x and z are rounded down to the 16-block grid |
+| `falling_floors.fade_ticks` | `10` | How long a stepped-on block stays red, 6-20 ticks |
+| `falling_floors.min_players` | `2` | Ready players that start the countdown |
+| `falling_floors.max_players` | `12` | Most players in the arena, 2-16 |
+| `falling_floors.solo` | `true` | Whether a lone player may play a solo round |
+| `falling_floors.round_seconds` | `180` | Then the edges fall in, 30-900 |
+| `falling_floors.reset_blocks_per_tick` | `400` | How fast the reset between rounds writes |
+| `falling_floors.daily_reward` | `1` | Tokens for the first full round of the day |
+| `falling_floors.milestones` | `[30, 60, 120]` | Solo seconds for the three milestones |
+| `falling_floors.milestone_rewards` | `[1, 2, 3]` | Tokens for each milestone, once ever |
+| `falling_floors.daily_cap` | `3` | Most tokens Falling Floors pays a player a day |
+
+**Verify in game** (on Java and on Bedrock, before switching it on for the family)
+
+1. `games.falling_floors.enabled: true`, `/hcm reload`. Within a few seconds `/hcm games floors
+   status` shows "lobby" and "resets: 1 done", and `/hcm games check` says "Falling Floors: box fits
+   (...), claimed, floors ready".
+2. On a tablet, `/hcm play tnt_run`: you're in the gallery holding Ready, Play solo and Leave game.
+3. Play solo and stand still after Go: the block under you turns red, then it's gone. Fall through the
+   three floors: you're back in the gallery with "You lasted 0:..!".
+4. Three players: two press Ready, the bar counts 10, everyone is on the top floor, 3-2-1, Go. The
+   last one standing wins: the results go to the gallery, the win is on this week's wins board, and
+   the winner's tokens are the same as everyone else's.
+5. The next round starts on whole floors a couple of seconds after the results.
+6. Stop the server mid-round: after the restart `/hcm games floors status` shows a reset first, the
+   floors are whole before anyone can come in, and everyone's things are back.
+7. As an admin, try to break a floor or gallery block: refused. `/hcm games floors tp` takes you to
+   the gallery to watch.
+<!-- ---- end Falling Floors ---- -->
+
 ### Commands
 
 Admin actions on the Games are logged with who did them, mini golf course edits included. A
@@ -1108,6 +1192,10 @@ clear times or high scores. A player in a world game can use only `/hcm play`, `
 | `/hcm games golf <id> name <name…>` | `hcm.games.admin` | Rename it |
 | `/hcm games golf <id> enable\|disable` | `hcm.games.admin` | Open it (only when nothing is missing) or close it (anyone playing it, or on the way in, is sent home) |
 | `/hcm games golf <id> delete confirm` | `hcm.games.admin` | Delete it and its high scores (anyone playing it is sent home) |
+| `/hcm games floors [status]` | `hcm.games.admin` | Falling Floors: this week's floors, the round, the floor writer, the resets, and why it is closed |
+| `/hcm games floors reset` | `hcm.games.admin` | Put the floors back and check them now (a round going finishes first); opens a closed arena again |
+| `/hcm games floors claim [confirm]` | `hcm.games.admin` | Whether its box is claimed; `confirm` claims it even with blocks in it (the next reset clears them) and opens it again |
+| `/hcm games floors tp` | `hcm.games.admin` | Into the gallery to watch (a plain teleport: not a game, nothing is taken) |
 | `/hcm arcade odds` | `hcm.arcade.use` | Players: one line per open game of chance. Admins: the per-stake detail, the Scratch Ticket and the crates |
 | `/hcm guide games` | `hcm.guide.use` | The Games page of How It Works |
 
@@ -1121,6 +1209,7 @@ completion lists the ids):
   its boards by name, `@board:creeper_sweeper:hard`), a hand-built course or golf course (its
   all-time board), or a Fresh course (`@board:fresh_parkour_hard`: **its current set's board**, which
   moves on to the new set by itself) or a Classics slot (the course it holds, with its old records).
+  `@board:falling_floors` shows this week's longest solo Falling Floors times.
   A game of chance has no leaderboard, and an id nothing has is refused with a message, as is a
   board the cabinet doesn't have (`@board:creeper_sweeper:hardd` names easy, normal and hard).
 - A hologram or TV shows a title ("Hard Parkour - this week"), the top 5 as "1. Sam 0:42.1" (ties
@@ -1170,7 +1259,8 @@ Cabinets and games of chance need nothing more. **Courses and mini golf need a G
    read, what to check by hand); `games.restart_times` reads, with the next restart and hold; Fresh
    Courses (on and how often, every area inside the world border and height and clear of hand-built
    courses and the other areas, each claimed, empty, or with foreign blocks and how many, the next
-   change, each course live or why not, the keep area and the Classics); every hand-built course is
+   change, each course live or why not, the keep area and the Classics); Falling Floors (its box fits
+   and is claimed, or what is wrong and the fix); every hand-built course is
    ready and its world loaded; the website feed (the dashboard, a feed token, and `/api/arcade`
    built in memory, never over the network); and the LuckPerms line that takes games of chance away
    from one player (`/lp user <player> permission set hcm.games.chance false`). It ends "All good."

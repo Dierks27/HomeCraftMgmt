@@ -20,6 +20,9 @@ public final class FloorsText {
     public static final String FIXING = "&7The floors are being fixed - one moment!";
     /** Arriving while a round is going. */
     public static final String WATCH = "&7A round is going - watch from here and play the next one!";
+    /** The arena is moving or its rounds changing (an admin's reload): everyone goes home first. */
+    public static final String MOVING = "&7Falling Floors is being changed - your things are back. Come back in a"
+            + " minute!";
     /** Ready pressed on. */
     public static final String READY_ON = "&aReady! &7Waiting for the others.";
     /** Ready pressed off. */

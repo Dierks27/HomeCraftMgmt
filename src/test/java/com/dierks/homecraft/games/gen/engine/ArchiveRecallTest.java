@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.gen.admin.GenArgs;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenBoards;
+import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.PlanCodec;
@@ -51,7 +52,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * old one finish; unrecall and the end of a recall's time close it and clear both halves once
  * nobody is on them; a recall is refused in the restart hold; one stopped halfway is simply built
  * again at the next start and nothing half-built opens; an unreadable plan is refused with the
- * seed to make it again, and that makes it "(re-made)".
+ * seed to make it again, and that makes it "(re-made)". Also: the course up now can't be recalled
+ * by any name; a first recall unrecalled or run out while being built (or after a failed try) has
+ * its blocks cleared, and an empty Classics slot reads "closed", not "being built"; and an archived
+ * plan is rebuilt at its own size, whatever its course's size is now.
  */
 class ArchiveRecallTest {
 
@@ -319,6 +323,7 @@ class ArchiveRecallTest {
     void replacingARecallLetsARunOnTheOldOneFinish() throws Exception {
         build(1);
         GenTag t2 = build(2);
+        build(3); // HARD-3 is up: HARD-1 and HARD-2 can be recalled
         recall("HARD-1", GenArgs.DAYS_DEFAULT, false);
         drive(10);
         GenTag c1 = gen.liveTag(CLASSIC);
@@ -352,6 +357,7 @@ class ArchiveRecallTest {
     void unrecallAndTheEndOfARecallsTimeCloseItAndClearBothHalves() throws Exception {
         build(1);
         build(2);
+        build(3);
         recall("HARD-1", GenArgs.DAYS_DEFAULT, false);
         drive(10);
         GenTag c1 = gen.liveTag(CLASSIC);
@@ -365,6 +371,8 @@ class ArchiveRecallTest {
         assertEquals(0, host.world().count(CDEF.half('A')) + host.world().count(CDEF.half('B')),
                 "both halves are cleared once nobody is on them");
         assertFalse(gen.standing(c1), "and it no longer stands");
+        assertEquals(GenCopy.closed(CDEF.name()), gen.closedLine(CLASSIC), "players read it is closed, not being built");
+        assertFalse(gen.classicPending(CLASSIC), "nothing is on its way");
         said.clear();
         gen.unrecall(CLASSIC, false, said::add);
         assertTrue(heard().contains("already empty"), heard());
@@ -437,5 +445,140 @@ class ArchiveRecallTest {
         assertEquals(t1.editionKey(), c.editionKey(), "as that edition, on its board");
         assertTrue(host.dao.course(CLASSIC).name().contains("re-made"), "and clearly marked re-made");
         assertTrue(gen.history(SLOT, 1).stream().anyMatch(l -> l.startsWith("&fHARD-1 ")), "history still lists it");
+    }
+
+    // ---- review fixes -------------------------------------------------------------------------------
+
+    @Test
+    void theCourseUpNowCantBeRecalledByItsCodeItsNumberOrItsDate() throws Exception {
+        build(1);
+        build(2);
+        for (String typed : List.of("HARD-2", "2", "2026-09-30")) {
+            said.clear();
+            gen.recall(null, SLOT, GenArgs.which(typed), GenArgs.DAYS_DEFAULT, false, said::add);
+            assertTrue(heard().contains("HARD-2 is still Hard Parkour's current course"),
+                    "'" + typed + "' names the course up now: refused like 'current', or its stars count twice: "
+                            + heard());
+        }
+        drive(10);
+        assertNull(gen.liveTag(CLASSIC), "nothing was recalled");
+        assertNull(host.store.meta(GenAdminKeys.recall(CLASSIC)), "or even asked for");
+        recall("HARD-1", GenArgs.DAYS_DEFAULT, false);
+        assertTrue(heard().contains("Bringing back"), "an older one still can be: " + heard());
+    }
+
+    @Test
+    void unrecallingAFirstRecallStillBeingBuiltClearsWhatItHadBuilt() throws Exception {
+        build(1);
+        build(2);
+        recall("HARD-1", GenArgs.DAYS_DEFAULT, false);
+        boolean caught = false;
+        for (int t = 1; t <= 4000 && !caught; t++) {
+            gen.tick();
+            host.now += 50;
+            if (t % 20 == 0) {
+                gen.check();
+            }
+            caught = host.world().count(CDEF.half('A')) > 0 && gen.liveTag(CLASSIC) == null;
+        }
+        assertTrue(caught, "caught with part of it built");
+        assertTrue(gen.classicPending(CLASSIC), "a recall is on its way");
+        assertEquals(GenCopy.building(CDEF.name()), gen.closedLine(CLASSIC), "players read it is being built");
+        said.clear();
+        gen.unrecall(CLASSIC, false, said::add);
+        assertTrue(heard().contains("is closed"), heard());
+        drive(15);
+        assertEquals(0, host.world().count(CDEF.half('A')) + host.world().count(CDEF.half('B')),
+                "what it had built is cleared once nobody is on it");
+        assertNull(host.dao.course(CLASSIC), "nothing opened");
+        assertFalse(gen.classicPending(CLASSIC), "nothing is on its way");
+        assertEquals(GenCopy.closed(CDEF.name()), gen.closedLine(CLASSIC), "and players read it is closed");
+    }
+
+    @Test
+    void aFirstRecallThatFailedPartWayIsClearedWhenUnrecalledOrWhenItsTimeIsUp() throws Exception {
+        build(1);
+        build(2);
+        build(3);
+        recall("HARD-1", GenArgs.DAYS_DEFAULT, false);
+        host.world().killAfter = 5; // the build fails a few blocks in (not a stop): tried again later
+        drive(3);
+        assertNull(gen.liveTag(CLASSIC), "it isn't up");
+        assertTrue(host.world().count(CDEF.half('A')) > 0, "and left some blocks: " + heard());
+        said.clear();
+        gen.unrecall(CLASSIC, false, said::add);
+        drive(15);
+        assertEquals(0, host.world().count(CDEF.half('A')) + host.world().count(CDEF.half('B')),
+                "unrecalled: what it had set is cleared");
+
+        recall("HARD-2", 1, false);
+        host.world().killAfter = 5;
+        drive(3);
+        assertNull(gen.liveTag(CLASSIC), "the next one failed too");
+        assertTrue(host.world().count(CDEF.half('A')) > 0, "after some blocks");
+        host.now += 86_400_000L + 1000;
+        drive(15);
+        assertNull(host.store.meta(GenAdminKeys.recall(CLASSIC)), "its day is up: the recall is over");
+        assertEquals(0, host.world().count(CDEF.half('A')) + host.world().count(CDEF.half('B')),
+                "and what it had set is cleared");
+        assertNull(host.dao.course(CLASSIC), "nothing ever opened");
+    }
+
+    @Test
+    void anArchivedPlanIsRebuiltAtItsOwnSizeEvenAfterItsCoursesSizeChanged() throws Exception {
+        build(1);
+        // An Easy Parkour from when its half was smaller than it is now (a generator that grew since).
+        Slots.Def easy = Slots.DAILY_PARKOUR_EASY;
+        Box now = easy.half('A');
+        Box was = Box.sized(now.minX(), now.minY(), now.minZ(), now.sizeX() - 8, now.sizeY(), now.sizeZ() - 8);
+        com.dierks.homecraft.games.gen.api.Plan old = GenKit.plan(easy, was, 4242L, 1);
+        long day = LocalDate.of(2026, 9, 1).toEpochDay();
+        new GenArchiveDao(host.db).archive(new GenArchiveDao.Row(easy.id(),
+                com.dierks.homecraft.games.gen.api.Edition.editionKey(1, day, 0), null, 0, day, 4242L, "parkour/1",
+                "parkour", "easy", "Easy Parkour", 1000L, null, PlanCodec.encode(old), 37_500, 54_000, 1000L, null),
+                1000L);
+        try (PreparedStatement ps = host.connection.prepareStatement(
+                "UPDATE gen_editions SET ends_at = 2000 WHERE code = 'EASY-1'")) {
+            ps.executeUpdate();
+        }
+        recall("EASY-1", GenArgs.DAYS_DEFAULT, false);
+        drive(10);
+        GenTag c = gen.liveTag(CLASSIC);
+        assertNotNull(c, "it is back, at the size it was made: " + heard() + " " + gen.status(CLASSIC));
+        Box h = CDEF.half(c.half());
+        com.dierks.homecraft.games.gen.api.Plan there = com.dierks.homecraft.games.gen.api.PlanShift.to(old,
+                Box.sized(h.minX(), h.minY(), h.minZ(), was.sizeX(), was.sizeY(), was.sizeZ()));
+        assertEquals(there.hash(), c.planHash(), "the archived plan, moved");
+        assertStands(there, h);
+        gen.stop();
+        gen = null;
+        host.now += 60_000;
+        boot();
+        drive(70);
+        assertTrue(gen.live(CLASSIC, gen.liveTag(CLASSIC)), "a restart vouches for it again");
+        assertEquals(0, host.logged(java.util.logging.Level.WARNING, "only its structure was checked"),
+                "block for block, from the same plan");
+        said.clear();
+        gen.keep(null, GenArgs.which("EASY-1"), "old_easy", null, false, true, said::add);
+        drive(25);
+        assertNotNull(host.dao.course("old_easy"), "and it can be kept: " + heard());
+        Box plot = host.settings.archive().keep().plot(1);
+        com.dierks.homecraft.games.gen.api.Plan kept = com.dierks.homecraft.games.gen.api.PlanShift.to(old,
+                Box.sized(plot.minX() + KeepArea.MARGIN, plot.minY(), plot.minZ() + KeepArea.MARGIN, was.sizeX(),
+                        was.sizeY(), was.sizeZ()));
+        assertStands(kept, plot);
+    }
+
+    /** Every block and sign of {@code plan} stands, and nothing else in {@code box}. */
+    private void assertStands(com.dierks.homecraft.games.gen.api.Plan plan, Box box) {
+        for (com.dierks.homecraft.games.gen.api.BlockOp op : plan.ops()) {
+            assertEquals(GenKit.FakeWorld.canonicalOf(plan.palette().get(op.state())), host.world().at(op.x(), op.y(),
+                    op.z()), "the block at " + op.x() + "," + op.y() + "," + op.z());
+        }
+        for (com.dierks.homecraft.games.gen.api.SignText sign : plan.signs()) {
+            assertTrue(String.valueOf(host.world().at(sign.x(), sign.y(), sign.z())).contains("sign"),
+                    "the sign at " + sign.x() + "," + sign.y() + "," + sign.z());
+        }
+        assertEquals(plan.ops().size() + plan.signs().size(), host.world().count(box), "and nothing else");
     }
 }

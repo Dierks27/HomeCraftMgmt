@@ -379,9 +379,14 @@ public final class GenService implements GeneratedCourses, GenOps {
             keeper.check();
             return;
         }
-        if (keeper.hasWork()) {
-            keeper.begin();
-            return;
+        // A plot job waits for every live course's boot check (they are shut until then), and none
+        // starts this close to a restart (the ones nothing records are dropped, their admins told).
+        if (keeper.hasWork() && !healDue()) {
+            if (!GenScheduler.nearRestart(now, hold, host.settings().avoidBeforeRestartMinutes())) {
+                keeper.begin();
+                return;
+            }
+            keeper.holdForRestart("a restart is due at " + hold.clock(hold.next(now)));
         }
         Job next = queue.poll();
         if (next != null) {
@@ -486,6 +491,24 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
     }
 
+    /**
+     * Whether a live course still waits for its check: a HEAL queued (every boot queues one per
+     * live half), or one {@link #schedule} would begin first. Those go before any plot job.
+     */
+    private boolean healDue() {
+        for (Job q : queue) {
+            if (q.kind == Kind.HEAL) {
+                return true;
+            }
+        }
+        for (SlotState s : slots.values()) {
+            if (s.on() && s.live != null && !s.verified && !s.healFailed && s.claimed) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Why a due recall can't start yet, or {@code null} when it can (the restart hold, the day's tries). */
     private String recallWait(SlotState s, long now, RestartHold hold) {
         DailySettings st = host.settings();
@@ -530,10 +553,30 @@ public final class GenService implements GeneratedCourses, GenOps {
                 s.want = null;
                 host.logger().info("Fresh Courses: " + s.def.id() + "'s recall of " + gone.slot() + " "
                         + gone.edition() + " is over.");
+                if (s.live == null) {
+                    forgetRecall(s, "its recall is over");
+                }
             }
             if (s.want == null && s.live != null) {
                 closeClassic(s, "its recall is over");
             }
+        }
+    }
+
+    /**
+     * A Classics slot that holds nothing live lost its recall (unrecalled, or its time is up): a
+     * recall still being built stops, and — since it may have set blocks, or failed after some —
+     * both halves are cleared once nobody is on them, like a closed one's.
+     */
+    private void forgetRecall(SlotState s, String why) {
+        if (job != null && job.slot == s && job.kind == Kind.RECALL) {
+            cancel(job, why);
+        }
+        queue.removeIf(j -> j.slot == s && j.kind == Kind.RECALL);
+        s.prior = null;
+        if (s.claimed) {
+            s.bothDirty = true;
+            s.lastClearCheck = 0;
         }
     }
 
@@ -969,9 +1012,9 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     /**
      * The planner's "stop now" check, which also gives the server room: while anyone is online the
-     * planner sleeps 2 ms after every 10 ms of work (§3.3 step 1).
+     * planner sleeps 2 ms after every 10 ms of work (§3.3 step 1). A keep's re-made plan uses it too.
      */
-    private BooleanSupplier cancelled(AtomicBoolean flag) {
+    BooleanSupplier cancelled(AtomicBoolean flag) {
         return new BooleanSupplier() {
             private long mark = System.nanoTime();
 
@@ -1492,7 +1535,11 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (archiveDays > 0 && archivePrunedDay != today) {
             archivePrunedDay = today;
             try {
-                int gone = host.store().pruneArchive(now - archiveDays * 86_400_000L, recalledNow());
+                Set<String> spared = recalledNow();
+                for (KeptPlot p : keeper.kept().values()) {
+                    spared.add(p.slot() + "|" + p.edition()); // a plot's course is kept, whatever kept_as says
+                }
+                int gone = host.store().pruneArchive(now - archiveDays * 86_400_000L, spared);
                 if (gone > 0) {
                     host.logger().info("Fresh Courses: " + gone + " archived course" + (gone == 1 ? "" : "s")
                             + " older than " + archiveDays + " days left the archive.");
@@ -1730,9 +1777,30 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (s == null) {
             return GenCopy.closed("That course");
         }
+        if (s.classic) {
+            // Empty until a recall: it is "being built" only while one is on its way or being checked.
+            return classicPending(s) || (s.on() && s.live != null && !s.verified && !s.healFailed)
+                    ? GenCopy.building(s.def.name()) : GenCopy.closed(s.def.name());
+        }
         boolean building = s.on() && ((job != null && job.slot == s && (job.kind == Kind.HEAL || s.live == null))
                 || (s.live != null && !s.verified && !s.healFailed) || (s.live == null && s.claimed));
         return building ? GenCopy.building(s.def.name()) : GenCopy.closed(s.def.name());
+    }
+
+    /**
+     * Whether a Classics slot has a recall on its way that isn't open yet: being built, waiting for
+     * its turn, or tried again later after a failed try ({@link #closedLine} says "being built,
+     * back soon"). A tile shows a Classics slot as holding a course when {@link #classic} gives one,
+     * as being built when this is true, and as empty otherwise.
+     */
+    public boolean classicPending(String classicId) {
+        SlotState s = slots.get(classicId == null ? "" : classicId.trim().toLowerCase(Locale.ROOT));
+        return s != null && s.classic && classicPending(s);
+    }
+
+    private boolean classicPending(SlotState s) {
+        return s.on() && s.want != null && ((job != null && job.slot == s && job.kind == Kind.RECALL)
+                || !holds(s, s.want) || !s.verified);
     }
 
     /**
@@ -2601,19 +2669,19 @@ public final class GenService implements GeneratedCourses, GenOps {
         j.seed = row.seed();
         j.mix = row.tierOrMix();
         Box target = s.half(j.half);
-        Box box = Box.sized(target.minX(), target.minY(), target.minZ(), orig.sizeX(), orig.sizeY(), orig.sizeZ());
-        if (!target.contains(box)) {
-            dropWant(j, row.name() + " doesn't fit " + s.def.name());
-            return;
-        }
         j.planDef = orig;
-        j.planBox = box;
         if (w.remade()) {
+            Box box = Box.sized(target.minX(), target.minY(), target.minZ(), orig.sizeX(), orig.sizeY(), orig.sizeZ());
+            if (!target.contains(box)) {
+                dropWant(j, row.name() + " doesn't fit " + s.def.name());
+                return;
+            }
             Planner p = planners.get(orig.generator());
             if (p == null) {
                 dropWant(j, "there is no " + orig.generator() + " generator");
                 return;
             }
+            j.planBox = box;
             plan(j, p);
             return;
         }
@@ -2623,6 +2691,13 @@ public final class GenService implements GeneratedCourses, GenOps {
                     + "/hcm games gen recall " + s.def.id() + " " + row.slot() + " seed:" + GenSeed.hex(row.seed()));
             return;
         }
+        // The plan's own half, as it was made: a slot whose size changed since can't refuse it.
+        Box box = at(target, read.plan().half());
+        if (!target.contains(box)) {
+            dropWant(j, row.name() + " doesn't fit " + s.def.name());
+            return;
+        }
+        j.planBox = box;
         Plan moved = PlanShift.to(read.plan(), box);
         List<String> problems = PlanCheck.problems(moved, orig, box);
         if (!problems.isEmpty()) {
@@ -2634,6 +2709,11 @@ public final class GenService implements GeneratedCourses, GenOps {
         j.stage = Stage.EVACUATE;
         j.evacStart = host.now();
         evacuate(j);
+    }
+
+    /** A box the size of {@code half} at {@code target}'s min corner (where an archived plan is moved to). */
+    private static Box at(Box target, Box half) {
+        return Box.sized(target.minX(), target.minY(), target.minZ(), half.sizeX(), half.sizeY(), half.sizeZ());
     }
 
     /** A recall that can never be built: it is forgotten (the slot keeps what it held), and the admin told. */
@@ -2667,8 +2747,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             GenArchiveDao.Row row = orig == null ? null : host.store().edition(tag.slot(), tag.editionKey());
             PlanCodec.Read read = row == null ? null : PlanCodec.decode(row.plan());
             if (read != null && read.ok()) {
-                Box box = Box.sized(target.minX(), target.minY(), target.minZ(), orig.sizeX(), orig.sizeY(),
-                        orig.sizeZ());
+                Box box = at(target, read.plan().half());
                 Plan moved = PlanShift.to(read.plan(), box);
                 if (moved.hash().equals(tag.planHash())) {
                     j.plan = moved;
@@ -3123,6 +3202,13 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (row == null) {
             return;
         }
+        if (row.live()) {
+            // By its code or its date as much as by "current": the same course open twice would
+            // give its stars twice in one week.
+            report.accept("&c" + row.code() + " is still " + row.name() + "'s current course. &7Recall an older one:"
+                    + " last, a number or a code (&e/hcm games gen history " + row.slot() + "&7).");
+            return;
+        }
         Slots.Def orig = Slots.of(row.slot());
         Slots.Def fits = Slots.classicFor(orig);
         Slots.Def classic = classicWord != null ? Slots.classicByWord(classicWord) : fits;
@@ -3228,12 +3314,10 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         s.want = null;
         s.prior = null;
-        if (job != null && job.slot == s && job.kind == Kind.RECALL) {
-            cancel(job, "it was unrecalled");
-        }
-        queue.removeIf(j -> j.slot == s && j.kind == Kind.RECALL);
         if (s.live != null) {
             closeClassic(s, "an admin closed it");
+        } else {
+            forgetRecall(s, "it was unrecalled");
         }
         report.accept("&a" + c.name() + " is closed. &7Its halves are cleared once nobody is on them.");
     }

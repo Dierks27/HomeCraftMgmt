@@ -33,13 +33,20 @@ import java.util.logging.Level;
  * plot of the keep area, registering it as a NORMAL course with its records, and clearing a plot
  * again.
  *
- * <p><b>The same guarantees as a build.</b> A plot is Fresh Courses' only after it was found empty
- * (or cleared with {@code claim plot <n> confirm}), exactly like a half. The plan is the archived
- * one moved into the plot ({@link PlanShift}), never planned again (unless an admin asked for a
- * course made again from its seed). It is built with {@link BuildJob}, whose writer throws outside
- * the plot, budgeted like every build, verified, and for golf its witness lines replayed on the real
- * blocks. Only then is the course row written — in one transaction with its copied records, the
- * archive's "kept as" and the plot's record — so nothing half-built is ever registered or open.
+ * <p><b>The same guarantees as a build.</b> A plot is built in only right after it was found empty
+ * (or cleared with {@code claim plot <n> confirm}), like a half the first time. Unlike a half, a
+ * free plot is NOT guarded ({@link GenRegionGuard} leaves the keep area alone: it is hand-built
+ * territory, and admins may build there), so a plot found empty once proves nothing later: every
+ * keep scans its plot first. Only a keep the server stopped halfway skips the scan: its
+ * {@code gen.keep.pending} record proves the blocks there are its own. No plot is scanned, cleared
+ * or built while keeping is off, while it overlaps another plot's kept course (the area moved), or
+ * near a registered course ({@link #plotProblem}). The plan is the archived one moved into the plot
+ * ({@link PlanShift}), never planned again (unless an admin asked for a course made again from its
+ * seed). It is built with {@link BuildJob}, whose writer throws outside the plot, budgeted like
+ * every build, verified, and for golf its witness lines replayed on the real blocks. Only then is
+ * the course row written — in one transaction with its copied records, the archive's "kept as" and
+ * the plot's record — so nothing half-built is ever registered or open. An edition is kept once:
+ * its archive row names one kept course.
  *
  * <p><b>Crash safety.</b> Before the first block, the job is written to {@code gen.keep.pending}. A
  * stop at any point leaves a plot that isn't registered and isn't open; the next start finishes the
@@ -48,7 +55,10 @@ import java.util.logging.Level;
  * finished the same way. After the keep, the generator never writes into that plot again: only an
  * admin's {@code clear-plot} does.
  *
- * <p>One writer at a time: {@link GenService} runs this between its own jobs and never beside one.
+ * <p>One writer at a time: {@link GenService} runs this between its own jobs and never beside one,
+ * never before a live course's boot check, and starts none within
+ * {@code avoid_before_restart_minutes} of a restart. A re-made course's plan runs under the same
+ * guards as the engine's own: the online throttle, and a kill after {@link GenService#PLAN_KILL_MS}.
  */
 final class KeepService {
 
@@ -79,6 +89,7 @@ final class KeepService {
         BuildJob build;
         boolean resumed;
         long writes;
+        long planStarted;
         // KEEP
         GenArchiveDao.Row row;
         Slots.Def def;
@@ -202,25 +213,49 @@ final class KeepService {
         inbox.clear();
     }
 
-    /** Give the running job up (a restart is close); it is finished after the restart. */
+    /**
+     * A restart is close: the running job is given up, and the jobs that haven't started are
+     * dropped ({@link #holdForRestart}). A job that may have changed blocks is recorded in
+     * {@code gen.keep.pending}, so it goes on after the restart; one that changed nothing (a scan, a
+     * keep still checking its plot) is not, and its admin is told to ask again.
+     */
     void cancel(String why) {
-        if (job == null) {
-            return;
-        }
         PlotJob j = job;
-        end(j);
-        j.cancelled.set(true);
-        job = null;
-        host.logger().info("Fresh Courses: " + j.kind.name().toLowerCase(Locale.ROOT) + " of plot " + j.plot
-                + " stopped - " + why);
-        j.report.accept("&7Plot " + j.plot + ": stopped - " + why + ". It goes on after the restart.");
-        if (j.kind == Kind.SCAN) {
-            return;
+        if (j != null) {
+            end(j);
+            j.cancelled.set(true);
+            job = null;
+            boolean resumes = j.kind != Kind.SCAN && j.stage != Stage.START
+                    && (j.kind != Kind.KEEP || pendingWritten(j));
+            host.logger().info("Fresh Courses: " + j.kind.name().toLowerCase(Locale.ROOT) + " of plot " + j.plot
+                    + " stopped - " + why + (resumes ? " (it goes on after the restart)" : " (nothing was changed)"));
+            if (resumes) {
+                queue.addFirst(copyForResume(j));
+                j.report.accept("&7Plot " + j.plot + ": stopped - " + why + ". It goes on after the restart.");
+            } else {
+                j.report.accept("&7Plot " + j.plot + ": stopped - " + why + ". Nothing was changed; run it again"
+                        + " after the restart.");
+            }
         }
-        if (j.stage == Stage.START || (j.kind == Kind.KEEP && !pendingWritten(j))) {
-            return;
-        }
-        queue.addFirst(copyForResume(j));
+        holdForRestart(why);
+    }
+
+    /**
+     * A restart is close: every waiting job that nothing records is dropped, and its admin told (the
+     * queue doesn't outlive a restart, and none may start this close to one). A job finishing what
+     * a stop cut short stays: its {@code gen.keep.pending} record brings it back anyway.
+     */
+    void holdForRestart(String why) {
+        queue.removeIf(q -> {
+            if (q.resumed) {
+                return false;
+            }
+            host.logger().info("Fresh Courses: " + q.kind.name().toLowerCase(Locale.ROOT) + " of plot " + q.plot
+                    + " not started - " + why);
+            q.report.accept("&7Plot " + q.plot + ": not started - " + why + ". Nothing was changed; run it again"
+                    + " after the restart.");
+            return true;
+        });
     }
 
     private boolean pendingWritten(PlotJob j) {
@@ -265,6 +300,14 @@ final class KeepService {
                 fail(j, "the world " + j.world + " isn't loaded");
                 return;
             }
+            if (!j.resumed && j.courseId == null) {
+                // Checked again as it starts: config may have changed while it waited.
+                String why = plotProblem(j.plot, j.world, j.box);
+                if (why != null) {
+                    fail(j, "it can't be used: " + why);
+                    return;
+                }
+            }
             switch (j.kind) {
                 case SCAN -> {
                     j.stage = Stage.SCAN;
@@ -272,7 +315,8 @@ final class KeepService {
                 }
                 case CLEAR -> beginClear(j, port);
                 case KEEP -> {
-                    if (!j.resumed && !claimed(j.plot, j.world, j.box)) {
+                    if (!j.resumed) {
+                        // Every keep checks its plot is empty first: nothing guards a free plot.
                         j.stage = Stage.SCAN;
                         j.build = new BuildJob(port, j.box, null, BuildJob.Mode.SCAN);
                     } else {
@@ -344,8 +388,9 @@ final class KeepService {
         Box build = buildBox(j);
         PlanInput in = new PlanInput(j.def, build, 'A', j.row.day(), key == null ? 0 : key.reroll(), j.row.seed(),
                 j.row.tierOrMix(), host.fallDepth(), GenService.WORK.getOrDefault(j.def.generator(), 200_000L),
-                j.cancelled::get);
+                gen.cancelled(j.cancelled));
         j.stage = Stage.PLANNING;
+        j.planStarted = host.now();
         host.planner().execute(() -> {
             Plan made = null;
             Throwable error = null;
@@ -383,10 +428,18 @@ final class KeepService {
         j.build = new BuildJob(port, j.box, j.plan, BuildJob.Mode.CONVERGE);
     }
 
-    /** Where the course stands in its plot: its half's size, {@value KeepArea#MARGIN} in from the plot's corner. */
+    /**
+     * Where the course stands in its plot, {@value KeepArea#MARGIN} in from the plot's corner: the
+     * archived plan's own half once it is moved there (its size as it was made, whatever the slot's
+     * size is now), or the slot's half size for a course made again from its seed.
+     */
     static Box buildBox(PlotJob j) {
-        return Box.sized(j.box.minX() + KeepArea.MARGIN, j.box.minY(), j.box.minZ() + KeepArea.MARGIN, j.def.sizeX(),
-                j.def.sizeY(), j.def.sizeZ());
+        return j.plan != null ? j.plan.half() : at(j.box, j.def.sizeX(), j.def.sizeY(), j.def.sizeZ());
+    }
+
+    /** A box of this size {@value KeepArea#MARGIN} in from {@code plot}'s corner. */
+    private static Box at(Box plot, int sx, int sy, int sz) {
+        return Box.sized(plot.minX() + KeepArea.MARGIN, plot.minY(), plot.minZ() + KeepArea.MARGIN, sx, sy, sz);
     }
 
     /** Every tick: plans that came back, then a tick of building. */
@@ -396,6 +449,15 @@ final class KeepService {
             r.run();
         }
         PlotJob j = job;
+        if (j != null && j.stage == Stage.PLANNING && host.now() - j.planStarted > GenService.PLAN_KILL_MS) {
+            // The engine's own rule for a plan that hangs: give it up, never wait on it.
+            j.cancelled.set(true);
+            if (host.planner() instanceof PlannerThread t) {
+                t.restart();
+            }
+            fail(j, "planning took longer than " + GenService.PLAN_KILL_MS / 1000 + " seconds");
+            return;
+        }
         if (j == null || j.build == null || (j.stage != Stage.SCAN && j.stage != Stage.CONVERGE)) {
             return;
         }
@@ -480,7 +542,6 @@ final class KeepService {
             j.report.accept("&c" + why);
             return;
         }
-        claim(j);
         if (j.kind == Kind.SCAN) {
             end(j);
             j.report.accept("&aPlot " + j.plot + " is empty and ready for a kept course.");
@@ -492,14 +553,6 @@ final class KeepService {
             return;
         }
         startBuild(j, port);
-    }
-
-    private void claim(PlotJob j) {
-        try {
-            host.store().meta(GenAdminKeys.plotClaim(j.plot), claimText(j.world, j.box));
-        } catch (SQLException e) {
-            host.logger().log(Level.WARNING, "Fresh Courses: could not record plot " + j.plot + "'s claim", e);
-        }
     }
 
     /** The blocks are the plan: prove golf on the real blocks, then register the course (one transaction). */
@@ -547,7 +600,6 @@ final class KeepService {
 
     private void cleared(PlotJob j) {
         end(j);
-        claim(j);
         forgetPending();
         host.logger().info("Fresh Courses: plot " + j.plot + " is empty (" + j.writes + " blocks cleared).");
         j.report.accept("&aPlot " + j.plot + " is cleared" + (j.courseId == null ? "" : " and " + j.courseId
@@ -614,6 +666,15 @@ final class KeepService {
             report.accept("&c" + row.code() + " was made for a course that no longer exists.");
             return;
         }
+        String already = keptAs(row);
+        if (already != null) {
+            // One kept course a set: its archive row names one ("kept as", the website's "kept"),
+            // and clearing that course's plot must never leave another copy unnamed.
+            report.accept("&c" + row.code() + " is already kept as " + already + ". &7Play it with &e/hcm play "
+                    + already + "&7; to keep it again under another id, clear its plot first (&e/hcm games gen"
+                    + " plots&7).");
+            return;
+        }
         String key = id.toLowerCase(Locale.ROOT);
         boolean exists;
         try {
@@ -627,8 +688,14 @@ final class KeepService {
             report.accept("&c" + problem);
             return;
         }
-        int n = freePlot(a.keep());
+        List<String> skipped = new ArrayList<>();
+        int n = freePlot(a.keep(), world, skipped);
         if (n < 1) {
+            if (!skipped.isEmpty()) {
+                report.accept("&cNo free plot can be used: &7" + skipped.get(0) + (skipped.size() > 1 ? " (and "
+                        + (skipped.size() - 1) + " more)" : "") + ".");
+                return;
+            }
             report.accept("&cThe keep area is full (" + a.keep().maxPlots() + " plots). &7Clear one with &e/hcm games"
                     + " gen clear-plot <n> confirm&7, or raise games.fresh.keep.max_plots.");
             return;
@@ -674,11 +741,11 @@ final class KeepService {
         if (j.def == null) {
             return "it was made for a course that no longer exists";
         }
-        Box build = buildBox(j);
-        if (!j.box.contains(build)) {
-            return "it doesn't fit a plot";
-        }
+        j.plan = null;
         if (j.remade) {
+            if (!j.box.contains(buildBox(j))) {
+                return "it doesn't fit a plot";
+            }
             if (planners.get(j.def.generator()) == null) {
                 return "there is no " + j.def.generator() + " generator";
             }
@@ -689,6 +756,13 @@ final class KeepService {
             return "its stored plan can't be read (" + read.problem() + "). Make it again from its seed with today's"
                     + " generator: /hcm games gen keep " + j.row.slot() + " seed:" + GenSeed.hex(j.row.seed()) + " "
                     + j.id;
+        }
+        // Sized by the plan's own half, not the slot's today: a generator that grew since can't
+        // make an old course unbuildable.
+        Box half = read.plan().half();
+        Box build = at(j.box, half.sizeX(), half.sizeY(), half.sizeZ());
+        if (!j.box.contains(build)) {
+            return "it doesn't fit a plot";
         }
         Plan moved = PlanShift.to(read.plan(), build);
         List<String> problems = PlanCheck.problems(moved, j.def, build);
@@ -705,6 +779,32 @@ final class KeepService {
         return null;
     }
 
+    /**
+     * The course {@code row}'s edition is kept as (its archive row, a plot's record, or a keep in
+     * flight), or {@code null} when it isn't.
+     */
+    private String keptAs(GenArchiveDao.Row row) {
+        if (row.keptAs() != null) {
+            return row.keptAs();
+        }
+        for (KeptPlot p : kept().values()) {
+            if (row.slot().equals(p.slot()) && row.edition().equals(p.edition())) {
+                return p.courseId();
+            }
+        }
+        List<PlotJob> jobs = new ArrayList<>(queue);
+        if (job != null) {
+            jobs.add(job);
+        }
+        for (PlotJob q : jobs) {
+            if (q.kind == Kind.KEEP && q.row != null && row.slot().equals(q.row.slot())
+                    && row.edition().equals(q.row.edition())) {
+                return q.id;
+            }
+        }
+        return null;
+    }
+
     /** Whether a keep waiting or running already takes {@code id}. */
     private boolean taken(String id) {
         if (job != null && id.equals(job.id)) {
@@ -718,8 +818,12 @@ final class KeepService {
         return false;
     }
 
-    /** The lowest plot with no course, no keep in flight and nothing waiting for it; -1 when full. */
-    private int freePlot(KeepArea area) {
+    /**
+     * The lowest plot with no course, no keep in flight, nothing waiting for it and nothing in its
+     * way ({@link #plotProblem}); -1 when there is none. Each plot passed over for being in the way
+     * is added to {@code skipped}, said as admins read it.
+     */
+    private int freePlot(KeepArea area, String world, List<String> skipped) {
         Map<Integer, KeptPlot> used = kept();
         String pending = null;
         try {
@@ -727,14 +831,76 @@ final class KeepService {
         } catch (SQLException e) {
             // judged by the jobs below
         }
+        List<Regions.Area> courses = courseAreas();
         for (int n = 1; n <= area.maxPlots(); n++) {
             if (used.containsKey(n) || busyPlot(n) || (pending != null && pending.split("\\|", -1).length > 1
                     && pending.split("\\|", -1)[1].equals(Integer.toString(n)))) {
                 continue;
             }
+            String why = plotProblem(n, world, area.plot(n), used, courses);
+            if (why != null) {
+                skipped.add("plot " + n + ": " + why);
+                continue;
+            }
             return n;
         }
         return -1;
+    }
+
+    /**
+     * Why plot {@code n} (standing in {@code box}) must not be scanned, cleared or built in, or
+     * {@code null}. The keep area is hand-built territory that nothing guards, so this is all that
+     * stands between a clear and someone's course: keeping is off (the area overlaps a generator
+     * or Classics half, or comes within {@value Regions#CLEARANCE} blocks of one: config's check);
+     * the box overlaps another plot's kept course (the area moved since it was kept); or a
+     * registered course stands in it or within {@value Regions#CLEARANCE} blocks of it (a kept
+     * course of another plot only when it stands inside).
+     */
+    String plotProblem(int n, String world, Box box) {
+        return plotProblem(n, world, box, kept(), courseAreas());
+    }
+
+    private String plotProblem(int n, String world, Box box, Map<Integer, KeptPlot> used, List<Regions.Area> courses) {
+        DailySettings.Archive a = host.settings().archive();
+        if (a.keepProblem() != null) {
+            return "keeping is off: the keep area " + a.keep().describe() + " " + a.keepProblem();
+        }
+        Map<String, Integer> keptIn = new java.util.HashMap<>();
+        for (KeptPlot p : used.values()) {
+            keptIn.put(p.courseId(), p.n());
+            if (p.n() != n && p.world().equalsIgnoreCase(world) && p.box().intersects(box)) {
+                return "it overlaps plot " + p.n() + ", where " + p.courseId() + " stands (" + p.box().describe()
+                        + "): the keep area moved since that course was kept";
+            }
+        }
+        if (courses == null) {
+            return "the courses can't be read to check it";
+        }
+        for (Regions.Area c : courses) {
+            if (c.world() == null || !c.world().equalsIgnoreCase(world)) {
+                continue;
+            }
+            Integer in = keptIn.get(c.courseId());
+            int gap = c.box().gap(box);
+            if (in != null ? in != n && gap < 0 : gap < Regions.CLEARANCE) {
+                return "the course " + c.courseId() + " is " + (gap < 0 ? "inside it" : "only " + gap
+                        + " blocks from it") + " (" + c.box().describe() + "; it must be " + Regions.CLEARANCE
+                        + " away)";
+            }
+        }
+        return null;
+    }
+
+    /** Every registered (non-generated) course's footprint, kept courses included; {@code null} when unreadable. */
+    private List<Regions.Area> courseAreas() {
+        try {
+            List<GamesDao.CourseRow> rows = new ArrayList<>(host.store().courses(Slots.GAME_TRIALS));
+            rows.addAll(host.store().courses(Slots.GAME_GOLF));
+            return Regions.handBuilt(rows);
+        } catch (SQLException | RuntimeException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: the courses couldn't be read to check a plot", e);
+            return null;
+        }
     }
 
     private boolean busyPlot(int n) {
@@ -849,7 +1015,11 @@ final class KeepService {
         report.accept("&7Taking down " + p.courseId() + " and clearing plot " + n + "...");
     }
 
-    /** claim plot: count what is in a plot; with confirm, clear it and make it Fresh Courses'. */
+    /**
+     * claim plot: count what is in a free plot; with confirm, clear it for a kept course. Refused
+     * for a plot with anything in its way ({@link #plotProblem}), so it never clears a course. A plot
+     * found empty is not remembered as ours: the next keep scans it again.
+     */
     void claimPlot(int n, boolean confirm, Consumer<String> report) {
         DailySettings.Archive a = host.settings().archive();
         if (n < 1 || n > a.keep().maxPlots()) {
@@ -870,25 +1040,14 @@ final class KeepService {
             return;
         }
         Box box = a.keep().plot(n);
-        if (claimed(n, world, box)) {
-            report.accept("&7Plot " + n + " is already claimed.");
+        String why = plotProblem(n, world, box);
+        if (why != null) {
+            report.accept("&cPlot " + n + " can't be used: &7" + why + ". Nothing was changed.");
             return;
         }
         queue.add(new PlotJob(confirm ? Kind.CLEAR : Kind.SCAN, n, world, box, report));
-        report.accept(confirm ? "&7Clearing plot " + n + " (" + box.describe() + ") and claiming it..."
+        report.accept(confirm ? "&7Clearing plot " + n + " (" + box.describe() + ")..."
                 : "&7Counting what is in plot " + n + "...");
-    }
-
-    private boolean claimed(int n, String world, Box box) {
-        try {
-            return claimText(world, box).equals(host.store().meta(GenAdminKeys.plotClaim(n)));
-        } catch (SQLException e) {
-            return false;
-        }
-    }
-
-    static String claimText(String world, Box box) {
-        return world.toLowerCase(Locale.ROOT) + "," + KeptPlot.boxText(box);
     }
 
     /** Where {@code tp plot <n>} goes: a kept course's plot corner, or the middle of a free plot. */

@@ -102,6 +102,24 @@ class GenArgsTest {
     }
 
     @Test
+    void keepWithAnEditionButNoIdIsRefusedNeverKeepingTheCurrentOneUnderThatWord() {
+        for (String which : List.of("last", "current", "live", "12", "date", "2026-10-05", "7:40")) {
+            GenArgs.Keep k = GenArgs.keep(words("fresh_parkour_hard " + which));
+            assertNotNull(k.error(), "'keep fresh_parkour_hard " + which + "' names an edition and no id: refused,"
+                    + " not the current course kept as '" + which + "'");
+            assertTrue(k.error().contains("Give the new course an id too"), "and it says what is missing: "
+                    + k.error());
+        }
+        GenArgs.Keep id = GenArgs.keep(words("fresh_parkour_hard dragon_run"));
+        assertNull(id.error(), "an id alone still keeps the current course: " + id.error());
+        assertEquals(GenArgs.How.CURRENT, id.which().how(), "the current one");
+        assertEquals("dragon_run", id.id(), "as that id");
+        GenArgs.Keep both = GenArgs.keep(words("fresh_parkour_hard last dragon_run"));
+        assertEquals(GenArgs.How.LAST, both.which().how(), "an edition and an id: that edition");
+        assertEquals("dragon_run", both.id(), "as that id");
+    }
+
+    @Test
     void historyTakesACourseOrAllAPageOrOneCourse() {
         GenArgs.History a = GenArgs.history(words("fresh_parkour_hard 2"));
         assertEquals("fresh_parkour_hard", a.slot(), "one course");

@@ -101,7 +101,10 @@ public interface GenOps {
         report.accept("&cThe archive isn't available.");
     }
 
-    /** Count what is in plot {@code n}; with {@code confirm}, clear it and make it Fresh Courses' to build in. */
+    /**
+     * Count what is in free plot {@code n}; with {@code confirm}, clear it for a kept course. Refused
+     * while anything is in the way (keeping is off, a course is in or near it).
+     */
     default void claimPlot(int n, boolean confirm, Consumer<String> report) {
         report.accept("&cThe archive isn't available.");
     }

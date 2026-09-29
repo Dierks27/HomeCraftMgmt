@@ -27,10 +27,9 @@ import java.util.List;
  * <p>The archive's keys (GEN-SPEC-KEEP): {@code gen.<classic slot>.recall} — what an admin recalled
  * into a Classics slot ({@link ClassicWant}); {@code gen.<slot>.codes} — the highest course-code
  * number ever handed out (kept by the archive's flip); {@code gen.keep.plot.<n>} — the course kept
- * in plot n and where it stands ({@link KeptPlot}); {@code gen.keep.claim.<n>} — plot n was found
- * empty (or cleared) and is Fresh Courses' to build in; {@code gen.keep.pending} — a keep or a
+ * in plot n and where it stands ({@link KeptPlot}); {@code gen.keep.pending} — a keep or a
  * clear-plot in flight ({@link KeepService}), so a stop halfway is finished or cleaned at the
- * next start.
+ * next start. A free plot has no key: nothing guards it, so every keep scans it again.
  */
 public final class GenAdminKeys {
 
@@ -80,11 +79,6 @@ public final class GenAdminKeys {
     /** The course kept in plot {@code n} ({@link KeptPlot#text()}). */
     public static String plot(int n) {
         return PLOTS + n;
-    }
-
-    /** Plot {@code n} was found empty (or cleared): {@code world,x,y,z,sx,sy,sz}. */
-    public static String plotClaim(int n) {
-        return "gen.keep.claim." + n;
     }
 
     /** The plot number of a {@link #plot} key, or -1. */

@@ -262,6 +262,11 @@ public final class GenArgs {
             }
             slot = def.id();
             w.remove(0);
+            if (w.size() == 1 && (which(w.get(0)) != null || w.get(0).equalsIgnoreCase("date"))) {
+                // "keep fresh_parkour_hard last confirm": an edition and no id, never a course called "last"
+                return Keep.bad("Give the new course an id too, like: keep " + def.id() + " "
+                        + w.get(0).toLowerCase(Locale.ROOT) + " dragon_run");
+            }
             which = w.size() >= 2 ? editionWords(w) : null;
             if (which == null) {
                 which = new Which(How.CURRENT, "current", 0, null);

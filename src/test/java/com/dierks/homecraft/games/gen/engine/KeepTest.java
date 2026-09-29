@@ -34,6 +34,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -46,7 +47,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * obeys the hand-built rules; the plot writer throws outside its plot; a plot must be empty the first
  * time; {@code clear-plot} takes the course and its boards down, moves people out and clears the
  * plot; a stop halfway leaves nothing registered and the next start finishes or cleans; and keep is
- * refused when the area is full, off, or the plan unreadable.
+ * refused when the area is full, off, or the plan unreadable. A free plot is unguarded hand-built
+ * territory, so every keep scans it again, and no plot is scanned, cleared or built while keeping is
+ * off, over another plot's kept course or around a registered course; an edition is kept once; and
+ * plot jobs keep the engine's guards: a hung re-made plan is killed, a keep cut short waits for the
+ * boot checks, and nothing starts, or is promised to go on, that a restart would drop.
  */
 class KeepTest {
 
@@ -209,6 +214,8 @@ class KeepTest {
         host.dao.submit(UUID.randomUUID(), "trials", GenBoards.day(t1), 61_000, true, host.now);
         keep("HARD-1", "first_copy", null, false, true);
         drive(20);
+        GenTag t2 = build(2);
+        host.dao.submit(UUID.randomUUID(), "trials", GenBoards.day(t2), 64_000, true, host.now);
         GenArgs.Which current = GenArgs.which("current");
         said.clear();
         gen.keep(SLOT, current, "second_copy", null, true, true, said::add);
@@ -235,7 +242,8 @@ class KeepTest {
         assertTrue(gen.usedPlots().isEmpty(), "nothing was kept");
         keep("HARD-1", "dragon_run", null, false, true);
         drive(20);
-        keep("HARD-1", "dragon_run", null, false, true);
+        build(2);
+        keep("HARD-2", "dragon_run", null, false, true);
         assertTrue(heard().contains("already a course called 'dragon_run'"), "an existing course: " + heard());
     }
 
@@ -370,30 +378,260 @@ class KeepTest {
         assertNull(host.store.meta(GenAdminKeys.KEEP_PENDING), "nothing pending");
     }
 
+    // ---- a free plot is hand-built territory: scanned every time, and never cleared over a course ------
+
+    @Test
+    void everyKeepScansItsPlotSoWhatAnAdminBuiltInAFreePlotIsNeverWiped() throws Exception {
+        build(1);
+        keep("HARD-1", "dragon_run", null, false, true);
+        drive(20);
+        said.clear();
+        gen.clearPlot(1, true, said::add);
+        drive(20);
+        Box plot = area().plot(1);
+        assertEquals(0, host.world().count(plot), "plot 1 is air again: " + heard());
+        // Nothing guards a free plot (admins may build anywhere in the keep area): one builds there.
+        int bx = plot.minX() + 100;
+        int by = plot.minY() + 3;
+        int bz = plot.minZ() + 200;
+        host.world().put(bx, by, bz, "minecraft:chest");
+        build(2);
+        keep("HARD-2", "second_run", null, false, true);
+        drive(20);
+        assertTrue(heard().contains("Plot 1 has 1 block that isn't Fresh Courses'"),
+                "the keep scans the plot again, although it was cleared and found empty before: " + heard());
+        assertEquals("minecraft:chest", host.world().at(bx, by, bz), "the admin's chest is untouched");
+        assertNull(host.dao.course("second_run"), "nothing is registered");
+        assertNull(host.store.meta(GenAdminKeys.KEEP_PENDING), "or pending");
+        said.clear();
+        gen.claimPlot(1, false, said::add);
+        drive(20);
+        assertTrue(heard().contains("Plot 1 has 1 block"), "claim plot counts it again too: " + heard());
+    }
+
+    @Test
+    void claimPlotAndKeepAreRefusedWhileKeepingIsOffSoALiveHalfIsNeverCleared() throws Exception {
+        GenTag t = build(1);
+        Box live = DEF.half(t.half());
+        long before = host.world().count(live);
+        assertTrue(before > 0, "the live course stands");
+        DailySettings.Archive shipped = host.settings.archive();
+        KeepArea bad = new KeepArea(live.minX() - 8, live.minY(), live.minZ() - 8, 24);
+        String problem = bad.problem(List.of(live));
+        assertNotNull(problem, "config refuses an area on top of a half");
+        host.settings = host.settings.withArchive(shipped.withKeep(bad, problem));
+        for (boolean confirm : new boolean[]{false, true}) {
+            said.clear();
+            gen.claimPlot(1, confirm, said::add);
+            assertTrue(heard().contains("Plot 1 can't be used") && heard().contains("keeping is off"),
+                    "claim plot" + (confirm ? " confirm" : "") + " is refused: " + heard());
+        }
+        drive(20);
+        assertEquals(before, host.world().count(live), "the live half is untouched");
+        assertTrue(gen.live(SLOT, t), "and still open");
+        // a keep asked for before a reload switched keeping off is checked again as it starts
+        host.settings = host.settings.withArchive(shipped);
+        keep("HARD-1", "dragon_run", null, false, true);
+        host.settings = host.settings.withArchive(shipped.withKeep(shipped.keep(), "it is on top of a Fresh"
+                + " Courses area"));
+        drive(5);
+        assertTrue(heard().contains("can't be used: keeping is off"), "refused as it starts: " + heard());
+        assertNull(host.dao.course("dragon_run"), "nothing kept");
+        assertEquals(0, host.world().count(shipped.keep().plot(1)), "nothing built");
+    }
+
+    @Test
+    void afterTheKeepAreaMovesAPlotOnTopOfAKeptCourseIsNeverClearedOrBuiltIn() throws Exception {
+        build(1);
+        keep("HARD-1", "dragon_run", null, false, true);
+        drive(20);
+        Box old = area().plot(1);
+        Map<String, String> standing = relative(old);
+        assertFalse(standing.isEmpty(), "dragon_run stands in plot 1");
+        KeepArea moved = new KeepArea(old.minX() - KeepArea.PLOT_X, old.minY(), old.minZ(), 24);
+        assertEquals(old, moved.plot(2), "the new plot 2 is where plot 1 was");
+        host.settings = host.settings.withArchive(host.settings.archive().withKeep(moved, null));
+        for (boolean confirm : new boolean[]{false, true}) {
+            said.clear();
+            gen.claimPlot(2, confirm, said::add);
+            assertTrue(heard().contains("Plot 2 can't be used") && heard().contains("where dragon_run stands"),
+                    "claim plot 2" + (confirm ? " confirm" : "") + " is refused: " + heard());
+        }
+        drive(20);
+        assertEquals(standing, relative(old), "dragon_run's blocks are untouched");
+        build(2);
+        keep("HARD-2", "second_run", null, false, true);
+        drive(25);
+        assertNotNull(host.dao.course("second_run"), "a keep passes over that plot: " + heard());
+        assertEquals(List.of(1, 3), gen.usedPlots(), "into plot 3");
+        assertEquals(standing, relative(old), "and dragon_run still stands");
+        assertNotNull(host.dao.course("dragon_run"), "registered as before");
+    }
+
+    @Test
+    void aPlotWithARegisteredCourseInItIsNeverClearedOrBuiltIn() throws Exception {
+        build(1);
+        Box plot = area().plot(1);
+        Course.Spot start = new Course.Spot(plot.minX() + 50.5, plot.minY() + 20, plot.minZ() + 50.5, 0f, 0f);
+        Course.Mark finish = new Course.Mark(plot.minX() + 60.5, plot.minY() + 20, plot.minZ() + 60.5, 2.0);
+        Course hand = new Course("cliff_hop", com.dierks.homecraft.games.trial.TrialKind.PARKOUR, "Cliff Hop",
+                com.dierks.homecraft.games.trial.Tier.EASY, GenKit.WORLD, start, List.of(), finish,
+                (double) plot.minY() + 10, null, true, false, 1);
+        host.dao.saveCourse(new GamesDao.CourseRow("cliff_hop", "trials", "parkour", "Cliff Hop", GenKit.WORLD, true,
+                CourseCodec.encode(hand), 1, host.now, host.now));
+        host.world().put(plot.minX() + 50, plot.minY() + 19, plot.minZ() + 50, "minecraft:stone");
+        said.clear();
+        gen.claimPlot(1, true, said::add);
+        assertTrue(heard().contains("Plot 1 can't be used") && heard().contains("cliff_hop is inside it"),
+                "a hand-built course in the plot: refused, and named: " + heard());
+        drive(20);
+        assertEquals(1, host.world().count(plot), "its block stands");
+        keep("HARD-1", "dragon_run", null, false, true);
+        drive(25);
+        assertNotNull(host.dao.course("dragon_run"), "a keep passes over plot 1: " + heard());
+        assertEquals(List.of(2), gen.usedPlots(), "and uses plot 2");
+        assertEquals(1, host.world().count(plot), "cliff_hop is untouched");
+    }
+
+    // ---- one kept course a set ---------------------------------------------------------------------------
+
+    @Test
+    void anEditionIsKeptOnceAndAPlotsCourseKeepsItsEditionArchived() throws Exception {
+        host.settings = host.settings.withArchive(host.settings.archive().withKeepDays(1));
+        GenTag t1 = build(1);
+        keep("HARD-1", "first_copy", null, false, true);
+        drive(20);
+        keep("HARD-1", "second_copy", null, false, true);
+        assertTrue(heard().contains("HARD-1 is already kept as first_copy"), "a second keep is refused: " + heard());
+        said.clear();
+        gen.keep(SLOT, GenArgs.which("current"), "third_copy", null, false, true, said::add);
+        assertTrue(heard().contains("already kept as first_copy"), "by any name: " + heard());
+        drive(20);
+        assertEquals(List.of(1), gen.usedPlots(), "one plot, one course");
+        assertEquals("first_copy", host.store.edition(SLOT, t1.editionKey()).keptAs(), "which the archive names");
+        // Even with its kept_as lost, plot 1's course keeps HARD-1 archived (archive.keep is 1 day here).
+        try (PreparedStatement ps = host.connection.prepareStatement(
+                "UPDATE gen_editions SET kept_as = NULL WHERE code = 'HARD-1'")) {
+            ps.executeUpdate();
+        }
+        for (int d = 2; d <= 5; d++) {
+            build(d);
+        }
+        assertNotNull(host.store.edition(SLOT, t1.editionKey()), "HARD-1 stays archived: a plot's course came from it");
+        assertNull(host.store.editionByCode("HARD-2"), "while an old one nobody kept is pruned");
+    }
+
+    // ---- the engine's guards hold for plot jobs too ------------------------------------------------------
+
+    @Test
+    void aReMadePlanThatHangsIsGivenUpLikeTheEnginesOwnAndTheBuildsGoOn() throws Exception {
+        GenTag t1 = build(1);
+        host.holdPlans = true;
+        said.clear();
+        gen.keep(SLOT, GenArgs.which("seed:" + com.dierks.homecraft.games.gen.api.GenSeed.hex(t1.seed())),
+                "remade_run", null, false, true, said::add);
+        for (int i = 0; i < 60 && host.plannerQueue.isEmpty(); i++) {
+            drive(1);
+        }
+        assertFalse(host.plannerQueue.isEmpty(), "the keep's plan went to the planner: " + heard());
+        host.holdPlans = false; // the engine's own plans run from now on; the keep's never answers
+        drive(100);
+        assertTrue(gen.keeper().busy(), "after 100 seconds it still waits for its plan");
+        drive(25);
+        assertTrue(heard().contains("planning took longer than 120 seconds"), "after 120 it is given up: " + heard());
+        GenTag t2 = build(2);
+        assertNotEquals(t1.editionKey(), t2.editionKey(), "and the next day's build went on");
+        host.runPlans(); // the hung plan comes back at last
+        drive(20);
+        assertNull(host.dao.course("remade_run"), "and is dropped: nothing registered");
+        assertNull(host.store.meta(GenAdminKeys.KEEP_PENDING), "nothing pending");
+        assertEquals(0, host.world().count(area().plot(1)), "and its plot is empty");
+    }
+
+    @Test
+    void aKeepCutShortWaitsForTheBootCheckOfTheLiveCoursesBeforeItGoesOn() throws Exception {
+        GenTag t1 = build(1);
+        keep("HARD-1", "dragon_run", null, false, true);
+        partWay();
+        gen.stop();
+        gen = null;
+        host.now += 60_000;
+        boot();
+        boolean plotFirst = false;
+        for (int s = 0; s < 40; s++) {
+            drive(1);
+            plotFirst |= gen.keeper().busy() && !gen.live(SLOT, t1);
+        }
+        assertFalse(plotFirst, "the plot waited while the live course was still shut for its check");
+        assertTrue(gen.live(SLOT, t1), "the live course was checked and opened");
+        assertNotNull(host.dao.course("dragon_run"), "and then the keep was finished");
+    }
+
+    @Test
+    void aKeepStoppedForARestartIsOnlyPromisedToGoOnWhenItWill() throws Exception {
+        build(1);
+        keep("HARD-1", "dragon_run", null, false, true);
+        for (int i = 0; i < 200 && gen.keeper().jobKind() == null; i++) {
+            gen.tick();
+            host.now += 50;
+            if (i % 20 == 19) {
+                gen.check();
+            }
+        }
+        assertEquals(KeepService.Kind.KEEP, gen.keeper().jobKind(), "the keep is checking its plot");
+        said.clear();
+        gen.keeper().cancel("a restart is less than 2 minutes away");
+        assertTrue(heard().contains("Nothing was changed; run it again after the restart"), heard());
+        assertFalse(heard().contains("goes on after the restart"), "never promised to go on: " + heard());
+        assertFalse(gen.keeper().hasWork(), "nothing waits");
+        assertNull(host.store.meta(GenAdminKeys.KEEP_PENDING), "and nothing is recorded");
+        keep("HARD-1", "dragon_run", null, false, true);
+        partWay();
+        said.clear();
+        gen.keeper().cancel("a restart is less than 2 minutes away");
+        assertTrue(heard().contains("It goes on after the restart"), "one that has built is: " + heard());
+        assertNotNull(host.store.meta(GenAdminKeys.KEEP_PENDING), "it is recorded");
+    }
+
+    @Test
+    void aKeepWaitingWhenTheRestartHoldBeginsIsNotStartedAndItsAdminTold() throws Exception {
+        build(1);
+        keep("HARD-1", "dragon_run", null, false, true); // it would start at the next check
+        host.restarts = List.of(java.time.LocalTime.of(4, 12)); // it is about 4:02: inside the 15 minutes
+        drive(3);
+        assertTrue(heard().contains("not started - a restart is due at 4:12 AM")
+                && heard().contains("run it again after the restart"), heard());
+        assertNull(gen.keeper().jobKind(), "it never started");
+        assertFalse(gen.keeper().hasWork(), "and doesn't wait for a restart that drops it");
+        assertEquals(0, host.world().count(area().plot(1)), "nothing was built");
+        assertNull(host.store.meta(GenAdminKeys.KEEP_PENDING), "or recorded");
+    }
+
     @Test
     void keepIsRefusedWhenTheAreaIsFullOffOrThePlanUnreadable() throws Exception {
-        GenTag t1 = build(1);
+        build(1);
         DailySettings.Archive shipped = host.settings.archive();
         host.settings = host.settings.withArchive(shipped.withKeep(new KeepArea(4096, 128, 5376, 1), null));
         keep("HARD-1", "one_plot", null, false, true);
         drive(20);
-        keep("HARD-1", "two_plots", null, false, true);
+        GenTag t2 = build(2);
+        keep("HARD-2", "two_plots", null, false, true);
         assertTrue(heard().contains("The keep area is full (1 plots)"), heard());
         host.settings = host.settings.withArchive(shipped.withKeep(shipped.keep(), "it is on top of a Fresh Courses"
                 + " area"));
-        keep("HARD-1", "three", null, false, true);
+        keep("HARD-2", "three", null, false, true);
         assertTrue(heard().contains("Keeping is off"), heard());
         host.settings = host.settings.withArchive(shipped);
         try (PreparedStatement ps = host.connection.prepareStatement(
-                "UPDATE gen_editions SET plan = X'00' WHERE code = 'HARD-1'")) {
+                "UPDATE gen_editions SET plan = X'00' WHERE code = 'HARD-2'")) {
             ps.executeUpdate();
         }
-        keep("HARD-1", "four", null, false, true);
+        keep("HARD-2", "four", null, false, true);
         assertTrue(heard().contains("can't be read") && heard().contains("seed:"
-                + com.dierks.homecraft.games.gen.api.GenSeed.hex(t1.seed())), "unreadable: the seed is offered: "
+                + com.dierks.homecraft.games.gen.api.GenSeed.hex(t2.seed())), "unreadable: the seed is offered: "
                 + heard());
         said.clear();
-        gen.keep(SLOT, GenArgs.which("seed:" + com.dierks.homecraft.games.gen.api.GenSeed.hex(t1.seed())), "four",
+        gen.keep(SLOT, GenArgs.which("seed:" + com.dierks.homecraft.games.gen.api.GenSeed.hex(t2.seed())), "four",
                 null, false, true, said::add);
         drive(20);
         assertNotNull(host.dao.course("four"), "made again from its seed: " + heard());

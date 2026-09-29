@@ -42,7 +42,8 @@ class GamesContractTest {
     @Test
     void theRewardKindsCarryTheirRules() {
         for (RewardKind k : RewardKind.values()) {
-            assertEquals(k != RewardKind.FIRST_CLEAR, k.capped(), k + ": only a first clear is uncapped");
+            assertEquals(k != RewardKind.FIRST_CLEAR && k != RewardKind.EVENT_PRIZE, k.capped(),
+                    k + ": only a first clear and a Race Night prize (bounded by construction) are uncapped");
             assertEquals(k == RewardKind.FEATURED || k == RewardKind.COURSE_OF_WEEK, k.acrossGames(), k.name());
             assertEquals(k == RewardKind.PERSONAL_BEST, k.repeatable(), k.name());
         }

@@ -6,8 +6,9 @@ package com.dierks.homecraft.games;
  * <p>The kind decides the rules the database enforces, so no game can pay a reward the wrong way:
  * <ul>
  *   <li>{@link #capped()}: counts toward the game's {@code daily_cap} and the server-wide
- *       {@code games.skill_daily_cap}. Only a {@link #FIRST_CLEAR} is exempt: it is bounded by
- *       the number of courses.</li>
+ *       {@code games.skill_daily_cap}. A {@link #FIRST_CLEAR} is exempt (it is bounded by the
+ *       number of courses), and so is an {@link #EVENT_PRIZE} (it is bounded by the prize rules:
+ *       at most one prize a player a night, on at most a few prize nights a week).</li>
  *   <li>{@link #acrossGames()}: once per day across ALL games, not per game (the featured bonus,
  *       the course of the week), so its row is stored under the game {@code '*'}.</li>
  *   <li>{@link #repeatable()}: may be paid again (stored with an empty ref). Every other kind is
@@ -49,11 +50,21 @@ public enum RewardKind {
      * can't pay all of it pays none and records none, so a later day of the set still can. The
      * constant keeps its first name so nothing stored under it changes.
      */
-    DAILY_CLEAR;
+    DAILY_CLEAR,
+    /**
+     * A Race Night prize (EVENTS-DROPPER-SPEC §A.3, D1): the server's fixed tokens for the night's
+     * places and finishers, once per player per night (ref {@code event:<id>},
+     * {@link SkillRewards#eventRef}). Not capped: the skill caps are a day's budget for play, and a
+     * prize night that a Snake afternoon had already "used up" would pay nothing. It is bounded by
+     * construction instead: one prize a player a night, and only on the week's few prize nights.
+     * One-time and per game, and paid through {@link SkillRewards#pay}, so never for a game of
+     * chance.
+     */
+    EVENT_PRIZE;
 
-    /** Whether it counts toward the daily caps (everything but a first clear). */
+    /** Whether it counts toward the daily caps (everything but a first clear and an event prize). */
     public boolean capped() {
-        return this != FIRST_CLEAR;
+        return this != FIRST_CLEAR && this != EVENT_PRIZE;
     }
 
     /** Whether it is once per day across every game (stored under the game {@code '*'}). */

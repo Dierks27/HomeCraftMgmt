@@ -26,8 +26,8 @@ import java.util.regex.Pattern;
 
 /**
  * Every games table (schema v34): rounds of the games of chance, skill rewards, scores (Daily
- * Courses' stars among them), Take a break, the saved state of players in a world game, courses,
- * per-player preferences, and the server's daily-board secret.
+ * Courses' stars and the points boards among them), Take a break, the saved state of players in a
+ * world game, courses, per-player preferences, and the server's daily-board secret.
  *
  * <p>The rule that shapes this class: <b>anything that moves tokens is ONE transaction</b>. The
  * tokens put in, the round row and the tokens back land together or not at all, through
@@ -743,6 +743,42 @@ public final class GamesDao {
                 }
             }
             return removed;
+        });
+    }
+
+    // ---- points boards ---------------------------------------------------------------------------
+
+    /**
+     * Add {@code delta} points to the player's running total on a points board (EVENTS-DROPPER-SPEC
+     * §A.3: Race Night's season {@code rnseason:<yyyy-MM>}; §B.3.4: Falling Floors' wins
+     * {@code ffwins:<week>}), higher is better. The row is made at {@code delta} when the player has
+     * none; otherwise the total rises by {@code delta}, {@code at} moves to {@code now} (so a tie on
+     * the board goes to whoever got there first) and {@code runs} counts the additions.
+     *
+     * <p>One transaction, and re-entrant: called inside a caller's transaction (a race's result rows,
+     * then the points they earned) it joins it, so the points land with the rows that earned them or
+     * not at all. It is not idempotent by itself: a caller that may run twice (a crash between
+     * writing a result and marking it done) inserts its own result row first and adds the points only
+     * when that row was new. A {@code delta} of 0 writes nothing.
+     *
+     * @param delta the points to add, never negative (a points board only ever rises)
+     * @return the player's total on the board now (0 when they have none and {@code delta} is 0)
+     */
+    public long addPoints(UUID player, String game, String board, long delta, long now) throws SQLException {
+        if (delta < 0) {
+            throw new IllegalArgumentException("a points board only rises: " + delta);
+        }
+        if (player == null || game == null || game.isBlank() || board == null || board.isBlank()) {
+            throw new IllegalArgumentException("points need a player, a game and a board");
+        }
+        return database.transaction(c -> {
+            Long total = best(c, player, game, board);
+            if (delta == 0) {
+                return total == null ? 0L : total;
+            }
+            long next = (total == null ? 0L : total) + delta;
+            writeScore(c, player, game, board, total, next, now);
+            return next;
         });
     }
 

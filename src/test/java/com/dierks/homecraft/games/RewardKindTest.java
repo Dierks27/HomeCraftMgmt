@@ -13,7 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the first counted finish of a course in a set, is capped like every skill reward, kept per game
  * (not once across games), and paid once per course and set by its ref {@code fresh:<slot>:<edition>}
  * — a reroll of the set pays no second one; golf's par and holes-in-one on a Fresh course are once
- * per set too. Star Chart goals are paid under their own source, "Fresh Courses".
+ * per set too. Star Chart goals are paid under their own source, "Fresh Courses". A Race Night
+ * prize (EVENT_PRIZE, EVENTS-DROPPER-SPEC §A.3) is one-time per night and outside the caps.
  */
 class RewardKindTest {
 
@@ -47,6 +48,28 @@ class RewardKindTest {
                 20725)), "another course has its own");
         assertEquals("ms:gweek:20720:10", SkillRewards.milestoneRef("gweek:20720", 10),
                 "a Star Chart goal is a milestone on the week's board");
+    }
+
+    @Test
+    void anEventPrizeIsOneTimeAndNeitherCappedNorAcrossGames() {
+        // EVENTS-DROPPER-SPEC §A.3: bounded by construction, never swallowed by the day's skill cap
+        assertFalse(RewardKind.EVENT_PRIZE.capped(), "a prize night is not eaten by a Snake afternoon");
+        assertFalse(RewardKind.EVENT_PRIZE.acrossGames(), "kept under Race Night's own id");
+        assertFalse(RewardKind.EVENT_PRIZE.repeatable(), "one-time: its ref is the night");
+        assertSame(RewardKind.EVENT_PRIZE, RewardKind.valueOf("EVENT_PRIZE"), "stored by that name");
+        assertTrue(RewardKind.FIRST_CLEAR.ordinal() < RewardKind.EVENT_PRIZE.ordinal()
+                && RewardKind.DAILY_CLEAR.ordinal() < RewardKind.EVENT_PRIZE.ordinal(), "appended after every old kind");
+        assertTrue(RewardKind.DAILY_CLEAR.capped() && RewardKind.MILESTONE.capped() && !RewardKind.FIRST_CLEAR.capped(),
+                "the old kinds keep their caps");
+    }
+
+    @Test
+    void theEventRefIsPerNight() {
+        assertEquals("event:rn-20261002-1900", SkillRewards.eventRef("rn-20261002-1900"), "event:<id>");
+        assertEquals("event:rn-20261002-1900-a1", SkillRewards.eventRef(" rn-20261002-1900-a1 "),
+                "an admin night's id, trimmed");
+        assertFalse(SkillRewards.eventRef("rn-20261002-1900").equals(SkillRewards.eventRef("rn-20261009-1900")),
+                "each night has its own");
     }
 
     @Test

@@ -82,9 +82,10 @@ public interface GenOps {
      * @param chosenSeed  the seed chosen for the next set, or {@code null}
      * @param chosenFor   that set as admins read it ("Mon 5 Oct-Sun 11 Oct"), or {@code null}
      * @param busy        a job for it is queued or running
+     * @param chosenUpNow the chosen set is the one up now (its week is running), not still to come
      */
     record Tools(boolean on, boolean golf, int cadence, Long previewSeed, boolean previewNext, Long chosenSeed,
-                 String chosenFor, boolean busy) {
+                 String chosenFor, boolean busy, boolean chosenUpNow) {
 
         /** Whether a preview stands in the spare half. */
         public boolean preview() {

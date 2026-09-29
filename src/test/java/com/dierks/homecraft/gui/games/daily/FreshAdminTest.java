@@ -43,7 +43,12 @@ class FreshAdminTest {
 
     private static GenOps.Tools state(boolean preview, boolean chosen) {
         return new GenOps.Tools(true, false, 7, preview ? 0x3f2aL : null, preview, chosen ? 0x3f2aL : null,
-                chosen ? "Mon 5 Oct-Sun 11 Oct" : null, false);
+                chosen ? "Mon 5 Oct-Sun 11 Oct" : null, false, false);
+    }
+
+    /** A preview of the set up now, nothing picked. */
+    private static GenOps.Tools thisSet() {
+        return new GenOps.Tools(true, false, 7, 0x3f2aL, false, null, null, false, false);
     }
 
     private static List<String> names(List<FreshAdmin.Tool> tools) {
@@ -85,10 +90,17 @@ class FreshAdminTest {
                 "&eAdmin: Build next week's to try (preview next)"), names(none), "before a preview: these three");
         List<FreshAdmin.Tool> all = FreshAdmin.tools(PARKOUR, state(true, true));
         assertEquals(List.of("&cAdmin: Make a new course now (regenerate)", "&eAdmin: Build one to try (preview)",
-                "&eAdmin: Build next week's to try (preview next)", "&aAdmin: Try the preview (test run)",
-                "&6Admin: Use it now (promote)", "&6Admin: Use it next week (choose)",
-                "&7Admin: Cancel next week's pick (unchoose)"), names(all),
-                "once a preview stands: try it, use it now, use it next week; and cancel a pick");
+                "&eAdmin: Build next week's to try (preview next)", "&aAdmin: Try next week's preview (test run)",
+                "&6Admin: Use it next week (choose)", "&7Admin: Cancel next week's pick (unchoose)"), names(all),
+                "once next week's preview stands: try it, use it next week; and cancel a pick (fix2-D: next week's"
+                        + " preview has no Use it now, which the command refuses)");
+        List<FreshAdmin.Tool> thisSet = FreshAdmin.tools(PARKOUR, thisSet());
+        assertEquals(List.of("&cAdmin: Make a new course now (regenerate)", "&eAdmin: Build one to try (preview)",
+                "&eAdmin: Build next week's to try (preview next)", "&aAdmin: Try this week's preview (test run)",
+                "&6Admin: Use it now (promote)", "&6Admin: Use it next week (choose)"), names(thisSet),
+                "a preview of this set: try it, use it now, use it next week");
+        all = new ArrayList<>(all);
+        all.add(tool(thisSet, FreshAdmin.Kind.PROMOTE));
         for (FreshAdmin.Kind k : List.of(FreshAdmin.Kind.REGENERATE, FreshAdmin.Kind.PROMOTE)) {
             String lore = String.join(" ", tool(all, k).lore());
             assertTrue(lore.contains("Players on it finish first. &7A running Weekly Cup here is called off and refunded."),
@@ -105,13 +117,14 @@ class FreshAdminTest {
         }
 
         List<FreshAdmin.Tool> golf = FreshAdmin.tools(GOLF, state(true, false));
-        assertTrue(names(golf).contains("&aAdmin: Walk the preview (go there)"), "golf's preview is walked: " + names(golf));
-        assertFalse(names(golf).contains("&aAdmin: Try the preview (test run)"), "not test-run");
+        assertTrue(names(golf).contains("&aAdmin: Walk next week's preview (go there)"), "golf's preview is walked: "
+                + names(golf));
+        assertFalse(names(golf).contains("&aAdmin: Try next week's preview (test run)"), "not test-run");
         assertFalse(String.join(" ", tool(golf, FreshAdmin.Kind.REGENERATE).lore()).contains("Weekly Cup"),
                 "and golf runs no Weekly Cup, so it doesn't mention one");
         assertEquals(List.of(), FreshAdmin.tools(PARKOUR, null), "nothing while Fresh Courses isn't running");
 
-        GenOps.Tools daily = new GenOps.Tools(true, false, 1, 1L, true, null, null, false);
+        GenOps.Tools daily = new GenOps.Tools(true, false, 1, 1L, true, null, null, false, false);
         assertTrue(names(FreshAdmin.tools(PARKOUR, daily)).contains("&6Admin: Use it tomorrow (choose)"),
                 "the words follow the cadence: " + names(FreshAdmin.tools(PARKOUR, daily)));
         assertTrue(FreshAdmin.state(state(true, true)).contains("&6Picked for Mon 5 Oct-Sun 11 Oct: seed 0000000000003f2a"),
@@ -260,6 +273,7 @@ class FreshAdminTest {
                 FreshAdmin.Kind.UNCHOOSE, "unchoose fresh_parkour",
                 FreshAdmin.Kind.WALK, "spot fresh_golf true");
         List<FreshAdmin.Tool> tools = new ArrayList<>(FreshAdmin.tools(PARKOUR, state(true, true)));
+        tools.add(tool(FreshAdmin.tools(PARKOUR, thisSet()), FreshAdmin.Kind.PROMOTE)); // a this-set preview's
         tools.add(tool(FreshAdmin.tools(GOLF, state(true, false)), FreshAdmin.Kind.WALK));
         assertEquals(words.keySet(), tools.stream().map(FreshAdmin.Tool::kind).collect(java.util.stream.Collectors.toSet()),
                 "every tool is here");

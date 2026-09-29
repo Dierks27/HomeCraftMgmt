@@ -182,6 +182,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         int reroll;
         long seed;
         String mix = "";
+        /** The {@code trials.fall_depth} its plan was made with (fix2-D: a preview keeps it for choose). */
+        int fallDepth;
         char half = 'A';
         GenTag tag;
         Plan plan;
@@ -355,15 +357,14 @@ public final class GenService implements GeneratedCourses, GenOps {
      * its blocks already right. Queued after the boot checks.
      */
     private void restoreChosen(SlotState s) {
-        GenScheduler.Pin c = s.chosen;
+        // Only a pick still to come for the next set, at the settings it was tried with (fix2-D): one
+        // up now, or no longer the next set's (the schedule moved), holds nothing.
+        GenScheduler.Choice c = s.classic ? null : chosenWaiting(s);
         Planner p = planners.get(s.def.generator());
-        if (s.classic || c == null || p == null || c.algo() != p.algo() || !s.on() || !s.claimed || s.live == null) {
+        if (c == null || p == null || c.algo() != p.algo() || !s.on() || !s.claimed || s.live == null) {
             return;
         }
         NextSet n = nextSet(s);
-        if (!c.appliesOn(n.day(), p.algo()) || c.appliesOn(target(s).start(), p.algo())) {
-            return; // not the next set's (the schedule moved), or it is up now: nothing to hold
-        }
         Job j = new Job(Kind.PREVIEW, s, null);
         j.day = n.day();
         j.cadence = n.cadence();
@@ -506,7 +507,6 @@ public final class GenService implements GeneratedCourses, GenOps {
                 continue;
             }
             warnIgnoredPin(s);
-            chosenUpkeep(s);
             GenScheduler.Decision d = GenScheduler.decide(view(s), now, readyAt, st, hold, ed);
             s.waiting = d.kind() == GenScheduler.Kind.WAIT ? d.reason() : null;
             switch (d.kind()) {
@@ -598,9 +598,9 @@ public final class GenService implements GeneratedCourses, GenOps {
      * planner running now), else {@code null}.
      */
     private GenScheduler.Pin activePin(SlotState s) {
-        GenScheduler.Pin chosen = chosenNow(s);
+        GenScheduler.Choice chosen = chosenNow(s);
         if (chosen != null) {
-            return chosen;
+            return chosen.pin();
         }
         Planner p = planners.get(s.def.generator());
         return s.pin != null && p != null && s.pin.appliesOn(target(s).start(), p.algo()) ? s.pin : null;
@@ -610,43 +610,132 @@ public final class GenService implements GeneratedCourses, GenOps {
      * WP-ADM: the admin's choice when it is for the edition the slot should show now (the next set
      * has come), else {@code null}. Over the slot's own pin for that one set, so the build (or its
      * restamp) is an ordinary pinned one: no flip path of its own.
+     *
+     * <p>fix2-D: "for the edition" is the same first day and the same length (D1: around a cadence
+     * change the set kept up can start on, or after, the day of a pick made for the set that follows
+     * it); and until its course stands it must still fit the settings it was tried with (D0), so
+     * what the change builds is the course that was tried. Once it stands, a tier or fall depth
+     * change is for the next build, as on any course.
      */
-    private GenScheduler.Pin chosenNow(SlotState s) {
+    private GenScheduler.Choice chosenNow(SlotState s) {
+        GenScheduler.Choice c = s.chosen;
         Planner p = planners.get(s.def.generator());
-        return s.chosen != null && p != null && s.chosen.appliesOn(target(s).start(), p.algo()) ? s.chosen : null;
+        if (c == null || p == null || c.algo() != p.algo()) {
+            return null;
+        }
+        GenScheduler.Target t = target(s);
+        if (!c.isSet(t.start(), t.cadence())) {
+            return null;
+        }
+        boolean stands = t.holds(s.live) && s.live.seed() == c.seed();
+        return stands || fits(s, c) ? c : null;
     }
 
-    /** WP-ADM: a choice that is still to come (its set hasn't started), else {@code null}. */
-    private GenScheduler.Pin chosenWaiting(SlotState s) {
-        return s.chosen != null && s.chosen.from() > target(s).start() ? s.chosen : null;
+    /**
+     * WP-ADM: a choice that is still to come, else {@code null}. fix2-D: only one for the next set
+     * (its first day and length: D1, D2) that still fits the settings it was tried with (D0);
+     * anything else is dropped at the next check ({@link #chosenUpkeep}), never shown as waiting.
+     */
+    private GenScheduler.Choice chosenWaiting(SlotState s) {
+        GenScheduler.Choice c = s.chosen;
+        if (c == null) {
+            return null;
+        }
+        GenScheduler.Target t = target(s);
+        NextSet n = nextSet(s);
+        return !c.isSet(t.start(), t.cadence()) && c.isSet(n.day(), n.cadence()) && fits(s, c) ? c : null;
+    }
+
+    /** fix2-D: whether a pick's course comes out as it was tried, at the settings now (D0). */
+    private boolean fits(SlotState s, GenScheduler.Choice c) {
+        return c.fits(s.mix, host.fallDepth());
+    }
+
+    /**
+     * fix2-D: the {@code trials.fall_depth} a pick of {@code s} keeps: parkour's layout is shaped by
+     * it (medium and hard fall back that far under the checkpoints); no other planner's is, so their
+     * picks keep 0 and never depend on it.
+     */
+    private int pickDepth(SlotState s, int depth) {
+        return Slots.PARKOUR.equals(s.def.generator()) ? depth : 0;
+    }
+
+    /** fix2-D: the pick's own set, as admins read it. */
+    private String pickSet(GenScheduler.Choice c) {
+        return editionName(c.cadence() > 0 ? c.cadence() : edition().cadenceDays(), c.from());
     }
 
     /**
      * WP-ADM: a choice whose set is over is forgotten, with one line (the set after goes back to its
      * own seed); one made for another planner version is said once and not used.
+     *
+     * <p>fix2-D: so is one that can no longer be the course that was tried, with a warning and a
+     * status line: its set is next but the tier or mix, or parkour's fall depth, has changed since
+     * (D0: building the seed now would put up a course nobody tried as "the chosen course"); or the
+     * schedule moved and its set is no longer the next one (D1, D2: status would promise a set that
+     * never comes, or it would go up later as a set of another length). Run at every check once the
+     * worlds are up (so before a chosen preview is put back at a boot), and at once by {@code tier}.
+     *
+     * @return what the admin reads when a pick was just dropped for a change, else {@code null}
      */
-    private void chosenUpkeep(SlotState s) {
-        GenScheduler.Pin c = s.chosen;
-        if (c == null) {
-            return;
+    private String chosenUpkeep(SlotState s) {
+        GenScheduler.Choice c = s.chosen;
+        if (c == null || s.classic) {
+            return null;
         }
-        if (c.endedBy(target(s).start())) {
-            try {
-                host.store().meta(GenAdminKeys.choose(s.def.id()), null);
-            } catch (SQLException e) {
-                return; // kept until the database takes the change; it applies to no set meanwhile
-            }
-            s.chosen = null;
-            host.logger().info("Fresh Courses: " + s.def.id() + "'s chosen seed " + GenSeed.hex(c.seed()) + " was for "
-                    + editionName(edition().cadenceDays(), c.from()) + "; each set's own seed is used from now on.");
-            return;
-        }
+        GenScheduler.Target t = target(s);
+        NextSet n = nextSet(s);
+        boolean now = c.isSet(t.start(), t.cadence());
+        boolean next = !now && c.isSet(n.day(), n.cadence());
         Planner p = planners.get(s.def.generator());
-        if (p != null && c.algo() != p.algo()) {
+        if ((now || next) && p != null && c.algo() != p.algo()) {
             warnOnce(s, "Fresh Courses: " + s.def.id() + "'s chosen seed " + GenSeed.hex(c.seed()) + " was made for "
                     + s.def.generator() + " planner v" + c.algo() + " and this is v" + p.algo() + " - the set's own seed"
                     + " is used (/hcm games gen unchoose " + s.def.id() + " forgets it)");
+            return null;
         }
+        if (now ? chosenNow(s) != null : next && fits(s, c)) {
+            return null; // it holds
+        }
+        boolean over = !now && !next && c.from() <= t.start(); // its set came (or its day passed)
+        String why = over ? null : now || next ? misfit(s, c) : "the schedule changed, and the next set is "
+                + editionName(n.cadence(), n.day()) + " now";
+        try {
+            host.store().meta(GenAdminKeys.choose(s.def.id()), null);
+        } catch (SQLException e) {
+            return null; // kept until the database takes the change; it applies to no set meanwhile
+        }
+        s.chosen = null;
+        String id = s.def.id();
+        String set = pickSet(c);
+        if (over) {
+            host.logger().info("Fresh Courses: " + id + "'s chosen seed " + GenSeed.hex(c.seed()) + " was for " + set
+                    + "; each set's own seed is used from now on.");
+            return null;
+        }
+        s.pickDropped = "&cpick for " + set + " dropped: " + why + ". Choose again.";
+        host.logger().warning("Fresh Courses: " + id + "'s pick for " + set + " (seed " + GenSeed.hex(c.seed())
+                + ") is dropped: " + why + ". Choose again: /hcm games gen preview " + id + " next, try it, then"
+                + " choose.");
+        return "&cYour pick for " + set + " (seed " + GenSeed.hex(c.seed()) + ") is dropped: &7" + why
+                + ". Build one to try: &e/hcm games gen preview " + id + " next";
+    }
+
+    /** fix2-D: why a pick no longer comes out as it was tried, in the owner's terms. */
+    private String misfit(SlotState s, GenScheduler.Choice c) {
+        if (c.mix() != null && !c.mix().equals(s.mix)) {
+            return "it was tried as " + c.mix() + ", and that set will be " + s.mix + ", so it would come out"
+                    + " different";
+        }
+        return "it was tried with fall_depth " + c.fallDepth() + ", and it is " + host.fallDepth() + " now, so it would"
+                + " come out different";
+    }
+
+    /** fix2-D: whether {@code day} and {@code cadence} are the next set's, not the one the slot shows now. */
+    private boolean isNextSet(SlotState s, long day, int cadence) {
+        GenScheduler.Target t = target(s);
+        NextSet n = nextSet(s);
+        return day == n.day() && cadence == n.cadence() && !(day == t.start() && cadence == t.cadence());
     }
 
     /** The next set: its first day and length (what {@code plan <course> next} plans for). */
@@ -813,9 +902,9 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     private GenScheduler.SlotView view(SlotState s) {
         Planner p = planners.get(s.def.generator());
-        GenScheduler.Pin chosen = chosenNow(s); // WP-ADM: the next set's pick, once it has come
+        GenScheduler.Choice chosen = chosenNow(s); // WP-ADM: the next set's pick, once it has come
         return new GenScheduler.SlotView(s.def.id(), s.on() && p != null, job != null, s.live, !s.healFailed,
-                s.liveMix, s.mix, s.reroll, chosen != null ? chosen : s.pin, p == null ? 0 : p.algo(), s.triesDay,
+                s.liveMix, s.mix, s.reroll, chosen != null ? chosen.pin() : s.pin, p == null ? 0 : p.algo(), s.triesDay,
                 s.tries, s.lastTryAt, s.oldDirty, secret(), scheduleSince);
     }
 
@@ -885,7 +974,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 String tier = meta.get(GenAdminKeys.tier(id));
                 s.mix = tier != null && s.def.tierProblem(tier) == null ? s.def.normalise(tier) : c.tierOrMix();
                 s.pin = GenScheduler.Pin.parse(meta.get(GenAdminKeys.pin(id)));
-                s.chosen = GenScheduler.Pin.parse(meta.get(GenAdminKeys.choose(id)));
+                s.chosen = GenScheduler.Choice.parse(meta.get(GenAdminKeys.choose(id)));
                 s.reroll = GenAdminKeys.whole(meta.get(GenAdminKeys.reroll(id, target(s).key())));
                 String claim = meta.get(GenAdminKeys.claim(id));
                 boolean claimed = Regions.claim(s.def, world, origin).equals(claim);
@@ -906,6 +995,12 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
         }
         areas = List.copyOf(kept);
+        if (readyAt >= 0) {
+            // fix2-D: a pick the settings or the schedule moved away from is dropped, and said, at once
+            for (SlotState s : slots.values()) {
+                chosenUpkeep(s);
+            }
+        }
         List<String> worlds = new ArrayList<>();
         for (List<Object[]> boxes : List.of(areas, wetPlots)) {
             for (Object[] a : boxes) {
@@ -1331,7 +1426,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         SlotState s = j.slot;
         Box half = j.planBox != null ? j.planBox : s.half(j.half);
         Slots.Def def = j.planDef != null ? j.planDef : s.def;
-        PlanInput in = new PlanInput(def, half, j.half, j.day, j.reroll, j.seed, j.mix, host.fallDepth(),
+        j.fallDepth = host.fallDepth();
+        PlanInput in = new PlanInput(def, half, j.half, j.day, j.reroll, j.seed, j.mix, j.fallDepth,
                 WORK.getOrDefault(def.generator(), 200_000L), cancelled(j.cancelled));
         j.stage = Stage.PLANNING;
         j.planStarted = host.now();
@@ -1539,7 +1635,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
             case PREVIEW -> {
                 if (proven(j)) {
-                    s.preview = new SlotState.Preview(j.half, j.plan, j.day, j.seed, j.mix, j.cadence, j.reroll);
+                    s.preview = new SlotState.Preview(j.half, j.plan, j.day, j.seed, j.mix, j.cadence, j.reroll,
+                            j.fallDepth);
                     s.oldDirty = true;
                     end(j);
                     host.logger().info("Fresh Courses: a preview of " + s.def.id() + " (seed " + GenSeed.hex(j.seed)
@@ -1588,7 +1685,7 @@ public final class GenService implements GeneratedCourses, GenOps {
      */
     private String previewReady(SlotState s, Job j) {
         String id = s.def.id();
-        boolean next = j.day > target(s).start();
+        boolean next = isNextSet(s, j.day, j.cadence); // fix2-D: a set's first day and length (D1)
         String look = s.def.golf() ? "Walk it: &e/hcm games gen tp " + id + " idle" : "Try it: &e/hcm games gen test "
                 + id + " &7(or walk it: &e/hcm games gen tp " + id + " idle&7)";
         return "&aThe preview of " + s.def.name() + (next ? " for " + editionName(j.cadence, j.day) : "") + " is ready in"
@@ -1778,6 +1875,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         s.clearing = false;
         s.oldDirty = before != null;
         s.preview = null;
+        s.pickDropped = null; // fix2-D: a new set is up: the note about a dropped pick is old news
         s.tries = 0;
         s.lastError = null;
         s.builtAt = now;
@@ -2095,6 +2193,15 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (j.stage == Stage.EVACUATE && !waiting) {
             if (s.previous != null && halves.contains(s.previous.half())) {
                 s.clearing = true; // its blocks are about to change: it no longer stands
+            }
+            // fix2-D (D3): so are the preview's, unless this job builds the preview's own plan there
+            // (a chosen pick at the change): if it fails or is stopped halfway, a test run or a
+            // promote must not start on a half that holds bits of two courses.
+            SlotState.Preview pv = s.preview;
+            if (pv != null && halves.contains(pv.half())
+                    && (j.plan == null || !j.plan.hash().equals(pv.plan().hash()))) {
+                s.preview = null;
+                s.oldDirty = true; // whatever this job leaves there is emptied once nothing else is due
             }
             j.stage = Stage.CONVERGE;
         }
@@ -2662,8 +2769,8 @@ public final class GenService implements GeneratedCourses, GenOps {
                 }
                 if (s.preview != null) {
                     out.add("  &7preview in half " + s.preview.half() + ", seed " + GenSeed.hex(s.preview.seed())
-                            + (s.preview.day() > target.start() ? " (for " + editionName(s.preview.cadence(),
-                            s.preview.day()) + ")" : ""));
+                            + (s.preview.day() != target.start() || s.preview.cadence() != target.cadence() ? " (for "
+                            + editionName(s.preview.cadence(), s.preview.day()) + ")" : ""));
                 }
             }
         }
@@ -2678,15 +2785,17 @@ public final class GenService implements GeneratedCourses, GenOps {
      * "this set: chosen seed ..." once it is up; {@code null} for none.
      */
     private String chosenLine(SlotState s) {
-        GenScheduler.Pin c = s.chosen;
-        if (s.classic || c == null) {
+        GenScheduler.Choice c = s.chosen;
+        if (s.classic) {
             return null;
+        }
+        if (c == null) {
+            return s.pickDropped; // fix2-D: a pick dropped for a change says so until the next pick or flip
         }
         Planner p = planners.get(s.def.generator());
         String unused = p != null && c.algo() != p.algo() ? " &c(not used: made for planner v" + c.algo() + ")" : "";
         if (chosenWaiting(s) != null) {
-            return "next set: chosen seed " + GenSeed.hex(c.seed()) + " (" + editionName(edition().cadenceDays(),
-                    c.from()) + ")" + unused;
+            return "next set: chosen seed " + GenSeed.hex(c.seed()) + " (" + pickSet(c) + ")" + unused;
         }
         return chosenNow(s) != null ? "this set: chosen seed " + GenSeed.hex(c.seed()) : null;
     }
@@ -2860,8 +2969,8 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     /** WP-ADM: what a preview, reroll or promote adds while a choice waits: it stays chosen. */
     private String choiceStays(SlotState s) {
-        GenScheduler.Pin c = chosenWaiting(s);
-        return c == null ? "" : " &7Your pick for " + editionName(edition().cadenceDays(), c.from()) + " (seed "
+        GenScheduler.Choice c = chosenWaiting(s);
+        return c == null ? "" : " &7Your pick for " + pickSet(c) + " (seed "
                 + GenSeed.hex(c.seed()) + ") stays chosen; it is built again at the change.";
     }
 
@@ -2885,7 +2994,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             report.accept("&cThere is no preview of " + s.def.name() + ". &7/hcm games gen preview " + slotId);
             return;
         }
-        if (pv.day() > t.start()) {
+        if (isNextSet(s, pv.day(), pv.cadence())) {
             report.accept("&cThat preview is for " + editionName(pv.cadence(), pv.day()) + ". &7Use it then: &e/hcm games"
                     + " gen choose " + slotId);
             return;
@@ -3008,8 +3117,9 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         s.mix = t;
+        String dropped = chosenUpkeep(s); // fix2-D (D0): a pick tried at another tier would come out different
         report.accept("&a" + s.def.name() + " will be " + t + " &7from its next build (the next set, or &e/hcm games"
-                + " gen reroll " + slotId + "&7).");
+                + " gen reroll " + slotId + "&7)." + (dropped == null ? "" : " " + dropped));
     }
 
     @Override
@@ -3082,7 +3192,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         j.mix = s.mix; // what the next build uses: config, or the admin's tier or mix
         queue.add(j);
         report.accept("&7A preview of " + s.def.name() + " for " + editionName(n.cadence(), n.day()) + " (" + s.mix
-                + ", seed " + GenSeed.hex(seed) + ") is on its way into half " + s.idleHalf() + ".");
+                + ", seed " + GenSeed.hex(seed) + ") is on its way into half " + s.idleHalf() + "."
+                + choiceStays(s)); // fix2-D (D6): building another candidate doesn't replace the pick
     }
 
     @Override
@@ -3113,14 +3224,24 @@ public final class GenService implements GeneratedCourses, GenOps {
                     + " come out different. &7Make a new one: &e/hcm games gen preview " + slotId + " next");
             return;
         }
-        GenScheduler.Pin was = s.chosen;
-        if (!confirm && was != null && !was.endedBy(n.day()) && (was.seed() != pv.seed() || was.from() != n.day())) {
+        // fix2-D (D0): the pick keeps what shapes its course, so a later change drops it instead of
+        // building the seed into something nobody tried; a preview made at another fall depth is refused
+        // as one made at another tier is.
+        int depth = pickDepth(s, host.fallDepth());
+        if (depth > 0 && pv.fallDepth() > 0 && pv.fallDepth() != depth) {
+            report.accept("&cThat preview was made with fall_depth " + pv.fallDepth() + ", and it is " + depth
+                    + " now, so it would come out different. &7Make a new one: &e/hcm games gen preview " + slotId
+                    + " next");
+            return;
+        }
+        GenScheduler.Choice was = chosenWaiting(s);
+        if (!confirm && was != null && was.seed() != pv.seed()) {
             report.accept("&e" + s.def.name() + " already has seed " + GenSeed.hex(was.seed()) + " chosen for "
-                    + editionName(n.cadence(), was.from()) + ". &7Type &e/hcm games gen choose " + slotId + " confirm &7to"
+                    + pickSet(was) + ". &7Type &e/hcm games gen choose " + slotId + " confirm &7to"
                     + " use this preview's seed " + GenSeed.hex(pv.seed()) + " instead.");
             return;
         }
-        GenScheduler.Pin pick = GenScheduler.Pin.oneSet(pv.seed(), p.algo(), n.day());
+        GenScheduler.Choice pick = new GenScheduler.Choice(pv.seed(), p.algo(), n.day(), n.cadence(), s.mix, depth);
         try {
             host.store().meta(GenAdminKeys.choose(slotId), pick.text());
         } catch (SQLException e) {
@@ -3129,6 +3250,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         s.chosen = pick;
+        s.pickDropped = null;
         host.logger().info("Fresh Courses: " + slotId + "'s course for " + set + " is chosen: seed "
                 + GenSeed.hex(pick.seed()) + ".");
         report.accept("&a" + s.def.name() + "'s course for " + set + " is this preview (seed " + GenSeed.hex(pick.seed())
@@ -3152,8 +3274,10 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         s.chosen = null;
+        s.pickDropped = null;
         report.accept("&a" + s.def.name() + "'s pick is cancelled. &7" + (upNow ? "The chosen course that is up now"
-                + " stays until the next set, which gets its own new course." : "The next set gets its own new course."));
+                + " stays until the next set, which gets its own new course; &e/hcm games gen regenerate " + slotId
+                + " &7and &epromote &7work on it now." : "The next set gets its own new course."));
     }
 
     @Override
@@ -3203,11 +3327,14 @@ public final class GenService implements GeneratedCourses, GenOps {
             return null;
         }
         SlotState.Preview pv = s.preview;
-        GenScheduler.Pin c = s.chosen != null && !s.chosen.endedBy(target(s).start()) ? s.chosen : null;
+        // fix2-D: the pick up now or the one still to come, and which (D5); the preview's set by its
+        // first day and length (D1)
+        GenScheduler.Choice up = chosenNow(s);
+        GenScheduler.Choice c = up != null ? up : chosenWaiting(s);
         int cadence = edition().cadenceDays();
         return new Tools(s.on(), s.def.golf(), cadence, pv == null ? null : pv.seed(),
-                pv != null && pv.day() > target(s).start(), c == null ? null : c.seed(),
-                c == null ? null : editionName(cadence, c.from()), busyWith(s));
+                pv != null && isNextSet(s, pv.day(), pv.cadence()), c == null ? null : c.seed(),
+                c == null ? null : pickSet(c), busyWith(s), up != null);
     }
 
     @Override

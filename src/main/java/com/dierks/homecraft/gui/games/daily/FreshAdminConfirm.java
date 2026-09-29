@@ -14,11 +14,17 @@ import org.bukkit.entity.Player;
  * (Bedrock).
  *
  * <pre>
- *  4 the tool, with what it does     11 No, go back     15 Yes: what it does     22 Back
+ *  4 the tool, with what it does     19 No, go back     22 Back     25 Yes: what it does
  * </pre>
  *
  * Yes runs the tool's command with {@code confirm}, once ({@link FreshAdmin#yes}), and the screen
  * closes so the command's answer reads in chat.
+ *
+ * <p>A double click never passes it (fix2-D, D4): it drops every click for
+ * {@link FreshAdmin#OPEN_HOLD_MS} as it opens (a vanilla client sends the second press to the new
+ * screen as a plain click), and No and Yes sit where no tool does ({@link FreshAdmin#CONFIRM_NO}),
+ * so even a click that gets through lands on nothing. Someone who is no longer an admin gets an
+ * empty screen (D7).
  */
 final class FreshAdminConfirm extends GameMenu {
 
@@ -32,18 +38,23 @@ final class FreshAdminConfirm extends GameMenu {
 
     @Override
     protected void build() {
+        hold(FreshAdmin.OPEN_HOLD_MS); // D4: the rest of the double click on the tool that opened it
         fill();
         exitTile();
+        if (!viewer.hasPermission(FreshAdmin.PERMISSION)) {
+            return; // D7: nothing to confirm for someone who isn't an admin any more
+        }
         set(4, FreshAdminMenu.icon(tool), null);
-        set(11, Menus.icon(Material.RED_STAINED_GLASS_PANE, "&cNo, go back", "&7Nothing changes."), e -> {
+        set(FreshAdmin.CONFIRM_NO, Menus.icon(Material.RED_STAINED_GLASS_PANE, "&cNo, go back", "&7Nothing changes."),
+                e -> {
             if (back != null) {
                 back.run();
             } else {
                 e.getWhoClicked().closeInventory();
             }
         });
-        set(15, Menus.icon(Material.LIME_STAINED_GLASS_PANE, tool.yes() == null ? "&aYes" : tool.yes(),
-                tool.lore().toArray(new String[0])), e -> {
+        set(FreshAdmin.CONFIRM_YES, Menus.icon(Material.LIME_STAINED_GLASS_PANE,
+                tool.yes() == null ? "&aYes" : tool.yes(), tool.lore().toArray(new String[0])), e -> {
             hold(com.dierks.homecraft.gui.games.ClickHold.SETTLE_MS); // one Yes, one command
             FreshAdmin.yes(tool, words -> FreshAdminMenu.run(plugin, viewer, words));
         });

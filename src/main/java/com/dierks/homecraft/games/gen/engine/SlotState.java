@@ -20,15 +20,22 @@ final class SlotState {
     /**
      * A preview built into the idle half without a flip ({@code /hcm games gen preview}).
      *
-     * @param half    the half it stands in
-     * @param plan    its plan
-     * @param day     the first day of the edition it was made for
-     * @param seed    its seed
-     * @param mix     the tier or mix it was made with
-     * @param cadence that edition's length in days
-     * @param reroll  the reroll it was made as (0 for a preview of the next set)
+     * @param half      the half it stands in
+     * @param plan      its plan
+     * @param day       the first day of the edition it was made for
+     * @param seed      its seed
+     * @param mix       the tier or mix it was made with
+     * @param cadence   that edition's length in days
+     * @param reroll    the reroll it was made as (0 for a preview of the next set)
+     * @param fallDepth the {@code trials.fall_depth} it was made with (fix2-D: a pick keeps it), or 0
+     *                  when unknown
      */
-    record Preview(char half, Plan plan, long day, long seed, String mix, int cadence, int reroll) {
+    record Preview(char half, Plan plan, long day, long seed, String mix, int cadence, int reroll, int fallDepth) {
+
+        /** A preview whose fall depth is unknown. */
+        Preview(char half, Plan plan, long day, long seed, String mix, int cadence, int reroll) {
+            this(half, plan, day, seed, mix, cadence, reroll, 0);
+        }
     }
 
     final Slots.Def def;
@@ -46,9 +53,15 @@ final class SlotState {
     GenScheduler.Pin pin;
     /**
      * An admin's pick for the next set ({@code gen.<slot>.choose}, WP-ADM): a one-set pin, used over
-     * {@link #pin} for the one set it names, forgotten once that set is over.
+     * {@link #pin} for the one set it names, forgotten once that set is over, or once it no longer
+     * names the next set or fits the settings it was tried with (fix2-D).
      */
-    GenScheduler.Pin chosen;
+    GenScheduler.Choice chosen;
+    /**
+     * Why the last pick was dropped, for status ("pick for Mon 5 Oct-Sun 11 Oct dropped: ..."), or
+     * {@code null}; gone at the next pick, cancel or flip (fix2-D).
+     */
+    String pickDropped;
     /** The current edition's reroll count. */
     int reroll;
     /** The claim matches this world and origin. */

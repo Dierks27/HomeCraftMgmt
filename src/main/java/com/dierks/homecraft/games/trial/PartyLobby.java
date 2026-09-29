@@ -297,7 +297,10 @@ public final class PartyLobby {
         }
     }
 
-    /** Close it for good (the coordinator stopped, the course closed). Everyone is out. */
+    /**
+     * Close it for good (the coordinator stopped, the course closed). Everyone is out. A lobby kept
+     * in {@link Parties} is closed through {@link Parties#close}, which also forgets who was in it.
+     */
     public void close() {
         state = State.CLOSED;
         members.clear();

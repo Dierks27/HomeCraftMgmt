@@ -275,6 +275,34 @@ public final class RaceTrack {
         return (float) Math.toDegrees(Math.atan2(-dx, dz));
     }
 
+    // ---- raceable ------------------------------------------------------------------------------
+
+    /**
+     * Why a night can't race on {@code c} with {@code spots} grid spots, or {@code null} (§A.4.1): it
+     * must be a boat course with a start, and seat at least {@code minRacers}.
+     */
+    public static String raceProblem(Course c, int spots, int minRacers) {
+        if (c == null) {
+            return "there's no such course";
+        }
+        if (c.kind() != TrialKind.BOAT) {
+            return c.name() + " isn't a boat course";
+        }
+        if (c.start() == null) {
+            return c.name() + " has no start";
+        }
+        if (spots < minRacers) {
+            return c.name() + "'s starting grid seats " + spots + " - Race Night needs " + minRacers
+                    + " (try /hcm games event grid " + c.id() + " auto)";
+        }
+        return null;
+    }
+
+    /** The races a night holds on a track: as asked with a stand, else 1 (finishers go home at the line). */
+    public static int races(int want, Point stand) {
+        return stand == null ? 1 : Math.max(1, want);
+    }
+
     // ---- an admin's grid and stand --------------------------------------------------------------
 
     /** Why {@code spot} can't join the admin grid {@code grid} of {@code c}, or {@code null}. */

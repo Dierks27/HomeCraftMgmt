@@ -433,7 +433,31 @@ final class ArcadeConfigMigration {
         }
         appendRows(c, defaults, "arcade.quests.daily_pool", GAME_DAILY, "daily game quests", log);
         appendRows(c, defaults, "arcade.quests.weekly_pool", GAME_WEEKLY, "weekly game quests", log);
-        appendRows(c, defaults, "arcade.achievements", GAME_ACHIEVEMENTS, "\"Games\" achievements", log);
+        appendRows(c, defaults, "arcade.achievements", GAME_ACHIEVEMENTS, EVENT_ACHIEVEMENTS, "\"Games\" achievements",
+                log);
+    }
+
+    // ---- revision 18: the events batch's achievements (EVENTS-DROPPER-SPEC §A.8) ------------------
+
+    /**
+     * The "Games" achievements revision 18 adds: Race Night's. (The events batch's other packages
+     * add theirs to this same list, so an upgraded server gains them all in one step.)
+     */
+    static final List<String> EVENT_ACHIEVEMENTS = List.of("game_race_first", "game_race_win");
+
+    /**
+     * Config revision 18: the events batch's "Games" achievements join the list, exactly as revision
+     * 17's did ({@link #gamesRows}): a list still as shipped gains them at its end, an edited one is
+     * left alone with a WARN giving the lines to paste, and a row already there is never added twice.
+     */
+    static void eventRows(FileConfiguration c, List<String> log) {
+        YamlConfiguration defaults = bundled();
+        if (defaults == null) {
+            log.add(WARN + "Config migration: could not read the bundled config.yml, so the Race Night achievements "
+                    + "were not added. Reinstall the jar, or copy them from the jar's config.yml.");
+            return;
+        }
+        appendRows(c, defaults, "arcade.achievements", EVENT_ACHIEVEMENTS, "Race Night achievements", log);
     }
 
     /**
@@ -443,10 +467,22 @@ final class ArcadeConfigMigration {
      */
     static void appendRows(FileConfiguration c, YamlConfiguration defaults, String path, List<String> ids,
                            String what, List<String> log) {
+        appendRows(c, defaults, path, ids, List.of(), what, log);
+    }
+
+    /**
+     * {@link #appendRows(FileConfiguration, YamlConfiguration, String, List, String, List)} for an
+     * earlier revision's step: the bundled rows a LATER revision adds ({@code later}) weren't shipped
+     * yet at this one, so they are left out of the list it compares against (a server that is behind
+     * both steps still gains this one's rows, and the later step adds its own after them).
+     */
+    static void appendRows(FileConfiguration c, YamlConfiguration defaults, String path, List<String> ids,
+                           List<String> later, String what, List<String> log) {
         if (!(c.get(path, null) instanceof List<?> raw)) {
             return;
         }
-        List<Map<String, Object>> bundledRows = mapRows(defaults.getList(path));
+        List<Map<String, Object>> bundledRows = new ArrayList<>(mapRows(defaults.getList(path)));
+        bundledRows.removeIf(r -> later.contains(idOf(r)));
         List<Map<String, Object>> current = mapRows(raw);
         Set<String> have = new HashSet<>();
         for (Map<String, Object> r : current) {

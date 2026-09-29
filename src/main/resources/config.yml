@@ -59,7 +59,7 @@ clock:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 17
+config_revision: 18
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -1439,7 +1439,8 @@ arcade:
   #               crates | jackpots | biomes; `target`. The skill games count
   #               cabinet_finishes | cabinet_golds | cabinets (different cabinet games) |
   #               course_finishes (courses and golf rounds) | course_records | holes_in_one |
-  #               golf_under_par | fresh_sets | star_chart_tops (nothing counts a game of chance)
+  #               golf_under_par | fresh_sets | star_chart_tops | race_nights | race_night_wins
+  #               (nothing counts a game of chance)
   #   COLLECTION  distinct Minis owned right now; `target`
   #   GRADE       print a Mini of `grade:` (MINT)
   #   FINISH      own a Mini with `finish:` (SHINY)
@@ -1484,6 +1485,8 @@ arcade:
     - { id: game_fresh_all, group: "Games", type: COUNTER, counter: fresh_sets, target: 1, reward: 40, display: "Finish every Fresh Course in one set" }
     - { id: game_star_chart, group: "Games", type: COUNTER, counter: star_chart_tops, target: 1, reward: 30, display: "Reach the top Star Chart goal in a week" }
     - { id: game_record, group: "Games", type: COUNTER, counter: course_records, target: 1, reward: 30, display: "Set a course record" }
+    - { id: game_race_first, group: "Games", type: COUNTER, counter: race_nights, target: 1, reward: 10, display: "Race at Race Night" }
+    - { id: game_race_win, group: "Games", type: COUNTER, counter: race_night_wins, target: 1, reward: 30, display: "Win a Race Night" }
   # Daily/weekly quests. Each player DRAWS their own `daily_draw` / `weekly_draw` from the
   # pools the first time they're needed in a day/week (local time) — no two of one type.
   # A Quest Reroll (Prize Counter) swaps one unfinished daily. Each row:

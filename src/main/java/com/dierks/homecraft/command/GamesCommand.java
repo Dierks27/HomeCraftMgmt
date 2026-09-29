@@ -144,6 +144,17 @@ public final class GamesCommand {
     /** {@code /hcm play <id> [player]}. */
     private void open(CommandSender sender, String[] args) {
         String id = args[1];
+        if (args.length == 3 && sender instanceof Player self && golfCourse(args[1], args[2])) {
+            // /hcm play golf <course>: the course's screen, with "Play with friends" (EVENTS-OWNER-DECISIONS D4)
+            if (deny(sender, PLAY)) {
+                return;
+            }
+            GamesService games = running(sender);
+            if (games != null) {
+                games.open(self, args[2], null);
+            }
+            return;
+        }
         if (args.length >= 3) {
             if (sender instanceof Player && deny(sender, ADMIN)) {
                 return;
@@ -169,6 +180,24 @@ public final class GamesCommand {
         GamesService games = running(sender);
         if (games != null) {
             games.open(player, id, null);
+        }
+    }
+
+    /**
+     * Whether {@code /hcm play <first> <second>} names a golf course after {@code golf} (golf together,
+     * EVENTS-OWNER-DECISIONS D4) rather than a player: {@code first} is golf and {@code second} one
+     * of its open courses. Never throws.
+     */
+    private boolean golfCourse(String first, String second) {
+        GamesService games = plugin.games();
+        if (games == null || !"golf".equalsIgnoreCase(first)) {
+            return false;
+        }
+        try {
+            GamesService.Target t = games.resolve(second);
+            return t != null && t.playable() != null && "golf".equals(t.game().id());
+        } catch (RuntimeException e) {
+            return false;
         }
     }
 

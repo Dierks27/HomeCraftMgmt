@@ -120,6 +120,16 @@ public final class NightRunner implements RaceLink {
         public boolean ready() {
             return ready;
         }
+
+        /** Targets reached in the race on now. */
+        public int reached() {
+            return reached;
+        }
+
+        /** Whether they finished (counted) at least one race tonight. */
+        public boolean finishedAny() {
+            return finishedAny;
+        }
     }
 
     /** The track a night races on. {@code stand} {@code null}: one race, finishers go home. */
@@ -204,6 +214,11 @@ public final class NightRunner implements RaceLink {
     /** How many laps each race is. */
     public int laps() {
         return laps;
+    }
+
+    /** How many targets (checkpoints and the finish) each race has. */
+    public int targets() {
+        return raced(track.grid().isEmpty() ? null : track.grid().get(0)).targets().size();
     }
 
     /** Whether it holds a prize slot (known from race 1's Go; before that, whether it will ask for one). */

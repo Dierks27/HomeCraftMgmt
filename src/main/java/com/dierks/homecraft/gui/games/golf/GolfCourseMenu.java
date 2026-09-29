@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.golf.GolfCourse;
+import com.dierks.homecraft.games.golf.GolfGroup;
 import com.dierks.homecraft.games.golf.GolfRun;
 import com.dierks.homecraft.games.golf.MiniGolf;
 import com.dierks.homecraft.gui.Menus;
@@ -27,7 +28,8 @@ import java.util.List;
  *
  * <pre>
  *  4  the course: holes and par, each hole's par
- *  10 your best     11 high scores (the record)     13 Start     15 Pick your ball     16 How to play
+ *  10 your best     11 high scores (the record)     12 Play with friends (golf together, D4)
+ *  13 Start     15 Pick your ball     16 How to play
  *  22 Back/Close
  * </pre>
  *
@@ -48,6 +50,8 @@ public final class GolfCourseMenu extends GameMenu {
     private static final int BALL = 15;
     private static final int RULES = 16;
     private static final int STARS = 14;
+    /** Golf together (EVENTS-OWNER-DECISIONS D4). */
+    private static final int FRIENDS = 12;
 
     private final MiniGolf golf;
     private final String courseId;
@@ -119,6 +123,9 @@ public final class GolfCourseMenu extends GameMenu {
                 Sounds.refused(viewer);
             }
         });
+        set(FRIENDS, Menus.icon(Material.CAKE, "&bPlay with friends &7- up to " + GolfGroup.MAX,
+                "&7Everyone plays the same hole at", "&7once, each with their own ball.", "&7Invite friends, then Start.",
+                "&eClick to make a party"), e -> golf.together().openLobby(viewer, c.id(), this::reopen));
         set(BALL, GolfBallMenu.currentTile(golf, viewer),
                 e -> new GolfBallMenu(plugin, golf, viewer, 0, this::reopen).open(viewer));
         set(RULES, rulesTile(golf.rules()), null);

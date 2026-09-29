@@ -162,6 +162,28 @@ public final class EventCopy {
         return board != null && (board.startsWith(NIGHT_PREFIX) || board.startsWith(SEASON_PREFIX));
     }
 
+    // ---- the Games screen -----------------------------------------------------------------------
+
+    /**
+     * The Race Night tile's NAME, which carries the state (§A.6; Bedrock shows lore only on
+     * tap-and-hold): "&amp;6Race Night &amp;7- Fri 7:00 PM", "&amp;aRace Night &amp;7- join now! 3/8",
+     * "&amp;cRace Night &amp;7- racing (race 2 of 3)".
+     */
+    public static String tileName(EventMachine.Phase phase, long startsAt, int racers, int maxRacers, int race,
+                                  int races, ZoneId zone) {
+        if (phase == null) {
+            return "&6Race Night &7- no race set";
+        }
+        return switch (phase) {
+            case SCHEDULED -> "&6Race Night &7- " + when(startsAt, zone);
+            case OPEN -> "&aRace Night &7- join now! " + racers + "/" + maxRacers;
+            case WARMUP -> "&cRace Night &7- warm-up laps";
+            case GRID, RACING, BREAK -> "&cRace Night &7- racing (race " + Math.max(1, race) + " of " + races + ")";
+            case SETTLING, DONE -> "&6Race Night &7- results";
+            case CALLED_OFF -> "&7Race Night &7- called off";
+        };
+    }
+
     // ---- chat lines -----------------------------------------------------------------------------
 
     /** The heads-up (T − 30 min). */

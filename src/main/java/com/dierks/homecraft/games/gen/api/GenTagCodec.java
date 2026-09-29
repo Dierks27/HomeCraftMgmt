@@ -26,6 +26,9 @@ import java.util.Map;
  *   built_at: 1790661730000
  *   attempts: [0, 2, 0]              # golf only
  *   witness: [[[12.5, 5]], ...]      # golf only: per hole, [yaw, power] per putt
+ *   recall_slot: fresh_classic_parkour   # only for an archived course recalled into a Classics slot:
+ *   recall_from: 1790661730000           #   which slot, since when (epoch ms)
+ *   recall_day: 20731                    #   and that moment's local day
  * </pre>
  *
  * Plain maps and lists in and out, so it needs no server and each codec keeps its own YAML
@@ -75,6 +78,11 @@ public final class GenTagCodec {
                 holes.add(putts);
             }
             m.put("witness", holes);
+        }
+        if (tag.recall() != null) {
+            m.put("recall_slot", tag.recall().slot());
+            m.put("recall_from", tag.recall().from());
+            m.put("recall_day", tag.recall().day());
         }
         return m;
     }
@@ -133,9 +141,14 @@ public final class GenTagCodec {
                 witness.add(line);
             }
         }
+        GenTag.Recall recall = null;
+        if (m.get("recall_slot") != null) {
+            recall = new GenTag.Recall(text(m, "recall_slot"), whole(m.get("recall_from"), "recall_from"),
+                    whole(m.get("recall_day"), "recall_day"));
+        }
         return new GenTag(slot, generator, algo, day, reroll, seed, half.charAt(0), plan,
                 optionalWhole(m, "ref_ms"), optionalWhole(m, "gold_ms"), optionalWhole(m, "silver_ms"), attempts,
-                witness, optionalWhole(m, "built_at"), cadence);
+                witness, optionalWhole(m, "built_at"), cadence, recall);
     }
 
     private static String text(Map<?, ?> m, String key) {

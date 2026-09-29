@@ -218,6 +218,64 @@ public final class GenCopy {
         };
     }
 
+    // ---- the archive: course codes, Classics and kept courses (GEN-SPEC-KEEP) -----------------------
+
+    /** The line that tells players old courses can come back (screens and the players' guide). */
+    public static final String CLASSICS_TIP = "&7Loved an old course? Tell an admin its course code, and they can"
+            + " bring it back for a week, or keep it forever.";
+    /** A course name is at most this long (the course tools cut a longer one). */
+    public static final int NAME_CHARS = 32;
+
+    /** A course's code as a player reads it, for an item NAME and the finish line: "Course code HARD-40". */
+    public static String courseCode(String code) {
+        return "Course code " + code;
+    }
+
+    /**
+     * What an archived course recalled into a Classics slot is called: "Classic: Hard Parkour (week
+     * of 5 Oct)", "Classic: Parkour (5 Oct)" for a daily one, "Classic: Sky Rings (5 Oct-7 Oct)" for
+     * a 3-day one, with " (re-made)" when it was made again from its seed by today's generator.
+     *
+     * @param name     the course's own name ("Hard Parkour")
+     * @param cadence  its edition's length in days
+     * @param startDay its edition's first day (local epoch day)
+     */
+    public static String classicName(String name, int cadence, long startDay, boolean remade) {
+        return "Classic: " + name + " (" + editionDates(cadence, startDay) + ")" + (remade ? " (re-made)" : "");
+    }
+
+    /**
+     * {@link #classicName} cut to fit a course row's name ({@value #NAME_CHARS} characters): the
+     * dates shortened first, then dropped. The screens show the full name from the tag.
+     */
+    public static String classicRowName(String name, int cadence, long startDay, boolean remade) {
+        String full = classicName(name, cadence, startDay, remade);
+        if (full.length() <= NAME_CHARS) {
+            return full;
+        }
+        String shorter = "Classic: " + name + (remade ? " (re-made)" : " (" + DAY_MONTH.format(Edition.date(startDay))
+                + ")");
+        if (shorter.length() <= NAME_CHARS) {
+            return shorter;
+        }
+        String bare = "Classic: " + name;
+        return bare.length() <= NAME_CHARS ? bare : bare.substring(0, NAME_CHARS).trim();
+    }
+
+    /** An edition's dates for players: "5 Oct" (a day), "week of 5 Oct" (a week), "5 Oct-7 Oct" (N days). */
+    public static String editionDates(int cadence, long startDay) {
+        String first = DAY_MONTH.format(Edition.date(startDay));
+        if (cadence <= Edition.DAILY) {
+            return first;
+        }
+        if (cadence == Edition.WEEKLY) {
+            return "week of " + first;
+        }
+        return first + "-" + DAY_MONTH.format(Edition.date(startDay + cadence - 1));
+    }
+
+    private static final DateTimeFormatter DAY_MONTH = DateTimeFormatter.ofPattern("d MMM", Locale.US);
+
     /** A moment as players and admins read it: "Thu 4:00 AM". */
     public static String when(long millis, ZoneId zone) {
         return WHEN.format(Instant.ofEpochMilli(millis).atZone(zone));
@@ -294,7 +352,7 @@ public final class GenCopy {
         List<String> out = new ArrayList<>(List.of(NAME, TILE, YESTERDAY, MOVED, ONE_MINUTE, EDITOR_REFUSED, GUARDED,
                 MADE_BY_DAILY, WINGS_TIP, closed("Easy Parkour"), building("Sky Rings"), comingHere(20),
                 comingHere(1), timesUp("fresh_golf"), restartSoon("4:00 PM"), newIn(11 * 3_600_000L + 120_000L),
-                newIn(6 * 86_400_000L + 14 * 3_600_000L)));
+                newIn(6 * 86_400_000L + 14 * 3_600_000L), CLASSICS_TIP, courseCode("HARD-40")));
         for (int cadence : new int[]{1, 2, 3, 7, 14, 28}) {
             out.add(cadenceName(cadence));
             out.add(current(cadence));
@@ -303,6 +361,8 @@ public final class GenCopy {
             out.add(previous(cadence));
             for (Slots.Def d : Slots.ALL) {
                 out.add(slotName(d, cadence));
+                out.add(classicName(slotName(d, cadence), cadence, 20731, false));
+                out.add(classicRowName(slotName(d, cadence), cadence, 20731, true));
             }
         }
         for (List<String> sign : everySign()) {

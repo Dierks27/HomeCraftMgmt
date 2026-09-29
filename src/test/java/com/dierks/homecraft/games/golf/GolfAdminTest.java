@@ -96,6 +96,8 @@ class GolfAdminTest {
         }
         assertEquals(GenCopy.MADE_BY_DAILY, GolfAdmin.dailyRefusal(c.withGen(null), "hole"),
                 "a row with a slot's id is Fresh Courses' even without its tag");
+        assertEquals(GenCopy.MADE_BY_DAILY, GolfAdmin.dailyRefusal(GolfCourse.create("fresh_classic_golf",
+                "Classic: Tiny Golf", "games"), "hole"), "and so is a Classics slot's row");
         GolfCourse handBuilt = GolfCourse.create("meadow", "Meadow Links", "games");
         for (String verb : List.of("info", "tp", "hole", "name", "enable", "disable", "delete")) {
             assertNull(GolfAdmin.dailyRefusal(handBuilt, verb), "a hand-built course is untouched: " + verb);

@@ -23,6 +23,13 @@ import java.util.List;
  * {@code gen.goals.<week>} — {@code <stars>:<tokens>,...}, a week's Star Chart goals as they were
  * fixed the first time they were asked for that week, so every goal of a week is paid against the
  * same list whatever is switched on or off later ({@link GenService#goals}).
+ *
+ * <p>The archive's keys (GEN-SPEC-KEEP): {@code gen.<classic slot>.recall} — what an admin recalled
+ * into a Classics slot ({@link ClassicWant}); {@code gen.<slot>.codes} — the highest course-code
+ * number ever handed out (kept by the archive's flip); {@code gen.keep.plot.<n>} — the course kept
+ * in plot n and where it stands ({@link KeptPlot}); {@code gen.keep.pending} — a keep or a
+ * clear-plot in flight ({@link KeepService}), so a stop halfway is finished or cleaned at the
+ * next start. A free plot has no key: nothing guards it, so every keep scans it again.
  */
 public final class GenAdminKeys {
 
@@ -57,6 +64,33 @@ public final class GenAdminKeys {
 
     public static String mix(String slot) {
         return "gen." + slot + ".mix";
+    }
+
+    /** What is recalled into a Classics slot ({@link ClassicWant#text()}); unset when it is empty. */
+    public static String recall(String classicSlot) {
+        return "gen." + classicSlot + ".recall";
+    }
+
+    /** Every plot key starts with this. */
+    public static final String PLOTS = "gen.keep.plot.";
+    /** A keep or clear-plot in flight. */
+    public static final String KEEP_PENDING = "gen.keep.pending";
+
+    /** The course kept in plot {@code n} ({@link KeptPlot#text()}). */
+    public static String plot(int n) {
+        return PLOTS + n;
+    }
+
+    /** The plot number of a {@link #plot} key, or -1. */
+    public static int plotOf(String key) {
+        if (key == null || !key.startsWith(PLOTS)) {
+            return -1;
+        }
+        try {
+            return Integer.parseInt(key.substring(PLOTS.length()));
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
     /** Every week's fixed goals start with this. */

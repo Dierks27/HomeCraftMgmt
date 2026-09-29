@@ -106,6 +106,56 @@ class GenAdminTest {
         public void clear(String slot, Consumer<String> report) {
             calls.add("clear " + slot);
         }
+
+        @Override
+        public List<String> history(String slot, int page) {
+            calls.add("history " + slot + " " + page);
+            return List.of("&fHARD-1");
+        }
+
+        @Override
+        public List<String> historyOf(String slot, GenArgs.Which which) {
+            calls.add("historyOf " + slot + " " + which.typed());
+            return List.of("&6HARD-1");
+        }
+
+        @Override
+        public void recall(String classic, String slot, GenArgs.Which which, int days, boolean confirm,
+                           Consumer<String> report) {
+            calls.add("recall " + classic + " " + slot + " " + which.typed() + " " + days + " " + confirm);
+        }
+
+        @Override
+        public void unrecall(String classic, boolean confirm, Consumer<String> report) {
+            calls.add("unrecall " + classic + " " + confirm);
+        }
+
+        @Override
+        public void keep(String slot, GenArgs.Which which, String id, String name, boolean freshBoard, boolean confirm,
+                         Consumer<String> report) {
+            calls.add("keep " + slot + " " + which.typed() + " " + id + " " + name + " " + freshBoard + " " + confirm);
+        }
+
+        @Override
+        public List<String> plots() {
+            calls.add("plots");
+            return List.of("&6Kept courses");
+        }
+
+        @Override
+        public void clearPlot(int n, boolean confirm, Consumer<String> report) {
+            calls.add("clear-plot " + n + " " + confirm);
+        }
+
+        @Override
+        public void claimPlot(int n, boolean confirm, Consumer<String> report) {
+            calls.add("claim plot " + n + " " + confirm);
+        }
+
+        @Override
+        public List<Integer> usedPlots() {
+            return List.of(1, 3);
+        }
     }
 
     private Ops ops;
@@ -265,8 +315,113 @@ class GenAdminTest {
     }
 
     @Test
+    void theArchiveVerbsAreParsedBeforeTheEngineIsAsked() {
+        run("history");
+        run("history fresh_parkour_hard 2");
+        run("history all 3");
+        run("history HARD-40");
+        run("history fresh_parkour_hard date 2026-10-05");
+        run("history nowhere");
+        assertTrue(heard().contains("No Fresh Course called 'nowhere'"), heard());
+        run("plots");
+        assertEquals(List.of("history null 1", "history fresh_parkour_hard 2", "history null 3",
+                "historyOf fresh_parkour_hard HARD-40", "historyOf fresh_parkour_hard date 2026-10-05", "plots"),
+                ops.calls, "pages and single courses go to the engine; a bad course never does");
+        ops.calls.clear();
+        run("recall HARD-40");
+        run("recall hard-40 forever");
+        run("recall parkour fresh_parkour_hard last 3 confirm");
+        run("recall golf fresh_tiny_golf date 2026-10-05");
+        run("recall fresh_classic_rings fresh_rings seed:3f2a9c01b7de");
+        run("recall boat fresh_boat last");
+        assertTrue(heard().contains("isn't a course code or a Classics slot"), heard());
+        run("recall parkour fresh_parkour_hard");
+        assertTrue(heard().contains("Which one"), heard());
+        assertEquals(List.of("recall null null HARD-40 0 false", "recall null null HARD-40 -1 false",
+                "recall fresh_classic_parkour fresh_parkour_hard last 3 true",
+                "recall fresh_classic_golf fresh_tiny_golf date 2026-10-05 0 false",
+                "recall fresh_classic_rings fresh_rings seed:3f2a9c01b7de 0 false"), ops.calls,
+                "codes anywhere an edition is taken, kinds for Classics slots, durations and confirm");
+        ops.calls.clear();
+        run("keep HARD-40 dragon_run \"Dragon Run\" confirm");
+        run("keep fresh_rings sky_loop --fresh-board");
+        run("keep fresh_parkour last cliff_hop");
+        run("keep");
+        assertTrue(heard().contains("Which course"), heard());
+        assertEquals(List.of("keep fresh_parkour_hard HARD-40 dragon_run Dragon Run false true",
+                "keep fresh_rings current sky_loop null true false", "keep fresh_parkour last cliff_hop null false false"),
+                ops.calls, "keep: a code or a course and which, the id, the name, the flag and confirm");
+        ops.calls.clear();
+        run("unrecall parkour");
+        run("unrecall fresh_classic_golf confirm");
+        run("unrecall fresh_parkour_hard");
+        assertTrue(heard().contains("Which Classics slot?"), heard());
+        run("clear-plot 3");
+        run("clear-plot 3 confirm");
+        run("clear-plot x");
+        assertTrue(heard().contains("Which plot?"), heard());
+        run("claim plot 2");
+        run("claim plot 2 confirm");
+        assertEquals(List.of("unrecall fresh_classic_parkour false", "unrecall fresh_classic_golf true",
+                "clear-plot 3 false", "clear-plot 3 true", "claim plot 2 false", "claim plot 2 true"), ops.calls,
+                "the engine is asked with confirm or without (it says what it would do)");
+        ops.calls.clear();
+        run("status fresh_classic_golf");
+        run("rebuild fresh_classic_golf");
+        run("reroll fresh_classic_golf confirm");
+        assertTrue(heard().contains("No Fresh Course called"), "a Classics slot is never rerolled: " + heard());
+        assertEquals(List.of("status fresh_classic_golf", "rebuild fresh_classic_golf"), ops.calls,
+                "status and rebuild take a Classics slot");
+    }
+
+    @Test
+    void recallAndKeepAreRefusedNearARestartAndChangesAreLogged() {
+        ops.restart = "&cA restart is coming at 4:00 PM - try after it.";
+        run("recall HARD-40");
+        assertTrue(heard().contains("A restart is coming at 4:00 PM"), heard());
+        run("keep HARD-40 dragon_run confirm");
+        assertTrue(heard().contains("A restart is coming at 4:00 PM"), heard());
+        assertTrue(ops.calls.isEmpty(), "neither reached the engine: " + ops.calls);
+        run("history all");
+        run("unrecall parkour confirm");
+        run("clear-plot 1 confirm");
+        assertEquals(List.of("history null 1", "unrecall fresh_classic_parkour true", "clear-plot 1 true"), ops.calls,
+                "looking, closing and clearing still work");
+        assertTrue(logs.stream().anyMatch(r -> r.getMessage().contains("ran /hcm games gen clear-plot 1 confirm")),
+                "a change is logged with who made it");
+        assertFalse(logs.stream().anyMatch(r -> r.getMessage().contains("gen history")), "a look isn't");
+    }
+
+    @Test
+    void tabCompletionKnowsTheArchiveVerbs() {
+        assertEquals(List.of("recall"), admin.tab(console, new String[]{"reca"}), "the verb");
+        assertEquals(List.of("fresh_classic_parkour", "fresh_classic_rings", "fresh_classic_golf", "parkour", "rings",
+                "golf"), admin.tab(console, new String[]{"recall", ""}), "Classics slots and kinds");
+        assertEquals(List.of("fresh_parkour_easy", "fresh_parkour", "fresh_parkour_hard"),
+                admin.tab(console, new String[]{"recall", "parkour", ""}), "the courses a kind can hold");
+        assertEquals(List.of("fresh_golf", "fresh_tiny_golf"), admin.tab(console, new String[]{"recall",
+                "fresh_classic_golf", ""}), "both golf courses go into Classic Golf");
+        assertEquals(List.of("last"), admin.tab(console, new String[]{"recall", "parkour", "fresh_parkour", "l"}),
+                "which one");
+        assertEquals(List.of("forever"), admin.tab(console, new String[]{"recall", "HARD-40", "f"}), "how long");
+        assertEquals(List.of("fresh_classic_golf"), admin.tab(console, new String[]{"unrecall", "fresh_classic_g"}),
+                "unrecall takes a Classics slot");
+        assertEquals(List.of("current"), admin.tab(console, new String[]{"keep", "fresh_rings", "c"}), "keep which");
+        assertEquals(List.of("--fresh-board"), admin.tab(console, new String[]{"keep", "HARD-40", "dragon_run", "--"}),
+                "keep's flag");
+        assertEquals(List.of("1", "3"), admin.tab(console, new String[]{"clear-plot", ""}), "the plots in use");
+        assertEquals(List.of("confirm"), admin.tab(console, new String[]{"clear-plot", "3", ""}), "then confirm");
+        assertTrue(admin.tab(console, new String[]{"history", ""}).contains("all"), "history all");
+        assertTrue(admin.tab(console, new String[]{"claim", ""}).contains("plot"), "claim a plot");
+        assertTrue(admin.tab(console, new String[]{"status", ""}).contains("fresh_classic_rings"),
+                "status of a Classics slot");
+        assertFalse(admin.tab(console, new String[]{"reroll", ""}).contains("fresh_classic_rings"),
+                "but no reroll of one");
+    }
+
+    @Test
     void tabCompletionOffersTheVerbsTheSlotsAndTheNextWord() {
-        assertEquals(List.of("plan", "preview", "promote", "pin"), admin.tab(console, new String[]{"p"}),
+        assertEquals(List.of("plan", "preview", "promote", "pin", "plots"), admin.tab(console, new String[]{"p"}),
                 "verbs by prefix");
         assertTrue(admin.tab(console, new String[]{"reroll", ""}).contains("all"), "reroll offers all");
         assertEquals(List.of("fresh_golf"), admin.tab(console, new String[]{"mix", "fresh_g"}), "mix offers golf only");

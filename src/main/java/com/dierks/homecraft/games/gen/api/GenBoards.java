@@ -85,9 +85,28 @@ public final class GenBoards {
         return STARS_PREFIX + courseId + ":" + edition;
     }
 
-    /** A course's best-stars board for the edition {@code tag} is in (any reroll). */
+    /**
+     * A course's best-stars board for the edition {@code tag} is in (any reroll). For an archived
+     * course recalled into a Classics slot (GEN-SPEC-KEEP §3) it is the recall's own board, kept
+     * by the day it was recalled ({@code gstars:<classic slot>:<day>}): its stars count toward the
+     * current week's chart even for a player who earned them on the original, while its time board
+     * and first-finish reward stay the original edition's.
+     */
     public static String stars(GenTag tag) {
+        if (tag.recall() != null) {
+            return stars(tag.recall().slot(), tag.recall().day());
+        }
         return stars(tag.slot(), tag.edition());
+    }
+
+    /**
+     * The one-time first-finish reward's ref for the layout {@code tag} names:
+     * {@code fresh:<slot>:<edition>} (no reroll). A recalled course carries its original slot and
+     * edition, so this is the ORIGINAL edition's ref: whoever cleared it back then isn't paid
+     * again, and a new player is.
+     */
+    public static String clearRef(GenTag tag) {
+        return "fresh:" + tag.slot() + ":" + tag.edition();
     }
 
     /** A course's best-stars board kept by course day (for callers that key stars by day). */

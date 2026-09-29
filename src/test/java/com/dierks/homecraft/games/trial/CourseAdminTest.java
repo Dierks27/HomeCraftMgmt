@@ -164,6 +164,10 @@ class CourseAdminTest {
         Course slotWithoutTag = c.withGen(null);
         assertEquals(GenCopy.MADE_BY_DAILY, CourseAdmin.dailyRefusal(slotWithoutTag, "start"),
                 "a row with a slot's id is Fresh Courses' even when its tag was lost");
+        assertEquals(GenCopy.MADE_BY_DAILY, CourseAdmin.dailyRefusal(new Course("fresh_classic_parkour",
+                        TrialKind.PARKOUR, "Classic: Easy Parkour", Tier.EASY, "games", null, List.of(), null, null,
+                        null, false, false, 1), "start"),
+                "and so is a Classics slot's row");
         Course handBuilt = new Course("cliffs", TrialKind.PARKOUR, "Cliffs", Tier.EASY, "games", null, List.of(),
                 null, null, null, false, false, 1);
         for (String verb : CourseAdmin.VERBS) {

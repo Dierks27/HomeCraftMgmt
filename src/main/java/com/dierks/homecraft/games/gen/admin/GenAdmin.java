@@ -35,14 +35,25 @@ import java.util.logging.Logger;
  * {@code avoid_before_restart_minutes} of a scheduled restart. Every change is logged with who made
  * it, and a command that goes wrong answers "That didn't work - see the console." and never
  * reaches the framework's guard, which would switch Fresh Courses off.
+ *
+ * <p><b>The archive (GEN-SPEC-KEEP).</b> {@code history} lists every past course with its course
+ * code; {@code recall} brings one back into a Classics slot for a while ({@code unrecall} closes
+ * it); {@code keep} makes one a normal course for good in a plot of the keep area ({@code plots}
+ * lists them, {@code clear-plot} takes one down). Any of them takes a course code where an edition
+ * is asked for ({@link GenArgs}). {@code recall} and {@code keep} are refused near a restart, like
+ * {@code reroll}; {@code keep}, {@code clear-plot}, and a recall or unrecall that would disturb
+ * someone playing, ask for {@code confirm} first.
  */
 public final class GenAdmin implements GameAdmin {
 
     /** The verbs, in help order. */
     public static final List<String> VERBS = List.of("status", "plan", "preview", "promote", "reroll", "rebuild",
-            "on", "off", "tier", "mix", "pin", "unpin", "tp", "claim", "clear");
+            "on", "off", "tier", "mix", "pin", "unpin", "tp", "claim", "clear", "history", "recall", "unrecall", "keep",
+            "plots", "clear-plot");
     /** Verbs that change nothing (not logged). */
-    private static final List<String> LOOKS = List.of("status", "plan", "tp", "help");
+    private static final List<String> LOOKS = List.of("status", "plan", "tp", "help", "history", "plots");
+    /** Verbs that also take a Classics slot's id. */
+    private static final List<String> CLASSIC_VERBS = List.of("status", "rebuild", "tp", "claim");
 
     private final Supplier<GenOps> ops;
     private final Logger log;
@@ -75,8 +86,17 @@ public final class GenAdmin implements GameAdmin {
                 "&e/hcm games gen mix <golf course> <E, M and H> &7- the golf holes from the next build",
                 "&e/hcm games gen pin <course> <seed|live> [days] &7- keep a good course; unpin to let it change",
                 "&e/hcm games gen tp <course> [live|idle] &7- go and look",
-                "&e/hcm games gen claim <course> [confirm] &7- count what is in a new area; confirm clears foreign blocks and claims it",
-                "&e/hcm games gen clear <course> confirm &7- empty both halves and switch it off (before moving it)");
+                "&e/hcm games gen claim <course|plot n> [confirm] &7- count what is in a new area; confirm clears"
+                        + " foreign blocks and claims it",
+                "&e/hcm games gen clear <course> confirm &7- empty both halves and switch it off (before moving it)",
+                "&e/hcm games gen history <course|all> [page] &7- every past course with its code; history <code> for one",
+                "&e/hcm games gen recall <code> [days|forever] [confirm] &7- bring a past course back into a Classics"
+                        + " slot (or: recall <classic|kind> <course> <last|number|date d|seed:hex>)",
+                "&e/hcm games gen unrecall <classic> [confirm] &7- close a Classics slot",
+                "&e/hcm games gen keep <code|course [which]> <new-id> [name] [--fresh-board] confirm &7- keep a"
+                        + " course for good as a normal course",
+                "&e/hcm games gen plots &7- the kept courses and their plots",
+                "&e/hcm games gen clear-plot <n> confirm &7- delete a kept course and its board, and clear its plot");
     }
 
     @Override
@@ -112,12 +132,15 @@ public final class GenAdmin implements GameAdmin {
         }
         Consumer<String> report = line -> say(sender, line);
         if (verb.equals("status")) {
-            String id = rest.isEmpty() ? null : slot(sender, rest.get(0));
+            String id = rest.isEmpty() ? null : slot(sender, rest.get(0), true);
             if (!rest.isEmpty() && id == null) {
                 return;
             }
             say(sender, "&6Fresh Courses");
             engine.status(id).forEach(report);
+            return;
+        }
+        if (archiveVerb(sender, engine, verb, rest, confirm, args, report)) {
             return;
         }
         if (verb.equals("reroll") && !rest.isEmpty() && rest.get(0).equalsIgnoreCase("all")) {
@@ -136,11 +159,27 @@ public final class GenAdmin implements GameAdmin {
             say(sender, "&cWhich course? &7" + String.join(", ", Slots.ids()));
             return;
         }
-        String id = slot(sender, rest.get(0));
+        if ((verb.equals("claim") || verb.equals("tp")) && rest.get(0).equalsIgnoreCase("plot")) {
+            int n = rest.size() > 1 ? plot(rest.get(1)) : 0;
+            if (n < 1) {
+                say(sender, "&cWhich plot? A number, like: /hcm games gen " + verb + " plot 3");
+                return;
+            }
+            if (verb.equals("tp")) {
+                tp(sender, engine, "plot:" + n, null);
+                return;
+            }
+            if (confirm) {
+                logChange(sender, args);
+            }
+            engine.claimPlot(n, confirm, report);
+            return;
+        }
+        String id = slot(sender, rest.get(0), CLASSIC_VERBS.contains(verb));
         if (id == null) {
             return;
         }
-        Slots.Def def = Slots.of(id);
+        Slots.Def def = Slots.any(id);
         String arg = rest.size() > 1 ? rest.get(1) : null;
         switch (verb) {
             case "plan" -> {
@@ -267,7 +306,9 @@ public final class GenAdmin implements GameAdmin {
             return;
         }
         player.teleport(new Location(world, spot.x(), spot.y(), spot.z(), spot.yaw(), 0f));
-        say(sender, "&7" + (idle ? "The spare half" : "The current course") + " of " + Slots.of(id).name() + ".");
+        Slots.Def def = Slots.any(id);
+        say(sender, def == null ? "&7" + id.replace("plot:", "Plot ") + "." : "&7" + (idle ? "The spare half"
+                : "The current course") + " of " + def.name() + ".");
     }
 
     /** Whether a restart is too close for this (the sender is told). */
@@ -289,14 +330,97 @@ public final class GenAdmin implements GameAdmin {
         return false;
     }
 
-    /** The slot id typed, or {@code null} after telling the sender the choices. */
-    private static String slot(CommandSender sender, String typed) {
-        Slots.Def def = Slots.of(typed);
+    /** The slot (or, when {@code classics}, Classics slot) id typed, or {@code null} after saying the choices. */
+    private static String slot(CommandSender sender, String typed, boolean classics) {
+        Slots.Def def = classics ? Slots.any(typed) : Slots.of(typed);
         if (def == null) {
-            say(sender, "&cNo Fresh Course called '" + typed + "'. &7" + String.join(", ", Slots.ids()));
+            say(sender, "&cNo Fresh Course called '" + typed + "'. &7" + String.join(", ", Slots.ids())
+                    + (classics ? ", " + String.join(", ", Slots.classicIds()) : ""));
             return null;
         }
         return def.id();
+    }
+
+    /**
+     * {@code history}, {@code plots}, {@code recall}, {@code unrecall}, {@code keep} and
+     * {@code clear-plot} (GEN-SPEC-KEEP); {@code false} for any other verb.
+     */
+    private boolean archiveVerb(CommandSender sender, GenOps engine, String verb, List<String> rest, boolean confirm,
+                                String[] args, Consumer<String> report) {
+        switch (verb) {
+            case "history" -> {
+                GenArgs.History h = GenArgs.history(rest);
+                if (h.error() != null) {
+                    say(sender, "&c" + h.error());
+                } else if (h.detail() != null) {
+                    engine.historyOf(h.slot(), h.detail()).forEach(report);
+                } else {
+                    engine.history(h.slot(), h.page()).forEach(report);
+                }
+            }
+            case "plots" -> engine.plots().forEach(report);
+            case "recall" -> {
+                GenArgs.Recall r = GenArgs.recall(rest);
+                if (r.error() != null) {
+                    say(sender, "&c" + r.error());
+                    return true;
+                }
+                if (refusedNearRestart(sender, engine)) {
+                    return true;
+                }
+                logChange(sender, args);
+                engine.recall(r.classic(), r.slot(), r.which(), r.days(), confirm, report);
+            }
+            case "unrecall" -> {
+                Slots.Def c = rest.isEmpty() ? null : Slots.classicByWord(rest.get(0));
+                if (c == null) {
+                    say(sender, "&cWhich Classics slot? &7" + String.join(", ", Slots.classicIds()));
+                    return true;
+                }
+                logChange(sender, args);
+                engine.unrecall(c.id(), confirm, report);
+            }
+            case "keep" -> {
+                GenArgs.Keep k = GenArgs.keep(rest);
+                if (k.error() != null) {
+                    say(sender, "&c" + k.error());
+                    return true;
+                }
+                if (refusedNearRestart(sender, engine)) {
+                    return true;
+                }
+                if (confirm) {
+                    logChange(sender, args);
+                }
+                engine.keep(k.slot(), k.which(), k.id(), k.name(), k.freshBoard(), confirm, report);
+            }
+            case "clear-plot" -> {
+                int n = rest.isEmpty() ? 0 : plot(rest.get(0));
+                if (n < 1) {
+                    say(sender, "&cWhich plot? A number, like: /hcm games gen clear-plot 3 confirm &7(/hcm games gen"
+                            + " plots)");
+                    return true;
+                }
+                if (confirm) {
+                    logChange(sender, args);
+                }
+                engine.clearPlot(n, confirm, report);
+            }
+            default -> {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** A plot number as typed (1 to 100), or 0. */
+    private static int plot(String typed) {
+        try {
+            int n = Integer.parseInt(typed.trim());
+            return n >= 1 && n <= 100 ? n : 0;
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     /** The live layout's seed: {@code live}, or {@code today} as it was first called. */
@@ -339,10 +463,20 @@ public final class GenAdmin implements GameAdmin {
         if (!VERBS.contains(verb)) {
             return out;
         }
+        List<String> archive = archiveTab(verb, args, last);
+        if (archive != null) {
+            return archive;
+        }
         if (args.length == 2) {
             List<String> ids = new ArrayList<>(Slots.ids());
             if (verb.equals("reroll")) {
                 ids.add("all");
+            }
+            if (CLASSIC_VERBS.contains(verb)) {
+                ids.addAll(Slots.classicIds());
+            }
+            if (verb.equals("claim") || verb.equals("tp")) {
+                ids.add("plot");
             }
             if (verb.equals("tier")) {
                 ids.removeIf(id -> Slots.of(id).golf());
@@ -369,6 +503,78 @@ public final class GenAdmin implements GameAdmin {
         }
         if (args.length == 4 && verb.equals("pin")) {
             match(out, last, List.of("1", "7", "30"));
+        }
+        return out;
+    }
+
+    /** Completion for the archive's verbs, or {@code null} for any other verb. */
+    private List<String> archiveTab(String verb, String[] args, String last) {
+        List<String> out = new ArrayList<>();
+        int n = args.length;
+        switch (verb) {
+            case "history" -> {
+                if (n == 2) {
+                    List<String> ids = new ArrayList<>(Slots.ids());
+                    ids.add("all");
+                    match(out, last, ids);
+                } else if (n == 3 && Slots.of(args[1]) != null) {
+                    match(out, last, List.of("last", "date", "2"));
+                }
+            }
+            case "recall" -> {
+                if (n == 2) {
+                    List<String> words = new ArrayList<>(Slots.classicIds());
+                    words.addAll(List.of("parkour", "rings", "golf"));
+                    match(out, last, words);
+                } else if (n == 3 && Slots.classicByWord(args[1]) != null) {
+                    Slots.Def c = Slots.classicByWord(args[1]);
+                    List<String> ids = new ArrayList<>();
+                    for (Slots.Def d : Slots.ALL) {
+                        if (Slots.classicFor(d) == c) {
+                            ids.add(d.id());
+                        }
+                    }
+                    match(out, last, ids);
+                } else if (n == 4 && Slots.of(args[2]) != null) {
+                    match(out, last, List.of("last", "date", "seed:"));
+                } else if (n >= 3) {
+                    match(out, last, List.of("7", "forever", "confirm"));
+                }
+            }
+            case "unrecall" -> {
+                if (n == 2) {
+                    match(out, last, Slots.classicIds());
+                } else if (n == 3) {
+                    match(out, last, List.of("confirm"));
+                }
+            }
+            case "keep" -> {
+                if (n == 2) {
+                    match(out, last, Slots.ids());
+                } else if (n == 3 && Slots.of(args[1]) != null) {
+                    match(out, last, List.of("current", "last"));
+                } else if (n >= 4) {
+                    match(out, last, List.of("--fresh-board", "confirm"));
+                }
+            }
+            case "clear-plot" -> {
+                if (n == 2) {
+                    GenOps engine = ops.get();
+                    List<String> used = new ArrayList<>();
+                    for (int p : engine == null ? List.<Integer>of() : engine.usedPlots()) {
+                        used.add(Integer.toString(p));
+                    }
+                    match(out, last, used);
+                } else if (n == 3) {
+                    match(out, last, List.of("confirm"));
+                }
+            }
+            case "plots" -> {
+                // nothing more to offer
+            }
+            default -> {
+                return null;
+            }
         }
         return out;
     }

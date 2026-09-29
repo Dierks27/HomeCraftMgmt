@@ -531,5 +531,15 @@ public final class DailyCourses implements Game {
                 p.teleport(new Location(w, x, y, z, at.getYaw(), at.getPitch()));
             }
         }
+
+        @Override
+        public boolean playIdTaken(String id) {
+            return games().game(id) != null || games().resolve(id) != null;
+        }
+
+        @Override
+        public String playerName(UUID player) {
+            return holder(player);
+        }
     }
 }

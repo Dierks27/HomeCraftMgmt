@@ -150,12 +150,39 @@ public final class Slots {
     public static final List<Def> ALL = List.of(DAILY_PARKOUR_EASY, DAILY_PARKOUR_MEDIUM, DAILY_PARKOUR_HARD,
             SKY_RINGS, DAILY_GOLF, TINY_GOLF, ICE_BOAT);
 
-    /** Every play id Fresh Courses keeps: the slots, {@link #DAILY} and {@link #DAILY_PARKOUR}. */
+    // ---- the Classics slots (GEN-SPEC-KEEP §3) -------------------------------------------------------
+
+    /*
+     * A Classics slot is empty and closed until an admin recalls an archived course into it. It is
+     * NOT in ALL: the scheduler never builds one on its own, the Star Chart doesn't count it, and a
+     * screen listing "this week's courses" doesn't show it. Its regions sit after the six normal
+     * slots (z 4736 on), each half the size of the largest course its kind can hold (a Classic Golf
+     * half is the big golf course's, so Tiny Golf fits too). Its tier or mix is the recalled
+     * course's own; the shipped one here only satisfies the region checks.
+     */
+
+    /** Classic Parkour: holds any parkour tier. */
+    public static final Def CLASSIC_PARKOUR = new Def("fresh_classic_parkour", PARKOUR, GAME_TRIALS, "parkour",
+            "Classic Parkour", "&6", 64, 48, 64, 0, true, "easy", 4096, 160, 4736, 0, 0);
+    /** Classic Sky Rings. */
+    public static final Def CLASSIC_RINGS = new Def("fresh_classic_rings", RINGS, GAME_TRIALS, "elytra",
+            "Classic Sky Rings", "&6", 128, 176, 320, 0, true, "easy", 4608, 128, 4736, 0, 0);
+    /** Classic Golf: holds the big golf course or Tiny Golf. */
+    public static final Def CLASSIC_GOLF = new Def("fresh_classic_golf", GOLF, GAME_GOLF, "golf", "Classic Golf",
+            "&6", 64, 16, 128, 9, true, "EEEMMMMHH", 4352, 160, 4736, 0, 0);
+
+    /** The Classics slots, in display and config order. */
+    public static final List<Def> CLASSICS = List.of(CLASSIC_PARKOUR, CLASSIC_RINGS, CLASSIC_GOLF);
+
+    /** Every play id Fresh Courses keeps: the slots, the Classics slots, {@link #DAILY} and {@link #DAILY_PARKOUR}. */
     public static final Set<String> RESERVED;
 
     static {
         Set<String> ids = new LinkedHashSet<>();
         for (Def d : ALL) {
+            ids.add(d.id());
+        }
+        for (Def d : CLASSICS) {
             ids.add(d.id());
         }
         ids.add(DAILY);
@@ -197,5 +224,73 @@ public final class Slots {
             out.add(d.id());
         }
         return out;
+    }
+
+    /** The Classics slot with this id (any case, trimmed), or {@code null}. */
+    public static Def classic(String id) {
+        if (id == null) {
+            return null;
+        }
+        String k = id.trim().toLowerCase(Locale.ROOT);
+        for (Def d : CLASSICS) {
+            if (d.id().equals(k)) {
+                return d;
+            }
+        }
+        return null;
+    }
+
+    /** Whether {@code id} is a Classics slot's id. */
+    public static boolean isClassic(String id) {
+        return classic(id) != null;
+    }
+
+    /** A slot or a Classics slot with this id, or {@code null}. */
+    public static Def any(String id) {
+        Def d = of(id);
+        return d != null ? d : classic(id);
+    }
+
+    /** Every Classics slot id, in order. */
+    public static List<String> classicIds() {
+        List<String> out = new ArrayList<>();
+        for (Def d : CLASSICS) {
+            out.add(d.id());
+        }
+        return out;
+    }
+
+    /**
+     * The Classics slot a course of {@code def}'s generator is recalled into: parkour (any tier)
+     * into Classic Parkour, Sky Rings into Classic Sky Rings, both golf courses into Classic Golf.
+     * {@code null} for the ice boat, which has no Classics slot.
+     */
+    public static Def classicFor(Def def) {
+        if (def == null) {
+            return null;
+        }
+        for (Def c : CLASSICS) {
+            if (c.generator().equals(def.generator())) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The Classics slot a word names: its id, or its kind ({@code parkour}; {@code rings},
+     * {@code elytra} or {@code sky_rings}; {@code golf}). {@code null} for anything else.
+     */
+    public static Def classicByWord(String word) {
+        Def d = classic(word);
+        if (d != null || word == null) {
+            return d;
+        }
+        return switch (word.trim().toLowerCase(Locale.ROOT)) {
+            case "parkour" -> CLASSIC_PARKOUR;
+            case "rings", "elytra", "sky_rings", "skyrings" -> CLASSIC_RINGS;
+            case "golf" -> CLASSIC_GOLF;
+            default -> null;
+        };
     }
 }

@@ -622,10 +622,10 @@ final class CourseAdmin implements GameAdmin {
 
     /**
      * Why {@code verb} can't be used on {@code c}, or {@code null} when it can: a course Daily
-     * Courses made (or one with a slot's id) allows only {@link #DAILY_VERBS}.
+     * Courses made (or one with a slot's or a Classics slot's id) allows only {@link #DAILY_VERBS}.
      */
     static String dailyRefusal(Course c, String verb) {
-        if (c == null || !(c.generated() || Slots.isSlot(c.id()))) {
+        if (c == null || !(c.generated() || Slots.any(c.id()) != null)) {
             return null;
         }
         return verb != null && DAILY_VERBS.contains(verb.toLowerCase(Locale.ROOT)) ? null : GenCopy.MADE_BY_DAILY;

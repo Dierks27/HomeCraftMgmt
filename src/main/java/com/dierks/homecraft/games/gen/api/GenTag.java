@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.gen.api;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * What makes a course row a generated one (GEN-SPEC §5.1): the {@code gen:} block of its
@@ -39,10 +40,33 @@ import java.util.List;
  * @param witness   golf: each hole's expert line, replayed at every build and boot
  * @param builtAt   when the blocks were verified (epoch ms)
  * @param cadence   the edition's length in days (1 to 28); a tag written before editions reads as 1
+ * @param recall    for an archived course recalled into a Classics slot (GEN-SPEC-KEEP §3), which slot and
+ *                  since when; {@code null} for a slot's own layout. Everything else is the ORIGINAL
+ *                  edition's (slot, edition, seed, star times), so its board ({@code gfresh:}) and its
+ *                  first-finish reward are the original's; {@code half} and {@code planHash} name the
+ *                  blocks in the Classics slot's half.
  */
 public record GenTag(String slot, String generator, int algo, long day, int reroll, long seed, char half,
                      String planHash, long refMs, long goldMs, long silverMs, List<Integer> attempts,
-                     List<List<Putt>> witness, long builtAt, int cadence) {
+                     List<List<Putt>> witness, long builtAt, int cadence, Recall recall) {
+
+    /**
+     * Where and since when an archived edition stands in a Classics slot.
+     *
+     * @param slot the Classics slot holding it ({@code fresh_classic_parkour})
+     * @param from when it was recalled (epoch ms)
+     * @param day  the local epoch day of {@code from}: its own stars board is kept by it
+     *             ({@link GenBoards#stars(GenTag)})
+     */
+    public record Recall(String slot, long from, long day) {
+
+        public Recall {
+            if (slot == null || slot.isBlank()) {
+                throw new IllegalArgumentException("a recall needs its Classics slot");
+            }
+            slot = slot.trim();
+        }
+    }
 
     public GenTag {
         slot = slot == null ? "" : slot;
@@ -62,6 +86,14 @@ public record GenTag(String slot, String generator, int algo, long day, int rero
         }
         witness = List.copyOf(lines);
         cadence = Edition.clampCadence(cadence);
+    }
+
+    /** A slot's own layout (not recalled): the shape before the Classics slots. */
+    public GenTag(String slot, String generator, int algo, long day, int reroll, long seed, char half,
+                  String planHash, long refMs, long goldMs, long silverMs, List<Integer> attempts,
+                  List<List<Putt>> witness, long builtAt, int cadence) {
+        this(slot, generator, algo, day, reroll, seed, half, planHash, refMs, goldMs, silverMs, attempts, witness,
+                builtAt, cadence, null);
     }
 
     /** A tag of a daily edition (the shape before cadences): {@code day} is the course day. */
@@ -109,12 +141,30 @@ public record GenTag(String slot, String generator, int algo, long day, int rero
     }
 
     /**
-     * Whether {@code other} names the same blocks: the same slot, generator, algo, half and plan.
-     * A pinned layout restamped for a new edition (§3.2) is the same layout under a new edition.
+     * Whether {@code other} names the same blocks: the same slot, generator, algo, half and plan,
+     * in the same place (a slot's own half, or the same Classics slot). A pinned layout restamped
+     * for a new edition (§3.2) is the same layout under a new edition; an archived course recalled
+     * into a Classics slot is never the same layout as its slot's own, even with the same plan.
      */
     public boolean sameLayout(GenTag other) {
         return other != null && slot.equals(other.slot) && generator.equals(other.generator) && algo == other.algo
-                && half == other.half && planHash.equals(other.planHash);
+                && half == other.half && planHash.equals(other.planHash)
+                && Objects.equals(recallSlot(), other.recallSlot());
+    }
+
+    /** Whether it is an archived course recalled into a Classics slot. */
+    public boolean recalled() {
+        return recall != null;
+    }
+
+    /** The Classics slot holding it, or {@code null} for a slot's own layout. */
+    public String recallSlot() {
+        return recall == null ? null : recall.slot();
+    }
+
+    /** The slot whose blocks these are: the Classics slot for a recalled course, else {@link #slot}. */
+    public String holder() {
+        return recall == null ? slot : recall.slot();
     }
 
     /** The same layout for another first day and reroll of the same cadence (a restamp: new boards, no blocks). */
@@ -125,12 +175,18 @@ public record GenTag(String slot, String generator, int algo, long day, int rero
     /** The same layout for another edition (a restamp: new boards, no blocks). */
     public GenTag withEdition(int newCadence, long newDay, int newReroll) {
         return new GenTag(slot, generator, algo, newDay, newReroll, seed, half, planHash, refMs, goldMs, silverMs,
-                attempts, witness, builtAt, newCadence);
+                attempts, witness, builtAt, newCadence, recall);
     }
 
     /** The same tag with a new verified time. */
     public GenTag withBuiltAt(long at) {
         return new GenTag(slot, generator, algo, day, reroll, seed, half, planHash, refMs, goldMs, silverMs,
-                attempts, witness, at, cadence);
+                attempts, witness, at, cadence, recall);
+    }
+
+    /** The same edition standing in a Classics slot ({@code null}: a slot's own layout). */
+    public GenTag withRecall(Recall r) {
+        return new GenTag(slot, generator, algo, day, reroll, seed, half, planHash, refMs, goldMs, silverMs,
+                attempts, witness, builtAt, cadence, r);
     }
 }

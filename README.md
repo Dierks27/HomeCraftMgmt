@@ -464,7 +464,7 @@ says how it is built; [`docs/how-it-works.md`](docs/how-it-works.md) is the play
   exactly what it was.
 - **Today's pick:** one skill game or course a day, the same for everyone, changing at local
   midnight. Its first finish of the day pays `games.featured_bonus`. A game of chance is never
-  the pick.
+  the pick. An admin who pins `trials` or `golf` makes every course of that game the pick.
 - **High scores:** your best on a board, then its top ten with their names. Only the website
   feed leaves names out.
 - **Take a break:** the Wallet's blue bed (slot 51), the hub's Play row, the Games screen, or
@@ -536,7 +536,7 @@ common keys turns the games off, junk in one game's block closes that game.
 | `chance_daily_tokens` | `100` | Most tokens a player can put into all games of chance in a day (`0` = off, at most 10000). While the games are on it also counts Crates, Scratch Tickets and token Card Packs |
 | `max_payout` | `250` | Most any single play of a game of chance can pay (never below the game's largest stake) |
 | `skill_daily_cap` | `6` | Most tokens all skill games together pay a player in a day (first clears don't count) |
-| `featured` | `auto` | `auto` picks a skill game or course each day; a game or course id pins it (`/hcm games feature`) |
+| `featured` | `auto` | `auto` picks a skill game or course each day; a game or course id pins it (`/hcm games feature`). `trials` or `golf` pins every course of that game |
 | `featured_bonus` | `1` | Tokens for the first finish of today's pick (counts toward `skill_daily_cap`) |
 | `restart_times` | `["04:00", "16:00"]` | When the host restarts the server each day: the minute it actually stops, not when its warnings start (quoted 24-hour times in `clock.time_zone`; midnight is `"00:00"`). Just before each one, nothing a restart would cut off starts: courses and golf, a new Twenty-One or Higher or Lower hand (an open one plays on), a cabinet's scored daily try (today's board isn't dealt until after, and the try is kept; practice after a used try and Classic play go on). Spins and flips aren't held, and the plugin sends no warnings of its own. `[]` = off; an entry that isn't a time is dropped with a WARN |
 | `restart_hold_minutes` | `5` | How many minutes before each restart that hold starts (1-60) |
@@ -643,21 +643,34 @@ Easy, Medium, Hard and "Why did we build this?".
   checkpoint, or below the course's own fall height. On elytra it's landing or touching water
   anywhere but the start, a checkpoint or the finish. On a boat it's getting out. Anywhere, it's
   the void, or a short teleport by someone else (a long one ends the game).
-- **Fair play.** Flying, a game mode other than adventure, or any potion effect voids the run the
-  moment it's seen ("This run won't count - …"); you can still finish it for fun. At the finish, a
-  run quicker than the course's shortest time (`min_seconds`) doesn't count, and nor does a leg
-  between two checkpoints covered faster than the kind allows (parkour 14, elytra 80, boat 75
-  blocks a second, over the gap between the two checkpoints' spheres). Either way the finish says
-  "That run didn't count." with why, and nothing is recorded. Nothing is recorded either for a run
-  whose course changed layout while it ran.
+- **Fair play.** Flying, a game mode other than adventure, any potion effect, a walk speed other
+  than the usual 0.2 (`/speed`) or a changed movement voids the run the moment it's seen ("This
+  run won't count - …"); you can still finish it for fun. Movement means movement speed, jump
+  strength, step height, gravity and safe fall distance: each must be at its usual value, with no
+  modifier on it but sprinting or powder snow's slow-down. At the finish, a run quicker than the
+  course's shortest time (`min_seconds`) doesn't count, and nor does a leg between two checkpoints
+  covered faster than the kind allows (parkour 14, elytra 80, boat 75 blocks a second, over the
+  gap between the two checkpoints' spheres). Either way the finish says "That run didn't count."
+  with why, and nothing is recorded. Every leg gets 0.05 s of slack, and a server stall (over
+  250 ms between two ticks) never voids an honest run: a leg it touched isn't checked. Nothing is
+  recorded either for a run whose course changed layout while it ran, or was deleted and made
+  again.
+- **Nobody else can touch a run.** For anyone in a world game, an effect from anything but a
+  plugin or the `/effect` command (a splash potion, a beacon, an arrow), all knockback (a wind
+  charge, a hit) and a fishing rod reeling them in are cancelled. A bystander can't spoil a run,
+  or carry it across a gap.
 - **The finish.** The time goes on the course's all-time board and this week's board. Chat shows
   your time, "★ Your first finish…" or "★ New best!", then the record and who holds it (or "★ New
-  course record!"), and "★ Best time this week!" when you set it. Then you're sent home with your
-  things, and a result screen offers Play again.
+  course record!"), and "★ Best time this week!" when you set it. "Your first finish" shows only
+  when that first finish is being paid now: after a layout change clears the board, a later
+  finish reads "★ New best!". Then you're sent home with your things, and a result screen offers
+  Play again.
 - **Rewards:** a course's first finish pays by tier, once ever and outside every cap; setting the
   week's best time on a course pays `weekly_best_bonus`, once per course per week; finishing the
-  course of the week pays `course_of_week_bonus`, once a day; and today's pick pays
-  `games.featured_bonus`. A new personal best pays nothing. The course of the week is picked by
+  course of the week pays `course_of_week_bonus`, once a day; and today's pick (the course, or any
+  course while `trials` is pinned) pays `games.featured_bonus`. A new personal best pays nothing.
+  A course's tile shows "First finish: N tokens" only while you haven't had it, and the course
+  screen's tokens item names the amount or says it's done. The course of the week is picked by
   the week (the same week as the weekly quests) unless an admin pins one.
 
 | Key | Default | Meaning |
@@ -675,7 +688,8 @@ Easy, Medium, Hard and "Why did we build this?".
 
 1. `/hcm games course create <id> <parkour|elytra|boat> [tier]`. A course id is 2-32 lower-case
    letters, digits or `_`, starting with a letter. It can't be a game id or alias, another
-   course, or one of `accept`, `deny`, `break`, `leave`, `invites`.
+   course, or one of `accept`, `deny`, `break`, `leave`, `invites`. Nor can it be `auto`, which
+   is how `/hcm games feature` lets the day pick.
 2. Stand where it starts, facing the way it goes: `<id> start`.
 3. At each checkpoint, in order: `<id> checkpoint add [radius]`. The default radius is 1.5 for
    parkour, 4 for elytra and 3 for boats (0.5-16, at most 64 checkpoints).
@@ -687,6 +701,9 @@ Each bumps the course's layout number (`rev`) and clears its all-time and this w
 a time on the old layout isn't a time on the new one. When there are times to lose, the command
 asks you to type it again with `confirm` on the end. The tier, name, shortest time and switches
 aren't layout. Deleting a course clears every board of it; first clears already paid stay paid.
+A fall height must be under the course's lowest point (the start, a checkpoint or the finish),
+or every run would go straight back, and not under the world's floor, where no run ever gets. A
+start, checkpoint or finish at or under the fall height is refused too.
 
 ### Mini golf
 
@@ -699,14 +716,15 @@ on the Golf tab ("Meadow Links - 9 holes, par 27") and its own `/hcm play <cours
   ball**, How to play and **Start**. Only Start takes you anywhere.
 - **Pick your ball:** any Mini you own that has a head. Only its look is borrowed, on a plain new
   head: the Mini itself stays in your collection, untouched. The choice is remembered. With no
-  Mini it's a plain white ball; a Bedrock player's ball is always a white block (Bedrock can't
-  draw head textures reliably).
+  Mini it's a plain white ball, and so is a picked Mini you no longer own; a Bedrock player's
+  ball is always a white block (Bedrock can't draw head textures reliably).
 - **Playing.** Start takes you to hole 1's tee with only the kit: five clubs (Tap, Putt, Chip,
   Swing and Drive, power 1 to 5), Go to my ball, Reset ball (+1 stroke), Scorecard and Leave game
   (click twice). Any click with a club putts the ball the way you look, once it's still and you're
   within 4 blocks. Slime bounces, ice slides, and soul sand, soul soil and honey slow it down; a
   half-block step is climbed only at speed. Water, lava or leaving the hole's bounds puts it back
-  on your last spot, +1 stroke. A fast ball rolls over the cup; a slow one drops in.
+  on your last spot, +1 stroke. A fast ball can roll over a flush cup; a slow one drops in. A
+  ball that drops into the hole, or stops anywhere on the cup block, is in.
 - **Picked up.** Once the ball stops with the strokes at par + `max_over_par` (3), the hole is over
   and scores exactly that.
 - **Between holes** the scorecard shows for 5 seconds (or until Next hole). After the last hole
@@ -715,8 +733,10 @@ on the Golf tab ("Meadow Links - 9 holes, par 27") and its own `/hcm play <cours
   course at once, each with their own ball; balls don't meet.
 - **Rewards:** a course's first finish (once ever, outside every cap), finishing at par or better
   (once per course per day), each hole-in-one in a round you finish (once per hole per day; the
-  title says "Hole in one!", with a harmless firework), and today's pick. A new personal best pays
-  nothing. A round left early, or on a course an admin changed meanwhile, records nothing.
+  title says "Hole in one!", with a harmless firework), and today's pick (the course, or any
+  course while `golf` is pinned). A new personal best pays nothing. A round left early records
+  nothing, and nor does one on a course an admin closes or changes the layout of: either ends
+  the round at once.
 - **The ball is only a picture.** Entities follow the game's own physics to draw it: an item
   display for Java players, a small invisible marker stand for Bedrock players. Nobody can pick
   it up, push it or hit it; it is never saved with the world, and any left by a crash are swept at
@@ -738,22 +758,31 @@ on the Golf tab ("Meadow Links - 9 holes, par 27") and its own `/hcm play <cours
    up to 32 lower-case letters, digits or `_`, starting with a letter, and can't be a game id or
    alias, another course, a word `/hcm play` keeps, or `create`, `list` or `help`.
 2. On each hole's tee, facing down the hole: `<id> hole add <par>` (par 2-6; at most 18 holes).
-3. Look at the cup block (within 6 blocks): `<id> hole <n> cup`. Stand at two opposite corners of
-   the hole: `<id> hole <n> bounds 1` and `bounds 2`. Out of bounds is leaving that box across the
-   ground, or dropping more than 2 blocks below its lower corner.
+3. Look at the cup block (within 6 blocks): `<id> hole <n> cup`. The cup is the block the ball
+   ends up resting on: the floor of a sunken hole, a bottom slab, or a block flush with the green.
+   `cup` refuses a block with nothing to rest on (air, a flower), anything under 0.2 of a block
+   high (carpet, a thin snow layer, a trapdoor laid flat, a lily pad) and hollow blocks (a
+   cauldron, composter or hopper). A hollow block sitting on the cup is fine: a ball stuck in it
+   counts. Stand at two opposite corners of the hole: `<id> hole <n> bounds 1` and `bounds 2`.
+   Out of bounds is leaving that box across the ground, or dropping more than 2 blocks below its
+   lower corner.
 4. `<id> enable` opens it once every hole has a tee, a cup and both corners, with the tee and cup
    inside the bounds.
 
 **Layout edits** are a tee, a cup, bounds, and adding or removing a hole. Each bumps the course's
-`rev` and clears its high scores, after a trailing `confirm` when there are scores to lose. Par and
-the name aren't layout. Closing or deleting a course sends anyone playing it home.
+`rev` and clears its high scores, after a trailing `confirm` when there are scores to lose. It
+also ends every round on that course at once: the players read "<Course> was changed by an
+admin, so this round can't count. Your things are back." and go home. Par and the name aren't
+layout. Closing or deleting a course sends anyone playing it home too. A player still on the way
+to the first tee when the course is closed, changed or deleted goes straight home.
 
 ### Commands
 
-Admin actions on the Games are logged with who did them; mini golf course edits are the one
-exception. `[confirm]` on a course command is needed only when a layout edit would clear times or
-high scores. A player in a world game can use only `/hcm play`, `/hcm leave`, `/hcm games` and
-`/hcm help`; anything else says "Finish or leave your game first — /hcm leave".
+Admin actions on the Games are logged with who did them, mini golf course edits included. A
+bug in a course or golf command answers "That didn't work - see the console." and never
+switches the game off. `[confirm]` on a course command is needed only when a layout edit would
+clear times or high scores. A player in a world game can use only `/hcm play`, `/hcm leave`,
+`/hcm games` and `/hcm help`; anything else says "Finish or leave your game first — /hcm leave".
 
 | Command | Who | What |
 |---|---|---|
@@ -765,7 +794,7 @@ high scores. A player in a world game can use only `/hcm play`, `/hcm leave`, `/
 | `/hcm play invites [on\|off]` | `hcm.games.play` | Your invite settings. `off` also turns Coin Flip invites off; only the Take a break screen turns them on |
 | `/hcm leave` | `hcm.games.play` | Leave the world game you're in; your things come back. Also finishes a trip home that didn't complete |
 | `/hcm games status` | `hcm.games.admin` | Every game, open or closed and why, with the odds of the open games of chance; players in world games, saved things waiting to go back, unfinished rounds, today's pick, and the next scheduled restart and when its hold starts |
-| `/hcm games feature <game\|course\|auto>` | `hcm.games.admin` | Pin today's pick (writes `games.featured`), or let the day pick again. Never a game of chance |
+| `/hcm games feature <game\|course\|auto>` | `hcm.games.admin` | Pin today's pick (writes `games.featured`), or let the day pick again. `trials` or `golf` makes every course of that game the pick. Never a game of chance |
 | `/hcm games break <player> show\|pause <days>\|limit <tokens\|none>\|clear\|clear-own confirm` | `hcm.games.admin` | A player's Take a break, online or not. `pause` (1-365 days) and `limit` set an admin pause or limit the player can't lift; `clear` removes only those; `clear-own confirm` lifts the player's OWN settings and logs a WARNING |
 | `/hcm games scores reset <game> [board\|all] [player] [confirm]` | `hcm.games.admin` | Clear high scores. Without `confirm` it only counts what it would clear |
 | `/hcm games saved <player> show\|restore\|return\|discard confirm` | `hcm.games.admin` | A player's things saved by a world game. `show` works offline; `restore` and `return` need them online; `discard confirm` deletes the row (logged) |
@@ -777,7 +806,7 @@ high scores. A player in a world game can use only `/hcm play`, `/hcm leave`, `/
 | `/hcm games course <id> checkpoint remove <n> [confirm]` | `hcm.games.admin` | Remove one; the ones after it move up |
 | `/hcm games course <id> checkpoint list` | `hcm.games.admin` | The checkpoints, in order, with their radii |
 | `/hcm games course <id> finish [radius] [confirm]` | `hcm.games.admin` | The finish, here |
-| `/hcm games course <id> fall <y\|off> [confirm]` | `hcm.games.admin` | Below this height a run goes back to its last checkpoint, on any kind of course; `off` goes back to the parkour default (none for elytra and boat) |
+| `/hcm games course <id> fall <y\|off> [confirm]` | `hcm.games.admin` | Below this height a run goes back to its last checkpoint, on any kind of course; `off` goes back to the parkour default (none for elytra and boat). It must be under the course's lowest point and not under the world's floor |
 | `/hcm games course <id> tier <tier>` | `hcm.games.admin` | Its tier (a first clear already paid isn't paid again) |
 | `/hcm games course <id> name <words…>` | `hcm.games.admin` | Its player-facing name |
 | `/hcm games course <id> minseconds <n\|default>` | `hcm.games.admin` | Its own shortest believable time, 0-3600 seconds, or back to `trials.min_seconds` |
@@ -791,13 +820,13 @@ high scores. A player in a world game can use only `/hcm play`, `/hcm leave`, `/
 | `/hcm games golf <id> [info\|list]` | `hcm.games.admin` | Its holes (par, tee, cup, bounds), what's missing, and who is playing it |
 | `/hcm games golf <id> tp [hole]` | `hcm.games.admin` | To a tee (hole 1 unless given) |
 | `/hcm games golf <id> hole add <par> [confirm]` | `hcm.games.admin` | A new last hole, par 2-6, its tee where you stand, facing the way you face (at most 18 holes) |
-| `/hcm games golf <id> hole <n> cup [confirm]` | `hcm.games.admin` | The block you look at, within 6 blocks, is the cup |
+| `/hcm games golf <id> hole <n> cup [confirm]` | `hcm.games.admin` | The block you look at, within 6 blocks, is the cup: the block the ball rests on. Refuses air, anything under 0.2 high (carpet) and hollow blocks (a cauldron) |
 | `/hcm games golf <id> hole <n> tee [confirm]` | `hcm.games.admin` | Move the tee to where you stand |
 | `/hcm games golf <id> hole <n> par <2-6>` | `hcm.games.admin` | Change par (not a layout edit) |
 | `/hcm games golf <id> hole <n> bounds <1\|2> [confirm]` | `hcm.games.admin` | One corner of the hole's bounds, at your feet |
 | `/hcm games golf <id> hole <n> remove [confirm]` | `hcm.games.admin` | Remove the hole; the holes after it move up |
 | `/hcm games golf <id> name <name…>` | `hcm.games.admin` | Rename it |
-| `/hcm games golf <id> enable\|disable` | `hcm.games.admin` | Open it (only when nothing is missing) or close it (anyone playing it is sent home) |
+| `/hcm games golf <id> enable\|disable` | `hcm.games.admin` | Open it (only when nothing is missing) or close it (anyone playing it, or on the way in, is sent home) |
 | `/hcm games golf <id> delete confirm` | `hcm.games.admin` | Delete it and its high scores (anyone playing it is sent home) |
 | `/hcm arcade odds` | `hcm.arcade.use` | Players: one line per open game of chance. Admins: the per-stake detail, the Scratch Ticket and the crates |
 | `/hcm guide games` | `hcm.guide.use` | The Games page of How It Works |
@@ -838,6 +867,8 @@ Leaving puts it all back exactly, however they leave: the kit's Leave item (clic
 `/hcm leave`, finishing, quitting, a restart or a teleport away. Anything that reached them
 during the game (an auction delivery, say) is handed over once they're home. They can't be hurt,
 get hungry, drop things or open other screens while they play, and the kit never leaves the game.
+Other players can't reach them either: effects from anything but a plugin or `/effect`, all
+knockback and fishing-rod pulls are cancelled.
 
 Things come back **exactly once**, even when something goes wrong. If what arrived during the
 game doesn't all fit at home, the rest waits in their saved row: "Some of your things didn't fit.
@@ -966,72 +997,98 @@ off. Every token a game moves is in the ledger under that game's own source, so
 33. `/hcm games course cliffs test`: "test run: nothing is recorded"; the finish says "Test run -
     nothing was recorded. It would have counted."
 34. `cliffs finish confirm` with times on the board: the layout number goes up and the times are
-    cleared. A run going at the time finishes with "the course changed during your run".
+    cleared. A run going at the time finishes with "the course changed during your run". Your
+    next finish reads "★ New best!", not "Your first finish", and the course screen's tokens item
+    says the first finish is done.
 35. An elytra course: a worn elytra and 3 rockets, back to 3 at each ring; landing outside a ring
-    sends you back to the last one. A boat course: getting out sends you back to the last
-    checkpoint, and after `/hcm leave` the boat is gone.
+    sends you back to the last one, even a landing within half a second of a Back to checkpoint.
+    A boat course: getting out sends you back to the last checkpoint, and after `/hcm leave` the
+    boat is gone.
+36. With a second player, mid-run: their splash potion, wind charge and fishing rod do nothing to
+    you (no effect, no push, no pull), and the run still counts.
+37. `/speed walk 2` mid-run: "This run won't count - your walk speed changed" (`/speed walk 1`
+    after). `/attribute @s minecraft:jump_strength base set 0.6` mid-run: "…your movement changed"
+    (set it back to 0.42). Sprinting the whole way, or `/save-all flush` mid-run, doesn't stop a
+    run counting.
+38. `/hcm games course create auto parkour` is refused ("'auto' is a word /hcm games feature keeps
+    for itself."). `cliffs fall 200` is refused (a fall height must be under the course's lowest
+    point), and so is a y under the world's floor.
+39. `/hcm games feature trials`: Cliffs' course screen says "★ Today's pick", and finishing it pays
+    "+1 token (Cliffs: today's pick)" if no pick has paid you yet today. `auto` after.
 
 **Mini golf**
 
-36. As admin in the Games world: `/hcm games golf create meadow Meadow Links`; on the tee,
+40. As admin in the Games world: `/hcm games golf create meadow Meadow Links`; on the tee,
     `meadow hole add 3`; looking at the cup, `meadow hole 1 cup`; at two opposite corners,
     `meadow hole 1 bounds 1` and `bounds 2` ("It's ready. Open it with /hcm games golf meadow
-    enable"); then `meadow enable`.
-37. `/hcm play meadow` opens the course screen, never a teleport. Pick your ball lists your Minis
+    enable"); then `meadow enable`. The console has an INFO line for each edit ("Games: <you>
+    created golf course meadow - …").
+41. Looking at a carpet, `meadow hole 1 cup` says "The white_carpet is too thin to hold a ball."
+    and "Look at the floor of the hole instead…"; a cauldron is refused as hollow. The cup
+    doesn't change.
+42. `/hcm play meadow` opens the course screen, never a teleport. Pick your ball lists your Minis
     (Bedrock: "Your ball: a white block"). Start: hole 1's tee, holding Tap to Drive, Go to my
     ball, Reset ball, Scorecard and Leave game.
-38. Click a club within 4 blocks: the ball rolls the way you look. Further off: "Get within 4
+43. Click a club within 4 blocks: the ball rolls the way you look. Further off: "Get within 4
     blocks of your ball…". Into water: "Splash! Back to your last spot, +1 stroke." A slow putt
     drops in, with the hole's title and "In the cup - …"; a hole-in-one says "Hole in one!", with
-    a firework.
-39. Keep missing on a par 3: at 6 strokes the hole is "Picked up" and scores 6.
-40. The ball is only a picture: you can't pick it up, push it or hit it, the Mini you picked is
+    a firework. On a sunken 1×1 hole, an off-centre putt that drops in counts too, and on the
+    first stroke it's a hole-in-one.
+44. Keep missing on a par 3: at 6 strokes the hole is "Picked up" and scores 6.
+45. The ball is only a picture: you can't pick it up, push it or hit it, the Mini you picked is
     still in your collection, and after the round (or a restart mid-round) no ball is left in the
     world.
-41. Finish: the total against par and "New best", then +5 for the first finish and +2 at par or
+46. Finish: the total against par and "New best", then +5 for the first finish and +2 at par or
     better. A second round at par the same day pays no par reward. `meadow disable` while someone
-    plays sends them home: "Meadow Links was closed by an admin."
+    plays sends them home: "Meadow Links was closed by an admin." It does the same just after a
+    player clicks Start, with no scorecard and no tokens.
+47. `meadow enable` again. Standing on hole 1's tee, `meadow hole 1 tee` (add `confirm` if asked)
+    while someone plays: they go home at once with their things, told "Meadow Links was changed
+    by an admin, so this round can't count. Your things are back."
+48. `/hcm games feature golf`, then finish Meadow Links on a day no pick has paid you yet:
+    "+1 token (Mini Golf: Meadow Links is today's pick)". `auto` after.
+49. Pick a Mini as your ball, then trade it away: the course screen shows the plain white ball.
 
 **World sessions (any course)**
 
-42. With a full inventory, an effect and some XP, `/hcm play cliffs`: you're in adventure mode
+50. With a full inventory, an effect and some XP, `/hcm play cliffs`: you're in adventure mode
     with only the kit, and `/hcm games saved <you> show` says ACTIVE. The Leave item (click twice)
     brings everything back.
-43. `/give` yourself diamonds mid-game: they're in your bag once you're home, once.
-44. Disconnect and rejoin mid-game: you're home with everything and no kit anywhere. `/kill`: no
+51. `/give` yourself diamonds mid-game: they're in your bag once you're home, once.
+52. Disconnect and rejoin mid-game: you're home with everything and no kit anywhere. `/kill`: no
     death screen, you're home ("You're out of the game. Your things are back."). A teleport far
     away or to another world ends the game; a 2-block one doesn't. `/gamemode survival` doesn't
     stick.
-45. `/stop` mid-game, then start and join: you're home, "Your things are back — the server
+53. `/stop` mid-game, then start and join: you're home, "Your things are back — the server
     restarted during your game."
-46. In a game, `/hcm auction` says "Finish or leave your game first — /hcm leave"; the binder,
+54. In a game, `/hcm auction` says "Finish or leave your game first — /hcm leave"; the binder,
     chests, the ender chest and dropping do nothing. Setting `games.enabled: false` and
     `/hcm reload` mid-game sends you home.
-47. Fill your inventory but one slot, start a course, `/give` yourself a diamond and an emerald,
+55. Fill your inventory but one slot, start a course, `/give` yourself a diamond and an emerald,
     then leave: you're home with one, told "Some of your things didn't fit…", and
     `/hcm games saved <you> show` says RETURN. Free a slot, `/hcm leave`: the second arrives and
     the row goes DONE.
-48. Open your inventory holding an item on the cursor, then from the console
+56. Open your inventory holding an item on the cursor, then from the console
     `/hcm play cliffs <you>`: "Put down what you're holding first." and nothing drops.
-49. With a RETURN row waiting, set `games.enabled: false`, `/hcm reload`, then `/hcm leave`: it
+57. With a RETURN row waiting, set `games.enabled: false`, `/hcm reload`, then `/hcm leave`: it
     finishes.
-50. After a session, `/data get entity <you> BukkitValues` shows
+58. After a session, `/data get entity <you> BukkitValues` shows
     `homecraftmanagement:games_session_mark` (the mark that keeps a crash from applying the same
     things twice). If Multiverse-Inventories swaps it per world group, tell us.
 
 **The website feed**
 
-51. With the games off, `/api/arcade` has only the `scratch_ticket` entry (plus the pot, prizes,
+59. With the games off, `/api/arcade` has only the `scratch_ticket` entry (plus the pot, prizes,
     packs and achievements), no `featured` and no `jackpot` achievement. Its `rtp` (77.6) matches
     `/hcm arcade odds`.
-52. With the games on, each open game appears, its `rtpByStake` matching the admin odds; `cliffs`
+60. With the games on, each open game appears, its `rtpByStake` matching the admin odds; `cliffs`
     appears as `"kind":"parkour","tier":"easy"` with its `record`, and `meadow` as `"kind":"golf"`
     with `holes` and `par`. `web.dashboard.arcade_show_names: true` adds `holder` to records;
     `false` takes it away.
 
 **The restart hold**
 
-53. At about 3:02 PM, set `games.restart_times: ["15:10"]` (any time 8 minutes ahead) and
+61. At about 3:02 PM, set `games.restart_times: ["15:10"]` (any time 8 minutes ahead) and
     `/hcm reload`: `/hcm games status` says "Next restart: 3:10 PM (new runs held from 3:05 PM)".
     Deal a Twenty-One hand and leave it open. From 3:05, `/hcm play cliffs` says "The server
     restarts at 3:10 PM. New runs open again after it."; the open hand plays to the end, but the

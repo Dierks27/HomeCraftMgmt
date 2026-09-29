@@ -30,6 +30,9 @@ class CourseCodeTest {
         for (Slots.Def d : Slots.CLASSICS) {
             assertNull(CourseCode.slotCode(d.id()), "a Classics slot makes no editions of its own, so no code word");
         }
+        assertEquals("DROP-12", CourseCode.format("fresh_dropper", 12), "the Dropper's code (EVENTS-DROPPER-SPEC §B.1.8)");
+        assertEquals("fresh_dropper_easy", CourseCode.parse("edrop-3").slot(), "Easy Dropper's, typed in any case");
+        assertEquals("fresh_dropper", CourseCode.parse("DROP-3").slot(), "and DROP is not EDROP");
     }
 
     @Test

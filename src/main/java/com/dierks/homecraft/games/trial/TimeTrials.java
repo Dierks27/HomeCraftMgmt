@@ -1763,6 +1763,11 @@ public final class TimeTrials implements Game {
         return warmups;
     }
 
+    /** Whether the player is on a run now (racing, warming up, or parked on a race's stand). WP-CH. */
+    public boolean onRun(UUID player) {
+        return player != null && run(player) != null;
+    }
+
     /**
      * The player's live run, or {@code null} (the Dropper's fall-damage hook finds it here; race mode
      * and warm-ups work on it).

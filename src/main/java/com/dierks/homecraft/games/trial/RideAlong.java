@@ -8,7 +8,6 @@ import com.dierks.homecraft.games.NoPush;
 import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.clubhouse.ClubDoor;
 import com.dierks.homecraft.games.clubhouse.ClubVisits;
-import com.dierks.homecraft.games.clubhouse.Clubhouse;
 import com.dierks.homecraft.games.event.NightRunner;
 import com.dierks.homecraft.games.event.RaceNight;
 import com.dierks.homecraft.games.world.KitItems;
@@ -34,8 +33,8 @@ import java.util.function.Consumer;
  *
  * <p><b>Who can ride.</b> Anyone online who isn't racing, watching, riding, in a party race's lobby,
  * on tonight's Race Night list or in any other game, and not during the restart hold (refused with a
- * plain reason). Ride along is part of the Clubhouse: with {@code games.clubhouse.enabled} off there
- * is no "Take a rider" anywhere. With {@code games.trials.rider_runs_count: false} the driver is told
+ * plain reason). Ride along is part of the Clubhouse: while it isn't open ({@code games.clubhouse.enabled}
+ * off, or its room not built and checked) there is no "Take a rider" anywhere. With {@code games.trials.rider_runs_count: false} the driver is told
  * first that a run with a rider is just for fun, and Race Night takes no riders.
  */
 public final class RideAlong {
@@ -56,7 +55,7 @@ public final class RideAlong {
         return games != null && games.game(TimeTrials.SPEC.id()) instanceof TimeTrials t && games.enabled(t) ? t : null;
     }
 
-    /** Whether "Take a rider" shows for a course of {@code kind}: a boat, with the Clubhouse on. */
+    /** Whether "Take a rider" shows for a course of {@code kind}: a boat, with the Clubhouse open. */
     public static boolean offered(GamesService games, TrialKind kind) {
         return kind == TrialKind.BOAT && trials(games) != null && clubhouseOn(games);
     }
@@ -67,11 +66,15 @@ public final class RideAlong {
         return track != null && offered(games, track.kind()) && t != null && t.settings().riderRunsCount();
     }
 
-    /** Ride along is part of the Clubhouse: its switch (and the games'), whether or not its room is built. */
+    /**
+     * Ride along is part of the Clubhouse: it is on only while the Clubhouse is OPEN, switched on with
+     * its room built and checked (Time Trials' door to it, which a test can fake), as every other
+     * Clubhouse button (the review's #9: the switch alone showed "Take a rider" with no room).
+     */
     static boolean clubhouseOn(GamesService games) {
         try {
-            Game c = games.game(Clubhouse.SPEC.id());
-            return c != null && games.enabled(c);
+            TimeTrials t = trials(games);
+            return t != null && t.raceMode().door() != null;
         } catch (RuntimeException e) {
             return false;
         }

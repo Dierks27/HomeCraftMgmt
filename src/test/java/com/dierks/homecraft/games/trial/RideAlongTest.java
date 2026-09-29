@@ -54,6 +54,8 @@ class RideAlongTest {
         assertNotNull(trials.course(LOOP.id()), "the boat loop");
         dad = bench.player("Dad");
         kid = bench.player("Kid");
+        // no server here, so the room is never built: the Clubhouse's door is open only when faked
+        trials.raceMode().door(clubhouseOn ? new ClubhouseRacesTest.FakeDoor() : null);
     }
 
     @AfterEach
@@ -79,6 +81,16 @@ class RideAlongTest {
         assertNull(RideAlong.driverRefusal(games, trials, dad, LOOP.id(), RideAlong.Purpose.SOLO), "Dad may drive");
         assertTrue(RideAlong.BUTTON.contains("Take a rider") && RideAlong.BUTTON.contains("(back seat)"),
                 "the key fact in the item's NAME, for Bedrock");
+    }
+
+    @Test
+    void withTheClubhouseSwitchedOnButItsRoomNotBuiltThereIsNoTakeARider() throws Exception {
+        open(true, true);
+        trials.raceMode().door(null); // on, but its room isn't built and checked: no door
+        assertFalse(RideAlong.offered(games, TrialKind.BOAT), "no Take a rider on the course screen (#9)");
+        assertFalse(RideAlong.nightOffered(games, trials.course(LOOP.id())), "nor on the Race Night screen");
+        assertEquals("Riders aren't on right now.",
+                RideAlong.driverRefusal(games, trials, dad, LOOP.id(), RideAlong.Purpose.SOLO), "and refused by name");
     }
 
     @Test

@@ -101,4 +101,26 @@ class CourseMenuLayoutTest {
         assertTrue(taken.contains(49), "49 is the way out");
         assertEquals(26, taken.size(), "twenty-six items, twenty-six slots; every other slot is filler");
     }
+    @Test
+    void whileThePartyIsRacingTheClubhouseItemsHideLikeTheOtherPreRaceItems() {
+        assertEquals(Set.of(PartyMenu.CLUB_SLOT, PartyMenu.WATCH_SLOT, PartyMenu.RIDER_SLOT),
+                PartyMenu.clubSlots(true, true, false, false), "before the race: Go, Watch and Take a rider");
+        assertEquals(Set.of(PartyMenu.WATCH_SLOT), PartyMenu.clubSlots(true, true, true, false),
+                "racing: Go and Take a rider hide (as Invite, Ready, Warm up and the Cup do); Watch stays for a"
+                        + " member who isn't in the race, since watching live is for a race going on");
+        assertEquals(Set.of(), PartyMenu.clubSlots(true, true, true, true), "a racer mid-race sees none of them");
+        assertEquals(Set.of(PartyMenu.RIDER_SLOT), PartyMenu.clubSlots(false, true, false, false),
+                "with the Clubhouse closed there is no Go or Watch");
+        assertEquals(Set.of(PartyMenu.CLUB_SLOT, PartyMenu.WATCH_SLOT), PartyMenu.clubSlots(true, false, false, false),
+                "not a boat course: no Take a rider");
+    }
+
+    @Test
+    void raceAgainIsSaidOnlyWhileTheClubhouseIsOpen() {
+        assertEquals("&aStart the race!", PartyMenu.startName(false, true), "the first race");
+        assertEquals("&aRace again!", PartyMenu.startName(true, true), "after a race, everyone is seated again from"
+                + " the Clubhouse");
+        assertEquals("&aStart the race!", PartyMenu.startName(true, false), "the Clubhouse off: the racers went home,"
+                + " so it's a new start as before (#10)");
+    }
 }

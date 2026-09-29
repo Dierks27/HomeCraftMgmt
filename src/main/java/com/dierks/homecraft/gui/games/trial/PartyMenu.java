@@ -94,8 +94,8 @@ public final class PartyMenu extends GameMenu {
         } else if (host) {
             String problem = party.startProblem(viewer);
             if (problem == null) {
-                set(13, Menus.glint(Menus.icon(Material.LIME_CONCRETE, last.isEmpty() ? "&aStart the race!"
-                        : "&aRace again!",
+                set(13, Menus.glint(Menus.icon(Material.LIME_CONCRETE, startName(!last.isEmpty(),
+                                Clubhouse.offered(plugin.games())),
                         "&7Everyone free goes to the grid.", "&7One 3-2-1 for all."), true), e -> {
                     viewer.closeInventory();
                     party.start(viewer);
@@ -151,33 +151,61 @@ public final class PartyMenu extends GameMenu {
                 set(CUP_SLOT, b.icon(), e -> b.click().run());
             }
         }
-        clubButtons(); // WP-CH
-        riderButton(); // WP-CH
+        Course raced = trials.course(lobby.course());
+        clubButtons(clubSlots(Clubhouse.offered(plugin.games()), raced != null
+                && com.dierks.homecraft.games.trial.RideAlong.offered(plugin.games(), raced.kind()), racing,
+                trials.onRun(me)), raced); // WP-CH
         exitTile();
     }
 
-    /** WP-CH: "Go to the Clubhouse" (wait there, seated from there) and "Watch" (a spectator), while it is open. */
-    private void clubButtons() {
-        if (!Clubhouse.offered(plugin.games())) {
-            return;
-        }
-        set(CLUB_SLOT, Menus.icon(Material.OAK_DOOR, ClubhouseText.GO_BUTTON, "&7Hang out with friends until",
-                "&7the race; you go straight to the grid."), e -> {
-            viewer.closeInventory();
-            Clubhouse.go(plugin.games(), viewer);
-        });
-        set(WATCH_SLOT, Menus.icon(Material.SPYGLASS, ClubhouseText.WATCH_BUTTON, "&7Watch the race and the results",
-                "&7without racing this time."), e -> {
-            viewer.closeInventory();
-            Clubhouse.watch(plugin.games(), viewer);
-        });
+    /**
+     * The Start tile's NAME: "Race again!" only after a race while the Clubhouse is open (everyone
+     * still there is seated again from it); with the Clubhouse off it is always "Start the race!"
+     * (the Clubhouse review, #10).
+     */
+    static String startName(boolean raced, boolean clubhouseOpen) {
+        return raced && clubhouseOpen ? "&aRace again!" : "&aStart the race!";
     }
 
-    /** WP-CH: "Take a rider (back seat)" for a member of a boat course's party, while ride along is on. */
-    private void riderButton() {
-        PartyLobby lobby = party.lobby(viewer.getUniqueId());
-        Course c = lobby == null ? null : trials.course(lobby.course());
-        if (c != null && com.dierks.homecraft.games.trial.RideAlong.offered(plugin.games(), c.kind())) {
+    /**
+     * Which of the Clubhouse's items show (WP-CH), like the other pre-race items: before the race, Go
+     * to the Clubhouse (36), Watch (37) and, on a boat course, Take a rider (39). While the party is
+     * racing, Go and Take a rider are hidden as Invite, Ready, Warm up and the Cup are (nobody joins a
+     * race under way, and a driver can't take a rider mid-race); Watch stays for a member who isn't in
+     * the race, since watching live is for a race going on, and is hidden from a racer.
+     */
+    static java.util.Set<Integer> clubSlots(boolean clubhouseOpen, boolean ridersOffered, boolean racing,
+                                            boolean viewerRacing) {
+        java.util.Set<Integer> out = new java.util.TreeSet<>();
+        if (clubhouseOpen && !racing) {
+            out.add(CLUB_SLOT);
+        }
+        if (clubhouseOpen && !viewerRacing) {
+            out.add(WATCH_SLOT);
+        }
+        if (ridersOffered && !racing) {
+            out.add(RIDER_SLOT);
+        }
+        return out;
+    }
+
+    /** WP-CH: the Clubhouse's items in {@code slots}. */
+    private void clubButtons(java.util.Set<Integer> slots, Course c) {
+        if (slots.contains(CLUB_SLOT)) {
+            set(CLUB_SLOT, Menus.icon(Material.OAK_DOOR, ClubhouseText.GO_BUTTON, "&7Hang out with friends until",
+                    "&7the race; you go straight to the grid."), e -> {
+                viewer.closeInventory();
+                Clubhouse.go(plugin.games(), viewer);
+            });
+        }
+        if (slots.contains(WATCH_SLOT)) {
+            set(WATCH_SLOT, Menus.icon(Material.SPYGLASS, ClubhouseText.WATCH_BUTTON, "&7Watch the race and the results",
+                    "&7without racing this time."), e -> {
+                viewer.closeInventory();
+                Clubhouse.watch(plugin.games(), viewer);
+            });
+        }
+        if (slots.contains(RIDER_SLOT) && c != null) {
             set(RIDER_SLOT, Menus.icon(Material.OAK_BOAT, com.dierks.homecraft.games.trial.RideAlong.BUTTON,
                     "&7A friend rides in the back of your", "&7boat: not a racer, not counted."),
                     e -> com.dierks.homecraft.games.trial.RideAlong.take(plugin.games(), viewer, c.id(),

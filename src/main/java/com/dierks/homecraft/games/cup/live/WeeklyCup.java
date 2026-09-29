@@ -43,11 +43,11 @@ import java.util.logging.Logger;
  * The Weekly Cup (EVENTS-OWNER-DECISIONS §D2, EVENTS-RECONCILED decision 3): on a time-trial course
  * that runs one, a player pays a small entry once a week ({@code games.cup.entry}, 5 tokens), their
  * best counted time that week is their Cup time, and at the week's rollover (the quests' week start
- * at 04:00, when the Fresh Courses change) the pool, every entry plus a small server top-up once two
- * or more are in, is shared by Cup time: 70/30 between two, 50/30/20 among three or more. Alone, or
- * when the course is deleted, re-made or closed mid-week, every entry comes back. The server keeps
- * nothing. It is a skill contest: nothing is random anywhere, so Take a break's chance rules don't
- * apply, and a player can hide it all with {@code /hcm play cup off}.
+ * at 04:00, when the Fresh Courses change) the pool, every entry plus a small server top-up, is
+ * shared by Cup time: 70/30 with 2 Cup times, 50/30/20 with 3 or more, and no share without one.
+ * With fewer than 2 Cup times, or when the course is deleted, re-made or closed mid-week, every
+ * entry comes back. The server keeps nothing. It is a skill contest: nothing is random anywhere, so
+ * Take a break's chance rules don't apply, and a player can hide it all with {@code /hcm play cup off}.
  *
  * <p><b>Why it is a game.</b> It has no tile and no screen of its own on the Games screen: it lives on
  * the course screens and tiles ({@link CupLink}). But as a game it gets the framework's guard (a bug
@@ -179,8 +179,7 @@ public final class WeeklyCup implements Game {
         List<String> out = new ArrayList<>();
         CupSettings s = settings();
         out.add((s.enabled() ? "entries open: " + CupText.tokens(s.entry()) + ", top-up " + s.serverTopup()
-                : "entries closed (" + (readable() ? "games.cup.enabled: false"
-                : "games.cup can't be read - see the console") + "); running Cups still finish their week")
+                : "entries closed (" + closedWhy() + "); running Cups still finish their week")
                 + " - /hcm games cup status");
         try {
             long week = desk().week();
@@ -238,6 +237,11 @@ public final class WeeklyCup implements Game {
     /** Whether {@code games.cup} could be read. */
     boolean readable() {
         return games().config().readable(SPEC.id());
+    }
+
+    /** Why entries are closed, for the admins: the switch, or a block that can't be read. */
+    String closedWhy() {
+        return readable() ? "games.cup.enabled: false" : "games.cup can't be read - see the console";
     }
 
     /** The desk: entries, Cup times, settling and calling off. */

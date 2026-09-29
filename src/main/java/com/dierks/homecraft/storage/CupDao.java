@@ -250,8 +250,9 @@ public final class CupDao {
             // Every word is worked out before the first write (each line's notice and each payment's
             // ledger detail), so nothing but SQL runs between the first write and the commit.
             List<Notice> notices = notices(key, plan, words, now);
-            List<String> details = new ArrayList<>(plan.payouts().size());
-            for (CupPayout l : plan.payouts()) {
+            List<CupPayout> payouts = plan.payouts();
+            List<String> details = new ArrayList<>(payouts.size());
+            for (CupPayout l : payouts) {
                 details.add(plain(CupText.payoutDetail(l, courseName)));
             }
             try (PreparedStatement ps = c.prepareStatement("INSERT INTO cup_settlements(course, week, settled_at, "
@@ -264,7 +265,6 @@ public final class CupDao {
                 ps.setString(6, plan.json());
                 ps.executeUpdate();
             }
-            List<CupPayout> payouts = plan.payouts();
             for (int i = 0; i < payouts.size(); i++) {
                 CupPayout l = payouts.get(i);
                 tokens.change(l.player(), l.tokens(), l.kind().source().name(), details.get(i), now);

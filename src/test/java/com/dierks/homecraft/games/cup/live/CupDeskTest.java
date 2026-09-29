@@ -359,6 +359,24 @@ class CupDeskTest {
     }
 
     @Test
+    void anEntryBetweenTheRolloverAndTheSettlementTickGoesIntoTheNewWeek() throws Exception {
+        switchOn(lava);
+        assertNull(desk.enter(alice, lava));
+        assertNull(desk.enter(bob, lava));
+        assertTrue(race(alice, lava, 40_000));
+        assertTrue(race(bob, lava, 41_000));
+        host.now = ROLLOVER + 30_000; // Monday 04:00:30: last week's Cup is over but its tick hasn't run
+        CupDesk.View v = desk.view(lava, alice);
+        assertEquals(new CupKey("lava_leap", W + 7), v.key(), "the screen shows the new week's Cup");
+        assertNull(v.refusal(), "which alice may enter: last week's is over, not running");
+        assertNull(desk.enter(alice, lava), "her entry goes into the new week");
+        assertEquals(CupPlan.Outcome.PRIZES, desk.tick().get(0).plan().outcome(), "last week's is then paid");
+        assertEquals(15 + 14 - 5, balance(alice), "on last week's two entries: 70% of 20, less the new entry");
+        assertEquals(1, dao.entries(new CupKey("lava_leap", W + 7)).size(), "her new entry stands");
+        assertNull(dao.settledAs(new CupKey("lava_leap", W + 7)), "and the new week's Cup runs");
+    }
+
+    @Test
     void rolloversMissedWhileTheServerWasDownAreSettledAtTheNextStartOldestFirst() throws Exception {
         switchOn(lava);
         assertNull(desk.enter(alice, lava));

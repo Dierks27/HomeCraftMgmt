@@ -107,8 +107,8 @@ final class CupAdmin implements GameAdmin {
         CupDesk desk = cup.desk();
         CupSettings s = cup.settings();
         sender.sendMessage(Text.of("&6Weekly Cup &7- " + (s.enabled() ? "&aentries open" : "&centries closed "
-                + "&7(games.cup.enabled: false)") + "&7: " + CupText.tokens(s.entry()) + " to enter, top-up "
-                + s.serverTopup() + " with 2 or more; paid &f" + cup.whenDated(desk.endsAt())));
+                + "&7(" + cup.closedWhy() + ")") + "&7: " + CupText.tokens(s.entry()) + " to enter, top-up "
+                + s.serverTopup() + " with 2 or more Cup times; paid &f" + cup.whenDated(desk.endsAt())));
         sender.sendMessage(Text.of(desk.freshEligible() ? "&7Fresh courses run a Cup by default."
                 : "&7Fresh courses run no Cup: they change more often than once a week."));
         int shown = 0;

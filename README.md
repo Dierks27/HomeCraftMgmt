@@ -762,21 +762,26 @@ A course can run a **Weekly Cup**: a player pays a small entry once per course p
 their best counted time that week is their Cup time. Warm-ups, practice drops, test runs and runs
 that didn't count never set one. The course screen and tile show the pool live ("Cup pool: 35
 tokens · 5 in"). At the week's rollover (the quests' week start at 04:00, when Fresh Courses
-change) the pool is shared by Cup time: 70/30 between two, 50/30/20 among three or more, rounded
-down with the rest to 1st. It is settled once, and a rollover the server was down for is settled at
-the next start. The server keeps nothing: the pool is every entry, plus `games.cup.server_topup`
-(10) only when 2 or more are in. A lone entrant, fewer than 2 Cup times, or a course deleted,
-re-made or closed mid-week gets every entry back, with the reason. Cup prizes aren't under the
+change) the pool is shared by Cup time: 70/30 with 2 Cup times, 50/30/20 with 3 or more, rounded
+down with the rest to 1st. An entrant with no Cup time gets no share: their entry stays in the
+pool. It is settled once, and a rollover the server was down for is settled at the next start. The
+server keeps nothing: the pool is every entry, plus `games.cup.server_topup` (10) when 2 or more
+set a Cup time. A lone entrant, fewer than 2 Cup times, or a course deleted, re-made or closed
+mid-week gets every entry back, with the reason. Cup prizes aren't under the
 daily skill caps: it's the players' own pool, and a cap would destroy tokens. Nothing in it is
 chance, so Take a break's chance rules don't apply; `/hcm play cup off` hides it for a player.
 Fresh parkour, Sky Rings, Ice Boat and Dropper courses run one by default (while Fresh Courses
-change once a week); a hand-built course only after `/hcm games cup on <course>`. Admins have
-`/hcm games cup status [course]`, `settle <course> confirm` and `void <course> confirm`.
+change once a week), and take entries once the week's own course is up ("The Cup starts when
+this week's course is up"); a hand-built course only after `/hcm games cup on <course>`. Admins
+have `/hcm games cup status [course]`, `settle <course> confirm` and `void <course> confirm`.
+Deleting, closing (`disable`) or re-making a course whose Cup has entrants asks for `confirm`,
+then refunds them; a deleted course's Cup switch goes with it.
 
 **For the owner:** an entry pool can mean the youngest players pay into a pool the oldest win.
 It is small, opt-in per player and refunded when a player is alone. To switch the Cup off
 server-wide, set `games.cup.enabled: false` and `/hcm reload`: nobody can enter, and Cups already
-paid into still finish their week and pay out or refund.
+paid into still finish their week and pay out or refund. A `games.cup` block that can't be read
+does the same until it is fixed.
 <!-- ---- /cup ---- -->
 
 ### Mini golf

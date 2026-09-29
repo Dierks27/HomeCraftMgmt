@@ -5,7 +5,15 @@ import com.dierks.homecraft.games.Breaks;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.gen.api.Edition;
+import com.dierks.homecraft.games.gen.api.GenBoards;
+import com.dierks.homecraft.games.gen.api.GenCopy;
+import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.engine.GenService;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.gui.games.daily.DailyLookup;
+import com.dierks.homecraft.gui.games.daily.DailyText;
 import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.util.Bedrock;
 import com.dierks.homecraft.util.Text;
@@ -25,6 +33,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 
 /**
@@ -42,6 +51,13 @@ import java.util.logging.Level;
  * and how a score reads (a time, flips, apples...) comes from what the game publishes about its
  * boards, never from a guess about its internals. {@link Boards} is the list of every board,
  * reached from the Games screen.
+ *
+ * <p>Fresh Courses' boards read the same way (GEN-SPEC §5.2, the weekly addendum §3): a set's own
+ * board is named by its course and its set, "Easy Parkour · this week" (the set up now), "Easy
+ * Parkour · week of Mon 28 Sep", "Easy Parkour · Tue 29 Sep" (a daily one), "Easy Parkour · Mon 28
+ * Sep-Wed 30 Sep" (every 3 days); a player's stars "Easy Parkour stars · this week"; a set
+ * recalled into a Classics slot "Classic: Hard Parkour · week of 5 Oct"; and the weekly Star Chart
+ * "Star Chart · this week", counted in stars, higher is better.
  */
 public final class ScoresMenu extends GameMenu {
 
@@ -78,6 +94,19 @@ public final class ScoresMenu extends GameMenu {
         }
         String word = value == 1 && u.endsWith("s") ? u.substring(0, u.length() - 1) : u;
         return value + " " + word;
+    }
+
+    /**
+     * The unit a board of a game of {@code kind} is kept in: a Fresh set's board is a time, or
+     * strokes for golf; the Star Chart and a set's stars are stars; anything else as
+     * {@link #unitFor(String, String)}.
+     */
+    static String unitFor(String board, String cabinetUnit, GameKind kind) {
+        GenBoards.Board b = GenBoards.parse(board);
+        if (b != null) {
+            return b.kind() == GenBoards.Kind.DAY ? (kind == GameKind.GOLF ? "strokes" : "ms") : "stars";
+        }
+        return unitFor(board, cabinetUnit);
     }
 
     /** The unit a board is kept in: courses are times, golf is strokes, a cabinet's is its own. */
@@ -119,12 +148,104 @@ public final class ScoresMenu extends GameMenu {
         return Character.toUpperCase(board.charAt(0)) + board.substring(1).replace('_', ' ');
     }
 
+    /**
+     * {@link #boardLabel(String, long, Function)}, and Fresh Courses' boards: "Easy Parkour · this
+     * week", "Easy Parkour · week of Mon 28 Sep", "Easy Parkour · Tue 29 Sep", "Easy Parkour · Mon
+     * 28 Sep-Wed 30 Sep", "Easy Parkour stars · this week", "Classic: Hard Parkour · week of 5 Oct",
+     * "Star Chart · this week". A set's real dates come from {@code ed} (the live schedule:
+     * {@link Edition#startDayOf}); it reads "this week" or "today" while it is the set up now.
+     *
+     * @param ed        the live schedule
+     * @param now       now (epoch ms): which set is up
+     * @param thisWeek  the Star Chart week now
+     * @param recalled  whether a board is the original board of a set recalled into a Classics slot now
+     */
+    static String boardLabel(String board, long today, Edition ed, long now, long thisWeek,
+                             Function<String, String> courseName, Predicate<String> recalled) {
+        GenBoards.Board b = GenBoards.parse(board);
+        if (b == null) {
+            return boardLabel(board, today, courseName);
+        }
+        return switch (b.kind()) {
+            case WEEK -> DailyText.chartLabel(b.day(), thisWeek);
+            case DAY -> {
+                long start = startDay(b, ed);
+                String name = dailyName(b.courseId(), courseName);
+                if (recalled != null && recalled.test(board)) {
+                    yield "Classic: " + name + " · " + GenCopy.editionDates(b.cadence(), start);
+                }
+                yield name + " · " + setLabel(b.cadence(), start, ed, now)
+                        + (b.reroll() > 0 ? " (layout " + (b.reroll() + 1) + ")" : "");
+            }
+            case STARS -> dailyName(b.courseId(), courseName) + " stars · " + (b.edition().isEmpty()
+                    ? DailyText.dayText(b.day(), ed.day(now)) : setLabel(b.cadence(), startDay(b, ed), ed, now));
+        };
+    }
+
+    /** A set board's real first day under the live schedule (its key's earliest day when unknown). */
+    private static long startDay(GenBoards.Board b, Edition ed) {
+        Edition.Key k = Edition.Key.parse(b.edition());
+        try {
+            return k == null || ed == null ? b.day() : ed.startDayOf(k);
+        } catch (RuntimeException e) {
+            return b.day();
+        }
+    }
+
+    /**
+     * A set as a board label reads it: "this week" / "today" while it is the set up now, else
+     * "week of Mon 28 Sep", "Tue 29 Sep", or "Mon 28 Sep-Wed 30 Sep".
+     */
+    static String setLabel(int cadence, long start, Edition ed, long now) {
+        boolean current = ed != null && ed.cadenceDays() == cadence && ed.editionStart(now) == start;
+        if (current && (cadence == Edition.DAILY || cadence == Edition.WEEKLY)) {
+            return GenCopy.when(cadence);
+        }
+        if (cadence == Edition.WEEKLY) {
+            return "week of " + DailyText.date(start);
+        }
+        return DailyText.setDates(cadence, start);
+    }
+
+    /** A Fresh course's name: the live course's, else its slot's, else the id. */
+    private static String dailyName(String id, Function<String, String> courseName) {
+        String name = courseName.apply(id);
+        Slots.Def slot = Slots.any(id);
+        return (name == null || name.equals(id)) && slot != null ? slot.name() : name == null ? id : name;
+    }
+
     private static long parse(String s, long fallback) {
         try {
             return Long.parseLong(s);
         } catch (NumberFormatException e) {
             return fallback;
         }
+    }
+
+    /** A board's label with the live schedule and the Classics as they are now. */
+    static String label(GamesService games, Game game, String board, long today) {
+        if (games == null) {
+            return boardLabel(board, today, id -> id);
+        }
+        Edition ed = DailyLookup.edition(games);
+        long now = games.clock().nowMillis();
+        return boardLabel(board, today, ed, now, ed.weekKey(ed.day(now)), id -> courseName(games, game, id),
+                b -> recalledBoard(games, b));
+    }
+
+    /** Whether {@code board} is the original board of a set that a Classics slot holds now. */
+    private static boolean recalledBoard(GamesService games, String board) {
+        GenService e = DailyLookup.engine(games);
+        if (e == null || board == null || !board.startsWith(GenBoards.DAY_PREFIX)) {
+            return false;
+        }
+        for (String id : Slots.classicIds()) {
+            GenTag t = e.liveTag(id);
+            if (t != null && GenBoards.day(t).equals(board)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** A course id's name among the game's playables, else the id. */
@@ -149,8 +270,8 @@ public final class ScoresMenu extends GameMenu {
             set(22, Menus.icon(Material.GRAY_DYE, "&7The games are closed right now"), null);
             return;
         }
-        String unit = unitFor(board, Screens.published(games, game).cabinetUnit());
-        String label = boardLabel(board, plugin.clock().dayKey(), id -> courseName(games, game, id));
+        String unit = unitFor(board, Screens.published(games, game).cabinetUnit(), game.kind());
+        String label = label(games, game, board, plugin.clock().dayKey());
 
         Long best = games.scores().best(viewer.getUniqueId(), game.id(), board);
         set(BEST, Menus.glint(Menus.icon(Material.GOLD_INGOT,
@@ -241,8 +362,8 @@ public final class ScoresMenu extends GameMenu {
             long today = plugin.clock().dayKey();
             for (int i = 0; i < onPage.size(); i++) {
                 Entry en = onPage.get(i);
-                set(9 + i, tile(games, en, today), e -> new ScoresMenu(plugin, en.game(), viewer, en.board(),
-                        en.lowerIsBetter(), this::reopen).open(viewer));
+                set(9 + i, tile(games, en, today), e -> new ScoresMenu(plugin, en.game(), viewer,
+                        en.board(), en.lowerIsBetter(), this::reopen).open(viewer));
             }
             if (p > 0) {
                 set(45, Menus.icon(Material.ARROW, "&fPrevious page"),
@@ -301,7 +422,7 @@ public final class ScoresMenu extends GameMenu {
         }
 
         private ItemStack tile(GamesService games, Entry en, long today) {
-            String label = boardLabel(en.board(), today, id -> courseName(games, en.game(), id));
+            String label = label(games, en.game(), en.board(), today);
             boolean course = en.board().contains(":");
             String name = course ? "&e" + label + " &7(" + en.game().name() + ")"
                     : "&b" + en.game().name() + " &7- " + label;
@@ -311,15 +432,16 @@ public final class ScoresMenu extends GameMenu {
                 lore.add("&7No scores yet.");
             } else {
                 String who = Bukkit.getOfflinePlayer(record.player()).getName();
-                lore.add("&7Best: &f" + score(unitFor(en.board(), en.unit()), record.score())
+                lore.add("&7Best: &f" + score(unitFor(en.board(), en.unit(), en.game().kind()), record.score())
                         + (who == null ? "" : " &7by &f" + who));
             }
             lore.add("&eClick to see the top 10");
-            Material m = switch (en.game().kind()) {
-                case TRIAL -> Material.FEATHER;
-                case GOLF -> Material.SNOWBALL;
-                default -> Material.JUKEBOX;
-            };
+            Material m = en.board().startsWith(GenBoards.WEEK_PREFIX) ? Material.NETHER_STAR
+                    : switch (en.game().kind()) {
+                        case TRIAL -> Material.FEATHER;
+                        case GOLF -> Material.SNOWBALL;
+                        default -> Material.JUKEBOX;
+                    };
             return Menus.icon(m, name, lore.toArray(new String[0]));
         }
 

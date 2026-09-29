@@ -1,6 +1,12 @@
 package com.dierks.homecraft.games.trial;
 
 import com.dierks.homecraft.games.GameAdmin;
+import com.dierks.homecraft.games.GeneratedCourses;
+import com.dierks.homecraft.games.gen.api.GenCopy;
+import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.gui.games.daily.DailyLookup;
+import com.dierks.homecraft.gui.games.daily.DailyText;
 import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Bukkit;
@@ -37,12 +43,20 @@ import java.util.logging.Level;
  * (else every run goes straight back, or none ever falls). A course opens only with a start and a
  * finish. Every change is logged with who made it, and a command that goes wrong says so here and
  * in the console — it never reaches the framework's guard, which would switch the game off.
+ *
+ * <p><b>Fresh Courses keeps its own</b> (GEN-SPEC §2.4, §5.5). A course Fresh Courses made is
+ * rebuilt every day from its seed, so here it can only be looked at, gone to, tried and featured
+ * ({@link #DAILY_VERBS}); anything else points to {@code /hcm games gen}. And no point of a
+ * hand-built course may be placed inside a Fresh Courses area or within {@value
+ * DailyLookup#EDITOR_MARGIN} blocks of one: that ground is rebuilt every day.
  */
 final class CourseAdmin implements GameAdmin {
 
     /** What can follow a course id. */
     static final List<String> VERBS = List.of("start", "checkpoint", "finish", "tier", "name", "fall", "minseconds",
             "enable", "disable", "info", "tp", "test", "feature", "delete");
+    /** What can follow a course id when Fresh Courses made the course: looking, trying, featuring. */
+    static final List<String> DAILY_VERBS = List.of("info", "tp", "test", "feature");
 
     private final TimeTrials trials;
 
@@ -108,7 +122,7 @@ final class CourseAdmin implements GameAdmin {
             sender.sendMessage(Text.of("&f" + c.id() + " &7- " + c.name() + " (" + TrialText.label(c) + "), "
                     + (c.enabled() ? "&aopen" : "&cclosed") + "&7, " + TrialText.checkpoints(c.checkpoints().size())
                     + ", layout " + c.rev() + (c.id().equals(week) ? " &6★ course of the week" : "")
-                    + (c.pinned() ? " &8(pinned)" : "")));
+                    + (c.pinned() ? " &8(pinned)" : "") + (c.generated() ? " &d(Fresh Courses)" : "")));
         }
     }
 
@@ -155,6 +169,11 @@ final class CourseAdmin implements GameAdmin {
         }
         if (args.length < 2) {
             info(sender, c);
+            return;
+        }
+        String daily = dailyRefusal(c, args[1]);
+        if (daily != null) {
+            sender.sendMessage(Text.of(daily));
             return;
         }
         boolean confirm = args[args.length - 1].equalsIgnoreCase("confirm");
@@ -206,7 +225,7 @@ final class CourseAdmin implements GameAdmin {
                     sender.sendMessage(Text.of("&cA radius is a number of blocks, like 3 or 2.5."));
                     return;
                 }
-                Location here = here(sender, c);
+                Location here = here(sender, c, r);
                 if (here == null) {
                     return;
                 }
@@ -247,7 +266,7 @@ final class CourseAdmin implements GameAdmin {
             sender.sendMessage(Text.of("&cA radius is a number of blocks, like 3 or 2.5."));
             return;
         }
-        Location here = here(sender, c);
+        Location here = here(sender, c, r);
         if (here == null) {
             return;
         }
@@ -352,9 +371,18 @@ final class CourseAdmin implements GameAdmin {
                 + c.minSecondsOr(trials.settings().minSeconds()) + "s" + (c.minSeconds() == null ? " (default)" : "")));
         GamesDao.ScoreRow record = trials.record(c.id());
         String week = trials.courseOfWeek();
-        sender.sendMessage(Text.of("&7Record: &f" + (record == null ? "none"
+        sender.sendMessage(Text.of((c.generated() ? "&7Today's best: &f" : "&7Record: &f") + (record == null ? "none"
                 : TrialText.time(record.score()) + " by " + trials.holder(record.player()))
                 + (c.id().equals(week) ? " &6★ course of the week" : "") + (c.pinned() ? " &8(pinned)" : "")));
+        GenTag gen = c.gen();
+        if (gen != null) {
+            sender.sendMessage(Text.of("&dMade by Fresh Courses: &7the layout for "
+                    + DailyText.setName(gen.cadence(), gen.day())
+                    + (gen.reroll() > 0 ? " (reroll " + gen.reroll() + ")" : "") + ", half " + gen.half()
+                    + (trials.generated().live(c.id(), gen) ? ", &aopen" : ", &cclosed right now")
+                    + " &7- &e/hcm games gen status"));
+            return;
+        }
         List<String> problems = c.problems(trials.games().config().common().worlds());
         if (!problems.isEmpty()) {
             sender.sendMessage(Text.of("&eTo open it: &7" + String.join("; ", problems)));
@@ -464,6 +492,11 @@ final class CourseAdmin implements GameAdmin {
      * and the course's own world once it has any point.
      */
     private Location here(CommandSender sender, Course c) {
+        return here(sender, c, 0);
+    }
+
+    /** {@link #here(CommandSender, Course)} for a point with a {@code radius} (a checkpoint, the finish). */
+    private Location here(CommandSender sender, Course c, double radius) {
         if (!(sender instanceof Player p)) {
             sender.sendMessage(Text.of("&cStand in the world to do that."));
             return null;
@@ -477,6 +510,11 @@ final class CourseAdmin implements GameAdmin {
         boolean placed = c.start() != null || c.finish() != null || !c.checkpoints().isEmpty();
         if (placed && !c.world().isBlank() && !c.world().equalsIgnoreCase(world)) {
             sender.sendMessage(Text.of("&c" + c.name() + " is in '" + c.world() + "'. A course is all in one world."));
+            return null;
+        }
+        String near = areaRefusal(trials.generated(), world, here.getX(), here.getY(), here.getZ(), radius);
+        if (near != null) {
+            sender.sendMessage(Text.of(near));
             return null;
         }
         return here;
@@ -512,7 +550,8 @@ final class CourseAdmin implements GameAdmin {
         }
         Course c = trials.course(args[0]);
         if (n == 2) {
-            match(out, last, VERBS.toArray(new String[0]));
+            match(out, last, (c != null && dailyRefusal(c, "start") != null ? DAILY_VERBS : VERBS)
+                    .toArray(new String[0]));
             return out;
         }
         String verb = args[1].toLowerCase(Locale.ROOT);
@@ -581,6 +620,36 @@ final class CourseAdmin implements GameAdmin {
     }
 
     // ---- small pure helpers (tested) ----------------------------------------------------------
+
+    /**
+     * Why {@code verb} can't be used on {@code c}, or {@code null} when it can: a course Daily
+     * Courses made (or one with a slot's or a Classics slot's id) allows only {@link #DAILY_VERBS}.
+     */
+    static String dailyRefusal(Course c, String verb) {
+        if (c == null || !(c.generated() || Slots.any(c.id()) != null)) {
+            return null;
+        }
+        return verb != null && DAILY_VERBS.contains(verb.toLowerCase(Locale.ROOT)) ? null : GenCopy.MADE_BY_DAILY;
+    }
+
+    /**
+     * Why a hand-built course's point can't be at (x, y, z) of {@code world}, or {@code null}: it is
+     * inside a Fresh Courses area or within {@value DailyLookup#EDITOR_MARGIN} blocks of one.
+     */
+    static String areaRefusal(GeneratedCourses g, String world, double x, double y, double z) {
+        return areaRefusal(g, world, x, y, z, 0);
+    }
+
+    /**
+     * {@link #areaRefusal(GeneratedCourses, String, double, double, double)} for a mark of
+     * {@code radius}: every block it covers is kept that far away, as the Fresh Courses engine
+     * measures a hand-built checkpoint (its point ± its radius).
+     */
+    static String areaRefusal(GeneratedCourses g, String world, double x, double y, double z, double radius) {
+        double r = Math.max(0, radius);
+        return DailyLookup.nearBox(g, world, (int) Math.floor(x - r), (int) Math.floor(y - r), (int) Math.floor(z - r),
+                (int) Math.floor(x + r), (int) Math.floor(y + r), (int) Math.floor(z + r)) ? GenCopy.EDITOR_REFUSED : null;
+    }
 
     /**
      * The words after the verb, without a {@code confirm} on the end: {@code [cliffs, fall, 60,

@@ -59,7 +59,7 @@ clock:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 16
+config_revision: 17
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -1436,7 +1436,10 @@ arcade:
   #   STAT        `stat:` a lifetime vanilla statistic, or CATCH_FISH | TRAVEL_ON_FOOT |
   #               KILL_HOSTILES | BREED_ANIMALS | TRADE_VILLAGER; `target`
   #   COUNTER     `counter:` wild_finds | rare_wild_finds | quests_done | deliveries |
-  #               crates | jackpots | biomes; `target`
+  #               crates | jackpots | biomes; `target`. The skill games count
+  #               cabinet_finishes | cabinet_golds | cabinets (different cabinet games) |
+  #               course_finishes (courses and golf rounds) | course_records | holes_in_one |
+  #               golf_under_par | fresh_sets | star_chart_tops (nothing counts a game of chance)
   #   COLLECTION  distinct Minis owned right now; `target`
   #   GRADE       print a Mini of `grade:` (MINT)
   #   FINISH      own a Mini with `finish:` (SHINY)
@@ -1470,6 +1473,17 @@ arcade:
     - { id: balance_1k, group: "Money", type: BALANCE, target: 1000, reward: 10, display: "Have $1,000" }
     - { id: rich_10k, group: "Money", type: BALANCE, target: 10000, reward: 50, display: "Have $10,000" }
     - { id: jackpot, group: "Arcade", type: EVENT, reward: 25, display: "Win the Scratch Ticket jackpot" }
+    # The skill games (never a game of chance). Counters, so a course finished in the Games world
+    # (no tokens there) unlocks as soon as the player is back home.
+    - { id: game_first_cabinet, group: "Games", type: COUNTER, counter: cabinet_finishes, target: 1, reward: 10, display: "Finish an arcade cabinet game" }
+    - { id: game_gold, group: "Games", type: COUNTER, counter: cabinet_golds, target: 1, reward: 20, display: "Earn a gold medal in a cabinet" }
+    - { id: game_all_cabinets, group: "Games", type: COUNTER, counter: cabinets, target: 8, reward: 30, display: "Finish every arcade cabinet game" }
+    - { id: game_first_course, group: "Games", type: COUNTER, counter: course_finishes, target: 1, reward: 15, display: "Finish a course" }
+    - { id: game_hole_in_one, group: "Games", type: COUNTER, counter: holes_in_one, target: 1, reward: 25, display: "Get a hole-in-one" }
+    - { id: game_under_par, group: "Games", type: COUNTER, counter: golf_under_par, target: 1, reward: 25, display: "Finish a golf course under par" }
+    - { id: game_fresh_all, group: "Games", type: COUNTER, counter: fresh_sets, target: 1, reward: 40, display: "Finish every Fresh Course in one set" }
+    - { id: game_star_chart, group: "Games", type: COUNTER, counter: star_chart_tops, target: 1, reward: 30, display: "Reach the top Star Chart goal in a week" }
+    - { id: game_record, group: "Games", type: COUNTER, counter: course_records, target: 1, reward: 30, display: "Set a course record" }
   # Daily/weekly quests. Each player DRAWS their own `daily_draw` / `weekly_draw` from the
   # pools the first time they're needed in a day/week (local time) — no two of one type.
   # A Quest Reroll (Prize Counter) swaps one unfinished daily. Each row:
@@ -1480,7 +1494,11 @@ arcade:
   #   FIND_WILD_MINI, SELL_MARKET (money), OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH.
   #   PULLED from statistics (every 30s) — CATCH_FISH, KILL_HOSTILES, BREED_ANIMALS,
   #   TRADE_VILLAGER, TRAVEL_ON_FOOT (blocks; walking/sprinting/sneaking only).
-  # Nothing counts in a world the economy is disabled in.
+  #   PUSHED by the skill games (never a game of chance) — FINISH_CABINET (a finished cabinet
+  #   run, practice too), FINISH_COURSE (a counted course run or a golf round), EARN_STARS
+  #   (Fresh Courses stars). They are only dealt while those games are open.
+  # Nothing counts in a world the economy is disabled in. The game quests count where the games
+  # pay tokens (the Games world too, never in creative); their tokens come once the player is home.
   quests:
     enabled: true
     # Which day a week rolls over on (local midnight).
@@ -1500,6 +1518,8 @@ arcade:
       - { id: mine_daily,     type: MINE_BLOCKS,       target: 200,  reward: 5, display: "Mine 200 stone or ore" }
       - { id: biome_daily,    type: VISIT_BIOMES,      target: 3,    reward: 5, display: "Visit 3 different biomes" }
       - { id: delivery_daily, type: COMPLETE_DELIVERY, target: 1,    reward: 5, display: "Finish a Courier delivery" }
+      - { id: cabinet_daily,  type: FINISH_CABINET,    target: 3,    reward: 4, display: "Play 3 arcade cabinets" }
+      - { id: course_daily,   type: FINISH_COURSE,     target: 1,    reward: 5, display: "Finish a course or a round of golf" }
     weekly_pool:
       - { id: hostiles_weekly, type: KILL_HOSTILES,     target: 150,  reward: 25, display: "Defeat 150 hostile mobs" }
       - { id: fish_weekly,     type: CATCH_FISH,        target: 40,   reward: 20, display: "Catch 40 fish" }
@@ -1510,6 +1530,9 @@ arcade:
       - { id: biome_weekly,    type: VISIT_BIOMES,      target: 8,    reward: 25, display: "Visit 8 different biomes" }
       - { id: delivery_weekly, type: COMPLETE_DELIVERY, target: 5,    reward: 25, display: "Finish 5 Courier deliveries" }
       - { id: wild_weekly,     type: FIND_WILD_MINI,    target: 1,    reward: 30, display: "Catch a wild Mini" }
+      - { id: cabinet_weekly,  type: FINISH_CABINET,    target: 15,   reward: 20, display: "Play 15 arcade cabinets" }
+      - { id: course_weekly,   type: FINISH_COURSE,     target: 5,    reward: 20, display: "Finish 5 courses or golf rounds" }
+      - { id: stars_weekly,    type: EARN_STARS,        target: 6,    reward: 20, display: "Earn 6 Fresh Courses stars" }
   # The Scratch Ticket: tokens in, tokens out, decided the moment you buy it. The pot
   # starts at `seed`, grows `per_ticket` with every ticket, tops out at `cap`, and goes
   # back to `seed` when someone wins it (with a shout to the whole server).
@@ -1553,6 +1576,10 @@ games:
   featured: auto
   # Tokens for the first finish of today's featured game (counts toward skill_daily_cap).
   featured_bonus: 1
+  # The website's leaderboards: how many of each game's and course's best scores /api/arcade
+  # lists ("top"; past Fresh Courses list up to 3). 0 = none. Names only with
+  # web.dashboard.arcade_show_names.
+  feed_top: 5
   # When your host restarts the server each day: "HH:mm" 24-hour times in clock.time_zone
   # (keep the quotes; midnight is "00:00"), the minute it actually stops, not when its warnings
   # start. Just before each one, courses, golf, new card-game hands and the daily scored try
@@ -1833,3 +1860,144 @@ games:
     daily_cap: 4
     # Strokes over par before a hole is picked up.
     max_over_par: 3
+  # ---- fresh ----
+  # Fresh Courses: parkour, Sky Rings and mini golf the plugin builds itself - a new set every week
+  # (or every day, or every few days: cadence), the same for everyone. Nothing to build by hand.
+  # Check with /hcm games gen status.
+  fresh:
+    # Ships OFF. true + /hcm reload and the first set is up in about two minutes.
+    enabled: false
+    # The world they are built in: "" = the first of games.worlds (it must be listed there).
+    # They sit far out and high up (x 4096-5279, z 4096-4671, y 128-303), away from anything built.
+    world: ""
+    # How often the courses change: weekly, daily, or a number of days from 1 to 28 (like 3).
+    # The dates are fixed: counted from rebuild_day, so they never depend on when you changed it.
+    # A change here keeps the courses that are up until the new setting's first change day (or
+    # their own end, if sooner). /hcm games gen status shows the date.
+    cadence: weekly
+    # The time a new set starts (clock.time_zone, 24-hour, in quotes). Keep it at a restart:
+    # the courses are rebuilt while nobody plays.
+    rebuild_at: "04:00"
+    # The day a weekly set starts, like "monday"; "" = the quests' week start (arcade.quests.week_starts).
+    # Every other cadence counts its days from this day too. After a change the courses that are up
+    # stay until the new day. Moving the change day later keeps this set until the new day comes
+    # round: a new day that would still be the same numbered set (weekly: one before the next
+    # Monday) is not a change, so they stay until the one after. Status shows the date.
+    rebuild_day: ""
+    # Seconds after the server is up before the first build.
+    startup_delay_seconds: 60
+    # No build starts this many minutes before one of games.restart_times.
+    avoid_before_restart_minutes: 15
+    # A build that failed is tried again after this many minutes.
+    retry_minutes: 30
+    # Builds tried per course per day before it keeps the last course until the next day.
+    max_tries_per_day: 4
+    # Minutes someone still on a course the next build needs gets to finish (after an admin's
+    # second quick reroll only).
+    clear_wait_minutes: 20
+    # Course boards and star rows older than this many days are pruned (each course always keeps
+    # its last 8 sets).
+    keep_days: 35
+    # No mobs, fire, random ticks or weather in that world, and always noon.
+    world_rules: true
+    # "x y z" where people standing in a building area are moved; "" = the world's spawn.
+    safe_spot: ""
+    # Most Star Chart tokens a player earns a day (games.skill_daily_cap still applies). A goal is
+    # paid in full or not at all: one the day's caps can't pay whole waits for a finish another day
+    # that week. A week's goals are fixed the first time they are shown, even if a course is
+    # switched off later that week.
+    daily_cap: 2
+    # When a new set goes up, one chat line tells each player once ("New courses this week! Easy,
+    # Parkour, Hard, Sky Rings and Golf - /hcm play"): at login, or at once for anyone on (not while
+    # they play a world game, and after they close a screen). Players turn it off with
+    # /hcm play news off. false = no line for anyone.
+    announce: true
+    # Tokens for each course's first finish in each set: one table for a weekly cadence and one for
+    # a daily one. Anything in between is worked out from the two, so a new cadence needs no retuning.
+    # They count toward games.trials.daily_cap / games.golf.daily_cap (4) and skill_daily_cap (6),
+    # and are paid in full or not at all: if today's caps can't pay all of it, nothing is paid or
+    # used up, and a finish on another day of the same set pays it. Keep each at or under 4: one
+    # bigger than a whole day's cap pays that cap, once.
+    rewards:
+      clear_weekly:
+        fresh_parkour_easy: 2
+        fresh_parkour: 3
+        fresh_parkour_hard: 4
+        fresh_rings: 3
+        fresh_golf: 3
+        fresh_tiny_golf: 2
+        fresh_boat: 3
+      clear_daily:
+        fresh_parkour_easy: 1
+        fresh_parkour: 2
+        fresh_parkour_hard: 3
+        fresh_rings: 2
+        fresh_golf: 2
+        fresh_tiny_golf: 1
+        fresh_boat: 2
+    # Star Chart goals: stars a player collects in a week, and the tokens each goal pays (once a
+    # week). Weekly and daily ends like the rewards; never above 80% of what the week can give.
+    # A week's goals are fixed the first time they are shown or paid: a change counts from the next.
+    star_goals:
+      weekly: [6, 12]
+      weekly_tokens: [1, 2]
+      daily: [10, 25]
+      daily_tokens: [1, 1]
+    # How much building one server tick may do.
+    budget:
+      # Blocks per tick while anyone is online.
+      blocks_per_tick: 500
+      # Blocks per tick while nobody is.
+      blocks_per_tick_idle: 5000
+      # Milliseconds of building per tick.
+      max_ms_per_tick: 4
+      # Chunk snapshots per tick.
+      snapshots_per_tick: 4
+      # Chunks waiting to load at once.
+      chunk_loads_in_flight: 2
+      # Building pauses while the average tick takes longer than this (ms); it goes on below 3/4 of it.
+      pause_above_mspt: 40
+    # Star times, as a factor of each course's expert time: gold = 3 stars, silver = 2 stars.
+    # Finishing is always 1 star. Tune after the first week if they feel too hard or too easy.
+    stars:
+      gold: {easy: 2.0, medium: 1.5, hard: 1.25}
+      silver: {easy: 3.0, medium: 2.2, hard: 1.8}
+    # Each course: on or off, its difficulty (tier, or mix of golf holes: E easy, M medium, H hard)
+    # and where its area starts (x y z, x and z a multiple of 16; two halves side by side along x).
+    # /hcm games gen on|off|tier|mix wins over these.
+    slots:
+      fresh_parkour_easy: {enabled: true, tier: easy, origin: [4096, 160, 4096]}
+      fresh_parkour: {enabled: true, tier: medium, origin: [4352, 160, 4096]}
+      fresh_parkour_hard: {enabled: true, tier: hard, origin: [4608, 160, 4096]}
+      fresh_rings: {enabled: true, tier: easy, origin: [4096, 128, 4352]}
+      fresh_golf: {enabled: true, mix: EEEMMMMHH, origin: [4864, 160, 4096]}
+      fresh_tiny_golf: {enabled: true, mix: EEE, origin: [5120, 160, 4096]}
+      fresh_boat: {enabled: false, tier: medium, origin: [4480, 160, 4352]}
+    # Every set that was ever up is archived with its whole layout, so a past course can be brought
+    # back exactly (/hcm games gen recall) or kept for good (/hcm games gen keep), and its board with it.
+    # A course is a few KB: a year of weekly sets for every course is well under 5 MB.
+    archive:
+      # Days an old set stays in the archive after it was replaced; 0 = forever. A kept or
+      # recalled course's set is never removed.
+      keep: 0
+    # The website's list of past courses (with their course codes and seeds): at most this many per course.
+    feed_history: 26
+    # The Classics: three empty courses an admin can bring an old course back into
+    # (/hcm games gen recall HARD-40). Its old records are the ones to beat.
+    classics:
+      # How long a recalled course stays up unless the recall says otherwise ("forever" keeps it).
+      days: 7
+      # Where each one is built (x y z, x and z a multiple of 16; two halves side by side along x),
+      # like the courses above. Keep them 32 blocks from every other area.
+      slots:
+        fresh_classic_parkour: {origin: [4096, 160, 4736]}
+        fresh_classic_rings: {origin: [4608, 128, 4736]}
+        fresh_classic_golf: {origin: [4352, 160, 4736]}
+    # Kept courses (/hcm games gen keep): each becomes a normal course with a lasting board, built in
+    # its own plot of this area and never touched by the generator again.
+    keep:
+      # The first plot's corner (x y z). Plots are 144 x 176 x 336, six to a row along x, rows along z.
+      # It must stay at least 16 blocks from every Fresh Courses area; otherwise keeping is off.
+      area: [4096, 128, 5376]
+      # How many plots there are.
+      max_plots: 24

@@ -2,6 +2,7 @@ package com.dierks.homecraft.gui.games;
 
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.Refusal;
+import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.world.Session;
 import org.junit.jupiter.api.Test;
 
@@ -20,7 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The Games screen's plain logic: how tiles sort into tabs and pages, what a player on a break
  * (or without the permission) sees in place of the games of chance — here and on the Arcade hub
  * (spec §8.1, §8.2, R1.16) — that the Arcade's own links wait while a world game is on, and that
- * an invite names its game.
+ * an invite names its game. Daily Courses' tiles come first on their tab (GEN-SPEC §5.4): Today's
+ * Courses, then the daily courses, then everything else as before.
  */
 class GamesMenuTest {
 
@@ -135,5 +137,46 @@ class GamesMenuTest {
                 "the game in the NAME: Bedrock shows lore only on a long press");
         assertEquals("&eGame invite &7from a player", GamesMenu.inviteName(null, null),
                 "still reads with nothing known");
+    }
+
+    // ---- Fresh Courses first ------------------------------------------------------------------
+
+    private static GamesMenu.Tile tile(Game.Tab tab, String playId, int rank, int order) {
+        return new GamesMenu.Tile(tab, GamesMenu.priority(playId), rank, order, null, null);
+    }
+
+    @Test
+    void generatedTilesComeFirstOnTheirTab() {
+        GamesMenu.Tile river = tile(Game.Tab.COURSES, "river_run", 13, 0);
+        GamesMenu.Tile cliffs = tile(Game.Tab.COURSES, "cliffs", 13, 1);
+        GamesMenu.Tile easy = tile(Game.Tab.COURSES, "fresh_parkour_easy", 13, 2);
+        GamesMenu.Tile rings = tile(Game.Tab.COURSES, "fresh_rings", 13, 3);
+        GamesMenu.Tile today = tile(Game.Tab.COURSES, Slots.DAILY, 15, 0);
+        GamesMenu.Tile meadow = tile(Game.Tab.GOLF, "meadow", 14, 0);
+        GamesMenu.Tile tiny = tile(Game.Tab.GOLF, "fresh_tiny_golf", 14, 1);
+        GamesMenu.Tile todayGolf = tile(Game.Tab.GOLF, "fresh_courses", 15, 1);
+        GamesMenu.Tile snake = tile(Game.Tab.CABINETS, "snake", 7, 0);
+        List<GamesMenu.Tile> in = List.of(river, cliffs, easy, rings, today, meadow, tiny, todayGolf, snake);
+
+        assertEquals(List.of(today, easy, rings, river, cliffs), GamesMenu.arrange(in, Game.Tab.COURSES),
+                "the Fresh Courses screen, then the fresh courses in their own order, then the hand-built ones as "
+                        + "before, even though Fresh Courses sits later in the catalog");
+        assertEquals(List.of(todayGolf, tiny, meadow), GamesMenu.arrange(in, Game.Tab.GOLF), "the same on the Golf tab");
+        assertEquals(List.of(snake, today, easy, rings, river, cliffs, todayGolf, tiny, meadow),
+                GamesMenu.arrange(in, null), "the tabs keep their order on All");
+    }
+
+    @Test
+    void onlyDailyCoursesIdsJumpTheQueue() {
+        assertEquals(GamesMenu.TODAY, GamesMenu.priority("fresh_courses"), "the Fresh Courses screen");
+        assertEquals(GamesMenu.TODAY, GamesMenu.priority(" Fresh_Parkour_Tiers "), "the tier picker, any case");
+        assertEquals(GamesMenu.OTHERS, GamesMenu.priority("daily"), "the old id is nothing now");
+        for (String id : Slots.ids()) {
+            assertEquals(GamesMenu.DAILY, GamesMenu.priority(id), id + " is a fresh course");
+        }
+        assertEquals(GamesMenu.OTHERS, GamesMenu.priority("river_run"), "a hand-built course");
+        assertEquals(GamesMenu.OTHERS, GamesMenu.priority(null), "no id");
+        assertEquals(GamesMenu.OTHERS, new GamesMenu.Tile(Game.Tab.LUCK, 0, 0, null, null).priority(),
+                "an old-style tile sorts as before");
     }
 }

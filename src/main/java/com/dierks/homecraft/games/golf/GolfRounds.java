@@ -2,13 +2,16 @@ package com.dierks.homecraft.games.golf;
 
 import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.GeneratedCourses;
 import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.ScoreResult;
-import com.dierks.homecraft.games.Scores;
-import com.dierks.homecraft.games.SkillRewards;
+import com.dierks.homecraft.games.gen.api.GenCopy;
+import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.world.KitItems;
 import com.dierks.homecraft.gui.arcade.BigWin;
+import com.dierks.homecraft.gui.games.daily.DailyLookup;
+import com.dierks.homecraft.gui.games.daily.DailyText;
 import com.dierks.homecraft.gui.games.golf.GolfScorecardMenu;
 import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.util.Sounds;
@@ -30,6 +33,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 
 /**
@@ -50,6 +54,10 @@ import java.util.logging.Level;
  * Everything here runs inside the game's guard (the tick, the kit, the session callbacks), so a
  * bug switches golf off — and the framework ends its sessions — rather than touching anything
  * else.
+ *
+ * <p>A Fresh course (GEN-SPEC §3.4) is played on the layout the round started on: a round keeps
+ * counting while that layout still stands, even after the next set's layout went live, and what
+ * it records and pays is {@link GolfFinish}'s.
  */
 public final class GolfRounds {
 
@@ -139,9 +147,10 @@ public final class GolfRounds {
      */
     private void begin(Player p, GolfCourse course, ItemStack look, int maxOverPar) {
         GolfCourse now = golf.playableCourse(course.id());
-        if (now == null || now.rev() != course.rev()) {
-            p.sendMessage(Text.of(now == null ? "&7" + course.name() + " was closed by an admin."
-                    : changedLine(course)));
+        boolean standing = course.generated() && games().generated().standing(course.gen());
+        if ((now == null || now.rev() != course.rev()) && !standing) {
+            p.sendMessage(Text.of(now != null ? changedLine(course) : course.generated()
+                    ? games().generated().closedLine(course.id()) : "&7" + course.name() + " was closed by an admin."));
             games().sessions().leave(p, EndReason.ADMIN);
             return;
         }
@@ -472,6 +481,10 @@ public final class GolfRounds {
         GolfCourse c = r.course;
         p.sendMessage(Text.of("&d" + c.name() + " &7done: &f" + GolfRun.strokesText(run.total()) + " &7("
                 + GolfRun.vsParText(run.total() - c.par()) + ")"));
+        String code = c.gen() == null ? null : DailyLookup.code(games(), c.gen());
+        if (code != null) {
+            p.sendMessage(Text.of("&7" + GenCopy.courseCode(code))); // so players can ask for it back
+        }
         p.sendMessage(Text.of(r.card().line()));
         if (changed(c)) {
             p.sendMessage(Text.of("&7This course was changed while you played, so this round isn't recorded."));
@@ -483,10 +496,10 @@ public final class GolfRounds {
         showWhenHome(p.getUniqueId(), card, 0);
     }
 
-    /** Whether an admin changed (or closed) the course since the round began. */
+    /** Whether an admin changed (or closed) the course since the round began, and its layout no longer stands. */
     private boolean changed(GolfCourse c) {
         try {
-            return stale(c, games().dao().course(c.id()));
+            return stale(c, games().dao().course(c.id()), games().generated()::standing);
         } catch (SQLException e) {
             golf.log(Level.WARNING, "Mini golf: could not check a course before recording a round", e);
             return true;
@@ -501,41 +514,130 @@ public final class GolfRounds {
         return now == null || now.rev() != c.rev() || !CourseCodec.GAME.equals(now.game()) || !now.enabled();
     }
 
-    /** The score on the board, then the rewards — while the player is still in the game, where they earn. */
+    /**
+     * {@link #stale(GolfCourse, GamesDao.CourseRow)} with Fresh Courses' "still standing" rule
+     * (GEN-SPEC §3.4): a round on a Fresh course can't count only if the old rule says so AND the
+     * layout it began on no longer stands (its half is being cleared). A hand-built course keeps the
+     * old rule exactly.
+     *
+     * @param standing whether a layout still stands ({@code GeneratedCourses#standing})
+     */
+    static boolean stale(GolfCourse c, GamesDao.CourseRow now, Predicate<GenTag> standing) {
+        boolean changed = stale(c, now);
+        if (!changed || c.gen() == null) {
+            return changed;
+        }
+        return standing == null || !standing.test(c.gen());
+    }
+
+    /**
+     * The score on the board, then the rewards — while the player is still in the game, where they
+     * earn ({@link GolfFinish}). A Fresh course's part comes from the layout the round began on.
+     */
     private void record(Player p, LiveRound r) {
         GolfRun run = r.run;
         GolfCourse c = r.course;
-        UUID id = p.getUniqueId();
-        ScoreResult result = games().scores().submit(id, golf.id(), Scores.golf(c.id()), run.total(), true);
-        if (result.personalBest()) {
-            p.sendMessage(Text.of("&a✦ New best on " + c.name() + "!" + (result.previous() == null ? ""
-                    : " &7(was " + GolfRun.strokesText(result.previous().intValue()) + ")")));
-        }
-        if (result.record()) {
-            p.sendMessage(Text.of("&6★ That's the course record!"));
-        }
         MiniGolfSettings s = golf.settings();
         long day = golf.plugin().clock().dayKey();
-        String name = golf.name() + ": " + c.name();
-        pay(p, RewardKind.FIRST_CLEAR, SkillRewards.firstClearRef(c.id()), s.firstClear(), name + " first finish");
-        if (run.parOrBetter()) {
-            pay(p, RewardKind.PAR, SkillRewards.parRef(c.id(), day), s.parReward(), name + " at par or better");
-        }
-        for (int hole : run.holesInOne()) {
-            pay(p, RewardKind.HOLE_IN_ONE, SkillRewards.holeInOneRef(c.id(), hole, day), s.holeInOneReward(),
-                    name + " hole-in-one on hole " + hole);
-        }
         // today's pick is this course, or golf as a whole (the reward is once a day either way)
-        if (games().featured().isFeatured(c.id()) || games().featured().isFeatured(golf.id())) {
-            pay(p, RewardKind.FEATURED, SkillRewards.featuredRef(day), games().config().common().featuredBonus(),
-                    name + " is today's pick");
+        boolean featured = games().featured().isFeatured(c.id()) || games().featured().isFeatured(golf.id());
+        GolfFinish.Daily daily = null;
+        if (c.generated()) { // the set of the layout the round started on, the Star Chart week of today
+            GenTag t = c.gen();
+            GeneratedCourses g = games().generated();
+            long week = DailyLookup.weekKey(games());
+            daily = new GolfFinish.Daily(t, week, g.dailyClear(t.slot(), t.cadence()), g.goals(week));
+        }
+        GolfFinish.settle(new GolfFinish.Round(c.id(), golf.name() + ": " + c.name(),
+                run.total(), c.par(), c.holes().size(), run.parOrBetter(), run.holesInOne(), day, featured,
+                s.firstClear(), s.parReward(), s.holeInOneReward(), games().config().common().featuredBonus(), daily),
+                ledger(p, c));
+    }
+
+    /**
+     * What a recorded round tells the quests and achievements (EXTRAS E4, guarded; {@link GolfFinish#settle}
+     * calls it once, last): the round with its par, holes-in-one and whether it set the record, and on
+     * a Fresh course the stars it added, the week's top goal and a whole set finished. A round on a
+     * course changed while it was played is never recorded, so never told.
+     */
+    private void progress(Player p, GolfCourse c, GolfFinish.Round r, GolfFinish.Summary summary) {
+        int strokes = r.strokes();
+        int par = r.par();
+        int holesInOne = r.holesInOne().size();
+        boolean record = summary.result().record();
+        games().tellProgress(g -> g.golfFinished(p, c.id(), strokes, par, holesInOne, c.generated(), record));
+        GolfFinish.Daily daily = r.daily();
+        if (daily != null && daily.tag() != null) {
+            DailyLookup.freshProgress(games(), p, daily.tag(), summary.added(), daily.weekKey(), daily.goals());
         }
     }
 
-    private void pay(Player p, RewardKind kind, String ref, int tokens, String detail) {
-        if (tokens > 0) {
-            games().rewards().pay(p, golf, golf.source(), kind, ref, tokens, golf.settings().dailyCap(), detail);
-        }
+    /** Where a round of {@code p} on {@code c} is recorded and paid. */
+    private GolfFinish.Ledger ledger(Player p, GolfCourse c) {
+        UUID id = p.getUniqueId();
+        return new GolfFinish.Ledger() {
+            @Override
+            public ScoreResult submit(String board, int strokes) {
+                return games().scores().submit(id, golf.id(), board, strokes, true);
+            }
+
+            @Override
+            public void announce(ScoreResult result, boolean daily) {
+                String was = result.previous() == null ? ""
+                        : " &7(was " + GolfRun.strokesText(result.previous().intValue()) + ")";
+                int cadence = GenCopy.words(c.gen()); // a Classic: "the best on ... so far", never "this week"
+                if (result.personalBest()) {
+                    p.sendMessage(Text.of((daily ? "&a✦ " + GenCopy.yourBest(cadence) + " on " : "&a✦ New best on ")
+                            + c.name() + "!" + was));
+                }
+                if (result.record()) {
+                    p.sendMessage(Text.of(daily ? setRecordLine(cadence, c.name()) : "&6★ That's the course record!"));
+                }
+            }
+
+            @Override
+            public int pay(RewardKind kind, String ref, int tokens, String detail) {
+                return games().rewards().pay(p, golf, golf.source(), kind, ref, tokens, golf.settings().dailyCap(),
+                        detail);
+            }
+
+            @Override
+            public int payWhole(RewardKind kind, String ref, int tokens, String detail) {
+                return games().rewards().payWhole(p, golf, golf.source(), kind, ref, tokens,
+                        golf.settings().dailyCap(), detail, GenCopy.clearLimit(GenCopy.words(c.gen())));
+            }
+
+            @Override
+            public GamesDao.StarsAdded addStars(String dayBoard, String weekBoard, int stars) {
+                return DailyLookup.addStars(games(), id, dayBoard, weekBoard, stars);
+            }
+
+            @Override
+            public void finished(GolfFinish.Round round, GolfFinish.Summary summary) {
+                progress(p, c, round, summary);
+            }
+
+            @Override
+            public void stars(int stars, GamesDao.StarsAdded added) {
+                p.sendMessage(Text.of(DailyText.golfFinish(stars, c.par(), c.holes().size(),
+                        added == null ? -1 : added.weekTotal())));
+            }
+
+            @Override
+            public int payGoal(String ref, int tokens, String detail) {
+                return DailyLookup.payGoal(games(), p, ref, tokens, detail);
+            }
+        };
+    }
+
+    /**
+     * A Fresh set's new best, in the set's words: "&amp;6★ That's this week's best on Tiny Golf!",
+     * "... today's best ...", or "&amp;6★ That's the best on Tiny Golf so far!" for another cadence.
+     */
+    static String setRecordLine(int cadence, String name) {
+        return cadence == 1 || cadence == 7
+                ? "&6★ That's " + GenCopy.bestOf(cadence).toLowerCase(java.util.Locale.ROOT) + " on " + name + "!"
+                : "&6★ That's the best on " + name + " so far!";
     }
 
     /** The final scorecard, with "Play again", once the player is back home (checked twice a second, up to 20 s). */

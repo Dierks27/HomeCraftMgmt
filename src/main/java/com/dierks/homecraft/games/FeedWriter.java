@@ -1,5 +1,7 @@
 package com.dierks.homecraft.games;
 
+import com.dierks.homecraft.games.gen.engine.FreshFeed;
+
 import java.util.List;
 import java.util.Map;
 
@@ -73,6 +75,86 @@ public interface FeedWriter {
      * @param holder        who holds it, or {@code null}
      */
     void golf(String id, String name, int holes, int par, Integer recordStrokes, Long recordAt, String holder);
+
+    /**
+     * What a Fresh Courses entry adds (GEN-SPEC §5.6, the weekly addendum), written as
+     * {@code daily:{day,nextAt?,goldMs?,silverMs?,cadence?,lastDay?}}. Never a full seed, a rev, a
+     * half or a UUID.
+     *
+     * @param day      its set's first day ({@code 2026-09-28})
+     * @param nextAt   when the next set is due (epoch ms), or 0 when there is none (a Classic)
+     * @param goldMs   the 3-star time, or {@code null} (golf)
+     * @param silverMs the 2-star time, or {@code null} (golf)
+     * @param cadence  the set's length in days (7 weekly, 1 daily), or 0 when unknown
+     * @param lastDay  its set's last day ({@code 2026-10-04}), or {@code null}
+     */
+    record Daily(String day, long nextAt, Long goldMs, Long silverMs, int cadence, String lastDay) {
+
+        /** The shape before cadences: no cadence or last day. */
+        public Daily(String day, long nextAt, Long goldMs, Long silverMs) {
+            this(day, nextAt, goldMs, silverMs, 0, null);
+        }
+    }
+
+    /**
+     * A generated time-trial course: {@link #course} plus its {@link Daily} part, its record from
+     * its set's board. Until the feed knows the daily part, it is written as a plain course.
+     */
+    default void course(String id, String name, String kind, String tier, Long recordMs, Long recordAt,
+                        String holder, Daily daily) {
+        course(id, name, kind, tier, recordMs, recordAt, holder);
+    }
+
+    /** A generated golf course: {@link #golf} plus its {@link Daily} part. */
+    default void golf(String id, String name, int holes, int par, Integer recordStrokes, Long recordAt,
+                      String holder, Daily daily) {
+        golf(id, name, holes, par, recordStrokes, recordAt, holder);
+    }
+
+    /**
+     * The board behind entry {@code id} (a course or a golf course), for its {@code top} list
+     * (EXTRAS E3): which game's scores, which board, which way is better and its unit ({@code ms},
+     * {@code strokes}). A cabinet's board is already in {@link #cabinet}. The writer reads the top
+     * rows itself, so a holder's name is only ever looked up while names may be shown.
+     */
+    default void board(String id, String game, String board, boolean lowerIsBetter, String unit) {
+    }
+
+    /**
+     * Fresh Courses' {@code fresh} object for its slot's entry (GEN-SPEC-KEEP §8): the live course's
+     * code, short seed, dates and cadence. Holds no player.
+     */
+    default void fresh(String id, FreshFeed.Fresh fresh) {
+    }
+
+    /** Fresh Courses' {@code classic} object for a Classics slot's entry: the recalled course's code and window. */
+    default void classic(String id, FreshFeed.Classic classic) {
+    }
+
+    /**
+     * The top-level {@code freshHistory} array: every past (and current) Fresh course, newest first.
+     * A record's and a top row's holder are written by the writer only while {@link #showNames()}.
+     */
+    default void freshHistory(List<FreshFeed.Entry> entries) {
+    }
+
+    /**
+     * Whether this writer publishes {@link #freshHistory} (the website's feed does). Reading it costs
+     * two queries per archived course, so a writer that would throw it away (a screen asking which
+     * boards the games publish) is never handed one.
+     */
+    default boolean wantsHistory() {
+        return false;
+    }
+
+    /**
+     * The Star Chart: this week's best total and who holds it ({@code null} unless
+     * {@link #showNames()}). Nothing until the feed knows it.
+     *
+     * @param weekIso the week's first day ({@code 2026-09-28})
+     */
+    default void starChart(String weekIso, Long best, String holder) {
+    }
 
     /**
      * Whether record holders' names may be published ({@code web.dashboard.arcade_show_names},

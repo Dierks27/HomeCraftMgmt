@@ -34,6 +34,19 @@ public interface GamesScreens {
      */
     void pickPlayer(Player player, Game game, Predicate<Player> eligible, Consumer<Player> chosen, Runnable back);
 
+    /**
+     * The Fresh Courses screen (GEN-SPEC §5.4): one tile per course of the current set, the Classics,
+     * the Star Chart and how stars work. "Coming soon!" until the screen is built.
+     */
+    default void today(Player player, Runnable back) {
+        player.sendMessage(com.dierks.homecraft.util.Text.of("&7Coming soon!"));
+    }
+
+    /** The parkour level picker ({@code /hcm play fresh_parkour_tiers}). "Coming soon!" until it is built. */
+    default void parkourTiers(Player player, Runnable back) {
+        player.sendMessage(com.dierks.homecraft.util.Text.of("&7Coming soon!"));
+    }
+
     /** What the service uses until the real screens are installed: a plain "Coming soon!". */
     GamesScreens NONE = new GamesScreens() {
         private void soon(Player player) {

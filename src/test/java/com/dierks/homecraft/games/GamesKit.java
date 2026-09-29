@@ -411,6 +411,8 @@ final class GamesKit {
         int stopped;
         int joins;
         int quits;
+        int coursesChanged;
+        boolean throwOnCoursesChanged;
 
         TestGame(String id, GameKind kind, String name, TokenService.Source source) {
             this.id = id;
@@ -496,6 +498,14 @@ final class GamesKit {
         @Override
         public void onQuit(Player player) {
             quits++;
+        }
+
+        @Override
+        public void coursesChanged() {
+            if (throwOnCoursesChanged) {
+                throw new IllegalStateException("broken on purpose");
+            }
+            coursesChanged++;
         }
 
         @Override

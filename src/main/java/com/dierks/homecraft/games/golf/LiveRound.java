@@ -40,7 +40,7 @@ final class LiveRound {
     }
 
     /** A ball still rolling after this many ticks is stopped where it is. */
-    static final int MAX_ROLL_TICKS = 600;
+    static final int MAX_ROLL_TICKS = GolfShot.MAX_ROLL_TICKS;
 
     final UUID player;
     final GolfCourse course;
@@ -106,15 +106,16 @@ final class LiveRound {
 
     /**
      * Putt: from where the ball is now (its new last spot), the horizontal way a player facing
-     * {@code facing} (Minecraft yaw: 0 is +z, 90 is -x) looks, at the club's speed. +1 stroke.
+     * {@code facing} (Minecraft yaw: 0 is +z, 90 is -x) looks, at the club's speed. +1 stroke. The
+     * direction is {@link GolfShot#direction}, the one Daily Golf plans and verifies with.
      */
     void putt(float facing, int power) {
-        double rad = Math.toRadians(facing);
+        GolfShot.Direction d = GolfShot.direction(facing);
         markSpot();
         run.stroke();
         rolling = 0;
         yaw = facing;
-        ball.putt(-Math.sin(rad), Math.cos(rad), BallPhysics.speed(power));
+        ball.putt(d.dx(), d.dz(), BallPhysics.speed(power));
     }
 
     /** One tick of the ball over {@code blocks}, and what it meant for the round. */

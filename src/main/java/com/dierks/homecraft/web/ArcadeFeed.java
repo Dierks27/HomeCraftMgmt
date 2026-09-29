@@ -4,15 +4,18 @@ import com.dierks.homecraft.arcade.ArcadeService;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.games.FeedWriter;
 import com.dierks.homecraft.games.RtpLimits;
+import com.dierks.homecraft.games.gen.engine.FreshFeed;
 import com.dierks.homecraft.mini.Pack;
 import com.dierks.homecraft.mini.PackOdds;
 import com.dierks.homecraft.mini.Rarity;
+import com.dierks.homecraft.storage.GamesDao;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -21,6 +24,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
@@ -30,8 +34,9 @@ import java.util.regex.Pattern;
  * Ticket's pot, the Prize Counter, the token Card Packs and the achievements. Built on the main
  * thread alongside the other feeds and cached; the HTTP handler only serves the string.
  *
- * <pre>{"generatedAt":ms[,"games":[…]][,"featured":{"game":…,"until":ms}]
- * [,"jackpots":[{"game":"scratch_ticket","tokens":N}]][,"prizes":[…]][,"packs":[…]][,"achievements":[…]]}</pre>
+ * <pre>{"generatedAt":ms[,"games":[…]][,"featured":{"game":…,"until":ms}][,"starChart":{…}]
+ * [,"freshHistory":[…]][,"jackpots":[{"game":"scratch_ticket","tokens":N}]][,"prizes":[…]][,"packs":[…]]
+ * [,"achievements":[…]]}</pre>
  *
  * <p><b>How the games get in.</b> This class is the games' {@link FeedWriter}: the server hands one
  * instance to every open game's {@code Game.feed}, each game writes its entries from the SAME
@@ -47,10 +52,29 @@ import java.util.regex.Pattern;
  *       ({@link FeedWriter#oneIn}, the number the screen shows), or the Wheel's exact
  *       {@code spaces}/{@code of}; a row with neither — a payout without its odds — is left out,
  *       and so is a game with no stake left. Extra keys never replace a standard one.</li>
- *   <li>{@code cabinet}: {@code {id,name,kind:"cabinet",board,unit,lowerIsBetter,best?}}.</li>
- *   <li>a course: {@code {id,name,kind:"parkour"|"elytra"|"boat",tier?,record?:{ms,at?}}}.</li>
- *   <li>{@code golf}: {@code {id,name,kind:"golf",holes,par,record?:{strokes,at?}}}.</li>
+ *   <li>{@code cabinet}: {@code {id,name,kind:"cabinet",board,unit,lowerIsBetter,best?,top?}}.</li>
+ *   <li>a course: {@code {id,name,kind:"parkour"|"elytra"|"boat",tier?,record?:{ms,at?},daily?,fresh?,
+ *       classic?,top?}}.</li>
+ *   <li>{@code golf}: {@code {id,name,kind:"golf",holes,par,record?:{strokes,at?},daily?,fresh?,classic?,
+ *       top?}}.</li>
  * </ul>
+ * A Fresh Courses course (GEN-SPEC §5.6, the weekly addendum) is written the same way, its record
+ * taken from its set's board, plus {@code daily:{day,nextAt?,goldMs?,silverMs?,cadence?,lastDay?}}:
+ * the set's first day, when the next set is due, for a time trial its star times, and the set's
+ * length in days and last day; and, from Fresh Courses itself (GEN-SPEC-KEEP §8), {@code fresh:
+ * {code,seed,from,to?,cadenceDays}} (the course code and short seed) or, for a Classics slot,
+ * {@code classic:{code,from,to?}}. A course without them is written byte for byte as before. The
+ * week's Star Chart is a top-level {@code starChart:{week,best?}} (with its {@code holder} only
+ * while names are on), and every past Fresh course a top-level {@code freshHistory} (the writer
+ * writes each entry itself, so a record's holder follows the same rule). Never a full seed, a rev,
+ * a half or a UUID.
+ *
+ * <p><b>Leaderboards (EXTRAS E3).</b> Every entry with a board (a cabinet, a course, a golf course,
+ * a Fresh course, a Classic) carries {@code top:[{rank,value,unit,at,holder?}]}: its board's best
+ * {@code games.feed_top} rows (shipped 5), ties sharing a rank (1, 1, 3); every past Fresh course
+ * its best 3. The writer reads the rows itself ({@link Boards}), after every game has written, so
+ * a name is only ever looked up while names may be shown. An empty board has no {@code top}.
+ * {@code record} and {@code best} are kept as they were.
  * Entries keep the order they were written in (the catalog's), after the Scratch Ticket's; a
  * second entry with an id already published is dropped, so the site can key on {@code id}.
  *
@@ -143,14 +167,36 @@ public final class ArcadeFeed implements FeedWriter {
                              String holder) implements GameRow {
     }
 
-    /** A time-trial course ({@link FeedWriter#course}). */
+    /** A time-trial course ({@link FeedWriter#course}); {@code daily} for a Fresh Courses course, else null. */
     public record CourseRow(String id, String name, String kind, String tier, Long recordMs, Long recordAt,
-                            String holder) implements GameRow {
+                            String holder, Daily daily) implements GameRow {
+
+        /** A hand-built course. */
+        public CourseRow(String id, String name, String kind, String tier, Long recordMs, Long recordAt,
+                         String holder) {
+            this(id, name, kind, tier, recordMs, recordAt, holder, null);
+        }
     }
 
-    /** A mini golf course ({@link FeedWriter#golf}). */
+    /** A mini golf course ({@link FeedWriter#golf}); {@code daily} for a Fresh Courses course, else null. */
     public record GolfRow(String id, String name, int holes, int par, Integer recordStrokes, Long recordAt,
-                          String holder) implements GameRow {
+                          String holder, Daily daily) implements GameRow {
+
+        /** A hand-built course. */
+        public GolfRow(String id, String name, int holes, int par, Integer recordStrokes, Long recordAt,
+                       String holder) {
+            this(id, name, holes, par, recordStrokes, recordAt, holder, null);
+        }
+    }
+
+    /**
+     * The week's Star Chart ({@link FeedWriter#starChart}).
+     *
+     * @param week   the week's first day ({@code 2026-09-28})
+     * @param best   the top total, or {@code null}
+     * @param holder who holds it, or {@code null} (published only while names are on)
+     */
+    public record StarChart(String week, Long best, String holder) {
     }
 
     /**
@@ -213,38 +259,135 @@ public final class ArcadeFeed implements FeedWriter {
     public record AchievementRow(String id, String name, String description, int tokens) {
     }
 
+    /**
+     * Where the writer reads a board's best rows for the {@code top} lists (the games' scores), and
+     * a player's name (asked only while names may be shown).
+     */
+    public interface Boards {
+
+        /** The board's best {@code limit} rows, best first (ties: whoever got there first). */
+        List<GamesDao.ScoreRow> top(String game, String board, boolean lowerIsBetter, int limit);
+
+        /** A player's name, or {@code null}. */
+        String name(UUID player);
+    }
+
+    /** The board behind an entry ({@link FeedWriter#board}), for its {@code top} list. */
+    public record BoardRef(String id, String game, String board, boolean lowerIsBetter, String unit) {
+    }
+
+    /** Fresh Courses' {@code fresh} object for an entry. */
+    private record FreshPart(String id, FreshFeed.Fresh fresh) {
+    }
+
+    /** Fresh Courses' {@code classic} object for an entry. */
+    private record ClassicPart(String id, FreshFeed.Classic classic) {
+    }
+
+    /** Fresh Courses' {@code freshHistory}. */
+    private record History(List<FreshFeed.Entry> entries) {
+    }
+
     // ---- the writer -------------------------------------------------------------------------
 
     private final boolean showNames;
-    private final List<GameRow> games = new ArrayList<>();
+    private final int topSize;
+    private final Boards boards;
+    /** Everything written, in order: the entries and what goes with them (a mark for {@link #truncate}). */
+    private final List<Object> writes = new ArrayList<>();
+    private StarChart starChart;
 
     /** @param showNames {@code web.dashboard.arcade_show_names}: whether records carry a holder */
     public ArcadeFeed(boolean showNames) {
+        this(showNames, 0, null);
+    }
+
+    /**
+     * @param showNames {@code web.dashboard.arcade_show_names}: whether records carry a holder
+     * @param topSize   {@code games.feed_top}: rows per {@code top} list (0 = none)
+     * @param boards    where the {@code top} rows are read, or {@code null} for none
+     */
+    public ArcadeFeed(boolean showNames, int topSize, Boards boards) {
         this.showNames = showNames;
+        this.topSize = Math.max(0, topSize);
+        this.boards = boards;
     }
 
     @Override
     public void chance(String id, String name, List<Integer> stakes, Map<Integer, Double> rtpByStake,
                        Integer dailyLimit, List<PayRow> paytable, String rules, Map<String, ?> extra) {
-        games.add(new ChanceRow(id, name, stakes, rtpByStake, dailyLimit, paytable, rules, extra));
+        writes.add(new ChanceRow(id, name, stakes, rtpByStake, dailyLimit, paytable, rules, extra));
     }
 
     @Override
     public void cabinet(String id, String name, String board, String unit, boolean lowerIsBetter, Long best,
                         String holder) {
-        games.add(new CabinetRow(id, name, board, unit, lowerIsBetter, best, holder));
+        writes.add(new CabinetRow(id, name, board, unit, lowerIsBetter, best, holder));
     }
 
     @Override
     public void course(String id, String name, String kind, String tier, Long recordMs, Long recordAt,
                        String holder) {
-        games.add(new CourseRow(id, name, kind, tier, recordMs, recordAt, holder));
+        writes.add(new CourseRow(id, name, kind, tier, recordMs, recordAt, holder));
     }
 
     @Override
     public void golf(String id, String name, int holes, int par, Integer recordStrokes, Long recordAt,
                      String holder) {
-        games.add(new GolfRow(id, name, holes, par, recordStrokes, recordAt, holder));
+        writes.add(new GolfRow(id, name, holes, par, recordStrokes, recordAt, holder));
+    }
+
+    @Override
+    public void course(String id, String name, String kind, String tier, Long recordMs, Long recordAt,
+                       String holder, Daily daily) {
+        writes.add(new CourseRow(id, name, kind, tier, recordMs, recordAt, holder, daily));
+    }
+
+    @Override
+    public void golf(String id, String name, int holes, int par, Integer recordStrokes, Long recordAt,
+                     String holder, Daily daily) {
+        writes.add(new GolfRow(id, name, holes, par, recordStrokes, recordAt, holder, daily));
+    }
+
+    @Override
+    public void board(String id, String game, String board, boolean lowerIsBetter, String unit) {
+        if (!blank(id) && !blank(game) && !blank(board)) {
+            writes.add(new BoardRef(id, game, board, lowerIsBetter, unit));
+        }
+    }
+
+    @Override
+    public void fresh(String id, FreshFeed.Fresh fresh) {
+        if (!blank(id) && fresh != null) {
+            writes.add(new FreshPart(id, fresh));
+        }
+    }
+
+    @Override
+    public void classic(String id, FreshFeed.Classic classic) {
+        if (!blank(id) && classic != null) {
+            writes.add(new ClassicPart(id, classic));
+        }
+    }
+
+    @Override
+    public void freshHistory(List<FreshFeed.Entry> entries) {
+        writes.add(new History(entries == null ? List.of() : List.copyOf(entries)));
+    }
+
+    /** How many rows each {@code top} list has at most ({@code games.feed_top}). */
+    public int topSize() {
+        return topSize;
+    }
+
+    @Override
+    public void starChart(String weekIso, Long best, String holder) {
+        starChart = weekIso == null || weekIso.isBlank() ? null : new StarChart(weekIso, best, holder);
+    }
+
+    /** The Star Chart written so far, or {@code null}. */
+    public StarChart starChart() {
+        return starChart;
     }
 
     @Override
@@ -252,24 +395,36 @@ public final class ArcadeFeed implements FeedWriter {
         return showNames;
     }
 
-    /** The entries written so far, in order. */
-    public List<GameRow> rows() {
-        return List.copyOf(games);
+    /** The website publishes the Fresh Courses history. */
+    @Override
+    public boolean wantsHistory() {
+        return true;
     }
 
-    /** How many entries have been written — a mark for {@link #truncate}. */
+    /** The entries written so far, in order. */
+    public List<GameRow> rows() {
+        List<GameRow> out = new ArrayList<>();
+        for (Object w : writes) {
+            if (w instanceof GameRow r) {
+                out.add(r);
+            }
+        }
+        return out;
+    }
+
+    /** How many things have been written (entries and what goes with them) — a mark for {@link #truncate}. */
     public int size() {
-        return games.size();
+        return writes.size();
     }
 
     /**
-     * Forget every entry written after {@code size} entries: a game that threw halfway through
-     * its {@code feed} leaves nothing half-written behind.
+     * Forget everything written after the mark {@code size} ({@link #size()}): a game that threw
+     * halfway through its {@code feed} leaves nothing half-written behind.
      */
     public void truncate(int size) {
         int keep = Math.max(0, size);
-        while (games.size() > keep) {
-            games.remove(games.size() - 1);
+        while (writes.size() > keep) {
+            writes.remove(writes.size() - 1);
         }
     }
 
@@ -294,8 +449,23 @@ public final class ArcadeFeed implements FeedWriter {
             entries.add(scratchEntry);
             ids.add(SCRATCH_ID);
         }
-        for (GameRow row : games) {
-            String entry = row == null || blank(row.id()) ? null : entry(row);
+        Map<String, BoardRef> refs = new HashMap<>();
+        Map<String, FreshFeed.Fresh> fresh = new HashMap<>();
+        Map<String, FreshFeed.Classic> classics = new HashMap<>();
+        List<FreshFeed.Entry> history = List.of();
+        for (Object w : writes) {
+            switch (w) {
+                case BoardRef b -> refs.put(key(b.id()), b);
+                case FreshPart f -> fresh.put(key(f.id()), f.fresh());
+                case ClassicPart c -> classics.put(key(c.id()), c.classic());
+                case History h -> history = h.entries();
+                default -> {
+                    // an entry: written below, in order
+                }
+            }
+        }
+        for (GameRow row : rows()) {
+            String entry = row == null || blank(row.id()) ? null : entry(row, refs, fresh, classics);
             if (entry != null && ids.add(row.id().toLowerCase(Locale.ROOT))) {
                 entries.add(entry);
                 // A world game pinned whole ("trials", "golf") makes every one of its courses
@@ -314,6 +484,21 @@ public final class ArcadeFeed implements FeedWriter {
             sb.append(",\"featured\":{\"game\":").append(Json.string(featured.game()))
                     .append(",\"until\":").append(featured.until()).append('}');
         }
+        if (starChart != null && !blank(Json.plain(starChart.week()))) {
+            sb.append(",\"starChart\":{\"week\":").append(Json.string(Json.plain(starChart.week())));
+            if (starChart.best() != null) {
+                sb.append(",\"best\":").append(Math.max(0, starChart.best()));
+                holder(sb, starChart.holder());
+            }
+            sb.append('}');
+        }
+        List<String> past = new ArrayList<>();
+        for (FreshFeed.Entry e : history) {
+            if (e != null && !blank(e.code()) && !blank(e.slot())) {
+                past.add(history(e));
+            }
+        }
+        array(sb, "freshHistory", past);
         if (scratchEntry != null && scratch.pot() != null) {
             sb.append(",\"jackpots\":[{\"game\":").append(Json.string(SCRATCH_ID))
                     .append(",\"tokens\":").append(Math.max(0, scratch.pot())).append("}]");
@@ -354,13 +539,19 @@ public final class ArcadeFeed implements FeedWriter {
         return sb.toString();
     }
 
-    private String entry(GameRow row) {
+    private String entry(GameRow row, Map<String, BoardRef> refs, Map<String, FreshFeed.Fresh> fresh,
+                         Map<String, FreshFeed.Classic> classics) {
+        String k = key(row.id());
         return switch (row) {
             case ChanceRow c -> chance(c);
             case CabinetRow c -> cabinet(c);
-            case CourseRow c -> course(c);
-            case GolfRow g -> golf(g);
+            case CourseRow c -> course(c, fresh.get(k), classics.get(k), refs.get(k));
+            case GolfRow g -> golf(g, fresh.get(k), classics.get(k), refs.get(k));
         };
+    }
+
+    private static String key(String id) {
+        return id == null ? "" : id.trim().toLowerCase(Locale.ROOT);
     }
 
     /** A chance entry, or {@code null} when no stake has a publishable RTP. */
@@ -463,10 +654,11 @@ public final class ArcadeFeed implements FeedWriter {
             sb.append(",\"best\":").append(r.best());
             holder(sb, r.holder());
         }
+        top(sb, r.id(), r.board(), r.lowerIsBetter(), r.unit(), topSize);
         return sb.append('}').toString();
     }
 
-    private String course(CourseRow r) {
+    private String course(CourseRow r, FreshFeed.Fresh fresh, FreshFeed.Classic classic, BoardRef ref) {
         StringBuilder sb = new StringBuilder(160);
         head(sb, r.id(), r.name(), Json.plain(r.kind()).toLowerCase(Locale.ROOT));
         if (!blank(Json.plain(r.tier()))) {
@@ -476,10 +668,13 @@ public final class ArcadeFeed implements FeedWriter {
             sb.append(",\"record\":{\"ms\":").append(r.recordMs());
             record(sb, r.recordAt(), r.holder());
         }
+        daily(sb, r.daily());
+        freshParts(sb, fresh, classic);
+        board(sb, ref);
         return sb.append('}').toString();
     }
 
-    private String golf(GolfRow r) {
+    private String golf(GolfRow r, FreshFeed.Fresh fresh, FreshFeed.Classic classic, BoardRef ref) {
         StringBuilder sb = new StringBuilder(160);
         head(sb, r.id(), r.name(), "golf");
         sb.append(",\"holes\":").append(r.holes()).append(",\"par\":").append(r.par());
@@ -487,7 +682,154 @@ public final class ArcadeFeed implements FeedWriter {
             sb.append(",\"record\":{\"strokes\":").append(r.recordStrokes());
             record(sb, r.recordAt(), r.holder());
         }
+        daily(sb, r.daily());
+        freshParts(sb, fresh, classic);
+        board(sb, ref);
         return sb.append('}').toString();
+    }
+
+    /** Fresh Courses' {@code fresh} and {@code classic} objects (no player in either). */
+    private static void freshParts(StringBuilder sb, FreshFeed.Fresh fresh, FreshFeed.Classic classic) {
+        if (fresh != null && !blank(fresh.code())) {
+            sb.append(",\"fresh\":").append(fresh.json());
+        }
+        if (classic != null && !blank(classic.code())) {
+            sb.append(",\"classic\":").append(classic.json());
+        }
+    }
+
+    /** The {@code top} list of the board behind a course or golf entry, when a game named one. */
+    private void board(StringBuilder sb, BoardRef ref) {
+        if (ref != null) {
+            top(sb, ref.game(), ref.board(), ref.lowerIsBetter(), ref.unit(), topSize);
+        }
+    }
+
+    /**
+     * {@code ,"top":[{rank,value,unit,at,holder?}]}: the board's best {@code limit} rows, ties sharing
+     * a rank; nothing at all for no rows (or no {@link Boards}, or a limit of 0). A holder only while
+     * names may be shown, looked up only then, and never a blank or a UUID.
+     */
+    private void top(StringBuilder sb, String game, String board, boolean lowerIsBetter, String unit, int limit) {
+        if (boards == null || limit <= 0 || blank(game) || blank(board)) {
+            return;
+        }
+        List<GamesDao.ScoreRow> rows;
+        try {
+            rows = boards.top(game, board, lowerIsBetter, limit);
+        } catch (RuntimeException e) {
+            return; // a board that can't be read has no top list; the rest of the feed goes out
+        }
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+        List<Long> values = new ArrayList<>();
+        for (GamesDao.ScoreRow row : rows) {
+            values.add(row.score());
+        }
+        List<Integer> ranks = FreshFeed.ranks(values);
+        List<String> out = new ArrayList<>();
+        for (int i = 0; i < rows.size() && i < limit; i++) {
+            GamesDao.ScoreRow row = rows.get(i);
+            String name = null;
+            if (showNames && row.player() != null) {
+                try {
+                    name = boards.name(row.player());
+                } catch (RuntimeException e) {
+                    name = null;
+                }
+            }
+            out.add(topRow(ranks.get(i), row.score(), unit, row.at(), name));
+        }
+        array(sb, "top", out);
+    }
+
+    /** One {@code top} row: {@code {"rank","value","unit","at","holder"?}}. */
+    private String topRow(int rank, long value, String unit, long at, String holder) {
+        StringBuilder sb = new StringBuilder(96);
+        sb.append("{\"rank\":").append(rank).append(",\"value\":").append(value);
+        sb.append(",\"unit\":").append(Json.string(blank(Json.plain(unit)) ? "points" : Json.plain(unit)));
+        sb.append(",\"at\":").append(at);
+        holder(sb, holder);
+        return sb.append('}').toString();
+    }
+
+    /**
+     * One {@code freshHistory} entry, keys in {@link FreshFeed#KEYS} order, written here so its
+     * record's and its top rows' holders follow the writer's own rule (only while names may be
+     * shown, never a blank or a UUID). Its {@code top} has at most 3 rows, and at most
+     * {@code games.feed_top}.
+     */
+    private String history(FreshFeed.Entry e) {
+        StringBuilder sb = new StringBuilder(256);
+        sb.append("{\"code\":").append(Json.string(Json.plain(e.code())));
+        sb.append(",\"slot\":").append(Json.string(Json.plain(e.slot())));
+        sb.append(",\"name\":").append(Json.string(Json.plain(e.name())));
+        sb.append(",\"kind\":").append(Json.string(Json.plain(e.kind())));
+        if (!blank(e.tier())) {
+            sb.append(",\"tier\":").append(Json.string(Json.plain(e.tier())));
+        }
+        sb.append(",\"from\":").append(e.from());
+        if (e.to() != null) {
+            sb.append(",\"to\":").append(e.to());
+        }
+        sb.append(",\"seed\":").append(Json.string(Json.plain(e.seed())));
+        sb.append(",\"plays\":").append(Math.max(0, e.plays()));
+        FreshFeed.Record r = e.record();
+        if (r != null && (r.ms() != null || r.strokes() != null)) {
+            sb.append(r.ms() != null ? ",\"record\":{\"ms\":" + r.ms() : ",\"record\":{\"strokes\":" + r.strokes());
+            record(sb, r.at(), r.holder());
+        }
+        if (!blank(e.kept())) {
+            sb.append(",\"kept\":").append(Json.string(Json.plain(e.kept())));
+        }
+        if (e.classic()) {
+            sb.append(",\"classic\":true");
+        }
+        int limit = Math.min(FreshFeed.TOP, topSize);
+        List<FreshFeed.Record> shown = new ArrayList<>();
+        List<Long> values = new ArrayList<>();
+        for (FreshFeed.Record t : e.top()) {
+            if (shown.size() < limit && t != null && (t.ms() != null || t.strokes() != null)) {
+                shown.add(t);
+                values.add(t.ms() != null ? t.ms() : (long) t.strokes());
+            }
+        }
+        List<Integer> ranks = FreshFeed.ranks(values);
+        List<String> rows = new ArrayList<>();
+        for (int i = 0; i < shown.size(); i++) {
+            rows.add(topRow(ranks.get(i), values.get(i), e.unit(), shown.get(i).at(), shown.get(i).holder()));
+        }
+        array(sb, "top", rows);
+        return sb.append('}').toString();
+    }
+
+    /**
+     * A Fresh Courses course's {@code daily} object: its set's first day, when the next set is due
+     * (when known), its star times (when set), and the set's length in days and last day (when
+     * known); nothing at all for a hand-built course.
+     */
+    private static void daily(StringBuilder sb, Daily d) {
+        if (d == null) {
+            return;
+        }
+        sb.append(",\"daily\":{\"day\":").append(Json.string(Json.plain(d.day())));
+        if (d.nextAt() > 0) {
+            sb.append(",\"nextAt\":").append(d.nextAt());
+        }
+        if (d.goldMs() != null && d.goldMs() > 0) {
+            sb.append(",\"goldMs\":").append(d.goldMs());
+        }
+        if (d.silverMs() != null && d.silverMs() > 0) {
+            sb.append(",\"silverMs\":").append(d.silverMs());
+        }
+        if (d.cadence() > 0) {
+            sb.append(",\"cadence\":").append(d.cadence());
+        }
+        if (!blank(Json.plain(d.lastDay()))) {
+            sb.append(",\"lastDay\":").append(Json.string(Json.plain(d.lastDay())));
+        }
+        sb.append('}');
     }
 
     /** The rest of a {@code record} object: {@code at} when known, the holder when allowed, the brace. */

@@ -1,5 +1,7 @@
 package com.dierks.homecraft.games.trial;
 
+import com.dierks.homecraft.games.gen.api.GenTag;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -29,10 +31,12 @@ import java.util.Objects;
  * @param enabled     open to players (needs a start and a finish)
  * @param pinned      pinned as the course of the week
  * @param rev         the layout version: every geometry edit bumps it (R2.15)
+ * @param gen         Fresh Courses' tag when the course was generated (GEN-SPEC §5.1), or {@code null}
+ *                    for a hand-built one, which behaves exactly as it always did
  */
 public record Course(String id, TrialKind kind, String name, Tier tier, String world, Spot start,
                      List<Mark> checkpoints, Mark finish, Double fallY, Integer minSeconds, boolean enabled,
-                     boolean pinned, int rev) {
+                     boolean pinned, int rev, GenTag gen) {
 
     /** Radii are kept in this range whatever the builder types. */
     public static final double MIN_RADIUS = 0.5;
@@ -67,6 +71,12 @@ public record Course(String id, TrialKind kind, String name, Tier tier, String w
         tier = tier == null ? Tier.EASY : tier;
         checkpoints = List.copyOf(checkpoints == null ? List.of() : checkpoints);
         rev = Math.max(1, rev);
+    }
+
+    /** A hand-built course (no {@code gen} tag): the constructor every course had before Fresh Courses. */
+    public Course(String id, TrialKind kind, String name, Tier tier, String world, Spot start, List<Mark> checkpoints,
+                  Mark finish, Double fallY, Integer minSeconds, boolean enabled, boolean pinned, int rev) {
+        this(id, kind, name, tier, world, start, checkpoints, finish, fallY, minSeconds, enabled, pinned, rev, null);
     }
 
     /** A brand-new course: a name from its id, nothing placed yet, closed. */
@@ -138,6 +148,11 @@ public record Course(String id, TrialKind kind, String name, Tier tier, String w
         return low;
     }
 
+    /** Whether Fresh Courses made it (it carries a {@code gen} tag). */
+    public boolean generated() {
+        return gen != null;
+    }
+
     /** Its own shortest time, or the server's when it has none. */
     public int minSecondsOr(int serverDefault) {
         return minSeconds != null ? minSeconds : serverDefault;
@@ -147,26 +162,27 @@ public record Course(String id, TrialKind kind, String name, Tier tier, String w
 
     public Course withName(String n) {
         return new Course(id, kind, n, tier, world, start, checkpoints, finish, fallY, minSeconds, enabled, pinned,
-                rev);
+                rev, gen);
     }
 
     public Course withTier(Tier t) {
         return new Course(id, kind, name, t, world, start, checkpoints, finish, fallY, minSeconds, enabled, pinned,
-                rev);
+                rev, gen);
     }
 
     public Course withWorld(String w) {
         return new Course(id, kind, name, tier, w, start, checkpoints, finish, fallY, minSeconds, enabled, pinned,
-                rev);
+                rev, gen);
     }
 
     public Course withStart(Spot s) {
         return new Course(id, kind, name, tier, world, s, checkpoints, finish, fallY, minSeconds, enabled, pinned,
-                rev);
+                rev, gen);
     }
 
     public Course withCheckpoints(List<Mark> list) {
-        return new Course(id, kind, name, tier, world, start, list, finish, fallY, minSeconds, enabled, pinned, rev);
+        return new Course(id, kind, name, tier, world, start, list, finish, fallY, minSeconds, enabled, pinned,
+                rev, gen);
     }
 
     /** One more checkpoint at the end. */
@@ -187,28 +203,38 @@ public record Course(String id, TrialKind kind, String name, Tier tier, String w
     }
 
     public Course withFinish(Mark f) {
-        return new Course(id, kind, name, tier, world, start, checkpoints, f, fallY, minSeconds, enabled, pinned, rev);
+        return new Course(id, kind, name, tier, world, start, checkpoints, f, fallY, minSeconds, enabled, pinned,
+                rev, gen);
     }
 
     public Course withFallY(Double y) {
-        return new Course(id, kind, name, tier, world, start, checkpoints, finish, y, minSeconds, enabled, pinned, rev);
+        return new Course(id, kind, name, tier, world, start, checkpoints, finish, y, minSeconds, enabled, pinned,
+                rev, gen);
     }
 
     public Course withMinSeconds(Integer s) {
-        return new Course(id, kind, name, tier, world, start, checkpoints, finish, fallY, s, enabled, pinned, rev);
+        return new Course(id, kind, name, tier, world, start, checkpoints, finish, fallY, s, enabled, pinned, rev, gen);
     }
 
     public Course withEnabled(boolean on) {
-        return new Course(id, kind, name, tier, world, start, checkpoints, finish, fallY, minSeconds, on, pinned, rev);
+        return new Course(id, kind, name, tier, world, start, checkpoints, finish, fallY, minSeconds, on, pinned,
+                rev, gen);
     }
 
     public Course withPinned(boolean on) {
-        return new Course(id, kind, name, tier, world, start, checkpoints, finish, fallY, minSeconds, enabled, on, rev);
+        return new Course(id, kind, name, tier, world, start, checkpoints, finish, fallY, minSeconds, enabled, on,
+                rev, gen);
     }
 
     public Course withRev(int r) {
         return new Course(id, kind, name, tier, world, start, checkpoints, finish, fallY, minSeconds, enabled, pinned,
-                r);
+                r, gen);
+    }
+
+    /** The same course with Fresh Courses' tag ({@code null}: hand-built). */
+    public Course withGen(GenTag g) {
+        return new Course(id, kind, name, tier, world, start, checkpoints, finish, fallY, minSeconds, enabled, pinned,
+                rev, g);
     }
 
     private static boolean listed(Collection<String> worlds, String world) {

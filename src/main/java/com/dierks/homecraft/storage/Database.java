@@ -862,6 +862,38 @@ public final class Database {
                 value  TEXT,
                 PRIMARY KEY (player, pref)
             )
+            """,
+            // v35 — Fresh Courses' archive (GEN-SPEC-KEEP §1, §8): one row per edition that was ever
+            //   playable, written in the same transaction as the flip that made it live (GenArchiveDao).
+            //   edition is the board's key (7:40, 7:40r1); code is the slot's own count (HARD-40),
+            //   unique and never reused (seq, with gen.<slot>.codes in hcm_meta); day is the edition's
+            //   first local day; algo is <generator>/<version>; starts_at is when it went live and
+            //   ends_at when the next flip replaced it (NULL while live); plan is the gzipped, versioned
+            //   plan (PlanCodec), so a past course is rebuilt exactly and never planned again; gold_ms and
+            //   silver_ms are its star times as they were; kept_as is the course it was kept as.
+            """
+            CREATE TABLE IF NOT EXISTS gen_editions (
+                slot        TEXT    NOT NULL,
+                edition     TEXT    NOT NULL,
+                code        TEXT    NOT NULL,
+                seq         INTEGER NOT NULL,
+                day         INTEGER NOT NULL,
+                seed        INTEGER NOT NULL,
+                algo        TEXT    NOT NULL,
+                kind        TEXT    NOT NULL,
+                tier_or_mix TEXT    NOT NULL DEFAULT '',
+                name        TEXT    NOT NULL,
+                starts_at   INTEGER NOT NULL,
+                ends_at     INTEGER,
+                plan        BLOB,
+                gold_ms     INTEGER NOT NULL DEFAULT 0,
+                silver_ms   INTEGER NOT NULL DEFAULT 0,
+                built_at    INTEGER NOT NULL,
+                kept_as     TEXT,
+                PRIMARY KEY (slot, edition)
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_gen_editions_code ON gen_editions (code);
+            CREATE INDEX IF NOT EXISTS idx_gen_editions_start ON gen_editions (slot, starts_at)
             """
     };
 

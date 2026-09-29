@@ -1,6 +1,7 @@
 package com.dierks.homecraft.gui.games;
 
 import com.dierks.homecraft.games.FeedWriter;
+import com.dierks.homecraft.games.gen.api.GenBoards;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -15,7 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * What the screens read from a game's own published entries: the give-back the guide shows and
  * the boards the high-score list shows — the same numbers the game plays with and the website
- * publishes.
+ * publishes. A daily course's board changes every day, so it isn't among the listed boards; the
+ * week's Star Chart is, in stars, higher is better (GEN-SPEC §5.2).
  */
 class ScreensTest {
 
@@ -66,5 +68,21 @@ class ScreensTest {
         assertNull(p.cabinetUnit(), "a course list is not a cabinet");
         FeedWriter w = p;
         assertEquals(false, w.showNames(), "the screens never ask the feed for names; they read them in game");
+    }
+
+    @Test
+    void aDailyCourseIsNotListedButTheStarChartIs() {
+        Screens.Published p = new Screens.Published();
+        p.course("fresh_parkour_easy", "Easy Parkour", "parkour", "easy", 40_000L, 1L, null,
+                new FeedWriter.Daily("2026-09-29", 1L, 45_000L, 70_000L));
+        p.golf("fresh_tiny_golf", "Tiny Golf", 3, 8, 8, 1L, null, new FeedWriter.Daily("2026-09-29", 1L, null, null));
+        p.course("river", "River Run", "boat", "medium", null, null, null, null);
+        p.starChart("2026-09-28", 14L, null);
+        p.starChart("not a week", 3L, null);
+        assertEquals(List.of(
+                new Screens.Published.Board("course:river", "River Run", "ms", true),
+                new Screens.Published.Board(GenBoards.week(20_724), "Star Chart", "stars", false)), p.boards(),
+                "a hand-built course still lists; a daily one doesn't; the chart is the week's board; junk is skipped");
+        assertNull(p.cabinetUnit(), "the chart is not a cabinet board");
     }
 }

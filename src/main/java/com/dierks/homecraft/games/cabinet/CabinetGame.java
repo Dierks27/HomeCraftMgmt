@@ -201,6 +201,8 @@ public abstract class CabinetGame implements Game {
             }
         }
         paid += featuredBonus(player);
+        boolean gold = milestonesReached(s.milestonesFor(board), milestoneValue, lowerIsBetter).contains(3);
+        games().tellProgress(g -> g.cabinetFinished(player, id(), false, gold)); // quests and achievements (E4)
         return new Finish(result, reached, paid, false);
     }
 
@@ -210,6 +212,7 @@ public abstract class CabinetGame implements Game {
      */
     public Finish finishDaily(Player player, DailyStart start, long score, boolean lowerIsBetter, boolean goalMet) {
         if (start == null || !start.scored()) {
+            games().tellProgress(g -> g.cabinetFinished(player, id(), true, false)); // practice counts (E4)
             return new Finish(ScoreResult.NONE, List.of(), 0, true);
         }
         ScoreResult result = games().scores().submit(player.getUniqueId(), id(), Scores.daily(start.day()), score,
@@ -222,7 +225,27 @@ public abstract class CabinetGame implements Game {
                     name() + ": daily challenge");
         }
         paid += featuredBonus(player);
+        games().tellProgress(g -> g.cabinetFinished(player, id(), false, false)); // quests and achievements (E4)
         return new Finish(result, List.of(), paid, false);
+    }
+
+    /**
+     * A run that went to its end but records nothing (a loss or a draw against the Arcade, a
+     * Connect Four win below hard, a creeper dug up): still a finish for the quests and
+     * achievements (EXTRAS E4), with no medal. Never for a friend game, or a run closed early.
+     *
+     * @param practice a daily board played again after its scored try
+     */
+    protected void finishedUnscored(Player player, boolean practice) {
+        games().tellProgress(g -> g.cabinetFinished(player, id(), practice, false)); // quests and achievements (E4)
+    }
+
+    /**
+     * The boards this cabinet keeps all-time scores on, besides the one it publishes: none, unless
+     * it has more than one (Creeper Sweeper's levels). A leaderboard display may name any of them.
+     */
+    public List<String> boards() {
+        return List.of();
     }
 
     /** Today's featured bonus, if this game is today's pick (once a day across every game). */

@@ -10,9 +10,16 @@ import com.dierks.homecraft.games.GameContext;
 import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GameSpec;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.GeneratedCourses;
 import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.gen.api.GenCopy;
+import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.api.Stars;
 import com.dierks.homecraft.games.world.WorldEntities;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.gui.games.daily.DailyLookup;
+import com.dierks.homecraft.gui.games.daily.DailyText;
 import com.dierks.homecraft.gui.games.golf.GolfCourseMenu;
 import com.dierks.homecraft.gui.games.golf.GolfCoursesMenu;
 import com.dierks.homecraft.mini.MiniDef;
@@ -57,6 +64,13 @@ import java.util.logging.Level;
  * better (once per course a day), each hole-in-one of a round that was finished (once per hole a
  * day) and today's featured bonus. A round played on a course that an admin changed meanwhile
  * counts for nothing — its board was cleared for the new layout.
+ *
+ * <p><b>Golf of the Week and Tiny Golf</b> (GEN-SPEC §4.3, §5, the weekly addendum) are ordinary
+ * golf rows Fresh Courses writes with a {@code gen:} tag, played by this same engine. They are open
+ * only while the Fresh Courses engine vouches for their blocks, they come first on the Golf tab,
+ * and their scores go on each set's own board with stars for the Star Chart, par and holes-in-one
+ * paid once per set ({@link GolfFinish}). A course recalled into Classic Golf plays on its original
+ * set's board.
  */
 public final class MiniGolf implements Game {
 
@@ -143,6 +157,9 @@ public final class MiniGolf implements Game {
 
     /** A course's tile: "&amp;dMeadow Links &amp;7- 9 holes, par 27". */
     public ItemStack courseTile(Player viewer, GolfCourse c) {
+        if (c.generated()) {
+            return dailyTile(viewer, c);
+        }
         List<String> lore = new ArrayList<>();
         lore.add("&7" + rules().get(0));
         lore.add("&7" + rules().get(2));
@@ -157,6 +174,58 @@ public final class MiniGolf implements Game {
         lore.add("&eClick to play");
         return Menus.icon(Material.SNOWBALL, "&d" + c.name() + " &7- " + holes(c.holes().size()) + ", par " + c.par(),
                 lore.toArray(new String[0]));
+    }
+
+    /**
+     * A Fresh course's tile (GEN-SPEC §5.4): "&amp;dGolf of the Week &amp;7- 9 holes, par 29 ★☆☆
+     * &amp;a(new this week) &amp;8· &amp;7Course code GOLF-3", its star lines, your best and the set's
+     * best, and what its first finish in the set pays. A course recalled into Classic Golf says it
+     * is a classic, with its old records to beat.
+     */
+    private ItemStack dailyTile(Player viewer, GolfCourse c) {
+        GenTag t = c.gen();
+        GamesService g = games();
+        UUID id = viewer.getUniqueId();
+        int cadence = GenCopy.words(t); // a Classic's board holds its original set's times: no "this week"
+        int stars = DailyLookup.stars(g, id, t);
+        List<String> lore = new ArrayList<>();
+        if (t.recalled()) {
+            lore.add("&7Its old records are the ones to beat.");
+        } else {
+            lore.add("&7" + GenCopy.schedule(cadence, DailyLookup.edition(g).rebuildDay(), null) + ".");
+        }
+        lore.add("&7" + rules().get(0));
+        lore.add(DailyText.starStrokes(c.par(), c.holes().size()));
+        Long best = best(id, c.id());
+        lore.add(DailyText.yourBest(cadence, best == null ? null : GolfRun.strokesText(best.intValue())));
+        lore.add(setBestLine(c, viewer));
+        String first = DailyText.firstFinish(cadence, DailyLookup.freshClear(g, t),
+                DailyLookup.freshClearPaid(g, id, id(), t));
+        if (first != null) {
+            lore.add(first);
+        }
+        lore.add("&eClick to play");
+        String fact = holes(c.holes().size()) + ", par " + c.par() + (stars > 0 ? " " + Stars.text(stars) : "");
+        String name = t.recalled()
+                ? "&6" + com.dierks.homecraft.games.trial.TimeTrials.classicName(t, c.name()) + " &7- " + fact
+                : DailyText.tabName(Slots.of(t.slot()), c.name(), fact, DailyLookup.current(g, t.slot()), cadence);
+        return Menus.glint(Menus.icon(Material.SNOWBALL, name + DailyLookup.codeSuffix(DailyLookup.code(g, t)),
+                lore.toArray(new String[0])), stars >= Stars.MAX);
+    }
+
+    /**
+     * "&amp;7This week's best: 27 strokes by Alex" on a Fresh course, or that nobody has finished it
+     * yet in this set (the words follow the set's cadence).
+     */
+    public String setBestLine(GolfCourse c, Player viewer) {
+        int cadence = GenCopy.words(c.gen());
+        GamesDao.ScoreRow r = record(c.id());
+        if (r == null) {
+            return DailyText.setBest(cadence, null, null, false);
+        }
+        boolean yours = viewer != null && viewer.getUniqueId().equals(r.player());
+        String who = yours ? null : Bukkit.getOfflinePlayer(r.player()).getName();
+        return DailyText.setBest(cadence, GolfRun.strokesText((int) r.score()), who, yours);
     }
 
     /** The course list. */
@@ -186,13 +255,28 @@ public final class MiniGolf implements Game {
         return true;
     }
 
+    /**
+     * One {@code /api/arcade} entry per playable course, and the board behind it for its
+     * {@code top} list. A Fresh course's record is its set's board's, with the set's first and last
+     * day, cadence and when the next set is due (never its full seed, rev or half); a recalled one
+     * has no next set.
+     */
     @Override
     public void feed(FeedWriter out) {
         for (GolfCourse c : playable()) {
             GamesDao.ScoreRow record = record(c.id());
-            out.golf(c.id(), c.name(), c.holes().size(), c.par(),
-                    record == null ? null : (int) record.score(), record == null ? null : record.at(),
-                    record != null && out.showNames() ? Bukkit.getOfflinePlayer(record.player()).getName() : null);
+            Integer strokes = record == null ? null : (int) record.score();
+            Long at = record == null ? null : record.at();
+            String who = record != null && out.showNames() ? Bukkit.getOfflinePlayer(record.player()).getName() : null;
+            if (c.generated()) {
+                GenTag t = c.gen();
+                out.golf(c.id(), c.name(), c.holes().size(), c.par(), strokes, at, who, new FeedWriter.Daily(
+                        t.date().toString(), t.recalled() ? 0 : games().generated().nextChangeAt(), null, null,
+                        t.cadence(), t.date().plusDays(t.cadence() - 1L).toString()));
+            } else {
+                out.golf(c.id(), c.name(), c.holes().size(), c.par(), strokes, at, who);
+            }
+            out.board(c.id(), id(), board(c), true, "strokes");
         }
     }
 
@@ -303,42 +387,85 @@ public final class MiniGolf implements Game {
         courses = null;
     }
 
+    @Override
+    public void coursesChanged() {
+        reloadCourses();
+    }
+
     /** The course, if it exists (enabled or not). */
     public GolfCourse course(String id) {
         return id == null ? null : courses().get(GolfCourse.normalise(id));
     }
 
-    /** The course if it can be played right now, else {@code null}. */
+    /**
+     * The course if it can be played right now (and, for a Fresh course, the Fresh Courses engine
+     * vouches for its blocks), else {@code null}.
+     */
     public GolfCourse playableCourse(String id) {
         GolfCourse c = course(id);
-        return c != null && c.playable(worlds()) ? c : null;
+        return c != null && c.playable(worlds()) && games().generated().live(c.id(), c.gen()) ? c : null;
     }
 
-    /** Every course that can be played right now, by id. */
+    /** Every course that can be played right now: the Fresh ones first (slot order), then by id. */
     public List<GolfCourse> playable() {
+        return playable(courses().values(), worlds(), games().generated());
+    }
+
+    /**
+     * {@link #playable()} as a pure filter, so a test can hand it the real rows and the real Fresh
+     * Courses gate: every course of {@code courses} that can be played in {@code worlds} and, when
+     * generated, is {@code gate}-vouched, in {@link #sorted} order.
+     */
+    public static List<GolfCourse> playable(Collection<GolfCourse> courses, Collection<String> worlds,
+                                            GeneratedCourses gate) {
         List<GolfCourse> out = new ArrayList<>();
-        List<String> worlds = worlds();
-        for (GolfCourse c : courses().values()) {
-            if (c.playable(worlds)) {
+        for (GolfCourse c : courses) {
+            if (c.playable(worlds) && gate.live(c.id(), c.gen())) {
                 out.add(c);
             }
         }
+        return sorted(out);
+    }
+
+    /** Fresh courses first, in slot order ({@link Slots#ALL}); then the rest by id. */
+    static List<GolfCourse> sorted(List<GolfCourse> courses) {
+        List<GolfCourse> out = new ArrayList<>(courses);
+        out.sort(Comparator.comparingInt(MiniGolf::dailyOrder).thenComparing(GolfCourse::id));
         return out;
     }
 
-    /** The player's best on a course (strokes), or {@code null}. */
+    private static int dailyOrder(GolfCourse c) {
+        if (!c.generated()) {
+            return Integer.MAX_VALUE;
+        }
+        int i = Slots.ids().indexOf(c.id());
+        return i < 0 ? Slots.ALL.size() : i;
+    }
+
+    /** The board a course's scores go on: a Fresh course's set board ("this week's best"), else its own. */
+    public static String board(GolfCourse c) {
+        return GolfFinish.board(c.id(), c.gen());
+    }
+
+    /** The board of course {@code courseId} as it is now. */
+    private String board(String courseId) {
+        GolfCourse c = course(courseId);
+        return c == null ? Scores.golf(GolfCourse.normalise(courseId)) : board(c);
+    }
+
+    /** The player's best on a course (strokes; a Fresh course: on its set's board), or {@code null}. */
     public Long best(UUID player, String courseId) {
-        return games().scores().best(player, id(), Scores.golf(courseId));
+        return games().scores().best(player, id(), board(courseId));
     }
 
-    /** A course's record, or {@code null}. */
+    /** A course's record (a Fresh course: its set's best), or {@code null}. */
     public GamesDao.ScoreRow record(String courseId) {
-        return games().scores().record(id(), Scores.golf(courseId), true);
+        return games().scores().record(id(), board(courseId), true);
     }
 
-    /** Open a course's high scores. */
+    /** Open a course's high scores (a Fresh course: its set's board). */
     public void openScores(Player player, String courseId, Runnable back) {
-        games().screens().scores(player, this, Scores.golf(courseId), true, back);
+        games().screens().scores(player, this, board(courseId), true, back);
     }
 
     /** Players on each course right now, for the admin tool. */

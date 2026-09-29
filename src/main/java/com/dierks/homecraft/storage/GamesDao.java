@@ -5,6 +5,9 @@ import com.dierks.homecraft.games.ChanceRounds;
 import com.dierks.homecraft.games.ChanceRounds.Round;
 import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.ScoreResult;
+import com.dierks.homecraft.games.gen.api.DailyStars;
+import com.dierks.homecraft.games.gen.api.GenBoards;
+import com.dierks.homecraft.games.gen.api.Stars;
 import com.dierks.homecraft.games.world.SavedState;
 
 import java.security.SecureRandom;
@@ -22,9 +25,9 @@ import java.util.function.BooleanSupplier;
 import java.util.regex.Pattern;
 
 /**
- * Every games table (schema v34): rounds of the games of chance, skill rewards, scores, Take a
- * break, the saved state of players in a world game, courses, per-player preferences, and the
- * server's daily-board secret.
+ * Every games table (schema v34): rounds of the games of chance, skill rewards, scores (Daily
+ * Courses' stars among them), Take a break, the saved state of players in a world game, courses,
+ * per-player preferences, and the server's daily-board secret.
  *
  * <p>The rule that shapes this class: <b>anything that moves tokens is ONE transaction</b>. The
  * tokens put in, the round row and the tokens back land together or not at all, through
@@ -97,6 +100,21 @@ public final class GamesDao {
      */
     public record CourseRow(String id, String game, String kind, String name, String world, boolean enabled,
                             String data, int rev, long createdAt, long updatedAt) {
+    }
+
+    /**
+     * What recording a daily course's stars did ({@link #addStars}).
+     *
+     * @param dayBest   the player's best stars on that course-day board now
+     * @param added     what the run added to the week: how far it beat the day's best, else 0
+     * @param weekTotal the player's Star Chart total for the week now
+     */
+    public record StarsAdded(int dayBest, int added, long weekTotal) {
+
+        /** The week's total before this run (a goal is crossed between the two). */
+        public long weekBefore() {
+            return weekTotal - added;
+        }
     }
 
     /**
@@ -437,6 +455,23 @@ public final class GamesDao {
     public int payReward(UUID player, String game, TokenService.Source source, long day, RewardKind kind,
                          String ref, int tokens, int capGame, int capAll, boolean once, String detail,
                          long now) throws SQLException {
+        return payReward(player, game, source, day, kind, ref, tokens, capGame, capAll, once, false, detail, now);
+    }
+
+    /**
+     * {@link #payReward(UUID, String, TokenService.Source, long, RewardKind, String, int, int, int, boolean,
+     * String, long)}, optionally <b>all or nothing</b> ({@code whole}): when the caps leave less than
+     * {@code tokens}, it pays 0 and writes nothing, so a one-time reward stays there to earn on a
+     * later day (Fresh Courses' first finish of a set and its Star Chart goals).
+     *
+     * <p>"All" is never more than a whole day's cap can hold: a reward bigger than the game's
+     * {@code daily_cap} or the server's cap (an owner who lowered one to 3 under a 4-token first
+     * finish) pays that cap on a day with all of it left, and is then done. Otherwise it could never
+     * be paid, and the player would be told to come back for it every day ({@link #wholePay}).
+     */
+    public int payReward(UUID player, String game, TokenService.Source source, long day, RewardKind kind,
+                         String ref, int tokens, int capGame, int capAll, boolean once, boolean whole,
+                         String detail, long now) throws SQLException {
         if (tokens <= 0) {
             return 0;
         }
@@ -456,8 +491,11 @@ public final class GamesDao {
                     pay = Math.min(pay, capAll - cappedSum(c, player, day, null));
                 }
             }
+            if (whole) {
+                pay = wholePay(tokens, kind.capped() ? capGame : -1, kind.capped() ? capAll : -1, pay);
+            }
             if (pay <= 0) {
-                return 0;
+                return 0; // nothing written: capped away today, still there another day
             }
             try (PreparedStatement ps = c.prepareStatement(
                     (once ? "INSERT OR IGNORE" : "INSERT")
@@ -478,6 +516,26 @@ public final class GamesDao {
             this.tokens.change(player, pay, source.name(), plain(detail), now);
             return pay;
         });
+    }
+
+    /**
+     * What an all-or-nothing reward pays: its "whole" is {@code tokens}, or the smaller of the two
+     * caps when one of them can never hold that much in a day; it pays that whole when today's
+     * caps leave room for it ({@code left}: what they let through now), else nothing. Pure.
+     *
+     * @param capGame the game's daily cap, or -1 for none (or a kind that isn't capped)
+     * @param capAll  the server's daily cap, or -1 for none
+     * @param left    what the caps let through today, at most {@code tokens}
+     */
+    static int wholePay(int tokens, int capGame, int capAll, int left) {
+        int whole = tokens;
+        if (capGame >= 0) {
+            whole = Math.min(whole, capGame);
+        }
+        if (capAll >= 0) {
+            whole = Math.min(whole, capAll);
+        }
+        return whole > 0 && left >= whole ? whole : 0;
     }
 
     /** Capped rewards paid to the player today across every game (what the server-wide cap counts). */
@@ -622,6 +680,101 @@ public final class GamesDao {
                 }
                 return ps.executeUpdate();
             }
+        }
+    }
+
+    // ---- Fresh Courses' stars ----------------------------------------------------------------
+
+    /**
+     * Record a counted run's stars on a Fresh Courses course (GEN-SPEC §5.2), in ONE transaction: keep
+     * the best on the course's stars board for its set ({@code gstars:<id>:<edition>}; a recalled
+     * course's own, {@code GenBoards.stars(tag)}), and when that rose, add exactly the
+     * rise to the week's Star Chart ({@code gweek:<week>}). Both boards are the
+     * {@code fresh_courses} game's. So the chart only ever rises, a replay never inflates it, and a
+     * crash can't land one write without the other. Stars are 1 to 3; anything else records nothing.
+     */
+    public StarsAdded addStars(UUID player, String dayBoard, String weekBoard, int stars, long now)
+            throws SQLException {
+        String game = GenBoards.GAME;
+        return database.transaction(c -> {
+            Long best = best(c, player, game, dayBoard);
+            Long week = best(c, player, game, weekBoard);
+            long weekNow = week == null ? 0 : week;
+            if (stars < 1 || stars > Stars.MAX) {
+                return new StarsAdded(best == null ? 0 : best.intValue(), 0, weekNow);
+            }
+            int added = DailyStars.delta(best, stars);
+            writeScore(c, player, game, dayBoard, best, added > 0 ? stars : best, now);
+            if (added > 0) {
+                writeScore(c, player, game, weekBoard, week, weekNow + added, now);
+            }
+            return new StarsAdded((int) Math.max(best == null ? 0 : best, stars), added, weekNow + added);
+        });
+    }
+
+    /**
+     * Remove the Fresh Courses star boards past keeping (GEN-SPEC §5.2): a course's stars
+     * ({@code gstars}) of sets that began before {@code oldestDay}, and Star Charts ({@code gweek})
+     * of weeks starting before {@code oldestWeek}. No other board is ever touched. One transaction.
+     * A set's own leaderboard ({@code gfresh}) is pruned by the engine
+     * ({@code GenStore.dropEditionBoards}), which keeps each course's last 8 sets.
+     *
+     * @return score rows removed
+     */
+    public int pruneBoards(long oldestDay, long oldestWeek) throws SQLException {
+        return database.transaction(c -> {
+            List<String> old = new ArrayList<>();
+            try (PreparedStatement ps = c.prepareStatement("SELECT DISTINCT board FROM game_scores WHERE "
+                    + "substr(board, 1, 7) = 'gstars:' OR substr(board, 1, 6) = 'gweek:'");
+                 ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String board = rs.getString(1);
+                    GenBoards.Board b = GenBoards.parse(board);
+                    if (b != null && b.day() < (b.kind() == GenBoards.Kind.WEEK ? oldestWeek : oldestDay)) {
+                        old.add(board);
+                    }
+                }
+            }
+            int removed = 0;
+            try (PreparedStatement ps = c.prepareStatement("DELETE FROM game_scores WHERE board = ?")) {
+                for (String board : old) {
+                    ps.setString(1, board);
+                    removed += ps.executeUpdate();
+                }
+            }
+            return removed;
+        });
+    }
+
+    /** Set a player's score on a board (inserting it when {@code previous} is null), counting the run. */
+    private static void writeScore(Connection c, UUID player, String game, String board, Long previous, long score,
+                                   long now) throws SQLException {
+        if (previous == null) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "INSERT INTO game_scores(player, game, board, score, at, runs) VALUES(?,?,?,?,?,1)")) {
+                ps.setString(1, player.toString());
+                ps.setString(2, game);
+                ps.setString(3, board);
+                ps.setLong(4, score);
+                ps.setLong(5, now);
+                ps.executeUpdate();
+            }
+            return;
+        }
+        boolean changed = score != previous;
+        String where = " WHERE player = ? AND game = ? AND board = ?";
+        try (PreparedStatement ps = c.prepareStatement(changed
+                ? "UPDATE game_scores SET score = ?, at = ?, runs = runs + 1" + where
+                : "UPDATE game_scores SET runs = runs + 1" + where)) {
+            int i = 1;
+            if (changed) {
+                ps.setLong(i++, score);
+                ps.setLong(i++, now);
+            }
+            ps.setString(i++, player.toString());
+            ps.setString(i++, game);
+            ps.setString(i, board);
+            ps.executeUpdate();
         }
     }
 

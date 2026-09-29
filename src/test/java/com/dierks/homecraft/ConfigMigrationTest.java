@@ -1228,7 +1228,8 @@ class ConfigMigrationTest {
         for (Map<?, ?> row : onDisk.getMapList("arcade.achievements")) {
             ach.put(String.valueOf(row.get("id")), row);
         }
-        assertEquals(26, ach.size());
+        assertEquals(bundled().getMapList("arcade.achievements").size(), ach.size(),
+                "the map becomes the whole shipped list (26 rows, and the 9 \"Games\" rows of revision 17)");
         assertEquals(9, intAt(ach.get("first_mini"), "reward"), "their reward is kept");
         assertEquals(10, intAt(ach.get("first_pc"), "reward"), "ours is rescaled");
         assertEquals(Boolean.FALSE, ach.get("first_sale").get("enabled"));
@@ -1736,6 +1737,26 @@ class ConfigMigrationTest {
         assertEquals(List.of(), startUp(reloaded, again), "a second start changes nothing");
         assertEquals(List.of(), again);
         assertEquals(Boolean.FALSE, reloaded.get("games.ore_slots.enabled", null));
+    }
+
+    @Test
+    void aBareFreshSwitchIsFoundUnderItsBlockNameNotTheGameId() throws Exception {
+        for (boolean on : new boolean[]{true, false}) {
+            YamlConfiguration onDisk = yaml(bundledReplacing("\n  fresh:\n", null, "\n  fresh: " + on + "\n"));
+            List<String> added = new ArrayList<>();
+            List<String> log = startUp(onDisk, added);
+
+            assertEquals(1, log.size(), "games.fresh: " + on + " is migrated with one line: " + log);
+            assertTrue(log.get(0).startsWith("Config migration: games.fresh: " + on)
+                    && log.get(0).contains("games.fresh.enabled: " + on), "the Config migration line: " + log.get(0));
+            assertEquals(on, onDisk.get("games.fresh.enabled", null),
+                    "games.fresh: " + on + " keeps the owner's switch (the game id is fresh_courses, the block fresh)");
+            assertFalse(added.contains("games.fresh.enabled"), "the switch is kept, not backfilled: " + added);
+            assertNull(onDisk.get("games.fresh_courses", null), "and nothing is written under the game id");
+            GameSpec<?> fresh = GameCatalog.spec("fresh_courses");
+            assertEquals(on, ((com.dierks.homecraft.games.gen.DailySettings) GamesConfig.parse(onDisk, w -> { })
+                    .settings(fresh)).enabled(), "and it reads as " + on);
+        }
     }
 
     @Test

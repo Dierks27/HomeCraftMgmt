@@ -61,6 +61,29 @@ public final class SkillRewards {
      */
     public int pay(Player player, Game game, TokenService.Source source, RewardKind kind, String ref, int tokens,
                    int gameDailyCap, String detail) {
+        return pay(player, game, source, kind, ref, tokens, gameDailyCap, detail, false, null);
+    }
+
+    /**
+     * {@link #pay}, but <b>all or nothing</b> (Fresh Courses' first finish of a set and its Star
+     * Chart goals, CADENCE-UI-TODO §4c): when what is left of today's caps (the game's or the
+     * server's) is smaller than {@code tokens}, NOTHING is paid and NOTHING is recorded, so the
+     * reward can still be earned on a later day of the same set, and the player reads
+     * {@code limitLine} once ("You've reached today's token limit - finish it again another day
+     * this week for its tokens."). A reward bigger than a whole day's cap pays that cap on a day
+     * with all of it left ({@code GamesDao.wholePay}), so it can always be earned. Every other
+     * reward keeps {@link #pay}'s partial pay.
+     *
+     * @param limitLine what a player held back by the caps reads ({@code null}: {@link #CAPPED})
+     * @return {@code tokens} (or the smaller cap, when a cap can't hold it in a day) or 0
+     */
+    public int payWhole(Player player, Game game, TokenService.Source source, RewardKind kind, String ref,
+                        int tokens, int gameDailyCap, String detail, String limitLine) {
+        return pay(player, game, source, kind, ref, tokens, gameDailyCap, detail, true, limitLine);
+    }
+
+    private int pay(Player player, Game game, TokenService.Source source, RewardKind kind, String ref, int tokens,
+                    int gameDailyCap, String detail, boolean whole, String limitLine) {
         if (player == null || game == null || kind == null || tokens <= 0) {
             return 0;
         }
@@ -85,7 +108,7 @@ public final class SkillRewards {
         int paid;
         try {
             paid = games.dao().payReward(id, game.id(), source == null ? game.source() : source, day, kind, r, tokens,
-                    capGame, capAll, once, line, games.host().clock().nowMillis());
+                    capGame, capAll, once, whole, line, games.host().clock().nowMillis());
         } catch (SQLException e) {
             games.host().logger().log(Level.SEVERE, "Could not pay a " + game.id() + " reward", e);
             return 0;
@@ -96,7 +119,10 @@ public final class SkillRewards {
             orb(player);
         }
         if (paid < tokens && kind.capped() && !(paid == 0 && once && alreadyPaid(id, game, kind, r))) {
-            sayOnce(player, CAPPED);
+            // "come back another day" only when another day can pay it: nothing was paid, and no cap
+            // is 0 (a reward bigger than a whole day's cap pays that cap and is done: CAPPED)
+            boolean later = whole && paid == 0 && limitLine != null && capGame != 0 && capAll != 0;
+            sayOnce(player, later ? limitLine : CAPPED);
         }
         return paid;
     }
@@ -186,8 +212,41 @@ public final class SkillRewards {
         return "par:" + course + ":" + day;
     }
 
+    /**
+     * Golf at par or better on a Fresh Courses layout, once per set: {@code par:<slot>:<edition>}
+     * ({@code tag.slot()} and {@code tag.edition()}, no reroll), so a daily and a weekly set that
+     * begin on the same day never share one, and a recalled course's is its original set's.
+     */
+    public static String parRef(String course, String edition) {
+        return "par:" + course + ":" + edition;
+    }
+
+    /**
+     * The first counted finish of a daily course on its course day (a reroll pays no second one):
+     * {@code dclear:<course>:<day>}. Fresh Courses pays by set now: {@link #freshClearRef}.
+     */
+    public static String dailyClearRef(String course, long day) {
+        return "dclear:" + course + ":" + day;
+    }
+
+    /**
+     * The first counted finish of a Fresh Courses course in one set (FRESH_CLEAR, the
+     * {@link RewardKind#DAILY_CLEAR} kind): {@code fresh:<slot>:<edition>}, the edition without its
+     * reroll ({@code 7:38}), so a reroll pays no second one. Exactly {@code GenBoards.clearRef(tag)}:
+     * a recalled course carries its original slot and set, so whoever cleared it back then isn't
+     * paid again.
+     */
+    public static String freshClearRef(String slot, String edition) {
+        return "fresh:" + slot + ":" + edition;
+    }
+
     /** A hole-in-one on a hole today: {@code hio:<course>:<hole>:<day>}. */
     public static String holeInOneRef(String course, int hole, long day) {
         return "hio:" + course + ":" + hole + ":" + day;
+    }
+
+    /** A hole-in-one on a hole of a Fresh Courses layout, once per set: {@code hio:<slot>:<hole>:<edition>}. */
+    public static String holeInOneRef(String course, int hole, String edition) {
+        return "hio:" + course + ":" + hole + ":" + edition;
     }
 }

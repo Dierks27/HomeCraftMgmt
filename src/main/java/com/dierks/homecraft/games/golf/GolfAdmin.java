@@ -3,7 +3,13 @@ package com.dierks.homecraft.games.golf;
 import com.dierks.homecraft.games.GameAdmin;
 import com.dierks.homecraft.games.GameCatalog;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.GeneratedCourses;
 import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.gen.api.GenCopy;
+import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.gui.games.daily.DailyLookup;
+import com.dierks.homecraft.gui.games.daily.DailyText;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -50,12 +56,19 @@ import java.util.logging.Level;
  * block flush with the green. A block with nothing to rest on at its centre, a sliver like a
  * carpet, or a hollow one like a cauldron is refused ({@link BallPhysics#cupShape}). Every edit that
  * is saved goes in the server log, as the trials editor's do.
+ *
+ * <p><b>Fresh Courses keeps its own</b> (GEN-SPEC §2.4, §5.5): Golf of the Week and Tiny Golf are
+ * rebuilt every day, so here they can only be looked at and gone to ({@link #DAILY_VERBS}); and no
+ * tee, cup or bound of a hand-built hole may be inside a Fresh Courses area or within {@value
+ * DailyLookup#EDITOR_MARGIN} blocks of one.
  */
 final class GolfAdmin implements GameAdmin {
 
     private static final String CONFIRM = "confirm";
     private static final List<String> VERBS = List.of("info", "tp", "hole", "name", "enable", "disable", "delete");
     private static final List<String> HOLE_VERBS = List.of("cup", "tee", "par", "bounds", "remove");
+    /** What a course Fresh Courses made allows here: looking and going there. */
+    static final List<String> DAILY_VERBS = List.of("info", "list", "tp");
     /**
      * This tool's own first words, and "auto" (the word /hcm games feature keeps for "pick one each
      * day", so a course called that could never be pinned): no course may be called them.
@@ -169,7 +182,7 @@ final class GolfAdmin implements GameAdmin {
         for (GolfCourse c : all.values()) {
             String state = c.playable(worlds) ? "&aopen" : !c.problems(worlds).isEmpty() ? "&cnot ready" : "&7closed";
             tell(sender, "&f" + c.id() + " &7- " + c.name() + ", " + MiniGolf.holes(c.holes().size()) + ", par "
-                    + c.par() + " - " + state);
+                    + c.par() + " - " + state + (c.generated() ? " &d(Fresh Courses)" : ""));
         }
         broken.forEach((id, why) -> tell(sender, "&c" + id + " &7- its saved data can't be read (" + why + ")"));
     }
@@ -191,6 +204,11 @@ final class GolfAdmin implements GameAdmin {
         GolfCourse c = golf.course(id);
         if (c == null) {
             tell(sender, "&cThere's no golf course called " + id + ". &7/hcm games golf list");
+            return;
+        }
+        String daily = dailyRefusal(c, verb);
+        if (daily != null) {
+            tell(sender, daily);
             return;
         }
         switch (verb) {
@@ -219,6 +237,13 @@ final class GolfAdmin implements GameAdmin {
         }
         for (String problem : c.problems(worlds)) {
             tell(sender, "&c- " + problem);
+        }
+        GenTag gen = c.gen();
+        if (gen != null) {
+            tell(sender, "&dMade by Fresh Courses: &7the layout for " + DailyText.setName(gen.cadence(), gen.day())
+                    + (gen.reroll() > 0 ? " (reroll " + gen.reroll() + ")" : "") + ", half " + gen.half()
+                    + (golf.games().generated().live(c.id(), gen) ? ", &aopen" : ", &cclosed right now")
+                    + " &7- &e/hcm games gen status");
         }
         List<UUID> playing = golf.playing().getOrDefault(c.id(), List.of());
         if (!playing.isEmpty()) {
@@ -280,6 +305,9 @@ final class GolfAdmin implements GameAdmin {
                     tell(sender, "&cLook at the cup block, within 6 blocks.");
                     return;
                 }
+                if (nearDaily(sender, p.getWorld(), b.getX(), b.getY(), b.getZ())) {
+                    return;
+                }
                 String what = b.getType().name().toLowerCase(Locale.ROOT);
                 BallPhysics.CupShape shape = BallPhysics.cupShape(new LiveBlocks(p.getWorld()), b.getX(), b.getY(),
                         b.getZ());
@@ -298,7 +326,7 @@ final class GolfAdmin implements GameAdmin {
             }
             case "tee" -> {
                 Player p = here(sender, c);
-                if (p != null) {
+                if (p != null && !nearDaily(sender, p.getLocation())) {
                     layout(sender, c, c.withHole(n, h.withTee(tee(p))), args, "Hole " + n + "'s tee is where you stand.");
                 }
             }
@@ -317,11 +345,17 @@ final class GolfAdmin implements GameAdmin {
                     return;
                 }
                 Player p = here(sender, c);
-                if (p == null) {
+                if (p == null || nearDaily(sender, p.getLocation())) {
                     return;
                 }
                 Location l = p.getLocation();
                 GolfCourse.Spot corner = new GolfCourse.Spot(l.getBlockX(), l.getBlockY(), l.getBlockZ());
+                GolfCourse.Spot other = which == 1 ? h.corner2() : h.corner1();
+                String box = boundsRefusal(golf.games().generated(), p.getWorld().getName(), corner, other);
+                if (box != null) {
+                    tell(sender, box);
+                    return;
+                }
                 layout(sender, c, c.withHole(n, h.withCorner(which, corner)), args,
                         "Hole " + n + "'s bounds corner " + which + " is at " + spot(corner) + "&a.");
             }
@@ -342,7 +376,7 @@ final class GolfAdmin implements GameAdmin {
             return;
         }
         Player p = here(sender, c);
-        if (p == null) {
+        if (p == null || nearDaily(sender, p.getLocation())) {
             return;
         }
         int n = c.holes().size() + 1;
@@ -364,6 +398,21 @@ final class GolfAdmin implements GameAdmin {
             return null;
         }
         return p;
+    }
+
+    /** Whether where the admin stands is too near a Fresh Courses area (and they were told). */
+    private boolean nearDaily(CommandSender sender, Location l) {
+        return l.getWorld() != null && nearDaily(sender, l.getWorld(), l.getBlockX(), l.getBlockY(), l.getBlockZ());
+    }
+
+    /** Whether block (x, y, z) is too near a Fresh Courses area (and the admin was told). */
+    private boolean nearDaily(CommandSender sender, World w, int x, int y, int z) {
+        String why = areaRefusal(golf.games().generated(), w.getName(), x, y, z);
+        if (why != null) {
+            tell(sender, why);
+            return true;
+        }
+        return false;
     }
 
     private static GolfCourse.Tee tee(Player p) {
@@ -510,7 +559,7 @@ final class GolfAdmin implements GameAdmin {
         }
         GolfCourse c = golf.course(first);
         if (n == 2) {
-            offer(out, typed, VERBS);
+            offer(out, typed, c != null && dailyRefusal(c, "hole") != null ? List.of("info", "tp") : VERBS);
             return out;
         }
         String verb = args[1].toLowerCase(Locale.ROOT);
@@ -590,6 +639,36 @@ final class GolfAdmin implements GameAdmin {
     }
 
     // ---- helpers ---------------------------------------------------------------------------------------
+
+    /**
+     * Why {@code verb} can't be used on {@code c}, or {@code null} when it can: a course Daily
+     * Courses made (or one with a slot's or a Classics slot's id) allows only {@link #DAILY_VERBS}.
+     */
+    static String dailyRefusal(GolfCourse c, String verb) {
+        if (c == null || !(c.generated() || Slots.any(c.id()) != null)) {
+            return null;
+        }
+        return verb != null && DAILY_VERBS.contains(verb.toLowerCase(Locale.ROOT)) ? null : GenCopy.MADE_BY_DAILY;
+    }
+
+    /**
+     * Why a hand-built hole's tee, cup or bound can't be at block (x, y, z) of {@code world}, or
+     * {@code null}: inside a Fresh Courses area or within {@value DailyLookup#EDITOR_MARGIN} blocks of one.
+     */
+    static String areaRefusal(GeneratedCourses g, String world, int x, int y, int z) {
+        return DailyLookup.nearArea(g, world, x, y, z) ? GenCopy.EDITOR_REFUSED : null;
+    }
+
+    /**
+     * Why a hand-built hole's bounds from corner {@code a} to corner {@code b} can't be, or
+     * {@code null}: the whole box, not only each corner, is kept out of the Fresh Courses areas and
+     * {@value DailyLookup#EDITOR_MARGIN} blocks around them (as the engine measures a hand-built
+     * hole). With the other corner not set yet, only {@code a} is checked.
+     */
+    static String boundsRefusal(GeneratedCourses g, String world, GolfCourse.Spot a, GolfCourse.Spot b) {
+        GolfCourse.Spot o = b == null ? a : b;
+        return DailyLookup.nearBox(g, world, a.x(), a.y(), a.z(), o.x(), o.y(), o.z()) ? GenCopy.EDITOR_REFUSED : null;
+    }
 
     /** A saved edit in the server log, as the trials editor keeps them: who, what, which course. */
     private void logged(CommandSender sender, String action, String id, String detail) {

@@ -193,6 +193,7 @@ public final class ConnectFour extends CabinetGame {
             player.sendMessage(Text.of("&eHard wins: &f" + total + (f.result().record() ? " &6★ Most on the server!" : "")));
         } else {
             featuredBonus(player);
+            finishedUnscored(player, false); // a game played out is a finish, won, lost or drawn (E4)
         }
         if (match.earnsDaily(id)) {
             ConnectFourSettings s = settings();

@@ -58,19 +58,22 @@
 | `/hcm play invites` | Shows your invite settings, for example "Your invites: Connect Four on, Tic-Tac-Toe on, Coin Flip off". |
 | `/hcm play invites on` | Turns on invites to Connect Four and Tic-Tac-Toe. Coin Flip invites can only be turned on from the Take a break screen. |
 | `/hcm play invites off` | Turns off all game invites, Coin Flip too. |
+| `/hcm play news` | Shows whether you get the new-courses line in chat: "New courses in chat: on". |
+| `/hcm play news off` | No more "New courses this week!" line in chat ("No more new-course lines in chat."). |
+| `/hcm play news on` | The line is back: "You'll see a line in chat when new courses are up." |
 | `/hcm leave` | Leaves the course or golf round you are in and takes you home with all your things. It also finishes a trip home that didn't finish, and hands over things kept for you. Works even while the games are off. /hcm play leave does the same. With no game: "You're not in a game." |
 | `/hcm arcade` | Opens the Arcade: your Wallet, the crates, the Scratch Ticket, the Prize Counter, Card Packs, quests, achievements and (while the games are on) the Play row. |
 | `/hcm arcade odds` | Shows one line for each open game of chance: what it gives back and how many plays a day, like "Ore Slots — gives back about 89 of every 100 tokens · 50 plays a day". For Twenty-One and Higher or Lower it says "the best play gives back about…". If games of chance are switched off for you: "Games of chance aren't open to you." If none are open: "No games of chance are open right now." |
 | `/hcm guide games` | Opens the Games page of How It Works. It is the same page as the book on the Games screen. |
 | `/hcm tokens` | Shows how many tokens you have and your login streak. |
 | `/hcm help (or just /hcm)` | Lists the commands you can use. |
-| `Admin-only commands` | /hcm games ... (status, feature, break, scores, saved, course, golf) and /hcm play <game> <player> are for admins. A player who tries them reads "You don't have permission." Only admins can make [Arcade] join signs or build in the Games world. |
+| `Admin-only commands` | /hcm games ... (status, check, feature, break, scores, saved, course, golf) and /hcm play <game> <player> are for admins. A player who tries them reads "You don't have permission." Only admins can make [Arcade] join signs or build in the Games world. |
 
 ## Tokens and the games
 
 - The new games only use tokens. No game takes or pays dollars. No game takes or gives your Cards, Minis or anything you could sell. The only thing a course or golf round gives you is its kit, and the kit stays in the game.
 - Tokens never turn into dollars. Nothing you get with tokens can be sold for money.
-- Ways to earn tokens: log in every day (your streak pays 2, 2, 3, 3, 4, 4, then 5 a day). Play (1 token for every hour). Do quests (3 daily and 2 weekly). Get achievements (26 of them, each pays once). Catch wild Minis (they count toward quests and achievements). Trade in spare Cards.
+- Ways to earn tokens: log in every day (your streak pays 2, 2, 3, 3, 4, 4, then 5 a day). Play (1 token for every hour). Do quests (3 daily and 2 weekly). Get achievements (35 of them, each pays once). Catch wild Minis (they count toward quests and achievements). Trade in spare Cards. Cabinets, courses, golf and Fresh Courses stars count toward quests and achievements too (see below).
 - Skill games (cabinets, time trials and mini golf) are free to play, and they pay a few tokens. You can earn milestones (bronze, silver and gold, each pays once ever), today's challenge on each cabinet, today's pick, and course rewards like a first finish or a round of golf at par or under.
 - By default you can win up to 6 tokens a day from all skill games together. Each game also has its own smaller cap: 2 a day for most cabinets, 1 for Connect Four and Tic-Tac-Toe, 4 for time trials and 4 for mini golf.
 - The first time you finish a course pays extra, and it doesn't count toward the 6. By default that is 5, 10, 20 or 40 tokens for an Easy, Medium, Hard or "Why did we build this?" course, and 5 for a golf course.
@@ -81,6 +84,28 @@
 - The five new games of chance never earn quests, achievements, today's pick or skill rewards.
 - You can see your tokens in your Wallet (top of the Arcade), on the sunflower at the top-left of the Games screen, or with /hcm tokens.
 - Every daily limit and cap starts fresh at midnight, server time.
+
+## Quests and achievements from the games
+
+- Skill games count toward your quests: cabinets, time trials, mini golf and Fresh Courses. Games of chance never do.
+- The game quests you can be given (only while those games are open):
+  - Daily: "Play 3 arcade cabinets" (4 tokens) and "Finish a course or a round of golf" (5 tokens).
+  - Weekly: "Play 15 arcade cabinets" (20 tokens), "Finish 5 courses or golf rounds" (20 tokens) and "Earn 6 Fresh Courses stars" (20 tokens).
+- A cabinet counts when you play it to the end, win, lose or draw: a game against the Arcade played out, or a Creeper Sweeper board that finds a creeper, counts too. Practice counts too. A game you close early, or a game against a friend, doesn't count.
+- A course counts when your run counts. A round of golf counts when you finish every hole. Each Fresh Courses star counts once.
+- Nothing counts in creative or spectator mode, or in a world without games.
+- Courses are in the Games world, and no tokens are paid there. A quest or achievement you finish there is paid as soon as you are back home, even if that is the next day or the next week.
+- The Games achievements, each paid once:
+  - "Finish an arcade cabinet game" (10 tokens)
+  - "Earn a gold medal in a cabinet" (20 tokens; practice has no medals)
+  - "Finish every arcade cabinet game" (30 tokens; all 8 of them)
+  - "Finish a course" (15 tokens; a round of golf counts)
+  - "Get a hole-in-one" (25 tokens)
+  - "Finish a golf course under par" (25 tokens)
+  - "Finish every Fresh Course in one set" (40 tokens)
+  - "Reach the top Star Chart goal in a week" (30 tokens)
+  - "Set a course record" (30 tokens; a time trial's or a golf course's)
+- When a new set of Fresh Courses is up, you read one line in chat, once for each set: "New courses this week! Easy, Parkour, Hard, Sky Rings and Golf - /hcm play". It waits while you are on a course, and until you close a screen. Don't want it? /hcm play news off.
 
 ## The fairness promises
 
@@ -143,6 +168,7 @@
 - When you beat your own best, the game says "New best!", but it doesn't pay tokens.
 - On Java, each row shows the player's head. On Bedrock, each row is a numbered paper tile.
 - Names show in the game. The website shows only the record score or time and its date, with no names, unless the owner turns names on.
+- Leaderboards around the hub: signs, floating holograms and wall screens can show a game's or a course's top 5 (a sign shows the top 3), like "1. Sam 0:42.1". Players who tie share a place. A Fresh course's board shows this week's course and moves on to the new one by itself. An empty board says "No times yet - be the first!". The line at the bottom says how to play it, like /hcm play fresh_parkour_hard.
 
 ## Playing with a friend (invites)
 
@@ -1414,6 +1440,22 @@ These are played in the Games world, on courses the server's builders make. Each
 - Only use Reset ball when your ball is stuck, like inside a cauldron. It costs a stroke.
 - Open the Scorecard any time to see how you're doing. Green is under par, white is par, yellow is over par, red is picked up, a star is a hole-in-one, light blue is the hole you're on, and grey is not played yet.
 
+## Fresh Courses
+
+New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sky Rings, Golf of the Week (9 holes) and Tiny Golf (3 holes). By default a new set goes up every Monday and stays all week. The owner can make them change every day (then the big golf course is Golf of the Day) or every few days, and every screen says which: "This week's courses", "Today's courses" or "The current courses".
+
+- Open them with /hcm play fresh_courses, or the Fresh Courses tile on the Courses and Golf tabs. /hcm play fresh_parkour_tiers opens Parkour Levels, where the three parkour courses sit side by side.
+- They are free skill games, the same for everyone. They play like the time trials and mini golf above, with the same kit, rules and "your things come back".
+- Each tile's name shows your stars for this week's course and its course code, like "Hard Parkour - ★★☆ · Course code HARD-40". A golf tile also shows its holes and par. A course being built shows grey: "being built, back soon".
+- Stars: finishing a course gives 1 star. A good time (or a good golf score) gives 2, a great one 3. Your best stars on each course this week count. The Star Chart adds up your best stars from every course this week, and it starts again every week.
+- Star Chart goals: by default 6 stars pays 1 token and 12 stars pays 2 tokens, once each a week. The Star Chart tile shows your stars and the next goal. A week's goals stay the same all week.
+- Tokens: your first finish of each course each week pays a few tokens (by default Easy 2, Parkour 3, Hard 4, Sky Rings 3, Golf 3, Tiny Golf 2). A second finish that week, even on another day, pays nothing more. Your very first finish of each course ever pays the usual first finish too. Golf pays for par or better and each hole-in-one once per course each week.
+- Daily limits: if today's limit can't pay the whole first-finish reward or a whole goal, none of it is paid and none of it is used up: "You've reached today's token limit - finish it again another day this week for its tokens." Finish it on another day this week and it pays.
+- Course codes: every course has a code, like HARD-40. You see it on its tile, on its screen and in chat when you finish. Loved an old course? Tell an admin its course code, and they can bring it back for a week, or keep it forever.
+- Classic courses: the owner can bring back a past course; its old records are the ones to beat. It shows up as Classic Parkour, Classic Sky Rings or Classic Golf on the Fresh Courses screen, like "Classic: Hard Parkour (week of 5 Oct)", with when it goes away again. If you got a course's first-finish tokens back when it first came, you don't get them again; if you didn't, you do. Stars on a classic count toward this week's Star Chart.
+- A kept course becomes a normal course with its own name, played like any other course.
+- High scores: each course has its own board for its week, shown as "Hard Parkour · this week" (older weeks by their date). The Star Chart has its own board.
+
 ## The older Arcade games
 
 - Crates: 15 tokens (the Arcade Crate). Before you open one, the crate screen shows every prize and its chance as a percent. You get one of these: a boost, a Firework Show, a Mini Radar, 8 filament, 8 tokens (less than the 15 you put in), a 1-day trail, a hat (once hats are set up), or rarely a Card for any Mini. On average, what comes out is worth less than 15 tokens at Prize Counter prices. The spin is only a show, because your prize is already yours. Bedrock gets a shorter spin. If you get a Card for any Mini, everyone sees it in chat. Take a break covers crates. While the games are on, they count toward the 100 tokens a day. Opening your first crate still earns the "Open an Arcade Crate" achievement (5 tokens).
@@ -1424,7 +1466,9 @@ These are played in the Games world, on courses the server's builders make. Each
 ## For the website
 
 - Endpoint: GET /api/arcade on the plugin's dashboard port (8080 by default; web.dashboard.enabled ships true). It is the same server as /api/market. Fetch it from the website's own server, the way the other feeds are read, not from players' browsers. The plugin rebuilds the feed every web.dashboard.refresh_seconds (30 by default). If web.dashboard.feed_token is set, send Authorization: Bearer <token>; without it the reply is 401 {"error":"unauthorized"}. web.dashboard.lan_skips_token ships false. Gzip is sent when asked for, and replies carry Cache-Control: no-store.
-- Top-level keys, in this order: generatedAt (always first, epoch ms), games, featured, jackpots, prizes, packs, achievements. A section with nothing in it is left out completely (never [] or null). Colour codes are stripped from names, combos, rules and descriptions.
+- Top-level keys, in this order: generatedAt (always first, epoch ms), games, featured, starChart, freshHistory, jackpots, prizes, packs, achievements. A section with nothing in it is left out completely (never [] or null). Colour codes are stripped from names, combos, rules and descriptions.
+- Leaderboards: every entry with a board (a cabinet, a hand-built course, a golf course, a Fresh course, a Classic) has top: [{rank, value, unit, at, holder?}], its best games.feed_top rows (5 by default), best first. Players who tie share a rank (1, 1, 3). value is in unit (ms, strokes, points, flips, apples or wins); holder appears only when the owner turns names on. top is absent for a board nobody has played. record and best are unchanged.
+- Fresh Courses: a Fresh course's entry has daily {day, nextAt?, goldMs?, silverMs?, cadence?, lastDay?} (its set's first day, when the next set comes, star times, the set's length in days and last day) and fresh {code, seed, from, to?, cadenceDays} (its course code, the first 12 hex digits of its seed, when it went up and when it changes; to is absent while it is kept up for good). A Classics slot's entry has classic {code, from, to?} (to absent for "forever"). freshHistory lists every past and current Fresh course, newest first, at most 26 per course: {code, slot, name, kind, tier?, from, to?, seed, plays, record?, kept?, classic?, top?}; its top has at most 3 rows. Nothing about a course that isn't up yet is ever published.
 - games[]: every open game in catalog order, with the Scratch Ticket first. Key on id, because each id appears only once. kind is chance, cabinet, parkour, elytra, boat or golf. Time trials and mini golf publish one entry per open course, using the course id (which is also its /hcm play id). Coin Flip ships off, so it is absent unless the owner turns it on.
 - Games of chance (kind chance) have these fields. stakes: the tokens a player can put in. rtp: the lowest of its stakes, floored to one decimal, the same number /hcm arcade odds gives admins. rtpByStake. dailyLimit: plays a day; the Scratch Ticket has none. paytable rows: {stake?, combo, pays, chance, oneIn}. chance has 4 significant digits and never reads 0. oneIn is the same "1 in N" the game screen shows (round(1/chance)). A row with stake pays that many tokens. A row without stake pays that multiple of the tokens put in. Ore Slots uses rows without stake while every stake pays the same multiples, as shipped. It switches to per-stake rows in tokens if max_payout ever cuts a line. A row without its odds is never published, and a game with no stake left is left out.
 - Per-game extras. The Wheel's rows use spaces and of (24) instead of chance/oneIn, one row per stake per result, including "your N back" and "nothing". Twenty-One has payouts per stake {win, twentyOne, doubleWin} and no paytable. Higher or Lower has maxMultiplier and maxGuesses (where a run cashes out by itself) and no paytable. Coin Flip has one "win the flip" row per stake with chance 0.5. rules is one plain line, where a game gives one.

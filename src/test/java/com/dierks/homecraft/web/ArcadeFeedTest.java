@@ -49,6 +49,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>And privacy: no UUID, balance, winner, command, permission or texture ever reaches the JSON,
  * and a record's holder only while {@code web.dashboard.arcade_show_names} is on.
+ *
+ * <p>And Fresh Courses (GEN-SPEC §5.6, the weekly addendum, GEN-SPEC-KEEP §8): a hand-built
+ * course's entry is byte for byte what it was; a generated one carries {@code daily} (its set's
+ * first day, when the next is due, its star times when it has them, its cadence and last day), its
+ * {@code fresh} object (course code and short seed) or, for a Classics slot, {@code classic}; the
+ * Star Chart is its own section, its holder only while names are on; {@code freshHistory} is
+ * written by the writer itself, byte for byte what Fresh Courses would write, its holders only
+ * while names are on; and no full seed, rev, half or UUID is ever written.
+ *
+ * <p>And the leaderboards (EXTRAS E3): every board-bearing entry (a cabinet, a hand-built course, a
+ * golf course, a Fresh course, a Classic) gains {@code top} — at most {@code games.feed_top} rows,
+ * ties sharing a rank, each with its value, unit and date — and a past Fresh course its best 3;
+ * with names off no {@code holder} appears at any depth and no name is even looked up; with names
+ * on the holders appear; an empty board has no {@code top}; {@code record} and {@code best} are
+ * unchanged.
  */
 class ArcadeFeedTest {
 
@@ -715,5 +730,285 @@ class ArcadeFeedTest {
         assertEquals("boat", games.get("r").get("kind").getAsString(), "a course kind reads lower case");
         assertEquals("medium", games.get("r").get("tier").getAsString());
         assertEquals("Steve", games.get("c").get("holder").getAsString());
+    }
+
+    // ---- Daily Courses ------------------------------------------------------------------------
+
+    private static final FeedWriter.Daily EASY_TODAY = new FeedWriter.Daily("2026-09-29", 1_790_060_400_000L, 45_000L,
+            70_000L);
+
+    @Test
+    void handBuiltEntriesAreByteIdenticalWhicheverWayTheyAreWritten() {
+        ArcadeFeed plain = new ArcadeFeed(true);
+        plain.course("river_run", "River Run", "boat", "medium", 61_234L, 1_789_990_000_000L, STEVE);
+        plain.golf("golf_meadow", "Meadow Links", 9, 27, 24, 1_789_980_000_000L, STEVE);
+        ArcadeFeed viaDaily = new ArcadeFeed(true);
+        viaDaily.course("river_run", "River Run", "boat", "medium", 61_234L, 1_789_990_000_000L, STEVE, null);
+        viaDaily.golf("golf_meadow", "Meadow Links", 9, 27, 24, 1_789_980_000_000L, STEVE, null);
+        String json = plain.json(T, null, null, null, null, null);
+        assertEquals(json, viaDaily.json(T, null, null, null, null, null), "no daily part: the same bytes");
+        assertEquals("{\"generatedAt\":1790000000000,\"games\":["
+                + "{\"id\":\"river_run\",\"name\":\"River Run\",\"kind\":\"boat\",\"tier\":\"medium\","
+                + "\"record\":{\"ms\":61234,\"at\":1789990000000,\"holder\":\"Steve\"}},"
+                + "{\"id\":\"golf_meadow\",\"name\":\"Meadow Links\",\"kind\":\"golf\",\"holes\":9,\"par\":27,"
+                + "\"record\":{\"strokes\":24,\"at\":1789980000000,\"holder\":\"Steve\"}}]}", json,
+                "the hand-built entries exactly as before Daily Courses");
+        assertEquals(new ArcadeFeed.CourseRow("x", "X", "parkour", "easy", null, null, null, null),
+                new ArcadeFeed.CourseRow("x", "X", "parkour", "easy", null, null, null), "the old row is a row with no daily part");
+        assertEquals(new ArcadeFeed.GolfRow("x", "X", 9, 27, null, null, null, null),
+                new ArcadeFeed.GolfRow("x", "X", 9, 27, null, null, null), "for golf too");
+    }
+
+    @Test
+    void generatedEntriesCarryTheirDailyPart() {
+        ArcadeFeed feed = new ArcadeFeed(false);
+        feed.course("fresh_parkour_easy", "Easy Parkour", "parkour", "easy", 41_200L, 1_790_000_100_000L, STEVE,
+                EASY_TODAY);
+        feed.golf("fresh_tiny_golf", "Tiny Golf", 3, 8, 8, 1_790_000_200_000L, null,
+                new FeedWriter.Daily("2026-09-29", 1_790_060_400_000L, null, null));
+        feed.course("fresh_rings", "Sky Rings", "elytra", "easy", null, null, null,
+                new FeedWriter.Daily("2026-09-29", -1, null, null));
+        String json = feed.json(T, null, null, null, null, null);
+        assertEquals("{\"generatedAt\":1790000000000,\"games\":["
+                + "{\"id\":\"fresh_parkour_easy\",\"name\":\"Easy Parkour\",\"kind\":\"parkour\",\"tier\":\"easy\","
+                + "\"record\":{\"ms\":41200,\"at\":1790000100000},"
+                + "\"daily\":{\"day\":\"2026-09-29\",\"nextAt\":1790060400000,\"goldMs\":45000,\"silverMs\":70000}},"
+                + "{\"id\":\"fresh_tiny_golf\",\"name\":\"Tiny Golf\",\"kind\":\"golf\",\"holes\":3,\"par\":8,"
+                + "\"record\":{\"strokes\":8,\"at\":1790000200000},"
+                + "\"daily\":{\"day\":\"2026-09-29\",\"nextAt\":1790060400000}},"
+                + "{\"id\":\"fresh_rings\",\"name\":\"Sky Rings\",\"kind\":\"elytra\",\"tier\":\"easy\","
+                + "\"daily\":{\"day\":\"2026-09-29\"}}]}", json,
+                "today's record, then daily: the day, when the next is due, the star times when set");
+        Map<String, JsonObject> games = games(json);
+        assertEquals(Set.of("id", "name", "kind", "tier", "record", "daily"), keys(games.get("fresh_parkour_easy")),
+                "a generated course: a course plus daily");
+        assertEquals(Set.of("day", "nextAt", "goldMs", "silverMs"), keys(games.get("fresh_parkour_easy").get("daily")),
+                "its daily part");
+        assertEquals(Set.of("day", "nextAt"), keys(games.get("fresh_tiny_golf").get("daily")), "golf has no star times");
+        assertFalse(json.toLowerCase().contains("seed") || json.contains("\"rev\"") || json.contains("half"),
+                "never a seed, a rev or a half");
+        assertFalse(json.contains(STEVE), "no holder while names are off");
+    }
+
+    @Test
+    void aFreshEntryCarriesItsCadenceItsCodeAndAClassicItsWindow() {
+        ArcadeFeed feed = new ArcadeFeed(false);
+        feed.course("fresh_parkour_hard", "Hard Parkour", "parkour", "hard", 62_300L, 1_790_100_000_000L, STEVE,
+                new FeedWriter.Daily("2026-09-28", 1_790_604_800_000L, 45_000L, 70_000L, 7, "2026-10-04"));
+        feed.fresh("fresh_parkour_hard", new com.dierks.homecraft.games.gen.engine.FreshFeed.Fresh("HARD-40",
+                "3f2a9c01b7de", 1_790_000_000_000L, 1_790_604_800_000L, 7));
+        feed.course("fresh_classic_parkour", "Classic: Hard Parkour (week of 5 Oct)", "parkour", "hard", null, null,
+                null, new FeedWriter.Daily("2026-10-05", 0, 45_000L, 70_000L, 7, "2026-10-11"));
+        feed.classic("fresh_classic_parkour", new com.dierks.homecraft.games.gen.engine.FreshFeed.Classic("HARD-40",
+                1_795_000_000_000L, null));
+        feed.fresh("nobody_wrote_me", new com.dierks.homecraft.games.gen.engine.FreshFeed.Fresh("X-1", "0", 1, null, 7));
+        String json = feed.json(T, null, null, null, null, null);
+        assertEquals("{\"generatedAt\":1790000000000,\"games\":["
+                + "{\"id\":\"fresh_parkour_hard\",\"name\":\"Hard Parkour\",\"kind\":\"parkour\",\"tier\":\"hard\","
+                + "\"record\":{\"ms\":62300,\"at\":1790100000000},\"daily\":{\"day\":\"2026-09-28\","
+                + "\"nextAt\":1790604800000,\"goldMs\":45000,\"silverMs\":70000,\"cadence\":7,\"lastDay\":\"2026-10-04\"},"
+                + "\"fresh\":{\"code\":\"HARD-40\",\"seed\":\"3f2a9c01b7de\",\"from\":1790000000000,"
+                + "\"to\":1790604800000,\"cadenceDays\":7}},"
+                + "{\"id\":\"fresh_classic_parkour\",\"name\":\"Classic: Hard Parkour (week of 5 Oct)\","
+                + "\"kind\":\"parkour\",\"tier\":\"hard\",\"daily\":{\"day\":\"2026-10-05\",\"goldMs\":45000,"
+                + "\"silverMs\":70000,\"cadence\":7,\"lastDay\":\"2026-10-11\"},"
+                + "\"classic\":{\"code\":\"HARD-40\",\"from\":1795000000000}}]}", json,
+                "daily gains the cadence and last day; fresh and classic come with their own entries only");
+        Map<String, JsonObject> games = games(json);
+        assertEquals(Set.of("day", "nextAt", "goldMs", "silverMs", "cadence", "lastDay"),
+                keys(games.get("fresh_parkour_hard").get("daily")), "the daily part");
+        assertEquals(Set.of("code", "seed", "from", "to", "cadenceDays"), keys(games.get("fresh_parkour_hard")
+                .get("fresh")), "the fresh part");
+        assertEquals(Set.of("code", "from"), keys(games.get("fresh_classic_parkour").get("classic")),
+                "a classic's window, no to while it is up for good");
+        assertFalse(json.contains("X-1"), "a fresh part without its entry is never written");
+    }
+
+    /** Boards the feed reads its top lists from: every board has the same rows, and names are counted. */
+    private static final class FakeBoards implements ArcadeFeed.Boards {
+        final List<String> asked = new ArrayList<>();
+        int named;
+
+        @Override
+        public List<com.dierks.homecraft.storage.GamesDao.ScoreRow> top(String game, String board,
+                                                                       boolean lowerIsBetter, int limit) {
+            asked.add(game + "|" + board + "|" + lowerIsBetter + "|" + limit);
+            if (board.equals("empty")) {
+                return List.of();
+            }
+            UUID a = UUID.fromString("00000000-0000-0000-0000-000000000001");
+            UUID b = UUID.fromString("00000000-0000-0000-0000-000000000002");
+            UUID c = UUID.fromString(STEVE_UUID);
+            List<com.dierks.homecraft.storage.GamesDao.ScoreRow> rows = List.of(
+                    new com.dierks.homecraft.storage.GamesDao.ScoreRow(a, 40, 1_789_000_000_001L),
+                    new com.dierks.homecraft.storage.GamesDao.ScoreRow(b, 40, 1_789_000_000_002L),
+                    new com.dierks.homecraft.storage.GamesDao.ScoreRow(c, 45, 1_789_000_000_003L));
+            return rows.subList(0, Math.min(limit, rows.size()));
+        }
+
+        @Override
+        public String name(UUID player) {
+            named++;
+            return player.toString().endsWith("1") ? "Ann" : player.toString().endsWith("2") ? "Bob" : STEVE_UUID;
+        }
+    }
+
+    /** One of every board-bearing entry, and one without a board. */
+    private static ArcadeFeed boards(boolean names, int top, FakeBoards boards) {
+        ArcadeFeed feed = new ArcadeFeed(names, top, boards);
+        feed.cabinet("snake", "Snake", "classic", "apples", false, 40L, "Ann");
+        feed.cabinet("simon_says", "Simon Says", "empty", "points", false, null, null);
+        feed.course("river_run", "River Run", "boat", "medium", 40L, 1L, "Ann");
+        feed.board("river_run", "trials", "course:river_run", true, "ms");
+        feed.golf("golf_meadow", "Meadow Links", 9, 27, 40, 1L, "Ann");
+        feed.board("golf_meadow", "golf", "golf:golf_meadow", true, "strokes");
+        feed.course("fresh_parkour_hard", "Hard Parkour", "parkour", "hard", 40L, 1L, "Ann",
+                new FeedWriter.Daily("2026-09-28", 1_790_604_800_000L, null, null, 7, "2026-10-04"));
+        feed.board("fresh_parkour_hard", "trials", "gfresh:fresh_parkour_hard:7:38", true, "ms");
+        feed.course("fresh_classic_parkour", "Classic Parkour", "parkour", "hard", 40L, 1L, "Ann",
+                new FeedWriter.Daily("2026-09-21", 0, null, null, 7, "2026-09-27"));
+        feed.board("fresh_classic_parkour", "trials", "gfresh:fresh_parkour_hard:7:37", true, "ms");
+        feed.course("no_board", "No Board", "parkour", "easy", null, null, null);
+        return feed;
+    }
+
+    @Test
+    void everyBoardBearingEntryHasItsTopListWithTiesSharingARank() {
+        FakeBoards boards = new FakeBoards();
+        String json = boards(false, 5, boards).json(T, null, null, null, null, null);
+        Map<String, JsonObject> games = games(json);
+        for (String id : List.of("snake", "river_run", "golf_meadow", "fresh_parkour_hard", "fresh_classic_parkour")) {
+            JsonArray top = games.get(id).getAsJsonArray("top");
+            assertNotNull(top, id + " has a top list: " + json);
+            assertEquals(3, top.size(), id + ": every row the board has, up to feed_top");
+            assertEquals(List.of(1, 1, 3), List.of(top.get(0).getAsJsonObject().get("rank").getAsInt(),
+                    top.get(1).getAsJsonObject().get("rank").getAsInt(),
+                    top.get(2).getAsJsonObject().get("rank").getAsInt()), id + ": a tie shares a rank");
+            assertEquals(Set.of("rank", "value", "unit", "at"), keys(top.get(0)), id + ": names off, no holder");
+        }
+        assertEquals("apples", games.get("snake").getAsJsonArray("top").get(0).getAsJsonObject().get("unit")
+                .getAsString(), "a cabinet's rows in its own unit");
+        assertEquals("strokes", games.get("golf_meadow").getAsJsonArray("top").get(0).getAsJsonObject().get("unit")
+                .getAsString(), "golf in strokes");
+        assertEquals("ms", games.get("fresh_parkour_hard").getAsJsonArray("top").get(0).getAsJsonObject().get("unit")
+                .getAsString(), "a course in ms");
+        assertFalse(games.get("simon_says").has("top"), "an empty board has no top list");
+        assertFalse(games.get("no_board").has("top"), "an entry no game named a board for has none");
+        assertTrue(boards.asked.contains("snake|classic|false|5"), "a cabinet's board is its own: " + boards.asked);
+        assertTrue(boards.asked.contains("trials|gfresh:fresh_parkour_hard:7:38|true|5"),
+                "a Fresh course's is its set's: " + boards.asked);
+        assertEquals(0, boards.named, "with names off, no name is even looked up");
+        assertFalse(json.contains("holder") || json.contains("Ann") || json.contains("Bob"),
+                "names off: no holder at any depth: " + json);
+        assertEquals(40, games.get("river_run").getAsJsonObject("record").get("ms").getAsInt(),
+                "record is kept as it was");
+        assertEquals(40, games.get("snake").get("best").getAsInt(), "and best");
+
+        String on = boards(true, 5, new FakeBoards()).json(T, null, null, null, null, null);
+        JsonArray top = games(on).get("river_run").getAsJsonArray("top");
+        assertEquals("Ann", top.get(0).getAsJsonObject().get("holder").getAsString(), "names on: the holders");
+        assertEquals("Bob", top.get(1).getAsJsonObject().get("holder").getAsString(), "each row's own");
+        assertFalse(top.get(2).getAsJsonObject().has("holder"), "a name that is a UUID is never written");
+        assertFalse(on.contains(STEVE_UUID), "never a UUID anywhere");
+
+        String two = boards(false, 2, new FakeBoards()).json(T, null, null, null, null, null);
+        assertEquals(2, games(two).get("snake").getAsJsonArray("top").size(), "feed_top 2: two rows");
+        String none = boards(false, 0, new FakeBoards()).json(T, null, null, null, null, null);
+        assertFalse(none.contains("\"top\""), "feed_top 0: no top lists at all");
+    }
+
+    @Test
+    void theGoldenTopListOfACourse() {
+        ArcadeFeed feed = new ArcadeFeed(true, 5, new FakeBoards());
+        feed.course("river_run", "River Run", "boat", "medium", 40L, 1_789_000_000_001L, "Ann");
+        feed.board("river_run", "trials", "course:river_run", true, "ms");
+        assertEquals("{\"generatedAt\":1790000000000,\"games\":[{\"id\":\"river_run\",\"name\":\"River Run\","
+                + "\"kind\":\"boat\",\"tier\":\"medium\",\"record\":{\"ms\":40,\"at\":1789000000001,\"holder\":\"Ann\"},"
+                + "\"top\":[{\"rank\":1,\"value\":40,\"unit\":\"ms\",\"at\":1789000000001,\"holder\":\"Ann\"},"
+                + "{\"rank\":1,\"value\":40,\"unit\":\"ms\",\"at\":1789000000002,\"holder\":\"Bob\"},"
+                + "{\"rank\":3,\"value\":45,\"unit\":\"ms\",\"at\":1789000000003}]}]}",
+                feed.json(T, null, null, null, null, null), "the exact shape, names on");
+    }
+
+    /** Two past Fresh courses, the way Fresh Courses hands them over (names already looked up or not). */
+    private static List<com.dierks.homecraft.games.gen.engine.FreshFeed.Entry> history(boolean names) {
+        String sam = names ? "Sam \"the fast\"" : null;
+        com.dierks.homecraft.games.gen.engine.FreshFeed.Record best =
+                new com.dierks.homecraft.games.gen.engine.FreshFeed.Record(62_300L, null, 1_790_100_000_000L, sam);
+        com.dierks.homecraft.games.gen.engine.FreshFeed.Record next =
+                new com.dierks.homecraft.games.gen.engine.FreshFeed.Record(64_000L, null, 1_790_200_000_000L,
+                        names ? STEVE_UUID : null);
+        return List.of(
+                new com.dierks.homecraft.games.gen.engine.FreshFeed.Entry("GOLF-3", "fresh_golf", "Golf of the Week",
+                        "golf", null, 1_790_604_900_000L, null, "abcdef012345", 0, null, null, false, List.of()),
+                new com.dierks.homecraft.games.gen.engine.FreshFeed.Entry("HARD-40", "fresh_parkour_hard",
+                        "Hard Parkour", "parkour", "hard", 1_790_000_000_000L, 1_790_604_800_000L, "3f2a9c01b7de", 14,
+                        best, "dragon_run", true, List.of(best, next, best, best)));
+    }
+
+    @Test
+    void freshHistoryIsWrittenByTheWriterItsHoldersOnlyWhileNamesAreOn() {
+        ArcadeFeed on = new ArcadeFeed(true, 5, null);
+        on.freshHistory(history(true));
+        String json = on.json(T, null, null, null, null, null);
+        assertEquals("{\"generatedAt\":1790000000000,\"freshHistory\":["
+                + "{\"code\":\"GOLF-3\",\"slot\":\"fresh_golf\",\"name\":\"Golf of the Week\",\"kind\":\"golf\","
+                + "\"from\":1790604900000,\"seed\":\"abcdef012345\",\"plays\":0},"
+                + "{\"code\":\"HARD-40\",\"slot\":\"fresh_parkour_hard\",\"name\":\"Hard Parkour\",\"kind\":\"parkour\","
+                + "\"tier\":\"hard\",\"from\":1790000000000,\"to\":1790604800000,\"seed\":\"3f2a9c01b7de\",\"plays\":14,"
+                + "\"record\":{\"ms\":62300,\"at\":1790100000000,\"holder\":\"Sam \\\"the fast\\\"\"},"
+                + "\"kept\":\"dragon_run\",\"classic\":true,\"top\":["
+                + "{\"rank\":1,\"value\":62300,\"unit\":\"ms\",\"at\":1790100000000,\"holder\":\"Sam \\\"the fast\\\"\"},"
+                + "{\"rank\":2,\"value\":64000,\"unit\":\"ms\",\"at\":1790200000000},"
+                + "{\"rank\":3,\"value\":62300,\"unit\":\"ms\",\"at\":1790100000000,"
+                + "\"holder\":\"Sam \\\"the fast\\\"\"}]}]}", json,
+                "keys in order, at most 3 top rows, a UUID never written as a holder");
+        ArcadeFeed off = new ArcadeFeed(false, 5, null);
+        off.freshHistory(history(true)); // even handed names by mistake
+        String hidden = off.json(T, null, null, null, null, null);
+        assertFalse(hidden.contains("holder") || hidden.contains("Sam"), "names off: no holder at any depth: " + hidden);
+        ArcadeFeed empty = new ArcadeFeed(true, 5, null);
+        empty.freshHistory(List.of());
+        assertNull(root(empty.json(T, null, null, null, null, null)).get("freshHistory"), "an empty history is left out");
+        ArcadeFeed noTop = new ArcadeFeed(false, 0, null);
+        noTop.freshHistory(history(false));
+        assertFalse(noTop.json(T, null, null, null, null, null).contains("\"top\""), "feed_top 0: no top lists");
+        assertEquals(com.dierks.homecraft.games.gen.engine.FreshFeed.json(history(true).subList(0, 1)),
+                "[" + json.substring(json.indexOf("{\"code\":\"GOLF-3\""), json.indexOf("},{\"code\":\"HARD-40\"") + 1)
+                        + "]", "byte for byte what Fresh Courses writes");
+    }
+
+    @Test
+    void aGameThatThrowsHalfwayTakesItsFreshPartsWithIt() {
+        ArcadeFeed feed = new ArcadeFeed(false);
+        feed.course("fresh_rings", "Sky Rings", "elytra", "easy", null, null, null,
+                new FeedWriter.Daily("2026-09-28", 0, null, null, 7, "2026-10-04"));
+        int mark = feed.size();
+        feed.fresh("fresh_rings", new com.dierks.homecraft.games.gen.engine.FreshFeed.Fresh("RINGS-2", "0a", 1, null, 7));
+        feed.freshHistory(history(false));
+        feed.truncate(mark);
+        String json = feed.json(T, null, null, null, null, null);
+        assertFalse(json.contains("RINGS-2") || json.contains("freshHistory"), "nothing half-written stays: " + json);
+        assertTrue(json.contains("fresh_rings"), "what came before stays");
+    }
+
+    @Test
+    void theStarChartIsItsOwnSectionItsHolderOnlyWhileNamesAreOn() {
+        ArcadeFeed off = new ArcadeFeed(false);
+        off.starChart("2026-09-28", 14L, STEVE);
+        assertEquals("{\"generatedAt\":1790000000000,\"starChart\":{\"week\":\"2026-09-28\",\"best\":14}}",
+                off.json(T, null, null, null, null, null), "the week and its best, no name");
+        ArcadeFeed on = new ArcadeFeed(true);
+        on.starChart("2026-09-28", 14L, STEVE);
+        assertEquals(Set.of("week", "best", "holder"), keys(root(on.json(T, null, null, null, null, null))
+                .get("starChart")), "the holder while names are on");
+        ArcadeFeed uuid = new ArcadeFeed(true);
+        uuid.starChart("2026-09-28", 14L, STEVE_UUID);
+        assertFalse(uuid.json(T, null, null, null, null, null).contains(STEVE_UUID), "never a UUID");
+        ArcadeFeed empty = new ArcadeFeed(true);
+        empty.starChart("2026-09-28", null, STEVE);
+        assertEquals("{\"generatedAt\":1790000000000,\"starChart\":{\"week\":\"2026-09-28\"}}",
+                empty.json(T, null, null, null, null, null), "no stars yet this week: just the week");
+        assertNull(root(full(filled(true))).get("starChart"), "a feed nobody wrote a chart into has none");
     }
 }

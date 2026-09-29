@@ -2,6 +2,7 @@ package com.dierks.homecraft.games;
 
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.world.Session;
 import com.dierks.homecraft.games.world.WorldSessions;
 import com.dierks.homecraft.gui.games.GameMenu;
@@ -83,10 +84,14 @@ public final class GamesService {
     private final WorldSessions sessions;
     private final Invites invites;
     private final Featured featured;
+    /** Who hears about skill-game finishes (quests, achievements); {@link GameProgress#NONE} until registered. */
+    private volatile GameProgress progress = GameProgress.NONE;
     private final List<GameSpec<?>> specs;
     private volatile List<Game> games = List.of();
     /** The shared screens (gui/games); "Coming soon!" until installed. */
     private GamesScreens screens = GamesScreens.NONE;
+    /** Fresh Courses' gate over generated courses; nothing generated is live until it is installed. */
+    private volatile GeneratedCourses generated = GeneratedCourses.NONE;
     /** Ids and aliases, lower-case. */
     private final Map<String, Game> byName = new HashMap<>();
     /** Games that threw: off until {@code /hcm reload}. */
@@ -338,7 +343,8 @@ public final class GamesService {
         if (!guard(game, game::configEnabled, false)) {
             GameSpec<?> spec = spec(game.id());
             Object on = spec == null ? null : PlayGate.component(cfg.settings(spec), "enabled");
-            return Boolean.FALSE.equals(on) ? "games." + game.id() + ".enabled is false"
+            return Boolean.FALSE.equals(on)
+                    ? GamesConfig.PATH + "." + GamesConfig.block(game.id()) + ".enabled is false"
                     : "not ready (not built yet, or no stake fits 85-95 - see the console)";
         }
         return null;
@@ -610,6 +616,31 @@ public final class GamesService {
         return featured;
     }
 
+    /** Who hears about skill-game finishes; never {@code null}. */
+    public GameProgress progress() {
+        return progress;
+    }
+
+    /**
+     * Register who hears about skill-game finishes ({@code null} = nobody). A game calls it through
+     * {@link #tellProgress}, which guards the call.
+     */
+    public void progress(GameProgress listener) {
+        this.progress = listener == null ? GameProgress.NONE : listener;
+    }
+
+    /** Tell the progress listener something, guarded: a listener that throws can't break a game. */
+    public void tellProgress(java.util.function.Consumer<GameProgress> call) {
+        if (call == null) {
+            return;
+        }
+        try {
+            call.accept(progress);
+        } catch (RuntimeException | LinkageError e) {
+            host.logger().log(java.util.logging.Level.WARNING, "Games: a quest/achievement listener failed", e);
+        }
+    }
+
     /** The shared games screens (Games screen, high scores, Take a break, player picker). */
     public GamesScreens screens() {
         return screens;
@@ -618,6 +649,37 @@ public final class GamesService {
     /** Install the real screens (done once at enable, after the service is built). */
     public void screens(GamesScreens screens) {
         this.screens = screens == null ? GamesScreens.NONE : screens;
+    }
+
+    /**
+     * What the course engines ask about generated courses (GEN-SPEC §0.2 R5): {@link
+     * GeneratedCourses#NONE} — nothing generated is live — until Fresh Courses installs its engine,
+     * and whenever the {@code fresh_courses} game is closed (switched off, reloaded off, or failed), whatever
+     * its own stop managed to do. So the gate can't outlive the game that vouches for it.
+     */
+    public GeneratedCourses generated() {
+        GeneratedCourses g = generated;
+        if (g == GeneratedCourses.NONE) {
+            return g;
+        }
+        Game daily = byName.get(Slots.DAILY);
+        return daily == null || enabled(daily) ? g : GeneratedCourses.NONE;
+    }
+
+    /** Install (or, with {@code null}, remove) Fresh Courses' engine. */
+    public void generated(GeneratedCourses generated) {
+        this.generated = generated == null ? GeneratedCourses.NONE : generated;
+    }
+
+    /**
+     * Tell the game {@code gameId} ({@code trials} or {@code golf}) that its courses changed
+     * outside its own commands, so it reads them again. Inside its guard; unknown ids are ignored.
+     */
+    public void coursesChanged(String gameId) {
+        Game g = gameId == null ? null : byId().get(gameId.trim().toLowerCase(Locale.ROOT));
+        if (g != null) {
+            guard(g, g::coursesChanged);
+        }
     }
 
     /** Every game's id, for {@code /hcm games status} and tab completion. */

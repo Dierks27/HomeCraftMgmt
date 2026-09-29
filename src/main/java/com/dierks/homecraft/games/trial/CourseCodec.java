@@ -1,5 +1,7 @@
 package com.dierks.homecraft.games.trial;
 
+import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.GenTagCodec;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -21,8 +23,13 @@ import java.util.Map;
  *
  * <p>Coordinates are kept to the thousandth of a block, facing to a tenth of a degree, radii to a
  * hundredth: plenty for a course, and the text stays readable.
+ *
+ * <p>A course Fresh Courses made also has a {@code gen:} block ({@link GenTagCodec}); a course
+ * without one is written exactly as it always was. A {@code gen:} block that can't be read is the
+ * one thing not read forgivingly into something else: the course comes back closed and without
+ * its tag, and says why, so nobody plays a layout nothing vouches for.
  */
-final class CourseCodec {
+public final class CourseCodec {
 
     private CourseCodec() {
     }
@@ -33,15 +40,15 @@ final class CourseCodec {
      * @param course   the course, or {@code null} when it couldn't be read at all
      * @param problems what was wrong with it, in admin words (empty = nothing)
      */
-    record Decoded(Course course, List<String> problems) {
+    public record Decoded(Course course, List<String> problems) {
 
-        Decoded {
+        public Decoded {
             problems = List.copyOf(problems);
         }
     }
 
     /** The course as YAML text. */
-    static String encode(Course c) {
+    public static String encode(Course c) {
         YamlConfiguration y = new YamlConfiguration();
         y.set("name", c.name());
         y.set("kind", c.kind().id());
@@ -73,11 +80,14 @@ final class CourseCodec {
         if (c.minSeconds() != null) {
             y.set("min_seconds", c.minSeconds());
         }
+        if (c.gen() != null) {
+            y.set(GenTagCodec.KEY, GenTagCodec.write(c.gen()));
+        }
         return y.saveToString();
     }
 
     /** Read course {@code id} from its YAML text; never throws. */
-    static Decoded decode(String id, String text) {
+    public static Decoded decode(String id, String text) {
         List<String> problems = new ArrayList<>();
         YamlConfiguration y = new YamlConfiguration();
         try {
@@ -141,8 +151,21 @@ final class CourseCodec {
             }
         }
         boolean enabled = y.getBoolean("enabled", false);
+        GenTag gen = null;
+        if (y.isSet(GenTagCodec.KEY)) {
+            try {
+                Map<?, ?> block = map(y.get(GenTagCodec.KEY));
+                if (block == null) {
+                    throw new IllegalArgumentException("gen is not a map");
+                }
+                gen = GenTagCodec.read(block);
+            } catch (IllegalArgumentException e) {
+                problems.add("its gen: block can't be read (" + e.getMessage() + ") - closed");
+                enabled = false;
+            }
+        }
         Course c = new Course(id, kind, name, tier, y.getString("world", ""), start, checkpoints, finish, fallY,
-                minSeconds, enabled, y.getBoolean("pinned", false), y.getInt("rev", 1));
+                minSeconds, enabled, y.getBoolean("pinned", false), y.getInt("rev", 1), gen);
         if (enabled && !c.ready()) {
             problems.add("it was open without a start and a finish - closed");
             c = c.withEnabled(false);

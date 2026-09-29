@@ -545,7 +545,9 @@ public final class MarketDashboardServer {
      * every refresh, so {@code /hcm reload} applies it).
      */
     private String arcadeJson(long now) {
-        ArcadeFeed feed = new ArcadeFeed(plugin.getConfig().getBoolean("web.dashboard.arcade_show_names", false));
+        GamesService games = plugin.games();
+        ArcadeFeed feed = new ArcadeFeed(plugin.getConfig().getBoolean("web.dashboard.arcade_show_names", false),
+                games == null ? 0 : games.config().common().feedTop(), games == null ? null : topBoards(games));
         ArcadeFeed.Featured featured = writeGames(feed);
         PluginConfig.Arcade arcade = plugin.config().arcade();
         if (arcade == null || !arcade.enabled()) {
@@ -580,6 +582,26 @@ public final class MarketDashboardServer {
         List<ArcadeFeed.AchievementRow> achievements = plugin.achievements() == null ? List.of()
                 : ArcadeFeed.achievements(plugin.achievements().all());
         return feed.json(now, featured, scratch, prizes, packs, achievements);
+    }
+
+    /**
+     * Where the feed's {@code top} lists are read (EXTRAS E3): the games' own boards, and a record
+     * holder's name, which the feed asks for only while {@code arcade_show_names} is on. Public so
+     * {@code /hcm games check} builds the feed exactly as {@code /api/arcade} does.
+     */
+    public static ArcadeFeed.Boards topBoards(GamesService games) {
+        return new ArcadeFeed.Boards() {
+            @Override
+            public List<com.dierks.homecraft.storage.GamesDao.ScoreRow> top(String game, String board,
+                                                                           boolean lowerIsBetter, int limit) {
+                return games.scores().top(game, board, lowerIsBetter, limit);
+            }
+
+            @Override
+            public String name(java.util.UUID player) {
+                return org.bukkit.Bukkit.getOfflinePlayer(player).getName();
+            }
+        };
     }
 
     /**

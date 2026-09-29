@@ -49,6 +49,13 @@ import java.util.UUID;
  * sale. {@link #celebrate} puts a burst of particles on every display of an item that just made
  * the news. With the live market off every display reads exactly as before, and the news board
  * reads "The Crate Market is calm today."
+ *
+ * <p><b>Leaderboards (EXTRAS E3).</b> A hologram, TV or sign bound to {@code @board:<id>[:<board>]}
+ * ({@link BoardDisplay}) shows a game's or a course's best: a title, the top five (a sign: three)
+ * and "/hcm play &lt;id&gt;"; a Fresh course's shows its current set's board, following each new set.
+ * It is drawn on the display timer, and again within a second of a score going on its board (a
+ * one-second timer draws only the boards a score touched since, so a burst of finishes is one
+ * redraw). Never per tick.
  */
 public final class DisplayService {
 
@@ -90,6 +97,14 @@ public final class DisplayService {
     /** Bumped each refresh tick. */
     private volatile long version;
 
+    /** Leaderboard displays to draw again: "game|board" keys a score went on since the last board tick. */
+    private final java.util.Set<String> dirtyBoards = new java.util.HashSet<>();
+    /** What each leaderboard display showed last: display id → "game|board". */
+    private final Map<Long, String> boardKeys = new HashMap<>();
+    /** The games service this listens to for new scores (re-hooked if it is replaced). */
+    private com.dierks.homecraft.games.GamesService hooked;
+    private BukkitTask boardTask;
+
     /** Advancing spin angle (radians) for floating item displays. */
     private float spinAngle;
 
@@ -114,6 +129,7 @@ public final class DisplayService {
         if (plugin.config().displays().hologram().itemDisplay() && plugin.config().displays().hologram().spin()) {
             spinTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::spinItems, 20L, 2L);
         }
+        boardTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::boardTick, 20L, 20L);
     }
 
     /** Monotonic version bumped each refresh; map-TV renderers repaint only when it changes. */
@@ -129,6 +145,10 @@ public final class DisplayService {
         if (spinTask != null) {
             spinTask.cancel();
             spinTask = null;
+        }
+        if (boardTask != null) {
+            boardTask.cancel();
+            boardTask = null;
         }
         // Despawn our (non-persistent) hologram + TV-panel entities so nothing is orphaned.
         for (Holo h : holograms.values()) {
@@ -164,6 +184,7 @@ public final class DisplayService {
         }
         for (DisplayDao.Display d : displays) {
             try {
+                rememberBoard(d); // a Fresh course's board follows each new set
                 switch (d.kind()) {
                     case DisplayDao.SIGN -> renderSign(d);
                     case DisplayDao.HOLOGRAM -> renderHologram(d);
@@ -189,7 +210,13 @@ public final class DisplayService {
         if (!(block.getState() instanceof Sign)) {
             return Result.fail("Look at a placed sign first.");
         }
-        if (plugin.market().item(itemId) == null) {
+        if (BoardDisplay.is(itemId)) {
+            String error = boardProblem(itemId);
+            if (error != null) {
+                return Result.fail(error);
+            }
+            itemId = BoardDisplay.parse(itemId).itemId();
+        } else if (plugin.market().item(itemId) == null) {
             return Result.fail("Unknown commodity '" + itemId + "'.");
         }
         try {
@@ -266,6 +293,9 @@ public final class DisplayService {
 
     /** The four sign lines for a commodity: name, price, trend, stock. Null if unknown. */
     private String[] signLines(String itemId) {
+        if (BoardDisplay.is(itemId)) {
+            return boardSign(itemId);
+        }
         MarketItem item = plugin.market().item(itemId);
         MarketState state = plugin.market().state(itemId);
         if (item == null || state == null) {
@@ -293,7 +323,13 @@ public final class DisplayService {
 
     /** Bind a floating hologram above {@code loc} to a commodity and spawn it now. */
     public Result bindHologram(Player admin, Location loc, String itemId) {
-        if (!bindable(itemId)) {
+        if (BoardDisplay.is(itemId)) {
+            String error = boardProblem(itemId);
+            if (error != null) {
+                return Result.fail(error);
+            }
+            itemId = BoardDisplay.parse(itemId).itemId();
+        } else if (!bindable(itemId)) {
             return Result.fail("Unknown commodity '" + itemId + "'.");
         }
         try {
@@ -407,6 +443,9 @@ public final class DisplayService {
         if (NEWS_ID.equals(itemId)) {
             return new ItemStack(Material.BELL);
         }
+        if (BoardDisplay.is(itemId)) {
+            return new ItemStack(Material.GOLD_INGOT); // a leaderboard's trophy
+        }
         MarketItem item = plugin.market().item(itemId);
         if (item != null && item.material().isItem()) {
             return new ItemStack(item.material());
@@ -453,6 +492,9 @@ public final class DisplayService {
     private net.kyori.adventure.text.Component holoText(String itemId) {
         if (NEWS_ID.equals(itemId)) {
             return Text.of(newsBoardText());
+        }
+        if (BoardDisplay.is(itemId)) {
+            return Text.of(boardScreen(itemId));
         }
         MarketItem item = plugin.market().item(itemId);
         MarketState state = plugin.market().state(itemId);
@@ -509,7 +551,13 @@ public final class DisplayService {
      * a rebind at the same block replaces it. Never spawns an ItemDisplay or a map.
      */
     public Result bindTvPanel(Player admin, Block wall, BlockFace face, String itemId, float scale) {
-        if (!bindable(itemId)) {
+        if (BoardDisplay.is(itemId)) {
+            String error = boardProblem(itemId);
+            if (error != null) {
+                return Result.fail(error);
+            }
+            itemId = BoardDisplay.parse(itemId).itemId();
+        } else if (!bindable(itemId)) {
             return Result.fail("Unknown commodity '" + itemId + "'.");
         }
         if (face != BlockFace.NORTH && face != BlockFace.SOUTH
@@ -605,6 +653,9 @@ public final class DisplayService {
         if (NEWS_ID.equals(itemId)) {
             return Text.of(newsBoardText());
         }
+        if (BoardDisplay.is(itemId)) {
+            return Text.of(boardScreen(itemId));
+        }
         MarketItem item = plugin.market().item(itemId);
         MarketState state = plugin.market().state(itemId);
         if (item == null || state == null) {
@@ -636,6 +687,151 @@ public final class DisplayService {
             return "\n" + line5;
         }
         return MarketLabels.showUsual(pct) ? "\n\n" + MarketLabels.usually(usual) : "";
+    }
+
+    // ---- leaderboards (@board, EXTRAS E3) ---------------------------------------
+
+    /** Why {@code itemId} can't be bound as a leaderboard (for the admin), or {@code null} when it can. */
+    public String boardProblem(String itemId) {
+        com.dierks.homecraft.games.GamesService games = plugin.games();
+        if (games == null) {
+            return "The games aren't running, so there is no leaderboard to show.";
+        }
+        BoardDisplay.Result r = BoardDisplay.resolve(itemId, new BoardSource(games));
+        return r.ok() ? null : r.error();
+    }
+
+    /** Every leaderboard target an admin can bind ({@code @board:<id>}), for tab completion. */
+    public List<String> boardTargets() {
+        com.dierks.homecraft.games.GamesService games = plugin.games();
+        List<String> out = new java.util.ArrayList<>();
+        if (games == null) {
+            return out;
+        }
+        try {
+            for (String id : new BoardSource(games).ids()) {
+                out.add(BoardDisplay.PREFIX + id);
+            }
+        } catch (RuntimeException e) {
+            // no completions rather than an error in the admin's chat
+        }
+        return out;
+    }
+
+    /** A leaderboard's resolution now, remembering which board each display shows; {@code null} when it can't be read. */
+    private BoardDisplay.Resolved board(String itemId, BoardSource[] source) {
+        com.dierks.homecraft.games.GamesService games = plugin.games();
+        if (games == null) {
+            return null;
+        }
+        source[0] = new BoardSource(games);
+        BoardDisplay.Result r = BoardDisplay.resolve(itemId, source[0]);
+        return r.ok() ? r.resolved() : null;
+    }
+
+    /** A hologram's or TV's leaderboard text: the title, the best five and "/hcm play &lt;id&gt;". */
+    private String boardScreen(String itemId) {
+        BoardSource[] source = new BoardSource[1];
+        BoardDisplay.Resolved r = board(itemId, source);
+        if (r == null) {
+            return "&7This leaderboard can't be shown right now.";
+        }
+        return String.join("\n", BoardDisplay.screen(r.title(), source[0].rows(r, BoardDisplay.SCREEN_ROWS), r.unit(),
+                r.playId()));
+    }
+
+    /** A sign's leaderboard lines: the title and the best three. */
+    private String[] boardSign(String itemId) {
+        BoardSource[] source = new BoardSource[1];
+        BoardDisplay.Resolved r = board(itemId, source);
+        if (r == null) {
+            return new String[]{"&8Leaderboard", "&7Not open", "&7right now", ""};
+        }
+        List<String> lines = BoardDisplay.sign(r.title(), source[0].rows(r, BoardDisplay.SIGN_ROWS), r.unit());
+        return new String[]{"&1&l" + lines.get(0), "&0" + lines.get(1), "&0" + lines.get(2), "&0" + lines.get(3)};
+    }
+
+    /** A score went on {@code board} of {@code game}: its leaderboards are drawn again within a second. */
+    public void scoreSubmitted(String game, String board) {
+        if (game != null && board != null) {
+            dirtyBoards.add(game + "|" + board);
+        }
+    }
+
+    /**
+     * Once a second: listen to the games' scores (again, if the service was replaced), and draw the
+     * leaderboards a score went on since the last tick, each once however many scores it got.
+     */
+    private void boardTick() {
+        com.dierks.homecraft.games.GamesService games = plugin.games();
+        if (games != null && games != hooked) {
+            hooked = games;
+            games.scores().onSubmit(this::scoreSubmitted);
+        }
+        if (dirtyBoards.isEmpty()) {
+            return;
+        }
+        java.util.Set<String> due = new java.util.HashSet<>(dirtyBoards);
+        dirtyBoards.clear();
+        List<DisplayDao.Display> displays;
+        try {
+            displays = dao.all();
+        } catch (SQLException e) {
+            return;
+        }
+        for (DisplayDao.Display d : dueBoards(displays, boardKeys, due)) {
+            try {
+                switch (d.kind()) {
+                    case DisplayDao.SIGN -> renderSign(d);
+                    case DisplayDao.HOLOGRAM -> renderHologram(d);
+                    case DisplayDao.TV -> renderTvPanel(d);
+                    default -> {
+                    }
+                }
+            } catch (Throwable t) {
+                plugin.getLogger().warning("Failed to render leaderboard " + d.id() + ": " + t.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Which displays a tick draws again: every leaderboard showing a board a score went on since
+     * the last tick ({@code dirty}, as {@code game|board}), and any leaderboard whose board isn't
+     * known yet; never a display of anything else, and none when no score came in. Each display is
+     * listed once, however many scores its board got. Pure, so it is tested.
+     *
+     * @param keys each leaderboard display's {@code game|board}, by display id
+     */
+    static List<DisplayDao.Display> dueBoards(List<DisplayDao.Display> displays, Map<Long, String> keys,
+                                              java.util.Set<String> dirty) {
+        List<DisplayDao.Display> out = new java.util.ArrayList<>();
+        if (displays == null || dirty == null || dirty.isEmpty()) {
+            return out;
+        }
+        for (DisplayDao.Display d : displays) {
+            if (d == null || !BoardDisplay.is(d.itemId())) {
+                continue;
+            }
+            String key = keys == null ? null : keys.get(d.id());
+            if (key == null || dirty.contains(key)) {
+                out.add(d); // a board a score went on, or one not read yet
+            }
+        }
+        return out;
+    }
+
+    /** Remember which board a leaderboard display shows, so a score on it draws it again. */
+    private void rememberBoard(DisplayDao.Display d) {
+        if (d == null || !BoardDisplay.is(d.itemId())) {
+            return;
+        }
+        BoardSource[] source = new BoardSource[1];
+        BoardDisplay.Resolved r = board(d.itemId(), source);
+        if (r != null && r.board() != null) {
+            boardKeys.put(d.id(), r.game() + "|" + r.board());
+        } else {
+            boardKeys.remove(d.id());
+        }
     }
 
     // ---- Market News board and celebrations -----------------------------------

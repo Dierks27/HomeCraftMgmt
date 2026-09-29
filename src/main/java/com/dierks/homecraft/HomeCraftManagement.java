@@ -66,9 +66,10 @@ public final class HomeCraftManagement extends JavaPlugin {
      * selling) leave the shipped pool. 13 = the wild hunt retune: closer, longer, one at a time.
      * 14 = the token economy: no money in the Arcade, Prize Counter tabs, quest pools, and the
      * achievements list. 15 = packs hold one Card and roll by rarity odds; the shipped prices
-     * drop to $100 / $300. 16 = the Second/Third Home rows become one "+1 Home" row.
+     * drop to $100 / $300. 16 = the Second/Third Home rows become one "+1 Home" row. 17 = the
+     * skill games' quests and "Games" achievements join a pool and a list the owner hasn't edited.
      */
-    static final int CONFIG_REVISION = 16;
+    static final int CONFIG_REVISION = 17;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -356,6 +357,7 @@ public final class HomeCraftManagement extends JavaPlugin {
         try {
             this.games = new com.dierks.homecraft.games.GamesService(this, breaks);
             this.games.screens(new com.dierks.homecraft.gui.games.Screens(this));
+            this.games.progress(new com.dierks.homecraft.arcade.GamesProgress(this)); // quests and achievements
             this.games.start();
         } catch (RuntimeException e) {
             getLogger().log(java.util.logging.Level.SEVERE, "Could not start the Games - they are off.", e);
@@ -1050,6 +1052,10 @@ public final class HomeCraftManagement extends JavaPlugin {
             // HomeSlotMigration.
             HomeSlotMigration.apply(c, log);
         }
+        if (from < 17) {
+            // The skill games' quests and achievements. See ArcadeConfigMigration#gamesRows.
+            ArcadeConfigMigration.gamesRows(c, log);
+        }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);
             log.add("Config migration: config_revision " + from + " → " + CONFIG_REVISION + ".");
@@ -1137,7 +1143,7 @@ public final class HomeCraftManagement extends JavaPlugin {
             return;
         }
         for (com.dierks.homecraft.games.GameSpec<?> spec : com.dierks.homecraft.games.GameCatalog.SPECS) {
-            String path = root + "." + spec.id();
+            String path = root + "." + com.dierks.homecraft.config.GamesConfig.block(spec.id());
             Object v = c.get(path, null);
             if (v != null && !(v instanceof org.bukkit.configuration.ConfigurationSection)) {
                 switchToSection(c, path, v, spec.id(), log);

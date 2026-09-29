@@ -57,6 +57,8 @@ final class TrialRun {
     long reseatUntil;
     /** The server stalls seen while the clock ran: the speed check skips the legs they touch. */
     final List<FairPlay.Stall> stalls = new ArrayList<>();
+    /** Sky Rings: the "open your wings" tip was shown (once per run, at the first fall-reset). */
+    boolean wingsTip;
 
     TrialRun(UUID player, Course course, boolean test, int countdown) {
         this.player = player;

@@ -25,6 +25,7 @@
 | **Time Trials: Elytra** | Time trial (skill) | `/hcm play <course id>` (list: `/hcm play trials`) | Free. It costs no tokens, and you can play as many times as you like. | First finish: tokens the first time you finish each course, once ever. By default: Easy 5, Medium 10, Hard 20, and Why did we build this? 40. This does not… |
 | **Time Trials: Boat** | Time trial (skill) | `/hcm play <course id>` (list: `/hcm play trials`) | Free. It costs no tokens, and you can play as many times as you like. | First finish: tokens the first time you finish each course, once ever. By default: Easy 5, Medium 10, Hard 20, and Why did we build this? 40. This does not… |
 | **Mini Golf** | Mini golf (skill) | `/hcm play <course id>` (list: `/hcm play golf`) | Free. It costs no tokens, and you can play as many times as you like. | First finish: 5 tokens by default the first time you finish each course, once ever. This does not count toward any daily limit. |
+| **Race Night** | Boat races together (skill) | `/hcm play race` | Free. Nobody can lose tokens. | The night's 1st, 2nd and 3rd win 5, 3 and 2 tokens, and everyone else who finished a race wins 1 (2nd needs 3 racers, 3rd needs 4). At most 3 prize nights a week. |
 
 ## Getting to the games
 
@@ -52,6 +53,8 @@
 | `/hcm play blackjack` | Opens Twenty-One. It is another name for /hcm play twenty_one. |
 | `/hcm play trials` | Shows the list of time-trial courses, easiest first. |
 | `/hcm play golf` | Shows the list of mini golf courses. |
+| `/hcm play golf <course id>` | Opens that golf course's screen, where Play with friends makes a golf party. |
+| `/hcm play race` | Opens the Race Night screen: when the next one is, Join, Watch and your season points. |
 | `/hcm play break` | Opens Take a break, where you can set your own daily limit or a pause for games of chance. Works even while the games are off. |
 | `/hcm play accept` | Says yes to the invite waiting for you. Bedrock players type this. Java players can also click [Accept] in chat. If nothing is waiting: "You have no invite waiting." |
 | `/hcm play deny` | Says no to the invite waiting for you ("Invite turned down."). If nothing is waiting: "You have no invite waiting." |
@@ -1455,6 +1458,67 @@ These are played in the Games world, on courses the server's builders make. Each
 - Water, lava and out of bounds each cost a stroke, so aim away from them.
 - Only use Reset ball when your ball is stuck, like inside a cauldron. It costs a stroke.
 - Open the Scorecard any time to see how you're doing. Green is under par, white is par, yellow is over par, red is picked up, a star is a hole-in-one, light blue is the hole you're on, and grey is not played yet.
+
+### Playing golf together
+
+- On a golf course's screen (/hcm play golf <course>, or its tile), click **Play with friends**. That makes a party of up to 4.
+- Click **Invite a friend** and pick someone. On Java they click [Accept]; on Bedrock they type /hcm play accept.
+- The host clicks **Start**, and everyone goes to hole 1 together.
+- Everyone plays the same hole at once, each with their own ball. Balls don't bump into each other.
+- When your ball is in, you wait for the others. When every ball is in (or picked up), everyone goes to the next tee together.
+- The Scorecard shows everyone's holes. At the end it shows who took the fewest strokes.
+- Each player's round is a normal round: it goes on the high scores and earns the normal tokens. Playing together doesn't cost or pay anything extra.
+- You can leave any time with Leave game. Your things come back and the others carry on.
+
+## Race Night
+
+*Boat races for everyone at once: three short races on one track, points in every race, and a few tokens for the top racers. It's free, so nobody can lose tokens.*
+
+- **Open it:** `/hcm play race`, the Race Night tile on the Together tab of the Games screen, or an [Arcade] Race Night sign.
+- **When:** at set times the owner picks (Fridays at 7:00 PM by default), or when an admin starts one. The Race Night tile's name says when the next one is.
+- **Costs:** Free.
+
+**How to play**
+
+1. About 30 minutes before, a chat line says Race Night is coming. 10 minutes before, joining opens: a line in chat and a bar at the top of the screen count down.
+2. Open the Race Night screen and click the green **Join Race Night** button. That's all. You can keep playing anything until it starts. Changed your mind? Click **Leave the race list**.
+3. Just before the start, you are taken to the track in your own boat. Your things are kept safe and come back at the end. If you're busy in another game, you're asked to stand still or use Leave game; if you can't in time, you join the next race.
+4. Warm-up: first you get a few minutes of free laps that don't count. Tap **Ready** when you're set. The race starts when the time is up, or when everyone is ready.
+5. Everyone starts together on a starting grid: "Race 1 of 3", then 3, 2, 1, Go! The bar at the top shows your place and lap, like "2nd of 5 · Lap 1/2".
+6. Cross the finish line: "You came 2nd!" Then you watch the others from the viewing stand.
+7. After a short break, the next race starts. Whoever has the fewest points starts at the front.
+8. After the last race, the winners are announced, prizes are paid, and everyone goes home with their things.
+
+**Points in every race**
+
+- 1st 10 points, 2nd 8, 3rd 6, 4th 5, 5th 4, 6th 3, 7th 2, and anyone else who finishes 2.
+- Still racing when the race ends? You still get 1 point. Great racing!
+- Leaving, or a race that didn't count (flying, a potion effect, a changed speed), is 0 points for that race.
+- The night's winner has the most points. If two racers have the same points, more 1st places wins, then more 2nd places. Still the same? They share the place.
+
+**Tokens you can win**
+
+- The night's 1st place wins 5 tokens, 2nd 3 tokens and 3rd 2 tokens. Everyone else who finished at least one race gets 1 token.
+- 2nd place needs at least 3 racers, and 3rd needs at least 4. So with 2 racers it's 5 and 1, and with 3 it's 5, 3 and 1.
+- Nobody wins more than 5 tokens a night. Only 3 nights a week pay tokens; after that it's "Just for fun tonight" and only points count.
+- These prizes don't count toward the daily token limit.
+- Not somewhere you can earn tokens when it ends (or offline)? Your prize waits and is paid when you're back.
+
+**The season**
+
+- Every race's points also go on this month's Race Night table: "Race Night · October" in High scores, on the hub board, and on the website.
+
+**Watching**
+
+- Click **Watch** on the Race Night screen to see the leader in a bar at the top, and the finishes in chat, from anywhere. Click it again to stop.
+
+**Limits and rules**
+
+- Boats bump into each other, like in normal Minecraft. Give each other room!
+- Leave game (or /hcm leave) during Race Night means you're out for the night. Points you already won still count, and your things come back.
+- If you disconnect, that race scores 0 for you. Come back before the next race and you're pulled back in.
+- If the server restarts during Race Night, the races already finished still count, and prizes are paid.
+- Race news: the bell on the Race Night screen, or /hcm play news off, turns off Race Night's chat lines and the join bar.
 
 ## Fresh Courses
 

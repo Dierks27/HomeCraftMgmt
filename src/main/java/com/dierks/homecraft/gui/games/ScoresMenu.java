@@ -127,6 +127,10 @@ public final class ScoresMenu extends GameMenu {
      * @param courseName a course id's name (the id itself when unknown)
      */
     static String boardLabel(String board, long today, Function<String, String> courseName) {
+        String raceNight = com.dierks.homecraft.games.event.EventCopy.boardLabel(board); // EVENTS-DROPPER-SPEC §A.8
+        if (raceNight != null) {
+            return raceNight;
+        }
         if (board.startsWith("daily:")) {
             long day = parse(board.substring(6), -1);
             return day == today ? "Today's challenge" : "Challenge of " + (day < 0 ? "a past day" : Breaks.dateText(day));

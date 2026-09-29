@@ -93,6 +93,8 @@ public final class MiniGolf implements Game {
     private final GameContext ctx;
     private final GolfRounds rounds;
     private final GolfAdmin admin;
+    /** Golf together (EVENTS-OWNER-DECISIONS D4): the parties, their invites and their start. */
+    private final GolfTogether together;
     /** Every golf course by id (sorted), read once and again after each edit. */
     private Map<String, GolfCourse> courses;
     /** Course rows whose data can't be read, with why: listed for admins, never played. */
@@ -102,6 +104,7 @@ public final class MiniGolf implements Game {
         this.ctx = ctx;
         this.rounds = new GolfRounds(this);
         this.admin = new GolfAdmin(this);
+        this.together = new GolfTogether(this);
     }
 
     @Override
@@ -299,11 +302,13 @@ public final class MiniGolf implements Game {
     @Override
     public void stop() {
         rounds.stopAll();
+        together.stop();
     }
 
     @Override
     public void onQuit(Player player) {
         rounds.quit(player);
+        together.quit(player.getUniqueId());
     }
 
     @Override
@@ -339,6 +344,11 @@ public final class MiniGolf implements Game {
     /** The rounds being played. */
     public GolfRounds rounds() {
         return rounds;
+    }
+
+    /** Golf together: "Play with friends", its party and invites (D4). */
+    public GolfTogether together() {
+        return together;
     }
 
     /** Start {@code courseId} for the player (the course screen's Start, "Play again"). */

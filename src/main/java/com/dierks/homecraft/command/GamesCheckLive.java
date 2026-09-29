@@ -225,6 +225,21 @@ final class GamesCheckLive implements GamesCheck.Facts {
     }
 
     @Override
+    public GamesCheck.RaceNight raceNight() {
+        GamesService g = games();
+        if (g == null || !(g.game(com.dierks.homecraft.games.event.RaceNight.SPEC.id())
+                instanceof com.dierks.homecraft.games.event.RaceNight r)) {
+            return null;
+        }
+        List<GamesCheck.RaceNightLine> lines = new ArrayList<>();
+        for (com.dierks.homecraft.games.event.RaceNight.Check c : g.guard(r, r::check,
+                List.<com.dierks.homecraft.games.event.RaceNight.Check>of())) {
+            lines.add(new GamesCheck.RaceNightLine(c.what(), c.fix()));
+        }
+        return new GamesCheck.RaceNight(r.switchedOn(), lines);
+    }
+
+    @Override
     public List<GamesCheck.Course> courses() {
         List<String> worlds = gamesWorlds();
         List<GamesCheck.Course> out = new ArrayList<>();

@@ -130,6 +130,11 @@ final class BoardSource implements BoardDisplay.Lookup {
         return null;
     }
 
+    @Override
+    public BoardDisplay.Result event(BoardDisplay.Target t) {
+        return EventDisplay.board(games, t);
+    }
+
     /** The board's best rows with their players' names (names are fine in game), ranked, ties sharing one. */
     List<BoardDisplay.Row> rows(BoardDisplay.Resolved r, int limit) {
         if (r == null || r.board() == null) {
@@ -174,6 +179,9 @@ final class BoardSource implements BoardDisplay.Lookup {
         }
         out.addAll(Slots.ids());
         out.addAll(Slots.classicIds());
+        if (games.game(com.dierks.homecraft.games.event.RaceNight.SPEC.id()) != null) {
+            out.add(com.dierks.homecraft.games.event.RaceNight.SPEC.id());
+        }
         return out;
     }
 }

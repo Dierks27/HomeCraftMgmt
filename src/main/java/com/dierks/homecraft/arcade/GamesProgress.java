@@ -32,7 +32,9 @@ import java.util.Locale;
  *       course of a set is one {@value #FRESH_SETS}; the week's top Star Chart goal is one
  *       {@value #STAR_CHART_TOPS};</li>
  *   <li>a counted Dropper run with no bonks is one {@value #DROPPER_CLEAN} (its finish is a course
- *       finish as for any trial).</li>
+ *       finish as for any trial);</li>
+ *   <li>a Race Night raced is one {@value #RACE_NIGHTS}, and a Race Night won one
+ *       {@value #RACE_NIGHT_WINS} (EVENTS-DROPPER-SPEC §A.8).</li>
  * </ul>
  *
  * <p><b>Why counters.</b> Courses are played in the Games world, which is not an economy world, so
@@ -71,10 +73,15 @@ public final class GamesProgress implements GameProgress {
     public static final String STAR_CHART_TOPS = "star_chart_tops";
     /** Counted Dropper runs with no bonks (EVENTS-DROPPER-SPEC §B.1.8). */
     public static final String DROPPER_CLEAN = "dropper_clean";
+    /** Race Nights raced (EVENTS-DROPPER-SPEC §A.8). */
+    public static final String RACE_NIGHTS = "race_nights";
+    /** Race Nights won. */
+    public static final String RACE_NIGHT_WINS = "race_night_wins";
 
     /** Every counter the "Games" achievements read. */
     public static final List<String> COUNTERS = List.of(CABINET_FINISHES, CABINET_GOLDS, CABINETS, COURSE_FINISHES,
-            COURSE_RECORDS, HOLES_IN_ONE, UNDER_PAR, FRESH_SETS, STAR_CHART_TOPS, DROPPER_CLEAN);
+            COURSE_RECORDS, HOLES_IN_ONE, UNDER_PAR, FRESH_SETS, STAR_CHART_TOPS, DROPPER_CLEAN, RACE_NIGHTS,
+            RACE_NIGHT_WINS);
 
     /** Where the finishes go: the live quests and achievements, or a test's fake. */
     public interface Sink {
@@ -188,6 +195,17 @@ public final class GamesProgress implements GameProgress {
             return;
         }
         sink.count(player, STAR_CHART_TOPS, 1);
+    }
+
+    @Override
+    public void raceNightFinished(Player player, boolean won) {
+        if (player == null || !sink.countsHere(player)) {
+            return;
+        }
+        sink.count(player, RACE_NIGHTS, 1);
+        if (won) {
+            sink.count(player, RACE_NIGHT_WINS, 1);
+        }
     }
 
     /** A whole round finished in fewer strokes than its par (a round with no par is never under). */

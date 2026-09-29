@@ -127,7 +127,8 @@ public final class ArcadeMenu extends Menu {
     private void play(GamesService games, GamesMenu.LuckView luck) {
         set(PLAY[0], Menus.icon(Material.LIGHT_BLUE_STAINED_GLASS_PANE, "&b&lPlay",
                 "&7Games of luck and skill,", "&7for tokens."), null);
-        set(PLAY[1], Menus.icon(Material.BOOKSHELF, "&bAll games", "&7Every game that's open.",
+        set(PLAY[1], Menus.icon(Material.BOOKSHELF, "&bAll games"
+                + com.dierks.homecraft.games.event.RaceNight.hubSuffix(games), "&7Every game that's open.",
                 "&eClick to see them"), e -> tab(null));
         pick(games);
         switch (luck.state()) {

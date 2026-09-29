@@ -44,7 +44,15 @@ class GamesRowsMigrationTest {
         without(c, "arcade.quests.daily_pool", ArcadeConfigMigration.GAME_DAILY);
         without(c, "arcade.quests.weekly_pool", ArcadeConfigMigration.GAME_WEEKLY);
         without(c, "arcade.achievements", ArcadeConfigMigration.GAME_ACHIEVEMENTS);
-        without(c, "arcade.achievements", ArcadeConfigMigration.LATER_ACHIEVEMENTS);
+        without(c, "arcade.achievements", ArcadeConfigMigration.EVENT_ACHIEVEMENTS);
+        return c;
+    }
+
+    /** A revision-17 file: the bundled one without the revision-18 rows (the events batch's achievements). */
+    private static YamlConfiguration rev17() throws Exception {
+        YamlConfiguration c = bundled();
+        c.set("config_revision", 17);
+        without(c, "arcade.achievements", ArcadeConfigMigration.EVENT_ACHIEVEMENTS);
         return c;
     }
 
@@ -178,9 +186,24 @@ class GamesRowsMigrationTest {
         assertFalse(ids(onDisk, "arcade.achievements").contains("game_first_cabinet"), "their list isn't touched");
         List<String> warns = warns(log);
         assertTrue(warns.stream().anyMatch(l -> l.contains("arcade.achievements")), "named: " + warns);
-        assertEquals(2 + ArcadeConfigMigration.GAME_ACHIEVEMENTS.size() + ArcadeConfigMigration.DROPPER_ACHIEVEMENTS.size(),
+        assertEquals(2 + ArcadeConfigMigration.GAME_ACHIEVEMENTS.size() + ArcadeConfigMigration.EVENT_ACHIEVEMENTS.size(),
                 warns.stream().filter(l -> l.contains("arcade.achievements") || l.contains("- { id: game_")).count(),
-                "one line naming the list per revision (17, then 18) and one line per achievement to paste: " + warns);
+                "one line naming the list per revision step, and one line per achievement to paste: " + warns);
+    }
+
+    @Test
+    void revisionEighteenAddsTheEventAchievementsToAShippedList() throws Exception {
+        YamlConfiguration onDisk = rev17();
+        YamlConfiguration shipped = bundled();
+
+        List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
+
+        assertEquals(ids(shipped, "arcade.achievements"), ids(onDisk, "arcade.achievements"),
+                "a server at revision 17 gains the events batch's rows at the end of its list");
+        assertEquals(List.of(), warns(log), "nothing was the owner's: " + log);
+        assertTrue(log.stream().anyMatch(l -> l.contains(String.join(", ", ArcadeConfigMigration.EVENT_ACHIEVEMENTS))),
+                "logged: " + log);
+        assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"), "a second pass is a no-op");
     }
 
     @Test

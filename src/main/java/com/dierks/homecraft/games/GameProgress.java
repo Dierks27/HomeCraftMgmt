@@ -69,4 +69,11 @@ public interface GameProgress {
     /** The player reached this week's top Star Chart goal. */
     default void starChartTopGoal(Player player, long week) {
     }
+
+    /**
+     * A Race Night ended with the player among its racers (EVENTS-DROPPER-SPEC §A.8): they raced at
+     * least one race of it; {@code won} when they were the night's 1st (a shared 1st counts).
+     */
+    default void raceNightFinished(Player player, boolean won) {
+    }
 }

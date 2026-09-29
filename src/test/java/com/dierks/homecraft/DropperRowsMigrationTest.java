@@ -37,13 +37,13 @@ class DropperRowsMigrationTest {
         }
     }
 
-    /** A revision-17 file: the bundled one without the Dropper's row. */
+    /** A revision-17 file: the bundled one without the revision-18 rows (the Dropper's among them). */
     private static YamlConfiguration rev17() throws Exception {
         YamlConfiguration c = bundled();
         c.set("config_revision", 17);
         List<Map<String, Object>> out = new ArrayList<>();
         for (Map<?, ?> row : c.getMapList("arcade.achievements")) {
-            if (!ArcadeConfigMigration.DROPPER_ACHIEVEMENTS.contains(String.valueOf(row.get("id")))) {
+            if (!ArcadeConfigMigration.EVENT_ACHIEVEMENTS.contains(String.valueOf(row.get("id")))) {
                 out.add(copy(row));
             }
         }
@@ -74,7 +74,9 @@ class DropperRowsMigrationTest {
         YamlConfiguration onDisk = rev17();
         List<String> log = HomeCraftManagement.migrateConfig(onDisk, "world");
         assertEquals(ids(bundled()), ids(onDisk), "the list is now exactly what a fresh install ships");
-        assertEquals("game_dropper_clean", ids(onDisk).get(ids(onDisk).size() - 1), "the new row at its end");
+        List<String> tail = ids(onDisk).subList(ids(onDisk).size() - ArcadeConfigMigration.EVENT_ACHIEVEMENTS.size(),
+                ids(onDisk).size());
+        assertEquals(ArcadeConfigMigration.EVENT_ACHIEVEMENTS, tail, "the new rows at its end, the Dropper's first");
         assertEquals(List.of(), warns(log), "nothing was the owner's: " + log);
         assertTrue(log.stream().anyMatch(l -> l.contains("game_dropper_clean")), "logged: " + log);
         assertEquals(18, onDisk.getInt("config_revision"), "stamped 18");

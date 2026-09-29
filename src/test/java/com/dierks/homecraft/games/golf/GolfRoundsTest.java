@@ -86,6 +86,16 @@ class GolfRoundsTest {
     }
 
     @Test
+    void aSetsNewBestSaysSoInTheSetsWords() {
+        org.junit.jupiter.api.Assertions.assertEquals("&6★ That's this week's best on Tiny Golf!",
+                GolfRounds.setRecordLine(7, "Tiny Golf"), "weekly");
+        org.junit.jupiter.api.Assertions.assertEquals("&6★ That's today's best on Tiny Golf!",
+                GolfRounds.setRecordLine(1, "Tiny Golf"), "daily");
+        org.junit.jupiter.api.Assertions.assertEquals("&6★ That's the best on Tiny Golf so far!",
+                GolfRounds.setRecordLine(3, "Tiny Golf"), "every 3 days");
+    }
+
+    @Test
     void aHandBuiltCourseKeepsTheOldRuleWhateverTheGateSays() {
         GolfCourse c = meadow();
         Predicate<GenTag> everything = t -> true;

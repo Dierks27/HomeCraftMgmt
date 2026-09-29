@@ -1746,7 +1746,8 @@ class ConfigMigrationTest {
             List<String> log = startUp(onDisk, added);
 
             assertEquals(1, log.size(), "games.fresh: " + on + " is migrated with one line: " + log);
-            assertTrue(log.get(0).contains("games.fresh.enabled: " + on), log.get(0));
+            assertTrue(log.get(0).startsWith("Config migration: games.fresh: " + on)
+                    && log.get(0).contains("games.fresh.enabled: " + on), "the Config migration line: " + log.get(0));
             assertEquals(on, onDisk.get("games.fresh.enabled", null),
                     "games.fresh: " + on + " keeps the owner's switch (the game id is fresh_courses, the block fresh)");
             assertFalse(added.contains("games.fresh.enabled"), "the switch is kept, not backfilled: " + added);

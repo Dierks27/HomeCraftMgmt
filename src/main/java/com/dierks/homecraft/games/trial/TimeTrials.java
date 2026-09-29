@@ -112,15 +112,17 @@ import java.util.logging.Logger;
  * <p>Everything live here — runs, boats — is in memory and cleaned up with the session: boats are
  * never saved with the world, and any left by a crash are swept when the game starts.
  *
- * <p><b>Daily courses</b> (GEN-SPEC §5, R6). Daily Courses writes its parkour, Sky Rings and ice
- * boat courses as ordinary rows with a {@code gen:} tag, and this engine runs them unchanged; only
- * four things differ. A generated course is open only while the Daily Courses engine vouches for
- * its blocks ({@code GamesService#generated()}, the gate), and it comes first on the Courses tab.
- * A finish on the layout before the one now live still counts while that layout stands (the
- * "still standing" rule, {@link FairPlay#stale(Course, int, Course, java.util.function.Predicate)}).
- * Its time goes on that layout's own day board, it earns stars for the Star Chart, and it pays
- * the first finish of its course day instead of the week's best ({@link TrialFinish}). And a
- * Sky Rings run's first fall-reset tells the player how to open their wings.
+ * <p><b>Fresh courses</b> (GEN-SPEC §5, R6, the weekly addendum). Fresh Courses writes its parkour,
+ * Sky Rings and ice boat courses as ordinary rows with a {@code gen:} tag, and this engine runs them
+ * unchanged; only a few things differ. A generated course is open only while the Fresh Courses
+ * engine vouches for its blocks ({@code GamesService#generated()}, the gate), and it comes first on
+ * the Courses tab. A finish on the layout before the one now live still counts while that layout
+ * stands (the "still standing" rule,
+ * {@link FairPlay#stale(Course, int, Course, java.util.function.Predicate)}). Its time goes on that
+ * set's own board, it earns stars for the Star Chart, and it pays the first finish of its set
+ * instead of the week's best ({@link TrialFinish}). A course recalled into a Classics slot plays on
+ * its original set's board. The words follow the cadence ("this week", "today"). And a Sky Rings
+ * run's first fall-reset tells the player how to open their wings.
  */
 public final class TimeTrials implements Game {
 
@@ -190,7 +192,7 @@ public final class TimeTrials implements Game {
      * @param record       a new course record
      * @param best         the player's best on the course after this run, or {@code null}
      * @param earned       tokens paid
-     * @param daily        what a daily course's run showed besides, or {@code null} (hand-built)
+     * @param daily        what a Fresh course's run showed besides, or {@code null} (hand-built)
      */
     public record Result(String courseId, String courseName, long ms, boolean counted, boolean test, String reason,
                          boolean personalBest, boolean record, Long best, int earned, Daily daily) {
@@ -203,15 +205,23 @@ public final class TimeTrials implements Game {
     }
 
     /**
-     * What a daily course's run showed (GEN-SPEC §5.4).
+     * What a Fresh course's run showed (GEN-SPEC §5.4).
      *
-     * @param board     the layout's own board ("today's best"), which the result screen reads
+     * @param board     the set's own board ("this week's best"), which the result screen reads
      * @param stars     the stars it earned (0 when it didn't count)
      * @param weekStars the Star Chart total after it, or -1 when not known
      * @param goldMs    the layout's 3-star time
      * @param silverMs  its 2-star time
+     * @param cadence   the set's length in days (the words the screen uses: "this week", "today")
+     * @param code      the course's code ("HARD-40"), or {@code null}
      */
-    public record Daily(String board, int stars, long weekStars, long goldMs, long silverMs) {
+    public record Daily(String board, int stars, long weekStars, long goldMs, long silverMs, int cadence,
+                        String code) {
+
+        /** A weekly set with no code (the shape before cadences). */
+        public Daily(String board, int stars, long weekStars, long goldMs, long silverMs) {
+            this(board, stars, weekStars, goldMs, silverMs, 7, null);
+        }
     }
 
     // ---- the Game ---------------------------------------------------------------------------
@@ -312,26 +322,32 @@ public final class TimeTrials implements Game {
 
     /**
      * One {@code /api/arcade} entry per open course: its kind, tier and record (no names unless
-     * allowed). A daily course's record is today's layout's, with its day, when the next one is due
-     * and its star times (never its seed, rev or half).
+     * allowed), and the board behind it for its {@code top} list. A Fresh course's record is its
+     * set's board's, with the set's first and last day, cadence, when the next set is due and its
+     * star times (never its seed, rev or half; the course code and short seed come from Fresh
+     * Courses' own {@code fresh}). A course recalled into a Classics slot has no next set: its
+     * {@code classic} window says when it goes.
      */
     @Override
     public void feed(FeedWriter out) {
         List<Course> open = new ArrayList<>(openCourses());
         open.sort(Comparator.comparing(Course::id));
         for (Course c : open) {
-            GamesDao.ScoreRow r = recordOn(board(c));
+            String board = board(c);
+            GamesDao.ScoreRow r = recordOn(board);
             Long ms = r == null ? null : r.score();
             Long at = r == null ? null : r.at();
             String who = r != null && out.showNames() ? holder(r.player()) : null;
             if (c.generated()) {
                 GenTag t = c.gen();
                 out.course(c.id(), c.name(), c.kind().id(), c.tier().id(), ms, at, who, new FeedWriter.Daily(
-                        t.date().toString(), games().generated().nextChangeAt(), t.goldMs() > 0 ? t.goldMs() : null,
-                        t.silverMs() > 0 ? t.silverMs() : null));
+                        t.date().toString(), t.recalled() ? 0 : games().generated().nextChangeAt(),
+                        t.goldMs() > 0 ? t.goldMs() : null, t.silverMs() > 0 ? t.silverMs() : null, t.cadence(),
+                        t.date().plusDays(t.cadence() - 1L).toString()));
             } else {
                 out.course(c.id(), c.name(), c.kind().id(), c.tier().id(), ms, at, who);
             }
+            out.board(c.id(), id(), board, true, "ms");
         }
     }
 
@@ -445,7 +461,7 @@ public final class TimeTrials implements Game {
 
     /**
      * The courses players can play: open, complete, in a Games world and — for a daily course —
-     * vouched for by the Daily Courses engine (the gate, GEN-SPEC R5). Daily courses first, in
+     * vouched for by the Fresh Courses engine (the gate, GEN-SPEC R5). Daily courses first, in
      * slot order; then easiest first, then by name.
      */
     public List<Course> openCourses() {
@@ -454,7 +470,7 @@ public final class TimeTrials implements Game {
 
     /**
      * {@link #openCourses()} as a pure filter, so a test can hand it the real rows and the real
-     * Daily Courses gate: every course of {@code courses} that is open, complete, in a Games world
+     * Fresh Courses gate: every course of {@code courses} that is open, complete, in a Games world
      * and, when generated, {@code gate}-vouched, in {@link #sorted} order.
      */
     public static List<Course> open(Collection<Course> courses, Predicate<String> gamesWorld, GeneratedCourses gate) {
@@ -485,11 +501,20 @@ public final class TimeTrials implements Game {
     }
 
     /**
-     * The board a course's times go on: a daily course's layout board ({@code gday:<id>:<edition>},
-     * "today's best"), else its all-time board.
+     * The board a course's times go on: a Fresh course's set board ({@code gfresh:<slot>:<edition>},
+     * "this week's best"; a recalled course's is its original set's, with its old records), else its
+     * all-time board.
      */
     public static String board(Course c) {
-        return c.generated() ? GenBoards.day(c.id(), c.gen().editionKey()) : Scores.course(c.id());
+        return c.generated() ? GenBoards.day(c.gen()) : Scores.course(c.id());
+    }
+
+    /**
+     * What a course's first clear is kept under: its id, or a Fresh course's slot (so a recalled
+     * course never adds a first clear beyond its slot's once-ever one).
+     */
+    public static String firstClearId(Course c) {
+        return c.generated() ? c.gen().slot() : c.id();
     }
 
     /** An open course by id, or {@code null}. */
@@ -628,26 +653,34 @@ public final class TimeTrials implements Game {
     }
 
     /**
-     * A daily course's tile (GEN-SPEC §5.4): "&amp;aEasy Parkour &amp;7- ★★☆ &amp;a(new today)", its
-     * star times, your best and today's best, and what its first finish today pays.
+     * A Fresh course's tile (GEN-SPEC §5.4): "&amp;aEasy Parkour &amp;7- ★★☆ &amp;a(new this week)
+     * &amp;8· &amp;7Course code EASY-4", its star times, your best and the set's best, and what its
+     * first finish in the set pays. A course recalled into a Classics slot says it is a classic:
+     * "&amp;6Classic: Hard Parkour (week of 5 Oct)", its code and that its old records are the ones
+     * to beat.
      */
     private ItemStack dailyTile(Player viewer, Course c, String courseOfWeek) {
         GenTag t = c.gen();
         GamesService g = games();
-        long today = DailyLookup.courseDay(g);
-        int stars = DailyLookup.stars(g, viewer.getUniqueId(), c.id(), t.day());
+        int cadence = t.cadence();
+        int stars = DailyLookup.stars(g, viewer.getUniqueId(), t);
+        String code = DailyLookup.code(g, t);
         List<String> lore = new ArrayList<>();
-        lore.add("&7A new course every morning.");
+        if (t.recalled()) {
+            lore.add("&7Its old records are the ones to beat.");
+        } else {
+            lore.add("&7" + GenCopy.schedule(cadence, DailyLookup.edition(g).rebuildDay(), null) + ".");
+        }
         for (String line : c.kind().rules()) {
             lore.add("&7" + line);
         }
         lore.add(DailyText.starTimes(t.goldMs(), t.silverMs()));
         String board = board(c);
         Long best = bestOn(viewer, board);
-        lore.add(DailyText.yourBestToday(best == null ? null : TrialText.time(best)));
-        lore.add(todaysBestLine(recordOn(board), viewer));
-        String first = DailyText.firstToday(g.generated().dailyClear(c.id()),
-                DailyLookup.dailyClearPaid(g, viewer.getUniqueId(), id(), c.id(), t.day()));
+        lore.add(DailyText.yourBest(cadence, best == null ? null : TrialText.time(best)));
+        lore.add(setBestLine(recordOn(board), viewer, cadence));
+        String first = DailyText.firstFinish(cadence, DailyLookup.freshClear(g, t),
+                DailyLookup.freshClearPaid(g, viewer.getUniqueId(), id(), t));
         if (first != null) {
             lore.add(first);
         }
@@ -655,17 +688,34 @@ public final class TimeTrials implements Game {
             lore.add("&6★ Course of the week");
         }
         lore.add("&eClick to play");
-        return Menus.glint(Menus.icon(icon(c.kind()), DailyText.tabName(Slots.of(c.id()), c.name(),
-                DailyText.trialFact(stars), t.day(), today), lore.toArray(new String[0])), stars >= 3);
+        String name = t.recalled() ? "&6" + classicName(t, c.name()) + " &7- " + DailyText.trialFact(cadence, stars)
+                : DailyText.tabName(Slots.of(t.slot()), c.name(), DailyText.trialFact(cadence, stars),
+                DailyLookup.current(g, t.slot()), cadence);
+        return Menus.glint(Menus.icon(icon(c.kind()), name + DailyLookup.codeSuffix(code),
+                lore.toArray(new String[0])), stars >= 3);
     }
 
-    /** "&amp;7Today's best: 0:58.1 by Alex" on a daily course, or that nobody has finished it today. */
-    public String todaysBestLine(GamesDao.ScoreRow record, Player viewer) {
+    /**
+     * A recalled course's full name from its tag ("Classic: Hard Parkour (week of 5 Oct)", with
+     * "(re-made)" when its row says so): the row's name may be cut to fit.
+     */
+    public static String classicName(GenTag t, String rowName) {
+        Slots.Def d = Slots.of(t.slot());
+        return GenCopy.classicName(d == null ? rowName : GenCopy.slotName(d, t.cadence()), t.cadence(), t.day(),
+                rowName != null && rowName.contains("(re-made)"));
+    }
+
+    /**
+     * "&amp;7This week's best: 0:58.1 by Alex" on a Fresh course, or that nobody has finished it yet
+     * in this set (the words follow the set's cadence).
+     */
+    public String setBestLine(GamesDao.ScoreRow record, Player viewer, int cadence) {
         if (record == null) {
-            return DailyText.todaysBest(null, null, false);
+            return DailyText.setBest(cadence, null, null, false);
         }
         boolean yours = viewer != null && viewer.getUniqueId().equals(record.player());
-        return DailyText.todaysBest(TrialText.time(record.score()), yours ? null : holder(record.player()), yours);
+        return DailyText.setBest(cadence, TrialText.time(record.score()), yours ? null : holder(record.player()),
+                yours);
     }
 
     /** "&amp;7Record: 0:58.1 by Alex", or that there isn't one yet. */
@@ -687,13 +737,13 @@ public final class TimeTrials implements Game {
         };
     }
 
-    /** The player's best time on a course (a daily course: on its layout today), or {@code null}. */
+    /** The player's best time on a course (a Fresh course: on its set's board), or {@code null}. */
     public Long best(Player player, String courseId) {
         Course c = course(courseId);
         return bestOn(player, c == null ? Scores.course(courseId) : board(c));
     }
 
-    /** The course record (a daily course: today's best on its layout), or {@code null}. */
+    /** The course record (a Fresh course: its set's best), or {@code null}. */
     public GamesDao.ScoreRow record(String courseId) {
         Course c = course(courseId);
         return recordOn(c == null ? Scores.course(courseId) : board(c));
@@ -730,11 +780,11 @@ public final class TimeTrials implements Game {
         return settings().firstClearFor(c.tier().id());
     }
 
-    /** Whether the player has had a course's first-clear reward. */
+    /** Whether the player has had a course's first-clear reward (a Fresh course's: its slot's). */
     public boolean firstClearDone(Player player, Course c) {
         try {
             return games().dao().rewardPaid(player.getUniqueId(), id(), RewardKind.FIRST_CLEAR,
-                    SkillRewards.firstClearRef(c.id()));
+                    SkillRewards.firstClearRef(firstClearId(c)));
         } catch (SQLException e) {
             log().warning("Could not read time-trial rewards: " + e.getMessage());
             return false;
@@ -746,13 +796,13 @@ public final class TimeTrials implements Game {
         return games().config().common().featuredBonus();
     }
 
-    /** A course's all-time board (a daily course: its layout's board, today's best). */
+    /** A course's all-time board (a Fresh course: its set's board). */
     public void showScores(Player player, String courseId, Runnable back) {
         Course c = course(courseId);
         games().screens().scores(player, this, c == null ? Scores.course(courseId) : board(c), true, back);
     }
 
-    /** The live Daily Courses gate and figures ({@code GamesService#generated()}). */
+    /** The live Fresh Courses gate and figures ({@code GamesService#generated()}). */
     public GeneratedCourses generated() {
         return games().generated();
     }
@@ -1330,8 +1380,14 @@ public final class TimeTrials implements Game {
         FairPlay.Verdict verdict = FairPlay.judge(run.test, run.voided, stale, ms,
                 run.course.minSecondsOr(s.minSeconds()), tooFast);
         String name = run.course.name();
+        GenTag tag = run.course.gen();
+        String code = tag == null ? null : DailyLookup.code(games(), tag);
         p.sendMessage(Text.of("&b" + name + ": &f" + TrialText.time(ms)));
+        if (code != null) {
+            p.sendMessage(Text.of("&7" + GenCopy.courseCode(code))); // so players can ask for it back
+        }
         TrialFinish.Summary summary = TrialFinish.Summary.NONE;
+        TrialFinish.Run counted = null;
         switch (verdict.kind()) {
             case TEST -> {
                 p.sendMessage(Text.of("&dTest run &7- nothing was recorded. " + (verdict.reason() == null
@@ -1344,12 +1400,17 @@ public final class TimeTrials implements Game {
                 title(p, "&f" + TrialText.time(ms), "&cThat run didn't count", 40);
                 Sounds.miss(p);
             }
-            case COUNTED -> summary = TrialFinish.settle(verdict, finishedRun(run, ms, s), ledger(p, run, s, ms));
+            case COUNTED -> {
+                counted = finishedRun(run, ms, s);
+                summary = TrialFinish.settle(verdict, counted, ledger(p, run, s, ms));
+            }
+        }
+        if (counted != null) {
+            progress(p, run.course, counted, summary);
         }
         Long best = verdict.counts() ? bestOn(p, board(run.course)) : null;
-        GenTag tag = run.course.gen();
         Daily daily = tag == null ? null : new Daily(board(run.course), summary.stars(), summary.weekStars(),
-                tag.goldMs(), tag.silverMs());
+                tag.goldMs(), tag.silverMs(), tag.cadence(), code);
         Result result = new Result(run.course.id(), name, ms, verdict.counts(), run.test, verdict.reason(),
                 summary.course().personalBest(), summary.course().record(), best, summary.earned(), daily);
         UUID id = p.getUniqueId();
@@ -1363,13 +1424,28 @@ public final class TimeTrials implements Game {
         showResult(id, result, RESULT_TRIES);
     }
 
+    /**
+     * What a counted run tells the quests and achievements (EXTRAS E4, through the guarded
+     * {@code GamesService#tellProgress}): the course finished, and on a Fresh course the stars it
+     * added, the week's top goal and a whole set finished ({@link DailyLookup#freshProgress}).
+     */
+    private void progress(Player p, Course c, TrialFinish.Run run, TrialFinish.Summary summary) {
+        boolean record = summary.course().record();
+        games().tellProgress(g -> g.courseFinished(p, c.id(), c.generated(), record));
+        TrialFinish.Daily d = run.daily();
+        if (d != null && d.tag() != null) {
+            DailyLookup.freshProgress(games(), p, d.tag(), summary.added(), d.weekKey(), d.goals());
+        }
+    }
+
     private TrialFinish.Run finishedRun(TrialRun run, long ms, TimeTrialsSettings s) {
         Course c = run.course;
         TrialFinish.Daily daily = null;
-        if (c.generated()) { // everything from the layout the run started on (GEN-SPEC §3.1)
+        if (c.generated()) { // the set of the layout the run started on (GEN-SPEC §3.1), the week of today
+            GenTag t = c.gen();
             GeneratedCourses g = games().generated();
-            daily = new TrialFinish.Daily(c.gen(), DailyLookup.weekKey(games(), c.gen().day()), g.dailyClear(c.id()),
-                    g.starGoals(), g.starGoalReward());
+            long week = DailyLookup.weekKey(games());
+            daily = new TrialFinish.Daily(t, week, g.dailyClear(t.slot(), t.cadence()), g.goals(week));
         }
         return new TrialFinish.Run(c.id(), c.name(), ms, today(), weekKey(), c.id().equals(courseOfWeek()),
                 featured(c.id()), s.firstClearFor(c.tier().id()), s.weeklyBestBonus(), s.courseOfWeekBonus(),
@@ -1398,6 +1474,13 @@ public final class TimeTrials implements Game {
             public int pay(RewardKind kind, String ref, int tokens, String detail) {
                 return games().rewards().pay(p, TimeTrials.this, run.course.kind().source(), kind, ref, tokens,
                         s.dailyCap(), detail);
+            }
+
+            @Override
+            public int payWhole(RewardKind kind, String ref, int tokens, String detail) {
+                GenTag t = run.course.gen();
+                return games().rewards().payWhole(p, TimeTrials.this, run.course.kind().source(), kind, ref, tokens,
+                        s.dailyCap(), detail, GenCopy.clearLimit(t == null ? 7 : t.cadence()));
             }
 
             @Override
@@ -1452,28 +1535,30 @@ public final class TimeTrials implements Game {
     }
 
     /**
-     * A daily course's finish lines: your best today, today's best (and who holds it) on the
-     * layout's own board. The stars line follows ({@link TrialFinish}).
+     * A Fresh course's finish lines: your best in this set, the set's best (and who holds it) on
+     * its own board, in the set's words ("this week", "today"). The stars line follows
+     * ({@link TrialFinish}), then the course code.
      */
-    private void announceDaily(Player p, Course c, long ms, ScoreResult today, boolean firstFinish) {
+    private void announceDaily(Player p, Course c, long ms, ScoreResult set, boolean firstFinish) {
+        int cadence = c.gen().cadence();
         String sub;
-        if (today.personalBest()) {
-            p.sendMessage(Text.of(today.previous() == null && firstFinish ? TrialText.bestLine(c.name(), null, true)
-                    : DailyText.bestToday(today.previous() == null ? null : TrialText.time(today.previous()))));
-            sub = "&eYour best today!";
+        if (set.personalBest()) {
+            p.sendMessage(Text.of(set.previous() == null && firstFinish ? TrialText.bestLine(c.name(), null, true)
+                    : DailyText.newBest(cadence, set.previous() == null ? null : TrialText.time(set.previous()))));
+            sub = "&e" + GenCopy.yourBest(cadence) + "!";
         } else {
-            String yours = today.previous() == null ? null : TrialText.time(today.previous());
-            p.sendMessage(Text.of(DailyText.yourBestToday(yours)));
-            sub = yours == null ? "" : "&7Your best today: " + yours;
+            String yours = set.previous() == null ? null : TrialText.time(set.previous());
+            p.sendMessage(Text.of(DailyText.yourBest(cadence, yours)));
+            sub = yours == null ? "" : "&7" + GenCopy.yourBest(cadence) + ": " + yours;
         }
-        if (today.record()) {
-            p.sendMessage(Text.of("&6★ Today's best time!"));
-            sub = "&6Today's best!";
+        if (set.record()) {
+            p.sendMessage(Text.of("&6★ " + GenCopy.bestOf(cadence) + " time!"));
+            sub = "&6" + GenCopy.bestOf(cadence) + "!";
         } else {
-            p.sendMessage(Text.of(todaysBestLine(recordOn(board(c)), p)));
+            p.sendMessage(Text.of(setBestLine(recordOn(board(c)), p, cadence)));
         }
         title(p, "&a" + TrialText.time(ms), sub, 40);
-        if (today.personalBest()) {
+        if (set.personalBest()) {
             Sounds.won(p);
         } else {
             Sounds.received(p);

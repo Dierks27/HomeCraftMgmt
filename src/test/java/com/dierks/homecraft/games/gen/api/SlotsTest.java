@@ -29,7 +29,7 @@ class SlotsTest {
                 Slots.ALL.stream().map(Slots.Def::tierOrMix).toList(), "their shipped tiers and mixes");
         assertEquals(List.of(1, 2, 3, 2, 2, 1, 2), Slots.ALL.stream().map(Slots.Def::dailyClear).toList(),
                 "their shipped first-finish tokens at a daily cadence (the addendum's table)");
-        assertEquals(List.of(2, 3, 5, 3, 3, 2, 3), Slots.ALL.stream().map(Slots.Def::weeklyClear).toList(),
+        assertEquals(List.of(2, 3, 4, 3, 3, 2, 3), Slots.ALL.stream().map(Slots.Def::weeklyClear).toList(),
                 "and at a weekly one");
         assertEquals(List.of(true, true, true, true, true, true, false),
                 Slots.ALL.stream().map(Slots.Def::enabled).toList(), "every slot ships on but the ice boat");

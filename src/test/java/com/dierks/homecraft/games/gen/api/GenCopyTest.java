@@ -111,6 +111,25 @@ class GenCopyTest {
             assertFalse(plain.contains("daily courses"), "the old name is gone: " + line);
         }
         assertFalse(GenCopy.TILE.toLowerCase(java.util.Locale.ROOT).contains("today"), "the tile doesn't say today");
+        assertEquals("this week", GenCopy.when(7), "a set's lines end in the cadence's words: weekly");
+        assertEquals("today", GenCopy.when(1), "daily");
+        assertEquals("on this course", GenCopy.when(3), "any other cadence: each set is a new course");
+        assertEquals("This week's best", GenCopy.bestOf(7), "a set's board");
+        assertEquals("Your best this week", GenCopy.yourBest(7), "your best in it");
+        assertEquals("First finish this week", GenCopy.firstFinish(7), "its first finish");
+        assertEquals("first finish this week", GenCopy.firstFinishReason(7), "the ledger's words");
+        assertEquals("first finish today", GenCopy.firstFinishReason(1), "daily");
+        assertEquals("This week's times", GenCopy.times(7), "a set's board as a tile names it");
+        assertEquals("(new this week)", GenCopy.newMark(7), "the mark on a current course");
+        assertEquals("(last week's)", GenCopy.oldMark(7), "and on the last set's");
+        assertEquals("(yesterday's)", GenCopy.oldMark(1), "daily");
+        assertEquals("Hard Parkour - this week", GenCopy.boardTitle("Hard Parkour", 7), "a leaderboard display's title");
+        assertEquals("Hard Parkour", GenCopy.boardTitle("Hard Parkour", 3), "or the name alone");
+        assertEquals("&7You've reached today's token limit - finish it again another day this week for its tokens.",
+                GenCopy.clearLimit(7), "the owner's words, weekly");
+        assertEquals(GenCopy.GOAL_LIMIT, GenCopy.clearLimit(14), "every other week too");
+        assertTrue(GenCopy.clearLimit(3).contains("before the courses change"), "a 3-day set: before the change");
+        assertFalse(GenCopy.clearLimit(1).contains("another day"), "a daily set can't be finished another day");
         assertFalse(GenCopy.YESTERDAY.toLowerCase(java.util.Locale.ROOT).contains("yesterday"),
                 "and the cadence-free line doesn't say yesterday");
     }

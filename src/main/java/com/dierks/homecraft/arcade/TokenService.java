@@ -66,8 +66,8 @@ public final class TokenService {
         GAMES_ELYTRA("Elytra course"),
         GAMES_BOAT("Boat race"),
         GAMES_GOLF("Mini golf"),
-        // Daily Courses' own rewards (the Star Chart goals); its courses pay under their course's source.
-        GAMES_DAILY("Daily Courses");
+        // Fresh Courses' own rewards (the Star Chart goals); its courses pay under their course's source.
+        GAMES_DAILY("Fresh Courses");
 
         private final String label;
 

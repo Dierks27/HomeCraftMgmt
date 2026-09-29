@@ -335,6 +335,37 @@ class GamesDaoTest {
         assertFalse(dao.rewardPaid(alice, "trials", RewardKind.DAILY_CLEAR, ref), "another game's row is its own");
     }
 
+    @Test
+    void aWholeRewardPaysAllOrNothingAndStaysThereForAnotherDay() throws Exception {
+        String ref = SkillRewards.freshClearRef("fresh_parkour_hard", "7:38");
+        // 5 left of the game's cap, 4 asked: paid in full
+        assertEquals(4, dao.payReward(alice, "trials", Source.GAMES_PARKOUR, DAY, RewardKind.DAILY_CLEAR, ref, 4, 5, 6,
+                true, true, "Hard Parkour: first finish this week", NOW), "5 left and 4 asked: all of it is paid");
+        assertTrue(dao.rewardPaid(alice, "trials", RewardKind.DAILY_CLEAR, ref), "and recorded once");
+
+        // 3 left, 4 asked: nothing paid, nothing recorded
+        assertEquals(1, dao.payReward(bob, "trials", Source.GAMES_PARKOUR, DAY, RewardKind.MILESTONE, "ms:x:1", 1, 4, 6,
+                true, "a", NOW), "bob has used 1 of the game's 4");
+        assertEquals(0, dao.payReward(bob, "trials", Source.GAMES_PARKOUR, DAY, RewardKind.DAILY_CLEAR, ref, 4, 4, 6,
+                true, true, "Hard Parkour: first finish this week", NOW), "3 left and 4 asked: nothing is paid");
+        assertFalse(dao.rewardPaid(bob, "trials", RewardKind.DAILY_CLEAR, ref), "and nothing is recorded");
+        assertEquals(1, balance(bob), "not a token of it: never part of it");
+        assertEquals(1, dao.rewardsToday(bob, "trials", DAY), "the caps are as they were");
+
+        // the next day of the same set: payable
+        assertEquals(4, dao.payReward(bob, "trials", Source.GAMES_PARKOUR, DAY + 1, RewardKind.DAILY_CLEAR, ref, 4, 4,
+                6, true, true, "Hard Parkour: first finish this week", NOW), "a new day of the set: paid in full");
+        assertEquals(0, dao.payReward(bob, "trials", Source.GAMES_PARKOUR, DAY + 2, RewardKind.DAILY_CLEAR, ref, 4, 4,
+                6, true, true, "again", NOW), "and once only");
+
+        // the server-wide cap counts too, and a partial reward is unchanged
+        assertEquals(0, dao.payReward(alice, "golf", Source.GAMES_GOLF, DAY, RewardKind.DAILY_CLEAR,
+                SkillRewards.freshClearRef("fresh_golf", "7:38"), 3, 4, 6, true, true, "g", NOW),
+                "alice has 4 of the server's 6 today: 2 left and 3 asked pays nothing");
+        assertEquals(2, dao.payReward(alice, "golf", Source.GAMES_GOLF, DAY, RewardKind.MILESTONE, "ms:y:1", 3, 4, 6,
+                true, false, "h", NOW), "a reward that isn't whole still pays what is left");
+    }
+
     // ---- Daily Courses' stars -------------------------------------------------------------------
 
     @Test

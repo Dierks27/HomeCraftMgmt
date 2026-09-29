@@ -24,7 +24,7 @@ import java.util.Map;
  * <p>Coordinates are kept to the thousandth of a block, facing to a tenth of a degree, radii to a
  * hundredth: plenty for a course, and the text stays readable.
  *
- * <p>A course Daily Courses made also has a {@code gen:} block ({@link GenTagCodec}); a course
+ * <p>A course Fresh Courses made also has a {@code gen:} block ({@link GenTagCodec}); a course
  * without one is written exactly as it always was. A {@code gen:} block that can't be read is the
  * one thing not read forgivingly into something else: the course comes back closed and without
  * its tag, and says why, so nobody plays a layout nothing vouches for.

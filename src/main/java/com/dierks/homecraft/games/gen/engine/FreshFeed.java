@@ -25,8 +25,9 @@ import java.util.function.Function;
  *       the recall's window, {@code to} absent for "forever".</li>
  *   <li>A top-level {@code freshHistory} array, newest first, at most {@code feed_history} per
  *       slot ({@link #history}, {@link #json(List)}): {@code {"code","slot","name","kind","tier"?,
- *       "from","to"?,"seed","plays","record"?:{"ms"|"strokes","at","holder"?},"kept"?,"classic"?}}.
- *       The array is omitted when empty.</li>
+ *       "from","to"?,"seed","plays","record"?:{"ms"|"strokes","at","holder"?},"kept"?,"classic"?,
+ *       "top"?:[{"rank","value","unit","at","holder"?}]}} (EXTRAS E3: the board's best {@value #TOP}
+ *       rows, ties sharing a rank). The array is omitted when empty.</li>
  * </ul>
  *
  * <p><b>What is never published.</b> Only editions that have been live: an archive row is written
@@ -54,9 +55,25 @@ public final class FreshFeed {
      * @param record  its record, or {@code null}
      * @param kept    the course it was kept as, or {@code null}
      * @param classic whether it is recalled into a Classics slot now
+     * @param top     its board's best rows, best first (at most {@value #TOP}; holders only when names may be shown)
      */
     public record Entry(String code, String slot, String name, String kind, String tier, long from, Long to,
-                        String seed, long plays, Record record, String kept, boolean classic) {
+                        String seed, long plays, Record record, String kept, boolean classic, List<Record> top) {
+
+        public Entry {
+            top = top == null ? List.of() : List.copyOf(top);
+        }
+
+        /** An entry without a top list. */
+        public Entry(String code, String slot, String name, String kind, String tier, long from, Long to, String seed,
+                     long plays, Record record, String kept, boolean classic) {
+            this(code, slot, name, kind, tier, from, to, seed, plays, record, kept, classic, List.of());
+        }
+
+        /** Its unit: {@code strokes} for golf, else {@code ms}. */
+        public String unit() {
+            return "golf".equals(kind) ? "strokes" : "ms";
+        }
     }
 
     /**
@@ -98,9 +115,21 @@ public final class FreshFeed {
         }
     }
 
-    /** What a board holds, as the history needs it. */
-    public record Board(long plays, GamesDao.ScoreRow best) {
+    /** What a board holds, as the history needs it: its plays, its record and its best rows (best first). */
+    public record Board(long plays, GamesDao.ScoreRow best, List<GamesDao.ScoreRow> top) {
+
+        public Board {
+            top = top == null ? (best == null ? List.of() : List.of(best)) : List.copyOf(top);
+        }
+
+        /** A board whose top list is its record alone. */
+        public Board(long plays, GamesDao.ScoreRow best) {
+            this(plays, best, null);
+        }
     }
+
+    /** How many of a past course's best rows the website gets ({@code freshHistory[].top}). */
+    public static final int TOP = 3;
 
     private FreshFeed() {
     }
@@ -141,17 +170,39 @@ public final class FreshFeed {
             Record record = null;
             boolean golf = Slots.GOLF.equals(r.generator()) || "golf".equals(r.kind());
             if (b != null && b.best() != null) {
-                GamesDao.ScoreRow best = b.best();
-                String holder = showNames && nameOf != null ? nameOf.apply(best.player()) : null;
-                record = golf ? new Record(null, (int) best.score(), best.at(), holder)
-                        : new Record(best.score(), null, best.at(), holder);
+                record = record(b.best(), golf, showNames, nameOf);
+            }
+            List<Record> top = new ArrayList<>();
+            for (GamesDao.ScoreRow row : b == null ? List.<GamesDao.ScoreRow>of() : b.top()) {
+                if (row != null && top.size() < TOP) {
+                    top.add(record(row, golf, showNames, nameOf));
+                }
             }
             Long to = r.endsAt() != null ? r.endsAt() : liveEnd == null ? null : liveEnd.apply(r.slot());
             String tier = golf || r.tierOrMix() == null || r.tierOrMix().isBlank() ? null
                     : r.tierOrMix().toLowerCase(Locale.ROOT);
             out.add(new Entry(r.code(), r.slot(), r.name(), r.kind(), tier, r.startsAt(), to, shortSeed(r.seed()),
                     b == null ? 0 : b.plays(), record, r.keptAs(), recalled != null
-                    && recalled.contains(r.slot() + "|" + r.edition())));
+                    && recalled.contains(r.slot() + "|" + r.edition()), top));
+        }
+        return out;
+    }
+
+    /** A board row as a record: a time or strokes, when, and its holder only when names may be shown. */
+    private static Record record(GamesDao.ScoreRow row, boolean golf, boolean showNames,
+                                 Function<java.util.UUID, String> nameOf) {
+        String holder = showNames && nameOf != null ? nameOf.apply(row.player()) : null;
+        return golf ? new Record(null, (int) row.score(), row.at(), holder) : new Record(row.score(), null, row.at(), holder);
+    }
+
+    /**
+     * Each row's rank, best first, ties sharing one (1, 1, 3): {@code values} in board order. The
+     * one rule for every {@code top} list on the website.
+     */
+    public static List<Integer> ranks(List<Long> values) {
+        List<Integer> out = new ArrayList<>();
+        for (int i = 0; i < values.size(); i++) {
+            out.add(i > 0 && values.get(i).equals(values.get(i - 1)) ? out.get(i - 1) : i + 1);
         }
         return out;
     }
@@ -207,12 +258,33 @@ public final class FreshFeed {
         if (e.classic()) {
             raw(sb, "classic", "true");
         }
+        if (!e.top().isEmpty()) {
+            List<Long> values = new ArrayList<>();
+            for (Record r : e.top()) {
+                values.add(r.ms() != null ? r.ms() : (long) r.strokes());
+            }
+            List<Integer> ranks = ranks(values);
+            StringBuilder top = new StringBuilder("[");
+            for (int i = 0; i < e.top().size(); i++) {
+                Record r = e.top().get(i);
+                StringBuilder row = new StringBuilder("{");
+                field(row, "rank", ranks.get(i));
+                field(row, "value", values.get(i));
+                field(row, "unit", e.unit());
+                field(row, "at", r.at());
+                if (r.holder() != null) {
+                    field(row, "holder", r.holder());
+                }
+                top.append(i > 0 ? "," : "").append(row.append('}'));
+            }
+            raw(sb, "top", top.append(']').toString());
+        }
         return sb.append('}').toString();
     }
 
     /** A map-free check for tests and the feed: which keys an entry's JSON may have. */
     public static final List<String> KEYS = List.of("code", "slot", "name", "kind", "tier", "from", "to", "seed",
-            "plays", "record", "kept", "classic");
+            "plays", "record", "kept", "classic", "top");
 
     private static void field(StringBuilder sb, String key, String value) {
         raw(sb, key, value == null ? "null" : quote(value));
@@ -286,6 +358,26 @@ public final class FreshFeed {
         }
         if (e.classic()) {
             m.put("classic", true);
+        }
+        if (!e.top().isEmpty()) {
+            List<Map<String, Object>> top = new ArrayList<>();
+            List<Long> values = new ArrayList<>();
+            for (Record r : e.top()) {
+                values.add(r.ms() != null ? r.ms() : (long) r.strokes());
+            }
+            List<Integer> ranks = ranks(values);
+            for (int i = 0; i < e.top().size(); i++) {
+                java.util.LinkedHashMap<String, Object> row = new java.util.LinkedHashMap<>();
+                row.put("rank", ranks.get(i));
+                row.put("value", values.get(i));
+                row.put("unit", e.unit());
+                row.put("at", e.top().get(i).at());
+                if (e.top().get(i).holder() != null) {
+                    row.put("holder", e.top().get(i).holder());
+                }
+                top.add(row);
+            }
+            m.put("top", top);
         }
         return m;
     }

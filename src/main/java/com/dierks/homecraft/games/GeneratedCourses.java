@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games;
 
+import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Slots;
@@ -10,13 +11,13 @@ import java.util.List;
  * What the course engines ask about generated courses (GEN-SPEC §0.2 R5, §3.4), through
  * {@link GamesService#generated()}.
  *
- * <p>A generated course is playable only while the Daily Courses engine vouches for its blocks:
+ * <p>A generated course is playable only while the Fresh Courses engine vouches for its blocks:
  * the gate is shut at every boot until the live half is verified, and shut whenever the
- * {@code daily} game is off. So the engines don't trust a row with a {@code gen:} block on its own;
+ * {@code fresh_courses} game is off. So the engines don't trust a row with a {@code gen:} block on its own;
  * they ask {@link #live}. A run in progress keeps counting while the layout it started on still
  * stands ({@link #standing}), even after the next layout went live.
  *
- * <p>Until the engine is installed — and whenever {@code daily} is off — this is {@link #NONE}: no
+ * <p>Until the engine is installed — and whenever Fresh Courses is off — this is {@link #NONE}: no
  * generated course is live, none is standing, and no area is protected, so hand-built courses
  * behave exactly as before and a leftover generated row simply stays closed.
  */
@@ -40,7 +41,7 @@ public interface GeneratedCourses {
     /** When the next set of courses is due (epoch ms), or -1 when nothing is scheduled. */
     long nextChangeAt();
 
-    /** Whether block (x, y, z) of {@code world} is inside a Daily Courses half (anyone's edits are refused there). */
+    /** Whether block (x, y, z) of {@code world} is inside a Fresh Courses half (anyone's edits are refused there). */
     boolean inArea(String world, int x, int y, int z);
 
     // ---- what a finish pays (games.fresh): the shipped values until the engine says otherwise ----
@@ -53,6 +54,23 @@ public interface GeneratedCourses {
     default int dailyClear(String courseId) {
         Slots.Def slot = Slots.of(courseId);
         return slot == null ? 0 : slot.weeklyClear();
+    }
+
+    /**
+     * What the first counted finish of {@code courseId} pays in a set of {@code cadence} days: pay
+     * with the run's own {@code tag.cadence()} (and {@code tag.slot()}), so a layout kept over a
+     * cadence change pays by the set it is. The engine scales between the daily and weekly tables.
+     */
+    default int dailyClear(String courseId, int cadence) {
+        return dailyClear(courseId);
+    }
+
+    /**
+     * The Star Chart goals of the week starting {@code weekKey}, each with its own tokens, fixed
+     * for the week once handed out: pay and show only these. Shipped: 6 stars (+1) and 12 (+2).
+     */
+    default List<DailyStars.Goal> goals(long weekKey) {
+        return SHIPPED_GOALS;
     }
 
     /** This week's Star Chart goals ({@code games.fresh.star_goals}; shipped weekly 6 and 12). */
@@ -76,7 +94,10 @@ public interface GeneratedCourses {
     /** {@code games.fresh.star_goals.weekly} as shipped. */
     List<Integer> SHIPPED_STAR_GOALS = List.of(6, 12);
 
-    /** No engine, or {@code daily} is off: nothing generated is live or standing; no area is kept. */
+    /** {@code games.fresh.star_goals.weekly} and {@code weekly_tokens} as shipped. */
+    List<DailyStars.Goal> SHIPPED_GOALS = List.of(new DailyStars.Goal(6, 1), new DailyStars.Goal(12, 2));
+
+    /** No engine, or Fresh Courses is off: nothing generated is live or standing; no area is kept. */
     GeneratedCourses NONE = new GeneratedCourses() {
         @Override
         public boolean live(String courseId, GenTag tag) {

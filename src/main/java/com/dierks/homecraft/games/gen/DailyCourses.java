@@ -22,6 +22,7 @@ import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.boat.BoatPlanner;
 import com.dierks.homecraft.games.gen.engine.BukkitWorldPort;
+import com.dierks.homecraft.games.gen.engine.FreshFeed;
 import com.dierks.homecraft.games.gen.engine.GenHost;
 import com.dierks.homecraft.games.gen.engine.GenRegionGuard;
 import com.dierks.homecraft.games.gen.engine.GenService;
@@ -200,7 +201,12 @@ public final class DailyCourses implements Game {
         return admin;
     }
 
-    /** The Star Chart: this week's best total (a name only when the feed may show names). */
+    /**
+     * The Star Chart (this week's best total, a name only when the feed may show names), and what
+     * the archive says (GEN-SPEC-KEEP §8): each live course's {@code fresh} object (its course code
+     * and short seed), each Classics slot's {@code classic} window, and {@code freshHistory}. The
+     * courses' own entries are written by Time Trials and Mini Golf; the feed puts these with them.
+     */
     @Override
     public void feed(FeedWriter out) {
         Edition ed = edition();
@@ -208,6 +214,23 @@ public final class DailyCourses implements Game {
         GamesDao.ScoreRow r = games().scores().record(GenBoards.GAME, GenBoards.week(week), false);
         out.starChart(LocalDate.ofEpochDay(week).toString(), r == null ? null : r.score(),
                 r != null && out.showNames() ? holder(r.player()) : null);
+        GenService e = engine;
+        if (e == null) {
+            return;
+        }
+        for (Slots.Def d : Slots.ALL) {
+            FreshFeed.Fresh f = e.fresh(d.id());
+            if (f != null) {
+                out.fresh(d.id(), f);
+            }
+        }
+        for (Slots.Def d : Slots.CLASSICS) {
+            FreshFeed.Classic c = e.classic(d.id());
+            if (c != null) {
+                out.classic(d.id(), c);
+            }
+        }
+        out.freshHistory(e.freshHistory(out.showNames()));
     }
 
     @Override

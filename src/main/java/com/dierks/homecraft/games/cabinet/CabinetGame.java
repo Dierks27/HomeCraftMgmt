@@ -201,6 +201,8 @@ public abstract class CabinetGame implements Game {
             }
         }
         paid += featuredBonus(player);
+        boolean gold = milestonesReached(s.milestonesFor(board), milestoneValue, lowerIsBetter).contains(3);
+        games().tellProgress(g -> g.cabinetFinished(player, id(), false, gold)); // quests and achievements (E4)
         return new Finish(result, reached, paid, false);
     }
 
@@ -210,6 +212,7 @@ public abstract class CabinetGame implements Game {
      */
     public Finish finishDaily(Player player, DailyStart start, long score, boolean lowerIsBetter, boolean goalMet) {
         if (start == null || !start.scored()) {
+            games().tellProgress(g -> g.cabinetFinished(player, id(), true, false)); // practice counts (E4)
             return new Finish(ScoreResult.NONE, List.of(), 0, true);
         }
         ScoreResult result = games().scores().submit(player.getUniqueId(), id(), Scores.daily(start.day()), score,
@@ -222,6 +225,7 @@ public abstract class CabinetGame implements Game {
                     name() + ": daily challenge");
         }
         paid += featuredBonus(player);
+        games().tellProgress(g -> g.cabinetFinished(player, id(), false, false)); // quests and achievements (E4)
         return new Finish(result, List.of(), paid, false);
     }
 

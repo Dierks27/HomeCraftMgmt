@@ -107,8 +107,36 @@ class DailySettingsTest {
             assertEquals(d.weeklyClear(), s.rewards().clearWeekly().get(d.id()), d.id() + ": the weekly table");
             assertEquals(d.dailyClear(), s.rewards().clearDaily().get(d.id()), d.id() + ": the daily table");
         }
-        assertEquals(5, s.dailyClear("fresh_parkour_hard"), "hard parkour's first finish in a week pays 5");
+        assertEquals(4, s.dailyClear("fresh_parkour_hard"),
+                "hard parkour's first finish in a week pays 4: never above what the trials' daily_cap can pay");
         assertFalse(s.slot("fresh_boat").enabled(), "the ice boat ships off");
+    }
+
+    @Test
+    void noShippedFirstFinishOrGoalIsMoreThanTheCapThatPaysIt() {
+        // All or nothing (CADENCE-UI-TODO §4c): an amount above its game's daily_cap could never be paid at all.
+        DailySettings s = DailySettings.defaults();
+        int trialsCap = com.dierks.homecraft.games.trial.TimeTrialsSettings.defaults().dailyCap();
+        int golfCap = com.dierks.homecraft.games.golf.MiniGolfSettings.defaults().dailyCap();
+        for (Slots.Def d : Slots.ALL) {
+            int cap = d.golf() ? golfCap : trialsCap;
+            for (int cadence = 1; cadence <= Edition.MAX_CADENCE; cadence++) {
+                int pays = s.dailyClear(d.id(), cadence);
+                assertTrue(pays <= cap, d.id() + " every " + cadence + " days pays " + pays
+                        + ", which its game's daily_cap (" + cap + ") can pay in one go");
+            }
+        }
+        assertEquals(4, Slots.DAILY_PARKOUR_HARD.weeklyClear(), "the weekly Hard Parkour is 4, the trials' cap");
+        for (DailyStars.Goal g : s.starGoalList()) {
+            assertTrue(g.tokens() <= s.dailyCap(), "a Star Chart goal's " + g.tokens()
+                    + " tokens fit games.fresh.daily_cap (" + s.dailyCap() + ")");
+        }
+        for (int cadence = 1; cadence <= Edition.MAX_CADENCE; cadence++) {
+            for (DailyStars.Goal g : s.withCadence(cadence).starGoals(1000)) {
+                assertTrue(g.tokens() <= s.dailyCap(), "every " + cadence + " days, a goal of " + g.stars()
+                        + " stars pays " + g.tokens() + ": within the daily cap");
+            }
+        }
     }
 
     @Test
@@ -184,8 +212,9 @@ class DailySettingsTest {
     @Test
     void eachCoursesFirstFinishFollowsTheCadenceBetweenTheTwoTables() throws Exception {
         assertEquals(3, with("cadence", "daily", new ArrayList<>()).dailyClear("fresh_parkour_hard"), "daily: 3");
-        assertEquals(4, with("cadence", 3, new ArrayList<>()).dailyClear("fresh_parkour_hard"), "every 3 days: 4");
-        assertEquals(5, with("cadence", 14, new ArrayList<>()).dailyClear("fresh_parkour_hard"), "every 14 days: 5");
+        assertEquals(3, with("cadence", 3, new ArrayList<>()).dailyClear("fresh_parkour_hard"),
+                "every 3 days: round(3 + 1 * 2/6)");
+        assertEquals(4, with("cadence", 14, new ArrayList<>()).dailyClear("fresh_parkour_hard"), "every 14 days: 4");
         Map<String, Object> fresh = shipped();
         put(fresh, "cadence", 2);
         put(fresh, "rewards.clear_daily.fresh_golf", 4);

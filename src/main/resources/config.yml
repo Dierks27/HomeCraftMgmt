@@ -1553,6 +1553,10 @@ games:
   featured: auto
   # Tokens for the first finish of today's featured game (counts toward skill_daily_cap).
   featured_bonus: 1
+  # The website's leaderboards: how many of each game's and course's best scores /api/arcade
+  # lists ("top"; past Fresh Courses list up to 3). 0 = none. Names only with
+  # web.dashboard.arcade_show_names.
+  feed_top: 5
   # When your host restarts the server each day: "HH:mm" 24-hour times in clock.time_zone
   # (keep the quotes; midnight is "00:00"), the minute it actually stops, not when its warnings
   # start. Just before each one, courses, golf, new card-game hands and the daily scored try
@@ -1853,8 +1857,9 @@ games:
     rebuild_at: "04:00"
     # The day a weekly set starts, like "monday"; "" = the quests' week start (arcade.quests.week_starts).
     # Every other cadence counts its days from this day too. After a change the courses that are up
-    # stay until the new day. A new day that would still be the same numbered set (weekly: one before
-    # the next Monday) is not a change, so they stay until the one after. Status shows the date.
+    # stay until the new day. Moving the change day later keeps this set until the new day comes
+    # round: a new day that would still be the same numbered set (weekly: one before the next
+    # Monday) is not a change, so they stay until the one after. Status shows the date.
     rebuild_day: ""
     # Seconds after the server is up before the first build.
     startup_delay_seconds: 60
@@ -1874,18 +1879,21 @@ games:
     world_rules: true
     # "x y z" where people standing in a building area are moved; "" = the world's spawn.
     safe_spot: ""
-    # Most Star Chart tokens a player earns a day (games.skill_daily_cap still applies). Both weekly
-    # goals on one day (1 + 2) pay 2: a goal a cap cuts short is not paid later.
+    # Most Star Chart tokens a player earns a day (games.skill_daily_cap still applies). A goal is
+    # paid in full or not at all: one the day's caps can't pay whole waits for a finish another day
+    # that week. A week's goals are fixed the first time they are shown, even if a course is
+    # switched off later that week.
     daily_cap: 2
     # Tokens for each course's first finish in each set: one table for a weekly cadence and one for
     # a daily one. Anything in between is worked out from the two, so a new cadence needs no retuning.
     # They count toward games.trials.daily_cap / games.golf.daily_cap (4) and skill_daily_cap (6),
-    # and a reward a cap cuts short is not paid later: Hard Parkour's weekly 5 pays at most 4.
+    # and are paid in full or not at all: if today's caps can't pay all of it, nothing is paid or
+    # used up, and a finish on another day of the same set pays it. Keep each at or under 4.
     rewards:
       clear_weekly:
         fresh_parkour_easy: 2
         fresh_parkour: 3
-        fresh_parkour_hard: 5
+        fresh_parkour_hard: 4
         fresh_rings: 3
         fresh_golf: 3
         fresh_tiny_golf: 2

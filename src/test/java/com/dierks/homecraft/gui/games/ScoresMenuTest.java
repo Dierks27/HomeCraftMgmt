@@ -4,17 +4,25 @@ import com.dierks.homecraft.games.Breaks;
 import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.gen.api.Edition;
 import com.dierks.homecraft.games.gen.api.GenBoards;
+import com.dierks.homecraft.gui.games.daily.DailyText;
 import org.junit.jupiter.api.Test;
 
+import java.time.DayOfWeek;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * How high scores read: times, units and board names (spec §6.2), Daily Courses' boards included
- * (GEN-SPEC §5.2): a layout's board is a time (strokes for golf) named by its course and day, a
- * day's stars and the Star Chart are stars, and the chart names its week.
+ * How high scores read: times, units and board names (spec §6.2), Fresh Courses' boards included
+ * (GEN-SPEC §5.2, the weekly addendum §3, GEN-SPEC-KEEP §3): a set's board is a time (strokes for
+ * golf) named by its course and its set ("this week", "week of Mon 28 Sep", a daily set's date,
+ * a 3-day set's first and last day), a set recalled into a Classics slot reads as a classic, stars
+ * and the Star Chart are stars, and the chart names its week.
  */
 class ScoresMenuTest {
 
@@ -68,30 +76,66 @@ class ScoresMenuTest {
 
     private static final long TODAY = 20_725;      // Tue 29 Sep 2026
     private static final long THIS_WEEK = 20_724;  // Mon 28 Sep 2026
+    private static final ZoneId CHICAGO = ZoneId.of("America/Chicago");
+    /** Tue 29 Sep 2026, 15:00 in Chicago. */
+    private static final long NOW = LocalDateTime.of(2026, 9, 29, 15, 0).atZone(CHICAGO).toInstant().toEpochMilli();
 
-    private static String label(String board) {
-        Function<String, String> names = id -> Map.of("fresh_golf", "Golf of the Day").getOrDefault(id, id);
-        return ScoresMenu.boardLabel(board, 999, TODAY, THIS_WEEK, names);
+    private static Edition schedule(int cadence) {
+        return new Edition(CHICAGO, Edition.DEFAULT_ROLLOVER, DayOfWeek.MONDAY, cadence, null);
+    }
+
+    private static String label(String board, int cadence) {
+        return label(board, cadence, b -> false);
+    }
+
+    private static String label(String board, int cadence, Predicate<String> recalled) {
+        Function<String, String> names = id -> Map.of("fresh_golf", "Golf of the Week").getOrDefault(id, id);
+        return ScoresMenu.boardLabel(board, 999, schedule(cadence), NOW, THIS_WEEK, names, recalled);
     }
 
     @Test
-    void dailyBoardsReadAsTheCourseAndItsDay() {
-        assertEquals("Easy Parkour · today", label(GenBoards.day("fresh_parkour_easy", Edition.editionKey(TODAY, 0))),
-                "today's layout, named by its slot even when it isn't open");
+    void freshBoardsReadAsTheCourseAndItsSet() {
+        assertEquals("Easy Parkour · this week",
+                label(GenBoards.day("fresh_parkour_easy", Edition.editionKey(7, THIS_WEEK, 0)), 7),
+                "the set up now, named by its slot even when it isn't open");
+        assertEquals("Easy Parkour · week of Mon 21 Sep",
+                label(GenBoards.day("fresh_parkour_easy", Edition.editionKey(7, THIS_WEEK - 7, 0)), 7),
+                "an older weekly set names its week");
+        assertEquals("Golf of the Week · this week (layout 2)",
+                label(GenBoards.day("fresh_golf", Edition.editionKey(7, THIS_WEEK, 1)), 7),
+                "a reroll says which layout of the set it is; a live course's own name is used");
+        assertEquals("Easy Parkour · today", label(GenBoards.day("fresh_parkour_easy", Edition.editionKey(TODAY, 0)), 1),
+                "a daily set up now: today");
         assertEquals("Easy Parkour · Mon 28 Sep",
-                label(GenBoards.day("fresh_parkour_easy", Edition.editionKey(TODAY - 1, 0))),
-                "an older layout names its day");
-        assertEquals("Golf of the Day · today (layout 2)",
-                label(GenBoards.day("fresh_golf", Edition.editionKey(TODAY, 1))),
-                "a reroll says which layout of the day it is; a live course's own name is used");
-        assertEquals("Hard Parkour stars · today", label(GenBoards.stars("fresh_parkour_hard", TODAY)),
-                "a player's stars that day");
-        assertEquals("Star Chart · this week", label(GenBoards.week(THIS_WEEK)), "this week's chart");
-        assertEquals("Star Chart · week of Mon 21 Sep", label(GenBoards.week(THIS_WEEK - 7)), "last week's");
-        assertEquals("mystery · today", label(GenBoards.day("mystery", Edition.editionKey(TODAY, 0))),
+                label(GenBoards.day("fresh_parkour_easy", Edition.editionKey(TODAY - 1, 0)), 1),
+                "an older daily set names its day");
+        assertEquals("Easy Parkour · Mon 28 Sep",
+                label(GenBoards.day("fresh_parkour_easy", Edition.editionKey(TODAY - 1, 0)), 7),
+                "a daily set kept under a weekly schedule still reads as its day");
+        String three = GenBoards.day("fresh_rings", Edition.editionKey(3, schedule(3).editionStart(NOW), 0));
+        assertEquals("Sky Rings · " + DailyText.setDates(3, schedule(3).editionStart(NOW)), label(three, 3),
+                "a 3-day set reads as its first and last day");
+        assertTrue(label(three, 3).matches("Sky Rings · \\w{3} \\d+ \\w{3}-\\w{3} \\d+ \\w{3}"),
+                "like Mon 28 Sep-Wed 30 Sep: " + label(three, 3));
+        assertEquals("Hard Parkour stars · this week",
+                label(GenBoards.stars("fresh_parkour_hard", Edition.editionKey(7, THIS_WEEK, 0)), 7),
+                "a player's stars in the set up now");
+        assertEquals("Hard Parkour stars · today", label(GenBoards.stars("fresh_parkour_hard", TODAY), 7),
+                "stars kept by day read as the day");
+        assertEquals("Star Chart · this week", label(GenBoards.week(THIS_WEEK), 7), "this week's chart");
+        assertEquals("Star Chart · week of Mon 21 Sep", label(GenBoards.week(THIS_WEEK - 7), 7), "last week's");
+        assertEquals("mystery · this week", label(GenBoards.day("mystery", Edition.editionKey(7, THIS_WEEK, 0)), 7),
                 "an unknown course shows its id");
-        assertEquals("River Run", ScoresMenu.boardLabel("course:river", 100, TODAY, THIS_WEEK, id -> "River Run"),
-                "every other board reads as before");
+        assertEquals("River Run", ScoresMenu.boardLabel("course:river", 100, schedule(7), NOW, THIS_WEEK,
+                id -> "River Run", b -> false), "every other board reads as before");
+    }
+
+    @Test
+    void aRecalledSetsBoardReadsAsAClassic() {
+        String board = GenBoards.day("fresh_parkour_hard", Edition.editionKey(7, THIS_WEEK + 7, 0));
+        assertEquals("Classic: Hard Parkour · week of 5 Oct", label(board, 7, board::equals),
+                "the original board, with its old records, named as the classic it is now");
+        assertEquals("Hard Parkour · week of Mon 5 Oct", label(board, 7), "and as itself when it isn't recalled");
     }
 
     @Test

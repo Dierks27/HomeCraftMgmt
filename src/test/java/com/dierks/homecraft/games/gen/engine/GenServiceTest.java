@@ -497,7 +497,7 @@ class GenServiceTest {
                 "fresh_tiny_golf"};
         host.settings = GenKit.weekly(six);
         boot();
-        assertEquals(5, gen.dailyClear("fresh_parkour_hard"), "weekly: Hard Parkour's first finish pays 5");
+        assertEquals(4, gen.dailyClear("fresh_parkour_hard"), "weekly: Hard Parkour's first finish pays 4");
         assertEquals(0, gen.dailyClear("river_run"), "a hand-built course pays no first-finish reward here");
         assertEquals(18, gen.weekMax(MON_28_SEP), "six courses, one edition a week: 18 stars");
         assertEquals(List.of(6, 12), gen.starGoals(), "6 and 12 stars");
@@ -507,10 +507,10 @@ class GenServiceTest {
         host.settings = GenKit.settings(six);
         gen.check(); // a reload: the engine reads the settings at its next check
         assertEquals(3, gen.dailyClear("fresh_parkour_hard"), "daily: 3");
-        assertEquals(5, gen.dailyClear("fresh_parkour_hard", 7),
-                "but a finish on a weekly layout kept over the change pays by its own edition: 5");
+        assertEquals(4, gen.dailyClear("fresh_parkour_hard", 7),
+                "but a finish on a weekly layout kept over the change pays by its own edition: 4");
         assertEquals(3, gen.dailyClear("fresh_parkour_hard", 1), "a daily one 3");
-        assertEquals(4, gen.dailyClear("fresh_parkour_hard", 3), "an every-3-days one 4");
+        assertEquals(3, gen.dailyClear("fresh_parkour_hard", 3), "an every-3-days one round(3 + 1 * 2/6) = 3");
         assertEquals(0, gen.dailyClear("river_run", 7), "a hand-built course nothing, whatever the cadence");
         assertEquals(126, gen.weekMax(MON_28_SEP), "seven editions a week: 126");
         assertEquals(List.of(10, 25), DailyStars.stars(gen.goals(MON_28_SEP + 7)), "10 and 25 from next week");

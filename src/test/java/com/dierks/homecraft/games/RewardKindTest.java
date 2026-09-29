@@ -9,10 +9,11 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Daily Courses' new reward kind and ledger source (GEN-SPEC §5.3): the first counted finish of a
- * course day is capped like every skill reward, kept per game (not once across games), and paid
- * once per course and course day by its ref — a reroll the same day pays no second one. Star Chart
- * goals are paid under their own source.
+ * Fresh Courses' reward kind and ledger source (GEN-SPEC §5.3, the weekly addendum §4): FRESH_CLEAR,
+ * the first counted finish of a course in a set, is capped like every skill reward, kept per game
+ * (not once across games), and paid once per course and set by its ref {@code fresh:<slot>:<edition>}
+ * — a reroll of the set pays no second one; golf's par and holes-in-one on a Fresh course are once
+ * per set too. Star Chart goals are paid under their own source, "Fresh Courses".
  */
 class RewardKindTest {
 
@@ -22,6 +23,18 @@ class RewardKindTest {
         assertFalse(RewardKind.DAILY_CLEAR.acrossGames(), "each game keeps its own");
         assertFalse(RewardKind.DAILY_CLEAR.repeatable(), "it is one-time, by its ref");
         assertSame(RewardKind.DAILY_CLEAR, RewardKind.valueOf("DAILY_CLEAR"), "stored by that name");
+    }
+
+    @Test
+    void theFreshClearRefIsPerSlotAndSet() {
+        assertEquals("fresh:fresh_parkour_hard:7:38", SkillRewards.freshClearRef("fresh_parkour_hard", "7:38"),
+                "fresh:<slot>:<edition>, the edition without its reroll");
+        assertFalse(SkillRewards.freshClearRef("fresh_golf", "7:38").equals(SkillRewards.freshClearRef("fresh_golf",
+                "1:268")), "a weekly and a daily set that begin the same day never share one");
+        assertEquals("par:fresh_golf:7:38", SkillRewards.parRef("fresh_golf", "7:38"), "par once per set");
+        assertEquals("hio:fresh_golf:3:7:38", SkillRewards.holeInOneRef("fresh_golf", 3, "7:38"),
+                "a hole-in-one once per hole per set");
+        assertEquals("par:meadow:20725", SkillRewards.parRef("meadow", 20725L), "a hand-built course's are by day");
     }
 
     @Test
@@ -40,6 +53,6 @@ class RewardKindTest {
     void starChartGoalsHaveTheirOwnLedgerSource() {
         TokenService.Source s = TokenService.Source.of("GAMES_DAILY");
         assertSame(TokenService.Source.GAMES_DAILY, s, "stored by name");
-        assertEquals("Daily Courses", s.label(), "what the token history says");
+        assertEquals("Fresh Courses", s.label(), "what the token history says");
     }
 }

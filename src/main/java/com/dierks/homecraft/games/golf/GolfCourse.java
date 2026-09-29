@@ -25,7 +25,7 @@ import java.util.regex.Pattern;
  * @param rev     goes up with every change to a hole's layout, so a round can tell the course
  *                changed under it
  * @param holes   the holes in playing order
- * @param gen     Daily Courses' tag when the course was generated (GEN-SPEC §5.1), or {@code null}
+ * @param gen     Fresh Courses' tag when the course was generated (GEN-SPEC §5.1), or {@code null}
  *                for a hand-built one, which behaves exactly as it always did
  */
 public record GolfCourse(String id, String name, String world, boolean enabled, int rev, List<Hole> holes,
@@ -43,7 +43,7 @@ public record GolfCourse(String id, String name, String world, boolean enabled, 
         holes = List.copyOf(holes);
     }
 
-    /** A hand-built course (no {@code gen} tag): the constructor every course had before Daily Courses. */
+    /** A hand-built course (no {@code gen} tag): the constructor every course had before Fresh Courses. */
     public GolfCourse(String id, String name, String world, boolean enabled, int rev, List<Hole> holes) {
         this(id, name, world, enabled, rev, holes, null);
     }
@@ -147,7 +147,7 @@ public record GolfCourse(String id, String name, String world, boolean enabled, 
         return id == null ? "" : id.trim().toLowerCase(Locale.ROOT);
     }
 
-    /** Whether Daily Courses made it (it carries a {@code gen} tag). */
+    /** Whether Fresh Courses made it (it carries a {@code gen} tag). */
     public boolean generated() {
         return gen != null;
     }
@@ -208,7 +208,7 @@ public record GolfCourse(String id, String name, String world, boolean enabled, 
         return new GolfCourse(id, name, world, enabled, r, holes, gen);
     }
 
-    /** The same course with Daily Courses' tag ({@code null}: hand-built). */
+    /** The same course with Fresh Courses' tag ({@code null}: hand-built). */
     public GolfCourse withGen(GenTag g) {
         return new GolfCourse(id, name, world, enabled, rev, holes, g);
     }

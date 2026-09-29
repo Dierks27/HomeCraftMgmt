@@ -90,7 +90,7 @@ public final class GamesService {
     private volatile List<Game> games = List.of();
     /** The shared screens (gui/games); "Coming soon!" until installed. */
     private GamesScreens screens = GamesScreens.NONE;
-    /** Daily Courses' gate over generated courses; nothing generated is live until it is installed. */
+    /** Fresh Courses' gate over generated courses; nothing generated is live until it is installed. */
     private volatile GeneratedCourses generated = GeneratedCourses.NONE;
     /** Ids and aliases, lower-case. */
     private final Map<String, Game> byName = new HashMap<>();
@@ -653,8 +653,8 @@ public final class GamesService {
 
     /**
      * What the course engines ask about generated courses (GEN-SPEC §0.2 R5): {@link
-     * GeneratedCourses#NONE} — nothing generated is live — until Daily Courses installs its engine,
-     * and whenever the {@code daily} game is closed (switched off, reloaded off, or failed), whatever
+     * GeneratedCourses#NONE} — nothing generated is live — until Fresh Courses installs its engine,
+     * and whenever the {@code fresh_courses} game is closed (switched off, reloaded off, or failed), whatever
      * its own stop managed to do. So the gate can't outlive the game that vouches for it.
      */
     public GeneratedCourses generated() {
@@ -666,7 +666,7 @@ public final class GamesService {
         return daily == null || enabled(daily) ? g : GeneratedCourses.NONE;
     }
 
-    /** Install (or, with {@code null}, remove) Daily Courses' engine. */
+    /** Install (or, with {@code null}, remove) Fresh Courses' engine. */
     public void generated(GeneratedCourses generated) {
         this.generated = generated == null ? GeneratedCourses.NONE : generated;
     }

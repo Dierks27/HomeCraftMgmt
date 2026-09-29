@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.FeedWriter;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.cabinet.CabinetGame;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.engine.GenService;
@@ -77,7 +78,30 @@ final class BoardSource implements BoardDisplay.Lookup {
             }
         };
         games.guard(g, () -> g.feed(capture));
-        return seen[0] != null ? seen[0] : new BoardDisplay.Cabinet(g.name(), "classic", "points", false);
+        BoardDisplay.Cabinet c = seen[0] != null ? seen[0] : new BoardDisplay.Cabinet(g.name(), "classic", "points", false);
+        return new BoardDisplay.Cabinet(c.name(), c.board(), c.unit(), c.lower(), boards(g));
+    }
+
+    /**
+     * A cabinet's other all-time boards: the ones it says it keeps (Creeper Sweeper's levels) and
+     * any with scores on them (never a daily board, whose name has a ':').
+     */
+    private List<String> boards(Game g) {
+        List<String> out = new ArrayList<>();
+        if (g instanceof CabinetGame cg) {
+            List<String> own = games.guard(g, cg::boards, List.<String>of());
+            out.addAll(own == null ? List.of() : own);
+        }
+        try {
+            for (String b : games.dao().boards(g.id())) {
+                if (b != null && !b.isBlank() && !b.contains(":") && !out.contains(b)) {
+                    out.add(b);
+                }
+            }
+        } catch (java.sql.SQLException | RuntimeException e) {
+            // the boards it says it keeps are enough to check a name against
+        }
+        return out;
     }
 
     @Override

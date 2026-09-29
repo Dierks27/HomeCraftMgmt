@@ -366,6 +366,34 @@ class GamesDaoTest {
                 true, false, "h", NOW), "a reward that isn't whole still pays what is left");
     }
 
+    @Test
+    void aWholeRewardBiggerThanADaysCapPaysThatCapOnceAndIsDone() throws Exception {
+        // an owner lowered games.trials.daily_cap to 3 under Hard Parkour's weekly first finish of 4
+        String ref = SkillRewards.freshClearRef("fresh_parkour_hard", "7:38");
+        assertEquals(3, dao.payReward(alice, "trials", Source.GAMES_PARKOUR, DAY, RewardKind.DAILY_CLEAR, ref, 4, 3, 6,
+                true, true, "Hard Parkour: first finish this week", NOW),
+                "a cap of 3 can never hold 4 in a day: an empty day pays the whole cap, or it could never be paid");
+        assertTrue(dao.rewardPaid(alice, "trials", RewardKind.DAILY_CLEAR, ref), "and it is recorded: done");
+        assertEquals(0, dao.payReward(alice, "trials", Source.GAMES_PARKOUR, DAY + 1, RewardKind.DAILY_CLEAR, ref, 4,
+                3, 6, true, true, "again", NOW), "once only, another day too");
+
+        // the same with the server-wide cap, and a day that has already used some of it
+        String goal = SkillRewards.milestoneRef("gweek:20720", 12);
+        assertEquals(1, dao.payReward(bob, "trials", Source.GAMES_PARKOUR, DAY, RewardKind.MILESTONE, "ms:x:1", 1, 4, 3,
+                true, "a", NOW), "bob has used 1 of the server's 3");
+        assertEquals(0, dao.payReward(bob, "fresh_courses", Source.GAMES_DAILY, DAY, RewardKind.MILESTONE, goal, 4, 4, 3,
+                true, true, "Star Chart: 12 stars this week", NOW),
+                "2 left of a whole of 3 (the server's cap): nothing now, and nothing recorded");
+        assertFalse(dao.rewardPaid(bob, "fresh_courses", RewardKind.MILESTONE, goal), "still there to earn");
+        assertEquals(3, dao.payReward(bob, "fresh_courses", Source.GAMES_DAILY, DAY + 1, RewardKind.MILESTONE, goal, 4,
+                4, 3, true, true, "Star Chart: 12 stars this week", NOW), "the next day pays the whole cap");
+
+        assertEquals(0, GamesDao.wholePay(4, 0, 6, 0), "a cap of 0 pays nothing, ever");
+        assertEquals(4, GamesDao.wholePay(4, -1, -1, 4), "no caps: the whole reward");
+        assertEquals(2, GamesDao.wholePay(4, 2, 6, 2), "the smaller cap is the whole");
+        assertEquals(0, GamesDao.wholePay(4, 5, 6, -3), "caps already over-used pay nothing");
+    }
+
     // ---- Daily Courses' stars -------------------------------------------------------------------
 
     @Test

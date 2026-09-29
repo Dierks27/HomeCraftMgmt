@@ -779,14 +779,7 @@ public final class DisplayService {
         } catch (SQLException e) {
             return;
         }
-        for (DisplayDao.Display d : displays) {
-            if (!BoardDisplay.is(d.itemId())) {
-                continue;
-            }
-            String key = boardKeys.get(d.id());
-            if (key != null && !due.contains(key)) {
-                continue; // a board no score touched
-            }
+        for (DisplayDao.Display d : dueBoards(displays, boardKeys, due)) {
             try {
                 switch (d.kind()) {
                     case DisplayDao.SIGN -> renderSign(d);
@@ -799,6 +792,32 @@ public final class DisplayService {
                 plugin.getLogger().warning("Failed to render leaderboard " + d.id() + ": " + t.getMessage());
             }
         }
+    }
+
+    /**
+     * Which displays a tick draws again: every leaderboard showing a board a score went on since
+     * the last tick ({@code dirty}, as {@code game|board}), and any leaderboard whose board isn't
+     * known yet; never a display of anything else, and none when no score came in. Each display is
+     * listed once, however many scores its board got. Pure, so it is tested.
+     *
+     * @param keys each leaderboard display's {@code game|board}, by display id
+     */
+    static List<DisplayDao.Display> dueBoards(List<DisplayDao.Display> displays, Map<Long, String> keys,
+                                              java.util.Set<String> dirty) {
+        List<DisplayDao.Display> out = new java.util.ArrayList<>();
+        if (displays == null || dirty == null || dirty.isEmpty()) {
+            return out;
+        }
+        for (DisplayDao.Display d : displays) {
+            if (d == null || !BoardDisplay.is(d.itemId())) {
+                continue;
+            }
+            String key = keys == null ? null : keys.get(d.id());
+            if (key == null || dirty.contains(key)) {
+                out.add(d); // a board a score went on, or one not read yet
+            }
+        }
+        return out;
     }
 
     /** Remember which board a leaderboard display shows, so a score on it draws it again. */

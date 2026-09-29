@@ -91,7 +91,7 @@
 - The game quests you can be given (only while those games are open):
   - Daily: "Play 3 arcade cabinets" (4 tokens) and "Finish a course or a round of golf" (5 tokens).
   - Weekly: "Play 15 arcade cabinets" (20 tokens), "Finish 5 courses or golf rounds" (20 tokens) and "Earn 6 Fresh Courses stars" (20 tokens).
-- A cabinet counts when you play it to the end. Practice counts too. A game you close early, or a friend game someone quits, doesn't count.
+- A cabinet counts when you play it to the end, win, lose or draw: a game against the Arcade played out, or a Creeper Sweeper board that finds a creeper, counts too. Practice counts too. A game you close early, or a game against a friend, doesn't count.
 - A course counts when your run counts. A round of golf counts when you finish every hole. Each Fresh Courses star counts once.
 - Nothing counts in creative or spectator mode, or in a world without games.
 - Courses are in the Games world, and no tokens are paid there. A quest or achievement you finish there is paid as soon as you are back home.
@@ -104,7 +104,7 @@
   - "Finish a golf course under par" (25 tokens)
   - "Finish every Fresh Course in one set" (40 tokens)
   - "Reach the top Star Chart goal in a week" (30 tokens)
-  - "Set a course record" (30 tokens)
+  - "Set a course record" (30 tokens; a time trial's or a golf course's)
 - When a new set of Fresh Courses is up, you read one line in chat, once for each set: "New courses this week! Easy, Parkour, Hard, Sky Rings and Golf - /hcm play". It waits while you are on a course, and until you close a screen. Don't want it? /hcm play news off.
 
 ## The fairness promises

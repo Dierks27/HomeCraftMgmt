@@ -77,7 +77,7 @@ public final class GolfCourseMenu extends GameMenu {
         holes.add(pars.toString());
         GenTag t = c.gen();
         GamesService games = plugin.games();
-        int cadence = t == null ? 7 : t.cadence();
+        int cadence = GenCopy.words(t); // a Classic's board holds its original set's times: no "this week"
         if (t != null && t.recalled()) {
             holes.add("&7Its old records are the ones to beat.");
         } else if (t != null) {
@@ -136,7 +136,7 @@ public final class GolfCourseMenu extends GameMenu {
 
     /** A Fresh course's stars in its set (in the name, for Bedrock), the star lines and the set's first finish. */
     private ItemStack dailyStars(GamesService games, GolfCourse c, GenTag t) {
-        int cadence = t.cadence();
+        int cadence = GenCopy.words(t);
         int stars = DailyLookup.stars(games, viewer.getUniqueId(), t);
         List<String> lore = new ArrayList<>();
         lore.add(DailyText.starStrokes(c.par(), c.holes().size()));

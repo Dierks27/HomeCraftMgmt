@@ -194,6 +194,7 @@ public final class TicTacToe extends CabinetGame {
             player.sendMessage(Text.of("&eWins: &f" + total + (f.result().record() ? " &6★ Most on the server!" : "")));
         } else {
             featuredBonus(player);
+            finishedUnscored(player, false); // a game played out is a finish, lost or drawn (E4)
         }
         if (match.earnsDaily(id)) {
             TicTacToeSettings s = settings();

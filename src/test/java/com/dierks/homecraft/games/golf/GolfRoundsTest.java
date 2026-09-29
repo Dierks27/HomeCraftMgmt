@@ -93,6 +93,9 @@ class GolfRoundsTest {
                 GolfRounds.setRecordLine(1, "Tiny Golf"), "daily");
         org.junit.jupiter.api.Assertions.assertEquals("&6★ That's the best on Tiny Golf so far!",
                 GolfRounds.setRecordLine(3, "Tiny Golf"), "every 3 days");
+        org.junit.jupiter.api.Assertions.assertEquals("&6★ That's the best on Tiny Golf so far!",
+                GolfRounds.setRecordLine(com.dierks.homecraft.games.gen.api.GenCopy.CLASSIC, "Tiny Golf"),
+                "a recalled course's board is its original set's: never 'this week's best'");
     }
 
     @Test

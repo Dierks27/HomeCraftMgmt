@@ -186,7 +186,7 @@ public final class MiniGolf implements Game {
         GenTag t = c.gen();
         GamesService g = games();
         UUID id = viewer.getUniqueId();
-        int cadence = t.cadence();
+        int cadence = GenCopy.words(t); // a Classic's board holds its original set's times: no "this week"
         int stars = DailyLookup.stars(g, id, t);
         List<String> lore = new ArrayList<>();
         if (t.recalled()) {
@@ -218,7 +218,7 @@ public final class MiniGolf implements Game {
      * yet in this set (the words follow the set's cadence).
      */
     public String setBestLine(GolfCourse c, Player viewer) {
-        int cadence = c.gen() == null ? 7 : c.gen().cadence();
+        int cadence = GenCopy.words(c.gen());
         GamesDao.ScoreRow r = record(c.id());
         if (r == null) {
             return DailyText.setBest(cadence, null, null, false);

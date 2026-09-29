@@ -112,6 +112,12 @@ public final class CreeperSweeper extends CabinetGame {
                 record != null && out.showNames() ? Bukkit.getOfflinePlayer(record.player()).getName() : null);
     }
 
+    /** Each level keeps its own all-time board (easy, normal, hard): a leaderboard display may show any. */
+    @Override
+    public List<String> boards() {
+        return CreeperSweeperSettings.LEVELS;
+    }
+
     @Override
     protected CabinetSettings cabinetSettings() {
         return settings();
@@ -182,10 +188,15 @@ public final class CreeperSweeper extends CabinetGame {
     /** A board just ended: say how it went, and record and pay a clear. */
     public void finish(Player player, Run run, SweeperEngine board) {
         if (board.state() == SweeperEngine.State.LOST) {
-            player.playSound(player.getLocation(), Sound.ENTITY_GENERIC_EXPLODE, 0.4f, 1.3f);
+            finishedUnscored(player, run.practice()); // the board ran to its end: a finish (E4)
             player.sendMessage(Text.of("&cBoom! &7That square hid a creeper."));
             if (run.isDaily() && !run.practice()) {
                 player.sendMessage(Text.of("&7That was today's scored try. You can still play the board for practice."));
+            }
+            try {
+                player.playSound(player.getLocation(), Sound.ENTITY_GENERIC_EXPLODE, 0.4f, 1.3f);
+            } catch (RuntimeException | LinkageError ignored) {
+                // a cosmetic sound never breaks a finish
             }
             return;
         }

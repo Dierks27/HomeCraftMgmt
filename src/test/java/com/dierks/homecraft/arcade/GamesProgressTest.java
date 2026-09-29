@@ -3,6 +3,7 @@ package com.dierks.homecraft.arcade;
 import com.dierks.homecraft.config.PluginConfig.QuestType;
 import com.dierks.homecraft.games.GameCatalog;
 import com.dierks.homecraft.games.GameKind;
+import com.dierks.homecraft.games.GameProgress;
 import com.dierks.homecraft.games.GameSpec;
 import org.bukkit.entity.Player;
 import org.junit.jupiter.api.Test;
@@ -146,6 +147,20 @@ class GamesProgressTest {
         progress.golfFinished(alex, "green", 27, 27, 0, true);
         assertEquals(List.of("quest FINISH_COURSE 1", "count course_finishes 1"), sink.events,
                 "level par is not under par, and no hole-in-one is none");
+        sink.events.clear();
+        progress.golfFinished(alex, "green", 27, 27, 0, false, true);
+        assertEquals(List.of("quest FINISH_COURSE 1", "count course_finishes 1", "count course_records 1"),
+                sink.events, "a round that sets the course's record is a course record ('Set a course record')");
+        sink.events.clear();
+        GameProgress quiet = new GameProgress() {
+            @Override
+            public void golfFinished(Player player, String courseId, int strokes, int par, int holesInOne,
+                                     boolean fresh) {
+                sink.events.add("six " + strokes);
+            }
+        };
+        quiet.golfFinished(alex, "green", 30, 27, 0, false, true);
+        assertEquals(List.of("six 30"), sink.events, "a listener that doesn't hear records still hears the round");
         assertFalse(GamesProgress.underPar(10, 0), "a round with no par is never under it");
         assertFalse(GamesProgress.underPar(0, 27), "a round with no strokes isn't a round");
         assertTrue(GamesProgress.underPar(26, 27), "one under is under");

@@ -301,8 +301,8 @@ public final class DailyText {
     static List<String> everyLine() {
         List<String> out = new ArrayList<>();
         List<DailyStars.Goal> goals = List.of(new DailyStars.Goal(6, 1), new DailyStars.Goal(12, 2));
-        for (int cadence : new int[]{1, 3, 7, 14}) {
-            for (Slots.Def s : Slots.ALL) {
+        for (int cadence : new int[]{GenCopy.CLASSIC, 1, 3, 7, 14}) {
+            for (Slots.Def s : cadence == GenCopy.CLASSIC ? List.<Slots.Def>of() : Slots.ALL) {
                 for (int stars = 0; stars <= Stars.MAX; stars++) {
                     out.add(slotName(s, cadence, stars, s.plots(), 29));
                 }
@@ -322,8 +322,13 @@ public final class DailyText {
             out.add(yourBest(cadence, "1:02.3"));
             out.add(firstFinish(cadence, 1, false));
             out.add(firstFinish(cadence, 2, true));
-            out.add(setDates(cadence, 20_724));
-            out.add(setName(cadence, 20_724));
+            if (cadence != GenCopy.CLASSIC) {
+                out.add(setDates(cadence, 20_724));
+                out.add(setName(cadence, 20_724));
+            } else {
+                out.add(trialFact(cadence, 0));
+                out.add(trialFact(cadence, 2));
+            }
         }
         out.add(starTimes(45_000, 70_000));
         out.add(starTimes(0, 0));

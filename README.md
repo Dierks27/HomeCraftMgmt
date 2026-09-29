@@ -913,7 +913,7 @@ result screens show it in their header's NAME. `/hcm play fresh_parkour_tiers` i
 | `fresh.safe_spot` | `""` | "x y z" where people standing in a building area are moved; `""` = the world's spawn |
 | `fresh.daily_cap` | `2` | Most Star Chart tokens a player earns a day (a goal is paid whole or waits for another day that week) |
 | `fresh.announce` | `true` | When a new set is up, each player reads one chat line about it, once per set: "New courses this week! Easy, Parkour, Hard, Sky Rings and Golf - /hcm play" ("today" when daily, "new every 3 days" for 3). It waits until every course of the set is up (or 15 minutes after the first), for players in a world the games are played in and not in a world game, and until a screen is closed (or a minute). Players who log in later read it a few seconds after joining. `/hcm play news off` turns it off for one player; `false` for everyone |
-| `fresh.rewards.clear_weekly.*` / `fresh.rewards.clear_daily.*` | see above | Each course's first-finish tokens at a weekly and at a daily cadence; other cadences are worked out from the two. Paid whole or not at all, so keep each at or under its game's `daily_cap` (4) |
+| `fresh.rewards.clear_weekly.*` / `fresh.rewards.clear_daily.*` | see above | Each course's first-finish tokens at a weekly and at a daily cadence; other cadences are worked out from the two. Paid whole or not at all (on a day whose caps can't hold it all, nothing is paid and it waits for another day of the set). An amount bigger than a whole day's cap (the paying game's `daily_cap`, or `games.skill_daily_cap`) pays that cap once, so keep each at or under them (4) |
 | `fresh.star_goals.weekly` / `.weekly_tokens` | `[6, 12]` / `[1, 2]` | The weekly Star Chart goals and what each pays, at a weekly cadence (a week's goals are fixed once shown: a change counts from the next week) |
 | `fresh.star_goals.daily` / `.daily_tokens` | `[10, 25]` / `[1, 1]` | The same at a daily cadence |
 | `fresh.budget.*` | `500` / `5000` / `4` / `4` / `2` / `40` | Blocks per tick online / idle, ms per tick, snapshots per tick, chunk loads at once, and the average tick time (ms) above which building pauses (it goes on below 3/4 of it) |
@@ -1035,11 +1035,14 @@ line, so they can ask for a favourite back.
 13. `/hcm play fresh_courses`: the title says "This week's courses", the header the week's dates,
     and each tile's name ends "Course code HARD-1" (and so on); finish Easy Parkour: the chat says
     "Course code EASY-1" and "First finish this week", never "today".
-14. Set `games.trials.daily_cap: 1` and `/hcm reload`, then finish Hard Parkour for the first time
-    this week: no "first finish this week" token (the once-ever first clear, which no cap limits,
-    still pays), and one line "You've reached today's token limit - finish it again another day this
-    week for its tokens."; `/hcm tokens history <you>` shows no "first finish this week" line. Put
-    the cap back to 4; the next day a finish pays the week's 4.
+14. On one day, finish Easy Parkour for the first time this week (+2 of time trials' `daily_cap` of
+    4), then Hard Parkour for the first time: 2 left and 4 asked, so no "first finish this week"
+    token (the once-ever first clear, which no cap limits, still pays), and one line "You've reached
+    today's token limit - finish it again another day this week for its tokens."; `/hcm tokens
+    history <you>` shows no Hard Parkour "first finish this week" line. The next day a finish pays
+    the week's 4. Then set `games.trials.daily_cap: 3` and `/hcm reload`: on the next set, Hard
+    Parkour's first finish on a day with nothing else earned pays 3 (the whole cap) and says "You've
+    won all the game tokens you can today", never "another day".
 15. Finish a Fresh course twice on two days of the same week: the second pays no first-finish token.
 16. `/hcm games gen history fresh_parkour_hard` → the week's course is HARD-1 "(up now)" with its seed.
 17. `/hcm games gen recall HARD-1` (the next week) → "Bringing back HARD-1…"; within a minute
@@ -1118,10 +1121,12 @@ completion lists the ids):
   its boards by name, `@board:creeper_sweeper:hard`), a hand-built course or golf course (its
   all-time board), or a Fresh course (`@board:fresh_parkour_hard`: **its current set's board**, which
   moves on to the new set by itself) or a Classics slot (the course it holds, with its old records).
-  A game of chance has no leaderboard, and an id nothing has is refused with a message.
+  A game of chance has no leaderboard, and an id nothing has is refused with a message, as is a
+  board the cabinet doesn't have (`@board:creeper_sweeper:hardd` names easy, normal and hard).
 - A hologram or TV shows a title ("Hard Parkour - this week"), the top 5 as "1. Sam 0:42.1" (ties
   share a rank; golf in strokes, cabinets in their own unit) and "/hcm play <id>"; a sign, the title
-  and the top 3. An empty board reads "No times yet - be the first!".
+  in whole words that fit its 15 characters ("Hard Parkour") and the top 3. An empty board reads
+  "No times yet - be the first!".
 - Names are shown: these are players on the server. `web.dashboard.arcade_show_names` is only the
   website's rule.
 - They are drawn on the display timer (`displays.refresh_seconds`), and again within a second of a

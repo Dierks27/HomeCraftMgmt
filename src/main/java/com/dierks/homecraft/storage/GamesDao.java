@@ -463,6 +463,11 @@ public final class GamesDao {
      * String, long)}, optionally <b>all or nothing</b> ({@code whole}): when the caps leave less than
      * {@code tokens}, it pays 0 and writes nothing, so a one-time reward stays there to earn on a
      * later day (Fresh Courses' first finish of a set and its Star Chart goals).
+     *
+     * <p>"All" is never more than a whole day's cap can hold: a reward bigger than the game's
+     * {@code daily_cap} or the server's cap (an owner who lowered one to 3 under a 4-token first
+     * finish) pays that cap on a day with all of it left, and is then done. Otherwise it could never
+     * be paid, and the player would be told to come back for it every day ({@link #wholePay}).
      */
     public int payReward(UUID player, String game, TokenService.Source source, long day, RewardKind kind,
                          String ref, int tokens, int capGame, int capAll, boolean once, boolean whole,
@@ -486,7 +491,10 @@ public final class GamesDao {
                     pay = Math.min(pay, capAll - cappedSum(c, player, day, null));
                 }
             }
-            if (pay <= 0 || (whole && pay < tokens)) {
+            if (whole) {
+                pay = wholePay(tokens, kind.capped() ? capGame : -1, kind.capped() ? capAll : -1, pay);
+            }
+            if (pay <= 0) {
                 return 0; // nothing written: capped away today, still there another day
             }
             try (PreparedStatement ps = c.prepareStatement(
@@ -508,6 +516,26 @@ public final class GamesDao {
             this.tokens.change(player, pay, source.name(), plain(detail), now);
             return pay;
         });
+    }
+
+    /**
+     * What an all-or-nothing reward pays: its "whole" is {@code tokens}, or the smaller of the two
+     * caps when one of them can never hold that much in a day; it pays that whole when today's
+     * caps leave room for it ({@code left}: what they let through now), else nothing. Pure.
+     *
+     * @param capGame the game's daily cap, or -1 for none (or a kind that isn't capped)
+     * @param capAll  the server's daily cap, or -1 for none
+     * @param left    what the caps let through today, at most {@code tokens}
+     */
+    static int wholePay(int tokens, int capGame, int capAll, int left) {
+        int whole = tokens;
+        if (capGame >= 0) {
+            whole = Math.min(whole, capGame);
+        }
+        if (capAll >= 0) {
+            whole = Math.min(whole, capAll);
+        }
+        return whole > 0 && left >= whole ? whole : 0;
     }
 
     /** Capped rewards paid to the player today across every game (what the server-wide cap counts). */

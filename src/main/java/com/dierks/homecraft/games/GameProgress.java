@@ -39,6 +39,18 @@ public interface GameProgress {
     default void golfFinished(Player player, String courseId, int strokes, int par, int holesInOne, boolean fresh) {
     }
 
+    /**
+     * A golf round was finished (every hole played), and whether it set the course's record (its
+     * board's best: a Fresh course's set board). What the games call; it tells
+     * {@link #golfFinished(Player, String, int, int, int, boolean)} unless a listener hears records.
+     *
+     * @param record the round set the course's record
+     */
+    default void golfFinished(Player player, String courseId, int strokes, int par, int holesInOne, boolean fresh,
+                              boolean record) {
+        golfFinished(player, courseId, strokes, par, holesInOne, fresh);
+    }
+
     /** Fresh Courses stars were added to this week's chart. */
     default void starsEarned(Player player, int stars) {
     }

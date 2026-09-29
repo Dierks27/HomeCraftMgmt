@@ -7,6 +7,11 @@ import com.dierks.homecraft.games.cabinet.connect.ConnectFour;
 import com.dierks.homecraft.games.cabinet.connect.ConnectFourAI;
 import com.dierks.homecraft.games.cabinet.connect.ConnectFourMatch;
 import com.dierks.homecraft.games.cabinet.snake.Snake;
+import com.dierks.homecraft.games.cabinet.sweeper.CreeperSweeper;
+import com.dierks.homecraft.games.cabinet.sweeper.SweeperEngine;
+import com.dierks.homecraft.games.cabinet.tictactoe.TicTacToe;
+import com.dierks.homecraft.games.cabinet.tictactoe.TicTacToeAI;
+import com.dierks.homecraft.games.cabinet.tictactoe.TicTacToeMatch;
 import com.dierks.homecraft.games.gen.DailyCourses;
 import com.dierks.homecraft.games.gen.DailySettings;
 import com.dierks.homecraft.gui.games.daily.DailyLookup;
@@ -33,8 +38,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * real cabinets and a real database.
  *
  * <p>Pinned here: a Classic cabinet run is one finish, and says whether it reached the board's gold
- * milestone; a daily board's scored try and its practice are finishes too; a game someone quit is
- * not, and a friend game never reaches a finish at all; no game of chance so much as names {@link GameProgress} (nothing may reward playing
+ * milestone; a daily board's scored try and its practice are finishes too; so is every game played
+ * out against the Arcade that records nothing (a Connect Four win below hard, a loss, a draw) and a
+ * Creeper Sweeper board lost to a creeper; a game someone quit is not, and a friend game never
+ * reaches a finish at all; no game of chance so much as names {@link GameProgress} (nothing may reward playing
  * one); and a Fresh course's run counts in the Star Chart of its own week, not of the week its set
  * began in (a weekly set changing on Thursday, run on a Monday).
  */
@@ -49,9 +56,11 @@ class GameProgressHooksTest {
     void setUp() {
         host = new Host(GamesKit.at(2026, 10, 5, 15, 0)); // Mon 5 Oct 2026
         host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6), "snake", Snake.SPEC.defaults(),
-                "connect_four", ConnectFour.SPEC.defaults(), "fresh_courses", DailySettings.defaults()
+                "connect_four", ConnectFour.SPEC.defaults(), "tic_tac_toe", TicTacToe.SPEC.defaults(),
+                "creeper_sweeper", CreeperSweeper.SPEC.defaults(), "fresh_courses", DailySettings.defaults()
                         .withEnabled(true).withRebuild(LocalTime.of(4, 0), DayOfWeek.THURSDAY));
-        games = GamesKit.service(host, List.of(Snake.SPEC, ConnectFour.SPEC, DailyCourses.SPEC));
+        games = GamesKit.service(host, List.of(Snake.SPEC, ConnectFour.SPEC, TicTacToe.SPEC, CreeperSweeper.SPEC,
+                DailyCourses.SPEC));
         games.progress(new GameProgress() {
             @Override
             public void cabinetFinished(Player player, String gameId, boolean practice, boolean goldMedal) {
@@ -104,6 +113,94 @@ class GameProgressHooksTest {
                         && !body.contains("tellProgress"), game + " " + method + " never tells a finish");
             }
         }
+    }
+
+    /** Run a game's finish; its sounds need a server, and they come after everything told. */
+    private static void quietly(Runnable finish) {
+        try {
+            finish.run();
+        } catch (LinkageError noServer) {
+            // org.bukkit.Sound can't load without a server: the sound is the last thing a finish does
+        }
+    }
+
+    @Test
+    void everyConnectFourGamePlayedOutAgainstTheArcadeIsAFinish() {
+        ConnectFour four = (ConnectFour) games.game("connect_four");
+        // the pieces go straight onto the board: red (the player) first, then yellow (the Arcade)
+        ConnectFourMatch easyWin = ConnectFourMatch.vsArcade(alex.id, ConnectFourAI.Level.EASY, 1L);
+        for (int c : new int[]{0, 1, 0, 1, 0, 1, 0}) {
+            easyWin.board().play(c);
+        }
+        assertEquals(ConnectFourMatch.Outcome.WON, easyWin.outcome(alex.id), "four in a column: a win on easy");
+        quietly(() -> four.finish(alex.player, easyWin));
+        assertEquals(List.of("cabinet connect_four"), heard, "a win below hard records nothing, but it is a finish");
+
+        ConnectFourMatch hardLoss = ConnectFourMatch.vsArcade(alex.id, ConnectFourAI.Level.HARD, 1L);
+        for (int c : new int[]{0, 1, 0, 1, 0, 1, 2, 1}) {
+            hardLoss.board().play(c);
+        }
+        assertEquals(ConnectFourMatch.Outcome.LOST, hardLoss.outcome(alex.id), "the Arcade's four: a loss");
+        quietly(() -> four.finish(alex.player, hardLoss));
+        assertEquals(List.of("cabinet connect_four", "cabinet connect_four"), heard, "so is a loss");
+
+        ConnectFourMatch hardWin = ConnectFourMatch.vsArcade(alex.id, ConnectFourAI.Level.HARD, 1L);
+        for (int c : new int[]{0, 1, 0, 1, 0, 1, 0}) {
+            hardWin.board().play(c);
+        }
+        quietly(() -> four.finish(alex.player, hardWin));
+        assertEquals(3, heard.size(), "a hard win is told once, by finishClassic, not twice: " + heard);
+    }
+
+    @Test
+    void aTicTacToeLossOrDrawAgainstTheArcadeIsAFinish() {
+        TicTacToe ttt = (TicTacToe) games.game("tic_tac_toe");
+        TicTacToeMatch draw = TicTacToeMatch.vsArcade(alex.id, TicTacToeAI.Level.EASY, 1L);
+        for (int cell : new int[]{0, 1, 2, 4, 3, 5, 7, 6, 8}) {
+            draw.board().play(cell);
+        }
+        assertEquals(TicTacToeMatch.Outcome.DRAW, draw.outcome(alex.id), "X O X / X O O / O X X: a draw");
+        quietly(() -> ttt.finish(alex.player, draw));
+        assertEquals(List.of("cabinet tic_tac_toe"), heard, "a draw records nothing, but it is a finish");
+
+        TicTacToeMatch loss = TicTacToeMatch.vsArcade(alex.id, TicTacToeAI.Level.HARD, 1L);
+        for (int cell : new int[]{0, 3, 1, 4, 8, 5}) {
+            loss.board().play(cell);
+        }
+        assertEquals(TicTacToeMatch.Outcome.LOST, loss.outcome(alex.id), "the Arcade's middle row: a loss");
+        quietly(() -> ttt.finish(alex.player, loss));
+        assertEquals(List.of("cabinet tic_tac_toe", "cabinet tic_tac_toe"), heard, "so is a loss");
+
+        TicTacToeMatch left = TicTacToeMatch.vsArcade(alex.id, TicTacToeAI.Level.EASY, 1L);
+        left.leave(alex.id);
+        quietly(() -> ttt.finish(alex.player, left));
+        assertEquals(2, heard.size(), "a game the player quit is no finish");
+    }
+
+    /** A board with 30 creepers in 45 squares, dug square by square until one is found. */
+    private static SweeperEngine dugUp() {
+        SweeperEngine board = SweeperEngine.classic(30, 7L);
+        board.dig(22, 1L);
+        for (int cell = 0; cell < SweeperEngine.CELLS && !board.state().over(); cell++) {
+            board.dig(cell, 2L);
+        }
+        assertEquals(SweeperEngine.State.LOST, board.state(), "a creeper was dug up");
+        return board;
+    }
+
+    @Test
+    void aCreeperDugUpEndsTheBoardAndIsAFinishScoredOrPractice() {
+        CreeperSweeper sweeper = (CreeperSweeper) games.game("creeper_sweeper");
+        sweeper.finish(alex.player, sweeper.classic("normal"), dugUp());
+        assertEquals(List.of("cabinet creeper_sweeper"), heard, "a Classic board lost is a finish, with no medal");
+        long day = host.clock.dayKey();
+        sweeper.finish(alex.player, new CreeperSweeper.Run("normal", new CabinetGame.DailyStart(day, 1L, true)),
+                dugUp());
+        assertEquals("cabinet creeper_sweeper", heard.get(1), "so is today's scored try");
+        sweeper.finish(alex.player, new CreeperSweeper.Run("normal", new CabinetGame.DailyStart(day, 1L, false)),
+                dugUp());
+        assertEquals("cabinet creeper_sweeper practice", heard.get(2), "and its practice, which says so");
+        assertTrue(alex.heard().contains("That square hid a creeper"), "the player still reads what happened");
     }
 
     /** A method's body, by counting braces from its signature. */

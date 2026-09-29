@@ -71,6 +71,10 @@ final class GolfFinish {
         default int payGoal(String ref, int tokens, String detail) {
             return 0;
         }
+
+        /** The round was recorded and paid: tell the quests and achievements (EXTRAS E4). Once, last. */
+        default void finished(Round round, Summary summary) {
+        }
     }
 
     /**
@@ -154,7 +158,7 @@ final class GolfFinish {
         return tag == null ? Scores.golf(courseId) : GenBoards.day(tag);
     }
 
-    /** Record and pay a round that counts. */
+    /** Record and pay a round that counts, then tell the quests ({@link Ledger#finished}). */
     static Summary settle(Round r, Ledger ledger) {
         Daily daily = r.daily() != null && r.daily().tag() != null ? r.daily() : null;
         GenTag tag = daily == null ? null : daily.tag();
@@ -173,7 +177,7 @@ final class GolfFinish {
                 r.name() + " first finish");
         if (daily != null && daily.freshClear() > 0) {
             earned += ledger.payWhole(RewardKind.DAILY_CLEAR, SkillRewards.freshClearRef(tag.slot(), tag.edition()),
-                    daily.freshClear(), r.name() + " " + GenCopy.firstFinishReason(tag.cadence()));
+                    daily.freshClear(), r.name() + " " + GenCopy.firstFinishReason(GenCopy.words(tag)));
         }
         if (r.parOrBetter()) {
             earned += pay(ledger, RewardKind.PAR, tag == null ? SkillRewards.parRef(r.course(), r.day())
@@ -199,7 +203,9 @@ final class GolfFinish {
                 }
             }
         }
-        return new Summary(result, earned, stars, added == null ? -1 : added.weekTotal(), added);
+        Summary summary = new Summary(result, earned, stars, added == null ? -1 : added.weekTotal(), added);
+        ledger.finished(r, summary);
+        return summary;
     }
 
     private static int pay(Ledger ledger, RewardKind kind, String ref, int tokens, String detail) {

@@ -21,9 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * one; a cabinet shows the board it publishes (or one it names), a course and a golf course their
  * all-time board, a Fresh course its current set's board — following the next set as soon as it
  * is up — and a Classic the board of the course it holds; a game of chance, an id nothing has, a
- * malformed target and a second board asked of a course are refused with a message; the lines
- * read "1. Sam 0:42.1" in each unit (times m:ss.t, strokes, points), ties share a rank, a sign
- * holds the title and the best three in 15 characters a line, and an empty board says so.
+ * malformed target, a second board asked of a course and a board a cabinet doesn't have are refused
+ * with a message; the lines read "1. Sam 0:42.1" in each unit (times m:ss.t, strokes, points), ties
+ * share a rank, a sign holds the title (in whole words) and the best three in 15 characters a
+ * line, and an empty board says so.
  */
 class BoardDisplayTest {
 
@@ -46,7 +47,8 @@ class BoardDisplayTest {
         public BoardDisplay.Cabinet cabinet(String id) {
             return switch (id) {
                 case "snake" -> new BoardDisplay.Cabinet("Snake", "classic", "apples", false);
-                case "creeper_sweeper" -> new BoardDisplay.Cabinet("Creeper Sweeper", "normal", "ms", true);
+                case "creeper_sweeper" -> new BoardDisplay.Cabinet("Creeper Sweeper", "normal", "ms", true,
+                        List.of("easy", "normal", "hard"));
                 default -> null;
             };
         }
@@ -138,8 +140,17 @@ class BoardDisplayTest {
                 BoardDisplay.resolve("@board:river_run:week", w).error(), "a second board of a course");
         assertTrue(BoardDisplay.resolve("@board:fresh_parkour:7", w).error().contains("current set"),
                 "and of a Fresh course");
+        assertEquals("Creeper Sweeper has no board called 'hardd': use @board:creeper_sweeper, or one of normal, "
+                + "easy, hard.", BoardDisplay.resolve("@board:creeper_sweeper:hardd", w).error(),
+                "a misspelled board is refused, naming the ones there are (never an empty board forever)");
+        assertEquals("Snake has one board: use @board:snake.", BoardDisplay.resolve("@board:snake:hard", w).error(),
+                "and a cabinet with one board has no other to name");
+        assertEquals("classic", BoardDisplay.resolve("@board:snake:classic", w).resolved().board(),
+                "its own board, named, is fine");
         for (String line : List.of(BoardDisplay.resolve("@board:ore_slots", w).error(),
-                BoardDisplay.resolve("@board:nothing", w).error())) {
+                BoardDisplay.resolve("@board:nothing", w).error(),
+                BoardDisplay.resolve("@board:creeper_sweeper:hardd", w).error(),
+                BoardDisplay.resolve("@board:snake:x", w).error())) {
             assertEquals(List.of(), GenCopy.copyProblems(line), "kid-safe: " + line);
         }
     }
@@ -168,7 +179,7 @@ class BoardDisplayTest {
         List<BoardDisplay.Row> rows = BoardDisplay.ranked(List.of("Sam", "Maximilian_The_Great", "Jo", "Kim"),
                 List.of(42_100L, 43_000L, 45_000L, 46_000L));
         List<String> sign = BoardDisplay.sign("Hard Parkour - this week", rows, "ms");
-        assertEquals("Hard Parkour -", sign.get(0), "the title, cut to fit");
+        assertEquals("Hard Parkour", sign.get(0), "the title, in whole words, to fit");
         assertEquals("1 Sam 0:42.1", sign.get(1), "a row: rank, name, time");
         assertEquals(4, sign.size(), "four lines");
         for (String line : sign) {
@@ -178,6 +189,41 @@ class BoardDisplayTest {
                 "a long name is cut, never the time: " + sign.get(2));
         assertEquals("1 Sam 27", BoardDisplay.sign("Meadow Links", BoardDisplay.ranked(List.of("Sam"), List.of(27L)),
                 "strokes").get(1), "golf: the bare strokes");
+    }
+
+    @Test
+    void aSignsTitleIsNeverCutInsideAWordForAnySlotOrCadence() {
+        World w = new World();
+        List<String> titles = new java.util.ArrayList<>();
+        for (int cadence : new int[]{1, 2, 3, 7, 14, 28}) {
+            w.cadence = cadence;
+            for (com.dierks.homecraft.games.gen.api.Slots.Def d : com.dierks.homecraft.games.gen.api.Slots.ALL) {
+                titles.add(BoardDisplay.resolve("@board:" + d.id(), w).resolved().title());
+                String name = GenCopy.slotName(d, cadence);
+                titles.add(GenCopy.classicName(name, cadence, 20_724, false));
+                titles.add(GenCopy.classicName(name, cadence, 20_724, true));
+            }
+        }
+        titles.addAll(List.of("Creeper Sweeper - Hard", "Whack-a-Zombie", "River Run", "Supercalifragilistic"));
+        for (String title : titles) {
+            String sign = BoardDisplay.signTitle(title);
+            assertTrue(sign.length() <= BoardDisplay.SIGN_CHARS && !sign.isBlank(), "fits a sign: '" + sign + "'");
+            List<String> words = List.of(title.split("[ ()]+"));
+            if (!title.equals("Supercalifragilistic")) {
+                for (String word : sign.split(" ")) {
+                    assertTrue(words.contains(word), "'" + sign + "' has only whole words of '" + title + "': " + word);
+                }
+            }
+            assertFalse(sign.endsWith("-") || sign.endsWith(":") || sign.endsWith(" of") || sign.endsWith(" the"),
+                    "and never ends on a dash, a colon or a little word: '" + sign + "' of '" + title + "'");
+        }
+        assertEquals("Hard Parkour", BoardDisplay.signTitle("Hard Parkour - this week"), "the set's words go first");
+        assertEquals("Golf of the Day", BoardDisplay.signTitle("Golf of the Day - today"), "15 characters fit");
+        assertEquals("Golf", BoardDisplay.signTitle("Golf of the Week - this week"), "whole words, no little word last");
+        assertEquals("Hard Parkour", BoardDisplay.signTitle(GenCopy.classicName("Hard Parkour", 7, 20_724, false)),
+                "a Classic: the course's own name");
+        assertEquals("Sky Rings", BoardDisplay.signTitle("&6Sky Rings - this week"), "colours never count");
+        assertEquals("Supercalifragil", BoardDisplay.signTitle("Supercalifragilistic"), "only one long word is cut");
     }
 
     @Test

@@ -131,6 +131,73 @@ class DailyCoursesTest {
         assertEquals(1, trials.coursesChanged, "and still hear about their courses");
     }
 
+    /** A feed writer that counts the histories it is handed, and says whether it publishes one. */
+    private record Writer(int[] histories, boolean wants) implements FeedWriter {
+
+        @Override
+        public void chance(String id, String name, List<Integer> stakes, Map<Integer, Double> rtpByStake,
+                           Integer dailyLimit, List<PayRow> paytable, String rules, Map<String, ?> extra) {
+        }
+
+        @Override
+        public void cabinet(String id, String name, String board, String unit, boolean lowerIsBetter, Long best,
+                            String holder) {
+        }
+
+        @Override
+        public void course(String id, String name, String kind, String tier, Long recordMs, Long recordAt,
+                           String holder) {
+        }
+
+        @Override
+        public void golf(String id, String name, int holes, int par, Integer recordStrokes, Long recordAt,
+                         String holder) {
+        }
+
+        @Override
+        public void freshHistory(List<com.dierks.homecraft.games.gen.engine.FreshFeed.Entry> entries) {
+            histories[0]++;
+        }
+
+        @Override
+        public boolean wantsHistory() {
+            return wants;
+        }
+    }
+
+    @Test
+    void onlyAWriterThatPublishesTheHistoryPaysToReadTheArchive() throws Exception {
+        GenStore real = GenStore.of(host.db);
+        int[] archiveReads = {0};
+        GenStore counted = (GenStore) java.lang.reflect.Proxy.newProxyInstance(GenStore.class.getClassLoader(),
+                new Class<?>[]{GenStore.class}, (proxy, m, args) -> {
+                    if (m.getName().equals("editions")) {
+                        archiveReads[0]++;
+                    }
+                    try {
+                        return m.invoke(real, args);
+                    } catch (java.lang.reflect.InvocationTargetException e) {
+                        throw e.getCause();
+                    }
+                });
+        GenService engine = new GenService(host(new boolean[]{false}, counted), Map.<String, Planner>of());
+        engine.start();
+        DailyCourses daily = (DailyCourses) games.game("fresh_courses");
+        java.lang.reflect.Field field = DailyCourses.class.getDeclaredField("engine");
+        field.setAccessible(true);
+        field.set(daily, engine);
+
+        int[] histories = {0};
+        daily.feed(new Writer(histories, false)); // what a screen asks: which boards are published
+        assertEquals(0, histories[0], "a writer that doesn't publish the history isn't handed one");
+        assertEquals(0, archiveReads[0], "and the archive isn't read for it");
+
+        daily.feed(new Writer(histories, true)); // the website's
+        assertEquals(1, histories[0], "the website's feed gets it");
+        assertTrue(archiveReads[0] > 0, "read from the archive");
+        assertTrue(new com.dierks.homecraft.web.ArcadeFeed(false).wantsHistory(), "the website's feed asks for it");
+    }
+
     @Test
     void switchedOffItRunsNothingWritesNothingAndLeavesEveryOtherGameAsBefore() throws Exception {
         host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6), "fresh_courses", on(false));
@@ -160,7 +227,11 @@ class DailyCoursesTest {
 
     /** The engine's host over the kit's database; {@code broken[0]} makes its settings throw. */
     private GenHost host(boolean[] broken) {
-        GenStore store = GenStore.of(host.db);
+        return host(broken, GenStore.of(host.db));
+    }
+
+    /** The same, over {@code store}. */
+    private GenHost host(boolean[] broken, GenStore store) {
         return new GenHost() {
             @Override
             public long now() {

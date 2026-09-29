@@ -548,21 +548,25 @@ public final class GolfRounds {
             long week = DailyLookup.weekKey(games());
             daily = new GolfFinish.Daily(t, week, g.dailyClear(t.slot(), t.cadence()), g.goals(week));
         }
-        GolfFinish.Summary summary = GolfFinish.settle(new GolfFinish.Round(c.id(), golf.name() + ": " + c.name(),
+        GolfFinish.settle(new GolfFinish.Round(c.id(), golf.name() + ": " + c.name(),
                 run.total(), c.par(), c.holes().size(), run.parOrBetter(), run.holesInOne(), day, featured,
                 s.firstClear(), s.parReward(), s.holeInOneReward(), games().config().common().featuredBonus(), daily),
                 ledger(p, c));
-        progress(p, c, run, daily, summary);
     }
 
     /**
-     * What a recorded round tells the quests and achievements (EXTRAS E4, guarded): the round, and
-     * on a Fresh course the stars it added, the week's top goal and a whole set finished.
+     * What a recorded round tells the quests and achievements (EXTRAS E4, guarded; {@link GolfFinish#settle}
+     * calls it once, last): the round with its par, holes-in-one and whether it set the record, and on
+     * a Fresh course the stars it added, the week's top goal and a whole set finished. A round on a
+     * course changed while it was played is never recorded, so never told.
      */
-    private void progress(Player p, GolfCourse c, GolfRun run, GolfFinish.Daily daily, GolfFinish.Summary summary) {
-        int strokes = run.total();
-        int holesInOne = run.holesInOne().size();
-        games().tellProgress(g -> g.golfFinished(p, c.id(), strokes, c.par(), holesInOne, c.generated()));
+    private void progress(Player p, GolfCourse c, GolfFinish.Round r, GolfFinish.Summary summary) {
+        int strokes = r.strokes();
+        int par = r.par();
+        int holesInOne = r.holesInOne().size();
+        boolean record = summary.result().record();
+        games().tellProgress(g -> g.golfFinished(p, c.id(), strokes, par, holesInOne, c.generated(), record));
+        GolfFinish.Daily daily = r.daily();
         if (daily != null && daily.tag() != null) {
             DailyLookup.freshProgress(games(), p, daily.tag(), summary.added(), daily.weekKey(), daily.goals());
         }
@@ -581,7 +585,7 @@ public final class GolfRounds {
             public void announce(ScoreResult result, boolean daily) {
                 String was = result.previous() == null ? ""
                         : " &7(was " + GolfRun.strokesText(result.previous().intValue()) + ")";
-                int cadence = c.gen() == null ? 7 : c.gen().cadence();
+                int cadence = GenCopy.words(c.gen()); // a Classic: "the best on ... so far", never "this week"
                 if (result.personalBest()) {
                     p.sendMessage(Text.of((daily ? "&a✦ " + GenCopy.yourBest(cadence) + " on " : "&a✦ New best on ")
                             + c.name() + "!" + was));
@@ -600,12 +604,17 @@ public final class GolfRounds {
             @Override
             public int payWhole(RewardKind kind, String ref, int tokens, String detail) {
                 return games().rewards().payWhole(p, golf, golf.source(), kind, ref, tokens,
-                        golf.settings().dailyCap(), detail, GenCopy.clearLimit(c.gen() == null ? 7 : c.gen().cadence()));
+                        golf.settings().dailyCap(), detail, GenCopy.clearLimit(GenCopy.words(c.gen())));
             }
 
             @Override
             public GamesDao.StarsAdded addStars(String dayBoard, String weekBoard, int stars) {
                 return DailyLookup.addStars(games(), id, dayBoard, weekBoard, stars);
+            }
+
+            @Override
+            public void finished(GolfFinish.Round round, GolfFinish.Summary summary) {
+                progress(p, c, round, summary);
             }
 
             @Override

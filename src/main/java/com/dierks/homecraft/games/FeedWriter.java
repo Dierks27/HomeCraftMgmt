@@ -139,6 +139,15 @@ public interface FeedWriter {
     }
 
     /**
+     * Whether this writer publishes {@link #freshHistory} (the website's feed does). Reading it costs
+     * two queries per archived course, so a writer that would throw it away (a screen asking which
+     * boards the games publish) is never handed one.
+     */
+    default boolean wantsHistory() {
+        return false;
+    }
+
+    /**
      * The Star Chart: this week's best total and who holds it ({@code null} unless
      * {@link #showNames()}). Nothing until the feed knows it.
      *

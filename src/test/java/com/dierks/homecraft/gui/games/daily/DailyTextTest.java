@@ -108,6 +108,36 @@ class DailyTextTest {
     }
 
     @Test
+    void aRecalledCoursesOldRecordsAreNeverCalledThisWeeksOrTodays() {
+        GenTag hard = new GenTag("fresh_parkour_hard", "parkour", 1, 20_724, 0, 1L, 'A', "a", 1, 2, 3, List.of(),
+                List.of(), 1L, 7);
+        GenTag recalled = hard.withRecall(new GenTag.Recall("fresh_classic_parkour", 1L, 20_759));
+        assertEquals(7, GenCopy.words(hard), "a weekly set's own course: its week's words");
+        assertEquals(GenCopy.CLASSIC, GenCopy.words(recalled),
+                "HARD-40 five weeks later in Classic Parkour: its board still holds that week's times");
+        assertEquals(1, GenCopy.words(new GenTag("fresh_golf", "golf", 1, 20_724, 0, 2L, 'A', "b", 0, 0, 0, List.of(),
+                List.of(), 1L, 1)), "a daily set: today's");
+        assertEquals(7, GenCopy.words(null), "no tag: weekly");
+        int c = GenCopy.CLASSIC;
+        assertEquals("&7Best on this course: &f0:58.1 &7by &fAlex", DailyText.setBest(c, "0:58.1", "Alex", false),
+                "the record to beat, not 'This week's best'");
+        assertEquals("&7Your best on this course: &f1:02.3", DailyText.yourBest(c, "1:02.3"), "the player's old time");
+        assertEquals("&a✔ First finish on this course done", DailyText.firstFinish(c, 4, true),
+                "cleared back then: done, not 'this week'");
+        assertEquals("Best on this course", GenCopy.bestOf(c), "'★ Best on this course time!' when it is beaten");
+        for (String line : List.of(DailyText.setBest(c, null, null, false), DailyText.setBest(c, "1", "a", true),
+                DailyText.yourBest(c, null), DailyText.yourBest(c, "1"), DailyText.newBest(c, null),
+                DailyText.newBest(c, "1"), DailyText.firstFinish(c, 1, false), DailyText.firstFinish(c, 1, true),
+                DailyText.starsNow(c, 0), DailyText.starsNow(c, 2), DailyText.trialFact(c, 0), GenCopy.bestOf(c),
+                GenCopy.yourBest(c), GenCopy.firstFinish(c), GenCopy.firstFinishReason(c), GenCopy.times(c),
+                GenCopy.boardTitle("Hard Parkour", c), GenCopy.clearLimit(c))) {
+            String l = line.toLowerCase(java.util.Locale.ROOT).replace("today's token limit", "");
+            assertFalse(l.contains("week") || l.contains("today") || l.contains("another day"),
+                    "a Classic never dates its old records, nor promises another day: " + line);
+        }
+    }
+
+    @Test
     void starTimesAndTheFinishLineReadAsTheSpecSays() {
         assertEquals("1:10", DailyText.clock(70_000), "star times are whole seconds");
         assertEquals("0:45", DailyText.clock(45_000), "with a leading zero");

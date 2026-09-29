@@ -204,7 +204,8 @@ public final class DailyCourses implements Game {
     /**
      * The Star Chart (this week's best total, a name only when the feed may show names), and what
      * the archive says (GEN-SPEC-KEEP §8): each live course's {@code fresh} object (its course code
-     * and short seed), each Classics slot's {@code classic} window, and {@code freshHistory}. The
+     * and short seed), each Classics slot's {@code classic} window, and {@code freshHistory} for a
+     * writer that publishes it ({@link FeedWriter#wantsHistory}: the website's, not a screen's). The
      * courses' own entries are written by Time Trials and Mini Golf; the feed puts these with them.
      */
     @Override
@@ -230,7 +231,9 @@ public final class DailyCourses implements Game {
                 out.classic(d.id(), c);
             }
         }
-        out.freshHistory(e.freshHistory(out.showNames()));
+        if (out.wantsHistory()) { // only the website's feed: the archive costs two queries a course
+            out.freshHistory(e.freshHistory(out.showNames()));
+        }
     }
 
     @Override

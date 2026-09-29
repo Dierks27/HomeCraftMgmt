@@ -24,7 +24,8 @@ import java.util.Locale;
  *       {@value #CABINET_FINISHES}; a gold medal on a scored run is one {@value #CABINET_GOLDS}; the
  *       first finish of each cabinet game is one {@value #CABINETS} (distinct cabinets);</li>
  *   <li>a counted time-trial run or a finished round of golf is one {@link QuestType#FINISH_COURSE}
- *       and one {@value #COURSE_FINISHES}; a course record is one {@value #COURSE_RECORDS}; a round
+ *       and one {@value #COURSE_FINISHES}; a course record (a time trial's or a golf course's) is one
+ *       {@value #COURSE_RECORDS}; a round
  *       with a hole-in-one adds its holes-in-one to {@value #HOLES_IN_ONE}, and a round under par is
  *       one {@value #UNDER_PAR};</li>
  *   <li>Fresh Courses stars are {@link QuestType#EARN_STARS} (one step a star); finishing every
@@ -131,11 +132,20 @@ public final class GamesProgress implements GameProgress {
 
     @Override
     public void golfFinished(Player player, String courseId, int strokes, int par, int holesInOne, boolean fresh) {
+        golfFinished(player, courseId, strokes, par, holesInOne, fresh, false);
+    }
+
+    @Override
+    public void golfFinished(Player player, String courseId, int strokes, int par, int holesInOne, boolean fresh,
+                             boolean record) {
         if (player == null || !sink.countsHere(player)) {
             return;
         }
         sink.quest(player, QuestType.FINISH_COURSE, 1);
         sink.count(player, COURSE_FINISHES, 1);
+        if (record) {
+            sink.count(player, COURSE_RECORDS, 1); // a golf course's record is a course record too
+        }
         if (holesInOne > 0) {
             sink.count(player, HOLES_IN_ONE, holesInOne);
         }

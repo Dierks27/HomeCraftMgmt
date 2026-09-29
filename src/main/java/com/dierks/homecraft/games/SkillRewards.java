@@ -70,10 +70,12 @@ public final class SkillRewards {
      * server's) is smaller than {@code tokens}, NOTHING is paid and NOTHING is recorded, so the
      * reward can still be earned on a later day of the same set, and the player reads
      * {@code limitLine} once ("You've reached today's token limit - finish it again another day
-     * this week for its tokens."). Every other reward keeps {@link #pay}'s partial pay.
+     * this week for its tokens."). A reward bigger than a whole day's cap pays that cap on a day
+     * with all of it left ({@code GamesDao.wholePay}), so it can always be earned. Every other
+     * reward keeps {@link #pay}'s partial pay.
      *
      * @param limitLine what a player held back by the caps reads ({@code null}: {@link #CAPPED})
-     * @return {@code tokens} or 0
+     * @return {@code tokens} (or the smaller cap, when a cap can't hold it in a day) or 0
      */
     public int payWhole(Player player, Game game, TokenService.Source source, RewardKind kind, String ref,
                         int tokens, int gameDailyCap, String detail, String limitLine) {
@@ -117,7 +119,10 @@ public final class SkillRewards {
             orb(player);
         }
         if (paid < tokens && kind.capped() && !(paid == 0 && once && alreadyPaid(id, game, kind, r))) {
-            sayOnce(player, whole && limitLine != null ? limitLine : CAPPED);
+            // "come back another day" only when another day can pay it: nothing was paid, and no cap
+            // is 0 (a reward bigger than a whole day's cap pays that cap and is done: CAPPED)
+            boolean later = whole && paid == 0 && limitLine != null && capGame != 0 && capAll != 0;
+            sayOnce(player, later ? limitLine : CAPPED);
         }
         return paid;
     }

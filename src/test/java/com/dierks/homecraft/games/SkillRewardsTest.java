@@ -97,6 +97,29 @@ class SkillRewardsTest {
     }
 
     @Test
+    void aWholeRewardBiggerThanTheGamesCapPaysTheCapAndPromisesNoOtherDay() {
+        // Snake's daily_cap is 2 here; a whole reward of 4 could never fit in a day
+        String line = com.dierks.homecraft.games.gen.api.GenCopy.GOAL_LIMIT;
+        String ref = SkillRewards.freshClearRef("fresh_parkour_hard", "7:38");
+        assertEquals(2, games.rewards().payWhole(alex.player, snake, snake.source(), RewardKind.DAILY_CLEAR, ref, 4, 2,
+                "Hard Parkour: first finish this week", line), "an empty day pays the whole cap");
+        assertEquals(0, alex.said.stream().filter(l -> l.contains("another day")).count(),
+                "no promise of another day: it is done");
+        assertEquals(1, alex.said.stream().filter(l -> l.contains("You've won all the game tokens")).count(),
+                "the capped line instead");
+        host.time.now = GamesKit.at(2026, 3, 11, 9, 0);
+        assertEquals(0, games.rewards().payWhole(alex.player, snake, snake.source(), RewardKind.DAILY_CLEAR, ref, 4, 2,
+                "again", line), "and it isn't paid again");
+
+        alex.said.clear();
+        String zero = SkillRewards.freshClearRef("fresh_golf", "7:38");
+        assertEquals(0, games.rewards().payWhole(alex.player, snake, snake.source(), RewardKind.DAILY_CLEAR, zero, 2, 0,
+                "Golf: first finish this week", line), "a cap of 0 pays nothing");
+        assertEquals(0, alex.said.stream().filter(l -> l.contains("another day")).count(),
+                "and never says to come back for it: no day can pay it");
+    }
+
+    @Test
     void theServerWideCapSpansEveryGame() {
         host.config = GamesKit.config(GamesKit.common(true, 100, 600, 3));
         assertEquals(2, pay(snake, RewardKind.DAILY_CHALLENGE, SkillRewards.dailyRef(1), 2), "Snake's daily");

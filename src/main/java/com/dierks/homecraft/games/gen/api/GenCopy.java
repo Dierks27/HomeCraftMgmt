@@ -219,8 +219,25 @@ public final class GenCopy {
     }
 
     /**
+     * The words of a course recalled into a Classics slot, given where a cadence picks a board's or
+     * a reward's words ({@link #when}, {@link #bestOf}, {@link #yourBest}, {@link #firstFinish},
+     * {@link #times}, {@link #clearLimit}): its board holds its original set's times, so it never
+     * says "this week" or "today" of them ("Best on this course", "Your best on this course"). Never
+     * a cadence for anything else (a schedule, a slot's name, a set's dates).
+     */
+    public static final int CLASSIC = 0;
+
+    /**
+     * The cadence a course's board and reward words follow: {@link #CLASSIC} for a recalled course,
+     * else its set's own ({@code null}: weekly).
+     */
+    public static int words(GenTag t) {
+        return t == null ? Edition.WEEKLY : t.recalled() ? CLASSIC : t.cadence();
+    }
+
+    /**
      * When a course's boards and rewards run, as a line ends: "today" (daily), "this week"
-     * (weekly), "on this course" (any other cadence: each set is a new course).
+     * (weekly), "on this course" (any other cadence: each set is a new course; and a Classic).
      */
     public static String when(int cadence) {
         return switch (cadence) {
@@ -467,6 +484,8 @@ public final class GenCopy {
                 out.add(classicRowName(slotName(d, cadence), cadence, 20731, true));
             }
         }
+        out.addAll(List.of(when(CLASSIC), bestOf(CLASSIC), yourBest(CLASSIC), firstFinish(CLASSIC),
+                firstFinishReason(CLASSIC), times(CLASSIC), boardTitle("Hard Parkour", CLASSIC), clearLimit(CLASSIC)));
         for (List<String> sign : everySign()) {
             out.addAll(sign);
         }

@@ -20,10 +20,11 @@ import java.util.regex.Pattern;
  * board (Classic, or the one it puts on the website), a course's all-time board, a golf course's
  * all-time board, and a Fresh course's <b>current</b> set's board, which follows each new set; a
  * Classics slot shows the board of the course it holds. A cabinet may name another of its boards
- * ({@code @board:creeper_sweeper:hard}); nothing else has a second board to pick.
+ * ({@code @board:creeper_sweeper:hard}), and only one it has; nothing else has a second board to pick.
  *
  * <p>What it shows: a title ("Hard Parkour - this week"), the best five as "1. Sam 0:42.1" (a
- * sign: the title and the best three), and "/hcm play &lt;id&gt;" under a hologram or TV. Names are
+ * sign: the title in whole words, "Hard Parkour", and the best three), and "/hcm play &lt;id&gt;"
+ * under a hologram or TV. Names are
  * shown: these are players in game, and {@code web.dashboard.arcade_show_names} is the website's
  * rule, not the server's. An empty board says so: "No times yet - be the first!".
  *
@@ -94,8 +95,33 @@ public final class BoardDisplay {
         }
     }
 
-    /** A cabinet's board, as it publishes it (its name, board, unit and which way is better). */
-    public record Cabinet(String name, String board, String unit, boolean lower) {
+    /**
+     * A cabinet's board, as it publishes it (its name, board, unit and which way is better), and
+     * the other boards it keeps all-time scores on ({@code boards}: Creeper Sweeper's levels), the
+     * only ones a display may name instead.
+     */
+    public record Cabinet(String name, String board, String unit, boolean lower, List<String> boards) {
+
+        public Cabinet {
+            boards = boards == null ? List.of() : List.copyOf(boards);
+        }
+
+        /** A cabinet with one board. */
+        public Cabinet(String name, String board, String unit, boolean lower) {
+            this(name, board, unit, lower, List.of());
+        }
+
+        /** Every board a display may show: the published one first, then the others. */
+        public List<String> all() {
+            List<String> out = new ArrayList<>();
+            out.add(board);
+            for (String b : boards) {
+                if (b != null && !out.contains(b)) {
+                    out.add(b);
+                }
+            }
+            return out;
+        }
     }
 
     /** One row: its rank (ties share one), who, and the score. */
@@ -190,6 +216,11 @@ public final class BoardDisplay {
         }
         Cabinet c = l.cabinet(t.id());
         if (c != null) {
+            if (t.board() != null && !c.all().contains(t.board())) {
+                return Result.fail(c.all().size() < 2 ? c.name() + " has one board: use @board:" + t.id() + "."
+                        : c.name() + " has no board called '" + t.board() + "': use @board:" + t.id() + ", or one of "
+                        + String.join(", ", c.all()) + ".");
+            }
             String board = t.board() == null ? c.board() : t.board();
             String title = t.board() == null || t.board().equals(c.board()) ? c.name()
                     : c.name() + " - " + Character.toUpperCase(board.charAt(0)) + board.substring(1).replace('_', ' ');
@@ -252,13 +283,57 @@ public final class BoardDisplay {
     }
 
     /**
+     * A title that fits a sign's {@value #SIGN_CHARS} characters, never cut inside a word: the
+     * whole title if it fits; else without its " - this week" or "(week of 5 Oct)" part ("Hard
+     * Parkour"); else without a "Classic: " in front; else as many whole words as fit, never ending
+     * on a dash, a colon or a little word ("Golf of the Week" is "Golf"). A single word too long for
+     * the line is the only thing ever cut.
+     */
+    public static String signTitle(String title) {
+        String t = plain(title).trim();
+        if (t.length() <= SIGN_CHARS) {
+            return t;
+        }
+        for (String cut : List.of(" - ", " (")) {
+            int at = t.indexOf(cut);
+            if (at > 0) {
+                t = t.substring(0, at).trim();
+            }
+        }
+        if (t.length() > SIGN_CHARS && t.indexOf(": ") > 0) {
+            t = t.substring(t.indexOf(": ") + 2).trim();
+        }
+        if (t.length() <= SIGN_CHARS) {
+            return t;
+        }
+        List<String> kept = new ArrayList<>();
+        int length = 0;
+        for (String word : t.split(" +")) {
+            int next = length + (kept.isEmpty() ? 0 : 1) + word.length();
+            if (next > SIGN_CHARS) {
+                break;
+            }
+            kept.add(word);
+            length = next;
+        }
+        while (!kept.isEmpty() && LOOSE.contains(kept.get(kept.size() - 1).toLowerCase(Locale.ROOT)
+                .replaceAll("[-:]+$", ""))) {
+            kept.remove(kept.size() - 1);
+        }
+        return kept.isEmpty() ? t.substring(0, SIGN_CHARS) : String.join(" ", kept).replaceAll("[-:,]+$", "");
+    }
+
+    /** Words a sign's title never ends on ("Golf of the", "Hard Parkour -"). */
+    private static final List<String> LOOSE = List.of("", "of", "the", "a", "an", "and", "on", "in", "to", "at");
+
+    /**
      * A sign's four lines: the title, then the best {@value #SIGN_ROWS} ("1 Sam 0:42.1"), each
      * at most {@value #SIGN_CHARS} characters (a long name is cut, never the score), or the empty
      * board in two lines.
      */
     public static List<String> sign(String title, List<Row> rows, String unit) {
         List<String> out = new ArrayList<>();
-        out.add(fit(title));
+        out.add(signTitle(title));
         if (rows == null || rows.isEmpty()) {
             String[] words = empty(unit).split(" - ", 2);
             out.add(fit(words[0]));
@@ -296,7 +371,11 @@ public final class BoardDisplay {
     }
 
     private static String fit(String s) {
-        String plain = s == null ? "" : s.replaceAll("(?i)[&§][0-9a-fk-or]", "");
+        String plain = plain(s);
         return plain.length() <= SIGN_CHARS ? plain : plain.substring(0, SIGN_CHARS).trim();
+    }
+
+    private static String plain(String s) {
+        return s == null ? "" : s.replaceAll("(?i)[&§][0-9a-fk-or]", "");
     }
 }

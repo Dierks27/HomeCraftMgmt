@@ -52,7 +52,7 @@ import java.util.logging.Level;
  * which runs the gate. A closed game shows no tile at all. The Luck tab also links to the Scratch
  * Ticket (with its "gives back about" line) and each crate, since Take a break covers them too.
  *
- * <p><b>Fresh Courses come first</b> on their tabs (GEN-SPEC §5.4): the the Fresh Courses screen tile, then
+ * <p><b>Fresh Courses come first</b> on their tabs (GEN-SPEC §5.4): the Fresh Courses tile, then
  * each daily course, then everything else in catalog order — the courses that are new every
  * morning are the ones worth a look.
  *
@@ -110,7 +110,7 @@ public final class GamesMenu extends GameMenu {
         }
     }
 
-    /** {@link #priority}: the the Fresh Courses screen screen and the parkour tier picker. */
+    /** {@link #priority}: the Fresh Courses screen and the parkour level picker. */
     static final int TODAY = 0;
     /** {@link #priority}: a daily course. */
     static final int DAILY = 1;

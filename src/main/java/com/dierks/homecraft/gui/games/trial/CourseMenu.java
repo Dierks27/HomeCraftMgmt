@@ -123,7 +123,7 @@ public final class CourseMenu extends GameMenu {
         fill();
         GamesService games = plugin.games();
         GenTag t = course.gen();
-        int cadence = t.cadence();
+        int cadence = GenCopy.words(t); // a Classic's board holds its original set's times: no "this week"
         Slots.Def slot = Slots.of(t.slot());
         boolean week = course.id().equals(trials.courseOfWeek());
         List<String> head = new ArrayList<>();
@@ -186,7 +186,7 @@ public final class CourseMenu extends GameMenu {
     /** A Fresh course's rewards: its first finish in the set in the name (Bedrock), the rest in the lore. */
     private ItemStack dailyRewards(GamesService games, GenTag t, boolean week) {
         TimeTrialsSettings s = trials.settings();
-        int cadence = t.cadence();
+        int cadence = GenCopy.words(t);
         int fresh = DailyLookup.freshClear(games, t);
         boolean freshDone = fresh > 0 && DailyLookup.freshClearPaid(games, viewer.getUniqueId(), trials.id(), t);
         List<String> lore = new ArrayList<>();

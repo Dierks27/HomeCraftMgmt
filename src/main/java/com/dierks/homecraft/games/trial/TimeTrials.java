@@ -212,7 +212,8 @@ public final class TimeTrials implements Game {
      * @param weekStars the Star Chart total after it, or -1 when not known
      * @param goldMs    the layout's 3-star time
      * @param silverMs  its 2-star time
-     * @param cadence   the set's length in days (the words the screen uses: "this week", "today")
+     * @param cadence   the words the screen uses ({@link GenCopy#words}): the set's length in days
+     *                  ("this week", "today"), or {@link GenCopy#CLASSIC} for a recalled course
      * @param code      the course's code ("HARD-40"), or {@code null}
      */
     public record Daily(String board, int stars, long weekStars, long goldMs, long silverMs, int cadence,
@@ -662,7 +663,7 @@ public final class TimeTrials implements Game {
     private ItemStack dailyTile(Player viewer, Course c, String courseOfWeek) {
         GenTag t = c.gen();
         GamesService g = games();
-        int cadence = t.cadence();
+        int cadence = GenCopy.words(t); // a Classic's board holds its original set's times: no "this week"
         int stars = DailyLookup.stars(g, viewer.getUniqueId(), t);
         String code = DailyLookup.code(g, t);
         List<String> lore = new ArrayList<>();
@@ -1405,12 +1406,9 @@ public final class TimeTrials implements Game {
                 summary = TrialFinish.settle(verdict, counted, ledger(p, run, s, ms));
             }
         }
-        if (counted != null) {
-            progress(p, run.course, counted, summary);
-        }
         Long best = verdict.counts() ? bestOn(p, board(run.course)) : null;
         Daily daily = tag == null ? null : new Daily(board(run.course), summary.stars(), summary.weekStars(),
-                tag.goldMs(), tag.silverMs(), tag.cadence(), code);
+                tag.goldMs(), tag.silverMs(), GenCopy.words(tag), code);
         Result result = new Result(run.course.id(), name, ms, verdict.counts(), run.test, verdict.reason(),
                 summary.course().personalBest(), summary.course().record(), best, summary.earned(), daily);
         UUID id = p.getUniqueId();
@@ -1426,8 +1424,9 @@ public final class TimeTrials implements Game {
 
     /**
      * What a counted run tells the quests and achievements (EXTRAS E4, through the guarded
-     * {@code GamesService#tellProgress}): the course finished, and on a Fresh course the stars it
-     * added, the week's top goal and a whole set finished ({@link DailyLookup#freshProgress}).
+     * {@code GamesService#tellProgress}; {@link TrialFinish#settle} calls it once, last, for a counted
+     * run only): the course finished, and on a Fresh course the stars it added, the week's top goal
+     * and a whole set finished ({@link DailyLookup#freshProgress}).
      */
     private void progress(Player p, Course c, TrialFinish.Run run, TrialFinish.Summary summary) {
         boolean record = summary.course().record();
@@ -1480,12 +1479,17 @@ public final class TimeTrials implements Game {
             public int payWhole(RewardKind kind, String ref, int tokens, String detail) {
                 GenTag t = run.course.gen();
                 return games().rewards().payWhole(p, TimeTrials.this, run.course.kind().source(), kind, ref, tokens,
-                        s.dailyCap(), detail, GenCopy.clearLimit(t == null ? 7 : t.cadence()));
+                        s.dailyCap(), detail, GenCopy.clearLimit(GenCopy.words(t)));
             }
 
             @Override
             public GamesDao.StarsAdded addStars(String dayBoard, String weekBoard, int stars) {
                 return DailyLookup.addStars(games(), p.getUniqueId(), dayBoard, weekBoard, stars);
+            }
+
+            @Override
+            public void finished(TrialFinish.Run counted, TrialFinish.Summary summary) {
+                progress(p, run.course, counted, summary);
             }
 
             @Override
@@ -1536,11 +1540,12 @@ public final class TimeTrials implements Game {
 
     /**
      * A Fresh course's finish lines: your best in this set, the set's best (and who holds it) on
-     * its own board, in the set's words ("this week", "today"). The stars line follows
+     * its own board, in the set's words ("this week", "today"; a Classic's "on this course", its
+     * board being its original set's). The stars line follows
      * ({@link TrialFinish}), then the course code.
      */
     private void announceDaily(Player p, Course c, long ms, ScoreResult set, boolean firstFinish) {
-        int cadence = c.gen().cadence();
+        int cadence = GenCopy.words(c.gen());
         String sub;
         if (set.personalBest()) {
             p.sendMessage(Text.of(set.previous() == null && firstFinish ? TrialText.bestLine(c.name(), null, true)

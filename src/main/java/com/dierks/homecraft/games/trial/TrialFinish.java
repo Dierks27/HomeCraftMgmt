@@ -104,6 +104,13 @@ final class TrialFinish {
         default int payGoal(String ref, int tokens, String detail) {
             return 0;
         }
+
+        /**
+         * The run was recorded and paid: tell the quests and achievements (EXTRAS E4). Once per
+         * counted run, last; never for a test, voided or stale run.
+         */
+        default void finished(Run run, Summary summary) {
+        }
     }
 
     /**
@@ -186,14 +193,22 @@ final class TrialFinish {
         }
     }
 
-    /** Record and pay {@code run} if the verdict says it counts; otherwise touch nothing. */
+    /**
+     * Record and pay {@code run} if the verdict says it counts, then tell the quests
+     * ({@link Ledger#finished}); otherwise touch nothing.
+     */
     static Summary settle(FairPlay.Verdict verdict, Run run, Ledger ledger) {
         if (verdict == null || !verdict.counts()) {
             return Summary.NONE;
         }
-        if (run.daily() != null && run.daily().tag() != null) {
-            return settleDaily(run, run.daily(), ledger);
-        }
+        Summary summary = run.daily() != null && run.daily().tag() != null ? settleDaily(run, run.daily(), ledger)
+                : settleCourse(run, ledger);
+        ledger.finished(run, summary);
+        return summary;
+    }
+
+    /** A hand-built course: its all-time and week boards, then the rewards. */
+    private static Summary settleCourse(Run run, Ledger ledger) {
         ScoreResult course = orNone(ledger.submit(Scores.course(run.course()), run.ms()));
         ScoreResult week = orNone(ledger.submit(Scores.week(run.course(), run.weekKey()), run.ms()));
         boolean firstFinish = run.firstClear() > 0 && !ledger.firstClearPaid();
@@ -220,7 +235,7 @@ final class TrialFinish {
         int earned = firstClear(run, tag.slot(), ledger);
         if (daily.freshClear() > 0) {
             earned += ledger.payWhole(RewardKind.DAILY_CLEAR, SkillRewards.freshClearRef(tag.slot(), tag.edition()),
-                    daily.freshClear(), run.name() + ": " + GenCopy.firstFinishReason(tag.cadence()));
+                    daily.freshClear(), run.name() + ": " + GenCopy.firstFinishReason(GenCopy.words(tag)));
         }
         earned += acrossGames(run, ledger);
         earned += goals(added, daily.goals(), weekBoard, ledger::payGoal);

@@ -87,6 +87,16 @@ class GolfFinishTest {
             calls.add("goal " + ref + " " + tokens);
             return paid.add(ref) ? tokens : 0;
         }
+
+        /** What the quests were told: the round and what it came to, once per round. */
+        final List<String> finished = new ArrayList<>();
+
+        @Override
+        public void finished(GolfFinish.Round round, GolfFinish.Summary summary) {
+            finished.add(round.strokes() + " par " + round.par() + " hio " + round.holesInOne().size()
+                    + (summary.result().record() ? " record" : "")
+                    + (summary.added() == null ? "" : " added " + summary.added().added()));
+        }
     }
 
     /** The big golf course's layout of the weekly set starting {@code day}. */
@@ -125,6 +135,18 @@ class GolfFinishTest {
         assertEquals(0, s.stars(), "no stars on a hand-built course");
         assertEquals(-1, s.weekStars(), "and no Star Chart");
         assertEquals(11, s.earned(), "what was paid");
+    }
+
+    @Test
+    void theQuestsHearEachRecordedRoundOnceWithItsParHolesInOneAndRecord() {
+        Ledger l = new Ledger();
+        GolfFinish.settle(round(8, List.of(2), false, null), l);
+        assertEquals(List.of("8 par 9 hio 1 record"), l.finished,
+                "the whole course's par, the round's holes-in-one, and that it set the record (game_record)");
+        GolfFinish.settle(round(11, List.of(), false, tag(LAYOUT_DAY, 0)), l);
+        assertEquals("11 par 9 hio 0 record added 1", l.finished.get(1),
+                "a Fresh round too, with the stars it added to the week");
+        assertEquals(2, l.finished.size(), "once a round, after it is recorded and paid");
     }
 
     @Test

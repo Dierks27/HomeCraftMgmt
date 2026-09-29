@@ -386,6 +386,12 @@ public final class ArcadeFeed implements FeedWriter {
         return showNames;
     }
 
+    /** The website publishes the Fresh Courses history. */
+    @Override
+    public boolean wantsHistory() {
+        return true;
+    }
+
     /** The entries written so far, in order. */
     public List<GameRow> rows() {
         List<GameRow> out = new ArrayList<>();

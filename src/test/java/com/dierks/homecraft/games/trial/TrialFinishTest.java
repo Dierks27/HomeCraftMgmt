@@ -82,6 +82,14 @@ class TrialFinishTest {
             cap -= paid;
             return paid;
         }
+
+        /** What the quests were told: one summary per counted run. */
+        final List<TrialFinish.Summary> finished = new ArrayList<>();
+
+        @Override
+        public void finished(TrialFinish.Run run, TrialFinish.Summary summary) {
+            finished.add(summary);
+        }
     }
 
     private static TrialFinish.Run run(boolean courseOfWeek, boolean featured) {
@@ -108,6 +116,28 @@ class TrialFinishTest {
         TrialFinish.settle(FairPlay.judge(false, null, true, 62_345, 5, -1), run(true, true), ledger);
         TrialFinish.settle(FairPlay.judge(false, null, false, 1_000, 5, -1), run(true, true), ledger);
         assertEquals(List.of(), ledger.calls, "flying, a changed layout and a too-quick run all record nothing");
+    }
+
+    @Test
+    void theQuestsHearEachCountedRunOnceAndNeverATestVoidedOrStaleOne() {
+        FakeLedger ledger = new FakeLedger();
+        TrialFinish.settle(FairPlay.judge(true, null, false, 62_345, 5, -1), run(true, true), ledger);
+        TrialFinish.settle(FairPlay.judge(false, FairPlay.FLYING, false, 62_345, 5, -1), run(true, true), ledger);
+        TrialFinish.settle(FairPlay.judge(false, null, true, 62_345, 5, -1), run(true, true), ledger);
+        TrialFinish.settle(FairPlay.judge(false, null, false, 1_000, 5, -1), run(true, true), ledger);
+        assertEquals(List.of(), ledger.finished, "a test run, a voided, a stale and a too-quick run finish nothing");
+        ledger.course = new ScoreResult(true, 70_000L, true, 1);
+        TrialFinish.Summary s = TrialFinish.settle(counted(), run(false, false), ledger);
+        assertEquals(List.of(s), ledger.finished, "a counted run is told once, with what it came to");
+        assertTrue(ledger.finished.get(0).course().record(), "so the quests hear it set the course's record");
+
+        DailyLedger fresh = new DailyLedger();
+        TrialFinish.Summary d = TrialFinish.settle(counted(40_000), dailyRun(tag(SET_DAY, 0), 40_000, false, false),
+                fresh);
+        assertEquals(List.of(d), fresh.finished, "a Fresh course's counted run too");
+        assertEquals(3, fresh.finished.get(0).added().added(), "with the stars it added to the week");
+        assertEquals("finished fresh_parkour_easy", fresh.calls.get(fresh.calls.size() - 1),
+                "told last, after everything is recorded and paid");
     }
 
     @Test
@@ -245,6 +275,15 @@ class TrialFinishTest {
         public int payGoal(String ref, int tokens, String detail) {
             calls.add("goal " + ref + " " + tokens + " " + detail);
             return whole(ref, tokens);
+        }
+
+        /** What the quests were told: one run and its summary per counted run. */
+        final List<TrialFinish.Summary> finished = new ArrayList<>();
+
+        @Override
+        public void finished(TrialFinish.Run run, TrialFinish.Summary summary) {
+            calls.add("finished " + run.course());
+            finished.add(summary);
         }
     }
 

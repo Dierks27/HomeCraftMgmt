@@ -1916,7 +1916,8 @@ games:
     # a daily one. Anything in between is worked out from the two, so a new cadence needs no retuning.
     # They count toward games.trials.daily_cap / games.golf.daily_cap (4) and skill_daily_cap (6),
     # and are paid in full or not at all: if today's caps can't pay all of it, nothing is paid or
-    # used up, and a finish on another day of the same set pays it. Keep each at or under 4.
+    # used up, and a finish on another day of the same set pays it. Keep each at or under 4: one
+    # bigger than a whole day's cap pays that cap, once.
     rewards:
       clear_weekly:
         fresh_parkour_easy: 2

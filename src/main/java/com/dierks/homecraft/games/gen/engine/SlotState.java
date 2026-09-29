@@ -26,8 +26,9 @@ final class SlotState {
      * @param seed    its seed
      * @param mix     the tier or mix it was made with
      * @param cadence that edition's length in days
+     * @param reroll  the reroll it was made as (0 for a preview of the next set)
      */
-    record Preview(char half, Plan plan, long day, long seed, String mix, int cadence) {
+    record Preview(char half, Plan plan, long day, long seed, String mix, int cadence, int reroll) {
     }
 
     final Slots.Def def;
@@ -43,6 +44,11 @@ final class SlotState {
     /** The tier or mix a build would use now. */
     String mix = "";
     GenScheduler.Pin pin;
+    /**
+     * An admin's pick for the next set ({@code gen.<slot>.choose}, WP-ADM): a one-set pin, used over
+     * {@link #pin} for the one set it names, forgotten once that set is over.
+     */
+    GenScheduler.Pin chosen;
     /** The current edition's reroll count. */
     int reroll;
     /** The claim matches this world and origin. */

@@ -17,6 +17,8 @@ import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.gui.games.daily.DailyLookup;
 import com.dierks.homecraft.gui.games.daily.DailyText;
+import com.dierks.homecraft.gui.games.daily.FreshAdmin;
+import com.dierks.homecraft.gui.games.daily.FreshAdminMenu;
 import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -33,7 +35,8 @@ import java.util.List;
  * scores; 13 Start; 14 this week's best; 15 the record and who holds it; 16 what it pays (the
  * first finish's amount, or that it's done, in the name); 20 Race with friends (a party race, D4;
  * never on a Dropper); 22 the way out; 24 the Weekly Cup, when the course runs one; 26 Take a rider,
- * on a boat course while ride along is on (WP-CH). Start runs the
+ * on a boat course while ride along is on (WP-CH); 18 Admin tools, for an admin on a Fresh course
+ * (WP-ADM). Start runs the
  * gate again (the screen may have been open a while) and then the world session takes the player
  * to the start line.
  *
@@ -43,6 +46,8 @@ import java.util.List;
  * first finish this week pays. A course recalled into Classic Parkour or Classic Sky Rings shows
  * its original set's board, with its old records to beat. A dropper says "levels" and that its
  * clock keeps running after a bonk, and Start says a practice drop comes first when warm-ups are on.
+ * An admin also sees 26, "Admin tools" (WP-ADM: regenerate, preview, try it, pick it), on a Fresh
+ * slot's own course.
  */
 public final class CourseMenu extends GameMenu {
 
@@ -201,6 +206,7 @@ public final class CourseMenu extends GameMenu {
         }
         cupButton();
         riderButton(); // WP-CH
+        adminTools(); // WP-ADM
         exitTile();
     }
 
@@ -269,6 +275,15 @@ public final class CourseMenu extends GameMenu {
             set(CupLink.SLOT, b.icon(), e -> b.click().run());
         }
     }
+
+    // ---- WP-ADM: the owner's Fresh Courses tools (hcm.games.admin only) ----
+    private void adminTools() {
+        FreshAdminMenu.Button b = FreshAdminMenu.button(plugin, viewer, course.id(), this::reopen);
+        if (b != null) {
+            set(FreshAdmin.SLOT, b.icon(), e -> b.click().run());
+        }
+    }
+    // ---- end WP-ADM ----
 
     private void reopen() {
         new CourseMenu(plugin, trials, course, viewer, back).open(viewer);

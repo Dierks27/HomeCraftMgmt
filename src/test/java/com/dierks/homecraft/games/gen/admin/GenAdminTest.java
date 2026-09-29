@@ -1,15 +1,20 @@
 package com.dierks.homecraft.games.gen.admin;
 
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.Tier;
+import com.dierks.homecraft.games.trial.TrialKind;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.logging.Handler;
 import java.util.logging.LogRecord;
@@ -157,6 +162,30 @@ class GenAdminTest {
         public List<Integer> usedPlots() {
             return List.of(1, 3);
         }
+
+        /** What {@code test} is given (WP-ADM): the preview's course, or why there is none. */
+        PreviewRun run = PreviewRun.refused("&cNo preview yet - /hcm games gen preview fresh_parkour first");
+
+        @Override
+        public void previewNext(String slot, String seed, Consumer<String> report) {
+            calls.add("previewNext " + slot + " " + seed);
+        }
+
+        @Override
+        public void choose(String slot, boolean confirm, Consumer<String> report) {
+            calls.add("choose " + slot + " " + confirm);
+        }
+
+        @Override
+        public void unchoose(String slot, Consumer<String> report) {
+            calls.add("unchoose " + slot);
+        }
+
+        @Override
+        public PreviewRun previewRun(String slot) {
+            calls.add("previewRun " + slot);
+            return run;
+        }
     }
 
     private Ops ops;
@@ -164,11 +193,12 @@ class GenAdminTest {
     private final List<String> said = new ArrayList<>();
     private final List<LogRecord> logs = new ArrayList<>();
     private CommandSender console;
+    private Logger log;
 
     @BeforeEach
     void setUp() {
         ops = new Ops();
-        Logger log = Logger.getAnonymousLogger();
+        log = Logger.getAnonymousLogger();
         log.setUseParentHandlers(false);
         log.addHandler(new Handler() {
             @Override
@@ -441,6 +471,187 @@ class GenAdminTest {
         assertEquals(List.of("live"), admin.tab(console, new String[]{"pin", "fresh_rings", "l"}), "pin live");
         assertEquals(List.of(), admin.tab(console, new String[]{"nonsense", ""}), "nothing for an unknown verb");
         assertEquals("gen", admin.name(), "it is /hcm games gen");
-        assertEquals(GenAdmin.VERBS.size() - 2, admin.help().size(), "one help line per verb (on/off and pin/unpin share one)");
+        assertEquals(GenAdmin.VERBS.size() - 4, admin.help().size(),
+                "one help line per verb (on/off, pin/unpin, choose/unchoose and retry/regenerate share one)");
+    }
+
+    // ---- picking a good course (WP-ADM) --------------------------------------------------------
+
+    /** A player who can run a course; what they read goes to {@link #said}. */
+    private Player player(String name) {
+        UUID id = UUID.nameUUIDFromBytes(name.getBytes());
+        return (Player) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{Player.class},
+                (proxy, m, a) -> switch (m.getName()) {
+                    case "sendMessage" -> {
+                        if (a != null && a.length == 1 && a[0] instanceof Component c) {
+                            said.add(LegacyComponentSerializer.legacyAmpersand().serialize(c)
+                                    .replaceAll("&[0-9a-fk-or]", ""));
+                        }
+                        yield null;
+                    }
+                    case "getName" -> name;
+                    case "getUniqueId" -> id;
+                    case "hasPermission" -> true;
+                    case "hashCode" -> id.hashCode();
+                    case "equals" -> proxy == a[0];
+                    default -> zero(m.getReturnType());
+                });
+    }
+
+    /** "Is there an admin command to skip the course that was made?" "Or a retry more or less" "Or regenerate". */
+    @Test
+    void retryAndRegenerateAreRerollWithItsConfirmAndRefusals() {
+        run("regenerate fresh_parkour");
+        assertTrue(heard().contains("/hcm games gen regenerate fresh_parkour confirm"),
+                "asks for confirm, in the words typed: " + heard());
+        run("retry fresh_rings");
+        assertTrue(heard().contains("/hcm games gen retry fresh_rings confirm"), heard());
+        run("retry all");
+        assertTrue(heard().contains("/hcm games gen retry all confirm"), heard());
+        assertTrue(ops.calls.isEmpty(), "nothing is done without confirm: " + ops.calls);
+        run("regenerate fresh_parkour confirm");
+        run("RETRY fresh_rings confirm");
+        assertEquals(List.of("reroll fresh_parkour", "reroll fresh_rings"), ops.calls,
+                "each is the engine's reroll, once");
+        ops.calls.clear();
+        run("regenerate all confirm");
+        assertEquals(Slots.ALL.size(), ops.calls.size(), "regenerate all rerolls every slot, as reroll all does");
+        ops.calls.clear();
+        run("regenerate fresh_classic_golf confirm");
+        assertTrue(heard().contains("No Fresh Course called"), "never a Classics slot, as reroll: " + heard());
+        ops.restart = "&cA restart is coming at 4:00 PM - try after it.";
+        run("regenerate fresh_parkour confirm");
+        assertTrue(heard().contains("A restart is coming at 4:00 PM"), "refused near a restart, as reroll: " + heard());
+        run("retry all confirm");
+        assertTrue(ops.calls.isEmpty(), "neither reached the engine: " + ops.calls);
+        assertTrue(logs.stream().anyMatch(r -> r.getMessage().contains("ran /hcm games gen regenerate fresh_parkour"
+                + " confirm")), "a change is logged as it was typed");
+        assertEquals("reroll", GenAdmin.verb("Regenerate"), "the alias names the verb");
+        assertEquals("reroll", GenAdmin.verb("retry"), "both of them");
+        assertEquals(List.of("reroll", "retry", "regenerate", "rebuild", "recall"), admin.tab(console, new String[]{"re"}),
+                "tab completion offers them beside reroll");
+        assertTrue(admin.tab(console, new String[]{"regenerate", ""}).contains("all"), "regenerate all, as reroll");
+        assertEquals(List.of("confirm"), admin.tab(console, new String[]{"retry", "fresh_rings", ""}), "then confirm");
+        assertTrue(admin.help().stream().anyMatch(l -> l.contains("retry|regenerate <course|all> confirm")),
+                "and a help line: " + admin.help());
+    }
+
+    /** "Like I could do the course preview a week early or whatever and find a good one." */
+    @Test
+    void previewNextChooseAndUnchooseAreParsedBeforeTheEngineIsAsked() {
+        run("preview fresh_parkour next");
+        run("preview fresh_parkour NEXT 3f2a");
+        run("preview fresh_parkour next nope");
+        assertTrue(heard().contains("16 hex digits"), "a bad seed is refused: " + heard());
+        run("preview fresh_parkour 3f2a");
+        run("preview fresh_parkour");
+        assertEquals(List.of("previewNext fresh_parkour null", "previewNext fresh_parkour 3f2a",
+                "preview fresh_parkour 3f2a", "preview fresh_parkour null"), ops.calls,
+                "next (a random seed, or the one typed) goes to the next set's preview; the rest as before");
+        ops.calls.clear();
+        run("choose fresh_parkour");
+        run("choose fresh_parkour confirm");
+        run("unchoose fresh_parkour");
+        assertEquals(List.of("choose fresh_parkour false", "choose fresh_parkour true", "unchoose fresh_parkour"),
+                ops.calls, "the engine is asked with confirm or without (it knows whether a choice is replaced)");
+        ops.calls.clear();
+        run("choose fresh_classic_parkour");
+        assertTrue(heard().contains("Classic Parkour is a Classics slot"), "a Classic can't be chosen for: " + heard());
+        run("unchoose fresh_classic_golf");
+        assertTrue(heard().contains("is a Classics slot"), heard());
+        run("choose nowhere");
+        assertTrue(heard().contains("No Fresh Course called 'nowhere'"), heard());
+        assertTrue(ops.calls.isEmpty(), "none of them reached the engine: " + ops.calls);
+        ops.restart = "&cA restart is coming at 4:00 PM - try after it.";
+        run("preview fresh_parkour next");
+        assertTrue(heard().contains("A restart is coming"), "preview next is refused near a restart: " + heard());
+        run("choose fresh_parkour");
+        assertEquals(List.of("choose fresh_parkour false"), ops.calls,
+                "choosing only stores a seed, so a restart doesn't stop it");
+        assertTrue(logs.stream().anyMatch(r -> r.getMessage().contains("ran /hcm games gen choose fresh_parkour")),
+                "and it is logged with who did it");
+        assertEquals(List.of("next"), admin.tab(console, new String[]{"preview", "fresh_parkour", ""}), "preview next");
+        assertEquals(List.of("confirm"), admin.tab(console, new String[]{"choose", "fresh_parkour", ""}), "choose confirm");
+        assertEquals(List.of("choose"), admin.tab(console, new String[]{"ch"}), "the verb");
+        assertTrue(admin.help().stream().anyMatch(l -> l.contains("preview <course> [next] [seed]")), admin.help().toString());
+        assertTrue(admin.help().stream().anyMatch(l -> l.contains("choose <course> [confirm]")), admin.help().toString());
+    }
+
+    /** "Will I be able to play the course previews?" */
+    @Test
+    void testRunsThePreviewThroughTheTesterOnceAndPlayAgainAsksAgain() {
+        List<String> tested = new ArrayList<>();
+        List<Runnable> agains = new ArrayList<>();
+        GenAdmin withTester = new GenAdmin(() -> ops, log, (p, c, again) -> {
+            tested.add(p.getName() + " " + c.id() + " " + c.world());
+            agains.add(again);
+        });
+        run("test fresh_parkour");
+        assertTrue(heard().contains("Only a player can run a course"), "the console can't: " + heard());
+        Player sam = player("Sam");
+        said.clear();
+        withTester.handle(sam, new String[]{"test", "fresh_parkour"});
+        assertTrue(heard().contains("No preview yet - /hcm games gen preview fresh_parkour first"),
+                "no preview: the engine's refusal: " + heard());
+        assertEquals(List.of(), tested, "and no run");
+
+        ops.run = new GenOps.PreviewRun(new Course("fresh_parkour", TrialKind.PARKOUR, "Parkour", Tier.MEDIUM, "games",
+                new Course.Spot(0.5, 140, 0.5, 0f, 0f), List.of(), new Course.Mark(20.5, 140, 0.5, 2), null, null, true,
+                false, 1), null);
+        withTester.handle(sam, new String[]{"test", "fresh_parkour"});
+        assertEquals(List.of("Sam fresh_parkour games"), tested, "the preview's course, to the tester, once");
+        agains.get(0).run();
+        assertEquals(2, tested.size(), "Play again asks the engine for the preview again and runs it");
+        assertEquals(3, ops.calls.stream().filter(c -> c.equals("previewRun fresh_parkour")).count(),
+                "each try asks the engine again (the preview may have changed)");
+        assertTrue(logs.isEmpty(), "a test run changes nothing, so it isn't logged: " + logs.size());
+
+        ops.restart = "&cA restart is coming at 4:00 PM - try after it.";
+        said.clear();
+        withTester.handle(sam, new String[]{"test", "fresh_parkour"});
+        assertTrue(heard().contains("A restart is coming"), "refused near a restart: " + heard());
+        assertEquals(2, tested.size(), "no run then");
+        ops.restart = null;
+        ops.run = GenOps.PreviewRun.refused("&cWalk it with /hcm games gen tp fresh_golf idle - golf previews can't"
+                + " be test-played yet.");
+        said.clear();
+        withTester.handle(sam, new String[]{"test", "fresh_golf"});
+        assertTrue(heard().contains("golf previews can't be test-played yet"), "golf is walked: " + heard());
+        assertEquals(2, tested.size(), "and never run");
+        ops.run = new GenOps.PreviewRun(new Course("fresh_parkour", TrialKind.PARKOUR, "Parkour", Tier.MEDIUM, "games",
+                new Course.Spot(0.5, 140, 0.5, 0f, 0f), List.of(), new Course.Mark(20.5, 140, 0.5, 2), null, null, true,
+                false, 1), null);
+        said.clear();
+        new GenAdmin(() -> ops, log).handle(sam, new String[]{"test", "fresh_parkour"});
+        assertTrue(heard().contains("Test runs aren't available right now"), "with no Time Trials to run it: " + heard());
+    }
+
+    /** What a proxy answers for a method nobody asked about: nothing, or a primitive's zero. */
+    private static Object zero(Class<?> type) {
+        if (type == boolean.class) {
+            return false;
+        }
+        if (type == int.class) {
+            return 0;
+        }
+        if (type == long.class) {
+            return 0L;
+        }
+        if (type == double.class) {
+            return 0.0;
+        }
+        if (type == float.class) {
+            return 0f;
+        }
+        if (type == short.class) {
+            return (short) 0;
+        }
+        if (type == byte.class) {
+            return (byte) 0;
+        }
+        if (type == char.class) {
+            return (char) 0;
+        }
+        return null;
     }
 }

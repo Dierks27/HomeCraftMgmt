@@ -24,7 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The final maps after the events batch and the Clubhouse were merged:
  * <ul>
- *   <li>the course screen (27): 4, 10-16 and 22 fixed; 20 Race with friends; 24 the Cup; 26 Take a rider;</li>
+ *   <li>the course screen (27): 4, 10-16 and 22 fixed; 18 Admin tools (an admin on a Fresh course, WP-ADM);
+ *       20 Race with friends; 24 the Cup; 26 Take a rider (every combination of the four on its own slots);</li>
  *   <li>the party screen (54): 4 the party, 11 the last race, 13 Start, 15 Leave, 19-25 and 28-34 the
  *       members, 36 Go to the Clubhouse, 37 Watch, 38 Invite, 39 Take a rider, 40 Ready, 42 Warm up
  *       first, 44 the Cup, 49 the way out; 45 and 53 (the page arrows' slots) stay filler;</li>
@@ -122,5 +123,27 @@ class CourseMenuLayoutTest {
                 + " the Clubhouse");
         assertEquals("&aStart the race!", PartyMenu.startName(true, false), "the Clubhouse off: the racers went home,"
                 + " so it's a new start as before (#10)");
+    }
+    @Test
+    void everyCombinationOfAdminBoatCupAndPartyGivesEachItemItsOwnSlot() {
+        // the four items a course screen may add to its fixed ones: Race with friends (not a Dropper), the
+        // Weekly Cup (when it runs one), Take a rider (a boat course, the Clubhouse open) and Admin tools
+        // (an admin on a Fresh course); a Fresh boat course seen by an admin can show all four at once
+        List<Integer> extras = List.of(CourseMenu.PARTY_SLOT, CupLink.SLOT, CourseMenu.RIDER_SLOT,
+                com.dierks.homecraft.gui.games.daily.FreshAdmin.SLOT);
+        assertEquals(List.of(20, 24, 26, 18), extras, "the final bottom-row map: 18 admin, 20 party, 22 out, 24 Cup,"
+                + " 26 rider");
+        for (int mask = 0; mask < 1 << extras.size(); mask++) {
+            Set<Integer> taken = new HashSet<>(CourseMenu.FIXED_SLOTS);
+            for (int b = 0; b < extras.size(); b++) {
+                if ((mask & 1 << b) != 0) {
+                    int slot = extras.get(b);
+                    assertTrue(slot >= 18 && slot < 27, slot + " is on the bottom row");
+                    assertTrue(taken.add(slot), "combination " + Integer.toBinaryString(mask) + ": " + slot
+                            + " is nobody else's");
+                }
+            }
+            assertEquals(CourseMenu.FIXED_SLOTS.size() + Integer.bitCount(mask), taken.size(), "one item, one slot");
+        }
     }
 }

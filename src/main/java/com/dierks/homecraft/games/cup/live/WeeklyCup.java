@@ -213,7 +213,7 @@ public final class WeeklyCup implements Game {
         for (Course c : trials.openCourses()) {
             try {
                 CupDesk.View v = desk().view(c, null);
-                if (v.shown()) {
+                if (v.shown() && !v.settledEarly()) { // a Cup paid out early is over: not on the website
                     out.cup(c.id(), new FeedWriter.Cup(v.fee(), v.pool().tokens(), v.pool().in(), v.endsAt()));
                 }
             } catch (SQLException e) {

@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.gen.admin;
 import com.dierks.homecraft.games.GameAdmin;
 import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -13,6 +14,7 @@ import org.bukkit.entity.Player;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
@@ -43,28 +45,60 @@ import java.util.logging.Logger;
  * is asked for ({@link GenArgs}). {@code recall} and {@code keep} are refused near a restart, like
  * {@code reroll}; {@code keep}, {@code clear-plot}, and a recall or unrecall that would disturb
  * someone playing, ask for {@code confirm} first.
+ *
+ * <p><b>Picking a good course (WP-ADM, the owner's words).</b> "If it comes out really bad, I can
+ * skip that course": {@code retry} and {@code regenerate} are {@code reroll} by other names, with its
+ * confirm and refusals. "Will I be able to play the course previews?": {@code test} starts an admin
+ * test run on the preview in the spare half, its real start, checkpoints, finish, clock and kit,
+ * recording nothing (golf is walked: {@code tp <course> idle}). "Find a good one before posting it
+ * for the following week": {@code preview <course> next [seed]} builds a candidate with the next
+ * set's settings, and {@code choose} makes its seed the next set's course (a one-set pin),
+ * {@code unchoose} cancels. The course screens carry the same as admin-only buttons.
  */
 public final class GenAdmin implements GameAdmin {
 
     /** The verbs, in help order. */
-    public static final List<String> VERBS = List.of("status", "plan", "preview", "promote", "reroll", "rebuild",
-            "on", "off", "tier", "mix", "pin", "unpin", "tp", "claim", "clear", "history", "recall", "unrecall", "keep",
-            "plots", "clear-plot");
+    public static final List<String> VERBS = List.of("status", "plan", "preview", "test", "promote", "choose", "unchoose",
+            "reroll", "retry", "regenerate", "rebuild", "on", "off", "tier", "mix", "pin", "unpin", "tp", "claim", "clear",
+            "history", "recall", "unrecall", "keep", "plots", "clear-plot");
+    /** Other names for a verb (the owner's words): each does exactly what its verb does. */
+    public static final Map<String, String> ALIASES = Map.of("retry", "reroll", "regenerate", "reroll");
     /** Verbs that change nothing (not logged). */
-    private static final List<String> LOOKS = List.of("status", "plan", "tp", "help", "history", "plots");
+    private static final List<String> LOOKS = List.of("status", "plan", "tp", "help", "history", "plots", "test");
     /** Verbs that also take a Classics slot's id. */
     private static final List<String> CLASSIC_VERBS = List.of("status", "rebuild", "tp", "claim");
 
+    /**
+     * Starts an admin's test run on a course that isn't the live one (a preview): Time Trials' test
+     * run, which records nothing. {@code again} is what its "Play again" does: this command again.
+     */
+    public interface Tester {
+        void test(Player player, Course course, Runnable again);
+    }
+
     private final Supplier<GenOps> ops;
     private final Logger log;
+    private final Tester tester;
 
     /**
      * @param ops the running engine, or {@code null} while Fresh Courses is off
      * @param log where changes are logged, with who made them
      */
     public GenAdmin(Supplier<GenOps> ops, Logger log) {
+        this(ops, log, (player, course, again) -> player.sendMessage(Text.of("&cTest runs aren't available right now.")));
+    }
+
+    /** @param tester how {@code test} starts a test run on a preview (Time Trials') */
+    public GenAdmin(Supplier<GenOps> ops, Logger log, Tester tester) {
         this.ops = ops;
         this.log = log;
+        this.tester = tester;
+    }
+
+    /** A verb as typed, as the verb it names ({@code regenerate} is {@code reroll}). */
+    public static String verb(String typed) {
+        String v = typed == null ? "" : typed.toLowerCase(Locale.ROOT);
+        return ALIASES.getOrDefault(v, v);
     }
 
     @Override
@@ -77,9 +111,14 @@ public final class GenAdmin implements GameAdmin {
         return List.of(
                 "&e/hcm games gen status [course] &7- how often they change, when next, what is up, and why not",
                 "&e/hcm games gen plan <course> [seed|next] &7- a dry run: what a build would make, no blocks",
-                "&e/hcm games gen preview <course> [seed] &7- build into the spare half to walk it (no switch)",
+                "&e/hcm games gen preview <course> [next] [seed] &7- build into the spare half to try it (no switch);"
+                        + " next: a candidate for the next set",
+                "&e/hcm games gen test <course> &7- a test run on the preview (nothing is recorded; golf: tp idle)",
                 "&e/hcm games gen promote <course> [confirm] &7- the preview becomes the current course",
+                "&e/hcm games gen choose <course> [confirm] &7- the preview's seed is the next set's course; unchoose"
+                        + " to cancel",
                 "&e/hcm games gen reroll <course|all> confirm &7- a new course for this set, on a fresh board",
+                "&e/hcm games gen retry|regenerate <course|all> confirm &7- the same as reroll",
                 "&e/hcm games gen rebuild <course> &7- check and repair the current course (same seed)",
                 "&e/hcm games gen on|off <course> &7- open or close one (its blocks stay)",
                 "&e/hcm games gen tier <course> <easy|medium|hard> &7- its difficulty from the next build",
@@ -111,7 +150,8 @@ public final class GenAdmin implements GameAdmin {
     }
 
     private void run(CommandSender sender, String[] args) {
-        String verb = args.length == 0 ? "help" : args[0].toLowerCase(Locale.ROOT);
+        String typed = args.length == 0 ? "help" : args[0].toLowerCase(Locale.ROOT);
+        String verb = verb(typed);
         if (verb.equals("help") || !VERBS.contains(verb)) {
             if (!verb.equals("help")) {
                 say(sender, "&cUnknown: &f" + args[0] + "&c. &7Try one of: " + String.join(", ", VERBS));
@@ -144,7 +184,7 @@ public final class GenAdmin implements GameAdmin {
             return;
         }
         if (verb.equals("reroll") && !rest.isEmpty() && rest.get(0).equalsIgnoreCase("all")) {
-            if (refusedNearRestart(sender, engine) || !confirmed(sender, confirm, "reroll all",
+            if (refusedNearRestart(sender, engine) || !confirmed(sender, confirm, typed + " all",
                     "This makes a new course of every Fresh Course, for this set. Anyone playing one finishes on"
                             + " its old board.")) {
                 return;
@@ -175,6 +215,12 @@ public final class GenAdmin implements GameAdmin {
             engine.claimPlot(n, confirm, report);
             return;
         }
+        if ((verb.equals("choose") || verb.equals("unchoose")) && Slots.of(rest.get(0)) == null
+                && Slots.any(rest.get(0)) != null) {
+            say(sender, "&c" + Slots.any(rest.get(0)).name() + " is a Classics slot: it holds a course brought back with"
+                    + " recall. &7Choose is for Fresh Courses.");
+            return;
+        }
         String id = slot(sender, rest.get(0), CLASSIC_VERBS.contains(verb));
         if (id == null) {
             return;
@@ -191,7 +237,9 @@ public final class GenAdmin implements GameAdmin {
                 engine.plan(id, arg, report);
             }
             case "preview" -> {
-                if (arg != null && GenSeed.parse(arg) == null) {
+                boolean next = arg != null && arg.equalsIgnoreCase("next");
+                String seed = next ? (rest.size() > 2 ? rest.get(2) : null) : arg;
+                if (seed != null && GenSeed.parse(seed) == null) {
                     say(sender, "&cA seed is up to 16 hex digits, like 3f2a91c07d1e55b0.");
                     return;
                 }
@@ -199,7 +247,20 @@ public final class GenAdmin implements GameAdmin {
                     return;
                 }
                 logChange(sender, args);
-                engine.preview(id, arg, report);
+                if (next) {
+                    engine.previewNext(id, seed, report);
+                } else {
+                    engine.preview(id, seed, report);
+                }
+            }
+            case "test" -> test(sender, engine, id);
+            case "choose" -> {
+                logChange(sender, args);
+                engine.choose(id, confirm, report);
+            }
+            case "unchoose" -> {
+                logChange(sender, args);
+                engine.unchoose(id, report);
             }
             case "promote" -> {
                 if (refusedNearRestart(sender, engine)) {
@@ -209,7 +270,7 @@ public final class GenAdmin implements GameAdmin {
                 engine.promote(id, confirm, report);
             }
             case "reroll" -> {
-                if (refusedNearRestart(sender, engine) || !confirmed(sender, confirm, "reroll " + id,
+                if (refusedNearRestart(sender, engine) || !confirmed(sender, confirm, typed + " " + id,
                         "This makes a new " + def.name() + " for this set, on a fresh board. Anyone playing it"
                                 + " finishes on the old one.")) {
                     return;
@@ -287,6 +348,26 @@ public final class GenAdmin implements GameAdmin {
             }
             default -> help().forEach(report);
         }
+    }
+
+    /**
+     * {@code test <course>}: an admin's test run on the preview in the spare half (WP-ADM), refused
+     * near a restart, with no preview, on golf (walked instead) and while the course is off.
+     */
+    private void test(CommandSender sender, GenOps engine, String id) {
+        if (!(sender instanceof Player player)) {
+            say(sender, "&cOnly a player can run a course.");
+            return;
+        }
+        if (refusedNearRestart(sender, engine)) {
+            return;
+        }
+        GenOps.PreviewRun run = engine.previewRun(id);
+        if (run == null || run.course() == null) {
+            say(sender, run == null ? "&cThere's no preview to try." : run.refusal());
+            return;
+        }
+        tester.test(player, run.course(), () -> handle(player, new String[]{"test", id}));
     }
 
     private void tp(CommandSender sender, GenOps engine, String id, String which) {
@@ -459,7 +540,7 @@ public final class GenAdmin implements GameAdmin {
             match(out, last, VERBS);
             return out;
         }
-        String verb = args[0].toLowerCase(Locale.ROOT);
+        String verb = verb(args[0]);
         if (!VERBS.contains(verb)) {
             return out;
         }
@@ -489,12 +570,12 @@ public final class GenAdmin implements GameAdmin {
         Slots.Def def = Slots.of(args[1]);
         if (args.length == 3) {
             switch (verb) {
-                case "plan" -> match(out, last, List.of("next"));
+                case "plan", "preview" -> match(out, last, List.of("next"));
                 case "tier" -> match(out, last, Slots.TIERS);
                 case "mix" -> match(out, last, def == null ? List.of() : List.of(def.tierOrMix()));
                 case "pin" -> match(out, last, List.of("live"));
                 case "tp" -> match(out, last, List.of("live", "idle"));
-                case "promote", "reroll", "claim", "clear" -> match(out, last, List.of("confirm"));
+                case "promote", "choose", "reroll", "claim", "clear" -> match(out, last, List.of("confirm"));
                 default -> {
                     // nothing more to offer
                 }

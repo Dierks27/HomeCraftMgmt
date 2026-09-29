@@ -1047,9 +1047,28 @@ droppers `fresh_dropper_easy` and `fresh_dropper` (on, with the rest of Fresh Co
 `/hcm play fresh_courses` opens the Fresh Courses screen and `/hcm play fresh_parkour_tiers` the
 parkour level picker.
 
-**Commands** (`hcm.games.admin`). `reroll`, `clear` and `claim` (to clear an area) need `confirm`;
-`promote` needs it when the course's board already has times. `reroll`, `preview` and `promote` are
-refused within `avoid_before_restart_minutes` of a restart. Every change is logged with who made it.
+**Picking a good course.** Don't like how this week's came out? **Regenerate it**:
+`/hcm games gen regenerate <course> confirm` (or `retry`, the same as `reroll`) makes a new one
+for this week on a fresh board; anyone on the old one finishes first, and a running Weekly Cup there
+is called off and refunded. Or find next week's a week early: `/hcm games gen preview <course> next`
+builds a candidate for next week (next week's tier or mix, a random seed it tells you) in the spare
+half, where nobody can play it; `/hcm games gen test <course>` takes you round it on a test run (its
+real start, checkpoints, finish, clock and kit; nothing is recorded or paid; golf is walked with
+`tp <course> idle`); don't like it, preview next again for another; like it,
+`/hcm games gen choose <course>` makes it next week's course. Monday 4:00 AM it goes up as usual, on
+fresh boards with its own course code (the website shows its code and seed), with almost nothing
+left to build, and the week after goes back to normal. `/hcm games gen unchoose <course>` changes
+your mind; `/hcm games gen status` shows "next set: chosen seed ...". The same tools are on each
+Fresh course's own screen for admins: the **Admin tools** item (bottom left) opens "Make a new
+course now (regenerate)", "Build one to try (preview)", "Build next week's to try (preview next)",
+and once a preview stands "Try the preview (test run)", "Use it now (promote)" and "Use it next week
+(choose)"; regenerate, promote and choose ask "Sure?" first. Players never see them.
+
+**Commands** (`hcm.games.admin`). `reroll` (and `retry`/`regenerate`), `clear` and `claim` (to clear
+an area) need `confirm`; `promote` needs it when the course's board already has times, and `choose`
+when it would replace another pick. `reroll`, `preview` (and `preview next`), `test` and `promote`
+are refused within `avoid_before_restart_minutes` of a restart. Every change is logged with who made
+it.
 The course and golf editors refuse a generated course ("This course is made by Fresh Courses - use
 /hcm games gen.") and anything of a hand-built course within 16 blocks of a Fresh Courses area: a
 point, a checkpoint or finish with its radius, a golf hole's whole bounds box.
@@ -1058,9 +1077,14 @@ point, a checkpoint or finish with its radius, a golf hole's whole bounds box.
 |---|---|
 | `/hcm games gen status [course]` | First how often the courses change and when next ("weekly (Mondays at 4:00 AM) · next: Mon 5 Oct 4:00 AM (in 6d 14h)"), then each course: on or off, its tier or mix, which set is live (and its key, like `7:38`), its half, rev and seed, who is playing it, and the last build (plan time, blocks, ticks, chunks, verify). With a course: its set's key and end, its area and pin too |
 | `/hcm games gen plan <course> [seed\|next]` | A dry run, no blocks: what a build would make (its blocks, hash and the planner's own summary), for this set or the `next` one |
-| `/hcm games gen preview <course> [seed]` | Build a new course into the spare half without switching, to walk it (`tp <course> idle`). The next scheduled build clears it away |
-| `/hcm games gen promote <course> [confirm]` | The preview becomes the current course, on a fresh board |
-| `/hcm games gen reroll <course\|all> confirm` | A new course for the current set, on a fresh board; anyone playing the old one finishes there. No second first-finish token |
+| `/hcm games gen preview <course> [seed]` | Build a new course into the spare half without switching, to try it (`test`) or walk it (`tp <course> idle`). The next scheduled build clears it away (unless it was chosen: see `choose`) |
+| `/hcm games gen preview <course> next [seed]` | A candidate for the NEXT set: its tier or mix and settings, and a seed (random unless you give one; the reply says it), in the spare half. Previewing again replaces it |
+| `/hcm games gen test <course>` | A test run on the preview: its real start, checkpoints, finish, clock and kit (the Dropper offers its practice drop as usual). Records nothing: no board, token, star, Cup time, quest or achievement. Refused with no preview ("No preview yet - /hcm games gen preview <course> first"), near a restart, and while the course is off. Golf previews are walked instead (`tp <course> idle`) |
+| `/hcm games gen promote <course> [confirm]` | The preview (of this set) becomes the current course, on a fresh board |
+| `/hcm games gen choose <course> [confirm]` | The preview's seed becomes the course of exactly the next set: it goes up at the scheduled change on fresh boards, with its own course code and seed on the website, and the set after goes back to its own seed. Kept across restarts (the spare half keeps the chosen preview, which is checked again after a restart, so the change has almost nothing to build). `confirm` when it replaces another pick. Refused for a Classic and while the course is off. Its pin, if any, comes back after it |
+| `/hcm games gen unchoose <course>` | Cancel the pick: the next set gets its own new course |
+| `/hcm games gen reroll <course\|all> confirm` | A new course for the current set, on a fresh board; anyone playing the old one finishes there, and a running Weekly Cup on it is called off and refunded. No second first-finish token |
+| `/hcm games gen retry\|regenerate <course\|all> confirm` | The same as `reroll` |
 | `/hcm games gen rebuild <course>` | Check the current course against its plan and put back anything missing (same course). After a `clear`, its area is checked for other blocks first and a new course is built |
 | `/hcm games gen on\|off <course>` | Open or close one (kept across restarts). `off` ends runs on it ("Easy Parkour is closed for now."); its blocks stay |
 | `/hcm games gen tier <course> <easy\|medium\|hard>` | Its difficulty from the next build (kept across restarts) |
@@ -1070,7 +1094,7 @@ point, a checkpoint or finish with its radius, a golf hole's whole bounds box.
 | `/hcm games gen claim <course> [confirm]` | Count what is in a new area; with `confirm`, clear it and let the course use it (refused while a hand-built course or the spawn is within 16 blocks) |
 | `/hcm games gen clear <course> confirm` | Empty both halves and switch the course off (do this before moving a course's `origin`) |
 
-The overrides (`on`/`off`, `tier`/`mix`, `pin`, rerolls per set, the claimed area, and the schedule
+The overrides (`on`/`off`, `tier`/`mix`, `pin`, `choose` (a one-set pin), rerolls per set, the claimed area, and the schedule
 with when it was first seen) live in `hcm_meta` under `gen.*`. Generated courses are ordinary
 `game_courses` rows with a `gen:` block (its `day` is the set's first day, its `cadence` the set's
 length), and their boards are ordinary `game_scores` rows: `gfresh:<course>:<set>` (that course's
@@ -1259,6 +1283,16 @@ line, so they can ask for a favourite back.
 19. `/hcm games gen unrecall parkour` → closed; its tile reads "Classic Parkour - empty" with the tip.
 20. `/hcm games gen keep HARD-1 dragon_run "Dragon Run"` → what it would do; add `confirm` → "Kept!";
     `/hcm play dragon_run`; `/hcm games course dragon_run info` shows a normal course.
+21. Picking a good course: `/hcm games gen preview fresh_parkour next` → "A preview of Parkour for
+    Mon 5 Oct-Sun 11 Oct (medium, seed …)", then "… is ready in half B". `/hcm games gen test
+    fresh_parkour` → you are at the preview's start with the course kit; finish: "Test run - nothing
+    was recorded", and "Play again" takes you round the preview again. `/hcm games gen choose
+    fresh_parkour` → "Parkour's course for Mon 5 Oct-Sun 11 Oct is this preview"; status shows "next
+    set: chosen seed …". After Monday's change `/hcm games gen status fresh_parkour` shows the chosen
+    seed live and its last build with (almost) no ops; the week after, a new seed of its own.
+22. As an admin, open Parkour's screen: bottom left, "Admin tools - new course, preview, try it,
+    pick one". Its "Admin: Make a new course now (regenerate)" asks "Sure?" first; as a player, the
+    item isn't there.
 
 ### Falling Floors
 
@@ -2122,7 +2156,8 @@ Dropper and Falling Floors have their own lists in their sections)
 73. `/hcm games cup settle cliffs`: what it would pay; with `confirm`, prizes by Cup time and a line
     to each entrant. With two entrants and only one Cup time, both get their entry back and no
     top-up is added. `/hcm tokens audit` shows the entries, prizes and refunds netting exactly the
-    top-ups paid.
+    top-ups paid. The course screen still shows the Cup item, now "Weekly Cup - already paid out
+    this week" (its tile shows no Cup until next week).
 74. `/hcm games cup off cliffs` with entrants asks for `confirm`, then "This week's was called off:
     N tokens back to M player(s)."; `disable` or `delete` on a course with entrants asks too.
     Put junk in `games.cup` and `/hcm reload`: `/hcm games cup status` says "entries closed

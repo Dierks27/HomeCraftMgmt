@@ -109,7 +109,7 @@ public final class DailyCourses implements Game {
 
     public DailyCourses(GameContext ctx) {
         this.ctx = ctx;
-        this.admin = new GenAdmin(() -> engine, log());
+        this.admin = new GenAdmin(() -> engine, log(), this::testPreview);
     }
 
     // ---- the Game ---------------------------------------------------------------------------------
@@ -329,6 +329,19 @@ public final class DailyCourses implements Game {
     /** The running engine, or {@code null} while Fresh Courses is off. */
     public GenService engine() {
         return engine;
+    }
+
+    /**
+     * {@code /hcm games gen test} (WP-ADM): Time Trials' test run on a preview, inside Time Trials'
+     * guard, so anything it throws closes only Time Trials, as a test run from its own command would.
+     */
+    private void testPreview(Player player, com.dierks.homecraft.games.trial.Course course, Runnable again) {
+        GamesService g = games();
+        if (!(g.game(TimeTrials.SPEC.id()) instanceof TimeTrials trials) || g.failed(trials)) {
+            player.sendMessage(Text.of("&cTime trials are closed right now, so there's nothing to run it with."));
+            return;
+        }
+        g.guard(trials, () -> trials.testPreview(player, course, again));
     }
 
     /**

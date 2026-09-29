@@ -341,7 +341,38 @@ public final class GenService implements GeneratedCourses, GenOps {
                 unclaimedLive(s);
             }
         }
+        for (SlotState s : slots.values()) {
+            restoreChosen(s);
+        }
         keeper.worldsReady();
+    }
+
+    /**
+     * WP-ADM: a slot with a course chosen for the next set gets that course back in its spare half
+     * after a restart, as a preview (the preview itself isn't stored, and the boot would otherwise
+     * empty that half as an old one): it converges from what stands there, which is nothing to write
+     * when the chosen preview is still there, the admin can try it again, and the change's build finds
+     * its blocks already right. Queued after the boot checks.
+     */
+    private void restoreChosen(SlotState s) {
+        GenScheduler.Pin c = s.chosen;
+        Planner p = planners.get(s.def.generator());
+        if (s.classic || c == null || p == null || c.algo() != p.algo() || !s.on() || !s.claimed || s.live == null) {
+            return;
+        }
+        NextSet n = nextSet(s);
+        if (!c.appliesOn(n.day(), p.algo()) || c.appliesOn(target(s).start(), p.algo())) {
+            return; // not the next set's (the schedule moved), or it is up now: nothing to hold
+        }
+        Job j = new Job(Kind.PREVIEW, s, null);
+        j.day = n.day();
+        j.cadence = n.cadence();
+        j.reroll = 0;
+        j.seed = c.seed();
+        j.mix = s.mix;
+        queue.add(j);
+        host.logger().info("Fresh Courses: " + s.def.id() + "'s chosen course for " + editionName(n.cadence(), n.day())
+                + " (seed " + GenSeed.hex(c.seed()) + ") is checked in its spare half again.");
     }
 
     /**
@@ -475,6 +506,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 continue;
             }
             warnIgnoredPin(s);
+            chosenUpkeep(s);
             GenScheduler.Decision d = GenScheduler.decide(view(s), now, readyAt, st, hold, ed);
             s.waiting = d.kind() == GenScheduler.Kind.WAIT ? d.reason() : null;
             switch (d.kind()) {
@@ -566,8 +598,64 @@ public final class GenService implements GeneratedCourses, GenOps {
      * planner running now), else {@code null}.
      */
     private GenScheduler.Pin activePin(SlotState s) {
+        GenScheduler.Pin chosen = chosenNow(s);
+        if (chosen != null) {
+            return chosen;
+        }
         Planner p = planners.get(s.def.generator());
         return s.pin != null && p != null && s.pin.appliesOn(target(s).start(), p.algo()) ? s.pin : null;
+    }
+
+    /**
+     * WP-ADM: the admin's choice when it is for the edition the slot should show now (the next set
+     * has come), else {@code null}. Over the slot's own pin for that one set, so the build (or its
+     * restamp) is an ordinary pinned one: no flip path of its own.
+     */
+    private GenScheduler.Pin chosenNow(SlotState s) {
+        Planner p = planners.get(s.def.generator());
+        return s.chosen != null && p != null && s.chosen.appliesOn(target(s).start(), p.algo()) ? s.chosen : null;
+    }
+
+    /** WP-ADM: a choice that is still to come (its set hasn't started), else {@code null}. */
+    private GenScheduler.Pin chosenWaiting(SlotState s) {
+        return s.chosen != null && s.chosen.from() > target(s).start() ? s.chosen : null;
+    }
+
+    /**
+     * WP-ADM: a choice whose set is over is forgotten, with one line (the set after goes back to its
+     * own seed); one made for another planner version is said once and not used.
+     */
+    private void chosenUpkeep(SlotState s) {
+        GenScheduler.Pin c = s.chosen;
+        if (c == null) {
+            return;
+        }
+        if (c.endedBy(target(s).start())) {
+            try {
+                host.store().meta(GenAdminKeys.choose(s.def.id()), null);
+            } catch (SQLException e) {
+                return; // kept until the database takes the change; it applies to no set meanwhile
+            }
+            s.chosen = null;
+            host.logger().info("Fresh Courses: " + s.def.id() + "'s chosen seed " + GenSeed.hex(c.seed()) + " was for "
+                    + editionName(edition().cadenceDays(), c.from()) + "; each set's own seed is used from now on.");
+            return;
+        }
+        Planner p = planners.get(s.def.generator());
+        if (p != null && c.algo() != p.algo()) {
+            warnOnce(s, "Fresh Courses: " + s.def.id() + "'s chosen seed " + GenSeed.hex(c.seed()) + " was made for "
+                    + s.def.generator() + " planner v" + c.algo() + " and this is v" + p.algo() + " - the set's own seed"
+                    + " is used (/hcm games gen unchoose " + s.def.id() + " forgets it)");
+        }
+    }
+
+    /** The next set: its first day and length (what {@code plan <course> next} plans for). */
+    record NextSet(long day, int cadence) {
+    }
+
+    private NextSet nextSet(SlotState s) {
+        Edition ed = edition();
+        return new NextSet(ed.editionStart(target(s).endsAt()), ed.cadenceDays());
     }
 
     /** Why a stored pin is not used, or {@code null} when there is none or it applies. */
@@ -725,9 +813,10 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     private GenScheduler.SlotView view(SlotState s) {
         Planner p = planners.get(s.def.generator());
+        GenScheduler.Pin chosen = chosenNow(s); // WP-ADM: the next set's pick, once it has come
         return new GenScheduler.SlotView(s.def.id(), s.on() && p != null, job != null, s.live, !s.healFailed,
-                s.liveMix, s.mix, s.reroll, s.pin, p == null ? 0 : p.algo(), s.triesDay, s.tries, s.lastTryAt,
-                s.oldDirty, secret(), scheduleSince);
+                s.liveMix, s.mix, s.reroll, chosen != null ? chosen : s.pin, p == null ? 0 : p.algo(), s.triesDay,
+                s.tries, s.lastTryAt, s.oldDirty, secret(), scheduleSince);
     }
 
     /** The edition a slot should show now ({@link GenScheduler#target}). */
@@ -796,6 +885,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 String tier = meta.get(GenAdminKeys.tier(id));
                 s.mix = tier != null && s.def.tierProblem(tier) == null ? s.def.normalise(tier) : c.tierOrMix();
                 s.pin = GenScheduler.Pin.parse(meta.get(GenAdminKeys.pin(id)));
+                s.chosen = GenScheduler.Pin.parse(meta.get(GenAdminKeys.choose(id)));
                 s.reroll = GenAdminKeys.whole(meta.get(GenAdminKeys.reroll(id, target(s).key())));
                 String claim = meta.get(GenAdminKeys.claim(id));
                 boolean claimed = Regions.claim(s.def, world, origin).equals(claim);
@@ -1449,14 +1539,12 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
             case PREVIEW -> {
                 if (proven(j)) {
-                    s.preview = new SlotState.Preview(j.half, j.plan, j.day, j.seed, j.mix, j.cadence);
+                    s.preview = new SlotState.Preview(j.half, j.plan, j.day, j.seed, j.mix, j.cadence, j.reroll);
                     s.oldDirty = true;
                     end(j);
                     host.logger().info("Fresh Courses: a preview of " + s.def.id() + " (seed " + GenSeed.hex(j.seed)
                             + ") stands in half " + j.half + ".");
-                    j.report.accept("&aThe preview of " + s.def.name() + " is ready in half " + j.half
-                            + ". &7Walk it: &e/hcm games gen tp " + s.def.id() + " idle&7; make it the current course:"
-                            + " &e/hcm games gen promote " + s.def.id());
+                    j.report.accept(previewReady(s, j));
                 }
             }
             case CLEAR_OLD -> {
@@ -1492,6 +1580,21 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
             default -> end(j);
         }
+    }
+
+    /**
+     * What an admin reads when a preview is up: how to walk it or try it (a test run; golf is
+     * walked), and to use it now ({@code promote}) or, for the next set's, then ({@code choose}).
+     */
+    private String previewReady(SlotState s, Job j) {
+        String id = s.def.id();
+        boolean next = j.day > target(s).start();
+        String look = s.def.golf() ? "Walk it: &e/hcm games gen tp " + id + " idle" : "Try it: &e/hcm games gen test "
+                + id + " &7(or walk it: &e/hcm games gen tp " + id + " idle&7)";
+        return "&aThe preview of " + s.def.name() + (next ? " for " + editionName(j.cadence, j.day) : "") + " is ready in"
+                + " half " + j.half + " (seed " + GenSeed.hex(j.seed) + "). &7" + look + "; " + (next ? "use it for that"
+                + " set: &e/hcm games gen choose " + id : "make it the current course: &e/hcm games gen promote " + id
+                + " &7or next set's: &e/hcm games gen choose " + id);
     }
 
     /** A claim scan finished: an empty region is claimed; anything else stays refused. */
@@ -1634,14 +1737,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         Slots.Def def = s.def;
         long now = host.now();
         PlannedCourse pc = j.plan.course();
-        long ref = pc instanceof PlannedTrial t ? t.refMs() : 0;
-        DailySettings.Stars factors = host.settings().stars();
-        long gold = def.golf() ? 0 : Stars.threshold(ref, factors.gold(starTier(def, j.mix)));
-        long silver = def.golf() ? 0 : Stars.threshold(ref, factors.silver(starTier(def, j.mix)));
-        List<Integer> attempts = pc instanceof PlannedGolf g ? g.attempts() : List.of();
-        List<List<Putt>> witness = pc instanceof PlannedGolf g ? g.witness() : List.of();
-        GenTag tag = new GenTag(def.id(), planners.get(def.generator()).id(), j.plan.algo(), j.day, j.reroll, j.seed,
-                j.half, j.plan.hash(), ref, gold, silver, attempts, witness, now, j.cadence);
+        GenTag tag = tagFor(def, planners.get(def.generator()).id(), j.plan, j.day, j.reroll, j.seed, j.half, j.mix,
+                host.settings().stars(), now, j.cadence);
         int rev;
         try {
             GamesDao.CourseRow old = host.store().course(def.id());
@@ -1705,6 +1802,32 @@ public final class GenService implements GeneratedCourses, GenOps {
         return def != null && def.dropper() ? DropRules.tier(tierOrMix).id() : tierOrMix;
     }
 
+    /**
+     * The tag a layout goes live with (its star times from the plan's expert time), for the flip and
+     * for an admin's test run of a preview (WP-ADM), so the two can't differ.
+     */
+    static GenTag tagFor(Slots.Def def, String generator, Plan plan, long day, int reroll, long seed, char half,
+                         String mix, DailySettings.Stars factors, long now, int cadence) {
+        PlannedCourse pc = plan.course();
+        long ref = pc instanceof PlannedTrial t ? t.refMs() : 0;
+        long gold = def.golf() ? 0 : Stars.threshold(ref, factors.gold(starTier(def, mix)));
+        long silver = def.golf() ? 0 : Stars.threshold(ref, factors.silver(starTier(def, mix)));
+        List<Integer> attempts = pc instanceof PlannedGolf g ? g.attempts() : List.of();
+        List<List<Putt>> witness = pc instanceof PlannedGolf g ? g.witness() : List.of();
+        return new GenTag(def.id(), generator, plan.algo(), day, reroll, seed, half, plan.hash(), ref, gold, silver,
+                attempts, witness, now, cadence);
+    }
+
+    /**
+     * A planned trial as the course the flip makes of it: the slot's id and {@code name}, in
+     * {@code world}, with {@code tag} (the row's course, and WP-ADM's test run of a preview).
+     */
+    static Course trialCourse(Slots.Def def, String world, Course planned, GenTag tag, int rev, boolean pinned,
+                              String name) {
+        return new Course(def.id(), planned.kind(), name, planned.tier(), world, planned.start(),
+                planned.checkpoints(), planned.finish(), planned.fallY(), planned.minSeconds(), true, pinned, rev, tag);
+    }
+
     /** The row for a new layout: the planned course with the slot's id and name, in the gen world. */
     static GamesDao.CourseRow row(Slots.Def def, String world, PlannedCourse pc, GenTag tag,
                                   GamesDao.CourseRow old, long now) {
@@ -1726,8 +1849,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             Course was = CourseCodec.decode(old.id(), old.data()).course();
             pinned = was != null && was.pinned();
         }
-        Course c = new Course(def.id(), planned.kind(), name, planned.tier(), world, planned.start(),
-                planned.checkpoints(), planned.finish(), planned.fallY(), planned.minSeconds(), true, pinned, rev, tag);
+        Course c = trialCourse(def, world, planned, tag, rev, pinned, name);
         return new GamesDao.CourseRow(c.id(), Slots.GAME_TRIALS, c.kind().id(), c.name(), c.world(), true,
                 CourseCodec.encode(c), rev, created, now);
     }
@@ -2515,6 +2637,10 @@ public final class GenService implements GeneratedCourses, GenOps {
             if (t != null && !(job != null && job.slot == s)) {
                 out.add("  &c" + t);
             }
+            String pick = chosenLine(s);
+            if (pick != null) {
+                out.add("  &7" + pick);
+            }
             if (slotId != null && s.classic) {
                 out.add("  &7region " + s.world + " " + Regions.describe(s.def, s.origin) + (s.claimed ? " (claimed)"
                         : " (not claimed yet)"));
@@ -2535,7 +2661,9 @@ public final class GenService implements GeneratedCourses, GenOps {
                             + date(s.pin.until()) : "") + (ignored == null ? "" : " &c(not used: " + ignored + ")"));
                 }
                 if (s.preview != null) {
-                    out.add("  &7preview in half " + s.preview.half() + ", seed " + GenSeed.hex(s.preview.seed()));
+                    out.add("  &7preview in half " + s.preview.half() + ", seed " + GenSeed.hex(s.preview.seed())
+                            + (s.preview.day() > target.start() ? " (for " + editionName(s.preview.cadence(),
+                            s.preview.day()) + ")" : ""));
                 }
             }
         }
@@ -2543,6 +2671,24 @@ public final class GenService implements GeneratedCourses, GenOps {
             out.add("&cNo slot called " + slotId + ".");
         }
         return out;
+    }
+
+    /**
+     * WP-ADM: "next set: chosen seed 3f2a91c07d1e55b0 (Mon 5 Oct-Sun 11 Oct)" while a choice waits,
+     * "this set: chosen seed ..." once it is up; {@code null} for none.
+     */
+    private String chosenLine(SlotState s) {
+        GenScheduler.Pin c = s.chosen;
+        if (s.classic || c == null) {
+            return null;
+        }
+        Planner p = planners.get(s.def.generator());
+        String unused = p != null && c.algo() != p.algo() ? " &c(not used: made for planner v" + c.algo() + ")" : "";
+        if (chosenWaiting(s) != null) {
+            return "next set: chosen seed " + GenSeed.hex(c.seed()) + " (" + editionName(edition().cadenceDays(),
+                    c.from()) + ")" + unused;
+        }
+        return chosenNow(s) != null ? "this set: chosen seed " + GenSeed.hex(c.seed()) : null;
     }
 
     private String statusLine(SlotState s) {
@@ -2709,7 +2855,22 @@ public final class GenService implements GeneratedCourses, GenOps {
         j.mix = s.mix;
         queue.add(j);
         report.accept("&7A preview of " + s.def.name() + " (seed " + GenSeed.hex(seed) + ") is on its way into half "
-                + s.idleHalf() + ".");
+                + s.idleHalf() + "." + choiceStays(s));
+    }
+
+    /** WP-ADM: what a preview, reroll or promote adds while a choice waits: it stays chosen. */
+    private String choiceStays(SlotState s) {
+        GenScheduler.Pin c = chosenWaiting(s);
+        return c == null ? "" : " &7Your pick for " + editionName(edition().cadenceDays(), c.from()) + " (seed "
+                + GenSeed.hex(c.seed()) + ") stays chosen; it is built again at the change.";
+    }
+
+    /** WP-ADM: why a pinned slot can't be rerolled or promoted, naming the pin or the choice. */
+    private String pinnedLine(SlotState s) {
+        String id = s.def.id();
+        return chosenNow(s) != null ? "&c" + s.def.name() + " is on the seed you chose for this set. &7/hcm games gen"
+                + " unchoose " + id + " first." : "&c" + s.def.name() + " is pinned. &7/hcm games gen unpin " + id
+                + " first.";
     }
 
     @Override
@@ -2724,12 +2885,17 @@ public final class GenService implements GeneratedCourses, GenOps {
             report.accept("&cThere is no preview of " + s.def.name() + ". &7/hcm games gen preview " + slotId);
             return;
         }
+        if (pv.day() > t.start()) {
+            report.accept("&cThat preview is for " + editionName(pv.cadence(), pv.day()) + ". &7Use it then: &e/hcm games"
+                    + " gen choose " + slotId);
+            return;
+        }
         if (pv.day() != t.start() || pv.cadence() != t.cadence()) {
             report.accept("&cThat preview was made for " + editionName(pv.cadence(), pv.day()) + ". &7Make a new one.");
             return;
         }
         if (activePin(s) != null) {
-            report.accept("&c" + s.def.name() + " is pinned. &7/hcm games gen unpin " + slotId + " first.");
+            report.accept(pinnedLine(s));
             return;
         }
         if (!confirm && s.live != null && hasScores(s)) {
@@ -2744,7 +2910,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         j.seed = pv.seed();
         j.mix = pv.mix();
         queue.add(j);
-        report.accept("&7Making the preview of " + s.def.name() + " the current course...");
+        report.accept("&7Making the preview of " + s.def.name() + " the current course..." + choiceStays(s));
     }
 
     private boolean hasScores(SlotState s) {
@@ -2762,7 +2928,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         if (activePin(s) != null) {
-            report.accept("&c" + s.def.name() + " is pinned. &7/hcm games gen unpin " + slotId + " first.");
+            report.accept(pinnedLine(s));
             return;
         }
         GenScheduler.Target t = target(s);
@@ -2778,7 +2944,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         s.tries = 0;
         report.accept("&a" + s.def.name() + " gets a new course for " + editionName(t.cadence(), t.start())
                 + " (reroll " + next + "). &7It is built at the next check; anyone on the old one finishes there, on"
-                + " its own board.");
+                + " its own board." + choiceStays(s));
     }
 
     @Override
@@ -2889,6 +3055,159 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         s.pin = null;
         report.accept("&a" + s.def.name() + " is unpinned. &7A new course comes with the next set.");
+    }
+
+    // ---- picking a good course: preview next, try it, choose it (WP-ADM) --------------------------------
+
+    @Override
+    public void previewNext(String slotId, String seedText, Consumer<String> report) {
+        SlotState s = slots.get(slotId);
+        if (!ready(s, report)) {
+            return;
+        }
+        Long seed = seedText == null ? null : GenSeed.parse(seedText);
+        if (seedText != null && seed == null) {
+            report.accept("&cA seed is up to 16 hex digits, like 3f2a91c07d1e55b0.");
+            return;
+        }
+        if (seed == null) {
+            seed = java.util.concurrent.ThreadLocalRandom.current().nextLong(); // a random candidate
+        }
+        NextSet n = nextSet(s);
+        Job j = new Job(Kind.PREVIEW, s, report);
+        j.day = n.day();
+        j.cadence = n.cadence();
+        j.reroll = 0; // exactly as the next set's build would make it (a pinned build is never a reroll)
+        j.seed = seed;
+        j.mix = s.mix; // what the next build uses: config, or the admin's tier or mix
+        queue.add(j);
+        report.accept("&7A preview of " + s.def.name() + " for " + editionName(n.cadence(), n.day()) + " (" + s.mix
+                + ", seed " + GenSeed.hex(seed) + ") is on its way into half " + s.idleHalf() + ".");
+    }
+
+    @Override
+    public void choose(String slotId, boolean confirm, Consumer<String> report) {
+        SlotState s = slots.get(slotId);
+        if (s == null || s.classic) {
+            report.accept("&cA Classics slot holds a course brought back with recall; choose is for Fresh Courses.");
+            return;
+        }
+        if (!s.on()) {
+            report.accept("&c" + s.def.name() + " is off" + (s.problem == null ? "." : ": &7" + s.problem));
+            return;
+        }
+        if (busyWith(s)) {
+            report.accept("&c" + s.def.name() + " is being built right now; try when it's done.");
+            return;
+        }
+        SlotState.Preview pv = s.preview;
+        Planner p = planners.get(s.def.generator());
+        if (pv == null || p == null) {
+            report.accept("&cNo preview yet - /hcm games gen preview " + slotId + " next first");
+            return;
+        }
+        NextSet n = nextSet(s);
+        String set = editionName(n.cadence(), n.day());
+        if (!pv.mix().equals(s.mix)) {
+            report.accept("&cThat preview was made as " + pv.mix() + ", and " + set + " will be " + s.mix + ", so it would"
+                    + " come out different. &7Make a new one: &e/hcm games gen preview " + slotId + " next");
+            return;
+        }
+        GenScheduler.Pin was = s.chosen;
+        if (!confirm && was != null && !was.endedBy(n.day()) && (was.seed() != pv.seed() || was.from() != n.day())) {
+            report.accept("&e" + s.def.name() + " already has seed " + GenSeed.hex(was.seed()) + " chosen for "
+                    + editionName(n.cadence(), was.from()) + ". &7Type &e/hcm games gen choose " + slotId + " confirm &7to"
+                    + " use this preview's seed " + GenSeed.hex(pv.seed()) + " instead.");
+            return;
+        }
+        GenScheduler.Pin pick = GenScheduler.Pin.oneSet(pv.seed(), p.algo(), n.day());
+        try {
+            host.store().meta(GenAdminKeys.choose(slotId), pick.text());
+        } catch (SQLException e) {
+            report.accept("&cCouldn't reach the database - see the console.");
+            host.logger().log(Level.WARNING, "Fresh Courses: could not store a chosen seed", e);
+            return;
+        }
+        s.chosen = pick;
+        host.logger().info("Fresh Courses: " + slotId + "'s course for " + set + " is chosen: seed "
+                + GenSeed.hex(pick.seed()) + ".");
+        report.accept("&a" + s.def.name() + "'s course for " + set + " is this preview (seed " + GenSeed.hex(pick.seed())
+                + "). &7It goes up at the change on fresh boards, with its own course code; the set after goes back"
+                + " to normal." + (s.pin != null ? " Its pin comes back after it." : "") + " &e/hcm games gen unchoose "
+                + slotId + " &7cancels it.");
+    }
+
+    @Override
+    public void unchoose(String slotId, Consumer<String> report) {
+        SlotState s = slots.get(slotId);
+        if (s == null || s.classic || s.chosen == null) {
+            report.accept("&7" + (s == null ? "That course" : s.def.name()) + " has no chosen course.");
+            return;
+        }
+        boolean upNow = chosenNow(s) != null;
+        try {
+            host.store().meta(GenAdminKeys.choose(slotId), null);
+        } catch (SQLException e) {
+            report.accept("&cCouldn't reach the database - see the console.");
+            return;
+        }
+        s.chosen = null;
+        report.accept("&a" + s.def.name() + "'s pick is cancelled. &7" + (upNow ? "The chosen course that is up now"
+                + " stays until the next set, which gets its own new course." : "The next set gets its own new course."));
+    }
+
+    @Override
+    public PreviewRun previewRun(String slotId) {
+        SlotState s = slots.get(slotId);
+        if (s == null || s.classic) {
+            return PreviewRun.refused("&cOnly a Fresh Course has previews.");
+        }
+        if (!running || readyAt < 0) {
+            return PreviewRun.refused("&cFresh Courses is still starting; try in a moment.");
+        }
+        if (!s.on()) {
+            return PreviewRun.refused("&c" + s.def.name() + " is off" + (s.problem == null ? "." : ": &7" + s.problem));
+        }
+        if (busyWith(s)) {
+            return PreviewRun.refused("&c" + s.def.name() + " is being built right now; try when it's done.");
+        }
+        SlotState.Preview pv = s.preview;
+        if (pv == null) {
+            return PreviewRun.refused("&cNo preview yet - /hcm games gen preview " + slotId + " first");
+        }
+        if (s.def.golf() || !(pv.plan().course() instanceof PlannedTrial)) { // no golf test round exists (yet)
+            return PreviewRun.refused("&cWalk it with /hcm games gen tp " + slotId + " idle - golf previews can't be"
+                    + " test-played yet.");
+        }
+        return new PreviewRun(previewCourse(s, pv), null);
+    }
+
+    /**
+     * The preview as the course its flip would make: the same conversion ({@link #tagFor},
+     * {@link #trialCourse}), in the slot's world and the idle half the preview stands in, under the
+     * name of its set. It lives only for an admin's test run: no row, no board, never live
+     * ({@link #live} refuses its tag), so nothing a run on it does is recorded.
+     */
+    Course previewCourse(SlotState s, SlotState.Preview pv) {
+        Planner p = planners.get(s.def.generator());
+        GenTag tag = tagFor(s.def, p == null ? s.def.generator() : p.id(), pv.plan(), pv.day(), pv.reroll(), pv.seed(),
+                pv.half(), pv.mix(), host.settings().stars(), host.now(), pv.cadence());
+        return trialCourse(s.def, s.world, ((PlannedTrial) pv.plan().course()).course(), tag, 1, false,
+                GenCopy.slotName(s.def, pv.cadence()));
+    }
+
+    @Override
+    public Tools tools(String slotId) {
+        SlotState s = slotId == null ? null : slots.get(slotId);
+        if (s == null || s.classic || !running) {
+            return null;
+        }
+        SlotState.Preview pv = s.preview;
+        GenScheduler.Pin c = s.chosen != null && !s.chosen.endedBy(target(s).start()) ? s.chosen : null;
+        int cadence = edition().cadenceDays();
+        return new Tools(s.on(), s.def.golf(), cadence, pv == null ? null : pv.seed(),
+                pv != null && pv.day() > target(s).start(), c == null ? null : c.seed(),
+                c == null ? null : editionName(cadence, c.from()), busyWith(s));
     }
 
     @Override
@@ -3343,7 +3662,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             if (row == null) {
                 return null;
             }
-            Long to = s.pin != null && s.pin.until() <= 0 ? null : target(s).endsAt();
+            Long to = pinnedForever(s) ? null : target(s).endsAt();
             return new FreshFeed.Fresh(row.code(), FreshFeed.shortSeed(row.seed()), row.startsAt(), to,
                     s.live.cadence());
         } catch (SQLException | RuntimeException e) {
@@ -3394,8 +3713,16 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         return FreshFeed.history(rows, boards::get, slot -> {
             SlotState s = slots.get(slot);
-            return s == null || s.live == null || (s.pin != null && s.pin.until() <= 0) ? null : target(s).endsAt();
+            return s == null || s.live == null || pinnedForever(s) ? null : target(s).endsAt();
         }, recalledNow(), per, host.now(), showNames, host::playerName);
+    }
+
+    /**
+     * Whether the live course stays for good: pinned with no end, and no choice (WP-ADM) is up now
+     * or waiting (a chosen set changes the course, and the set after it again).
+     */
+    private boolean pinnedForever(SlotState s) {
+        return s.pin != null && s.pin.until() <= 0 && s.chosen == null;
     }
 
     /** The world the courses are built in ({@code games.fresh.world}, or the first Games world). */

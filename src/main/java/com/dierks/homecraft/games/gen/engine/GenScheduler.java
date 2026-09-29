@@ -120,18 +120,38 @@ public final class GenScheduler {
     }
 
     /**
-     * A pinned seed ({@code gen.<slot>.pin} = {@code seed:algo:until}).
+     * A pinned seed ({@code gen.<slot>.pin} = {@code seed:algo:until}), or an admin's choice for one
+     * set ({@code gen.<slot>.choose} = {@code seed:algo:until:from}, WP-ADM): the same pin, held only
+     * for editions that start from {@code from} to {@code until}, so it is the next set's course and
+     * the set after goes back to its own seed, with no flip path of its own.
      *
      * @param seed  the seed
      * @param algo  the planner version it was pinned under; another version ignores it
      * @param until the last course day it holds for (inclusive: an edition starting on or before it
      *              keeps the pin), or 0 for no end
+     * @param from  the first course day it holds for (an edition starting before it doesn't use it), or
+     *              0 for no start: every plain pin
      */
-    public record Pin(long seed, int algo, long until) {
+    public record Pin(long seed, int algo, long until, long from) {
+
+        /** A plain pin: from now on, until {@code until} (0: no end). */
+        public Pin(long seed, int algo, long until) {
+            this(seed, algo, until, 0);
+        }
+
+        /** A choice for the one set that starts on {@code day} ({@code choose}). */
+        public static Pin oneSet(long seed, int algo, long day) {
+            return new Pin(seed, algo, day, day);
+        }
 
         /** Whether it holds for an edition that starts on local day {@code day}. */
         public boolean activeOn(long day) {
-            return until <= 0 || day <= until;
+            return (until <= 0 || day <= until) && (from <= 0 || day >= from);
+        }
+
+        /** Whether it is over for an edition that starts on local day {@code day} (it never holds again). */
+        public boolean endedBy(long day) {
+            return until > 0 && day > until;
         }
 
         /**
@@ -143,23 +163,24 @@ public final class GenScheduler {
             return activeOn(day) && algo == plannerAlgo;
         }
 
-        /** As stored. */
+        /** As stored: three parts for a plain pin (as it always was), four for a choice. */
         public String text() {
-            return GenSeed.hex(seed) + ":" + algo + ":" + until;
+            return GenSeed.hex(seed) + ":" + algo + ":" + until + (from > 0 ? ":" + from : "");
         }
 
-        /** A stored pin, or {@code null} when it can't be read. */
+        /** A stored pin or choice, or {@code null} when it can't be read. */
         public static Pin parse(String text) {
             if (text == null) {
                 return null;
             }
             String[] p = text.trim().split(":");
-            if (p.length != 3) {
+            if (p.length != 3 && p.length != 4) {
                 return null;
             }
             Long seed = GenSeed.parse(p[0]);
             try {
-                return seed == null ? null : new Pin(seed, Integer.parseInt(p[1]), Long.parseLong(p[2]));
+                return seed == null ? null : new Pin(seed, Integer.parseInt(p[1]), Long.parseLong(p[2]),
+                        p.length == 4 ? Long.parseLong(p[3]) : 0);
             } catch (NumberFormatException e) {
                 return null;
             }

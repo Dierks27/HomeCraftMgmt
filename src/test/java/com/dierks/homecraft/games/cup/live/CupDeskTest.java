@@ -358,6 +358,45 @@ class CupDeskTest {
                 "and told why");
     }
 
+    /**
+     * WP-ADM checklist fix: after an admin's early {@code /hcm games cup settle}, the course screen
+     * used to lose its Cup item. It stays, saying the week's Cup is already paid out (WEEK_OVER's short
+     * form, in the NAME for Bedrock); the tile and the website leave it out, since nothing is running;
+     * a Cup called off stays hidden as before.
+     */
+    @Test
+    void aCupPaidOutEarlyStillShowsOnTheCourseScreenSayingSo() throws Exception {
+        switchOn(lava);
+        threeRace(lava);
+        assertTrue(desk.view(lava, alice).shown(), "running: shown");
+        CupDesk.Closed closed = desk.settle(desk.key(lava.id())); // the admin's early settle
+        assertNotNull(closed, "settled");
+        assertEquals(CupPlan.Outcome.PRIZES, closed.plan().outcome(), "paid out mid-week");
+
+        CupDesk.View v = desk.view(lava, alice);
+        assertEquals(CupRefusal.WEEK_OVER, v.refusal(), "nobody can enter a Cup already paid out");
+        assertTrue(v.settledEarly(), "this week's Cup was settled early");
+        assertTrue(v.shown(), "and the course screen still shows its item");
+        assertEquals("&7Weekly Cup &8- &7already paid out this week", CupWords.buttonName(v),
+                "saying so in its NAME (Bedrock)");
+        assertEquals(List.of("&7This week's Cup on this course is already paid out. It's back next week.",
+                "&eClick to see the Cup"), CupWords.buttonLore(v, "Mon 5 Oct 4:00 AM"),
+                "its lore doesn't promise a payout at the week's end");
+        assertTrue(desk.view(lava, null).shown(), "for someone who wasn't in it too");
+        assertEquals("", CupWords.tileSuffix(v), "the tile's NAME leaves out a Cup that is over");
+        assertEquals(List.of(), CupWords.tileLines(v), "and so does its lore");
+
+        Course cliffs = handBuilt("cliffs", "Cliffs");
+        host.put(cliffs);
+        switchOn(cliffs);
+        assertNull(desk.enter(bob, cliffs));
+        assertNotNull(desk.voidNow(cliffs.id(), CupPlan.VoidReason.CLOSED, "Cliffs"), "a Cup called off");
+        CupDesk.View off = desk.view(cliffs, bob);
+        assertEquals(CupRefusal.CALLED_OFF, off.refusal(), "called off, not paid out");
+        assertFalse(off.settledEarly(), "a Cup called off isn't one settled early");
+        assertFalse(off.shown(), "and stays hidden, as before");
+    }
+
     @Test
     void anEntryBetweenTheRolloverAndTheSettlementTickGoesIntoTheNewWeek() throws Exception {
         switchOn(lava);

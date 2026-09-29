@@ -704,32 +704,41 @@ works, but nothing is timed for the record, recorded, paid, or counted for the W
 action bar reads "Warm-up 2:14 left - not counted", and each lap says "Warm-up lap: 0:48.2 (not
 counted)". When the time is up, or you tap the **Start timed run** kit item, you go back to the
 start and the normal 3-2-1 begins; that run is timed and counted as usual. A run gets one
-warm-up. An admin's test run never warms up, and the Dropper has its own practice drop instead.
+warm-up, and a restart due soon (the restart hold) ends it at once. An admin's test run never warms
+up, and the Dropper has its own practice drop instead.
 
 **Race with friends (party races).** Any open time-trial course (hand-built, Fresh or Classic;
 parkour, elytra or boat, never a Dropper) can be raced together, any time, free and just for fun.
 Click **Race with friends** on the course screen (bottom row, left of the way out; the Weekly Cup's
 item is right of it), or type `/hcm play race <course>`, to open your party. Anyone in it
 can invite through the usual invites ([Accept] on Java, `/hcm play accept` on Bedrock; the 30 s
-cooldown stays, and `/hcm play invites off` turns party invites off too), up to `party_max`. The
-party screen shows who's in and who's ready. Only the host starts, and the host chooses whether
-everyone warms up first (the same `warmup_seconds`, with a **Ready** kit item to be done early).
+cooldown stays, and `/hcm play invites off` turns party invites off too, including for a player who
+turned them off before party races existed), up to `party_max`. The party screen shows who's in and
+who's ready, and the course's Weekly Cup item when it runs one. Only the host starts, and the host
+chooses whether everyone warms up first (the same `warmup_seconds`, with a **Ready** kit item to be done early).
 Then everyone goes to one grid and starts on **one shared 3-2-1**: boats in rows of two behind the
 start line (single file on a narrow track), runners and flyers on the start itself. A bar shows your
 place ("2nd of 5 · Lap 1/2"), finishes and photo finishes go to the group, and a results screen
 ranks everyone. The race ends when everyone is in, 2 minutes after the first finish, or 10 minutes
 after Go. Each racer's finish is also their **normal counted run** on the course, exactly once and
 under every fair-play rule: its boards, its first finish and other rewards, and the Weekly Cup. A
-party race has no entry, no fees and no prizes of its own. Boats bump, as at Race Night. Anyone
+party race has no entry, no fees and no prizes of its own. Boats bump, as at Race Night; runners
+and flyers can't push each other (they are on the `hcm_nopush` scoreboard team while they race, and
+back on any team they were on before as soon as their run ends). Anyone
 can leave at any time (Leave game, or Leave the party on the party screen) and the others carry
 on; a disconnect is the same. A host who leaves passes the party to the next one who joined. A
-restart due soon refuses a new start, and a course held for Race Night can't be party-raced.
+restart due soon refuses a new start (and ends a shared warm-up: straight to the grid), and a course
+held for Race Night can't be party-raced: when Race Night takes the track, a party race still on it is
+called off, its racers go home with their things, and nothing they hadn't finished counts.
 
 **Race mode** is the engine party races and Race Night share: racers are held on the grid until one
 go tick and all start on one clock, a finish is judged on the course as it is (its layout, and the
 still-standing rule for Fresh Courses), finishers wait on Fresh Ice Boat's **viewing stand** (a railed
 platform in the middle of the loop, built by boat planner v2) or go home at the line where there is
-none, and a racer sent back to a checkpoint is re-seated clear of the other boats.
+none, and a racer sent back to a checkpoint is re-seated clear of the other boats. A boat that
+creeps off its grid spot before Go is put back on it and starts once back, on the shared clock (it
+never gains a head start). A racer whose trip to the track falls through (hands full, hurt) is
+dropped from the race at once, so nobody waits for them.
 <!-- ---- end WP-R1 ---- -->
 
 **Building a course** (`hcm.games.admin`, standing in a `games.worlds` world; the full list is in
@@ -1410,14 +1419,16 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
   screen (`/hcm play race`, the Race Night tile on the **Together** tab, or an `[Arcade] race_night`
   sign): one tap on **Join**. Joining moves nobody; keep playing. Leaving the list before the racing
   is free. At most `max_racers` (8), fewer if the track's grid has fewer spots.
-- **The track.** 2 minutes before the start it is reserved (new solo runs on it are refused), and 1
+- **The track.** 2 minutes before the start it is reserved (new solo runs and party races on it are
+  refused, and a party race still on it is called off), and 1
   minute before, solo runs still on it end. 15 seconds before, every joined racer who is free goes to
   the track in their own oak boat, two a tick (their things are kept safe, as in every world game).
   Anyone busy is asked every second to stand still or use Leave game, until just before Go, and is
   then out of race 1 ("you'll be in the next one").
 - **The warm-up** (owner decision D3). With `warmup_seconds` above 0 (180 as shipped), racers first
   get free warm-up laps, never timed; each can tap **Ready**. The grid waits for the window to run
-  out, or for everyone to be ready.
+  out, or for everyone who joined (and is online) to be at the track and ready; race 1 never starts
+  before its advertised time. A restart due soon ends the warm-up at once.
 - **A race.** Everyone on the grid, held still, "Race 1 of 3", 3-2-1-Go on one tick. The bossbar shows
   your place ("2nd of 5 · Lap 1/2", yellow on the last lap). At the line: "You came 2nd! 0:41.2", then
   onto the stand to watch. A race ends when everyone is in, 60 s after the first finisher, or after 4
@@ -1432,7 +1443,10 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
   countback (more 1st places, then more 2nd places...); racers still level share the place. **1st 5,
   2nd 3, 3rd 2 tokens, and 1 to everyone else who finished a race.** 2nd needs 3 or more racers at
   race 1 and 3rd needs 4 or more, so nobody wins a podium prize for coming last (2 racers get 5 and
-  1; 3 get 5, 3 and 1). At most **5 tokens a player a night**, and at most **3 prize nights a week**
+  1; 3 get 5, 3 and 1). A podium prize (and "Win a Race Night") needs at least one finished race
+  that night and someone ranked below you: racers tied for last came last, and a night where nobody
+  finished pays nothing. A racer who only warmed up (never in a race) gets no place. At most **5
+  tokens a player a night**, and at most **3 prize nights a week**
   server-wide (`prize_events_per_week`, the week the weekly boards use). A 4th night that week says
   "Just for fun tonight - points only" and pays nothing; so does an admin's `fun` night. Prizes are a
   new reward kind (`EVENT_PRIZE`) **outside the daily skill cap**, paid once per player per night
@@ -1454,7 +1468,10 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
   Trials) off while racers are at the track calls the night off at once: the races done stand, and
   prizes are paid (or owed) if it held a prize slot. A crash does the same at the next boot. A night
   still in its join window resumes after a restart if its start is at least 2 minutes away. Prizes
-  can never be paid twice (the payment's ref is the night's id).
+  can never be paid twice (the payment's ref is the night's id). A night called off before any race
+  was stored gives its prize night back to the week. An admin's `start ... in M` is saved at once, so
+  a restart before its window keeps it. `/hcm reload` while racers are at the track says first that a
+  reload switching Race Night or Time Trials off calls it off.
 - **The restart hold.** A scheduled night runs only if its whole window, from joining to its worst
   case (`races × (max_race_minutes + break) + 2 min`, plus the warm-up: 18 minutes as shipped), ends 2
   minutes before a restart's hold; otherwise it is skipped, with the reason in `event list` and
@@ -1485,7 +1502,7 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
 | `race_night.finisher_prize` | `1` | Tokens for everyone else who finished a race (0-2) |
 | `race_night.prize_events_per_week` | `3` | Nights a week that pay tokens, server-wide (0-7) |
 | `race_night.season` | `month` | `month` (a monthly season board) or `off` |
-| `race_night.stand_radius` | `4` | How far a racer may wander from the stand |
+| `race_night.stand_radius` | `4` | How far a racer may wander from the stand (race mode puts them back) |
 
 **Admin** (`/hcm games event ...`, `hcm.games.admin`):
 

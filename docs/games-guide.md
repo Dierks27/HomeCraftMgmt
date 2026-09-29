@@ -1149,12 +1149,14 @@ These are played in the Games world, on courses the server's builders make. Each
 
 - **Warm up first.** When you start a time-trial course, a small screen asks: Warm up (3:00), or Go straight to the timed run. Going straight is the run as it always was.
 - In a warm-up you run the course as much as you like. Checkpoints still guide you and Back to checkpoint works, but nothing is timed for the record, saved or paid, and it doesn't count for the Weekly Cup. The bar above your hotbar says Warm-up 2:14 left - not counted.
-- When you're ready, click Start timed run in your hotbar (or wait for the clock). You go back to the start for the normal 3, 2, 1, Go!, and that run counts as usual. Each run gets one warm-up.
+- When you're ready, click Start timed run in your hotbar (or wait for the clock). You go back to the start for the normal 3, 2, 1, Go!, and that run counts as usual. Each run gets one warm-up. If the server restarts in a few minutes, the warm-up ends at once so your timed run still happens.
 - **Race with friends.** Open a course's screen and click Race with friends, or type /hcm play race <course id>. That makes your party. Invite friends from the party screen: they get [Accept] in chat, and Bedrock players type /hcm play accept. A party holds up to 8 by default.
 - The party screen shows who's in and who's ready. Only the host can start the race, and the host chooses if everyone warms up first. In a party warm-up, click Ready when you're set: the race starts when the warm-up ends or everyone is ready.
 - Everyone goes to the start together and gets one 3, 2, 1, Go! at the same moment. Boats line up in rows of two behind the start line. A bar at the top of the screen shows your place, like 2nd of 5 · Lap 1/2. Boats can bump into each other.
 - When the race is over, everyone goes home and a results screen shows the whole group. It ends when everyone is in, 2 minutes after the first person finishes, or after 10 minutes.
-- Party races are free and just for fun: no entry, no prizes. Your time also counts as a normal run on the course, once, with the usual rewards and high scores.
+- Party races are free and just for fun: no entry, no prizes. Your time also counts as a normal run on the course, once, with the usual rewards and high scores, and for the Weekly Cup if you're in it (the party screen shows the Cup's button too).
+- On foot or with wings, racers can't push each other. The Dropper has no party races.
+- When Race Night needs the track, a party race on it is called off: everyone goes home with their things, and a race you hadn't finished doesn't count.
 - You can leave any time with Leave game, or Leave the party on the party screen. The others carry on. If the host leaves, the next person who joined becomes the host.
 - /hcm play invites off turns off party race invites too.
 <!-- ---- end WP-R1 ---- -->
@@ -1486,7 +1488,7 @@ These are played in the Games world, on courses the server's builders make. Each
 1. About 30 minutes before, a chat line says Race Night is coming. 10 minutes before, joining opens: a line in chat and a bar at the top of the screen count down.
 2. Open the Race Night screen and click the green **Join Race Night** button. That's all. You can keep playing anything until it starts. Changed your mind? Click **Leave the race list**.
 3. Just before the start, you are taken to the track in your own boat. Your things are kept safe and come back at the end. If you're busy in another game, you're asked to stand still or use Leave game; if you can't in time, you join the next race.
-4. Warm-up: first you get a few minutes of free laps that don't count. Tap **Ready** when you're set. The race starts when the time is up, or when everyone is ready.
+4. Warm-up: first you get a few minutes of free laps that don't count. Tap **Ready** when you're set. The race starts when the time is up, or when everyone who joined is at the track and ready, but never before the start time.
 5. Everyone starts together on a starting grid: "Race 1 of 3", then 3, 2, 1, Go! The bar at the top shows your place and lap, like "2nd of 5 · Lap 1/2".
 6. Cross the finish line: "You came 2nd!" Then you watch the others from the viewing stand.
 7. After a short break, the next race starts. Whoever has the fewest points starts at the front.
@@ -1503,6 +1505,7 @@ These are played in the Games world, on courses the server's builders make. Each
 
 - The night's 1st place wins 5 tokens, 2nd 3 tokens and 3rd 2 tokens. Everyone else who finished at least one race gets 1 token.
 - 2nd place needs at least 3 racers, and 3rd needs at least 4. So with 2 racers it's 5 and 1, and with 3 it's 5, 3 and 1.
+- A 1st, 2nd or 3rd place prize needs at least one finished race, and someone behind you. If nobody finishes a race all night, no tokens are won.
 - Nobody wins more than 5 tokens a night. Only 3 nights a week pay tokens; after that it's "Just for fun tonight" and only points count.
 - These prizes don't count toward the daily token limit.
 - Not somewhere you can earn tokens when it ends (or offline)? Your prize waits and is paid when you're back.

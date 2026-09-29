@@ -75,6 +75,10 @@ class NightRunnerTest {
         final Map<UUID, Course.Spot> regridded = new HashMap<>();
         final List<UUID> parked = new ArrayList<>();
         final List<UUID> home = new ArrayList<>();
+        final Map<UUID, String> homeLines = new HashMap<>();
+        /** How often each racer's freedom was asked (a seat attempt asks it). */
+        final Map<UUID, Integer> asked = new HashMap<>();
+        boolean restartHeld;
         final Map<UUID, String> titles = new HashMap<>();
         final Map<UUID, Boolean> progressed = new LinkedHashMap<>();
         final List<String> announced = new ArrayList<>();
@@ -99,7 +103,13 @@ class NightRunnerTest {
 
         @Override
         public boolean free(UUID player) {
+            asked.merge(player, 1, Integer::sum);
             return online.contains(player) && !busy.contains(player) && !seatedAt.containsKey(player);
+        }
+
+        @Override
+        public boolean restartHeld() {
+            return restartHeld;
         }
 
         @Override
@@ -127,6 +137,7 @@ class NightRunnerTest {
         @Override
         public void home(UUID racer, EndReason why, String line) {
             home.add(racer);
+            homeLines.put(racer, line);
             seatedAt.remove(racer);
             if (link != null) {
                 link.left(racer, why); // Time Trials ends the session, which tells the link
@@ -496,7 +507,9 @@ class NightRunnerTest {
         runUntil(ports.now + 500);
         assertEquals(EventMachine.Phase.GRID, runner.phase(), "everyone ready: to the grid");
         assertEquals(0L, runner.warmupUntil(), "the warm-up is over");
-        runUntil(ports.now + 6_000);
+        runUntil(T - 1_000);
+        assertEquals(EventMachine.Phase.GRID, runner.phase(), "but race 1 never goes before the advertised start");
+        runUntil(T + 250);
         assertEquals(EventMachine.Phase.RACING, runner.phase(), "then the countdown and Go");
     }
 
@@ -534,5 +547,215 @@ class NightRunnerTest {
         runUntil(T - 5_000);
         assertTrue(ports.seatedAt.containsKey(C), "a late joiner still makes race 1");
         assertEquals("Race Night is full (3). Tap Watch to see it.", runner.joinProblem(D), "3 of 3: full");
+    }
+
+    // ---- the fixes (EV fix stage, R2 review) --------------------------------------------------------
+
+    @Test
+    void everyoneIsOnTheWayHomeWithTheNightsOwnLineBeforeItsEndIsHeard() throws Exception {
+        open();
+        join(A, B, C);
+        List<UUID> homeAtEnd = new ArrayList<>();
+        runner.onEnd(r -> homeAtEnd.addAll(ports.home)); // RaceNight's onEnd forgets the night: nothing ticks it after
+        runUntil(T + 250);
+        race(A, B, C);
+        runUntil(ports.now + 21_000);
+        race(A, B, C);
+        runUntil(ports.now + 21_000);
+        race(A, B, C);
+        runUntil(ports.now + 1_000);
+        assertEquals(EventMachine.Phase.DONE, runner.phase(), "done");
+        assertTrue(homeAtEnd.containsAll(List.of(A, B, C)), "everyone was sent home before the end was heard: " + homeAtEnd);
+        assertEquals(NightRunner.DONE_LINE, ports.homeLines.get(A), "reading the night's own goodbye");
+        assertEquals(NightRunner.DONE_LINE, runner.calledOffLine(), "and race mode's line for a night that ended is the same");
+    }
+
+    @Test
+    void anAdminCancelSendsEveryoneHomeWithoutAnotherTick() throws Exception {
+        open();
+        join(A, B, C);
+        runUntil(T + 250);
+        List<UUID> homeAtEnd = new ArrayList<>();
+        runner.onEnd(r -> homeAtEnd.addAll(ports.home));
+        runner.callOff("&7Race Night was called off by an admin.", "admin cancel"); // EventAdmin's cancel: no drain after
+        assertTrue(homeAtEnd.containsAll(List.of(A, B, C)), "everyone on the way home at once: " + homeAtEnd);
+        assertEquals("&7Race Night was called off.", ports.homeLines.get(A), "with the called-off line");
+    }
+
+    @Test
+    void oneReadyRacerNeverEndsTheWarmUpWhileAJoinedRacerIsntAtTheTrackYet() throws Exception {
+        runner = night(rules(180));
+        runUntil(T - 10 * MIN + 1_000);
+        join(A, B, C);
+        ports.busy.add(C); // still in another game
+        runUntil(T - 14_000);
+        assertEquals(EventMachine.Phase.WARMUP, runner.phase(), "the shared warm-up");
+        runner.ready(A);
+        runner.ready(B);
+        runUntil(ports.now + 3_000);
+        assertEquals(EventMachine.Phase.WARMUP, runner.phase(), "Cal joined but isn't here: the warm-up waits for Cal");
+        ports.busy.remove(C);
+        runUntil(ports.now + 1_500);
+        assertTrue(ports.seatedAt.containsKey(C), "free: Cal is taken to the track");
+        runUntil(ports.now + 1_000);
+        assertEquals(EventMachine.Phase.WARMUP, runner.phase(), "and Cal gets to warm up too");
+        runner.ready(C);
+        runUntil(ports.now + 500);
+        assertEquals(EventMachine.Phase.GRID, runner.phase(), "everyone joined is ready: to the grid");
+        runUntil(T - 1_000);
+        assertEquals(EventMachine.Phase.GRID, runner.phase(), "race 1 still waits for the advertised start");
+    }
+
+    @Test
+    void aRestartDueSoonEndsTheWarmUpAtOnce() throws Exception {
+        runner = night(rules(180));
+        runUntil(T - 10 * MIN + 1_000);
+        join(A, B);
+        runUntil(T - 14_000);
+        assertEquals(EventMachine.Phase.WARMUP, runner.phase(), "the shared warm-up");
+        ports.restartHeld = true;
+        runUntil(ports.now + 500);
+        assertEquals(EventMachine.Phase.GRID, runner.phase(), "the restart hold: straight to the grid");
+    }
+
+    @Test
+    void aNightWhereNobodyFinishedPaysNothingAndNobodyWins() throws Exception {
+        open();
+        join(A, B, C);
+        while (!runner.phase().over() && ports.now < T + 20 * MIN) {
+            runUntil(ports.now + 1_000); // nobody crosses the line: each race runs out of time
+        }
+        assertEquals(EventMachine.Phase.DONE, runner.phase(), "three races, all run out");
+        assertTrue(payer.paid.isEmpty(), "still-racing points alone win no prize: " + payer.paid);
+        for (UUID u : List.of(A, B, C)) {
+            assertEquals(Boolean.FALSE, ports.progressed.get(u), names.get(u) + " raced, but nobody won");
+            assertTrue(ports.heard(u, "nobody finished a race tonight"), names.get(u) + " hears there's no winner");
+        }
+    }
+
+    @Test
+    void aVoidedFinishNeverStartsTheFinishWindow() throws Exception {
+        open();
+        join(A, B);
+        runUntil(T + 250);
+        runUntil(ports.now + 40_000);
+        runner.finished(A, 40_000, false, "flying");
+        runUntil(ports.now + 65_000);
+        assertEquals(EventMachine.Phase.RACING, runner.phase(), "a void isn't a finish: Ben races on past the window");
+        runner.finished(B, 110_000, true, null);
+        runUntil(ports.now + 1_000);
+        assertEquals(EventMachine.Phase.BREAK, runner.phase(), "everyone in: the break");
+    }
+
+    @Test
+    void aLeaveBeforeTheRacingCancelsASeatStillQueued() throws Exception {
+        runner = night(rules(180));
+        runUntil(T - 10 * MIN + 1_000);
+        join(A, B);
+        runUntil(T - 14_000);
+        assertEquals(EventMachine.Phase.WARMUP, runner.phase(), "the shared warm-up");
+        join(C); // a late joiner: queued to be seated
+        runner.leave(C); // and changes their mind before the queue gets to them
+        runUntil(ports.now + 2_000);
+        assertFalse(ports.seatedAt.containsKey(C), "never taken to the track");
+        assertFalse(runner.in(C), "and off the list");
+    }
+
+    @Test
+    void aRacerBackAfterLeavingTheWarmUpLeavesForGoodWithLeaveGame() throws Exception {
+        runner = night(rules(180));
+        runUntil(T - 10 * MIN + 1_000);
+        join(A, B, C);
+        runUntil(T - 14_000);
+        runUntil(ports.now + 1_000);
+        runner.leave(C); // at the track: out, and sent home
+        runUntil(ports.now + 100);
+        assertTrue(ports.home.contains(C), "Cal went home");
+        assertNull(runner.join(C, "Cal"), "the racing hasn't begun: Cal may join again");
+        runUntil(ports.now + 1_000);
+        assertTrue(ports.seatedAt.containsKey(C), "and is back at the track");
+        runner.left(C, EndReason.QUIT_ITEM); // Leave game this time
+        assertFalse(runner.in(C), "Leave game is leaving for good, even after being sent home once");
+    }
+
+    @Test
+    void aRacerWhoIsntFreeIsTriedAgainOnceASecond() throws Exception {
+        open();
+        join(A, B, C);
+        ports.busy.add(C);
+        runUntil(T - 14_000);
+        int before = ports.asked.getOrDefault(C, 0);
+        runUntil(ports.now + 10_000);
+        int tries = ports.asked.getOrDefault(C, 0) - before;
+        assertTrue(tries >= 9 && tries <= 11, "about once a second, not every 5 ticks: " + tries + " in 10 s");
+    }
+
+    @Test
+    void aNightCalledOffInRaceOneGivesItsPrizeSlotBack() throws Exception {
+        open();
+        join(A, B, C);
+        runUntil(T + 250);
+        assertTrue(dao.event(ID).prized(), "race 1's Go claimed one of the week's prize nights");
+        runner.callOff("&7Race Night was called off by an admin.", "admin cancel");
+        assertFalse(dao.event(ID).prized(), "nothing was raced: the slot is given back");
+        assertEquals(0, dao.prizedIn("2920"), "so the week still has all its prize nights");
+    }
+
+    @Test
+    void anAdminGoStoresTheMovedStart() throws Exception {
+        runner = night(rules(0));
+        runner.restore(List.of(new EventDao.EntryRow(ID, A, "Ava", T - 11 * MIN, EventDao.IN, 0, null, 0, null),
+                new EventDao.EntryRow(ID, B, "Ben", T - 11 * MIN, EventDao.IN, 0, null, 0, null)));
+        assertEquals(EventMachine.Phase.SCHEDULED, runner.phase(), "resumed before its window: scheduled");
+        assertNull(runner.goNow(), "an admin's go");
+        assertEquals(ports.now + EventMachine.GRID_LEAD_MS, dao.event(ID).startsAt(),
+                "the row has the moved start, so a boot never resumes a night that already started");
+        assertEquals(runner.startsAt(), dao.event(ID).startsAt(), "the same start the night runs to");
+    }
+
+    @Test
+    void theLiveNightAndARecoveredOneAgreeAndAWarmUpAloneIsNoRace() throws Exception {
+        runner = night(rules(180));
+        runUntil(T - 10 * MIN + 1_000);
+        join(A, B, C, D);
+        runUntil(T - 14_000);
+        runUntil(ports.now + 2_000);
+        ports.seatedAt.remove(D);
+        runner.left(D, EndReason.QUIT_ITEM); // at the track for the warm-up only, then Leave game
+        for (UUID u : List.of(A, B, C)) {
+            runner.ready(u);
+        }
+        runUntil(T + 250);
+        assertEquals(EventMachine.Phase.RACING, runner.phase(), "race 1 is off");
+        race(A, B, C);
+        List<EventDao.RaceRow> rows = dao.races(ID);
+        assertEquals("DNS", rows.stream().filter(r -> r.player().equals(D)).findFirst().orElseThrow().result(),
+                "Dee never started race 1: DNS, not LEFT");
+        assertEquals(3, runner.started(), "three started race 1, as the stored rows say");
+        runner.stopNow("&7Race Night was called off - the server is restarting.", "the server restarted");
+        List<EventDao.Placed> recovered = StoredNight.placed(dao.races(ID), dao.entries(ID), rules(180), true);
+        List<NightStandings.Ranked> live = runner.standings();
+        assertEquals(live.size(), recovered.size(), "the same racers have a place live and recovered");
+        for (int i = 0; i < live.size(); i++) {
+            assertEquals(live.get(i).player(), recovered.get(i).player(), "the same order");
+            assertEquals(live.get(i).place(), recovered.get(i).place(), "the same place");
+        }
+        assertTrue(live.stream().noneMatch(r -> r.player().equals(D)), "a warm-up alone gets no place");
+        assertFalse(ports.progressed.containsKey(D), "and no Race Night achievement");
+    }
+
+    @Test
+    void theLiveFinishLineSaysThePlaceByTimeAndTheLastRaceMakesNoPromise() throws Exception {
+        runner = night(new NightRules(1, 0, 2, 8, List.of(10, 8, 6), 2, 1, List.of(5, 3, 2), 1, false, 0, 60, 4, 20));
+        runUntil(T - 10 * MIN + 1_000);
+        join(A, B, C);
+        ports.busy.add(C);
+        runUntil(T + 250);
+        assertTrue(ports.heard(C, "You weren't free when the last race began."), "one race: no 'next one' promised");
+        assertFalse(ports.heard(C, "next one"), "never a promise that can't be kept");
+        runUntil(ports.now + 40_000);
+        runner.finished(A, 45_200, true, null);
+        runner.finished(B, 45_100, true, null); // told later, but faster (the interpolated crossing)
+        assertTrue(ports.heard(B, "You came 1st!"), "Ben's place is by time, as it is stored: " + ports.told.get(B));
     }
 }

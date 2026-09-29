@@ -236,6 +236,76 @@ class RaceModeTest {
     }
 
     @Test
+    void aRacerWhoDriftsOffTheGridSpotIsPutBackAndNeverGainsAHeadStart() {
+        TrialFakes.Link link = new TrialFakes.Link();
+        link.goTick = 200;
+        RaceRun.Clock clock = new RaceRun.Clock();
+        AtomicLong nanos = new AtomicLong(9_000_000);
+        Course.Spot spot = new Course.Spot(1, 65, -4, 0, 0);
+        RaceRun still = racer(link, new Course.Spot(-2, 65, -4, 0, 0), STAND);
+        RaceRun crept = racer(link, spot, STAND);
+
+        assertFalse(crept.offSpot(new Point(1.6, 64.5, -3.4)), "under a block across (settling on the ice) is on the spot");
+        assertTrue(crept.offSpot(new Point(1, 65, -2.5)), "a boat that crept 1.5 blocks forward is off it");
+        RaceRun.Release held = crept.release(150, true, true, clock, ticking(nanos));
+        assertTrue(held.hold() && held.back(), "before Go: still held, and put back on the spot");
+        assertFalse(crept.release(150, false, true, clock, ticking(nanos)).back(),
+                "while the move back is on its way (not in place), nothing more is asked");
+
+        RaceRun.Release onSpot = still.release(200, true, false, clock, ticking(nanos));
+        assertTrue(onSpot.go(), "the racer on their spot goes at Go");
+        RaceRun.Release drifted = crept.release(200, true, true, clock, ticking(nanos));
+        assertFalse(drifted.go(), "the drifted racer is NOT released from where it drifted to");
+        assertTrue(drifted.back(), "it goes back onto its spot first");
+        RaceRun.Release later = crept.release(215, true, false, clock, ticking(nanos));
+        assertTrue(later.go(), "back on the spot: it starts");
+        assertEquals(onSpot.nanos(), later.nanos(), "on the shared clock, so the time it took going back is lost, never gained");
+        assertFalse(crept.release(150, true, false, clock, ticking(nanos)).back(), "a racer on the spot is never moved");
+    }
+
+    @Test
+    void aWarmingBoatEntersOnItsOwnGridSpotAndARunnerAtTheStart() {
+        Course.Spot spot = new Course.Spot(-2, 65, -8, 0, 0);
+        assertSame(spot, RaceMode.entrySpot(BASE, spot, true),
+                "a boat warms up from its grid spot: 8 boats spawned on one point would sit inside each other");
+        assertSame(spot, RaceMode.entrySpot(BASE, spot, false), "and goes there for the grid as ever");
+        Course run = LapsTest.straight();
+        assertEquals(run.start(), RaceMode.entrySpot(run, spot, true), "a runner warms up from the course's start");
+        assertSame(spot, RaceMode.entrySpot(run, spot, false), "and is entered on the grid spot without a warm-up");
+    }
+
+    @Test
+    void theStandIsKeptWithinTheLinksRadius() {
+        TrialFakes.Link link = new TrialFakes.Link();
+        RaceRun rr = racer(link, BASE.start(), STAND);
+        rr.parked();
+        assertEquals(4.0, link.standRadius(), "a party race keeps the usual 4 blocks");
+        assertFalse(rr.offStand(new Point(3.5, 70, 0.5), 4), "3 blocks across: on the stand");
+        assertTrue(rr.offStand(new Point(3.5, 70, 0.5), 2), "Race Night's stand_radius 2: put back");
+        assertTrue(rr.offStand(new Point(0.5, 63, 0.5), 4), "fell 7 blocks below it: put back");
+        rr.state = RaceRun.State.RACING;
+        assertFalse(rr.offStand(new Point(40, 70, 40), 4), "only a racer parked on the stand is ever put back");
+    }
+
+    @Test
+    void aLinkWhoseNormalRunThrowsIsAskedThroughTheGuard() {
+        RaceLink throwing = new TrialFakes.Link() {
+            @Override
+            public boolean normalRun() {
+                throw new IllegalStateException("the coordinator broke");
+            }
+        };
+        RaceRun rr = racer((TrialFakes.Link) throwing, BASE.start(), STAND);
+        rr.started();
+        RaceRun.Line line = rr.line(true, false); // RaceMode.finish asks normalRun() through its guard: false
+        assertTrue(line.report(), "the line is still reported");
+        assertFalse(line.normal(), "no normal run from a broken link");
+        TimeTrials trials = new TimeTrials(null);
+        assertFalse(trials.raceMode().call(throwing, throwing::normalRun, false), "the guard's answer is false");
+        assertFalse(trials.raceMode().alive(throwing), "and the link is over from then on");
+    }
+
+    @Test
     void aNormalRunIsExactlyAsItAlwaysWas() {
         TimeTrials trials = new TimeTrials(null);
         RaceMode mode = trials.raceMode();

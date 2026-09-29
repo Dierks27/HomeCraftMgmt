@@ -198,6 +198,20 @@ class InvitesTest {
     }
 
     @Test
+    void partyRaceInvitesFollowAnOlderFriendGamesOffUntilTheirOwnChoiceIsStored() {
+        assertTrue(games.invites().accepts(sam.id, "trials"), "party race invites are on for a new player");
+        // /hcm play invites off before party races existed: rows for the games there were then only
+        games.invites().setAccepts(kim.id, "connect_four", false);
+        games.invites().setAccepts(kim.id, "tic_tac_toe", false);
+        assertFalse(games.invites().accepts(kim.id, "trials"),
+                "no row for party races yet: Kim's earlier 'off' still keeps party invites away");
+        games.invites().setAccepts(kim.id, "trials", true);
+        assertTrue(games.invites().accepts(kim.id, "trials"), "once Kim chooses for party races, that choice rules");
+        games.invites().setAccepts(sam.id, "connect_four", true);
+        assertTrue(games.invites().accepts(sam.id, "trials"), "an 'on' carries over the same way");
+    }
+
+    @Test
     void aQuitOrAWorldChangeCallsItOffBothWays() {
         send(alex, sam, connect);
         send(kim, alex, connect);

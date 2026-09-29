@@ -87,6 +87,19 @@ public final class Warmup {
         return "&7Warm-up lap: &f" + time + " &8(not counted)";
     }
 
+    /** A warm-up ended early because the server restarts soon: "The server restarts at 4:00 PM...". */
+    public static String endedForRestart(String at) {
+        return "&eThe server restarts at " + at + " &7- so the warm-up is over and your timed run starts now.";
+    }
+
+    /**
+     * Whether a solo warm-up ends at tick {@code now}: its time ran out, or a restart is due soon
+     * ({@code restartHeld}, the restart hold), so the counted run isn't lost to free laps.
+     */
+    static boolean over(TrialRun run, long now, boolean restartHeld) {
+        return run != null && run.warmup && (run.warmupOver(now) || restartHeld);
+    }
+
     /** The warm-up ended; the timed run's 3-2-1 is next. {@code early}: "Start timed run" was tapped. */
     public static String ended(boolean early) {
         return early ? "&aTimed run! &7Back to the start for the 3-2-1."

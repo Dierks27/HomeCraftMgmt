@@ -128,6 +128,37 @@ class BoatValidatorTest {
         assertTrue(says(BoatValidator.problems(bad, "easy"), "aren't in loop order"), "swapped checkpoints");
     }
 
+    @Test
+    void anAlgoOneLayoutWithNoStandStillPassesOnRecallAndKeep() throws GenFailed {
+        Plan two = real("medium", 7);
+        int floorY = two.half().minY() + BoatPlanner.ICE_ABOVE_FLOOR + 5;
+        List<BlockOp> ops = new ArrayList<>();
+        for (BlockOp op : two.ops()) {
+            if (op.y() < floorY) {
+                ops.add(op); // a layout from before the stand: the track only
+            }
+        }
+        List<com.dierks.homecraft.games.gen.api.SignText> signs = new ArrayList<>();
+        for (com.dierks.homecraft.games.gen.api.SignText sign : two.signs()) {
+            if (sign.y() != floorY + 1) {
+                signs.add(sign); // and no "watch from here" sign
+            }
+        }
+        Plan one = Plan.of(two.slot(), 1, two.seed(), two.half(), two.palette(), ops, signs, two.keepClear(),
+                two.course(), two.summary(), two.work());
+        assertEquals(List.of(), BoatValidator.problems(one, "medium"), "an algo 1 layout never had a stand: none is asked for");
+        assertTrue(says(BoatValidator.problems(Plan.of(two.slot(), 2, two.seed(), two.half(), two.palette(), ops, signs,
+                        two.keepClear(), two.course(), two.summary(), two.work()), "medium"), "platform has a hole"),
+                "the same blocks as algo 2 must have it");
+        char other = SLOT.half('A').equals(one.half()) ? 'B' : 'A';
+        Box to = SLOT.half(other);
+        Plan moved = com.dierks.homecraft.games.gen.api.PlanShift.to(one, to); // a recall, or a kept layout, moved
+        assertEquals(List.of(), com.dierks.homecraft.games.gen.engine.PlanCheck.problems(moved, SLOT, to),
+                "the structural check passes it in the other half");
+        assertEquals(List.of(), BoatValidator.problems(moved, "medium"), "and so does the boat check, still with no stand");
+        assertEquals(1, moved.algo(), "it stays an algo 1 layout (racers go home at the line)");
+    }
+
     /** The plan with every stand block for which {@code drop} is true taken out, and {@code extra} added. */
     private static Plan standEdited(Plan p, java.util.function.Predicate<BlockOp> drop, List<BlockOp> extra) {
         List<BlockOp> ops = new ArrayList<>();

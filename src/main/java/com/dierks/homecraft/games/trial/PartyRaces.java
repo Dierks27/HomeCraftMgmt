@@ -46,7 +46,10 @@ import java.util.UUID;
  * <p><b>Leaving.</b> Anyone can leave at any time: Leave game is a DNF and keeps them in the party;
  * "Leave the party" also takes them out of it; a disconnect is a DNF and takes them out. A party
  * whose host leaves passes to the next who joined. The others carry on. A restart due soon refuses
- * a new start (racers already going finish), and a course held for Race Night can't be party-raced.
+ * a new start (racers already going finish, and a shared warm-up goes straight to the grid), and a
+ * course held for Race Night can't be party-raced: Race Night's hold calls off a party race already
+ * on its track ({@link #callOff}), its racers home with a clear line and nothing counted. The Dropper
+ * has no party races (its only extra is its own practice drop).
  *
  * <p>Everything runs inside Time Trials' guard; a party is memory only, and every party race ends
  * with Time Trials.
@@ -59,6 +62,11 @@ public final class PartyRaces {
     static final long EVERY = 5;
     /** The results screen waits up to this many checks for a racer to be home. */
     static final int RESULT_TRIES = 30;
+    /** Why a Dropper has no party race (the orchestrator's decision after the D review). */
+    static final String NO_DROPPER = "The Dropper has no party races - try its practice drop instead.";
+    /** What a party racer reads when Race Night takes the track (their race is called off). */
+    static final String CALLED_OFF_FOR_NIGHT = "&eYour party race is called off &7- Race Night needs this track now."
+            + " Nothing from this race counts. Your things are back.";
 
     private final TimeTrials trials;
     /** Lobby id → whether the host wants a shared warm-up first. */
@@ -150,8 +158,9 @@ public final class PartyRaces {
             return;
         }
         Course c = trials.openCourse(courseId);
-        if (c == null) {
-            g.tell(player, Refusal.of("That course is closed right now."));
+        String no = courseProblem(c);
+        if (no != null) {
+            g.tell(player, Refusal.of(no));
             return;
         }
         PartyLobby lobby = g.parties().create(PartyLobby.Kind.RACE, c.id(), id, trials.settings().partyMax());
@@ -343,14 +352,26 @@ public final class PartyRaces {
             return hold.message();
         }
         Course c = trials.openCourse(lobby.course());
-        if (c == null) {
-            return "That course is closed right now.";
+        String no = courseProblem(c);
+        if (no != null) {
+            return no;
         }
         String held = trials.raceMode().holds().refusal(c.id());
         if (held != null) {
             return Text.plain(held);
         }
         return null;
+    }
+
+    /**
+     * Why a party race can't be on {@code c} at all: the course is closed, or it is a Dropper
+     * ({@link #offered}); {@code null} when it can.
+     */
+    static String courseProblem(Course c) {
+        if (c == null) {
+            return "That course is closed right now.";
+        }
+        return offered(c.kind()) ? null : NO_DROPPER;
     }
 
     /** The host starts the race: who's free races; grid, warm-up, Go. */
@@ -444,7 +465,7 @@ public final class PartyRaces {
             return;
         }
         if (!race.seatingDone()) {
-            finish(race, "&7The race needs 2 racers - it's off. Try it again from the party screen.");
+            finish(race, "&7The race needs 2 racers - it's off. Try it again from the party screen.", EndReason.FINISH);
         }
     }
 
@@ -456,10 +477,11 @@ public final class PartyRaces {
             return;
         }
         long now = Bukkit.getCurrentTick();
+        boolean held = trials.games().restartHeld() != null; // a restart soon: warm-ups go straight to the grid
         for (PartyRace race : new ArrayList<>(races.values())) {
-            switch (race.tick(now)) {
+            switch (race.tick(now, held)) {
                 case TO_GRID -> toGrid(race);
-                case END -> finish(race, null);
+                case END -> finish(race, null, EndReason.FINISH);
                 default -> {
                     if (race.state() == PartyRace.State.RACING && ticks % 10 == 0) {
                         bars(race);
@@ -489,7 +511,7 @@ public final class PartyRaces {
     private void bars(PartyRace race) {
         for (UUID id : race.racers()) {
             Player p = Bukkit.getPlayer(id);
-            String line = race.bar(id);
+            String line = barFor(race, trials.run(id), id);
             if (p == null || line == null) {
                 hideBar(id);
                 continue;
@@ -515,6 +537,15 @@ public final class PartyRaces {
         }
     }
 
+    /**
+     * The racer's bar line, or {@code null} to hide it: only while their run is still on this race (a
+     * finisher sent home at the line, or anyone gone, has no bar, even once on a solo run).
+     */
+    static String barFor(PartyRace race, TrialRun run, UUID id) {
+        boolean onIt = run != null && run.race != null && run.race.link == race && !run.race.ended;
+        return onIt ? race.bar(id) : null;
+    }
+
     private void hideBar(UUID id) {
         laps.remove(id);
         BossBar bar = bars.remove(id);
@@ -529,22 +560,51 @@ public final class PartyRaces {
     }
 
     /**
-     * The race is over: everyone still on the track or the stand goes home (things back), the group
-     * reads the results and sees them on a screen once home, and the party opens again.
+     * Race Night holds {@code courseId} ({@code TimeTrials.reserve}): every party race on it is called
+     * off now. Its racers go home with their things, reading {@code line}; whatever they hadn't
+     * finished is a DNF (nothing more counts), no results are kept, and the party opens again (a new
+     * start is refused while the track is held). Returns how many were called off.
      */
-    private void finish(PartyRace race, String line) {
+    int callOff(String courseId, String line) {
+        if (courseId == null || races.isEmpty()) {
+            return 0;
+        }
+        int n = 0;
+        for (PartyRace race : new ArrayList<>(races.values())) {
+            if (race.base().id().equalsIgnoreCase(courseId.trim())) {
+                finish(race, line == null ? CALLED_OFF_FOR_NIGHT : line, EndReason.ADMIN);
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** A race running for its lobby (PartyRaces.start's bookkeeping; the tests seat one directly). */
+    void running(PartyRace race) {
+        races.put(race.lobbyId(), race);
+    }
+
+    /**
+     * The race is over: everyone still on the track or the stand goes home (things back), the group
+     * reads the results and sees them on a screen once home, and the party opens again. With a
+     * {@code line} it was called off (too few seated, or Race Night took the track): everyone on it
+     * reads that line, and no results are kept.
+     */
+    private void finish(PartyRace race, String line, EndReason why) {
         races.remove(race.lobbyId());
         race.end();
         List<PartyRace.Line> lines = race.results();
-        results.put(race.lobbyId(), lines);
+        if (line == null) {
+            results.put(race.lobbyId(), lines);
+        }
         for (UUID id : race.racers()) {
             hideBar(id);
             TrialRun run = trials.run(id);
-            if (run != null && run.race != null && run.race.link == race) {
+            if ((run != null && run.race != null && run.race.link == race) || trials.raceMode().arrivingFor(id, race)) {
                 PartyRace.Line mine = lineOf(lines, id);
                 String bye = line != null ? line : mine != null && mine.result() == PartyRace.Result.STILL_RACING
                         ? "&7Race over - great racing!" : null;
-                trials.endRace(id, EndReason.FINISH, bye);
+                trials.endRace(id, why, bye);
             }
         }
         PartyLobby lobby = games().parties().get(race.lobbyId());
@@ -552,7 +612,7 @@ public final class PartyRaces {
             lobby.finish();
         }
         if (line != null) {
-            return; // called off before it began: no results
+            return; // called off: no results
         }
         List<String> chat = new ArrayList<>();
         chat.add("&6Race results on " + race.base().name() + ":");

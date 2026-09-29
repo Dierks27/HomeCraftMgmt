@@ -29,10 +29,19 @@ import java.util.function.Consumer;
  * taken to the track, two a tick, each into an ordinary Time Trials run in race mode: into the
  * shared warm-up (free laps, never timed; "Ready" skips the rest) or straight onto the grid. Anyone
  * not free is tried again every second until just before Go, then is DNS for that race ("you'll be
- * in the next one"). At the line a racer's place is final at once and they are parked on the stand;
- * when the race ends anyone still racing is parked too and scores the still-racing point. Leave
- * game or {@code /hcm leave} is leaving for good (LEFT); a disconnect scores 0 in that race and,
- * back and free before the next grid, is pulled back in.
+ * in the next one"); so is one whose entry was dropped on the way in (race mode's sweep tells the
+ * night they left). The shared warm-up ends early only when EVERY joined racer who is online is at
+ * the track and tapped Ready, and race 1 never goes before the advertised start. At the line a
+ * racer's place is final at once and they are parked on the stand; when the race ends anyone still
+ * racing is parked too and scores the still-racing point. Leave game or {@code /hcm leave} is
+ * leaving for good (LEFT); a disconnect scores 0 in that race and, back and free before the next
+ * grid, is pulled back in. A racer who never started a race (at the track for the warm-up only) has
+ * no place and no Race Night achievement.
+ *
+ * <p><b>The track.</b> From the last call it is held ({@code TimeTrials.reserve}), and held again on
+ * every step while the night needs it, so a Time Trials stop (which drops every hold) never lets it
+ * go; holding it calls off a party race on it. Race mode keeps finishers on the stand, within
+ * {@code stand_radius} ({@link #standRadius()}).
  *
  * <p><b>Storing.</b> Each race is stored in one transaction ({@link EventDao#storeRace}): its rows,
  * the night's points and the season board. Settling stores the places and prizes in one
@@ -50,6 +59,8 @@ public final class NightRunner implements RaceLink {
     static final long PHOTO_MS = 200;
     /** A seating retry line at most this often per racer (ms). */
     static final long NAG_MS = 5_000;
+    /** A racer who couldn't be seated is tried again at most this often (ms): once a second. */
+    static final long RETRY_MS = 1_000;
 
     /** A racer's part in the current race. */
     public enum Leg {
@@ -77,10 +88,17 @@ public final class NightRunner implements RaceLink {
         boolean sentHome;
         boolean everSeated;
         boolean finishedAny;
+        /** In the race on now: seated at its Go, or seated during it. */
+        boolean inRace;
+        /** Was in at least one race tonight (a warm-up alone is not a race). */
+        boolean startedAny;
+        /** When a seat was last tried (ms), so retries come once a second. */
+        long triedAt = Long.MIN_VALUE / 2;
         Leg leg = Leg.AWAY;
         long ms;
         int reached;
-        double toNext;
+        /** Unknown until the first report: behind anyone who reported on the same target count. */
+        double toNext = Double.MAX_VALUE;
         long reachedAt;
         int points;
         final List<Integer> places = new ArrayList<>();
@@ -130,6 +148,11 @@ public final class NightRunner implements RaceLink {
         public boolean finishedAny() {
             return finishedAny;
         }
+
+        /** Whether they were in at least one race tonight (not just the warm-up). */
+        public boolean startedAny() {
+            return startedAny;
+        }
     }
 
     /** The track a night races on. {@code stand} {@code null}: one race, finishers go home. */
@@ -163,6 +186,10 @@ public final class NightRunner implements RaceLink {
     private int started = -1;
     private boolean prizeNight;
     private boolean released;
+    /** The track was found held by something else (logged once). */
+    private boolean holdWarned;
+    /** How far a racer on the stand may wander ({@code stand_radius}). */
+    private double standRadius = 4;
     private Consumer<NightRunner> onEnd = r -> {
     };
 
@@ -258,7 +285,7 @@ public final class NightRunner implements RaceLink {
         Map<UUID, Integer> points = new LinkedHashMap<>();
         Map<UUID, List<Integer>> places = new HashMap<>();
         for (Racer r : racers.values()) {
-            if (r.everSeated || r.points > 0) {
+            if (r.startedAny || r.points > 0) { // a warm-up alone is no race: no place
                 points.put(r.id, r.points);
                 places.put(r.id, r.places);
             }
@@ -369,6 +396,7 @@ public final class NightRunner implements RaceLink {
             return;
         }
         if (!r.everSeated && started < 0) {
+            r.left = true; // a seat still queued for them never happens
             racers.remove(id);
             try {
                 dao.unjoin(plan.id(), id);
@@ -395,19 +423,20 @@ public final class NightRunner implements RaceLink {
         }
         long now = ports.now();
         long at = now + EventMachine.GRID_LEAD_MS;
+        moved = new EventPlan(plan.id(), plan.course(), Math.min(plan.joinAt(), now), at, plan.rules(),
+                plan.adminStarted(), plan.madeBy());
+        if (state.phase() == EventMachine.Phase.SCHEDULED) {
+            openRow(); // written with the moved start, so a boot never resumes a night already started
+            state = EventMachine.State.open(now);
+        }
         try {
-            dao.setStart(plan.id(), Math.min(plan.joinAt(), now), at);
+            dao.setStart(plan.id(), moved.joinAt(), moved.startsAt());
         } catch (SQLException e) {
             ports.log("Race Night: could not move the start: " + e.getMessage(), true);
         }
-        moved = plan.withStart(at);
-        if (state.phase() == EventMachine.Phase.SCHEDULED) {
-            openRow();
-            state = EventMachine.State.open(now);
-        }
         state = new EventMachine.State(state.phase(), state.race(), state.since(), state.goAt(), state.warmupEnds(),
                 state.flags() | EventMachine.LAST_CALL_DONE | EventMachine.SOLO_DONE);
-        ports.reserve(track.base().id(), this, reservedLine());
+        holdTrack();
         ports.endSoloRuns(track.base().id(), racers.keySet(), "&eRace Night is starting on this track now.");
         return null;
     }
@@ -416,8 +445,9 @@ public final class NightRunner implements RaceLink {
      * Write the night's row (its window is open). Idempotent: a night already written keeps its row.
      */
     public void openRow() {
+        EventPlan p = moved != null ? moved : plan; // an admin's go moved the start: write the moved one
         try {
-            dao.open(new EventDao.EventRow(plan.id(), track.base().id(), plan.joinAt(), plan.startsAt(),
+            dao.open(new EventDao.EventRow(plan.id(), track.base().id(), p.joinAt(), p.startsAt(),
                     EventDao.OPEN, rules.encode(), 0, false, "", plan.madeBy(), ports.now(), null, ""));
         } catch (SQLException e) {
             ports.log("Race Night: could not write " + plan.id() + ": " + e.getMessage(), true);
@@ -466,8 +496,11 @@ public final class NightRunner implements RaceLink {
             return;
         }
         long now = ports.now();
+        if (state.has(EventMachine.LAST_CALL_DONE) && !released) {
+            holdTrack(); // idempotent: holds it again after a Time Trials stop dropped every hold
+        }
         EventMachine.Facts f = new EventMachine.Facts(now, joined().size(), seatedCount(), racingCount(), firstFinishAt,
-                allReady());
+                allReady(), ports.restartHeld());
         EventMachine.Step s = EventMachine.step(state, timing(), f);
         EventMachine.Phase before = state.phase();
         state = s.state();
@@ -501,9 +534,7 @@ public final class NightRunner implements RaceLink {
             }
             case LAST_CALL -> {
                 ports.announce(Announcer.Line.LAST_CALL, EventCopy.lastCall(joined().size()), racers.keySet());
-                if (!ports.reserve(track.base().id(), this, reservedLine())) {
-                    ports.log("Race Night: " + track.base().id() + " is held by something else", true);
-                }
+                holdTrack();
                 ports.warnSoloRuns(track.base().id(), racers.keySet(), "&eRace Night needs this track in 1 minute.");
             }
             case END_SOLO_RUNS -> {
@@ -528,8 +559,10 @@ public final class NightRunner implements RaceLink {
                 }
             }
             case RETRY_SEATS -> {
+                long now = ports.now();
                 for (Racer r : joined()) {
-                    if (!r.seated && r.refused != null && !queued(r)) {
+                    if (!r.seated && r.refused != null && !queued(r) && now - r.triedAt >= RETRY_MS) {
+                        r.triedAt = now;
                         inQueue.add(r.id);
                         queue.add(() -> seat(r, spotFor(r)));
                     }
@@ -582,7 +615,7 @@ public final class NightRunner implements RaceLink {
 
     private void seat(Racer r, Course.Spot spot) {
         inQueue.remove(r.id);
-        if (r.left || r.seated || state.phase().over() || spot == null) {
+        if (r.left || r.seated || state.phase().over() || spot == null || racers.get(r.id) != r) {
             return;
         }
         if (!ports.online(r.id)) {
@@ -594,9 +627,15 @@ public final class NightRunner implements RaceLink {
         if (why == null) {
             r.seated = true;
             r.everSeated = true;
+            r.sentHome = false; // at the track again: a later Leave is leaving, for good
             r.refused = null;
             r.ready = false;
-            r.leg = state.phase() == EventMachine.Phase.RACING ? Leg.RACING : Leg.WAITING;
+            boolean racing = state.phase() == EventMachine.Phase.RACING;
+            r.leg = racing ? Leg.RACING : Leg.WAITING;
+            if (racing) { // seated after Go (a slow chunk): in this race, on the shared clock
+                r.inRace = true;
+                r.startedAny = true;
+            }
             if (state.phase() == EventMachine.Phase.WARMUP) {
                 ports.tell(r.id, "&bWarm-up laps &7- not counted. Tap &aReady &7when you're set.", false);
             } else {
@@ -632,9 +671,12 @@ public final class NightRunner implements RaceLink {
         lastFinishMs = -1;
         finishedThisRace = 0;
         assignSpots(race);
+        for (Racer r : racers.values()) {
+            r.inRace = false; // a new race: in it only from its Go
+        }
         for (Racer r : joined()) {
             r.reached = 0;
-            r.toNext = 0;
+            r.toNext = Double.MAX_VALUE;
             r.reachedAt = 0;
             r.ms = 0;
             Course.Spot spot = spots.get(r.id);
@@ -670,13 +712,17 @@ public final class NightRunner implements RaceLink {
         for (Racer r : joined()) {
             if (r.seated) {
                 r.leg = Leg.RACING;
+                r.inRace = true;
+                r.startedAny = true;
                 if (race <= 1) {
                     ports.title(r.id, "&aGo!", sub);
                 }
             } else {
                 r.leg = Leg.AWAY;
                 if (ports.online(r.id)) {
-                    ports.tell(r.id, "&7You weren't free when the race began - you'll be in the next one.", false);
+                    ports.tell(r.id, race < rules.races()
+                            ? "&7You weren't free when the race began - you'll be in the next one."
+                            : "&7You weren't free when the last race began.", false);
                 }
             }
         }
@@ -719,6 +765,25 @@ public final class NightRunner implements RaceLink {
     }
 
     @Override
+    public double standRadius() {
+        return standRadius;
+    }
+
+    /** How far a racer on the stand may wander before race mode puts them back ({@code stand_radius}). */
+    public void standRadius(int blocks) {
+        this.standRadius = Math.max(1, blocks);
+    }
+
+    /** What a racer reads when the night ends under them: "great racing!" when it ran to the end. */
+    @Override
+    public String calledOffLine() {
+        return state.phase() == EventMachine.Phase.DONE ? DONE_LINE : "&7Race Night was called off.";
+    }
+
+    /** What every racer reads going home from a night that ran to the end. */
+    static final String DONE_LINE = "&7Race Night is over - great racing! Your things are back.";
+
+    @Override
     public void ready(UUID racer) {
         Racer r = racers.get(racer);
         if (r == null || !r.seated || state.phase() != EventMachine.Phase.WARMUP) {
@@ -749,18 +814,23 @@ public final class NightRunner implements RaceLink {
             return;
         }
         long now = ports.now();
-        if (firstFinishAt < 0) {
-            firstFinishAt = now;
-        }
         if (!counted) {
             r.leg = Leg.VOID;
             ports.tell(racer, "&cThat race didn't count - " + (voidReason == null ? "a rule was broken" : voidReason)
                     + ". &7You'll race again next time.", false);
         } else {
+            if (firstFinishAt < 0) {
+                firstFinishAt = now; // the finish window starts at the first COUNTED finish
+            }
             r.leg = Leg.FINISHED;
             r.ms = raceMs;
             finishedThisRace++;
-            int place = finishedThisRace;
+            int place = 1; // by time, as the stored place is (the callbacks may come out of order)
+            for (Racer o : racers.values()) {
+                if (o != r && o.leg == Leg.FINISHED && o.ms < raceMs) {
+                    place++;
+                }
+            }
             ports.tell(racer, "&6You came " + NightStandings.ordinal(place) + "! &f" + EventCopy.time(raceMs), false);
             ports.watchers("&e" + NightStandings.ordinal(place) + " &f" + r.name + " &7" + EventCopy.time(raceMs));
             if (lastFinishMs >= 0 && Math.abs(raceMs - lastFinishMs) <= PHOTO_MS && lastFinisher != null) {
@@ -804,8 +874,11 @@ public final class NightRunner implements RaceLink {
         }
         if (why == EndReason.QUIT_ITEM || why == EndReason.COMMAND) {
             leftForGood(r);
-        } else if (r.leg == Leg.RACING || r.leg == Leg.WAITING) {
-            r.leg = Leg.OUT;
+        } else {
+            if (r.leg == Leg.RACING || r.leg == Leg.WAITING) {
+                r.leg = Leg.OUT;
+            }
+            r.refused = "not at the track"; // a disconnect, or an entry dropped on the way: tried again
         }
         if (wasSeated) {
             ports.changed();
@@ -832,7 +905,8 @@ public final class NightRunner implements RaceLink {
             if (!r.everSeated && r.leg == Leg.AWAY && r.left) {
                 continue;
             }
-            NightStandings.Result result = switch (r.leg) {
+            NightStandings.Result result = !r.inRace ? NightStandings.Result.DNS // not in this race at its Go
+                    : switch (r.leg) {
                 case FINISHED -> NightStandings.Result.FINISHED;
                 case VOID -> NightStandings.Result.VOID;
                 case RACING, WAITING -> r.seated ? NightStandings.Result.STILL_RACING : NightStandings.Result.LEFT;
@@ -875,6 +949,15 @@ public final class NightRunner implements RaceLink {
                 r.places.add(s.place());
                 r.finishedAny = true;
             }
+        }
+        if (race == 1) { // who started race 1, exactly as a recovered night counts it (its non-DNS rows)
+            int in = 0;
+            for (NightStandings.Scored s : scored) {
+                if (s.result() != NightStandings.Result.DNS) {
+                    in++;
+                }
+            }
+            started = in;
         }
         racesDone = race;
         if (race < rules.races()) {
@@ -946,7 +1029,7 @@ public final class NightRunner implements RaceLink {
                 ports.tell(e.getKey(), PayLoop.WAITING, true);
             }
         }
-        String results = resultsLine(ranked);
+        String results = finishers.isEmpty() ? NOBODY_FINISHED : resultsLine(ranked);
         if (!ranked.isEmpty() && racesDone >= 1) {
             for (Racer r : racers.values()) {
                 ports.tell(r.id, results, true);
@@ -955,8 +1038,8 @@ public final class NightRunner implements RaceLink {
             ports.announce(Announcer.Line.RESULTS, results, racers.keySet());
             for (NightStandings.Ranked s : ranked) {
                 Racer r = racers.get(s.player());
-                if (r != null && r.everSeated) {
-                    ports.progress(r.id, s.place() == 1 && s.points() > 0);
+                if (r != null && r.startedAny) { // a warm-up alone never earns "Race at Race Night"
+                    ports.progress(r.id, RacePrizes.won(s, ranked, finishers));
                 }
             }
         }
@@ -971,6 +1054,9 @@ public final class NightRunner implements RaceLink {
         finish(calledOff ? EventDao.CALLED_OFF : EventDao.DONE, why, calledOff ? EventMachine.Phase.CALLED_OFF
                 : EventMachine.Phase.DONE, "&7Race Night is over - great racing! Your things are back.");
     }
+
+    /** A night where nobody finished a race: no winner, no podium. */
+    static final String NOBODY_FINISHED = "&7Race Night is over - nobody finished a race tonight. Great trying!";
 
     /** "&amp;6Race Night winner: Sam! &amp;72nd Ava, 3rd Lee." */
     String resultsLine(List<NightStandings.Ranked> ranked) {
@@ -1031,6 +1117,14 @@ public final class NightRunner implements RaceLink {
     private void finish(String stored, String why, EventMachine.Phase end, String homeLine) {
         long now = ports.now();
         state = state.ended(end, now);
+        if (racesDone == 0 && prizeNight) {
+            try {
+                dao.releasePrizeSlot(plan.id()); // nothing raced: the week's prize night isn't used up
+            } catch (SQLException e) {
+                ports.log("Race Night: could not give back " + plan.id() + "'s prize slot: " + e.getMessage(), true);
+            }
+            prizeNight = false;
+        }
         try {
             dao.setState(plan.id(), stored, why == null ? "" : (end == EventMachine.Phase.CALLED_OFF ? "called off: " : "")
                     + why, now);
@@ -1043,9 +1137,18 @@ public final class NightRunner implements RaceLink {
             }
             ports.bar(r.id, null, 0, false);
         }
+        drain(); // everyone on the way home now, with the night's own line: nothing ticks an ended night
         release();
         ports.changed();
         onEnd.accept(this);
+    }
+
+    /** Hold the track for the night (again: idempotent), which calls off a party race on it. */
+    private void holdTrack() {
+        if (!ports.reserve(track.base().id(), this, reservedLine()) && !holdWarned) {
+            holdWarned = true;
+            ports.log("Race Night: " + track.base().id() + " is held by something else", true);
+        }
     }
 
     private void release() {
@@ -1136,15 +1239,21 @@ public final class NightRunner implements RaceLink {
         return n;
     }
 
+    /**
+     * Whether everyone is ready to leave the warm-up: every joined racer who is online is at the track
+     * AND tapped Ready (someone still on the way, or busy elsewhere, keeps the warm-up on until its
+     * window ends), and at least one is.
+     */
     private boolean allReady() {
         boolean any = false;
         for (Racer r : racers.values()) {
-            if (r.seated && !r.left) {
-                any = true;
-                if (!r.ready) {
-                    return false;
-                }
+            if (r.left || !ports.online(r.id)) {
+                continue;
             }
+            if (!r.seated || !r.ready) {
+                return false;
+            }
+            any = true;
         }
         return any;
     }

@@ -13,7 +13,6 @@ import com.dierks.homecraft.games.RestartHold;
 import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.gen.NewCoursesNudge;
 import com.dierks.homecraft.games.trial.Course;
-import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.daily.DailyLookup;
@@ -21,9 +20,7 @@ import com.dierks.homecraft.gui.games.event.RaceNightMenu;
 import com.dierks.homecraft.storage.EventDao;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
@@ -244,14 +241,44 @@ public final class RaceNight implements Game {
             boolean stopping = stopping();
             boolean keep = stopping && (n.phase() == EventMachine.Phase.OPEN || n.phase() == EventMachine.Phase.SCHEDULED);
             if (!keep) {
-                n.stopNow("&7Race Night was called off - " + (stopping ? "the server is restarting"
-                        : "it was switched off") + ". Points so far count.", stopping ? RESTARTED
-                        : "Race Night was switched off");
+                String why = stopping ? "the server is restarting" : whyStopped();
+                n.stopNow("&7Race Night was called off - " + why + ". Points so far count.", stopping ? RESTARTED
+                        : "Race Night stopped: " + why);
             }
         }
         bars.clear();
         watchers.clear();
         news.clear();
+    }
+
+    /** Why the game stopped with the server still up: its switch, Time Trials', or a problem. */
+    private String whyStopped() {
+        try {
+            if (!settings().enabled()) {
+                return "it was switched off";
+            }
+            if (!trialsOpen()) {
+                return "Time Trials was switched off";
+            }
+        } catch (RuntimeException e) {
+            // fall through: say what is always true
+        }
+        return "something went wrong on the server";
+    }
+
+    /**
+     * What {@code /hcm reload} says first while a night is at the track (§A.9), or {@code null}: a
+     * reload keeps it going, unless the reload switches Race Night or Time Trials off.
+     */
+    public static String reloadWarning(GamesService games) {
+        try {
+            Game g = games == null ? null : games.game(SPEC.id());
+            NightRunner n = g instanceof RaceNight r ? r.night : null;
+            return n != null && n.phase().running() ? "&eRace Night is running. &7A reload that switches Race Night or"
+                    + " Time Trials off calls it off (points so far count); otherwise it carries on." : null;
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     @Override
@@ -289,11 +316,7 @@ public final class RaceNight implements Game {
         if (ticks % 10 == 0) {
             drawBars();
         }
-        if (ticks % 20 == 0) {
-            NightRunner on = night;
-            if (on != null && on.phase().running() && on.track().stand() != null) {
-                holdOnStand(on);
-            }
+        if (ticks % 20 == 0) { // the stand is race mode's to keep (RaceMode.onStand, within stand_radius)
             for (UUID gone : watchers.expire(now())) {
                 bars.hide(gone);
             }
@@ -305,32 +328,6 @@ public final class RaceNight implements Game {
         if (ticks % OWED_TICKS == 0) {
             for (Player p : new ArrayList<>(Bukkit.getOnlinePlayers())) {
                 payOwed(p.getUniqueId(), false);
-            }
-        }
-    }
-
-    /**
-     * Racers waiting on the stand (done with this race, or in the break) stay within
-     * {@code stand_radius} of it (§A.4.2): anyone further is put back by the session's own teleport.
-     */
-    private void holdOnStand(NightRunner n) {
-        Point stand = n.track().stand();
-        World w = Bukkit.getWorld(n.track().base().world());
-        if (w == null) {
-            return;
-        }
-        int radius = settings().standRadius();
-        for (NightRunner.Racer r : n.joined()) {
-            boolean waiting = n.phase() == EventMachine.Phase.BREAK || r.leg() == NightRunner.Leg.FINISHED
-                    || r.leg() == NightRunner.Leg.VOID || r.leg() == NightRunner.Leg.STILL;
-            Player p = r.seated() && waiting ? Bukkit.getPlayer(r.id()) : null;
-            if (p == null || !w.equals(p.getWorld())) {
-                continue;
-            }
-            Location l = p.getLocation();
-            if (RaceTrack.offStand(l.getX() - stand.x(), l.getY() - stand.y(), l.getZ() - stand.z(), radius)) {
-                games().sessions().teleport(p, new Location(w, stand.x(), stand.y(), stand.z(), l.getYaw(), l.getPitch()));
-                p.sendMessage(Text.of("&7Please watch from the stand."));
             }
         }
     }
@@ -349,8 +346,8 @@ public final class RaceNight implements Game {
         }
         long now = now();
         long announceAt = s.announceMinutes() > 0 ? o.startsAt() - s.announceMinutes() * 60_000L : o.joinAt();
-        if (now < Math.min(announceAt, o.joinAt())) {
-            return;
+        if (now < Math.min(announceAt, o.joinAt()) || !recheck(trackFailedAt.get(o.id()), now)) {
+            return; // not due, or its track failed a moment ago (no scan of the world every second)
         }
         try {
             if (dao().exists(o.id())) {
@@ -363,11 +360,13 @@ public final class RaceNight implements Game {
         Tracks.Found t = s.autoCourse() ? tracks.pick(o.id(), s.races(), s.minRacers(), s.maxRacers())
                 : tracks.find(s.course(), s.races(), s.minRacers(), s.maxRacers());
         if (t.problem() != null) {
+            trackFailedAt.put(o.id(), now);
             if (warned.add(o.id())) {
                 log(Level.WARNING, "Race Night " + o.id() + " is skipped: " + t.problem(), null);
             }
             return;
         }
+        trackFailedAt.remove(o.id());
         NightRules rules = NightRules.of(s, t.races(), s.laps(), false,
                 Math.min(s.maxRacers(), t.track().grid().size()));
         EventPlan plan = new EventPlan(o.id(), t.track().base().id(), o.joinAt(), o.startsAt(), rules, false, "");
@@ -391,6 +390,16 @@ public final class RaceNight implements Game {
         nextAt = now;
         nextFor = version;
         return nextCached;
+    }
+
+    /** A night whose track couldn't be raced is looked at again this often (ms), not every second. */
+    static final long TRACK_RECHECK_MS = 60_000L;
+    /** Scheduled ids whose track failed, and when (a track fixed by an admin is found within a minute). */
+    private final Map<String, Long> trackFailedAt = new HashMap<>();
+
+    /** Whether to look at a night's track again: never failed, or failed at least a minute ago. */
+    static boolean recheck(Long failedAt, long now) {
+        return failedAt == null || now - failedAt >= TRACK_RECHECK_MS;
     }
 
     /** How long {@link #next()} is kept. */
@@ -483,6 +492,7 @@ public final class RaceNight implements Game {
         NightRunner r = new NightRunner(plan, track, dao(), new LivePorts(this, plan.id()), payLoop(), zone(), season,
                 s.announceMinutes(), state);
         r.prizeWeek(DailyLookup.weekKey(games()), s.prizeEventsPerWeek());
+        r.standRadius(s.standRadius()); // race mode keeps the stand, within this
         r.onEnd(this::ended);
         news.clear();
         night = r;
@@ -541,7 +551,9 @@ public final class RaceNight implements Game {
                 }
                 EventPlan plan = new EventPlan(row.id(), row.course(), row.joinAt(), row.startsAt(), rules,
                         EventPlan.adminId(row.id()), row.madeBy());
-                NightRunner r = begin(plan, t.track(), EventMachine.State.open(now));
+                // an admin's "start ... in M" set before a restart: its window opens when it said
+                NightRunner r = begin(plan, t.track(), now < row.joinAt() ? EventMachine.State.scheduled()
+                        : EventMachine.State.open(now));
                 r.restore(dao().entries(row.id()));
                 log(Level.INFO, "Race Night " + row.id() + " resumed after a restart with " + r.joined().size()
                         + " racer(s)", null);
@@ -567,6 +579,9 @@ public final class RaceNight implements Game {
 
     private void callOffStored(EventDao.EventRow row, String why, long now) throws SQLException {
         dao().setState(row.id(), EventDao.CALLED_OFF, "called off: " + why, now);
+        if (row.prized()) {
+            dao().releasePrizeSlot(row.id()); // no race stored: the week's prize night isn't used up
+        }
         tellEntrants(row.id(), "&7Race Night was called off - " + why + ". See you next time!");
         log(Level.INFO, "Race Night " + row.id() + " called off: " + why, null);
     }
@@ -584,7 +599,7 @@ public final class RaceNight implements Game {
         return new PayLoop(dao(), new PayLoop.Payer() {
             @Override
             public int pay(UUID player, String ref, int tokens, String detail) {
-                Player p = Bukkit.getPlayer(player);
+                Player p = online(player);
                 if (p == null || !games().rewards().canEarnHere(p)) {
                     return -1;
                 }
@@ -738,7 +753,9 @@ public final class RaceNight implements Game {
             return problem;
         }
         EventPlan plan = new EventPlan(adminId(joinAt), t.track().base().id(), joinAt, startsAt, rules, true, by);
-        begin(plan, t.track(), EventMachine.State.scheduled()).step(); // the window opens now (or when due)
+        NightRunner r = begin(plan, t.track(), EventMachine.State.scheduled());
+        r.step(); // the window opens now (or when due)
+        r.openRow(); // written at once, so a restart before its window opens keeps it (it resumes, scheduled)
         return null;
     }
 
@@ -1104,6 +1121,20 @@ public final class RaceNight implements Game {
             dao = new EventDao(ctx.plugin().database(), games().dao());
         }
         return dao;
+    }
+
+    /** A test's own DAO (no plugin to open the database from). */
+    void dao(EventDao testDao) {
+        this.dao = testDao;
+    }
+
+    /** The player if online, or {@code null} (never a throw: no server in a test). */
+    private static Player online(UUID id) {
+        try {
+            return Bukkit.getPlayer(id);
+        } catch (RuntimeException | LinkageError e) {
+            return null;
+        }
     }
 
     long now() {

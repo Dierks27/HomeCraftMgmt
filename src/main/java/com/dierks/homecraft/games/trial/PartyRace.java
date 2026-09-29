@@ -91,7 +91,8 @@ public final class PartyRace implements RaceLink {
         RaceStandings.State state = RaceStandings.State.RACING;
         Result result;
         int reached;
-        double toNext;
+        /** Unknown until the first report: behind anyone who reported on the same target count. */
+        double toNext = Double.MAX_VALUE;
         long at;
         long ms = -1;
 
@@ -227,13 +228,22 @@ public final class PartyRace implements RaceLink {
 
     /** Move the race on at server tick {@code now}: what the coordinator must do. */
     Step tick(long now) {
+        return tick(now, false);
+    }
+
+    /**
+     * {@link #tick(long)}, knowing whether a restart is due soon ({@code restartHeld}, the restart
+     * hold): the shared warm-up then ends at once and everyone goes to the grid, so the race itself
+     * isn't eaten by free laps.
+     */
+    Step tick(long now, boolean restartHeld) {
         switch (state) {
             case WARMUP -> {
                 if (in() == 0) {
                     end();
                     return Step.END;
                 }
-                if (now >= warmupUntil || allReady()) {
+                if (now >= warmupUntil || allReady() || restartHeld) {
                     state = State.GRID;
                     goTick = now + GRID_SETTLE + GO_DELAY;
                     return Step.TO_GRID;

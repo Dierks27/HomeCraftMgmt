@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.trial;
 import com.dierks.homecraft.util.Text;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -130,5 +131,35 @@ class WarmupTest {
         assertEquals(3, Warmup.secondsLeft(100, 141), "41 ticks left read as 3 seconds (rounded up)");
         assertEquals(0, Warmup.secondsLeft(200, 141), "none once past");
         assertEquals(1_000 + 3_600, Warmup.endsAt(1_000, 180), "180 seconds of ticks");
+    }
+
+    // ---- the fixes (EV fix stage, R1 review) --------------------------------------------------------
+
+    @Test
+    void aWarmUpChoiceHoldsOnlyForTheCourseItWasMadeOn() {
+        TimeTrialsSettings on = withWarmup(180);
+        TrialRun here = newRun();
+        assertTrue(Warmups.wants(COURSE.id(), here, on), "chosen on this course: it warms up");
+        assertTrue(Warmups.wants(COURSE.id().toUpperCase(java.util.Locale.ROOT), here, on), "whatever the case");
+        assertFalse(Warmups.wants("another", here, on), "a choice left over from another course never carries over");
+        assertFalse(Warmups.wants(null, here, on), "no choice: no warm-up");
+        TrialRun drop = new TrialRun(UUID.randomUUID(), new Course("drop", TrialKind.DROPPER, "Drop", Tier.EASY, "games",
+                COURSE.start(), List.of(), COURSE.finish(), null, 30, true, false, 1), false, 0);
+        assertFalse(Warmups.wants("drop", drop, on), "never on a Dropper (its practice drop plays that part)");
+        TrialRun test = new TrialRun(UUID.randomUUID(), COURSE, true, 0);
+        assertFalse(Warmups.wants(COURSE.id(), test, on), "never on an admin's test run");
+        assertFalse(Warmups.wants(COURSE.id(), here, withWarmup(0)), "never with warm-ups switched off");
+    }
+
+    @Test
+    void aSoloWarmUpEndsWhenItsTimeIsUpOrARestartIsDueSoon() {
+        TrialRun run = newRun();
+        assertTrue(Warmup.begin(run, 1_000, 180, COURSE.start().point(), 5_000), "warming up");
+        assertFalse(Warmup.over(run, 1_100, false), "time left, no restart: warming up");
+        assertTrue(Warmup.over(run, 1_100, true), "the restart hold: over now, so the counted run still happens");
+        assertTrue(Warmup.over(run, Warmup.endsAt(1_000, 180), false), "or when its time is up");
+        assertTrue(Warmup.endedForRestart("4:00 PM").contains("4:00 PM"), "and the player hears why");
+        Warmup.toCountdown(run);
+        assertFalse(Warmup.over(run, 1_100, true), "a run no longer warming up has nothing to end");
     }
 }

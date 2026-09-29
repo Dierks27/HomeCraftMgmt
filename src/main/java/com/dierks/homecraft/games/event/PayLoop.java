@@ -96,8 +96,12 @@ public final class PayLoop {
         return owed;
     }
 
-    /** The ledger line: "Race Night: 2nd place". */
+    /**
+     * The ledger line: "Race Night: 2nd place" for the podium (1st to 3rd), "Race Night: finished a
+     * race" for the finisher's prize everyone else gets.
+     */
     static String detail(Integer place) {
-        return place == null ? "Race Night prize" : "Race Night: " + NightStandings.ordinal(place) + " place";
+        return place == null ? "Race Night prize" : place > 3 ? "Race Night: finished a race"
+                : "Race Night: " + NightStandings.ordinal(place) + " place";
     }
 }

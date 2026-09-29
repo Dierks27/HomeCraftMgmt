@@ -50,4 +50,17 @@ class CourseMenuLayoutTest {
         }
         assertFalse(PartyRaces.offered(null), "no kind, no party");
     }
+
+    @Test
+    void thePartyScreenHasTheCupItemOnASlotOfItsOwn() {
+        // /hcm play race <course> opens the party screen: a party race's finish counts for the Cup like any
+        // run, so it shows the course screen's own Cup item (CupLink.button, the prompt in its NAME)
+        Set<Integer> taken = new HashSet<>(List.of(4, 11, 13, 15, 38, 40, 42, 49));
+        for (int m : PartyMenu.MEMBER_SLOTS) {
+            taken.add(m);
+        }
+        assertFalse(taken.contains(PartyMenu.CUP_SLOT), PartyMenu.CUP_SLOT + " is nobody else's on the party screen");
+        assertTrue(PartyMenu.CUP_SLOT >= 0 && PartyMenu.CUP_SLOT < 54, "on the 54-slot screen");
+        assertFalse(List.of(45, 49, 53).contains(PartyMenu.CUP_SLOT), "never a page arrow's or the way out's slot");
+    }
 }

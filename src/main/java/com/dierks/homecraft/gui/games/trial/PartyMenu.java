@@ -1,6 +1,8 @@
 package com.dierks.homecraft.gui.games.trial;
 
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.games.cup.live.CupLink;
+import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.PartyLobby;
 import com.dierks.homecraft.games.trial.PartyRace;
 import com.dierks.homecraft.games.trial.PartyRaces;
@@ -21,16 +23,24 @@ import java.util.UUID;
  * <p>4 the party ("Party race: River Run - 3 of 8 in", free and just for fun); 11 the last race's
  * results; 13 Start (the host's; greyed with the reason in its NAME otherwise); 15 Leave the party;
  * 19-25 and 28-34 everyone in, in join order, the host marked and ready or not in each NAME; 38
- * Invite a friend; 40 Ready; 42 Warm up first (the host's choice); 49 the way out. It repaints every
- * second, so a friend who joins shows up at once. Every key fact is in an item NAME for Bedrock.
+ * Invite a friend; 40 Ready; 42 Warm up first (the host's choice); 44 this week's Cup on the course,
+ * when it runs one ({@link CupLink#button}: "Enter this week's Cup: 5 tokens..." in its NAME, since a
+ * party race's finish counts for the Cup like any run); 49 the way out. It repaints every second, so
+ * a friend who joins shows up at once. Every key fact is in an item NAME for Bedrock.
  */
 public final class PartyMenu extends GameMenu {
 
     /** Where the members go: the middle two rows, seven each. */
     static final int[] MEMBER_SLOTS = {19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34};
+    /** This week's Cup on the party's course (the course screen's own Cup item). */
+    public static final int CUP_SLOT = 44;
+    /** The Cup item is read again at most this often (it reads the Cup's rows), not on every repaint. */
+    static final long CUP_EVERY_MS = 5_000;
 
     private final TimeTrials trials;
     private final PartyRaces party;
+    private CupLink.Button cup;
+    private long cupAt = Long.MIN_VALUE / 2;
 
     public PartyMenu(HomeCraftManagement plugin, TimeTrials trials, Player viewer, Runnable back) {
         super(plugin, trials, viewer, back);
@@ -126,8 +136,23 @@ public final class PartyMenu extends GameMenu {
                 party.toggleWarmup(viewer);
                 refresh();
             } : null);
+            CupLink.Button b = cupButton(lobby);
+            if (b != null) {
+                set(CUP_SLOT, b.icon(), e -> b.click().run());
+            }
         }
         exitTile();
+    }
+
+    /** The Cup's item for the party's course, read again every few seconds; {@code null} when none runs. */
+    private CupLink.Button cupButton(PartyLobby lobby) {
+        long now = System.currentTimeMillis();
+        if (now - cupAt >= CUP_EVERY_MS) {
+            Course c = trials.course(lobby.course());
+            cup = c == null ? null : CupLink.button(plugin.games(), viewer, c, this::reopen);
+            cupAt = now;
+        }
+        return cup;
     }
 
     /**

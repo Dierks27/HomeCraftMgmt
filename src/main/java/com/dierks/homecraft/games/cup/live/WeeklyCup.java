@@ -180,7 +180,7 @@ public final class WeeklyCup implements Game {
                     waiting++;
                 }
             }
-            out.add(running + " running this week, paid " + GenCopy.when(desk().endsAt(), zone())
+            out.add(running + " running this week, paid " + whenDated(desk().endsAt())
                     + (waiting > 0 ? "; " + waiting + " waiting to be settled" : ""));
         } catch (SQLException e) {
             out.add("the Cups can't be read right now");
@@ -312,13 +312,22 @@ public final class WeeklyCup implements Game {
         return desk().voidNow(courseId, reason, name);
     }
 
-    /** How many are in this week's Cup on {@code courseId} (0 when it can't be read). */
+    /**
+     * How many are in this week's Cup on {@code courseId} while it is still running: 0 once it was
+     * called off or settled (its rows stay, but nobody is waiting on it), or when it can't be read.
+     */
     public int entrants(String courseId) {
         try {
-            return desk().dao().entries(desk().key(courseId)).size();
+            CupKey key = desk().key(courseId);
+            return desk().dao().settledAs(key) != null ? 0 : desk().dao().entries(key).size();
         } catch (SQLException e) {
             return 0;
         }
+    }
+
+    /** A moment with its date, for the admins: "Mon 5 Oct 4:00 AM". */
+    public String whenDated(long millis) {
+        return GenCopy.whenDated(millis, zone());
     }
 
     /** The player's Cups this week, for {@code /hcm play cup}. */

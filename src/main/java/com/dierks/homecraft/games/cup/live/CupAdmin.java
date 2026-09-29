@@ -108,7 +108,7 @@ final class CupAdmin implements GameAdmin {
         CupSettings s = cup.settings();
         sender.sendMessage(Text.of("&6Weekly Cup &7- " + (s.enabled() ? "&aentries open" : "&centries closed "
                 + "&7(games.cup.enabled: false)") + "&7: " + CupText.tokens(s.entry()) + " to enter, top-up "
-                + s.serverTopup() + " with 2 or more; paid &f" + cup.when(desk.endsAt())));
+                + s.serverTopup() + " with 2 or more; paid &f" + cup.whenDated(desk.endsAt())));
         sender.sendMessage(Text.of(desk.freshEligible() ? "&7Fresh courses run a Cup by default."
                 : "&7Fresh courses run no Cup: they change more often than once a week."));
         int shown = 0;
@@ -229,7 +229,13 @@ final class CupAdmin implements GameAdmin {
             return;
         }
         CupDesk desk = cup.desk();
-        List<CupEntry> entries = desk.dao().entries(desk.key(id));
+        CupKey key = desk.key(id);
+        CupPlan.Outcome ended = desk.dao().settledAs(key);
+        if (ended != null) {
+            sender.sendMessage(Text.of("&7This week's Cup on '" + id + "' already ended: " + CupWords.outcome(ended) + "."));
+            return;
+        }
+        List<CupEntry> entries = desk.dao().entries(key);
         if (entries.isEmpty()) {
             sender.sendMessage(Text.of("&7Nobody is in this week's Cup on '" + id + "': nothing to call off."));
             return;

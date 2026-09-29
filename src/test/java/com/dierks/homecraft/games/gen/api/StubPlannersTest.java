@@ -23,6 +23,8 @@ class StubPlannersTest {
 
     private static final List<Planner> PLANNERS = List.of(new ParkourPlanner(), new RingsPlanner(),
             new BoatPlanner(), new GolfPlanner());
+    /** The planners still stubbed (WP2 built parkour, rings and the boat). */
+    private static final List<Planner> STUBS = List.of(new GolfPlanner());
 
     @Test
     void thereIsAPlannerForEveryGeneratorASlotNames() {
@@ -36,7 +38,7 @@ class StubPlannersTest {
 
     @Test
     void everyStubSaysItIsNotBuiltYet() {
-        for (Planner p : PLANNERS) {
+        for (Planner p : STUBS) {
             Slots.Def slot = Slots.ALL.stream().filter(s -> s.generator().equals(p.id())).findFirst().orElseThrow();
             PlanInput in = new PlanInput(slot, slot.half('A'), 'A', 20725, 0, 1L, slot.tierOrMix(), 8, 1000, null);
             GenFailed plan = assertThrows(GenFailed.class, () -> p.plan(in), p.id() + " can't plan yet");

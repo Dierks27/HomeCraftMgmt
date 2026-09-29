@@ -43,6 +43,12 @@ import java.util.concurrent.ThreadLocalRandom;
  * <p><b>Where it can't pay, it doesn't use the try.</b> A player who can't earn where they are
  * (creative, a world without games) is dealt today's board as practice and told why: the scored try
  * is kept for when it can count.
+ *
+ * <p><b>The restart hold.</b> In the last few minutes before a scheduled restart
+ * ({@code games.restart_times}) a scored try the restart cut off would be gone, so a player whose
+ * try is unused is dealt nothing and told when the server restarts, like any new run. Not today's
+ * board as practice: that would show them the layout before their scored try. Practice after a
+ * used try, and Classic play, have no try to lose and are never held.
  */
 public abstract class CabinetGame implements Game {
 
@@ -70,7 +76,7 @@ public abstract class CabinetGame implements Game {
 
     /** Today's local day key. */
     protected long today() {
-        return ctx.plugin().clock().dayKey();
+        return games().clock().dayKey();
     }
 
     // ---- the daily board ----------------------------------------------------------------------
@@ -95,21 +101,42 @@ public abstract class CabinetGame implements Game {
      * now, so closing the screen can't earn a second one); every later one is practice. A player
      * who can't earn here ({@link SkillRewards#canEarnHere}) gets practice without the try being
      * used, and is told once why.
+     *
+     * @return {@code null} when refused (told): the player's scored try is unused and a scheduled
+     *         restart is minutes away ({@link GamesService#restartRefusal}). Nothing is dealt, so
+     *         today's board isn't seen before the try, and the try is kept.
      */
     public DailyStart startDaily(Player player) {
         long day = today();
-        long seed = dailySeed(day);
         boolean canEarn = games().rewards().canEarnHere(player);
+        Refusal held = canEarn ? games().restartRefusal() : null;
+        if (held != null && !usedTry(player, day)) {
+            games().tell(player, held);
+            return null;
+        }
+        long seed = dailySeed(day);
         if (!canEarn) {
             player.sendMessage(Text.of(NOT_HERE_DAILY));
         }
         try {
             return deal(day, seed, canEarn, () -> games().dao().markDailyAttempt(player.getUniqueId(), id(), day,
-                    seed, "", ctx.plugin().clock().nowMillis()));
+                    seed, "", games().clock().nowMillis()));
         } catch (SQLException e) {
             ctx.plugin().getLogger().warning("Could not record " + id() + "'s daily try for "
                     + player.getName() + " - it is practice: " + e.getMessage());
             return new DailyStart(day, seed, false);
+        }
+    }
+
+    /**
+     * Whether the player's scored try at {@code day}'s board is used (false if it can't be read,
+     * so a hold keeps it rather than showing the board).
+     */
+    private boolean usedTry(Player player, long day) {
+        try {
+            return games().dao().dailyAttempt(player.getUniqueId(), id(), day);
+        } catch (SQLException e) {
+            return false;
         }
     }
 

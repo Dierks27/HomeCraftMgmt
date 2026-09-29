@@ -1553,6 +1553,13 @@ games:
   featured: auto
   # Tokens for the first finish of today's featured game (counts toward skill_daily_cap).
   featured_bonus: 1
+  # When your host restarts the server each day: "HH:mm" 24-hour times in clock.time_zone
+  # (keep the quotes; midnight is "00:00"), the minute it actually stops, not when its warnings
+  # start. Just before each one, courses, golf, new card-game hands and the daily scored try
+  # don't start; the host's own chat warnings are left alone. [] = off.
+  restart_times: ["04:00", "16:00"]
+  # How many minutes before each restart nothing new starts (1-60).
+  restart_hold_minutes: 5
   # "Take a break" (Wallet): the choices players get.
   break:
     # Daily token limits a player can pick for games of chance (they can also pick none).

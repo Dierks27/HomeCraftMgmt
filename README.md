@@ -538,6 +538,8 @@ common keys turns the games off, junk in one game's block closes that game.
 | `skill_daily_cap` | `6` | Most tokens all skill games together pay a player in a day (first clears don't count) |
 | `featured` | `auto` | `auto` picks a skill game or course each day; a game or course id pins it (`/hcm games feature`) |
 | `featured_bonus` | `1` | Tokens for the first finish of today's pick (counts toward `skill_daily_cap`) |
+| `restart_times` | `["04:00", "16:00"]` | When the host restarts the server each day: the minute it actually stops, not when its warnings start (quoted 24-hour times in `clock.time_zone`; midnight is `"00:00"`). Just before each one, nothing a restart would cut off starts: courses and golf, a new Twenty-One or Higher or Lower hand (an open one plays on), a cabinet's scored daily try (today's board isn't dealt until after, and the try is kept; practice after a used try and Classic play go on). Spins and flips aren't held, and the plugin sends no warnings of its own. `[]` = off; an entry that isn't a time is dropped with a WARN |
+| `restart_hold_minutes` | `5` | How many minutes before each restart that hold starts (1-60) |
 | `break.daily_choices` | `[10, 25, 50, 100]` | The daily limits a player can pick (they can also pick none) |
 | `break.pause_days` | `[1, 7, 30]` | The pauses a player can pick, in days |
 | `break.raise_delay_days` | `7` | How long a raised or removed limit waits before it starts (at least 1) |
@@ -762,7 +764,7 @@ high scores. A player in a world game can use only `/hcm play`, `/hcm leave`, `/
 | `/hcm play accept\|deny` | `hcm.games.play` | Answer your latest invite |
 | `/hcm play invites [on\|off]` | `hcm.games.play` | Your invite settings. `off` also turns Coin Flip invites off; only the Take a break screen turns them on |
 | `/hcm leave` | `hcm.games.play` | Leave the world game you're in; your things come back. Also finishes a trip home that didn't complete |
-| `/hcm games status` | `hcm.games.admin` | Every game, open or closed and why, with the odds of the open games of chance; players in world games, saved things waiting to go back, unfinished rounds and today's pick |
+| `/hcm games status` | `hcm.games.admin` | Every game, open or closed and why, with the odds of the open games of chance; players in world games, saved things waiting to go back, unfinished rounds, today's pick, and the next scheduled restart and when its hold starts |
 | `/hcm games feature <game\|course\|auto>` | `hcm.games.admin` | Pin today's pick (writes `games.featured`), or let the day pick again. Never a game of chance |
 | `/hcm games break <player> show\|pause <days>\|limit <tokens\|none>\|clear\|clear-own confirm` | `hcm.games.admin` | A player's Take a break, online or not. `pause` (1-365 days) and `limit` set an admin pause or limit the player can't lift; `clear` removes only those; `clear-own confirm` lifts the player's OWN settings and logs a WARNING |
 | `/hcm games scores reset <game> [board\|all] [player] [confirm]` | `hcm.games.admin` | Clear high scores. Without `confirm` it only counts what it would clear |
@@ -1026,6 +1028,16 @@ off. Every token a game moves is in the ledger under that game's own source, so
     appears as `"kind":"parkour","tier":"easy"` with its `record`, and `meadow` as `"kind":"golf"`
     with `holes` and `par`. `web.dashboard.arcade_show_names: true` adds `holder` to records;
     `false` takes it away.
+
+**The restart hold**
+
+53. At about 3:02 PM, set `games.restart_times: ["15:10"]` (any time 8 minutes ahead) and
+    `/hcm reload`: `/hcm games status` says "Next restart: 3:10 PM (new runs held from 3:05 PM)".
+    Deal a Twenty-One hand and leave it open. From 3:05, `/hcm play cliffs` says "The server
+    restarts at 3:10 PM. New runs open again after it."; the open hand plays to the end, but the
+    next Deal is refused the same way, and so is a cabinet's daily board if you haven't had
+    today's try (Classic still deals). After 3:10 all of them work again. Put
+    `["04:00", "16:00"]` back and reload.
 
 ---
 

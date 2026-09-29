@@ -13,6 +13,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -41,6 +42,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *       common key turns them OFF, junk in a game's block closes that game only — never an
  *       exception;</li>
  *   <li>a bare switch where a game's section belongs reads as its {@code enabled};</li>
+ *   <li>the restart hold ships the owner's schedule (04:00 and 16:00, 5 minutes); a restart time
+ *       that isn't one is dropped with one WARN and the rest still hold, {@code []} is off;</li>
  *   <li>the shipped skill cap stays within a quarter of an active day's tokens (DESIGN §3.9).</li>
  * </ul>
  */
@@ -238,6 +241,8 @@ class GamesConfigTest {
         clamps.put("max_payout", 2_000_000);
         clamps.put("skill_daily_cap", -3);
         clamps.put("featured_bonus", 1_000);
+        clamps.put("restart_times", List.of("04:00", "noon"));
+        clamps.put("restart_hold_minutes", 0);
         clamps.put("break.raise_delay_days", 0);
         clamps.put("break.pause_days", List.of(0, 7, 30));
         clamps.put("snake.tick_java", 1);
@@ -297,6 +302,96 @@ class GamesConfigTest {
                 "a course id is kept (lower-cased)");
     }
 
+    // ---- the restart hold ---------------------------------------------------------------------
+
+    @Test
+    void theShippedRestartHoldIsTheOwnersSchedule() throws Exception {
+        GamesConfig.Common common = GamesConfig.parse(bundled(), w -> { }).common();
+        assertEquals(List.of(LocalTime.of(4, 0), LocalTime.of(16, 0)), common.restartTimes(),
+                "the host restarts at 04:00 and 16:00, so that is what ships");
+        assertEquals(5, common.restartHoldMinutes(), "held for the last five minutes before each");
+    }
+
+    @Test
+    void aRestartTimeThatIsNotOneIsDroppedWithOneWarnAndTheRestStillHold() throws Exception {
+        Map<String, Object> games = shipped();
+        put(games, "enabled", true);
+        put(games, "restart_times", java.util.Arrays.asList("16:00", "noon", 960, "25:00", "4:00", "04:00", null));
+        List<String> warns = new ArrayList<>();
+        GamesConfig.Parsed parsed = GamesConfig.parse(games, warns::add, null);
+        assertEquals(List.of(LocalTime.of(4, 0), LocalTime.of(16, 0)), parsed.common().restartTimes(),
+                "the good times, sorted; \"4:00\" and \"04:00\" are the same restart, kept once");
+        assertEquals(4, warns.size(), "one WARN per dropped entry, none for the duplicate: " + warns);
+        assertEquals(4, warnsNaming(warns, "games.restart_times"), "each names the key: " + warns);
+        assertTrue(warns.stream().anyMatch(w -> w.contains("960") && w.contains("quotes")),
+                "a number (YAML's reading of an unquoted 16:00) says to write the time in quotes: " + warns);
+        assertTrue(parsed.enabled(), "a dropped time is not junk: the games stay on");
+        assertEquals(Set.of(), parsed.unreadable(), "and nothing closes");
+    }
+
+    @Test
+    void anEmptyListTurnsTheHoldOffAndASingleTimeIsAListOfOne() throws Exception {
+        Map<String, Object> games = shipped();
+        put(games, "restart_times", List.of());
+        List<String> warns = new ArrayList<>();
+        assertEquals(List.of(), GamesConfig.parse(games, warns::add, null).common().restartTimes(),
+                "restart_times: [] means no restart hold");
+        put(games, "restart_times", "16:30");
+        assertEquals(List.of(LocalTime.of(16, 30)), GamesConfig.parse(games, warns::add, null).common().restartTimes(),
+                "a single time is a list of one");
+        assertEquals(List.of(), warns, "neither is worth a WARN");
+    }
+
+    @Test
+    void theHoldIsKeptBetweenOneMinuteAndAnHour() throws Exception {
+        Map<String, Object> games = shipped();
+        put(games, "restart_hold_minutes", 90);
+        List<String> warns = new ArrayList<>();
+        assertEquals(60, GamesConfig.parse(games, warns::add, null).common().restartHoldMinutes(), "at most an hour");
+        put(games, "restart_hold_minutes", 0);
+        assertEquals(1, GamesConfig.parse(games, warns::add, null).common().restartHoldMinutes(),
+                "at least a minute: a hold of 0 would never hold");
+        assertEquals(2, warnsNaming(warns, "games.restart_hold_minutes"), warns.toString());
+    }
+
+    @Test
+    void anUnquotedTimeInTheFileIsReportedNotGuessed() {
+        // YAML 1.1 reads an unquoted 16:00 as the base-60 number 960; 04:00 (leading zero) stays text.
+        List<String> warns = new ArrayList<>();
+        GamesConfig.Parsed parsed = GamesConfig.parse(yaml("games:\n  restart_times: [04:00, 16:00]\n"), warns::add);
+        assertEquals(List.of(LocalTime.of(4, 0)), parsed.common().restartTimes(),
+                "04:00 reads as a time; 960 is never guessed back into one");
+        assertEquals(1, warns.size(), "one WARN, for the unquoted 16:00: " + warns);
+        assertEquals("games.restart_times 960 is not a time - dropped (YAML reads an unquoted 16:00 as 960: "
+                + "write it in quotes, \"16:00\")", warns.get(0), "it names the key and says how to write the time");
+        assertEquals("write each time in quotes, like \"16:00\"", GamesConfig.unquoted(7),
+                "a number that can't be a time of day gets the plain advice");
+    }
+
+    @Test
+    void midnightWrittenAs2400PointsTo0000QuotedOrNot() {
+        // Unquoted, YAML reads 24:00 as 1440; quoted, it is text but not a 24-hour time.
+        List<String> warns = new ArrayList<>();
+        GamesConfig.Parsed unquoted = GamesConfig.parse(yaml("games:\n  restart_times: [24:00]\n"), warns::add);
+        assertEquals(List.of(), unquoted.common().restartTimes(), "1440 is never guessed back into midnight");
+        assertEquals(1, warns.size(), "one WARN: " + warns);
+        assertTrue(warns.get(0).contains("\"00:00\""),
+                "the owner is told midnight is \"00:00\", not only to add quotes that won't help: " + warns);
+
+        warns.clear();
+        GamesConfig.Parsed quoted = GamesConfig.parse(yaml("games:\n  restart_times: [\"24:00\"]\n"), warns::add);
+        assertEquals(List.of(), quoted.common().restartTimes(), "\"24:00\" is not a time of day either");
+        assertEquals(1, warns.size(), "one WARN: " + warns);
+        assertTrue(warns.get(0).startsWith("games.restart_times \"24:00\""), "it names the key and the entry: " + warns);
+        assertTrue(warns.get(0).contains("\"00:00\""), "and says midnight is \"00:00\": " + warns);
+
+        warns.clear();
+        assertEquals(List.of(LocalTime.MIDNIGHT),
+                GamesConfig.parse(yaml("games:\n  restart_times: [\"00:00\"]\n"), warns::add).common().restartTimes(),
+                "which is read as midnight");
+        assertEquals(List.of(), warns, "without a WARN");
+    }
+
     // ---- junk -------------------------------------------------------------------------------
 
     @Test
@@ -319,6 +414,8 @@ class GamesConfigTest {
         junk.put("enabled", "maybe");
         junk.put("click_cooldown_ms", "fast");
         junk.put("worlds", Map.of("a", 1));
+        junk.put("restart_times", Map.of("at", "04:00"));
+        junk.put("restart_hold_minutes", "soon");
         junk.put("break.daily_choices", List.of("ten"));
         junk.put("break", 7);
         for (Map.Entry<String, Object> j : junk.entrySet()) {

@@ -222,6 +222,9 @@ public final class WhackAZombiePlayMenu extends GameMenu {
             new WhackAZombiePlayMenu(plugin, whack, viewer, back, null, whack.classicSeed()).open(viewer);
         } else {
             CabinetGame.DailyStart next = whack.startDaily(viewer);
+            if (next == null) {
+                return; // held for a restart (told): this screen stays
+            }
             new WhackAZombiePlayMenu(plugin, whack, viewer, back, next, next.seed()).open(viewer);
         }
     }

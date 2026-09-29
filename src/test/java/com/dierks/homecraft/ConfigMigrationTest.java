@@ -1770,6 +1770,36 @@ class ConfigMigrationTest {
         assertEquals(Boolean.FALSE, onDisk.get("games.snake.enabled", null), "snake: maybe fails closed");
     }
 
+    // ---- the restart hold (games.restart_times, games.restart_hold_minutes) ---------------------
+
+    @Test
+    void anUpgradedGamesBlockGainsTheRestartKeysLeafByLeaf() throws Exception {
+        YamlConfiguration shipped = bundled();
+        YamlConfiguration onDisk = yaml(bundledReplacing("  # When your host restarts", "  # \"Take a break\"", ""));
+        assertNull(onDisk.get("games.restart_times", null), "fixture: a games block from before the restart hold");
+        List<String> added = new ArrayList<>();
+        startUp(onDisk, added);
+        assertEquals(List.of("games.restart_times", "games.restart_hold_minutes"), added,
+                "exactly the two new keys are added, and nothing else in the file is touched");
+        assertEquals(shipped.get("games.restart_times"), onDisk.get("games.restart_times"),
+                "with the owner's schedule as shipped");
+        List<String> warns = new ArrayList<>();
+        assertEquals(GamesConfig.Common.defaults(), GamesConfig.parse(onDisk, warns::add).common(),
+                "and it reads as shipped");
+        assertEquals(List.of(), warns, "without a WARN");
+    }
+
+    @Test
+    void anOwnersEmptyRestartListIsKeptByTheBackfill() throws Exception {
+        YamlConfiguration onDisk = yaml(bundledReplacing("  restart_times:", "  # \"Take a break\"",
+                "  restart_times: []\n"));
+        List<String> added = new ArrayList<>();
+        startUp(onDisk, added);
+        assertEquals(List.of("games.restart_hold_minutes"), added, "only the missing hold is added");
+        assertEquals(List.of(), GamesConfig.parse(onDisk, w -> { }).common().restartTimes(),
+                "restart_times: [] stays off: an empty list is a setting, not a missing key");
+    }
+
     /** The game's shipped settings with {@code enabled: false}, read through its own parser. */
     private static <S> S switchedOff(GameSpec<S> spec) {
         return spec.parse().apply(new GamesConfig.Node("games." + spec.id(), Map.of("enabled", false), w -> { }),

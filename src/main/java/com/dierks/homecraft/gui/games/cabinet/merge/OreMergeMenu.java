@@ -136,7 +136,11 @@ public final class OreMergeMenu extends GameMenu {
         if (!merge.mayPlay(viewer)) {
             return;
         }
-        run = how.get();
+        OreMerge.Run next = how.get();
+        if (next == null) {
+            return; // today's board is held for a restart (told): the screen stays as it was
+        }
+        run = next;
         grid = merge.deal(run);
         ended = false;
         endArmed = false;

@@ -151,9 +151,15 @@ public final class Snake extends CabinetGame {
         return new Run(null, tick(player));
     }
 
-    /** Deal today's board to the player (their first deal today is the scored try) and say which it is. */
+    /**
+     * Deal today's board to the player (their first deal today is the scored try) and say which it
+     * is; {@code null} when a restart minutes away holds the scored try (told, nothing dealt).
+     */
     public Run daily(Player player) {
         DailyStart start = startDaily(player);
+        if (start == null) {
+            return null;
+        }
         if (start.scored()) {
             player.sendMessage(Text.of("&bToday's board &7- your scored try. Closing the game uses it up."));
         } else if (dailyTried(player)) {

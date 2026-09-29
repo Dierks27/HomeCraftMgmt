@@ -85,7 +85,10 @@ public final class SimonSaysMenu extends GameMenu {
 
     private void daily() {
         if (simon.mayPlay(viewer)) {
-            play(simon.startDaily(viewer));
+            CabinetGame.DailyStart start = simon.startDaily(viewer);
+            if (start != null) { // null: held for a restart (told)
+                play(start);
+            }
         }
     }
 

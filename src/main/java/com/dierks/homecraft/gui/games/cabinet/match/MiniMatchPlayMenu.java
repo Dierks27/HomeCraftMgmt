@@ -162,6 +162,9 @@ public final class MiniMatchPlayMenu extends GameMenu {
             new MiniMatchPlayMenu(plugin, match, viewer, back, null, match.classicSeed()).open(viewer);
         } else {
             CabinetGame.DailyStart next = match.startDaily(viewer);
+            if (next == null) {
+                return; // held for a restart (told): this screen stays
+            }
             new MiniMatchPlayMenu(plugin, match, viewer, back, next, next.seed()).open(viewer);
         }
     }

@@ -1085,6 +1085,25 @@ final class SessionCore<P, I> {
         return true;
     }
 
+    /**
+     * A game holds a session player in place (the 3-2-1 on a spawn or at a start) by sending a move
+     * back to {@code at}, where it began. The server makes that a PLUGIN teleport, which unarmed reads
+     * as someone else's short hop: a void a tick later, and on the last tick of the hold that is the Go
+     * tick, after the game's own task has said Go (final gate #14: out at Go, a bonk, back to the
+     * start). Armed here first, it is the session's own, and its own teleport spends the arming.
+     *
+     * @return whether it was armed (false: no ACTIVE session in that world; a redirect then touches none)
+     */
+    boolean hold(P p, Place at) {
+        UUID id = port.id(p);
+        Live s = live.get(id);
+        if (s == null || s.phase != Session.Phase.ACTIVE || at == null || !at.world().equals(s.world)) {
+            return false;
+        }
+        arm(id, at);
+        return true;
+    }
+
     // ---- WP-CH (the Clubhouse): a session handed from one game to another ---------------------
 
     /**

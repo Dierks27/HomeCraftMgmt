@@ -1200,20 +1200,25 @@ public final class TimeTrials implements Game {
 
     // ---- moves ------------------------------------------------------------------------------
 
-    /** The countdown holds a player on foot still, but lets them look around (no real teleport). */
+    /**
+     * The countdown holds a player on foot still, but lets them look around. The hold is the framework's
+     * ({@code sessions().hold}), armed as the session's own: a changed {@code to} of the game's own is a
+     * PLUGIN teleport nobody armed, a void a tick later, and on the countdown's last tick that void came
+     * after Go (a phantom bonk on a timed Dropper run, "Back to the start" on the rest: final gate #14).
+     */
     private void hold(PlayerMoveEvent e) {
         if (runs.isEmpty()) {
             return;
         }
-        TrialRun run = runs.get(e.getPlayer().getUniqueId());
-        if (run == null || run.phase != TrialRun.Phase.COUNTDOWN || run.course.kind() == TrialKind.BOAT
-                || !e.hasExplicitlyChangedPosition() || (run.drop != null && run.drop.letsGo())) {
-            return;
+        if (holds(runs.get(e.getPlayer().getUniqueId()), e.hasExplicitlyChangedPosition())) {
+            sessions().hold(e);
         }
-        Location held = e.getFrom().clone();
-        held.setYaw(e.getTo().getYaw());
-        held.setPitch(e.getTo().getPitch());
-        e.setTo(held);
+    }
+
+    /** Whether a move of the run's player is held: a step on foot during the countdown (not a practice drop). */
+    static boolean holds(TrialRun run, boolean stepped) {
+        return run != null && stepped && run.phase == TrialRun.Phase.COUNTDOWN && run.course.kind() != TrialKind.BOAT
+                && (run.drop == null || !run.drop.letsGo());
     }
 
     private void moved(PlayerMoveEvent e) {

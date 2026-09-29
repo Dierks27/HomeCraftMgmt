@@ -10,12 +10,14 @@ import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.HandlerList;
+import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 
 /**
@@ -267,6 +269,44 @@ public final class WorldSessions {
         boolean[] made = {false};
         port().safely("a game's teleport", () -> made[0] = core().teleport(player, place));
         return made[0];
+    }
+
+    /**
+     * Hold a session player where they stand, free to look around (a 3-2-1 on a spawn or at a start): a
+     * move that changed position goes back to where it began, with the new look. This is the ONLY way a
+     * game changes a move's {@code to} (HoldSessionTest holds the games to it). The server turns a
+     * changed {@code to} into a PLUGIN teleport, so the spot is armed as the session's own first:
+     * unarmed, it is someone else's short hop, and the session voids the player a tick later — on the
+     * last tick of the hold, after Go (final gate #14). A game that can't use this cancels the move.
+     *
+     * @return whether the move was held (false: it changed only the look, and goes ahead)
+     */
+    public boolean hold(PlayerMoveEvent e) {
+        if (e == null || e.getPlayer() == null) {
+            return false;
+        }
+        if (!live()) {
+            return hold(e, place -> false);
+        }
+        Player p = e.getPlayer();
+        return hold(e, place -> {
+            boolean[] armed = {false};
+            port().safely("a game's hold", () -> armed[0] = core().hold(p, place));
+            return armed[0];
+        });
+    }
+
+    /** {@link #hold(PlayerMoveEvent)} with the arming given ({@code own}: the session's, or a test's). */
+    static boolean hold(PlayerMoveEvent e, Predicate<Place> own) {
+        if (!e.hasExplicitlyChangedPosition()) {
+            return false;
+        }
+        Location held = e.getFrom().clone();
+        held.setYaw(e.getTo().getYaw());
+        held.setPitch(e.getTo().getPitch());
+        own.test(BukkitPort.place(held));
+        e.setTo(held);
+        return true;
     }
 
     // ---- WP-CH (the Clubhouse) ----------------------------------------------------------------------

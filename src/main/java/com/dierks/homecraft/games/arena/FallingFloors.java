@@ -209,7 +209,11 @@ public final class FallingFloors implements Game {
         service = new ArenaService(host);
         GenRegionGuard.register(g, this, () -> (world, x, y, z) -> inBox(service, world, x, y, z), log());
         guardEdits(g);
-        g.on(this, PlayerMoveEvent.class, EventPriority.HIGH, true, e -> hold(service, e));
+        g.on(this, PlayerMoveEvent.class, EventPriority.HIGH, true, e -> {
+            if (held(service, e)) {
+                g.sessions().hold(e); // the framework's hold: armed as the session's own (final gate #14)
+            }
+        });
         g.on(this, PlayerMoveEvent.class, EventPriority.MONITOR, true, this::moved);
         g.every(this, 1, 1, () -> {
             ArenaService s = service;
@@ -385,15 +389,14 @@ public final class FallingFloors implements Game {
 
     // ---- moves ------------------------------------------------------------------------------------
 
-    /** On a spawn waiting for Go: held in place, free to look around (the trials hold). */
-    static void hold(ArenaService s, PlayerMoveEvent e) {
-        if (s == null || !e.hasExplicitlyChangedPosition() || !s.held(e.getPlayer().getUniqueId())) {
-            return;
-        }
-        Location held = e.getFrom().clone();
-        held.setYaw(e.getTo().getYaw());
-        held.setPitch(e.getTo().getPitch());
-        e.setTo(held);
+    /**
+     * Whether a move is held: on a spawn waiting for Go, a step is undone and the player is free to look
+     * around (the trials hold). The hold itself is the framework's ({@code sessions().hold}): a changed
+     * {@code to} of the game's own would be someone else's teleport to the session, a void a tick later,
+     * and on the last hold tick that void came after Go and put the player out (final gate #14).
+     */
+    static boolean held(ArenaService s, PlayerMoveEvent e) {
+        return s != null && e.hasExplicitlyChangedPosition() && s.held(e.getPlayer().getUniqueId());
     }
 
     /** Every accepted move of a round player marks the floor it passes over (not one read a tick). */

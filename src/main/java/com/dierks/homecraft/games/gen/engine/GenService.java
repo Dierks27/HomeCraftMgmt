@@ -815,8 +815,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         Planner p = planners.get(s.def.generator());
         GenScheduler.Pin chosen = chosenNow(s); // WP-ADM: the next set's pick, once it has come
         return new GenScheduler.SlotView(s.def.id(), s.on() && p != null, job != null, s.live, !s.healFailed,
-                s.liveMix, s.mix, s.reroll, chosen != null ? chosen : s.pin, p == null ? 0 : p.algo(), s.triesDay, s.tries, s.lastTryAt,
-                s.oldDirty, secret(), scheduleSince);
+                s.liveMix, s.mix, s.reroll, chosen != null ? chosen : s.pin, p == null ? 0 : p.algo(), s.triesDay,
+                s.tries, s.lastTryAt, s.oldDirty, secret(), scheduleSince);
     }
 
     /** The edition a slot should show now ({@link GenScheduler#target}). */

@@ -62,7 +62,8 @@ public final class FreshAdminMenu extends GameMenu {
         if (fresh == null || engine == null) {
             return null;
         }
-        GenOps.Tools state = engine.tools(courseId);
+        // Fresh Courses' own guard: this runs on another game's screen, which a Fresh Courses bug mustn't close
+        GenOps.Tools state = games.guard(fresh, () -> engine.tools(courseId), null);
         ItemStack icon = Menus.icon(Material.COMMAND_BLOCK, FreshAdmin.itemName(),
                 FreshAdmin.state(state).toArray(new String[0]));
         return new Button(icon, () -> new FreshAdminMenu(plugin, fresh, viewer, courseId, back).open(viewer));

@@ -78,7 +78,7 @@ public final class ClubRaces {
         if (warmNow && run.beginWarmup(until)) {
             run.progress = new Progress(run.course, TimeTrials.position(p, run), System.nanoTime());
             run.phase = TrialRun.Phase.RUNNING;
-            p.getInventory().setItem(Warmup.KIT_SLOT, KitItems.item(trials, Warmup.READY, Material.LIME_DYE,
+            KitItems.put(p.getInventory(), Warmup.KIT_SLOT, KitItems.item(trials, Warmup.READY, Material.LIME_DYE,
                     Warmup.READY_NAME, "&7Tap when you're set.", "&7The race starts when the warm-up",
                     "&7ends, or everyone is ready."));
             p.sendMessage(Text.of("&b" + rr.base.name() + " &7- race warm-up"));

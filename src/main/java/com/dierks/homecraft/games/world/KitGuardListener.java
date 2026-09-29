@@ -184,7 +184,8 @@ public final class KitGuardListener implements Listener {
         }
         if (!s.gameId().equals(gameId)) {
             deny(e);
-            p.getInventory().setItemInMainHand(null); // another game's: not this one's to use
+            // another game's: not this one's to use (taken out as a kit item, final gate #16)
+            KitItems.clear(p.getInventory(), p.getInventory().getHeldItemSlot());
             return;
         }
         if (s.phase() != Session.Phase.ACTIVE) {

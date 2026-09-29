@@ -19,6 +19,7 @@ import org.bukkit.inventory.PlayerInventory;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -240,22 +241,46 @@ final class DropperHooks {
     /** Hand the player one of the Dropper's kits: slot 0 (and 1), and "Leave game" in 8. */
     void giveKit(Player p, DropperRun.Kit kit) {
         PlayerInventory inv = p.getInventory();
-        inv.setItem(1, null);
+        kit(KitItems.slots(inv), kit, this::kitItem);
+        inv.setHeldItemSlot(0);
+    }
+
+    /**
+     * One of the Dropper's kits into {@code inv}: slot 0 (and 1 for the offer), and "Leave game" in 8.
+     * Slot 1 is otherwise the first empty slot of the whole run, where an auction win or a Mini lands
+     * mid-session: a kit change takes only the offer's button out of it, and a kit item goes in only once
+     * their thing has moved aside (final gate #16).
+     */
+    static <I> void kit(KitItems.Slots<I> inv, DropperRun.Kit kit, Function<String, I> item) {
+        KitItems.clear(inv, 1);
         switch (kit) {
             case OFFER -> {
-                inv.setItem(0, item(DropperRun.PRACTICE_ACTION, Material.LIGHT_BLUE_DYE, DropperText.PRACTICE_ITEM,
-                        DropperText.PRACTICE_LORE));
-                inv.setItem(1, item(DropperRun.STRAIGHT_ACTION, Material.LIME_DYE, DropperText.STRAIGHT_ITEM,
-                        DropperText.STRAIGHT_LORE));
+                KitItems.put(inv, 0, item.apply(DropperRun.PRACTICE_ACTION));
+                KitItems.put(inv, 1, item.apply(DropperRun.STRAIGHT_ACTION));
             }
-            case PRACTICE -> inv.setItem(0, item(DropperRun.TIMED_ACTION, Material.CLOCK, DropperText.TIMED_ITEM,
-                    DropperText.TIMED_LORE));
-            case DROP -> inv.setItem(0, item(DropperRun.BACK_ACTION, Material.RECOVERY_COMPASS, DropperText.BACK_ITEM,
-                    DropperText.BACK_LORE));
+            case PRACTICE -> KitItems.put(inv, 0, item.apply(DropperRun.TIMED_ACTION));
+            case DROP -> KitItems.put(inv, 0, item.apply(DropperRun.BACK_ACTION));
         }
-        inv.setItem(8, KitItems.item(trials, "leave", Material.OAK_DOOR, "&cLeave game", "&7Click twice to leave.",
-                "&7Your things come back."));
-        inv.setHeldItemSlot(0);
+        KitItems.put(inv, 8, item.apply(LEAVE_ACTION));
+    }
+
+    /** The kit's "Leave game" (the kit guard answers it for every game). */
+    static final String LEAVE_ACTION = "leave";
+
+    /** The Dropper's kit item for {@code action}. */
+    private ItemStack kitItem(String action) {
+        return switch (action) {
+            case DropperRun.PRACTICE_ACTION -> item(action, Material.LIGHT_BLUE_DYE, DropperText.PRACTICE_ITEM,
+                    DropperText.PRACTICE_LORE);
+            case DropperRun.STRAIGHT_ACTION -> item(action, Material.LIME_DYE, DropperText.STRAIGHT_ITEM,
+                    DropperText.STRAIGHT_LORE);
+            case DropperRun.TIMED_ACTION -> item(action, Material.CLOCK, DropperText.TIMED_ITEM,
+                    DropperText.TIMED_LORE);
+            case DropperRun.BACK_ACTION -> item(action, Material.RECOVERY_COMPASS, DropperText.BACK_ITEM,
+                    DropperText.BACK_LORE);
+            default -> KitItems.item(trials, LEAVE_ACTION, Material.OAK_DOOR, "&cLeave game", "&7Click twice to leave.",
+                    "&7Your things come back.");
+        };
     }
 
     private ItemStack item(String action, Material m, String name, List<String> lore) {

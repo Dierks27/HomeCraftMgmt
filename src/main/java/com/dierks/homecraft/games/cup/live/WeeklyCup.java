@@ -461,6 +461,11 @@ public final class WeeklyCup implements Game {
         }
 
         @Override
+        public com.dierks.homecraft.games.RestartHold restartHold() {
+            return games().restartHold();
+        }
+
+        @Override
         public Boolean slotWanted(String id) {
             GenService e = DailyLookup.engine(games());
             if (e == null || !e.running()) {

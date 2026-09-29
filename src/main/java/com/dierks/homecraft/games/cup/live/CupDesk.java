@@ -80,6 +80,11 @@ public final class CupDesk {
         /** Say {@code line} ({@code &}-coded) to {@code player} now if they are online; whether it was said. */
         boolean tellNow(UUID player, String line);
 
+        /** The games' scheduled-restart hold ({@code games.restart_times}), or {@code null} for none. */
+        default com.dierks.homecraft.games.RestartHold restartHold() {
+            return null;
+        }
+
         Logger logger();
     }
 
@@ -221,8 +226,9 @@ public final class CupDesk {
         int balance = viewer == null ? 0 : dao.balance(viewer);
         boolean in = mine != null || (viewer != null && on && settled == null
                 && dao.openCup(c.id(), viewer, CupRules.liveWeeks(host.edition(), host.now())) != null);
-        CupRefusal refusal = CupRules.refusal(s.enabled(), on, key, week, settled, in, layoutUp(c, week), s.entry(),
-                balance);
+        boolean closing = CupRules.closing(host.now(), endsAt(key), host.restartHold()); // fx2-C #12
+        CupRefusal refusal = CupRules.refusal(s.enabled(), on, key, week, settled, in, closing, layoutUp(c, week),
+                s.entry(), balance);
         return new View(key, on, s.enabled(), s.entry(), CupRules.livePool(entries, s.serverTopup()), mine, settled,
                 endsAt(key), refusal);
     }

@@ -113,6 +113,7 @@ public final class CupWords {
             case CALLED_OFF -> "called off this week";
             case WEEK_OVER -> "already paid out this week";
             case ALREADY_IN -> "you're in";
+            case CLOSING -> "closing for this week";
             case NOT_UP_YET -> "starts when this week's course is up";
             case NOT_ENOUGH_TOKENS -> "not enough tokens";
         };

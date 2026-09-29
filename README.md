@@ -778,7 +778,10 @@ pool counts the top-up once 2 or more are in, and it is paid only if 2 or more s
 At the week's rollover (the quests' week start at 04:00, when Fresh Courses change) the pool is
 shared by Cup time: 70/30 with 2 Cup times, 50/30/20 with 3 or more, rounded down with the rest
 to 1st. An entrant with no Cup time gets no share: their entry stays in the
-pool. It is settled once, and a rollover the server was down for is settled at the next start. The
+pool, so the Cup stops taking entries in its last `games.restart_hold_minutes` (5) before the
+rollover, and during a restart hold that runs into them ("This week's Cup is nearly over, so it takes
+no new entries."): no run started then could set a Cup time. It is settled once, and a rollover the
+server was down for is settled at the next start. The
 server keeps nothing: the pool is every entry, plus `games.cup.server_topup` (10) when 2 or more
 set a Cup time. A lone entrant, fewer than 2 Cup times, or a course deleted, re-made or closed
 mid-week gets every entry back, with the reason. Cup prizes aren't under the

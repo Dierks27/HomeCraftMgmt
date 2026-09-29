@@ -26,6 +26,12 @@ public enum CupRefusal {
      */
     ALREADY_IN,
     /**
+     * The Cup is about to be paid out (fx2-C #12): its last few minutes, or a restart hold that runs
+     * into them, so no run started now could set a Cup time before it is paid, and an entry now could
+     * only go into the others' shares ({@link CupRules#closing}).
+     */
+    CLOSING,
+    /**
      * A Fresh course still on last week's layout after the rollover: runs on it set no Cup time this
      * week, so the Cup takes no entry until this week's course is up.
      */
@@ -41,6 +47,7 @@ public enum CupRefusal {
             case CALLED_OFF -> "This week's Cup on this course was called off. It's back next week.";
             case WEEK_OVER -> "This week's Cup on this course is already paid out. It's back next week.";
             case ALREADY_IN -> "You're already in this week's Cup on this course.";
+            case CLOSING -> "This week's Cup is nearly over, so it takes no new entries. A new one starts soon.";
             case NOT_UP_YET -> "The Cup starts when this week's course is up.";
             case NOT_ENOUGH_TOKENS -> "You need " + CupText.tokens(fee) + " to enter the Cup.";
         };

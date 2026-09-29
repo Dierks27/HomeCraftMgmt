@@ -237,4 +237,34 @@ class CupWeekTest {
         assertEquals(day(2026, 9, 20), CupRules.week(sundays, at(2026, 9, 27, 3, 59)),
                 "Sunday 03:59 is still the week before");
     }
+
+    /**
+     * fx2-C #12: a Cup takes no entry once no run started now could set a Cup time before it is paid:
+     * in its last {@code restart_hold_minutes}, and in a restart hold whose restart leaves less than
+     * that before it is paid (runs are held then, and after the rollover the week is over).
+     */
+    @Test
+    void theCupStopsTakingEntriesWhenNoRunCouldStillSetACupTime() {
+        long settles = at(2026, 10, 5, 4, 0); // Monday 04:00
+        com.dierks.homecraft.games.RestartHold owner = new com.dierks.homecraft.games.RestartHold(
+                List.of(LocalTime.of(4, 0), LocalTime.of(16, 0)), CHICAGO, 5);
+        assertFalse(CupRules.closing(at(2026, 10, 5, 3, 54), settles, owner), "03:54 still takes entries");
+        assertTrue(CupRules.closing(at(2026, 10, 5, 3, 55), settles, owner),
+                "from 03:55 the 04:00 restart holds every run, and at 04:00 the Cup is paid: closed");
+        assertTrue(CupRules.closing(at(2026, 10, 5, 3, 59), settles, owner), "right up to the payout");
+        assertFalse(CupRules.closing(at(2026, 10, 4, 15, 56), settles, owner),
+                "Sunday's 4:00 PM hold is a pause, not the end: there is a whole evening left");
+        com.dierks.homecraft.games.RestartHold none = new com.dierks.homecraft.games.RestartHold(List.of(), CHICAGO, 5);
+        assertTrue(CupRules.closing(at(2026, 10, 5, 3, 56), settles, none),
+                "with no restarts set, the last 5 minutes are still too short to set a Cup time");
+        assertFalse(CupRules.closing(at(2026, 10, 5, 3, 54), settles, null), "and before them it takes entries");
+        com.dierks.homecraft.games.RestartHold early = new com.dierks.homecraft.games.RestartHold(
+                List.of(LocalTime.of(3, 54)), CHICAGO, 5);
+        assertTrue(CupRules.closing(at(2026, 10, 5, 3, 50), settles, early),
+                "held for a 03:54 restart at 03:50: after it, the Cup's last minutes are all that is left");
+        com.dierks.homecraft.games.RestartHold earlier = new com.dierks.homecraft.games.RestartHold(
+                List.of(LocalTime.of(3, 30)), CHICAGO, 5);
+        assertFalse(CupRules.closing(at(2026, 10, 5, 3, 27), settles, earlier),
+                "held for a 03:30 restart: there is time after it to set a Cup time");
+    }
 }

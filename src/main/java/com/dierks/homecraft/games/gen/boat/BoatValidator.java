@@ -8,6 +8,7 @@ import com.dierks.homecraft.games.gen.api.PlanInput;
 import com.dierks.homecraft.games.gen.api.PlannedTrial;
 import com.dierks.homecraft.games.gen.api.SignText;
 import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.RaceStand;
 import com.dierks.homecraft.games.trial.TrialKind;
 
 import java.util.ArrayDeque;
@@ -31,7 +32,11 @@ import java.util.Locale;
  *       tighter than the tier allows (with a margin for reading it off whole blocks);</li>
  *   <li><b>checkpoints</b>: two identical laps of them in loop order, each on the ice and wide
  *       enough to span it, at most {@value #MAX_CHECKPOINTS} in all; the finish on the start line
- *       and the start a few blocks before it, facing the way round.</li>
+ *       and the start a few blocks before it, facing the way round;</li>
+ *   <li><b>the viewing stand</b> (algo 2 on, EVENTS-DROPPER-SPEC §A.4.2): a whole 7 × 7 platform at
+ *       the half's middle, above the track's keep-clear space; its two-high rail unbroken all the
+ *       way round; nothing over the inner 5 × 5 but its sign (headroom); and at least
+ *       {@code RaceStand.LANE_CLEARANCE} blocks from any ice, so no boat can reach it.</li>
  * </ul>
  * Pure: no Bukkit.
  */
@@ -98,6 +103,9 @@ public final class BoatValidator {
         int sz = half.sizeZ();
         byte[][] low = new byte[sx][sz];
         byte[][] high = new byte[sx][sz];
+        boolean wantStand = plan.algo() >= RaceStand.FIRST_ALGO;
+        int floorY = RaceStand.floorY(iceY + 1);
+        java.util.Map<Long, String> stand = new java.util.HashMap<>();
         String wall = Palette.id(Palette.TRACK_WALL);
         String arrow = Palette.id(Palette.ARROW);
         for (BlockOp op : plan.ops()) {
@@ -108,6 +116,13 @@ public final class BoatValidator {
             String b = Palette.id(plan.blockOf(op));
             int x = op.x() - half.minX();
             int z = op.z() - half.minZ();
+            if (wantStand && op.y() >= floorY && op.y() <= floorY + RaceStand.RAIL) {
+                if (stand.put(standKey(op.x(), op.y(), op.z()), b) != null) {
+                    out.add("two blocks at " + op.x() + " " + op.y() + " " + op.z());
+                    return out;
+                }
+                continue; // the stand's blocks: checked below
+            }
             byte[][] layer = op.y() == iceY ? low : op.y() == iceY + 1 ? high : null;
             byte kind = b.equals(ice) ? BoatPlanner.ICE : b.equals(wall) || b.equals(arrow) ? BoatPlanner.WALL : 0;
             if (layer == null || kind == 0 || (kind == BoatPlanner.ICE && layer == high)
@@ -316,12 +331,99 @@ public final class BoatValidator {
         if (trial.refMs() <= 0 || course.minSeconds() == null || course.minSeconds() * 1000L > trial.refMs()) {
             out.add("the times don't fit (reference " + trial.refMs() + "ms, shortest " + course.minSeconds() + "s)");
         }
+        int standX = RaceStand.centreX(half);
+        int standZ = RaceStand.centreZ(half);
         for (SignText sign : plan.signs()) {
+            if (wantStand && sign.y() == floorY + 1 && RaceStand.onPlatform(sign.x(), sign.z(), standX, standZ)
+                    && !RaceStand.onRail(sign.x(), sign.z(), standX, standZ)) {
+                continue; // the stand's own sign, on its platform
+            }
             int x = sign.x() - half.minX();
             int z = sign.z() - half.minZ();
             if (!half.contains(sign.x(), sign.y(), sign.z()) || sign.y() != iceY + 2 || high[x][z] != BoatPlanner.WALL) {
                 out.add("the sign at " + sign.x() + " " + sign.y() + " " + sign.z() + " isn't on the wall");
             }
+        }
+        if (wantStand) {
+            out.addAll(standProblems(plan, low, stand, standX, standZ, floorY));
+        }
+        return out;
+    }
+
+    private static long standKey(int x, int y, int z) {
+        return ((long) (y & 0xFFF) << 52) ^ ((long) (x & 0x3FFFFFF) << 26) ^ (z & 0x3FFFFFFL);
+    }
+
+    /**
+     * The viewing stand (algo 2): a whole platform at the half's middle, above every keep-clear box;
+     * an unbroken two-high rail round its edge; nothing over the inner 5 × 5 (the headroom) and no
+     * other block at its heights (anything higher is already a stray); at least
+     * {@code RaceStand.LANE_CLEARANCE} from any ice; and its sign on the platform.
+     */
+    static List<String> standProblems(Plan plan, byte[][] low, java.util.Map<Long, String> stand, int standX,
+                                      int standZ, int floorY) {
+        List<String> out = new ArrayList<>();
+        Box half = plan.half();
+        String floor = Palette.id(RaceStand.FLOOR);
+        String rail = Palette.id(RaceStand.RAIL_BLOCK);
+        int r = RaceStand.SIZE / 2;
+        if (floorY + RaceStand.RAIL > half.maxY()) {
+            out.add("the stand's rail reaches over the half");
+        }
+        for (Box k : plan.keepClear()) {
+            if (k.maxY() >= floorY) {
+                out.add("the stand isn't above the track's keep-clear space");
+            }
+        }
+        int expected = 0;
+        for (int x = standX - r; x <= standX + r; x++) {
+            for (int z = standZ - r; z <= standZ + r; z++) {
+                expected++;
+                if (!floor.equals(stand.get(standKey(x, floorY, z)))) {
+                    out.add("the stand's platform has a hole at " + x + " " + floorY + " " + z);
+                    return out;
+                }
+                boolean edge = RaceStand.onRail(x, z, standX, standZ);
+                for (int h = 1; h <= RaceStand.RAIL; h++) {
+                    String b = stand.get(standKey(x, floorY + h, z));
+                    if (edge && !rail.equals(b)) {
+                        out.add("the stand's rail has a gap at " + x + " " + (floorY + h) + " " + z);
+                        return out;
+                    }
+                    if (!edge && b != null) {
+                        out.add("no headroom on the stand at " + x + " " + (floorY + h) + " " + z);
+                        return out;
+                    }
+                    expected += edge ? 1 : 0;
+                }
+            }
+        }
+        if (stand.size() != expected) {
+            out.add("a stray block at the stand's height, off the stand");
+            return out;
+        }
+        double nearest = Double.MAX_VALUE;
+        for (int x = 0; x < low.length; x++) {
+            for (int z = 0; z < low[0].length; z++) {
+                if (low[x][z] != BoatPlanner.ICE) {
+                    continue;
+                }
+                int dx = Math.max(0, Math.abs(half.minX() + x - standX) - r);
+                int dz = Math.max(0, Math.abs(half.minZ() + z - standZ) - r);
+                nearest = Math.min(nearest, Math.hypot(dx, dz));
+            }
+        }
+        if (nearest < RaceStand.LANE_CLEARANCE) {
+            out.add("the stand is " + fmt(nearest) + " blocks from the ice; at least "
+                    + fmt(RaceStand.LANE_CLEARANCE));
+        }
+        boolean sign = false;
+        for (SignText s : plan.signs()) {
+            sign |= s.y() == floorY + 1 && RaceStand.onPlatform(s.x(), s.z(), standX, standZ)
+                    && !RaceStand.onRail(s.x(), s.z(), standX, standZ);
+        }
+        if (!sign) {
+            out.add("the stand has no sign");
         }
         return out;
     }

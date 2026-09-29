@@ -27,7 +27,9 @@ final class TrialRun {
         /** The clock is running. */
         RUNNING,
         /** Finished: waiting for the session to end. */
-        DONE
+        DONE,
+        /** Race mode: done with this race, waiting on the stand for the next one ({@link RaceRun}). */
+        PARKED
     }
 
     final UUID player;
@@ -86,6 +88,9 @@ final class TrialRun {
 
     /** A dropper run's own rules and state (its practice drop, splashes, hops, bonks), else {@code null}. */
     DropperRun drop;
+
+    /** Race mode (EVENTS-DROPPER-SPEC §A.4.11): the racer's side of a race, or {@code null} for a normal run. */
+    RaceRun race;
 
     TrialRun(UUID player, Course course, boolean test, int countdown) {
         this.player = player;

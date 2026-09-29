@@ -13,6 +13,8 @@ import com.dierks.homecraft.games.gen.api.PlanInput;
 import com.dierks.homecraft.games.gen.api.PlannedTrial;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.Point;
+import com.dierks.homecraft.games.trial.RaceStand;
 import com.dierks.homecraft.games.trial.Tier;
 import com.dierks.homecraft.games.trial.TrialKind;
 import org.junit.jupiter.api.Test;
@@ -172,20 +174,24 @@ class BoatPlannerTest {
 
     @Test
     void goldenHashesPinThreeSeedsPerTier() throws GenFailed {
-        // A change here means the planner makes different layouts: bump BoatPlanner.ALGO.
-        String[][] golden = {
-                {"easy", "c431f4f7659d", "2c8f2339eae0", "4866d9e2ddf6"},
-                {"medium", "1f9d5e8fd314", "eb8900883d94", "6661d237633a"},
-                {"hard", "1b8bd23af91a", "9e7a7ec992c2", "7bfaf9fede91"},
-        };
+        // A change here means the planner makes different layouts: bump BoatPlanner.ALGO. Algo 2 added
+        // the viewing stand (EVENTS-DROPPER-SPEC §A.4.2), so every layout changed once.
+        String golden = """
+                easy 17716620da48 60f766a48aae be493b43c067
+                medium e32014d62d1c f556e10cb2e4 c84f65320221
+                hard de0d07f16cf7 524fc2c7990c b3ce7c41112a
+                """;
         long[] seeds = {1L, 0xC0FFEEL, 0x5EED5EEDL};
-        for (String[] tier : golden) {
-            for (int s = 0; s < 3; s++) {
-                assertEquals(tier[s + 1], PLANNER.plan(input('A', seeds[s], tier[0])).hash(),
-                        tier[0] + " seed " + Long.toHexString(seeds[s]) + " (if this changed, bump ALGO)");
+        StringBuilder made = new StringBuilder();
+        for (String tier : List.of("easy", "medium", "hard")) {
+            made.append(tier);
+            for (long seed : seeds) {
+                made.append(' ').append(PLANNER.plan(input('A', seed, tier)).hash());
             }
+            made.append('\n');
         }
-        assertEquals(1, BoatPlanner.ALGO, "the version these hashes were pinned at");
+        assertEquals(golden, made.toString(), "every tier's three seeds (if this changed, bump ALGO)");
+        assertEquals(2, BoatPlanner.ALGO, "the version these hashes were pinned at");
     }
 
     @Test
@@ -216,9 +222,54 @@ class BoatPlannerTest {
             assertEquals(4, Math.hypot(c.start().x() - c.finish().x(), c.start().z() - c.finish().z()), 0.2,
                     "the start is 4 before the line");
             assertTrue(p.ops().stream().anyMatch(op -> p.blockOf(op).startsWith(Palette.ARROW)), "arrows in the wall");
-            assertEquals(1, p.signs().size(), "a start sign");
+            assertEquals(2, p.signs().size(), "a start sign and the viewing stand's sign");
             assertEquals(GenCopy.boatStart(BoatPlanner.LAPS), p.signs().get(0).lines(), "saying two laps");
+            assertEquals(RaceStand.SIGN, p.signs().get(1).lines(), "and where to watch from");
             assertTrue(p.ops().size() < 6_000, "about 3,300 blocks: " + p.ops().size());
+        }
+    }
+
+    @Test
+    void theViewingStandIsRailedAboveTheKeepClearSpaceAndFarFromTheLane() throws GenFailed {
+        for (BoatPlanner.Level level : BoatPlanner.Level.values()) {
+            for (long seed : new long[]{1, 21, 0xC0FFEEL}) {
+                Plan p = PLANNER.plan(input('B', seed, level.id()));
+                Box half = p.half();
+                Course c = ((PlannedTrial) p.course()).course();
+                int cx = RaceStand.centreX(half);
+                int cz = RaceStand.centreZ(half);
+                int floorY = RaceStand.floorY(c.start().y());
+                int iceY = half.minY() + BoatPlanner.ICE_ABOVE_FLOOR;
+                assertEquals(iceY + 5, floorY, "the platform is 5 above the ice, its top 5 above the race line");
+                java.util.Map<String, String> at = new java.util.HashMap<>();
+                double nearestIce = Double.MAX_VALUE;
+                for (BlockOp op : p.ops()) {
+                    at.put(op.x() + " " + op.y() + " " + op.z(), p.blockOf(op));
+                    if (op.y() == iceY && p.blockOf(op).equals(level.ice())) {
+                        int dx = Math.max(0, Math.abs(op.x() - cx) - 3);
+                        int dz = Math.max(0, Math.abs(op.z() - cz) - 3);
+                        nearestIce = Math.min(nearestIce, Math.hypot(dx, dz));
+                    }
+                }
+                for (int x = cx - 3; x <= cx + 3; x++) {
+                    for (int z = cz - 3; z <= cz + 3; z++) {
+                        assertEquals(RaceStand.FLOOR, at.get(x + " " + floorY + " " + z), "a whole 7 x 7 platform");
+                        boolean edge = Math.abs(x - cx) == 3 || Math.abs(z - cz) == 3;
+                        for (int h = 1; h <= 2; h++) {
+                            assertEquals(edge ? RaceStand.RAIL_BLOCK : null, at.get(x + " " + (floorY + h) + " " + z),
+                                    edge ? "a two-high glass rail round the edge" : "headroom over the inner 5 x 5");
+                        }
+                    }
+                }
+                assertTrue(nearestIce >= 12, level + " seed " + seed + ": at least 12 from the lane, got " + nearestIce);
+                for (Box k : p.keepClear()) {
+                    assertTrue(k.maxY() < floorY, "above the track's keep-clear space (ice + 1 to + 4)");
+                }
+                assertTrue(half.contains(cx, floorY + 2, cz), "the rail's top is inside the half");
+                Point spot = RaceStand.spot(half, c.start().y());
+                assertEquals(floorY + 1, spot.y(), 1e-9, "players stand on the platform");
+                assertEquals(new Point(cx + 0.5, floorY + 1, cz + 0.5), spot, "in the middle of it, where races park them");
+            }
         }
     }
 

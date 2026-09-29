@@ -1376,12 +1376,17 @@ every race and round works exactly as before**.
 - **Before Race Night** the join message and the Race Night screen offer **Wait in the Clubhouse**;
   racers there are taken to the grid at seating time. Nothing else about the night changes.
 - **After a party race** a racer who finishes (or doesn't) comes back to the Clubhouse instead of
-  going home. When the race is over the board shows the order, times and gaps, and the host's party
-  screen has **Race again**, which takes everyone still in the Clubhouse back to the grid.
+  going home ("Back in the Clubhouse! Look at the board for the results."). When the race is over the
+  board shows the order, times and gaps, and the host's party screen has **Race again**, which takes
+  everyone still in the Clubhouse back to the grid. While a party is racing, its screen hides **Go to
+  the Clubhouse** and **Take a rider** (like Invite, Ready and the Cup); **Watch** stays for anyone not
+  in the race.
 - **After Race Night** everyone goes to the Clubhouse. The night's top three stand on the podium,
   "Photo time!" shows for 10 seconds, a firework (no damage) goes off over 1st, and the board shows
   the night's standings. Ties on points follow the night's own ranking.
 - **After golf together** the group comes to the Clubhouse and the board shows the group's order.
+  **Play again together** works from there: the Results item's card offers it, and the host's Start
+  on the golf party screen takes everyone waiting in the Clubhouse straight to hole 1.
 - **Solo runs** go home as always.
 - **The board** shows, while a party race, Race Night or golf group is going, the live positions
   (place, name, lap or checkpoint, gap; golf: the group's card), at most once a second; after it ends,
@@ -1392,12 +1397,14 @@ every race and round works exactly as before**.
 - **Watch live.** **Watch live** in the Clubhouse kit (while a race or golf group is going), or
   `/hcm play watch [<player>]`, takes you to the course being raced, in **spectator mode**: fly round
   it, look into the Dropper's shafts, follow a racer by clicking them. You can't leave the course's
-  area (you're put back inside) and can only follow players in that race or group. Other players
+  area (a move out of it just stops at the edge, and the area never reaches below the world's floor)
+  and can only follow players in that race or group. Other players
   don't see you at all; watchers see each other. The action bar shows the race's positions and
   "Watching live - /hcm play clubhouse to go back"; `/hcm play clubhouse` brings you back in
   adventure mode with the kit, and so does the race's end, in time for the results and the photo.
   Every way out (Leave game, a quit, the restart hold, the games off, a crash) puts back the game
-  mode you came with.
+  mode you came with; a watcher who leaves or quits is first brought down to the Clubhouse's floor,
+  never left in mid-air where they flew.
 - **Cheer.** `/hcm play cheer` sends the racers "<name> cheers for you!" on the action bar, once
   every 10 seconds. A racer who'd rather not: `/hcm play cheers off` (kept; `on` turns them back on).
 - **Ride along.** A boat driver can take **one** passenger in the back seat, on a solo boat run, a
@@ -1408,11 +1415,16 @@ every race and round works exactly as before**.
   with Dad - hold on tight!", can't get out mid-run, and is never timed, counted, paid or on a board.
   Their **Leave game** ends only their ride; when the driver finishes, stops, leaves or disconnects,
   the rider goes with them (to the Clubhouse after a party race or Race Night, home after a solo run),
-  their things back. Nobody racing, watching, in a party or in another game can ride, and no new
+  their things back. A ride that waits in the Clubhouse goes on at the driver's next race from there
+  (Race Night on a track with no viewing stand, a party's Race again), and ends when either leaves
+  the Clubhouse or after 5 minutes with no race. A rider can't be pushed or hit by a racing boat, and
+  off the boat (the driver on the stand) is kept within 4 blocks of the driver. Nobody racing, watching, in a party or in another game can ride, and no new
   rides start in the restart hold. A passenger doesn't change a boat's speed, so the driver's run
-  counts as normal; with `games.trials.rider_runs_count: false` a run with a rider is just for fun (no
-  board, record, rewards or Cup time, told before the invite and in the finish line) and Race Night
-  takes no riders. Ride along is part of the Clubhouse: with it off there's no Take a rider anywhere.
+  counts as normal; with `games.trials.rider_runs_count: false` a run with a rider (at any point of it)
+  is just for fun (no board, record, rewards or Cup time, told before the invite and in the finish
+  line; in a party race the driver's place still stands) and Race Night takes no riders. Ride along is
+  part of the Clubhouse: while it isn't open (off, or not built and checked) there's no Take a rider
+  anywhere.
 - **Time limits.** Anyone in the Clubhouse for `max_minutes` (30) with no race or party going is sent
   home, with a warning a minute before. In the restart hold nobody new comes in (except arriving from
   a race already going), and everyone still there is sent home a minute after the hold starts, with a
@@ -1431,8 +1443,11 @@ every race and round works exactly as before**.
   nobody comes in until the check passes; a failed check closes it, and every flow goes back to
   today's. Nobody, admins included, can change a block of the generated room while it's on.
 - **Your own room.** Build one by hand, stand where visitors should arrive and run `/hcm games
-  clubhouse here`; set the podium with `/hcm games clubhouse podium <1|2|3>` and the board with `/hcm
+  clubhouse here` (in a Games world: another world is refused, and `/hcm games check` warns about a room
+  stored in one); set the podium with `/hcm games clubhouse podium <1|2|3>` and the board with `/hcm
   games clubhouse board`. Nothing is built or guarded then. `/hcm games clubhouse generated` goes back.
+- **Your things.** Nothing in the Clubhouse ever empties your inventory: a kit change takes only the
+  kit, and anything that arrives while you're in it (an auction win, a Mini) comes home with you.
 
 | Key | Default | Meaning |
 |---|---|---|

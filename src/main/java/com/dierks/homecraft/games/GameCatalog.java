@@ -62,8 +62,8 @@ public final class GameCatalog {
     }
 
     /**
-     * Whether {@code id} is taken by a game id, a reserved word, or a Daily Courses id (its slots,
-     * {@code daily} and {@code daily_parkour}: {@link Slots#RESERVED}), so no hand-built course can
+     * Whether {@code id} is taken by a game id, a reserved word, or a Fresh Courses id (its slots,
+     * {@code fresh_courses} and {@code fresh_parkour_tiers}: {@link Slots#RESERVED}), so no hand-built course can
      * take one. It can't see a game's aliases (Twenty-One's "blackjack" lives on the built game): a
      * course id is checked with {@link #taken(String, GamesService)}. {@code /hcm play} doesn't ask
      * this: a slot's own course still resolves.

@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.GameSpec;
 import com.dierks.homecraft.games.PlayGate;
 import com.dierks.homecraft.games.RestartHold;
 import com.dierks.homecraft.games.RtpLimits;
+import com.dierks.homecraft.games.gen.api.Slots;
 import org.bukkit.configuration.ConfigurationSection;
 
 import java.time.LocalTime;
@@ -42,6 +43,10 @@ import java.util.function.Consumer;
  * <p>Each game reads its own block with a {@link Node} in its own package, so a game owner adds a
  * key without touching this class; {@link #KEYS} (pinned by {@code GamesConfigTest} against the
  * bundled file) is built from the common keys and every spec's.
+ *
+ * <p>A game's block is named after its id ({@code games.<id>}), with one exception: Fresh Courses
+ * (id {@code fresh_courses}, the name players type) keeps its settings in {@code games.fresh}
+ * ({@link #block}). Parsed settings and {@link Parsed#readable} stay keyed by the game's id.
  */
 public final class GamesConfig {
 
@@ -56,14 +61,27 @@ public final class GamesConfig {
 
     /**
      * Every leaf the parser reads, relative to {@code games}, in config order: {@link #COMMON},
-     * then each game's keys as {@code <id>.<key>}. The bundled config.yml ships exactly these.
+     * then each game's keys as {@code <block>.<key>} ({@link #block}). The bundled config.yml ships
+     * exactly these.
      */
     public static final List<String> KEYS = keys();
 
     /** The most tokens a day's limit on games of chance may allow, whatever config says. */
     public static final int MAX_CHANCE_DAILY_TOKENS = 10_000;
 
+    /** Where Fresh Courses' settings live: {@code games.fresh}. */
+    public static final String FRESH_BLOCK = "fresh";
+
     private GamesConfig() {
+    }
+
+    /**
+     * The block under {@code games:} that game {@code id}'s settings live in: its id, except
+     * {@code fresh} for Fresh Courses ({@code fresh_courses}). A plain function (no table), so it
+     * is safe while this class is still initialising {@link #KEYS}.
+     */
+    public static String block(String id) {
+        return Slots.DAILY.equals(id) ? FRESH_BLOCK : id;
     }
 
     // ---- the parsed config ----------------------------------------------------------------
@@ -258,14 +276,14 @@ public final class GamesConfig {
             Map<String, Object> settings = new LinkedHashMap<>();
             Set<String> unreadable = new LinkedHashSet<>();
             for (GameSpec<?> spec : GameCatalog.SPECS) {
-                Node n = gameNode(root, spec.id(), common);
+                Node n = gameNode(root, block(spec.id()), common);
                 try {
                     settings.put(spec.id(), parseOne(spec, n));
                     if (n.invalid()) {
                         unreadable.add(spec.id());
                     }
                 } catch (RuntimeException | LinkageError e) {
-                    w.accept(PATH + "." + spec.id() + " could not be read (" + e
+                    w.accept(PATH + "." + block(spec.id()) + " could not be read (" + e
                             + ") - that game is off until it is fixed");
                     unreadable.add(spec.id());
                     settings.put(spec.id(), spec.defaults());
@@ -905,7 +923,7 @@ public final class GamesConfig {
         List<String> out = new ArrayList<>(COMMON);
         for (GameSpec<?> spec : GameCatalog.SPECS) {
             for (String k : spec.keys()) {
-                out.add(spec.id() + "." + k);
+                out.add(block(spec.id()) + "." + k);
             }
         }
         return List.copyOf(out);

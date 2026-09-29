@@ -114,7 +114,8 @@ class GamesConfigTest {
 
     /** The game's shipped settings with {@code enabled: false}, read through its own parser. */
     private static <S> S switchedOff(GameSpec<S> spec) {
-        return spec.parse().apply(new GamesConfig.Node("games." + spec.id(), Map.of("enabled", false), w -> { }),
+        return spec.parse().apply(new GamesConfig.Node("games." + GamesConfig.block(spec.id()),
+                        Map.of("enabled", false), w -> { }),
                 spec.defaults());
     }
 
@@ -160,7 +161,7 @@ class GamesConfigTest {
             assertFalse(spec.keys().isEmpty(), spec.id() + " ships at least its enabled key");
             assertEquals("enabled", spec.keys().get(0), spec.id() + ": enabled comes first");
             for (String k : spec.keys()) {
-                expected.add(spec.id() + "." + k);
+                expected.add(GamesConfig.block(spec.id()) + "." + k);
             }
         }
         assertEquals(expected, GamesConfig.KEYS);
@@ -172,7 +173,7 @@ class GamesConfigTest {
         List<String> ids = GameCatalog.SPECS.stream().map(GameSpec::id).toList();
         assertEquals(List.of("ore_slots", "twenty_one", "wheel", "higher_lower", "coin_flip", "creeper_sweeper",
                 "ore_merge", "snake", "mini_match", "simon_says", "whack_a_zombie", "connect_four", "tic_tac_toe",
-                "trials", "golf", "daily"), ids);
+                "trials", "golf", "fresh_courses"), ids);
         assertEquals(5, GameCatalog.SPECS.stream().filter(s -> s.kind() == GameKind.CHANCE).count(),
                 "five games of chance");
         for (String reserved : GameCatalog.RESERVED) {
@@ -180,6 +181,29 @@ class GamesConfigTest {
         }
         assertTrue(GameCatalog.taken("ORE_SLOTS"), "a game id can't be a course id");
         assertFalse(GameCatalog.taken("river_run"));
+    }
+
+    @Test
+    void freshCoursesKeepsItsSettingsInGamesFresh() throws Exception {
+        assertEquals("fresh", GamesConfig.block("fresh_courses"), "the game fresh_courses reads games.fresh");
+        assertEquals("snake", GamesConfig.block("snake"), "every other game reads the block of its id");
+        assertTrue(GamesConfig.KEYS.contains("fresh.cadence"), "its keys are listed under fresh");
+        assertTrue(GamesConfig.KEYS.stream().noneMatch(k -> k.startsWith("fresh_courses.") || k.startsWith("daily.")),
+                "and nowhere else");
+        Map<String, Object> games = shipped();
+        put(games, "fresh.cadence", "daily");
+        List<String> warns = new ArrayList<>();
+        GamesConfig.Parsed parsed = GamesConfig.parse(games, warns::add, null);
+        assertEquals(List.of(), warns, "no WARN");
+        assertEquals(1, parsed.settings(com.dierks.homecraft.games.gen.DailyCourses.SPEC).cadenceDays(),
+                "games.fresh.cadence is the game's cadence");
+        for (String stray : List.of("daily", "fresh_courses")) {
+            Map<String, Object> g = shipped();
+            put(g, stray + ".enabled", true);
+            List<String> w = new ArrayList<>();
+            GamesConfig.parse(g, w::add, null);
+            assertEquals(1, warnsNaming(w, "games." + stray), "games." + stray + " is not a block: " + w);
+        }
     }
 
     // ---- left out ---------------------------------------------------------------------------
@@ -193,10 +217,10 @@ class GamesConfigTest {
 
         for (GameSpec<?> spec : GameCatalog.SPECS) {
             Map<String, Object> games = shipped();
-            put(games, spec.id(), null);
+            put(games, GamesConfig.block(spec.id()), null);
             GamesConfig.Parsed parsed = GamesConfig.parse(games, warns::add, null);
-            assertEquals(List.of(), warns, "games." + spec.id() + " left out");
-            assertAllShipped(parsed, "games." + spec.id() + " left out");
+            assertEquals(List.of(), warns, "games." + GamesConfig.block(spec.id()) + " left out");
+            assertAllShipped(parsed, "games." + GamesConfig.block(spec.id()) + " left out");
         }
         Map<String, Object> games = shipped();
         put(games, "break", null);
@@ -249,10 +273,10 @@ class GamesConfigTest {
         clamps.put("golf.max_over_par", 99);
         clamps.put("trials.fall_depth", 0);
         clamps.put("higher_lower.rtp", 99);
-        clamps.put("daily.retry_minutes", 0);
-        clamps.put("daily.budget.blocks_per_tick", 0);
-        clamps.put("daily.stars.gold.hard", 0.5);
-        clamps.put("daily.slots.tiny_golf.daily_clear", 500);
+        clamps.put("fresh.retry_minutes", 0);
+        clamps.put("fresh.budget.blocks_per_tick", 0);
+        clamps.put("fresh.stars.gold.hard", 0.5);
+        clamps.put("fresh.rewards.clear_daily.fresh_tiny_golf", 500);
         for (Map.Entry<String, Object> c : clamps.entrySet()) {
             Map<String, Object> games = shipped();
             put(games, "enabled", true);
@@ -442,10 +466,10 @@ class GamesConfigTest {
             for (Object junk : List.of(List.of(1), 12, "maybe")) {
                 Map<String, Object> games = shipped();
                 put(games, "enabled", true);
-                put(games, spec.id(), junk);
+                put(games, GamesConfig.block(spec.id()), junk);
                 List<String> warns = new ArrayList<>();
                 GamesConfig.Parsed parsed = GamesConfig.parse(games, warns::add, null);
-                String key = "games." + spec.id();
+                String key = "games." + GamesConfig.block(spec.id());
                 assertTrue(parsed.enabled(), key + ": the other games stay on");
                 assertFalse(parsed.readable(spec.id()), key + " = " + junk + " closes " + spec.id());
                 assertEquals(Set.of(spec.id()), parsed.unreadable(), key + ": only that game");
@@ -454,11 +478,11 @@ class GamesConfigTest {
             }
 
             Map<String, Object> games = shipped();
-            put(games, spec.id() + ".enabled", "maybe");
+            put(games, GamesConfig.block(spec.id()) + ".enabled", "maybe");
             List<String> warns = new ArrayList<>();
             GamesConfig.Parsed parsed = GamesConfig.parse(games, warns::add, null);
             assertFalse(parsed.readable(spec.id()), spec.id() + ".enabled: maybe fails closed");
-            assertEquals(1, warnsNaming(warns, "games." + spec.id() + ".enabled"), warns.toString());
+            assertEquals(1, warnsNaming(warns, "games." + GamesConfig.block(spec.id()) + ".enabled"), warns.toString());
             assertEquals(1, warns.size(), warns.toString());
             assertEquals(switchedOff(spec), parsed.settings(spec), spec.id() + " reads switched off");
         }
@@ -468,7 +492,7 @@ class GamesConfigTest {
     void aBareSwitchWhereAGamesSectionBelongsIsItsEnabled() throws Exception {
         for (GameSpec<?> spec : GameCatalog.SPECS) {
             Map<String, Object> games = shipped();
-            put(games, spec.id(), false);
+            put(games, GamesConfig.block(spec.id()), false);
             List<String> warns = new ArrayList<>();
             GamesConfig.Parsed parsed = GamesConfig.parse(games, warns::add, null);
             assertTrue(parsed.readable(spec.id()), spec.id() + ": false is a readable switch");

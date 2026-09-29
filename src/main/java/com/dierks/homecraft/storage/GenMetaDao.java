@@ -8,11 +8,13 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Daily Courses' admin overrides and bookkeeping in {@code hcm_meta} (GEN-SPEC §5.5): a slot
- * switched on or off, its tier or golf mix, a pinned seed, today's reroll count, the region it has
- * claimed, and the difficulty its live layout was made with.
+ * Fresh Courses' admin overrides and bookkeeping in {@code hcm_meta} (GEN-SPEC §5.5): a slot
+ * switched on or off, its tier or golf mix, a pinned seed, each edition's reroll count
+ * ({@code gen.<slot>.reroll.<edition>}, like {@code reroll.7:38}), the region it has claimed, the
+ * difficulty its live layout was made with, and the schedule with when it was first seen
+ * ({@code gen.cadence}).
  *
- * <p>Why {@code hcm_meta} and not a table of its own: there is no schema migration for Daily
+ * <p>Why {@code hcm_meta} and not a table of its own: there is no schema migration for Fresh
  * Courses (v34 is the last one, and a v35 would clash with any other branch), and these are a
  * handful of small values an admin can read with one query. Why only keys under {@code gen.}:
  * {@code hcm_meta} also holds the schema version and the games secret, and a typo here must never
@@ -118,13 +120,13 @@ public final class GenMetaDao {
 
     private static void checkPrefix(String prefix) {
         if (prefix == null || !prefix.startsWith(PREFIX)) {
-            throw new IllegalArgumentException("Daily Courses only keeps keys under " + PREFIX + ", not " + prefix);
+            throw new IllegalArgumentException("Fresh Courses only keeps keys under " + PREFIX + ", not " + prefix);
         }
     }
 
     private static void check(String key) {
         if (!allowed(key)) {
-            throw new IllegalArgumentException("Daily Courses only keeps keys under " + PREFIX + ", not " + key);
+            throw new IllegalArgumentException("Fresh Courses only keeps keys under " + PREFIX + ", not " + key);
         }
     }
 }

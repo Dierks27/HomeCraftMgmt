@@ -1833,30 +1833,39 @@ games:
     daily_cap: 4
     # Strokes over par before a hole is picked up.
     max_over_par: 3
-  # ---- daily ----
-  # Daily Courses: parkour, Sky Rings and mini golf the plugin builds itself - a fresh set every
-  # day, the same for everyone. Nothing to build by hand. Check with /hcm games gen status.
-  daily:
+  # ---- fresh ----
+  # Fresh Courses: parkour, Sky Rings and mini golf the plugin builds itself - a new set every week
+  # (or every day, or every few days: cadence), the same for everyone. Nothing to build by hand.
+  # Check with /hcm games gen status.
+  fresh:
     # Ships OFF. true + /hcm reload and the first set is up in about two minutes.
     enabled: false
     # The world they are built in: "" = the first of games.worlds (it must be listed there).
     # They sit far out and high up (x 4096-5279, z 4096-4671, y 128-303), away from anything built.
     world: ""
-    # A new course day starts at this time (clock.time_zone, 24-hour, in quotes). Keep it at a
-    # restart: the courses are rebuilt while nobody plays.
-    rollover: "04:00"
+    # How often the courses change: weekly, daily, or a number of days from 1 to 28 (like 3).
+    # The dates are fixed: counted from rebuild_day, so they never depend on when you changed it.
+    # A change here keeps the current courses until the next change day of the new setting.
+    cadence: weekly
+    # The time a new set starts (clock.time_zone, 24-hour, in quotes). Keep it at a restart:
+    # the courses are rebuilt while nobody plays.
+    rebuild_at: "04:00"
+    # The day a weekly set starts, like "monday"; "" = the quests' week start (arcade.quests.week_starts).
+    # Every other cadence counts its days from this day too.
+    rebuild_day: ""
     # Seconds after the server is up before the first build.
     startup_delay_seconds: 60
     # No build starts this many minutes before one of games.restart_times.
     avoid_before_restart_minutes: 15
     # A build that failed is tried again after this many minutes.
     retry_minutes: 30
-    # Builds tried per course per day before it keeps yesterday's course.
+    # Builds tried per course per day before it keeps the last course until the next day.
     max_tries_per_day: 4
     # Minutes someone still on a course the next build needs gets to finish (after an admin's
     # second quick reroll only).
     clear_wait_minutes: 20
-    # Day boards and star rows older than this many days are pruned.
+    # Course boards and star rows older than this many days are pruned (each course always keeps
+    # its last 8 sets).
     keep_days: 35
     # No mobs, fire, random ticks or weather in that world, and always noon.
     world_rules: true
@@ -1864,10 +1873,32 @@ games:
     safe_spot: ""
     # Most Star Chart tokens a player earns a day (games.skill_daily_cap still applies).
     daily_cap: 2
-    # Weekly Star Chart goals: stars a player collects in a week for a token each.
-    star_goals: [10, 25]
-    # Tokens for each weekly goal reached (once a week each).
-    star_goal_reward: 1
+    # Tokens for each course's first finish in each set: one table for a weekly cadence and one for
+    # a daily one. Anything in between is worked out from the two, so a new cadence needs no retuning.
+    rewards:
+      clear_weekly:
+        fresh_parkour_easy: 2
+        fresh_parkour: 3
+        fresh_parkour_hard: 5
+        fresh_rings: 3
+        fresh_golf: 3
+        fresh_tiny_golf: 2
+        fresh_boat: 3
+      clear_daily:
+        fresh_parkour_easy: 1
+        fresh_parkour: 2
+        fresh_parkour_hard: 3
+        fresh_rings: 2
+        fresh_golf: 2
+        fresh_tiny_golf: 1
+        fresh_boat: 2
+    # Star Chart goals: stars a player collects in a week, and the tokens each goal pays (once a
+    # week). Weekly and daily ends like the rewards; never above 80% of what the week can give.
+    star_goals:
+      weekly: [6, 12]
+      weekly_tokens: [1, 2]
+      daily: [10, 25]
+      daily_tokens: [1, 1]
     # How much building one server tick may do.
     budget:
       # Blocks per tick while anyone is online.
@@ -1887,14 +1918,14 @@ games:
     stars:
       gold: {easy: 2.0, medium: 1.5, hard: 1.25}
       silver: {easy: 3.0, medium: 2.2, hard: 1.8}
-    # Each course: on or off, its difficulty (tier, or mix of golf holes: E easy, M medium, H hard),
-    # where its area starts (x y z, x and z a multiple of 16; two halves side by side along x) and
-    # the tokens for its first finish each day. /hcm games gen on|off|tier|mix wins over these.
+    # Each course: on or off, its difficulty (tier, or mix of golf holes: E easy, M medium, H hard)
+    # and where its area starts (x y z, x and z a multiple of 16; two halves side by side along x).
+    # /hcm games gen on|off|tier|mix wins over these.
     slots:
-      daily_parkour_easy: {enabled: true, tier: easy, origin: [4096, 160, 4096], daily_clear: 1}
-      daily_parkour_medium: {enabled: true, tier: medium, origin: [4352, 160, 4096], daily_clear: 2}
-      daily_parkour_hard: {enabled: true, tier: hard, origin: [4608, 160, 4096], daily_clear: 3}
-      sky_rings: {enabled: true, tier: easy, origin: [4096, 128, 4352], daily_clear: 2}
-      daily_golf: {enabled: true, mix: EEEMMMMHH, origin: [4864, 160, 4096], daily_clear: 2}
-      tiny_golf: {enabled: true, mix: EEE, origin: [5120, 160, 4096], daily_clear: 1}
-      ice_boat: {enabled: false, tier: medium, origin: [4480, 160, 4352], daily_clear: 2}
+      fresh_parkour_easy: {enabled: true, tier: easy, origin: [4096, 160, 4096]}
+      fresh_parkour: {enabled: true, tier: medium, origin: [4352, 160, 4096]}
+      fresh_parkour_hard: {enabled: true, tier: hard, origin: [4608, 160, 4096]}
+      fresh_rings: {enabled: true, tier: easy, origin: [4096, 128, 4352]}
+      fresh_golf: {enabled: true, mix: EEEMMMMHH, origin: [4864, 160, 4096]}
+      fresh_tiny_golf: {enabled: true, mix: EEE, origin: [5120, 160, 4096]}
+      fresh_boat: {enabled: false, tier: medium, origin: [4480, 160, 4352]}

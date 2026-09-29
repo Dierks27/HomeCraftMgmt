@@ -20,7 +20,7 @@ import java.util.function.Consumer;
 /**
  * Where the generated courses may stand (GEN-SPEC §2.2, §2.4), as pure checks.
  *
- * <p>Every rule here protects something that isn't Daily Courses': the hand-built courses, the
+ * <p>Every rule here protects something that isn't Fresh Courses': the hand-built courses, the
  * world's spawn, the edge of the world, and the other slots. The generator only ever writes inside
  * its own halves ({@link HalfWriter}), so the halves themselves must be where nothing else is:
  * <ul>
@@ -77,7 +77,7 @@ public final class Regions {
 
     /**
      * The slots with every problem fixed or switched off (GEN-SPEC §2.4), one WARN each through
-     * {@code warn}; {@code path} is {@code games.daily.slots}. Never throws.
+     * {@code warn}; {@code path} is {@code games.fresh.slots}. Never throws.
      */
     public static List<SlotConfig> validate(List<SlotConfig> slots, Consumer<String> warn, String path) {
         List<SlotConfig> out = new ArrayList<>();
@@ -208,7 +208,7 @@ public final class Regions {
      * @param maxHeight one above its highest block
      * @param border    the world border's blocks along x and z ({@code y} ignored), or {@code null}
      * @param spawn     the spawn block {x, y, z}
-     * @param safeSpot  {@code games.daily.safe_spot}, or {@code null}
+     * @param safeSpot  {@code games.fresh.safe_spot}, or {@code null}
      */
     public record WorldFacts(String name, boolean listed, int minHeight, int maxHeight, Box border, int[] spawn,
                              double[] safeSpot) {
@@ -240,7 +240,7 @@ public final class Regions {
             double[] s = w.safeSpot();
             String near = near(def, origin, (int) Math.floor(s[0]), (int) Math.floor(s[1]), (int) Math.floor(s[2]));
             if (near != null) {
-                out.add("games.daily.safe_spot is " + near);
+                out.add("games.fresh.safe_spot is " + near);
             }
         }
         return out;
@@ -272,7 +272,7 @@ public final class Regions {
     /**
      * The footprints of every hand-built course among {@code rows}: each time trial's start,
      * checkpoints and finish (each ± its radius), each golf hole's bounds. A row with a
-     * {@code gen:} block is Daily Courses' own and left out; one that can't be read is left out too
+     * {@code gen:} block is Fresh Courses' own and left out; one that can't be read is left out too
      * (its owner is told by its own game).
      */
     public static List<Area> handBuilt(List<GamesDao.CourseRow> rows) {
@@ -337,14 +337,14 @@ public final class Regions {
 
     /**
      * Why the course row already using a slot's id can't be taken over, or {@code null} when there
-     * is none or it is Daily Courses' own (its game, with a {@code gen:} block).
+     * is none or it is Fresh Courses' own (its game, with a {@code gen:} block).
      */
     public static String takenByHand(Slots.Def def, GamesDao.CourseRow row) {
         if (row == null) {
             return null;
         }
         if (!def.game().equals(row.game()) || !hasGen(row.data())) {
-            return "course " + def.id() + " exists and wasn't made by Daily Courses";
+            return "course " + def.id() + " exists and wasn't made by Fresh Courses";
         }
         return null;
     }

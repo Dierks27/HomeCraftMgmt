@@ -43,7 +43,7 @@ class RegionsTest {
     @Test
     void theShippedLayoutPassesEveryCheckAndEveryHalfIs32Apart() {
         List<String> warns = new ArrayList<>();
-        List<SlotConfig> out = Regions.validate(shipped(), warns::add, "games.daily.slots");
+        List<SlotConfig> out = Regions.validate(shipped(), warns::add, "games.fresh.slots");
         assertEquals(List.of(), warns, "the shipped slots need no WARN");
         assertEquals(shipped(), out, "and come out unchanged");
         List<Box> halves = new ArrayList<>();
@@ -69,9 +69,9 @@ class RegionsTest {
         List<SlotConfig> slots = shipped();
         slots.set(0, slots.get(0).withOrigin(new int[]{4100, 160, 4111}));
         List<String> warns = new ArrayList<>();
-        List<SlotConfig> out = Regions.validate(slots, warns::add, "games.daily.slots");
+        List<SlotConfig> out = Regions.validate(slots, warns::add, "games.fresh.slots");
         assertEquals(1, warns.size(), warns.toString());
-        assertTrue(warns.get(0).startsWith("games.daily.slots.daily_parkour_easy.origin "), warns.get(0));
+        assertTrue(warns.get(0).startsWith("games.fresh.slots.fresh_parkour_easy.origin "), warns.get(0));
         assertArrayEquals(new int[]{4096, 160, 4096}, out.get(0).origin(), "rounded down to the grid");
         assertTrue(out.get(0).enabled(), "and still on");
     }
@@ -85,14 +85,14 @@ class RegionsTest {
         slots.set(4, slots.get(4).withTierOrMix("EEEEEEEEEE"));
         slots.set(5, slots.get(5).withTierOrMix("EEX"));
         List<String> warns = new ArrayList<>();
-        List<SlotConfig> out = Regions.validate(slots, warns::add, "games.daily.slots");
+        List<SlotConfig> out = Regions.validate(slots, warns::add, "games.fresh.slots");
         assertEquals(5, warns.size(), "one WARN per bad slot: " + warns);
         for (int i : new int[]{0, 1, 2, 4, 5}) {
             assertFalse(out.get(i).enabled(), out.get(i).id() + " is off");
-            assertTrue(warns.stream().anyMatch(w -> w.startsWith("games.daily.slots." + out.get(i).id() + " ")),
+            assertTrue(warns.stream().anyMatch(w -> w.startsWith("games.fresh.slots." + out.get(i).id() + " ")),
                     "its WARN names it");
         }
-        assertTrue(out.get(3).enabled(), "sky_rings is untouched");
+        assertTrue(out.get(3).enabled(), "fresh_rings is untouched");
         assertTrue(warns.stream().anyMatch(w -> w.contains("29000000")), "the reach is named");
         assertTrue(warns.stream().anyMatch(w -> w.contains("-56..312")), "the height is named");
     }
@@ -102,9 +102,9 @@ class RegionsTest {
         List<SlotConfig> slots = shipped();
         slots.set(1, slots.get(1).withOrigin(new int[]{4240, 160, 4096})); // onto easy's half B
         List<String> warns = new ArrayList<>();
-        List<SlotConfig> out = Regions.validate(slots, warns::add, "games.daily.slots");
+        List<SlotConfig> out = Regions.validate(slots, warns::add, "games.fresh.slots");
         assertEquals(1, warns.size(), warns.toString());
-        assertTrue(warns.get(0).contains("daily_parkour_easy"), "naming the one it meets: " + warns.get(0));
+        assertTrue(warns.get(0).contains("fresh_parkour_easy"), "naming the one it meets: " + warns.get(0));
         assertTrue(out.get(0).enabled(), "the earlier slot stays on");
         assertFalse(out.get(1).enabled(), "the later one is off");
         assertNotNull(Regions.apartProblem(slots.get(1), slots), "the pre-build check agrees");
@@ -178,7 +178,7 @@ class RegionsTest {
                 null, false, false, 1);
         GamesDao.CourseRow row = new GamesDao.CourseRow(d.id(), "trials", "parkour", "Mine", "games", false,
                 CourseCodec.encode(hand), 1, 0, 0);
-        assertEquals("course daily_parkour_easy exists and wasn't made by Daily Courses", Regions.takenByHand(d, row),
+        assertEquals("course fresh_parkour_easy exists and wasn't made by Fresh Courses", Regions.takenByHand(d, row),
                 "a hand-built row is refused");
         GenTag tag = new GenTag(d.id(), "parkour", 1, 20725, 0, 1, 'A', "abc", 1, 2, 3, List.of(), List.of(), 0);
         GamesDao.CourseRow gen = new GamesDao.CourseRow(d.id(), "trials", "parkour", "Mine", "games", false,

@@ -39,9 +39,9 @@ import java.util.function.Supplier;
 import java.util.logging.Logger;
 
 /**
- * Nobody changes a generated course (GEN-SPEC §6 S6): inside any Daily Courses half, while the
+ * Nobody changes a generated course (GEN-SPEC §6 S6): inside any Fresh Courses half, while the
  * {@code daily} game is open, every change is refused — for everyone, admins included — with
- * "This area is built by Daily Courses - use /hcm games gen".
+ * "This area is built by Fresh Courses - use /hcm games gen".
  *
  * <p>Why admins too: the halves are rebuilt from their plans and verified block for block, so an
  * admin's "quick fix" would be undone at the next build or boot, and a block placed into an idle
@@ -185,7 +185,7 @@ public final class GenRegionGuard {
                 }
             }
         } catch (RuntimeException ex) {
-            log.warning("Daily Courses: the area guard failed: " + ex);
+            log.warning("Fresh Courses: the area guard failed: " + ex);
         }
     }
 
@@ -196,7 +196,7 @@ public final class GenRegionGuard {
                 e.setCancelled(true);
             }
         } catch (RuntimeException ex) {
-            log.warning("Daily Courses: the area guard failed: " + ex);
+            log.warning("Fresh Courses: the area guard failed: " + ex);
         }
     }
 
@@ -213,7 +213,7 @@ public final class GenRegionGuard {
                 e.setCancelled(true);
             }
         } catch (RuntimeException ex) {
-            log.warning("Daily Courses: the area guard failed: " + ex);
+            log.warning("Fresh Courses: the area guard failed: " + ex);
         }
     }
 
@@ -222,7 +222,7 @@ public final class GenRegionGuard {
             Area a = area.get();
             blocks.removeIf(b -> a.in(b.getWorld().getName(), b.getX(), b.getY(), b.getZ()));
         } catch (RuntimeException ex) {
-            log.warning("Daily Courses: the area guard failed: " + ex);
+            log.warning("Fresh Courses: the area guard failed: " + ex);
         }
     }
 

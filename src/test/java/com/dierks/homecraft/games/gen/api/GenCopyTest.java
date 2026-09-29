@@ -2,6 +2,8 @@ package com.dierks.homecraft.games.gen.api;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.DayOfWeek;
+import java.time.ZoneId;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -10,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Daily Courses' words (GEN-SPEC §7): every sign fits a sign on both editions (at most four lines
+ * Fresh Courses' words (GEN-SPEC §7): every sign fits a sign on both editions (at most four lines
  * of fifteen plain ASCII characters), no line uses a word the Games never say or a character
  * Bedrock can't draw, and the checks really catch each of those.
  */
@@ -66,6 +68,50 @@ class GenCopyTest {
         assertEquals("less than a minute", GenCopy.span(-5), "and never negative");
         assertEquals("&7New course in &f11h 2m", GenCopy.newIn(11 * 3_600_000L + 120_000L), "the tile's line");
         assertTrue(GenCopy.comingHere(1).contains("next 1 minute -"), "one minute is singular");
-        assertTrue(GenCopy.timesUp("daily_golf").endsWith("/hcm play daily_golf"), "it says how to try the new one");
+        assertTrue(GenCopy.timesUp("fresh_golf").endsWith("/hcm play fresh_golf"), "it says how to try the new one");
+        assertEquals("6d 14h", GenCopy.span(6 * 86_400_000L + 14 * 3_600_000L + 59 * 60_000L),
+                "a weekly wait is days and hours");
+        assertEquals("1d 0h", GenCopy.span(86_400_000L), "a day is a day");
+    }
+
+    @Test
+    void theWordsFollowTheCadence() {
+        assertEquals("weekly", GenCopy.cadenceName(7), "7 is weekly");
+        assertEquals("daily", GenCopy.cadenceName(1), "1 is daily");
+        assertEquals("every 3 days", GenCopy.cadenceName(3), "anything else counts its days");
+        assertEquals("This week's courses", GenCopy.current(7), "weekly");
+        assertEquals("Today's courses", GenCopy.current(1), "daily");
+        assertEquals("The current courses", GenCopy.current(3), "every few days");
+        assertEquals("The current courses", GenCopy.current(14), "or every other week");
+        assertEquals("New courses every Monday", GenCopy.schedule(7, DayOfWeek.MONDAY, "Mon 4:00 AM"),
+                "weekly names the day");
+        assertEquals("New courses every Thursday", GenCopy.schedule(7, DayOfWeek.THURSDAY, null),
+                "the configured day");
+        assertEquals("New courses every day", GenCopy.schedule(1, DayOfWeek.MONDAY, "Tue 4:00 AM"), "daily");
+        assertEquals("New courses every 3 days - next Thu 4:00 AM", GenCopy.schedule(3, DayOfWeek.MONDAY,
+                "Thu 4:00 AM"), "every N days says when next");
+        assertEquals("New courses every 3 days", GenCopy.schedule(3, DayOfWeek.MONDAY, null), "or not, when not given");
+        assertEquals("&eFresh Courses &7- new every Monday", GenCopy.tile(7, DayOfWeek.MONDAY), "the tile, weekly");
+        assertEquals(GenCopy.TILE, GenCopy.tile(7, DayOfWeek.MONDAY), "the constant is the shipped tile");
+        assertEquals("&eFresh Courses &7- new every day", GenCopy.tile(1, DayOfWeek.MONDAY), "daily");
+        assertEquals("&eFresh Courses &7- new every 2 days", GenCopy.tile(2, DayOfWeek.MONDAY), "every 2 days");
+        assertTrue(GenCopy.previous(7).contains("Last week's course"), "weekly: last week's");
+        assertTrue(GenCopy.previous(1).contains("Yesterday's course"), "daily: yesterday's");
+        assertEquals(GenCopy.YESTERDAY, GenCopy.previous(3), "otherwise: the last course");
+        assertEquals("Golf of the Week", GenCopy.slotName(Slots.DAILY_GOLF, 7), "the big golf course, weekly");
+        assertEquals("Golf of the Day", GenCopy.slotName(Slots.DAILY_GOLF, 1), "daily");
+        assertEquals("Fresh Golf", GenCopy.slotName(Slots.DAILY_GOLF, 3), "every few days");
+        assertEquals("Tiny Golf", GenCopy.slotName(Slots.TINY_GOLF, 1), "every other course keeps its name");
+        ZoneId chicago = ZoneId.of("America/Chicago");
+        long mon = java.time.LocalDateTime.of(2026, 10, 5, 4, 0).atZone(chicago).toInstant().toEpochMilli();
+        assertEquals("Mon 4:00 AM", GenCopy.when(mon, chicago), "a moment");
+        assertEquals("Mon 5 Oct 4:00 AM", GenCopy.whenDated(mon, chicago), "with its date, as status shows it");
+        for (String line : GenCopy.everyLine()) {
+            String plain = line.toLowerCase(java.util.Locale.ROOT);
+            assertFalse(plain.contains("daily courses"), "the old name is gone: " + line);
+        }
+        assertFalse(GenCopy.TILE.toLowerCase(java.util.Locale.ROOT).contains("today"), "the tile doesn't say today");
+        assertFalse(GenCopy.YESTERDAY.toLowerCase(java.util.Locale.ROOT).contains("yesterday"),
+                "and the cadence-free line doesn't say yesterday");
     }
 }

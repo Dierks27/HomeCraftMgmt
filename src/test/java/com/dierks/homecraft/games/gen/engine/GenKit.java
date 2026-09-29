@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.RestartHold;
 import com.dierks.homecraft.games.gen.DailySettings;
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.Edition;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.GenTag;
@@ -396,16 +397,22 @@ final class GenKit {
 
     // ---- settings -----------------------------------------------------------------------------------
 
-    /** Daily Courses on, in {@link #WORLD}, with only {@code on} slots switched on. */
+    /**
+     * Fresh Courses on, in {@link #WORLD}, with only {@code on} slots switched on, changing every
+     * day (so a test's "next day" is a new edition); {@link #weekly} for the shipped cadence.
+     */
     static DailySettings settings(String... on) {
         DailySettings d = DailySettings.defaults();
         List<DailySettings.SlotConfig> slots = new ArrayList<>();
         for (DailySettings.SlotConfig c : d.slots()) {
             slots.add(c.withEnabled(List.of(on).contains(c.id())));
         }
-        return new DailySettings(true, WORLD, d.rollover(), d.startupDelaySeconds(), d.avoidBeforeRestartMinutes(),
-                d.retryMinutes(), d.maxTriesPerDay(), d.clearWaitMinutes(), d.keepDays(), d.worldRules(), d.safeSpot(),
-                d.dailyCap(), d.starGoals(), d.starGoalReward(), d.budget(), d.stars(), slots);
+        return d.withEnabled(true).withWorld(WORLD).withSlots(slots).withCadence(Edition.DAILY);
+    }
+
+    /** As {@link #settings}, at the shipped weekly cadence. */
+    static DailySettings weekly(String... on) {
+        return settings(on).withCadence(Edition.WEEKLY);
     }
 
     // ---- the host -----------------------------------------------------------------------------------
@@ -466,6 +473,16 @@ final class GenKit {
         @Override
         public int pruneBoards(long oldestDay, long oldestWeek) throws SQLException {
             return real.pruneBoards(oldestDay, oldestWeek);
+        }
+
+        @Override
+        public List<String> editionBoards() throws SQLException {
+            return real.editionBoards();
+        }
+
+        @Override
+        public int dropEditionBoards(List<String> boards) throws SQLException {
+            return real.dropEditionBoards(boards);
         }
 
         @Override

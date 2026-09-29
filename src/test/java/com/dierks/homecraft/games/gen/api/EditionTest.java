@@ -10,13 +10,20 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The course day (GEN-SPEC §3.1): 03:59 is still yesterday and 04:00 is today; the next change is
- * the next rollover, 23 or 25 hours away across a DST change in America/Chicago; a rollover inside
- * the spring-forward gap happens at the first instant after it; the day never steps back in the
- * repeated fall-back hour; and a week is the quests' week.
+ * The course day and the edition (GEN-SPEC §3.1, weekly addendum §1): 03:59 is still yesterday and
+ * 04:00 is today; the next change is the next rollover, 23 or 25 hours away across a DST change in
+ * America/Chicago; a rollover inside the spring-forward gap happens at the first instant after it;
+ * the day never steps back in the repeated fall-back hour; a week is the quests' week.
+ *
+ * <p>And the cadence: N = 1, 2, 3, 7, 14 and 28 start on the fixed grid {@code (d - anchor) mod N},
+ * the anchor being the first rebuild day on or after 2026-01-05; the key is {@code N:<index>} and
+ * changes only on a start day; Monday 03:59 vs 04:00 and the Sunday-to-Monday rollover; DST weeks in
+ * America/Chicago; days before the anchor (floorMod); and moving the rebuild day never brings back an
+ * earlier key.
  */
 class EditionTest {
 
@@ -111,12 +118,201 @@ class EditionTest {
 
     @Test
     void editionKeysAndDefaults() {
-        assertEquals("20725", Edition.editionKey(20725, 0), "no reroll: the day");
-        assertEquals("20725r2", Edition.editionKey(20725, 2), "a reroll: <day>r<n>");
+        assertEquals(20458, Edition.EPOCH_DAY, "2026-01-05, a Monday, is where editions count from");
+        assertEquals(DayOfWeek.MONDAY, Edition.EPOCH.getDayOfWeek(), "and it is a Monday");
+        assertEquals("1:267", Edition.editionKey(20725, 0), "a daily edition: 1:<days since 2026-01-05>");
+        assertEquals("1:267r2", Edition.editionKey(20725, 2), "a reroll: r<n> after the key");
+        assertEquals("7:38", Edition.editionKey(7, day(2026, 9, 28), 0), "the week of Mon 28 Sep is 7:38");
+        assertEquals("7:38r1", Edition.editionKey(7, day(2026, 9, 28), 1), "and its first reroll");
         assertEquals(LocalDate.of(2026, 9, 29), Edition.date(20725), "a day's date");
         Edition d = new Edition(null, null, null);
         assertEquals(ZoneOffset.UTC, d.zone(), "no zone reads as UTC");
         assertEquals(Edition.DEFAULT_ROLLOVER, d.rollover(), "no rollover reads as 04:00");
         assertEquals(DayOfWeek.MONDAY, d.weekStart(), "weeks start on Monday by default");
+        assertEquals(Edition.DAILY, d.cadenceDays(), "the three-part form is the course-day rules: daily");
+        assertEquals(DayOfWeek.MONDAY, d.rebuildDay(), "an empty rebuild day is the week start");
+        assertEquals(DayOfWeek.SUNDAY, new Edition(null, null, DayOfWeek.SUNDAY, 7, null).rebuildDay(),
+                "the quests' week start, whatever it is");
+        assertEquals(Edition.MAX_CADENCE, new Edition(null, null, null, 99, null).cadenceDays(), "28 days at most");
+        assertEquals(Edition.DAILY, new Edition(null, null, null, 0, null).cadenceDays(), "and 1 at least");
+    }
+
+    // ---- cadences (weekly addendum §1) ------------------------------------------------------------
+
+    private static Edition every(int days) {
+        return new Edition(CHICAGO, LocalTime.of(4, 0), DayOfWeek.MONDAY, days, null);
+    }
+
+    @Test
+    void theAnchorIsTheFirstRebuildDayOnOrAfterTheFifthOfJanuary() {
+        assertEquals(day(2026, 1, 5), every(7).anchor(), "Monday: the fifth itself");
+        Edition thursday = new Edition(CHICAGO, LocalTime.of(4, 0), DayOfWeek.MONDAY, 7, DayOfWeek.THURSDAY);
+        assertEquals(day(2026, 1, 8), thursday.anchor(), "Thursday: the eighth");
+        Edition sunday = new Edition(CHICAGO, LocalTime.of(4, 0), DayOfWeek.SUNDAY, 7, null);
+        assertEquals(day(2026, 1, 11), sunday.anchor(), "an empty rebuild day with Sunday weeks: the eleventh");
+    }
+
+    @Test
+    void everyCadenceStartsOnItsFixedGridAndKeysChangeExactlyThere() {
+        for (int n : new int[]{1, 2, 3, 7, 14, 28}) {
+            Edition ed = every(n);
+            long from = day(2026, 8, 1);
+            long to = day(2027, 3, 31);
+            int starts = 0;
+            String lastKey = null;
+            for (long d = from; d <= to; d++) {
+                boolean start = Math.floorMod(d - day(2026, 1, 5), n) == 0;
+                assertEquals(start, ed.starts(d), "N=" + n + ": (d - anchor) mod N == 0 is a start, " + d);
+                long noon = ed.startOf(d) + 8 * 3_600_000L;
+                long first = ed.editionStart(noon);
+                assertTrue(first <= d && d < first + n, "N=" + n + ": the edition around " + d + " starts in the "
+                        + "last N days: " + first);
+                assertTrue(ed.starts(first), "N=" + n + ": and on the grid");
+                assertEquals(ed.startOf(first + n), ed.nextChangeAt(noon), "N=" + n + ": it ends at the next start");
+                String key = ed.key(noon);
+                assertEquals(n + ":" + Math.floorDiv(first - day(2026, 1, 5), n), key, "N=" + n + ": N:<index>");
+                if (lastKey != null) {
+                    assertEquals(start, !key.equals(lastKey), "N=" + n + ": the key changes on a start day only, " + d);
+                }
+                lastKey = key;
+                starts += start ? 1 : 0;
+            }
+            long days = to - from + 1;
+            assertTrue(Math.abs(starts - days / (double) n) <= 1, "N=" + n + ": one start every N days (" + starts
+                    + " in " + days + ")");
+        }
+    }
+
+    @Test
+    void mondayAt359IsStillLastWeekAndAt400ANewWeekBegins() {
+        Edition weekly = every(7);
+        long sun = at(2026, 10, 4, 12, 0);
+        long mon359 = at(2026, 10, 5, 3, 59);
+        long mon400 = at(2026, 10, 5, 4, 0);
+        assertEquals(day(2026, 9, 28), weekly.editionStart(sun), "Sunday is in the week that began Monday 28 Sep");
+        assertEquals(day(2026, 9, 28), weekly.editionStart(mon359), "Monday 03:59 is still that week");
+        assertEquals("7:38", weekly.key(mon359), "edition 7:38");
+        assertEquals(day(2026, 10, 5), weekly.editionStart(mon400), "Monday 04:00 is the new week");
+        assertEquals("7:39", weekly.key(mon400), "edition 7:39");
+        assertEquals(mon400, weekly.nextChangeAt(sun), "from Sunday the next change is Monday 04:00");
+        assertEquals(mon400, weekly.nextChangeAt(mon359), "from 03:59, in a minute");
+        assertEquals(at(2026, 10, 12, 4, 0), weekly.nextChangeAt(mon400), "from 04:00, a week later");
+        assertEquals(weekly.key(at(2026, 9, 29, 9, 0)), weekly.key(at(2026, 10, 1, 23, 0)),
+                "the courses don't change on Tuesday or any day but Monday");
+
+        Edition daily = every(1);
+        assertEquals("1:272", daily.key(at(2026, 10, 5, 3, 59)), "daily: Monday 03:59 is Sunday's (day 272)");
+        assertEquals("1:273", daily.key(at(2026, 10, 5, 4, 0)), "and 04:00 is Monday's");
+        Edition three = every(3);
+        long before = at(2026, 9, 29, 3, 59);
+        long after = at(2026, 9, 29, 4, 0);
+        assertTrue(three.starts(day(2026, 9, 29)), "Tue 29 Sep is on the 3-day grid (267 days from the anchor)");
+        assertFalse(three.starts(day(2026, 10, 1)), "Thu 1 Oct isn't");
+        assertEquals("3:88", three.key(before), "03:59 is still the set from Sat 26 Sep");
+        assertEquals("3:89", three.key(after), "every 3 days: it changes at 04:00 on the grid day");
+        assertEquals(three.key(after), three.key(at(2026, 10, 2, 3, 59)), "and holds for three days");
+        assertEquals(at(2026, 10, 2, 4, 0), three.nextChangeAt(after), "then Fri 2 Oct");
+    }
+
+    @Test
+    void weeklyEditionsAcrossDstInChicagoAreAWeekOfLocalTime() {
+        Edition weekly = every(7);
+        // 2026-03-08 (a Sunday): Chicago skips 02:00-03:00; the week of Mon 2 Mar is an hour short.
+        long mar2 = weekly.startOf(day(2026, 3, 2));
+        assertEquals(weekly.startOf(day(2026, 3, 9)), weekly.nextChangeAt(mar2), "the next week is Mon 9 Mar 04:00");
+        assertEquals(7 * 24 * 3_600_000L - 3_600_000L, weekly.nextChangeAt(mar2) - mar2,
+                "which is 167 hours away");
+        assertEquals(day(2026, 3, 2), weekly.editionStart(at(2026, 3, 9, 3, 59)), "03:59 CDT is still that week");
+        assertEquals(day(2026, 3, 9), weekly.editionStart(at(2026, 3, 9, 4, 0)), "04:00 CDT is the next");
+        // 2026-11-01 (a Sunday): Chicago repeats 01:00-02:00; the week of Mon 26 Oct is an hour long.
+        long oct26 = weekly.startOf(day(2026, 10, 26));
+        assertEquals(7 * 24 * 3_600_000L + 3_600_000L, weekly.nextChangeAt(oct26) - oct26, "169 hours");
+        long last = weekly.editionStart(at(2026, 10, 31, 20, 0));
+        for (long t = at(2026, 10, 31, 20, 0); t <= at(2026, 11, 2, 6, 0); t += 60_000L) {
+            long e = weekly.editionStart(t);
+            assertTrue(e >= last, "the edition never goes back in the repeated hour (at " + t + ")");
+            last = e;
+        }
+        assertEquals(day(2026, 11, 2), last, "and moves on at Monday 04:00 CST");
+        Edition three = every(3);
+        long start = three.editionStart(at(2026, 11, 1, 12, 0));
+        assertTrue(three.starts(start), "every 3 days across the fall-back weekend stays on its grid");
+        assertEquals(three.startOf(start + 3), three.nextChangeAt(at(2026, 11, 1, 12, 0)),
+                "and its change is at 04:00 local on the grid day");
+    }
+
+    @Test
+    void daysBeforeTheAnchorUseFloorModNotRemainder() {
+        Edition weekly = every(7);
+        long dec31 = at(2025, 12, 31, 12, 0);
+        assertEquals(day(2025, 12, 29), weekly.editionStart(dec31), "31 Dec 2025 is in the week of Mon 29 Dec");
+        assertEquals("7:-1", weekly.key(dec31), "the week before the epoch is index -1, not 0");
+        Edition three = every(3);
+        assertEquals(day(2025, 12, 30), three.editionStart(dec31), "every 3 days: 30 Dec (six days before the 5th)");
+        assertEquals("3:-2", three.key(dec31), "index -2");
+        assertTrue(three.starts(day(2026, 1, 2)) && !three.starts(day(2026, 1, 1)), "2 Jan is a start, 1 Jan isn't");
+        assertEquals(-1, Edition.index(7, day(2026, 1, 4)), "the Sunday before the epoch is week -1");
+        assertEquals(0, Edition.index(7, day(2026, 1, 5)), "the epoch Monday is week 0");
+    }
+
+    @Test
+    void anIndexDependsOnTheStartDateAloneSoMovingTheRebuildDayNeverReusesAKey() {
+        for (DayOfWeek rebuild : DayOfWeek.values()) {
+            Edition daily = new Edition(CHICAGO, LocalTime.of(4, 0), DayOfWeek.MONDAY, 1, rebuild);
+            assertEquals("1:267", daily.key(at(2026, 9, 29, 12, 0)), "a daily key is the same whatever the "
+                    + "rebuild day (" + rebuild + ")");
+            Edition weekly = new Edition(CHICAGO, LocalTime.of(4, 0), DayOfWeek.MONDAY, 7, rebuild);
+            long start = weekly.editionStart(at(2026, 9, 29, 12, 0));
+            assertEquals((start - weekly.anchor()) / 7, Edition.index(7, start),
+                    "weekly and longer: exactly (start - anchor) / N (" + rebuild + ")");
+        }
+        long switchDay = day(2026, 9, 20);
+        for (int n : new int[]{1, 2, 3, 5}) {
+            for (DayOfWeek from : DayOfWeek.values()) {
+                for (DayOfWeek to : DayOfWeek.values()) {
+                    Edition before = new Edition(CHICAGO, LocalTime.of(4, 0), DayOfWeek.MONDAY, n, from);
+                    Edition after = new Edition(CHICAGO, LocalTime.of(4, 0), DayOfWeek.MONDAY, n, to);
+                    java.util.Set<String> used = new java.util.HashSet<>();
+                    String running = null;
+                    for (long d = switchDay - 40; d < switchDay; d++) {
+                        running = before.key(before.startOf(d) + 3_600_000L);
+                        used.add(running);
+                    }
+                    // The running edition is kept until its own end (the engine's rule); from then on:
+                    long end = before.startOfEditionOn(switchDay - 1) + n;
+                    for (long d = end; d < switchDay + 40; d++) {
+                        String key = after.key(after.startOf(d) + 3_600_000L);
+                        assertTrue(key.equals(running) || !used.contains(key), "N=" + n + ", " + from + " -> " + to
+                                + ": " + key + " on day " + d + " was already used");
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void editionsStartingInAWeekAndKeysReadBack() {
+        assertEquals(1, every(7).startsInWeek(day(2026, 9, 28)), "weekly: one a week");
+        assertEquals(7, every(1).startsInWeek(day(2026, 9, 28)), "daily: seven");
+        int two = every(3).startsInWeek(day(2026, 9, 28));
+        assertTrue(two == 2 || two == 3, "every 3 days: two or three: " + two);
+        assertEquals(1, every(14).startsInWeek(day(2026, 10, 12)) + every(14).startsInWeek(day(2026, 10, 19)),
+                "every 14 days: one start in two weeks");
+        Edition thursdays = new Edition(CHICAGO, LocalTime.of(4, 0), DayOfWeek.MONDAY, 7, DayOfWeek.THURSDAY);
+        long thu = thursdays.editionStart(at(2026, 10, 3, 12, 0));
+        assertEquals(day(2026, 10, 1), thu, "Saturday 3 Oct is in the week that began Thursday 1 Oct");
+        Edition.Key thuKey = Edition.Key.parse(thursdays.key(at(2026, 10, 3, 12, 0)));
+        assertEquals(thu, thursdays.startDayOf(thuKey), "a key reads back to its real first day under its rules");
+        assertEquals(day(2026, 9, 28), thuKey.firstDay(), "(its earliest possible day is the Monday before)");
+        assertEquals(thuKey.firstDay(), every(1).startDayOf(thuKey), "under another cadence, the earliest day");
+        Edition.Key k = Edition.Key.parse("7:38r1");
+        assertEquals(new Edition.Key(7, 38, 1), k, "a key reads back");
+        assertEquals("7:38", k.base(), "its base has no reroll");
+        assertEquals("7:38r1", k.toString(), "and it writes back the same");
+        assertEquals(day(2026, 9, 28), k.firstDay(), "the week of 28 Sep");
+        assertEquals(new Edition.Key(3, -2, 0), Edition.Key.parse("3:-2"), "negative indexes too");
+        for (String bad : new String[]{null, "", "7", ":38", "0:3", "29:1", "7:x", "7:38r", "7:38r0", "20725"}) {
+            assertEquals(null, Edition.Key.parse(bad), "'" + bad + "' is not a key");
+        }
     }
 }

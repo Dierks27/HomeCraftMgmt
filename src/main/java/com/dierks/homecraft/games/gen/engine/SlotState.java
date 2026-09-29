@@ -9,7 +9,7 @@ import java.util.Arrays;
 
 /**
  * One slot as the engine holds it in memory (GEN-SPEC §3.2-§3.5): what is live and whether it was
- * vouched for, the layout still standing beside it, and today's tries.
+ * vouched for, the layout still standing beside it, and the course day's tries.
  *
  * <p>Nothing here is stored. The database has the live row (and so the live tag), and
  * {@code hcm_meta} has the admin's overrides and the claim; everything else is worked out again at
@@ -20,13 +20,14 @@ final class SlotState {
     /**
      * A preview built into the idle half without a flip ({@code /hcm games gen preview}).
      *
-     * @param half   the half it stands in
-     * @param plan   its plan
-     * @param day    the course day it was made for
-     * @param seed   its seed
-     * @param mix    the tier or mix it was made with
+     * @param half    the half it stands in
+     * @param plan    its plan
+     * @param day     the first day of the edition it was made for
+     * @param seed    its seed
+     * @param mix     the tier or mix it was made with
+     * @param cadence that edition's length in days
      */
-    record Preview(char half, Plan plan, long day, long seed, String mix) {
+    record Preview(char half, Plan plan, long day, long seed, String mix, int cadence) {
     }
 
     final Slots.Def def;
@@ -40,7 +41,7 @@ final class SlotState {
     /** The tier or mix a build would use now. */
     String mix = "";
     GenScheduler.Pin pin;
-    /** Today's reroll count. */
+    /** The current edition's reroll count. */
     int reroll;
     /** The claim matches this world and origin. */
     boolean claimed;

@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class GeneratedCoursesTest {
 
-    private static final GenTag TAG = new GenTag("daily_parkour_easy", "parkour", 1, 20725, 0, 1L, 'A', "abc", 1, 2,
+    private static final GenTag TAG = new GenTag("fresh_parkour_easy", "parkour", 1, 20725, 0, 1L, 'A', "abc", 1, 2,
             3, List.of(), List.of(), 0);
 
     private Host host;
@@ -55,12 +55,12 @@ class GeneratedCoursesTest {
     void withoutTheEngineNothingGeneratedIsLiveOrStanding() {
         GeneratedCourses none = GeneratedCourses.NONE;
         assertTrue(none.live("river_run", null), "a hand-built course is not the gate's business");
-        assertFalse(none.live("daily_parkour_easy", TAG), "a generated one is closed");
+        assertFalse(none.live("fresh_parkour_easy", TAG), "a generated one is closed");
         assertFalse(none.standing(TAG), "its layout doesn't stand, so an old run's finish follows the old rule");
         assertFalse(none.standing(null), "nothing stands for a hand-built course either");
         assertFalse(none.inArea("games", 4100, 170, 4100), "no area is kept");
         assertEquals(-1, none.nextChangeAt(), "nothing is scheduled");
-        assertEquals("&7Easy Parkour is closed for now.", none.closedLine("daily_parkour_easy"),
+        assertEquals("&7Easy Parkour is closed for now.", none.closedLine("fresh_parkour_easy"),
                 "a closed slot is named");
         assertEquals("&7That course is closed for now.", none.closedLine("mystery"), "anything else isn't");
     }
@@ -99,7 +99,8 @@ class GeneratedCoursesTest {
         games.generated(null);
         assertSame(GeneratedCourses.NONE, games.generated(), "removing it goes back to NONE");
 
-        TestGame daily = new TestGame("daily", GameKind.TRIAL, "Daily Courses", TokenService.Source.GAMES_DAILY);
+        TestGame daily = new TestGame("fresh_courses", GameKind.TRIAL, "Fresh Courses",
+                TokenService.Source.GAMES_DAILY);
         GamesService withDaily = GamesKit.service(host, List.of(GamesKit.spec(daily, new SkillSettings(true, 2),
                 null)));
         withDaily.generated(mine);
@@ -206,11 +207,11 @@ class GeneratedCoursesTest {
             }
         };
         FeedWriter.Daily d = new FeedWriter.Daily("2026-09-29", 5L, 76_000L, 114_000L);
-        out.course("daily_parkour_easy", "Easy Parkour", "parkour", "easy", 40_000L, 7L, null, d);
-        out.golf("tiny_golf", "Tiny Golf", 3, 9, 10, 8L, null, d);
+        out.course("fresh_parkour_easy", "Easy Parkour", "parkour", "easy", 40_000L, 7L, null, d);
+        out.golf("fresh_tiny_golf", "Tiny Golf", 3, 9, 10, 8L, null, d);
         out.starChart("2026-09-28", 14L, null);
-        assertEquals(List.of("course daily_parkour_easy parkour easy 40000 7 null",
-                "golf tiny_golf 3 9 10 8 null"), calls,
+        assertEquals(List.of("course fresh_parkour_easy parkour easy 40000 7 null",
+                "golf fresh_tiny_golf 3 9 10 8 null"), calls,
                 "a daily entry is the plain entry until the feed learns the daily part; the Star Chart is nothing");
     }
 }

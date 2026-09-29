@@ -87,18 +87,18 @@ class LiveProofTest {
         w.put(20, 99, 10, "minecraft:light_blue_concrete");
         w.put(30, 99, 10, "minecraft:gold_block");
         LiveProof.Solid solid = (x, y, z) -> w.at(x, y, z) != null;
-        Course c = new Course("daily_parkour_easy", TrialKind.PARKOUR, "Easy Parkour", Tier.EASY, "games",
+        Course c = new Course("fresh_parkour_easy", TrialKind.PARKOUR, "Easy Parkour", Tier.EASY, "games",
                 new Course.Spot(10.5, 100, 10.5, 0f, 0f), List.of(new Course.Mark(20.5, 100, 10.5, 2.2)),
                 new Course.Mark(30.5, 100, 10.5, 3), null, null, true, false, 1);
         assertEquals(List.of(), LiveProof.structure(c, solid), "every pad is there");
         w.blocks.remove(GenKit.pos(20, 99, 10));
         assertEquals(List.of("nothing solid under checkpoint 1"), LiveProof.structure(c, solid), "a missing pad");
-        Course rings = new Course("sky_rings", TrialKind.ELYTRA, "Sky Rings", Tier.EASY, "games",
+        Course rings = new Course("fresh_rings", TrialKind.ELYTRA, "Sky Rings", Tier.EASY, "games",
                 new Course.Spot(10.5, 100, 10.5, 0f, 0f), List.of(new Course.Mark(20.5, 150, 10.5, 5)),
                 new Course.Mark(30.5, 120, 10.5, 5), null, null, true, false, 1);
         assertEquals(List.of(), LiveProof.structure(rings, solid), "rings float: only the tower is checked");
 
-        GolfCourse golf = new GolfCourse("tiny_golf", "Tiny Golf", "games", true, 1, List.of(new GolfCourse.Hole(
+        GolfCourse golf = new GolfCourse("fresh_tiny_golf", "Tiny Golf", "games", true, 1, List.of(new GolfCourse.Hole(
                 new GolfCourse.Tee(10.5, 100, 10.5, 0f), new GolfCourse.Spot(30, 99, 10), 2,
                 new GolfCourse.Spot(0, 90, 0), new GolfCourse.Spot(40, 110, 20))));
         assertEquals(List.of(), LiveProof.structure(golf, solid), "a tee on turf and a cup block");

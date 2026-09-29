@@ -3,30 +3,38 @@ package com.dierks.homecraft.games.gen.api;
 import java.util.Locale;
 
 /**
- * The one spelling of every Daily Courses board (GEN-SPEC §5.2), and the way back from a name.
+ * The one spelling of every Fresh Courses board (GEN-SPEC §5.2, weekly addendum §3), and the way
+ * back from a name.
  *
  * <ul>
- *   <li>{@code gday:<id>:<editionKey>} — one layout's leaderboard ("Today's best"), in the course's
- *       own game ({@code trials} or {@code golf}), lower is better. A reroll is a new edition and
- *       so a fresh board; nothing is ever cleared.</li>
- *   <li>{@code gstars:<id>:<day>} — a player's best stars on a course that course-day (any reroll),
- *       in game {@value #GAME}, higher is better.</li>
+ *   <li>{@code gfresh:<id>:<editionKey>} — one layout's leaderboard, in the course's own game
+ *       ({@code trials} or {@code golf}), lower is better. The edition key ({@code 7:38},
+ *       {@code 7:38r1}) carries the cadence, so a daily and a weekly edition never share a board,
+ *       and a reroll is a fresh board; nothing is ever cleared.</li>
+ *   <li>{@code gstars:<id>:<edition>} — a player's best stars on a course in one edition (any
+ *       reroll: {@code 7:38}), in game {@value #GAME}, higher is better. {@code gstars:<id>:<day>}
+ *       (a course day) is still read and written for callers that key stars by day.</li>
  *   <li>{@code gweek:<weekKey>} — the Star Chart: the sum of those bests over the week, in game
- *       {@value #GAME}, higher is better.</li>
+ *       {@value #GAME}, higher is better. Per week whatever the cadence.</li>
  * </ul>
  * Days and weeks are local epoch days ({@link Edition}).
  */
 public final class GenBoards {
 
-    /** The game the star boards are kept under. */
-    public static final String GAME = "daily";
-    public static final String DAY_PREFIX = "gday:";
+    /** The game the star boards are kept under: Fresh Courses' own id. */
+    public static final String GAME = Slots.DAILY;
+    public static final String DAY_PREFIX = "gfresh:";
     public static final String STARS_PREFIX = "gstars:";
     public static final String WEEK_PREFIX = "gweek:";
 
     /** Which board a name is. */
     public enum Kind {
-        DAY, STARS, WEEK
+        /** One edition's leaderboard of one course ({@code gfresh:}). */
+        DAY,
+        /** A player's best stars on a course ({@code gstars:}). */
+        STARS,
+        /** The Star Chart ({@code gweek:}). */
+        WEEK
     }
 
     /**
@@ -34,16 +42,35 @@ public final class GenBoards {
      *
      * @param kind     which board
      * @param courseId the course ({@code null} for the week)
-     * @param day      the course day ({@code gday}, {@code gstars}); the week's first day for {@code gweek}
-     * @param reroll   {@code gday} only: the edition's reroll (0 for none)
+     * @param day      for an edition's board, the earliest day that edition can start on
+     *                 ({@link Edition.Key#firstDay}: its real start is at most N-1 days later); a
+     *                 day-keyed stars board's course day; the week's first day for {@code gweek}
+     * @param reroll   {@code gfresh} only: the edition's reroll (0 for none)
+     * @param edition  the edition key without the reroll ({@code 7:38}), or {@code ""} for a week or
+     *                 a day-keyed stars board
      */
-    public record Board(Kind kind, String courseId, long day, int reroll) {
+    public record Board(Kind kind, String courseId, long day, int reroll, String edition) {
+
+        public Board {
+            edition = edition == null ? "" : edition;
+        }
+
+        /** A board that isn't an edition's (a week, or stars kept by day). */
+        public Board(Kind kind, String courseId, long day, int reroll) {
+            this(kind, courseId, day, reroll, "");
+        }
+
+        /** The edition's cadence in days, or 0 when the board isn't an edition's. */
+        public int cadence() {
+            Edition.Key k = Edition.Key.parse(edition);
+            return k == null ? 0 : k.cadence();
+        }
     }
 
     private GenBoards() {
     }
 
-    /** One layout's leaderboard. */
+    /** One layout's leaderboard ({@code editionKey} is {@code 7:38} or {@code 7:38r1}). */
     public static String day(String courseId, String editionKey) {
         return DAY_PREFIX + courseId + ":" + editionKey;
     }
@@ -53,7 +80,17 @@ public final class GenBoards {
         return day(tag.slot(), tag.editionKey());
     }
 
-    /** A course's best-stars board for a course day. */
+    /** A course's best-stars board for one edition ({@code edition} without a reroll: {@code 7:38}). */
+    public static String stars(String courseId, String edition) {
+        return STARS_PREFIX + courseId + ":" + edition;
+    }
+
+    /** A course's best-stars board for the edition {@code tag} is in (any reroll). */
+    public static String stars(GenTag tag) {
+        return stars(tag.slot(), tag.edition());
+    }
+
+    /** A course's best-stars board kept by course day (for callers that key stars by day). */
     public static String stars(String courseId, long day) {
         return STARS_PREFIX + courseId + ":" + day;
     }
@@ -63,7 +100,7 @@ public final class GenBoards {
         return WEEK_PREFIX + weekKey;
     }
 
-    /** A board name read back, or {@code null} when it isn't a well-formed Daily Courses board. */
+    /** A board name read back, or {@code null} when it isn't a well-formed Fresh Courses board. Never throws. */
     public static Board parse(String board) {
         if (board == null) {
             return null;
@@ -77,28 +114,26 @@ public final class GenBoards {
                 return null;
             }
             String rest = board.substring(day ? DAY_PREFIX.length() : STARS_PREFIX.length());
-            int colon = rest.lastIndexOf(':');
+            int colon = rest.indexOf(':');
             if (colon <= 0) {
                 return null;
             }
             String id = rest.substring(0, colon);
             String key = rest.substring(colon + 1).toLowerCase(Locale.ROOT);
-            int r = key.indexOf('r');
-            if (r >= 0 && !day) {
-                return null; // a stars board is per day, never per reroll
+            if (!day && key.indexOf(':') < 0) {
+                return new Board(Kind.STARS, id, Long.parseLong(key), 0); // stars kept by course day
             }
-            long d = Long.parseLong(r < 0 ? key : key.substring(0, r));
-            int reroll = r < 0 ? 0 : Integer.parseInt(key.substring(r + 1));
-            if (reroll < 0 || (r >= 0 && reroll == 0)) {
-                return null;
+            Edition.Key k = Edition.Key.parse(key);
+            if (k == null || !key.equals(k.toString()) || (!day && k.reroll() > 0)) {
+                return null; // a stars board is per edition, never per reroll
             }
-            return new Board(day ? Kind.DAY : Kind.STARS, id, d, reroll);
+            return new Board(day ? Kind.DAY : Kind.STARS, id, k.firstDay(), k.reroll(), k.base());
         } catch (NumberFormatException e) {
             return null;
         }
     }
 
-    /** Whether {@code board} is a Daily Courses board. */
+    /** Whether {@code board} is a Fresh Courses board. */
     public static boolean generated(String board) {
         return parse(board) != null;
     }

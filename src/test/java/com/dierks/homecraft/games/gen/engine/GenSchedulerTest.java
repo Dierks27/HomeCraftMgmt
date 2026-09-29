@@ -21,19 +21,25 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * When a slot gets a new layout (GEN-SPEC §3.2), with a fake clock in America/Chicago and the
- * owner's restarts at 04:00 and 16:00.
+ * When a slot gets a new layout (GEN-SPEC §3.2, weekly addendum §1), with a fake clock in
+ * America/Chicago and the owner's restarts at 04:00 and 16:00.
  *
- * <p>Pinned here: a stale day builds and a current one doesn't; nothing starts in the 15 minutes
+ * <p>Pinned here: a stale edition builds and a current one doesn't; nothing starts in the 15 minutes
  * before either restart (03:45-04:00, 15:45-16:00); a failed try waits {@code retry_minutes} and
  * a day stops after {@code max_tries_per_day}; nothing before the startup delay; a pinned layout
  * that stands is restamped; a pin of another planner version is ignored; a reroll or an unverified
  * layout builds; the seed is the HMAC seed; no secret, no build; a job running two minutes before
  * a restart is abandoned.
+ *
+ * <p>And the cadence: weekly courses change on Monday at 04:00 and not on Tuesday; a cadence change
+ * on reload keeps the current edition until the new schedule's first start (weekly to daily: the
+ * next 04:00; daily to weekly: the day's own end; weekly to every 3 days: the fixed grid), or until
+ * its own end when the change's moment is unknown; a reroll in that time is a new layout of the kept
+ * edition; a later edition is never undone; a pin holds per edition.
  */
 class GenSchedulerTest {
 
-    private static final String SLOT = "daily_parkour_easy";
+    private static final String SLOT = "fresh_parkour_easy";
     private static final long SECRET = 0x5eed_5eedL;
     private static final DailySettings S = GenKit.settings(SLOT);
     private static final RestartHold HOLD = new RestartHold(List.of(LocalTime.of(4, 0), LocalTime.of(16, 0)),
@@ -178,6 +184,136 @@ class GenSchedulerTest {
         Decision d = at(noSecret, GenKit.at(2026, 9, 29, 5, 0));
         assertEquals(Kind.WAIT, d.kind(), "the old layout stays");
         assertTrue(d.reason().contains("secret"), d.reason());
+    }
+
+    // ---- editions (weekly addendum §1) -------------------------------------------------------------
+
+    private static final DailySettings WEEKLY = GenKit.weekly(SLOT);
+    private static final long MON_28_SEP = 20724;
+
+    private static Edition every(int days) {
+        return new Edition(GenKit.ZONE, LocalTime.of(4, 0), DayOfWeek.MONDAY, days, null);
+    }
+
+    private static GenTag edition(int cadence, long start, int reroll, long seed) {
+        return tag(start, reroll, seed).withEdition(cadence, start, reroll);
+    }
+
+    private static SlotView view(GenTag live, long since) {
+        return new SlotView(SLOT, true, false, live, true, "easy", "easy", 0, null, 1, 0, 0, 0, false, SECRET, since);
+    }
+
+    @Test
+    void weeklyTheCoursesChangeOnMondayAt400AndNotOnTuesday() {
+        Edition weekly = every(7);
+        GenTag week = edition(7, MON_28_SEP, 0, 1);
+        for (long t : new long[]{GenKit.at(2026, 9, 29, 4, 1), GenKit.at(2026, 9, 29, 12, 0),
+                GenKit.at(2026, 10, 1, 9, 0), GenKit.at(2026, 10, 4, 23, 0), GenKit.at(2026, 10, 5, 3, 59)}) {
+            assertEquals(Kind.NONE, GenScheduler.decide(view(week), t, 0, WEEKLY, HOLD, weekly).kind(),
+                    "this week's courses stay all week (at " + t + ")");
+        }
+        Decision monday = GenScheduler.decide(view(week), GenKit.at(2026, 10, 5, 4, 0), 0, WEEKLY, HOLD, weekly);
+        assertEquals(Kind.BUILD, monday.kind(), "Monday 04:00 builds the next week");
+        assertEquals(MON_28_SEP + 7, monday.day(), "for the week of Mon 5 Oct");
+        assertEquals(7, monday.cadence(), "a weekly edition");
+        assertEquals(GenSeed.seed(SECRET, 7, MON_28_SEP + 7, SLOT, 0), monday.seed(),
+                "from the seed of (secret, 7:39, slot)");
+        Decision first = GenScheduler.decide(view(null), GenKit.at(2026, 9, 30, 12, 0), 0, WEEKLY, HOLD, weekly);
+        assertEquals(MON_28_SEP, first.day(), "a first build mid-week is this week's edition, begun Monday");
+        GenTag daily = tag(20725, 0, 1);
+        assertEquals(Kind.NONE, GenScheduler.decide(view(daily), GenKit.at(2026, 9, 29, 12, 0), 0, WEEKLY, HOLD,
+                weekly).kind(), "a daily layout is kept after a switch to weekly (until its own end)");
+    }
+
+    @Test
+    void weeklyToDailyKeepsTheWeekUntilTheNext400ThenChangesDaily() {
+        Edition daily = every(1);
+        GenTag week = edition(7, MON_28_SEP, 0, 1);
+        long since = GenKit.at(2026, 9, 30, 15, 0); // the owner reloads on Wednesday afternoon
+        GenScheduler.Target kept = GenScheduler.target(week, GenKit.at(2026, 9, 30, 16, 0), daily, since);
+        assertTrue(kept.kept(), "the week's layout is kept");
+        assertEquals(MON_28_SEP, kept.start(), "as the week of 28 Sep");
+        assertEquals(GenKit.at(2026, 10, 1, 4, 0), kept.endsAt(), "until the next 4:00 AM, the new schedule's first");
+        assertEquals(Kind.NONE, GenScheduler.decide(view(week, since), GenKit.at(2026, 10, 1, 3, 59), 0, S, HOLD,
+                daily).kind(), "never rebuilt mid-edition just because the setting changed");
+        Decision thu = GenScheduler.decide(view(week, since), GenKit.at(2026, 10, 1, 4, 0), 0, S, HOLD, daily);
+        assertEquals(Kind.BUILD, thu.kind(), "at 04:00 the daily courses begin");
+        assertEquals(20727, thu.day(), "Thursday's");
+        assertEquals(1, thu.cadence(), "a daily edition");
+        assertEquals(GenSeed.seed(SECRET, 1, 20727, SLOT, 0), thu.seed(), "with a daily seed");
+        GenScheduler.Target unknown = GenScheduler.target(week, GenKit.at(2026, 9, 30, 16, 0), daily, 0);
+        assertEquals(GenKit.at(2026, 10, 5, 4, 0), unknown.endsAt(),
+                "when the change's moment is unknown, the layout is kept until its own end");
+    }
+
+    @Test
+    void dailyToWeeklyKeepsTodaysUntilTheNext400ThenTheWeeksSetGoesUp() {
+        Edition weekly = every(7);
+        GenTag wednesday = tag(20726, 0, 1);
+        long since = GenKit.at(2026, 9, 30, 15, 0);
+        GenScheduler.Target kept = GenScheduler.target(wednesday, GenKit.at(2026, 9, 30, 16, 0), weekly, since);
+        assertTrue(kept.kept(), "Wednesday's daily layout is kept");
+        assertEquals(GenKit.at(2026, 10, 1, 4, 0), kept.endsAt(), "until its own end, the next 4:00 AM");
+        Decision thu = GenScheduler.decide(view(wednesday, since), GenKit.at(2026, 10, 1, 4, 0), 0, WEEKLY, HOLD,
+                weekly);
+        assertEquals(Kind.BUILD, thu.kind(), "then the week's set goes up");
+        assertEquals(MON_28_SEP, thu.day(), "the week that began on Monday (key 7:38)");
+        assertEquals(7, thu.cadence(), "weekly");
+        GenTag week = edition(7, MON_28_SEP, 0, 2);
+        assertEquals(Kind.NONE, GenScheduler.decide(view(week, since), GenKit.at(2026, 10, 3, 12, 0), 0, WEEKLY, HOLD,
+                weekly).kind(), "and it stays until Monday");
+    }
+
+    @Test
+    void weeklyToEveryThreeDaysChangesOnTheFixedThreeDayGrid() {
+        Edition three = every(3);
+        GenTag week = edition(7, MON_28_SEP, 0, 1);
+        long since = GenKit.at(2026, 9, 30, 15, 0);
+        GenScheduler.Target kept = GenScheduler.target(week, GenKit.at(2026, 9, 30, 16, 0), three, since);
+        assertEquals(GenKit.at(2026, 10, 2, 4, 0), kept.endsAt(), "the next 3-day grid day is Fri 2 Oct");
+        assertTrue(three.starts(20728), "which is on the grid");
+        Decision fri = GenScheduler.decide(view(week, since), GenKit.at(2026, 10, 2, 4, 0), 0,
+                GenKit.settings(SLOT).withCadence(3), HOLD, three);
+        assertEquals(Kind.BUILD, fri.kind(), "and the courses change then");
+        assertEquals(20728, fri.day(), "on that day");
+        assertEquals(3, fri.cadence(), "every 3 days");
+    }
+
+    @Test
+    void aRerollDuringAKeptEditionIsANewLayoutOfThatEditionAndALaterStartIsNeverUndone() {
+        Edition daily = every(1);
+        GenTag week = edition(7, MON_28_SEP, 0, 1);
+        long since = GenKit.at(2026, 9, 30, 15, 0);
+        SlotView rerolled = new SlotView(SLOT, true, false, week, true, "easy", "easy", 1, null, 1, 0, 0, 0, false,
+                SECRET, since);
+        Decision d = GenScheduler.decide(rerolled, GenKit.at(2026, 9, 30, 16, 0), 0, S, HOLD, daily);
+        assertEquals(Kind.BUILD, d.kind(), "an admin's reroll builds at once");
+        assertEquals(MON_28_SEP, d.day(), "the kept edition");
+        assertEquals(7, d.cadence(), "as a weekly one");
+        assertEquals(GenSeed.seed(SECRET, 7, MON_28_SEP, SLOT, 1), d.seed(), "with 7:38r1's seed");
+        GenTag tomorrow = tag(20726, 0, 1); // made under a later rebuild_at, the day before it moved
+        Edition fiveAm = new Edition(GenKit.ZONE, LocalTime.of(5, 0), DayOfWeek.MONDAY, 1, null);
+        assertEquals(Kind.NONE, GenScheduler.decide(view(tomorrow), GenKit.at(2026, 9, 30, 4, 30), 0, S, HOLD,
+                fiveAm).kind(), "a layout of a later edition is never replaced by an older one");
+    }
+
+    @Test
+    void aPinHoldsForEditionsStartingOnOrBeforeItsLastDay() {
+        Edition weekly = every(7);
+        long seed = 0x3f2a91c07d1e55b0L;
+        GenTag week = edition(7, MON_28_SEP, 0, seed);
+        Pin twoWeeks = new Pin(seed, 1, MON_28_SEP + 13);
+        SlotView pinned = new SlotView(SLOT, true, false, week, true, "easy", "easy", 0, twoWeeks, 1, 0, 0, 0, false,
+                SECRET);
+        Decision d = GenScheduler.decide(pinned, GenKit.at(2026, 10, 5, 4, 1), 0, WEEKLY, HOLD, weekly);
+        assertEquals(Kind.RESTAMP, d.kind(), "the next week is restamped: new boards, no blocks");
+        assertEquals(MON_28_SEP + 7, d.day(), "for the week of 5 Oct");
+        assertEquals(7, d.cadence(), "as a weekly edition");
+        SlotView later = new SlotView(SLOT, true, false, week.withEdition(7, MON_28_SEP + 7, 0), true, "easy", "easy",
+                0, twoWeeks, 1, 0, 0, 0, false, SECRET);
+        Decision lapsed = GenScheduler.decide(later, GenKit.at(2026, 10, 12, 4, 1), 0, WEEKLY, HOLD, weekly);
+        assertEquals(GenSeed.seed(SECRET, 7, MON_28_SEP + 14, SLOT, 0), lapsed.seed(),
+                "a week starting after its last day builds from the edition's own seed");
     }
 
     @Test

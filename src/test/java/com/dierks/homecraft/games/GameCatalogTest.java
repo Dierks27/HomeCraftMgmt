@@ -18,9 +18,10 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Daily Courses' ids in the {@code /hcm play} namespace (GEN-SPEC §5.4): every slot id,
- * {@code daily} and {@code daily_parkour} are taken, so no hand-built course can ever be made with
- * one; but {@code /hcm play} doesn't ask that question, so a slot's own course still resolves.
+ * Fresh Courses' ids in the {@code /hcm play} namespace (GEN-SPEC §5.4, weekly addendum §2): every
+ * slot id, {@code fresh_courses} and {@code fresh_parkour_tiers} are taken, so no hand-built course
+ * can ever be made with one; but {@code /hcm play} doesn't ask that question, so a slot's own course
+ * still resolves.
  */
 class GameCatalogTest {
 
@@ -32,7 +33,7 @@ class GameCatalogTest {
     void setUp() {
         host = new Host(GamesKit.at(2026, 9, 29, 15, 0));
         trials = new TestGame("test_trials", GameKind.TRIAL, "Test Trials", TokenService.Source.GAMES_PARKOUR);
-        trials.playables.add(new Game.Playable("daily_golf", "Daily Golf", trials, TokenService.Source.GAMES_GOLF, ""));
+        trials.playables.add(new Game.Playable("fresh_golf", "Daily Golf", trials, TokenService.Source.GAMES_GOLF, ""));
         games = GamesKit.service(host, List.of(GamesKit.spec(trials, new SkillSettings(true, 4), null)));
     }
 
@@ -42,14 +43,15 @@ class GameCatalogTest {
     }
 
     @Test
-    void everyDailyCoursesIdIsTaken() {
+    void everyFreshCoursesIdIsTaken() {
         for (String id : Slots.RESERVED) {
             assertTrue(GameCatalog.taken(id), id + " can't be a hand-built course's id");
             assertTrue(GameCatalog.taken(" " + id.toUpperCase() + " "), id + " in any case, with spaces");
             assertTrue(GameCatalog.taken(id, games), id + " with the service's check too");
         }
-        assertEquals(9, Slots.RESERVED.size(), "seven slots, the Today's Courses screen and the tier picker");
-        assertFalse(GameCatalog.taken("daily_golf_2"), "a name that only starts like one is free");
+        assertEquals(9, Slots.RESERVED.size(), "seven slots, the Fresh Courses screen and the level picker");
+        assertFalse(GameCatalog.taken("fresh_golf_2"), "a name that only starts like one is free");
+        assertFalse(GameCatalog.taken("daily"), "the old daily id never shipped and is free");
         assertFalse(GameCatalog.taken("river_run"), "a hand-built id is free");
         assertTrue(GameCatalog.taken("accept"), "the old reserved words still are");
         assertTrue(GameCatalog.taken("snake"), "and the games' ids");
@@ -57,9 +59,9 @@ class GameCatalogTest {
 
     @Test
     void aSlotsCourseStillResolvesForPlay() {
-        GamesService.Target t = games.resolve("Daily_Golf");
-        assertNotNull(t, "/hcm play daily_golf finds the course, taken or not");
+        GamesService.Target t = games.resolve("Fresh_Golf");
+        assertNotNull(t, "/hcm play fresh_golf finds the course, taken or not");
         assertSame(trials, t.game(), "in the game that runs it");
-        assertEquals("daily_golf", t.playable().id(), "and the course itself");
+        assertEquals("fresh_golf", t.playable().id(), "and the course itself");
     }
 }

@@ -59,22 +59,27 @@ import java.util.concurrent.Executor;
 import java.util.logging.Logger;
 
 /**
- * Daily Courses (GEN-SPEC §0, §5.4): parkour in three tiers, Sky Rings, Daily Golf and Tiny Golf,
- * built by the plugin itself every morning — the same for everyone all day, each with its own
- * board, and 1 to 3 stars a day for the weekly Star Chart.
+ * Fresh Courses (GEN-SPEC §0, §5.4 and the weekly addendum): parkour in three tiers, Sky Rings, the
+ * big golf course and Tiny Golf, built by the plugin itself — a new set every week by default
+ * ({@code games.fresh.cadence}: weekly, daily, or every few days), the same for everyone, each with
+ * its own board, and 1 to 3 stars per course per set for the weekly Star Chart.
  *
  * <p><b>Why it is a game.</b> Being in {@link com.dierks.homecraft.games.GameCatalog} gives it
- * everything the framework gives a game for free: its {@code games.daily} block parsed like every
- * other (junk closes only it), its guard (anything it throws switches off only Daily Courses — and
+ * everything the framework gives a game for free: its {@code games.fresh} block parsed like every
+ * other (junk closes only it), its guard (anything it throws switches off only Fresh Courses — and
  * with it the gate, so no generated course opens that nothing vouches for), its tasks and listeners
- * registered and removed with it, a tile, and a line in {@code /hcm games status}.
+ * registered and removed with it, a tile, and a line in {@code /hcm games status}. Its id is
+ * {@code fresh_courses}; its settings block is {@code games.fresh}.
  *
  * <p><b>What it is not.</b> The courses themselves are ordinary {@code game_courses} rows that Time
  * Trials and Mini Golf run unchanged; this game only builds them and says, through
  * {@link GamesService#generated()}, which of them may be played ({@link GenService}). Its own screen
- * is Today's Courses; {@code /hcm play daily_parkour} opens the tier picker.
+ * lists the current courses; {@code /hcm play fresh_parkour_tiers} opens the parkour level picker.
  *
- * <p>Ships off ({@code games.daily.enabled: false}): switching it on and {@code /hcm reload} is all
+ * <p><b>The words follow the cadence.</b> Its tile and rules say "every Monday", "every day" or
+ * "every 3 days" as configured ({@link GenCopy}); nothing here says "daily" or "today" on its own.
+ *
+ * <p>Ships off ({@code games.fresh.enabled: false}): switching it on and {@code /hcm reload} is all
  * the owner does; the first set is up within a few minutes.
  */
 public final class DailyCourses implements Game {
@@ -85,12 +90,8 @@ public final class DailyCourses implements Game {
     public static final GameSpec<DailySettings> SPEC = new GameSpec<>(Slots.DAILY, GameKind.TRIAL,
             DailySettings.KEYS, DailySettings.defaults(), DailySettings::parse, DailyCourses::new, null);
 
-    /** The rules, on the tile and the screen. */
-    static final List<String> RULES = List.of(
-            "New courses every morning: parkour, Sky Rings and golf.",
-            "The same courses for everyone, all day.",
-            "Finish for a star, go faster for more!",
-            "Fill your Star Chart every week.");
+    /** The rules at the shipped (weekly) cadence, on the tile and the screen ({@link #rules(int, DayOfWeek)}). */
+    static final List<String> RULES = rules(Edition.DEFAULT_CADENCE, DayOfWeek.MONDAY);
 
     private final GameContext ctx;
     private final GenAdmin admin;
@@ -116,7 +117,7 @@ public final class DailyCourses implements Game {
 
     @Override
     public String name() {
-        return "Daily Courses";
+        return GenCopy.NAME;
     }
 
     @Override
@@ -131,7 +132,17 @@ public final class DailyCourses implements Game {
 
     @Override
     public List<String> rules() {
-        return RULES;
+        Edition ed = edition();
+        return rules(ed.cadenceDays(), ed.rebuildDay());
+    }
+
+    /** The rules for an N-day cadence starting on {@code rebuildDay}: when they change comes first. */
+    static List<String> rules(int cadence, DayOfWeek rebuildDay) {
+        return List.of(
+                GenCopy.schedule(cadence, rebuildDay, null) + ": parkour, Sky Rings and golf.",
+                "The same courses for everyone.",
+                "Finish for a star, go faster for more!",
+                "Fill your Star Chart every week.");
     }
 
     /** Never today's pick: its courses are picked on their own. */
@@ -142,35 +153,37 @@ public final class DailyCourses implements Game {
 
     @Override
     public ItemStack tile(Player viewer) {
+        Edition ed = edition();
         List<String> lore = new ArrayList<>();
-        for (String line : RULES) {
+        for (String line : rules(ed.cadenceDays(), ed.rebuildDay())) {
             lore.add("&7" + line);
         }
         GenService e = engine;
         if (e != null && e.nextChangeAt() > 0) {
             lore.add(GenCopy.newIn(e.nextChangeAt() - games().clock().nowMillis()));
         }
-        lore.add("&eClick to see today's courses");
-        return Menus.icon(Material.CLOCK, GenCopy.TILE, lore.toArray(new String[0]));
+        lore.add("&eClick to see " + GenCopy.current(ed.cadenceDays()).toLowerCase(java.util.Locale.ROOT));
+        return Menus.icon(Material.CLOCK, GenCopy.tile(ed.cadenceDays(), ed.rebuildDay()),
+                lore.toArray(new String[0]));
     }
 
-    /** One tile on the Courses tab and one on the Golf tab, both opening Today's Courses. */
+    /** One tile on the Courses tab and one on the Golf tab, both opening the Fresh Courses screen. */
     @Override
     public List<GameTile> tiles(Player viewer) {
         ItemStack icon = tile(viewer);
         return List.of(new GameTile(Tab.COURSES, icon, id(), 0), new GameTile(Tab.GOLF, icon.clone(), id(), 1));
     }
 
-    /** Today's Courses. */
+    /** The Fresh Courses screen (the current set). */
     @Override
     public void open(Player player, Runnable back) {
         games().screens().today(player, back);
     }
 
-    /** {@code daily_parkour}: the parkour tier picker. */
+    /** {@code fresh_parkour_tiers}: the parkour level picker. */
     @Override
     public Collection<Playable> playables() {
-        return List.of(new Playable(Slots.DAILY_PARKOUR, "Daily Parkour", this, TokenService.Source.GAMES_DAILY, ""));
+        return List.of(new Playable(Slots.DAILY_PARKOUR, "Parkour Levels", this, TokenService.Source.GAMES_DAILY, ""));
     }
 
     @Override
@@ -235,7 +248,7 @@ public final class DailyCourses implements Game {
             try {
                 e.stop();
             } finally {
-                games().generated(null); // only Daily Courses installs one
+                games().generated(null); // only Fresh Courses installs one
             }
         }
         if (planner != null) {
@@ -251,25 +264,49 @@ public final class DailyCourses implements Game {
         return ctx.games().settings(SPEC);
     }
 
-    /** The running engine, or {@code null} while Daily Courses is off. */
+    /** The running engine, or {@code null} while Fresh Courses is off. */
     public GenService engine() {
         return engine;
     }
 
-    /** The course day's rules: {@code clock.time_zone}, {@code rollover}, {@code quests.week_starts_on}. */
+    /**
+     * The schedule: {@code clock.time_zone}, {@code games.fresh.cadence}, {@code rebuild_at},
+     * {@code rebuild_day} (the quests' week start when empty), and the quests' week.
+     */
     public Edition edition() {
-        return new Edition(games().clock().zone(), settings().rollover(), weekStart());
-    }
-
-    /** Tokens for the first counted finish of {@code slotId}'s course day ({@code daily_clear}). */
-    public int dailyClear(String slotId) {
-        return settings().dailyClear(slotId);
+        return settings().edition(games().clock().zone(), weekStart());
     }
 
     /**
-     * Pay the weekly Star Chart goals a counted run just crossed ({@code star_goals}, +
-     * {@code star_goal_reward} each, once a week each, under {@code daily_cap}): the course engines
-     * call this with what {@code GamesDao.addStars} returned.
+     * Tokens for the first counted finish of {@code slotId} in an edition, at the configured cadence
+     * ({@code games.fresh.rewards}: between the daily and weekly tables).
+     */
+    public int dailyClear(String slotId) {
+        GenService e = engine;
+        return e != null ? e.dailyClear(slotId) : settings().dailyClear(slotId);
+    }
+
+    /**
+     * The Star Chart goals of the week starting {@code weekKey}: the cadence's goals and tokens
+     * ({@code star_goals}), never above 80% of what the week can give.
+     */
+    public List<DailyStars.Goal> goals(long weekKey) {
+        GenService e = engine;
+        if (e != null) {
+            return e.goals(weekKey);
+        }
+        DailySettings st = settings();
+        int on = 0;
+        for (DailySettings.SlotConfig c : st.slots()) {
+            on += c.enabled() ? 1 : 0;
+        }
+        return st.starGoals(DailyStars.weekMax(on, Math.max(1, edition().startsInWeek(weekKey))));
+    }
+
+    /**
+     * Pay the weekly Star Chart goals a counted run just crossed (each goal's own tokens, once a week
+     * each, under {@code daily_cap}): the course engines call this with what
+     * {@code GamesDao.addStars} returned.
      *
      * @param weekKey the week of the layout the run was on
      * @return the goals crossed, smallest first
@@ -279,11 +316,12 @@ public final class DailyCourses implements Game {
             return List.of();
         }
         DailySettings st = settings();
-        List<Integer> crossed = DailyStars.crossed(added.weekBefore(), added.weekTotal(), st.starGoals());
+        List<DailyStars.Goal> goals = goals(weekKey);
+        List<Integer> crossed = DailyStars.crossed(added.weekBefore(), added.weekTotal(), DailyStars.stars(goals));
         for (int goal : crossed) {
             games().rewards().pay(player, this, TokenService.Source.GAMES_DAILY, RewardKind.MILESTONE,
-                    SkillRewards.milestoneRef(GenBoards.week(weekKey), goal), st.starGoalReward(), st.dailyCap(),
-                    "Star Chart: " + goal + " stars this week");
+                    SkillRewards.milestoneRef(GenBoards.week(weekKey), goal), DailyStars.tokens(goals, goal),
+                    st.dailyCap(), "Star Chart: " + goal + " stars this week");
         }
         return crossed;
     }

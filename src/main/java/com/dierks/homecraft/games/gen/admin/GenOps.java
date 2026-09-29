@@ -21,16 +21,16 @@ public interface GenOps {
     /** "A restart is coming at 4:00 PM - try after it." while one is within {@code avoid_before_restart_minutes}, else {@code null}. */
     String restartSoon();
 
-    /** A dry run: the plan for today (or {@code tomorrow}, or a seed), no blocks. */
+    /** A dry run: the plan for the current edition (or the {@code next} one, or a seed), no blocks. */
     void plan(String slot, String seedOrTomorrow, Consumer<String> report);
 
     /** Build into the idle half without flipping. */
     void preview(String slot, String seed, Consumer<String> report);
 
-    /** The preview becomes today's layout. */
+    /** The preview becomes the current edition's layout. */
     void promote(String slot, boolean confirm, Consumer<String> report);
 
-    /** A new layout for today (a fresh board). */
+    /** A new layout for the current edition (a fresh board). */
     void reroll(String slot, Consumer<String> report);
 
     /** Verify and heal the live half, same seed. */
@@ -42,7 +42,7 @@ public interface GenOps {
     /** A tier or mix override, from the next build. */
     void tier(String slot, String tierOrMix, Consumer<String> report);
 
-    /** Pin a seed ({@code today} = the live one) for {@code days} (0 = until unpinned). */
+    /** Pin a seed ({@code live} = the live one) for {@code days} (0 = until unpinned). */
     void pin(String slot, String seedOrToday, int days, Consumer<String> report);
 
     void unpin(String slot, Consumer<String> report);

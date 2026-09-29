@@ -32,7 +32,7 @@ class PlanCheckTest {
     void aGoodPlanPassesAndEachKindOfBadOneIsRefused() {
         Plan good = GenKit.plan(DEF, A, 11, 1);
         assertEquals(List.of(), PlanCheck.problems(good, DEF, A), "the kit's plan is fine");
-        assertTrue(PlanCheck.problems(good, Slots.DAILY_PARKOUR_HARD, A).get(0).contains("not daily_parkour_hard"),
+        assertTrue(PlanCheck.problems(good, Slots.DAILY_PARKOUR_HARD, A).get(0).contains("not fresh_parkour_hard"),
                 "a plan for another slot");
         assertTrue(PlanCheck.problems(good, DEF, DEF.half('B')).get(0).contains("not x 4192"),
                 "a plan for the other half");

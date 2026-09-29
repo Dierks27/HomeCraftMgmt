@@ -2103,6 +2103,36 @@ public final class GenService implements GeneratedCourses, GenOps {
         return s == null ? null : s.live;
     }
 
+    /**
+     * One slot as {@code /hcm games check} and the new-courses line read it (EXTRAS E1, E2).
+     *
+     * @param wanted    switched on (config, or the admin's override)
+     * @param on        switched on and nothing in the way
+     * @param problem   why it can't be built or opened (its region, a hand-built course, foreign
+     *                  blocks: "Region has 1,234 blocks..."), or {@code null}
+     * @param claimed   its area is Fresh Courses' own
+     * @param live      its live layout, or {@code null}
+     * @param current   the live layout is vouched for and is its current edition's
+     * @param building  a job is running on it now
+     * @param lastError why its last try failed, or {@code null}
+     */
+    public record SlotReport(String id, boolean classic, boolean wanted, boolean on, String problem, boolean claimed,
+                             String world, GenTag live, boolean verified, boolean current, boolean building,
+                             String lastError, boolean healFailed) {
+    }
+
+    /** Every slot, then every Classics slot, as they stand now. Read-only. */
+    public List<SlotReport> report() {
+        List<SlotReport> out = new ArrayList<>();
+        for (SlotState s : slots.values()) {
+            boolean current = s.live != null && s.verified && (s.classic ? s.want != null && holds(s, s.want)
+                    : target(s).holds(s.live));
+            out.add(new SlotReport(s.def.id(), s.classic, s.wanted(), s.on(), s.problem, s.claimed, s.world, s.live,
+                    s.verified, current, job != null && job.slot == s, s.lastError, s.healFailed));
+        }
+        return out;
+    }
+
     // ---- status (§8.6) ----------------------------------------------------------------------------
 
     /** The lines under {@code fresh_courses} in {@code /hcm games status}. */

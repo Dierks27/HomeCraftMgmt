@@ -405,6 +405,118 @@ final class ArcadeConfigMigration {
                 + "The six old ids are kept, so every unlock already earned still counts.");
     }
 
+    // ---- revision 17: the skill games' quests and achievements (EXTRAS E4) ----------------------
+
+    /** The daily quests revision 17 adds, in the order they ship. */
+    static final List<String> GAME_DAILY = List.of("cabinet_daily", "course_daily");
+    /** The weekly quests revision 17 adds. */
+    static final List<String> GAME_WEEKLY = List.of("cabinet_weekly", "course_weekly", "stars_weekly");
+    /** The "Games" achievements revision 17 adds. */
+    static final List<String> GAME_ACHIEVEMENTS = List.of("game_first_cabinet", "game_gold", "game_all_cabinets",
+            "game_first_course", "game_hole_in_one", "game_under_par", "game_fresh_all", "game_star_chart",
+            "game_record");
+
+    /**
+     * Config revision 17: the skill games' quests join the daily and weekly pools, and the "Games"
+     * achievements join the list. A list is one value to the backfill, so an upgraded server would
+     * never see them otherwise. A list that is still exactly what we shipped gains the new rows at
+     * its end; a list the owner has changed is theirs and is left as it is, with a
+     * {@link HomeCraftManagement#WARN} naming it and the lines to paste to add them. Rows already
+     * there by id are never added twice. The rows are read from the bundled config.yml.
+     */
+    static void gamesRows(FileConfiguration c, List<String> log) {
+        YamlConfiguration defaults = bundled();
+        if (defaults == null) {
+            log.add(WARN + "Config migration: could not read the bundled config.yml, so the game quests and "
+                    + "achievements were not added. Reinstall the jar, or copy them from the jar's config.yml.");
+            return;
+        }
+        appendRows(c, defaults, "arcade.quests.daily_pool", GAME_DAILY, "daily game quests", log);
+        appendRows(c, defaults, "arcade.quests.weekly_pool", GAME_WEEKLY, "weekly game quests", log);
+        appendRows(c, defaults, "arcade.achievements", GAME_ACHIEVEMENTS, "\"Games\" achievements", log);
+    }
+
+    /**
+     * Append the bundled rows {@code ids} name to the list at {@code path} when the rest of it is
+     * still the shipped list; otherwise leave it and say which lines to add. Absent (the backfill
+     * writes the whole bundled list) or not a list: nothing to do.
+     */
+    static void appendRows(FileConfiguration c, YamlConfiguration defaults, String path, List<String> ids,
+                           String what, List<String> log) {
+        if (!(c.get(path, null) instanceof List<?> raw)) {
+            return;
+        }
+        List<Map<String, Object>> bundledRows = mapRows(defaults.getList(path));
+        List<Map<String, Object>> current = mapRows(raw);
+        Set<String> have = new HashSet<>();
+        for (Map<String, Object> r : current) {
+            have.add(idOf(r));
+        }
+        List<Map<String, Object>> missing = new ArrayList<>();
+        List<Map<String, Object>> shippedBefore = new ArrayList<>();
+        for (Map<String, Object> r : bundledRows) {
+            if (ids.contains(idOf(r))) {
+                if (!have.contains(idOf(r))) {
+                    missing.add(r);
+                }
+            } else {
+                shippedBefore.add(r);
+            }
+        }
+        if (missing.isEmpty()) {
+            return;
+        }
+        List<Map<String, Object>> currentBefore = new ArrayList<>();
+        for (Map<String, Object> r : current) {
+            if (!ids.contains(idOf(r))) {
+                currentBefore.add(r);
+            }
+        }
+        if (current.size() == raw.size() && sameRows(currentBefore, shippedBefore)) {
+            List<Object> out = new ArrayList<>(raw);
+            out.addAll(missing);
+            c.set(path, out);
+            List<String> added = new ArrayList<>();
+            for (Map<String, Object> r : missing) {
+                added.add(idOf(r));
+            }
+            log.add("Config migration: added the " + what + " to " + path + " (" + String.join(", ", added)
+                    + "). They count only the skill games, never a game of chance.");
+            return;
+        }
+        log.add(WARN + "Config migration: kept your " + path + " as it is because you have changed it, so the new "
+                + what + " were not added. To add them, put these lines at the end of " + path + ":");
+        for (Map<String, Object> r : missing) {
+            log.add(WARN + "  " + flowRow(r));
+        }
+    }
+
+    /** Words YAML reads as something other than text when bare. */
+    private static final Set<String> YAML_WORDS = Set.of("true", "false", "yes", "no", "on", "off", "y", "n", "null", "~");
+
+    /** A row as one line of YAML to paste: {@code - { id: a, type: B, target: 3, display: "Say it" }}. */
+    static String flowRow(Map<String, Object> row) {
+        StringBuilder sb = new StringBuilder("- { ");
+        boolean first = true;
+        for (Map.Entry<String, Object> e : row.entrySet()) {
+            if (!first) {
+                sb.append(", ");
+            }
+            first = false;
+            sb.append(e.getKey()).append(": ");
+            Object v = e.getValue();
+            if (v instanceof Number || v instanceof Boolean) {
+                sb.append(v);
+            } else {
+                String text = String.valueOf(v);
+                boolean bare = text.matches("[A-Za-z_][A-Za-z0-9_]*") && !YAML_WORDS.contains(text.toLowerCase(Locale.ROOT));
+                sb.append(bare && !e.getKey().equals("display") && !e.getKey().equals("group") ? text
+                        : "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\"");
+            }
+        }
+        return sb.append(" }").toString();
+    }
+
     // ---- helpers --------------------------------------------------------------------------
 
     private static Map<String, Object> row(Object... kv) {

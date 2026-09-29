@@ -35,13 +35,14 @@ import java.util.logging.Level;
  * <ul>
  *   <li>{@code /hcm play} — the Games screen; {@code /hcm play <game|course>} — open a game (rules
  *       and odds first) or start a course; {@code /hcm play break} — Take a break;
- *       {@code /hcm play accept|deny} — answer an invite; {@code /hcm play invites [on|off]}
- *       (hcm.games.play)</li>
+ *       {@code /hcm play accept|deny} — answer an invite; {@code /hcm play invites [on|off]};
+ *       {@code /hcm play news [on|off]} — the "New courses are up!" line (hcm.games.play)</li>
  *   <li>{@code /hcm play <game|course> <player>} — the same for someone else: NPC plugins, command
  *       blocks, the hub (hcm.games.admin, or the console)</li>
  *   <li>{@code /hcm leave} — leave the world game you are in (hcm.games.play)</li>
  *   <li>{@code /hcm games status|feature|break|scores|saved} and each world game's own
- *       {@code course}/{@code golf} editor (hcm.games.admin)</li>
+ *       {@code course}/{@code golf} editor (hcm.games.admin); {@code /hcm games check} — is the
+ *       server set up for the games? It only reads ({@link GamesCheck})</li>
  * </ul>
  *
  * <p>A player inside a world game may use only {@code play}, {@code leave}, {@code games} and
@@ -63,13 +64,13 @@ public final class GamesCommand {
     /** What a player in a world session may still use under {@code /hcm}. */
     static final Set<String> IN_SESSION = Set.of("play", "leave", "games", "help");
     /** The {@code /hcm games} verbs, in the order help and tab completion list them. */
-    static final List<String> VERBS = List.of("status", "feature", "break", "scores", "saved");
+    static final List<String> VERBS = List.of("status", "check", "feature", "break", "scores", "saved");
     /** The {@code /hcm games break <player>} verbs. */
     static final List<String> BREAK_VERBS = List.of("show", "pause", "limit", "clear", "clear-own");
     /** The {@code /hcm games saved <player>} verbs (world sessions own them). */
     static final List<String> SAVED_VERBS = List.of("show", "restore", "return", "discard");
     /** Words {@code /hcm play} keeps for itself. */
-    static final List<String> PLAY_WORDS = List.of("break", "accept", "deny", "invites", "leave");
+    static final List<String> PLAY_WORDS = List.of("break", "accept", "deny", "invites", "news", "leave");
 
     private final HomeCraftManagement plugin;
 
@@ -134,6 +135,7 @@ public final class GamesCommand {
             case "break" -> takeABreak(sender);
             case "accept", "deny" -> answer(sender, args[1].equalsIgnoreCase("accept"));
             case "invites" -> invites(sender, args);
+            case "news" -> news(sender, args);
             case "leave" -> leave(sender, args);
             default -> open(sender, args);
         }
@@ -241,6 +243,38 @@ public final class GamesCommand {
         player.sendMessage(Text.of("&7/hcm play invites on|off &8(Coin Flip: the Take a break screen)"));
     }
 
+    /**
+     * {@code /hcm play news [on|off]}: show, or switch the one chat line that says new Fresh Courses
+     * are up ({@link com.dierks.homecraft.games.gen.NewCoursesNudge}). It is on unless turned off.
+     */
+    private void news(CommandSender sender, String[] args) {
+        Player player = self(sender, "Only players get the new-courses line.");
+        if (player == null || deny(sender, PLAY)) {
+            return;
+        }
+        GamesService games = running(sender);
+        if (games == null) {
+            return;
+        }
+        UUID id = player.getUniqueId();
+        String key = com.dierks.homecraft.games.gen.NewCoursesNudge.PREF_NEWS;
+        try {
+            if (args.length >= 3 && isOnOff(args[2])) {
+                boolean on = args[2].equalsIgnoreCase("on");
+                games.dao().setPref(id, key, on ? null : "off");
+                player.sendMessage(Text.of(on ? "&aYou'll see a line in chat when new courses are up."
+                        : "&7No more new-course lines in chat. &8(/hcm play news on)"));
+                return;
+            }
+            boolean on = !"off".equalsIgnoreCase(games.dao().pref(id, key));
+            player.sendMessage(Text.of("&eNew courses in chat: " + (on ? "&aon" : "&7off")
+                    + " &7- /hcm play news on|off"));
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.WARNING, "Could not read or save a player's news setting", e);
+            failed(sender);
+        }
+    }
+
     private static String inviteState(GamesService games, UUID player, String gameId) {
         Game g = games.game(gameId);
         String name = g == null ? gameId : g.name();
@@ -281,6 +315,10 @@ public final class GamesCommand {
         }
         if (verb.equals("help")) {
             help(sender);
+            return;
+        }
+        if (verb.equals("check")) {
+            check(sender); // read-only, and works with the games off or failed to start
             return;
         }
         if (verb.equals("saved")) {
@@ -362,6 +400,25 @@ public final class GamesCommand {
         RestartHold hold = games.restartHold();
         sender.sendMessage(Text.of("&7" + hold.status(now) + (hold.holding(now) ? " &c- held now" : "")));
         log(sender, "status");
+    }
+
+    /**
+     * {@code /hcm games check}: one line per check (OK, WARN or FAIL, with the fix), then "All good"
+     * or how many things to fix. It only reads: see {@link GamesCheck}.
+     */
+    private void check(CommandSender sender) {
+        List<String> lines;
+        try {
+            lines = GamesCheck.render(GamesCheck.run(new GamesCheckLive(plugin)));
+        } catch (RuntimeException | LinkageError e) {
+            plugin.getLogger().log(Level.SEVERE, "The games check failed", e);
+            sender.sendMessage(Text.of("&cThe check couldn't run - see the console."));
+            return;
+        }
+        for (String line : lines) {
+            sender.sendMessage(Text.of(line));
+        }
+        log(sender, "check");
     }
 
     /** {@code /hcm games feature <id|auto>}: pin the featured game, or let the day pick again. */
@@ -666,6 +723,7 @@ public final class GamesCommand {
             out.add("&e/hcm play break &7- Take a break: your own limits on games of chance");
             out.add("&e/hcm play accept|deny &7- answer a game invite");
             out.add("&e/hcm play invites [on|off] &7- invites to friend games");
+            out.add("&e/hcm play news [on|off] &7- a line in chat when new courses are up");
             out.add("&e/hcm leave &7- leave the world game you're in (your things come back)");
         }
         if (sender.hasPermission(ADMIN)) {
@@ -678,6 +736,7 @@ public final class GamesCommand {
         List<String> out = new ArrayList<>();
         out.add("&e/hcm play <game> <player> &7- open a game for someone (NPCs, the hub)");
         out.add("&e/hcm games status &7- which games are open, and why not");
+        out.add("&e/hcm games check &7- is the server set up for the games? (changes nothing)");
         out.add("&e/hcm games feature <game|course|auto> &7- pin the featured game, or let the day pick");
         out.add("&e/hcm games break <player> show|pause <days>|limit <n|none>|clear|clear-own confirm &7- a player's"
                 + " Take a break");
@@ -714,7 +773,7 @@ public final class GamesCommand {
                 if (games != null) {
                     playIds(out, games, last);
                 }
-            } else if (n == 3 && args[1].equalsIgnoreCase("invites")) {
+            } else if (n == 3 && (args[1].equalsIgnoreCase("invites") || args[1].equalsIgnoreCase("news"))) {
                 match(out, last, "on", "off");
             } else if (n == 3 && !PLAY_WORDS.contains(args[1].toLowerCase(Locale.ROOT))
                     && (!(sender instanceof Player) || sender.hasPermission(ADMIN))) {

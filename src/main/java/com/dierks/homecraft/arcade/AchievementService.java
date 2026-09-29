@@ -32,6 +32,11 @@ import java.util.UUID;
  * ones nothing pushes (STAT, BALANCE, COLLECTION, FINISH) — on the five-minute token tick.
  *
  * <p>The six original ids are kept, so every unlock a player already has still counts.
+ *
+ * <p>The "Games" group (EXTRAS E4) is all COUNTERs the skill games push through
+ * {@link GamesProgress} ({@link #count}): a course is finished in the Games world, where no tokens
+ * are paid, so an EVENT fired there could never unlock; a counter is kept there and unlocks at the
+ * next sweep back home. Nothing is ever tied to a game of chance.
  */
 public final class AchievementService {
 
@@ -110,10 +115,61 @@ public final class AchievementService {
     }
 
     private void checkCounter(Player player, String counter, long value) {
-        for (AchievementDef def : defs()) {
+        for (String id : counterUnlocks(defs(), counter, value)) {
+            tryAward(player, id);
+        }
+    }
+
+    /**
+     * The COUNTER achievements {@code counter} at {@code value} reaches, in list order (enabled or
+     * not: {@link #tryAward} skips a disabled one). Pure, so the rows can be tested.
+     */
+    public static List<String> counterUnlocks(Collection<AchievementDef> defs, String counter, long value) {
+        List<String> out = new java.util.ArrayList<>();
+        if (defs == null || counter == null) {
+            return out;
+        }
+        for (AchievementDef def : defs) {
             if (def.type() == AchievementType.COUNTER && counter.equalsIgnoreCase(def.key()) && value >= def.target()) {
-                tryAward(player, def.id());
+                out.add(def.id());
             }
+        }
+        return out;
+    }
+
+    /**
+     * Add to a counter a skill game pushes (EXTRAS E4, through {@link GamesProgress}). The count is
+     * kept wherever it happened; what it unlocks is checked now only where tokens can be paid, and
+     * otherwise by the next {@link #sweep} (join, the five-minute tick, a world change), so a first
+     * course finished in the Games world unlocks once the player is back home.
+     */
+    public void count(Player player, String counter, long by) {
+        if (player == null || counter == null || by <= 0) {
+            return;
+        }
+        try {
+            long value = dao.addCounter(player.getUniqueId(), counter, by);
+            if (plugin.sandbox().allowed(player.getWorld())) {
+                checkCounter(player, counter, value);
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to count '" + counter + "': " + e.getMessage());
+        }
+    }
+
+    /**
+     * Note that the player has done {@code marker} (a counter of its own): true only the first time
+     * ever, for a count of distinct things (every cabinet game). False when it can't be read.
+     */
+    public boolean firstTime(Player player, String marker) {
+        if (player == null || marker == null) {
+            return false;
+        }
+        try {
+            return dao.addCounter(player.getUniqueId(), marker, 1) == 1;
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to note '" + marker + "': " + e.getMessage());
+            return false;
         }
     }
 

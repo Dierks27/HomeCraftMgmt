@@ -69,12 +69,14 @@ import java.util.Objects;
  * @param rewards                   the first-finish tokens at both ends of the cadence
  * @param slots                     every slot's settings, in {@link Slots#ALL} order
  * @param archive                   the archive, the Classics slots and the keep area (GEN-SPEC-KEEP)
+ * @param announce                  one chat line tells each player once when a new set is up
+ *                                  ({@code announce}, EXTRAS E2: {@link NewCoursesNudge})
  */
 public record DailySettings(boolean enabled, String world, int cadenceDays, LocalTime rollover, DayOfWeek rebuildDay,
                             int startupDelaySeconds, int avoidBeforeRestartMinutes, int retryMinutes,
                             int maxTriesPerDay, int clearWaitMinutes, int keepDays, boolean worldRules,
                             double[] safeSpot, int dailyCap, Goals goals, Budget budget, Stars stars, Rewards rewards,
-                            List<SlotConfig> slots, Archive archive) {
+                            List<SlotConfig> slots, Archive archive, boolean announce) {
 
     /** The tiers a star factor is set for. */
     public static final List<String> TIERS = Slots.TIERS;
@@ -91,6 +93,17 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         rewards = rewards == null ? Rewards.shipped() : rewards;
         slots = List.copyOf(slots == null ? List.of() : slots);
         archive = archive == null ? Archive.shipped() : archive;
+    }
+
+    /** Without {@code announce} (the shape before EXTRAS E2): it is on, as shipped. */
+    public DailySettings(boolean enabled, String world, int cadenceDays, LocalTime rollover, DayOfWeek rebuildDay,
+                         int startupDelaySeconds, int avoidBeforeRestartMinutes, int retryMinutes, int maxTriesPerDay,
+                         int clearWaitMinutes, int keepDays, boolean worldRules, double[] safeSpot, int dailyCap,
+                         Goals goals, Budget budget, Stars stars, Rewards rewards, List<SlotConfig> slots,
+                         Archive archive) {
+        this(enabled, world, cadenceDays, rollover, rebuildDay, startupDelaySeconds, avoidBeforeRestartMinutes,
+                retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules, safeSpot, dailyCap, goals, budget,
+                stars, rewards, slots, archive, true);
     }
 
     /** Without the archive's settings (the shape before GEN-SPEC-KEEP): they are the shipped ones. */
@@ -345,7 +358,8 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         }
         return new DailySettings(false, "", Edition.DEFAULT_CADENCE, Edition.DEFAULT_ROLLOVER, null, 60, 15, 30, 4,
                 20, 35, true, null, 2, Goals.shipped(), new Budget(500, 5000, 4, 4, 2, 40),
-                new Stars(tiers(2.0, 1.5, 1.25), tiers(3.0, 2.2, 1.8)), Rewards.shipped(), slots, Archive.shipped());
+                new Stars(tiers(2.0, 1.5, 1.25), tiers(3.0, 2.2, 1.8)), Rewards.shipped(), slots, Archive.shipped(),
+                true);
     }
 
     /** Read {@code games.fresh} over {@code d}; never throws. */
@@ -364,6 +378,7 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         boolean worldRules = n.bool("world_rules", d.worldRules());
         double[] safeSpot = safeSpot(n, d.safeSpot());
         int dailyCap = n.whole("daily_cap", d.dailyCap(), 0, 100);
+        boolean announce = n.bool("announce", d.announce());
 
         GamesConfig.Node r = n.child("rewards");
         Rewards rewards = new Rewards(r.wholeMap("clear_weekly", d.rewards().clearWeekly(), 0, 100),
@@ -400,7 +415,8 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             }
         }
         return new DailySettings(enabled, world, cadence, rebuildAt, rebuildDay, startupDelay, avoid, retry, maxTries,
-                clearWait, keepDays, worldRules, safeSpot, dailyCap, goals, budget, stars, rewards, slots, archive);
+                clearWait, keepDays, worldRules, safeSpot, dailyCap, goals, budget, stars, rewards, slots, archive,
+                announce);
     }
 
     /**
@@ -534,13 +550,13 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
     public DailySettings withEnabled(boolean on) {
         return new DailySettings(on, world, cadenceDays, rollover, rebuildDay, startupDelaySeconds,
                 avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
-                safeSpot, dailyCap, goals, budget, stars, rewards, slots, archive);
+                safeSpot, dailyCap, goals, budget, stars, rewards, slots, archive, announce);
     }
 
     public DailySettings withWorld(String w) {
         return new DailySettings(enabled, w, cadenceDays, rollover, rebuildDay, startupDelaySeconds,
                 avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
-                safeSpot, dailyCap, goals, budget, stars, rewards, slots, archive);
+                safeSpot, dailyCap, goals, budget, stars, rewards, slots, archive, announce);
     }
 
     /** Another cadence; each slot's first-finish amount follows it. */
@@ -552,33 +568,40 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         }
         return new DailySettings(enabled, world, n, rollover, rebuildDay, startupDelaySeconds,
                 avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
-                safeSpot, dailyCap, goals, budget, stars, rewards, out, archive);
+                safeSpot, dailyCap, goals, budget, stars, rewards, out, archive, announce);
     }
 
     /** Another {@code rebuild_at} and {@code rebuild_day} ({@code null}: the quests' week start). */
     public DailySettings withRebuild(LocalTime at, DayOfWeek day) {
         return new DailySettings(enabled, world, cadenceDays, at, day, startupDelaySeconds, avoidBeforeRestartMinutes,
                 retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules, safeSpot, dailyCap, goals,
-                budget, stars, rewards, slots, archive);
+                budget, stars, rewards, slots, archive, announce);
     }
 
     public DailySettings withBudget(Budget b) {
         return new DailySettings(enabled, world, cadenceDays, rollover, rebuildDay, startupDelaySeconds,
                 avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
-                safeSpot, dailyCap, goals, b, stars, rewards, slots, archive);
+                safeSpot, dailyCap, goals, b, stars, rewards, slots, archive, announce);
     }
 
     public DailySettings withSlots(List<SlotConfig> s) {
         return new DailySettings(enabled, world, cadenceDays, rollover, rebuildDay, startupDelaySeconds,
                 avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
-                safeSpot, dailyCap, goals, budget, stars, rewards, s, archive);
+                safeSpot, dailyCap, goals, budget, stars, rewards, s, archive, announce);
     }
 
     /** Other archive, Classics and keep settings. */
     public DailySettings withArchive(Archive a) {
         return new DailySettings(enabled, world, cadenceDays, rollover, rebuildDay, startupDelaySeconds,
                 avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
-                safeSpot, dailyCap, goals, budget, stars, rewards, slots, a);
+                safeSpot, dailyCap, goals, budget, stars, rewards, slots, a, announce);
+    }
+
+    /** The new-courses line on or off. */
+    public DailySettings withAnnounce(boolean on) {
+        return new DailySettings(enabled, world, cadenceDays, rollover, rebuildDay, startupDelaySeconds,
+                avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
+                safeSpot, dailyCap, goals, budget, stars, rewards, slots, archive, on);
     }
 
     @Override
@@ -591,7 +614,7 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
                 && keepDays == x.keepDays && worldRules == x.worldRules && Arrays.equals(safeSpot, x.safeSpot)
                 && dailyCap == x.dailyCap && goals.equals(x.goals) && budget.equals(x.budget)
                 && stars.equals(x.stars) && rewards.equals(x.rewards) && slots.equals(x.slots)
-                && archive.equals(x.archive);
+                && archive.equals(x.archive) && announce == x.announce;
     }
 
     @Override
@@ -835,7 +858,7 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
     private static List<String> keys() {
         List<String> out = new ArrayList<>(List.of("enabled", "world", "cadence", "rebuild_at", "rebuild_day",
                 "startup_delay_seconds", "avoid_before_restart_minutes", "retry_minutes", "max_tries_per_day",
-                "clear_wait_minutes", "keep_days", "world_rules", "safe_spot", "daily_cap"));
+                "clear_wait_minutes", "keep_days", "world_rules", "safe_spot", "daily_cap", "announce"));
         for (String table : List.of("clear_weekly", "clear_daily")) {
             for (Slots.Def d : Slots.ALL) {
                 out.add("rewards." + table + "." + d.id());

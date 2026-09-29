@@ -46,6 +46,16 @@ class GamesCommandTest {
     }
 
     @Test
+    void newsAndCheckAreWordsOfTheirOwnSoNoGameCanTakeThem() {
+        assertTrue(GamesCommand.PLAY_WORDS.contains("news"), "/hcm play news on|off is offered and never opens a game");
+        assertTrue(GamesCommand.VERBS.contains("check"), "/hcm games check is offered to admins");
+        assertEquals(GamesCommand.VERBS.size(), new java.util.HashSet<>(GamesCommand.VERBS).size(), "no verb twice");
+        for (String word : GamesCommand.PLAY_WORDS) {
+            assertTrue(com.dierks.homecraft.games.GameCatalog.taken(word), word + " can't become a course's id");
+        }
+    }
+
+    @Test
     void adminNumbersAreWholeAndInRange() {
         assertEquals(7, GamesCommand.parse("7", 1, 365), "a pause of 7 days");
         assertEquals(-2, GamesCommand.parse("0", 1, 365), "below the range");

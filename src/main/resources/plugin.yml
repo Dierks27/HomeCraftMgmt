@@ -72,8 +72,10 @@ commands:
       /hcm play break        - Take a break: your own limits on games of chance
       /hcm play accept|deny  - answer a game invite
       /hcm play invites [on|off]  - your invites to friend games (Coin Flip: the Take a break screen)
+      /hcm play news [on|off]  - a line in chat when new Fresh Courses are up
       /hcm leave             - leave the world game you are in (your things come back)
       /hcm games status|course|golf|feature|break|saved|scores  - admin: run the Games
+      /hcm games check       - admin: is the server set up for the Games? (it only looks)
       /hcm games break <player> show|pause <days>|limit <tokens|none>|clear|clear-own confirm  - admin: a player's Take a break
       /hcm games saved <player> show|restore|return|discard confirm  - admin: a player's things saved by a world game
       /hcm games scores reset <game> [board|all] [player] [confirm]  - admin: clear high scores (a dry run first)

@@ -168,15 +168,16 @@ public final class Slots {
     /*
      * The Dropper (EVENTS-DROPPER-SPEC §B.1.2): a row of glass shafts, one per level of its mix (E, M,
      * H), each 11 x 11 inside, so a half is 64 x 64 x 16 (4 x 1 chunks). The regions stand 48 apart in
-     * z past Tiny Golf (96 blocks from its half B), well inside the keep plot's size. Both ship off.
+     * z past Tiny Golf (96 blocks from its half B), well inside the keep plot's size. Both ship ON (the
+     * owner's decision: they run only while games.fresh.enabled is on, which the owner switches on).
      */
 
     /** Easy Dropper: 3 easy levels, every hole ringed with light. */
     public static final Def EASY_DROPPER = new Def("fresh_dropper_easy", DROPPER, GAME_TRIALS, "dropper",
-            "Easy Dropper", "&a", 64, 64, 16, 5, false, "EEE", 5376, 160, 4096, 1, 2);
+            "Easy Dropper", "&a", 64, 64, 16, 5, true, "EEE", 5376, 160, 4096, 1, 2);
     /** Dropper: 5 levels, easy to hard. */
     public static final Def FRESH_DROPPER = new Def("fresh_dropper", DROPPER, GAME_TRIALS, "dropper", "Dropper",
-            "&9", 64, 64, 16, 5, false, "EEMMH", 5376, 160, 4160, 2, 3);
+            "&9", 64, 64, 16, 5, true, "EEMMH", 5376, 160, 4160, 2, 3);
 
     /** Every slot, in display and config order. */
     public static final List<Def> ALL = List.of(DAILY_PARKOUR_EASY, DAILY_PARKOUR_MEDIUM, DAILY_PARKOUR_HARD,

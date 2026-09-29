@@ -24,7 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The droppers in {@code games.fresh} (EVENTS-DROPPER-SPEC §B.1.2, §B.1.8; WIRING §2): their rows ship
- * off with a {@code mix} (not a tier) and their origins; their first-finish tokens are Easy Dropper
+ * ON (the orchestrator's decision: they run only while {@code games.fresh.enabled} is on) with a
+ * {@code mix} (not a tier) and their origins; their first-finish tokens are Easy Dropper
  * 2 a week and 1 a day, the Dropper 3 and 2; a mix is read in any case, and one that doesn't fit the
  * five shafts switches that dropper off alone with one WARN; the planner is registered; and the
  * new-courses line calls both "Dropper".
@@ -64,13 +65,18 @@ class DropperSlotsConfigTest {
     }
 
     @Test
-    void theDroppersShipOffWithTheirMixesOriginsAndTokens() throws Exception {
+    void theDroppersShipOnWithTheirMixesOriginsAndTokens() throws Exception {
         List<String> warns = new ArrayList<>();
         DailySettings s = parse(shipped(), warns);
         assertEquals(List.of(), warns, "the shipped block has no WARN");
         DailySettings.SlotConfig easy = s.slot("fresh_dropper_easy");
         DailySettings.SlotConfig drop = s.slot("fresh_dropper");
-        assertFalse(easy.enabled() || drop.enabled(), "both droppers ship off");
+        assertTrue(easy.enabled() && drop.enabled(), "both droppers ship on inside games.fresh");
+        assertEquals(DailySettings.defaults().slot("fresh_dropper_easy").enabled(), easy.enabled(),
+                "the defaults agree with config.yml (Easy Dropper)");
+        assertEquals(DailySettings.defaults().slot("fresh_dropper").enabled(), drop.enabled(),
+                "and for the Dropper");
+        assertFalse(s.enabled(), "Fresh Courses itself ships off, so nothing is built until the owner switches it on");
         assertEquals("EEE", easy.tierOrMix(), "Easy Dropper: three easy levels");
         assertEquals("EEMMH", drop.tierOrMix(), "the Dropper: five, easy to hard");
         assertArrayEquals(new int[]{5376, 160, 4096}, easy.origin(), "Easy Dropper's area");

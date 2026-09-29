@@ -312,7 +312,8 @@ class DropperPlannerTest {
         assertEquals(new Box(5472, 160, 4160, 5535, 223, 4175), DropperSlots.DROPPER_SLOT.half('B'),
                 "the Dropper's half B, 32 past A");
         assertEquals(4224, DropperSlots.CLASSIC.originZ(), "the Classic Dropper, 48 further along z");
-        assertFalse(DropperSlots.EASY.enabled() || DropperSlots.DROPPER_SLOT.enabled(), "both ship off");
+        assertTrue(DropperSlots.EASY.enabled() && DropperSlots.DROPPER_SLOT.enabled(),
+                "both ship on (inside games.fresh, which ships off)");
         assertEquals(List.of(1, 2), List.of(DropperSlots.EASY.dailyClear(), DropperSlots.DROPPER_SLOT.dailyClear()),
                 "a first finish pays 1 and 2 a day");
         assertEquals(List.of(2, 3), List.of(DropperSlots.EASY.weeklyClear(), DropperSlots.DROPPER_SLOT.weeklyClear()),

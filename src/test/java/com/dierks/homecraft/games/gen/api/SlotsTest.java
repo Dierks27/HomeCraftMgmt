@@ -32,8 +32,9 @@ class SlotsTest {
                 "their shipped first-finish tokens at a daily cadence (the addendum's table, §B.1.8's droppers)");
         assertEquals(List.of(2, 3, 4, 3, 3, 2, 3, 2, 3), Slots.ALL.stream().map(Slots.Def::weeklyClear).toList(),
                 "and at a weekly one");
-        assertEquals(List.of(true, true, true, true, true, true, false, false, false),
-                Slots.ALL.stream().map(Slots.Def::enabled).toList(), "every slot ships on but the ice boat and the droppers");
+        assertEquals(List.of(true, true, true, true, true, true, false, true, true),
+                Slots.ALL.stream().map(Slots.Def::enabled).toList(),
+                "every slot ships on but the ice boat (the droppers too: they run only while Fresh Courses is on)");
         assertEquals(List.of("Easy Parkour", "Parkour", "Hard Parkour", "Sky Rings", "Golf of the Week", "Tiny Golf",
                 "Ice Boat", "Easy Dropper", "Dropper"), Slots.ALL.stream().map(Slots.Def::name).toList(),
                 "the names players see (weekly)");

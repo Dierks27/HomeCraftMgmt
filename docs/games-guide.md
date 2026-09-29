@@ -112,7 +112,7 @@
   - "Reach the bottom of a Dropper with no bonks" (20 tokens)
   - "Race at Race Night" (10 tokens) and "Win a Race Night" (30 tokens)
   - "Last a whole minute on Falling Floors" (15 tokens; a round you play out, not one you leave)
-- When a new set of Fresh Courses is up, you read one line in chat, once for each set: "New courses this week! Easy, Parkour, Hard, Sky Rings and Golf - /hcm play". It waits while you are on a course, and until you close a screen. Don't want it? /hcm play news off.
+- When a new set of Fresh Courses is up, you read one line in chat, once for each set: "New courses this week! Easy, Parkour, Hard, Sky Rings, Golf and Dropper - /hcm play". It waits while you are on a course, and until you close a screen. Don't want it? /hcm play news off.
 
 ## The fairness promises
 
@@ -1544,7 +1544,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 
 *Step off a ledge, steer through the holes as you fall, and land in the water. Then do it again, one level lower.*
 
-- **Open it:** the Easy Dropper and Dropper tiles on the Fresh Courses screen (/hcm play fresh_courses), or /hcm play fresh_dropper_easy and /hcm play fresh_dropper. The owner has to switch them on first.
+- **Open it:** the Easy Dropper and Dropper tiles on the Fresh Courses screen (/hcm play fresh_courses), or /hcm play fresh_dropper_easy and /hcm play fresh_dropper. They come with Fresh Courses: once the owner switches Fresh Courses on, they are there.
 - **Costs:** Free, like every Fresh Course.
 - **The courses:** Easy Dropper has 3 easy levels, and every hole on the way down glows ("follow the light"), with the whole floor water. Dropper has 5 levels that get harder, with smaller pools. Both are new with every set.
 

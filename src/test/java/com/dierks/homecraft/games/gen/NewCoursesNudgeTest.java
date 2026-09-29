@@ -141,8 +141,8 @@ class NewCoursesNudgeTest {
         run(10);
         assertEquals(1, toldTo(alex), "Alex hears it once");
         assertEquals(1, toldTo(sam), "and so does Sam");
-        assertEquals(alex + " &aNew courses this week! &7Easy, Parkour, Hard, Sky Rings and Golf - &e/hcm play",
-                host.said.get(0), "the line names this week's courses");
+        assertEquals(alex + " &aNew courses this week! &7Easy, Parkour, Hard, Sky Rings, Golf and Dropper - &e/hcm play",
+                host.said.get(0), "the line names this week's courses (both droppers ship on: Dropper once)");
         run(120);
         assertEquals(2, host.said.size(), "not again for the same set");
 
@@ -283,7 +283,8 @@ class NewCoursesNudgeTest {
         f.allUp(WEEK, 0);
         NewCoursesNudge.NewSet set = NewCoursesNudge.newest(f.slots());
         assertEquals("7:38", set.key(), "the edition, without its reroll");
-        assertEquals(List.of("Easy", "Parkour", "Hard", "Sky Rings", "Golf"), set.names(), "golf and tiny golf are Golf");
+        assertEquals(List.of("Easy", "Parkour", "Hard", "Sky Rings", "Golf", "Dropper"), set.names(),
+                "golf and tiny golf are Golf, and both droppers are Dropper");
         assertTrue(set.complete(), "every course that is on is up");
         f.slots.put(Slots.SKY_RINGS.id(), new NewCoursesNudge.Slot(Slots.SKY_RINGS.id(), true,
                 tag(Slots.SKY_RINGS, WEEK - 7, 0, 7), false));

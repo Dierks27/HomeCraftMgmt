@@ -997,7 +997,7 @@ result screens show it in their header's NAME. `/hcm play fresh_parkour_tiers` i
 | `fresh.world_rules` | `true` | No mobs, fire, random ticks or weather in that world; always noon |
 | `fresh.safe_spot` | `""` | "x y z" where people standing in a building area are moved; `""` = the world's spawn |
 | `fresh.daily_cap` | `2` | Most Star Chart tokens a player earns a day (a goal is paid whole or waits for another day that week) |
-| `fresh.announce` | `true` | When a new set is up, each player reads one chat line about it, once per set: "New courses this week! Easy, Parkour, Hard, Sky Rings and Golf - /hcm play" ("today" when daily, "new every 3 days" for 3). It waits until every course of the set is up (or 15 minutes after the first), for players in a world the games are played in and not in a world game, and until a screen is closed (or a minute). Players who log in later read it a few seconds after joining. `/hcm play news off` turns it off for one player; `false` for everyone |
+| `fresh.announce` | `true` | When a new set is up, each player reads one chat line about it, once per set: "New courses this week! Easy, Parkour, Hard, Sky Rings, Golf and Dropper - /hcm play" ("today" when daily, "new every 3 days" for 3). It waits until every course of the set is up (or 15 minutes after the first), for players in a world the games are played in and not in a world game, and until a screen is closed (or a minute). Players who log in later read it a few seconds after joining. `/hcm play news off` turns it off for one player; `false` for everyone |
 | `fresh.rewards.clear_weekly.*` / `fresh.rewards.clear_daily.*` | see above | Each course's first-finish tokens at a weekly and at a daily cadence; other cadences are worked out from the two. Paid whole or not at all (on a day whose caps can't hold it all, nothing is paid and it waits for another day of the set). An amount bigger than a whole day's cap (the paying game's `daily_cap`, or `games.skill_daily_cap`) pays that cap once, so keep each at or under them (4) |
 | `fresh.star_goals.weekly` / `.weekly_tokens` | `[6, 12]` / `[1, 2]` | The weekly Star Chart goals and what each pays, at a weekly cadence (a week's goals are fixed once shown: a change counts from the next week) |
 | `fresh.star_goals.daily` / `.daily_tokens` | `[10, 25]` / `[1, 1]` | The same at a daily cadence |
@@ -1007,7 +1007,7 @@ result screens show it in their header's NAME. `/hcm play fresh_parkour_tiers` i
 
 The courses (their ids are also their `/hcm play` ids): `fresh_parkour_easy`, `fresh_parkour`,
 `fresh_parkour_hard`, `fresh_rings`, `fresh_golf`, `fresh_tiny_golf`, `fresh_boat` (off), and the
-droppers `fresh_dropper_easy` and `fresh_dropper` (off; see "The Dropper" below).
+droppers `fresh_dropper_easy` and `fresh_dropper` (on, with the rest of Fresh Courses; see "The Dropper" below).
 `/hcm play fresh_courses` opens the Fresh Courses screen and `/hcm play fresh_parkour_tiers` the
 parkour level picker.
 
@@ -1045,7 +1045,8 @@ new tables.
 <!-- ---- dropper (EVENTS-DROPPER-SPEC §B.1, WP-D) ---- -->
 #### The Dropper
 
-Two more Fresh Courses, new with every set and **shipped off**: **Easy Dropper** (3 easy levels) and
+Two more Fresh Courses, new with every set and **shipped on** (like the others, they are built only once
+`games.fresh.enabled` is on): **Easy Dropper** (3 easy levels) and
 **Dropper** (5 levels, easy to hard). A level is a glass shaft in its own colour: step off a lime
 ledge ("LEVEL 2 of 5 / Step off and / fall into the / WATER!"), steer through the holes in the
 coloured floors below, and land in the water at the bottom. On Easy every hole on the way down is
@@ -1089,8 +1090,8 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
 
 | Key | Default | Meaning |
 |---|---|---|
-| `fresh.slots.fresh_dropper_easy` | `{enabled: false, mix: EEE, origin: [5376, 160, 4096]}` | Easy Dropper |
-| `fresh.slots.fresh_dropper` | `{enabled: false, mix: EEMMH, origin: [5376, 160, 4160]}` | The Dropper (at most 5 levels) |
+| `fresh.slots.fresh_dropper_easy` | `{enabled: true, mix: EEE, origin: [5376, 160, 4096]}` | Easy Dropper |
+| `fresh.slots.fresh_dropper` | `{enabled: true, mix: EEMMH, origin: [5376, 160, 4160]}` | The Dropper (at most 5 levels) |
 | `fresh.rewards.clear_weekly.fresh_dropper_easy` / `.fresh_dropper` | `2` / `3` | First finish in a weekly set |
 | `fresh.rewards.clear_daily.fresh_dropper_easy` / `.fresh_dropper` | `1` / `2` | First finish in a daily set |
 | `fresh.classics.slots.fresh_classic_dropper.origin` | `[5376, 160, 4224]` | Where Classic Dropper is built |

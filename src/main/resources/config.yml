@@ -1996,8 +1996,9 @@ games:
     # Each course: on or off, its difficulty (tier, or mix of golf holes or dropper levels: E easy,
     # M medium, H hard) and where its area starts (x y z, x and z a multiple of 16; two halves side by
     # side along x). /hcm games gen on|off|tier|mix wins over these.
-    # The droppers ship OFF: glass shafts with water pools at the bottom, one level per letter of
-    # their mix (at most 5). Turn one on and it is built with the next set (or /hcm games gen reroll).
+    # The droppers ship ON (they run only while Fresh Courses is on): glass shafts with water pools at
+    # the bottom, one level per letter of their mix (at most 5). A dropper switched on later is built
+    # with the next set (or /hcm games gen reroll).
     slots:
       fresh_parkour_easy: {enabled: true, tier: easy, origin: [4096, 160, 4096]}
       fresh_parkour: {enabled: true, tier: medium, origin: [4352, 160, 4096]}
@@ -2006,8 +2007,8 @@ games:
       fresh_golf: {enabled: true, mix: EEEMMMMHH, origin: [4864, 160, 4096]}
       fresh_tiny_golf: {enabled: true, mix: EEE, origin: [5120, 160, 4096]}
       fresh_boat: {enabled: false, tier: medium, origin: [4480, 160, 4352]}
-      fresh_dropper_easy: {enabled: false, mix: EEE, origin: [5376, 160, 4096]}
-      fresh_dropper: {enabled: false, mix: EEMMH, origin: [5376, 160, 4160]}
+      fresh_dropper_easy: {enabled: true, mix: EEE, origin: [5376, 160, 4096]}
+      fresh_dropper: {enabled: true, mix: EEMMH, origin: [5376, 160, 4160]}
     # Every set that was ever up is archived with its whole layout, so a past course can be brought
     # back exactly (/hcm games gen recall) or kept for good (/hcm games gen keep), and its board with it.
     # A course is a few KB: a year of weekly sets for every course is well under 5 MB.

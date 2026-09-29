@@ -12,6 +12,8 @@ import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.gui.games.daily.DailyLookup;
 import com.dierks.homecraft.gui.games.daily.DailyText;
+import com.dierks.homecraft.gui.games.daily.FreshAdmin;
+import com.dierks.homecraft.gui.games.daily.FreshAdminMenu;
 import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
@@ -30,7 +32,7 @@ import java.util.List;
  *  4  the course: holes and par, each hole's par
  *  10 your best     11 high scores (the record)     12 Play with friends (golf together, D4)
  *  13 Start     15 Pick your ball     16 How to play
- *  22 Back/Close
+ *  22 Back/Close     26 Admin tools (WP-ADM: an admin, on Golf of the Week or Tiny Golf)
  * </pre>
  *
  * Start takes the player into the game (their things are kept safe until they come back), so it
@@ -68,6 +70,7 @@ public final class GolfCourseMenu extends GameMenu {
     protected void build() {
         fill();
         exitTile();
+        adminTools(); // WP-ADM: shown while the course is closed too (it may be being rebuilt)
         GolfCourse c = golf.playableCourse(courseId);
         if (c == null) {
             set(13, Menus.icon(Material.GRAY_DYE, "&7This course is closed right now"), null);
@@ -158,6 +161,15 @@ public final class GolfCourseMenu extends GameMenu {
         return Menus.glint(Menus.icon(Material.NETHER_STAR, DailyText.starsNow(cadence, stars),
                 lore.toArray(new String[0])), stars >= 3);
     }
+
+    // ---- WP-ADM: the owner's Fresh Courses tools (hcm.games.admin only) ----
+    private void adminTools() {
+        FreshAdminMenu.Button b = FreshAdminMenu.button(plugin, viewer, courseId, this::reopen);
+        if (b != null) {
+            set(FreshAdmin.SLOT, b.icon(), e -> b.click().run());
+        }
+    }
+    // ---- end WP-ADM ----
 
     private void reopen() {
         new GolfCourseMenu(plugin, golf, viewer, courseId, back).open(viewer);

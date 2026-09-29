@@ -17,6 +17,8 @@ import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.GameMenu;
 import com.dierks.homecraft.gui.games.daily.DailyLookup;
 import com.dierks.homecraft.gui.games.daily.DailyText;
+import com.dierks.homecraft.gui.games.daily.FreshAdmin;
+import com.dierks.homecraft.gui.games.daily.FreshAdminMenu;
 import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Material;
@@ -42,6 +44,8 @@ import java.util.List;
  * first finish this week pays. A course recalled into Classic Parkour or Classic Sky Rings shows
  * its original set's board, with its old records to beat. A dropper says "levels" and that its
  * clock keeps running after a bonk, and Start says a practice drop comes first when warm-ups are on.
+ * An admin also sees 26, "Admin tools" (WP-ADM: regenerate, preview, try it, pick it), on a Fresh
+ * slot's own course.
  */
 public final class CourseMenu extends GameMenu {
 
@@ -185,6 +189,7 @@ public final class CourseMenu extends GameMenu {
             set(PARTY_SLOT, PartyMenu.tile(trials, viewer), e -> trials.raceWithFriends(viewer, course.id(), this::reopen));
         }
         cupButton();
+        adminTools(); // WP-ADM
         exitTile();
     }
 
@@ -253,6 +258,15 @@ public final class CourseMenu extends GameMenu {
             set(CupLink.SLOT, b.icon(), e -> b.click().run());
         }
     }
+
+    // ---- WP-ADM: the owner's Fresh Courses tools (hcm.games.admin only) ----
+    private void adminTools() {
+        FreshAdminMenu.Button b = FreshAdminMenu.button(plugin, viewer, course.id(), this::reopen);
+        if (b != null) {
+            set(FreshAdmin.SLOT, b.icon(), e -> b.click().run());
+        }
+    }
+    // ---- end WP-ADM ----
 
     private void reopen() {
         new CourseMenu(plugin, trials, course, viewer, back).open(viewer);

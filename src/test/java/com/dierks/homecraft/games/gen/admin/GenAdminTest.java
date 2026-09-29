@@ -494,9 +494,7 @@ class GenAdminTest {
                     case "hasPermission" -> true;
                     case "hashCode" -> id.hashCode();
                     case "equals" -> proxy == a[0];
-                    default -> m.getReturnType() == boolean.class ? false : m.getReturnType() == int.class ? 0
-                            : m.getReturnType() == long.class ? 0L : m.getReturnType() == double.class ? 0.0
-                            : m.getReturnType() == float.class ? 0f : null;
+                    default -> zero(m.getReturnType());
                 });
     }
 
@@ -626,5 +624,34 @@ class GenAdminTest {
         said.clear();
         new GenAdmin(() -> ops, log).handle(sam, new String[]{"test", "fresh_parkour"});
         assertTrue(heard().contains("Test runs aren't available right now"), "with no Time Trials to run it: " + heard());
+    }
+
+    /** What a proxy answers for a method nobody asked about: nothing, or a primitive's zero. */
+    private static Object zero(Class<?> type) {
+        if (type == boolean.class) {
+            return false;
+        }
+        if (type == int.class) {
+            return 0;
+        }
+        if (type == long.class) {
+            return 0L;
+        }
+        if (type == double.class) {
+            return 0.0;
+        }
+        if (type == float.class) {
+            return 0f;
+        }
+        if (type == short.class) {
+            return (short) 0;
+        }
+        if (type == byte.class) {
+            return (byte) 0;
+        }
+        if (type == char.class) {
+            return (char) 0;
+        }
+        return null;
     }
 }

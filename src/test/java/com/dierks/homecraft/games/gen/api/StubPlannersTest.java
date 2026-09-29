@@ -11,20 +11,19 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The planners as C0 ships them (GEN-SPEC §8): one per generator a slot names, each with its id
- * and version, and every plan failing with "not built yet" until its package lands, so the engine
- * keeps those slots closed and says why.
+ * The planners (GEN-SPEC §8): one per generator a slot names, each with its id and version. C0
+ * shipped them as stubs failing with "not built yet"; WP2 and WP3 built every one, so this now
+ * pins that none of them is still a stub (the per-planner tests cover what they build).
  */
 class StubPlannersTest {
 
     private static final List<Planner> PLANNERS = List.of(new ParkourPlanner(), new RingsPlanner(),
             new BoatPlanner(), new GolfPlanner());
-    /** The planners still stubbed (WP2 built parkour, rings and the boat). */
-    private static final List<Planner> STUBS = List.of(new GolfPlanner());
 
     @Test
     void thereIsAPlannerForEveryGeneratorASlotNames() {
@@ -37,14 +36,17 @@ class StubPlannersTest {
     }
 
     @Test
-    void everyStubSaysItIsNotBuiltYet() {
-        for (Planner p : STUBS) {
+    void noPlannerIsAStubAnyMore() {
+        for (Planner p : PLANNERS) {
             Slots.Def slot = Slots.ALL.stream().filter(s -> s.generator().equals(p.id())).findFirst().orElseThrow();
-            PlanInput in = new PlanInput(slot, slot.half('A'), 'A', 20725, 0, 1L, slot.tierOrMix(), 8, 1000, null);
-            GenFailed plan = assertThrows(GenFailed.class, () -> p.plan(in), p.id() + " can't plan yet");
-            assertEquals("not built yet", plan.getMessage(), p.id() + " says why");
-            GenFailed again = assertThrows(GenFailed.class, () -> p.rederive(in, null), p.id() + " can't re-derive");
-            assertEquals(GenFailed.NOT_BUILT, again.getMessage(), p.id() + " says why again");
+            PlanInput in = new PlanInput(slot, slot.half('A'), 'A', 20725, 0, 1L, slot.tierOrMix(), 6,
+                    50_000_000L, null);
+            try {
+                Plan plan = p.plan(in);
+                assertEquals(slot.id(), plan.slot(), p.id() + " plans the slot it was given");
+            } catch (GenFailed e) {
+                assertNotEquals(GenFailed.NOT_BUILT, e.getMessage(), p.id() + " is built (WP2/WP3), not a stub");
+            }
         }
     }
 

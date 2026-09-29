@@ -70,7 +70,12 @@ class DropperLayoutTest {
                 "Easy: 11 x 11 of water from its bottom to half a block over the surface at 68");
         assertArrayEquals(new double[]{34, 49, 10, 39, 52.5, 15}, DropperLayout.poolBox(DropperCourses.POOL_3), 1e-9,
                 "Hard: 5 x 5");
-        assertTrue(DropperLayout.inPool(DropperCourses.POOL_3, at(34.1, 52.4, 14.9)), "a corner of the water is in it");
+        assertArrayEquals(new double[]{34.3, 49, 10.3, 38.7, 52.5, 14.7}, DropperLayout.splashBox(DropperCourses.POOL_3),
+                1e-6, "the splash box: the pool box pulled in by half a player's width");
+        assertTrue(DropperLayout.inPool(DropperCourses.POOL_3, at(34.35, 52.4, 14.65)),
+                "a corner of the water, the whole body over it, is in it");
+        assertFalse(DropperLayout.inPool(DropperCourses.POOL_3, at(34.1, 52.4, 14.9)),
+                "a centre 0.1 over the water is a body on the rim: not in it");
         assertFalse(DropperLayout.inPool(DropperCourses.POOL_3, at(33.9, 52.0, 12.5)), "just past its edge isn't");
         assertFalse(DropperLayout.inPool(DropperCourses.POOL_3, at(36.5, 52.6, 12.5)), "nor over it");
         assertFalse(DropperLayout.inPool(null, at(0, 0, 0)), "no pool, no splash");
@@ -84,7 +89,8 @@ class DropperLayoutTest {
             // the feet of someone standing anywhere on the floor round the pool (its top is the surface)
             for (double dx = -h - 3; dx <= h + 3; dx += 0.25) {
                 for (double dz = -h - 3; dz <= h + 3; dz += 0.25) {
-                    boolean overWater = Math.abs(dx) <= h && Math.abs(dz) <= h;
+                    // a body wholly over the water; anything else rests on the rim (0.3: half its width)
+                    boolean overWater = Math.abs(dx) <= h - 0.3 && Math.abs(dz) <= h - 0.3;
                     if (overWater) {
                         continue;
                     }
@@ -96,8 +102,8 @@ class DropperLayoutTest {
                 }
             }
             assertTrue(pool.contains(at(pool.x(), s - 1, pool.z())), "a body in the middle of the water does");
-            assertTrue(DropperLayout.inPool(pool, at(pool.x() + h - 0.1, s - 0.5, pool.z() + h - 0.1)),
-                    "and the box has the corners of the water");
+            assertTrue(DropperLayout.inPool(pool, at(pool.x() + h - 0.31, s - 0.5, pool.z() + h - 0.31)),
+                    "and the box has the corners of the water a body fits in");
         }
     }
 

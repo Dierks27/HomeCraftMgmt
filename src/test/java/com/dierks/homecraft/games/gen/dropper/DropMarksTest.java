@@ -123,12 +123,35 @@ class DropMarksTest {
     }
 
     @Test
+    void theSplashBoxIsThePoolBoxPulledInByHalfABody() {
+        Course.Mark m = DropMarks.pool(10.5, 100, 20.5, 5);
+        assertArrayEquals(new double[]{8.3, 97, 18.3, 12.7, 100.5, 22.7}, DropMarks.splashBox(m), 1e-6,
+                "x and z pulled in by 0.3 on every side; the heights are the pool box's");
+        assertEquals(DropSim.HALF_WIDTH, DropMarks.SPLASH_INSET, 1e-6, "the inset is half a player's width");
+        assertTrue(DropMarks.SPLASH_INSET < DropSim.HALF_WIDTH,
+                "less a hair, so a body hugging a wall (float sums) is still wholly over the water");
+        for (int size : DropMarks.POOL_SIZES) {
+            int x0 = 100;
+            int z0 = 200;
+            Course.Mark p = DropMarks.pool(x0 + size / 2.0, 64, z0 + size / 2.0, size);
+            for (double x = x0 - 1; x <= x0 + size + 1; x += 0.01) {
+                boolean onRim = x - DropSim.HALF_WIDTH < x0 - 1e-6 || x + DropSim.HALF_WIDTH > x0 + size + 1e-6;
+                assertEquals(!onRim, DropMarks.inPool(p, x, 64, z0 + size / 2.0),
+                        "pool " + size + ": feet at x " + x + " are in the box exactly when the body misses the rim");
+            }
+        }
+    }
+
+    @Test
     void theBoxCatchesTheCornerSplashesTheSphereMisses() {
         Course.Mark m = DropMarks.pool(102.5, 64, 202.5, 5);
-        Point corner = new Point(100.05, 64.2, 200.05);
+        Point corner = new Point(100.35, 64.2, 200.35);
         assertTrue(DropMarks.inPool(m, corner.x(), corner.y(), corner.z()),
                 "a splash in the pool's corner is in its box");
         assertFalse(m.contains(corner), "though the sphere doesn't reach that corner");
+        assertFalse(DropMarks.inPool(m, 100.05, 64.2, 200.05),
+                "a centre 0.05 over the water's corner is a body on the rim, not in the box");
+        assertFalse(DropMarks.inPool(m, 100.25, 64.0, 202.5), "nor a centre 0.25 over the water's side");
         assertFalse(DropMarks.inPool(m, 99.9, 64.2, 202.5), "just outside the water isn't in the box");
         assertFalse(DropMarks.inPool(m, 102.5, 64.6, 202.5), "nor is more than half a block over the surface");
     }

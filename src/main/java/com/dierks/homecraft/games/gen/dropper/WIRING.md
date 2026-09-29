@@ -100,8 +100,9 @@ The slot rows (§2) are still WP-D's: they come with their config rows and the p
   - `levels`, `levelOf`, `isPool`, `backTo`, `currentLevel`, `poolBox`, `inPool`, `facing`;
   - `problems(course)`, which joins `Course.problems` for a `DROPPER` row.
 - **`trial/DropperRules`** holds the bonk and splash rules (pure, WP-D). A splash is the first move
-  segment that enters `DropMarks.poolBox(mark)`. The validator's pool-box rule makes every block of
-  that box water. Bonks are ignored during the hop.
+  segment that enters `DropMarks.splashBox(mark)`: the pool box pulled in by half a player's width,
+  so a body resting on the rim with its centre over the water is no splash. The validator's pool-box
+  rule makes every block of `DropMarks.poolBox(mark)` water. Bonks are ignored during the hop.
 - **`TimeTrials` and `TrialRun`**: the splash title, the hop (`setVelocity(0)`,
   `setFallDistance(0)`, `progress.jump(ledge)`), the bonk's `sendBack`, the countdown on level 1
   only, and the clock line "&e0:12.4 &7· level 2 of 5 · 1 bonk". A run keeps its `Course` snapshot,

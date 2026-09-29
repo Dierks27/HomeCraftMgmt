@@ -660,11 +660,11 @@ public final class TimeTrials implements Game {
         } catch (RuntimeException e) {
             // the default week
         }
-        return ctx.plugin().clock().weekKey(start);
+        return games().clock().weekKey(start); // the framework's clock: the plugin's, live
     }
 
     private long today() {
-        return ctx.plugin().clock().dayKey();
+        return games().clock().dayKey();
     }
 
     // ---- what the screens show --------------------------------------------------------------
@@ -1645,10 +1645,14 @@ public final class TimeTrials implements Game {
             p.sendMessage(Text.of("&e★ Best time this week!"));
         }
         title(p, "&a" + TrialText.time(ms), sub, 40);
-        if (course.personalBest() || week.record()) {
-            Sounds.won(p);
-        } else {
-            Sounds.received(p);
+        try {
+            if (course.personalBest() || week.record()) {
+                Sounds.won(p);
+            } else {
+                Sounds.received(p);
+            }
+        } catch (RuntimeException | LinkageError ignored) {
+            // a sound is decoration (and has no registry off a server): the finish is recorded all the same
         }
     }
 

@@ -950,8 +950,9 @@ and a run already going always counts. The old half is emptied once nobody is on
   that aren't Fresh Courses' (first at x,y,z)". Then either run `/hcm games gen claim <course>
   confirm` to clear that area, or use a flat world (below). A course is also refused, with a line in
   the console and in status, when a hand-built course is within 16 blocks of its area, when the
-  world's spawn (or `safe_spot`) is, or when a hand-built course already uses its id; `claim` is
-  refused then too, so it never clears one of your courses or the spawn.
+  world's spawn (or `safe_spot`) is, when a hand-built course already uses its id, or when its area
+  comes within 32 blocks of the Falling Floors arena (`games.falling_floors.origin`, on or off);
+  `claim` is refused then too, so it never clears one of your courses, the spawn or the arena.
 - **A flat world instead** (the fallback when your Games world has hills; no extra plugin needed):
   1. `/mv create games_fresh normal --world-type flat --no-structures` (Multiverse-Core 5; on 4.x
      it was `-t flat -a false`; check `/mv create --help`).
@@ -1086,7 +1087,8 @@ ledge ("LEVEL 2 of 5 / Step off and / fall into the / WATER!"), steer through th
 coloured floors below, and land in the water at the bottom. On Easy every hole on the way down is
 ringed with glowing sea lanterns ("follow the light") and the whole floor is water. A splash clears
 the level ("Level 2! of 5 - keep going!") and a quarter of a second later you are on the next ledge;
-the last splash is the finish ("Splash! 0:21.4 · ★★★"). Landing on anything but water is a **bonk**:
+the last splash is the finish ("Splash! 0:21.4 · ★★★"). Landing on anything but water (the rim of a
+pool too, even with half of you over the water: only a body wholly over the water splashes) is a **bonk**:
 "Bonk! Back to the top of level 2.", the clock keeps running, and the first one adds the tip "Steer
 while you fall to go through the holes!". The result screen says "No bonks - perfect drop!" or
 "Bonks: 2". Every level is proven solvable before it is built: a walk-only witness path with room to
@@ -1108,11 +1110,16 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
 - **Fair play:** as any time trial (flying, potions - slow falling too - or a changed gravity or
   safe-fall attribute void the run). The game's own hops to the next ledge are never speed-checked;
   a run quicker than 90% of the levels' walk-off falls doesn't count. A run going at the weekly change
-  finishes and counts on its own set's board. Two fallers in one shaft can't push each other.
+  finishes and counts on its own set's board. Two fallers in one shaft can't push each other (a
+  no-push scoreboard team for the run; a player on another plugin's team, for nametags, goes back on
+  it when the run ends).
 - **Water, safely:** water only ever sits in sealed pools at least a block inside the area, written
   with no physics, after every wall of the area is up, and drained before any wall is taken down; the
   area guard stops water flowing into an area **and out of one**; verify puts back a missing water
-  block like any other.
+  block like any other. Time Trials holds every Dropper course's pools itself too, so no pool spills
+  even while Fresh Courses is off; a kept Dropper's plot keeps its water in; and a Dropper whose
+  `origin` is moved without a `clear` keeps its old area guarded ("drain first": move it back and
+  `/hcm games gen clear` it; status lists it) until it is cleared there.
 - **Where:** x 5376-5535, y 160-223, z 4096-4111 (Easy Dropper) and 4160-4175 (Dropper); Classic
   Dropper (recalls of either) at z 4224-4239. Each half is 64 x 64 x 16. The keep plot size is
   unchanged.
@@ -1137,13 +1144,15 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
    reroll fresh_dropper confirm` (and the same for Easy): `/hcm games gen status` shows both live
    within about 2 minutes; the Fresh Courses screen shows "Easy Dropper - 3 levels" and "Dropper - 5
    levels · Course code DROP-1".
-2. Start Easy Dropper: the hotbar shows Practice drop (not timed) and Go straight to the timed run.
+2. Open Easy Dropper's screen: the Start tile reads "Start - one practice drop first" (Bedrock too).
+   Start it: the hotbar shows Practice drop (not timed) and Go straight to the timed run.
    Take the practice drop: nothing is timed, and the splash puts you back on the ledge for the 3-2-1.
 3. Finish Easy Dropper on a tablet without sprinting, following the lights.
 4. Finish the Dropper on Java cleanly: 3 stars (under the gold time) and "No bonks - perfect drop!".
 5. Land on a coloured floor on purpose: "Bonk!", back on that level's ledge, the clock still running,
    and the result says "Bonks: 1".
-6. Stand on the light-blue floor beside a Medium pool: bonk.
+6. Stand on the light-blue floor beside a Medium pool: bonk. Land on the rim of a Hard pool with half
+   of you over the water: bonk too, not a splash.
 7. `/effect give @s slow_falling` mid-run: "This run won't count".
 8. Stand in a pool during `/hcm games gen preview fresh_dropper`: you are moved out. After the build
    there is no flowing water anywhere near the area.
@@ -1178,7 +1187,8 @@ line, so they can ask for a favourite back.
 - The keep area is hand-built territory that nothing guards, so every keep checks its plot is empty
   first, however often it was cleared before; blocks there refuse it, and `claim plot <n> confirm`
   clears them. `claim plot <n>` (and every plot job) is refused while keeping is off (the keep area
-  too near a Fresh Courses area), when the plot overlaps a kept course's old plot (the keep area
+  too near a Fresh Courses area, or within 32 blocks of the Falling Floors arena), when the plot
+  overlaps a kept course's old plot (the keep area
   moved), or when a registered course stands in it or within 16 blocks: it says which, and changes
   nothing.
 - Refused within `avoid_before_restart_minutes` of a restart: recall and keep. A keep, clear-plot or

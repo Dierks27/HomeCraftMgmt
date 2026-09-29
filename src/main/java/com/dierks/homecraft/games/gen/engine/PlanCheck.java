@@ -151,6 +151,17 @@ public final class PlanCheck {
      * planner thread.
      */
     public static List<String> generator(Planner planner, Plan plan, PlanInput in) {
+        return generator(planner, plan, in, false);
+    }
+
+    /**
+     * {@link #generator(Planner, Plan, PlanInput)}, told whether the plan was made again from a live
+     * tag ({@code rederived}, a heal). A new Dropper plan is proven against the mix it was asked for
+     * ({@code in.tierOrMix()}), so a plan whose pools name another mix is refused. A heal's plan is the
+     * tag's own layout (the engine checks its hash next), and the planner may have had to find the
+     * mix it was made with, so its pools name the mix it is proven against.
+     */
+    public static List<String> generator(Planner planner, Plan plan, PlanInput in, boolean rederived) {
         if (plan == null) {
             return List.of();
         }
@@ -167,7 +178,8 @@ public final class PlanCheck {
             return GolfValidator.quickProblems(plan);
         }
         if (planner instanceof DropperPlanner) {
-            return DropperValidator.problems(plan); // the mix its pools name: a heal re-derives the tag's own
+            return rederived || in == null ? DropperValidator.problems(plan)
+                    : DropperValidator.problems(plan, in.tierOrMix());
         }
         return List.of();
     }

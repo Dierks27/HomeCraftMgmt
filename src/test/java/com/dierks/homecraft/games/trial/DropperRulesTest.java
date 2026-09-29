@@ -3,6 +3,8 @@ package com.dierks.homecraft.games.trial;
 import com.dierks.homecraft.games.gen.dropper.DropMarks;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static com.dierks.homecraft.games.trial.DropperCourses.at;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -24,8 +26,8 @@ class DropperRulesTest {
 
     @Test
     void aCornerSplashCountsWhereThePoolMarksSphereDoesNotReach() {
-        Point above = at(34.2, 60, 14.8); // over the water's corner
-        Point in = at(34.2, 51.5, 14.8);
+        Point above = at(34.35, 60, 14.65); // over the water's corner, the whole body over the water
+        Point in = at(34.35, 51.5, 14.65);
         assertFalse(POOL.contains(in), "the corner of the water is outside the pool mark's sphere");
         double t = DropperRules.splash(above, in, POOL);
         assertFalse(Double.isNaN(t), "but the fall into it is a splash");
@@ -46,6 +48,52 @@ class DropperRulesTest {
         assertTrue(Double.isNaN(DropperRules.splash(at(36.5, 70, 16.0), at(36.5, 50, 16.0), POOL)),
                 "nor a fall just past its far edge");
         assertTrue(Double.isNaN(DropperRules.splash(null, at(36.5, 50, 12.5), POOL)), "no move, no splash");
+    }
+
+    @Test
+    void aBodyRestingOnTheRimWithItsCentreOverTheWaterIsNoSplash() {
+        double s = DropMarks.surface(POOL);
+        // the water starts at x 34; the rim block is 33..34. Feet at 34.2: the body is 33.9..34.5, so it
+        // rests on the rim though its centre is over the water (the review's probe: this was t = 0.9375)
+        assertTrue(Double.isNaN(DropperRules.splash(at(34.2, 60, 12.5), at(34.2, s, 12.5), POOL)),
+                "a fall onto the rim with the centre 0.2 over the water is no splash");
+        assertTrue(Double.isNaN(DropperRules.splash(at(36.5, 60, 14.8), at(36.5, s, 14.8), POOL)),
+                "nor on the far rim along z");
+        assertTrue(Double.isNaN(DropperRules.splash(at(34.2, 60, 14.8), at(34.2, s, 14.8), POOL)),
+                "nor on the corner of the rim");
+        assertTrue(Double.isNaN(DropperRules.splash(at(34.29, 60, 12.5), at(34.29, s, 12.5), POOL)),
+                "nor with the body still a hundredth over the rim");
+        assertTrue(Double.isNaN(DropperRules.splash(at(34.2, s, 12.5), at(34.25, s, 12.5), POOL)),
+                "nor shuffling along the rim's edge");
+        for (Course.Mark pool : List.of(DropperCourses.POOL_1, DropperCourses.POOL_2, POOL)) {
+            double h = DropMarks.halfWidth(pool);
+            double top = DropMarks.surface(pool);
+            for (double d = 0; d < 0.3 - 1e-6; d += 0.02) {
+                double x = pool.x() - h + d;
+                assertTrue(Double.isNaN(DropperRules.splash(at(x, top + 8, pool.z()), at(x, top, pool.z()), pool)),
+                        "pool " + (2 * h) + ": a centre " + d + " over the water rests on the rim, no splash");
+            }
+        }
+    }
+
+    @Test
+    void aCleanDropWhollyOverTheWaterIsASplashRightUpToTheEdge() {
+        double s = DropMarks.surface(POOL);
+        double t = DropperRules.splash(at(34.3, 60, 12.5), at(34.3, s - 1, 12.5), POOL);
+        assertFalse(Double.isNaN(t), "a body whose side just meets the water's edge (34.0..34.6) falls in: a splash");
+        assertEquals((60 - 52.5) / (60 - 51.0), t, 1e-9, "crossing the box top half a block over the water");
+        assertFalse(Double.isNaN(DropperRules.splash(at(38.7, 60, 10.3), at(38.7, s - 1, 10.3), POOL)),
+                "and at the far corner, the body just inside both edges");
+        assertFalse(Double.isNaN(DropperRules.splash(at(36.5, 60, 12.5), at(36.5, s - 1, 12.5), POOL)),
+                "a drop into the middle is a splash");
+        for (Course.Mark pool : List.of(DropperCourses.POOL_1, DropperCourses.POOL_2, POOL)) {
+            double h = DropMarks.halfWidth(pool);
+            double top = DropMarks.surface(pool);
+            double x = pool.x() - h + 0.3; // hugging a wall (Easy's pool is the whole shaft floor)
+            assertFalse(Double.isNaN(DropperRules.splash(at(x, top + 8, pool.z() + h - 0.3),
+                            at(x, top - 1, pool.z() + h - 0.3), pool)),
+                    "pool " + (2 * h) + ": a body hugging two walls all the way down still splashes");
+        }
     }
 
     @Test

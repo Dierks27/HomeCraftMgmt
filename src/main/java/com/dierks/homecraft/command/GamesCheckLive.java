@@ -177,6 +177,7 @@ final class GamesCheckLive implements GamesCheck.Facts {
                 w.getMinHeight(), w.getMaxHeight(), new BukkitWorldPort(plugin, w).border(),
                 new BukkitWorldPort(plugin, w).spawn(), st.safeSpot());
         List<GamesCheck.Region> regions = new ArrayList<>();
+        List<Regions.Extra> arenaBox = DailyCourses.arenaExtras(cfg.settings(FallingFloors.SPEC)); // WP-D fix
         for (DailySettings.SlotConfig c : all) {
             Slots.Def def = Slots.any(c.id());
             if (def == null) {
@@ -193,6 +194,10 @@ final class GamesCheckLive implements GamesCheck.Facts {
             String near = Regions.handBuiltProblem(def, c.origin(), world, built);
             if (near != null) {
                 problems.add(near);
+            }
+            String arena = Regions.extrasProblem(def, c.origin(), arenaBox); // WP-D fix: the arena's extra box
+            if (arena != null) {
+                problems.add(arena);
             }
             regions.add(new GamesCheck.Region(def.id(), GenCopy.slotName(def, st.cadenceDays()), Slots.isClassic(def.id()),
                     c.enabled(), problems, Regions.describe(def, c.origin())));
@@ -226,8 +231,9 @@ final class GamesCheckLive implements GamesCheck.Facts {
         }
         return new GamesCheck.Fresh(st.enabled() && cfg.enabled(), st.cadenceName(),
                 GenCopy.schedule(ed.cadenceDays(), ed.rebuildDay(), null), world, w != null, listed, regions, slots,
-                next, st.archive().keepProblem(), st.archive().keep().describe() + ", " + st.archive().keep().maxPlots()
-                + " plots");
+                next, st.archive().keepProblem() != null ? st.archive().keepProblem()
+                : Regions.keepExtrasProblem(st.archive().keep(), arenaBox), // WP-D fix: or it crowds the arena
+                st.archive().keep().describe() + ", " + st.archive().keep().maxPlots() + " plots");
     }
 
     // ---- Falling Floors (EVENTS-DROPPER-SPEC §C.2 WP-F) ----

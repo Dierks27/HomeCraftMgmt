@@ -38,12 +38,15 @@ import java.util.UUID;
  *       block meets a person (their box grown by one) waits and is tried again every tick; after
  *       {@value #STUCK_MS} ms {@link #stuckPeople} names who is in the way, to be moved.</li>
  *   <li><b>Water last, and gone first</b> (EVENTS-DROPPER-SPEC §B.1.9, a Dropper's sealed pools): a
- *       pass writes in three stages over the WHOLE half. First every water block the plan doesn't
- *       want is drained (while the chunks are read); then the solids and signs of every chunk;
- *       and only when those are all written, the planned water, bottom-up. So a pool is drained
- *       before its walls go (clearing a half), and filled only once every wall round it stands.
- *       A stop between two stages is just the next converge. With writes made without physics,
- *       sealed pools and the area guard's flow rules, water in a half never moves.</li>
+ *       pass over a half that has water (the plan's, the caller's word that the half may hold some,
+ *       a Dropper's slot or plot, or water found in a chunk) writes in three stages over the WHOLE
+ *       half. First every water block the plan doesn't want is drained (while the chunks are read);
+ *       then the solids and signs of every chunk; and only when those are all written, the planned
+ *       water, bottom-up. So a pool is drained before its walls go (clearing a half), and filled only
+ *       once every wall round it stands. A stop between two stages is just the next converge. With
+ *       writes made without physics, sealed pools and the area guard's flow rules, water in a half
+ *       never moves. A half with no water is written chunk by chunk as it is read (only one
+ *       chunk's writes are ever held), as every generator but the Dropper always was.</li>
  *   <li><b>VERIFY</b>: the next pass. None differ: {@link Phase#DONE}. Otherwise the pass wrote
  *       them, and up to {@value #MAX_PASSES} passes in all are made before it is
  *       {@link Phase#FAILED} naming the first five.</li>
@@ -127,6 +130,12 @@ public final class BuildJob {
     private final List<Op> fills = new ArrayList<>();
     /** Which of a pass's three write stages it is on (drain while reading, then body, then fill). */
     private Stage stage = Stage.DRAIN;
+    /**
+     * Whether the writes are staged over the whole half: the plan has water, the caller said the half
+     * may hold some, or a chunk showed some (from that chunk on, and every later pass). Otherwise each
+     * chunk is written as it is read.
+     */
+    private boolean staged;
     private final List<String> named = new ArrayList<>();
     private final Set<UUID> stuck = new LinkedHashSet<>();
     private Phase phase = Phase.LOAD;
@@ -145,10 +154,22 @@ public final class BuildJob {
      * @throws IllegalArgumentException when a plan block or sign is outside the half or isn't a block
      */
     public BuildJob(WorldPort port, Box half, Plan plan, Mode mode) {
+        this(port, half, plan, mode, false);
+    }
+
+    /**
+     * @param plan         what the half must hold, or {@code null} for nothing
+     * @param mayHoldWater the half may hold water the plan doesn't want (a Dropper's slot or plot being
+     *                     cleared): every pass is staged from its first chunk, so every pool is drained
+     *                     before any wall goes, wherever the chunks' edges cut it
+     * @throws IllegalArgumentException when a plan block or sign is outside the half or isn't a block
+     */
+    public BuildJob(WorldPort port, Box half, Plan plan, Mode mode, boolean mayHoldWater) {
         this.port = port;
         this.half = half;
         this.writer = new HalfWriter(port, half);
         this.mode = mode;
+        this.staged = mayHoldWater;
         for (int cx = half.minX() >> 4; cx <= half.maxX() >> 4; cx++) {
             for (int cz = half.minZ() >> 4; cz <= half.maxZ() >> 4; cz++) {
                 chunks.add(new int[]{cx, cz});
@@ -167,8 +188,10 @@ public final class BuildJob {
         for (BlockOp op : p.ops()) {
             inside(op.x(), op.y(), op.z());
             ChunkPlan cp = plan.computeIfAbsent(key(op.x() >> 4, op.z() >> 4), k -> new ChunkPlan());
-            cp.blocks.add(new Op(op.x(), op.y(), op.z(), states[op.state()], null));
+            String state = states[op.state()];
+            cp.blocks.add(new Op(op.x(), op.y(), op.z(), state, null));
             cp.at.add(pos(op.x(), op.y(), op.z()));
+            staged |= fluid(state); // a plan with water is written in stages over the whole half
         }
         for (SignText s : p.signs()) {
             inside(s.x(), s.y(), s.z());
@@ -280,9 +303,14 @@ public final class BuildJob {
                     named.add(at);
                 }
                 if (mode == Mode.CONVERGE) {
-                    pending.addAll(d.drain); // stage 1 as the chunks are read: every other write waits
-                    body.addAll(d.body);
-                    fills.addAll(d.fill);
+                    staged |= !d.drain.isEmpty() || !d.fill.isEmpty(); // water here: staged from now on
+                    if (staged) {
+                        pending.addAll(d.drain); // stage 1 as the chunks are read: every other write waits
+                        body.addAll(d.body);
+                        fills.addAll(d.fill);
+                    } else {
+                        pending.addAll(d.body); // no water: this chunk's writes now, before the next is read
+                    }
                 }
                 continue;
             }
@@ -478,6 +506,11 @@ public final class BuildJob {
     }
 
     /** Whether it finished: the half now matches (converge), or the count is in (scan). */
+    /** Whether its writes are staged over the whole half (water: the plan's, the caller's word, or found). */
+    boolean staged() {
+        return staged;
+    }
+
     public boolean done() {
         return phase == Phase.DONE;
     }

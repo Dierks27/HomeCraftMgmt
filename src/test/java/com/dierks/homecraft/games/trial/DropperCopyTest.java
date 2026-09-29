@@ -57,6 +57,20 @@ class DropperCopyTest {
     }
 
     @Test
+    void theStartTileSaysThePracticeDropInItsName() {
+        TimeTrialsSettings on = TimeTrialsSettings.defaults();
+        TimeTrialsSettings off = new TimeTrialsSettings(true, on.firstClear(), 5, 2, 4, 6, 5, 0, 8);
+        String name = DropperText.startName(DropperCourses.hand(), on);
+        assertTrue(plain(name).startsWith("Start") && plain(name).contains("practice drop"),
+                "a dropper's Start names its practice drop, for Bedrock: " + name);
+        assertEquals(DropperText.START, DropperText.startName(DropperCourses.hand(), off),
+                "with warm-ups off there is no practice drop to name");
+        assertEquals(DropperText.START, DropperText.startName(DropperCourses.asParkour(), on),
+                "every other course's Start is just Start");
+        assertEquals(DropperText.START, DropperText.startName(null, null), "and nothing known is plain Start");
+    }
+
+    @Test
     void theKitsKeyWordsAreInItsNames() {
         assertTrue(plain(DropperText.PRACTICE_ITEM).contains("Practice drop (not timed)"), DropperText.PRACTICE_ITEM);
         assertTrue(plain(DropperText.STRAIGHT_ITEM).contains("Go straight to the timed run"), DropperText.STRAIGHT_ITEM);

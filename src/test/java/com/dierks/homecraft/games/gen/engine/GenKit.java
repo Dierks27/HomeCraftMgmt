@@ -603,6 +603,8 @@ final class GenKit {
         long nanos;
         boolean holdPlans;
         double mspt = 10;
+        /** The extra boxes Fresh Courses keeps apart from (the Falling Floors arena), none by default. */
+        List<Regions.Extra> extras = List.of();
         /** {@code trials.fall_depth}. */
         int fallDepth = 6;
 
@@ -749,6 +751,11 @@ final class GenKit {
         public void endRun(UUID player) {
             ended.add(player);
             people.removeIf(p -> p.id().equals(player));
+        }
+
+        @Override
+        public List<Regions.Extra> extras() {
+            return extras;
         }
 
         @Override

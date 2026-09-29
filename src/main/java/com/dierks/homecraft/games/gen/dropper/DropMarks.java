@@ -16,6 +16,7 @@ import java.util.List;
  * ledge mark   = the ledge's centre at feet height, radius 2.5
  * pool mark    = (pool x, surfaceY - (r - 0.5), pool z), radius r = h + 1 (h: the pool's half-width)
  * pool box     = [x +- h] x [surfaceY - 3, surfaceY + 0.5] x [z +- h]
+ * splash box   = the pool box, x and z pulled in by half a player's width (0.3)
  * fallY        = the lowest pool floor - 4
  * </pre>
  *
@@ -71,9 +72,27 @@ public final class DropMarks {
                 pool.z() + h};
     }
 
-    /** Whether a point is inside a pool mark's box. */
-    public static boolean inPool(Course.Mark pool, double x, double y, double z) {
+    /**
+     * How far in from the water's edge the feet must be for a splash: half a player's width, less a
+     * hair for float sums (a body that only touches the rim's edge isn't standing on it).
+     */
+    public static final double SPLASH_INSET = DropSim.HALF_WIDTH - 1e-7;
+
+    /**
+     * The splash box a mark names, {x1, y1, z1, x2, y2, z2}: {@link #poolBox} with x and z pulled in by
+     * {@link #SPLASH_INSET}. The live splash tests the feet's centre, and a body can stand on the rim
+     * with its centre up to 0.3 over the water; only a centre this far in has the whole body over the
+     * water, so a rim landing is never a splash (the validator reads the plain {@link #poolBox}).
+     */
+    public static double[] splashBox(Course.Mark pool) {
         double[] b = poolBox(pool);
+        return new double[]{b[0] + SPLASH_INSET, b[1], b[2] + SPLASH_INSET, b[3] - SPLASH_INSET, b[4],
+                b[5] - SPLASH_INSET};
+    }
+
+    /** Whether the feet at a point are inside a pool mark's {@link #splashBox}: in the water, not on the rim. */
+    public static boolean inPool(Course.Mark pool, double x, double y, double z) {
+        double[] b = splashBox(pool);
         return x >= b[0] && x <= b[3] && y >= b[1] && y <= b[4] && z >= b[2] && z <= b[5];
     }
 

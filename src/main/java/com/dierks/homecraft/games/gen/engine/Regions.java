@@ -240,6 +240,42 @@ public final class Regions {
     }
 
     /**
+     * Why {@code def}'s region at {@code origin} crowds one of {@code extras} (Fresh Courses' side of
+     * {@link #extraProblem}: the same rule, asked for one slot), or {@code null} when it keeps
+     * {@value #APART} blocks from every one. Whether the slot is switched on doesn't matter.
+     */
+    public static String extrasProblem(Slots.Def def, int[] origin, List<Extra> extras) {
+        if (def == null || origin == null) {
+            return null;
+        }
+        List<SlotConfig> one = List.of(SlotConfig.shipped(def).withOrigin(origin).withEnabled(true));
+        for (Extra e : extras == null ? List.<Extra>of() : extras) {
+            String p = e == null ? null : extraProblem(e, one, null);
+            if (p != null) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Why the keep area crowds one of {@code extras} ({@link #extraProblem} for the keep area), or
+     * {@code null}: keeping is refused while it does.
+     */
+    public static String keepExtrasProblem(KeepArea keep, List<Extra> extras) {
+        if (keep == null) {
+            return null;
+        }
+        for (Extra e : extras == null ? List.<Extra>of() : extras) {
+            String p = e == null ? null : extraProblem(e, List.of(), keep);
+            if (p != null) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    /**
      * {@link #extraProblem} for several boxes, which must also be {@value #APART} apart from each
      * other: each box's problem by its name (in order), only for the boxes that have one.
      */
@@ -481,6 +517,38 @@ public final class Regions {
     public static String claim(Slots.Def def, String world, int[] origin) {
         return world.toLowerCase(Locale.ROOT) + "," + origin[0] + "," + origin[1] + "," + origin[2] + ","
                 + def.sizeX() + "," + def.sizeY() + "," + def.sizeZ();
+    }
+
+    /** The world a claim was made in, or {@code null} when it can't be read. */
+    public static String claimWorld(String claim) {
+        if (claim == null || claimOrigin(claim) == null) {
+            return null;
+        }
+        String w = claim.substring(0, claim.indexOf(',')).trim();
+        return w.isEmpty() ? null : w;
+    }
+
+    /**
+     * The claims a stored wet list names ({@link GenAdminKeys#wet}): ';' between them, each a whole
+     * claim; blanks, unreadable ones and repeats dropped, in order.
+     */
+    public static List<String> wetClaims(String stored) {
+        List<String> out = new ArrayList<>();
+        if (stored == null) {
+            return out;
+        }
+        for (String c : stored.split(";")) {
+            String t = c.trim();
+            if (claimOrigin(t) != null && claimWorld(t) != null && !out.contains(t)) {
+                out.add(t);
+            }
+        }
+        return out;
+    }
+
+    /** A wet list as stored, or {@code null} (the key unset) when it is empty. */
+    public static String wetText(List<String> claims) {
+        return claims == null || claims.isEmpty() ? null : String.join(";", claims);
     }
 
     /** The origin a claim was made at, or {@code null} when it can't be read. */

@@ -6,11 +6,13 @@ import com.dierks.homecraft.games.gen.dropper.DropperGeometry;
  * The Dropper's splash and bonk rules (EVENTS-DROPPER-SPEC §B.1.7), pure and tested: when a fall
  * reaches the water, and when it went wrong and goes back to the top of its level.
  *
- * <p><b>A splash</b> is the first move segment that enters a pool's box ({@link DropperLayout#poolBox}):
- * the water's column from its floor to half a block over the surface. The pool mark's own sphere
- * agrees in the middle of the pool, but a splash near a corner of a big pool is outside the sphere
- * and still in the water, so the box decides. Where the feet stand on the rim round a pool is
- * outside the box, so a rim landing is never a splash.
+ * <p><b>A splash</b> is the first move segment that enters a pool's splash box
+ * ({@link DropperLayout#splashBox}): the water's column from its floor to half a block over the
+ * surface, pulled in by half a player's width on every side. The pool mark's own sphere agrees in
+ * the middle of the pool, but a splash near a corner of a big pool is outside the sphere and still in
+ * the water, so the box decides. The feet are a point, but the body is 0.6 wide: a body can rest on
+ * the rim with its centre up to 0.3 over the water, which is why the box is pulled in. So a rim
+ * landing is never a splash, only a body wholly over the water is.
  *
  * <p><b>A bonk</b> is any of: a fall-damage event (already cancelled by the kit guard, seen anyway),
  * a landing ({@link Landing}: two ticks in a row the feet didn't drop, well below the ledge, in the
@@ -84,12 +86,12 @@ public final class DropperRules {
         return lo;
     }
 
-    /** Where along a move a splash into {@code pool} happens ({@link #enter} its box), or {@code NaN}. */
+    /** Where along a move a splash into {@code pool} happens ({@link #enter} its splash box), or {@code NaN}. */
     public static double splash(Point from, Point to, Course.Mark pool) {
         if (from == null || to == null || pool == null) {
             return Double.NaN;
         }
-        return enter(from, to, DropperLayout.poolBox(pool));
+        return enter(from, to, DropperLayout.splashBox(pool));
     }
 
     /**

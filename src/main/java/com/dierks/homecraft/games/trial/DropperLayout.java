@@ -96,7 +96,15 @@ public final class DropperLayout {
         return DropMarks.poolBox(pool);
     }
 
-    /** Whether a point is inside a pool mark's box. */
+    /**
+     * A pool mark's splash box: {@link #poolBox} with x and z pulled in by half a player's width, so
+     * the feet of a body resting on the rim are never in it ({@link DropMarks#splashBox}).
+     */
+    public static double[] splashBox(Course.Mark pool) {
+        return DropMarks.splashBox(pool);
+    }
+
+    /** Whether the feet at a point are inside a pool mark's {@link #splashBox}. */
     public static boolean inPool(Course.Mark pool, Point p) {
         return pool != null && p != null && DropMarks.inPool(pool, p.x(), p.y(), p.z());
     }

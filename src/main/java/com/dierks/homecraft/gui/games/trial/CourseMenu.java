@@ -228,14 +228,18 @@ public final class CourseMenu extends GameMenu {
         return Menus.icon(Material.GOLD_NUGGET, name, lore.toArray(new String[0]));
     }
 
-    /** Start: the start line with only the course kit (and, for a dropper, its one practice drop). */
+    /**
+     * Start: the start line with only the course kit (and, for a dropper, its one practice drop, said
+     * in the NAME so Bedrock shows it).
+     */
     private ItemStack startTile() {
         List<String> lore = new ArrayList<>(List.of("&7You go to the start line", "&7with only the course kit.",
                 "&7Your things come back when", "&7you finish or leave."));
-        if (course.kind() == TrialKind.DROPPER && trials.settings().warmupsOn()) {
+        TimeTrialsSettings s = trials.settings();
+        if (course.kind() == TrialKind.DROPPER && s.warmupsOn()) {
             lore.add(DropperText.PRACTICE_ON_START);
         }
-        return Menus.icon(Material.LIME_CONCRETE, "&aStart", lore.toArray(new String[0]));
+        return Menus.icon(Material.LIME_CONCRETE, DropperText.startName(course, s), lore.toArray(new String[0]));
     }
 
     /**

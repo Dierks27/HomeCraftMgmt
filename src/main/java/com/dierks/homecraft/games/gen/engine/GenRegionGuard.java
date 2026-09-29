@@ -35,6 +35,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 
@@ -49,7 +50,8 @@ import java.util.logging.Logger;
  * existing Games-world guard (which exempts admins) is unchanged; this one only covers the halves.
  *
  * <p>Covered: placing and breaking, buckets, sign edits, hanging and taking down, placing boats,
- * carts and stands, fluids flowing in and out (a Dropper's pools never leak), blocks forming, spreading and fading, mobs and falling
+ * carts and stands, fluids flowing in and out (a Dropper's pools never leak, and neither does a kept
+ * Dropper's plot, where nothing else is refused), blocks forming, spreading and fading, mobs and falling
  * blocks changing blocks, fire, pistons touching a half, and explosions (the blocks inside a half
  * are taken out of the list; the rest still go). WorldEdit can't be intercepted: the next boot or
  * {@code /hcm games gen rebuild} heals what it did.
@@ -66,6 +68,15 @@ public final class GenRegionGuard {
     @FunctionalInterface
     public interface Area {
         boolean in(String world, int x, int y, int z);
+
+        /**
+         * Whether anything of the area is in {@code world} at all: false lets a handler that runs for
+         * every block in every world (a fluid flowing) stop before it looks at a block. True unless
+         * the area says otherwise.
+         */
+        default boolean covers(String world) {
+            return true;
+        }
     }
 
     /** A kind of change the guard sees. */
@@ -127,6 +138,35 @@ public final class GenRegionGuard {
                 || (to != null && refused(Change.FLOW_INTO, area.in(world, to[0], to[1], to[2]), false));
     }
 
+    /**
+     * The flow handler's decision ({@link BlockFromToEvent}, which fires for every fluid in every
+     * world): a fluid whose source is in {@code area} or {@code wet} never moves ({@link Change#FLOW_OUT});
+     * one flowing into {@code area} is refused ({@link Change#FLOW_INTO}). {@code wet} is flow-only (a
+     * kept Dropper's plot: the keep area is otherwise nobody's to guard). It looks at nothing in a
+     * world neither covers ({@link Area#covers}), and at where the fluid goes only when its source
+     * decided nothing ({@code to} is asked for then, and only then).
+     *
+     * @param flow what {@code to} reads where the fluid would flow from
+     * @param to   where the fluid would flow, {x, y, z} (asked for at most once)
+     */
+    public static <T> boolean flowRefused(Area area, Area wet, String world, int fx, int fy, int fz, T flow,
+                                          Function<T, int[]> to) {
+        boolean full = area != null && area.covers(world);
+        boolean flowOnly = wet != null && wet.covers(world);
+        if (!full && !flowOnly) {
+            return false; // not the Games world, or nothing of ours in it: the common case
+        }
+        if ((full && refused(Change.FLOW_OUT, area.in(world, fx, fy, fz), false))
+                || (flowOnly && refused(Change.FLOW_OUT, wet.in(world, fx, fy, fz), false))) {
+            return true;
+        }
+        if (!full) {
+            return false;
+        }
+        int[] t = to == null ? null : to.apply(flow);
+        return t != null && refused(Change.FLOW_INTO, area.in(world, t[0], t[1], t[2]), false);
+    }
+
     /** Which of an explosion's blocks are spared: those inside a half. */
     public static List<int[]> spared(Area area, String world, List<int[]> blocks) {
         List<int[]> out = new ArrayList<>();
@@ -145,6 +185,14 @@ public final class GenRegionGuard {
      * guard, and go when it stops. {@code area} is asked at the moment of each event.
      */
     public static void register(GamesService games, Game daily, Supplier<Area> area, Logger log) {
+        register(games, daily, area, null, log);
+    }
+
+    /**
+     * {@link #register(GamesService, Game, Supplier, Logger)}, and no fluid ever flows out of
+     * {@code wet} ({@code null}: none), where nothing else is refused (a kept Dropper's plot).
+     */
+    public static void register(GamesService games, Game daily, Supplier<Area> area, Supplier<Area> wet, Logger log) {
         GenRegionGuard g = new GenRegionGuard();
         EventPriority p = EventPriority.LOW;
         games.on(daily, BlockPlaceEvent.class, p, true,
@@ -163,7 +211,7 @@ public final class GenRegionGuard {
                 e -> g.block(area, e, Change.UNHANG, e.getEntity().getLocation().getBlock(), log));
         games.on(daily, EntityPlaceEvent.class, p, true,
                 e -> g.player(area, e, Change.ENTITY_PLACE, e.getPlayer(), e.getEntity().getLocation().getBlock(), log));
-        games.on(daily, BlockFromToEvent.class, p, true, e -> g.flow(area, e, e.getBlock(), e.getToBlock(), log));
+        games.on(daily, BlockFromToEvent.class, p, true, e -> g.flow(area, wet, e, log));
         games.on(daily, BlockFormEvent.class, p, true, e -> g.block(area, e, Change.FORM, e.getBlock(), log));
         games.on(daily, BlockSpreadEvent.class, p, true, e -> g.block(area, e, Change.SPREAD, e.getBlock(), log));
         games.on(daily, BlockFertilizeEvent.class, p, true, e -> {
@@ -215,19 +263,36 @@ public final class GenRegionGuard {
         }
     }
 
-    /** A fluid flowing: refused when it flows out of a half or into one ({@link #flowRefused}). */
-    private void flow(Supplier<Area> area, Cancellable e, Block from, Block to, Logger log) {
+    /** A fluid flowing: refused when it flows out of a half or a wet box, or into a half ({@link #flowed}). */
+    private void flow(Supplier<Area> area, Supplier<Area> wet, BlockFromToEvent e, Logger log) {
         try {
-            Area a = area.get();
-            int[] f = from == null ? null : new int[]{from.getX(), from.getY(), from.getZ()};
-            int[] t = to == null ? null : new int[]{to.getX(), to.getY(), to.getZ()};
-            Block any = from != null ? from : to;
-            if (any != null && flowRefused(a, any.getWorld().getName(), f, t)) {
+            if (flowed(area.get(), wet == null ? null : wet.get(), e)) {
                 e.setCancelled(true);
             }
         } catch (RuntimeException ex) {
             log.warning("Fresh Courses: the area guard failed: " + ex);
         }
+    }
+
+    /**
+     * Whether {@code e} is refused ({@link #flowRefused}): its source block ({@code getBlock}) is judged
+     * first, and where it flows ({@code getToBlock}) only when that decided nothing. Each area is
+     * looked up once.
+     */
+    static boolean flowed(Area area, Area wet, BlockFromToEvent e) {
+        Block from = e.getBlock();
+        org.bukkit.World w = from == null ? null : from.getWorld();
+        String world = w == null ? null : w.getName();
+        if (world == null || !((area != null && area.covers(world)) || (wet != null && wet.covers(world)))) {
+            return false; // another world: not a block looked at
+        }
+        return flowRefused(area, wet, world, from.getX(), from.getY(), from.getZ(), e, GenRegionGuard::toOf);
+    }
+
+    /** Where a flow goes, {x, y, z}, or {@code null}. */
+    private static int[] toOf(BlockFromToEvent e) {
+        Block to = e.getToBlock();
+        return to == null ? null : new int[]{to.getX(), to.getY(), to.getZ()};
     }
 
     private void piston(Supplier<Area> area, Cancellable e, Block piston, List<Block> blocks, BlockFace dir,

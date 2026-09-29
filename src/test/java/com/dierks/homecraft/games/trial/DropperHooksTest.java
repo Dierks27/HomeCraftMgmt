@@ -1,12 +1,16 @@
 package com.dierks.homecraft.games.trial;
 
+import com.dierks.homecraft.games.NoPush;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -67,6 +71,51 @@ class DropperHooksTest {
         TrialRun plain = new TrialRun(UUID.randomUUID(), DropperCourses.asParkour(), false, 61);
         new DropperHooks(null).end(plain, null);
         assertEquals(null, plain.drop, "a run of any other kind has nothing of the Dropper's");
+    }
+
+    @Test
+    void aRunWhosePlayerHasGoneStillComesOffTheNoPushTeam() {
+        Map<String, String> board = new HashMap<>();
+        NoPush team = new NoPush(() -> new NoPush.Board() {
+            @Override
+            public String teamOf(String entry) {
+                return board.get(entry);
+            }
+
+            @Override
+            public void ensureNoCollision(String t) {
+            }
+
+            @Override
+            public boolean exists(String t) {
+                return true;
+            }
+
+            @Override
+            public void add(String t, String entry) {
+                board.put(entry, t);
+            }
+
+            @Override
+            public void remove(String t, String entry) {
+                board.remove(entry, t);
+            }
+
+            @Override
+            public Set<String> entries(String t) {
+                return Set.of();
+            }
+        });
+        board.put("Sam", "nametags");
+        TrialRun run = new TrialRun(UUID.randomUUID(), DropperCourses.hand(), false, 61);
+        DropperRunTest.FakePort port = new DropperRunTest.FakePort(run);
+        run.drop = DropperRun.start(run, port, true);
+        assertTrue(team.on(run.player, "Sam"), "(what the live port does at the start)");
+        assertEquals(NoPush.TEAM, board.get("Sam"), "the runner is on the no-push team");
+        new DropperHooks(null, () -> team).end(run, null);
+        assertFalse(team.isOn(run.player), "a quit ends the run and takes them off the team (saved with the world)");
+        assertEquals("nametags", board.get("Sam"), "back on the team they came from");
+        new DropperHooks(null, () -> null).end(new TrialRun(UUID.randomUUID(), DropperCourses.hand(), false, 61), null);
     }
 
     @Test

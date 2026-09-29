@@ -54,6 +54,9 @@ class DropperRunTest {
         final List<DropperRun.Cue> sounds = new ArrayList<>();
         final List<Long> finishes = new ArrayList<>();
         final List<Boolean> collidableCalls = new ArrayList<>();
+        /** On the no-push team now, and every call made. */
+        boolean onTeam;
+        final List<Boolean> noPushCalls = new ArrayList<>();
 
         FakePort(TrialRun run) {
             this.run = run;
@@ -120,6 +123,12 @@ class DropperRunTest {
         public void collidable(boolean on) {
             collidable = on;
             collidableCalls.add(on);
+        }
+
+        @Override
+        public void noPush(boolean on) {
+            onTeam = on;
+            noPushCalls.add(on);
         }
 
         @Override
@@ -262,6 +271,32 @@ class DropperRunTest {
     }
 
     @Test
+    void aBonkWhoseTeleportFailsIsNotCountedAndTheNextOneIs() {
+        TrialRun run = newRun();
+        FakePort port = new FakePort(run);
+        DropperRun d = DropperRun.start(run, port, false);
+        run.drop = d;
+        go(run, port);
+        port.failTeleports = true;
+        int titles = port.titles.size();
+        for (int i = 0; i < 100; i++) {
+            port.tick++;
+            d.bonk(port, DropperRules.Why.FALL_DAMAGE);
+        }
+        assertEquals(0, d.bonks(), "100 ticks of bonks that couldn't send the run back count none (was 9)");
+        assertEquals(titles, port.titles.size(), "and show no Bonk! title");
+        assertTrue(port.sounds.isEmpty(), "nor play its sound");
+        assertTrue(port.chats.isEmpty(), "nor the tip");
+        assertFalse(d.bonk(port, DropperRules.Why.KIT), "the bonk reports it did nothing, so Time Trials sends back");
+        port.failTeleports = false;
+        port.tick += DropperRules.BONK_GAP;
+        assertTrue(d.bonk(port, DropperRules.Why.FALL_DAMAGE), "once teleports work again, a bonk is one");
+        assertEquals(1, d.bonks(), "counted once");
+        assertEquals("&eBonk!|&7Back to the top of level 1.", port.titles.get(port.titles.size() - 1), "and shown");
+        assertEquals(List.of(DropperText.TIP), port.chats, "with the tip");
+    }
+
+    @Test
     void theHopWaitsForItsTeleportToLandAndTriesAgainIfItFailed() {
         TrialRun run = newRun();
         FakePort port = new FakePort(run);
@@ -295,9 +330,12 @@ class DropperRunTest {
             FakePort port = new FakePort(run);
             port.collidable = before;
             DropperRun d = DropperRun.start(run, port, true);
-            assertFalse(port.collidable, "two fallers in one shaft can't push each other");
+            assertTrue(port.onTeam, "two fallers in one shaft can't push each other: the no-push team");
+            assertFalse(port.collidable, "and not collidable, so mobs can't either");
             assertFalse(d.ended(), "the run is on");
             d.end(port);
+            assertFalse(port.onTeam, "the end takes the runner off the no-push team");
+            assertEquals(List.of(true, false), port.noPushCalls, "on once at the start, off once at the end");
             assertEquals(before, port.collidable, "the end gives back exactly what it had (" + before + ")");
             assertTrue(d.ended(), "and remembers it did");
             port.collidable = false;

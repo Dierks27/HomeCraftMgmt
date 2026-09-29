@@ -1,11 +1,12 @@
 package com.dierks.homecraft.games.trial;
 
+import com.dierks.homecraft.games.NoPush;
 import com.dierks.homecraft.games.world.KitItems;
+import com.dierks.homecraft.util.Sounds;
 import com.dierks.homecraft.util.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.entity.EntityDamageEvent;
@@ -13,6 +14,8 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
 import java.util.List;
+import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * Where Time Trials meets the Dropper on the server (EVENTS-DROPPER-SPEC §B.1.7, the practice drop
@@ -26,9 +29,16 @@ import java.util.List;
 final class DropperHooks {
 
     private final TimeTrials trials;
+    /** The games' no-push team ({@code GamesService.noPush()}), or {@code null}: none (a test). */
+    private final Supplier<NoPush> noPush;
 
     DropperHooks(TimeTrials trials) {
+        this(trials, () -> trials == null ? null : trials.games().noPush());
+    }
+
+    DropperHooks(TimeTrials trials, Supplier<NoPush> noPush) {
         this.trials = trials;
+        this.noPush = noPush;
     }
 
     // ---- the hooks ------------------------------------------------------------------------------
@@ -144,16 +154,28 @@ final class DropperHooks {
         }
     }
 
-    /** The run is over however it ended: the player collides as before (once; offline, nothing to do). */
+    /**
+     * The run is over however it ended: off the no-push team and collidable as before (once). A player
+     * who has gone is still taken off the team (it is saved with the world's scoreboard); there is no
+     * collidability to give back (it isn't saved with them).
+     */
     void end(TrialRun run, Player p) {
         if (run == null || run.drop == null || run.drop.ended()) {
             return;
         }
         if (p == null || !p.isOnline()) {
-            run.drop.end(new Offline());
+            run.drop.end(new Offline(team(), run.player));
             return;
         }
         run.drop.end(port(p, run));
+    }
+
+    private NoPush team() {
+        try {
+            return noPush == null ? null : noPush.get();
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     // ---- the kits -------------------------------------------------------------------------------
@@ -239,14 +261,9 @@ final class DropperHooks {
 
             @Override
             public void sound(DropperRun.Cue cue) {
-                try {
-                    switch (cue) {
-                        case SPLASH -> p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_SPLASH, 0.7f, 1.2f);
-                        case BONK -> p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.7f, 0.8f);
-                        case CHOICE -> p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.6f, 1.4f);
-                    }
-                } catch (RuntimeException | LinkageError ignored) {
-                    // a sound is decoration
+                switch (cue) { // the plugin's sound vocabulary (Sounds never throws)
+                    case SPLASH, CHOICE -> Sounds.received(p);
+                    case BONK -> Sounds.refused(p);
                 }
             }
 
@@ -261,14 +278,38 @@ final class DropperHooks {
             }
 
             @Override
+            public void noPush(boolean on) {
+                NoPush team = team();
+                if (team == null) {
+                    return;
+                }
+                if (on) {
+                    team.on(p);
+                } else {
+                    team.off(p);
+                }
+            }
+
+            @Override
             public void finish(long nanos) {
                 trials.finish(p, run, nanos);
             }
         };
     }
 
-    /** A player who has gone: collidability isn't saved with them, so there is nothing to give back. */
-    private static final class Offline implements DropperRun.Port {
+    /**
+     * A player who has gone: collidability isn't saved with them, so there is nothing to give back,
+     * but the no-push team is (the world's scoreboard), so they come off it by id.
+     */
+    private record Offline(NoPush team, UUID player) implements DropperRun.Port {
+
+        @Override
+        public void noPush(boolean on) {
+            if (!on && team != null) {
+                team.off(player, null);
+            }
+        }
+
         @Override
         public long tick() {
             return 0;

@@ -61,8 +61,22 @@ public final class DropperText {
     public static final String CLOCK_RULE = "The clock keeps running after a bonk.";
     /** The course screen's Start lore when a practice drop is offered. */
     public static final String PRACTICE_ON_START = "&7You can have one practice drop first.";
+    /** The course screen's Start NAME when a practice drop is offered (Bedrock shows names, not lore). */
+    public static final String START_WITH_PRACTICE = "&aStart &7- one practice drop first";
+    /** Any other course's Start name. */
+    public static final String START = "&aStart";
 
     private DropperText() {
+    }
+
+    /**
+     * The course screen's Start NAME: a dropper's practice drop is said in it while one is offered
+     * ({@code games.trials.warmup_seconds > 0}); every other course (and a dropper without one) reads
+     * "Start".
+     */
+    public static String startName(Course course, TimeTrialsSettings settings) {
+        return course != null && course.kind() == TrialKind.DROPPER && DropperRun.offers(settings)
+                ? START_WITH_PRACTICE : START;
     }
 
     /** "&amp;73 levels: step off, steer through the holes, land in the water. Ready..." */
@@ -124,7 +138,7 @@ public final class DropperText {
         java.util.List<String> out = new java.util.ArrayList<>(List.of(OFFER_TITLE, OFFER_SUBTITLE, OFFER, OFFER_BAR,
                 PRACTICE_ITEM, STRAIGHT_ITEM, TIMED_ITEM, PRACTICE_TITLE, PRACTICE_SUBTITLE, PRACTICE_BAR,
                 PRACTICE_SPLASH, PRACTICE_BONK, PRACTICE_SKIPPED, BACK_ITEM, TIP, CLOCK_RULE, PRACTICE_ON_START,
-                BONK_TITLE, SPLASH_TITLE, DropperLayout.GEOMETRY_REFUSED));
+                START_WITH_PRACTICE, BONK_TITLE, SPLASH_TITLE, DropperLayout.GEOMETRY_REFUSED));
         out.addAll(PRACTICE_LORE);
         out.addAll(STRAIGHT_LORE);
         out.addAll(TIMED_LORE);

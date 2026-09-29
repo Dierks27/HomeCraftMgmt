@@ -25,8 +25,10 @@ import java.util.List;
  * during the hop. A bonk sends the run back to the top of the level it is on and counts one; the
  * clock keeps running. The last splash is the finish.
  *
- * <p><b>Collisions.</b> The runner can't be pushed by another faller in the same shaft: it is set not
- * collidable at the start, and {@link #end} gives back what it was, once, on every way a run ends.
+ * <p><b>Collisions.</b> The runner can't be pushed by another faller in the same shaft: it goes on the
+ * games' no-push team ({@code games/NoPush}: only a team's collision rule stops player pushing) and is
+ * set not collidable (which stops mobs) at the start, and {@link #end} takes it off the team and gives
+ * back what it was, once, on every way a run ends.
  */
 final class DropperRun {
 
@@ -57,6 +59,12 @@ final class DropperRun {
         boolean collidable();
 
         void collidable(boolean on);
+
+        /**
+         * On the games' no-push team ({@code on}: nobody pushes the player or is pushed by them), or
+         * off it and back on the team the player came from.
+         */
+        void noPush(boolean on);
 
         /** The last splash: finish the run at {@code nanos} (Time Trials' own finish). */
         void finish(long nanos);
@@ -131,11 +139,13 @@ final class DropperRun {
     }
 
     /**
-     * A dropper run begins (the player is on level 1's ledge, held by the countdown): not collidable,
-     * and either the offer ({@code offer}) or straight to the 3-2-1 with the drop kit.
+     * A dropper run begins (the player is on level 1's ledge, held by the countdown): on the no-push
+     * team and not collidable, and either the offer ({@code offer}) or straight to the 3-2-1 with the
+     * drop kit.
      */
     static DropperRun start(TrialRun run, Port port, boolean offer) {
         DropperRun d = new DropperRun(run, port.collidable());
+        port.noPush(true);
         port.collidable(false);
         if (offer && !run.warmupUsed) {
             d.stage = Stage.OFFER;
@@ -363,7 +373,9 @@ final class DropperRun {
     /**
      * Something went wrong ({@code why}): in the practice drop it ends the practice; in the timed run
      * it is a bonk, when {@link DropperRules#counts} says so: back to the top of this level, one more
-     * bonk, the clock running. The first bonk of a run adds the steering tip.
+     * bonk, the clock running. The first bonk of a run adds the steering tip. A bonk whose teleport
+     * couldn't be made isn't one: nothing is counted or shown, and the next try waits
+     * {@link DropperRules#BONK_GAP} ticks (a landing, the void, or Time Trials' own send-back).
      *
      * @return whether it did anything
      */
@@ -376,11 +388,13 @@ final class DropperRun {
         if (stage != Stage.TIMED || !DropperRules.counts(run.running(), hopping, run.suspended, now, lastBonk)) {
             return false;
         }
-        lastBonk = now;
-        bonks++;
+        lastBonk = now; // a failed teleport is tried again only after the gap, not every tick
         landing.reset();
         int level = level();
-        port.teleport(DropperLayout.stand(course, level));
+        if (!port.teleport(DropperLayout.stand(course, level))) {
+            return false; // not sent back: no bonk to count
+        }
+        bonks++;
         port.title(DropperText.BONK_TITLE, DropperText.bonkSubtitle(level + 1), 30);
         port.sound(Cue.BONK);
         if (!tipShown) {
@@ -405,12 +419,13 @@ final class DropperRun {
                 run.voided != null);
     }
 
-    /** The run is over, however it ended: the player collides again as before. Once. */
+    /** The run is over, however it ended: off the no-push team, and collidable again as before. Once. */
     void end(Port port) {
         if (released) {
             return;
         }
         released = true;
+        port.noPush(false);
         port.collidable(collidableBefore);
     }
 

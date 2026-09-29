@@ -56,8 +56,11 @@ final class GolfAdmin implements GameAdmin {
     private static final String CONFIRM = "confirm";
     private static final List<String> VERBS = List.of("info", "tp", "hole", "name", "enable", "disable", "delete");
     private static final List<String> HOLE_VERBS = List.of("cup", "tee", "par", "bounds", "remove");
-    /** This tool's own first words: no course may be called them. */
-    private static final List<String> OWN_WORDS = List.of("create", "list", "help");
+    /**
+     * This tool's own first words, and "auto" (the word /hcm games feature keeps for "pick one each
+     * day", so a course called that could never be pinned): no course may be called them.
+     */
+    static final List<String> OWN_WORDS = List.of("create", "list", "help", "auto");
 
     private final MiniGolf golf;
 

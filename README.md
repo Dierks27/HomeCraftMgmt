@@ -756,7 +756,7 @@ on the Golf tab ("Meadow Links - 9 holes, par 27") and its own `/hcm play <cours
 
 1. `/hcm games golf create <id> [name…]` makes a closed course in the world you stand in. An id is
    up to 32 lower-case letters, digits or `_`, starting with a letter, and can't be a game id or
-   alias, another course, a word `/hcm play` keeps, or `create`, `list` or `help`.
+   alias, another course, a word `/hcm play` keeps, or `create`, `list`, `help` or `auto`.
 2. On each hole's tee, facing down the hole: `<id> hole add <par>` (par 2-6; at most 18 holes).
 3. Look at the cup block (within 6 blocks): `<id> hole <n> cup`. The cup is the block the ball
    ends up resting on: the floor of a sunken hole, a bottom slab, or a block flush with the green.

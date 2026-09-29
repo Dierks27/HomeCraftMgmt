@@ -55,4 +55,10 @@ class GolfAdminTest {
         admin.handle(console(told), new String[0]);
         assertEquals(admin.help().size(), told.size(), "the help lines, and no error: " + told);
     }
+
+    @Test
+    void autoIsTheFeatureCommandsWordAndNoCoursesId() {
+        assertTrue(GolfAdmin.OWN_WORDS.contains("auto"),
+                "a golf course called auto could never be pinned as today's pick, so the id is refused");
+    }
 }

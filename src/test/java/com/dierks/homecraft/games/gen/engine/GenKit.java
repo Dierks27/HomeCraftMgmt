@@ -21,6 +21,7 @@ import com.dierks.homecraft.games.trial.Tier;
 import com.dierks.homecraft.games.trial.TrialKind;
 import com.dierks.homecraft.storage.Database;
 import com.dierks.homecraft.storage.GamesDao;
+import com.dierks.homecraft.storage.GenArchiveDao;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -422,6 +423,7 @@ final class GenKit {
         final GenStore real;
         boolean secretFails;
         boolean flipFails;
+        boolean keepFails;
         int flips;
 
         FlakyStore(GenStore real) {
@@ -489,6 +491,86 @@ final class GenKit {
         public boolean hasScores(String game, String board) throws SQLException {
             return real.hasScores(game, board);
         }
+
+        @Override
+        public Flipped flip(GamesDao.CourseRow row, Map<String, String> meta, GenArchiveDao.Row archive, long now)
+                throws SQLException {
+            if (flipFails) {
+                throw new SQLException("disk I/O error");
+            }
+            flips++;
+            return real.flip(row, meta, archive, now);
+        }
+
+        @Override
+        public GenArchiveDao.Row edition(String slot, String edition) throws SQLException {
+            return real.edition(slot, edition);
+        }
+
+        @Override
+        public GenArchiveDao.Row editionByCode(String code) throws SQLException {
+            return real.editionByCode(code);
+        }
+
+        @Override
+        public List<GenArchiveDao.Row> editions(String slot, int offset, int limit) throws SQLException {
+            return real.editions(slot, offset, limit);
+        }
+
+        @Override
+        public int editionCount(String slot) throws SQLException {
+            return real.editionCount(slot);
+        }
+
+        @Override
+        public GenArchiveDao.Row editionLive(String slot, long after, long at) throws SQLException {
+            return real.editionLive(slot, after, at);
+        }
+
+        @Override
+        public List<GenArchiveDao.Row> editionsBySeed(String slot, String hexPrefix) throws SQLException {
+            return real.editionsBySeed(slot, hexPrefix);
+        }
+
+        @Override
+        public Set<String> archivedBoards() throws SQLException {
+            return real.archivedBoards();
+        }
+
+        @Override
+        public int pruneArchive(long endedBefore, Set<String> spared) throws SQLException {
+            return real.pruneArchive(endedBefore, spared);
+        }
+
+        @Override
+        public GenArchiveDao.BoardStats boardStats(String game, String board) throws SQLException {
+            return real.boardStats(game, board);
+        }
+
+        @Override
+        public List<GamesDao.ScoreRow> top(String game, String board, boolean lowerIsBetter, int limit)
+                throws SQLException {
+            return real.top(game, board, lowerIsBetter, limit);
+        }
+
+        @Override
+        public void closeCourse(String id, Map<String, String> meta) throws SQLException {
+            real.closeCourse(id, meta);
+        }
+
+        @Override
+        public int keep(GamesDao.CourseRow row, String fromBoard, String toBoard, String slot, String edition,
+                        Map<String, String> meta) throws SQLException {
+            if (keepFails) {
+                throw new SQLException("disk I/O error");
+            }
+            return real.keep(row, fromBoard, toBoard, slot, edition, meta);
+        }
+
+        @Override
+        public void dropCourse(String id, Map<String, String> meta) throws SQLException {
+            real.dropCourse(id, meta);
+        }
     }
 
     /** The server, as the engine sees it. */
@@ -506,6 +588,9 @@ final class GenKit {
         final List<UUID> moved = new ArrayList<>();
         final List<LogRecord> logs = new ArrayList<>();
         final List<Runnable> plannerQueue = new ArrayList<>();
+        /** What {@code /hcm play} already opens (games, aliases, courses), for the kept-course id rules. */
+        final Set<String> playIds = new HashSet<>();
+        final Map<UUID, String> names = new HashMap<>();
         final Logger logger = Logger.getAnonymousLogger();
         DailySettings settings;
         List<LocalTime> restarts = List.of();
@@ -657,6 +742,16 @@ final class GenKit {
         public void endRun(UUID player) {
             ended.add(player);
             people.removeIf(p -> p.id().equals(player));
+        }
+
+        @Override
+        public boolean playIdTaken(String id) {
+            return playIds.contains(id);
+        }
+
+        @Override
+        public String playerName(UUID player) {
+            return names.getOrDefault(player, "someone");
         }
 
         @Override

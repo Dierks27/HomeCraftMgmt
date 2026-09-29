@@ -15,9 +15,11 @@ import java.util.Map;
  * ({@code gen.cadence}), and each week's Star Chart goals as they were fixed
  * ({@code gen.goals.<week>}).
  *
- * <p>Why {@code hcm_meta} and not a table of its own: there is no schema migration for Fresh
- * Courses (v34 is the last one, and a v35 would clash with any other branch), and these are a
- * handful of small values an admin can read with one query. Why only keys under {@code gen.}:
+ * <p>Why {@code hcm_meta} and not a table of its own: these are a handful of small values an admin
+ * can read with one query (the archive of past editions, which is not small, has its own table:
+ * {@code gen_editions}, v35, {@link GenArchiveDao}). The archive's bookkeeping lives here too: what
+ * each Classics slot should hold, each slot's highest course-code number, the kept courses' plots
+ * and a keep in flight ({@code gen.keep.*}). Why only keys under {@code gen.}:
  * {@code hcm_meta} also holds the schema version and the games secret, and a typo here must never
  * be able to overwrite either — every method refuses any other key with
  * {@link IllegalArgumentException}, before touching the database.

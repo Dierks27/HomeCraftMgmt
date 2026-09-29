@@ -3,8 +3,10 @@ package com.dierks.homecraft.games.gen.engine;
 import com.dierks.homecraft.games.GeneratedCourses;
 import com.dierks.homecraft.games.RestartHold;
 import com.dierks.homecraft.games.gen.DailySettings;
+import com.dierks.homecraft.games.gen.admin.GenArgs;
 import com.dierks.homecraft.games.gen.admin.GenOps;
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.CourseCode;
 import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.Edition;
 import com.dierks.homecraft.games.gen.api.GenBoards;
@@ -13,7 +15,9 @@ import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Plan;
+import com.dierks.homecraft.games.gen.api.PlanCodec;
 import com.dierks.homecraft.games.gen.api.PlanInput;
+import com.dierks.homecraft.games.gen.api.PlanShift;
 import com.dierks.homecraft.games.gen.api.PlannedCourse;
 import com.dierks.homecraft.games.gen.api.PlannedGolf;
 import com.dierks.homecraft.games.gen.api.PlannedTrial;
@@ -25,6 +29,7 @@ import com.dierks.homecraft.games.golf.GolfCourse;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.CourseCodec;
 import com.dierks.homecraft.storage.GamesDao;
+import com.dierks.homecraft.storage.GenArchiveDao;
 
 import java.sql.SQLException;
 import java.time.Instant;
@@ -81,6 +86,15 @@ import java.util.logging.Level;
  * up and says why in status. Nothing here ever reaches Time Trials or Mini Golf except through the
  * gate and {@code coursesChanged}.
  *
+ * <p><b>The archive, the Classics and kept courses (GEN-SPEC-KEEP).</b> Every flip that makes an
+ * edition live also archives it — its course code, dates, seed and whole plan — in the same
+ * transaction, and pruning keeps an archived edition's board as long as its row. The three
+ * Classics slots are slots too, but the schedule never builds one: an admin's {@code recall}
+ * records what a Classics slot should hold ({@link ClassicWant}), and the engine makes it so with
+ * the same converge, verify and flip, from the archived plan moved into its half (never planned
+ * again). Its row carries the ORIGINAL edition's tag, so its board and first-finish reward are the
+ * original's. Kept courses are built by {@link KeepService}, between this engine's jobs.
+ *
  * <p>Driven by the game: {@link #start} and {@link #stop}, {@link #worldsReady} a tick after enable,
  * {@link #tick} every tick and {@link #check} every second. Everything runs on the main thread;
  * only plans are made elsewhere, and they come back through {@link #tick}'s inbox.
@@ -124,7 +138,11 @@ public final class GenService implements GeneratedCourses, GenOps {
         /** Empty both halves, then claim them. */
         CLAIM,
         /** Empty both halves; the slot is off. */
-        DECOMMISSION
+        DECOMMISSION,
+        /** An archived course into a Classics slot's idle half, then the flip (no planner). */
+        RECALL,
+        /** Empty both halves of a Classics slot that holds nothing any more. */
+        UNRECALL
     }
 
     /** Where a job is. */
@@ -169,6 +187,12 @@ public final class GenService implements GeneratedCourses, GenOps {
         boolean pauseWarned;
         boolean deferWarned;
         String proof = "verify ok";
+        /** A recall: what it brings back, and the archive row it comes from. */
+        ClassicWant want;
+        GenArchiveDao.Row source;
+        /** The slot the plan is made for, and where (a recall's are the original slot, moved). */
+        Slots.Def planDef;
+        Box planBox;
 
         Job(Kind kind, SlotState slot, Consumer<String> report) {
             this.kind = kind;
@@ -200,6 +224,12 @@ public final class GenService implements GeneratedCourses, GenOps {
     /** Each week's Star Chart goals once fixed ({@link #goals}), by the week's first day. */
     private final Map<Long, List<DailyStars.Goal>> weekGoals = new HashMap<>();
     private volatile List<Object[]> areas = List.of();
+    /** Kept courses and their plots (GEN-SPEC-KEEP §4); it builds only while this engine doesn't. */
+    private final KeepService keeper;
+    /** Course codes already looked up, by {@code slot|edition}. */
+    private final Map<String, String> codes = new HashMap<>();
+    /** The archive is pruned at most once a course day. */
+    private long archivePrunedDay = Long.MIN_VALUE;
 
     /**
      * @param planners each generator's planner by its id ({@code parkour}, {@code rings}, {@code golf},
@@ -211,6 +241,10 @@ public final class GenService implements GeneratedCourses, GenOps {
         for (Slots.Def d : Slots.ALL) {
             slots.put(d.id(), new SlotState(d));
         }
+        for (Slots.Def d : Slots.CLASSICS) {
+            slots.put(d.id(), new SlotState(d));
+        }
+        this.keeper = new KeepService(this, host, this.planners);
     }
 
     // ---- lifecycle ----------------------------------------------------------------------------
@@ -253,6 +287,9 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
         }
         for (SlotState s : slots.values()) {
+            if (s.classic && s.live == null && s.claimed) {
+                s.bothDirty = true; // a recall or a clearing may have stopped halfway
+            }
             if (s.live == null || !s.on()) {
                 continue;
             }
@@ -265,6 +302,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                         + "- a new one will be built");
             }
         }
+        keeper.worldsReady();
     }
 
     /** Stop: give up the running job (its tickets go), forget the queue. The blocks stay as they are. */
@@ -273,6 +311,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (job != null) {
             cancel(job, "Fresh Courses stopped");
         }
+        keeper.stop();
         queue.clear();
         inbox.clear();
         areas = List.of();
@@ -290,6 +329,10 @@ public final class GenService implements GeneratedCourses, GenOps {
         Runnable r;
         while ((r = inbox.poll()) != null) {
             r.run();
+        }
+        if (running && keeper.busy()) {
+            keeper.tick();
+            return;
         }
         if (!running || job == null) {
             return;
@@ -319,15 +362,25 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (now - lastVet >= VET_EVERY_MS) {
             vetAll();
         }
+        classicUpkeep(now);
         RestartHold hold = host.restartHold();
         if (GenScheduler.abandon(now, hold)) {
             if (job != null) {
                 cancel(job, "a restart is less than 2 minutes away - it goes on after the restart");
             }
+            keeper.cancel("a restart is less than 2 minutes away");
             return; // nothing starts this close to a restart
         }
         if (job != null) {
             evacuate(job);
+            return;
+        }
+        if (keeper.busy()) {
+            keeper.check();
+            return;
+        }
+        if (keeper.hasWork()) {
+            keeper.begin();
             return;
         }
         Job next = queue.poll();
@@ -351,6 +404,9 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
         }
         for (SlotState s : slots.values()) {
+            if (s.classic) {
+                continue; // built only when an admin recalls something (below)
+            }
             if (!s.on()) {
                 s.waiting = null;
                 continue;
@@ -395,9 +451,116 @@ public final class GenService implements GeneratedCourses, GenOps {
                 }
             }
         }
+        for (SlotState s : slots.values()) {
+            if (!s.classic || !s.on()) {
+                continue;
+            }
+            ClassicWant w = s.want;
+            if (w != null && (!holds(s, w) || s.healFailed)) {
+                s.waiting = recallWait(s, now, hold);
+                if (s.waiting == null) {
+                    Job j = new Job(Kind.RECALL, s, s.recallReport);
+                    j.want = w;
+                    begin(j);
+                    return;
+                }
+                continue;
+            }
+            s.waiting = null;
+            if (clear == null && now - s.lastClearCheck >= CLEAR_EVERY_MS && (s.bothDirty || s.oldDirty)) {
+                s.lastClearCheck = now;
+                if (s.live == null && s.bothDirty) {
+                    if (!Evacuator.anyone(host.people(), s.world, s.half('A'))
+                            && !Evacuator.anyone(host.people(), s.world, s.half('B'))) {
+                        begin(new Job(Kind.UNRECALL, s, null));
+                        return;
+                    }
+                } else if (s.live != null && s.oldDirty
+                        && !Evacuator.anyone(host.people(), s.world, s.half(s.idleHalf()))) {
+                    clear = s;
+                }
+            }
+        }
         if (clear != null) {
             begin(new Job(Kind.CLEAR_OLD, clear, null));
         }
+    }
+
+    /** Why a due recall can't start yet, or {@code null} when it can (the restart hold, the day's tries). */
+    private String recallWait(SlotState s, long now, RestartHold hold) {
+        DailySettings st = host.settings();
+        if (GenScheduler.nearRestart(now, hold, st.avoidBeforeRestartMinutes())) {
+            return "a restart is coming at " + hold.clock(hold.next(now));
+        }
+        long day = edition().day(now);
+        if (s.triesOn(day) >= st.maxTriesPerDay()) {
+            return "gave up until tomorrow after " + s.tries + " tries";
+        }
+        if (s.triesOn(day) > 0 && now < s.lastTryAt + st.retryMinutes() * 60_000L) {
+            return "next try at " + clock(s.lastTryAt + st.retryMinutes() * 60_000L);
+        }
+        return null;
+    }
+
+    /** Whether a Classics slot's live layout is the recall {@code w} (the same request, not only the same course). */
+    static boolean holds(SlotState s, ClassicWant w) {
+        GenTag live = s.live;
+        return live != null && w != null && live.recall() != null && live.slot().equals(w.slot())
+                && live.editionKey().equals(w.edition()) && live.recall().from() == w.from();
+    }
+
+    /**
+     * Every check, whatever else runs: a recall whose time is up is closed, and a Classics slot whose
+     * recall is gone (unrecalled) closes: its row goes, the layout stands until its half is cleared
+     * (runs on it finish there), and both halves are cleared once nobody is on them.
+     */
+    private void classicUpkeep(long now) {
+        for (SlotState s : slots.values()) {
+            if (!s.classic) {
+                continue;
+            }
+            if (s.want != null && s.want.expired(now)) {
+                ClassicWant gone = s.want;
+                try {
+                    host.store().meta(GenAdminKeys.recall(s.def.id()), null);
+                } catch (SQLException e) {
+                    host.logger().log(Level.WARNING, "Fresh Courses: could not end " + s.def.id() + "'s recall", e);
+                    continue;
+                }
+                s.want = null;
+                host.logger().info("Fresh Courses: " + s.def.id() + "'s recall of " + gone.slot() + " "
+                        + gone.edition() + " is over.");
+            }
+            if (s.want == null && s.live != null) {
+                closeClassic(s, "its recall is over");
+            }
+        }
+    }
+
+    /** A Classics slot closes: its row goes; runs on it finish there; both halves are cleared once empty. */
+    private void closeClassic(SlotState s, String why) {
+        if (job != null && job.slot == s) {
+            cancel(job, why);
+        }
+        queue.removeIf(j -> j.slot == s);
+        try {
+            host.store().closeCourse(s.def.id(), Map.of());
+        } catch (SQLException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: could not close " + s.def.id(), e);
+            return;
+        }
+        GenTag was = s.live;
+        s.previous = s.verified && was != null ? was : null;
+        s.clearing = false;
+        s.live = null;
+        s.verified = false;
+        s.healFailed = false;
+        s.oldDirty = false;
+        s.bothDirty = true;
+        s.lastClearCheck = 0;
+        host.coursesChanged(s.def.game());
+        host.logger().info("Fresh Courses: " + s.def.id() + " is closed (" + why + "); its halves are cleared once"
+                + " nobody is on them.");
     }
 
     private GenScheduler.SlotView view(SlotState s) {
@@ -439,7 +602,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         noticeSchedule(meta);
         List<Object[]> kept = new ArrayList<>();
         for (SlotState s : slots.values()) {
-            DailySettings.SlotConfig c = st.slot(s.def.id());
+            DailySettings.SlotConfig c = s.classic ? st.archive().classic(s.def.id()) : st.slot(s.def.id());
             if (c == null) {
                 continue;
             }
@@ -450,6 +613,19 @@ public final class GenService implements GeneratedCourses, GenOps {
             s.world = world;
             s.origin = origin;
             s.configOn = c.enabled();
+            if (s.classic) {
+                s.mix = s.def.tierOrMix();
+                if (meta != null) {
+                    s.want = ClassicWant.parse(meta.get(GenAdminKeys.recall(s.def.id())));
+                    s.claimed = Regions.claim(s.def, world, origin).equals(meta.get(GenAdminKeys.claim(s.def.id())));
+                }
+                if (s.wanted() || s.claimed) {
+                    for (char h : new char[]{'A', 'B'}) {
+                        kept.add(new Object[]{world, s.half(h)});
+                    }
+                }
+                continue;
+            }
             if (meta != null) {
                 String id = s.def.id();
                 s.override = GenAdminKeys.bool(meta.get(GenAdminKeys.enabled(id)));
@@ -636,7 +812,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 return;
             }
             GenTag tag = tagOf(s.def, row);
-            if (tag == null || !s.def.id().equals(tag.slot())) {
+            if (tag == null || !s.def.id().equals(tag.holder())) {
                 return;
             }
             s.live = tag;
@@ -704,6 +880,13 @@ public final class GenService implements GeneratedCourses, GenOps {
                     j.stage = Stage.EVACUATE;
                     j.evacStart = host.now();
                 }
+                case RECALL -> beginRecall(j);
+                case UNRECALL -> {
+                    s.clearing = true; // the closed layout stops standing now
+                    j.steps.add(new Step('A', null, BuildJob.Mode.CONVERGE));
+                    j.steps.add(new Step('B', null, BuildJob.Mode.CONVERGE));
+                    j.stage = Stage.CONVERGE;
+                }
             }
         } catch (RuntimeException e) {
             fail(j, "it couldn't start (" + e + ")");
@@ -725,6 +908,10 @@ public final class GenService implements GeneratedCourses, GenOps {
         j.reroll = s.live.reroll();
         j.seed = s.live.seed();
         j.mix = s.liveMix;
+        if (s.classic) {
+            healClassic(j);
+            return;
+        }
         Planner p = planners.get(s.def.generator());
         if (p.algo() != j.tag.algo()) {
             // An older planner made it: it can't be derived again, so it gets the quick check.
@@ -756,9 +943,10 @@ public final class GenService implements GeneratedCourses, GenOps {
     /** Hand the plan to the planner thread; the result comes back through the inbox. */
     private void plan(Job j, Planner p) {
         SlotState s = j.slot;
-        Box half = s.half(j.half);
-        PlanInput in = new PlanInput(s.def, half, j.half, j.day, j.reroll, j.seed, j.mix, host.fallDepth(),
-                WORK.getOrDefault(s.def.generator(), 200_000L), cancelled(j.cancelled));
+        Box half = j.planBox != null ? j.planBox : s.half(j.half);
+        Slots.Def def = j.planDef != null ? j.planDef : s.def;
+        PlanInput in = new PlanInput(def, half, j.half, j.day, j.reroll, j.seed, j.mix, host.fallDepth(),
+                WORK.getOrDefault(def.generator(), 200_000L), cancelled(j.cancelled));
         j.stage = Stage.PLANNING;
         j.planStarted = host.now();
         boolean heal = j.kind == Kind.HEAL;
@@ -819,7 +1007,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             fail(j, error instanceof GenFailed ? String.valueOf(error.getMessage()) : "the planner threw " + error);
             return;
         }
-        List<String> problems = PlanCheck.problems(plan, s.def, s.half(j.half));
+        List<String> problems = PlanCheck.problems(plan, j.planDef != null ? j.planDef : s.def,
+                j.planBox != null ? j.planBox : s.half(j.half));
         if (!problems.isEmpty()) {
             fail(j, "its plan was refused: " + String.join("; ", problems));
             return;
@@ -943,6 +1132,20 @@ public final class GenService implements GeneratedCourses, GenOps {
                     flip(j);
                 }
             }
+            case RECALL -> {
+                if (proven(j)) {
+                    flipRecall(j);
+                }
+            }
+            case UNRECALL -> {
+                s.previous = null;
+                s.clearing = false;
+                s.bothDirty = false;
+                s.oldDirty = false;
+                end(j);
+                host.logger().info("Fresh Courses: " + s.def.id() + "'s halves are empty (" + j.writes
+                        + " blocks cleared).");
+            }
             case PREVIEW -> {
                 if (proven(j)) {
                     s.preview = new SlotState.Preview(j.half, j.plan, j.day, j.seed, j.mix, j.cadence);
@@ -1004,7 +1207,11 @@ public final class GenService implements GeneratedCourses, GenOps {
             j.build = null;
             j.steps.clear();
             j.stepIndex = 0;
-            plan(j, planners.get(s.def.generator()));
+            if (j.kind == Kind.RECALL) {
+                recallPlan(j);
+            } else {
+                plan(j, planners.get(s.def.generator()));
+            }
             return;
         }
         end(j);
@@ -1042,8 +1249,10 @@ public final class GenService implements GeneratedCourses, GenOps {
                 fail(j, "its layout from an older version failed the check: " + String.join("; ", problems));
                 return;
             }
-            host.logger().warning("Fresh Courses: " + s.def.id() + "'s course was made by an older version of its"
-                    + " planner, so only its structure was checked; the new version builds from the next set.");
+            host.logger().warning("Fresh Courses: " + s.def.id() + (s.classic ? "'s recalled course can't be made"
+                    + " again block for block (it was re-made from its seed, or its archived plan is gone), so only"
+                    + " its structure was checked." : "'s course was made by an older version of its planner, so"
+                    + " only its structure was checked; the new version builds from the next set."));
         } else if (!proven(j)) {
             return;
         }
@@ -1138,7 +1347,12 @@ public final class GenService implements GeneratedCourses, GenOps {
             if (j.kind == Kind.PROMOTE) {
                 meta.put(GenAdminKeys.reroll(def.id(), tag.edition()), Integer.toString(j.reroll));
             }
-            rev = host.store().flip(row, meta);
+            // The archive row lands in the same transaction: every edition that goes live is archived.
+            GenStore.Flipped f = host.store().flip(row, meta, archiveEntry(def, tag, encode(j.plan), j.mix, now), now);
+            rev = f.rev();
+            if (f.archived() != null) {
+                codes.put(def.id() + "|" + tag.editionKey(), f.archived().code());
+            }
         } catch (SQLException | RuntimeException e) {
             host.logger().log(Level.WARNING, "Fresh Courses: the flip of " + def.id() + " failed", e);
             fail(j, "the database refused the new course (" + e.getMessage() + ")");
@@ -1174,9 +1388,14 @@ public final class GenService implements GeneratedCourses, GenOps {
     /** The row for a new layout: the planned course with the slot's id and name, in the gen world. */
     static GamesDao.CourseRow row(Slots.Def def, String world, PlannedCourse pc, GenTag tag,
                                   GamesDao.CourseRow old, long now) {
+        return row(def, world, pc, tag, old, now, GenCopy.slotName(def, tag.cadence()));
+    }
+
+    /** The row for a new layout under {@code name} (a recalled course's "Classic: ..."). */
+    static GamesDao.CourseRow row(Slots.Def def, String world, PlannedCourse pc, GenTag tag,
+                                  GamesDao.CourseRow old, long now, String name) {
         long created = old == null ? now : old.createdAt();
         int rev = old == null ? 1 : old.rev() + 1;
-        String name = GenCopy.slotName(def, tag.cadence());
         if (pc instanceof PlannedGolf g) {
             GolfCourse c = new GolfCourse(def.id(), name, world, true, rev, g.course().holes(), tag);
             return com.dierks.homecraft.games.golf.CourseCodec.toRow(c, created, now);
@@ -1214,7 +1433,14 @@ public final class GenService implements GeneratedCourses, GenOps {
                 row = new GamesDao.CourseRow(old.id(), old.game(), old.kind(), old.name(), old.world(), old.enabled(),
                         CourseCodec.encode(c), old.rev() + 1, old.createdAt(), host.now());
             }
-            rev = host.store().flip(row, Map.of());
+            // The same layout under a new edition: archived with the plan its last edition was archived with.
+            GenArchiveDao.Row was = host.store().edition(def.id(), s.live.editionKey());
+            GenStore.Flipped f = host.store().flip(row, Map.of(), archiveEntry(def, tag, was == null ? null : was.plan(),
+                    s.liveMix, host.now()), host.now());
+            rev = f.rev();
+            if (f.archived() != null) {
+                codes.put(def.id() + "|" + tag.editionKey(), f.archived().code());
+            }
         } catch (SQLException | RuntimeException e) {
             host.logger().log(Level.WARNING, "Fresh Courses: the restamp of " + def.id() + " failed", e);
             s.failedTry(edition().day(host.now()), host.now(), "the database refused the new edition (" + e.getMessage()
@@ -1262,10 +1488,23 @@ public final class GenService implements GeneratedCourses, GenOps {
         } catch (SQLException | RuntimeException e) {
             host.logger().log(Level.WARNING, "Fresh Courses: could not prune old Star Chart goals", e);
         }
+        int archiveDays = st.archive().keepDays();
+        if (archiveDays > 0 && archivePrunedDay != today) {
+            archivePrunedDay = today;
+            try {
+                int gone = host.store().pruneArchive(now - archiveDays * 86_400_000L, recalledNow());
+                if (gone > 0) {
+                    host.logger().info("Fresh Courses: " + gone + " archived course" + (gone == 1 ? "" : "s")
+                            + " older than " + archiveDays + " days left the archive.");
+                }
+            } catch (SQLException | RuntimeException e) {
+                host.logger().log(Level.WARNING, "Fresh Courses: could not prune the archive", e);
+            }
+        }
         try {
             int removed = host.store().pruneBoards(Math.min(keepFrom, lastEditions), oldestWeek);
             removed += host.store().dropEditionBoards(oldEditionBoards(host.store().editionBoards(), keepFrom,
-                    KEEP_EDITIONS));
+                    KEEP_EDITIONS, host.store().archivedBoards()));
             if (removed > 0) {
                 host.logger().info("Fresh Courses: pruned " + removed + " old course-board and star rows.");
             }
@@ -1280,6 +1519,16 @@ public final class GenService implements GeneratedCourses, GenOps {
      * whatever their cadence). Anything that isn't an edition board is never picked.
      */
     static List<String> oldEditionBoards(List<String> boards, long keepFrom, int keep) {
+        return oldEditionBoards(boards, keepFrom, keep, Set.of());
+    }
+
+    /**
+     * {@link #oldEditionBoards(List, long, int)}, sparing every board in {@code archived}: an
+     * archived edition's board is kept as long as its archive row (GEN-SPEC-KEEP §1), so a recall
+     * brings back its old records and the history shows them.
+     */
+    static List<String> oldEditionBoards(List<String> boards, long keepFrom, int keep, Set<String> archived) {
+        Set<String> spare = archived == null ? Set.of() : archived;
         Map<String, List<GenBoards.Board>> byCourse = new HashMap<>();
         Map<GenBoards.Board, String> names = new HashMap<>();
         for (String name : boards == null ? List.<String>of() : boards) {
@@ -1296,7 +1545,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                             .thenComparing(GenBoards.Board::edition, Comparator.reverseOrder()))
                     .map(GenBoards.Board::edition).distinct().limit(Math.max(0, keep)).toList();
             for (GenBoards.Board b : course) {
-                if (b.day() < keepFrom && !recent.contains(b.edition())) {
+                if (b.day() < keepFrom && !recent.contains(b.edition()) && !spare.contains(names.get(b))) {
                     out.add(names.get(b));
                 }
             }
@@ -1339,6 +1588,11 @@ public final class GenService implements GeneratedCourses, GenOps {
             case CLEAR_OLD -> {
                 s.lastError = why;
                 host.logger().warning("Fresh Courses: emptying " + id + "'s old half failed - " + why);
+            }
+            case RECALL -> {
+                s.failedTry(edition().day(host.now()), host.now(), why);
+                host.logger().warning("Fresh Courses: " + id + " couldn't be brought back - " + why + " (try " + s.tries
+                        + " of " + host.settings().maxTriesPerDay() + ")");
             }
             default -> {
                 s.lastError = why;
@@ -1384,8 +1638,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         boolean waiting = false;
         for (char h : halves) {
             Box half = s.half(h);
-            boolean holdsRun = j.stage == Stage.EVACUATE && (j.kind == Kind.BUILD || j.kind == Kind.PREVIEW)
-                    && s.previous != null && !s.clearing && s.previous.half() == h;
+            boolean holdsRun = j.stage == Stage.EVACUATE && (j.kind == Kind.BUILD || j.kind == Kind.PREVIEW
+                    || j.kind == Kind.RECALL) && s.previous != null && !s.clearing && s.previous.half() == h;
             for (Evacuator.Action a : j.evac.step(people, s.world, half, s.def.id(), holdsRun, now, deadline)) {
                 act(s, people, a);
             }
@@ -1460,7 +1714,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (!running || tag == null) {
             return false;
         }
-        SlotState s = slots.get(tag.slot());
+        SlotState s = slots.get(tag.holder());
         if (s == null) {
             return false;
         }
@@ -1493,7 +1747,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         long next = Long.MAX_VALUE;
         for (SlotState s : slots.values()) {
-            if (s.on() && s.live != null) {
+            if (!s.classic && s.on() && s.live != null) {
                 next = Math.min(next, target(s).endsAt());
             }
         }
@@ -1566,7 +1820,7 @@ public final class GenService implements GeneratedCourses, GenOps {
     public int weekMax(long weekKey) {
         int on = 0;
         for (SlotState s : slots.values()) {
-            if (s.on()) {
+            if (!s.classic && s.on()) {
                 on++;
             }
         }
@@ -1653,6 +1907,9 @@ public final class GenService implements GeneratedCourses, GenOps {
         long last = 0;
         GenScheduler.Target shown = null;
         for (SlotState s : slots.values()) {
+            if (s.classic) {
+                continue;
+            }
             GenScheduler.Target t = target(s);
             if (s.on() && s.verified && s.live != null && t.holds(s.live)) {
                 up++;
@@ -1673,7 +1930,24 @@ public final class GenService implements GeneratedCourses, GenOps {
                 out.add(s.def.id() + ": " + line);
             }
         }
+        for (SlotState s : slots.values()) {
+            if (s.classic && s.live != null) {
+                out.add(s.def.id() + ": " + classicHolds(s));
+            }
+        }
         return out;
+    }
+
+    /** "HARD-40 (Hard Parkour, week of 5 Oct) until Mon 12 Oct 4:02 AM" for a Classics slot that holds one. */
+    private String classicHolds(SlotState s) {
+        GenTag t = s.live;
+        Slots.Def orig = Slots.of(t.slot());
+        String code = code(t);
+        String until = s.want == null ? "closing" : s.want.until() > 0 ? "until " + GenCopy.whenDated(s.want.until(),
+                host.zone()) : "until replaced or unrecalled";
+        return (code == null ? t.slot() + " " + t.editionKey() : code) + " (" + (orig == null ? t.slot() : orig.name())
+                + ", " + GenCopy.editionDates(t.cadence(), t.day()) + (s.want != null && s.want.remade() ? ", re-made"
+                : "") + ") " + until;
     }
 
     /**
@@ -1689,7 +1963,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 ? ed.rebuildDay().getDisplayName(TextStyle.FULL, Locale.US) + "s " + at : at;
         boolean kept = false;
         for (SlotState s : slots.values()) {
-            kept |= s.on() && s.live != null && target(s).kept();
+            kept |= !s.classic && s.on() && s.live != null && target(s).kept();
         }
         int was = keptCadence();
         String made = was == ed.cadenceDays() ? "for the old change day" : GenCopy.cadenceName(was);
@@ -1701,7 +1975,7 @@ public final class GenService implements GeneratedCourses, GenOps {
     /** The cadence a kept layout was made with (the first one found). */
     private int keptCadence() {
         for (SlotState s : slots.values()) {
-            if (s.on() && s.live != null && target(s).kept()) {
+            if (!s.classic && s.on() && s.live != null && target(s).kept()) {
                 return s.live.cadence();
             }
         }
@@ -1710,6 +1984,9 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     /** What is wrong with a slot for the summary, or {@code null}. */
     private String trouble(SlotState s, long today) {
+        if (s.classic) {
+            return classicTrouble(s, today);
+        }
         if (!s.wanted()) {
             return null;
         }
@@ -1732,6 +2009,27 @@ public final class GenService implements GeneratedCourses, GenOps {
             return "closed - " + (s.lastError == null ? "its course couldn't be checked" : s.lastError);
         }
         if (s.waiting != null && (s.live == null || behind)) {
+            return "waiting - " + s.waiting;
+        }
+        return null;
+    }
+
+    /** What is wrong with a Classics slot for the summary, or {@code null}. */
+    private String classicTrouble(SlotState s, long today) {
+        if (s.problem != null && (s.want != null || s.live != null)) {
+            return "off - " + s.problem;
+        }
+        if (job != null && job.slot == s) {
+            return job.kind == Kind.RECALL ? "being built" : null;
+        }
+        if (s.want != null && !holds(s, s.want) && s.lastError != null) {
+            return "not up yet - " + s.lastError + " (try " + s.triesOn(today) + " of "
+                    + host.settings().maxTriesPerDay() + nextTry(s) + ")";
+        }
+        if (s.healFailed && s.live != null) {
+            return "closed - " + (s.lastError == null ? "its course couldn't be checked" : s.lastError);
+        }
+        if (s.waiting != null && s.want != null && !holds(s, s.want)) {
             return "waiting - " + s.waiting;
         }
         return null;
@@ -1764,7 +2062,14 @@ public final class GenService implements GeneratedCourses, GenOps {
             if (t != null && !(job != null && job.slot == s)) {
                 out.add("  &c" + t);
             }
-            if (slotId != null) {
+            if (slotId != null && s.classic) {
+                out.add("  &7region " + s.world + " " + Regions.describe(s.def, s.origin) + (s.claimed ? " (claimed)"
+                        : " (not claimed yet)"));
+                if (s.want != null) {
+                    out.add("  &7recalled " + s.want.slot() + " " + s.want.edition() + " on " + GenCopy.whenDated(
+                            s.want.from(), host.zone()) + (s.want.remade() ? " (re-made)" : ""));
+                }
+            } else if (slotId != null) {
                 GenScheduler.Target target = target(s);
                 out.add("  &7edition " + target.key() + " (" + editionName(target.cadence(), target.start())
                         + ") until " + GenCopy.whenDated(target.endsAt(), host.zone())
@@ -1787,6 +2092,19 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     private String statusLine(SlotState s) {
+        if (s.classic) {
+            StringBuilder c = new StringBuilder("&f").append(pad(s.def.id(), 21));
+            if (job != null && job.slot == s && job.kind == Kind.RECALL) {
+                return c.append("&eBUILDING &7").append(s.want == null ? "" : s.want.slot() + " " + s.want.edition())
+                        .toString();
+            }
+            if (s.live == null) {
+                return c.append(s.want != null ? "&7waiting to bring back " + s.want.slot() + " " + s.want.edition()
+                        : s.bothDirty || s.previous != null ? "&7empty &8(being cleared)" : "&7empty").toString();
+            }
+            return c.append(s.verified ? "&aholds &7" : "&cclosed &7").append(classicHolds(s)).append("  half ")
+                    .append(s.live.half()).append("  ").append(playing(s)).append(" playing").toString();
+        }
         StringBuilder b = new StringBuilder("&f").append(pad(s.def.id(), 21));
         if (!s.wanted()) {
             return b.append("&7off").toString();
@@ -2121,6 +2439,16 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     @Override
     public Spot spot(String slotId, boolean idle) {
+        if (slotId != null && slotId.startsWith("plot:")) {
+            Box b;
+            try {
+                b = keeper.plotBox(Integer.parseInt(slotId.substring(5)));
+            } catch (NumberFormatException e) {
+                b = null;
+            }
+            return b == null ? null : new Spot(genWorld(), (b.minX() + b.maxX() + 1) / 2.0, b.minY() + b.sizeY() / 2.0,
+                    (b.minZ() + b.maxZ() + 1) / 2.0, 0f);
+        }
         SlotState s = slots.get(slotId);
         if (s == null || s.world.isBlank()) {
             return null;
@@ -2215,6 +2543,757 @@ public final class GenService implements GeneratedCourses, GenOps {
             return false;
         }
         return true;
+    }
+
+    // ---- recalls into the Classics slots (GEN-SPEC-KEEP §3) ------------------------------------------
+
+    /** A recall starts: the Classics slot's region is checked (and claimed the first time), then its plan. */
+    private void beginRecall(Job j) {
+        SlotState s = j.slot;
+        String why = vet(s, handBuilt());
+        if (why != null) {
+            end(j);
+            j.report.accept("&c" + s.def.name() + " can't be used: &7" + why);
+            return;
+        }
+        j.half = s.idleHalf();
+        if (!s.claimed) {
+            j.steps.add(new Step('A', null, BuildJob.Mode.SCAN));
+            j.steps.add(new Step('B', null, BuildJob.Mode.SCAN));
+            j.stage = Stage.SCANNING;
+            return;
+        }
+        recallPlan(j);
+    }
+
+    /**
+     * The recalled edition's plan: the ARCHIVED one moved into the Classics slot's idle half (never
+     * planned again), or, for a course made again from its seed, today's generator's.
+     */
+    private void recallPlan(Job j) {
+        SlotState s = j.slot;
+        ClassicWant w = j.want;
+        GenArchiveDao.Row row;
+        try {
+            row = host.store().edition(w.slot(), w.edition());
+        } catch (SQLException e) {
+            fail(j, "the archive can't be read (" + e.getMessage() + ")");
+            return;
+        }
+        Slots.Def orig = row == null ? null : Slots.of(row.slot());
+        if (row == null || orig == null) {
+            dropWant(j, "that course isn't in the archive any more");
+            return;
+        }
+        if (Slots.classicFor(orig) != s.def) {
+            dropWant(j, s.def.name() + " can't hold " + row.name());
+            return;
+        }
+        Edition.Key key = Edition.Key.parse(row.edition());
+        if (key == null) {
+            dropWant(j, "its edition " + row.edition() + " can't be read");
+            return;
+        }
+        j.source = row;
+        j.day = row.day();
+        j.cadence = key.cadence();
+        j.reroll = key.reroll();
+        j.seed = row.seed();
+        j.mix = row.tierOrMix();
+        Box target = s.half(j.half);
+        Box box = Box.sized(target.minX(), target.minY(), target.minZ(), orig.sizeX(), orig.sizeY(), orig.sizeZ());
+        if (!target.contains(box)) {
+            dropWant(j, row.name() + " doesn't fit " + s.def.name());
+            return;
+        }
+        j.planDef = orig;
+        j.planBox = box;
+        if (w.remade()) {
+            Planner p = planners.get(orig.generator());
+            if (p == null) {
+                dropWant(j, "there is no " + orig.generator() + " generator");
+                return;
+            }
+            plan(j, p);
+            return;
+        }
+        PlanCodec.Read read = PlanCodec.decode(row.plan());
+        if (!read.ok()) {
+            dropWant(j, "its stored plan can't be read (" + read.problem() + "). Make it again from its seed: "
+                    + "/hcm games gen recall " + s.def.id() + " " + row.slot() + " seed:" + GenSeed.hex(row.seed()));
+            return;
+        }
+        Plan moved = PlanShift.to(read.plan(), box);
+        List<String> problems = PlanCheck.problems(moved, orig, box);
+        if (!problems.isEmpty()) {
+            fail(j, "its plan was refused: " + String.join("; ", problems));
+            return;
+        }
+        j.plan = moved;
+        j.steps.add(new Step(j.half, moved, BuildJob.Mode.CONVERGE));
+        j.stage = Stage.EVACUATE;
+        j.evacStart = host.now();
+        evacuate(j);
+    }
+
+    /** A recall that can never be built: it is forgotten (the slot keeps what it held), and the admin told. */
+    private void dropWant(Job j, String why) {
+        SlotState s = j.slot;
+        end(j);
+        ClassicWant back = s.prior != null && holds(s, s.prior) ? s.prior : null;
+        try {
+            host.store().meta(GenAdminKeys.recall(s.def.id()), back == null ? null : back.text());
+        } catch (SQLException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: could not forget " + s.def.id() + "'s recall", e);
+        }
+        s.want = back;
+        s.prior = null;
+        s.lastError = why;
+        host.logger().warning("Fresh Courses: the recall into " + s.def.id() + " was dropped - " + why);
+        j.report.accept("&c" + s.def.name() + ": &7" + why);
+    }
+
+    /**
+     * The boot check of a Classics slot: its archived plan moved into its live half again (the same
+     * blocks when it hashes the same), converged and verified. A course made again from its seed, or
+     * one the archive can no longer give back, gets the quick structural check instead.
+     */
+    private void healClassic(Job j) {
+        SlotState s = j.slot;
+        GenTag tag = j.tag;
+        Slots.Def orig = Slots.of(tag.slot());
+        Box target = s.half(j.half);
+        try {
+            GenArchiveDao.Row row = orig == null ? null : host.store().edition(tag.slot(), tag.editionKey());
+            PlanCodec.Read read = row == null ? null : PlanCodec.decode(row.plan());
+            if (read != null && read.ok()) {
+                Box box = Box.sized(target.minX(), target.minY(), target.minZ(), orig.sizeX(), orig.sizeY(),
+                        orig.sizeZ());
+                Plan moved = PlanShift.to(read.plan(), box);
+                if (moved.hash().equals(tag.planHash())) {
+                    j.plan = moved;
+                    j.planDef = orig;
+                    j.planBox = box;
+                    j.steps.add(new Step(j.half, moved, BuildJob.Mode.CONVERGE));
+                    j.stage = Stage.CONVERGE;
+                    return;
+                }
+            }
+        } catch (SQLException | RuntimeException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: " + s.def.id() + "'s archived course can't be read", e);
+        }
+        j.steps.add(new Step(j.half, null, BuildJob.Mode.SCAN));
+        j.stage = Stage.CONVERGE;
+    }
+
+    /**
+     * The recalled course goes live in its Classics slot: one database write. Its tag is the
+     * ORIGINAL edition's (slot, edition, seed, star times), so its board is the original board and
+     * its first-finish reward the original's; only its half, its plan hash (the blocks here) and the
+     * recall differ. No archive row: it is an old edition, not a new one.
+     */
+    private void flipRecall(Job j) {
+        SlotState s = j.slot;
+        ClassicWant w = j.want;
+        GenArchiveDao.Row src = j.source;
+        Slots.Def orig = Slots.of(src.slot());
+        long now = host.now();
+        PlannedCourse pc = j.plan.course();
+        long ref = pc instanceof PlannedTrial t ? t.refMs() : 0;
+        long gold = src.goldMs();
+        long silver = src.silverMs();
+        if (w.remade() && !orig.golf()) {
+            DailySettings.Stars factors = host.settings().stars();
+            gold = Stars.threshold(ref, factors.gold(src.tierOrMix()));
+            silver = Stars.threshold(ref, factors.silver(src.tierOrMix()));
+        }
+        List<Integer> attempts = pc instanceof PlannedGolf g ? g.attempts() : List.of();
+        List<List<Putt>> witness = pc instanceof PlannedGolf g ? g.witness() : List.of();
+        GenTag.Recall recall = new GenTag.Recall(s.def.id(), w.from(), edition().day(w.from()));
+        GenTag tag = new GenTag(src.slot(), orig.generator(), j.plan.algo(), src.day(), j.reroll, src.seed(), j.half,
+                j.plan.hash(), ref, gold, silver, attempts, witness, now, j.cadence, recall);
+        String name = GenCopy.classicRowName(src.name(), j.cadence, src.day(), w.remade());
+        int rev;
+        try {
+            GamesDao.CourseRow old = host.store().course(s.def.id());
+            String taken = Regions.takenByHand(s.def, old);
+            if (taken != null) {
+                s.problem = taken;
+                fail(j, taken);
+                return;
+            }
+            rev = host.store().flip(row(s.def, s.world, pc, tag, old, now, name), Map.of());
+        } catch (SQLException | RuntimeException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: the recall into " + s.def.id() + " failed", e);
+            fail(j, "the database refused the course (" + e.getMessage() + ")");
+            return;
+        }
+        end(j);
+        GenTag before = s.live;
+        boolean beforeStood = before != null && s.verified;
+        s.previous = beforeStood && before.half() != tag.half() ? before : s.previous != null && !s.clearing
+                && s.previous.half() != tag.half() ? s.previous : null;
+        s.live = tag;
+        s.rev = rev;
+        s.liveMix = src.tierOrMix();
+        s.verified = true;
+        s.healFailed = false;
+        s.clearing = false;
+        s.oldDirty = before != null || s.bothDirty || s.previous != null;
+        s.bothDirty = false;
+        s.tries = 0;
+        s.lastError = null;
+        s.builtAt = now;
+        s.prior = null;
+        s.lastLine = lastLine(j);
+        host.coursesChanged(s.def.game());
+        String until = w.until() > 0 ? " until " + GenCopy.whenDated(w.until(), host.zone()) : " until it is replaced"
+                + " or unrecalled";
+        host.logger().info("Fresh Courses: " + src.code() + " (" + src.slot() + " " + src.edition() + ")"
+                + (w.remade() ? " (re-made)" : "") + " is back in " + s.def.id() + " (half " + j.half + ")" + until
+                + ".");
+        j.report.accept("&a" + src.code() + " is back: &f" + GenCopy.classicName(src.name(), j.cadence, src.day(),
+                w.remade()) + "&a, " + until.trim() + ". &7Play it: &e/hcm play " + s.def.id());
+    }
+
+    // ---- the archive ------------------------------------------------------------------------------------
+
+    /** The archive row for an edition going live at a flip (its code is handed out by the store). */
+    private GenArchiveDao.Row archiveEntry(Slots.Def def, GenTag tag, byte[] plan, String mix, long now) {
+        return new GenArchiveDao.Row(def.id(), tag.editionKey(), null, 0, tag.day(), tag.seed(),
+                tag.generator() + "/" + tag.algo(), def.kind(), mix == null ? "" : mix,
+                GenCopy.slotName(def, tag.cadence()), now, null, plan, tag.goldMs(), tag.silverMs(), now, null);
+    }
+
+    /** A plan as the archive keeps it; {@code null} (the row reads as unreadable) if it can't be written. */
+    private byte[] encode(Plan plan) {
+        try {
+            return plan == null ? null : PlanCodec.encode(plan);
+        } catch (RuntimeException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: a plan couldn't be archived", e);
+            return null;
+        }
+    }
+
+    /** The archived editions recalled into a Classics slot now ({@code slot|edition}): never pruned. */
+    private Set<String> recalledNow() {
+        Set<String> out = new HashSet<>();
+        for (SlotState s : slots.values()) {
+            if (!s.classic) {
+                continue;
+            }
+            if (s.want != null) {
+                out.add(s.want.slot() + "|" + s.want.edition());
+            }
+            if (s.live != null) {
+                out.add(s.live.slot() + "|" + s.live.editionKey());
+            }
+            if (s.previous != null && !s.clearing) {
+                out.add(s.previous.slot() + "|" + s.previous.editionKey());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * A course's code: {@code HARD-40} for the edition {@code tag} names (a recalled course's is its
+     * original edition's), or {@code null} while it isn't archived (an edition from before the
+     * archive).
+     */
+    public String code(GenTag tag) {
+        if (tag == null) {
+            return null;
+        }
+        String k = tag.slot() + "|" + tag.editionKey();
+        String c = codes.get(k);
+        if (c != null) {
+            return c;
+        }
+        try {
+            GenArchiveDao.Row row = host.store().edition(tag.slot(), tag.editionKey());
+            if (row != null) {
+                codes.put(k, row.code());
+                return row.code();
+            }
+        } catch (SQLException | RuntimeException e) {
+            host.logger().log(Level.FINE, "Fresh Courses: a course code couldn't be read", e);
+        }
+        return null;
+    }
+
+    /**
+     * What the website shows for a slot's live course ({@code "fresh":{...}}), or {@code null} when it
+     * has none or it isn't archived: its code, short seed, when it went up, when it changes next
+     * (left out while pinned forever) and the cadence.
+     */
+    public FreshFeed.Fresh fresh(String slotId) {
+        SlotState s = slots.get(slotId);
+        if (s == null || s.classic || s.live == null || !s.verified || !s.on()) {
+            return null;
+        }
+        try {
+            GenArchiveDao.Row row = host.store().edition(s.def.id(), s.live.editionKey());
+            if (row == null) {
+                return null;
+            }
+            Long to = s.pin != null && s.pin.until() <= 0 ? null : target(s).endsAt();
+            return new FreshFeed.Fresh(row.code(), FreshFeed.shortSeed(row.seed()), row.startsAt(), to,
+                    s.live.cadence());
+        } catch (SQLException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * What the website shows for a Classics slot ({@code "classic":{...}}), or {@code null} while it
+     * holds nothing open: the recalled course's code and the recall's window ({@code to} left out for
+     * "forever").
+     */
+    public FreshFeed.Classic classic(String classicId) {
+        SlotState s = slots.get(classicId == null ? "" : classicId);
+        if (s == null || !s.classic || s.live == null || !s.verified || s.want == null || !holds(s, s.want)) {
+            return null;
+        }
+        String c = code(s.live);
+        return c == null ? null : new FreshFeed.Classic(c, s.want.from(), s.want.until() > 0 ? s.want.until() : null);
+    }
+
+    /**
+     * The website's {@code freshHistory}: every archived edition that has been live, at most
+     * {@code feed_history} per slot, newest first. Names only when {@code showNames}.
+     */
+    public List<FreshFeed.Entry> freshHistory(boolean showNames) {
+        int per = host.settings().archive().feedHistory();
+        List<GenArchiveDao.Row> rows = new ArrayList<>();
+        try {
+            for (Slots.Def d : Slots.ALL) {
+                rows.addAll(host.store().editions(d.id(), 0, Math.max(1, per)));
+            }
+        } catch (SQLException | RuntimeException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: the archive couldn't be read for the website", e);
+            return List.of();
+        }
+        Map<String, FreshFeed.Board> boards = new HashMap<>();
+        for (GenArchiveDao.Row r : rows) {
+            Slots.Def d = Slots.of(r.slot());
+            String game = d == null ? Slots.GAME_TRIALS : d.game();
+            try {
+                GenArchiveDao.BoardStats st = host.store().boardStats(game, r.board());
+                List<GamesDao.ScoreRow> top = host.store().top(game, r.board(), true, 1);
+                boards.put(r.board(), new FreshFeed.Board(st.plays(), top.isEmpty() ? null : top.get(0)));
+            } catch (SQLException | RuntimeException e) {
+                boards.put(r.board(), new FreshFeed.Board(0, null));
+            }
+        }
+        return FreshFeed.history(rows, boards::get, slot -> {
+            SlotState s = slots.get(slot);
+            return s == null || s.live == null || (s.pin != null && s.pin.until() <= 0) ? null : target(s).endsAt();
+        }, recalledNow(), per, host.now(), showNames, host::playerName);
+    }
+
+    /** The world the courses are built in ({@code games.fresh.world}, or the first Games world). */
+    String genWorld() {
+        String w = host.settings().world();
+        return w.isBlank() ? first(host.gamesWorlds()) : w;
+    }
+
+    /** Move someone to {@code safe_spot} or the world's spawn, and say why (a plot being built or cleared). */
+    void moveOut(String world, Person p) {
+        double[] spot = host.settings().safeSpot();
+        if (spot == null) {
+            WorldPort port = host.world(world);
+            int[] spawn = port == null ? null : port.spawn();
+            if (spawn == null) {
+                return;
+            }
+            spot = new double[]{spawn[0] + 0.5, spawn[1], spawn[2] + 0.5};
+        }
+        host.move(p.id(), world, spot[0], spot[1], spot[2]);
+        host.tell(p.id(), GenCopy.MOVED);
+    }
+
+    /** An edition as admins read it from its key and first day ("Mon 28 Sep-Sun 4 Oct"). */
+    static String editionName(Edition.Key key, long startDay) {
+        return editionName(key == null ? Edition.DAILY : key.cadence(), startDay);
+    }
+
+    // ---- admin: history, recall, unrecall, keep, plots (GenOps) -----------------------------------------
+
+    /** History lines come 8 to a page. */
+    public static final int HISTORY_PAGE = 8;
+
+    @Override
+    public List<String> history(String slotId, int page) {
+        List<String> out = new ArrayList<>();
+        Slots.Def def = slotId == null ? null : Slots.of(slotId);
+        try {
+            int total = host.store().editionCount(def == null ? null : def.id());
+            int pages = Math.max(1, (total + HISTORY_PAGE - 1) / HISTORY_PAGE);
+            int p = Math.max(1, Math.min(page, pages));
+            out.add("&6History &7- " + (def == null ? "every course" : def.name()) + " &8(page " + p + " of " + pages
+                    + ", " + total + " in all, newest first)");
+            if (total == 0) {
+                out.add("&7Nothing archived yet: every set is kept here from the moment it goes up.");
+                return out;
+            }
+            for (GenArchiveDao.Row r : host.store().editions(def == null ? null : def.id(), (p - 1) * HISTORY_PAGE,
+                    HISTORY_PAGE)) {
+                out.add(historyLine(r, def == null));
+            }
+            if (p < pages) {
+                out.add("&7More: &e/hcm games gen history " + (def == null ? "all" : def.id()) + " " + (p + 1));
+            }
+            out.add("&7One course in full: &e/hcm games gen history <code>&7; bring one back: &e/hcm games gen recall"
+                    + " <code>");
+        } catch (SQLException | RuntimeException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: the history couldn't be read", e);
+            out.add("&cCouldn't reach the database - see the console.");
+        }
+        return out;
+    }
+
+    /** One archived edition, one line: code, dates, short seed, record, plays and whether it is kept or back now. */
+    private String historyLine(GenArchiveDao.Row r, boolean named) {
+        Slots.Def d = Slots.of(r.slot());
+        String game = d == null ? Slots.GAME_TRIALS : d.game();
+        String record = "&8no finish yet";
+        long plays = 0;
+        try {
+            List<GamesDao.ScoreRow> top = host.store().top(game, r.board(), true, 1);
+            if (!top.isEmpty()) {
+                record = "&7record &f" + score(game, top.get(0).score()) + " &7by &f" + host.playerName(top.get(0)
+                        .player());
+            }
+            plays = host.store().boardStats(game, r.board()).plays();
+        } catch (SQLException | RuntimeException e) {
+            record = "&8record unknown";
+        }
+        return "&f" + r.code() + (named ? " &7" + r.name() : "") + " &7" + dates(r) + " &8seed "
+                + FreshFeed.shortSeed(r.seed()) + " " + record + " &7- " + plays + " play" + (plays == 1 ? "" : "s")
+                + flags(r);
+    }
+
+    private String flags(GenArchiveDao.Row r) {
+        StringBuilder b = new StringBuilder();
+        if (r.live()) {
+            b.append(" &e(up now)");
+        }
+        if (recalledNow().contains(r.slot() + "|" + r.edition())) {
+            b.append(" &b(recalled now)");
+        }
+        if (r.keptAs() != null) {
+            b.append(" &a(kept as ").append(r.keptAs()).append(")");
+        }
+        return b.toString();
+    }
+
+    /** "Mon 5 Oct - Mon 12 Oct", or "Mon 5 Oct - now". */
+    private String dates(GenArchiveDao.Row r) {
+        return DATE.format(Instant.ofEpochMilli(r.startsAt()).atZone(host.zone())) + " - " + (r.endsAt() == null
+                ? "now" : DATE.format(Instant.ofEpochMilli(r.endsAt()).atZone(host.zone())));
+    }
+
+    /** A board score as people read it: a time, or golf strokes. */
+    private static String score(String game, long score) {
+        return Slots.GAME_GOLF.equals(game) ? score + " stroke" + (score == 1 ? "" : "s")
+                : com.dierks.homecraft.games.trial.TrialText.time(score);
+    }
+
+    @Override
+    public List<String> historyOf(String slotId, GenArgs.Which which) {
+        List<String> out = new ArrayList<>();
+        String slot = slotId != null ? slotId : which.slot();
+        GenArchiveDao.Row r = resolve(slot, which, out::add);
+        if (r == null) {
+            return out;
+        }
+        Slots.Def d = Slots.of(r.slot());
+        String game = d == null ? Slots.GAME_TRIALS : d.game();
+        Edition.Key key = Edition.Key.parse(r.edition());
+        out.add("&6" + r.code() + " &7- &f" + r.name() + " &7(" + editionName(key, r.day()) + ", edition "
+                + r.edition() + ")" + flags(r));
+        out.add("&7Up " + dates(r) + " · " + r.kind() + " " + r.tierOrMix() + " · seed " + GenSeed.hex(r.seed())
+                + " · " + r.algo() + " · built " + GenCopy.whenDated(r.builtAt(), host.zone()));
+        PlanCodec.Read read = PlanCodec.decode(r.plan());
+        out.add(read.ok() ? "&7Plan: " + read.plan().ops().size() + " blocks, hash " + read.plan().hash()
+                + " &8(it can be brought back exactly)" : "&cPlan: can't be read (" + read.problem()
+                + ") &7- it can be made again from its seed: recall ... seed:" + GenSeed.hex(r.seed()));
+        try {
+            GenArchiveDao.BoardStats st = host.store().boardStats(game, r.board());
+            out.add("&7" + st.players() + " player" + (st.players() == 1 ? "" : "s") + ", " + st.plays() + " play"
+                    + (st.plays() == 1 ? "" : "s") + (st.players() > 0 ? ". Top 5:" : "."));
+            int rank = 0;
+            for (GamesDao.ScoreRow row : host.store().top(game, r.board(), true, 5)) {
+                rank++;
+                out.add("&f  " + rank + ". " + host.playerName(row.player()) + " &7" + score(game, row.score()));
+            }
+        } catch (SQLException | RuntimeException e) {
+            out.add("&cIts board couldn't be read.");
+        }
+        return out;
+    }
+
+    /**
+     * The archived edition an admin named, with its plan; {@code null} after telling them why not.
+     * {@code last} is the newest edition before the one up now; a date is the one up that day; a
+     * seed must match exactly one of the slot's editions.
+     */
+    private GenArchiveDao.Row resolve(String slot, GenArgs.Which w, Consumer<String> report) {
+        Slots.Def def = slot == null ? null : Slots.of(slot);
+        try {
+            GenArchiveDao.Row row = switch (w.how()) {
+                case CODE -> host.store().editionByCode(w.text());
+                case NUMBER -> def == null ? null : host.store().editionByCode(CourseCode.format(def.id(), w.n()));
+                case KEY -> def == null ? null : host.store().edition(def.id(), w.text());
+                case LAST -> {
+                    if (def == null) {
+                        yield null;
+                    }
+                    List<GenArchiveDao.Row> two = host.store().editions(def.id(), 0, 2);
+                    yield two.isEmpty() ? null : two.get(0).live() ? (two.size() > 1 ? two.get(1) : null) : two.get(0);
+                }
+                case CURRENT -> {
+                    if (def == null) {
+                        yield null;
+                    }
+                    List<GenArchiveDao.Row> one = host.store().editions(def.id(), 0, 1);
+                    yield one.isEmpty() || !one.get(0).live() ? null : one.get(0);
+                }
+                case DATE -> {
+                    if (def == null) {
+                        yield null;
+                    }
+                    long from = w.date().atStartOfDay(host.zone()).toInstant().toEpochMilli();
+                    long to = w.date().plusDays(1).atStartOfDay(host.zone()).toInstant().toEpochMilli() - 1;
+                    yield host.store().editionLive(def.id(), from, to);
+                }
+                case SEED -> {
+                    if (def == null) {
+                        yield null;
+                    }
+                    List<GenArchiveDao.Row> match = host.store().editionsBySeed(def.id(), w.text());
+                    if (match.size() > 1) {
+                        report.accept("&c" + match.size() + " of " + def.name() + "'s courses have a seed starting "
+                                + w.text() + ". &7Give more of its digits.");
+                        yield null;
+                    }
+                    yield match.isEmpty() ? null : match.get(0);
+                }
+            };
+            if (row == null) {
+                if (w.how() == GenArgs.How.SEED && def != null) {
+                    report.accept("&cNo archived " + def.name() + " has a seed starting " + w.text()
+                            + ". &7/hcm games gen history " + def.id());
+                } else if (w.how() != GenArgs.How.SEED) {
+                    report.accept("&cNo archived course " + (def == null ? "" : "of " + def.name() + " ") + "is "
+                            + w.typed() + ". &7/hcm games gen history " + (def == null ? "all" : def.id()));
+                }
+                return null;
+            }
+            if (def != null && !row.slot().equals(def.id())) {
+                report.accept("&c" + row.code() + " is " + row.name() + ", not " + def.name() + ".");
+                return null;
+            }
+            return row.plan() != null ? row : host.store().edition(row.slot(), row.edition());
+        } catch (SQLException | RuntimeException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: the archive couldn't be read", e);
+            report.accept("&cCouldn't reach the database - see the console.");
+            return null;
+        }
+    }
+
+    @Override
+    public void recall(String classicWord, String slotId, GenArgs.Which which, int days, boolean confirm,
+                       Consumer<String> report) {
+        if (!running || readyAt < 0) {
+            report.accept("&cFresh Courses is still starting; try in a moment.");
+            return;
+        }
+        String soon = restartSoon();
+        if (soon != null) {
+            report.accept(soon);
+            return;
+        }
+        String slot = slotId != null ? slotId : which.slot();
+        if (slot == null) {
+            report.accept("&cWhich course? A course code like HARD-40, or a course and which one.");
+            return;
+        }
+        GenArchiveDao.Row row = resolve(slot, which, report);
+        if (row == null) {
+            return;
+        }
+        Slots.Def orig = Slots.of(row.slot());
+        Slots.Def fits = Slots.classicFor(orig);
+        Slots.Def classic = classicWord != null ? Slots.classicByWord(classicWord) : fits;
+        if (fits == null) {
+            report.accept("&c" + row.name() + " has no Classics slot. &7Keep it for good instead: &e/hcm games gen keep "
+                    + row.code() + " <new-id> [name]");
+            return;
+        }
+        if (classic != fits) {
+            report.accept("&c" + classic.name() + " can't hold " + row.name() + ". &7It goes into " + fits.id() + ".");
+            return;
+        }
+        SlotState s = slots.get(classic.id());
+        if (!s.on()) {
+            report.accept("&c" + classic.name() + " is off" + (s.problem == null ? "." : ": &7" + s.problem));
+            return;
+        }
+        boolean remade = which.remade();
+        if (!remade) {
+            PlanCodec.Read read = PlanCodec.decode(row.plan());
+            if (!read.ok()) {
+                report.accept("&c" + row.code() + "'s stored plan can't be read (" + read.problem() + ").");
+                report.accept("&7Make it again from its seed with today's generator (marked re-made): &e/hcm games gen"
+                        + " recall " + classic.id() + " " + row.slot() + " seed:" + GenSeed.hex(row.seed()));
+                return;
+            }
+        }
+        long now = host.now();
+        int d = days == GenArgs.FOREVER ? 0 : days == GenArgs.DAYS_DEFAULT ? host.settings().archive().classicDays()
+                : days;
+        long until = days == GenArgs.FOREVER ? 0 : now + d * 86_400_000L;
+        String span = until == 0 ? "until it is replaced or unrecalled" : "until " + GenCopy.whenDated(until,
+                host.zone());
+        if (!remade && s.want != null && !s.want.remade() && s.want.slot().equals(row.slot())
+                && s.want.edition().equals(row.edition())) {
+            ClassicWant w = s.want.withUntil(until);
+            if (!storeWant(s, w, report)) {
+                return;
+            }
+            s.want = w;
+            report.accept("&a" + row.code() + " stays in " + classic.name() + " " + span + ".");
+            return;
+        }
+        if (busyWith(s)) {
+            report.accept("&c" + classic.name() + " is being built right now; try when it's done.");
+            return;
+        }
+        int on = playing(s);
+        if (s.live != null && on > 0 && !confirm) {
+            report.accept("&e" + on + " player" + (on == 1 ? " is" : "s are") + " on " + classic.name() + " now. &7They"
+                    + " finish on the course they started; the new one opens beside it.");
+            report.accept("&7Add &econfirm &7at the end to do it.");
+            return;
+        }
+        ClassicWant w = new ClassicWant(row.slot(), row.edition(), now, until, remade);
+        if (!storeWant(s, w, report)) {
+            return;
+        }
+        s.prior = s.want != null && holds(s, s.want) ? s.want : null;
+        s.want = w;
+        s.tries = 0;
+        s.lastError = null;
+        s.recallReport = report;
+        host.logger().info("Fresh Courses: " + row.code() + " (" + row.slot() + " " + row.edition() + ")"
+                + (remade ? " (re-made)" : "") + " is recalled into " + classic.id() + " " + span + ".");
+        report.accept("&7Bringing back &f" + row.code() + " &7(" + row.name() + ", " + editionName(Edition.Key.parse(
+                row.edition()), row.day()) + ")" + (remade ? " re-made from its seed" : "") + " into " + classic.name()
+                + " " + span + ". &7It opens once it is built and checked; its old records are the ones to beat.");
+    }
+
+    private boolean storeWant(SlotState s, ClassicWant w, Consumer<String> report) {
+        try {
+            host.store().meta(GenAdminKeys.recall(s.def.id()), w == null ? null : w.text());
+            return true;
+        } catch (SQLException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: could not store a recall", e);
+            report.accept("&cCouldn't reach the database - see the console.");
+            return false;
+        }
+    }
+
+    @Override
+    public void unrecall(String classicWord, boolean confirm, Consumer<String> report) {
+        Slots.Def c = Slots.classicByWord(classicWord);
+        SlotState s = c == null ? null : slots.get(c.id());
+        if (s == null) {
+            report.accept("&cNo Classics slot called '" + classicWord + "'. &7" + String.join(", ", Slots.classicIds()));
+            return;
+        }
+        if (s.want == null && s.live == null) {
+            report.accept("&7" + c.name() + " is already empty.");
+            return;
+        }
+        int on = playing(s);
+        if (on > 0 && !confirm) {
+            report.accept("&e" + on + " player" + (on == 1 ? " is" : "s are") + " on " + c.name() + " now. &7They"
+                    + " finish; its halves are cleared once nobody is on them.");
+            report.accept("&7Add &econfirm &7at the end to do it.");
+            return;
+        }
+        if (!storeWant(s, null, report)) {
+            return;
+        }
+        s.want = null;
+        s.prior = null;
+        if (job != null && job.slot == s && job.kind == Kind.RECALL) {
+            cancel(job, "it was unrecalled");
+        }
+        queue.removeIf(j -> j.slot == s && j.kind == Kind.RECALL);
+        if (s.live != null) {
+            closeClassic(s, "an admin closed it");
+        }
+        report.accept("&a" + c.name() + " is closed. &7Its halves are cleared once nobody is on them.");
+    }
+
+    @Override
+    public void keep(String slotId, GenArgs.Which which, String id, String name, boolean freshBoard, boolean confirm,
+                     Consumer<String> report) {
+        if (!running || readyAt < 0) {
+            report.accept("&cFresh Courses is still starting; try in a moment.");
+            return;
+        }
+        String soon = restartSoon();
+        if (soon != null) {
+            report.accept(soon);
+            return;
+        }
+        String slot = slotId != null ? slotId : which.slot();
+        GenArchiveDao.Row row = slot == null ? null : resolve(slot, which, report);
+        if (row == null) {
+            if (slot == null) {
+                report.accept("&cWhich course? A course code like HARD-40, or a course and which one.");
+            }
+            return;
+        }
+        if (!which.remade()) {
+            PlanCodec.Read read = PlanCodec.decode(row.plan());
+            if (!read.ok()) {
+                report.accept("&c" + row.code() + "'s stored plan can't be read (" + read.problem() + "), so it can't"
+                        + " be kept as it was.");
+                report.accept("&7Make it again from its seed with today's generator (marked re-made): &e/hcm games gen"
+                        + " keep " + row.slot() + " seed:" + GenSeed.hex(row.seed()) + " " + id);
+                return;
+            }
+        }
+        keeper.keep(row, which.remade(), id, name, freshBoard, confirm, report);
+    }
+
+    @Override
+    public List<String> plots() {
+        return keeper.plots();
+    }
+
+    @Override
+    public void clearPlot(int n, boolean confirm, Consumer<String> report) {
+        keeper.clearPlot(n, confirm, report);
+    }
+
+    @Override
+    public void claimPlot(int n, boolean confirm, Consumer<String> report) {
+        keeper.claimPlot(n, confirm, report);
+    }
+
+    @Override
+    public List<Integer> usedPlots() {
+        return keeper.usedPlots();
+    }
+
+    /** For tests: the keep engine. */
+    KeepService keeper() {
+        return keeper;
     }
 
     // ---- helpers ------------------------------------------------------------------------------------

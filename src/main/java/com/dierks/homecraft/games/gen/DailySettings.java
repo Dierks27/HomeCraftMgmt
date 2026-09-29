@@ -5,7 +5,9 @@ import com.dierks.homecraft.games.RestartHold;
 import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.Edition;
 import com.dierks.homecraft.games.gen.api.GenCopy;
+import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.engine.KeepArea;
 import com.dierks.homecraft.games.gen.engine.Regions;
 
 import java.time.DayOfWeek;
@@ -66,12 +68,13 @@ import java.util.Objects;
  * @param stars                     the star times, as factors of a course's reference time
  * @param rewards                   the first-finish tokens at both ends of the cadence
  * @param slots                     every slot's settings, in {@link Slots#ALL} order
+ * @param archive                   the archive, the Classics slots and the keep area (GEN-SPEC-KEEP)
  */
 public record DailySettings(boolean enabled, String world, int cadenceDays, LocalTime rollover, DayOfWeek rebuildDay,
                             int startupDelaySeconds, int avoidBeforeRestartMinutes, int retryMinutes,
                             int maxTriesPerDay, int clearWaitMinutes, int keepDays, boolean worldRules,
                             double[] safeSpot, int dailyCap, Goals goals, Budget budget, Stars stars, Rewards rewards,
-                            List<SlotConfig> slots) {
+                            List<SlotConfig> slots, Archive archive) {
 
     /** The tiers a star factor is set for. */
     public static final List<String> TIERS = Slots.TIERS;
@@ -87,6 +90,71 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         goals = goals == null ? Goals.shipped() : goals;
         rewards = rewards == null ? Rewards.shipped() : rewards;
         slots = List.copyOf(slots == null ? List.of() : slots);
+        archive = archive == null ? Archive.shipped() : archive;
+    }
+
+    /** Without the archive's settings (the shape before GEN-SPEC-KEEP): they are the shipped ones. */
+    public DailySettings(boolean enabled, String world, int cadenceDays, LocalTime rollover, DayOfWeek rebuildDay,
+                         int startupDelaySeconds, int avoidBeforeRestartMinutes, int retryMinutes, int maxTriesPerDay,
+                         int clearWaitMinutes, int keepDays, boolean worldRules, double[] safeSpot, int dailyCap,
+                         Goals goals, Budget budget, Stars stars, Rewards rewards, List<SlotConfig> slots) {
+        this(enabled, world, cadenceDays, rollover, rebuildDay, startupDelaySeconds, avoidBeforeRestartMinutes,
+                retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules, safeSpot, dailyCap, goals, budget,
+                stars, rewards, slots, null);
+    }
+
+    /**
+     * The archive of every edition, the Classics slots and the keep area (GEN-SPEC-KEEP §1, §3, §4,
+     * §8): {@code archive.keep}, {@code feed_history}, {@code classics.*} and {@code keep.*}.
+     *
+     * @param keepDays    days an edition stays archived after it ended; 0 = forever (shipped)
+     * @param feedHistory past courses per slot in the website's {@code freshHistory}
+     * @param classicDays how long a recalled course stays up when no time is given
+     * @param classics    each Classics slot's region (its origin); one whose area can't be used is off
+     * @param keep        the keep area and its plots
+     * @param keepProblem why the keep area can't be used (keep is refused), or {@code null}
+     */
+    public record Archive(int keepDays, int feedHistory, int classicDays, List<SlotConfig> classics, KeepArea keep,
+                          String keepProblem) {
+
+        public Archive {
+            classics = List.copyOf(classics == null ? List.of() : classics);
+        }
+
+        /** The shipped settings: forever, 26 on the website, a week, the shipped regions and 24 plots. */
+        public static Archive shipped() {
+            List<SlotConfig> c = new ArrayList<>();
+            for (Slots.Def d : Slots.CLASSICS) {
+                c.add(SlotConfig.shipped(d));
+            }
+            return new Archive(0, 26, 7, c, new KeepArea(4096, 128, 5376, 24), null);
+        }
+
+        /** A Classics slot's settings, or {@code null}. */
+        public SlotConfig classic(String id) {
+            Slots.Def def = Slots.classic(id);
+            if (def == null) {
+                return null;
+            }
+            for (SlotConfig c : classics) {
+                if (c.id().equals(def.id())) {
+                    return c;
+                }
+            }
+            return null;
+        }
+
+        public Archive withKeep(KeepArea k, String problem) {
+            return new Archive(keepDays, feedHistory, classicDays, classics, k, problem);
+        }
+
+        public Archive withClassics(List<SlotConfig> c) {
+            return new Archive(keepDays, feedHistory, classicDays, c, keep, keepProblem);
+        }
+
+        public Archive withKeepDays(int days) {
+            return new Archive(days, feedHistory, classicDays, classics, keep, keepProblem);
+        }
     }
 
     /**
@@ -223,9 +291,9 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             return origin.clone();
         }
 
-        /** The slot's fixed definition. */
+        /** The slot's (or Classics slot's) fixed definition. */
         public Slots.Def def() {
-            return Slots.of(id);
+            return Slots.any(id);
         }
 
         public SlotConfig withEnabled(boolean on) {
@@ -277,7 +345,7 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         }
         return new DailySettings(false, "", Edition.DEFAULT_CADENCE, Edition.DEFAULT_ROLLOVER, null, 60, 15, 30, 4,
                 20, 35, true, null, 2, Goals.shipped(), new Budget(500, 5000, 4, 4, 2, 40),
-                new Stars(tiers(2.0, 1.5, 1.25), tiers(3.0, 2.2, 1.8)), Rewards.shipped(), slots);
+                new Stars(tiers(2.0, 1.5, 1.25), tiers(3.0, 2.2, 1.8)), Rewards.shipped(), slots, Archive.shipped());
     }
 
     /** Read {@code games.fresh} over {@code d}; never throws. */
@@ -323,6 +391,7 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
                     .withDailyClear(rewards.clear(def.id(), cadence)));
         }
         slots = Regions.validate(slots, n::warn, s.path());
+        Archive archive = archive(n, d.archive(), slots);
         if (enabled) {
             GamesConfig.Common common = n.common();
             String note = Regions.rolloverNote(rebuildAt, common == null ? List.of() : common.restartTimes());
@@ -331,7 +400,72 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             }
         }
         return new DailySettings(enabled, world, cadence, rebuildAt, rebuildDay, startupDelay, avoid, retry, maxTries,
-                clearWait, keepDays, worldRules, safeSpot, dailyCap, goals, budget, stars, rewards, slots);
+                clearWait, keepDays, worldRules, safeSpot, dailyCap, goals, budget, stars, rewards, slots, archive);
+    }
+
+    /**
+     * {@code archive.keep}, {@code feed_history}, {@code classics.*} and {@code keep.*}. A Classics
+     * slot's origin is checked like a slot's (on the grid, in range, 32 from every other half); one
+     * that can't be used is off on its own. A keep area that overlaps a Fresh Courses area or comes
+     * within 16 blocks of one gets one WARN and keep is refused until it is moved.
+     */
+    private static Archive archive(GamesConfig.Node n, Archive d, List<SlotConfig> slots) {
+        int keep = n.child("archive").whole("keep", d.keepDays(), 0, 36_500);
+        int feed = n.whole("feed_history", d.feedHistory(), 0, 520);
+        GamesConfig.Node cn = n.child("classics");
+        int days = cn.whole("days", d.classicDays(), 1, 365);
+        GamesConfig.Node cs = cn.child("slots");
+        List<SlotConfig> both = new ArrayList<>(slots);
+        for (Slots.Def def : Slots.CLASSICS) {
+            SlotConfig shipped = d.classic(def.id());
+            SlotConfig c = shipped == null ? SlotConfig.shipped(def) : shipped;
+            Object raw = cs.raw(def.id());
+            if (raw != null) {
+                Object o = raw instanceof Map<?, ?> ? cs.child(def.id()).raw("origin") : raw;
+                int[] read = o == null ? c.origin() : origin(o);
+                if (read == null) {
+                    cs.warn(cs.key(def.id()) + ".origin should be three whole numbers [x, y, z] - that Classics slot"
+                            + " is off");
+                    c = c.withEnabled(false);
+                } else {
+                    c = c.withOrigin(read);
+                }
+            }
+            both.add(c);
+        }
+        both = Regions.validate(both, cs::warn, cs.path());
+        List<SlotConfig> classics = new ArrayList<>(both.subList(slots.size(), both.size()));
+
+        GamesConfig.Node kn = n.child("keep");
+        KeepArea dk = d.keep();
+        int plots = kn.whole("max_plots", dk.maxPlots(), 1, 100);
+        int[] at = {dk.x(), dk.y(), dk.z()};
+        Object ra = kn.raw("area");
+        String problem = null;
+        if (ra != null) {
+            int[] read = origin(ra);
+            if (read == null) {
+                problem = "keep.area should be three whole numbers [x, y, z]";
+            } else {
+                at = read;
+            }
+        }
+        KeepArea area = new KeepArea(at[0], at[1], at[2], plots);
+        if (problem == null) {
+            List<Box> halves = new ArrayList<>();
+            for (SlotConfig c : both) {
+                Slots.Def def = c.def();
+                if (def != null) {
+                    halves.addAll(Regions.halves(def, c.origin()));
+                }
+            }
+            problem = area.problem(halves);
+        }
+        if (problem != null) {
+            kn.warn(kn.key("area") + " " + area.describe() + ": " + problem + " - keeping a course is off until it"
+                    + " is moved");
+        }
+        return new Archive(keep, feed, days, classics, area, problem);
     }
 
     // ---- what the engine and the screens ask ----------------------------------------------------
@@ -400,13 +534,13 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
     public DailySettings withEnabled(boolean on) {
         return new DailySettings(on, world, cadenceDays, rollover, rebuildDay, startupDelaySeconds,
                 avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
-                safeSpot, dailyCap, goals, budget, stars, rewards, slots);
+                safeSpot, dailyCap, goals, budget, stars, rewards, slots, archive);
     }
 
     public DailySettings withWorld(String w) {
         return new DailySettings(enabled, w, cadenceDays, rollover, rebuildDay, startupDelaySeconds,
                 avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
-                safeSpot, dailyCap, goals, budget, stars, rewards, slots);
+                safeSpot, dailyCap, goals, budget, stars, rewards, slots, archive);
     }
 
     /** Another cadence; each slot's first-finish amount follows it. */
@@ -418,26 +552,33 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         }
         return new DailySettings(enabled, world, n, rollover, rebuildDay, startupDelaySeconds,
                 avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
-                safeSpot, dailyCap, goals, budget, stars, rewards, out);
+                safeSpot, dailyCap, goals, budget, stars, rewards, out, archive);
     }
 
     /** Another {@code rebuild_at} and {@code rebuild_day} ({@code null}: the quests' week start). */
     public DailySettings withRebuild(LocalTime at, DayOfWeek day) {
         return new DailySettings(enabled, world, cadenceDays, at, day, startupDelaySeconds, avoidBeforeRestartMinutes,
                 retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules, safeSpot, dailyCap, goals,
-                budget, stars, rewards, slots);
+                budget, stars, rewards, slots, archive);
     }
 
     public DailySettings withBudget(Budget b) {
         return new DailySettings(enabled, world, cadenceDays, rollover, rebuildDay, startupDelaySeconds,
                 avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
-                safeSpot, dailyCap, goals, b, stars, rewards, slots);
+                safeSpot, dailyCap, goals, b, stars, rewards, slots, archive);
     }
 
     public DailySettings withSlots(List<SlotConfig> s) {
         return new DailySettings(enabled, world, cadenceDays, rollover, rebuildDay, startupDelaySeconds,
                 avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
-                safeSpot, dailyCap, goals, budget, stars, rewards, s);
+                safeSpot, dailyCap, goals, budget, stars, rewards, s, archive);
+    }
+
+    /** Other archive, Classics and keep settings. */
+    public DailySettings withArchive(Archive a) {
+        return new DailySettings(enabled, world, cadenceDays, rollover, rebuildDay, startupDelaySeconds,
+                avoidBeforeRestartMinutes, retryMinutes, maxTriesPerDay, clearWaitMinutes, keepDays, worldRules,
+                safeSpot, dailyCap, goals, budget, stars, rewards, slots, a);
     }
 
     @Override
@@ -449,7 +590,8 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
                 && maxTriesPerDay == x.maxTriesPerDay && clearWaitMinutes == x.clearWaitMinutes
                 && keepDays == x.keepDays && worldRules == x.worldRules && Arrays.equals(safeSpot, x.safeSpot)
                 && dailyCap == x.dailyCap && goals.equals(x.goals) && budget.equals(x.budget)
-                && stars.equals(x.stars) && rewards.equals(x.rewards) && slots.equals(x.slots);
+                && stars.equals(x.stars) && rewards.equals(x.rewards) && slots.equals(x.slots)
+                && archive.equals(x.archive);
     }
 
     @Override
@@ -714,6 +856,11 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             out.add(p + (d.golf() ? "mix" : "tier"));
             out.add(p + "origin");
         }
+        out.addAll(List.of("archive.keep", "feed_history", "classics.days"));
+        for (Slots.Def d : Slots.CLASSICS) {
+            out.add("classics.slots." + d.id() + ".origin");
+        }
+        out.addAll(List.of("keep.area", "keep.max_plots"));
         return List.copyOf(out);
     }
 }

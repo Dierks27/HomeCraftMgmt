@@ -105,8 +105,11 @@ class SlotsTest {
         assertFalse(Slots.isSlot("fresh_courses"), "fresh_courses is a screen, not a slot");
         assertFalse(Slots.reserved("daily"), "the old daily id is free again: it never shipped");
         assertEquals(Set.of("fresh_parkour_easy", "fresh_parkour", "fresh_parkour_hard", "fresh_rings",
-                "fresh_golf", "fresh_tiny_golf", "fresh_boat", "fresh_courses", "fresh_parkour_tiers"), Slots.RESERVED,
-                "every slot, the Fresh Courses screen and the level picker are reserved");
+                "fresh_golf", "fresh_tiny_golf", "fresh_boat", "fresh_classic_parkour", "fresh_classic_rings",
+                "fresh_classic_golf", "fresh_courses", "fresh_parkour_tiers"), Slots.RESERVED,
+                "every slot, every Classics slot, the Fresh Courses screen and the level picker are reserved");
+        assertNull(Slots.of("fresh_classic_golf"), "a Classics slot is not one the schedule builds");
+        assertSame(Slots.CLASSIC_GOLF, Slots.any("Fresh_Classic_Golf"), "but it is found among every slot");
         assertTrue(Slots.reserved("FRESH_PARKOUR_TIERS"), "in any case");
         assertFalse(Slots.reserved(null), "nothing is not reserved");
     }

@@ -31,6 +31,8 @@ final class SlotState {
     }
 
     final Slots.Def def;
+    /** A Classics slot (GEN-SPEC-KEEP §3): empty until an admin recalls an archived course into it. */
+    final boolean classic;
 
     // ---- where and how (refreshed from config and hcm_meta at every check) ----------------------
     String world = "";
@@ -80,9 +82,20 @@ final class SlotState {
     long builtAt;
     long lastClearCheck;
 
+    // ---- a Classics slot ------------------------------------------------------------------------
+    /** What an admin recalled into it ({@code gen.<slot>.recall}), or {@code null}: empty. */
+    ClassicWant want;
+    /** It holds nothing live, but either half may still hold blocks (cleared once nobody is on them). */
+    boolean bothDirty;
+    /** The recall the slot held before the one being built (kept if the new one can never be built). */
+    ClassicWant prior;
+    /** Where the last recall's outcome goes (the admin who asked), or {@code null}. */
+    java.util.function.Consumer<String> recallReport;
+
     SlotState(Slots.Def def) {
         this.def = def;
         this.origin = def.origin();
+        this.classic = Slots.isClassic(def.id());
     }
 
     /** Switched on: the admin's override, else config. */
@@ -99,9 +112,15 @@ final class SlotState {
         return Regions.half(def, origin, which);
     }
 
-    /** The half the next layout goes into. */
+    /**
+     * The half the next layout goes into: the other one than the live layout's, or than a layout
+     * still standing after a Classics slot closed (runs on it finish there).
+     */
     char idleHalf() {
-        return live == null ? 'A' : live.otherHalf();
+        if (live != null) {
+            return live.otherHalf();
+        }
+        return previous != null && !clearing ? previous.otherHalf() : 'A';
     }
 
     /** Failed tries on course day {@code day}. */

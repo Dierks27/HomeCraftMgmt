@@ -55,4 +55,59 @@ public interface GenOps {
 
     /** Empty both halves and switch the slot off (decommission, or before moving it). */
     void clear(String slot, Consumer<String> report);
+
+    // ---- the archive: history, recall and keep (GEN-SPEC-KEEP) ------------------------------------------
+
+    /** Past courses, newest first, 8 a page ({@code slot} null: every slot's). */
+    default List<String> history(String slot, int page) {
+        return List.of("&cThe archive isn't available.");
+    }
+
+    /** One past course's details, with its top 5. */
+    default List<String> historyOf(String slot, GenArgs.Which which) {
+        return List.of("&cThe archive isn't available.");
+    }
+
+    /**
+     * Bring an archived course back into a Classics slot.
+     *
+     * @param classic the Classics slot or kind typed, or {@code null} (it follows the course's kind)
+     * @param slot    the slot the course was made for, or {@code null} when {@code which} is a code
+     * @param days    1-365, {@link GenArgs#DAYS_DEFAULT} ({@code classics.days}) or {@link GenArgs#FOREVER}
+     */
+    default void recall(String classic, String slot, GenArgs.Which which, int days, boolean confirm,
+                        Consumer<String> report) {
+        report.accept("&cThe archive isn't available.");
+    }
+
+    /** Close a Classics slot; its halves are cleared once nobody is on them. */
+    default void unrecall(String classic, boolean confirm, Consumer<String> report) {
+        report.accept("&cThe archive isn't available.");
+    }
+
+    /** Keep an archived course for good as a normal course in the next free plot. */
+    default void keep(String slot, GenArgs.Which which, String id, String name, boolean freshBoard, boolean confirm,
+                      Consumer<String> report) {
+        report.accept("&cThe archive isn't available.");
+    }
+
+    /** The keep area's plots and the courses in them. */
+    default List<String> plots() {
+        return List.of("&cThe archive isn't available.");
+    }
+
+    /** Delete plot {@code n}'s course (and its boards), move anyone out, and clear the plot to air. */
+    default void clearPlot(int n, boolean confirm, Consumer<String> report) {
+        report.accept("&cThe archive isn't available.");
+    }
+
+    /** Count what is in plot {@code n}; with {@code confirm}, clear it and make it Fresh Courses' to build in. */
+    default void claimPlot(int n, boolean confirm, Consumer<String> report) {
+        report.accept("&cThe archive isn't available.");
+    }
+
+    /** The plot numbers that hold a course (tab completion). */
+    default List<Integer> usedPlots() {
+        return List.of();
+    }
 }

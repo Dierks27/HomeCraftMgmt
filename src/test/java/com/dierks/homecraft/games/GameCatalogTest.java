@@ -49,7 +49,8 @@ class GameCatalogTest {
             assertTrue(GameCatalog.taken(" " + id.toUpperCase() + " "), id + " in any case, with spaces");
             assertTrue(GameCatalog.taken(id, games), id + " with the service's check too");
         }
-        assertEquals(9, Slots.RESERVED.size(), "seven slots, the Fresh Courses screen and the level picker");
+        assertEquals(12, Slots.RESERVED.size(), "seven slots, three Classics slots, the Fresh Courses screen and the"
+                + " level picker");
         assertFalse(GameCatalog.taken("fresh_golf_2"), "a name that only starts like one is free");
         assertFalse(GameCatalog.taken("daily"), "the old daily id never shipped and is free");
         assertFalse(GameCatalog.taken("river_run"), "a hand-built id is free");

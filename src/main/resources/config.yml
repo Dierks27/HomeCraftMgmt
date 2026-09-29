@@ -1936,3 +1936,31 @@ games:
       fresh_golf: {enabled: true, mix: EEEMMMMHH, origin: [4864, 160, 4096]}
       fresh_tiny_golf: {enabled: true, mix: EEE, origin: [5120, 160, 4096]}
       fresh_boat: {enabled: false, tier: medium, origin: [4480, 160, 4352]}
+    # Every set that was ever up is archived with its whole layout, so a past course can be brought
+    # back exactly (/hcm games gen recall) or kept for good (/hcm games gen keep), and its board with it.
+    # A course is a few KB: a year of weekly sets for every course is well under 5 MB.
+    archive:
+      # Days an old set stays in the archive after it was replaced; 0 = forever. A kept or
+      # recalled course's set is never removed.
+      keep: 0
+    # The website's list of past courses (with their course codes and seeds): at most this many per course.
+    feed_history: 26
+    # The Classics: three empty courses an admin can bring an old course back into
+    # (/hcm games gen recall HARD-40). Its old records are the ones to beat.
+    classics:
+      # How long a recalled course stays up unless the recall says otherwise ("forever" keeps it).
+      days: 7
+      # Where each one is built (x y z, x and z a multiple of 16; two halves side by side along x),
+      # like the courses above. Keep them 32 blocks from every other area.
+      slots:
+        fresh_classic_parkour: {origin: [4096, 160, 4736]}
+        fresh_classic_rings: {origin: [4608, 128, 4736]}
+        fresh_classic_golf: {origin: [4352, 160, 4736]}
+    # Kept courses (/hcm games gen keep): each becomes a normal course with a lasting board, built in
+    # its own plot of this area and never touched by the generator again.
+    keep:
+      # The first plot's corner (x y z). Plots are 144 x 176 x 336, six to a row along x, rows along z.
+      # It must stay at least 16 blocks from every Fresh Courses area; otherwise keeping is off.
+      area: [4096, 128, 5376]
+      # How many plots there are.
+      max_plots: 24

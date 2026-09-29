@@ -75,4 +75,17 @@ public interface GenHost {
 
     /** Teleport a player to (x, y, z) in {@code world}. */
     void move(UUID player, String world, double x, double y, double z);
+
+    /**
+     * Whether {@code /hcm play} already opens something called {@code id} — a game, one of its
+     * other names, a course — so a kept course may not take it (GEN-SPEC-KEEP §4 step 1).
+     */
+    default boolean playIdTaken(String id) {
+        return false;
+    }
+
+    /** A player's name for admins (history, records); the start of their id when unknown. */
+    default String playerName(UUID player) {
+        return player == null ? "someone" : player.toString().substring(0, 8);
+    }
 }

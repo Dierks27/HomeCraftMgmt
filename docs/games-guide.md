@@ -1137,6 +1137,21 @@ These are played in the Games world, on courses the server's builders make. Each
 - Bedrock players: the kits and rules are the same. High-score lists show numbered paper tiles instead of player heads. The time-trial course screen puts the first-finish reward in the Tokens for finishing tile's name, so no tap-and-hold is needed. In mini golf the ball is always a white block.
 - Numbers marked by default are settings the server owner can change later (config.yml, games.trials and games.golf, plus games.skill_daily_cap and games.featured_bonus).
 
+<!-- ---- WP-R1: warm-ups and party races ---- -->
+### Warm-ups and racing with friends
+
+- **Warm up first.** When you start a time-trial course, a small screen asks: Warm up (3:00), or Go straight to the timed run. Going straight is the run as it always was.
+- In a warm-up you run the course as much as you like. Checkpoints still guide you and Back to checkpoint works, but nothing is timed for the record, saved or paid, and it doesn't count for the Weekly Cup. The bar above your hotbar says Warm-up 2:14 left - not counted.
+- When you're ready, click Start timed run in your hotbar (or wait for the clock). You go back to the start for the normal 3, 2, 1, Go!, and that run counts as usual. Each run gets one warm-up.
+- **Race with friends.** Open a course's screen and click Race with friends, or type /hcm play race <course id>. That makes your party. Invite friends from the party screen: they get [Accept] in chat, and Bedrock players type /hcm play accept. A party holds up to 8 by default.
+- The party screen shows who's in and who's ready. Only the host can start the race, and the host chooses if everyone warms up first. In a party warm-up, click Ready when you're set: the race starts when the warm-up ends or everyone is ready.
+- Everyone goes to the start together and gets one 3, 2, 1, Go! at the same moment. Boats line up in rows of two behind the start line. A bar at the top of the screen shows your place, like 2nd of 5 · Lap 1/2. Boats can bump into each other.
+- When the race is over, everyone goes home and a results screen shows the whole group. It ends when everyone is in, 2 minutes after the first person finishes, or after 10 minutes.
+- Party races are free and just for fun: no entry, no prizes. Your time also counts as a normal run on the course, once, with the usual rewards and high scores.
+- You can leave any time with Leave game, or Leave the party on the party screen. The others carry on. If the host leaves, the next person who joined becomes the host.
+- /hcm play invites off turns off party race invites too.
+<!-- ---- end WP-R1 ---- -->
+
 ### Time Trials: Parkour
 
 *Jump from the start to the finish through every checkpoint, as fast as you can.*

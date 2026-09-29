@@ -78,7 +78,19 @@ final class RaceMode {
      * coordinator may end a racer before they arrive; their arrival then sends them straight home,
      * and nobody else's run (a solo run started later) is ever touched by a race's end.
      */
-    private final Map<UUID, RaceLink> arriving = new HashMap<>();
+    private final Map<UUID, Arrival> arriving = new HashMap<>();
+
+    /** A racer on the way in: their race, and whether (and how) the race sent them home meanwhile. */
+    private static final class Arrival {
+        final RaceLink link;
+        boolean sentHome;
+        EndReason why;
+        String line;
+
+        Arrival(RaceLink link) {
+            this.link = link;
+        }
+    }
 
     RaceMode(TimeTrials trials) {
         this.trials = trials;
@@ -112,15 +124,14 @@ final class RaceMode {
         long now = Bukkit.getCurrentTick();
         boolean warm = call(link, () -> link.warmupUntil() > now, false);
         Course.Spot spot = grid != null ? grid : raced.start();
-        Course runOn = warm ? base : raced;
         Course.Spot at = warm ? base.start() : spot;
         Point standAt = stand != null && stand.getWorld() != null && stand.getWorld().equals(world)
                 ? TimeTrials.point(stand) : null;
         Location to = new Location(world, at.x(), at.y(), at.z(), at.yaw(), at.pitch());
         UUID id = p.getUniqueId();
-        arriving.put(id, link);
+        arriving.put(id, new Arrival(link));
         boolean in = trials.sessions().enter(p, trials, base.id(), to,
-                q -> seated(q, new RaceRun(link, base, spot, standAt, warm), runOn));
+                q -> seated(q, new RaceRun(link, base, spot, standAt, warm), raced));
         if (!in) {
             arriving.remove(id);
             return Refusal.of("Stand still somewhere safe to join the race.");
@@ -128,37 +139,53 @@ final class RaceMode {
         return null;
     }
 
-    /** In, saved, cleared: the kit, the boat, and the grid (or the shared warm-up's free laps). */
-    private void seated(Player p, RaceRun rr, Course runOn) {
+    /**
+     * In, saved, cleared: the kit, the boat, and the grid (or the shared warm-up's free laps). A racer
+     * the race sent home while they were on the way goes straight back; one who arrives after the
+     * shared warm-up ended goes straight to their grid spot.
+     */
+    private void seated(Player p, RaceRun rr, Course raced) {
         trials.end(p);
-        if (arriving.remove(p.getUniqueId()) != rr.link || !alive(rr.link)) {
-            // the race ended them (or ended) while they were on their way in: straight home
-            p.sendMessage(Text.of(call(rr.link, rr.link::calledOffLine, "&7The race was called off.")));
-            trials.sessions().leave(p, EndReason.ADMIN);
+        Arrival a = arriving.remove(p.getUniqueId());
+        if (a == null || a.link != rr.link || a.sentHome || !alive(rr.link)) {
+            String line = a != null && a.sentHome ? a.line : call(rr.link, rr.link::calledOffLine,
+                    "&7The race was called off.");
+            if (line != null && !line.isBlank()) {
+                p.sendMessage(Text.of(line));
+            }
+            trials.sessions().leave(p, a != null && a.sentHome && a.why != null ? a.why : EndReason.ADMIN);
             return;
         }
-        TrialRun run = new TrialRun(p.getUniqueId(), runOn, false, 0);
+        long now = Bukkit.getCurrentTick();
+        long until = call(rr.link, rr.link::warmupUntil, 0L);
+        boolean warm = rr.state == RaceRun.State.WARMUP && until > now;
+        TrialRun run = new TrialRun(p.getUniqueId(), warm ? rr.base : raced, false, 0);
         run.race = rr;
         trials.replaceRun(run);
-        trials.giveKit(p, runOn.kind());
+        trials.giveKit(p, run.course.kind());
         p.setFallDistance(0f);
         noShoving(p, rr);
-        if (runOn.kind() == TrialKind.BOAT) {
+        if (run.course.kind() == TrialKind.BOAT) {
             trials.seat(p, run, p.getLocation());
         }
-        if (rr.state == RaceRun.State.WARMUP && run.beginWarmup(call(rr.link, rr.link::warmupUntil, 0L))) {
+        if (warm && run.beginWarmup(until)) {
             run.progress = new Progress(run.course, TimeTrials.position(p, run), System.nanoTime());
             run.phase = TrialRun.Phase.RUNNING;
             p.getInventory().setItem(Warmup.KIT_SLOT, KitItems.item(trials, Warmup.READY, Material.LIME_DYE,
                     Warmup.READY_NAME, "&7Tap when you're set.", "&7The race starts when the warm-up",
                     "&7ends, or everyone is ready."));
-            long left = Warmup.secondsLeft(Bukkit.getCurrentTick(), run.warmupEnds);
+            long left = Warmup.secondsLeft(now, run.warmupEnds);
             p.sendMessage(Text.of("&b" + rr.base.name() + " &7- race warm-up"));
             p.sendMessage(Text.of(Warmup.started((int) left)));
             p.sendMessage(Text.of(Warmup.HOW_TO_READY));
-        } else {
-            rr.state = RaceRun.State.GRID;
-            p.sendMessage(Text.of("&b" + rr.base.name() + " &7- on the grid. Wait for Go!"));
+            return;
+        }
+        boolean late = rr.state == RaceRun.State.WARMUP; // the warm-up ended while they were on the way
+        rr.state = RaceRun.State.GRID;
+        p.sendMessage(Text.of("&b" + rr.base.name() + " &7- on the grid. Wait for Go!"));
+        Location spot = late ? spot(raced.world(), rr.grid) : null;
+        if (spot != null) {
+            trials.move(p, run, spot); // they arrived at the course's start: onto their grid spot
         }
     }
 
@@ -419,8 +446,12 @@ final class RaceMode {
         if (racer == null) {
             return;
         }
-        if (arriving.remove(racer) != null) {
-            return; // on the way in: their arrival sends them straight home (seated)
+        Arrival a = arriving.get(racer);
+        if (a != null) {
+            a.sentHome = true; // on the way in: their arrival sends them straight home (seated)
+            a.why = why;
+            a.line = line;
+            return;
         }
         TrialRun run = trials.run(racer);
         if (run == null || run.race == null || run.race.ended) {
@@ -436,11 +467,11 @@ final class RaceMode {
     void left(Player p, EndReason why) {
         TrialRun run = p == null ? null : trials.run(p.getUniqueId());
         if (run == null || run.race == null) {
-            RaceLink link = p == null ? null : arriving.remove(p.getUniqueId());
-            if (link != null) { // called off on arrival (or gone before it): the race hears it once
+            Arrival a = p == null ? null : arriving.remove(p.getUniqueId());
+            if (a != null && !a.sentHome) { // called off on arrival (or gone before it): the race hears it once
                 UUID id = p.getUniqueId();
-                call(link, () -> {
-                    link.left(id, why);
+                call(a.link, () -> {
+                    a.link.left(id, why);
                     return null;
                 }, null);
             }

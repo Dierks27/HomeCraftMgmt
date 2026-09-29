@@ -683,6 +683,44 @@ Easy, Medium, Hard and "Why did we build this?".
 | `trials.daily_cap` | `4` | Most tokens time trials pay a player a day (first clears don't count) |
 | `trials.fall_depth` | `6` | Parkour: blocks below the lower of the last and next checkpoint that count as a fall |
 | `trials.min_seconds` | `5` | A run faster than this doesn't count (a course can set its own) |
+| `trials.warmup_seconds` | `180` | A warm-up's length before a timed run; `0` turns warm-ups off (0-600) |
+| `trials.party_max` | `8` | The most racers in one party race (2-12) |
+
+<!-- ---- WP-R1: warm-ups, party races and race mode ---- -->
+**Warm-ups.** While `warmup_seconds` is above 0, starting a course (Start on its screen,
+`/hcm play <course>`, a join sign, Play again) first asks "Warm up (3:00)" or "Go straight to the
+timed run". Going straight is the run as it always was. A warm-up takes you to the start and lets
+you run the course freely, as many laps as you like: checkpoints guide you and Back to checkpoint
+works, but nothing is timed for the record, recorded, paid, or counted for the Weekly Cup. The
+action bar reads "Warm-up 2:14 left - not counted", and each lap says "Warm-up lap: 0:48.2 (not
+counted)". When the time is up, or you tap the **Start timed run** kit item, you go back to the
+start and the normal 3-2-1 begins; that run is timed and counted as usual. A run gets one
+warm-up. An admin's test run never warms up, and the Dropper has its own practice drop instead.
+
+**Race with friends (party races).** Any open time-trial course (hand-built, Fresh or Classic;
+parkour, elytra or boat) can be raced together, any time, free and just for fun. Click **Race with
+friends** on the course screen, or type `/hcm play race <course>`, to open your party. Anyone in it
+can invite through the usual invites ([Accept] on Java, `/hcm play accept` on Bedrock; the 30 s
+cooldown stays, and `/hcm play invites off` turns party invites off too), up to `party_max`. The
+party screen shows who's in and who's ready. Only the host starts, and the host chooses whether
+everyone warms up first (the same `warmup_seconds`, with a **Ready** kit item to be done early).
+Then everyone goes to one grid and starts on **one shared 3-2-1**: boats in rows of two behind the
+start line (single file on a narrow track), runners and flyers on the start itself. A bar shows your
+place ("2nd of 5 · Lap 1/2"), finishes and photo finishes go to the group, and a results screen
+ranks everyone. The race ends when everyone is in, 2 minutes after the first finish, or 10 minutes
+after Go. Each racer's finish is also their **normal counted run** on the course, exactly once and
+under every fair-play rule: its boards, its first finish and other rewards, and the Weekly Cup. A
+party race has no entry, no fees and no prizes of its own. Boats bump, as at Race Night. Anyone
+can leave at any time (Leave game, or Leave the party on the party screen) and the others carry
+on; a disconnect is the same. A host who leaves passes the party to the next one who joined. A
+restart due soon refuses a new start, and a course held for Race Night can't be party-raced.
+
+**Race mode** is the engine party races and Race Night share: racers are held on the grid until one
+go tick and all start on one clock, a finish is judged on the course as it is (its layout, and the
+still-standing rule for Fresh Courses), finishers wait on Fresh Ice Boat's **viewing stand** (a railed
+platform in the middle of the loop, built by boat planner v2) or go home at the line where there is
+none, and a racer sent back to a checkpoint is re-seated clear of the other boats.
+<!-- ---- end WP-R1 ---- -->
 
 **Building a course** (`hcm.games.admin`, standing in a `games.worlds` world; the full list is in
 [Commands](#commands)):

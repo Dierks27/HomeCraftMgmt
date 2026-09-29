@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.gen.engine;
 
 import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.dropper.DropRules;
 import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.storage.GenArchiveDao;
 
@@ -180,7 +181,7 @@ public final class FreshFeed {
             }
             Long to = r.endsAt() != null ? r.endsAt() : liveEnd == null ? null : liveEnd.apply(r.slot());
             String tier = golf || r.tierOrMix() == null || r.tierOrMix().isBlank() ? null
-                    : r.tierOrMix().toLowerCase(Locale.ROOT);
+                    : tier(r.generator(), r.tierOrMix());
             out.add(new Entry(r.code(), r.slot(), r.name(), r.kind(), tier, r.startsAt(), to, shortSeed(r.seed()),
                     b == null ? 0 : b.plays(), record, r.keptAs(), recalled != null
                     && recalled.contains(r.slot() + "|" + r.edition()), top));
@@ -380,5 +381,17 @@ public final class FreshFeed {
             m.put("top", top);
         }
         return m;
+    }
+
+    /**
+     * A past set's tier as the feed says it: a trial's own ({@code medium}); a Dropper's mix
+     * ({@code EEMMH}) as the tier its row has, the rounded mean of its levels (EVENTS-DROPPER-SPEC
+     * §B.1.2), so the feed keeps one shape.
+     */
+    static String tier(String generator, String tierOrMix) {
+        if (Slots.DROPPER.equals(generator) && DropRules.mixProblem(tierOrMix) == null) {
+            return DropRules.tier(tierOrMix).id();
+        }
+        return tierOrMix.toLowerCase(Locale.ROOT);
     }
 }

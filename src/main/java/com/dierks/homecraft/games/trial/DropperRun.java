@@ -336,8 +336,8 @@ final class DropperRun {
      * else the landing watch.
      */
     void running(Port port, Point here, boolean inWater) {
-        if (stage != Stage.TIMED || run.progress == null) {
-            return;
+        if (stage != Stage.TIMED || !run.running()) {
+            return; // not started, or finished: nothing to watch
         }
         if (hopping) {
             if (hopAt >= 0 && port.tick() >= hopAt) {

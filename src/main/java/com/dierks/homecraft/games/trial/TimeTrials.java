@@ -414,9 +414,8 @@ public final class TimeTrials implements Game {
     @Override
     public void onVoid(Player player) {
         TrialRun run = runs.get(player.getUniqueId());
-        if (run != null && run.drop != null) {
-            drops.bonk(player, run, DropperRules.Why.VOID);
-            return;
+        if (run != null && run.drop != null && drops.bonk(player, run, DropperRules.Why.VOID)) {
+            return; // a dropper's bonk: back to the top of this level
         }
         if (run != null && run.running() && sendBack(player, run, 0)) {
             wingsTip(player, run);
@@ -672,6 +671,7 @@ public final class TimeTrials implements Game {
         }
         lore.add("&eClick to play");
         return Menus.icon(icon(c.kind()), "&e" + c.name() + " &7(" + TrialText.label(c) + ") &7- "
+                + (c.kind() == TrialKind.DROPPER ? TrialText.levels(DropperLayout.levels(c)) + " · " : "") // a kept dropper
                 + (best == null ? "no time yet" : "best " + TrialText.time(best)), lore.toArray(new String[0]));
     }
 

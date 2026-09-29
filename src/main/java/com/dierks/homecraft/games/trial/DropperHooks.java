@@ -96,11 +96,13 @@ final class DropperHooks {
         return true;
     }
 
-    /** Something else went wrong for the run (the void, a fall past the floor): a bonk. */
-    void bonk(Player p, TrialRun run, DropperRules.Why why) {
-        if (run.drop != null) {
-            run.drop.bonk(port(p, run), why);
-        }
+    /**
+     * Something else went wrong for the run (the void, a fall past the floor): a bonk.
+     *
+     * @return whether it was one (false: not now, like while the run's own teleport is on its way)
+     */
+    boolean bonk(Player p, TrialRun run, DropperRules.Why why) {
+        return run.drop != null && run.drop.bonk(port(p, run), why);
     }
 
     /**
@@ -123,8 +125,8 @@ final class DropperHooks {
     }
 
     /**
-     * The last splash was judged: the bonk line, the splash title (with its stars on a Fresh course
-     * that counted), and a clean counted drop tells the achievements ({@code game_dropper_clean}).
+     * The last splash was judged: the bonk line; for a run that counted, the splash title (with its
+     * stars on a Fresh course), and a clean drop tells the achievements ({@code game_dropper_clean}).
      */
     void finished(Player p, TrialRun run, long ms, boolean counted, int stars) {
         DropperRun d = run.drop;
@@ -132,8 +134,11 @@ final class DropperHooks {
             return;
         }
         p.sendMessage(Text.of(DropperText.bonks(d.bonks())));
-        TimeTrials.title(p, DropperText.SPLASH_TITLE, DropperText.splashSubtitle(ms, counted ? stars : 0), 50);
-        if (counted && d.clean()) {
+        if (!counted) {
+            return; // a test, void or stale run keeps Time Trials' own title, and never a clean drop
+        }
+        TimeTrials.title(p, DropperText.SPLASH_TITLE, DropperText.splashSubtitle(ms, stars), 50);
+        if (d.clean()) {
             String course = run.course.id();
             trials.games().tellProgress(g -> g.dropperClean(p, course));
         }

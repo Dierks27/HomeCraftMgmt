@@ -57,6 +57,25 @@ class ArenaCheckTest {
                 "before its first build");
     }
 
+    /** F review #8: a round_seconds longer than the restart hold is a WARN (rounds stop starting early). */
+    @Test
+    void aRoundLongerThanTheRestartHoldIsAWarning() {
+        Facts longRounds = new Facts(true, "games", true, BOX, List.of(), Claim.CLAIMED, null, true, 900, 5);
+        List<Line> out = rows(longRounds);
+        assertEquals(2, out.size(), "the warning and the box's line: " + out);
+        Line warn = out.get(0);
+        assertEquals(Status.WARN, warn.status());
+        assertTrue(warn.what().contains("round_seconds (900 s)") && warn.what().contains("restart hold (5 min)"),
+                warn.what());
+        assertTrue(warn.fix().contains("games.falling_floors.round_seconds"), warn.fix());
+        assertEquals(Status.OK, out.get(1).status(), "the box still fits");
+
+        assertEquals(Status.OK, one(new Facts(true, "games", true, BOX, List.of(), Claim.CLAIMED, null, true, 180, 5))
+                .status(), "the shipped 180 s inside a 5-minute hold: nothing to say");
+        assertEquals(Status.OK, one(new Facts(true, "games", true, BOX, List.of(), Claim.CLAIMED, null, true, 900, 0))
+                .status(), "no restart times set: nothing is held, nothing to say");
+    }
+
     @Test
     void eachThingWrongSaysHowToFixIt() {
         Line noWorld = one(new Facts(true, "", false, BOX, List.of(), Claim.CLAIMED, null, false));

@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.arena;
 
+import com.dierks.homecraft.games.NoPush;
 import com.dierks.homecraft.games.arena.rules.ArenaRound;
 import com.dierks.homecraft.games.arena.rules.ArenaText;
 import com.dierks.homecraft.games.arena.rules.ArenaTick;
@@ -132,6 +133,9 @@ public final class ArenaService {
     public void start() {
         hold = host.holding();
         plan(host.weekKey(host.now()));
+        if (round != null) {
+            hold = restartClose(host.now(), RoundSettings.COUNTDOWN_TICKS);
+        }
     }
 
     /** Stop: drop the reset, put everyone's collisions back and take the bar away. */
@@ -141,7 +145,7 @@ public final class ArenaService {
             writer.clear();
         }
         for (UUID p : new ArrayList<>(uncollided)) {
-            host.collidable(p, true);
+            restoreCollision(p);
         }
         uncollided.clear();
         for (UUID p : new ArrayList<>(barShown)) {
@@ -214,9 +218,9 @@ public final class ArenaService {
 
     /** Once a second: the restart hold, a new week's shape, a reset waiting for its world, the bars and kits. */
     public void check() {
-        hold = host.holding();
         long now = host.now();
         if (round == null) {
+            hold = host.holding();
             if (now - lastPlanTry >= 30_000L || lastPlanTry == Long.MIN_VALUE) {
                 plan(host.weekKey(now));
             }
@@ -226,8 +230,58 @@ public final class ArenaService {
         if (week != site.week() && (week != plannedWeek || (planProblem != null && now - lastPlanTry >= 60_000L))) {
             plan(week);
         }
+        // a countdown still to come is counted whole; one going, only what is left of it
+        hold = restartClose(now, round.phase() == ArenaRound.Phase.COUNTDOWN ? round.countdownLeft()
+                : RoundSettings.COUNTDOWN_TICKS);
         tryStartReset();
         secondUi();
+    }
+
+    // ---- the restart (F review #8) ----------------------------------------------------------------
+
+    /** Lag's share of a round's worst case: a few seconds more before a restart counts as too close. */
+    static final long RESTART_MARGIN_MS = 5_000L;
+
+    private FloorLayout tailFor;
+    private long tailTicks;
+
+    /**
+     * Whether a round starting {@code leadTicks} from now might not be over before the next restart:
+     * the games' own restart hold, or its worst-case end ({@link #roundTailTicks}) after the restart.
+     * No countdown or solo round starts then (a round already going always finishes).
+     */
+    boolean restartClose(long now, long leadTicks) {
+        if (host.holding()) {
+            return true;
+        }
+        long next = host.nextRestart();
+        if (next < 0 || arena == null) {
+            return false;
+        }
+        long worst = (leadTicks + roundTailTicks()) * RoundSettings.MS_PER_TICK + RESTART_MARGIN_MS;
+        return now + worst >= next;
+    }
+
+    /** {@link #tailTicks(RoundSettings, FloorLayout)} for the floors the next round starts on. */
+    long roundTailTicks() {
+        FloorLayout l = arena.layout();
+        if (l != tailFor) {
+            tailFor = l;
+            tailTicks = tailTicks(rs, l);
+        }
+        return tailTicks;
+    }
+
+    /**
+     * The longest a round can take from its first teleport to its end, in ticks: the teleports (two a
+     * tick), the 3-2-1, {@code round_seconds}, the edges falling in ring by ring until the last
+     * ring's fade ({@link FloorRules#goneBy()}), and the backstop's wait after it
+     * ({@link ArenaTick#FALL_TICKS}). About 40 s more than {@code round_seconds} on the shipped
+     * floors; the countdown before it is added by the caller.
+     */
+    static long tailTicks(RoundSettings rs, FloorLayout l) {
+        long teleports = (rs.maxPlayers() + RoundSettings.TELEPORTS_PER_TICK - 1) / RoundSettings.TELEPORTS_PER_TICK;
+        return teleports + RoundSettings.HOLD_TICKS + FloorRules.of(l, rs).goneBy() + ArenaTick.FALL_TICKS + 1;
     }
 
     /** Every position a round player's move reached this tick (the floors are marked by each). */
@@ -295,7 +349,9 @@ public final class ArenaService {
             case RoundEvent.RoundStarting s -> roundStarting(s);
             case RoundEvent.TeleportTo t -> {
                 moves.remove(t.player());
-                host.teleport(t.player(), world, site.spawn(arena.layout(), t.spawn()));
+                if (!host.teleport(t.player(), world, site.spawn(arena.layout(), t.spawn()))) {
+                    notOnSpawn(t.player());
+                }
             }
             case RoundEvent.HoldStarted h -> {
                 // the 3-2-1 is shown tick by tick (tickUi)
@@ -329,9 +385,7 @@ public final class ArenaService {
         hideBars();
         roundWeek = site.week();
         for (UUID p : s.players()) {
-            if (uncollided.add(p)) {
-                host.collidable(p, false);
-            }
+            noCollisions(p);
             giveKit(p, new ArenaHost.Kit(ArenaHost.KitKind.ROUND, false, false));
             host.tell(p, FloorsText.roundStarting(s.round(), s.players().size(), s.solo()));
         }
@@ -339,6 +393,22 @@ public final class ArenaService {
             giveKit(p, new ArenaHost.Kit(ArenaHost.KitKind.WATCH, false, false));
             host.tell(p, FloorsText.ROUND_WITHOUT_YOU);
         }
+    }
+
+    /**
+     * A round player whose spawn teleport failed (offline, or the server refused it) never plays on
+     * the floors from wherever they are: they are out of the round before Go and watch it from the
+     * gallery (F review #3). A round left with too few is called off, as for a leaver.
+     */
+    private void notOnSpawn(UUID p) {
+        if (!round.unseat(p)) {
+            return;
+        }
+        moves.remove(p);
+        restoreCollision(p);
+        host.logger().info("Falling Floors: " + host.name(p) + " couldn't be moved to a spawn - they watch this round");
+        host.tell(p, FloorsText.NO_SPAWN);
+        giveKit(p, new ArenaHost.Kit(ArenaHost.KitKind.WATCH, false, false));
     }
 
     private void out(RoundEvent.Out o) {
@@ -463,10 +533,11 @@ public final class ArenaService {
         if (host.world(world) == null) {
             host.logger().warning("Falling Floors: the world " + world + " went away during a reset");
             cancelJob();
-            failedResets++;
-            verified = false;
-            lastResetError = "the world " + world + " went away";
-            round.resetDone(jobTicket, false);
+            if (round.resetDone(jobTicket, false)) { // a stale job's answer changes nothing (#10)
+                failedResets++;
+                verified = false;
+                lastResetError = "the world " + world + " went away";
+            }
             return;
         }
         budget.begin(budget(), host.anyoneOnline(), host.mspt());
@@ -486,23 +557,28 @@ public final class ArenaService {
                 claimScanned(done);
                 return;
             }
-            resets++;
-            resetWrites = done.writes();
-            resetTicks = ticks - jobStarted;
-            verified = true;
-            closedNote = null;
-            round.resetDone(jobTicket, true);
+            // only the answer to the latest request counts: a job a newer request replaced (last
+            // week's plan, say) never marks the box verified or counts as a reset (#10)
+            if (round.resetDone(jobTicket, true)) {
+                resets++;
+                resetWrites = done.writes();
+                resetTicks = ticks - jobStarted;
+                verified = true;
+                closedNote = null;
+            }
         } else if (job.failed()) {
             BuildJob failed = job;
             job = null;
             failed.release();
-            failedResets++;
-            verified = false; // nobody new comes in until a verify passes again
-            lastResetError = failed.error();
-            closedNote = failed.firstFound().isEmpty() ? null : "first at " + String.join(" ", failed.firstFound());
-            host.logger().warning("Falling Floors: the reset failed (try " + round.resetAttempt() + " of "
-                    + RoundSettings.RESET_ATTEMPTS + "): " + lastResetError);
-            round.resetDone(jobTicket, false);
+            int attempt = round.resetAttempt();
+            if (round.resetDone(jobTicket, false)) {
+                failedResets++;
+                verified = false; // nobody new comes in until a verify passes again
+                lastResetError = failed.error();
+                closedNote = failed.firstFound().isEmpty() ? null : "first at " + String.join(" ", failed.firstFound());
+                host.logger().warning("Falling Floors: the reset failed (try " + attempt + " of "
+                        + RoundSettings.RESET_ATTEMPTS + "): " + lastResetError);
+            }
         }
     }
 
@@ -655,8 +731,9 @@ public final class ArenaService {
      * are in, or why not (their session should then end).
      */
     public String joined(UUID player) {
-        if (round == null || site == null) {
-            return FloorsText.FIXING;
+        if (round == null || site == null || !verified) {
+            // a verify that failed while they were on their way: nobody comes into a gallery not checked (#4)
+            return round != null && round.phase() == ArenaRound.Phase.CLOSED ? ArenaText.closed() : FloorsText.FIXING;
         }
         ArenaRound.Join j = round.join(player);
         if (j != ArenaRound.Join.JOINED && j != ArenaRound.Join.ALREADY_IN) {
@@ -722,7 +799,7 @@ public final class ArenaService {
         if (round == null) {
             return;
         }
-        ArenaRound.Solo s = round.solo(player, hold);
+        ArenaRound.Solo s = round.solo(player, restartClose(host.now(), 0)); // a solo round has no countdown
         String why = s == ArenaRound.Solo.HELD ? ArenaText.hold(host.heldFor() == null ? "soon" : host.heldFor())
                 : ArenaText.solo(s);
         if (why != null) {
@@ -734,9 +811,28 @@ public final class ArenaService {
         return rs.solo() && round.members().size() == 1 && round.isMember(player);
     }
 
+    /**
+     * Nobody can push or shove a round player: collisions off (mobs) and on the games' no-push team
+     * (players: {@code setCollidable} alone doesn't stop them, F review #1).
+     */
+    private void noCollisions(UUID player) {
+        if (uncollided.add(player)) {
+            host.collidable(player, false);
+            NoPush np = host.noPush();
+            if (np != null) {
+                np.on(player, host.name(player));
+            }
+        }
+    }
+
+    /** Collisions back and off the no-push team: every way off the floors comes through here. */
     private void restoreCollision(UUID player) {
         if (uncollided.remove(player)) {
             host.collidable(player, true);
+            NoPush np = host.noPush();
+            if (np != null) {
+                np.off(player, null); // only what this game did: the entry it put on the team
+            }
         }
     }
 

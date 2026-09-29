@@ -1587,9 +1587,9 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - **Open it:** `/hcm play falling_floors` (or `/hcm play tnt_run`), or its tile on the Together tab of the Games screen. The tile's name says how many are playing: "Falling Floors - 2 playing · join!". One tap takes you in. The owner switches it on; it ships switched off.
 - **Costs:** Free. No tokens go in. It is a skill game, not a game of chance.
 - **It's TNT Run without any TNT.** Nothing explodes. A block you stand on turns red, and half a second later it's gone.
-- **Where you go:** the gallery, a walkway with glass rails all round the edge of the arena. It's where you wait, where you watch, and where you go when you're out. Nobody can jump in or fall out. Your things are kept safe and come back when you leave, like every world game.
+- **Where you go:** the gallery, a glass walkway with glass rails all round the edge of the arena. It's where you wait, where you watch, and where you go when you're out. Nobody can jump in or fall out. Your things are kept safe and come back when you leave, like every world game.
 - **The kit:** Ready (tap when you're set), Play solo (only when you're the only one there) and Leave game (click twice). Everyone in the gallery plays the next round.
-- **When a round starts:** when two players press Ready, a 10-second bar counts down. It also starts by itself 20 seconds after a second player arrives. Everyone goes to a spot on the top floor, waits 3-2-1, and then Go! Nobody can push anybody.
+- **When a round starts:** when enough players press Ready (two, unless the owner changes it), a 10-second bar counts down. It also starts by itself 20 seconds after a second player arrives. Everyone goes to a spot on the top floor, waits 3-2-1, and then Go! Nobody can push anybody.
 - **The floors:** three glass floors, 8 blocks apart: yellow on top, then pink, then light blue. Standing still doesn't help, and nor does jumping in place: the block under you turns red and drops. Fall below the bottom floor and you're out. You go back to the gallery with your time: "You lasted 0:42 - 3rd of 6!". Three floors means three chances.
 - **Every round ends:** after 3 minutes (by default) the edges start falling in, one ring every 2 seconds.
 - **Winning:** the last one standing wins. Players who go out on the same moment share their place. Wins go on this week's wins board.
@@ -1597,7 +1597,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - **Tokens (by default):** 1 token for your first full round of the day (a round played out with others, or 20 seconds solo); solo milestones of 30, 60 and 120 seconds pay 1, 2 and 3 tokens, once ever; and the usual bonus when it's Today's pick. At most 3 tokens a day from Falling Floors. **Winning pays nothing extra.** Leaving a round early earns nothing.
 - **Achievement:** "Last a whole minute on Falling Floors" (15 tokens).
 - **A new arena every week:** each floor is a different shape: a disc, a rounded square, a ring with an island, a plus or a diamond.
-- **Between rounds** the floors are put back, and the next round starts on whole floors a couple of seconds later. Just before a planned restart, no new round starts; a round already going finishes.
+- **Between rounds** the floors are put back, and the next round starts on whole floors a couple of seconds later. Just before a planned restart, no new round starts (and none starts that couldn't finish before it); a round already going finishes.
 - **Website feed:** `falling_floors` is in `games` with `kind: "arena"`, this week's `shape` (the top floor's: `disc`, `square`, `ring`, `plus` or `diamond`) and `top`: this week's longest solo times, in ms, longest first.
 <!-- ---- end Falling Floors ---- -->
 

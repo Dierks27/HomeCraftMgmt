@@ -10,6 +10,7 @@ import com.dierks.homecraft.games.GameContext;
 import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GameSpec;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.NoPush;
 import com.dierks.homecraft.games.arena.rules.ArenaScoring;
 import com.dierks.homecraft.games.arena.rules.ArenaText;
 import com.dierks.homecraft.games.arena.rules.RoundSettings;
@@ -23,13 +24,24 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Cancellable;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.block.SignChangeEvent;
+import org.bukkit.event.entity.EntityPlaceEvent;
+import org.bukkit.event.hanging.HangingPlaceEvent;
+import org.bukkit.event.player.PlayerBucketEmptyEvent;
+import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.logging.Logger;
 
@@ -195,11 +207,9 @@ public final class FallingFloors implements Game {
         GamesService g = games();
         host = new LiveArenaHost(this);
         service = new ArenaService(host);
-        GenRegionGuard.register(g, this, () -> (world, x, y, z) -> {
-            ArenaService s = service;
-            return s != null && world != null && world.equalsIgnoreCase(s.world()) && s.box().contains(x, y, z);
-        }, log());
-        g.on(this, PlayerMoveEvent.class, EventPriority.HIGH, true, this::hold);
+        GenRegionGuard.register(g, this, () -> (world, x, y, z) -> inBox(service, world, x, y, z), log());
+        guardEdits(g);
+        g.on(this, PlayerMoveEvent.class, EventPriority.HIGH, true, e -> hold(service, e));
         g.on(this, PlayerMoveEvent.class, EventPriority.MONITOR, true, this::moved);
         g.every(this, 1, 1, () -> {
             ArenaService s = service;
@@ -226,11 +236,8 @@ public final class FallingFloors implements Game {
      */
     private boolean settingsChanged(ArenaService s) {
         LiveArenaHost h = host;
-        if (h == null || s.builtWith(settings(), h.worldName())) {
+        if (h == null || !startAgain(s, settings(), h.worldName())) {
             return false;
-        }
-        if (s.round() != null && s.round().phase().inRound()) {
-            return false; // the round going finishes on the arena it started on
         }
         log().info("Falling Floors: its settings changed - starting its arena again");
         List<UUID> members = s.round() == null ? List.of() : s.round().members();
@@ -245,6 +252,18 @@ public final class FallingFloors implements Game {
         }
         service.start();
         return true;
+    }
+
+    /**
+     * Whether a running arena must make way for a new one: it was made for other settings (a box,
+     * world or round knob that changed), and no round is going (that one finishes on the arena it
+     * started on).
+     */
+    static boolean startAgain(ArenaService s, FallingFloorsSettings now, String worldName) {
+        if (s == null || s.builtWith(now, worldName)) {
+            return false;
+        }
+        return s.round() == null || !s.round().phase().inRound();
     }
 
     /** Stop: collisions back, bars away, no reset left running. Sessions are the framework's to end. */
@@ -279,8 +298,19 @@ public final class FallingFloors implements Game {
         if (s != null) {
             s.left(player.getUniqueId());
         }
+        collisionsBack(player, games().noPush());
+    }
+
+    /**
+     * However a session ended (even with no arena left to ask), the player collides again and is off
+     * the no-push team, back on their own team.
+     */
+    static void collisionsBack(Player player, NoPush noPush) {
         if (player.isOnline() && !player.isCollidable()) {
-            player.setCollidable(true); // however the session ended, collisions come back
+            player.setCollidable(true);
+        }
+        if (noPush != null && noPush.isOn(player.getUniqueId())) {
+            noPush.off(player);
         }
     }
 
@@ -331,14 +361,21 @@ public final class FallingFloors implements Game {
         games().sessions().enter(p, this, ArenaService.REF, at, this::arrived);
     }
 
-    /** In, saved and cleared: into the arena (the kit comes with it), or home again if it closed meanwhile. */
+    /**
+     * In, saved and cleared: into the arena (the kit comes with it), or home again if it closed, or
+     * its floors failed a verify, meanwhile.
+     */
     private void arrived(Player p) {
-        ArenaService s = service;
-        String why = s == null ? ArenaText.closed() : s.joined(p.getUniqueId());
+        String why = arrival(service, p.getUniqueId());
         if (why != null) {
             p.sendMessage(Text.of(why));
             games().sessions().leave(p, EndReason.FINISH);
         }
+    }
+
+    /** Why a player whose session is ready can't come into the arena after all, or {@code null} (they're in). */
+    static String arrival(ArenaService s, UUID player) {
+        return s == null ? ArenaText.closed() : s.joined(player);
     }
 
     private static void refuse(Player p, String line) {
@@ -349,8 +386,7 @@ public final class FallingFloors implements Game {
     // ---- moves ------------------------------------------------------------------------------------
 
     /** On a spawn waiting for Go: held in place, free to look around (the trials hold). */
-    private void hold(PlayerMoveEvent e) {
-        ArenaService s = service;
+    static void hold(ArenaService s, PlayerMoveEvent e) {
         if (s == null || !e.hasExplicitlyChangedPosition() || !s.held(e.getPlayer().getUniqueId())) {
             return;
         }
@@ -369,6 +405,49 @@ public final class FallingFloors implements Game {
         Location to = e.getTo();
         Location from = e.getFrom();
         s.moved(e.getPlayer().getUniqueId(), to.getX(), to.getY(), to.getZ(), to.getY() - from.getY());
+    }
+
+    // ---- the box's own words for an edit (F review #9) ----------------------------------------------
+
+    /** Whether (x, y, z) in {@code world} is inside the running arena's box. */
+    static boolean inBox(ArenaService s, String world, int x, int y, int z) {
+        return s != null && world != null && world.equalsIgnoreCase(s.world()) && s.box().contains(x, y, z);
+    }
+
+    /**
+     * A player's edit inside the box (admins too) is refused here, before Fresh Courses' own area
+     * guard ({@link GenRegionGuard}, which skips an edit already refused), so the line names this
+     * arena and {@code /hcm games floors}, not Fresh Courses. Everything else changing the box
+     * (flowing, forming, pistons, explosions) is still the area guard's.
+     */
+    private void guardEdits(GamesService g) {
+        EventPriority p = EventPriority.LOWEST;
+        g.on(this, BlockPlaceEvent.class, p, true, e -> refuseEdit(e, e.getPlayer(), e.getBlock()));
+        g.on(this, BlockBreakEvent.class, p, true, e -> refuseEdit(e, e.getPlayer(), e.getBlock()));
+        g.on(this, PlayerBucketEmptyEvent.class, p, true, e -> refuseEdit(e, e.getPlayer(), e.getBlock()));
+        g.on(this, PlayerBucketFillEvent.class, p, true, e -> refuseEdit(e, e.getPlayer(), e.getBlock()));
+        g.on(this, SignChangeEvent.class, p, true, e -> refuseEdit(e, e.getPlayer(), e.getBlock()));
+        g.on(this, HangingPlaceEvent.class, p, true,
+                e -> refuseEdit(e, e.getPlayer(), e.getEntity().getLocation().getBlock()));
+        g.on(this, EntityPlaceEvent.class, p, true,
+                e -> refuseEdit(e, e.getPlayer(), e.getEntity().getLocation().getBlock()));
+    }
+
+    private final Map<UUID, Long> toldGuarded = new HashMap<>();
+
+    private void refuseEdit(Cancellable e, Player player, Block block) {
+        if (block == null || !inBox(service, block.getWorld().getName(), block.getX(), block.getY(), block.getZ())) {
+            return;
+        }
+        e.setCancelled(true);
+        if (player != null) {
+            long now = System.currentTimeMillis();
+            Long last = toldGuarded.get(player.getUniqueId());
+            if (last == null || now - last >= 2_000L) {
+                toldGuarded.put(player.getUniqueId(), now);
+                player.sendActionBar(Text.of(FloorsText.GUARDED));
+            }
+        }
     }
 
     // ---- for the host and the admin tool ----------------------------------------------------------

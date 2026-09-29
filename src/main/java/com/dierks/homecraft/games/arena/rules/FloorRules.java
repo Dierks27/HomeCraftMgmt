@@ -30,8 +30,13 @@ public final class FloorRules {
 
     /** How far above a floor top the feet may be and still mark it (a landing is caught early). */
     public static final double STAND_ABOVE = 0.1;
-    /** Slack below a top for rounding: feet at 200.9999999 are on the floor at 201. */
-    public static final double STAND_BELOW = 1e-6;
+    /**
+     * Slack below a top for rounding: feet at 200.9999 are on the floor at 201. The server accepts
+     * feet up to 1e-5 inside a block (its collision check shrinks the player's box by that much), and
+     * a Bedrock player's position comes through Geyser as a float, a few millionths off: both still
+     * stand on it (the F review's #12; with 1e-6 such a player never marked the floor).
+     */
+    public static final double STAND_BELOW = 1e-4;
     /** Half a player's width: the footprint is 0.6 x 0.6. */
     public static final double HALF_WIDTH = 0.3;
     /** A footprint that only touches a cell's edge isn't on it (and float sums land on edges). */

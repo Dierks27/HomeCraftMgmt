@@ -57,6 +57,11 @@ class ArenaValidatorTest {
                 "only the " + rule + " rule refuses it: " + problems);
     }
 
+    /** The gallery walk's palette entry in the planner's plans. */
+    private static short walkState() {
+        return (short) good().plan().palette().indexOf(ArenaPlanner.WALK);
+    }
+
     @Test
     void aGoodPlanPasses() {
         assertEquals(List.of(), ArenaValidator.problems(good()), "the planner's plan is fine");
@@ -66,7 +71,7 @@ class ArenaValidatorTest {
     @Test
     void theBoxRule() {
         List<BlockOp> ops = ops();
-        ops.add(new BlockOp(BOX.maxX() + 1, 206, BOX.minZ() + 20, (short) 4));
+        ops.add(new BlockOp(BOX.maxX() + 1, 206, BOX.minZ() + 20, walkState()));
         refusedBy("box", withOps(ops));
         ArenaSite s = good();
         refusedOnlyBy("box", with(s, Box.sized(BOX.minX(), BOX.minY(), BOX.minZ(), 48, 41, 48), s.plan().palette(),
@@ -76,7 +81,7 @@ class ArenaValidatorTest {
     @Test
     void theOpsRule() {
         List<BlockOp> ops = ops();
-        BlockOp walk = new BlockOp(BOX.minX() + 1, 206, BOX.minZ() + 1, (short) 4);
+        BlockOp walk = new BlockOp(BOX.minX() + 1, 206, BOX.minZ() + 1, walkState());
         while (ops.size() <= ArenaPlanner.MAX_OPS) {
             ops.add(walk);
         }

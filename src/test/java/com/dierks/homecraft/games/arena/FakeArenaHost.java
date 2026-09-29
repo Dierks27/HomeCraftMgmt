@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.arena;
 
+import com.dierks.homecraft.games.NoPush;
 import com.dierks.homecraft.games.arena.rules.Feet;
 import com.dierks.homecraft.games.arena.rules.RoundResult;
 import com.dierks.homecraft.games.gen.api.Box;
@@ -73,6 +74,54 @@ final class FakeArenaHost implements ArenaHost {
     final Map<UUID, P> players = new LinkedHashMap<>();
     boolean holding;
     String heldFor;
+    /** The next restart (epoch ms), -1 for none. */
+    long nextRestart = -1;
+    /** Players whose next teleports the server refuses. */
+    final java.util.Set<UUID> teleportFails = new java.util.HashSet<>();
+    /** The main scoreboard's teams, entry → team, and the no-push helper over them. */
+    final Map<String, String> teams = new HashMap<>();
+    final java.util.Set<String> teamNames = new java.util.HashSet<>();
+    final NoPush noPush = new NoPush(() -> new NoPush.Board() {
+        @Override
+        public String teamOf(String entry) {
+            return teams.get(entry);
+        }
+
+        @Override
+        public void ensureNoCollision(String team) {
+            teamNames.add(team);
+        }
+
+        @Override
+        public boolean exists(String team) {
+            return teamNames.contains(team);
+        }
+
+        @Override
+        public void add(String team, String entry) {
+            if (teamNames.contains(team)) {
+                teams.put(entry, team);
+            }
+        }
+
+        @Override
+        public void remove(String team, String entry) {
+            if (team.equals(teams.get(entry))) {
+                teams.remove(entry);
+            }
+        }
+
+        @Override
+        public java.util.Set<String> entries(String team) {
+            java.util.Set<String> out = new java.util.HashSet<>();
+            teams.forEach((e, t) -> {
+                if (t.equals(team)) {
+                    out.add(e);
+                }
+            });
+            return out;
+        }
+    });
     double mspt = 20;
     final List<RoundResult> scored = new ArrayList<>();
     final List<Long> scoredWeeks = new ArrayList<>();
@@ -202,6 +251,11 @@ final class FakeArenaHost implements ArenaHost {
     }
 
     @Override
+    public long nextRestart() {
+        return nextRestart;
+    }
+
+    @Override
     public String heldFor() {
         return heldFor;
     }
@@ -213,13 +267,15 @@ final class FakeArenaHost implements ArenaHost {
     }
 
     @Override
-    public void teleport(UUID player, String world, ArenaSite.Spot spot) {
+    public boolean teleport(UUID player, String world, ArenaSite.Spot spot) {
         P p = players.get(player);
-        if (p != null) {
-            p.world = world;
-            p.at(spot.x(), spot.y(), spot.z());
-            p.teleports++;
+        if (p == null || !p.online || teleportFails.contains(player)) {
+            return false;
         }
+        p.world = world;
+        p.at(spot.x(), spot.y(), spot.z());
+        p.teleports++;
+        return true;
     }
 
     @Override
@@ -249,6 +305,16 @@ final class FakeArenaHost implements ArenaHost {
             p.collidable = on;
             p.collisions.add(on);
         }
+    }
+
+    @Override
+    public NoPush noPush() {
+        return noPush;
+    }
+
+    /** The main-scoreboard team a player's entry is on now, or {@code null}. */
+    String teamOf(P p) {
+        return teams.get(p.name);
     }
 
     @Override

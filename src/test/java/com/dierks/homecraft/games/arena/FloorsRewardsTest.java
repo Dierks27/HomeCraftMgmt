@@ -69,10 +69,19 @@ class FloorsRewardsTest {
 
         @Override
         public int pay(UUID player, ArenaScoring.Claim claim) {
+            return paid(player, claim, "pay ");
+        }
+
+        @Override
+        public int payWhole(UUID player, ArenaScoring.Claim claim) {
+            return paid(player, claim, "pay whole ");
+        }
+
+        private int paid(UUID player, ArenaScoring.Claim claim, String how) {
             if (!paid.add(player + "|" + claim.kind() + "|" + claim.ref())) {
                 return 0;
             }
-            calls.add("pay " + name(player) + " " + claim.kind() + " " + claim.ref() + " " + claim.tokens());
+            calls.add(how + name(player) + " " + claim.kind() + " " + claim.ref() + " " + claim.tokens());
             tokens += claim.tokens();
             return claim.tokens();
         }
@@ -113,10 +122,10 @@ class FloorsRewardsTest {
         FakeLedger l = new FakeLedger();
         FloorsRewards.apply(solo(ANN, 65 * 20, OutReason.FELL), DAY, WEEK, SHIPPED, 0, l);
         assertEquals(List.of("best Ann ffsolo:" + WEEK + " 65000",
-                "pay Ann MILESTONE ms:ffsolo:1 1",
-                "pay Ann MILESTONE ms:ffsolo:2 2",
+                "pay whole Ann MILESTONE ms:ffsolo:1 1",
+                "pay whole Ann MILESTONE ms:ffsolo:2 2",
                 "pay Ann DAILY_CHALLENGE daily:" + DAY + " 1"), l.calls,
-                "the board first, then 30 s and 60 s (not 120 s yet), then today's daily");
+                "the board first, then 30 s and 60 s (not 120 s yet) whole or not at all, then today's daily");
         assertEquals(SkillRewards.milestoneRef("ffsolo", 1), ArenaScoring.milestoneRef(1), "the one spelling of the ref");
         assertEquals(SkillRewards.dailyRef(DAY), ArenaScoring.dailyRef(DAY), "the one spelling of the daily ref");
         assertEquals(List.of(ANN), l.minutes, "a whole minute counts toward game_floors_minute");
@@ -210,9 +219,19 @@ class FloorsRewardsTest {
 
             @Override
             public int pay(UUID player, ArenaScoring.Claim c) {
+                return paid(player, c, false);
+            }
+
+            @Override
+            public int payWhole(UUID player, ArenaScoring.Claim c) {
+                return paid(player, c, true);
+            }
+
+            private int paid(UUID player, ArenaScoring.Claim c, boolean whole) {
                 try {
                     return dao.payReward(player, FloorsRewards.GAME, TokenService.Source.GAMES_FLOORS, day, c.kind(),
-                            c.ref(), c.tokens(), c.kind().acrossGames() ? -1 : dailyCap, 6, true, c.detail(), NOW);
+                            c.ref(), c.tokens(), c.kind().acrossGames() ? -1 : dailyCap, 6, true, whole, c.detail(),
+                            NOW);
                 } catch (SQLException e) {
                     throw new IllegalStateException(e);
                 }
@@ -261,6 +280,22 @@ class FloorsRewardsTest {
         FloorsRewards.apply(solo(BEN, 30 * 20, OutReason.FELL), DAY + 7, nextWeek, SHIPPED, 0, db(DAY + 7, 10));
         assertEquals(125_000L, dao.best(BEN, FloorsRewards.GAME, ArenaScoring.soloBoard(nextWeek)),
                 "a shorter round keeps the best");
+    }
+
+    /**
+     * F review #5: a milestone the day's cap can pay only part of is paid whole another day, never
+     * recorded short for ever (before, 1 of its 2 tokens was paid and its once-ever ref kept).
+     */
+    @Test
+    void aMilestoneTheCapCanOnlyPayPartOfWaitsWholeForAnotherDay() throws Exception {
+        FloorsRewards.apply(solo(ANN, 65 * 20, OutReason.FELL), DAY, WEEK, SHIPPED, 0, db(DAY, 2));
+        assertEquals(1 + 1, balance(ANN), "30 s (1), then 60 s (2) can't be paid whole with 1 left, so the daily (1)");
+        assertTrue(!dao.rewardPaid(ANN, FloorsRewards.GAME, RewardKind.MILESTONE, ArenaScoring.milestoneRef(2)),
+                "the 60 s milestone isn't recorded: it is still there to earn");
+        FloorsRewards.apply(solo(ANN, 65 * 20, OutReason.FELL), DAY + 1, WEEK, SHIPPED, 0, db(DAY + 1, 2));
+        assertEquals(2 + 2, balance(ANN), "the next day it is paid whole: 2");
+        assertTrue(dao.rewardPaid(ANN, FloorsRewards.GAME, RewardKind.MILESTONE, ArenaScoring.milestoneRef(2)),
+                "and now it is once ever");
     }
 
     @Test

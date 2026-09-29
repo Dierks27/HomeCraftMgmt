@@ -41,7 +41,7 @@ import java.util.TreeSet;
 public final class ArenaPlanner {
 
     /** The planner's version: part of the plan, so a change of algorithm is a change of plan. */
-    public static final int ALGO = 1;
+    public static final int ALGO = 2; // 2: the gallery walk is glass (was white concrete, where mobs could spawn)
     /** The plan's "slot" name, and the seed's label. */
     public static final String SLOT = "falling_floors";
 
@@ -76,8 +76,12 @@ public final class ArenaPlanner {
 
     /** The floors' colours, top to bottom (the colour language: red is "about to fall"). */
     public static final List<String> FLOOR_COLOURS = List.of("yellow", "pink", "light_blue");
-    /** The gallery's walk and rails. */
-    public static final String WALK = "minecraft:white_concrete";
+    /**
+     * The gallery's walk and rails: clear glass, both. No mob can spawn on glass, so nothing spawns
+     * in the gallery whatever the world's rules (F review #6), and clear reads as "safe": the floors
+     * are coloured, and red falls.
+     */
+    public static final String WALK = Palette.GLASS;
     public static final String RAIL = Palette.GLASS;
 
     /** The shapes a floor can take, each with a few sizes that keep it near 450 cells. */
@@ -199,9 +203,11 @@ public final class ArenaPlanner {
             palette.add(Palette.stainedGlass(colour));
         }
         palette.add(RAIL);
-        palette.add(WALK);
-        short railState = (short) FLOOR_COLOURS.size();
-        short walkState = (short) (FLOOR_COLOURS.size() + 1);
+        if (!palette.contains(WALK)) {
+            palette.add(WALK);
+        }
+        short railState = (short) palette.indexOf(RAIL);
+        short walkState = (short) palette.indexOf(WALK);
 
         int x0 = box.minX() + FOOTPRINT_OFFSET;
         int z0 = box.minZ() + FOOTPRINT_OFFSET;

@@ -106,6 +106,12 @@ class FloorRulesTest {
                 "0.1 above and coming down: a landing is caught this tick");
         assertEquals(0, f.standingOn(new Feet(CX + 0.5, TOP - 1e-9, CZ + 0.5, 0)),
                 "a rounding hair below the top is still on it");
+        assertEquals(0, f.standingOn(new Feet(CX + 0.5, TOP - 1e-5, CZ + 0.5, 0)),
+                "the server's own slack (it takes feet up to 1e-5 into a block) is still on it (F review #12)");
+        double eyeThroughAFloat = (float) (TOP + 1.62); // a Bedrock position comes through Geyser as a float
+        assertEquals(0, f.standingOn(new Feet(CX + 0.5, eyeThroughAFloat - 1.62, CZ + 0.5, 0)),
+                "feet worked out from a float eye height (a few millionths under) are still on it");
+        assertEquals(-1, f.standingOn(new Feet(CX + 0.5, TOP - 0.01, CZ + 0.5, -0.1)), "a hundredth under is falling");
         assertEquals(-1, f.standingOn(new Feet(CX + 0.5, TOP + 0.11, CZ + 0.5, -0.3)), "0.11 above is in the air");
         assertEquals(-1, f.standingOn(new Feet(CX + 0.5, TOP, CZ + 0.5, 0.42)), "jumping off marks nothing");
         assertEquals(-1, f.standingOn(new Feet(CX + 0.5, TOP - 3, CZ + 0.5, -0.5)), "between floors, falling");

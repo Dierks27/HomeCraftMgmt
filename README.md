@@ -1248,14 +1248,18 @@ off (`games.falling_floors.enabled: false`).
 - **Joining is one tap.** `/hcm play falling_floors` (or `/hcm play tnt_run`), or its tile on the
   **Together** tab ("Falling Floors - 2 playing · join!"), takes you straight into the **gallery**, a
   railed walkway round the arena's edge. As in every world game your things are kept safe and come
-  back when you leave. The gallery is the lobby, the stand and where you go when you're out; its
-  glass rails are 2 high on both sides, so nobody can jump in or fall out. The kit's **Leave game**
-  (click twice) or `/hcm leave` is the way home.
+  back when you leave. The gallery is the lobby, the stand and where you go when you're out; it is
+  glass, walk and rails (no mob can spawn on glass), and its rails are 2 high on both sides, so
+  nobody can jump in or fall out. The kit's **Leave game** (click twice) or `/hcm leave` is the way
+  home.
 - **A round.** In the gallery the kit has **Ready**, **Play solo** (only while you're alone, with
   `solo` on) and **Leave game**. A round starts after a 10-second bar once `min_players` (2) press
   Ready, or by itself 20 seconds after a second player arrives. Everyone in the gallery plays, up to
   `max_players`. Players go to spread-out spots on the top floor two a tick, wait 3-2-1 (held in
-  place), then the floors start falling. Nobody can push anybody during a round.
+  place), then the floors start falling; anyone the server couldn't move to a spot watches that
+  round from the gallery instead. Nobody can push anybody during a round: the round's players are on
+  a main-scoreboard team, `hcm_nopush`, that never collides. A player on another plugin's
+  main-scoreboard team (nametag colours, say) comes off it for the round and goes back on it after.
 - **The floors.** Three floors 8 blocks apart: yellow on top, pink, light blue at the bottom. A block
   you stand on turns red at once and is gone `fade_ticks` (10 ticks) later, so standing still or
   jumping in place doesn't help: keep moving. Fall below the bottom floor and you're out, back in the
@@ -1276,13 +1280,17 @@ off (`games.falling_floors.enabled: false`).
   Leaving a round earns nothing. Lasting a whole minute counts toward the "Last a whole minute on
   Falling Floors" achievement (15).
 - **The restart hold:** in the minutes before a scheduled restart no new round starts (and nobody
-  new comes in); a round already going finishes.
+  new comes in); a round already going finishes. A countdown or solo round also doesn't start when
+  it might still be going at the next restart (at its longest: the 10-second countdown,
+  `round_seconds`, then about 40 seconds more while the edges fall in), and `/hcm games check` warns
+  when `round_seconds` is longer than `games.restart_hold_minutes`.
 - **Safety.** The arena is one box, 48 x 40 x 48 at `origin` (shipped x 5376-5423, y 176-215,
   z 4352-4399). Before anything is written it must be 32 blocks from every Fresh Courses area
   (switched on or not) and the kept courses, 16 from every hand-built course and from the world's
   spawn and `games.fresh.safe_spot`, and inside the world's heights and border. The first time, the
   box must be empty: anything in it closes the game, touching nothing, until `/hcm games floors claim
-  confirm`. After that nobody, admins included, can change a block in the box while the game is on,
+  confirm`. After that nobody, admins included, can change a block in the box while the game is on
+  ("This is the Falling Floors arena - it puts itself back. Use /hcm games floors."),
   and during a round the only blocks that change are floor blocks turning red, then air (at most 128
   a tick). After a crash, the next start puts every floor back before anyone comes in, and everyone's
   things come back as from any world game. A reset that can't put the floors back three times closes
@@ -1317,8 +1325,9 @@ off (`games.falling_floors.enabled: false`).
 5. The next round starts on whole floors a couple of seconds after the results.
 6. Stop the server mid-round: after the restart `/hcm games floors status` shows a reset first, the
    floors are whole before anyone can come in, and everyone's things are back.
-7. As an admin, try to break a floor or gallery block: refused. `/hcm games floors tp` takes you to
-   the gallery to watch.
+7. As an admin, try to break a floor or gallery block: refused, naming `/hcm games floors`.
+   `/hcm games floors tp` (refused until the floors are built and checked) takes you to the gallery
+   to watch.
 <!-- ---- end Falling Floors ---- -->
 
 ### Commands
@@ -1387,7 +1396,7 @@ clear times or high scores. A player in a world game can use only `/hcm play`, `
 | `/hcm games floors [status]` | `hcm.games.admin` | Falling Floors: this week's floors, the round, the floor writer, the resets, and why it is closed |
 | `/hcm games floors reset` | `hcm.games.admin` | Put the floors back and check them now (a round going finishes first); opens a closed arena again |
 | `/hcm games floors claim [confirm]` | `hcm.games.admin` | Whether its box is claimed; `confirm` claims it even with blocks in it (the next reset clears them) and opens it again |
-| `/hcm games floors tp` | `hcm.games.admin` | Into the gallery to watch (a plain teleport: not a game, nothing is taken) |
+| `/hcm games floors tp` | `hcm.games.admin` | Into the gallery to watch (a plain teleport: not a game, nothing is taken); refused until the floors are built and checked, when there may be nothing to stand on |
 | `/hcm arcade odds` | `hcm.arcade.use` | Players: one line per open game of chance. Admins: the per-stake detail, the Scratch Ticket and the crates |
 | `/hcm guide games` | `hcm.guide.use` | The Games page of How It Works |
 

@@ -203,6 +203,40 @@ class ArenaPlannerTest {
         assertFalse(s.inGallery(5378.5, 190, 4378.5), "under the gallery is not the gallery");
     }
 
+    /**
+     * F review #6: nothing in the arena is a block a mob can spawn on. The floors are stained glass,
+     * and the gallery's walk and rails are clear glass (the walk was white concrete, where mobs could
+     * spawn at night with Fresh Courses' world rules off).
+     */
+    @Test
+    void noMobCanSpawnAnywhereInTheArena() {
+        for (long seed : new long[]{1L, 42L, -7L}) {
+            ArenaSite s = site(seed);
+            for (BlockOp op : s.plan().ops()) {
+                String block = s.plan().blockOf(op);
+                assertTrue(block.equals("minecraft:glass") || block.endsWith("_stained_glass"),
+                        "glass only (no mob spawns on glass): " + block + " at " + op);
+            }
+        }
+        assertEquals("minecraft:glass", ArenaPlanner.WALK, "the gallery walk is clear glass");
+    }
+
+    /**
+     * The gallery's rails are taller than any jump: feet on the walk are 2 blocks under the rail's
+     * top, and a player jumps about 1.25 (the arena hands out nothing that jumps higher), so nobody
+     * hops out of the gallery or down onto the floors.
+     */
+    @Test
+    void theRailsAreTallerThanAnyJump() {
+        double jump = 1.2522; // a plain jump's apex, in blocks
+        assertTrue(ArenaPlanner.RAIL_HEIGHT > jump, "a " + ArenaPlanner.RAIL_HEIGHT + "-high rail can't be jumped");
+        ArenaSite s = site(3);
+        for (ArenaSite.Spot spot : s.gallerySpots()) {
+            double railTop = s.galleryY() + 1 + ArenaPlanner.RAIL_HEIGHT;
+            assertTrue(railTop - spot.y() > jump, "from " + spot + " the rail's top is out of reach");
+        }
+    }
+
     @Test
     void theSameWeekAlwaysMakesTheSameArenaAndTheHashesArePinned() {
         for (long seed : new long[]{1L, 42L, -7L}) {
@@ -228,9 +262,10 @@ class ArenaPlannerTest {
         assertEquals(20, weeks.size(), "twenty weeks, twenty different arenas");
     }
 
-    static final String GOLDEN_1 = "30987113ed3d";
-    static final String GOLDEN_42 = "0f9133ccea61";
-    static final String GOLDEN_MINUS_7 = "3fbe465dad77";
+    // ALGO 2: the gallery walk is glass (F review #6)
+    static final String GOLDEN_1 = "b7787b375c59";
+    static final String GOLDEN_42 = "3dfec1439b0d";
+    static final String GOLDEN_MINUS_7 = "907be954ed6a";
 
     @Test
     void theBoxMustBeTheArenasSizeAndTheShapesReadWell() {

@@ -37,6 +37,23 @@ class FloorsTextTest {
         assertEquals("&cLeave game", FloorsText.KIT_LEAVE, "the way out, as in every world game");
     }
 
+    /** F review #9: the Ready item says how many start a round, from min_players, not a fixed "two". */
+    @Test
+    void theReadyItemSaysHowManyStartARound() {
+        assertEquals(List.of("&7A round starts when 2 are ready,", "&7or 20 seconds after a friend comes."),
+                FloorsText.readyLore(2), "the shipped min_players");
+        assertTrue(FloorsText.readyLore(3).get(0).contains("when 3 are ready"), "min_players 3 says 3");
+    }
+
+    /** F review #9: an edit in the box names this arena and its own command, not Fresh Courses'. */
+    @Test
+    void anEditInTheBoxNamesTheArenasOwnCommand() {
+        assertTrue(FloorsText.GUARDED.contains("Falling Floors") && FloorsText.GUARDED.contains("/hcm games floors"),
+                FloorsText.GUARDED);
+        assertFalse(FloorsText.GUARDED.contains("Fresh Courses") || FloorsText.GUARDED.contains("games gen"),
+                "not Fresh Courses' words: " + FloorsText.GUARDED);
+    }
+
     @Test
     void theLinesAroundARound() {
         assertEquals("&7This week's floors: &fRing with an island, disc and plus&7.",
@@ -74,6 +91,8 @@ class FloorsTextTest {
         lines.add(FloorsRewards.bestLine(42_000, -1L));
         lines.add(FloorsRewards.bestLine(65_000, 42_000L));
         lines.addAll(ArenaAdmin.HELP);
+        lines.addAll(FloorsText.readyLore(3));
+        lines.add(ArenaAdmin.TP_NOT_BUILT);
         for (String line : lines) {
             assertTrue(line.codePoints().allMatch(c -> c <= 0xFFFF), "nothing above U+FFFF: " + line);
             String lower = line.toLowerCase(Locale.ROOT);

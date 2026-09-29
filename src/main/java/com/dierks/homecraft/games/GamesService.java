@@ -86,6 +86,8 @@ public final class GamesService {
     private final Invites invites;
     /** Every play-together party (EVENTS-OWNER-DECISIONS D4): one per player across the games. */
     private final Parties parties = new Parties();
+    /** The shared no-push team (the "player collisions" decision): players in a crowd can't shove. */
+    private final NoPush noPush = NoPush.live();
     private final Featured featured;
     /** Who hears about skill-game finishes (quests, achievements); {@link GameProgress#NONE} until registered. */
     private volatile GameProgress progress = GameProgress.NONE;
@@ -141,6 +143,14 @@ public final class GamesService {
      */
     public void start() {
         cancelSweep();
+        quietly(() -> {
+            int left = noPush.clearAll(); // the team is saved with the world: a crash leaves its members on it
+            if (left > 0) {
+                host.logger().warning("Games: " + left + " player(s) were still on the no-push team " + NoPush.TEAM
+                        + " from the last run (it ended without stopping the games). They are off it now; any"
+                        + " other main-scoreboard team they were on before could not be restored.");
+            }
+        });
         try {
             int pruned = dao().pruneDone(host.clock().nowMillis() - DONE_KEPT_MS);
             if (pruned > 0) {
@@ -216,6 +226,7 @@ public final class GamesService {
         }
         invites.clear();
         parties.clear();
+        quietly(noPush::offAll); // anyone a game left on the no-push team goes back to their own team
         featured.forget();
         // Anyone still in a session ends it the right way for a stop, and the guards come off.
         quietly(sessions::stop);
@@ -624,6 +635,15 @@ public final class GamesService {
      */
     public Parties parties() {
         return parties;
+    }
+
+    /**
+     * The shared no-push team ({@link NoPush}): a game puts a player on it where players crowd (the
+     * Dropper's shafts, Falling Floors, a race's start and stand) and takes them off on every way
+     * out. Emptied at start; everyone put back at stop.
+     */
+    public NoPush noPush() {
+        return noPush;
     }
 
     public Featured featured() {

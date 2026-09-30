@@ -290,7 +290,7 @@ class NightRunnerTest {
         NightRunner r = new NightRunner(plan, new NightRunner.Track(loop(), "Ice Loop", grid(), new Point(0, 70, 0)),
                 dao, ports, new PayLoop(dao, payer, () -> ports.now, Logger.getAnonymousLogger()), ZoneOffset.UTC,
                 SEASON, 30, EventMachine.State.scheduled());
-        r.prizeWeek(2920, 3);
+        r.prizeWeek(() -> 2920L, 3);
         return r;
     }
 

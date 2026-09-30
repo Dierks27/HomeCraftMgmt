@@ -756,11 +756,6 @@ public final class NightRunner implements RaceLink {
         this.perWeek = prizeEventsPerWeek;
     }
 
-    /** {@link #prizeWeek(java.util.function.LongSupplier, int)} with a week that never changes (the tests). */
-    public void prizeWeek(long weekKey, int prizeEventsPerWeek) {
-        prizeWeek(() -> weekKey, prizeEventsPerWeek);
-    }
-
     @Override
     public boolean alive() {
         return !state.phase().over();

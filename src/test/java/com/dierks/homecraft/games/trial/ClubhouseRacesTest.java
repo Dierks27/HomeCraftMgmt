@@ -502,7 +502,7 @@ class ClubhouseRacesTest {
         }, bench::now, Logger.getAnonymousLogger());
         NightRunner night = new NightRunner(plan, new NightRunner.Track(loop, loop.name(), grid, STAND), dao, ports, pay,
                 ZoneOffset.UTC, null, 30, EventMachine.State.scheduled());
-        night.prizeWeek(2920, 3);
+        night.prizeWeek(() -> 2920L, 3);
         return night;
     }
 

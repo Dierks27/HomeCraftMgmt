@@ -477,11 +477,22 @@ public final class RaceNight implements Game {
         changed();
     }
 
+    /**
+     * How each night made here reaches the server, by its id: {@link LivePorts}. The tests that race a
+     * night made here, with no server, give it a fake ({@link #portsFor(java.util.function.Function)}).
+     */
+    private java.util.function.Function<String, NightPorts> portsFor = id -> new LivePorts(this, id);
+
+    /** The tests: the ports the nights made from now on use (fx2-C #13: race 1's Go of a night made here). */
+    void portsFor(java.util.function.Function<String, NightPorts> ports) {
+        this.portsFor = ports;
+    }
+
     /** Start running {@code plan} on {@code track} from {@code state}. */
     NightRunner begin(EventPlan plan, NightRunner.Track track, EventMachine.State state) {
         RaceNightSettings s = settings();
         String season = s.seasonOn() ? EventCopy.seasonBoard(EventCopy.seasonKey(plan.startsAt(), zone())) : null;
-        NightRunner r = new NightRunner(plan, track, dao(), new LivePorts(this, plan.id()), payLoop(), zone(), season,
+        NightRunner r = new NightRunner(plan, track, dao(), portsFor.apply(plan.id()), payLoop(), zone(), season,
                 s.announceMinutes(), state);
         r.prizeWeek(() -> DailyLookup.weekKey(games()), s.prizeEventsPerWeek()); // the week at race 1's Go
         r.standRadius(s.standRadius()); // race mode keeps the stand, within this

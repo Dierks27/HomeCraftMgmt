@@ -29,7 +29,17 @@ public final class GamesBench {
      * {@code games}, economy world {@code world}).
      */
     public GamesBench(long now, List<GameSpec<?>> specs, Object... idThenSettings) {
-        host = new GamesKit.Host(now);
+        this(now, c -> c, specs, idThenSettings);
+    }
+
+    /**
+     * {@link #GamesBench(long, List, Object...)} with the framework's database reached through
+     * {@code wrap} (the real connection in, what the DAOs use out): a test that counts the statements
+     * something asks. {@link #connection()} stays the real one.
+     */
+    public GamesBench(long now, java.util.function.UnaryOperator<Connection> wrap, List<GameSpec<?>> specs,
+                      Object... idThenSettings) {
+        host = new GamesKit.Host(now, wrap);
         host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6), idThenSettings);
         games = GamesKit.service(host, specs);
     }

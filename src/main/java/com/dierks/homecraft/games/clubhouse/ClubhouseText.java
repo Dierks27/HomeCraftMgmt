@@ -50,8 +50,9 @@ public final class ClubhouseText {
     public static final String HOLD_HOME = "&7The Clubhouse is closing for the restart. Your things are back.";
 
     /**
-     * A race or a golf round that would end in the Clubhouse ends during the restart hold: home instead
-     * ({@link ClubDoor#closingForRestart}), and why.
+     * A race or a golf round that would end in the Clubhouse ends in the restart hold's last minute or
+     * so, too late to get the hold's minute there: home instead ({@link ClubDoor#closingForRestart}),
+     * and why.
      */
     public static final String HOLD_NOT_TAKEN = "&7The Clubhouse is closed for the restart, so you're going home."
             + " Your things are back.";

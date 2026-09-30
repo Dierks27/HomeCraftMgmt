@@ -23,10 +23,13 @@ import java.util.function.Predicate;
  *       for them is sent home, with a friendly warning a minute before;</li>
  *   <li>anyone here when the restart hold starts is warned and sent home a minute later, and in any
  *       case {@link #HOME_BEFORE_RESTART} before the restart's own minute starts, so nobody is ever
- *       here across a restart. Nobody is taken in during the hold ({@code Clubhouse.takeIn}: a race
- *       or a golf round that ends then sends its players home), so this minute is for those already
- *       here; the cap is for a short hold ({@code restart_hold_minutes: 1}), whose minute would
- *       otherwise end in the restart's own, and anyone who got in late some other way.</li>
+ *       here across a restart. Someone arriving during the hold from a race or a golf group already
+ *       going (CLUBHOUSE-SPEC §7) gets the same warning and minute; from
+ *       {@link #LAST_IN_BEFORE_RESTART} before the restart, when they could no longer get it, nobody
+ *       is taken in ({@link #closedForRestart}: {@code Clubhouse.takeIn}, and a race or a golf round
+ *       that ends then sends its players home). The cap is for a short hold
+ *       ({@code restart_hold_minutes: 1}), whose minute would otherwise end in the restart's own, and
+ *       anyone who got in late some other way.</li>
  * </ul>
  */
 public final class ClubVisits {
@@ -52,6 +55,15 @@ public final class ClubVisits {
      * home is over before it even when the second's timer runs a little late.
      */
     public static final long HOME_BEFORE_RESTART = 5_000L;
+
+    /**
+     * From this long before a restart's own minute to the end of it, the Clubhouse takes nobody in
+     * ({@link #closedForRestart}): 66 s, the hold's minute, {@link #HOME_BEFORE_RESTART} and the second
+     * the once-a-second check may take to see (and warn) a new arrival. Anyone taken in before then is
+     * warned and gets the whole minute, home before the restart; anyone after could not, so they go
+     * home instead of coming in.
+     */
+    public static final long LAST_IN_BEFORE_RESTART = MINUTE + HOME_BEFORE_RESTART + 1_000L;
 
     /** What {@link #second} says to do. */
     public enum What {
@@ -204,6 +216,20 @@ public final class ClubVisits {
         if (v != null) {
             v.spectator = on;
         }
+    }
+
+    /**
+     * Whether the Clubhouse takes nobody in at {@code now}: in the restart hold ({@code holding}), from
+     * {@link #LAST_IN_BEFORE_RESTART} before the restart ({@code restartAt}, the start of its minute,
+     * epoch ms; -1 for none known, which counts as closed) to the end of the hold (the end of the
+     * restart's own minute). Earlier in the hold the Clubhouse still takes in players arriving from a
+     * race, Race Night or a golf group already going (CLUBHOUSE-SPEC §7: "no new Clubhouse visits during
+     * it, except arriving from a race already under way"); they are warned and home a minute later with
+     * everyone. New visits ({@code /hcm play clubhouse}) are refused for the whole hold by the
+     * framework's own entry check.
+     */
+    public static boolean closedForRestart(long now, boolean holding, long restartAt) {
+        return holding && (restartAt < 0 || now >= restartAt - LAST_IN_BEFORE_RESTART);
     }
 
     /**

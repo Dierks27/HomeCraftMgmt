@@ -37,17 +37,19 @@ public final class ClubNight {
 
     /**
      * Whether the Clubhouse takes the night's racers when done: open, {@code race_night_after}, the
-     * track's world, and not in the restart hold.
+     * track's world, and not closing for a restart ({@link ClubDoor#closingForRestart}).
      */
     static boolean takes(GamesService games, String trackWorld) {
         return takes(Clubhouse.door(games), trackWorld);
     }
 
     /**
-     * {@link #takes(GamesService, String)} through {@code club} ({@code null}: none). Never during the
-     * restart hold ({@link ClubDoor#closingForRestart}): a night that ends in it (a race that ran long)
-     * sends its racers home with its own home line, never "Everyone to the Clubhouse!" to a Clubhouse
-     * that would have them there across the restart.
+     * {@link #takes(GamesService, String)} through {@code club} ({@code null}: none). Never while the
+     * Clubhouse is closing for a restart ({@link ClubDoor#closingForRestart}: the hold's last minute or
+     * so): a night that ends then (a race that ran long) sends its racers home with its own home line,
+     * never "Everyone to the Clubhouse!" to a Clubhouse that would have them there across the restart.
+     * A night that ends earlier in the hold still goes there, and its racers are warned and sent home a
+     * minute later with everyone (CLUBHOUSE-SPEC §7).
      */
     public static boolean takes(ClubDoor club, String trackWorld) {
         return club != null && club.nightAfter() && !club.closingForRestart() && trackWorld != null

@@ -35,7 +35,7 @@ class ClubGolfTest {
     private static final class Door implements ClubDoor {
         final Map<UUID, ClubVisits.Kind> in = new LinkedHashMap<>();
         boolean golfAfter = true;
-        /** The restart hold is on: the real Clubhouse takes nobody in. */
+        /** Closing for a restart (the hold's last 66 s and the restart's own minute): the real one takes nobody in. */
         boolean closing;
         ClubBoard.Sheet sheet;
         final List<UUID> handedOut = new ArrayList<>();
@@ -137,12 +137,13 @@ class ClubGolfTest {
     }
 
     /**
-     * The PRODBUG the journeys found, for golf together: a group whose round ends during the restart hold went
-     * into the Clubhouse (in its last minute, still there at the restart). Now they go home with the group's
-     * card, as with no Clubhouse, and nothing of the Clubhouse's is touched.
+     * The PRODBUG the journeys found, for golf together: a group whose round ends in the restart hold's last
+     * minute went into the Clubhouse, still there at the restart. While the Clubhouse is closing for the restart
+     * they go home with the group's card, as with no Clubhouse, and nothing of the Clubhouse's is touched. A
+     * group that ends earlier in the hold still goes there (CLUBHOUSE-SPEC §7).
      */
     @Test
-    void aGroupThatEndsInTheRestartHoldGoesHomeAndLeavesTheClubhouseAlone() {
+    void aGroupThatEndsAsTheClubhouseClosesForTheRestartGoesHomeAndLeavesTheClubhouseAlone() {
         Door door = new Door();
         door.closing = true;
         int[] forgot = {0};

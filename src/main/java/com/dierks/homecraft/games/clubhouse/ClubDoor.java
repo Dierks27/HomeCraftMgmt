@@ -43,7 +43,7 @@ public interface ClubDoor {
     /**
      * Take a player from another game's session (a race, a round of golf) into the Clubhouse: moved
      * to an arrival spot inside their session (the teleport's result is checked), the session handed
-     * over, the Clubhouse's kit, and {@code line} to read. Never during the restart hold
+     * over, the Clubhouse's kit, and {@code line} to read. Never while it is closing for a restart
      * ({@link #closingForRestart}).
      *
      * @return whether they are in (false: the caller does what it always did, and sends them home)
@@ -51,10 +51,14 @@ public interface ClubDoor {
     boolean takeIn(Player p, ClubVisits.Kind kind, String line);
 
     /**
-     * Whether the restart hold is on ({@code games.restart_times}, to the end of the restart's own
-     * minute): the Clubhouse takes nobody in until it is over, since nobody may be in it across a
-     * restart ({@link ClubVisits}). A race, Race Night or a golf group that would end here asks first
-     * and sends its players home instead, each with its own home line; {@link #takeIn} refuses too.
+     * Whether the Clubhouse is closing for a restart ({@code games.restart_times}): in the restart
+     * hold, from {@link ClubVisits#LAST_IN_BEFORE_RESTART} (66 s) before the restart to the end of its
+     * own minute, when someone taken in could no longer get the hold's minute and be home before the
+     * restart ({@link ClubVisits#closedForRestart}; nobody may be in the Clubhouse across one). A race,
+     * Race Night or a golf group that would end here asks first and sends its players home instead,
+     * each with its own home line; {@link #takeIn} refuses too. Earlier in the hold it is false: a race
+     * or golf group already going still ends here (CLUBHOUSE-SPEC §7), and its players are warned and
+     * sent home a minute later with everyone.
      */
     default boolean closingForRestart() {
         return false;

@@ -78,7 +78,7 @@ class ClubhouseRacesTest {
         ClubBoard.Sheet result;
         List<UUID> podium;
         boolean open = true;
-        /** The restart hold is on ({@link #closingForRestart}). */
+        /** Closing for a restart ({@link #closingForRestart}: the hold's last 66 s and the restart's own minute). */
         boolean closing;
 
         @Override
@@ -348,16 +348,18 @@ class ClubhouseRacesTest {
     }
 
     /**
-     * The PRODBUG the journeys found: a racer who finished during the restart hold was taken into the Clubhouse
-     * (in its last minute, still there when the server stopped). {@code ClubRaces.toClub} now asks the door
-     * first and sends them home, as with no Clubhouse, reading why; the finish still counts once.
+     * The PRODBUG the journeys found: a racer who finished in the restart hold's last minute was taken into the
+     * Clubhouse, still there when the server stopped. {@code ClubRaces.toClub} now asks the door first
+     * ({@code closingForRestart}: from 66 s before the restart to the end of its minute) and then sends them
+     * home, as with no Clubhouse, reading why; the finish still counts once. Earlier in the hold the door is
+     * not closing, and a race's end comes in as always (CLUBHOUSE-SPEC §7; the journeys pin both sides).
      */
     @Test
-    void aPartyRacerWhoFinishesInTheRestartHoldGoesHomeNotToTheClubhouse() throws Exception {
+    void aPartyRacerWhoFinishesAsTheClubhouseClosesForTheRestartGoesHomeNotToTheClubhouse() throws Exception {
         clubOn();
         door.in.put(id(ava), ClubVisits.Kind.PARTY);
         door.in.put(id(ben), ClubVisits.Kind.PARTY);
-        door.closing = true; // the race went before the hold; the hold is on when it ends
+        door.closing = true; // the race went before the hold; it ends in the hold's last minute
         raceOnce(List.of(ava, ben, cal), List.of(ava, ben, cal), 180);
         assertEquals(1, race.fromClub.get(id(ava)), "Ava was seated from the Clubhouse");
         for (Player p : List.of(ava, ben, cal)) {
@@ -603,12 +605,13 @@ class ClubhouseRacesTest {
     }
 
     /**
-     * Race Night's end-of-night trip in the restart hold (its last race ran into it): the Clubhouse takes nobody
-     * then ({@code ClubNight.takes}), so everyone goes home with the night's own home line, never "Everyone to the
-     * Clubhouse!", and nothing goes on the Clubhouse's board or podium for a room that is emptying.
+     * Race Night's end-of-night trip in the restart hold's last minute (its last race ran into it): the Clubhouse
+     * is closing for the restart and takes nobody then ({@code ClubNight.takes}), so everyone goes home with the
+     * night's own home line, never "Everyone to the Clubhouse!", and nothing goes on the Clubhouse's board or
+     * podium for a room that is emptying. A night that ends earlier in the hold still goes there.
      */
     @Test
-    void raceNightEndingInTheRestartHoldSendsEveryoneHomeNotToTheClubhouse() {
+    void raceNightEndingAsTheClubhouseClosesForTheRestartSendsEveryoneHomeNotToTheClubhouse() {
         clubOn();
         door.in.put(id(ava), ClubVisits.Kind.NIGHT); // "Wait in the Clubhouse"
         wholeNight(() -> door.closing = true);

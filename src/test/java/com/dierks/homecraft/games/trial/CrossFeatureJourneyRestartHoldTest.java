@@ -44,14 +44,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Pinned: every new start is refused with the restart's time and takes or moves nothing; a warm-up
  * ends so the counted run still happens; what was running finishes and counts (a party race that went
- * before the hold, a golf group on its last hole), and its players go home, not to the Clubhouse, which
- * takes nobody in during the hold (they read why); everyone already in the Clubhouse is warned once and
- * sent home a minute later with their things; by 3:59:59 nobody is in a game, so the restart restores
- * nobody in place. The edges are pinned on their own: a race's end in the restart's last minute, or in
- * the restart's own minute before the server stops, goes home (the PRODBUG this journey found: it was
- * taken in and still there at the restart); with a one-minute hold, everyone in the Clubhouse is home
- * before the restart's minute; and after an unplanned stop, someone in the Clubhouse is restored in
- * place and home at the next join.
+ * before the hold, a golf group on its last hole), and its players come back to the Clubhouse, as a
+ * race already under way may (CLUBHOUSE-SPEC §7); everyone in the Clubhouse, there when the hold
+ * started or back from a race or golf in it, is warned once and sent home a minute later with their
+ * things; by 3:59:59 nobody is in a game, so the restart restores nobody in place. The edges are pinned
+ * on their own: a race's end up to 3:58:53 still comes in and is home a whole minute later, before the
+ * restart; one from 3:58:54 ({@link ClubVisits#LAST_IN_BEFORE_RESTART}), in the restart's last minute,
+ * or in its own minute before the server stops, goes home instead (the PRODBUG this journey found: one
+ * taken in during the last minute was still there at the restart); with a one-minute hold the
+ * Clubhouse takes nobody in and everyone in it is home before the restart's minute; and after an
+ * unplanned stop, someone in the Clubhouse is restored in place and home at the next join.
  */
 class CrossFeatureJourneyRestartHoldTest {
 
@@ -283,29 +285,31 @@ class CrossFeatureJourneyRestartHoldTest {
             j.rail.arriveAll();
         }
 
-        // what was running finished and counted; its players went home, never into the Clubhouse
+        // what was running finished and counted; its players came back to the Clubhouse: a race or a golf group
+        // already under way still ends there early in the hold (CLUBHOUSE-SPEC §7), long before its last minute
+        String closed = "The Clubhouse is closed for the restart, so you're going home";
         for (Player p : List.of(ava, ben)) {
             assertEquals(1, j.told.courses(id(p)), p.getName() + "'s party race counted once");
             assertNotNull(j.best(id(p), Scores.course(loop.id())), p.getName() + "'s time is on the board");
-            assertEquals(0, j.door.takenIn.getOrDefault(id(p), 0), p.getName() + " finished in the hold: not taken"
+            assertEquals(1, j.door.takenIn.getOrDefault(id(p), 0), p.getName() + " finished early in the hold: taken"
                     + " into the Clubhouse");
-            assertTrue(j.bench.heard(id(p)).contains("The Clubhouse is closed for the restart, so you're going home"),
-                    p.getName() + " reads why: " + j.bench.heard(id(p)));
+            assertFalse(j.bench.heard(id(p)).contains(closed), p.getName() + " was not turned away: "
+                    + j.bench.heard(id(p)));
         }
         assertEquals(j.best(id(ava), Scores.course(loop.id())), j.cupTime(id(ava), loop.id()), "Ava's Cup time");
-        assertEquals(0, j.door.takenIn.getOrDefault(id(kid), 0), "Kid went home with Ben, not to the Clubhouse");
+        assertEquals(1, j.door.takenIn.getOrDefault(id(kid), 0), "Kid followed Ben");
         for (Player p : List.of(sam, lee)) {
             assertEquals(1, golf.recorded.get(id(p)), p.getName() + "'s golf round is recorded once");
-            assertEquals(0, golf.toClub.getOrDefault(id(p), 0), p.getName() + "'s group ended in the hold: not to"
-                    + " the Clubhouse");
-            assertEquals(1, golf.home.getOrDefault(id(p), 0), p.getName() + " went home with the group's card");
-            assertTrue(j.bench.heard(id(p)).contains("The Clubhouse is closed for the restart, so you're going home"),
-                    p.getName() + " reads why: " + j.bench.heard(id(p)));
+            assertEquals(1, golf.toClub.getOrDefault(id(p), 0), p.getName() + " went to the Clubhouse");
+            assertEquals(0, golf.home.getOrDefault(id(p), 0), p.getName() + "'s group didn't go straight home");
+            assertFalse(j.bench.heard(id(p)).contains(closed), p.getName() + " was not turned away: "
+                    + j.bench.heard(id(p)));
         }
         assertNotNull(j.best(id(fay), Scores.course(lava.id())), "Fay's timed run counted after her warm-up ended");
 
-        // the Clubhouse's hold: those in it when it started are warned once, and home a minute later
-        for (Player p : List.of(vic, wes)) {
+        // the Clubhouse's hold: those in it when it started, and those who came in from a race or golf early in
+        // it, are warned once and home a minute later
+        for (Player p : List.of(vic, wes, ava, ben, kid, sam, lee)) {
             assertEquals(1, warnings.getOrDefault(id(p), 0), p.getName() + " was warned once");
             assertNotNull(sentHome.get(id(p)), p.getName() + " was sent home");
             assertTrue(sentHome.get(id(p)) - warned.get(id(p)) >= ClubVisits.MINUTE, p.getName()
@@ -313,8 +317,8 @@ class CrossFeatureJourneyRestartHoldTest {
             assertTrue(j.bench.heard(id(p)).contains("the Clubhouse closes in 1 minute"), j.bench.heard(id(p)));
         }
         for (Player p : List.of(ava, ben, kid, sam, lee)) {
-            assertNull(warned.get(id(p)), p.getName() + " was never in the Clubhouse during the hold, so never warned");
-            assertNull(sentHome.get(id(p)), p.getName() + " was never sent home from it");
+            assertTrue(warned.get(id(p)) >= GamesBench.at(2026, 9, 29, 15, 55) + 10 * SEC, p.getName() + " was warned"
+                    + " on arriving at 3:55:10 or later, not with those already there at 3:55:01");
         }
         assertTrue(j.rail.syncTeleports().stream().anyMatch(s -> s.world().equals("games") && s.y() == 161),
                 "Wes was brought down to the Clubhouse floor: " + j.rail.syncTeleports());
@@ -372,10 +376,36 @@ class CrossFeatureJourneyRestartHoldTest {
         }
     }
 
+    /** 2026-09-29 at {@code hour}:{@code minute}:{@code second}, epoch ms. */
+    private static long t(int hour, int minute, int second) {
+        return GamesBench.at(2026, 9, 29, hour, minute) + second * SEC;
+    }
+
+    /**
+     * The Clubhouse's second ({@code ClubBench.visitsSecond}, the real {@link ClubVisits#second}) once a second
+     * until {@code until}: when each visitor was first warned for the hold, and first sent home for it.
+     */
+    private void holdSecondsUntil(long until, Map<UUID, Long> warnedAt, Map<UUID, Long> homeAt) {
+        while (j.bench.now() < until) {
+            for (ClubVisits.Act a : j.club.visitsSecond()) {
+                switch (a.what()) {
+                    case WARN_HOLD -> warnedAt.putIfAbsent(a.player(), j.bench.now());
+                    case HOME_HOLD -> homeAt.putIfAbsent(a.player(), j.bench.now());
+                    default -> {
+                        // no idle timeouts in these few minutes
+                    }
+                }
+            }
+            j.rail.arriveAll();
+            j.bench.move(SEC);
+        }
+    }
+
     /**
      * The PRODBUG this journey found, fixed: a race's end in the restart's last minute (3:59:30) took her into the
      * Clubhouse, where she was warned and would have gone home only at 4:00:30, so she was still there when the
-     * server stopped. The Clubhouse now takes nobody in during the hold ({@code Clubhouse.takeIn}, mirrored in
+     * server stopped. The Clubhouse now takes nobody in from {@link ClubVisits#LAST_IN_BEFORE_RESTART} (66 s)
+     * before the restart ({@code Clubhouse.takeIn} through {@code closingForRestart}, mirrored in
      * {@code ClubBench.SessionDoor.takeIn}; {@code ClubRaces.toClub} asks first), so she goes home as she would
      * with no Clubhouse.
      */
@@ -398,45 +428,84 @@ class CrossFeatureJourneyRestartHoldTest {
     }
 
     /**
-     * The hold's edges for a race's end, lined up with the restart hold's own window (3:55 PM to the end of the
-     * restart's minute, 4:00:59): a second before it the Clubhouse still takes her, and she is warned with
-     * everyone at 3:55 and home a minute later; from 3:55:00, at 3:58:59 and at 4:00:30 (the restart's own minute,
-     * the server not stopped yet) it takes nobody, so each goes straight home; from 4:01 it takes people again.
-     * The door's hold is the real {@code Clubhouse.closingForRestart}.
+     * The hold's edges for a race's end (a restart at 4:00 PM, held from 3:55). CLUBHOUSE-SPEC §7: no new Clubhouse
+     * visits during the hold "except arriving from a race already under way", and everyone goes home. So a race
+     * that ends a second before the hold, as it starts (3:55:00), mid-hold (3:57:30) and at 3:58:53 (the last
+     * second before {@link ClubVisits#LAST_IN_BEFORE_RESTART}, 66 s before the restart) still ends in the Clubhouse,
+     * and each racer is warned on arriving (or as the hold starts) and home a whole minute later, the last at
+     * 3:59:53, before the restart. From 3:58:54 an arrival could no longer get that minute, so at 3:58:54, 3:59:30
+     * and 4:00:30 (the restart's own minute, the server not stopped yet) the Clubhouse takes nobody and each goes
+     * straight home; from 4:01 it takes people again. The door's answer is the real
+     * {@code Clubhouse.closingForRestart}.
      */
     @Test
-    void aRaceEndingAnywhereInTheHoldGoesHomeUntilTheRestartsMinuteIsOver() throws Exception {
-        at(15, 54, 0);
-        Player ava = racer("Ava");
-        at(15, 54, 59);
-        assertFalse(j.door.closingForRestart(), "3:54:59: no hold yet");
-        assertTrue(raceEnds(ava), "a second before the hold, the race's end still takes her to the Clubhouse");
+    void aRaceEndingEarlyInTheHoldStillEndsInTheClubhouseButNotInItsLastMinuteOrTheRestartsOwn() throws Exception {
         Map<UUID, Long> warnedAt = new HashMap<>();
         Map<UUID, Long> homeAt = new HashMap<>();
+        List<Player> early = new ArrayList<>();
+        at(15, 54, 0);
+        early.add(racer("Ava"));
+        at(15, 54, 59);
+        assertNull(j.games.restartHeld(), "3:54:59: no hold yet");
+        assertFalse(j.door.closingForRestart(), "3:54:59: the Clubhouse is open");
+        assertTrue(raceEnds(early.get(0)), "a second before the hold, the race's end takes Ava to the Clubhouse");
         at(15, 55, 0);
+        early.add(racer("Ben"));
+        assertEquals("4:00 PM", j.games.restartHeld(), "3:55:00: the hold is on");
+        assertFalse(j.door.closingForRestart(), "but a race already under way still ends in the Clubhouse");
+        assertTrue(raceEnds(early.get(1)), "Ben's race ends as the hold starts: to the Clubhouse");
+        holdSecondsUntil(t(15, 57, 30), warnedAt, homeAt);
+        early.add(racer("Cal"));
+        assertFalse(j.door.closingForRestart(), "3:57:30: mid-hold, still open to a race's end");
+        assertTrue(raceEnds(early.get(2)), "Cal's race ends mid-hold: to the Clubhouse");
+        holdSecondsUntil(t(15, 58, 53), warnedAt, homeAt);
+        early.add(racer("Dan"));
+        assertFalse(j.door.closingForRestart(), "3:58:53, 67 s before the restart: the last second it takes anyone");
+        assertTrue(raceEnds(early.get(3)), "Dan's race ends then: to the Clubhouse");
+
         List<Player> late = new ArrayList<>();
-        late.add(racer("Ben"));
-        assertTrue(j.door.closingForRestart(), "3:55:00: the hold");
-        assertFalse(raceEnds(late.get(0)), "Ben's race ends as the hold starts: home, not the Clubhouse");
-        for (int s = 0; s < 3 * 60 + 59; s++) { // to 3:58:59, a second at a time
-            for (ClubVisits.Act a : j.club.visitsSecond()) {
-                (a.what() == ClubVisits.What.WARN_HOLD ? warnedAt : homeAt).putIfAbsent(a.player(), j.bench.now());
-            }
-            j.rail.arriveAll();
-            j.bench.move(SEC);
+        holdSecondsUntil(t(15, 58, 54), warnedAt, homeAt);
+        late.add(racer("Fay"));
+        assertTrue(j.door.closingForRestart(), "3:58:54, 66 s before the restart: an arrival could no longer get the"
+                + " hold's minute and be home before it");
+        assertFalse(raceEnds(late.get(0)), "Fay's race's end goes home, not to the Clubhouse");
+        holdSecondsUntil(t(15, 59, 30), warnedAt, homeAt);
+        late.add(racer("Gus"));
+        assertTrue(j.door.closingForRestart(), "3:59:30: closed");
+        assertFalse(raceEnds(late.get(1)), "Gus's race's end in the restart's last minute goes home");
+        holdSecondsUntil(t(16, 0, 0), warnedAt, homeAt);
+
+        long[][] times = {
+            {t(15, 55, 0), t(15, 56, 0)}, // Ava: in before the hold, warned as it starts
+            {t(15, 55, 0), t(15, 56, 0)}, // Ben
+            {t(15, 57, 30), t(15, 58, 30)}, // Cal
+            {t(15, 58, 53), t(15, 59, 53)}, // Dan: a whole minute, and still before 3:59:55
+        };
+        for (int i = 0; i < early.size(); i++) {
+            Player p = early.get(i);
+            assertEquals(1, j.door.takenIn.getOrDefault(id(p), 0), p.getName() + " was taken in once");
+            assertEquals(times[i][0], warnedAt.get(id(p)), p.getName() + " was warned on arriving (or as the hold"
+                    + " started)");
+            assertEquals(times[i][1], homeAt.get(id(p)), p.getName() + " was sent home a whole minute later");
+            assertTrue(homeAt.get(id(p)) <= t(16, 0, 0) - ClubVisits.HOME_BEFORE_RESTART, p.getName()
+                    + " was home before the restart");
+            assertTrue(j.bench.heard(id(p)).contains("the Clubhouse closes in 1 minute"), p.getName() + ": "
+                    + j.bench.heard(id(p)));
+            assertTrue(j.bench.heard(id(p)).contains("closing for the restart"), p.getName() + ": "
+                    + j.bench.heard(id(p)));
+            assertFalse(j.club.visits().in(id(p)), p.getName() + " is out of the Clubhouse by 4:00 PM");
+            assertNull(j.rail.session(id(p)), p.getName() + " is in no session at 4:00 PM");
+            assertNull(j.homeProblem(id(p)), p.getName() + " is home as they were: " + j.homeProblem(id(p)));
         }
-        assertEquals(GamesBench.at(2026, 9, 29, 15, 55), warnedAt.get(id(ava)), "Ava was warned as the hold started");
-        assertEquals(GamesBench.at(2026, 9, 29, 15, 56), homeAt.get(id(ava)), "and sent home a minute later");
-        assertNull(j.homeProblem(id(ava)), "home as she was: " + j.homeProblem(id(ava)));
-        late.add(racer("Cal"));
-        assertFalse(raceEnds(late.get(1)), "3:58:59: Cal's race's end goes home");
+
         at(16, 0, 30);
         late.add(racer("Dee"));
-        assertTrue(j.door.closingForRestart(), "4:00:30: the restart's own minute is still held");
+        assertTrue(j.door.closingForRestart(), "4:00:30: the restart's own minute is still closed");
         assertFalse(raceEnds(late.get(2)), "Dee's race's end in the restart's own minute goes home");
         for (Player p : late) {
             assertEquals(0, j.door.takenIn.getOrDefault(id(p), 0), p.getName() + " was never taken in");
             assertFalse(j.club.visits().in(id(p)), p.getName() + " is not in the Clubhouse");
+            assertNull(warnedAt.get(id(p)), p.getName() + " was never warned");
             assertNull(j.homeProblem(id(p)), p.getName() + " is home as they were: " + j.homeProblem(id(p)));
         }
         at(16, 1, 0);
@@ -455,28 +524,24 @@ class CrossFeatureJourneyRestartHoldTest {
     void withAOneMinuteHoldEveryoneInTheClubhouseIsHomeBeforeTheRestartsMinute() throws Exception {
         j.bench.restarts(List.of(LocalTime.of(16, 0)), 1);
         Player vic = j.player("Vic", "SURVIVAL", "blue");
+        Map<UUID, Long> warnedAt = new HashMap<>();
+        Map<UUID, Long> homeAt = new HashMap<>();
         at(15, 58, 30);
         assertNull(j.club.enter(id(vic), ClubVisits.Kind.VISIT, false), "Vic visits before the hold");
-        long warnedAt = -1;
-        long homeAt = -1;
-        while (j.bench.now() < GamesBench.at(2026, 9, 29, 16, 0)) {
-            for (ClubVisits.Act a : j.club.visitsSecond()) {
-                if (a.what() == ClubVisits.What.WARN_HOLD && warnedAt < 0) {
-                    warnedAt = j.bench.now();
-                }
-                if (a.what() == ClubVisits.What.HOME_HOLD && homeAt < 0) {
-                    homeAt = j.bench.now();
-                }
-            }
-            j.rail.arriveAll();
-            j.bench.move(SEC);
-        }
-        assertEquals(GamesBench.at(2026, 9, 29, 15, 59), warnedAt, "warned as the one-minute hold started");
-        assertEquals(GamesBench.at(2026, 9, 29, 16, 0) - ClubVisits.HOME_BEFORE_RESTART, homeAt,
+        holdSecondsUntil(t(15, 59, 0), warnedAt, homeAt);
+        Player ben = racer("Ben");
+        assertTrue(j.door.closingForRestart(), "a one-minute hold is shorter than the 66 s a new arrival needs, so the"
+                + " Clubhouse takes nobody in for all of it");
+        assertFalse(raceEnds(ben), "Ben's race ends as it starts: home, not the Clubhouse");
+        holdSecondsUntil(t(16, 0, 0), warnedAt, homeAt);
+        assertEquals(t(15, 59, 0), warnedAt.get(id(vic)), "warned as the one-minute hold started");
+        assertEquals(t(16, 0, 0) - ClubVisits.HOME_BEFORE_RESTART, homeAt.get(id(vic)),
                 "sent home before the restart's minute, not a whole minute after the warning (4:00:00)");
         assertTrue(j.bench.heard(id(vic)).contains("closing for the restart"), j.bench.heard(id(vic)));
         assertNull(j.rail.session(id(vic)), "in no session at 4:00 PM: " + j.rail.session(id(vic)));
         assertNull(j.homeProblem(id(vic)), "home as he was: " + j.homeProblem(id(vic)));
+        assertEquals(0, j.door.takenIn.getOrDefault(id(ben), 0), "Ben was never taken in");
+        assertNull(j.homeProblem(id(ben)), "and is home as he was: " + j.homeProblem(id(ben)));
         int trips = j.rail.started();
         int syncs = j.rail.syncTeleports().size();
         j.rail.stopping(true);

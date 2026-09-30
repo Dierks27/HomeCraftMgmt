@@ -350,7 +350,7 @@ public final class ClubBench {
                 return false;
             }
             if (closingForRestart()) {
-                return false; // nobody comes in during the restart hold: the caller sends them home
+                return false; // nobody comes in in the hold's last minute or so: the caller sends them home
             }
             UUID id = p.getUniqueId();
             Session sess = rail.session(id);
@@ -374,7 +374,7 @@ public final class ClubBench {
 
         @Override
         public boolean closingForRestart() {
-            return club.closingForRestart(); // the real one: the restart hold, to the end of the restart's minute
+            return club.closingForRestart(); // the real one: 66 s before the restart to the end of its minute
         }
 
         @Override

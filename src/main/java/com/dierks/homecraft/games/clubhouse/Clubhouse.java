@@ -76,8 +76,10 @@ import java.util.logging.Logger;
  * changes a block (the box is guarded, like the Falling Floors arena's), chat is the server's. The
  * kit: Party (while in a party race's lobby), Results (the last results screen) and Leave game.
  * Anyone here longer than {@code max_minutes} with no race or party going is sent home, with a
- * warning a minute before; the restart hold sends everyone home a minute after it starts (and always
- * before the restart's own minute), and nobody is taken in from a race or golf while it is on.
+ * warning a minute before; the restart hold sends everyone home a minute after it starts or after
+ * they arrive from a race or golf already going (and always before the restart's own minute), and
+ * from a little over a minute before the restart, when an arrival could not get that minute, nobody
+ * is taken in at all ({@link #closingForRestart}).
  *
  * <p><b>The board</b> shows the last event's result (a party race's times and gaps, Race Night's
  * points, golf's strokes), drawn only on a new result. At the end of Race Night its top three stand
@@ -1166,9 +1168,10 @@ public final class Clubhouse implements Game, ClubDoor {
             return false;
         }
         if (closingForRestart()) {
-            // Nobody comes in during the restart hold, not even from a race or a round that ends in it: one
-            // taken in during the restart's last minute was still here when it came, and ClubVisits promises
-            // nobody ever is. The caller sends them home, as with no Clubhouse.
+            // Nobody comes in from a little over a minute before the restart, not even from a race or a round
+            // that ends then: one taken in during its last minute was still here when it came, and ClubVisits
+            // promises nobody ever is. The caller sends them home, as with no Clubhouse. Earlier in the hold a
+            // race's end still comes in (CLUBHOUSE-SPEC §7), warned and home a minute later with everyone.
             return false;
         }
         World w = Bukkit.getWorld(r.world());
@@ -1193,7 +1196,9 @@ public final class Clubhouse implements Game, ClubDoor {
 
     @Override
     public boolean closingForRestart() {
-        return games().restartHold().holding(now());
+        RestartHold hold = games().restartHold();
+        long now = now();
+        return ClubVisits.closedForRestart(now, hold.holding(now), hold.next(now));
     }
 
     @Override

@@ -31,8 +31,8 @@ import java.util.List;
  * with no stand), at the end of a party race, or at the end of Race Night, the race run ends as it
  * would (the boat goes, collisions and the no-push team back), and the session is handed to the
  * Clubhouse, which moves them there and checks the move. If the Clubhouse can't take them, they go
- * home exactly as before; during the restart hold it takes nobody ({@link ClubDoor#closingForRestart}),
- * so a racer who finishes then goes home, reading why.
+ * home exactly as before; in the restart hold's last minute or so it takes nobody
+ * ({@link ClubDoor#closingForRestart}), so a racer who finishes then goes home, reading why.
  */
 public final class ClubRaces {
 
@@ -95,9 +95,10 @@ public final class ClubRaces {
     /**
      * The racer's race run is over and the race sends them to the Clubhouse: the run ends as a trip
      * home would end it, then the Clubhouse takes their session. False when there is no Clubhouse to
-     * take them or it couldn't (the caller sends them home as it always did), and during the restart
-     * hold, before anything is touched: nobody may be in the Clubhouse across a restart, and a racer
-     * handed in during its last minute still was when it came.
+     * take them or it couldn't (the caller sends them home as it always did), and while it is closing
+     * for a restart, before anything is touched: nobody may be in the Clubhouse across a restart, and a
+     * racer handed in during its last minute still was when it came. Earlier in the hold they are taken
+     * in (a race already under way, CLUBHOUSE-SPEC §7) and sent home a minute later with everyone.
      */
     static boolean toClub(TimeTrials trials, RaceMode mode, ClubDoor club, Player p, TrialRun run, String line) {
         if (club == null || p == null || !p.isOnline()) {

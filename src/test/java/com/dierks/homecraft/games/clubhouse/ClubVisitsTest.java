@@ -15,8 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Who is in the Clubhouse and for how long (CLUBHOUSE-SPEC §4, §8): {@code max_minutes} with a
  * warning a minute before, a race or a party stopping the clock, the restart hold sending everyone
- * home a minute after it starts (a late arrival too) and always before the restart's own minute, and
- * an arrival that never lands.
+ * home a minute after it starts (an arrival from a race during it too) and always before the restart's
+ * own minute, when the Clubhouse stops taking anyone in, and an arrival that never lands.
  */
 class ClubVisitsTest {
 
@@ -68,11 +68,53 @@ class ClubVisitsTest {
         assertEquals(List.of(ClubVisits.What.HOME_HOLD), whats(home, ava), "home at hold start + 1 minute");
         assertEquals(List.of(ClubVisits.What.HOME_HOLD), whats(home, ben), "everyone");
         UUID cal = UUID.randomUUID();
-        v.enter(cal, "Cal", ClubVisits.Kind.PARTY, hold + 3 * MIN); // in late some other way (a seat handed back)
+        v.enter(cal, "Cal", ClubVisits.Kind.PARTY, hold + 3 * MIN); // from a race already under way, say
         assertEquals(List.of(ClubVisits.What.WARN_HOLD), whats(v.second(hold + 3 * MIN, 30, id -> true, true), cal),
                 "a late arrival is warned at once");
         assertEquals(List.of(ClubVisits.What.HOME_HOLD), whats(v.second(hold + 4 * MIN, 30, id -> true, true), cal),
                 "and gets the same minute: never here across a restart");
+    }
+
+    /**
+     * CLUBHOUSE-SPEC §7: during the restart hold nobody new comes in "except arriving from a race already under
+     * way", and everyone goes home. The Clubhouse still takes a race's (or a golf group's) end in until
+     * {@link ClubVisits#LAST_IN_BEFORE_RESTART} before the restart, while the arrival can still get the hold's
+     * whole minute (warned at the next second's check, home before the restart); from then to the end of the
+     * restart's own minute it takes nobody, so the one taken in during the last minute (the PRODBUG) goes home.
+     */
+    @Test
+    void theClubhouseTakesARacesEndInDuringTheHoldUntilAnArrivalCouldNoLongerGetItsMinute() {
+        long restart = 60 * MIN;
+        long hold = restart - 5 * MIN; // the shipped five-minute hold
+        long closes = restart - ClubVisits.LAST_IN_BEFORE_RESTART;
+        assertEquals(66_000L, ClubVisits.LAST_IN_BEFORE_RESTART,
+                "the hold's minute, HOME_BEFORE_RESTART, and the second the check may take to see an arrival");
+        assertFalse(ClubVisits.closedForRestart(hold - 1, false, restart), "before the hold: open");
+        assertFalse(ClubVisits.closedForRestart(hold, true, restart),
+                "as the hold starts: still open to a race already under way");
+        assertFalse(ClubVisits.closedForRestart(restart - 2 * MIN, true, restart), "mid-hold: open to a race's end");
+        assertFalse(ClubVisits.closedForRestart(closes - 1, true, restart), "the last instant it takes anyone");
+        assertTrue(ClubVisits.closedForRestart(closes, true, restart), "66 s before the restart: closed");
+        assertTrue(ClubVisits.closedForRestart(restart - 30_000, true, restart), "the restart's last minute: closed");
+        assertTrue(ClubVisits.closedForRestart(restart + 30_000, true, restart), "the restart's own minute: closed");
+        assertTrue(ClubVisits.closedForRestart(restart + MIN - 1, true, restart), "to the end of it");
+        assertFalse(ClubVisits.closedForRestart(restart + MIN, false, restart + 24 * 60 * MIN),
+                "once the restart's minute is over (no hold): open again");
+        assertTrue(ClubVisits.closedForRestart(restart - MIN, true, restart),
+                "a one-minute hold is shorter than 66 s: closed from its start");
+        assertTrue(ClubVisits.closedForRestart(hold, true, -1), "holding with no restart known: closed, to be safe");
+
+        // the latest arrival: taken in the instant before it closes, warned at the next second's check, and home a
+        // whole minute after that, still before the restart's last call
+        ClubVisits v = new ClubVisits();
+        v.enter(ava, "Ava", ClubVisits.Kind.PARTY, closes - 1);
+        long check = closes - 1 + 1_000;
+        assertEquals(List.of(ClubVisits.What.WARN_HOLD), whats(v.second(check, 30, id -> true, true, restart), ava),
+                "warned at the next second's check");
+        assertEquals(List.of(), v.second(check + MIN - 1, 30, id -> true, true, restart), "nothing for the minute");
+        assertEquals(List.of(ClubVisits.What.HOME_HOLD), whats(v.second(check + MIN, 30, id -> true, true, restart),
+                ava), "home a whole minute after the warning");
+        assertTrue(check + MIN < restart - ClubVisits.HOME_BEFORE_RESTART, "which is before the restart's last call");
     }
 
     /**

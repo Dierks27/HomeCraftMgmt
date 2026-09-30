@@ -16,8 +16,9 @@ import java.util.UUID;
  * Golf together's side of the Clubhouse (CLUBHOUSE-SPEC §3; WP-CH): when a group's round ends, the
  * group goes to the Clubhouse instead of home, and its board shows the group ranking. One line in
  * {@link GolfRounds}'s group end ({@code Port.home}); a round alone still goes home as before, and
- * with the Clubhouse off or not built (or {@code golf_after} off) so does the group, and during the
- * restart hold ({@link ClubDoor#closingForRestart}: nobody may be in the Clubhouse across a restart).
+ * with the Clubhouse off or not built (or {@code golf_after} off) so does the group, and while the
+ * Clubhouse is closing for a restart ({@link ClubDoor#closingForRestart}, the hold's last minute or
+ * so: nobody may be in the Clubhouse across a restart).
  */
 public final class ClubGolf {
 
@@ -37,8 +38,8 @@ public final class ClubGolf {
     /**
      * {@link #toClubhouse} with the server's parts passed in: the Clubhouse's door ({@code null} while
      * it is off), the world the player is in, how to forget their finished round, and the results
-     * screen. The board gets the group ranking. During the restart hold nothing is touched and they
-     * read why they go home.
+     * screen. The board gets the group ranking. While the Clubhouse is closing for a restart nothing
+     * is touched and they read why they go home.
      */
     static boolean take(ClubDoor club, Player p, String world, Runnable forget, GolfGroup.Card card,
                         java.util.function.Consumer<Player> opener) {

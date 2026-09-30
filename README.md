@@ -1468,13 +1468,16 @@ every race and round works exactly as before**.
   part of the Clubhouse: while it isn't open (off, or not built and checked) there's no Take a rider
   anywhere.
 - **Time limits.** Anyone in the Clubhouse for `max_minutes` (30) with no race or party going is sent
-  home, with a warning a minute before. In the restart hold (to the end of the restart's own minute)
-  nobody comes in, not even from a party race or a golf group that ends then (they go home with their
-  things, reading "The Clubhouse is closed for the restart, so you're going home.") or a Race Night
-  (its racers go home with the night's own line, and its results skip the board). Everyone already
-  there is sent home a minute after the hold starts, with a warning, and always at least 5 seconds
-  before the restart's minute (sooner than the minute with `restart_hold_minutes: 1`), so nobody is in
-  it across a restart. After a crash, their things come back at the next join as from any world game.
+  home, with a warning a minute before. In the restart hold nobody new comes in, except arriving from
+  a race already going: a party race, golf group or Race Night that ends then still brings its players
+  here. Everyone there is sent home a minute after the hold starts (or after they arrive), with a
+  warning, and always at least 5 seconds before the restart's minute (sooner than the minute with
+  `restart_hold_minutes: 1`), so nobody is in it across a restart. From 66 seconds before the restart
+  to the end of its minute, too late for that minute, it takes nobody at all: a party race or golf
+  group that ends then sends its players home with their things, reading "The Clubhouse is closed for
+  the restart, so you're going home.", and a Race Night sends its racers home with the night's own line
+  (its results skip the board). With a one-minute hold that is the whole hold. After a crash, their
+  things come back at the next join as from any world game.
 - **One place at a time.** A solo run, another game or golf from the Clubhouse is refused, as from
   any world game: "Finish your game first (/hcm leave)". Going from the Clubhouse to a race hands your
   session over; nothing is saved or given back twice.

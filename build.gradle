@@ -104,6 +104,9 @@ processResources {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // The generator soaks keep many proven layouts in memory (MountainRuns caches 180 Mountain Runs);
+    // Gradle's 512 MB default for test workers runs out on the full suite.
+    maxHeapSize = '2g'
     // `gradle test -Pslow` also runs the long soaks (@EnabledIfSystemProperty hcm.slow).
     systemProperty 'hcm.slow', project.hasProperty('slow') ? 'true' : 'false'
     // Log every test, so the CI transcript proves the regression tests actually ran —

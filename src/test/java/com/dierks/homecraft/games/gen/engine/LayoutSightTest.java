@@ -21,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * closest two places are 36 chunks apart, every half stays in the number range the golf ball and the
  * pilots were proven in (x, z 4096..8191), and nothing meets or sees a 0.35 spot.
  *
- * <p>The new spots are the spec's table, written out here; they are not the shipped ones yet (that
- * switch comes with its config migration), so this pins the table itself. The 0.35 layout, measured
+ * <p>The new spots are the spec's table, written out here, so this pins the table itself
+ * ({@code ShippedLayoutTest} proves the shipped defaults are this table). The 0.35 layout, measured
  * the same way, has exactly the pairs in sight the spec counted (312 at view distance 10, 844 at 32):
  * the check and the spec's arithmetic agree.
  */
@@ -119,7 +119,7 @@ class LayoutSightTest {
         return n;
     }
 
-    private static boolean brute(Box on, Box seen, int view) {
+    static boolean brute(Box on, Box seen, int view) {
         int r = Sight.REACH;
         for (int cx = Math.floorDiv(on.minX() - r, 16); cx <= Math.floorDiv(on.maxX() + r, 16); cx++) {
             for (int cz = Math.floorDiv(on.minZ() - r, 16); cz <= Math.floorDiv(on.maxZ() + r, 16); cz++) {

@@ -46,17 +46,24 @@ public record FallingFloorsSettings(boolean enabled, List<Integer> origin, int f
     public static final int SIZE_Y = 40;
     public static final int SIZE_Z = 48;
 
+    /**
+     * The shipped corner (LAYOUT-SPEC §1.5): east of the Clubhouse, 576 blocks from it and from every
+     * shipped Fresh Courses area and the kept courses' area, so from the gallery none of them can be
+     * seen ({@code ShippedLayoutTest} pins it).
+     */
+    public static final List<Integer> ORIGIN = List.of(6688, 176, 8544);
+
     public FallingFloorsSettings {
-        origin = List.copyOf(origin == null ? List.of(5376, 176, 4352) : origin);
+        origin = List.copyOf(origin == null ? ORIGIN : origin);
         milestones = List.copyOf(milestones == null ? List.of() : milestones);
         milestoneRewards = List.copyOf(milestoneRewards == null ? List.of() : milestoneRewards);
     }
 
-    /** The shipped settings (§B.3.5): off, at [5376, 176, 4352], fade 10, 2-12 players, solo on. */
+    /** The shipped settings (§B.3.5): off, at {@link #ORIGIN}, fade 10, 2-12 players, solo on. */
     public static FallingFloorsSettings defaults() {
         return new FallingFloorsSettings(
                 false,
-                List.of(5376, 176, 4352),
+                ORIGIN,
                 RoundSettings.DEFAULT_FADE_TICKS,
                 RoundSettings.DEFAULT_MIN_PLAYERS,
                 RoundSettings.DEFAULT_MAX_PLAYERS,

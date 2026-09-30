@@ -101,6 +101,28 @@ class SightCheckTest {
     }
 
     @Test
+    void aServerThatKeptThe035LayoutIsToldWhyAndAClassicIsEmptiedByClosingIt() {
+        Slots.Def c = Slots.CLASSIC_GOLF;
+        List<Place> places = new ArrayList<>(halves(Kind.CLASSIC, c, LegacyBoxes.half(c, 'A'),
+                LegacyBoxes.half(c, 'B')));
+        places.add(new Place(Kind.SLOT, "fresh_parkour", "Parkour", LegacyBoxes.half(Slots.DAILY_PARKOUR_MEDIUM, 'A')));
+        List<Line> out = rows(new SightCheck.Facts("games", VIEW, "why", places, List.of(), "30 Sep 2026"));
+        assertEquals(Status.OK, out.get(0).status(), "context, not a problem of its own: the pairs below are the WARNs");
+        assertTrue(out.get(0).what().contains("on 30 Sep 2026") && out.get(0).what().contains("its 0.35 spot and shape")
+                && out.get(0).what().contains("Moving an area by hand"), "why the old spots stayed: " + out.get(0));
+        List<Line> classic = out.stream().filter(l -> l.what().startsWith("From Classic Golf")).toList();
+        assertFalse(classic.isEmpty(), "Classic Golf sees things at 0.35's spots: " + out);
+        for (Line l : classic) {
+            assertTrue(l.fix().contains("/hcm games gen unrecall fresh_classic_golf confirm (wait until its halves are"
+                    + " empty)"), "a Classic is emptied by closing it: " + l.fix());
+            assertFalse(l.fix().contains("gen clear fresh_classic"), "clear doesn't take a Classic: " + l.fix());
+        }
+        assertTrue(rows(facts(places, List.of())).stream().noneMatch(l -> l.what().contains("0.35 spot")),
+                "a server on the new layout isn't told about it");
+        assertTrue(out.stream().noneMatch(l -> l.status() == Status.FAIL), "never a FAIL");
+    }
+
+    @Test
     void twoPlacesInSightNameTheOneThatMovesMostSimplyAndTheViewDistanceThatWouldHideThem() {
         Box club = Box.sized(0, 160, 0, 32, 16, 32);
         Box golf = Box.sized(32 + 16 * 7, 160, 0, 64, 16, 48); // 7 chunk columns after the club's reach ends

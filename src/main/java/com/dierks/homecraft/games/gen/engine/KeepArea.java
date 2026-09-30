@@ -38,11 +38,14 @@ public record KeepArea(int x, int y, int z, int maxPlots, int gap) {
     public static final int LEGACY_GAP = 0;
     /**
      * The gap that keeps every kept course out of its neighbours' sight at every view distance
-     * ({@link Sight#GAP}). Not yet the default (see {@link Slots#SIGHT_HALF_GAP}).
+     * ({@link Sight#GAP}).
      */
     public static final int SIGHT_GAP = Sight.GAP;
-    /** The gap when config names none ({@code keep.plot_gap}): still {@link #LEGACY_GAP}. */
-    public static final int DEFAULT_GAP = LEGACY_GAP;
+    /**
+     * The gap when config names none ({@code keep.plot_gap}): {@link #SIGHT_GAP}. An install that
+     * kept courses in 0.35 has {@code plot_gap: 0} written, so its plots stay where they are.
+     */
+    public static final int DEFAULT_GAP = SIGHT_GAP;
     /** The largest {@code keep.plot_gap} config takes; it is a multiple of {@link Slots#GAP_GRID}. */
     public static final int MAX_GAP = 4096;
     /** A course stands this far in from its plot's edges along x and z. */
@@ -138,7 +141,7 @@ public record KeepArea(int x, int y, int z, int maxPlots, int gap) {
         return null;
     }
 
-    /** "x 4096..4959, y 128..303, z 5376..6719" for admins, and the gap when there is one. */
+    /** "x 1760..5503, y 128..303, z 7296..10367, plots 576 apart" for admins (the gap when there is one). */
     public String describe() {
         return area().describe() + (gap == 0 ? "" : ", plots " + gap + " apart");
     }

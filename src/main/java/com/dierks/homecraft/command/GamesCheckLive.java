@@ -284,7 +284,20 @@ final class GamesCheckLive implements GamesCheck.Facts {
                     + w.getSendViewDistance() + (players == 0 ? ", nobody there now"
                     : ", and the " + players + " player" + (players == 1 ? "" : "s") + " there (up to " + theirs + ")");
         }
-        return new SightCheck.Facts(world, view, why, world.isBlank() ? List.of() : places(cfg, st, world, w), grounds);
+        return new SightCheck.Facts(world, view, why, world.isBlank() ? List.of() : places(cfg, st, world, w), grounds,
+                keptSince());
+    }
+
+    /** The day the layout check kept 0.35's spots ({@code LayoutGuard}), or {@code null}: the new layout. */
+    private String keptSince() {
+        try {
+            com.dierks.homecraft.games.gen.LayoutGuard.Stamp stamp = com.dierks.homecraft.games.gen.LayoutGuard.Stamp
+                    .parse(new GenMetaDao(plugin.database()).get(com.dierks.homecraft.games.gen.LayoutGuard.STAMP_KEY));
+            return stamp != null && stamp.decision() == com.dierks.homecraft.games.gen.LayoutGuard.Decision.LEGACY
+                    ? stamp.day() : null;
+        } catch (SQLException | RuntimeException e) {
+            return null;
+        }
     }
 
     /** The places of {@link #sight()} in {@code world} ({@code w} when it is loaded). */

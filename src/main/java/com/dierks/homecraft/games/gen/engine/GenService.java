@@ -1004,7 +1004,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             int[] origin = c.origin();
             int gap = c.halfGap();
             if (!s.sameRegion(world, origin, gap) && (s.claimed || s.live != null) && !s.world.isBlank()) {
-                moved(s, world, origin, gap);
+                moved(s, world, origin, gap, !s.classic && !s.claimed && meta != null
+                        && meta.get(GenAdminKeys.claim(s.def.id())) == null);
             }
             s.world = world;
             s.origin = origin;
@@ -1196,17 +1197,26 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
     }
 
-    /** A slot's region moved (config): nothing at the old place is vouched for or cleared. */
-    private void moved(SlotState s, String world, int[] origin, int gap) {
+    /**
+     * A slot's region moved (config): nothing at the old place is vouched for or cleared. A slot that
+     * was {@code cleared} first (its claim given up: README "Moving an area by hand") left nothing there,
+     * so that is said as an INFO, not the "not cleared" WARN.
+     */
+    private void moved(SlotState s, String world, int[] origin, int gap, boolean cleared) {
         if (job != null && job.slot == s) {
             cancel(job, "its region moved");
         }
         queue.removeIf(j -> j.slot == s);
-        host.logger().warning("Fresh Courses: " + s.def.id() + " moved from " + s.world + " "
+        String line = "Fresh Courses: " + s.def.id() + " moved from " + s.world + " "
                 + Regions.describe(s.def, s.origin, s.gap) + " to " + world + " "
-                + Regions.describe(s.def, origin, gap)
-                + ". The old halves were not cleared (use /hcm games gen clear before moving a course)."
-                + (s.def.mayHoldWater() ? " " + drainFirst(s) : ""));
+                + Regions.describe(s.def, origin, gap);
+        if (!cleared) {
+            host.logger().warning(line + ". The old halves were not cleared (use /hcm games gen clear before moving a"
+                    + " course)." + (s.def.mayHoldWater() ? " " + drainFirst(s) : ""));
+        } else {
+            host.logger().info(line + ". Its old halves were emptied first, so nothing is left there; the new area is"
+                    + " checked before it is used.");
+        }
         s.verified = false;
         s.healFailed = s.live != null;
         s.previous = null;

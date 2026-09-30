@@ -80,18 +80,26 @@ public final class SightCheck {
     /**
      * Everything the section reads.
      *
-     * @param world   the world the games build in ({@code ""}: none)
-     * @param view    the view distance used: the largest of the world's view and send distances and every
-     *                online player's send distance there
-     * @param viewWhy where it came from, for admins
-     * @param places  every place in {@code world}
-     * @param grounds each Games world
+     * @param world      the world the games build in ({@code ""}: none)
+     * @param view       the view distance used: the largest of the world's view and send distances and
+     *                   every online player's send distance there
+     * @param viewWhy    where it came from, for admins
+     * @param places     every place in {@code world}
+     * @param grounds    each Games world
+     * @param keptSince  the day the layout check kept 0.35's spots and shapes because this server had built
+     *                   there ({@code LayoutGuard}), or {@code null} (the new layout)
      */
-    public record Facts(String world, int view, String viewWhy, List<Place> places, List<Ground> grounds) {
+    public record Facts(String world, int view, String viewWhy, List<Place> places, List<Ground> grounds,
+                        String keptSince) {
 
         public Facts {
             places = places == null ? List.of() : List.copyOf(places);
             grounds = grounds == null ? List.of() : List.copyOf(grounds);
+        }
+
+        /** On the new layout. */
+        public Facts(String world, int view, String viewWhy, List<Place> places, List<Ground> grounds) {
+            this(world, view, viewWhy, places, grounds, null);
         }
     }
 
@@ -115,6 +123,11 @@ public final class SightCheck {
                         + " there would fall", "stand at the spawn and put a block under it, or make the world with /mv"
                         + " create <name> normal -g HomeCraftManagement, which adds a platform at its spawn"));
             }
+        }
+        if (f.keptSince() != null) {
+            out.add(GamesCheck.Line.ok("This server had built Games places before the update, so on " + f.keptSince()
+                    + " every one kept its 0.35 spot and shape (half_gap: 32, keep.plot_gap: 0). README \"Moving an"
+                    + " area by hand\" moves one to its new spot, out of sight"));
         }
         if (f.world() == null || f.world().isBlank()) {
             return; // Fresh Courses' own section says there is no world
@@ -194,8 +207,14 @@ public final class SightCheck {
         };
     }
 
+    /**
+     * How to empty a course before it moves: {@code clear} for a Fresh course (both halves emptied, water
+     * first, its claim given up); a Classic isn't cleared but closed ({@code unrecall}, which empties
+     * both halves once nobody is on them).
+     */
     private static String clearFirst(Place p) {
-        return "/hcm games gen clear " + p.id() + " confirm";
+        return p.kind() == Kind.CLASSIC ? "/hcm games gen unrecall " + p.id() + " confirm (wait until its halves"
+                + " are empty)" : "/hcm games gen clear " + p.id() + " confirm";
     }
 
     private static String section(Place p) {

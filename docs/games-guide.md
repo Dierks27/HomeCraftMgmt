@@ -1564,6 +1564,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 
 - Open them with /hcm play fresh_courses, or the Fresh Courses tile on the Courses and Golf tabs. /hcm play fresh_parkour_tiers opens Parkour Levels, where the three parkour courses sit side by side.
 - They are free skill games, the same for everyone. They play like the time trials and mini golf above, with the same kit, rules and "your things come back".
+- Each course stands on its own, far out in the sky: from a course you see only that course, never another course (or the next one being built) floating nearby.
 - Each tile's name shows your stars for this week's course and its course code, like "Hard Parkour - ★★☆ · Course code HARD-40". A golf tile also shows its holes and par. A course being built shows grey: "being built, back soon".
 - Stars: finishing a course gives 1 star. A good time (or a good golf score) gives 2, a great one 3. Your best stars on each course this week count. The Star Chart adds up your best stars from every course this week, and it starts again every week.
 - Star Chart goals: by default 6 stars pays 1 token and 12 stars pays 2 tokens, once each a week. The Star Chart tile shows your stars and the next goal. A week's goals stay the same all week.

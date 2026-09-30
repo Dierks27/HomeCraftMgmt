@@ -40,7 +40,8 @@ class ClubhouseRegionsTest {
     @Test
     void theShippedOriginPassesExtraProblemsAgainstTheShippedConfig() {
         DailySettings shipped = DailySettings.defaults();
-        assertEquals(List.of(5376, 160, 4448), ClubhouseSettings.defaults().origin(), "the shipped corner");
+        assertEquals(List.of(6080, 160, 8544), ClubhouseSettings.defaults().origin(),
+                "the shipped corner (LAYOUT-SPEC §1.5)");
         assertEquals(List.of(), ClubhouseRegions.problems(BOX, shipped, ARENA, List.of(), world()),
                 "every slot (on or off), every Classics slot, the keep area and the arena are 32 or more away");
         List<SlotConfig> all = new ArrayList<>();

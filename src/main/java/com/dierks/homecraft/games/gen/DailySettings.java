@@ -141,13 +141,20 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             classics = List.copyOf(classics == null ? List.of() : classics);
         }
 
+        /**
+         * The shipped keep area's first plot corner ({@code keep.area}, LAYOUT-SPEC §1.5): west of the
+         * courses, 24 plots from x 1760, z 7296, {@link KeepArea#DEFAULT_GAP} apart, so no kept course
+         * can see another, or any course.
+         */
+        public static final List<Integer> KEEP_AREA = List.of(1760, 128, 7296);
+
         /** The shipped settings: forever, 26 on the website, a week, the shipped regions and 24 plots. */
         public static Archive shipped() {
             List<SlotConfig> c = new ArrayList<>();
             for (Slots.Def d : Slots.CLASSICS) {
                 c.add(SlotConfig.shipped(d));
             }
-            return new Archive(0, 26, 7, c, new KeepArea(4096, 128, 5376, 24), null);
+            return new Archive(0, 26, 7, c, new KeepArea(KEEP_AREA.get(0), KEEP_AREA.get(1), KEEP_AREA.get(2), 24), null);
         }
 
         /** A Classics slot's settings, or {@code null}. */

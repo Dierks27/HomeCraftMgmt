@@ -951,10 +951,27 @@ next. That's all.
   week whatever the cadence.
 
 **Where they are.** In your existing Games world (`games.fresh.world: ""` means the first of
-`games.worlds`), far from spawn and high in the sky: x 4096-5535, z 4096-4671, y 128-303. Each
-course owns two halves side by side: the current course stands in one while the next is built and
-checked in the other, and the switch is one database write, so nobody ever plays a half-built course
-and a run already going always counts. The old half is emptied once nobody is on it.
+`games.worlds`), far from spawn and high in the sky. Everything the games build stands in x
+1760-8191, z 4096-10367, y 128-303: the courses and the Classics in two columns (x 6080 and x 7488,
+z 4096-7967), the Clubhouse and Falling Floors south of them (z 8544), and the kept courses' plots to
+the west (from x 1760, z 7296). **Every place is 576 blocks (36 chunks) from every other**, a
+course's own spare half included, so from any course players see only that course, whatever view
+distance the server uses (the server sends chunks up to its view distance plus one; 576 blocks is
+clear up to view distance 34, and Paper's largest is 32). Each course owns two halves 576 blocks
+apart along x: the current course stands in one while the next is built and checked in the other,
+and the switch is one database write, so nobody ever plays a half-built course and a run already
+going always counts. The old half is emptied once nobody is on it.
+
+- **Three distances.** A course isn't built within 16 blocks of a hand-built course, the world's
+  spawn or `safe_spot`, nor within 32 blocks of another of the games' places (the Classics, the
+  kept courses, Falling Floors, the Clubhouse); 576 keeps it out of sight. A place closer than 576
+  still works: `/hcm games check` warns that players can see it (see "What players can see").
+- **Keep this sky free.** Don't build anything above y 120 in the Games world between x 1760 and
+  8191, z 4096 and 10367 (further south if you raise `keep.max_plots`: 36 plots reach z 12191, 100
+  plots z 22223). A spot with your blocks in it isn't used: that course stays off and says where.
+- **The world border must be at least 21,000 across** (centred on 0,0; vanilla's is 60 million).
+  A course, the Clubhouse or the arena past a smaller one stays off, a kept-course plot past it is
+  never used, and `/hcm games check` names each.
 
 - **Nothing of yours is ever cleared.** The first time a course uses its area, the area is checked
   block by block. If anything is there (a mountain top, a build), that course stays off and
@@ -984,6 +1001,76 @@ and a run already going always counts. The old half is emptied once nobody is on
   one of its jumps would now send players back) stays closed and is replaced by a new one for the
   same set (a pinned course is built again from its seed), on a fresh board.
 - **In that world** (`world_rules: true`): no mobs, fire or weather, no random ticks, always noon.
+
+**A void world** (the best look: only sky round the courses, nothing below them). The plugin has a
+void world built in: no ground, caves, trees, mobs or structures, the_void biome everywhere, and a 5 x
+5 smooth-stone platform with a light at its spawn (0, 100, 0), there from the first load, so nobody
+arriving falls. Someone who drops off a course is put back on it, as in any Games world.
+
+1. `/mv create sky normal -g HomeCraftManagement` (the same on Multiverse-Core 4 and 5; `-g` names the
+   generator, and anything after `HomeCraftManagement:` is ignored).
+2. `/mv modify sky set gamemode adventure` (Multiverse-Core 5; on 4.x `/mv modify set mode adventure
+   sky`).
+3. Put `sky` in your Games world's Multiverse-Inventories group, or give it one of its own (see
+   "Turning it on, and the Games world", step 4).
+4. `games.worlds: [games, sky]` and `games.fresh.world: sky`, then `/hcm reload`. Fresh Courses, the
+   Classics, the kept courses, the Clubhouse and Falling Floors are built in `games.fresh.world`;
+   hand-built courses stay in `games`.
+
+Do this **before** anything is built. Once courses stand in a world, changing `games.fresh.world` is a
+move by hand (below): clear first. `/hcm games check` says for each Games world whether it is void
+("Games world 'sky' is void (nothing below the courses)") and warns when a world's spawn has nothing
+under it ("... someone arriving there would fall").
+
+**Moving an area by hand.** Nothing moves by itself: a place stays where it was built until you empty
+it and give it another spot. Change an `origin` (or `half_gap`, or `games.fresh.world`) without
+emptying first and the course is treated as a new one: a new course on a fresh board at the new
+spot, and the old blocks left standing (a Dropper's or a golf course's water stays guarded there until
+you drain it: status says "drain first").
+
+- **A Fresh course:** `/hcm games gen clear <course> confirm` (both halves emptied, water first, and
+  the course switched off; its board and stars stay). Then change `games.fresh.slots.<course>.origin`
+  (and take out its `half_gap`, or set it to 576), `/hcm reload` and `/hcm games gen on <course>`: the
+  new area is checked empty and the next course is built there.
+- **A Classic:** `/hcm games gen unrecall <classic> confirm` (it empties both halves once nobody is on
+  them), then change `games.fresh.classics.slots.<classic>.origin` (and its `half_gap`) and `/hcm
+  reload`; the next recall is built there. Classic Dropper and Classic Golf keep their old, empty
+  halves guarded afterwards (status lists them); that is harmless.
+- **The Clubhouse** (`games.clubhouse.origin`) and **Falling Floors** (`games.falling_floors.origin`):
+  change the origin and `/hcm reload`. The new box must be empty; the old room's or arena's blocks stay
+  where they are, for you to take down.
+- **Kept courses** stay where they were kept. `keep.area` and `keep.plot_gap` only place the courses
+  kept from then on.
+- A spot 576 blocks from every other place (x and z) is out of sight; `/hcm games check` shows what
+  can still be seen. The shipped spots (config.yml) are all free once nothing else is built there.
+
+**What players can see** (`/hcm games check`, after the Clubhouse). One OK line per Games world (void
+or not), a WARN for a spawn with nothing under it, then the view distance the server really uses (the
+largest of the Games world's view and send distances and every online player's send distance there;
+the server's own when the world isn't loaded), then either "Nothing else built by the games can be
+seen from any course, the Clubhouse or the arena (view distance 10; the closest two places are 36
+chunks apart, clear up to view distance 34)" or one WARN per pair of places close enough to see each
+other, nearest first (at most 8, then "...and N more"), like "From Tiny Golf, players can see the
+Clubhouse (9 chunks away; view distance 10)", each with how to move one by hand, and the view distance
+that would hide them when there is one. Places are the courses' and Classics' halves, the kept
+courses' plots, the Clubhouse, the arena, the world's spawn and `safe_spot`. It is never a FAIL: a
+course that can see another still works.
+
+**Coming from 0.35 (a server that already built).** At the first start after the update, before the
+games start, the plugin looks in its database for anything 0.35 built: a Fresh set or a claimed area,
+a Classic holding a recall, a kept course, the Clubhouse or the arena claimed. **If there is anything,
+every Games place keeps its 0.35 spot and shape:** config.yml gets the 0.35 origins written out,
+`half_gap: 32` under each course and Classic and `keep.plot_gap: 0`, and the console WARNs once.
+Nothing is moved, rebuilt or rerolled; boards, codes and kept courses stay as they were. `/hcm games
+check` then says so ("This server had built Games places before the update, so on 30 Sep 2026 every
+one kept its 0.35 spot and shape") and lists which places can see each other, each with how to move
+it by hand (above). If nothing was built, every spot you never changed takes the new layout; one you
+set yourself stays, with `half_gap: 32` (or `plot_gap: 0`) so its shape stays too, and a WARN names
+it. A fresh install needs none of this: its config.yml is the new layout. The answer is found once and
+stored (`gen.layout.guard` in `hcm_meta`); a stop halfway just finds the same answer at the next
+start, and the games don't start until it is stored. Don't run `/hcm config reset games` (or
+`games.fresh`, `games.clubhouse`, `games.falling_floors`) on a server that kept 0.35's spots: it puts
+the new spots back, which is a move without a clear.
 
 **Stars and tokens.** Parkour and Sky Rings: 3 stars under the gold time, 2 under the silver time
 (both fixed when the course is made, from its expert time: see `stars`), 1 for finishing. Golf: 3 at
@@ -1055,7 +1142,8 @@ result screens show it in their header's NAME. `/hcm play fresh_parkour_tiers` i
 | `fresh.star_goals.daily` / `.daily_tokens` | `[10, 25]` / `[1, 1]` | The same at a daily cadence |
 | `fresh.budget.*` | `500` / `5000` / `4` / `4` / `2` / `40` | Blocks per tick online / idle, ms per tick, snapshots per tick, chunk loads at once, and the average tick time (ms) above which building pauses (it goes on below 3/4 of it) |
 | `fresh.stars.gold.*` / `fresh.stars.silver.*` | easy 2.0 / 3.0, medium 1.5 / 2.2, hard 1.25 / 1.8 | The 3-star and 2-star times as a factor of each course's expert time (tune after the first week) |
-| `fresh.slots.<course>` | see config.yml | Each course: `enabled`, `tier` (or `mix` of golf holes, E/M/H) and `origin` (x y z of its area, x and z a multiple of 16) |
+| `fresh.slots.<course>` | see config.yml | Each course: `enabled`, `tier` (or `mix` of golf holes, E/M/H) and `origin` (x y z of its area, x and z a multiple of 16). Move one by hand only (see "Moving an area by hand") |
+| `fresh.slots.<course>.half_gap` | not set (576) | Optional: blocks between a course's two halves along x (32-4096, a multiple of 16). 576 keeps the spare half, where the next course is built, out of sight; a server that built in 0.35 has `32` written |
 
 The courses (their ids are also their `/hcm play` ids): `fresh_parkour_easy`, `fresh_parkour`,
 `fresh_parkour_hard`, `fresh_rings`, `fresh_golf`, `fresh_tiny_golf`, `fresh_boat` (off), and the
@@ -1113,7 +1201,7 @@ point, a checkpoint or finish with its radius, a golf hole's whole bounds box.
 | `/hcm games gen pin <course> <seed\|live> [days]` / `unpin <course>` | Keep a good course: the same blocks in every new set (each on fresh boards) until unpinned, or for that many days. A pin ends by itself after its days; one made before a plugin update that changed that course's generator is ignored (the console and status say so) |
 | `/hcm games gen tp <course> [live\|idle]` | Go to the current course, or the spare half |
 | `/hcm games gen claim <course> [confirm]` | Count what is in a new area; with `confirm`, clear it and let the course use it (refused while a hand-built course or the spawn is within 16 blocks) |
-| `/hcm games gen clear <course> confirm` | Empty both halves and switch the course off (do this before moving a course's `origin`) |
+| `/hcm games gen clear <course> confirm` | Empty both halves and switch the course off (do this before moving a course's `origin`: see "Moving an area by hand") |
 
 The overrides (`on`/`off`, `tier`/`mix`, `pin`, `choose` (a one-set pin), rerolls per set, the claimed area, and the schedule
 with when it was first seen) live in `hcm_meta` under `gen.*`. Generated courses are ordinary
@@ -1165,10 +1253,10 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
   block like any other. Time Trials holds every Dropper course's pools itself too, so no pool spills
   even while Fresh Courses is off; a kept Dropper's plot keeps its water in; and a Dropper whose
   `origin` is moved without a `clear` keeps its old area guarded ("drain first": move it back and
-  `/hcm games gen clear` it; status lists it) until it is cleared there.
-- **Where:** x 5376-5535, y 160-223, z 4096-4111 (Easy Dropper) and 4160-4175 (Dropper); Classic
-  Dropper (recalls of either) at z 4224-4239. Each half is 64 x 64 x 16. The keep plot size is
-  unchanged.
+  `/hcm games gen clear` it; status lists it) until it is cleared there (see "Moving an area by hand").
+- **Where:** in the east column: half A x 7488-7551 and half B x 8128-8191, y 160-223, z 6768-6783
+  (Easy Dropper) and 7360-7375 (Dropper); Classic Dropper (recalls of either) at z 7952-7967. Each
+  half is 64 x 64 x 16. The keep plot size is unchanged.
 - **Admin:** `/hcm games gen on fresh_dropper` (or `slots.fresh_dropper.enabled: true`) and it is built
   with the next set, or at once with `/hcm games gen reroll fresh_dropper confirm`. `/hcm games gen mix
   fresh_dropper EMHHH` changes the levels (1-5 of E, M and H) from the next build. Droppers can't be
@@ -1177,11 +1265,11 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
 
 | Key | Default | Meaning |
 |---|---|---|
-| `fresh.slots.fresh_dropper_easy` | `{enabled: true, mix: EEE, origin: [5376, 160, 4096]}` | Easy Dropper |
-| `fresh.slots.fresh_dropper` | `{enabled: true, mix: EEMMH, origin: [5376, 160, 4160]}` | The Dropper (at most 5 levels) |
+| `fresh.slots.fresh_dropper_easy` | `{enabled: true, mix: EEE, origin: [7488, 160, 6768]}` | Easy Dropper |
+| `fresh.slots.fresh_dropper` | `{enabled: true, mix: EEMMH, origin: [7488, 160, 7360]}` | The Dropper (at most 5 levels) |
 | `fresh.rewards.clear_weekly.fresh_dropper_easy` / `.fresh_dropper` | `2` / `3` | First finish in a weekly set |
 | `fresh.rewards.clear_daily.fresh_dropper_easy` / `.fresh_dropper` | `1` / `2` | First finish in a daily set |
-| `fresh.classics.slots.fresh_classic_dropper.origin` | `[5376, 160, 4224]` | Where Classic Dropper is built |
+| `fresh.classics.slots.fresh_classic_dropper.origin` | `[7488, 160, 7952]` | Where Classic Dropper is built |
 | `trials.warmup_seconds` | `180` | 0 turns off the practice drop (and the other warm-ups) |
 
 **Verify in game** (Java and Bedrock):
@@ -1253,8 +1341,10 @@ line, so they can ask for a favourite back.
 | `fresh.archive.keep` | `0` | Days an old set stays in the archive after it was replaced; 0 = forever (kept and recalled sets never go) |
 | `fresh.feed_history` | `26` | The website's `freshHistory`: at most this many past sets per course |
 | `fresh.classics.days` | `7` | How long a recall lasts unless it says otherwise |
-| `fresh.classics.slots.<id>.origin` | see config.yml | Where each Classics slot is built (32 blocks from every other area) |
-| `fresh.keep.area` | `[4096, 128, 5376]` | Where kept courses go: plots 144 x 176 x 336, six to a row; 16 blocks from every Fresh Courses area, or keeping is off |
+| `fresh.classics.slots.<id>.origin` | see config.yml | Where each Classics slot is built (32 blocks from every other area; the shipped spots are 576 apart, out of sight). A bare `[x, y, z]` works too |
+| `fresh.classics.slots.<id>.half_gap` | not set (576) | Optional, as for a course: blocks between its two halves |
+| `fresh.keep.area` | `[1760, 128, 7296]` | Where kept courses go: plots 144 x 176 x 336, six to a row, rows along z; 16 blocks from every Fresh Courses area, or keeping is off. Each plot must be inside the world border (24 plots reach z 10367) |
+| `fresh.keep.plot_gap` | not set (576) | Optional: blocks between neighbouring plots (0-4096, a multiple of 16). 576 keeps kept courses out of sight of each other; a server that kept courses in 0.35 has `0` written (its plots touch) |
 | `fresh.keep.max_plots` | `24` | How many plots |
 
 **Verify in game** (on Java and on Bedrock, before switching it on for the family)
@@ -1363,8 +1453,9 @@ off (`games.falling_floors.enabled: false`).
   it might still be going at the next restart (at its longest: the 10-second countdown,
   `round_seconds`, then about 40 seconds more while the edges fall in), and `/hcm games check` warns
   when `round_seconds` is longer than `games.restart_hold_minutes`.
-- **Safety.** The arena is one box, 48 x 40 x 48 at `origin` (shipped x 5376-5423, y 176-215, z
-  4352-4399). Before anything is written it must be 32 blocks from every Fresh Courses area
+- **Safety.** The arena is one box, 48 x 40 x 48 at `origin` (shipped x 6688-6735, y 176-215, z
+  8544-8591, 576 blocks from everything else). Before anything is written it must be 32 blocks from
+  every Fresh Courses area
   (switched on or not), the kept courses and the Clubhouse, 16 from every hand-built course and from
   the world's spawn and `games.fresh.safe_spot`, and inside the world's heights and border. The
   first time, the box must be empty: anything in it closes the game, touching nothing, until `/hcm
@@ -1378,7 +1469,7 @@ off (`games.falling_floors.enabled: false`).
 | Key | Default | Meaning |
 |---|---|---|
 | `falling_floors.enabled` | `false` | The game's switch |
-| `falling_floors.origin` | `[5376, 176, 4352]` | The box's lowest corner; x and z are rounded down to the 16-block grid |
+| `falling_floors.origin` | `[6688, 176, 8544]` | The box's lowest corner; x and z are rounded down to the 16-block grid |
 | `falling_floors.fade_ticks` | `10` | How long a stepped-on block stays red, 6-20 ticks |
 | `falling_floors.min_players` | `2` | Ready players that start the countdown |
 | `falling_floors.max_players` | `12` | Most players in the arena, 2-16 |
@@ -1501,8 +1592,9 @@ every race and round works exactly as before**.
   session over; nothing is saved or given back twice.
 - **Nothing here pays or counts.** The Clubhouse moves no tokens and counts toward no board, quest,
   achievement or Cup; a race from it is the same race as always.
-- **Safety.** The generated room is one box, 32 x 16 x 32 at `origin` (shipped x 5376-5407, y
-  160-175, z 4448-4479), checked like the Falling Floors arena: 32 blocks from every Fresh Courses
+- **Safety.** The generated room is one box, 32 x 16 x 32 at `origin` (shipped x 6080-6111, y
+  160-175, z 8544-8575, 576 blocks from everything else), checked like the Falling Floors arena: 32
+  blocks from every Fresh Courses
   area, the kept courses and the arena, 16 from hand-built courses, spawn and `games.fresh.safe_spot`,
   inside the world's heights and border. The first time, the box must be empty: anything in it closes
   the Clubhouse, touching nothing, until `/hcm games clubhouse rebuild confirm`. It is built with the
@@ -1519,7 +1611,7 @@ every race and round works exactly as before**.
 | Key | Default | Meaning |
 |---|---|---|
 | `clubhouse.enabled` | `true` | The Clubhouse's switch (and Watch, Watch live, cheers and Take a rider). Nothing happens while `games.enabled` is false |
-| `clubhouse.origin` | `[5376, 160, 4448]` | The box's lowest corner; x and z are multiples of 16 |
+| `clubhouse.origin` | `[6080, 160, 8544]` | The box's lowest corner; x and z are multiples of 16 |
 | `clubhouse.max_minutes` | `30` | Minutes with no race or party going before a visitor is sent home |
 | `clubhouse.party_after` | `true` | Party racers come back here after the race |
 | `clubhouse.race_night_after` | `true` | Everyone comes here at the end of Race Night, the top three on the podium; on a track with no viewing stand, racers (and their riders) also wait here between races |
@@ -1851,7 +1943,9 @@ Cabinets and games of chance need nothing more. **Courses and mini golf need a G
    allowed and claimed, built and checked; or an owner-built room's arrival, podium and board set);
    every hand-built course is ready and its world loaded; Race Night (off, or Time Trials open, the
    schedule reads, each coming night fits or why it is skipped, the track can be raced with its grid
-   spots, and its viewing stand); the website feed (the dashboard, a feed token, and `/api/arcade`
+   spots, and its viewing stand); what players can see (each Games world void or not, the view
+   distance used, and every pair of the games' places close enough to see each other, as WARNs:
+   see "What players can see"); the website feed (the dashboard, a feed token, and `/api/arcade`
    built in memory, never over the network); and the LuckPerms line that takes games of chance away
    from one player (`/lp user <player> permission set hcm.games.chance false`). It ends "All good."
    or "N things to fix." (every WARN and FAIL).
@@ -2245,6 +2339,22 @@ Dropper and Falling Floors have their own lists in their sections)
     "endsAt":...}`; with Race Night on there is an `events` object; with Falling Floors on,
     `falling_floors` is in `games` with `"kind":"arena"`. With `arcade_show_names: false`, no
     `holder` appears anywhere.
+
+**Where the places stand: out of sight, and a void world** (see "Where they are")
+
+77. At the first start of this version the console says once "Games layout: a new install, so the
+    Games places use the new spots, far apart, and from any course you can't see another." (on a
+    server that built in 0.35: the WARN of "Coming from 0.35"). `/hcm games check`, under what
+    players can see: "View distance used: 10 (...)" and "Nothing else built by the games can be seen
+    from any course, the Clubhouse or the arena (view distance 10; the closest two places are 36
+    chunks apart, clear up to view distance 34)".
+78. `/hcm games gen tp fresh_parkour`, press F5 and look all round at your largest render distance:
+    sky and that course only, not another course and not its spare half (576 blocks east). The same
+    from `fresh_golf`, the Clubhouse and the Falling Floors gallery.
+79. `/mv create sky normal -g HomeCraftManagement`, then `/mv tp sky`: you stand on a 5 x 5
+    smooth-stone platform with a light, and there is nothing else, not even below. With `sky` in
+    `games.worlds` and `/hcm reload`, `/hcm games check` says "Games world 'sky' is void (nothing
+    below the courses)" (finish the steps in "A void world", or take it out again).
 
 ---
 

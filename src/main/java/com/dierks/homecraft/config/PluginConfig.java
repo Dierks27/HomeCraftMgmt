@@ -992,6 +992,15 @@ public final class PluginConfig {
         return games;
     }
 
+    /**
+     * Put back the Games settings read before a {@code /hcm reload}: the Games layout check couldn't
+     * give the new file its decision ({@code LayoutGuard}), so the running Games keep what they had
+     * rather than read spots nobody has decided.
+     */
+    public void keepGames(GamesConfig.Parsed before) {
+        this.games = before == null ? GamesConfig.Parsed.OFF : before;
+    }
+
     /** (Re)parse config.yml into the typed views above. */
     public void load() {
         FileConfiguration c = plugin.getConfig();

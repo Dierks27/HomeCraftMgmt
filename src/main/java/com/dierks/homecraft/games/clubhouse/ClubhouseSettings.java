@@ -39,11 +39,12 @@ public record ClubhouseSettings(boolean enabled, List<Integer> origin, int maxMi
     public static final int SIZE_Z = 32;
 
     /**
-     * The shipped corner: south of the Falling Floors arena, clear of every shipped Fresh Courses
-     * area, the Classics, the kept courses' area and the arena box ({@code ClubhouseRegionsTest}
-     * pins it).
+     * The shipped corner (LAYOUT-SPEC §1.5): south of the courses' west column, 576 blocks from every
+     * shipped Fresh Courses area, the Classics, the kept courses' area and the Falling Floors arena,
+     * so from the room none of them can be seen ({@code ClubhouseRegionsTest} and
+     * {@code ShippedLayoutTest} pin it).
      */
-    public static final List<Integer> ORIGIN = List.of(5376, 160, 4448);
+    public static final List<Integer> ORIGIN = List.of(6080, 160, 8544);
 
     public ClubhouseSettings {
         origin = List.copyOf(origin == null ? ORIGIN : origin);

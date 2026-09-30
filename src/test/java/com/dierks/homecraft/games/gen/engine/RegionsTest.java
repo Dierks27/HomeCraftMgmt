@@ -42,7 +42,7 @@ class RegionsTest {
     }
 
     @Test
-    void theShippedLayoutPassesEveryCheckAndEveryHalfIs32Apart() {
+    void theShippedLayoutPassesEveryCheckAndEveryHalfIs576Apart() {
         List<String> warns = new ArrayList<>();
         List<SlotConfig> out = Regions.validate(shipped(), warns::add, "games.fresh.slots");
         assertEquals(List.of(), warns, "the shipped slots need no WARN");
@@ -57,13 +57,13 @@ class RegionsTest {
         }
         for (int i = 0; i < halves.size(); i++) {
             for (int j = i + 1; j < halves.size(); j++) {
-                assertTrue(halves.get(i).gap(halves.get(j)) >= 32, halves.get(i).describe() + " and "
-                        + halves.get(j).describe() + " are at least 32 apart");
+                assertTrue(halves.get(i).gap(halves.get(j)) >= 576, halves.get(i).describe() + " and "
+                        + halves.get(j).describe() + " are at least 576 apart (out of sight of each other)");
             }
         }
         Slots.Def rings = Slots.SKY_RINGS;
-        assertEquals("x 4096..4223, y 128..303, z 4352..4671", rings.half('A').describe(), "the spec's table, half A");
-        assertEquals(4256, rings.half('B').minX(), "and half B");
+        assertEquals("x 6080..6207, y 128..303, z 4096..4415", rings.half('A').describe(), "the spec's table, half A");
+        assertEquals(6784, rings.half('B').minX(), "and half B, 576 past half A");
     }
 
     // ---- named extra boxes (EVENTS-DROPPER-SPEC §B.3.2) ---------------------------------------------

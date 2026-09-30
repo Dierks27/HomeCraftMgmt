@@ -76,7 +76,7 @@ class ArchiveSettingsTest {
         assertEquals(0, a.keepDays(), "archived forever");
         assertEquals(26, a.feedHistory(), "26 past courses a slot on the website");
         assertEquals(7, a.classicDays(), "a recall stays a week");
-        assertEquals(new KeepArea(4096, 128, 5376, 24), a.keep(), "24 plots, well apart");
+        assertEquals(new KeepArea(1760, 128, 7296, 24, 576), a.keep(), "24 plots from x 1760, z 7296, 576 apart");
         assertNull(a.keepProblem(), "keeping is on");
         for (Slots.Def d : Slots.CLASSICS) {
             assertArrayEquals(d.origin(), a.classic(d.id()).origin(), d.id() + " where the code places it");

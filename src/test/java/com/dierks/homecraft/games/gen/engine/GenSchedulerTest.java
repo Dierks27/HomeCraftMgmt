@@ -87,7 +87,9 @@ class GenSchedulerTest {
             assertTrue(d.reason().contains("4:00 PM"), "and says when: " + d.reason());
         }
         assertEquals(Kind.BUILD, at(due, GenKit.at(2026, 9, 29, 15, 44)).kind(), "15:44 is not");
-        assertEquals(Kind.BUILD, at(due, GenKit.at(2026, 9, 29, 16, 0)).kind(), "at the restart the next one is 04:00");
+        assertEquals(Kind.WAIT, at(due, GenKit.at(2026, 9, 29, 16, 0)).kind(),
+                "the restart's own minute is held too: the server stops some seconds into it");
+        assertEquals(Kind.BUILD, at(due, GenKit.at(2026, 9, 29, 16, 1)).kind(), "once it is over the next one is 04:00");
         SlotView rerolled = new SlotView(SLOT, true, false, tag(DAY, 0, 1), true, "easy", "easy", 1, null, 1, 0, 0, 0,
                 false, SECRET);
         assertEquals(Kind.WAIT, at(rerolled, GenKit.at(2026, 9, 30, 3, 50)).kind(),
@@ -233,8 +235,8 @@ class GenSchedulerTest {
             assertEquals(Kind.NONE, GenScheduler.decide(view(week), t, 0, WEEKLY, HOLD, weekly).kind(),
                     "this week's courses stay all week (at " + t + ")");
         }
-        Decision monday = GenScheduler.decide(view(week), GenKit.at(2026, 10, 5, 4, 0), 0, WEEKLY, HOLD, weekly);
-        assertEquals(Kind.BUILD, monday.kind(), "Monday 04:00 builds the next week");
+        Decision monday = GenScheduler.decide(view(week), GenKit.at(2026, 10, 5, 4, 1), 0, WEEKLY, HOLD, weekly);
+        assertEquals(Kind.BUILD, monday.kind(), "Monday 04:01, once the 04:00 restart is over, builds the next week");
         assertEquals(MON_28_SEP + 7, monday.day(), "for the week of Mon 5 Oct");
         assertEquals(7, monday.cadence(), "a weekly edition");
         assertEquals(GenSeed.seed(SECRET, 7, MON_28_SEP + 7, SLOT, 0), monday.seed(),
@@ -257,8 +259,8 @@ class GenSchedulerTest {
         assertEquals(GenKit.at(2026, 10, 1, 4, 0), kept.endsAt(), "until the next 4:00 AM, the new schedule's first");
         assertEquals(Kind.NONE, GenScheduler.decide(view(week, since), GenKit.at(2026, 10, 1, 3, 59), 0, S, HOLD,
                 daily).kind(), "never rebuilt mid-edition just because the setting changed");
-        Decision thu = GenScheduler.decide(view(week, since), GenKit.at(2026, 10, 1, 4, 0), 0, S, HOLD, daily);
-        assertEquals(Kind.BUILD, thu.kind(), "at 04:00 the daily courses begin");
+        Decision thu = GenScheduler.decide(view(week, since), GenKit.at(2026, 10, 1, 4, 1), 0, S, HOLD, daily);
+        assertEquals(Kind.BUILD, thu.kind(), "from 04:00 (once the restart's minute is over) the daily courses begin");
         assertEquals(20727, thu.day(), "Thursday's");
         assertEquals(1, thu.cadence(), "a daily edition");
         assertEquals(GenSeed.seed(SECRET, 1, 20727, SLOT, 0), thu.seed(), "with a daily seed");
@@ -275,7 +277,7 @@ class GenSchedulerTest {
         GenScheduler.Target kept = GenScheduler.target(wednesday, GenKit.at(2026, 9, 30, 16, 0), weekly, since);
         assertTrue(kept.kept(), "Wednesday's daily layout is kept");
         assertEquals(GenKit.at(2026, 10, 1, 4, 0), kept.endsAt(), "until its own end, the next 4:00 AM");
-        Decision thu = GenScheduler.decide(view(wednesday, since), GenKit.at(2026, 10, 1, 4, 0), 0, WEEKLY, HOLD,
+        Decision thu = GenScheduler.decide(view(wednesday, since), GenKit.at(2026, 10, 1, 4, 1), 0, WEEKLY, HOLD,
                 weekly);
         assertEquals(Kind.BUILD, thu.kind(), "then the week's set goes up");
         assertEquals(MON_28_SEP, thu.day(), "the week that began on Monday (key 7:38)");
@@ -293,7 +295,7 @@ class GenSchedulerTest {
         GenScheduler.Target kept = GenScheduler.target(week, GenKit.at(2026, 9, 30, 16, 0), three, since);
         assertEquals(GenKit.at(2026, 10, 2, 4, 0), kept.endsAt(), "the next 3-day grid day is Fri 2 Oct");
         assertTrue(three.starts(20728), "which is on the grid");
-        Decision fri = GenScheduler.decide(view(week, since), GenKit.at(2026, 10, 2, 4, 0), 0,
+        Decision fri = GenScheduler.decide(view(week, since), GenKit.at(2026, 10, 2, 4, 1), 0,
                 GenKit.settings(SLOT).withCadence(3), HOLD, three);
         assertEquals(Kind.BUILD, fri.kind(), "and the courses change then");
         assertEquals(20728, fri.day(), "on that day");
@@ -307,7 +309,7 @@ class GenSchedulerTest {
         long since = GenKit.at(2026, 9, 30, 15, 0);
         SlotView rerolled = new SlotView(SLOT, true, false, week, true, "easy", "easy", 1, null, 1, 0, 0, 0, false,
                 SECRET, since);
-        Decision d = GenScheduler.decide(rerolled, GenKit.at(2026, 9, 30, 16, 0), 0, S, HOLD, daily);
+        Decision d = GenScheduler.decide(rerolled, GenKit.at(2026, 9, 30, 16, 1), 0, S, HOLD, daily);
         assertEquals(Kind.BUILD, d.kind(), "an admin's reroll builds at once");
         assertEquals(MON_28_SEP, d.day(), "the kept edition");
         assertEquals(7, d.cadence(), "as a weekly one");
@@ -358,8 +360,8 @@ class GenSchedulerTest {
                 "and status and nextChangeAt say the courses change on Fri 9 Oct, when a new key goes up");
         assertEquals(GenKit.at(2026, 10, 9, 4, 0), GenScheduler.target(week, since, friday, since).endsAt(),
                 "already on Wednesday");
-        Decision next = GenScheduler.decide(view(week, since), GenKit.at(2026, 10, 9, 4, 0), 0, WEEKLY, HOLD, friday);
-        assertEquals(Kind.BUILD, next.kind(), "Fri 9 Oct 04:00 builds");
+        Decision next = GenScheduler.decide(view(week, since), GenKit.at(2026, 10, 9, 4, 1), 0, WEEKLY, HOLD, friday);
+        assertEquals(Kind.BUILD, next.kind(), "Fri 9 Oct 04:00 builds (once the restart's minute is over)");
         assertEquals(20735, next.day(), "the week that starts that Friday");
         assertEquals("7:39", Edition.editionKey(next.cadence(), next.day(), 0), "under a new key");
     }
@@ -377,7 +379,7 @@ class GenSchedulerTest {
             assertEquals(GenKit.at(2026, 10, 11, 4, 0),
                     GenScheduler.target(week, GenKit.at(2026, 10, 4, 12, 0), sunday, since).endsAt(),
                     "the reported change is Sun 11 Oct (since " + since + ")");
-            Decision d = GenScheduler.decide(view(week, since), GenKit.at(2026, 10, 11, 4, 0), 0, WEEKLY, HOLD, sunday);
+            Decision d = GenScheduler.decide(view(week, since), GenKit.at(2026, 10, 11, 4, 1), 0, WEEKLY, HOLD, sunday);
             assertEquals(Kind.BUILD, d.kind(), "and it happens then");
             assertEquals("7:39", Edition.editionKey(d.cadence(), d.day(), 0), "as 7:39");
         }
@@ -429,10 +431,20 @@ class GenSchedulerTest {
         assertFalse(GenScheduler.abandon(GenKit.at(2026, 9, 29, 15, 57), HOLD), "three minutes before: keep going");
         assertTrue(GenScheduler.abandon(GenKit.at(2026, 9, 29, 15, 58), HOLD), "two minutes before: give up");
         assertTrue(GenScheduler.abandon(GenKit.at(2026, 9, 30, 3, 59), HOLD), "before 04:00 too");
-        assertFalse(GenScheduler.abandon(GenKit.at(2026, 9, 30, 4, 0), HOLD), "at the restart the next is 12 hours off");
+        assertFalse(GenScheduler.abandon(GenKit.at(2026, 9, 30, 4, 1), HOLD),
+                "once the restart's minute is over the next is 12 hours off");
         assertFalse(GenScheduler.abandon(GenKit.at(2026, 9, 29, 15, 59), new RestartHold(List.of(), GenKit.ZONE, 5)),
                 "with no restart times nothing is abandoned");
         assertFalse(GenScheduler.nearRestart(GenKit.at(2026, 9, 29, 15, 59), HOLD, 0),
                 "avoid_before_restart_minutes: 0 holds nothing");
+    }
+
+    /** fx2-C #11: the restart's own minute is still before the stop: nothing starts, a job gives up. */
+    @Test
+    void theRestartsOwnMinuteStillCountsAsTheRestartComing() {
+        long restart = GenKit.at(2026, 9, 29, 16, 0);
+        assertTrue(GenScheduler.abandon(restart + 10_000, HOLD), "10 s into 4:00 PM the server hasn't stopped yet");
+        assertTrue(GenScheduler.nearRestart(restart + 10_000, HOLD, 5), "so no build starts either");
+        assertFalse(GenScheduler.abandon(restart + 60_000, HOLD), "from 4:01 PM the next restart is 12 hours off");
     }
 }

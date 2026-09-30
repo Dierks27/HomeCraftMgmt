@@ -550,7 +550,7 @@ common keys turns the games off, junk in one game's block closes that game.
 | `featured` | `auto` | `auto` picks a skill game or course each day; a game or course id pins it (`/hcm games feature`). `trials` or `golf` pins every course of that game |
 | `featured_bonus` | `1` | Tokens for the first finish of today's pick (counts toward `skill_daily_cap`) |
 | `feed_top` | `5` | The website's leaderboards: how many of each game's and course's best scores `/api/arcade` lists as `top` (0-25; 0 = none). Past Fresh courses list at most 3. Names only with `web.dashboard.arcade_show_names` |
-| `restart_times` | `["04:00", "16:00"]` | When the host restarts the server each day: the minute it actually stops, not when its warnings start (quoted 24-hour times in `clock.time_zone`; midnight is `"00:00"`). Just before each one, nothing a restart would cut off starts: courses and golf, a new Twenty-One or Higher or Lower hand (an open one plays on), a cabinet's scored daily try (today's board isn't dealt until after, and the try is kept; practice after a used try and Classic play go on). Spins and flips aren't held, and the plugin sends no warnings of its own. `[]` = off; an entry that isn't a time is dropped with a WARN |
+| `restart_times` | `["04:00", "16:00"]` | When the host restarts the server each day: the minute it actually stops, not when its warnings start (quoted 24-hour times in `clock.time_zone`; midnight is `"00:00"`). Just before each one, and through that minute until the server stops, nothing a restart would cut off starts: courses and golf, a new Twenty-One or Higher or Lower hand (an open one plays on), a cabinet's scored daily try (today's board isn't dealt until after, and the try is kept; practice after a used try and Classic play go on). Spins and flips aren't held, and the plugin sends no warnings of its own. `[]` = off; an entry that isn't a time is dropped with a WARN |
 | `restart_hold_minutes` | `5` | How many minutes before each restart that hold starts (1-60) |
 | `break.daily_choices` | `[10, 25, 50, 100]` | The daily limits a player can pick (they can also pick none) |
 | `break.pause_days` | `[1, 7, 30]` | The pauses a player can pick, in days |
@@ -778,7 +778,10 @@ pool counts the top-up once 2 or more are in, and it is paid only if 2 or more s
 At the week's rollover (the quests' week start at 04:00, when Fresh Courses change) the pool is
 shared by Cup time: 70/30 with 2 Cup times, 50/30/20 with 3 or more, rounded down with the rest
 to 1st. An entrant with no Cup time gets no share: their entry stays in the
-pool. It is settled once, and a rollover the server was down for is settled at the next start. The
+pool, so the Cup stops taking entries in its last `games.restart_hold_minutes` (5) before the
+rollover, and during a restart hold that runs into them ("This week's Cup is nearly over, so it takes
+no new entries."): no run started then could set a Cup time. It is settled once, and a rollover the
+server was down for is settled at the next start. The
 server keeps nothing: the pool is every entry, plus `games.cup.server_topup` (10) when 2 or more
 set a Cup time. A lone entrant, fewer than 2 Cup times, or a course deleted, re-made or closed
 mid-week gets every entry back, with the reason. Cup prizes aren't under the
@@ -1684,11 +1687,13 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
   that night and someone ranked below you: racers tied for last came last, and a night where nobody
   finished pays nothing. A racer who only warmed up (never in a race) gets no place. At most **5
   tokens a player a night**, and at most **3 prize nights a week**
-  server-wide (`prize_events_per_week`, the week the weekly boards use). A 4th night that week says
+  server-wide (`prize_events_per_week`, the week the weekly boards use, counted in the week race 1
+  starts in, even for a night announced the evening before). A 4th night that week says
   "Just for fun tonight - points only" and pays nothing; so does an admin's `fun` night. Prizes are a
   new reward kind (`EVENT_PRIZE`) **outside the daily skill cap**, paid once per player per night
-  (ledger source "Race Night"). A racer offline or somewhere tokens can't be earned is owed: it is
-  paid at their next join (and every 5 minutes while they're online), with a line that says so.
+  (ledger source "Race Night"). A racer offline or somewhere tokens can't be earned (watching live,
+  creative) is owed, and reads a line that says so (at once, or at their next join): it is paid at
+  their next join and every minute while they're online, even after Race Night is switched off.
 - **The season.** Every race's points also go on the month's season board (`rnseason:2026-10`,
   "Race Night · October" on the high-score screen); each night's result on its own board
   (`rnnight:<id>`, "Race Night · Fri 2 Oct"). `season: off` turns the season board off.
@@ -1716,7 +1721,9 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
 - **Boats bump.** Vanilla boats are solid to each other and that can't be switched off: race only on
   tracks with walls on both sides. Java and Bedrock boats can feel slightly different on ice.
 - **Achievements:** "Race at Race Night" (10) and "Win a Race Night" (30), counters, so they unlock
-  back home (config revision 18 adds them to a shipped list).
+  back home (config revision 18 adds them to a shipped list). Every racer who started a race of the
+  night is counted when it ends, wherever they are then (offline, or watching the others live), and so
+  is a night settled at the next boot after a crash.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -1911,8 +1918,9 @@ cabinet's scored daily try), `game_breaks` (Take a break), `game_scores`, `game_
 `game_saved_state` (a player's things during a world game), `game_courses` and `game_prefs`
 (invites, the golf ball, lines waiting for the next join). No `config_revision` bump: every
 `games` key is new and back-filled with its comments. A bare `games: false` (or
-`games.<id>: false`) is first rewritten as its `enabled` key, so a game you switched off stays
-off. Every token a game moves is in the ledger under that game's own source, so
+`games.<id>: false`, or a Fresh course's `games.fresh.slots.<id>: false`) is first rewritten as its
+`enabled` key, so a game or course you switched off stays off (and one you switched on stays on);
+the backfill never replaces a single value you wrote where a section belongs, it warns instead. Every token a game moves is in the ledger under that game's own source, so
 `/hcm tokens audit` shows each game's real flow.
 
 ### Verify in game
@@ -2105,7 +2113,7 @@ off. Every token a game moves is in the ledger under that game's own source, so
     Deal a Twenty-One hand and leave it open. From 3:05, `/hcm play cliffs` says "The server
     restarts at 3:10 PM. New runs open again after it."; the open hand plays to the end, but the
     next Deal is refused the same way, and so is a cabinet's daily board if you haven't had
-    today's try (Classic still deals). After 3:10 all of them work again. Put
+    today's try (Classic still deals), right through the 3:10 minute. From 3:11 all of them work again. Put
     `["04:00", "16:00"]` back and reload.
 
 **The setup check, the new-courses line, and the games' quests and achievements**

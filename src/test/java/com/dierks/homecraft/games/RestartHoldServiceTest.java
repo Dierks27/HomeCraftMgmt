@@ -87,8 +87,8 @@ class RestartHoldServiceTest {
         assertEquals(HELD, held.message(), "and the player reads when, and that it opens again after");
         clockTo(15, 59);
         assertEquals(HELD, games.sessions().entryRefusal(course).message(), "right up to the restart");
-        clockTo(16, 0);
-        assertNull(games.sessions().entryRefusal(course), "once the restart time has come, runs start again");
+        clockTo(16, 1);
+        assertNull(games.sessions().entryRefusal(course), "once the restart's minute is over, runs start again");
         assertEquals(100, host.balanceOf(alex.id), "nothing was taken for any of it");
     }
 
@@ -142,8 +142,8 @@ class RestartHoldServiceTest {
     void aNewRoundOpensAgainAfterTheRestart() {
         clockTo(15, 59);
         assertNull(games.rounds().open(alex.player, slots, 10, "v1"), "held at 3:59 PM");
-        clockTo(16, 0);
-        assertNotNull(games.rounds().open(alex.player, slots, 10, "v1"), "dealt again from 4:00 PM");
+        clockTo(16, 1);
+        assertNotNull(games.rounds().open(alex.player, slots, 10, "v1"), "dealt again from 4:01 PM");
         assertEquals(90, host.balanceOf(alex.id), "and only now is the stake taken");
     }
 
@@ -329,5 +329,26 @@ class RestartHoldServiceTest {
         try (PreparedStatement ps = host.connection.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             return rs.next() ? rs.getInt(1) : -1;
         }
+    }
+
+    /**
+     * fx2-C #11: the host stops the server some seconds into the restart's minute, so every new run
+     * is still held in that minute: a course, a new hand and today's scored try (which a stop seconds
+     * later would throw away for the day).
+     */
+    @Test
+    void theRestartsOwnMinuteStartsNothingNew() throws Exception {
+        CabinetGame snake = cabinet();
+        host.time.now = GamesKit.at(2026, 6, 10, 16, 0) + 10_000;
+        long day = games.clock().dayKey();
+        Refusal held = games.sessions().entryRefusal(course);
+        assertNotNull(held, "no course starts 10 s into 4:00 PM, before the server has stopped");
+        assertEquals(HELD, held.message(), "with the usual line");
+        assertNull(games.rounds().open(alex.player, slots, 10, "v1"), "no new hand either");
+        assertNull(snake.startDaily(alex.player), "nor today's scored try");
+        assertFalse(games.dao().dailyAttempt(alex.id, "test_snake", day), "so the try is kept for after the restart");
+        assertEquals(100, host.balanceOf(alex.id), "nothing was taken");
+        host.time.now = GamesKit.at(2026, 6, 10, 16, 1);
+        assertNull(games.sessions().entryRefusal(course), "from 4:01 PM runs start again");
     }
 }

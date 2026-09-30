@@ -37,16 +37,23 @@ import java.util.logging.Level;
  */
 public final class ClubhouseRoom {
 
+    /**
+     * Every key the room keeps in {@code hcm_meta} starts with this. The live host stores them through
+     * {@code GenMetaDao}, which refuses any key outside {@code gen.} (so a typo can never overwrite the
+     * schema version or the games secret): a key outside it could never be read or saved on a live
+     * server (fx2-C #8).
+     */
+    public static final String META_PREFIX = "gen.clubhouse.";
     /** Where the claim is kept in {@code hcm_meta}. */
-    public static final String CLAIM_KEY = "gen.clubhouse.claim";
+    public static final String CLAIM_KEY = META_PREFIX + "claim";
     /** "hand" while an owner-built room is the Clubhouse. */
-    public static final String MODE_KEY = "clubhouse.mode";
+    public static final String MODE_KEY = META_PREFIX + "mode";
     /** "1" while an admin has switched the Clubhouse off. */
-    public static final String OFF_KEY = "clubhouse.off";
+    public static final String OFF_KEY = META_PREFIX + "off";
     /** The owner-built room's spots: "world;x;y;z;yaw". */
-    public static final String SPAWN_KEY = "clubhouse.hand.spawn";
-    public static final String BOARD_KEY = "clubhouse.hand.board";
-    public static final String PODIUM_KEY = "clubhouse.hand.podium.";
+    public static final String SPAWN_KEY = META_PREFIX + "hand.spawn";
+    public static final String BOARD_KEY = META_PREFIX + "hand.board";
+    public static final String PODIUM_KEY = META_PREFIX + "hand.podium.";
     /** The build's time budget a tick, and the snapshots and chunk loads it may use. */
     static final int BUILD_MS = 3;
     static final int BUILD_SNAPSHOTS = 3;

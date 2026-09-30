@@ -101,6 +101,17 @@ public interface Game {
     default void onQuit(Player player) {
     }
 
+    // fx2-C #7: a prize already won is settled whatever the game's switch says.
+    /**
+     * Pay what the game still owes the player: a prize won that couldn't be paid then (offline, or
+     * somewhere tokens can't be earned). The framework calls it a moment after every join
+     * ({@code joined}) and once a minute for everyone online, WHETHER THE GAME IS OPEN OR NOT (only
+     * a failed game is skipped), as it finishes a round of chance left open: a switch closes new play,
+     * never what was already won. Runs inside the game's guard.
+     */
+    default void settleOwed(Player player, boolean joined) {
+    }
+
     /** Lines for {@code /hcm arcade odds} (games of chance), from the same engine it plays with. */
     default List<String> oddsLines() {
         return List.of();

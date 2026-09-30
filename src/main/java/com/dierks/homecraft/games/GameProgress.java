@@ -85,4 +85,14 @@ public interface GameProgress {
      */
     default void raceNightFinished(Player player, boolean won) {
     }
+
+    // fx2-C #6: Race Night is settled after the racing, by player id.
+    /**
+     * {@link #raceNightFinished(Player, boolean)} by id, which is how Race Night tells it: the night
+     * settles after its last race (or at the next boot, from its stored rows), when a racer may be
+     * offline, watching live in spectator or anywhere else, so what they raced is counted wherever
+     * they are then.
+     */
+    default void raceNightFinished(java.util.UUID player, boolean won) {
+    }
 }

@@ -734,19 +734,25 @@ public final class NightRunner implements RaceLink {
 
     private boolean claimSlot() {
         try {
-            return dao.claimPrizeSlot(plan.id(), Long.toString(week), perWeek);
+            return dao.claimPrizeSlot(plan.id(), Long.toString(week.getAsLong()), perWeek);
         } catch (SQLException e) {
             ports.log("Race Night: could not claim a prize slot, so tonight is just for fun: " + e.getMessage(), true);
             return false;
         }
     }
 
-    private long week;
+    /** The prize-night week, read when the slot is claimed (fx2-C #13). */
+    private java.util.function.LongSupplier week = () -> 0L;
     private int perWeek = 3;
 
-    /** The prize-night week key and the week's limit (the runner claims a slot at race 1's Go). */
-    public void prizeWeek(long weekKey, int prizeEventsPerWeek) {
-        this.week = weekKey;
+    /**
+     * The prize-night week and the week's limit. The runner claims a slot at race 1's Go, in the week
+     * {@code weekKey} gives THEN (fx2-C #13): a night is made up to 12 hours before its window (a long
+     * heads-up, an admin's {@code start ... in M}), maybe in the week before, and the screen shows a
+     * prize night by the week it is looked at, so the claim goes by the week the racing is in.
+     */
+    public void prizeWeek(java.util.function.LongSupplier weekKey, int prizeEventsPerWeek) {
+        this.week = weekKey == null ? () -> 0L : weekKey;
         this.perWeek = prizeEventsPerWeek;
     }
 
@@ -1028,10 +1034,12 @@ public final class NightRunner implements RaceLink {
         } catch (SQLException e) {
             ports.log("Race Night: could not settle " + plan.id() + ": " + e.getMessage(), true);
         }
-        int owed = pay.payNight(plan.id());
-        for (Map.Entry<UUID, RacePrizes.Prize> e : prizes.entrySet()) {
-            if (!ports.online(e.getKey()) && owed > 0) {
-                ports.tell(e.getKey(), PayLoop.WAITING, true);
+        // fx2-C #6: each racer whose prize can't be paid now (offline, or watching live, in creative, in a
+        // world without tokens) reads that it is waiting: now if online, else at their next join
+        List<UUID> owed = pay.payNightOwed(plan.id());
+        for (UUID u : owed == null ? List.<UUID>of() : owed) {
+            if (prizes.containsKey(u)) {
+                ports.tell(u, PayLoop.WAITING, true);
             }
         }
         String results = finishers.isEmpty() ? NOBODY_FINISHED : resultsLine(ranked);

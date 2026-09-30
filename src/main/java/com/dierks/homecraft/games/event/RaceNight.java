@@ -73,8 +73,6 @@ public final class RaceNight implements Game {
     static final String PAUSED = EventDao.META + "paused";
     /** A scheduled night an admin skipped: {@code race.skip.<id>}. */
     static final String SKIP = EventDao.META + "skip.";
-    /** Owed prizes are tried again this often while their racer is online (ticks). */
-    static final long OWED_TICKS = 20L * 60 * 5;
     /** What a night called off by a stop or a restart says. */
     static final String RESTARTED = "the server restarted during Race Night";
     /** What a track problem reads when there is no track at all. */
@@ -284,7 +282,6 @@ public final class RaceNight implements Game {
     @Override
     public void onJoin(Player player) {
         UUID id = player.getUniqueId();
-        games().later(this, 60, () -> payOwed(id, true));
         NightRunner n = night;
         if (n != null && n.in(id) && !n.phase().over()) {
             player.sendMessage(Text.of("&bYou're in tonight's Race Night &7- it starts at "
@@ -300,7 +297,7 @@ public final class RaceNight implements Game {
         news.remove(id);
     }
 
-    /** Every tick: the night; once a second the schedule and the bars; every 5 minutes the owed prizes. */
+    /** Every tick: the night; once a second the schedule and the bars (the owed prizes: {@link #settleOwed}). */
     private void tick() {
         ticks++;
         NightRunner n = night;
@@ -323,11 +320,6 @@ public final class RaceNight implements Game {
             if (last != null && now() - lastEndedAt > EventMachine.RESULTS_MS) {
                 last = null;
                 changed();
-            }
-        }
-        if (ticks % OWED_TICKS == 0) {
-            for (Player p : new ArrayList<>(Bukkit.getOnlinePlayers())) {
-                payOwed(p.getUniqueId(), false);
             }
         }
     }
@@ -485,13 +477,24 @@ public final class RaceNight implements Game {
         changed();
     }
 
+    /**
+     * How each night made here reaches the server, by its id: {@link LivePorts}. The tests that race a
+     * night made here, with no server, give it a fake ({@link #portsFor(java.util.function.Function)}).
+     */
+    private java.util.function.Function<String, NightPorts> portsFor = id -> new LivePorts(this, id);
+
+    /** The tests: the ports the nights made from now on use (fx2-C #13: race 1's Go of a night made here). */
+    void portsFor(java.util.function.Function<String, NightPorts> ports) {
+        this.portsFor = ports;
+    }
+
     /** Start running {@code plan} on {@code track} from {@code state}. */
     NightRunner begin(EventPlan plan, NightRunner.Track track, EventMachine.State state) {
         RaceNightSettings s = settings();
         String season = s.seasonOn() ? EventCopy.seasonBoard(EventCopy.seasonKey(plan.startsAt(), zone())) : null;
-        NightRunner r = new NightRunner(plan, track, dao(), new LivePorts(this, plan.id()), payLoop(), zone(), season,
+        NightRunner r = new NightRunner(plan, track, dao(), portsFor.apply(plan.id()), payLoop(), zone(), season,
                 s.announceMinutes(), state);
-        r.prizeWeek(DailyLookup.weekKey(games()), s.prizeEventsPerWeek());
+        r.prizeWeek(() -> DailyLookup.weekKey(games()), s.prizeEventsPerWeek()); // the week at race 1's Go
         r.standRadius(s.standRadius()); // race mode keeps the stand, within this
         r.onEnd(this::ended);
         news.clear();
@@ -561,6 +564,11 @@ public final class RaceNight implements Game {
             case CALL_OFF -> callOffStored(row, RESTARTED, now);
             case CALL_OFF_SETTLE -> {
                 StoredNight.settle(dao(), row, rules, "called off: " + RESTARTED, now);
+                // fx2-C #6: the races done count for the achievements, as for a night called off live
+                for (Map.Entry<UUID, Boolean> r : StoredNight.raced(dao().races(row.id()), dao().entries(row.id()))
+                        .entrySet()) {
+                    games().tellProgress(g -> g.raceNightFinished(r.getKey(), r.getValue()));
+                }
                 int owed = payLoop().payNight(row.id());
                 tellEntrants(row.id(), "&7Race Night was called off - " + RESTARTED + ". The races you finished "
                         + "still count" + (owed > 0 ? ", and prizes are paid when you're back in a world with tokens."
@@ -596,10 +604,15 @@ public final class RaceNight implements Game {
 
     /** The pay loop over the live rewards (EVENT_PRIZE, outside the skill cap, ref {@code event:<id>}). */
     PayLoop payLoop() {
+        return payLoop(RaceNight::online);
+    }
+
+    /** {@link #payLoop()}, finding who is online through {@code online}. */
+    private PayLoop payLoop(java.util.function.Function<UUID, Player> online) {
         return new PayLoop(dao(), new PayLoop.Payer() {
             @Override
             public int pay(UUID player, String ref, int tokens, String detail) {
-                Player p = online(player);
+                Player p = online.apply(player);
                 if (p == null || !games().rewards().canEarnHere(p)) {
                     return -1;
                 }
@@ -620,13 +633,18 @@ public final class RaceNight implements Game {
     }
 
     /** Pay what the player is owed from past nights; tell them once if some has to wait. */
-    private void payOwed(UUID player, boolean tellIfWaiting) {
-        int owed = payLoop().payOwed(player);
-        if (owed > 0 && tellIfWaiting) {
-            Player p = Bukkit.getPlayer(player);
-            if (p != null) {
-                p.sendMessage(Text.of(PayLoop.WAITING));
-            }
+    /**
+     * fx2-C #7: the prizes the player is owed from past nights, paid a moment after their join and
+     * once a minute while they are online, by the framework, even while Race Night or Time Trials is
+     * switched off (the switch closes new nights, never a prize already won). At a join, a prize
+     * still owed says so.
+     */
+    @Override
+    public void settleOwed(Player player, boolean joined) {
+        UUID id = player.getUniqueId();
+        int owed = payLoop(u -> u.equals(id) ? player : online(u)).payOwed(id);
+        if (owed > 0 && joined) {
+            player.sendMessage(Text.of(PayLoop.WAITING));
         }
     }
 

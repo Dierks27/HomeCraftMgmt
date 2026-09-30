@@ -290,7 +290,7 @@ class NightRunnerTest {
         NightRunner r = new NightRunner(plan, new NightRunner.Track(loop(), "Ice Loop", grid(), new Point(0, 70, 0)),
                 dao, ports, new PayLoop(dao, payer, () -> ports.now, Logger.getAnonymousLogger()), ZoneOffset.UTC,
                 SEASON, 30, EventMachine.State.scheduled());
-        r.prizeWeek(2920, 3);
+        r.prizeWeek(() -> 2920L, 3);
         return r;
     }
 
@@ -468,6 +468,35 @@ class NightRunnerTest {
         assertTrue(ports.home.containsAll(List.of(A, B, C)), "everyone home with their things");
     }
 
+    /**
+     * fx2-C #13: a night made before the week's rollover (a long heads-up, or an admin's start in 600)
+     * that goes after it claims its prize night in the week race 1 goes in, as the screen shows it:
+     * a full last week doesn't make it just for fun, and it doesn't use up last week's slots.
+     */
+    @Test
+    void thePrizeNightIsClaimedInTheWeekRace1GoesIn() throws Exception {
+        for (int i = 1; i <= 3; i++) { // last week used all three of its prize nights
+            String other = "rn-2026092" + i + "-1900";
+            dao.open(new EventDao.EventRow(other, "ice", T - 5 * 86_400_000L, T - 5 * 86_400_000L, EventDao.DONE, "",
+                    3, false, "", "", T, T, ""));
+            assertTrue(dao.claimPrizeSlot(other, "2919", 3), "last week's prize night " + i);
+        }
+        long[] week = {2919}; // the night is made on the last evening of last week
+        EventPlan plan = new EventPlan(ID, "ice", T - 10 * MIN, T, rules(0), false, "");
+        runner = new NightRunner(plan, new NightRunner.Track(loop(), "Ice Loop", grid(), new Point(0, 70, 0)), dao,
+                ports, new PayLoop(dao, payer, () -> ports.now, Logger.getAnonymousLogger()), ZoneOffset.UTC, SEASON,
+                30, EventMachine.State.scheduled());
+        runner.prizeWeek(() -> week[0], 3);
+        runUntil(T - 10 * MIN + 1_000);
+        join(A, B, C);
+        week[0] = 2920; // the week turns over before race 1's Go
+        runUntil(T + 250);
+        assertTrue(runner.prizeNight(), "the new week has all its prize nights: this is one");
+        assertTrue(ports.titles.get(A).contains("Prizes: 5, 3, 2 tokens"), "and Go says so: " + ports.titles.get(A));
+        assertEquals(1, dao.prizedIn("2920"), "it uses the new week's slot");
+        assertEquals(3, dao.prizedIn("2919"), "never last week's");
+    }
+
     @Test
     void theFourthPrizeNightOfAWeekIsJustForFun() throws Exception {
         for (int i = 1; i <= 3; i++) {
@@ -534,6 +563,29 @@ class NightRunnerTest {
         assertEquals(1, payer.to(C), "the finisher's 1 token");
         assertEquals(0, loop.payOwed(C), "a second join pays nothing");
         assertEquals(1, payer.paid.values().stream().filter(v -> v == 1).count(), "once");
+    }
+
+    /**
+     * fx2-C #6: a racer who is online but can't be paid where they are when the night settles (watching
+     * live in spectator from the Clubhouse, in creative) reads that their prize is waiting, as an
+     * offline one does at their next join; a racer who was paid reads nothing of the kind.
+     */
+    @Test
+    void anOnlineRacerWhosePrizeIsOwedIsToldItIsWaiting() throws Exception {
+        open();
+        join(A, B, C);
+        runUntil(T + 250);
+        payer.canEarn.remove(A); // Ava is watching the others live when the night settles
+        race(A, B, C);
+        runUntil(ports.now + 21_000);
+        race(A, B, C);
+        runUntil(ports.now + 21_000);
+        race(A, B, C);
+        runUntil(ports.now + 1_000);
+        assertEquals(EventMachine.Phase.DONE, runner.phase(), "settled");
+        assertEquals(1, dao.owed(A).size(), "Ava's prize is owed");
+        assertTrue(ports.heard(A, "Your Race Night prize is waiting"), "and she is told so: " + ports.told.get(A));
+        assertFalse(ports.heard(B, "Your Race Night prize is waiting"), "Ben was paid: nothing is waiting for him");
     }
 
     @Test

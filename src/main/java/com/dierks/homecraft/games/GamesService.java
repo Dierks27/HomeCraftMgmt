@@ -252,6 +252,7 @@ public final class GamesService {
             Player p = host.online(id);
             if (p != null) {
                 deliverNotices(p);
+                settleOwed(p, true); // fx2-C #7
             }
         };
         if (host.later(NOTICE_DELAY_TICKS, deliver) == null) {
@@ -785,10 +786,25 @@ public final class GamesService {
         }
     }
 
-    /** The one-minute sweep: stale rounds, lapsed invites. Never throws. */
+    /** The one-minute sweep: stale rounds, lapsed invites, owed prizes. Never throws. */
     void sweep() {
         quietly(rounds::sweep);
         quietly(invites::expireLapsed);
+        for (Player p : online()) { // fx2-C #7
+            settleOwed(p, false);
+        }
+    }
+
+    /**
+     * fx2-C #7: each game's {@link Game#settleOwed} for the player, open or not (a failed game is
+     * skipped), each inside its own guard: a prize won is paid even after its game was switched off.
+     */
+    private void settleOwed(Player player, boolean joined) {
+        for (Game g : games) {
+            if (!failed.contains(g.id())) {
+                guard(g, () -> g.settleOwed(player, joined));
+            }
+        }
     }
 
     /** Build every game not built yet, in catalog order; a constructor that throws leaves that game out. */

@@ -278,10 +278,7 @@ class RaceModeEndToEndTest {
 
         @Override
         public void progress(UUID player, boolean won) {
-            Player p = race.player(player);
-            if (p != null) {
-                games.tellProgress(g -> g.raceNightFinished(p, won)); // LivePorts.progress
-            }
+            games.tellProgress(g -> g.raceNightFinished(player, won)); // LivePorts.progress: by id (fx2-C #6)
         }
 
         @Override
@@ -355,7 +352,7 @@ class RaceModeEndToEndTest {
         PayLoop pay = payLoop(dao);
         NightRunner night = new NightRunner(plan, new NightRunner.Track(loop, loop.name(), grid, STAND), dao, ports,
                 pay, ZoneOffset.UTC, "rnseason:2026-09", 30, EventMachine.State.scheduled());
-        night.prizeWeek(2920, 3);
+        night.prizeWeek(() -> 2920L, 3);
         int[] before = {bench.balance(id(ava)), bench.balance(id(ben)), bench.balance(id(cal))};
 
         // joining opens at T - 10; Ava, Ben and Cal join
@@ -546,7 +543,7 @@ class RaceModeEndToEndTest {
         EventPlan plan = new EventPlan(NIGHT, loop.id(), startsAt - 10 * MIN, startsAt, rules, false, "");
         NightRunner night = new NightRunner(plan, new NightRunner.Track(loop, loop.name(), grid, STAND), dao, ports,
                 payLoop(dao), ZoneOffset.UTC, "rnseason:2026-09", 30, EventMachine.State.scheduled());
-        night.prizeWeek(2920, 3);
+        night.prizeWeek(() -> 2920L, 3);
         return night;
     }
 

@@ -1826,4 +1826,58 @@ class ConfigMigrationTest {
         return spec.parse().apply(new GamesConfig.Node("games." + spec.id(), Map.of("enabled", false), w -> { }),
                 spec.defaults());
     }
+
+    // ---- fx2-C #9: a bare Fresh course switch, and any scalar where a section belongs ----------------
+
+    /** The bundled config with {@code games.fresh.slots.<id>}'s flow line replaced by {@code <id>: <value>}. */
+    private static String bundledWithSlot(String id, String value) throws IOException {
+        String text;
+        try (InputStream in = ConfigMigrationTest.class.getResourceAsStream("/config.yml")) {
+            assertNotNull(in, "the bundled config.yml is missing from the test classpath");
+            text = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        String from = "\n      " + id + ": {";
+        int a = text.indexOf(from);
+        int b = text.indexOf('\n', a + 1);
+        assertTrue(a > 0 && b > a, "fixture: config.yml ships games.fresh.slots." + id);
+        return text.substring(0, a) + "\n      " + id + ": " + value + text.substring(b);
+    }
+
+    @Test
+    void aBareFreshCourseSwitchSurvivesMigrateAndBackfillAsItsEnabledKey() throws Exception {
+        String text = bundledWithSlot("fresh_dropper", "false"); // the owner turns the dropper off
+        int a = text.indexOf("\n      fresh_boat: {");
+        int b = text.indexOf('\n', a + 1);
+        YamlConfiguration onDisk = yaml(text.substring(0, a) + "\n      fresh_boat: true" + text.substring(b));
+        assertEquals(Boolean.FALSE, onDisk.get("games.fresh.slots.fresh_dropper", null), "fixture: the dropper is off");
+        assertEquals(Boolean.TRUE, onDisk.get("games.fresh.slots.fresh_boat", null), "fixture: Ice Boat is on");
+
+        List<String> added = new ArrayList<>();
+        List<String> log = startUp(onDisk, added);
+        assertEquals(Boolean.FALSE, onDisk.get("games.fresh.slots.fresh_dropper.enabled", null),
+                "the owner's dropper stays off after the migration and the backfill: " + log);
+        assertEquals(Boolean.TRUE, onDisk.get("games.fresh.slots.fresh_boat.enabled", null),
+                "and Ice Boat stays on (Race Night's track): " + log);
+        assertTrue(added.contains("games.fresh.slots.fresh_dropper.mix"), "the rest of the section is filled in: "
+                + added);
+        assertFalse(added.contains("games.fresh.slots.fresh_dropper.enabled"), "the switch is kept, not backfilled");
+        com.dierks.homecraft.games.gen.DailySettings fresh = (com.dierks.homecraft.games.gen.DailySettings)
+                GamesConfig.parse(onDisk, w -> { }).settings(GameCatalog.spec("fresh_courses"));
+        assertFalse(fresh.slot("fresh_dropper").enabled(), "and it reads as off");
+        assertTrue(fresh.slot("fresh_boat").enabled(), "and Ice Boat as on");
+        List<String> again = new ArrayList<>();
+        assertEquals(List.of(), startUp(yaml(onDisk.saveToString()), again), "a second start changes nothing");
+        assertEquals(List.of(), again, "and adds nothing");
+    }
+
+    @Test
+    void theBackfillNeverReplacesAnOwnersValueWithTheShippedSection() {
+        YamlConfiguration onDisk = yaml("block: false\nother:\n  kept: 1\n");
+        YamlConfiguration shipped = yaml("block:\n  enabled: true\n  size: 3\nother:\n  kept: 2\n  more: 4\n");
+        List<String> added = HomeCraftManagement.backfillConfig(onDisk, shipped);
+        assertEquals(Boolean.FALSE, onDisk.get("block", null),
+                "a value where a section is shipped is the owner's: never swapped for the shipped section");
+        assertEquals(List.of("other.more"), added, "everything else missing is still filled in");
+        assertEquals(1, onDisk.get("other.kept", null), "and nothing the owner set is changed");
+    }
 }

@@ -53,13 +53,13 @@ public final class CourseListMenu extends GameMenu {
             set(22, Menus.icon(Material.PAPER, "&7No courses yet", "&7They're built in the Games world.",
                     "&7Check back soon!"), null);
         }
-        for (int i = 0; i < PER_PAGE; i++) {
-            int at = p * PER_PAGE + i;
-            if (at >= open.size()) {
-                break;
-            }
-            Course c = open.get(at);
-            set(FIRST + i, trials.courseTile(viewer, c, week), e -> new CourseMenu(plugin, trials, c, viewer,
+        // fx2-C #5: the page's tiles in one build, the Weekly Cup read once for all of them
+        List<Course> shown = open.subList(Math.min(open.size(), p * PER_PAGE),
+                Math.min(open.size(), (p + 1) * PER_PAGE));
+        List<TimeTrials.Face> faces = trials.faces(viewer, shown, week);
+        for (int i = 0; i < shown.size(); i++) {
+            Course c = shown.get(i);
+            set(FIRST + i, faces.get(i).item(), e -> new CourseMenu(plugin, trials, c, viewer,
                     this::reopen).open(viewer));
         }
         if (p > 0) {

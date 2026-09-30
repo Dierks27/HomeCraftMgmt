@@ -136,9 +136,14 @@ final class GamesKit {
         boolean canSchedule = true;
 
         Host(long now) {
+            this(now, c -> c);
+        }
+
+        /** The host with the framework's database reached through {@code wrap} (the real connection in). */
+        Host(long now, java.util.function.UnaryOperator<Connection> wrap) {
             try {
                 connection = DriverManager.getConnection("jdbc:sqlite::memory:");
-                db = Database.open(connection, Logger.getAnonymousLogger());
+                db = Database.open(wrap.apply(connection), Logger.getAnonymousLogger());
             } catch (SQLException e) {
                 throw new IllegalStateException(e);
             }

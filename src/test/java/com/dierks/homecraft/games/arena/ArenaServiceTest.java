@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.arena;
 
 import com.dierks.homecraft.games.NoPush;
+import com.dierks.homecraft.games.RestartHold;
 import com.dierks.homecraft.games.arena.FakeArenaHost.P;
 import com.dierks.homecraft.games.arena.rules.ArenaRound;
 import com.dierks.homecraft.games.arena.rules.ArenaText;
@@ -604,6 +605,24 @@ class ArenaServiceTest {
         host.nextRestart = host.now + solo + 1_000;
         arena.solo(a.id);
         assertEquals(ArenaRound.Phase.TELEPORT, arena.round().phase(), "with time for all of it, it starts");
+    }
+
+    /**
+     * fx2-C #11: the live host reads the hold and the next restart from {@link RestartHold}; in the
+     * restart's own minute (the server stops some seconds into it) no round may start.
+     */
+    @Test
+    void noRoundStartsInTheRestartsOwnMinute() {
+        booted();
+        RestartHold hold = new RestartHold(List.of(java.time.LocalTime.of(16, 0)), java.time.ZoneOffset.UTC, 5);
+        long restart = hold.next(0);
+        long now = restart + 10_000;
+        host.holding = hold.holding(now); // as LiveArenaHost reads them
+        host.nextRestart = hold.next(now);
+        assertTrue(arena.restartClose(now, 0), "10 s into the restart's minute: no countdown or solo round starts");
+        host.holding = hold.holding(restart + 60_000);
+        host.nextRestart = hold.next(restart + 60_000);
+        assertFalse(arena.restartClose(restart + 60_000, 0), "from the next minute the restart is 24 hours off");
     }
 
     // ---- a reset a newer request replaced (F review #10) ----------------------------------------

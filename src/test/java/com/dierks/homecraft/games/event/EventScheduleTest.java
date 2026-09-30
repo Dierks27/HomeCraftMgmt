@@ -207,4 +207,16 @@ class EventScheduleTest {
         NightRules noWarmup = new NightRules(3, 0, 2, 8, List.of(10), 2, 1, List.of(5, 3, 2), 1, false, 0, 60, 4, 20);
         assertEquals(WORST, noWarmup.worstMillis(), "the spec's 15 minutes without a warm-up");
     }
+
+    /** fx2-C #11: a night whose window opens in the restart's own minute is cut off by it. */
+    @Test
+    void aNightOpeningInTheRestartsOwnMinuteDoesNotFit() {
+        RestartHold owner = new RestartHold(List.of(LocalTime.of(4, 0), LocalTime.of(16, 0)), CHICAGO, 5);
+        long restart = at(2026, 10, 3, 16, 0);
+        assertEquals("A restart is at 4:00 PM - Race Night needs 15 minutes.",
+                EventSchedule.restartProblem(restart + 10_000, restart + 10 * 60_000L, WORST, owner),
+                "the server stops some seconds into 4:00 PM");
+        assertNull(EventSchedule.restartProblem(restart + 60_000, restart + 10 * 60_000L, WORST, owner),
+                "from 4:01 PM the restart is over");
+    }
 }

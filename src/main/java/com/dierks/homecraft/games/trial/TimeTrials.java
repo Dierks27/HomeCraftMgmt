@@ -313,14 +313,48 @@ public final class TimeTrials implements Game {
     /** One tile per open course on the Courses tab, easiest first. */
     @Override
     public List<GameTile> tiles(Player viewer) {
-        List<Course> open = openCourses();
-        String week = courseOfWeek(open);
-        List<GameTile> out = new ArrayList<>(open.size());
-        for (int i = 0; i < open.size(); i++) {
-            Course c = open.get(i);
-            out.add(new GameTile(Tab.COURSES, courseTile(viewer, c, week), c.id(), i));
+        List<Face> faces = faces(viewer);
+        List<GameTile> out = new ArrayList<>(faces.size());
+        for (int i = 0; i < faces.size(); i++) {
+            Face f = faces.get(i);
+            out.add(new GameTile(Tab.COURSES, f.item(), f.course(), i));
         }
         return out;
+    }
+
+    /** What every open course's tile shows, easiest first, for one build of the Games screen. */
+    List<Face> faces(Player viewer) {
+        List<Course> open = openCourses();
+        return faces(viewer, open, courseOfWeek(open));
+    }
+
+    /**
+     * What the tiles of {@code courses} show, in order, for one screen build (the Games screen's open
+     * courses, a page of the course list): the Weekly Cup is read through one {@link CupLink.Tiles} for
+     * all of them (fx2-C #5), so the viewer's hidden-Cup choice and balance are read once a screen, not
+     * once a course. Not kept past the build.
+     */
+    public List<Face> faces(Player viewer, List<Course> courses, String courseOfWeek) {
+        CupLink.Tiles cups = CupLink.tiles(games(), viewer); // the Weekly Cup's reads shared by every tile
+        List<Face> out = new ArrayList<>(courses.size());
+        for (Course c : courses) {
+            out.add(face(viewer, c, courseOfWeek, cups));
+        }
+        return out;
+    }
+
+    /**
+     * What a course's tile shows before it is an item: its course, icon, NAME, lore, and its glint
+     * ({@code null}: none set). Kept apart from the item so a screen's reads can be tested (an item
+     * needs a server).
+     */
+    public record Face(String course, Material icon, String name, List<String> lore, Boolean glint) {
+
+        /** The tile. */
+        public ItemStack item() {
+            ItemStack i = Menus.icon(icon, name, lore.toArray(new String[0]));
+            return glint == null ? i : Menus.glint(i, glint);
+        }
     }
 
     /** Every open course, each paying under its kind's own ledger source. */
@@ -686,8 +720,16 @@ public final class TimeTrials implements Game {
 
     /** A course's tile: "River Run (Boat · Medium) - best 1:02.3", its rules, the record, what it pays. */
     public ItemStack courseTile(Player viewer, Course c, String courseOfWeek) {
+        return face(viewer, c, courseOfWeek, CupLink.tiles(games(), viewer)).item();
+    }
+
+    /**
+     * What {@link #courseTile(Player, Course, String)} shows, with the Weekly Cup read through
+     * {@code cups}, one {@link CupLink.Tiles} for every tile of a screen (fx2-C #5).
+     */
+    private Face face(Player viewer, Course c, String courseOfWeek, CupLink.Tiles cups) {
         if (c.generated()) {
-            return dailyTile(viewer, c, courseOfWeek);
+            return dailyFace(viewer, c, courseOfWeek, cups);
         }
         Long best = best(viewer, c.id());
         GamesDao.ScoreRow record = record(c.id());
@@ -703,13 +745,12 @@ public final class TimeTrials implements Game {
         if (c.id().equals(courseOfWeek)) {
             lore.add("&6★ Course of the week");
         }
-        CupLink.Tile cup = CupLink.tile(games(), viewer, c); // Weekly Cup: read once for the lore and the NAME
+        CupLink.Tile cup = cups.tile(c); // Weekly Cup: read once for the lore and the NAME
         lore.addAll(cup.lines());
         lore.add("&eClick to play");
-        return Menus.icon(icon(c.kind()), "&e" + c.name() + " &7(" + TrialText.label(c) + ") &7- "
+        return new Face(c.id(), icon(c.kind()), "&e" + c.name() + " &7(" + TrialText.label(c) + ") &7- "
                 + (c.kind() == TrialKind.DROPPER ? TrialText.levels(DropperLayout.levels(c)) + " · " : "") // a kept dropper
-                + (best == null ? "no time yet" : "best " + TrialText.time(best)) + cup.suffix(),
-                lore.toArray(new String[0]));
+                + (best == null ? "no time yet" : "best " + TrialText.time(best)) + cup.suffix(), lore, null);
     }
 
     /**
@@ -719,7 +760,7 @@ public final class TimeTrials implements Game {
      * "&amp;6Classic: Hard Parkour (week of 5 Oct)", its code and that its old records are the ones
      * to beat.
      */
-    private ItemStack dailyTile(Player viewer, Course c, String courseOfWeek) {
+    private Face dailyFace(Player viewer, Course c, String courseOfWeek, CupLink.Tiles cups) {
         GenTag t = c.gen();
         GamesService g = games();
         int cadence = GenCopy.words(t); // a Classic's board holds its original set's times: no "this week"
@@ -747,15 +788,14 @@ public final class TimeTrials implements Game {
         if (c.id().equals(courseOfWeek)) {
             lore.add("&6★ Course of the week");
         }
-        CupLink.Tile cup = CupLink.tile(g, viewer, c); // Weekly Cup: read once for the lore and the NAME
+        CupLink.Tile cup = cups.tile(c); // Weekly Cup: read once for the lore and the NAME
         lore.addAll(cup.lines());
         lore.add("&eClick to play");
         String fact = (c.kind() == TrialKind.DROPPER ? DailyText.levels(DropperLayout.levels(c)) + " · " : "")
                 + DailyText.trialFact(cadence, stars);
         String name = t.recalled() ? "&6" + classicName(t, c.name()) + " &7- " + fact
                 : DailyText.tabName(Slots.of(t.slot()), c.name(), fact, DailyLookup.current(g, t.slot()), cadence);
-        return Menus.glint(Menus.icon(icon(c.kind()), name + DailyLookup.codeSuffix(code)
-                + cup.suffix(), lore.toArray(new String[0])), stars >= 3);
+        return new Face(c.id(), icon(c.kind()), name + DailyLookup.codeSuffix(code) + cup.suffix(), lore, stars >= 3);
     }
 
     /**

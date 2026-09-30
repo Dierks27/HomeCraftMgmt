@@ -33,7 +33,10 @@ public interface RoomHost {
     /** Whether {@code name} is one of {@code games.worlds} (where world sessions may take players). */
     boolean gamesWorld(String name);
 
-    /** A stored value ({@code hcm_meta}), or {@code null}. Throws when it can't be read. */
+    /**
+     * A stored value ({@code hcm_meta}), or {@code null}. Throws when it can't be read. Every key starts
+     * with {@link ClubhouseRoom#META_PREFIX} ({@code gen.}), the only keys the live store takes.
+     */
     String meta(String key) throws Exception;
 
     /** Store (or, with {@code null}, forget) a value. Throws when it can't be written. */

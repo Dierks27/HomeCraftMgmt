@@ -619,8 +619,10 @@ public final class BoatPlanner implements Planner {
                 drops.append(drops.length() == 0 ? "" : ",").append(l.drop());
             }
             TrackProfile.Lip last = profile.last();
+            String where = last == null ? "" : " (" + Math.round(profile.finish - last.s()) + " before the finish"
+                    + (profile.finalInFront() ? ", in front of the stand)" : ")");
             out.add("drops " + drops + " (" + profile.descent() + " down), Final Drop "
-                    + (last == null ? 0 : last.drop()) + " - sand: run-offs " + pieces.runoffs() + ", kerbs "
+                    + (last == null ? 0 : last.drop()) + where + " - sand: run-offs " + pieces.runoffs() + ", kerbs "
                     + pieces.kerbs() + ", pit " + pieces.count(TrackPieces.Kind.SAND_PIT) + " - split "
                     + pieces.count(TrackPieces.Kind.SPLIT) + " - cave " + pieces.count(TrackPieces.Kind.CAVE)
                     + " - forest " + pieces.count(TrackPieces.Kind.FOREST) + " - boost "

@@ -564,6 +564,9 @@ class BoatPlannerTest {
                 long finals = m.plan.signs().stream().filter(s -> s.lines().equals(GenCopy.boatFinalDrop())).count();
                 assertEquals(after <= 70 ? 1 : 0, finals, level + " day " + day + ": the finish is " + Math.round(after)
                         + " after the Final Drop, so " + (after <= 70 ? "one FINAL DROP! sign" : "no FINAL DROP! sign"));
+                assertTrue(m.finished(m.work, BoatPlanner.TRIES).summary().get(1).contains("Final Drop " + last.drop() + " ("
+                                + Math.round(after) + " before the finish" + (after <= 70 ? ", in front of the stand)" : ")")),
+                        level + ": the admin summary says where the Final Drop is");
                 if (after <= 70) {
                     inFront++;
                     assertTrue(after >= BoatEnvelope.zone(last.drop()) + 3, level + ": and it is Z(d) + 3 before the finish");

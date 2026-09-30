@@ -168,6 +168,70 @@ class PaletteTest {
     }
 
     @Test
+    void leafDistancesAreVanillasShortestPathFromALogCappedAtSeven() {
+        // §1.1.2: a trunk at (0, 0..3, 0), a 3 x 3 canopy round its top at y 3 and a plus above it at y 4
+        List<int[]> logs = new java.util.ArrayList<>();
+        for (int y = 0; y <= 3; y++) {
+            logs.add(new int[]{0, y, 0});
+        }
+        List<int[]> leaves = new java.util.ArrayList<>();
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                if (x != 0 || z != 0) {
+                    leaves.add(new int[]{x, 3, z});
+                }
+            }
+        }
+        leaves.add(new int[]{0, 4, 0});
+        leaves.add(new int[]{1, 4, 0});
+        java.util.Map<Long, Integer> d = Palette.leafDistances(logs, leaves);
+        assertEquals(10, d.size(), "every leaf has one");
+        assertEquals(1, d.get(Palette.blockKey(1, 3, 0)), "beside the trunk: 1");
+        assertEquals(2, d.get(Palette.blockKey(1, 3, 1)), "a corner, two steps round: 2");
+        assertEquals(1, d.get(Palette.blockKey(0, 4, 0)), "on top of the trunk: 1");
+        assertEquals(2, d.get(Palette.blockKey(1, 4, 0)), "beside that, or over a 1: 2");
+
+        List<int[]> chain = new java.util.ArrayList<>();
+        for (int x = 1; x <= 9; x++) {
+            chain.add(new int[]{x, 0, 0});
+        }
+        java.util.Map<Long, Integer> far = Palette.leafDistances(List.of(new int[]{0, 0, 0}), chain);
+        for (int x = 1; x <= 9; x++) {
+            assertEquals(Math.min(x, 7), far.get(Palette.blockKey(x, 0, 0)), "a chain counts up, capped at 7: " + x);
+        }
+        assertEquals(7, Palette.leafDistances(List.of(), List.of(new int[]{5, 5, 5})).get(Palette.blockKey(5, 5, 5)),
+                "a leaf no log holds is 7");
+        assertTrue(Palette.leafDistances(logs, List.of()).isEmpty(), "no leaves, nothing");
+        assertEquals(1, Palette.leafDistances(List.of(new int[]{0, 0, 0}), List.of(new int[]{0, -1, 0}))
+                .get(Palette.blockKey(0, -1, 0)), "under a log counts too, and below y 0");
+
+        assertTrue(Palette.holdsLeaves(Palette.log("oak")) && Palette.holdsLeaves(Palette.TRACK_WALL)
+                && Palette.holdsLeaves("minecraft:stripped_oak_log"), "logs and wood, stripped too (vanilla's #logs)");
+        assertFalse(Palette.holdsLeaves(Palette.MOSS) || Palette.holdsLeaves(Palette.leaves("oak", 1))
+                || Palette.holdsLeaves(Palette.GLASS), "moss, leaves and glass hold no leaf up");
+        assertTrue(Palette.isLeaves(Palette.leaves("birch", 3)) && !Palette.isLeaves(Palette.log("birch")),
+                "leaves are leaves");
+    }
+
+    @Test
+    void aLeafWhoseDistanceIsNotVanillasIsCaught() {
+        List<String> palette = List.of(Palette.log("oak"), Palette.leaves("oak", 1), Palette.leaves("oak", 2),
+                Palette.leaves("oak", 3), Palette.TRACK_WALL, Palette.MOSS);
+        List<BlockOp> tree = List.of(new BlockOp(0, 0, 0, (short) 0), new BlockOp(1, 0, 0, (short) 1),
+                new BlockOp(2, 0, 0, (short) 2), new BlockOp(2, 1, 0, (short) 3), new BlockOp(0, 1, 0, (short) 5));
+        assertEquals(List.of(), Palette.leafProblems(palette, tree), "1, 2 and 3 steps from the log");
+        List<BlockOp> wrong = List.of(new BlockOp(0, 0, 0, (short) 0), new BlockOp(1, 0, 0, (short) 2),
+                new BlockOp(2, 0, 0, (short) 2), new BlockOp(2, 1, 0, (short) 3));
+        assertEquals(List.of("1 leaf says the wrong distance (first at 1 0 0: it says 2, vanilla gives 1): the game"
+                + " would change it"), Palette.leafProblems(palette, wrong), "a leaf beside the log that says 2");
+        List<BlockOp> wall = List.of(new BlockOp(5, 0, 5, (short) 4), new BlockOp(5, 1, 5, (short) 2));
+        assertEquals(1, Palette.leafProblems(palette, wall).size(),
+                "a stripped-wood wall holds a leaf as a log does: beside one a leaf is 1, not 2");
+        assertEquals(List.of(), Palette.leafProblems(palette, List.of(new BlockOp(0, 0, 0, (short) 0))), "no leaves");
+        assertEquals(List.of(), Palette.leafProblems(null, List.of()), "nothing, nothing to say");
+    }
+
+    @Test
     void theSandIsSmoothSandstoneAndNeverFalls() {
         assertEquals("minecraft:smooth_sandstone", Palette.SAND, "a full block that never falls, flows or ticks");
         assertEquals("minecraft:smooth_sandstone_slab[type=bottom]", Palette.SAND_SLAB, "a sunken bunker's slab");

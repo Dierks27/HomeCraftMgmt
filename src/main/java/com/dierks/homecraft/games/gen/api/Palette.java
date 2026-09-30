@@ -1,6 +1,8 @@
 package com.dierks.homecraft.games.gen.api;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -217,7 +219,7 @@ public final class Palette {
      * <ul>
      *   <li>every {@code *_leaves} says {@code persistent=true} (it never decays) and
      *       {@code waterlogged=false}, with a {@code distance} of 1 to {@value #MAX_LEAF_DISTANCE}
-     *       (the validators check it is the one vanilla would give it);</li>
+     *       (the validators check it is the one vanilla would give it: {@link #leafProblems});</li>
      *   <li>every {@code *_slab} says {@code type=bottom} (the golf model's half block);</li>
      *   <li>every {@code *_log} says {@code axis=y} (a trunk);</li>
      *   <li>nothing says {@code waterlogged=true}, and no state is given twice or can't be read.</li>
@@ -349,6 +351,144 @@ public final class Palette {
             throw new IllegalArgumentException("not a wood of the palette: " + wood);
         }
         return w;
+    }
+
+    // ---- leaf distance (§1.1.2): vanilla's own rule, one copy for every planner and validator ------------
+
+    /**
+     * Whether a block holds leaves up, as vanilla's {@code #logs} tag says: any log or wood, stripped
+     * too (so a {@link #GOLF_WALL}/{@link #TRACK_WALL} of stripped spruce wood counts), and the nether
+     * stems. A leaf beside one is at {@code distance=1}.
+     */
+    public static boolean holdsLeaves(String blockData) {
+        String id = id(blockData);
+        return id.endsWith("_log") || id.endsWith("_wood") || id.endsWith("_stem") || id.endsWith("_hyphae");
+    }
+
+    /** Whether a block is leaves (any wood): a leaf passes its distance on to the next. */
+    public static boolean isLeaves(String blockData) {
+        return id(blockData).endsWith("_leaves");
+    }
+
+    /**
+     * A block position as one number, for {@link #leafDistances}: x and z in 26 bits, y in 12 (any
+     * block of a world).
+     */
+    public static long blockKey(int x, int y, int z) {
+        return ((long) (x & 0x3FFFFFF) << 38) | ((long) (z & 0x3FFFFFF) << 12) | (y & 0xFFF);
+    }
+
+    /**
+     * The {@code distance} vanilla gives each leaf, keyed by {@link #blockKey}: 1 + the least distance
+     * of its six face neighbours, where anything that {@link #holdsLeaves holds leaves} counts 0 and
+     * anything else (air, stone, a block that isn't the plan's) counts 7, capped at
+     * {@value #MAX_LEAF_DISTANCE}. That is the shortest path from any log through leaves, found
+     * breadth first. The rule has one answer, so a plan that writes it never changes when a
+     * neighbour updates. Only the given blocks count: a canopy must stand clear of anything that isn't
+     * the plan's (two columns, §1.1.2).
+     *
+     * @param logs   {x, y, z} of every block that holds leaves
+     * @param leaves {x, y, z} of every leaf
+     */
+    public static Map<Long, Integer> leafDistances(List<int[]> logs, List<int[]> leaves) {
+        Map<Long, Integer> out = new HashMap<>();
+        if (leaves == null || leaves.isEmpty()) {
+            return out;
+        }
+        Set<Long> anchor = new HashSet<>();
+        if (logs != null) {
+            for (int[] l : logs) {
+                anchor.add(blockKey(l[0], l[1], l[2]));
+            }
+        }
+        Map<Long, int[]> leaf = new HashMap<>();
+        for (int[] l : leaves) {
+            leaf.put(blockKey(l[0], l[1], l[2]), l);
+        }
+        int[][] faces = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+        ArrayDeque<int[]> queue = new ArrayDeque<>();
+        for (int[] l : leaves) {
+            long k = blockKey(l[0], l[1], l[2]);
+            if (out.containsKey(k)) {
+                continue;
+            }
+            for (int[] f : faces) {
+                if (anchor.contains(blockKey(l[0] + f[0], l[1] + f[1], l[2] + f[2]))) {
+                    out.put(k, 1);
+                    queue.add(l);
+                    break;
+                }
+            }
+        }
+        while (!queue.isEmpty()) {
+            int[] l = queue.poll();
+            int d = out.get(blockKey(l[0], l[1], l[2]));
+            if (d >= MAX_LEAF_DISTANCE) {
+                continue;
+            }
+            for (int[] f : faces) {
+                long n = blockKey(l[0] + f[0], l[1] + f[1], l[2] + f[2]);
+                int[] next = leaf.get(n);
+                if (next != null && !out.containsKey(n)) {
+                    out.put(n, d + 1);
+                    queue.add(next);
+                }
+            }
+        }
+        for (long k : leaf.keySet()) {
+            out.putIfAbsent(k, MAX_LEAF_DISTANCE);
+        }
+        return out;
+    }
+
+    /**
+     * Every leaf of a plan whose stored {@code distance} isn't the one vanilla gives it
+     * ({@link #leafDistances} over the plan's own blocks), said once with how many and the first;
+     * empty when all are right (or there are none). What both boat and golf validators ask.
+     */
+    public static List<String> leafProblems(List<String> palette, List<BlockOp> ops) {
+        List<String> out = new ArrayList<>();
+        if (palette == null || ops == null) {
+            return out;
+        }
+        List<int[]> logs = new ArrayList<>();
+        List<int[]> leaves = new ArrayList<>();
+        List<BlockOp> leafOps = new ArrayList<>();
+        for (BlockOp op : ops) {
+            if (op.state() < 0 || op.state() >= palette.size()) {
+                continue;
+            }
+            String b = palette.get(op.state());
+            if (holdsLeaves(b)) {
+                logs.add(new int[]{op.x(), op.y(), op.z()});
+            } else if (isLeaves(b)) {
+                leaves.add(new int[]{op.x(), op.y(), op.z()});
+                leafOps.add(op);
+            }
+        }
+        if (leafOps.isEmpty()) {
+            return out;
+        }
+        Map<Long, Integer> want = leafDistances(logs, leaves);
+        int wrong = 0;
+        String first = null;
+        for (BlockOp op : leafOps) {
+            Map<String, String> states = states(palette.get(op.state()));
+            int said = leafDistance(states == null ? null : states.get("distance"));
+            int is = want.get(blockKey(op.x(), op.y(), op.z()));
+            if (said != is) {
+                wrong++;
+                if (first == null) {
+                    first = op.x() + " " + op.y() + " " + op.z() + ": it says " + (said < 0 ? "none" : said)
+                            + ", vanilla gives " + is;
+                }
+            }
+        }
+        if (wrong > 0) {
+            out.add(wrong + " lea" + (wrong == 1 ? "f says" : "ves say") + " the wrong distance (first at " + first
+                    + "): the game would change " + (wrong == 1 ? "it" : "them"));
+        }
+        return out;
     }
 
     /** A magenta arrow pointing {@code facing} ({@code north}, {@code south}, {@code east}, {@code west}). */

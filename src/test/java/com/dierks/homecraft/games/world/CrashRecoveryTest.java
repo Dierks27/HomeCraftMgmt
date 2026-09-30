@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -30,7 +31,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li><b>never stuck in spectator mode</b>: a watcher's SPECTATOR is the session's own, and after a
  *       crash there is no session left to take it back. When the recovery then fails in place (the
  *       world isn't there yet, the snapshot doesn't read, the database is down) they are put in
- *       adventure mode, unless spectator was their own mode before the game.</li>
+ *       adventure mode, unless spectator was their own mode before the game;</li>
+ *   <li><b>never dropped</b> (#19, second pass): the crash left them where they were flying, and out of
+ *       any session nothing spares a fall in a Games world. They are brought down to a floor (the
+ *       spawn of the world they are in) by our own trip first, still a spectator on the way, and only
+ *       then put in adventure mode. A trip that fails leaves them a spectator, who can't fall.</li>
  * </ul>
  */
 class CrashRecoveryTest {
@@ -90,7 +95,34 @@ class CrashRecoveryTest {
     /** The server dies; the next boot finds the player as their file had them. */
     private SessionCore<FakeServer.Body, String> crash(FakeServer after) {
         wes.crash();
+        if (!after.worldExists(wes.place.world())) {
+            wes.place = after.mainSpawn(); // Paper: a player whose world isn't loaded joins at the main spawn
+        }
         return new SessionCore<>(dao, after, log);
+    }
+
+    /** A crashed watcher, back in the Games world where their file had them: in the air, a spectator. */
+    private SessionCore<FakeServer.Body, String> crashWatching(FakeServer after) {
+        visit();
+        watch();
+        wes.autosave(); // watching for more than five minutes: SPECTATOR and the spot they flew to are in their file
+        SessionCore<FakeServer.Body, String> rebooted = crash(after);
+        assertEquals(FLYING, wes.place, "(the crash left them where they were flying)");
+        assertEquals("SPECTATOR", wes.gameMode, "(in the session's spectator mode)");
+        return rebooted;
+    }
+
+    /** The recovery failed in place: they come down to the floor first, and only there leave spectator mode. */
+    private void broughtDown(FakeServer after, SessionCore<FakeServer.Body, String> rebooted, String why) {
+        assertEquals("SPECTATOR", wes.gameMode, why + ": not dropped where they were flying (a spectator can't fall)");
+        assertEquals(FLYING, wes.place, why + ": (the trip down is on its way)");
+        assertTrue(rebooted.recovering(wes.id), why + ": on the way down nothing else starts, and a fall is spared");
+        after.arriveAll();
+        Place floor = after.spawn("games");
+        assertEquals(floor, wes.place, why + ": brought down to a floor, the Games world's spawn, never left at y 95");
+        assertEquals("ADVENTURE", wes.gameMode, why + ": then out of spectator mode, not flying through bases");
+        assertEquals(floor, wes.modeResetAt, why + ": the mode changed only once they were on the floor");
+        assertFalse(rebooted.recovering(wes.id), why + ": nothing left on the way");
     }
 
     private long count(String item) {
@@ -151,33 +183,32 @@ class CrashRecoveryTest {
         after.worlds.remove("games"); // Multiverse hasn't loaded the Games world yet
         SessionCore<FakeServer.Body, String> rebooted = crash(after);
         assertEquals("SPECTATOR", wes.gameMode, "(the crash left them in the session's spectator mode)");
+        assertEquals(after.mainSpawn(), wes.place, "(and the server put them on the main world's spawn)");
         rebooted.joined(wes);
         after.arriveAll();
         assertEquals("ADVENTURE", wes.gameMode, "the recovery failed in place, but never in spectator mode");
-        assertEquals(FLYING, wes.place, "they stay where they are (fail in place)");
+        assertEquals(after.mainSpawn(), wes.place, "on a floor: the spawn of the world the server put them in");
+        assertEquals(after.mainSpawn(), wes.modeResetAt, "out of spectator mode only there");
         assertNotNull(dao.loadState(wes.id), "the row is kept for an admin");
         assertTrue(wes.messages.contains(SessionCore.SAFE_WITH_ADMIN), "and they are told their things are safe");
     }
 
     @Test
-    void aWatcherWhoseSnapshotNoLongerReadsIsNotLeftInSpectatorMode() throws Exception {
-        visit();
-        watch();
-        wes.autosave();
+    void aWatcherWhoseSnapshotNoLongerReadsIsBroughtDownThenOutOfSpectatorMode() throws Exception {
+        FakeServer after = new FakeServer();
+        SessionCore<FakeServer.Body, String> rebooted = crashWatching(after);
         try (PreparedStatement ps = conn.prepareStatement("UPDATE game_saved_state SET items = ?")) {
             ps.setBytes(1, "JUNK".getBytes()); // an upgrade the old item blob no longer reads under
             ps.executeUpdate();
         }
-        FakeServer after = new FakeServer();
-        SessionCore<FakeServer.Body, String> rebooted = crash(after);
         rebooted.joined(wes);
-        after.arriveAll();
-        assertEquals("ADVENTURE", wes.gameMode, "no flying through bases until an admin helps");
-        assertEquals(FLYING, wes.place, "left where they are");
+        broughtDown(after, rebooted, "the snapshot doesn't read");
+        assertNotNull(dao.loadState(wes.id), "the row is kept for an admin");
+        assertTrue(wes.messages.contains(SessionCore.SAFE_WITH_ADMIN), "and they are told their things are safe");
     }
 
     @Test
-    void aWatcherWhoseSavedStateCantBeReadAtAllIsNotLeftInSpectatorMode() throws Exception {
+    void aWatcherWhoseSavedStateCantBeReadAtAllIsBroughtDownThenOutOfSpectatorMode() throws Exception {
         visit();
         watch();
         wes.autosave();
@@ -185,14 +216,101 @@ class CrashRecoveryTest {
             st.execute("ALTER TABLE game_saved_state RENAME TO game_saved_state_away"); // the database fails
         }
         FakeServer after = new FakeServer();
-        SessionCore<FakeServer.Body, String> rebooted = crash(after);
+        SessionCore<FakeServer.Body, String> rebooted = crash(after); // at boot: the rows aren't known
         rebooted.joined(wes);
-        assertEquals("ADVENTURE", wes.gameMode, "in a Games world with a row nobody can read: not in spectator mode");
-        assertEquals(FLYING, wes.place, "left where they are");
+        broughtDown(after, rebooted, "a Games world, a body a game cleared, and a row nobody can read");
         try (Statement st = conn.createStatement()) {
             st.execute("ALTER TABLE game_saved_state_away RENAME TO game_saved_state");
         }
         assertNotNull(dao.loadState(wes.id), "and nothing was lost");
+    }
+
+    @Test
+    void aWatcherWhoseRestoreInTheirSessionWorldCantReadTheRowAgainIsBroughtDown() throws Exception {
+        FakeServer after = new FakeServer();
+        SessionCore<FakeServer.Body, String> rebooted = crashWatching(after);
+        after.beforePrepare = () -> { // the first read worked; the database fails before the restore's own
+            after.beforePrepare = null;
+            try (Statement st = conn.createStatement()) {
+                st.execute("ALTER TABLE game_saved_state RENAME TO game_saved_state_away");
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        };
+        rebooted.joined(wes);
+        broughtDown(after, rebooted, "the restore in place couldn't read the row again");
+        try (Statement st = conn.createStatement()) {
+            st.execute("ALTER TABLE game_saved_state_away RENAME TO game_saved_state");
+        }
+        assertNotNull(dao.loadState(wes.id), "and nothing was lost");
+    }
+
+    @Test
+    void aWatcherWhoseRestoreInTheirSessionWorldReadsAnUnreadableSnapshotIsBroughtDown() throws Exception {
+        FakeServer after = new FakeServer();
+        SessionCore<FakeServer.Body, String> rebooted = crashWatching(after);
+        after.beforePrepare = () -> { // the first decode worked; the row changed before the restore's own
+            after.beforePrepare = null;
+            try (PreparedStatement ps = conn.prepareStatement("UPDATE game_saved_state SET items = ?")) {
+                ps.setBytes(1, "JUNK".getBytes());
+                ps.executeUpdate();
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        };
+        rebooted.joined(wes);
+        broughtDown(after, rebooted, "the restore in place read a snapshot that doesn't decode");
+        assertNotNull(dao.loadState(wes.id), "the row is kept for an admin");
+    }
+
+    @Test
+    void aWatcherWhoseSnapshotWontGoOnIsBroughtDown() throws Exception {
+        FakeServer after = new FakeServer();
+        SessionCore<FakeServer.Body, String> rebooted = crashWatching(after);
+        after.applyFails = true; // it throws before it gets as far as their mode
+        rebooted.joined(wes);
+        broughtDown(after, rebooted, "putting it back failed");
+        assertEquals(0, wes.applies, "(nothing went on)");
+        assertNotNull(dao.loadState(wes.id), "the row is kept for an admin");
+        assertTrue(wes.messages.contains(SessionCore.SAFE_WITH_ADMIN), "and they are told their things are safe");
+    }
+
+    @Test
+    void aTripDownThatFailsLeavesThemASpectatorWhoCantFallAndTheNextJoinTriesAgain() throws Exception {
+        FakeServer after = new FakeServer();
+        SessionCore<FakeServer.Body, String> rebooted = crashWatching(after);
+        try (PreparedStatement ps = conn.prepareStatement("UPDATE game_saved_state SET items = ?")) {
+            ps.setBytes(1, "JUNK".getBytes());
+            ps.executeUpdate();
+        }
+        rebooted.joined(wes);
+        assertEquals(1, after.trips.size(), "(a trip down is on its way)");
+        after.fail(0); // another plugin refused the teleport
+        assertEquals("SPECTATOR", wes.gameMode, "never put in adventure mode in mid-air: flying beats falling");
+        assertEquals(FLYING, wes.place, "(still where they were)");
+        assertNull(wes.modeResetAt, "their mode was never touched");
+        assertFalse(rebooted.recovering(wes.id), "nothing is left on the way, so the next try can start");
+        rebooted.joined(wes); // they rejoin
+        broughtDown(after, rebooted, "the next join");
+    }
+
+    @Test
+    void anAdminLookingRoundTheCoursesInTheirOwnSpectatorModeIsLeftAloneWhileTheDatabaseFails() throws Exception {
+        FakeServer.Body ada = new FakeServer.Body("Ada", FLYING);
+        ada.gameMode = "SPECTATOR"; // her own, over a course; no game ever cleared her
+        try (Statement st = conn.createStatement()) {
+            st.execute("ALTER TABLE game_saved_state RENAME TO game_saved_state_away"); // down at boot
+        }
+        SessionCore<FakeServer.Body, String> booted = new SessionCore<>(dao, server, log);
+        assertTrue(booted.hasRow(ada.id), "(with the rows unknown, every join asks, and a failed read says maybe)");
+        booted.joined(ada);
+        assertEquals(0, server.started, "nobody moves her");
+        assertEquals(FLYING, ada.place, "she stays where she is");
+        assertEquals("SPECTATOR", ada.gameMode, "in her own spectator mode: no game's mark in her data");
+        assertNull(ada.modeResetAt, "never touched");
+        try (Statement st = conn.createStatement()) {
+            st.execute("ALTER TABLE game_saved_state_away RENAME TO game_saved_state");
+        }
     }
 
     @Test

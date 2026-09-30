@@ -292,6 +292,9 @@ final class SessionCore<P, I> {
          */
         void resetMode(P p, String sessionMode);
 
+        /** The player's game mode now, by its name ({@code "SURVIVAL"}, {@code "SPECTATOR"}, ...). */
+        String gameMode(P p);
+
         void tell(P p, String line);
     }
 
@@ -1201,21 +1204,61 @@ final class SessionCore<P, I> {
      * runs for a live one): with their world not loaded yet or a snapshot that no longer reads, they
      * would fly through every base until an admin helped. So, still in spectator mode while the mode
      * they came in with ({@code row}) isn't, they are put in adventure mode, as our own change. With
-     * no row to read (the database is failing) that is done only in a Games world, where a live row
-     * says a game put them there.
+     * no row to read (the database is failing) that is done only for a body a game cleared (the mark
+     * in their own data) in a Games world: an admin looking round the courses in their own spectator
+     * mode is left alone.
+     *
+     * <p>Never in mid-air, though (final gate #19, second pass). Where a crash leaves a watcher is where
+     * Paper's autosave found them flying (over Sky Rings, in a Dropper shaft, inside terrain), and
+     * outside a session nothing spares a fall there: the mode change alone would drop them, or leave
+     * them in a wall. As {@link #land} does for a live watcher, they are brought down to a floor first, the
+     * spawn of the world they are in (the landing a recovery already uses), by our own trip (armed,
+     * landing with no fall), and only then put in adventure mode. While it is on its way they are
+     * still a spectator, who can't fall, and in {@code recovering}, so no other recovery starts. A trip
+     * that fails, a world with no spawn or a server that is stopping leaves them in spectator mode for
+     * the next join or an admin: flying is better than falling.
      */
     private void unstick(P p, SavedState row) {
-        if (!port.online(p)) {
+        if (!port.online(p) || !SPECTATOR.equals(port.gameMode(p))) {
             return;
         }
-        if (row == null ? !port.gamesWorld(port.world(p)) : SPECTATOR.equals(row.gameMode())) {
+        String world = port.world(p);
+        if (row == null ? !port.gamesWorld(world) || !cleared(p) : SPECTATOR.equals(row.gameMode())) {
             return;
         }
-        try {
-            port.resetMode(p, SPECTATOR);
-        } catch (RuntimeException e) {
-            log.log(Level.WARNING, "Games: could not take " + port.name(p) + " out of spectator mode", e);
+        Place floor = port.spawn(world);
+        if (floor == null || port.stopping()) {
+            log.warning("Games: left " + port.name(p) + " in spectator mode: there is no floor to bring them"
+                    + " down to now (the next join tries again)");
+            return;
         }
+        UUID id = port.id(p);
+        long token = ++tokens;
+        recovering.put(id, token);
+        go(p, floor, false, ok -> {
+            if (!owns(id, token)) {
+                return;
+            }
+            recovering.remove(id);
+            if (!Boolean.TRUE.equals(ok) || !port.online(p) || !floor.world().equals(port.world(p))) {
+                if (port.online(p)) {
+                    log.warning("Games: could not bring " + port.name(p) + " down to a floor, so they are"
+                            + " left in spectator mode (the next join tries again)");
+                }
+                return;
+            }
+            try {
+                port.resetMode(p, SPECTATOR);
+            } catch (RuntimeException e) {
+                log.log(Level.WARNING, "Games: could not take " + port.name(p) + " out of spectator mode", e);
+            }
+        });
+    }
+
+    /** Whether the player's own data says a game cleared them (for any session). */
+    private boolean cleared(P p) {
+        String m = port.mark(p);
+        return m != null && m.startsWith(CLEARED);
     }
 
     /**

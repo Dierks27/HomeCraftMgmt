@@ -65,6 +65,8 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
         float fall;
         /** How fast they are moving (the server keeps that through a teleport too). */
         double speed;
+        /** Where they were when {@code resetMode} last took them out of a game's mode (a watcher's spectator). */
+        Place modeResetAt;
         /** The player's own data file: the body as of its last save (ours, or the server's autosave). */
         private DataFile file;
 
@@ -150,6 +152,10 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
     private final List<Task> tasks = new ArrayList<>();
     /** Runs just before a state is captured (to race another row in). */
     Runnable beforeCapture;
+    /** Runs as each snapshot is decoded (to break the row or the database under a recovery). */
+    Runnable beforePrepare;
+    /** Every restore throws before it changes anything (a snapshot that won't go on). */
+    boolean applyFails;
 
     // ---- the test's controls --------------------------------------------------------------------
 
@@ -350,9 +356,15 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
 
     @Override
     public SessionCore.Restore<Body> prepare(SavedState s) {
+        if (beforePrepare != null) {
+            beforePrepare.run();
+        }
         String[] contents = slots(s.items());
         List<SavedStateCodec.Effect> effects = SavedStateCodec.decodeEffects(s.effects());
         return p -> {
+            if (applyFails) {
+                throw new IllegalStateException("the snapshot won't go on");
+            }
             p.applies++;
             p.appliedIn.add(p.place.world());
             SavedStateCodec.apply(s, effects, new FakeBody(p, contents));
@@ -491,7 +503,13 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
     public void resetMode(Body p, String sessionMode) {
         if (sessionMode != null && sessionMode.equals(p.gameMode)) {
             p.gameMode = "ADVENTURE";
+            p.modeResetAt = p.place;
         }
+    }
+
+    @Override
+    public String gameMode(Body p) {
+        return p.gameMode;
     }
 
     @Override

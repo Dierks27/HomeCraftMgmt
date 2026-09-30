@@ -142,6 +142,11 @@ final class BukkitPort implements SessionCore.Port<Player, ItemStack> {
         }
     }
 
+    @Override
+    public String gameMode(Player p) {
+        return p.getGameMode().name();
+    }
+
     /** The plugin is being disabled (PluginDisableEvent, just before onDisable). */
     void disabling() {
         disabling = true;

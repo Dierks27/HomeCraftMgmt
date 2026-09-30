@@ -10,12 +10,16 @@ import java.util.UUID;
  * @param id        unique for this server run
  * @param from      who asked
  * @param to        who is asked
- * @param gameId    the game
+ * @param gameId    the game's id, or the invite's own key ({@code rider}: a ride in someone's boat), which
+ *                  the player's invite switch is kept under
  * @param summary   what is on offer, as the invitee reads it ("Coin Flip for 10 tokens each")
  * @param sentAt    when it was sent (epoch ms)
  * @param expiresAt when it lapses (epoch ms)
+ * @param name      what it is an invite to, for a screen's NAME ("Ride along", "Connect Four"): the key fact a
+ *                  Bedrock player reads, since they read only item names
  */
-public record Invite(long id, UUID from, UUID to, String gameId, String summary, long sentAt, long expiresAt) {
+public record Invite(long id, UUID from, UUID to, String gameId, String summary, long sentAt, long expiresAt,
+                     String name) {
 
     /** Whether it has lapsed at {@code now}. */
     public boolean expired(long now) {

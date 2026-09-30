@@ -397,6 +397,14 @@ public final class Clubhouse implements Game, ClubDoor {
             refuse(p, ClubhouseText.CLOSED);
             return;
         }
+        // Final gate, group B (#2): every way in from outside (/hcm play watch, Watch, Go to / Wait in the
+        // Clubhouse) runs the play gate, as /hcm play clubhouse does: hcm.games.play, a world games are
+        // played in. Before anything is taken or moved.
+        com.dierks.homecraft.games.Refusal gate = games().canOpen(p, this);
+        if (gate != null) {
+            games().tell(p, gate);
+            return;
+        }
         World w = Bukkit.getWorld(r.world());
         ClubhouseSite.Spot s = r.spawn(nextSpot++);
         if (w == null || s == null) {
@@ -1290,6 +1298,11 @@ public final class Clubhouse implements Game, ClubDoor {
     /** Watch live (for the tests). */
     WatchLive watchLive() {
         return watch;
+    }
+
+    /** A test's own room (over a fake world), so the ways in can be walked with no server. Final gate, group B. */
+    void room(ClubhouseRoom r) {
+        this.room = r;
     }
 
     private static void refuse(Player p, String line) {

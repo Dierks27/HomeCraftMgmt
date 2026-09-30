@@ -32,6 +32,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * answer; a player who can't be asked is simply not asked. What the INVITER hears after sending is
  * the game's answer callback's to say, so the framework says nothing to them on a deny, an expiry
  * or a quit — nobody reads the same news twice.
+ *
+ * <p>The final gate's group B: an invite under a key of its own ({@code rider}) is answered inside the
+ * guard of the game that sent it, however it ends, and is named for what it is (#0); and {@code /hcm play
+ * invites off} covers golf together and every invite key added later (the docs check), while Connect
+ * Four's or Tic-Tac-Toe's own screen switch is just for that game.
  */
 class InvitesTest {
 
@@ -197,18 +202,26 @@ class InvitesTest {
         assertFalse(games.invites().accepts(kim.id, "connect_four"), "a player can turn friend games off");
     }
 
+    /**
+     * The rows {@code /hcm play invites off} wrote before any invite key after the first two friend games
+     * existed: those two and Coin Flip, all off.
+     */
+    private void olderInvitesOff(Fake f) {
+        games.invites().setAccepts(f.id, "connect_four", false);
+        games.invites().setAccepts(f.id, "tic_tac_toe", false);
+        games.invites().setAccepts(f.id, "coin_flip", false);
+    }
+
     @Test
     void partyRaceInvitesFollowAnOlderFriendGamesOffUntilTheirOwnChoiceIsStored() {
         assertTrue(games.invites().accepts(sam.id, "trials"), "party race invites are on for a new player");
-        // /hcm play invites off before party races existed: rows for the games there were then only
-        games.invites().setAccepts(kim.id, "connect_four", false);
-        games.invites().setAccepts(kim.id, "tic_tac_toe", false);
+        olderInvitesOff(kim); // /hcm play invites off before party races existed
         assertFalse(games.invites().accepts(kim.id, "trials"),
                 "no row for party races yet: Kim's earlier 'off' still keeps party invites away");
         games.invites().setAccepts(kim.id, "trials", true);
         assertTrue(games.invites().accepts(kim.id, "trials"), "once Kim chooses for party races, that choice rules");
         games.invites().setAccepts(sam.id, "connect_four", true);
-        assertTrue(games.invites().accepts(sam.id, "trials"), "an 'on' carries over the same way");
+        assertTrue(games.invites().accepts(sam.id, "trials"), "an 'on' leaves them on");
     }
 
     @Test
@@ -222,5 +235,132 @@ class InvitesTest {
         assertEquals(2, answers.size(), "both games heard no");
         assertTrue(sam.heard().contains("That invite was called off."), "Sam, who was invited, is told");
         assertTrue(kim.said.isEmpty(), "Kim, who invited Alex, hears it from the game only");
+    }
+
+    // ---- the final gate's group B -------------------------------------------------------------------
+
+    private Invite ride(Fake from, Fake to) {
+        return games.invites().send(from.player, to.player, connect, "rider", "Ride along",
+                "a ride in the back of " + from.name + "'s boat", 60,
+                (invite, yes) -> answers.add(invite.gameId() + ":" + yes));
+    }
+
+    @Test
+    void anInviteUnderAKeyOfItsOwnIsAnsweredHoweverItEnds() {
+        Invite invite = ride(alex, sam);
+        assertNotNull(invite, "sent under its own key");
+        assertEquals("rider", invite.gameId(), "its switch is its own key");
+        assertTrue(games.invites().accept(sam.player), "Sam accepts");
+        assertEquals(List.of("rider:true"), answers, "the answer runs although no game is called 'rider' (#0)");
+
+        host.move(Invites.PAIR_COOLDOWN_MS);
+        ride(kim, sam);
+        assertTrue(games.invites().deny(sam.player), "a no");
+        ride(alex, kim);
+        host.runTasks(); // it runs out
+        host.move(Invites.PAIR_COOLDOWN_MS);
+        ride(sam, alex);
+        games.invites().cancel(alex.id); // a quit
+        assertEquals(List.of("rider:true", "rider:false", "rider:false", "rider:false"), answers,
+                "a no, an expiry and a quit are answered too, once each");
+        assertEquals(0, host.severe(), "nothing failed");
+    }
+
+    @Test
+    void everyInviteIsNamedForWhatItIsForTheGamesScreensTile() {
+        assertEquals("Ride along", ride(alex, sam).name(), "a keyed invite: its own name");
+        assertEquals("Connect Four", send(kim, alex, connect).name(), "a game's invite: the game's name");
+    }
+
+    @Test
+    void aKeyedInviteNeedsTheGameThatSendsIt() {
+        assertNull(games.invites().send(alex.player, sam.player, null, "rider", "Ride along", "a ride", 60,
+                (invite, yes) -> answers.add("never")), "no owning game: never sent, so never an answer nobody runs");
+        assertNull(games.invites().pending(sam.id), "nothing waits");
+    }
+
+    @Test
+    void switchingOffTheGameThatSentAKeyedInviteCallsItOff() {
+        ride(alex, sam);
+        int scheduled = host.tasks.size(); // the invite's own 60 s expiry: it must NOT be what ends the invite
+        games.fail(connect, new IllegalStateException("test: the game broke"));
+        // Run only what the failure scheduled (the switch-off a tick later). runTasks() would run the
+        // invite's expiry first, whatever its delay, and the test would pass with cancelGame doing nothing.
+        List<GamesKit.Task> switchOff = List.copyOf(host.tasks.subList(scheduled, host.tasks.size()));
+        assertFalse(switchOff.isEmpty(), "the failure schedules its switch-off");
+        for (GamesKit.Task t : switchOff) {
+            t.work.run();
+        }
+        assertNull(games.invites().pending(sam.id), "the ride invite went with the game that sent it");
+        assertEquals(List.of("rider:false"), answers, "and was answered no, once");
+        assertFalse(sam.heard().contains("run out"), "called off by the switch-off, not run out: " + sam.heard());
+        host.runTasks();
+        assertEquals(List.of("rider:false"), answers, "its expiry was cancelled with it: still one answer");
+    }
+
+    @Test
+    void cancelGameCallsOffWhatThatGameSentUnderAnyKeyAndNothingElse() {
+        ride(alex, sam); // a ride sent by Connect Four (standing in for the party races' game), key "rider"
+        assertNotNull(games.invites().send(kim.player, alex.player, flip, "rider", "Ride along", "a ride with Kim",
+                60, (invite, yes) -> answers.add("flip's ride:" + yes)), "the same key, sent by another game");
+        games.invites().cancelGame(connect.id()); // the switch-off's own step
+        assertNull(games.invites().pending(sam.id), "the keyed invite Connect Four sent is called off (#0)");
+        assertEquals(List.of("rider:false"), answers, "answered no, once, inside its own game's guard");
+        assertFalse(sam.heard().contains("run out"), "it didn't run out: it was called off: " + sam.heard());
+        assertNotNull(games.invites().pending(alex.id), "the same key sent by a game still on stays");
+        assertEquals(0, host.severe(), "nothing failed");
+    }
+
+    @Test
+    void golfTogetherAndEveryInviteAddedLaterFollowTheOneSwitch() {
+        assertTrue(Invites.FRIEND_GAMES.contains("golf"), "/hcm play invites on|off writes golf together's row too");
+        assertTrue(games.invites().accepts(sam.id, "golf"), "golf together invites are on for a new player");
+        olderInvitesOff(kim); // /hcm play invites off before golf together (or any later key) was covered
+        assertFalse(games.invites().accepts(kim.id, "golf"), "Kim's 'off' keeps golf together invites away");
+        assertFalse(games.invites().accepts(kim.id, "a_later_game"), "and any invite key added later");
+        games.invites().setAccepts(kim.id, "golf", true);
+        assertTrue(games.invites().accepts(kim.id, "golf"), "once Kim chooses for golf, that choice rules");
+        games.invites().setAccepts(alex.id, "coin_flip", true);
+        assertTrue(games.invites().accepts(alex.id, "coin_flip"), "Coin Flip keeps its own switch (off until turned on)");
+        assertFalse(games.invites().accepts(sam.id, "coin_flip"), "which starts off");
+    }
+
+    @Test
+    void aFriendGamesOwnScreenSwitchIsJustForThatGame() {
+        games.invites().setAccepts(sam.id, "connect_four", false); // "Friend invites: off" on Connect Four's screen
+        assertFalse(games.invites().accepts(sam.id, "connect_four"), "nobody can invite Sam to Connect Four");
+        for (String key : List.of("tic_tac_toe", "trials", "rider", "golf", "a_later_game")) {
+            assertTrue(games.invites().accepts(sam.id, key), "but " + key + " invites still come: the screen says"
+                    + " 'Nobody can invite you to Connect Four.', not to golf together (the checker's probe)");
+        }
+        games.invites().setAccepts(sam.id, "tic_tac_toe", false); // and Tic-Tac-Toe's own screen too
+        for (String key : List.of("trials", "rider", "golf", "a_later_game")) {
+            assertTrue(games.invites().accepts(sam.id, key), "both cabinet games off on their own screens still"
+                    + " leaves " + key + " on: a child who doesn't want Connect Four invites can still be asked to ride");
+        }
+        games.invites().setAccepts(sam.id, "coin_flip", false); // /hcm play invites off's third row: now the mark
+        assertFalse(games.invites().accepts(sam.id, "golf"), "all three off reads as an older /hcm play invites off");
+    }
+
+    @Test
+    void invitesOffLeavesTheMarkLaterKeysFollowAndTurningAGameBackOnLiftsIt() {
+        games.invites().setAllFriendGames(kim.id, false); // /hcm play invites off
+        for (String key : Invites.FRIEND_GAMES) {
+            assertFalse(games.invites().accepts(kim.id, key), "invites off: " + key);
+        }
+        assertFalse(games.invites().accepts(kim.id, "coin_flip"), "Coin Flip too");
+        assertFalse(games.invites().accepts(kim.id, "a_later_game"), "and a key added after this release");
+        games.invites().setAllFriendGames(kim.id, true); // /hcm play invites on
+        for (String key : Invites.FRIEND_GAMES) {
+            assertTrue(games.invites().accepts(kim.id, key), "invites on: " + key);
+        }
+        assertFalse(games.invites().accepts(kim.id, "coin_flip"), "never Coin Flip: only Take a break turns it on");
+        assertTrue(games.invites().accepts(kim.id, "a_later_game"), "and a later key is on again");
+
+        olderInvitesOff(alex);
+        assertFalse(games.invites().accepts(alex.id, "golf"), "an older off keeps golf together away");
+        games.invites().setAccepts(alex.id, "connect_four", true); // Alex turns Connect Four back on, on its screen
+        assertTrue(games.invites().accepts(alex.id, "golf"), "the mark is lifted: a later key is on again, as for a"
+                + " new player (the javadoc's promise)");
     }
 }

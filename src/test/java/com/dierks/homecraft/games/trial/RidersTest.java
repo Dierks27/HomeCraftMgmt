@@ -475,7 +475,8 @@ class RidersTest {
     void theRiderIsOffTheNoPushTeamAndCollidableAgainOnEveryEndOfTheRide() {
         riding();
         assertTrue(port.noPush.contains(kid.id), "on the no-push team for the ride");
-        assertTrue(port.notCollidable.contains(kid.id), "and not collidable: a racing boat can't hit them (#4)");
+        assertTrue(port.notCollidable.contains(kid.id),
+                "and not collidable (#4; the stand rule keeps them off the track, #15)");
         riders.sessionEnded(dad.id); // Dad finishes: the ride is over and the rider is sent home
         riders.sessionEnded(kid.id); // then the framework ends the rider's own session
         assertFalse(port.noPush.contains(kid.id), "off the no-push team after the driver's finish (#2)");
@@ -522,5 +523,70 @@ class RidersTest {
         port.where.put(kid.id, new Location(null, 30, 70, 5)); // wandered off the stand
         riders.second();
         assertEquals(5, port.where.get(kid.id).getX(), 1e-9, "brought back by Dad");
+    }
+
+    /** Race mode's stand rule for a stand at (5, 70, 5) with Race Night's {@code stand_radius}. */
+    private static boolean offStand(Location at, double radius) {
+        return Math.hypot(at.getX() - 5, at.getZ() - 5) > radius || Math.abs(at.getY() - 70) > radius + 2;
+    }
+
+    @Test
+    void aRiderIsHeldToTheStandByTheRacersOwnRuleNotJustNearTheDriver() {
+        riding();
+        dad.vehicle = null; // Dad finished and is parked on the stand
+        Location stand = new Location(null, 5, 70, 5);
+        port.where.put(dad.id, new Location(null, 9, 70, 5)); // at the stand's track-side edge: 4 blocks out
+        riders.follow(dad.player, stand);
+        port.where.put(kid.id, new Location(null, 12.5, 70, 5)); // 3.5 from Dad, 7.5 from the stand: the racing line
+        riders.second();
+        assertEquals(12.5, port.where.get(kid.id).getX(), 1e-9, "within 4 of Dad, so the once-a-second keep-near"
+                + " alone leaves Kid there, where the next heat's boats pass");
+        riders.onStand(dad.id, at -> offStand(at, 4), stand); // race mode's stand check, with the race's radius
+        assertEquals(5, port.where.get(kid.id).getX(), 1e-9, "the racers' own stand rule puts Kid back on the stand"
+                + " (the final gate's #15)");
+        assertTrue(port.last(kid).contains("stand"), "and Kid reads why: " + port.last(kid));
+        int before = port.teleports.size();
+        port.where.put(kid.id, new Location(null, 7, 70, 7)); // a few steps across the stand: fine
+        riders.onStand(dad.id, at -> offStand(at, 4), stand);
+        assertEquals(before, port.teleports.size(), "on the stand: left alone");
+        port.where.put(kid.id, new Location(null, 5, 63, 5)); // jumped down off it, 7 below
+        riders.onStand(dad.id, at -> offStand(at, 4), stand);
+        assertEquals(70, port.where.get(kid.id).getY(), 1e-9, "down off the stand is off it, as for a racer");
+    }
+
+    @Test
+    void raceModeHandsTheRiderTheParkedRacersOwnStandAndTheRacesRadius() {
+        riding();
+        dad.vehicle = null; // Dad finished and is parked on the stand
+        RaceRun rr = new RaceRun(new TrialFakes.Link(), LapsTest.loop(6, 2), new Course.Spot(1, 65, -4, 0, 0),
+                new Point(5, 70, 5), false);
+        rr.parked();
+        port.where.put(kid.id, new Location(null, 12.5, 70, 5)); // 7.5 blocks from the stand
+        RaceMode.holdRider(riders, dad.id, rr, 8, null); // a Race Night with stand_radius 8
+        assertEquals(12.5, port.where.get(kid.id).getX(), 1e-9,
+                "inside the race's own 8-block stand: where a racer may stand, so may Kid");
+        RaceMode.holdRider(riders, dad.id, rr, 4, null); // the race's radius, passed through: 4 this time
+        assertEquals(5, port.where.get(kid.id).getX(), 1e-9, "off a 4-block stand: back onto the race's stand"
+                + " (the final gate's #15, as race mode's stand check wires it)");
+        assertEquals(70, port.where.get(kid.id).getY(), 1e-9, "at the stand's own height");
+
+        int before = port.teleports.size();
+        port.where.put(kid.id, new Location(null, 40, 70, 5));
+        RaceMode.holdRider(riders, dad.id, new RaceRun(new TrialFakes.Link(), LapsTest.loop(6, 2),
+                new Course.Spot(1, 65, -4, 0, 0), null, false), 4, null);
+        assertEquals(before, port.teleports.size(), "a race with no stand holds nobody to one");
+        rr.state = RaceRun.State.RACING;
+        RaceMode.holdRider(riders, dad.id, rr, 4, null);
+        assertEquals(before, port.teleports.size(), "nor a race whose racer isn't parked: the racers' rule, exactly");
+    }
+
+    @Test
+    void theStandRuleLeavesAloneARiderWhoIsNotOnTheRide() {
+        riders.paired(dad.player, kid.player, "loop", null); // paired, but never got in: no session yet
+        port.where.put(kid.id, new Location(null, 60, 65, 0));
+        riders.onStand(dad.id, at -> true, new Location(null, 5, 70, 5));
+        assertTrue(port.teleports.isEmpty(), "a rider not in their ride's session is never moved by it");
+        riders.onStand(UUID.randomUUID(), at -> true, new Location(null, 5, 70, 5));
+        assertTrue(port.teleports.isEmpty(), "nor anyone for a driver with no rider");
     }
 }

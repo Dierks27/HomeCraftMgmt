@@ -408,6 +408,20 @@ final class RaceMode {
             toStand(p, run);
             p.sendMessage(Text.of(BACK_TO_STAND));
         }
+        holdRider(trials.riders(), p.getUniqueId(), rr, radius, p.getWorld());
+    }
+
+    /**
+     * A parked racer's rider is held to the SAME stand by the SAME rule as the racer: the race's own
+     * {@link RaceRun#offStand(Point, double)} with its {@code stand_radius} (final gate, group B #15). Kept
+     * apart from {@link #onStand} (which needs a live player) so a test pins the wiring.
+     */
+    static void holdRider(Riders riders, UUID driver, RaceRun rr, double radius, World world) {
+        if (riders == null || rr == null || rr.stand == null) {
+            return;
+        }
+        Location stand = new Location(world, rr.stand.x(), rr.stand.y(), rr.stand.z());
+        riders.onStand(driver, at -> rr.offStand(TimeTrials.point(at), radius), stand);
     }
 
     // ---- the line -------------------------------------------------------------------------------

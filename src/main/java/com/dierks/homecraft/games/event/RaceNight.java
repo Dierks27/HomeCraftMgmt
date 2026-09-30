@@ -349,8 +349,12 @@ public final class RaceNight implements Game {
             log(Level.WARNING, "Race Night: could not check " + o.id(), e);
             return;
         }
-        Tracks.Found t = s.autoCourse() ? tracks.pick(o.id(), s.races(), s.minRacers(), s.maxRacers())
-                : tracks.find(s.course(), s.races(), s.minRacers(), s.maxRacers());
+        // round 2, G2 #4 (fx3-G2): read the track from loaded chunks only; while they load, ask again next second
+        Tracks.Found t = s.autoCourse() ? tracks.pick(o.id(), s.races(), s.minRacers(), s.maxRacers(), false)
+                : tracks.find(s.course(), s.races(), s.minRacers(), s.maxRacers(), false);
+        if (t.loading()) {
+            return;
+        }
         if (t.problem() != null) {
             trackFailedAt.put(o.id(), now);
             if (warned.add(o.id())) {

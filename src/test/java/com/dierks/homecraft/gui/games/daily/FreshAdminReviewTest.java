@@ -197,7 +197,7 @@ class FreshAdminReviewTest {
 
         FreshAdmin.Tool first = tool(FreshAdmin.tools(PARKOUR, tools(B, true, null, false)), FreshAdmin.Kind.CHOOSE);
         assertEquals("&6Admin: Use it next week (choose)", first.name(), "nothing to replace: as before");
-        assertEquals("&aYes: use it next week", first.yes(), "as before");
+        assertEquals("&aYes: use seed " + B_HEX + " next week", first.yes(), "the seed it uses (round 2, G2 #1)");
         FreshAdmin.Tool same = tool(FreshAdmin.tools(PARKOUR, tools(A, true, A, false)), FreshAdmin.Kind.CHOOSE);
         assertFalse(same.name().contains("instead"), "the preview is the pick already: nothing is replaced");
         FreshAdmin.Tool afterUp = tool(FreshAdmin.tools(PARKOUR, tools(B, true, A, true)), FreshAdmin.Kind.CHOOSE);

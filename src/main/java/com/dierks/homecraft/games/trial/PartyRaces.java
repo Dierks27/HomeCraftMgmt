@@ -82,6 +82,8 @@ public final class PartyRaces {
     private final Map<UUID, BossBar> bars = new HashMap<>();
     /** Racer → the lap their bar last showed (a new lap gets a title). */
     private final Map<UUID, Integer> laps = new HashMap<>();
+    /** Lobbies whose Start waits for the track's chunks (round 2, G2 #4). */
+    private final java.util.Set<Long> loading = new java.util.HashSet<>();
     private long ticks;
 
     PartyRaces(TimeTrials trials) {
@@ -115,6 +117,7 @@ public final class PartyRaces {
         invites.clear();
         results.clear();
         laps.clear();
+        loading.clear();
     }
 
     /** A player quit: a DNF in their race, and out of their party (the host passes on). */
@@ -383,6 +386,22 @@ public final class PartyRaces {
 
     /** The host starts the race: who's free races; grid, warm-up, Go. */
     public void start(Player host) {
+        PartyLobby lobby = lobby(host.getUniqueId());
+        if (lobby != null && loading.contains(lobby.id())) {
+            return; // round 2, G2 #4: this Start is already waiting for the track's chunks
+        }
+        start(host, 0);
+    }
+
+    /**
+     * {@link #start(Player)} after {@code waited} rounds of loading the track's chunks (round 2, G2 #4).
+     * The grid and the stand are read from the live blocks, and those are never read by loading a chunk
+     * on the main thread: from the Clubhouse or home, the boat grid's path behind the start and the stand
+     * are in chunks nobody has loaded. A read that needed some waits for them ({@link TrackChunks}), off
+     * the main thread, and the Start runs again from the top, every check made again (the lobby, who is
+     * free, a restart due), with nothing said twice.
+     */
+    private void start(Player host, int waited) {
         String problem = startProblem(host);
         if (problem != null) {
             games().tell(host, Refusal.of(problem));
@@ -403,7 +422,9 @@ public final class PartyRaces {
                 continue;
             }
             if (club != null && club.spectator(id)) {
-                say(lobby, "&7" + p.getName() + " is watching this one from the Clubhouse.");
+                if (waited == 0) {
+                    say(lobby, "&7" + p.getName() + " is watching this one from the Clubhouse.");
+                }
                 continue; // WP-CH: a spectator is never seated
             }
             if (club != null && club.seatable(id)) {
@@ -412,7 +433,9 @@ public final class PartyRaces {
             }
             if (games().canOpen(p, trials) != null || trials.sessions().session(p) != null
                     || !trials.sessions().home(p)) {
-                say(lobby, "&7" + p.getName() + " isn't free to race right now.");
+                if (waited == 0) {
+                    say(lobby, "&7" + p.getName() + " isn't free to race right now.");
+                }
                 continue;
             }
             free.add(p);
@@ -421,7 +444,22 @@ public final class PartyRaces {
             games().tell(host, Refusal.of("The race needs 2 racers who are free right now."));
             return;
         }
-        RaceGrid.Grid grid = RaceGrid.forCourse(base, new WorldSurface(world), free.size());
+        WorldSurface blocks = new WorldSurface(world); // round 2, G2 #4: loaded chunks only
+        RaceGrid.Grid grid = RaceGrid.forCourse(base, blocks, free.size());
+        Location stand = stand(base, world, blocks);
+        switch (TrackChunks.next(blocks.missing(), waited)) {
+            case WAIT -> {
+                waitForTrack(lobby.id(), host.getUniqueId(), world, blocks.missing(), waited);
+                return;
+            }
+            case GIVE_UP -> {
+                games().tell(host, Refusal.of("The track isn't ready yet - tap Start again in a moment."));
+                return;
+            }
+            default -> {
+                // every block was read from a loaded chunk: the grid and the stand hold
+            }
+        }
         if (grid.size() < free.size()) {
             games().tell(host, Refusal.of("This track's grid fits " + grid.size() + " boats - race with fewer friends."));
             return;
@@ -439,7 +477,6 @@ public final class PartyRaces {
         race.clubhouse(club != null && club.partyAfter() && base.world().equalsIgnoreCase(club.world())); // WP-CH
         races.put(lobby.id(), race);
         results.remove(lobby.id());
-        Location stand = stand(base, world);
         say(lobby, "&dRace on " + base.name() + "! &7" + free.size() + " racers"
                 + (warm > 0 ? " - warm up first (" + Warmup.clock(warm) + ")" : "") + ". Free, just for fun.");
         for (int i = 0; i < free.size(); i++) {
@@ -752,16 +789,33 @@ public final class PartyRaces {
     }
 
     /**
-     * The course's stand, where finishers wait: Fresh Ice Boat from algo 2 (checked in the world: a
-     * stand that isn't standing is never used), else none, and finishers go home at the line.
+     * The course's stand, where finishers wait: Fresh Ice Boat from algo 2 (checked in the world, on
+     * {@code blocks}: a stand that isn't standing is never used), else none, and finishers go home at
+     * the line.
      */
-    private Location stand(Course base, World world) {
+    private Location stand(Course base, World world, WorldSurface blocks) {
         Box half = base.gen() == null ? null : trials.generated().half(base.gen());
         Point at = RaceStand.of(base, half);
-        if (at == null || !RaceStand.standable(new WorldSurface(world), at)) {
+        if (at == null || !RaceStand.standable(blocks, at)) {
             return null;
         }
         return new Location(world, at.x(), at.y(), at.z());
+    }
+
+    /**
+     * Round 2, G2 #4: load the chunks the track's read needed off the main thread, then run the host's
+     * Start again, if they are still this lobby's host (a Start clicked meanwhile waits with it).
+     */
+    private void waitForTrack(long lobbyId, UUID hostId, World world, List<int[]> missing, int waited) {
+        loading.add(lobbyId);
+        TrackChunks.whenLoaded(TrackChunks.server(world, games(), trials), missing, () -> {
+            loading.remove(lobbyId);
+            Player h = Bukkit.getPlayer(hostId);
+            PartyLobby now = h == null ? null : lobby(hostId);
+            if (now != null && now.id() == lobbyId) {
+                start(h, waited + 1);
+            }
+        });
     }
 
     /** Tell every member of the party online. */

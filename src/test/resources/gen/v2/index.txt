@@ -1,0 +1,7 @@
+# The algo-2 plans frozen before Course Variety (§1.4): name slot tier-or-mix half seed day hash
+boat-easy fresh_boat easy A 0000000000000001 20725 17716620da48
+boat-medium fresh_boat medium A 0000000000c0ffee 20725 f556e10cb2e4
+boat-hard fresh_boat hard A 000000005eed5eed 20725 b3ce7c41112a
+golf-9-a fresh_golf EEEMMMMHH A 0000000000000001 20725 3c87c264a106
+golf-9-b fresh_golf EEEMMMMHH A 3f2a91c07d1e55b0 20725 655b02693a68
+golf-3 fresh_tiny_golf EEE A 0000000000000001 20725 47bd03bb54b0

@@ -196,7 +196,7 @@ class DropperGuardTest {
     }
 
     @Test
-    void aPendingPlotJobIsWetWhenItMayHoldADroppersWater() {
+    void aPendingPlotJobIsWetWhenItMayHoldADroppersOrAGolfCoursesWater() {
         Box b = Box.sized(100, 64, 100, 64, 64, 16);
         String box = KeptPlot.boxText(b);
         Object[] keep = KeepService.wetPending("keep|1|games|" + box + "|" + SLOT + "|d1|x|0|0|");
@@ -209,7 +209,16 @@ class DropperGuardTest {
                 "a parkour keep holds no water");
         assertNull(KeepService.wetPending(null), "nothing pending");
         assertNull(KeepService.wetPending("keep|1|games|nonsense|" + SLOT), "an unreadable record");
-        assertTrue(KeepService.dropper(SLOT) && KeepService.dropper("fresh_dropper_easy"), "the two Dropper slots");
-        assertFalse(KeepService.dropper("fresh_golf") || KeepService.dropper(null), "and no other");
+        assertEquals(b, KeepService.wetPending("keep|1|games|" + box + "|fresh_golf|d1|x|0|0|")[1],
+                "a golf keep may hold its ponds (Course Variety §1.2)");
+        assertEquals(b, KeepService.wetPending("keep|1|games|" + box + "|fresh_classic_golf|d1|x|0|0|")[1],
+                "and so may a Classic Golf one");
+        assertNull(KeepService.wetPending("keep|1|games|" + box + "|fresh_boat|d1|x|0|0|"), "the ice boat stays dry");
+        assertTrue(KeepService.mayHoldWater(SLOT) && KeepService.mayHoldWater("fresh_dropper_easy"),
+                "the two Dropper slots");
+        assertTrue(KeepService.mayHoldWater("fresh_golf") && KeepService.mayHoldWater("fresh_tiny_golf")
+                && KeepService.mayHoldWater("fresh_classic_golf"), "the golf slots, for their ponds");
+        assertFalse(KeepService.mayHoldWater("fresh_boat") || KeepService.mayHoldWater("fresh_parkour_easy")
+                || KeepService.mayHoldWater("fresh_rings") || KeepService.mayHoldWater(null), "and no other");
     }
 }

@@ -703,9 +703,27 @@ public final class RaceNight implements Game {
         }
     }
 
+    /** Which bar a player sees: a seated racer's own (the night draws it), the watchers', the join window's, none. */
+    enum Bar { OWN, WATCH, JOIN, NONE }
+
+    /**
+     * The bar for {@code p} ({@code racer}: their place in tonight's night, or {@code null}; {@code open}: the
+     * join window is open): the join window's only for a player {@link #joinBar} lets see it (final gate,
+     * group B #1). Kept apart from {@link #drawBars} (which walks the live server) so a test pins it.
+     */
+    Bar barFor(Player p, NightRunner.Racer racer, boolean open) {
+        if (racer != null && racer.seated()) {
+            return Bar.OWN;
+        }
+        if (watchers.watching(p.getUniqueId())) {
+            return Bar.WATCH;
+        }
+        return open && joinBar(p, racer != null) ? Bar.JOIN : Bar.NONE;
+    }
+
     /**
      * The join window's bar for everyone {@link Announcer#joinBar} lets see it; the watchers' bar; nothing
-     * for anyone else.
+     * for anyone else ({@link #barFor}).
      */
     private void drawBars() {
         NightRunner n = night;
@@ -714,19 +732,25 @@ public final class RaceNight implements Game {
         for (Player p : new ArrayList<>(Bukkit.getOnlinePlayers())) {
             UUID id = p.getUniqueId();
             NightRunner.Racer r = n == null ? null : n.racer(id);
-            if (r != null && r.seated()) {
-                continue; // the night draws a racer's own bar
-            }
-            if (watchers.watching(id)) {
-                NightRunner shown = n != null ? n : last;
-                bars.show(id, shown == null ? "&bRace Night" : Watchers.bar(shown.phase(), shown.race(),
-                        shown.plan().races(), shown.leader(), shown.joined().size()), 1f, RaceBars.Tone.WATCH);
-            } else if (open && joinBar(p, r != null)) {
-                long window = Math.max(1, n.startsAt() - n.plan().joinAt());
-                bars.show(id, EventCopy.joinBar(n.startsAt() - now, n.joined().size()),
-                        (n.startsAt() - now) / (float) window, RaceBars.Tone.JOIN);
-            } else if (bars.has(id)) {
-                bars.hide(id);
+            switch (barFor(p, r, open)) {
+                case OWN -> {
+                    // the night draws a racer's own bar
+                }
+                case WATCH -> {
+                    NightRunner shown = n != null ? n : last;
+                    bars.show(id, shown == null ? "&bRace Night" : Watchers.bar(shown.phase(), shown.race(),
+                            shown.plan().races(), shown.leader(), shown.joined().size()), 1f, RaceBars.Tone.WATCH);
+                }
+                case JOIN -> {
+                    long window = Math.max(1, n.startsAt() - n.plan().joinAt());
+                    bars.show(id, EventCopy.joinBar(n.startsAt() - now, n.joined().size()),
+                            (n.startsAt() - now) / (float) window, RaceBars.Tone.JOIN);
+                }
+                case NONE -> {
+                    if (bars.has(id)) {
+                        bars.hide(id);
+                    }
+                }
             }
         }
     }

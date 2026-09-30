@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -62,6 +63,24 @@ class RaceNightNewsGateTest {
         assertFalse(night.joinBar(kim, false), "Kim never sees it: /hcm play race would refuse her (#1)");
         assertFalse(night.joinBar(nia, false), "nor someone where games aren't played: joining from there is refused");
         assertTrue(night.joinBar(nia, true), "but a racer who joined still sees the time to the start, wherever");
+    }
+
+    @Test
+    void theBarsTheNightDrawsAskTheSameGate() {
+        Player ava = bench.player("Ava");
+        Player kim = PlayerAs.limited(bench.player("Kim"), Set.of("hcm.games.play"), null);
+        Player nia = PlayerAs.limited(bench.player("Nia"), Set.of(), "world_nether");
+        assertEquals(RaceNight.Bar.JOIN, night.barFor(ava, null, true), "the join window is open: Ava sees its bar");
+        assertEquals(RaceNight.Bar.NONE, night.barFor(kim, null, true),
+                "what the night draws for Kim is nothing, although her news is on (#1: the bar asks the play gate)");
+        assertEquals(RaceNight.Bar.NONE, night.barFor(nia, null, true), "nor for Nia, where games aren't played");
+        NightRunner.Racer joined = new NightRunner.Racer(nia.getUniqueId(), "Nia", 0L);
+        assertEquals(RaceNight.Bar.JOIN, night.barFor(nia, joined, true), "until she has joined: then the countdown");
+        joined.seated = true;
+        assertEquals(RaceNight.Bar.OWN, night.barFor(nia, joined, true), "seated, the night draws her own bar");
+        assertEquals(RaceNight.Bar.NONE, night.barFor(ava, null, false), "no join window: no join bar");
+        assertTrue(night.watch(ava), "Ava watches");
+        assertEquals(RaceNight.Bar.WATCH, night.barFor(ava, null, true), "a watcher sees the watchers' bar instead");
     }
 
     @Test

@@ -243,6 +243,17 @@ class DownhillValidatorTest {
     }
 
     @Test
+    void aDropInsideAnothersFlightZoneIsRefused() {
+        HandRun run = HandRun.easy();
+        run.plan();
+        // a bay one lower, beside the first landing: a boat flying off the first drop could clear its edge too
+        run.extra.add(new int[]{108, 40, 118 - run.h - 1, 46, run.after(1) - 1});
+        caught(run.plan(), "easy", "is inside the flight zone of the drop at",
+                "one flight never clears two drops: that fall would be 2 on easy");
+        passes(HandRun.easy().plan(), "easy", "the hand-made run's drops are each well past the last one's zone");
+    }
+
+    @Test
     void aMissingRiserIsRefused() {
         HandRun run = HandRun.medium();
         Plan p = run.plan();

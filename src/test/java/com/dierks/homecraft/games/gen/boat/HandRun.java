@@ -38,8 +38,9 @@ import java.util.function.Predicate;
  * gold finish markers, a lime pit wall, arrows and cave lanterns. Two trees (on the island and on a
  * terrace), both with vanilla's own leaf distances.
  *
- * <p>Its fields are open so a test can build a variant ({@link #extra} drive areas, the pit's
- * length, a tier's drops) and {@link #edit} changes single blocks of a built plan.
+ * <p>Its fields are open so a test can build a variant ({@link #extra} drive areas, {@link #carve}d
+ * obstacles, the pit's length, a tier's drops, corners rounded to arcs as a planner draws them) and
+ * {@link #edit} changes single blocks of a built plan.
  */
 final class HandRun {
 

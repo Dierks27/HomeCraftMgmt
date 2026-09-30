@@ -48,8 +48,9 @@ import java.util.Map;
  *   <li><b>V4 containment.</b> W1: every column beside the track (8 ways) is solid wall from the
  *       lowest ice beside it to 2 above the highest surface. W2: round every drop's flight zone
  *       ({@link BoatEnvelope#zone Z(d)}: the lower track within Z of the lip, reachable from it
- *       without climbing), walls reach 2 above the lip's surface. W3: under the high side of a
- *       2-block drop a riser fills the slot. W4: no open edge.</li>
+ *       without climbing), walls reach 2 above the lip's surface, and no other drop lies inside
+ *       it (one flight never clears two drops, so no fall is ever more than one drop). W3: under
+ *       the high side of a 2-block drop a riser fills the slot. W4: no open edge.</li>
  *   <li><b>V5 widths.</b> A path P wide (its cells at least (P - 1)/2 from every wall) and an
  *       all-ice line B wide run from the start to the finish, so sand is never forced; every block
  *       of track is within 3 of the wide path; every gap between walls is at least P, or 0; both
@@ -68,7 +69,8 @@ import java.util.Map;
  *       with the drive cells as its ice, and the scenery cap: nothing but the stand at or above
  *       its floor.</li>
  *   <li><b>V10 the grid.</b> The live {@link RaceGrid#plan} run on the plan's own blocks
- *       ({@link PlanSurface}) seats 12 in rows of two, and the stand can be stood on.</li>
+ *       ({@link PlanSurface}) seats 12 in rows of two, the start faces down the track (the grid
+ *       lines up behind it), and the stand can be stood on.</li>
  *   <li><b>V11 the finish.</b> On the lowest deck, a cut, at least Z(d) + 3 from the Final Drop, 12
  *       to 30 from the stand's edge, with a flat run-out whose sand paddock starts at least 14
  *       on.</li>
@@ -78,9 +80,14 @@ import java.util.Map;
  *       everything inside the half.</li>
  * </ul>
  * Where the spec leaves a reading open, this takes the one its numbers allow: medium's 2-block
- * drops (§2.4) are allowed; a checkpoint's "3 from a zone" is its centre's distance, which is what
- * lets a leg across a 2-block drop stay within 60; the cut uses the blocks wholly inside the sphere,
- * so any boat crossing them is inside it.
+ * drops (§2.4's table, over V3's "hard only") are allowed; a checkpoint's "3 from a zone" is its
+ * centre's distance, which is what lets a leg across a 2-block drop stay within 60; the cut uses the
+ * blocks wholly inside the sphere, so any boat crossing them is inside it; "at least 14 drive cells
+ * follow the finish" is its sand paddock starting at least 14 past its centre. What only shapes the
+ * fun is the planner's to keep and isn't checked here: the first lip's distance from the start, the
+ * landing strips, the pieces' placement, checkpoints "normally 20-40" apart and exactly one between
+ * two drops (this proves the safety half: never two drops in one leg), and keep-clear boxes
+ * covering the runs (only their count, the half and the stand are checked, their one use).
  *
  * <p>Pure: no Bukkit. Milliseconds a plan. It never throws: a plan it can't read is refused.
  */
@@ -693,6 +700,12 @@ public final class DownhillValidator {
                         int[] c = queue.poll();
                         if (h[c[0]][c[1]] < lip) {
                             zoneLip[c[0]][c[1]] = Math.max(zoneLip[c[0]][c[1]], lip);
+                            if (lipDrop[c[0]][c[1]] > 0) {
+                                // §2.6: no drop inside another's zone, or one flight clears both
+                                found.add("chained", "the drop at " + wx(c[0]) + " " + (h[c[0]][c[1]] + 1) + " "
+                                        + wz(c[1]) + " is inside the flight zone of the drop at " + wx(x) + " "
+                                        + (lip + 1) + " " + wz(z) + ": one flight could clear both");
+                            }
                         }
                         for (int[] s : SIDES) {
                             int nx = c[0] + s[0];

@@ -24,7 +24,8 @@ import org.bukkit.entity.Player;
  * {@link FreshAdmin#OPEN_HOLD_MS} as it opens (a vanilla client sends the second press to the new
  * screen as a plain click), and No and Yes sit where no tool does ({@link FreshAdmin#CONFIRM_NO}),
  * so even a click that gets through lands on nothing. Someone who is no longer an admin gets an
- * empty screen (D7).
+ * empty screen (D7), and Yes runs nothing for them ({@link FreshAdminMenu#run}). Both through
+ * {@link FreshAdmin#opening}, as the tools screen.
  */
 final class FreshAdminConfirm extends GameMenu {
 
@@ -38,11 +39,13 @@ final class FreshAdminConfirm extends GameMenu {
 
     @Override
     protected void build() {
-        hold(FreshAdmin.OPEN_HOLD_MS); // D4: the rest of the double click on the tool that opened it
-        fill();
-        exitTile();
-        if (!viewer.hasPermission(FreshAdmin.PERMISSION)) {
-            return; // D7: nothing to confirm for someone who isn't an admin any more
+        // D4: the rest of the double click on the tool that opened it is dropped; D7: nothing to
+        // confirm for someone who isn't an admin any more
+        if (!FreshAdmin.opening(viewer.hasPermission(FreshAdmin.PERMISSION), this::hold, () -> {
+            fill();
+            exitTile();
+        })) {
+            return;
         }
         set(4, FreshAdminMenu.icon(tool), null);
         set(FreshAdmin.CONFIRM_NO, Menus.icon(Material.RED_STAINED_GLASS_PANE, "&cNo, go back", "&7Nothing changes."),

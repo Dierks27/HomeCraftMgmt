@@ -190,11 +190,12 @@ public final class GenScheduler {
     /**
      * An admin's pick for one set ({@code choose}, WP-ADM; {@code gen.<slot>.choose}): the tried
      * preview's seed for exactly the set that starts on {@code from} and lasts {@code cadence} days,
-     * as it was tried: at {@code mix}, and with {@code fallDepth} for a course that depends on it.
+     * as it was tried: at {@code mix}, and at {@code fallDepth} for a course whose layout depends on it.
      *
      * <p>Why it carries more than a {@link Pin} (fix2-D, D0-D2): "the course you tested is the
      * course that goes live". A pick is a seed, but the course is the seed plus the tier or mix and
-     * (for parkour) {@code trials.fall_depth}, and its set is a first day plus a length. So a pick
+     * (for medium and hard parkour) the fall depth its layout is shaped by, and its set is a first
+     * day plus a length. So a pick
      * applies only to the set it names (the same first day and cadence: around a cadence change a
      * kept set can start later than the next one, or on the same day) and only while the settings
      * are the ones it was tried with. The engine drops it, and says so, once either stops being
@@ -211,8 +212,9 @@ public final class GenScheduler {
      * @param from      its set's first day (local epoch day)
      * @param cadence   its set's length in days, or 0 when unknown
      * @param mix       the tier or mix it was tried at, or {@code null} when unknown
-     * @param fallDepth the {@code trials.fall_depth} it was tried with, or 0 when the course doesn't
-     *                  depend on it (or it is unknown)
+     * @param fallDepth the fall depth its layout was shaped by ({@code ParkourPlanner.designDepth}:
+     *                  {@code trials.fall_depth} up to 6, for medium and hard parkour), or 0 when the
+     *                  layout doesn't depend on it (easy parkour, the other planners) or it is unknown
      */
     public record Choice(long seed, int algo, long from, int cadence, String mix, int fallDepth) {
 
@@ -226,7 +228,10 @@ public final class GenScheduler {
             return from == start && (cadence <= 0 || cadence == days);
         }
 
-        /** Whether its course comes out as tried at {@code mixNow} and {@code fallDepthNow}. */
+        /**
+         * Whether its course comes out as tried at {@code mixNow} and a design fall depth of
+         * {@code fallDepthNow} (worked out as {@link #fallDepth} was, not the raw setting).
+         */
         public boolean fits(String mixNow, int fallDepthNow) {
             return (mix == null || mix.equals(mixNow)) && (fallDepth <= 0 || fallDepth == fallDepthNow);
         }

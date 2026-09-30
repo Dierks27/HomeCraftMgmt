@@ -37,14 +37,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * plays a preview whose half has since been written over. With the engine, a fake clock and world
  * and the real database, as {@link PickACourseTest}.
  *
- * <p>Pinned here: a tier (or mix) or {@code trials.fall_depth} change after a pick drops the pick,
- * with a line to the admin who typed it, one console line and a status line, so the set goes up on
- * its own seed at the new settings (D0); a pick made while a cadence change is still settling in is
+ * <p>Pinned here: a tier (or mix) change after a pick, or a {@code trials.fall_depth} change that
+ * shapes its layout differently (medium or hard parkour below 6), drops the pick, with a line to the
+ * admin who typed it, one console line and a status line, so the set goes up on its own seed at the
+ * new settings, while a change that makes the same course (any on easy, a raise past 6) keeps it
+ * (D0); a pick made while a cadence change is still settling in is
  * the set that goes up at the change, never forgotten at once and never "this set's" early (D1); a
  * cadence or {@code rebuild_day} change that moves the next set off the pick's drops it the same way,
  * instead of status promising it for a set that never comes (D2); a preview whose half a failed or
  * stopped job has started writing over is gone, so a test run can't start on blocks that aren't its
- * (D3); and the tools know when the chosen course is the one up now (D5).
+ * (D3); and the tools know when the chosen course is the one up now, and letting it go says
+ * regenerate and promote work on it only when no pin of the slot's own still holds (D5).
  */
 class ChoosePromiseTest {
 
@@ -227,32 +230,69 @@ class ChoosePromiseTest {
     }
 
     @Test
-    void aFallDepthOrAConfigTierChangeAfterChooseDropsThePickWithAConsoleLine() throws Exception {
+    void aFallDepthChangeThatReshapesAMediumPickOrAConfigTierChangeDropsItWithAConsoleLine() throws Exception {
+        host.settings = withTier(GenKit.weekly(SLOT), "medium"); // medium: shaped by fall_depth up to 6
         weekUp();
         previewNext(PICK_HEX);
+        assertEquals(6, gen.slot(SLOT).preview.fallDepth(), "the preview is made at the shipped fall depth");
         choose();
+        assertTrue(chosenMeta().endsWith(":medium:6"), "the pick keeps the depth its layout is shaped by: "
+                + chosenMeta());
 
-        host.fallDepth = 9; // trials.fall_depth, which shapes a parkour course
+        host.fallDepth = 9; // deeper than the layout is shaped for: only the floor under the legs moves
         drive(2);
-        assertNull(chosenMeta(), "a new fall depth makes another course: the pick goes");
-        assertEquals(1, host.logged(Level.WARNING, "fall_depth 6"), "the console says why: " + host.logs.stream()
+        assertNotNull(chosenMeta(), "a raise past 6 makes the same course: the pick stays");
+        assertEquals(0, host.logged(Level.WARNING, "is dropped"), "nothing is said: " + heard());
+        assertTrue(status().contains("next set: chosen seed " + PICK_HEX), "status still promises it: " + status());
+
+        host.fallDepth = 4; // shallower: the legs are shaped closer together, another course
+        drive(2);
+        assertNull(chosenMeta(), "a new fall depth that shapes another course: the pick goes");
+        assertEquals(1, host.logged(Level.WARNING, "tried with fall_depth 6 or more, and it is 4 now, so it would"
+                + " come out different"), "the console says why, in the owner's terms: " + host.logs.stream()
                 .map(r -> r.getMessage()).toList());
+        assertTrue(status().contains("pick for Mon 5 Oct-Sun 11 Oct dropped"), "status says so: " + status());
         said.clear();
         gen.choose(SLOT, true, said::add);
-        assertTrue(heard().contains("would come out different"), "the preview made at the old depth can't be chosen"
-                + " again: " + heard());
+        assertTrue(heard().contains("made with fall_depth 6, and it is 4 now, so it would come out different"),
+                "the preview made at the old depth can't be chosen again: " + heard());
         assertNull(chosenMeta(), "nothing chosen");
 
-        host.fallDepth = 6;
-        choose(); // the preview fits again
+        host.fallDepth = 8;
+        choose(); // a preview made at 6 is the course 8 makes too
+        assertTrue(chosenMeta().endsWith(":medium:6"), "kept as the depth that shapes it, not the setting: "
+                + chosenMeta());
         host.settings = withTier(host.settings, "hard"); // a config edit, seen at the next boot
         host.now += 60_000;
         boot();
         drive(10);
         assertNull(chosenMeta(), "a config tier change drops it too");
-        assertEquals(1, host.logged(Level.WARNING, "tried as easy"), "with a console line");
+        assertEquals(1, host.logged(Level.WARNING, "tried as medium"), "with a console line");
         assertEquals(0, host.logged(Level.INFO, "is checked in its spare half again"),
                 "and the dropped pick isn't put back after the restart");
+    }
+
+    @Test
+    void anEasyPickIsKeptWhateverTheFallDepthAndGoesUpAsTried() throws Exception {
+        weekUp();
+        previewNext(PICK_HEX);
+        host.fallDepth = 2; // easy falls back at a fixed height: the setting never shapes it
+        said.clear();
+        gen.choose(SLOT, false, said::add);
+        assertFalse(heard().contains("come out different"), "a preview made at 6 is the course 2 makes: " + heard());
+        assertTrue(chosenMeta().endsWith(":easy:0"), "and the pick keeps no fall depth: " + chosenMeta());
+        for (int depth : new int[]{9, 1, 64, 6}) {
+            host.fallDepth = depth; // a Time Trials setting owners change for their own courses too
+            drive(2);
+            assertNotNull(chosenMeta(), "fall_depth " + depth + " doesn't touch an easy course: the pick stays");
+        }
+        assertEquals(0, host.logged(Level.WARNING, "is dropped"), "never a word about dropping it");
+        assertTrue(status().contains("next set: chosen seed " + PICK_HEX), "status still promises it: " + status());
+
+        host.fallDepth = 9;
+        host.now = GenKit.at(2026, 10, 5, 4, 0) + 40_000;
+        stepUntil(() -> tag() != null && tag().day() == MON_5_OCT, 20 * 60);
+        assertEquals(PICK, tag().seed(), "the change puts up the course that was tried");
     }
 
     // ---- D1: choose while a longer cadence is settling in ---------------------------------------------
@@ -399,15 +439,16 @@ class ChoosePromiseTest {
 
     @Test
     void aPickIsStoredWithItsSetsLengthAndSettingsAndAnOlderOneIsStillRead() {
-        GenScheduler.Choice pick = new GenScheduler.Choice(PICK, 3, MON_5_OCT, 7, "easy", 6);
-        assertEquals(PICK_HEX + ":3:" + MON_5_OCT + ":" + MON_5_OCT + ":7:easy:6", pick.text(),
+        GenScheduler.Choice pick = new GenScheduler.Choice(PICK, 3, MON_5_OCT, 7, "medium", 6);
+        assertEquals(PICK_HEX + ":3:" + MON_5_OCT + ":" + MON_5_OCT + ":7:medium:6", pick.text(),
                 "a one-set pin's four fields, then the set's length and what it was tried at");
         assertEquals(pick, GenScheduler.Choice.parse(pick.text()), "read back");
         assertEquals(GenScheduler.Pin.oneSet(PICK, 3, MON_5_OCT), pick.pin(), "to the scheduler, a one-set pin");
         assertTrue(pick.isSet(MON_5_OCT, 7), "its set");
         assertFalse(pick.isSet(MON_5_OCT, 14), "not a 14-day set starting that day");
         assertFalse(pick.isSet(MON_5_OCT, 1), "nor that day alone");
-        assertTrue(pick.fits("easy", 6) && !pick.fits("hard", 6) && !pick.fits("easy", 9), "tried at easy, depth 6");
+        assertTrue(pick.fits("medium", 6) && !pick.fits("hard", 6) && !pick.fits("medium", 4),
+                "tried at medium, shaped for depth 6");
         GenScheduler.Choice golf = new GenScheduler.Choice(PICK, 3, MON_5_OCT, 7, "EEEMMMMHH", 0);
         assertEquals(golf, GenScheduler.Choice.parse(golf.text()), "a mix, and no fall depth (golf doesn't use it)");
         assertTrue(golf.fits("EEEMMMMHH", 9), "any fall depth");
@@ -441,9 +482,67 @@ class ChoosePromiseTest {
         assertEquals(PICK, up.chosenSeed(), "still the pick");
         assertTrue(up.chosenUpNow(), "and the tools know it is the one up now");
         assertEquals("Mon 5 Oct-Sun 11 Oct", up.chosenFor(), "for this set");
+        assertFalse(up.pinned(), "no pin of its own");
         said.clear();
         gen.unchoose(SLOT, said::add);
-        assertTrue(heard().contains("stays until the next set") && heard().contains("regenerate"),
+        assertTrue(heard().contains("stays until the next set, which gets its own new course")
+                        && heard().contains("regenerate " + SLOT + " &7and &epromote &7work on it now"),
                 "letting it go says the course stays, and that regenerate works now: " + heard());
+        said.clear();
+        gen.reroll(SLOT, said::add);
+        assertTrue(heard().contains("gets a new course"), "and it does: " + heard());
+    }
+
+    @Test
+    void lettingThePickUpNowGoOverAPinSaysRegenerateAndPromoteWaitForAnUnpin() throws Exception {
+        GenTag week = weekUp();
+        said.clear();
+        gen.pin(SLOT, "live", 0, said::add); // this week's course, until unpinned
+        previewNext(PICK_HEX);
+        choose();
+        assertTrue(heard().contains("Its pin comes back after it."), "choose may pick over a pin: " + heard());
+
+        host.now = GenKit.at(2026, 10, 5, 4, 0) + 40_000;
+        stepUntil(() -> tag() != null && tag().day() == MON_5_OCT, 20 * 60);
+        assertEquals(PICK, tag().seed(), "the pick goes up over the pin");
+        GenOps.Tools up = gen.tools(SLOT);
+        assertTrue(up.chosenUpNow() && up.pinned(), "the tools know the pick is up now, over the slot's own pin");
+
+        said.clear();
+        gen.unchoose(SLOT, said::add);
+        assertTrue(heard().contains("stays until the next set, which gets its pinned course (seed "
+                + GenSeed.hex(week.seed()) + ")"), "the pin comes back after it: " + heard());
+        assertTrue(heard().contains("is pinned too, so regenerate and promote wait for &e/hcm games gen unpin " + SLOT),
+                "the pin still holds for this set, and the reply says what that means: " + heard());
+        assertFalse(heard().contains("work on it now"), "never that regenerate and promote work now: " + heard());
+        assertTrue(gen.tools(SLOT).pinned(), "the tools say the pin holds (their lore follows it)");
+
+        said.clear();
+        gen.reroll(SLOT, said::add);
+        assertTrue(heard().contains("is pinned. &7/hcm games gen unpin " + SLOT), "as the reply said, a reroll waits for"
+                + " the unpin: " + heard());
+        drive(5);
+        assertEquals(PICK, tag().seed(), "and the chosen course stays up meanwhile");
+
+        gen.unpin(SLOT, said::add);
+        said.clear();
+        gen.reroll(SLOT, said::add);
+        assertTrue(heard().contains("gets a new course"), "after the unpin it works: " + heard());
+    }
+
+    @Test
+    void cancellingAPickStillToComeOverAPinSaysTheSetGetsItsPinnedCourse() throws Exception {
+        GenTag week = weekUp();
+        gen.pin(SLOT, "live", 0, said::add);
+        previewNext(PICK_HEX);
+        choose();
+        said.clear();
+        gen.unchoose(SLOT, said::add);
+        assertTrue(heard().contains("The next set gets its pinned course (seed " + GenSeed.hex(week.seed()) + ")."),
+                "not its own new course: the pin comes back: " + heard());
+        host.now = GenKit.at(2026, 10, 5, 4, 0) + 40_000;
+        drive(30);
+        assertEquals(MON_5_OCT, tag().day(), "next week's set is up");
+        assertEquals(week.seed(), tag().seed(), "on the pinned seed, as said");
     }
 }

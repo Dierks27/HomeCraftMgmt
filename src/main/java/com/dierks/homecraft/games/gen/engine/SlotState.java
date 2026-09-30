@@ -27,8 +27,8 @@ final class SlotState {
      * @param mix       the tier or mix it was made with
      * @param cadence   that edition's length in days
      * @param reroll    the reroll it was made as (0 for a preview of the next set)
-     * @param fallDepth the {@code trials.fall_depth} it was made with (fix2-D: a pick keeps it), or 0
-     *                  when unknown
+     * @param fallDepth the {@code trials.fall_depth} it was made with (fix2-D: choose keeps the depth
+     *                  that shapes its layout), or 0 when unknown
      */
     record Preview(char half, Plan plan, long day, long seed, String mix, int cadence, int reroll, int fallDepth) {
 

@@ -8,12 +8,16 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.lang.reflect.Proxy;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -80,13 +84,67 @@ class FreshAdminReviewTest {
         assertTrue(FreshAdmin.OPEN_HOLD_MS >= 400, "both screens drop clicks for about 400 ms as they open: "
                 + FreshAdmin.OPEN_HOLD_MS);
 
-        long[] clock = {1_000};
-        ClickHold opened = new ClickHold(() -> clock[0]);
-        opened.hold(FreshAdmin.OPEN_HOLD_MS); // what the screens do as they open (GameMenu#hold)
-        clock[0] += 150;
-        assertFalse(opened.passes(ClickType.LEFT), "the second press of a double click, 150 ms on, is dropped");
-        clock[0] += 350;
-        assertTrue(opened.passes(ClickType.LEFT), "a click after reading the screen goes through");
+        for (boolean admin : new boolean[]{true, false}) {
+            long[] clock = {1_000};
+            ClickHold opened = new ClickHold(() -> clock[0]); // the screen's own hold (GameMenu#hold)
+            int[] frames = {0};
+            boolean rest = FreshAdmin.opening(admin, opened::hold, () -> frames[0]++); // how both builds start
+            assertEquals(admin, rest, "the tools, seeds and Yes are painted only for an admin: admin " + admin);
+            assertEquals(1, frames[0], "the filler and the way out are painted either way: admin " + admin);
+            clock[0] += 150;
+            assertFalse(opened.passes(ClickType.LEFT), "the second press of a double click, 150 ms on, is dropped:"
+                    + " admin " + admin);
+            clock[0] += 350;
+            assertTrue(opened.passes(ClickType.LEFT), "a click after reading the screen goes through: admin " + admin);
+        }
+    }
+
+    /**
+     * D4 and D7 hold only while both screens' {@code build()} start with {@link FreshAdmin#opening} and
+     * every way to a screen or a command goes through {@link FreshAdminMenu#asAdmin}. There is no
+     * server in the tests to open a screen on, so this reads the two screens' source: a later edit
+     * that drops the hold or a permission gate fails here, not in front of a player.
+     */
+    @Test
+    void bothScreensStartWithTheHoldAndThePermissionAndEveryWayInIsGated() throws IOException {
+        String gate = "if (!FreshAdmin.opening(viewer.hasPermission(FreshAdmin.PERMISSION), this::hold, () -> { fill();"
+                + " exitTile(); })) { return; }";
+        for (String file : List.of("FreshAdminMenu.java", "FreshAdminConfirm.java")) {
+            String code = source(file);
+            String start = "protected void build() { ";
+            int at = code.indexOf(start);
+            assertTrue(at >= 0 && code.indexOf(start, at + 1) < 0, file + " has one build()");
+            assertTrue(code.startsWith(gate, at + start.length()), file + "'s build() starts with the open hold, the"
+                    + " frame and the permission, before anything else is painted: "
+                    + code.substring(at, Math.min(code.length(), at + start.length() + gate.length() + 40)));
+        }
+
+        String menu = source("FreshAdminMenu.java");
+        String confirm = source("FreshAdminConfirm.java");
+        String both = menu + confirm;
+        int opens = count(both, Pattern.compile("new FreshAdmin(Menu|Confirm)\\("));
+        int gated = count(both, Pattern.compile("asAdmin\\(viewer, \\(\\) -> new FreshAdmin(Menu|Confirm)\\("));
+        assertEquals(3, opens, "the course screen's item, a tool that asks first, and No: three ways to a screen");
+        assertEquals(opens, gated, "each opens its screen only through asAdmin");
+        assertTrue(menu.contains("static void run(HomeCraftManagement plugin, Player viewer, String[] words) {"
+                + " asAdmin(viewer, () -> command(plugin, viewer, words)); }"), "a tool's command runs only through"
+                + " asAdmin (the command trusts its caller to have checked)");
+        assertEquals(1, count(both, Pattern.compile("command\\(plugin, viewer, words\\)")), "and from nowhere else");
+        assertEquals(1, count(both, Pattern.compile("\\.handle\\(")), "one call into the command");
+        assertTrue(confirm.contains("FreshAdmin.yes(tool, words -> FreshAdminMenu.run(plugin, viewer, words))"),
+                "Yes runs its command through run");
+        assertTrue(menu.contains("FreshAdmin.click(t, this::ask, words -> run(plugin, viewer, words))"),
+                "a tool runs its command through run, and asks through ask");
+    }
+
+    /** One of this package's screens, without comments, its whitespace made single spaces. */
+    private static String source(String file) throws IOException {
+        String code = Files.readString(Path.of("src/main/java/com/dierks/homecraft/gui/games/daily/" + file));
+        return code.replaceAll("(?s)/\\*.*?\\*/", " ").replaceAll("//[^\\n]*", " ").replaceAll("\\s+", " ");
+    }
+
+    private static int count(String text, Pattern p) {
+        return (int) p.matcher(text).results().count();
     }
 
     // ---- D5: the chosen set's own tools, and the title at the cadence -------------------------------------
@@ -102,6 +160,15 @@ class FreshAdminReviewTest {
         List<String> upState = FreshAdmin.state(tools(null, false, A, true));
         assertTrue(upState.contains("&6Picked for " + NEXT_WEEK + " (up now): seed " + A_HEX),
                 "the header says it is up now: " + upState);
+
+        GenOps.Tools pinned = new GenOps.Tools(true, false, 7, null, false, A, NEXT_WEEK, false, true, true);
+        String pinnedLore = String.join(" ", tool(FreshAdmin.tools(PARKOUR, pinned), FreshAdmin.Kind.UNCHOOSE).lore());
+        assertTrue(pinnedLore.contains("stays up") && pinnedLore.contains("pinned too")
+                        && pinnedLore.contains("/hcm games gen unpin fresh_parkour"),
+                "with the slot's own pin under the pick, regenerate and promote are refused until an unpin, and the"
+                        + " lore says so: " + pinnedLore);
+        assertFalse(pinnedLore.contains("work on it"), "not that they work: " + pinnedLore);
+        assertFalse(lore.contains("pinned"), "no pin: as above, " + lore);
 
         FreshAdmin.Tool cancel = tool(FreshAdmin.tools(PARKOUR, tools(null, false, A, false)),
                 FreshAdmin.Kind.UNCHOOSE);
@@ -141,16 +208,36 @@ class FreshAdminReviewTest {
 
     @Test
     void someoneWhoLostTheAdminPermissionGetsNoToolsScreen() {
+        int[] went = {0};
+        int[] refused = {0};
+        assertFalse(FreshAdmin.allowed(false, () -> went[0]++, () -> refused[0]++), "not an admin: no way in");
+        assertEquals(0, went[0], "nothing opens or runs");
+        assertEquals(1, refused[0], "they are refused, once");
+        assertTrue(FreshAdmin.allowed(true, () -> went[0]++, () -> refused[0]++), "an admin: in");
+        assertEquals(1, went[0], "it opens or runs once");
+        assertEquals(1, refused[0], "and nobody is refused");
+
         List<String> heard = new ArrayList<>();
         int[] closed = {0};
+        int[] opened = {0};
         Player kid = player(false, heard, closed);
-        assertFalse(FreshAdminMenu.admin(kid), "not an admin (any more): no tools or confirm screen opens");
+        assertFalse(FreshAdminMenu.asAdmin(kid, () -> opened[0]++), "not an admin (any more): no tools or confirm"
+                + " screen opens");
+        assertEquals(0, opened[0], "nothing opened");
         assertEquals(List.of("That's for admins."), heard, "told why");
         assertEquals(1, closed[0], "and the screen they had open closes");
 
         heard.clear();
         closed[0] = 0;
-        assertTrue(FreshAdminMenu.admin(player(true, heard, closed)), "an admin gets the screen");
+        FreshAdminMenu.run(null, kid, new String[]{"regenerate", "fresh_parkour", "confirm"}); // a Yes, after the loss
+        assertEquals(List.of("That's for admins."), heard, "a tool's command doesn't run for them either (it would"
+                + " reach for the plugin first)");
+        assertEquals(1, closed[0], "and their screen closes");
+
+        heard.clear();
+        closed[0] = 0;
+        assertTrue(FreshAdminMenu.asAdmin(player(true, heard, closed), () -> opened[0]++), "an admin gets the screen");
+        assertEquals(1, opened[0], "it opens once");
         assertEquals(List.of(), heard, "with nothing said");
         assertEquals(0, closed[0], "and nothing closed");
     }

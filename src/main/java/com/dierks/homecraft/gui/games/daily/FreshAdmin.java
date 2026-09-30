@@ -8,6 +8,7 @@ import com.dierks.homecraft.games.gen.api.Slots;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.LongConsumer;
 
 /**
  * The owner's Fresh Courses tools on a course's own screen (WP-ADM): the same {@code /hcm games gen}
@@ -221,11 +222,14 @@ public final class FreshAdmin {
         }
         if (t.chosenSeed() != null) {
             // D5: during the chosen set the pick is this set's: letting it go keeps the course up and lets
-            // regenerate and promote work on it; a pick still to come is cancelled, as before
+            // regenerate and promote work on it, unless the slot's own pin holds too (they wait for an unpin);
+            // a pick still to come is cancelled, as before
             out.add(t.chosenUpNow()
                     ? new Tool(Kind.UNCHOOSE, 24, "&7Admin: Let " + thisOnes(n) + " pick go (unchoose)",
-                    lines(List.of("&7Picked: seed " + GenSeed.hex(t.chosenSeed()) + ", up now.",
-                            "&7The chosen course stays up; then", "&7regenerate and promote work on it."), List.of(),
+                    lines(List.of("&7Picked: seed " + GenSeed.hex(t.chosenSeed()) + ", up now."), t.pinned()
+                            ? List.of("&7The chosen course stays up.", "&7It is pinned too: regenerate and",
+                            "&7promote wait for &e/hcm games gen unpin " + id)
+                            : List.of("&7The chosen course stays up; then", "&7regenerate and promote work on it."),
                             "/hcm games gen unchoose " + id), List.of("unchoose", id), false, null)
                     : new Tool(Kind.UNCHOOSE, 24, "&7Admin: Cancel " + nextOnes(n) + " pick (unchoose)",
                     lines(List.of("&7Picked: seed " + GenSeed.hex(t.chosenSeed()) + ".", "&7The set gets its own new"
@@ -257,5 +261,42 @@ public final class FreshAdmin {
     /** The confirm screen's Yes: the command, with {@code confirm}, once. */
     public static void yes(Tool tool, Consumer<String[]> run) {
         run.accept(tool.command());
+    }
+
+    /**
+     * How the tools screen and its "Sure?" screen start every paint (fix2-D, D4 and D7), one step both
+     * {@code build()}s go through so neither can lose a part of it: drop every click for
+     * {@link #OPEN_HOLD_MS} (the rest of the double click that opened the screen: a vanilla client
+     * sends its second press to the new screen as a plain click), paint the frame (the filler and the
+     * way out), and go on to the tools, the seeds and Yes only for someone who still has
+     * {@link #PERMISSION} (the screen stays open while it is taken away).
+     *
+     * @param admin whether the viewer has {@link #PERMISSION} now
+     * @param hold  the screen's click hold ({@code GameMenu#hold})
+     * @param frame paints the filler and the way out
+     * @return whether to paint the rest
+     */
+    public static boolean opening(boolean admin, LongConsumer hold, Runnable frame) {
+        hold.accept(OPEN_HOLD_MS);
+        frame.run();
+        return admin;
+    }
+
+    /**
+     * The one door to a tools or "Sure?" screen, and to a tool's command (fix2-D, D7): {@code go}
+     * runs only for someone who still has {@link #PERMISSION}. The course screen checked it when it
+     * painted the item, but a screen stays open while it is taken away, and the command itself
+     * trusts its caller to have checked; anyone else gets {@code refuse} (told, and their screen
+     * closed) and nothing else.
+     *
+     * @return whether {@code go} ran
+     */
+    public static boolean allowed(boolean admin, Runnable go, Runnable refuse) {
+        if (!admin) {
+            refuse.run();
+            return false;
+        }
+        go.run();
+        return true;
     }
 }

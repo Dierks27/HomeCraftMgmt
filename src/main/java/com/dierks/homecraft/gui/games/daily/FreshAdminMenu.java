@@ -28,8 +28,9 @@ import org.bukkit.inventory.ItemStack;
  *
  * The preview's three appear once a preview stands (Use it now only for this set's); the cancel once
  * a course is picked. Like the confirm screen, it drops clicks for {@link FreshAdmin#OPEN_HOLD_MS}
- * as it opens (the rest of the double click that opened it), and it opens, and paints its tools,
- * only for someone who still has {@code hcm.games.admin} (fix2-D, D4 and D7). A tool
+ * as it opens (the rest of the double click that opened it), and it opens, paints its tools and runs
+ * one only for someone who still has {@code hcm.games.admin} (fix2-D, D4 and D7: both through
+ * {@link FreshAdmin#opening} and {@link #asAdmin}, pure steps a test drives). A tool
  * runs its {@code /hcm games gen} command through the command's own path, as the admin who clicked
  * (so every refusal, answer and log line is the command's); one whose command needs {@code confirm}
  * asks first ({@link FreshAdminConfirm}). The screen closes as the command runs, so its answer reads
@@ -77,20 +78,20 @@ public final class FreshAdminMenu extends GameMenu {
         GenOps.Tools state = games.guard(fresh, () -> engine.tools(courseId), null);
         ItemStack icon = Menus.icon(Material.COMMAND_BLOCK, FreshAdmin.itemName(state),
                 FreshAdmin.state(state).toArray(new String[0]));
-        return new Button(icon, () -> {
-            if (admin(viewer)) { // D7: the course screen may have been painted before the permission went
-                new FreshAdminMenu(plugin, fresh, viewer, courseId, back).open(viewer);
-            }
-        });
+        // D7: the course screen may have been painted before the permission went
+        return new Button(icon, () -> asAdmin(viewer, () -> new FreshAdminMenu(plugin, fresh, viewer, courseId, back)
+                .open(viewer)));
     }
 
     @Override
     protected void build() {
-        hold(FreshAdmin.OPEN_HOLD_MS); // D4: the rest of the double click that opened it
-        fill();
-        exitTile();
-        if (!viewer.hasPermission(FreshAdmin.PERMISSION)) {
-            return; // D7: no tools, no preview or pick seeds, for someone who isn't an admin any more
+        // D4: the rest of the double click that opened it is dropped; D7: no tools, no preview or pick
+        // seeds, for someone who isn't an admin any more
+        if (!FreshAdmin.opening(viewer.hasPermission(FreshAdmin.PERMISSION), this::hold, () -> {
+            fill();
+            exitTile();
+        })) {
+            return;
         }
         GamesService games = plugin.games();
         GenService engine = games == null ? null : DailyLookup.engine(games);
@@ -120,35 +121,34 @@ public final class FreshAdminMenu extends GameMenu {
     }
 
     private void ask(FreshAdmin.Tool t) {
-        if (admin(viewer)) {
-            new FreshAdminConfirm(plugin, game, viewer, t, this::reopen).open(viewer);
-        }
+        asAdmin(viewer, () -> new FreshAdminConfirm(plugin, game, viewer, t, this::reopen).open(viewer));
     }
 
     /**
-     * Whether {@code viewer} may have a tools or confirm screen now (fix2-D, D7): the permission is
-     * checked when the course screen paints the item, but a screen stays open while it is taken
-     * away. Someone who lost it is told, and the screen they have open closes.
+     * {@code go} (opening a tools or confirm screen, or running a tool's command) only while
+     * {@code viewer} has {@code hcm.games.admin} ({@link FreshAdmin#allowed}, fix2-D, D7): someone
+     * who lost it is told, and the screen they have open closes.
+     *
+     * @return whether {@code go} ran
      */
-    static boolean admin(Player viewer) {
-        if (viewer.hasPermission(FreshAdmin.PERMISSION)) {
-            return true;
-        }
-        viewer.sendMessage(Text.of("&cThat's for admins."));
-        viewer.closeInventory();
-        return false;
+    static boolean asAdmin(Player viewer, Runnable go) {
+        return FreshAdmin.allowed(viewer.hasPermission(FreshAdmin.PERMISSION), go, () -> {
+            viewer.sendMessage(Text.of("&cThat's for admins."));
+            viewer.closeInventory();
+        });
     }
 
     /**
      * Run {@code words} as {@code /hcm games gen <words>} for {@code viewer}, through Fresh Courses'
-     * own command (its refusals, answers and log line), inside its guard. The screen closes first so
-     * the answer reads in chat (and a test run can take the player to its start).
+     * own command (its refusals, answers and log line), inside its guard, and only for an admin (the
+     * command trusts its caller to have checked). The screen closes first so the answer reads in chat
+     * (and a test run can take the player to its start).
      */
     static void run(HomeCraftManagement plugin, Player viewer, String[] words) {
-        if (!viewer.hasPermission(FreshAdmin.PERMISSION)) {
-            viewer.sendMessage(Text.of("&cThat's for admins."));
-            return;
-        }
+        asAdmin(viewer, () -> command(plugin, viewer, words));
+    }
+
+    private static void command(HomeCraftManagement plugin, Player viewer, String[] words) {
         GamesService games = plugin.games();
         Game fresh = games == null ? null : DailyLookup.fresh(games);
         GameAdmin tool = fresh == null ? null : games.guard(fresh, fresh::admin, null);
@@ -161,8 +161,6 @@ public final class FreshAdminMenu extends GameMenu {
     }
 
     private void reopen() {
-        if (admin(viewer)) {
-            new FreshAdminMenu(plugin, game, viewer, slotId, back).open(viewer);
-        }
+        asAdmin(viewer, () -> new FreshAdminMenu(plugin, game, viewer, slotId, back).open(viewer));
     }
 }

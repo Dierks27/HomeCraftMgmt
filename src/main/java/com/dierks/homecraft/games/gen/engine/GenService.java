@@ -599,11 +599,22 @@ public final class GenService implements GeneratedCourses, GenOps {
      */
     private GenScheduler.Pin activePin(SlotState s) {
         GenScheduler.Choice chosen = chosenNow(s);
-        if (chosen != null) {
-            return chosen.pin();
-        }
+        return chosen != null ? chosen.pin() : ownPin(s, target(s).start());
+    }
+
+    /**
+     * The slot's own pin ({@code pin}, not a pick) if it applies to the set that starts on {@code day},
+     * else {@code null}. fix2-D (D5): what holds once a pick is let go.
+     */
+    private GenScheduler.Pin ownPin(SlotState s, long day) {
         Planner p = planners.get(s.def.generator());
-        return s.pin != null && p != null && s.pin.appliesOn(target(s).start(), p.algo()) ? s.pin : null;
+        return s.pin != null && p != null && s.pin.appliesOn(day, p.algo()) ? s.pin : null;
+    }
+
+    /** fix2-D (D5): what the set starting {@code day} gets with no pick: its pinned course, or its own new one. */
+    private String ownCourse(SlotState s, long day) {
+        GenScheduler.Pin pin = ownPin(s, day);
+        return pin == null ? "its own new course" : "its pinned course (seed " + GenSeed.hex(pin.seed()) + ")";
     }
 
     /**
@@ -648,16 +659,24 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     /** fix2-D: whether a pick's course comes out as it was tried, at the settings now (D0). */
     private boolean fits(SlotState s, GenScheduler.Choice c) {
-        return c.fits(s.mix, host.fallDepth());
+        return c.fits(s.mix, pickDepth(s, host.fallDepth()));
     }
 
     /**
-     * fix2-D: the {@code trials.fall_depth} a pick of {@code s} keeps: parkour's layout is shaped by
-     * it (medium and hard fall back that far under the checkpoints); no other planner's is, so their
-     * picks keep 0 and never depend on it.
+     * fix2-D: the fall depth a pick of {@code s} keeps and is checked against: only what shapes the
+     * layout ({@link ParkourPlanner#designDepth}). Medium and hard parkour are shaped by
+     * {@code trials.fall_depth} up to {@link ParkourPlanner#FALL_DESIGN} (a deeper setting makes the
+     * same course); easy parkour falls back at a fixed height, and no other planner reads it, so
+     * those picks keep 0 and a change of the setting (a global Time Trials one, also for hand-built
+     * courses) never drops them.
      */
     private int pickDepth(SlotState s, int depth) {
-        return Slots.PARKOUR.equals(s.def.generator()) ? depth : 0;
+        return Slots.PARKOUR.equals(s.def.generator()) ? ParkourPlanner.designDepth(s.mix, depth) : 0;
+    }
+
+    /** fix2-D: a kept design depth as the owner reads it ("6 or more": any of those makes the course). */
+    private static String depthWords(int design) {
+        return design >= ParkourPlanner.FALL_DESIGN ? design + " or more" : String.valueOf(design);
     }
 
     /** fix2-D: the pick's own set, as admins read it. */
@@ -670,7 +689,8 @@ public final class GenService implements GeneratedCourses, GenOps {
      * own seed); one made for another planner version is said once and not used.
      *
      * <p>fix2-D: so is one that can no longer be the course that was tried, with a warning and a
-     * status line: its set is next but the tier or mix, or parkour's fall depth, has changed since
+     * status line: its set is next but the tier or mix, or the fall depth its parkour layout is shaped
+     * by ({@link #pickDepth}: not easy's, nor a raise past 6), has changed since
      * (D0: building the seed now would put up a course nobody tried as "the chosen course"); or the
      * schedule moved and its set is no longer the next one (D1, D2: status would promise a set that
      * never comes, or it would go up later as a set of another length). Run at every check once the
@@ -727,8 +747,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             return "it was tried as " + c.mix() + ", and that set will be " + s.mix + ", so it would come out"
                     + " different";
         }
-        return "it was tried with fall_depth " + c.fallDepth() + ", and it is " + host.fallDepth() + " now, so it would"
-                + " come out different";
+        return "it was tried with fall_depth " + depthWords(c.fallDepth()) + ", and it is " + host.fallDepth() + " now,"
+                + " so it would come out different";
     }
 
     /** fix2-D: whether {@code day} and {@code cadence} are the next set's, not the one the slot shows now. */
@@ -3225,13 +3245,14 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         // fix2-D (D0): the pick keeps what shapes its course, so a later change drops it instead of
-        // building the seed into something nobody tried; a preview made at another fall depth is refused
-        // as one made at another tier is.
+        // building the seed into something nobody tried; a preview made at a fall depth that shapes the
+        // layout differently is refused as one made at another tier is (one only the play-time fall
+        // floor differs for is the same course, and is taken).
         int depth = pickDepth(s, host.fallDepth());
-        if (depth > 0 && pv.fallDepth() > 0 && pv.fallDepth() != depth) {
-            report.accept("&cThat preview was made with fall_depth " + pv.fallDepth() + ", and it is " + depth
-                    + " now, so it would come out different. &7Make a new one: &e/hcm games gen preview " + slotId
-                    + " next");
+        if (pv.fallDepth() > 0 && pickDepth(s, pv.fallDepth()) != depth) {
+            report.accept("&cThat preview was made with fall_depth " + pv.fallDepth() + ", and it is "
+                    + host.fallDepth() + " now, so it would come out different. &7Make a new one: &e/hcm games gen"
+                    + " preview " + slotId + " next");
             return;
         }
         GenScheduler.Choice was = chosenWaiting(s);
@@ -3275,9 +3296,15 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         s.chosen = null;
         s.pickDropped = null;
-        report.accept("&a" + s.def.name() + "'s pick is cancelled. &7" + (upNow ? "The chosen course that is up now"
-                + " stays until the next set, which gets its own new course; &e/hcm games gen regenerate " + slotId
-                + " &7and &epromote &7work on it now." : "The next set gets its own new course."));
+        // fix2-D (D5): once the pick up now is let go, reroll and promote are refused while the slot's own
+        // pin holds for this set (choose may pick over a pin), so they are offered only when none does
+        String next = ownCourse(s, nextSet(s).day());
+        String then = !upNow ? "The next set gets " + next + "."
+                : "The chosen course that is up now stays until the next set, which gets " + next + "; "
+                + (activePin(s) == null ? "&e/hcm games gen regenerate " + slotId + " &7and &epromote &7work on it now."
+                : s.def.name() + " is pinned too, so regenerate and promote wait for &e/hcm games gen unpin " + slotId
+                + "&7.");
+        report.accept("&a" + s.def.name() + "'s pick is cancelled. &7" + then);
     }
 
     @Override
@@ -3334,7 +3361,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         int cadence = edition().cadenceDays();
         return new Tools(s.on(), s.def.golf(), cadence, pv == null ? null : pv.seed(),
                 pv != null && isNextSet(s, pv.day(), pv.cadence()), c == null ? null : c.seed(),
-                c == null ? null : pickSet(c), busyWith(s), up != null);
+                c == null ? null : pickSet(c), busyWith(s), up != null, ownPin(s, target(s).start()) != null);
     }
 
     @Override

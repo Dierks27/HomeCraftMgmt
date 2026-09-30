@@ -252,6 +252,20 @@ public final class ParkourPlanner implements Planner {
                 + " in " + RESTARTS + " starts");
     }
 
+    /**
+     * The fall depth a {@code tier} layout is shaped by at a live {@code trials.fall_depth} of
+     * {@code fallDepth}: for medium and hard, that setting (as allowed) up to {@link #FALL_DESIGN},
+     * since their legs are kept that far clear of the floor and a deeper setting only lowers it; 0
+     * for easy, which falls back at a fixed height and never reads the setting, and for anything
+     * that isn't a parkour tier. The same seed at two settings with the same design depth makes the
+     * same layout, so this is what a chosen course keeps and is checked against (fix2-D, D0): a
+     * change that leaves it alone leaves the course alone.
+     */
+    public static int designDepth(String tier, int fallDepth) {
+        JumpRules.Level level = JumpRules.Level.of(tier);
+        return level == null || level.fixedFall() ? 0 : Math.min(FALL_DESIGN, clampDepth(fallDepth));
+    }
+
     /** {@code trials.fall_depth} as the settings allow it (1 to 64). */
     static int clampDepth(int depth) {
         return Math.max(1, Math.min(64, depth));

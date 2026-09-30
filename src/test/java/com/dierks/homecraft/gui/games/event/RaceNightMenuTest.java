@@ -68,6 +68,22 @@ class RaceNightMenuTest {
     }
 
     @Test
+    void theMountainRunsTrackTileSaysDownhillRaces() {
+        // COURSE-VARIETY-SPEC §5.2, §8: a sprint has no laps to count
+        RaceNightMenu.View v = view(RaceNightMenu.Join.OPEN, true);
+        RaceNightMenu.View downhill = new RaceNightMenu.View(v.when(), v.state(), v.track(), 3, 1, v.prizes(),
+                v.finisherPrize(), v.prizeNight(), v.join(), v.racers(), v.maxRacers(), v.opensAt(), v.watching(),
+                v.lastWinner(), v.lastBoard(), v.seasonName(), v.seasonBoard(), v.seasonPoints(), v.newsOn(), true);
+        assertEquals("&bIce Boat &7- 3 downhill races", name(RaceNightMenu.tiles(downhill, true), RaceNightMenu.TRACK),
+                "the Mountain Run's races, in the NAME for Bedrock");
+        assertFalse(v.downhill(), "the shape before the Mountain Run reads as not downhill");
+        assertEquals("&bIce Boat &7- 3 races, 2 laps", name(RaceNightMenu.tiles(v, true), RaceNightMenu.TRACK),
+                "a loop: as it always was");
+        assertEquals(List.of(), GenCopy.copyProblems(name(RaceNightMenu.tiles(downhill, true),
+                RaceNightMenu.TRACK)), "kid-safe");
+    }
+
+    @Test
     void theFactsAreInTheNames() {
         List<RaceNightMenu.Tile> t = RaceNightMenu.tiles(view(RaceNightMenu.Join.OPEN, true), true);
         assertEquals("&6Race Night &7- Fri 7:00 PM", name(t, RaceNightMenu.HEADER), "when");

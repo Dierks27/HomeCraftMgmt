@@ -22,7 +22,7 @@ import java.util.List;
  *
  * <pre>
  *  4  CLOCK      "Race Night - Fri 7:00 PM"
- *  10 OAK_BOAT   "Ice Boat - 3 races, 2 laps"
+ *  10 OAK_BOAT   "Ice Boat - 3 races, 2 laps" ("Ice Boat - 3 downhill races" on the Mountain Run)
  *  12 GOLD_INGOT "Prizes - 5, 3, 2 tokens" (or "Just for fun tonight"), the rules in lore
  *  13 Join       LIME "Join Race Night - 3 of 8 in" / RED "Leave the race list" / GRAY "Joining opens at 6:50 PM"
  *  14 SPYGLASS   "Watch" (a bossbar with the leader, and the finishes in chat)
@@ -81,14 +81,25 @@ public final class RaceNightMenu extends GameMenu {
      * @param lastBoard     the last night's board ({@code rnnight:<id>}), or {@code null}
      * @param seasonName    "October", or {@code null} with the season off
      * @param seasonBoard   the season board, or {@code null}
+     * @param downhill      the track is the Ice Boat Mountain Run, a sprint: "3 downhill races", no laps
+     *                      (COURSE-VARIETY-SPEC §5.2)
      */
     public record View(String when, String state, String track, int races, int laps, List<Integer> prizes,
                        int finisherPrize, boolean prizeNight, Join join, int racers, int maxRacers, String opensAt,
                        boolean watching, String lastWinner, String lastBoard, String seasonName, String seasonBoard,
-                       long seasonPoints, boolean newsOn) {
+                       long seasonPoints, boolean newsOn, boolean downhill) {
 
         public View {
             prizes = prizes == null ? List.of() : List.copyOf(prizes);
+        }
+
+        /** A view of a track that isn't the Mountain Run (the shape before it). */
+        public View(String when, String state, String track, int races, int laps, List<Integer> prizes,
+                    int finisherPrize, boolean prizeNight, Join join, int racers, int maxRacers, String opensAt,
+                    boolean watching, String lastWinner, String lastBoard, String seasonName, String seasonBoard,
+                    long seasonPoints, boolean newsOn) {
+            this(when, state, track, races, laps, prizes, finisherPrize, prizeNight, join, racers, maxRacers, opensAt,
+                    watching, lastWinner, lastBoard, seasonName, seasonBoard, seasonPoints, newsOn, false);
         }
     }
 
@@ -206,7 +217,7 @@ public final class RaceNightMenu extends GameMenu {
                 List.of("&7" + (v.state() == null ? "Boat races for everyone at once." : v.state()),
                         "&7Three short races: every race gives points."));
         out[TRACK] = new Tile(TRACK, Material.OAK_BOAT, v.track() == null ? "&bThe track &7- picked on the night"
-                : "&b" + v.track() + " &7- " + EventCopy.format(v.races(), Math.max(1, v.laps())),
+                : "&b" + v.track() + " &7- " + EventCopy.format(v.races(), Math.max(1, v.laps()), v.downhill()),
                 List.of("&7Everyone starts together on a grid.", "&7Boats bump - give each other room!",
                         "&7Finishers watch the rest from the stand."));
         List<String> rules = new ArrayList<>();

@@ -17,10 +17,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * was); a course is labelled by kind and tier, the hardest tier with its own name; tiers and kinds
  * are read in any case and nothing else is; each kind pays under its own ledger source; a course
  * id is a short lower-case word, and never "auto" (the feature command's word); a name comes from
- * the id; a typed name loses colour codes and anything Bedrock can't draw; and a new best with no
- * time before it is called a first finish only when the first finish is being paid.
+ * the id; a typed name loses colour codes and anything Bedrock can't draw; a new best with no
+ * time before it is called a first finish only when the first finish is being paid; and a Mountain
+ * Run's drops read "1 drop", "5 drops".
  */
 class TrialTextTest {
+
+    @Test
+    void aMountainRunsDropsReadLikeADroppersLevels() {
+        assertEquals("1 drop", TrialText.drops(1), "one drop, no s (COURSE-VARIETY-SPEC §8: 1 -> \"1 drop\")");
+        assertEquals("5 drops", TrialText.drops(5), "the Medium run's five");
+        assertEquals("0 drops", TrialText.drops(0), "none (never shown: the tile and the hype skip a flat track)");
+        assertEquals("3 levels", TrialText.levels(3), "the Dropper's fact it sits beside, the same shape");
+    }
 
     @Test
     void aTimeReadsAsMinutesSecondsAndTenthsFloored() {

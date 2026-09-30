@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.gen.api.Edition;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.api.Stars;
+import com.dierks.homecraft.games.trial.TrialText;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -80,11 +81,13 @@ public final class DailyText {
      * the name: "&amp;aEasy Parkour &amp;7- ★★☆" once the player has stars in this set,
      * "&amp;cHard Parkour" before; a golf course always says its holes and par ("&amp;dGolf of the
      * Week &amp;7- 9 holes, par 29"), then its stars; a dropper its levels ("&amp;aEasy Dropper &amp;7-
-     * 3 levels · ★★☆", EVENTS-DROPPER-SPEC §B.1.8). Golf's big course is named for the cadence
-     * ({@link GenCopy#slotName}).
+     * 3 levels · ★★☆", EVENTS-DROPPER-SPEC §B.1.8); the Ice Boat Mountain Run its drops the same way
+     * ("&amp;bIce Boat &amp;7- 5 drops · ★★☆", COURSE-VARIETY-SPEC §5.2). Golf's big course is named for
+     * the cadence ({@link GenCopy#slotName}).
      *
      * @param stars the player's best stars on it in this set (0 = none yet)
-     * @param holes golf: how many holes; a dropper: how many levels (ignored for any other trial)
+     * @param holes golf: how many holes; a dropper: how many levels; a boat: how many drops (0 for the
+     *              flat loop); ignored for any other trial
      * @param par   golf: the course's par
      */
     public static String slotName(Slots.Def slot, int cadence, int stars, int holes, int par) {
@@ -95,6 +98,9 @@ public final class DailyText {
         }
         if (slot != null && slot.dropper() && holes > 0) {
             return head + " &7- " + levels(holes) + (starText == null ? "" : " · " + starText);
+        }
+        if (slot != null && Slots.BOAT.equals(slot.generator()) && holes > 0) {
+            return head + " &7- " + TrialText.drops(holes) + (starText == null ? "" : " · " + starText);
         }
         return starText == null ? head : head + " &7- " + starText;
     }

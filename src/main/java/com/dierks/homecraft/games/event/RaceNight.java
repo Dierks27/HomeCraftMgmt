@@ -594,6 +594,7 @@ public final class RaceNight implements Game {
                 s.announceMinutes(), state);
         r.prizeWeek(() -> DailyLookup.weekKey(games()), s.prizeEventsPerWeek()); // the week at race 1's Go
         r.standRadius(s.standRadius()); // race mode keeps the stand, within this
+        r.hype(s.hype()); // a Mountain Run's drops in the heads-up and join-open lines
         r.onEnd(this::ended);
         news.clear();
         night = r;
@@ -1078,6 +1079,20 @@ public final class RaceNight implements Game {
         return String.format(Locale.ROOT, "%.2f ms average, %.2f ms at most", tickAvgNanos / 1e6, tickMaxNanos / 1e6);
     }
 
+    /**
+     * A scheduled night's track as the Race Night screen shows it before the night is made: its name
+     * ({@code null} while it isn't picked), the laps it will be raced over, and whether it is the Ice Boat
+     * Mountain Run, a downhill sprint ("3 downhill races", COURSE-VARIETY-SPEC §5.2).
+     */
+    record Upcoming(String track, int laps, boolean downhill) {
+
+        /** {@code c} ({@code null}: not picked yet) for a night of {@code laps} laps. */
+        static Upcoming of(Course c, int laps) {
+            return c == null ? new Upcoming(null, laps, false)
+                    : new Upcoming(c.name(), RaceTrack.laps(c, laps), EventCopy.downhill(c));
+        }
+    }
+
     /** What the Race Night screen shows the viewer now. */
     public RaceNightMenu.View view(Player viewer) {
         UUID id = viewer.getUniqueId();
@@ -1089,6 +1104,7 @@ public final class RaceNight implements Game {
         String track = null;
         int races = s.races();
         int laps = s.laps();
+        boolean downhill = false;
         List<Integer> prizes = s.prizes();
         int finisher = s.finisherPrize();
         boolean prizeNight = s.prizeEventsPerWeek() > prizedThisWeek();
@@ -1101,6 +1117,7 @@ public final class RaceNight implements Game {
             track = n.track().name();
             races = n.plan().races();
             laps = n.laps();
+            downhill = EventCopy.downhill(n.track().base());
             prizes = n.plan().rules().prizes();
             finisher = n.plan().rules().finisherPrize();
             prizeNight = n.prizeNight() && (n.started() >= 0 || prizeNight);
@@ -1123,9 +1140,10 @@ public final class RaceNight implements Game {
             EventSchedule.Occurrence o = next();
             if (o != null) {
                 when = EventCopy.when(o.startsAt(), zone);
-                Course c = nextTrack(o);
-                track = c == null ? null : c.name();
-                laps = c == null ? laps : RaceTrack.laps(c, laps);
+                Upcoming u = Upcoming.of(nextTrack(o), laps);
+                track = u.track();
+                laps = u.laps();
+                downhill = u.downhill();
                 opensAt = EventCopy.clock(o.joinAt(), zone) + " (" + EventCopy.when(o.startsAt(), zone) + ")";
                 join = RaceNightMenu.Join.SOON;
             }
@@ -1136,7 +1154,7 @@ public final class RaceNight implements Game {
         return new RaceNightMenu.View(when, state, track, races, laps, prizes, finisher, prizeNight, join, racers, max,
                 opensAt, watchers.watching(id), lastRow == null ? null : winner(lastRow.id()),
                 lastRow == null ? null : EventCopy.nightBoard(lastRow.id()), seasonName, board, seasonPoints(id),
-                newsOn(id));
+                newsOn(id), downhill);
     }
 
     /** Race Night's {@code events} section of the website feed (§A.7). */
@@ -1157,7 +1175,8 @@ public final class RaceNight implements Game {
         String prizes = "prize nights " + prizedThisWeek() + "/" + settings().prizeEventsPerWeek() + " this week";
         if (n != null) {
             out.add(n.phase().name().toLowerCase(Locale.ROOT) + " · " + n.plan().id() + " on " + n.track().name()
-                    + " (" + EventCopy.format(n.plan().races(), n.laps()) + ") · " + EventCopy.racers(n.joined().size())
+                    + " (" + EventCopy.format(n.plan().races(), n.laps(), n.track().base()) + ") · "
+                    + EventCopy.racers(n.joined().size())
                     + " · " + prizes);
         } else {
             EventSchedule.Occurrence o = next();

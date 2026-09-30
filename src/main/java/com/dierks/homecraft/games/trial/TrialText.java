@@ -5,8 +5,9 @@ import java.util.regex.Pattern;
 
 /**
  * The words the time trials use, in one place and tested: how a time reads ("1:02.3"), how a
- * course is labelled ("Boat · Medium"), a Dropper's levels ("level 2 of 5"), what a course id may
- * look like, and how an admin's typed name is cleaned before a player reads it.
+ * course is labelled ("Boat · Medium"), a Dropper's levels ("level 2 of 5"), a Mountain Run's drops
+ * ("5 drops"), what a course id may look like, and how an admin's typed name is cleaned before a
+ * player reads it.
  */
 public final class TrialText {
 
@@ -43,6 +44,11 @@ public final class TrialText {
     /** A Dropper's "1 level", "5 levels" (EVENTS-DROPPER-SPEC §B.1.8). */
     public static String levels(int n) {
         return n + " level" + (n == 1 ? "" : "s");
+    }
+
+    /** A Mountain Run's "1 drop", "5 drops" (COURSE-VARIETY-SPEC §5.2): a Hop and a Big Drop are one drop each. */
+    public static String drops(int n) {
+        return n + " drop" + (n == 1 ? "" : "s");
     }
 
     /** "level 2" (1-based). */

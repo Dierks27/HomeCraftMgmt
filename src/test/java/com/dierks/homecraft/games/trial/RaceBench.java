@@ -140,6 +140,10 @@ final class RaceBench {
         if (!mode.alive(link)) {
             return "That race is over.";
         }
+        boolean waiting = door != null && door.seatable(id);
+        if (!waiting && !p.hasPermission(com.dierks.homecraft.games.PlayGate.PERMISSION_PLAY)) {
+            return Refusal.NO_GAMES.message(); // RaceMode.race: the play gate's permission step (G1 #3)
+        }
         if (trials.run(id) != null) {
             return Refusal.IN_SESSION.message();
         }

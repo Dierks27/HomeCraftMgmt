@@ -110,6 +110,12 @@ public final class GamesService {
     private final Map<String, List<BukkitTask>> tasks = new HashMap<>();
     /** Cancels the one-minute round sweep. */
     private Runnable sweep;
+    /**
+     * When this plugin run began (the service is built once, at enable; {@code /hcm reload} keeps it):
+     * the restart hold skips a restart whose minute it fell in, since that is the restart it came back
+     * from (the round-2 audit's G1 #2).
+     */
+    private final long bootedAt;
 
     /**
      * @param breaks Take a break, built earlier and on its own (it also guards the Scratch Ticket
@@ -124,6 +130,7 @@ public final class GamesService {
         this.host = host;
         this.breaks = breaks;
         this.specs = List.copyOf(specs);
+        this.bootedAt = host.clock().nowMillis();
         this.context = new GameContext(host.plugin(), this);
         this.gate = new PlayGate(this);
         this.rounds = new ChanceRounds(this);
@@ -457,11 +464,12 @@ public final class GamesService {
     /**
      * The scheduled-restart hold as configured now ({@code games.restart_times},
      * {@code games.restart_hold_minutes}, read in {@code clock.time_zone}). Built on every call,
-     * so a reload takes effect at once.
+     * so a reload takes effect at once. It knows when this run began, so a server back up inside a
+     * restart's minute isn't held for the restart it came back from.
      */
     public RestartHold restartHold() {
         GamesConfig.Common c = config().common();
-        return new RestartHold(c.restartTimes(), host.clock().zone(), c.restartHoldMinutes());
+        return new RestartHold(c.restartTimes(), host.clock().zone(), c.restartHoldMinutes(), bootedAt);
     }
 
     /**

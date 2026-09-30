@@ -225,4 +225,34 @@ class RestartHoldTest {
         assertFalse(owner.holding(restart + MINUTE), "from 4:01 PM the restart has happened: nothing is held");
         assertEquals(at(2026, 6, 11, 4, 0), owner.next(restart + MINUTE), "and the next is tomorrow's 04:00");
     }
+
+    /**
+     * The round-2 audit's G1 #2: a quick restart is back up inside the restart's own minute. That restart
+     * has happened, so for a plugin enabled inside its minute it is over; a plugin up since before it is
+     * still waiting for it, and so is one enabled in the hold before it (a crash at 3:57 PM).
+     */
+    @Test
+    void aPluginEnabledInsideARestartsMinuteIsNotHeldForTheRestartItCameBackFrom() {
+        long restart = at(2026, 6, 10, 16, 0);
+        List<LocalTime> times = List.of(LocalTime.of(4, 0), LocalTime.of(16, 0));
+        RestartHold back = new RestartHold(times, CHICAGO, 5, restart + 20_000); // up again at 4:00:20
+        assertFalse(back.holding(restart + 30_000), "at 4:00:30 the restart it came back from is over: nothing held");
+        assertNull(back.heldFor(restart + 30_000), "no time to read");
+        assertEquals(at(2026, 6, 11, 4, 0), back.next(restart + 30_000), "the next restart is tomorrow's 04:00");
+        assertTrue(back.cameBackFrom(restart), "it came back from 4:00 PM");
+        assertFalse(back.cameBackFrom(at(2026, 6, 11, 4, 0)), "not from tomorrow's");
+
+        RestartHold at0 = new RestartHold(times, CHICAGO, 5, restart); // enabled on the minute itself
+        assertFalse(at0.holding(restart + 1_000), "a boot at 4:00:00 is a boot after the stop too");
+
+        RestartHold before = new RestartHold(times, CHICAGO, 5, restart - 3 * MINUTE); // a crash-restart at 3:57
+        assertTrue(before.holding(restart + 30_000), "up since before the restart's minute: still held for it");
+        assertEquals("4:00 PM", before.heldFor(restart - MINUTE), "and through the hold before it");
+
+        RestartHold longAgo = new RestartHold(times, CHICAGO, 5, restart - 86_400_000L);
+        assertTrue(longAgo.holding(restart + 30_000), "a plugin up since yesterday waits for the stop");
+        RestartHold unknown = new RestartHold(times, CHICAGO, 5);
+        assertEquals(RestartHold.NEVER_BOOTED, unknown.bootedAt(), "no boot time: every restart counts");
+        assertTrue(unknown.holding(restart + 30_000), "(as before)");
+    }
 }

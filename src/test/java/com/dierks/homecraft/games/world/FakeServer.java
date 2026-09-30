@@ -58,6 +58,8 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
         final List<String> dropped = new ArrayList<>();
         int applies;
         final List<String> appliedIn = new ArrayList<>();
+        /** Where each snapshot went on (its game mode with it): never in mid-air or inside a wall. */
+        final List<Place> appliedAt = new ArrayList<>();
         int saves;
         /** The mark in the player's own data (on the server it is saved with their inventory). */
         String mark;
@@ -372,6 +374,7 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
             }
             p.applies++;
             p.appliedIn.add(p.place.world());
+            p.appliedAt.add(p.place);
             SavedStateCodec.apply(s, effects, new FakeBody(p, contents));
         };
     }

@@ -97,15 +97,61 @@ class FallHomeTest {
         dan.fall = 17f; // they load in over the shaft on the next join and fall a little
         core.joined(dan);
         dan.fall += 8f; // on the loading screen while the trip home loads
-        assertTrue(KitGuardListener.sparesFall(core.recovering(dan.id), EntityDamageEvent.DamageCause.FALL),
+        assertTrue(SessionRecoveryListener.sparesFall(core, dan, EntityDamageEvent.DamageCause.FALL),
                 "out of any session, but on the way home: hitting the shaft floor meanwhile costs nothing");
-        assertFalse(KitGuardListener.sparesFall(core.recovering(dan.id), EntityDamageEvent.DamageCause.LAVA),
+        assertFalse(SessionRecoveryListener.sparesFall(core, dan, EntityDamageEvent.DamageCause.LAVA),
                 "only the fall");
         server.arriveAll();
-        assertFalse(KitGuardListener.sparesFall(core.recovering(dan.id), EntityDamageEvent.DamageCause.FALL),
+        assertFalse(SessionRecoveryListener.sparesFall(core, dan, EntityDamageEvent.DamageCause.FALL),
                 "home: a fall is theirs again");
         assertEquals(HOME, dan.place, "sent home at the join");
         assertEquals(0f, dan.fall, "and they land with no fall");
+    }
+
+    /**
+     * The round-2 audit's G1 #3: the fall a trip home spares depends on nothing but the trip (the recovery
+     * listener asks, with the games on, off or failed: {@link RecoveryFallGuardTest}).
+     */
+    @Test
+    void theFallATripHomeSparesDependsOnNothingButTheTrip() throws Exception {
+        midDrop();
+        core.quit(dan);
+        dan.fall = 17f;
+        core.joined(dan); // after a crash the owner switched the games off: the core knows no switch
+        assertTrue(core.recovering(dan.id), "(on the way home)");
+        assertTrue(SessionRecoveryListener.sparesFall(core, dan, EntityDamageEvent.DamageCause.FALL),
+                "the fall on the way home is spared");
+    }
+
+    /**
+     * The round-2 audit's G1 #1, the backstop: a player a game let go in a Games world with their things
+     * not home yet (the trip home failed, and so did our teleport down to a floor) never takes a fall there;
+     * at home, or with everything handed over, a fall is theirs again.
+     */
+    @Test
+    void aPlayerLetGoInAGamesWorldBeforeTheirThingsAreHomeHasTheirFallSpared() throws Exception {
+        midDrop();
+        core.leave(dan, EndReason.QUIT_ITEM); // restored in the shaft, RETURN written, the trip home starts
+        server.syncTeleportsWork = false; // another plugin refuses every teleport of ours for now
+        server.fail(0);
+        assertTrue(dan.messages.contains(SessionCore.NOT_HOME), "(the trip home failed)");
+        assertNull(core.phase(dan.id), "(out of the session)");
+        assertFalse(core.recovering(dan.id), "(and no trip is under way)");
+        assertEquals(Place.of("games", 100, 40, 100), dan.place, "(our teleport down didn't happen either)");
+        assertTrue(SessionRecoveryListener.sparesFall(core, dan, EntityDamageEvent.DamageCause.FALL),
+                "their things aren't home yet, and they are in a Games world: the fall to the shaft's floor is spared");
+
+        FakeServer.Body eve = new FakeServer.Body("Eve", Place.of("games", 0, 90, 0));
+        assertFalse(SessionRecoveryListener.sparesFall(core, eve, EntityDamageEvent.DamageCause.FALL),
+                "someone in the Games world with no game of theirs to finish takes their own falls");
+
+        server.syncTeleportsWork = true;
+        core.leave(dan, EndReason.COMMAND); // /hcm leave
+        server.arriveAll();
+        assertEquals(HOME, dan.place, "home");
+        assertNull(dao.loadState(dan.id), "(finished)");
+        assertFalse(SessionRecoveryListener.sparesFall(core, dan, EntityDamageEvent.DamageCause.FALL),
+                "home with everything: a fall is theirs again");
     }
 
     @Test

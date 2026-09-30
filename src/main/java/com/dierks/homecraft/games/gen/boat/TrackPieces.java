@@ -99,8 +99,6 @@ final class TrackPieces {
         boolean ok(List<double[]> blocked);
     }
 
-    static StringBuilder DEBUG;
-
     final List<Piece> list;
     /** Per path segment: sand columns on the outside of the bend, and the kerb on its inside at the apex. */
     final int[] runoff;
@@ -248,8 +246,6 @@ final class TrackPieces {
         List<Kind> deck = deck(r, level, richness);
         for (Kind k : deck) {
             List<Piece> options = options(r, path, profile, level, k, placed, h0);
-            int nOptions = options.size();
-            int before = placed.size();
             for (int attempt = 0; attempt < BoatPlanner.PIECE_ATTEMPTS && !options.isEmpty(); attempt++) {
                 Piece p = options.remove(r.nextInt(options.size()));
                 List<double[]> blocked = blocked(placed);
@@ -260,9 +256,6 @@ final class TrackPieces {
                     placed.add(p);
                     break;
                 }
-            }
-            if (DEBUG != null) {
-                DEBUG.append(" ").append(k).append(":").append(nOptions).append(placed.size() > before ? "+" : "-");
             }
         }
         placed.sort((a, b) -> Double.compare(a.s1, b.s1));
@@ -369,7 +362,7 @@ final class TrackPieces {
                 }
             }
             // whole blocks from the straight's start, plus a half: the piece ends between columns
-            double first = st.s0 + BoatPlanner.PIECE_END_GAP + 0.5;
+            double first = TrackProfile.spotStart(st) + BoatPlanner.PIECE_END_GAP + 0.5;
             for (double s1 = first; s1 + len + BoatPlanner.PIECE_END_GAP <= st.s1() + 1e-9; s1 += 1) {
                 double s2 = s1 + len;
                 if (!free(profile, level, k, s1, s2, placed, h0, st.s0)) {

@@ -49,7 +49,7 @@ final class BoatScenery {
      */
     static int[][] terraces(TrackRaster t) {
         int[][] out = new int[t.sx][t.sz];
-        double reach = t.path.pitch + 2;
+        double reach = 2.0 * t.path.pitch;
         for (int x = 0; x < t.sx; x++) {
             for (int z = 0; z < t.sz; z++) {
                 out[x][z] = TrackRaster.NONE;

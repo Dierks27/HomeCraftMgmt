@@ -47,8 +47,6 @@ final class TrackProfile {
     record Lip(int leg, double s, int drop) {
     }
 
-    static StringBuilder DEBUG;
-
     final int top;
     final List<Lip> lips;
     final double finish;
@@ -143,11 +141,6 @@ final class TrackProfile {
             List<Lip> ok = new ArrayList<>();
             List<Double> okPost = new ArrayList<>();
             options(path, level, lips, posts, k, 1, finish, ok, okPost);
-            if (DEBUG != null) {
-                double[] w = window(path, level, lips, k, 1, finish);
-                DEBUG.append(" leg ").append(k).append(" window ").append(java.util.Arrays.toString(w))
-                        .append(" ok ").append(ok.size()).append(ok.isEmpty() ? "" : " first " + ok.get(0).s() + " post " + okPost.get(0));
-            }
             if (ok.isEmpty()) {
                 continue;
             }
@@ -174,9 +167,6 @@ final class TrackProfile {
             }
         }
         if (lips.size() < level.minDrops()) {
-            if (DEBUG != null) {
-                DEBUG.append(" -> lips ").append(lips.size());
-            }
             return null;
         }
         upgrade(r, path, level, lips, posts, finish);

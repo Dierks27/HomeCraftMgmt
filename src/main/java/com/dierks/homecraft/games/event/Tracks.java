@@ -145,7 +145,9 @@ final class Tracks {
 
     /**
      * {@link #pick(String, int, int, int)}; with {@code mayLoad} false (the schedule), a candidate whose
-     * chunks are still loading is {@link Found#loading}, never skipped for the next (round 2, G2 #4).
+     * chunks are still loading is never skipped for the next one in turn (round 2, G2 #4): the pick is
+     * {@link Found#loading} until it can be read. Every candidate's missing chunks are asked for in the
+     * same pass, so one more second reads them all.
      */
     Found pick(String eventId, int races, int minRacers, int maxRacers, boolean mayLoad) {
         List<String> ids = candidates();
@@ -155,14 +157,19 @@ final class Tracks {
         }
         int at = ids.indexOf(first);
         Found last = null;
+        Found waiting = null;
         for (int i = 0; i < ids.size(); i++) {
             Found f = find(ids.get((at + i) % ids.size()), races, minRacers, maxRacers, mayLoad);
-            if (f.problem() == null || f.loading()) {
-                return f;
+            if (f.loading()) {
+                waiting = waiting == null ? f : waiting; // an earlier one in turn still to read: wait for it
+                continue;
+            }
+            if (f.problem() == null) {
+                return waiting == null ? f : waiting;
             }
             last = last == null ? f : last;
         }
-        return last;
+        return waiting != null ? waiting : last;
     }
 
     /**

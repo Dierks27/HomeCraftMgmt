@@ -119,6 +119,8 @@ public final class DownhillValidator {
     public static final double RING_REACH = 1;
     /** ...unless the track joins it within this many radii along the ground. */
     public static final int RING_STEPS = 3;
+    /** The start faces down the track: the track this far ahead of it is nearer the finish than behind. */
+    public static final double FACING = 3;
 
     /** The three tiers, as the proof sees them (§2.4). */
     public enum Tier {
@@ -351,6 +353,7 @@ public final class DownhillValidator {
 
         byte[] codes;
         String[] ids;
+        boolean blue;
         byte[] grid;
         int floorY;
         int top;
@@ -426,9 +429,7 @@ public final class DownhillValidator {
                     found.add("'" + p + "' isn't an Ice Boat block");
                 } else {
                     codes[i] = CODES.get(id);
-                    if (codes[i] == BLUE && !tier.blueIce()) {
-                        found.add("blue ice on an easy track: easy races on packed ice");
-                    }
+                    blue |= codes[i] == BLUE;
                 }
             }
             for (String p : Palette.stateProblems(palette)) {
@@ -578,7 +579,7 @@ public final class DownhillValidator {
                         }
                         boolean square = (!sideA || h[nx][z] == h[x][z] || h[nx][z] == h[nx][nz])
                                 && (!sideB || h[x][nz] == h[x][z] || h[x][nz] == h[nx][nz]);
-                        if (!square || Math.abs(h[nx][nz] - h[x][z]) > tier.maxDrop()) {
+                        if (!square) {
                             found.add("corner", "a corner step at " + wx(x) + " " + (h[x][z] + 1) + " " + wz(z)
                                     + ": track blocks corner to corner differ in height with nothing square between");
                         }
@@ -845,6 +846,9 @@ public final class DownhillValidator {
                     if (y < hiIce + ROOF) {
                         found.add("close", "scenery at " + wx(x) + " " + y + " " + wz(z)
                                 + " is too close to the track: 2 columns away, or 5 over the ice");
+                    } else if (atEdge(x, z)) {
+                        found.add("inset", "scenery at " + wx(x) + " " + y + " " + wz(z) + " is within "
+                                + SCENERY_INSET + " of the area's edge");
                     }
                 } else {
                     stray(x, y, z);
@@ -852,9 +856,12 @@ public final class DownhillValidator {
             }
         }
 
+        boolean atEdge(int x, int z) {
+            return x < SCENERY_INSET || z < SCENERY_INSET || x >= sx - SCENERY_INSET || z >= sz - SCENERY_INSET;
+        }
+
         void farColumn(int x, int z) {
-            boolean edge = x < SCENERY_INSET || z < SCENERY_INSET || x >= sx - SCENERY_INSET
-                    || z >= sz - SCENERY_INSET;
+            boolean edge = atEdge(x, z);
             for (int y = half.minY(); y <= top; y++) {
                 byte m = at(x, y, z);
                 if (m == AIR) {
@@ -1489,7 +1496,8 @@ public final class DownhillValidator {
                 }
             }
             if (!any) {
-                found.add("nothing follows the finish: a run-out and a sand paddock end the track");
+                found.add("nothing lies past the finish: it doesn't span the track, or no run-out and sand paddock"
+                        + " follow it");
                 return;
             }
             if (!flat) {
@@ -1506,6 +1514,9 @@ public final class DownhillValidator {
         // ---- V8: falls -------------------------------------------------------------------------------
 
         void falls() {
+            if (blue && !tier.blueIce()) {
+                found.add("blue ice on an easy track: easy races on packed ice");
+            }
             int big = 0;
             for (Lip lip : lips) {
                 big += lip.drop() == 2 ? 1 : 0;
@@ -1547,6 +1558,21 @@ public final class DownhillValidator {
             }
             if (!RaceStand.standable(surface, RaceStand.spot(half, course.start().y()))) {
                 found.add("the viewing stand can't be stood on");
+            }
+            // the grid lines up behind the start's facing, so the start faces down the track
+            Course.Spot s = course.start();
+            double yaw = Math.toRadians(s.yaw());
+            double fx = -Math.sin(yaw);
+            double fz = Math.cos(yaw);
+            int[][] toFinish = graph.steps(disk(course.finish(), "the finish").nearCells(), sx * sz);
+            int ax = (int) Math.floor(s.x() + fx * FACING) - half.minX();
+            int az = (int) Math.floor(s.z() + fz * FACING) - half.minZ();
+            int bx = (int) Math.floor(s.x() - fx * FACING) - half.minX();
+            int bz = (int) Math.floor(s.z() - fz * FACING) - half.minZ();
+            int ahead = driveAt(ax, az) ? toFinish[ax][az] : -1;
+            int behind = driveAt(bx, bz) ? toFinish[bx][bz] : -1;
+            if (ahead < 0 || (behind >= 0 && ahead >= behind)) {
+                found.add("the start doesn't face down the track toward the finish");
             }
         }
 

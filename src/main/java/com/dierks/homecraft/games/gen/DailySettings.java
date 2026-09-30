@@ -83,6 +83,13 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
 
     /** The leaves under {@code games.fresh}, in config order. */
     public static final List<String> KEYS = keys();
+    /**
+     * Leaves read under {@code games.fresh} that config.yml doesn't ship (so the backfill never adds
+     * them): each slot's and Classics slot's {@code half_gap} and {@code keep.plot_gap}. Only an owner
+     * (or a config migration keeping an owner's spot as it was) writes them; they are known keys, so
+     * never reported as a typo.
+     */
+    public static final List<String> OPTIONAL_KEYS = optionalKeys();
 
     public DailySettings {
         world = world == null ? "" : world.trim();
@@ -291,14 +298,26 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
      * @param origin     half A's min corner {x, y, z}, on the 16-block grid
      * @param dailyClear tokens for the first counted finish of an edition, at the configured cadence
      *                   (worked out from {@link Rewards})
+     * @param halfGap    the blocks between its half A and half B along +X ({@code half_gap}, optional;
+     *                   {@link Slots#HALF_GAP} when config names none). Where half B stands, so it is
+     *                   part of the claim: changing it moves the spare half like changing the origin.
      */
-    public record SlotConfig(String id, boolean enabled, String tierOrMix, int[] origin, int dailyClear) {
+    public record SlotConfig(String id, boolean enabled, String tierOrMix, int[] origin, int dailyClear,
+                             int halfGap) {
 
         public SlotConfig {
             origin = origin == null ? new int[3] : origin.clone();
             if (origin.length != 3) {
                 throw new IllegalArgumentException("an origin is x, y, z");
             }
+            if (halfGap < 0) {
+                throw new IllegalArgumentException("a half gap is 0 or more blocks: " + halfGap);
+            }
+        }
+
+        /** A slot at the default gap ({@link Slots#HALF_GAP}). */
+        public SlotConfig(String id, boolean enabled, String tierOrMix, int[] origin, int dailyClear) {
+            this(id, enabled, tierOrMix, origin, dailyClear, Slots.HALF_GAP);
         }
 
         /** The origin, {x, y, z} (a copy). */
@@ -313,19 +332,23 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         }
 
         public SlotConfig withEnabled(boolean on) {
-            return new SlotConfig(id, on, tierOrMix, origin, dailyClear);
+            return new SlotConfig(id, on, tierOrMix, origin, dailyClear, halfGap);
         }
 
         public SlotConfig withOrigin(int[] o) {
-            return new SlotConfig(id, enabled, tierOrMix, o, dailyClear);
+            return new SlotConfig(id, enabled, tierOrMix, o, dailyClear, halfGap);
         }
 
         public SlotConfig withTierOrMix(String t) {
-            return new SlotConfig(id, enabled, t, origin, dailyClear);
+            return new SlotConfig(id, enabled, t, origin, dailyClear, halfGap);
         }
 
         public SlotConfig withDailyClear(int tokens) {
-            return new SlotConfig(id, enabled, tierOrMix, origin, tokens);
+            return new SlotConfig(id, enabled, tierOrMix, origin, tokens, halfGap);
+        }
+
+        public SlotConfig withHalfGap(int gap) {
+            return new SlotConfig(id, enabled, tierOrMix, origin, dailyClear, gap);
         }
 
         /** The shipped settings of a slot (at the shipped, weekly, cadence). */
@@ -337,19 +360,20 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         @Override
         public boolean equals(Object o) {
             return o instanceof SlotConfig s && id.equals(s.id) && enabled == s.enabled
-                    && tierOrMix.equals(s.tierOrMix) && Arrays.equals(origin, s.origin) && dailyClear == s.dailyClear;
+                    && tierOrMix.equals(s.tierOrMix) && Arrays.equals(origin, s.origin) && dailyClear == s.dailyClear
+                    && halfGap == s.halfGap;
         }
 
         @Override
         public int hashCode() {
-            return (id.hashCode() * 31 + Arrays.hashCode(origin)) * 31 + tierOrMix.hashCode() + dailyClear
-                    + (enabled ? 1 : 0);
+            return ((id.hashCode() * 31 + Arrays.hashCode(origin)) * 31 + tierOrMix.hashCode() + dailyClear
+                    + (enabled ? 1 : 0)) * 31 + halfGap;
         }
 
         @Override
         public String toString() {
             return "SlotConfig[" + id + ", " + (enabled ? "on" : "off") + ", " + tierOrMix + ", "
-                    + Arrays.toString(origin) + ", " + dailyClear + "]";
+                    + Arrays.toString(origin) + ", " + dailyClear + ", gap " + halfGap + "]";
         }
     }
 
@@ -449,6 +473,10 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
                 } else {
                     c = c.withOrigin(read);
                 }
+                if (raw instanceof Map<?, ?> && c.enabled()) {
+                    Integer gap = halfGap(cs.child(def.id()), c.halfGap());
+                    c = gap == null ? c.withEnabled(false) : c.withHalfGap(gap);
+                }
             }
             both.add(c);
         }
@@ -469,13 +497,31 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
                 at = read;
             }
         }
-        KeepArea area = new KeepArea(at[0], at[1], at[2], plots);
+        int gap = dk.gap();
+        Object rg = kn.raw("plot_gap");
+        String gapProblem = null;
+        if (rg != null) {
+            Integer read = wholeBlocks(rg);
+            if (read == null || read < 0 || read > KeepArea.MAX_GAP) {
+                // where every plot stands: no other gap is guessed, so keeping waits until it is fixed
+                gapProblem = "keep.plot_gap should be a whole number of blocks, 0-" + KeepArea.MAX_GAP + ", not " + rg;
+                kn.warn(kn.key("plot_gap") + " should be a whole number of blocks, 0-" + KeepArea.MAX_GAP + ", not "
+                        + rg + " - keeping a course is off until it is fixed");
+            } else {
+                gap = Math.floorDiv(read, Slots.GAP_GRID) * Slots.GAP_GRID;
+                if (gap != read) {
+                    kn.warn(kn.key("plot_gap") + " " + read + " is not a multiple of " + Slots.GAP_GRID + " - using "
+                            + gap);
+                }
+            }
+        }
+        KeepArea area = new KeepArea(at[0], at[1], at[2], plots, gap);
         if (problem == null) {
             List<Box> halves = new ArrayList<>();
             for (SlotConfig c : both) {
                 Slots.Def def = c.def();
                 if (def != null) {
-                    halves.addAll(Regions.halves(def, c.origin()));
+                    halves.addAll(Regions.halves(def, c.origin(), c.halfGap()));
                 }
             }
             problem = area.problem(halves);
@@ -483,6 +529,8 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         if (problem != null) {
             kn.warn(kn.key("area") + " " + area.describe() + ": " + problem + " - keeping a course is off until it"
                     + " is moved");
+        } else {
+            problem = gapProblem;
         }
         return new Archive(keep, feed, days, classics, area, problem);
     }
@@ -831,7 +879,45 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             }
             origin = read;
         }
-        return new SlotConfig(def.id(), enabled, tierOrMix, origin, d.dailyClear());
+        Integer gap = halfGap(n, d.halfGap());
+        if (gap == null) {
+            return d.withEnabled(false);
+        }
+        return new SlotConfig(def.id(), enabled, tierOrMix, origin, d.dailyClear(), gap);
+    }
+
+    /**
+     * {@code half_gap} under {@code n} (optional): the blocks between the slot's halves, a whole
+     * number {@value Slots#MIN_HALF_GAP}..{@value Slots#MAX_HALF_GAP}; one off the 16-block grid is
+     * rounded down with a WARN, as an origin is. {@code d} when unset; {@code null} (one WARN, that
+     * course is off) when it can't be used: the gap decides where the spare half stands, so no other
+     * gap is guessed in its place.
+     */
+    private static Integer halfGap(GamesConfig.Node n, int d) {
+        Object raw = n.raw("half_gap");
+        if (raw == null) {
+            return d;
+        }
+        Integer gap = wholeBlocks(raw);
+        if (gap == null || gap < Slots.MIN_HALF_GAP || gap > Slots.MAX_HALF_GAP) {
+            n.warn(n.key("half_gap") + " should be a whole number of blocks, " + Slots.MIN_HALF_GAP + "-"
+                    + Slots.MAX_HALF_GAP + ", not " + raw + " - that course is off");
+            return null;
+        }
+        int aligned = Math.floorDiv(gap, Slots.GAP_GRID) * Slots.GAP_GRID;
+        if (aligned != gap) {
+            n.warn(n.key("half_gap") + " " + gap + " is not a multiple of " + Slots.GAP_GRID + " - using " + aligned);
+        }
+        return aligned;
+    }
+
+    /** A whole number (an integral Number, not a boolean or text), or {@code null}. */
+    private static Integer wholeBlocks(Object raw) {
+        if (!(raw instanceof Number num) || num.doubleValue() != Math.rint(num.doubleValue())
+                || Math.abs(num.doubleValue()) > Integer.MAX_VALUE / 2.0) {
+            return null;
+        }
+        return num.intValue();
     }
 
     /** Three whole numbers, or {@code null}. */
@@ -887,6 +973,18 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             out.add("classics.slots." + d.id() + ".origin");
         }
         out.addAll(List.of("keep.area", "keep.max_plots"));
+        return List.copyOf(out);
+    }
+
+    private static List<String> optionalKeys() {
+        List<String> out = new ArrayList<>();
+        for (Slots.Def d : Slots.ALL) {
+            out.add("slots." + d.id() + ".half_gap");
+        }
+        for (Slots.Def d : Slots.CLASSICS) {
+            out.add("classics.slots." + d.id() + ".half_gap");
+        }
+        out.add("keep.plot_gap");
         return List.copyOf(out);
     }
 }

@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.GenRandom;
 import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlanInput;
 import com.dierks.homecraft.games.gen.api.PlannedGolf;
@@ -57,7 +58,8 @@ class GolfPlannerTest {
     }
 
     private static PlanInput input(Slots.Def slot, int n) {
-        return new PlanInput(slot, slot.half('A'), 'A', 20725 + n, 0, seed(slot, n), slot.tierOrMix(), 8, 0, null);
+        return new PlanInput(slot, LegacyBoxes.half(slot, 'A'), 'A', 20725 + n, 0, seed(slot, n), slot.tierOrMix(), 8, 0,
+                null);
     }
 
     private static Run run(Slots.Def slot, int n) {
@@ -197,8 +199,8 @@ class GolfPlannerTest {
     void theFallbackHoleIsValidInEveryPlotAndFarBeyond() throws GenFailed {
         List<Box> halves = new ArrayList<>();
         for (Slots.Def slot : List.of(Slots.DAILY_GOLF, Slots.TINY_GOLF)) {
-            halves.add(slot.half('A'));
-            halves.add(slot.half('B'));
+            halves.add(LegacyBoxes.half(slot, 'A'));
+            halves.add(LegacyBoxes.half(slot, 'B'));
         }
         for (int[] origin : new int[][]{{0, 64, 0}, {16, -48, -16}, {-4096, 200, 8192}, {65_536, 100, -65_536},
                 {1_048_576, 160, 1_048_576}, {-28_999_936, -48, 28_999_808}, {28_999_808, 280, -28_999_936}}) {
@@ -258,8 +260,8 @@ class GolfPlannerTest {
         PlannedGolf g = golf(r.plan());
         assertThrows(GenFailed.class, () -> planner.rederive(input(r.slot(), r.n()),
                 tag(r.plan(), g.attempts(), g.witness(), GolfPlanner.ALGO + 1)), "another version can't rebuild it");
-        PlanInput otherMix = new PlanInput(r.slot(), r.slot().half('A'), 'A', 1, 0, r.plan().seed(), "EEEMMMMHM", 8,
-                0, null);
+        PlanInput otherMix = new PlanInput(r.slot(), LegacyBoxes.half(r.slot(), 'A'), 'A', 1, 0, r.plan().seed(),
+                "EEEMMMMHM", 8, 0, null);
         GenFailed mixed = assertThrows(GenFailed.class, () -> planner.rederive(otherMix, tag(r.plan(), g.attempts(),
                 g.witness(), GolfPlanner.ALGO)), "a changed mix doesn't rebuild the stored layout");
         assertTrue(mixed.getMessage().contains("mix"), "and the admin reads that the mix may be why: "
@@ -311,7 +313,7 @@ class GolfPlannerTest {
 
     @Test
     void plotsRunInSnakeOrderInsideTheHalf() {
-        Box half = Slots.DAILY_GOLF.half('A');
+        Box half = LegacyBoxes.half(Slots.DAILY_GOLF, 'A');
         List<Box> plots = new ArrayList<>();
         for (int i = 0; i < 9; i++) {
             int[] p = GolfPlanner.plot(half, i);
@@ -325,7 +327,7 @@ class GolfPlannerTest {
         assertEquals(half.minX() + 44, GolfPlanner.plot(half, 2)[0], "hole 3 ends the first row");
         assertEquals(GolfPlanner.plot(half, 2)[0], GolfPlanner.plot(half, 3)[0], "hole 4 starts the next row "
                 + "above it: snake order");
-        Box tiny = Slots.TINY_GOLF.half('A');
+        Box tiny = LegacyBoxes.half(Slots.TINY_GOLF, 'A');
         assertTrue(tiny.contains(Box.sized(GolfPlanner.plot(tiny, 2)[0], tiny.minY(), GolfPlanner.plot(tiny, 2)[1],
                 20, 16, 40)), "Tiny Golf's three plots fit its half");
     }
@@ -335,14 +337,15 @@ class GolfPlannerTest {
         GolfPlanner planner = new GolfPlanner();
         assertEquals(Slots.GOLF, planner.id(), "the golf generator");
         assertThrows(GenFailed.class, () -> planner.plan(new PlanInput(Slots.DAILY_PARKOUR_EASY,
-                Slots.DAILY_PARKOUR_EASY.half('A'), 'A', 1, 0, 1, "easy", 8, 0, null)), "not a golf slot");
+                LegacyBoxes.half(Slots.DAILY_PARKOUR_EASY, 'A'), 'A', 1, 0, 1, "easy", 8, 0, null)), "not a golf slot");
         assertThrows(GenFailed.class, () -> planner.plan(GolfKit.input(Slots.DAILY_GOLF, 1, "EEX", 0)),
                 "not a mix");
         assertThrows(GenFailed.class, () -> planner.plan(GolfKit.input(Slots.TINY_GOLF, 1, "EEEE", 0)),
                 "more holes than Tiny Golf has plots");
         AtomicBoolean stop = new AtomicBoolean(true);
         GenFailed cancelled = assertThrows(GenFailed.class, () -> planner.plan(new PlanInput(Slots.DAILY_GOLF,
-                Slots.DAILY_GOLF.half('A'), 'A', 1, 0, 1, "EEEMMMMHH", 8, 0, stop::get)), "a cancelled job stops");
+                LegacyBoxes.half(Slots.DAILY_GOLF, 'A'), 'A', 1, 0, 1, "EEEMMMMHH", 8, 0, stop::get)),
+                "a cancelled job stops");
         assertEquals("cancelled", cancelled.getMessage(), "and says so");
     }
 

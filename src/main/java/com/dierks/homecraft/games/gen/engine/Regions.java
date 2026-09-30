@@ -44,6 +44,12 @@ import java.util.function.Consumer;
  * {@link #extraHandBuiltProblem}). The slots were there first, so an extra box that is too close is
  * the one that stays shut.
  *
+ * <p><b>Apart is not out of sight.</b> {@value #APART} blocks is the build rule: two areas closer
+ * than that are never both built. It used to be the gap between a slot's own two halves too; that gap
+ * is now each slot's own ({@code half_gap}, {@link SlotConfig#halfGap}), and being out of each other's
+ * sight is {@link com.dierks.homecraft.games.gen.api.Sight}'s question, which {@code /hcm games check}
+ * WARNs about and never refuses.
+ *
  * <p>No Bukkit server is needed: the world is described by {@link WorldFacts}, read by the caller.
  */
 public final class Regions {
@@ -53,8 +59,12 @@ public final class Regions {
     /** The lowest and highest block a region may use (-64..319 with 8 to spare). */
     public static final int MIN_Y = -56;
     public static final int MAX_Y = 312;
-    /** Every half of every slot is at least this many blocks from every other. */
-    public static final int APART = Slots.HALF_GAP;
+    /**
+     * Every half of every slot is at least this many blocks from every other, and from the arena, the
+     * Clubhouse and the keep area: the rule to be built at all (0.35's gap between halves, kept as the
+     * rule when the gap became each slot's own). Sight is {@code Sight}'s, a WARN.
+     */
+    public static final int APART = 32;
     /** Hand-built courses, the spawn and the safe spot stay at least this far outside every half. */
     public static final int CLEARANCE = 16;
     /** Headroom to the world's floor and ceiling, checked at start. */
@@ -67,19 +77,25 @@ public final class Regions {
 
     // ---- geometry -------------------------------------------------------------------------------
 
-    /** Half {@code which} of {@code def}'s region at {@code origin}. */
-    public static Box half(Slots.Def def, int[] origin, char which) {
-        return def.half(origin[0], origin[1], origin[2], which);
+    /** Half {@code which} of {@code def}'s region at {@code origin}, its halves {@code gap} blocks apart. */
+    public static Box half(Slots.Def def, int[] origin, int gap, char which) {
+        return def.half(origin[0], origin[1], origin[2], which, gap);
     }
 
     /** Both halves, A then B. */
-    public static List<Box> halves(Slots.Def def, int[] origin) {
-        return List.of(half(def, origin, 'A'), half(def, origin, 'B'));
+    public static List<Box> halves(Slots.Def def, int[] origin, int gap) {
+        return List.of(half(def, origin, gap, 'A'), half(def, origin, gap, 'B'));
+    }
+
+    /** A slot's two halves as its config places them. */
+    public static List<Box> halves(SlotConfig c) {
+        return halves(c.def(), c.origin(), c.halfGap());
     }
 
     /** "half A x 4096..4159, y 160..207, z 4096..4159; half B ..." for admins and WARNs. */
-    public static String describe(Slots.Def def, int[] origin) {
-        return "half A " + half(def, origin, 'A').describe() + "; half B " + half(def, origin, 'B').describe();
+    public static String describe(Slots.Def def, int[] origin, int gap) {
+        return "half A " + half(def, origin, gap, 'A').describe() + "; half B "
+                + half(def, origin, gap, 'B').describe();
     }
 
     // ---- at config load -----------------------------------------------------------------------
@@ -137,20 +153,21 @@ public final class Regions {
         return out;
     }
 
-    /** Why a slot's own settings can't be used, or {@code null}. */
+    /** Why a slot's own settings can't be used, or {@code null}. Each half is checked, not the air between them. */
     static String problem(Slots.Def def, SlotConfig c) {
         String tier = def.tierProblem(c.tierOrMix());
         if (tier != null) {
             return (def.mixed() ? "mix" : "tier") + " '" + c.tierOrMix() + "': " + tier;
         }
-        int[] o = c.origin();
-        Box region = def.region(o[0], o[1], o[2]);
-        if (Math.abs((long) region.minX()) > MAX_XZ || Math.abs((long) region.maxX()) > MAX_XZ
-                || Math.abs((long) region.minZ()) > MAX_XZ || Math.abs((long) region.maxZ()) > MAX_XZ) {
-            return "reaches past +-" + MAX_XZ + " (" + region.describe() + ")";
-        }
-        if (region.minY() < MIN_Y || region.maxY() > MAX_Y) {
-            return "needs y " + region.minY() + ".." + region.maxY() + ", outside " + MIN_Y + ".." + MAX_Y;
+        for (char which : new char[]{'A', 'B'}) {
+            Box half = half(def, c.origin(), c.halfGap(), which);
+            if (Math.abs((long) half.minX()) > MAX_XZ || Math.abs((long) half.maxX()) > MAX_XZ
+                    || Math.abs((long) half.minZ()) > MAX_XZ || Math.abs((long) half.maxZ()) > MAX_XZ) {
+                return "reaches past +-" + MAX_XZ + " (half " + which + " " + half.describe() + ")";
+            }
+            if (half.minY() < MIN_Y || half.maxY() > MAX_Y) {
+                return "needs y " + half.minY() + ".." + half.maxY() + ", outside " + MIN_Y + ".." + MAX_Y;
+            }
         }
         return null;
     }
@@ -173,11 +190,11 @@ public final class Regions {
         return null;
     }
 
-    /** The smallest gap between any half of {@code a} and any half of {@code b}. */
+    /** The smallest gap between any half of {@code a} and any half of {@code b}, each at its own gap. */
     static int gap(SlotConfig a, SlotConfig b) {
         int min = Integer.MAX_VALUE;
-        for (Box x : halves(a.def(), a.origin())) {
-            for (Box y : halves(b.def(), b.origin())) {
+        for (Box x : halves(a)) {
+            for (Box y : halves(b)) {
                 min = Math.min(min, x.gap(y));
             }
         }
@@ -222,7 +239,7 @@ public final class Regions {
                 continue;
             }
             for (char which : new char[]{'A', 'B'}) {
-                int gap = b.gap(half(c.def(), c.origin(), which));
+                int gap = b.gap(half(c.def(), c.origin(), c.halfGap(), which));
                 if (gap < APART) {
                     return extra.name() + " is " + (gap < 0 ? "on top of" : "only " + gap + " blocks from") + " "
                             + c.id() + "'s half " + which + " (they must be " + APART + " apart)";
@@ -240,15 +257,16 @@ public final class Regions {
     }
 
     /**
-     * Why {@code def}'s region at {@code origin} crowds one of {@code extras} (Fresh Courses' side of
-     * {@link #extraProblem}: the same rule, asked for one slot), or {@code null} when it keeps
-     * {@value #APART} blocks from every one. Whether the slot is switched on doesn't matter.
+     * Why {@code def}'s region at {@code origin} (its halves {@code gap} apart) crowds one of
+     * {@code extras} (Fresh Courses' side of {@link #extraProblem}: the same rule, asked for one slot),
+     * or {@code null} when it keeps {@value #APART} blocks from every one. Whether the slot is switched
+     * on doesn't matter.
      */
-    public static String extrasProblem(Slots.Def def, int[] origin, List<Extra> extras) {
+    public static String extrasProblem(Slots.Def def, int[] origin, int gap, List<Extra> extras) {
         if (def == null || origin == null) {
             return null;
         }
-        List<SlotConfig> one = List.of(SlotConfig.shipped(def).withOrigin(origin).withEnabled(true));
+        List<SlotConfig> one = List.of(SlotConfig.shipped(def).withOrigin(origin).withHalfGap(gap).withEnabled(true));
         for (Extra e : extras == null ? List.<Extra>of() : extras) {
             String p = e == null ? null : extraProblem(e, one, null);
             if (p != null) {
@@ -382,31 +400,37 @@ public final class Regions {
                              double[] safeSpot) {
     }
 
-    /** Why {@code def}'s region at {@code origin} can't be built in {@code w}, in admin words; empty = fine. */
-    public static List<String> worldProblems(Slots.Def def, int[] origin, WorldFacts w) {
+    /**
+     * Why {@code def}'s region at {@code origin} (its halves {@code gap} apart) can't be built in
+     * {@code w}, in admin words; empty = fine. Each half is checked on its own (the world's height and
+     * border, the spawn and the safe spot), never the air between them.
+     */
+    public static List<String> worldProblems(Slots.Def def, int[] origin, int gap, WorldFacts w) {
         List<String> out = new ArrayList<>();
         if (!w.listed()) {
             out.add("the world " + w.name() + " isn't in games.worlds");
         }
-        Box region = def.region(origin[0], origin[1], origin[2]);
-        if (w.minHeight() + HEADROOM > region.minY() || region.maxY() + 1 > w.maxHeight() - HEADROOM) {
-            out.add("it needs y " + region.minY() + ".." + region.maxY() + ", but " + w.name() + " has room for "
+        Box a = half(def, origin, gap, 'A');
+        Box b = half(def, origin, gap, 'B');
+        if (w.minHeight() + HEADROOM > a.minY() || a.maxY() + 1 > w.maxHeight() - HEADROOM) {
+            out.add("it needs y " + a.minY() + ".." + a.maxY() + ", but " + w.name() + " has room for "
                     + (w.minHeight() + HEADROOM) + ".." + (w.maxHeight() - HEADROOM - 1));
         }
-        Box b = w.border();
-        if (b != null && (region.minX() < b.minX() || region.maxX() > b.maxX() || region.minZ() < b.minZ()
-                || region.maxZ() > b.maxZ())) {
-            out.add("it reaches past the world border (" + region.describe() + ")");
+        for (Box h : List.of(a, b)) {
+            if (outside(h, w.border())) {
+                out.add("it reaches past the world border (half " + (h == a ? 'A' : 'B') + " " + h.describe() + ")");
+                break;
+            }
         }
         if (w.spawn() != null) {
-            String near = near(def, origin, w.spawn()[0], w.spawn()[1], w.spawn()[2]);
+            String near = near(List.of(a, b), w.spawn()[0], w.spawn()[1], w.spawn()[2]);
             if (near != null) {
                 out.add("the world's spawn is " + near);
             }
         }
         if (w.safeSpot() != null) {
             double[] s = w.safeSpot();
-            String near = near(def, origin, (int) Math.floor(s[0]), (int) Math.floor(s[1]), (int) Math.floor(s[2]));
+            String near = near(List.of(a, b), (int) Math.floor(s[0]), (int) Math.floor(s[1]), (int) Math.floor(s[2]));
             if (near != null) {
                 out.add("games.fresh.safe_spot is " + near);
             }
@@ -414,17 +438,82 @@ public final class Regions {
         return out;
     }
 
+    /**
+     * Why kept-course plot {@code n} (standing in {@code plot}) can't be used in {@code w}, in admin
+     * words; empty = fine: inside the world's height (with {@value #HEADROOM} to spare) and border,
+     * and the spawn and the safe spot at least {@value #CLEARANCE} blocks outside it. The keep area
+     * had none of these checks in 0.35; with its plots spread apart, the last ones reach far out.
+     */
+    public static List<String> plotWorldProblems(int n, Box plot, WorldFacts w) {
+        List<String> out = new ArrayList<>();
+        if (w.minHeight() + HEADROOM > plot.minY() || plot.maxY() + 1 > w.maxHeight() - HEADROOM) {
+            out.add("plot " + n + " needs y " + plot.minY() + ".." + plot.maxY() + ", but " + w.name()
+                    + " has room for " + (w.minHeight() + HEADROOM) + ".." + (w.maxHeight() - HEADROOM - 1));
+        }
+        if (outside(plot, w.border())) {
+            out.add("plot " + n + " reaches past the world border (" + plot.describe() + ")");
+        }
+        if (w.spawn() != null) {
+            String near = near(plot, w.spawn()[0], w.spawn()[1], w.spawn()[2]);
+            if (near != null) {
+                out.add("the world's spawn is " + near + " plot " + n);
+            }
+        }
+        if (w.safeSpot() != null) {
+            double[] s = w.safeSpot();
+            String near = near(plot, (int) Math.floor(s[0]), (int) Math.floor(s[1]), (int) Math.floor(s[2]));
+            if (near != null) {
+                out.add("games.fresh.safe_spot is " + near + " plot " + n);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The plots of {@code keep} that can't be used in {@code w} ({@link #plotWorldProblems}), by
+     * number, each with its first problem; empty when every plot fits.
+     */
+    public static Map<Integer, String> keepWorldProblems(KeepArea keep, WorldFacts w) {
+        Map<Integer, String> out = new LinkedHashMap<>();
+        if (keep == null || w == null) {
+            return out;
+        }
+        for (int n = 1; n <= keep.maxPlots(); n++) {
+            List<String> p = plotWorldProblems(n, keep.plot(n), w);
+            if (!p.isEmpty()) {
+                out.put(n, p.get(0));
+            }
+        }
+        return out;
+    }
+
+    /** Whether any of {@code box} lies outside {@code border} (x and z; {@code null}: no border known). */
+    private static boolean outside(Box box, Box border) {
+        return border != null && (box.minX() < border.minX() || box.maxX() > border.maxX()
+                || box.minZ() < border.minZ() || box.maxZ() > border.maxZ());
+    }
+
     /** "inside half A" / "only 3 blocks from half B", or {@code null} when at least {@value #CLEARANCE} away. */
-    private static String near(Slots.Def def, int[] origin, int x, int y, int z) {
+    private static String near(List<Box> halves, int x, int y, int z) {
         Box point = new Box(x, y, z, x, y, z);
-        for (char which : new char[]{'A', 'B'}) {
-            int gap = point.gap(half(def, origin, which));
+        for (int i = 0; i < halves.size(); i++) {
+            char which = (char) ('A' + i);
+            int gap = point.gap(halves.get(i));
             if (gap < CLEARANCE) {
                 return gap < 0 ? "inside half " + which : "only " + gap + " blocks from half " + which
                         + " (it must be " + CLEARANCE + " away)";
             }
         }
         return null;
+    }
+
+    /** "inside" / "only 3 blocks from", or {@code null} when at least {@value #CLEARANCE} away from {@code box}. */
+    private static String near(Box box, int x, int y, int z) {
+        int gap = new Box(x, y, z, x, y, z).gap(box);
+        if (gap >= CLEARANCE) {
+            return null;
+        }
+        return gap < 0 ? "inside" : "only " + gap + " blocks from";
     }
 
     /**
@@ -483,16 +572,17 @@ public final class Regions {
     }
 
     /**
-     * Why {@code def}'s region at {@code origin} in {@code world} is too close to a hand-built
-     * course, or {@code null} when every one is at least {@value #CLEARANCE} blocks away.
+     * Why {@code def}'s region at {@code origin} (its halves {@code halfGap} apart) in {@code world} is
+     * too close to a hand-built course, or {@code null} when every one is at least {@value #CLEARANCE}
+     * blocks away.
      */
-    public static String handBuiltProblem(Slots.Def def, int[] origin, String world, List<Area> areas) {
+    public static String handBuiltProblem(Slots.Def def, int[] origin, int halfGap, String world, List<Area> areas) {
         for (Area a : areas) {
             if (a.world() == null || !a.world().equalsIgnoreCase(world)) {
                 continue;
             }
             for (char which : new char[]{'A', 'B'}) {
-                int gap = a.box().gap(half(def, origin, which));
+                int gap = a.box().gap(half(def, origin, halfGap, which));
                 if (gap < CLEARANCE) {
                     return "the hand-built course " + a.courseId() + " is " + (gap < 0 ? "inside" : "only " + gap
                             + " blocks from") + " half " + which + " (" + a.box().describe() + "; it must be "
@@ -533,10 +623,29 @@ public final class Regions {
 
     // ---- claims ---------------------------------------------------------------------------------
 
-    /** What {@code gen.<slot>.claim} holds: "world,x,y,z,sx,sy,sz" (the origin and one half's size). */
-    public static String claim(Slots.Def def, String world, int[] origin) {
+    /**
+     * What {@code gen.<slot>.claim} holds: "world,x,y,z,sx,sy,sz" (the origin and one half's size) when
+     * the halves stand {@link Slots#LEGACY_HALF_GAP} apart, so a claim made before gaps were recorded
+     * still matches; "world,x,y,z,sx,sy,sz,gap" for any other gap. Where half B stands is part of the
+     * claim, so a changed gap reads as a moved region, exactly like a changed origin.
+     */
+    public static String claim(Slots.Def def, String world, int[] origin, int gap) {
         return world.toLowerCase(Locale.ROOT) + "," + origin[0] + "," + origin[1] + "," + origin[2] + ","
-                + def.sizeX() + "," + def.sizeY() + "," + def.sizeZ();
+                + def.sizeX() + "," + def.sizeY() + "," + def.sizeZ()
+                + (gap == Slots.LEGACY_HALF_GAP ? "" : "," + gap);
+    }
+
+    /**
+     * The gap between the halves a claim was made with: {@link Slots#LEGACY_HALF_GAP} for the 7 fields
+     * every claim had before gaps were recorded (never the default gap, which may have changed since),
+     * the 8th field otherwise; {@code null} when the claim can't be read.
+     */
+    public static Integer claimGap(String claim) {
+        if (claimOrigin(claim) == null) {
+            return null;
+        }
+        String[] p = claim.split(",");
+        return p.length == 7 ? Slots.LEGACY_HALF_GAP : Integer.parseInt(p[7].trim()); // read by claimOrigin
     }
 
     /** The world a claim was made in, or {@code null} when it can't be read. */
@@ -571,16 +680,19 @@ public final class Regions {
         return claims == null || claims.isEmpty() ? null : String.join(";", claims);
     }
 
-    /** The origin a claim was made at, or {@code null} when it can't be read. */
+    /** The origin a claim was made at, or {@code null} when it can't be read (7 fields, or 8 with the gap). */
     public static int[] claimOrigin(String claim) {
         if (claim == null) {
             return null;
         }
         String[] p = claim.split(",");
-        if (p.length != 7) {
+        if (p.length != 7 && p.length != 8) {
             return null;
         }
         try {
+            if (p.length == 8 && Integer.parseInt(p[7].trim()) < 0) {
+                return null;
+            }
             return new int[]{Integer.parseInt(p[1].trim()), Integer.parseInt(p[2].trim()),
                     Integer.parseInt(p[3].trim())};
         } catch (NumberFormatException e) {

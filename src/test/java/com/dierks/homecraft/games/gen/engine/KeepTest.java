@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.gen.admin.GenArgs;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenBoards;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.PlannedGolf;
@@ -448,7 +449,8 @@ class KeepTest {
         Box old = area().plot(1);
         Map<String, String> standing = relative(old);
         assertFalse(standing.isEmpty(), "dragon_run stands in plot 1");
-        KeepArea moved = new KeepArea(old.minX() - KeepArea.PLOT_X, old.minY(), old.minZ(), 24);
+        KeepArea moved = new KeepArea(old.minX() - KeepArea.PLOT_X - area().gap(), old.minY(), old.minZ(), 24,
+                area().gap());
         assertEquals(old, moved.plot(2), "the new plot 2 is where plot 1 was");
         host.settings = host.settings.withArchive(host.settings.archive().withKeep(moved, null));
         for (boolean confirm : new boolean[]{false, true}) {
@@ -642,7 +644,7 @@ class KeepTest {
 
     @Test
     void aMovedGolfCourseAndTrialPassTheCourseGamesOwnValidation() {
-        KeepArea a = new KeepArea(4096, 128, 5376, 24);
+        KeepArea a = LegacyBoxes.keep();
         Plan golf = PlanShift.to(golfPlan(), a.build(5, Slots.TINY_GOLF));
         GamesDao.CourseRow g = KeptCourses.row("mini_links", "Mini Links", GenKit.WORLD, golf.course(), 1000);
         assertEquals("golf", g.game(), "a golf row");
@@ -661,9 +663,9 @@ class KeepTest {
         assertFalse(KeptCourses.problems(t, List.of("elsewhere")).isEmpty(), "and would say so for an unlisted world");
     }
 
-    /** A two-hole Tiny Golf plan in its half B, tees and cups inside their bounds. */
+    /** A two-hole Tiny Golf plan in its 0.35 half B, tees and cups inside their bounds. */
     private static Plan golfPlan() {
-        Box half = Slots.TINY_GOLF.half('B');
+        Box half = LegacyBoxes.half(Slots.TINY_GOLF, 'B');
         List<GolfCourse.Hole> holes = List.of(
                 new GolfCourse.Hole(new GolfCourse.Tee(5220.5, 164.0, 4100.5, 180.0f), new GolfCourse.Spot(5220, 162,
                         4112), 2, new GolfCourse.Spot(5217, 161, 4097), new GolfCourse.Spot(5224, 168, 4115)),

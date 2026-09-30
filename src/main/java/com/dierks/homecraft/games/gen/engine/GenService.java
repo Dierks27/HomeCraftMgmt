@@ -1002,19 +1002,22 @@ public final class GenService implements GeneratedCourses, GenOps {
                 continue;
             }
             int[] origin = c.origin();
-            if (!s.sameRegion(world, origin) && (s.claimed || s.live != null) && !s.world.isBlank()) {
-                moved(s, world, origin);
+            int gap = c.halfGap();
+            if (!s.sameRegion(world, origin, gap) && (s.claimed || s.live != null) && !s.world.isBlank()) {
+                moved(s, world, origin, gap);
             }
             s.world = world;
             s.origin = origin;
+            s.gap = gap;
             s.configOn = c.enabled();
             if (s.classic) {
                 s.mix = s.def.tierOrMix();
                 if (meta != null) {
                     s.want = ClassicWant.parse(meta.get(GenAdminKeys.recall(s.def.id())));
-                    s.claimed = Regions.claim(s.def, world, origin).equals(meta.get(GenAdminKeys.claim(s.def.id())));
+                    s.claimed = Regions.claim(s.def, world, origin, gap)
+                            .equals(meta.get(GenAdminKeys.claim(s.def.id())));
                 }
-                wetRegions(s, meta, world, origin, kept);
+                wetRegions(s, meta, world, origin, gap, kept);
                 if (s.wanted() || s.claimed) {
                     for (char h : new char[]{'A', 'B'}) {
                         kept.add(new Object[]{world, s.half(h)});
@@ -1032,17 +1035,17 @@ public final class GenService implements GeneratedCourses, GenOps {
                 s.pickDropped = SlotState.DroppedPick.parse(meta.get(GenAdminKeys.dropped(id))); // round 2, G2 #3
                 s.reroll = GenAdminKeys.whole(meta.get(GenAdminKeys.reroll(id, target(s).key())));
                 String claim = meta.get(GenAdminKeys.claim(id));
-                boolean claimed = Regions.claim(s.def, world, origin).equals(claim);
+                boolean claimed = Regions.claim(s.def, world, origin, gap).equals(claim);
                 if (claim != null && !claimed) {
                     int[] old = Regions.claimOrigin(claim);
-                    String where = old == null ? claim : Regions.describe(s.def, old);
+                    String where = old == null ? claim : Regions.describe(s.def, old, Regions.claimGap(claim));
                     warnOnce(s, "Fresh Courses: " + id + " was claimed at another place (" + where + "). "
                             + (s.def.mayHoldWater() ? drainFirst(s) : "Those blocks are left as they are: clear them by"
                             + " hand.") + " The new region is checked before it is used.");
                 }
                 s.claimed = claimed;
             }
-            wetRegions(s, meta, world, origin, kept);
+            wetRegions(s, meta, world, origin, gap, kept);
             if (s.wanted() || s.claimed) {
                 for (char h : new char[]{'A', 'B'}) {
                     kept.add(new Object[]{world, s.half(h)});
@@ -1078,7 +1081,8 @@ public final class GenService implements GeneratedCourses, GenOps {
      * the slot is claimed there again, which puts it under the claim's guard and lets a {@code clear}
      * drain it (a CLEAR empties the water before anything else). Any other slot: nothing.
      */
-    private void wetRegions(SlotState s, Map<String, String> meta, String world, int[] origin, List<Object[]> kept) {
+    private void wetRegions(SlotState s, Map<String, String> meta, String world, int[] origin, int gap,
+                            List<Object[]> kept) {
         if (!s.def.mayHoldWater()) {
             return;
         }
@@ -1086,7 +1090,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             String key = GenAdminKeys.wet(s.def.id());
             List<String> stored = Regions.wetClaims(meta.get(key));
             List<String> now = new ArrayList<>(stored);
-            String here = Regions.claim(s.def, world, origin);
+            String here = Regions.claim(s.def, world, origin, gap);
             String claim = meta.get(GenAdminKeys.claim(s.def.id()));
             if (claim != null && !claim.equals(here) && Regions.claimOrigin(claim) != null && !now.contains(claim)) {
                 now.add(claim);
@@ -1108,7 +1112,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             String w = Regions.claimWorld(c);
             int[] o = Regions.claimOrigin(c);
             if (w != null && o != null) {
-                for (Box h : Regions.halves(s.def, o)) {
+                for (Box h : Regions.halves(s.def, o, Regions.claimGap(c))) {
                     kept.add(new Object[]{w, h});
                 }
             }
@@ -1193,13 +1197,14 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     /** A slot's region moved (config): nothing at the old place is vouched for or cleared. */
-    private void moved(SlotState s, String world, int[] origin) {
+    private void moved(SlotState s, String world, int[] origin, int gap) {
         if (job != null && job.slot == s) {
             cancel(job, "its region moved");
         }
         queue.removeIf(j -> j.slot == s);
         host.logger().warning("Fresh Courses: " + s.def.id() + " moved from " + s.world + " "
-                + Regions.describe(s.def, s.origin) + " to " + world + " " + Regions.describe(s.def, origin)
+                + Regions.describe(s.def, s.origin, s.gap) + " to " + world + " "
+                + Regions.describe(s.def, origin, gap)
                 + ". The old halves were not cleared (use /hcm games gen clear before moving a course)."
                 + (s.def.mayHoldWater() ? " " + drainFirst(s) : ""));
         s.verified = false;
@@ -1252,27 +1257,29 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (port == null) {
             return "the world " + s.world + " isn't loaded";
         }
-        List<String> world = Regions.worldProblems(s.def, s.origin, facts(port));
+        List<String> world = Regions.worldProblems(s.def, s.origin, s.gap, facts(port));
         if (!world.isEmpty()) {
             return world.get(0);
         }
         List<DailySettings.SlotConfig> others = new ArrayList<>();
         for (SlotState o : slots.values()) {
             if (o != s && (o.wanted() || o.claimed)) {
-                DailySettings.SlotConfig oc = DailySettings.SlotConfig.shipped(o.def).withOrigin(o.origin);
+                DailySettings.SlotConfig oc = DailySettings.SlotConfig.shipped(o.def).withOrigin(o.origin)
+                        .withHalfGap(o.gap);
                 others.add(oc);
             }
         }
-        String apart = Regions.apartProblem(DailySettings.SlotConfig.shipped(s.def).withOrigin(s.origin), others);
+        String apart = Regions.apartProblem(DailySettings.SlotConfig.shipped(s.def).withOrigin(s.origin)
+                .withHalfGap(s.gap), others);
         if (apart != null) {
             return apart;
         }
-        String extra = Regions.extrasProblem(s.def, s.origin, extras());
+        String extra = Regions.extrasProblem(s.def, s.origin, s.gap, extras());
         if (extra != null) {
             return extra; // the Falling Floors arena: neither is ever built into the other
         }
         if (built != null) {
-            String near = Regions.handBuiltProblem(s.def, s.origin, s.world, built);
+            String near = Regions.handBuiltProblem(s.def, s.origin, s.gap, s.world, built);
             if (near != null) {
                 return near;
             }
@@ -1789,13 +1796,13 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     private void claimed(SlotState s) {
         try {
-            host.store().meta(GenAdminKeys.claim(s.def.id()), Regions.claim(s.def, s.world, s.origin));
+            host.store().meta(GenAdminKeys.claim(s.def.id()), Regions.claim(s.def, s.world, s.origin, s.gap));
             s.claimed = true;
             if (s.problem != null && s.problem.startsWith(FOREIGN)) {
                 s.problem = null;
             }
             host.logger().info("Fresh Courses: " + s.def.id() + " claimed " + s.world + " "
-                    + Regions.describe(s.def, s.origin));
+                    + Regions.describe(s.def, s.origin, s.gap));
         } catch (SQLException e) {
             host.logger().log(Level.WARNING, "Fresh Courses: could not record " + s.def.id() + "'s claim", e);
         }
@@ -2686,7 +2693,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             for (String c : s.wet) {
                 int[] o = Regions.claimOrigin(c);
                 out.add(s.def.id() + ": its old area in " + Regions.claimWorld(c) + " (" + (o == null ? c
-                        : Regions.describe(s.def, o)) + ") is still guarded - drain first: move it back and /hcm"
+                        : Regions.describe(s.def, o, Regions.claimGap(c))) + ") is still guarded - drain first:"
+                        + " move it back and /hcm"
                         + " games gen clear " + s.def.id());
             }
         }
@@ -2822,7 +2830,8 @@ public final class GenService implements GeneratedCourses, GenOps {
                 out.add("  &7" + pick);
             }
             if (slotId != null && s.classic) {
-                out.add("  &7region " + s.world + " " + Regions.describe(s.def, s.origin) + (s.claimed ? " (claimed)"
+                out.add("  &7region " + s.world + " " + Regions.describe(s.def, s.origin, s.gap)
+                        + (s.claimed ? " (claimed)"
                         : " (not claimed yet)"));
                 if (s.want != null) {
                     out.add("  &7recalled " + s.want.slot() + " " + s.want.edition() + " on " + GenCopy.whenDated(
@@ -2833,7 +2842,8 @@ public final class GenService implements GeneratedCourses, GenOps {
                 out.add("  &7edition " + target.key() + " (" + editionName(target.cadence(), target.start())
                         + ") until " + GenCopy.whenDated(target.endsAt(), host.zone())
                         + (target.kept() ? " - kept from the old setting" : ""));
-                out.add("  &7region " + s.world + " " + Regions.describe(s.def, s.origin) + (s.claimed ? " (claimed)"
+                out.add("  &7region " + s.world + " " + Regions.describe(s.def, s.origin, s.gap)
+                        + (s.claimed ? " (claimed)"
                         : " (not claimed yet)"));
                 if (s.pin != null) {
                     String ignored = pinIgnored(s);
@@ -3529,7 +3539,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         queue.add(new Job(confirm ? Kind.CLAIM : Kind.SCAN, s, report));
-        report.accept(confirm ? "&7Clearing " + s.def.name() + "'s area (" + Regions.describe(s.def, s.origin)
+        report.accept(confirm ? "&7Clearing " + s.def.name() + "'s area ("
+                + Regions.describe(s.def, s.origin, s.gap)
                 + ") and claiming it..." : "&7Counting what is in " + s.def.name() + "'s area...");
     }
 

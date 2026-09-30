@@ -27,9 +27,11 @@ import java.util.regex.Pattern;
  * profiles; {@code games.restart_times} reads, with the next restart and hold; Fresh Courses (on,
  * the cadence, every area inside the world and clear of hand-built courses and each other, the
  * claims and foreign blocks, the next change, each course live or why not, the keep area and the
- * Classics); Falling Floors (its box and claim, {@link ArenaCheck}); every hand-built course is ready
- * and its world loaded; the website feed; and how to take
- * games of chance away from one player.
+ * Classics); Falling Floors (its box and claim, {@link ArenaCheck}); the Clubhouse; what players can
+ * see (each Games world void or not, something under its spawn, and every pair of the games' places
+ * in sight of each other at the view distance the server really uses: WARNs only, {@link SightCheck});
+ * every hand-built course is ready and its world loaded; the website feed; and how to take games of
+ * chance away from one player.
  */
 public final class GamesCheck {
 
@@ -104,10 +106,24 @@ public final class GamesCheck {
      * @param slots       the running engine's slots, or {@code null} while it isn't running
      * @param nextChange  when the courses change next, for admins, or {@code null}
      * @param keepProblem why the keep area can't be used, or {@code null}
+     * @param keepPlots   the kept-course plots that don't fit the world (past its border or height, or at
+     *                    its spawn or the safe spot), each with its first problem: they are skipped
      */
     public record Fresh(boolean enabled, String cadence, String schedule, String world, boolean worldLoaded,
                         boolean worldListed, List<Region> regions, List<SlotFact> slots, String nextChange,
-                        String keepProblem, String keepArea) {
+                        String keepProblem, String keepArea, Map<Integer, String> keepPlots) {
+
+        public Fresh {
+            keepPlots = keepPlots == null ? Map.of() : Map.copyOf(keepPlots);
+        }
+
+        /** Fresh Courses with every plot fitting the world. */
+        public Fresh(boolean enabled, String cadence, String schedule, String world, boolean worldLoaded,
+                     boolean worldListed, List<Region> regions, List<SlotFact> slots, String nextChange,
+                     String keepProblem, String keepArea) {
+            this(enabled, cadence, schedule, world, worldLoaded, worldListed, regions, slots, nextChange, keepProblem,
+                    keepArea, Map.of());
+        }
     }
 
     /**
@@ -200,6 +216,14 @@ public final class GamesCheck {
             return null;
         }
         // ---- end the Clubhouse ----
+
+        /**
+         * What players can see (LAYOUT-SPEC §5.1, {@link SightCheck}): the Games worlds' ground, the view
+         * distance and every place; {@code null} skips the section.
+         */
+        default SightCheck.Facts sight() {
+            return null;
+        }
     }
 
     /** The LuckPerms line that takes games of chance away from one player. */
@@ -225,6 +249,7 @@ public final class GamesCheck {
         section(out, "Fresh Courses", () -> fresh(f.fresh(), out));
         section(out, "Falling Floors", () -> ArenaCheck.rows(f.arena(), out)); // WP-F
         section(out, "the Clubhouse", () -> ClubhouseCheck.rows(f.clubhouse(), out)); // WP-CH
+        section(out, "what players can see", () -> SightCheck.rows(f.sight(), out)); // WARN only, never FAIL
         section(out, "the hand-built courses", () -> courses(f.courses(), out));
         section(out, "Race Night", () -> raceNight(f.raceNight(), out));
         section(out, "the website feed", () -> web(f.web(), out));
@@ -441,6 +466,28 @@ public final class GamesCheck {
         }
         out.add(fr.keepProblem() == null ? Line.ok("Keep area: " + fr.keepArea())
                 : Line.fail("The keep area can't be used: " + fr.keepProblem(), "move it with games.fresh.keep.area"));
+        if (fr.keepProblem() == null && !fr.keepPlots().isEmpty()) {
+            List<Integer> plots = new ArrayList<>(new java.util.TreeSet<>(fr.keepPlots().keySet()));
+            int n = plots.size();
+            out.add(Line.warn(n + " kept-course plot" + (n == 1 ? "" : "s") + " (" + plotList(plots)
+                            + ") can't be used: " + fr.keepPlots().get(plots.get(0)),
+                    "make the world border bigger (stand in " + fr.world() + " and use /worldborder set), or move"
+                            + " games.fresh.keep.area; a course is only ever kept in a plot that fits"));
+        }
+    }
+
+    /** "3" / "19-24" / "3, 19-24": plot numbers as ranges. */
+    static String plotList(List<Integer> sorted) {
+        List<String> out = new ArrayList<>();
+        for (int i = 0; i < sorted.size(); i++) {
+            int from = sorted.get(i);
+            int to = from;
+            while (i + 1 < sorted.size() && sorted.get(i + 1) == to + 1) {
+                to = sorted.get(++i);
+            }
+            out.add(from == to ? Integer.toString(from) : from + "-" + to);
+        }
+        return String.join(", ", out);
     }
 
     /** One Fresh Courses slot: its area, then (engine running) its claim and course. */

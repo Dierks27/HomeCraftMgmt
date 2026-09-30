@@ -7,6 +7,7 @@ import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.GenRandom;
 import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlanInput;
@@ -42,7 +43,7 @@ class BoatPlannerTest {
     private static final Slots.Def SLOT = Slots.ICE_BOAT;
 
     static PlanInput input(char half, long seed, String tier) {
-        return new PlanInput(SLOT, SLOT.half(half), half, 20725, 0, seed, tier, 6, 0, null);
+        return new PlanInput(SLOT, LegacyBoxes.half(SLOT, half), half, 20725, 0, seed, tier, 6, 0, null);
     }
 
     /** The loop a plan was drawn from: the same streams the planner used, the last one it drew. */
@@ -202,7 +203,7 @@ class BoatPlannerTest {
             assertEquals(TrialKind.BOAT, c.kind(), "a boat course");
             assertEquals(SLOT.id(), c.id(), "the slot's id");
             assertEquals(Tier.of(level.id()), c.tier(), "its tier");
-            Box half = SLOT.half('B');
+            Box half = LegacyBoxes.half(SLOT, 'B');
             int iceY = half.minY() + BoatPlanner.ICE_ABOVE_FLOOR;
             for (BlockOp op : p.ops()) {
                 assertTrue(half.contains(op.x(), op.y(), op.z()), "inside half B");
@@ -275,7 +276,7 @@ class BoatPlannerTest {
 
     @Test
     void aCircleAlwaysPassesSoACourseIsNeverMissing() {
-        Box half = SLOT.half('A');
+        Box half = LegacyBoxes.half(SLOT, 'A');
         BoatPlanner.Loop circle = BoatPlanner.loop(new GenRandom(1), half.minX() + 64, half.minZ() + 64, 0);
         assertEquals(BoatPlanner.BASE_RADIUS, BoatPlanner.minRadius(circle), 0.01, "a flat loop is a circle of 40");
         for (BoatPlanner.Level level : BoatPlanner.Level.values()) {
@@ -297,7 +298,8 @@ class BoatPlannerTest {
     @Test
     void aWrongTierOrACancelFailsCleanly() {
         assertThrows(GenFailed.class, () -> PLANNER.plan(input('A', 1, "EEE")), "a golf mix isn't a boat tier");
-        PlanInput cancelled = new PlanInput(SLOT, SLOT.half('A'), 'A', 1, 0, 1, "medium", 6, 0, () -> true);
+        PlanInput cancelled = new PlanInput(SLOT, LegacyBoxes.half(SLOT, 'A'), 'A', 1, 0, 1, "medium", 6, 0,
+                () -> true);
         assertThrows(GenFailed.class, () -> PLANNER.plan(cancelled), "a cancelled job gives up");
         assertEquals(Slots.BOAT, PLANNER.id(), "its id");
     }

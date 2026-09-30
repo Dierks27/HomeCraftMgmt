@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.gen.dropper;
 
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -16,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class DropperGeometryTest {
 
-    private static final Box HALF = DropperSlots.DROPPER_SLOT.half('A');
+    private static final Box HALF = LegacyBoxes.half(DropperSlots.DROPPER_SLOT, 'A');
 
     @Test
     void fiveShaftsShareWallsAndFillSixtyOneOfTheSixtyFourBlocks() {

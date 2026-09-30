@@ -6,6 +6,7 @@ import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.games.Game;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.RestartHold;
+import com.dierks.homecraft.games.VoidWorld;
 import com.dierks.homecraft.games.arena.ArenaRegions;
 import com.dierks.homecraft.games.arena.ArenaService;
 import com.dierks.homecraft.games.arena.FallingFloors;
@@ -18,7 +19,9 @@ import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.engine.BukkitWorldPort;
+import com.dierks.homecraft.games.gen.engine.GenAdminKeys;
 import com.dierks.homecraft.games.gen.engine.GenService;
+import com.dierks.homecraft.games.gen.engine.KeptPlot;
 import com.dierks.homecraft.games.gen.engine.Regions;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.mini.MiniService;
@@ -187,22 +190,23 @@ final class GamesCheckLive implements GamesCheck.Facts {
             }
             List<String> problems = new ArrayList<>();
             if (facts != null) {
-                problems.addAll(Regions.worldProblems(def, c.origin(), facts));
+                problems.addAll(Regions.worldProblems(def, c.origin(), c.halfGap(), facts));
             }
             String apart = Regions.apartProblem(c, used);
             if (apart != null) {
                 problems.add(apart);
             }
-            String near = Regions.handBuiltProblem(def, c.origin(), world, built);
+            String near = Regions.handBuiltProblem(def, c.origin(), c.halfGap(), world, built);
             if (near != null) {
                 problems.add(near);
             }
-            String extra = Regions.extrasProblem(def, c.origin(), extraBoxes); // the arena's or the Clubhouse's box
+            // the arena's or the Clubhouse's box
+            String extra = Regions.extrasProblem(def, c.origin(), c.halfGap(), extraBoxes);
             if (extra != null) {
                 problems.add(extra);
             }
             regions.add(new GamesCheck.Region(def.id(), GenCopy.slotName(def, st.cadenceDays()), Slots.isClassic(def.id()),
-                    c.enabled(), problems, Regions.describe(def, c.origin())));
+                    c.enabled(), problems, Regions.describe(def, c.origin(), c.halfGap())));
         }
 
         List<GamesCheck.SlotFact> slots = null;
@@ -235,8 +239,141 @@ final class GamesCheckLive implements GamesCheck.Facts {
                 GenCopy.schedule(ed.cadenceDays(), ed.rebuildDay(), null), world, w != null, listed, regions, slots,
                 next, st.archive().keepProblem() != null ? st.archive().keepProblem()
                 : Regions.keepExtrasProblem(st.archive().keep(), extraBoxes), // or it crowds the arena or the Clubhouse
-                st.archive().keep().describe() + ", " + st.archive().keep().maxPlots() + " plots");
+                st.archive().keep().describe() + ", " + st.archive().keep().maxPlots() + " plots",
+                facts == null ? null : Regions.keepWorldProblems(st.archive().keep(), facts)); // each plot fits
     }
+
+    // ---- what players can see (LAYOUT-SPEC §5.1) ----
+
+    /**
+     * Every Games world's ground, the view distance the server really uses in the world the games build
+     * in (the largest of its view and send distances and every online player's send distance there;
+     * the server's view distance when it isn't loaded), and every place the games build or put players
+     * there: each Fresh course's and Classic's halves where config puts them (a course that is on or
+     * claimed), each kept course's stored plot, the Clubhouse's and Falling Floors' boxes (on or claimed,
+     * the Clubhouse not in hand mode), the world's spawn and the safe spot. Read-only.
+     */
+    @Override
+    public SightCheck.Facts sight() {
+        GamesConfig.Parsed cfg = config();
+        DailySettings st = cfg.settings(DailyCourses.SPEC);
+        String world = st.world().isBlank() ? (cfg.common().worlds().isEmpty() ? "" : cfg.common().worlds().get(0))
+                : st.world();
+        List<SightCheck.Ground> grounds = new ArrayList<>();
+        for (String name : cfg.common().worlds()) {
+            World gw = Bukkit.getWorld(name);
+            grounds.add(new SightCheck.Ground(name, gw != null, gw != null && VoidWorld.ours(gw.getGenerator()),
+                    gw == null ? null : footed(gw)));
+        }
+        World w = world.isBlank() ? null : Bukkit.getWorld(world);
+        int view;
+        String why;
+        if (w == null) {
+            view = Bukkit.getViewDistance();
+            why = "the server's view distance; " + (world.isBlank() ? "there is no Games world"
+                    : world + " isn't loaded");
+        } else {
+            int players = 0;
+            int theirs = 0;
+            for (org.bukkit.entity.Player p : w.getPlayers()) {
+                players++;
+                theirs = Math.max(theirs, p.getSendViewDistance());
+            }
+            view = Math.max(Math.max(w.getViewDistance(), w.getSendViewDistance()), theirs);
+            why = w.getName() + "'s view distance " + w.getViewDistance() + ", its send distance "
+                    + w.getSendViewDistance() + (players == 0 ? ", nobody there now"
+                    : ", and the " + players + " player" + (players == 1 ? "" : "s") + " there (up to " + theirs + ")");
+        }
+        return new SightCheck.Facts(world, view, why, world.isBlank() ? List.of() : places(cfg, st, world, w), grounds);
+    }
+
+    /** The places of {@link #sight()} in {@code world} ({@code w} when it is loaded). */
+    private List<SightCheck.Place> places(GamesConfig.Parsed cfg, DailySettings st, String world, World w) {
+        List<SightCheck.Place> out = new ArrayList<>();
+        java.util.Map<String, GenService.SlotReport> engine = new java.util.HashMap<>();
+        GenService running = engine();
+        if (running != null) {
+            for (GenService.SlotReport r : running.report()) {
+                engine.put(r.id(), r);
+            }
+        }
+        List<DailySettings.SlotConfig> all = new ArrayList<>(st.slots());
+        all.addAll(st.archive().classics());
+        for (DailySettings.SlotConfig c : all) {
+            Slots.Def def = c.def();
+            GenService.SlotReport r = engine.get(c.id());
+            boolean stands = r != null ? r.wanted() || r.claimed() : c.enabled() && st.enabled();
+            if (def == null || !stands) {
+                continue;
+            }
+            SightCheck.Kind kind = Slots.isClassic(def.id()) ? SightCheck.Kind.CLASSIC : SightCheck.Kind.SLOT;
+            for (Box half : Regions.halves(c)) {
+                out.add(new SightCheck.Place(kind, def.id(), GenCopy.slotName(def, st.cadenceDays()), half));
+            }
+        }
+        java.util.Map<String, String> meta;
+        try {
+            meta = new GenMetaDao(plugin.database()).like("gen.");
+        } catch (SQLException | RuntimeException e) {
+            meta = java.util.Map.of();
+        }
+        for (java.util.Map.Entry<String, String> e : meta.entrySet()) {
+            int n = GenAdminKeys.plotOf(e.getKey());
+            KeptPlot p = n < 1 ? null : KeptPlot.parse(n, e.getValue());
+            if (p != null && p.world().equalsIgnoreCase(world)) {
+                out.add(new SightCheck.Place(SightCheck.Kind.KEPT, Integer.toString(n), "the kept course \""
+                        + p.courseId() + "\" (plot " + n + ")", p.box()));
+            }
+        }
+        com.dierks.homecraft.games.clubhouse.ClubhouseSettings cs =
+                cfg.settings(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC);
+        GamesService g = games();
+        Game club = g == null ? null : g.game(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC.id());
+        boolean hand = club instanceof com.dierks.homecraft.games.clubhouse.Clubhouse c && c.running() && c.handBuilt();
+        if (!hand && (cfg.enabled() && cs.enabled() || meta.containsKey(
+                com.dierks.homecraft.games.clubhouse.ClubhouseRoom.CLAIM_KEY))) {
+            out.add(new SightCheck.Place(SightCheck.Kind.CLUBHOUSE,
+                    com.dierks.homecraft.games.clubhouse.ClubhouseRegions.NAME, "the Clubhouse", cs.box()));
+        }
+        FallingFloorsSettings ff = cfg.settings(FallingFloors.SPEC);
+        if (cfg.enabled() && ff.enabled() || meta.containsKey(ArenaService.CLAIM_KEY)) {
+            out.add(new SightCheck.Place(SightCheck.Kind.ARENA, ArenaRegions.NAME, "Falling Floors", ff.box()));
+        }
+        if (w != null) {
+            org.bukkit.Location s = w.getSpawnLocation();
+            out.add(new SightCheck.Place(SightCheck.Kind.SPAWN, "spawn", "the spawn of " + w.getName(),
+                    new Box(s.getBlockX(), s.getBlockY(), s.getBlockZ(), s.getBlockX(), s.getBlockY(), s.getBlockZ())));
+        }
+        double[] safe = st.safeSpot();
+        if (safe != null) {
+            int x = (int) Math.floor(safe[0]);
+            int y = (int) Math.floor(safe[1]);
+            int z = (int) Math.floor(safe[2]);
+            out.add(new SightCheck.Place(SightCheck.Kind.SAFE_SPOT, "safe_spot", "the safe spot (games.fresh.safe_spot)",
+                    new Box(x, y, z, x, y, z)));
+        }
+        return out;
+    }
+
+    /**
+     * Whether anything stands under {@code w}'s spawn, all the way down: a void world with no platform
+     * lets someone arriving there fall. {@code null} when it can't be read.
+     */
+    private static Boolean footed(World w) {
+        try {
+            org.bukkit.Location s = w.getSpawnLocation();
+            for (int y = s.getBlockY() - 1; y >= w.getMinHeight(); y--) {
+                if (!w.getBlockAt(s.getBlockX(), y, s.getBlockZ()).getType().isAir()) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    // ---- end what players can see ----
 
     // ---- Falling Floors (EVENTS-DROPPER-SPEC §C.2 WP-F) ----
 

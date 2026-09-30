@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.gen.engine;
 import com.dierks.homecraft.games.gen.DailySettings;
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.SignText;
 import com.dierks.homecraft.games.gen.api.Slots;
@@ -30,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class BuildJobTest {
 
     private static final Slots.Def DEF = Slots.DAILY_PARKOUR_EASY;
-    private static final Box HALF = DEF.half('A');
+    private static final Box HALF = LegacyBoxes.half(DEF, 'A');
     private static final DailySettings.Budget BUDGET = new DailySettings.Budget(500, 5000, 4, 4, 2, 40);
 
     private long nanos;

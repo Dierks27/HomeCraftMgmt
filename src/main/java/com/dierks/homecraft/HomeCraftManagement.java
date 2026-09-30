@@ -6,6 +6,7 @@ import com.dierks.homecraft.command.HcmCommand;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.crafting.RecipeManager;
 import com.dierks.homecraft.crafting.WorkbenchListener;
+import com.dierks.homecraft.games.VoidWorld;
 import com.dierks.homecraft.gui.MenuListener;
 import com.dierks.homecraft.input.ChatPromptService;
 import com.dierks.homecraft.integration.EconomyService;
@@ -34,8 +35,12 @@ import com.dierks.homecraft.trade.WildDropListener;
 import com.dierks.homecraft.trade.WildDropService;
 import com.dierks.homecraft.util.Keys;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.generator.BiomeProvider;
+import org.bukkit.generator.ChunkGenerator;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.sql.SQLException;
 
@@ -487,6 +492,23 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
 
         getLogger().info("HomeCraft Management enabled.");
+    }
+
+    /**
+     * The built-in void world for the Games ({@link VoidWorld}):
+     * {@code /mv create sky normal -g HomeCraftManagement}. Every world that names this plugin as its
+     * generator gets it; the id after a {@code :} is ignored. Needs nothing of the plugin, so it works
+     * even when Bukkit asks before the plugin is enabled.
+     */
+    @Override
+    public ChunkGenerator getDefaultWorldGenerator(@NotNull String worldName, @Nullable String id) {
+        return new VoidWorld.Generator();
+    }
+
+    /** The void world's biomes ({@code minecraft:the_void}), for a world that names this plugin's biomes. */
+    @Override
+    public BiomeProvider getDefaultBiomeProvider(@NotNull String worldName, @Nullable String id) {
+        return VoidWorld.biomes();
     }
 
     @Override

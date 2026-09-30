@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.gen.boat;
 import com.dierks.homecraft.games.gen.V2Fixtures;
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlannedTrial;
@@ -54,7 +55,7 @@ class LoopValidatorV2Test {
     @Test
     void aSquareLoopWithSharpCornersIsRefused() {
         // a walled square ring of 7-wide ice round the middle, side about 80: its corners are right angles
-        Box half = SLOT.half('A');
+        Box half = LegacyBoxes.half(SLOT, 'A');
         int cx = half.minX() + 64;
         int cz = half.minZ() + 64;
         int iceY = half.minY() + ICE_ABOVE_FLOOR;
@@ -159,8 +160,8 @@ class LoopValidatorV2Test {
         assertTrue(says(LoopValidatorV2.problems(Plan.of(two.slot(), 2, two.seed(), two.half(), two.palette(), ops, signs,
                         two.keepClear(), two.course(), two.summary(), two.work()), "medium"), "platform has a hole"),
                 "the same blocks as algo 2 must have it");
-        char other = SLOT.half('A').equals(one.half()) ? 'B' : 'A';
-        Box to = SLOT.half(other);
+        char other = LegacyBoxes.half(SLOT, 'A').equals(one.half()) ? 'B' : 'A';
+        Box to = LegacyBoxes.half(SLOT, other);
         Plan moved = com.dierks.homecraft.games.gen.api.PlanShift.to(one, to); // a recall, or a kept layout, moved
         assertEquals(List.of(), com.dierks.homecraft.games.gen.engine.PlanCheck.problems(moved, SLOT, to),
                 "the structural check passes it in the other half");

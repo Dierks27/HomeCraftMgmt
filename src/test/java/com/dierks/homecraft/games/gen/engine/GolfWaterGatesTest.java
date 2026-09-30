@@ -83,16 +83,16 @@ class GolfWaterGatesTest {
         Slots.Def golf = Slots.DAILY_GOLF;
         host = new Host(GenKit.at(2026, 9, 29, 4, 0) + 40_000, golf.id(), Slots.ICE_BOAT.id());
         int[] here = golf.origin();
-        host.store.meta(GenAdminKeys.claim(golf.id()), Regions.claim(golf, W, here));
+        host.store.meta(GenAdminKeys.claim(golf.id()), Regions.claim(golf, W, here, Slots.HALF_GAP));
         boot(fakes());
-        Box oldA = Regions.half(golf, here, 'A');
+        Box oldA = Regions.half(golf, here, Slots.HALF_GAP, 'A');
         assertTrue(guarded(oldA), "claimed: guarded, as before");
 
         moveTo(golf.id(), new int[]{here[0], here[1], here[2] + 2048});
         gen.check();
-        assertTrue(guarded(oldA) && guarded(Regions.half(golf, here, 'B')),
+        assertTrue(guarded(oldA) && guarded(Regions.half(golf, here, Slots.HALF_GAP, 'B')),
                 "moved away: the old halves (maybe holding ponds) stay guarded");
-        assertEquals(Regions.claim(golf, W, here), host.store.meta(GenAdminKeys.wet(golf.id())),
+        assertEquals(Regions.claim(golf, W, here, Slots.HALF_GAP), host.store.meta(GenAdminKeys.wet(golf.id())),
                 "remembered as a wet region, as a Dropper's is");
         assertTrue(host.logged(Level.WARNING, "Its ponds may still be there") > 0
                 && host.logged(Level.WARNING, "drain first - move it back and use /hcm games gen clear " + golf.id()
@@ -102,11 +102,11 @@ class GolfWaterGatesTest {
 
         Slots.Def boat = Slots.ICE_BOAT;
         int[] boatHere = boat.origin();
-        host.store.meta(GenAdminKeys.claim(boat.id()), Regions.claim(boat, W, boatHere));
+        host.store.meta(GenAdminKeys.claim(boat.id()), Regions.claim(boat, W, boatHere, Slots.HALF_GAP));
         boot(fakes());
         moveTo(boat.id(), new int[]{boatHere[0], boatHere[1], boatHere[2] + 2048});
         gen.check();
-        Box boatOld = Regions.half(boat, boatHere, 'A');
+        Box boatOld = Regions.half(boat, boatHere, Slots.HALF_GAP, 'A');
         assertFalse(gen.inArea(W, boatOld.minX(), boatOld.minY(), boatOld.minZ()),
                 "the ice boat stays dry: its old region isn't kept guarded");
         assertNull(host.store.meta(GenAdminKeys.wet(boat.id())), "nor remembered");

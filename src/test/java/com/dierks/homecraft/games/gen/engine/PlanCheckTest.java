@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.gen.engine;
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlannedGolf;
 import com.dierks.homecraft.games.gen.api.Putt;
@@ -26,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PlanCheckTest {
 
     private static final Slots.Def DEF = Slots.DAILY_PARKOUR_EASY;
-    private static final Box A = DEF.half('A');
+    private static final Box A = LegacyBoxes.half(DEF, 'A');
 
     @Test
     void aGoodPlanPassesAndEachKindOfBadOneIsRefused() {
@@ -34,7 +35,7 @@ class PlanCheckTest {
         assertEquals(List.of(), PlanCheck.problems(good, DEF, A), "the kit's plan is fine");
         assertTrue(PlanCheck.problems(good, Slots.DAILY_PARKOUR_HARD, A).get(0).contains("not fresh_parkour_hard"),
                 "a plan for another slot");
-        assertTrue(PlanCheck.problems(good, DEF, DEF.half('B')).get(0).contains("not x 4192"),
+        assertTrue(PlanCheck.problems(good, DEF, LegacyBoxes.half(DEF, 'B')).get(0).contains("not x 4192"),
                 "a plan for the other half");
 
         List<BlockOp> twice = new ArrayList<>(good.ops());
@@ -57,7 +58,7 @@ class PlanCheckTest {
                 good.course(), List.of(), 0, "000000000000");
         assertTrue(PlanCheck.problems(lying, DEF, A).contains("the plan's hash doesn't match its blocks"),
                 "a hash that doesn't name the blocks");
-        assertTrue(PlanCheck.problems(good, Slots.DAILY_GOLF, Slots.DAILY_GOLF.half('A')).stream()
+        assertTrue(PlanCheck.problems(good, Slots.DAILY_GOLF, LegacyBoxes.half(Slots.DAILY_GOLF, 'A')).stream()
                 .anyMatch(p -> p.contains("no golf course")), "a trial plan for a golf slot");
     }
 
@@ -88,7 +89,7 @@ class PlanCheckTest {
     void aMovedGolfPlanIsProvenAgainWhereItWillStand() {
         // Course Variety §1.2: a moved golf plan runs golf's quick check (ponds sealed, witness lines replayed)
         com.dierks.homecraft.games.gen.V2Fixtures.Fixture f = com.dierks.homecraft.games.gen.V2Fixtures.named("golf-3");
-        Box to = Slots.CLASSIC_GOLF.half('B');
+        Box to = LegacyBoxes.half(Slots.CLASSIC_GOLF, 'B');
         Box at = Box.sized(to.minX(), to.minY(), to.minZ(), f.plan().half().sizeX(), f.plan().half().sizeY(),
                 f.plan().half().sizeZ());
         Plan moved = com.dierks.homecraft.games.gen.api.PlanShift.to(f.plan(), at);
@@ -113,7 +114,7 @@ class PlanCheckTest {
     @Test
     void aGolfPlanBecomesAGolfRowThatReadsBackWithItsTag() {
         Slots.Def def = Slots.TINY_GOLF;
-        Box half = def.half('A');
+        Box half = LegacyBoxes.half(def, 'A');
         int t = half.minY() + 4;
         GolfCourse.Hole hole = new GolfCourse.Hole(new GolfCourse.Tee(half.minX() + 10.5, t, half.minZ() + 3.5, 0f),
                 new GolfCourse.Spot(half.minX() + 10, t - 2, half.minZ() + 15), 3,

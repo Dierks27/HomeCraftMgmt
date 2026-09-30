@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.gen.V2Fixtures;
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenTagCodec;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlanShift;
@@ -53,7 +54,7 @@ class V2FixturesTest {
             assertEquals(f.hash(), p.hash(), f + ": the plan the index pins");
             assertEquals(Plan.hash(p.palette(), p.ops(), p.signs(), p.course()), p.hash(), f + ": whose blocks hash so");
             assertEquals(f.slot().id(), p.slot(), f + ": for its slot");
-            assertEquals(f.slot().half(f.half()), p.half(), f + ": in its half");
+            assertEquals(LegacyBoxes.half(f.slot(), f.half()), p.half(), f + ": in its 0.35 half, where it was made");
             assertEquals(f.seed(), p.seed(), f + ": from its seed");
             assertEquals(f.slot().id(), f.tag().slot(), f + ": the row's tag names the slot");
             assertEquals(2, f.tag().algo(), f + ": and algo 2");
@@ -95,10 +96,10 @@ class V2FixturesTest {
 
     @Test
     void aMovedGolfCourseIsProvenAgainWhereItStands() {
-        KeepArea keep = new KeepArea(4096, 128, 5376, 24);
+        KeepArea keep = LegacyBoxes.keep();
         for (V2Fixtures.Fixture f : V2Fixtures.golf()) {
-            for (Box to : List.of(Slots.CLASSIC_GOLF.half('A'), Slots.CLASSIC_GOLF.half('B'), keep.build(2, f.slot()),
-                    keep.build(7, f.slot()))) {
+            for (Box to : List.of(LegacyBoxes.half(Slots.CLASSIC_GOLF, 'A'), LegacyBoxes.half(Slots.CLASSIC_GOLF, 'B'),
+                    keep.build(2, f.slot()), keep.build(7, f.slot()))) {
                 Box at = Box.sized(to.minX(), to.minY(), to.minZ(), f.plan().half().sizeX(), f.plan().half().sizeY(),
                         f.plan().half().sizeZ());
                 Plan moved = PlanShift.to(f.plan(), at);

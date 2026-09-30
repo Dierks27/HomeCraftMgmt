@@ -43,8 +43,31 @@ public final class Slots {
     public static final String GAME_TRIALS = "trials";
     public static final String GAME_GOLF = "golf";
 
-    /** Blocks between a slot's half A and half B, along +X. */
-    public static final int HALF_GAP = 32;
+    /**
+     * The blocks between a slot's half A and half B, along +X, in 0.35.0: 2 chunks, so the spare half
+     * (where the next course is built) is in plain sight of the live one. A claim written without a
+     * gap was made with it ({@code Regions.claimGap}).
+     */
+    public static final int LEGACY_HALF_GAP = 32;
+    /**
+     * The gap that keeps a slot's spare half out of its live half's sight at every view distance
+     * (LAYOUT-SPEC §1.2): {@link Sight#GAP}, 576 blocks. Not yet the shipped gap: the shipped origins
+     * stand 32 to 96 blocks apart, so it only fits once they move to the new layout (§1.5), and
+     * {@link #HALF_GAP} becomes this with them.
+     */
+    public static final int SIGHT_HALF_GAP = Sight.GAP;
+    /**
+     * The gap a slot or Classics slot has when its config names none
+     * ({@code games.fresh.slots.<id>.half_gap}): every main-code caller passes the slot's own
+     * configured gap; this is only its default. Still {@link #LEGACY_HALF_GAP} (see
+     * {@link #SIGHT_HALF_GAP}).
+     */
+    public static final int HALF_GAP = LEGACY_HALF_GAP;
+    /** The smallest and largest {@code half_gap} config takes; it is a multiple of {@link #GAP_GRID}. */
+    public static final int MIN_HALF_GAP = LEGACY_HALF_GAP;
+    public static final int MAX_HALF_GAP = 4096;
+    /** Origins and gaps stand on the 16-block (chunk) grid, so every box is chunk-aligned. */
+    public static final int GAP_GRID = 16;
     /** The trial tiers a parkour, rings or boat slot may be set to. */
     public static final List<String> TIERS = List.of("easy", "medium", "hard");
 
@@ -114,25 +137,42 @@ public final class Slots {
 
         /**
          * Half {@code which} ('A' or 'B') for a region whose origin (half A's min corner) is
-         * (x, y, z): A starts at the origin, B {@link #HALF_GAP} blocks further along +X.
+         * (x, y, z) and whose halves stand {@code gap} blocks apart: A starts at the origin, B
+         * {@code sizeX + gap} blocks further along +X, same y and z.
          */
-        public Box half(int x, int y, int z, char which) {
+        public Box half(int x, int y, int z, char which, int gap) {
+            if (gap < 0) {
+                throw new IllegalArgumentException("a gap is 0 or more blocks: " + gap);
+            }
             int dx = switch (Character.toUpperCase(which)) {
                 case 'A' -> 0;
-                case 'B' -> sizeX + HALF_GAP;
+                case 'B' -> sizeX + gap;
                 default -> throw new IllegalArgumentException("a half is A or B: " + which);
             };
             return Box.sized(x + dx, y, z, sizeX, sizeY, sizeZ);
         }
 
-        /** Half {@code which} at the shipped origin. */
+        /** {@link #half(int, int, int, char, int)} at the default gap, {@link #HALF_GAP}. */
+        public Box half(int x, int y, int z, char which) {
+            return half(x, y, z, which, HALF_GAP);
+        }
+
+        /** Half {@code which} at the shipped origin and the default gap. */
         public Box half(char which) {
             return half(originX, originY, originZ, which);
         }
 
-        /** Both halves and the gap between them, for a region whose origin is (x, y, z). */
+        /** Both halves and the {@code gap} between them, for a region whose origin is (x, y, z). */
+        public Box region(int x, int y, int z, int gap) {
+            if (gap < 0) {
+                throw new IllegalArgumentException("a gap is 0 or more blocks: " + gap);
+            }
+            return Box.sized(x, y, z, 2 * sizeX + gap, sizeY, sizeZ);
+        }
+
+        /** {@link #region(int, int, int, int)} at the default gap, {@link #HALF_GAP}. */
         public Box region(int x, int y, int z) {
-            return Box.sized(x, y, z, 2 * sizeX + HALF_GAP, sizeY, sizeZ);
+            return region(x, y, z, HALF_GAP);
         }
 
         /**

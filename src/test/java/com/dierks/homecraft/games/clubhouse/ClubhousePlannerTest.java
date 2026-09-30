@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.clubhouse;
 
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Plan;
 import org.junit.jupiter.api.Test;
 
@@ -25,7 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ClubhousePlannerTest {
 
-    private static final Box BOX = ClubhouseSettings.defaults().box();
+    /** The 0.35 box: the golden hash names blocks where they stand, so it never follows the shipped origin. */
+    private static final Box BOX = LegacyBoxes.clubhouse();
     private static final ClubhouseSite SITE = ClubhousePlanner.plan(BOX);
 
     /** Every block of the plan by position ({@code null}: air). */

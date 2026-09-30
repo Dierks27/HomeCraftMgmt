@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.GenSeed;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlanInput;
@@ -42,7 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class BuildJobWaterTest {
 
     private static final Slots.Def DEF = Slots.EASY_DROPPER;
-    private static final Box HALF = DEF.half('A');
+    private static final Box HALF = LegacyBoxes.half(DEF, 'A');
     private static final DailySettings.Budget BUDGET = new DailySettings.Budget(500, 5000, 4, 4, 2, 40);
 
     /** One write, in the order the world saw it. */

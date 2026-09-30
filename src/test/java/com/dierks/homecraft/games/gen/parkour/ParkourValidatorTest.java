@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenFailed;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlannedTrial;
@@ -66,7 +67,7 @@ class ParkourValidatorTest {
                         first.z1() + first.sz() / 2.0), 0f);
         Course c = new Course(slot.id(), TrialKind.PARKOUR, slot.name(), Tier.of(tier), "", start, cps,
                 new Course.Mark(f.x1() + f.sx() / 2.0, f.top(), f.z1() + f.sz() / 2.0, 3.0), fallY, 5, true, false, 1);
-        return Plan.of(slot.id(), 1, 1, slot.half('A'), palette, ops, List.of(), List.of(),
+        return Plan.of(slot.id(), 1, 1, LegacyBoxes.half(slot, 'A'), palette, ops, List.of(), List.of(),
                 new PlannedTrial(c, 20_000), List.of(), 0);
     }
 
@@ -114,8 +115,8 @@ class ParkourValidatorTest {
 
     @Test
     void aFlatFourGapIsRefusedEvenOnHard() {
-        int x = HARD.half('A').minX() + 5;
-        int z = HARD.half('A').minZ() + 5;
+        int x = LegacyBoxes.half(HARD, 'A').minX() + 5;
+        int z = LegacyBoxes.half(HARD, 'A').minZ() + 5;
         List<P> pads = List.of(new P(x, z, 5, 5, 180, Palette.START),
                 new P(x + 5 + 4, z + 2, 1, 1, 180, Palette.PATH_HARD),
                 new P(x + 5 + 4 + 1 + 2, z + 1, 5, 5, 180, Palette.FINISH));
@@ -125,8 +126,8 @@ class ParkourValidatorTest {
 
     @Test
     void aTwoBlockClimbIsRefused() {
-        int x = EASY.half('A').minX() + 5;
-        int z = EASY.half('A').minZ() + 5;
+        int x = LegacyBoxes.half(EASY, 'A').minX() + 5;
+        int z = LegacyBoxes.half(EASY, 'A').minZ() + 5;
         List<P> pads = List.of(new P(x, z, 5, 5, 180, Palette.START),
                 new P(x + 6, z + 1, 3, 3, 182, Palette.PATH_EASY),
                 new P(x + 11, z, 5, 5, 182, Palette.FINISH));
@@ -136,8 +137,8 @@ class ParkourValidatorTest {
 
     @Test
     void aSprintGapIsRefusedOnEasy() {
-        int x = EASY.half('A').minX() + 5;
-        int z = EASY.half('A').minZ() + 5;
+        int x = LegacyBoxes.half(EASY, 'A').minX() + 5;
+        int z = LegacyBoxes.half(EASY, 'A').minZ() + 5;
         List<P> pads = List.of(new P(x, z, 5, 5, 180, Palette.START),
                 new P(x + 5 + 3, z + 1, 3, 3, 180, Palette.PATH_EASY),
                 new P(x + 5 + 3 + 3 + 2, z, 5, 5, 180, Palette.FINISH));
@@ -158,8 +159,8 @@ class ParkourValidatorTest {
 
     @Test
     void aSkipIsRefused() {
-        int x = EASY.half('A').minX() + 5;
-        int z = EASY.half('A').minZ() + 5;
+        int x = LegacyBoxes.half(EASY, 'A').minX() + 5;
+        int z = LegacyBoxes.half(EASY, 'A').minZ() + 5;
         // start, then two pads one gap apart: the start and the second pad are only 5 apart
         List<P> pads = List.of(new P(x, z, 5, 5, 180, Palette.START),
                 new P(x + 6, z + 1, 3, 3, 180, Palette.PATH_EASY),
@@ -171,8 +172,8 @@ class ParkourValidatorTest {
 
     @Test
     void aPadUnderTheFallFloorIsRefused() {
-        int x = MEDIUM.half('A').minX() + 5;
-        int z = MEDIUM.half('A').minZ() + 5;
+        int x = LegacyBoxes.half(MEDIUM, 'A').minX() + 5;
+        int z = LegacyBoxes.half(MEDIUM, 'A').minZ() + 5;
         // fall_depth 6 under a leg from 180 to 180 is 174: a pad at 175 is 1 over it
         List<P> pads = List.of(new P(x, z, 5, 5, 180, Palette.START),
                 new P(x + 7, z + 1, 2, 2, 179, Palette.PATH_MEDIUM),
@@ -216,7 +217,7 @@ class ParkourValidatorTest {
     @Test
     void tooManyBlocksAreRefused() {
         Slots.Def slot = HARD;
-        Box half = slot.half('A');
+        Box half = LegacyBoxes.half(slot, 'A');
         List<BlockOp> ops = new ArrayList<>();
         for (int y = half.minY(); ops.size() <= ParkourValidator.MAX_OPS; y += 2) {
             for (int x = half.minX(); x <= half.maxX(); x++) {
@@ -235,7 +236,7 @@ class ParkourValidatorTest {
 
     @Test
     void theAirOverAPadMustReachTheSky() {
-        Box half = EASY.half('A');
+        Box half = LegacyBoxes.half(EASY, 'A');
         int x = half.minX() + 10;
         int y = half.minY() + 20;
         int z = half.minZ() + 10;

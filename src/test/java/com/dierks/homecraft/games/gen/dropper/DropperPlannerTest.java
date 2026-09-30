@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlanCodec;
@@ -277,8 +278,8 @@ class DropperPlannerTest {
 
     @Test
     void aStarvedWorkBudgetStillMakesEveryLevelAsAStraightDrop() throws GenFailed {
-        PlanInput starved = new PlanInput(DropperSlots.DROPPER_SLOT, DropperSlots.DROPPER_SLOT.half('A'), 'A',
-                DropperFixtures.DAY, 0, 99, "EEMMH", 6, 1, null);
+        PlanInput starved = new PlanInput(DropperSlots.DROPPER_SLOT, LegacyBoxes.half(DropperSlots.DROPPER_SLOT, 'A'),
+                'A', DropperFixtures.DAY, 0, 99, "EEMMH", 6, 1, null);
         DropperPlanner.Build b = PLANNER.build(starved, false);
         assertEquals(5, b.levels().size(), "a course is never missing a level");
         assertEquals(5, b.safeLevels(), "with no budget to search, every level is the proven straight drop");
@@ -353,14 +354,14 @@ class DropperPlannerTest {
     @Test
     void everyFailureIsAGenFailed() {
         Slots.Def d = DropperSlots.DROPPER_SLOT;
-        assertThrows(GenFailed.class, () -> PLANNER.plan(new PlanInput(d, d.half('A'), 'A', 1, 0, 1, "EXE", 6, 0,
-                null)), "a bad mix");
-        assertThrows(GenFailed.class, () -> PLANNER.plan(new PlanInput(d, d.half('A'), 'A', 1, 0, 1, "easy", 6, 0,
-                null)), "a trial tier is not a mix");
+        assertThrows(GenFailed.class, () -> PLANNER.plan(new PlanInput(d, LegacyBoxes.half(d, 'A'), 'A', 1, 0, 1, "EXE",
+                6, 0, null)), "a bad mix");
+        assertThrows(GenFailed.class, () -> PLANNER.plan(new PlanInput(d, LegacyBoxes.half(d, 'A'), 'A', 1, 0, 1, "easy",
+                6, 0, null)), "a trial tier is not a mix");
         assertThrows(GenFailed.class, () -> PLANNER.plan(new PlanInput(d, Box.sized(0, 0, 0, 40, 64, 16), 'A', 1, 0,
                 1, "EEEEE", 6, 0, null)), "a half too narrow for five shafts");
-        GenFailed stop = assertThrows(GenFailed.class, () -> PLANNER.plan(new PlanInput(d, d.half('A'), 'A', 1, 0, 1,
-                "EEMMH", 6, 0, () -> true)), "a cancelled job");
+        GenFailed stop = assertThrows(GenFailed.class, () -> PLANNER.plan(new PlanInput(d, LegacyBoxes.half(d, 'A'), 'A',
+                1, 0, 1, "EEMMH", 6, 0, () -> true)), "a cancelled job");
         assertEquals("cancelled", stop.getMessage(), "gives up as cancelled");
     }
 
@@ -445,7 +446,7 @@ class DropperPlannerTest {
 
     @Test
     void aFailingPilotWidensItsOpeningByOneTowardTheBlockItHit() {
-        DropperGeometry.Shaft s = DropperGeometry.shaft(DropperSlots.DROPPER_SLOT.half('A'), 1);
+        DropperGeometry.Shaft s = DropperGeometry.shaft(LegacyBoxes.half(DropperSlots.DROPPER_SLOT, 'A'), 1);
         DropperPlanner.Rect open = new DropperPlanner.Rect(s.x1() + 4, s.z1() + 4, s.x1() + 6, s.z1() + 6);
         assertEquals(new DropperPlanner.Rect(s.x1() + 3, s.z1() + 4, s.x1() + 6, s.z1() + 6),
                 DropperPlanner.widen(s, open, s.x1() + 3, s.z1() + 5), "a hit to the west grows it one block west");
@@ -581,7 +582,7 @@ class DropperPlannerTest {
     @Test
     void aDropperMovedToTheClassicSlotOrArchivedIsStillProven() {
         Plan p = DropperFixtures.plan("EEMMH", 8);
-        Plan recalled = PlanShift.to(p, DropperSlots.CLASSIC.half('B'));
+        Plan recalled = PlanShift.to(p, LegacyBoxes.half(DropperSlots.CLASSIC, 'B'));
         assertEquals(List.of(), DropperValidator.problems(recalled),
                 "moved whole blocks away it is the same course, proven from its own pools' mix");
         PlanCodec.Read back = PlanCodec.decode(PlanCodec.encode(p));

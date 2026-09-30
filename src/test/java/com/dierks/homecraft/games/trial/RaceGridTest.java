@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.trial;
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.GenSeed;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlanInput;
@@ -229,7 +230,8 @@ class RaceGridTest {
 
     static Plan freshBoat(long seed, String tier) throws GenFailed {
         Slots.Def slot = Slots.ICE_BOAT;
-        return new BoatPlanner().plan(new PlanInput(slot, slot.half('A'), 'A', 20725, 0, seed, tier, 6, 0, null));
+        return new BoatPlanner().plan(new PlanInput(slot, LegacyBoxes.half(slot, 'A'), 'A', 20725, 0, seed, tier, 6, 0,
+                null));
     }
 
     @Test

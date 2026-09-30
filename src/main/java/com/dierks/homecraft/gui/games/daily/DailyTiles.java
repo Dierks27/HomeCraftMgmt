@@ -139,6 +139,21 @@ final class DailyTiles {
                 : DailyText.closedName(slot, cadence);
     }
 
+    /**
+     * A Fresh time trial's count for its tile NAME ({@link DailyText#slotName}'s {@code holes}): a
+     * Dropper's levels ("3 levels"), the Ice Boat Mountain Run's drops ("5 drops", COURSE-VARIETY-SPEC
+     * §5.2); 0 for anything else (a flat loop, a parkour course), whose NAME says its stars alone.
+     */
+    static int trialCount(Slots.Def slot, Course trial) {
+        if (slot == null || trial == null) {
+            return 0;
+        }
+        if (slot.dropper()) {
+            return DropperLayout.levels(trial);
+        }
+        return BoatHype.mountain(trial) ? BoatHype.drops(trial) : 0;
+    }
+
     /** A slot's tile for {@code viewer}: {@code cadence} is the live schedule's (for a slot not up yet). */
     static ItemStack tile(GamesService games, Player viewer, View v, int cadence) {
         Slots.Def slot = v.slot();
@@ -169,11 +184,7 @@ final class DailyTiles {
             lore.add(DailyText.yourBest(setCadence, best == null ? null : GolfRun.strokesText(best.intValue())));
             lore.add(DailyText.starStrokes(par, holes));
         } else if (v.trial() != null && v.game() instanceof TimeTrials trials) {
-            if (slot.dropper()) {
-                holes = DropperLayout.levels(v.trial()); // a dropper's key fact: its levels
-            } else if (BoatHype.mountain(v.trial())) {
-                holes = BoatHype.drops(v.trial()); // a Mountain Run's: its drops
-            }
+            holes = trialCount(slot, v.trial());
             String board = TimeTrials.board(v.trial());
             lore.add(trials.setBestLine(trials.recordOn(board), viewer, setCadence));
             Long best = trials.bestOn(viewer, board);

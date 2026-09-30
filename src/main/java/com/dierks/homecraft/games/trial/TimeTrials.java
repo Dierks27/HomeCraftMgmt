@@ -792,11 +792,25 @@ public final class TimeTrials implements Game {
         CupLink.Tile cup = cups.tile(c); // Weekly Cup: read once for the lore and the NAME
         lore.addAll(cup.lines());
         lore.add("&eClick to play");
-        String fact = (c.kind() == TrialKind.DROPPER ? DailyText.levels(DropperLayout.levels(c)) + " · "
-                : BoatHype.fact(c)) + DailyText.trialFact(cadence, stars); // "5 drops · " on a Mountain Run
+        String fact = tileFact(c, cadence, stars);
         String name = t.recalled() ? "&6" + classicName(t, c.name()) + " &7- " + fact
                 : DailyText.tabName(Slots.of(t.slot()), c.name(), fact, DailyLookup.current(g, t.slot()), cadence);
         return new Face(c.id(), icon(c.kind()), name + DailyLookup.codeSuffix(code) + cup.suffix(), lore, stars >= 3);
+    }
+
+    /**
+     * The key fact in a Fresh course's Courses-tab NAME, before the Weekly Cup's and the code's tails
+     * (Bedrock shows lore only on tap-and-hold): a Dropper's levels ("3 levels · ★★☆", EVENTS-DROPPER-SPEC
+     * §B.1.8), the Ice Boat Mountain Run's drops ("5 drops · ★★☆", COURSE-VARIETY-SPEC §5.2), then the
+     * player's stars in this set, or that they have no time in it yet. A flat loop, a kept course and any
+     * other trial say their stars alone, as they always did. Pure, so the NAME is pinned without a server.
+     *
+     * @param cadence the set's cadence words ({@link GenCopy#words})
+     * @param stars   the player's best stars on it in this set (0 = none yet)
+     */
+    static String tileFact(Course c, int cadence, int stars) {
+        return (c.kind() == TrialKind.DROPPER ? DailyText.levels(DropperLayout.levels(c)) + " · " : BoatHype.fact(c))
+                + DailyText.trialFact(cadence, stars);
     }
 
     /**
@@ -1327,12 +1341,20 @@ public final class TimeTrials implements Game {
     private void reached(Player p, TrialRun run, int index) {
         int of = run.course.checkpoints().size();
         String time = TrialText.time(run.elapsedMs(run.progress.times()[index]));
-        title(p, BoatHype.checkpointTitle(run.course, index), // "Final drop!" on a Mountain Run
-                "&aCheckpoint " + (index + 1) + " of " + of + " &7- " + time, 25);
+        title(p, checkpointBig(run.course, index), "&aCheckpoint " + (index + 1) + " of " + of + " &7- " + time, 25);
         ping(p, 1.4f + 0.4f * (index + 1) / Math.max(1, of));
         if (run.course.kind() == TrialKind.ELYTRA) {
             refillRockets(p);
         }
+    }
+
+    /**
+     * The big title as a racer reaches checkpoint {@code index} (0-based) of {@code c}, over the small
+     * "Checkpoint 3 of 10 - 0:21.4": "&amp;aFinal drop!" at the checkpoint before a Mountain Run's last
+     * lip (COURSE-VARIETY-SPEC §5.2), nothing anywhere else, so every other course reads as it always did.
+     */
+    static String checkpointBig(Course c, int index) {
+        return BoatHype.checkpointTitle(c, index);
     }
 
     /** The run's own teleport arrived (moves count again from there); anyone else's suspends it. */

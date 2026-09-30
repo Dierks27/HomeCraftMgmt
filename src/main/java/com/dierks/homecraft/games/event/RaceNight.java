@@ -1079,6 +1079,20 @@ public final class RaceNight implements Game {
         return String.format(Locale.ROOT, "%.2f ms average, %.2f ms at most", tickAvgNanos / 1e6, tickMaxNanos / 1e6);
     }
 
+    /**
+     * A scheduled night's track as the Race Night screen shows it before the night is made: its name
+     * ({@code null} while it isn't picked), the laps it will be raced over, and whether it is the Ice Boat
+     * Mountain Run, a downhill sprint ("3 downhill races", COURSE-VARIETY-SPEC §5.2).
+     */
+    record Upcoming(String track, int laps, boolean downhill) {
+
+        /** {@code c} ({@code null}: not picked yet) for a night of {@code laps} laps. */
+        static Upcoming of(Course c, int laps) {
+            return c == null ? new Upcoming(null, laps, false)
+                    : new Upcoming(c.name(), RaceTrack.laps(c, laps), EventCopy.downhill(c));
+        }
+    }
+
     /** What the Race Night screen shows the viewer now. */
     public RaceNightMenu.View view(Player viewer) {
         UUID id = viewer.getUniqueId();
@@ -1126,10 +1140,10 @@ public final class RaceNight implements Game {
             EventSchedule.Occurrence o = next();
             if (o != null) {
                 when = EventCopy.when(o.startsAt(), zone);
-                Course c = nextTrack(o);
-                track = c == null ? null : c.name();
-                laps = c == null ? laps : RaceTrack.laps(c, laps);
-                downhill = EventCopy.downhill(c);
+                Upcoming u = Upcoming.of(nextTrack(o), laps);
+                track = u.track();
+                laps = u.laps();
+                downhill = u.downhill();
                 opensAt = EventCopy.clock(o.joinAt(), zone) + " (" + EventCopy.when(o.startsAt(), zone) + ")";
                 join = RaceNightMenu.Join.SOON;
             }

@@ -26,6 +26,12 @@ import java.util.function.LongConsumer;
  * <p>Pure: the tools as data (their NAMEs, lore and command words), so a test can check who sees
  * them and that each click reaches its command exactly once. Every key fact is in the NAME for
  * Bedrock, which shows lore only on tap-and-hold.
+ *
+ * <p>Round 2, G2: a Sure screen can stay open while a whole new preview is built (by another admin,
+ * the console, or the admin's own one still planning), so Promote's and Choose's words carry what
+ * their Sure screen showed (the preview's seed, and the pick still to come or {@code none}) and the
+ * command acts on nothing else (#1); they aren't offered while the slot is being built. A pick a
+ * config or schedule change dropped is said on the item, the header and its lore (#3).
  */
 public final class FreshAdmin {
 
@@ -112,10 +118,23 @@ public final class FreshAdmin {
         return "&dAdmin tools &7- new course, preview, try it, pick one";
     }
 
-    /** The course screen's item NAME for a slot as it stands: {@link #itemName()}, and the pick's set (D8). */
+    /**
+     * The course screen's item NAME for a slot as it stands: {@link #itemName()}, and the pick's set (D8);
+     * round 2, G2: that it is being built (#1) and that a pick was dropped (#3), in the NAME for Bedrock.
+     */
     public static String itemName(GenOps.Tools t) {
-        return itemName() + (t == null || t.chosenSeed() == null ? "" : " &6- picked for " + t.chosenFor()
-                + (t.chosenUpNow() ? " (up now)" : ""));
+        return itemName() + busyName(t) + (t == null || t.chosenSeed() == null ? droppedName(t)
+                : " &6- picked for " + t.chosenFor() + (t.chosenUpNow() ? " (up now)" : ""));
+    }
+
+    /** Round 2, G2 #1: " - being built" while the slot is (Promote and Choose wait for it), else nothing. */
+    private static String busyName(GenOps.Tools t) {
+        return t != null && t.busy() ? " &e- being built" : "";
+    }
+
+    /** Round 2, G2 #3: " - your pick was dropped" while that note stands, else nothing. */
+    private static String droppedName(GenOps.Tools t) {
+        return t != null && t.dropped() != null ? " &c- your pick was dropped" : "";
     }
 
     /** The course's name at the cadence ("Golf of the Day"), or its shipped name when that isn't known (D5). */
@@ -130,8 +149,8 @@ public final class FreshAdmin {
 
     /** The tools screen's header NAME (slot 4): the course, and what is picked, for Bedrock (D5, D8). */
     public static String headerName(Slots.Def def, GenOps.Tools t) {
-        return "&dAdmin tools &7- " + courseName(def, t) + (t == null || t.chosenSeed() == null ? ""
-                : " &6- picked seed " + GenSeed.hex(t.chosenSeed()) + " for " + t.chosenFor()
+        return "&dAdmin tools &7- " + courseName(def, t) + busyName(t) + (t == null || t.chosenSeed() == null
+                ? droppedName(t) : " &6- picked seed " + GenSeed.hex(t.chosenSeed()) + " for " + t.chosenFor()
                 + (t.chosenUpNow() ? " (up now)" : ""));
     }
 
@@ -153,8 +172,31 @@ public final class FreshAdmin {
         if (t.chosenSeed() != null) {
             out.add("&6Picked for " + t.chosenFor() + (t.chosenUpNow() ? " (up now)" : "") + ": seed "
                     + GenSeed.hex(t.chosenSeed()));
+        } else if (t.dropped() != null) {
+            // round 2, G2 #3: a pick a config or schedule change dropped says so here, not only in the console
+            for (String line : wrap(t.dropped(), 40)) {
+                out.add("&c" + line);
+            }
+            out.add("&7Build one to try, then choose again.");
         }
         out.add("&8Only admins see this.");
+        return out;
+    }
+
+    /** {@code text} in lines of at most about {@code width} characters, broken between words. */
+    static List<String> wrap(String text, int width) {
+        List<String> out = new ArrayList<>();
+        StringBuilder line = new StringBuilder();
+        for (String word : text.trim().split("\\s+")) {
+            if (!line.isEmpty() && line.length() + 1 + word.length() > width) {
+                out.add(line.toString());
+                line.setLength(0);
+            }
+            line.append(line.isEmpty() ? "" : " ").append(word);
+        }
+        if (!line.isEmpty()) {
+            out.add(line.toString());
+        }
         return out;
     }
 
@@ -189,6 +231,7 @@ public final class FreshAdmin {
             // D8: which set the preview is for is in the NAMEs; next set's can't be promoted (the
             // command refuses it), so it has no Use it now
             String whose = t.previewNext() ? nextOnes(n) : thisOnes(n);
+            String seed = GenSeed.hex(t.previewSeed());
             if (slot.golf()) {
                 out.add(new Tool(Kind.WALK, 14, "&aAdmin: Walk " + whose + " preview (go there)",
                         lines(List.of("&7Takes you to the spare half.", "&7Golf previews are walked:",
@@ -200,25 +243,35 @@ public final class FreshAdmin {
                                 + " kit.", "&7Nothing is recorded or paid."), List.of(), "/hcm games gen test " + id),
                         List.of("test", id), false, null));
             }
-            if (!t.previewNext()) {
+            // Round 2, G2 #1: while the slot is being built (the admin's own new preview may still be
+            // planning, with this one still shown) there is nothing to promote or choose yet: its Sure
+            // screen would sit open over a preview about to be replaced. The header NAME says why.
+            if (!t.previewNext() && !t.busy()) {
+                // the words carry the preview it showed: the command refuses once another stands
                 out.add(new Tool(Kind.PROMOTE, 15, "&6Admin: Use it now (promote)", lines(List.of(
                         "&7The preview becomes this set's course,", "&7on a fresh board."), finishFirst,
-                        "/hcm games gen promote " + id + " confirm"), List.of("promote", id), true,
-                        "&aYes: use the preview now" + cupCalledOff));
+                        "/hcm games gen promote " + id + " " + seed + " confirm"), List.of("promote", id, seed), true,
+                        "&aYes: use the preview (seed " + seed + ") now" + cupCalledOff));
             }
-            // D6: choosing over a pick still to come replaces it, and the NAMEs say so (the command's own
-            // "already has seed ... chosen" warning is skipped: the button sends confirm)
-            boolean replaces = t.chosenSeed() != null && !t.chosenUpNow() && !t.chosenSeed().equals(t.previewSeed());
+            // D6: choosing over a pick still to come replaces it, and the NAMEs say so. Round 2, G2 #1:
+            // the words carry the preview and the pick still to come the Sure screen showed ("none" for
+            // none), so its confirm skips the command's own "already has seed ... chosen" warning only for
+            // that pick, and the command refuses once another preview stands
+            Long waiting = t.waitingPick();
+            boolean replaces = waiting != null && !waiting.equals(t.previewSeed());
             List<String> choose = new ArrayList<>(List.of("&7The preview's seed becomes " + nextOnes(n) + " course.",
                     "&7It goes up at the change, on fresh boards;", "&7the set after goes back to normal."));
             if (replaces) {
-                choose.add("&cReplaces your pick: seed " + GenSeed.hex(t.chosenSeed()) + ".");
+                choose.add("&cReplaces your pick: seed " + GenSeed.hex(waiting) + ".");
             }
-            out.add(new Tool(Kind.CHOOSE, 16, "&6Admin: Use it " + nextTime(n)
-                    + (replaces ? " instead of your pick" : "") + " (choose)",
-                    lines(choose, List.of(), "/hcm games gen choose " + id + " confirm"),
-                    List.of("choose", id), true, replaces ? "&aYes: use seed " + GenSeed.hex(t.previewSeed())
-                    + " instead of " + GenSeed.hex(t.chosenSeed()) : "&aYes: use it " + nextTime(n)));
+            String over = waiting == null ? "none" : GenSeed.hex(waiting);
+            if (!t.busy()) {
+                out.add(new Tool(Kind.CHOOSE, 16, "&6Admin: Use it " + nextTime(n)
+                        + (replaces ? " instead of your pick" : "") + " (choose)",
+                        lines(choose, List.of(), "/hcm games gen choose " + id + " " + seed + " confirm"),
+                        List.of("choose", id, seed, over), true, replaces ? "&aYes: use seed " + seed + " instead of "
+                        + over : "&aYes: use seed " + seed + " " + nextTime(n)));
+            }
         }
         if (t.chosenSeed() != null) {
             // D5: during the chosen set the pick is this set's: letting it go keeps the course up and lets

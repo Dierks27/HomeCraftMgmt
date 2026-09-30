@@ -32,6 +32,32 @@ public interface GenOps {
     /** The preview becomes the current edition's layout. */
     void promote(String slot, boolean confirm, Consumer<String> report);
 
+    /**
+     * What a "Sure?" screen showed, which its Yes acts on only while it still stands (round 2, G2 #1):
+     * the screen can stay open for as long as a whole new preview takes, so a Yes that ran "whatever
+     * stands now" could promote or choose a course nobody tried.
+     *
+     * @param preview   the preview's seed it showed
+     * @param pickShown whether it also showed the pick still to come ({@code choose}: the one its Yes
+     *                  replaces, or that there was none)
+     * @param pick      that pick's seed, or {@code null} for none
+     */
+    record Shown(long preview, boolean pickShown, Long pick) {
+
+        /** A screen that showed the preview only. */
+        public static Shown preview(long seed) {
+            return new Shown(seed, false, null);
+        }
+    }
+
+    /**
+     * {@link #promote(String, boolean, Consumer)}, refused unless the preview is still the one
+     * {@code shown} ({@code null}: whichever stands, as typed without a seed).
+     */
+    default void promote(String slot, Shown shown, boolean confirm, Consumer<String> report) {
+        promote(slot, confirm, report);
+    }
+
     /** A new layout for the current edition (a fresh board). */
     void reroll(String slot, Consumer<String> report);
 
@@ -86,14 +112,28 @@ public interface GenOps {
      * @param pinned      the slot's own pin ({@code pin}) holds for the set up now, under any pick: once
      *                    the pick up now is let go, regenerate and promote still wait for an unpin
      *                    (fix2-D, D5)
+     * @param dropped     why the last pick was dropped by a config or schedule change ("Your pick for Mon 5
+     *                    Oct-Sun 11 Oct (seed ...) was dropped: ..."), or {@code null}: kept until that set is
+     *                    over or a new pick is made, across restarts (round 2, G2 #3)
      */
     record Tools(boolean on, boolean golf, int cadence, Long previewSeed, boolean previewNext, Long chosenSeed,
-                 String chosenFor, boolean busy, boolean chosenUpNow, boolean pinned) {
+                 String chosenFor, boolean busy, boolean chosenUpNow, boolean pinned, String dropped) {
+
+        /** As before round 2: no note of a dropped pick. */
+        public Tools(boolean on, boolean golf, int cadence, Long previewSeed, boolean previewNext, Long chosenSeed,
+                     String chosenFor, boolean busy, boolean chosenUpNow, boolean pinned) {
+            this(on, golf, cadence, previewSeed, previewNext, chosenSeed, chosenFor, busy, chosenUpNow, pinned, null);
+        }
 
         /** As before fix2-D: no pin of its own. */
         public Tools(boolean on, boolean golf, int cadence, Long previewSeed, boolean previewNext, Long chosenSeed,
                      String chosenFor, boolean busy, boolean chosenUpNow) {
             this(on, golf, cadence, previewSeed, previewNext, chosenSeed, chosenFor, busy, chosenUpNow, false);
+        }
+
+        /** The pick still to come (not the one up now), or {@code null}: what a choose replaces. */
+        public Long waitingPick() {
+            return chosenUpNow ? null : chosenSeed;
         }
 
         /** Whether a preview stands in the spare half. */
@@ -110,6 +150,15 @@ public interface GenOps {
     /** The preview's seed becomes the course of exactly the next set (a one-set pin). */
     default void choose(String slot, boolean confirm, Consumer<String> report) {
         report.accept("&cThat isn't available.");
+    }
+
+    /**
+     * {@link #choose(String, boolean, Consumer)}, refused unless the preview is still the one
+     * {@code shown}; and {@code confirm} replaces a pick only when it is the one {@code shown} (any
+     * other gets the command's own "already has seed ... chosen" warning). {@code null}: as typed.
+     */
+    default void choose(String slot, Shown shown, boolean confirm, Consumer<String> report) {
+        choose(slot, confirm, report);
     }
 
     /** Forget the next set's chosen seed: it gets its own new course. */

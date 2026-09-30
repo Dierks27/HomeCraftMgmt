@@ -259,8 +259,10 @@ class FreshAdminTest {
                 FreshAdmin.Kind.PREVIEW, List.of("preview", "fresh_parkour"),
                 FreshAdmin.Kind.PREVIEW_NEXT, List.of("preview", "fresh_parkour", "next"),
                 FreshAdmin.Kind.TEST, List.of("test", "fresh_parkour"),
-                FreshAdmin.Kind.PROMOTE, List.of("promote", "fresh_parkour", "confirm"),
-                FreshAdmin.Kind.CHOOSE, List.of("choose", "fresh_parkour", "confirm"),
+                // round 2, G2 #1: with what their Sure screen showed (the preview, and the pick still to come)
+                FreshAdmin.Kind.PROMOTE, List.of("promote", "fresh_parkour", "0000000000003f2a", "confirm"),
+                FreshAdmin.Kind.CHOOSE, List.of("choose", "fresh_parkour", "0000000000003f2a", "0000000000003f2a",
+                        "confirm"),
                 FreshAdmin.Kind.UNCHOOSE, List.of("unchoose", "fresh_parkour"),
                 FreshAdmin.Kind.WALK, List.of("tp", "fresh_golf", "idle"));
         Map<FreshAdmin.Kind, String> engine = Map.of(

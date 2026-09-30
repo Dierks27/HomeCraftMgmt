@@ -619,8 +619,9 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     /**
      * WP-ADM: the admin's choice when it is for the edition the slot should show now (the next set
-     * has come), else {@code null}. Over the slot's own pin for that one set, so the build (or its
-     * restamp) is an ordinary pinned one: no flip path of its own.
+     * has come), else {@code null}. Over the slot's own pin for that one set, so the build is an
+     * ordinary pinned one: no flip path of its own (never a restamp: round 2, G2 #2,
+     * {@link GenScheduler.Pin#pick}).
      *
      * <p>fix2-D: "for the edition" is the same first day and the same length (D1: around a cadence
      * change the set kept up can start on, or after, the day of a pick made for the set that follows
@@ -733,12 +734,43 @@ public final class GenService implements GeneratedCourses, GenOps {
                     + "; each set's own seed is used from now on.");
             return null;
         }
-        s.pickDropped = "&cpick for " + set + " dropped: " + why + ". Choose again.";
+        dropNote(s, new SlotState.DroppedPick(c.seed(), c.from(), c.cadence(), why)); // round 2, G2 #3
         host.logger().warning("Fresh Courses: " + id + "'s pick for " + set + " (seed " + GenSeed.hex(c.seed())
                 + ") is dropped: " + why + ". Choose again: /hcm games gen preview " + id + " next, try it, then"
                 + " choose.");
         return "&cYour pick for " + set + " (seed " + GenSeed.hex(c.seed()) + ") is dropped: &7" + why
                 + ". Build one to try: &e/hcm games gen preview " + id + " next";
+    }
+
+    /**
+     * Round 2, G2 #3: the note that a pick was dropped ({@code null}: forgotten), in memory and in
+     * {@code hcm_meta}, so a restart keeps it; it stays through the flips of the set it was for (the
+     * usual drop is at the restart at the change, a minute before that set's own build flips) and goes
+     * once that set is over ({@link #droppedUpkeep}) or at the next pick or cancel.
+     */
+    private void dropNote(SlotState s, SlotState.DroppedPick note) {
+        if (s.pickDropped == null && note == null) {
+            return;
+        }
+        s.pickDropped = note;
+        try {
+            host.store().meta(GenAdminKeys.dropped(s.def.id()), note == null ? null : note.text());
+        } catch (SQLException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: could not store why " + s.def.id() + "'s pick was dropped",
+                    e);
+        }
+    }
+
+    /** Round 2, G2 #3: a dropped pick's note is forgotten once the set it was for is over. */
+    private void droppedUpkeep(SlotState s) {
+        if (s.pickDropped != null && s.pickDropped.over(target(s).start())) {
+            dropNote(s, null);
+        }
+    }
+
+    /** Round 2, G2 #3: the set a dropped pick was for, as admins read it. */
+    private String droppedSet(SlotState.DroppedPick d) {
+        return editionName(d.cadence() > 0 ? d.cadence() : edition().cadenceDays(), d.from());
     }
 
     /** fix2-D: why a pick no longer comes out as it was tried, in the owner's terms. */
@@ -995,6 +1027,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 s.mix = tier != null && s.def.tierProblem(tier) == null ? s.def.normalise(tier) : c.tierOrMix();
                 s.pin = GenScheduler.Pin.parse(meta.get(GenAdminKeys.pin(id)));
                 s.chosen = GenScheduler.Choice.parse(meta.get(GenAdminKeys.choose(id)));
+                s.pickDropped = SlotState.DroppedPick.parse(meta.get(GenAdminKeys.dropped(id))); // round 2, G2 #3
                 s.reroll = GenAdminKeys.whole(meta.get(GenAdminKeys.reroll(id, target(s).key())));
                 String claim = meta.get(GenAdminKeys.claim(id));
                 boolean claimed = Regions.claim(s.def, world, origin).equals(claim);
@@ -1019,6 +1052,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             // fix2-D: a pick the settings or the schedule moved away from is dropped, and said, at once
             for (SlotState s : slots.values()) {
                 chosenUpkeep(s);
+                droppedUpkeep(s);
             }
         }
         List<String> worlds = new ArrayList<>();
@@ -1895,7 +1929,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         s.clearing = false;
         s.oldDirty = before != null;
         s.preview = null;
-        s.pickDropped = null; // fix2-D: a new set is up: the note about a dropped pick is old news
+        // round 2, G2 #3: a dropped pick's note stays through the flips of the set it was for (the usual
+        // drop is at the restart at the change, a minute before this set's own build); droppedUpkeep ends it
         s.tries = 0;
         s.lastError = null;
         s.builtAt = now;
@@ -2810,7 +2845,9 @@ public final class GenService implements GeneratedCourses, GenOps {
             return null;
         }
         if (c == null) {
-            return s.pickDropped; // fix2-D: a pick dropped for a change says so until the next pick or flip
+            // fix2-D: a pick dropped for a change says so; round 2, G2 #3: until its set is over or a new pick
+            SlotState.DroppedPick d = s.pickDropped;
+            return d == null ? null : "&cpick for " + droppedSet(d) + " dropped: " + d.why() + ". Choose again.";
         }
         Planner p = planners.get(s.def.generator());
         String unused = p != null && c.algo() != p.algo() ? " &c(not used: made for planner v" + c.algo() + ")" : "";
@@ -3004,6 +3041,28 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     @Override
     public void promote(String slotId, boolean confirm, Consumer<String> report) {
+        promote(slotId, null, confirm, report);
+    }
+
+    /**
+     * Round 2, G2 #1: a "Sure?" screen's Yes (or a typed seed) acts only on the preview it showed. The
+     * screen can stay open while a whole new preview is built, by another admin, the console, or the
+     * admin's own one still planning when the tools were painted; the preview that stands when Yes is
+     * pressed then is a course nobody tried.
+     *
+     * @return the line refusing it, or {@code null} when {@code pv} is still the preview {@code shown}
+     */
+    private String changedSince(SlotState s, SlotState.Preview pv, Shown shown) {
+        if (shown == null || pv == null || pv.seed() == shown.preview()) {
+            return null;
+        }
+        return "&eThe preview of " + s.def.name() + " changed while that was open: it is seed " + GenSeed.hex(pv.seed())
+                + " now, not " + GenSeed.hex(shown.preview()) + ". &7Nothing was done. Look at it (and try it) again"
+                + " first.";
+    }
+
+    @Override
+    public void promote(String slotId, Shown shown, boolean confirm, Consumer<String> report) {
         SlotState s = slots.get(slotId);
         if (!ready(s, report)) {
             return;
@@ -3012,6 +3071,11 @@ public final class GenService implements GeneratedCourses, GenOps {
         GenScheduler.Target t = target(s);
         if (pv == null) {
             report.accept("&cThere is no preview of " + s.def.name() + ". &7/hcm games gen preview " + slotId);
+            return;
+        }
+        String changed = changedSince(s, pv, shown);
+        if (changed != null) {
+            report.accept(changed);
             return;
         }
         if (isNextSet(s, pv.day(), pv.cadence())) {
@@ -3218,6 +3282,11 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     @Override
     public void choose(String slotId, boolean confirm, Consumer<String> report) {
+        choose(slotId, null, confirm, report);
+    }
+
+    @Override
+    public void choose(String slotId, Shown shown, boolean confirm, Consumer<String> report) {
         SlotState s = slots.get(slotId);
         if (s == null || s.classic) {
             report.accept("&cA Classics slot holds a course brought back with recall; choose is for Fresh Courses.");
@@ -3235,6 +3304,11 @@ public final class GenService implements GeneratedCourses, GenOps {
         Planner p = planners.get(s.def.generator());
         if (pv == null || p == null) {
             report.accept("&cNo preview yet - /hcm games gen preview " + slotId + " next first");
+            return;
+        }
+        String changed = changedSince(s, pv, shown); // round 2, G2 #1
+        if (changed != null) {
+            report.accept(changed);
             return;
         }
         NextSet n = nextSet(s);
@@ -3256,7 +3330,11 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         GenScheduler.Choice was = chosenWaiting(s);
-        if (!confirm && was != null && was.seed() != pv.seed()) {
+        // round 2, G2 #1: a Sure screen's confirm replaces only the pick it showed (or none); any other
+        // pick, made while it was open, gets this warning as if nothing had been confirmed
+        boolean replaces = confirm && (shown == null || !shown.pickShown()
+                || java.util.Objects.equals(shown.pick(), was == null ? null : was.seed()));
+        if (!replaces && was != null && was.seed() != pv.seed()) {
             report.accept("&e" + s.def.name() + " already has seed " + GenSeed.hex(was.seed()) + " chosen for "
                     + pickSet(was) + ". &7Type &e/hcm games gen choose " + slotId + " confirm &7to"
                     + " use this preview's seed " + GenSeed.hex(pv.seed()) + " instead.");
@@ -3271,7 +3349,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         s.chosen = pick;
-        s.pickDropped = null;
+        dropNote(s, null);
         host.logger().info("Fresh Courses: " + slotId + "'s course for " + set + " is chosen: seed "
                 + GenSeed.hex(pick.seed()) + ".");
         report.accept("&a" + s.def.name() + "'s course for " + set + " is this preview (seed " + GenSeed.hex(pick.seed())
@@ -3295,7 +3373,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         s.chosen = null;
-        s.pickDropped = null;
+        dropNote(s, null);
         // fix2-D (D5): once the pick up now is let go, reroll and promote are refused while the slot's own
         // pin holds for this set (choose may pick over a pin), so they are offered only when none does
         String next = ownCourse(s, nextSet(s).day());
@@ -3359,9 +3437,12 @@ public final class GenService implements GeneratedCourses, GenOps {
         GenScheduler.Choice up = chosenNow(s);
         GenScheduler.Choice c = up != null ? up : chosenWaiting(s);
         int cadence = edition().cadenceDays();
+        SlotState.DroppedPick d = s.chosen == null ? s.pickDropped : null; // round 2, G2 #3
         return new Tools(s.on(), s.def.golf(), cadence, pv == null ? null : pv.seed(),
                 pv != null && isNextSet(s, pv.day(), pv.cadence()), c == null ? null : c.seed(),
-                c == null ? null : pickSet(c), busyWith(s), up != null, ownPin(s, target(s).start()) != null);
+                c == null ? null : pickSet(c), busyWith(s), up != null, ownPin(s, target(s).start()) != null,
+                d == null ? null : "Your pick for " + droppedSet(d) + " (seed " + GenSeed.hex(d.seed()) + ") was"
+                        + " dropped: " + d.why() + ".");
     }
 
     @Override

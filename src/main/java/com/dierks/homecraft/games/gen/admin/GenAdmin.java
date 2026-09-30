@@ -54,6 +54,11 @@ import java.util.logging.Logger;
  * for the following week": {@code preview <course> next [seed]} builds a candidate with the next
  * set's settings, and {@code choose} makes its seed the next set's course (a one-set pin),
  * {@code unchoose} cancels. The course screens carry the same as admin-only buttons.
+ *
+ * <p>Round 2, G2 #1: {@code promote <course> <seed>} and {@code choose <course> <seed> [<pick>|none]}
+ * act only while the preview is still that seed (and, for {@code choose confirm}, the pick still to
+ * come is the one named): what the buttons' "Sure?" screens send, so a Yes pressed after a new
+ * preview came along acts on nothing. Typed without a seed, they act on whatever stands, as before.
  */
 public final class GenAdmin implements GameAdmin {
 
@@ -114,9 +119,10 @@ public final class GenAdmin implements GameAdmin {
                 "&e/hcm games gen preview <course> [next] [seed] &7- build into the spare half to try it (no switch);"
                         + " next: a candidate for the next set",
                 "&e/hcm games gen test <course> &7- a test run on the preview (nothing is recorded; golf: tp idle)",
-                "&e/hcm games gen promote <course> [confirm] &7- the preview becomes the current course",
-                "&e/hcm games gen choose <course> [confirm] &7- the preview's seed is the next set's course; unchoose"
-                        + " to cancel",
+                "&e/hcm games gen promote <course> [seed] [confirm] &7- the preview becomes the current course (with"
+                        + " a seed: only while the preview is that seed)",
+                "&e/hcm games gen choose <course> [seed] [confirm] &7- the preview's seed is the next set's course;"
+                        + " unchoose to cancel",
                 "&e/hcm games gen reroll <course|all> confirm &7- a new course for this set, on a fresh board",
                 "&e/hcm games gen retry|regenerate <course|all> confirm &7- the same as reroll",
                 "&e/hcm games gen rebuild <course> &7- check and repair the current course (same seed)",
@@ -255,19 +261,24 @@ public final class GenAdmin implements GameAdmin {
             }
             case "test" -> test(sender, engine, id);
             case "choose" -> {
+                GenOps.Shown shown = shown(sender, arg, rest.size() > 2 ? rest.get(2) : null);
+                if (arg != null && shown == null) {
+                    return;
+                }
                 logChange(sender, args);
-                engine.choose(id, confirm, report);
+                engine.choose(id, shown, confirm, report);
             }
             case "unchoose" -> {
                 logChange(sender, args);
                 engine.unchoose(id, report);
             }
             case "promote" -> {
-                if (refusedNearRestart(sender, engine)) {
+                GenOps.Shown shown = shown(sender, arg, null);
+                if ((arg != null && shown == null) || refusedNearRestart(sender, engine)) {
                     return;
                 }
                 logChange(sender, args);
-                engine.promote(id, confirm, report);
+                engine.promote(id, shown, confirm, report);
             }
             case "reroll" -> {
                 if (refusedNearRestart(sender, engine) || !confirmed(sender, confirm, typed + " " + id,
@@ -400,6 +411,26 @@ public final class GenAdmin implements GameAdmin {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Round 2, G2 #1: what a {@code promote} or {@code choose} names, so it acts only on that: the
+     * preview's seed ({@code seed}) and, for {@code choose}, the pick still to come ({@code pick}: a seed,
+     * or {@code none}). {@code null} when no seed was typed (whatever stands), or after telling the
+     * sender that a word isn't a seed.
+     */
+    private static GenOps.Shown shown(CommandSender sender, String seed, String pick) {
+        if (seed == null) {
+            return null;
+        }
+        Long preview = GenSeed.parse(seed);
+        Long picked = pick == null || pick.equalsIgnoreCase("none") ? null : GenSeed.parse(pick);
+        if (preview == null || (pick != null && !pick.equalsIgnoreCase("none") && picked == null)) {
+            say(sender, "&cA seed is up to 16 hex digits, like 3f2a91c07d1e55b0" + (pick == null ? "." : "; the pick"
+                    + " it replaces is one too, or &enone&c."));
+            return null;
+        }
+        return new GenOps.Shown(preview, pick != null, picked);
     }
 
     /** Whether {@code confirm} was typed; when not, the sender reads what it would do and how to confirm. */

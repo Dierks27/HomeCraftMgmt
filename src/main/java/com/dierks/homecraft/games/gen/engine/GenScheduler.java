@@ -18,8 +18,12 @@ import com.dierks.homecraft.games.gen.api.GenTag;
  * restart is due within {@code avoid_before_restart_minutes}, fewer than
  * {@code max_tries_per_day} tries were made on this course day, and the last one was at least
  * {@code retry_minutes} ago. A pinned seed whose layout already stands is only restamped for the
- * new edition (new boards, no blocks). A job still running two minutes before a restart is given
- * up ({@link #abandon}): nothing flips, and the half converges again after the boot.
+ * new edition (new boards, no blocks). An admin's pick ({@link Choice}) never is (round 2, G2 #2): its
+ * promise is the layout that was tried, and the live layout of the same seed can be another one (made
+ * at another fall depth, which the boot check keeps), so the pick is built, into the spare half where
+ * its tried preview usually still stands, which writes nothing. A job still running two minutes
+ * before a restart is given up ({@link #abandon}): nothing flips, and the half converges again after
+ * the boot.
  *
  * <p><b>A cadence change never rebuilds mid-edition.</b> A live layout made under another cadence
  * (or another {@code rebuild_day}) is off the current grid. It stays until the earlier of its own
@@ -142,6 +146,15 @@ public final class GenScheduler {
         /** A choice for the one set that starts on {@code day} ({@code choose}). */
         public static Pin oneSet(long seed, int algo, long day) {
             return new Pin(seed, algo, day, day);
+        }
+
+        /**
+         * Whether it is an admin's pick for one set ({@link Choice#pin}) rather than a plain pin: never
+         * restamped over the live layout, since that is the course that was tried only if it was built
+         * from the tried preview (round 2, G2 #2).
+         */
+        public boolean pick() {
+            return from > 0;
         }
 
         /** Whether it holds for an edition that starts on local day {@code day}. */
@@ -370,8 +383,9 @@ public final class GenScheduler {
         if (!due) {
             return v.oldDirty() ? Decision.clearOld() : Decision.none();
         }
-        if (pin != null && live != null && v.liveOk() && live.seed() == pin.seed() && live.algo() == pin.algo()
-                && same(v.liveMix(), v.mix()) && !current) {
+        // round 2, G2 #2: a pick is always built (as tried), never restamped over a live layout of its seed
+        if (pin != null && !pin.pick() && live != null && v.liveOk() && live.seed() == pin.seed()
+                && live.algo() == pin.algo() && same(v.liveMix(), v.mix()) && !current) {
             return Decision.restamp(t);
         }
         if (nearRestart(now, hold, s.avoidBeforeRestartMinutes())) {

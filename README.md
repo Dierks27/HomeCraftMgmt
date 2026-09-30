@@ -1066,7 +1066,12 @@ your mind; `/hcm games gen status` shows "next set: chosen seed ...". The same t
 Fresh course's own screen for admins: the **Admin tools** item (bottom left) opens "Make a new
 course now (regenerate)", "Build one to try (preview)", "Build next week's to try (preview next)",
 and once a preview stands "Try the preview (test run)", "Use it now (promote)" and "Use it next week
-(choose)"; regenerate, promote and choose ask "Sure?" first. Players never see them.
+(choose)"; regenerate, promote and choose ask "Sure?" first. A Yes acts only on the preview its Sure
+screen showed: if a new one was built while it was open, nothing happens and it says so; and promote
+and choose wait while the course is being built (its name says so). A pick that a later change
+drops (another tier, a fall depth that shapes it differently, a moved rebuild day, in config or by
+command) says so on the Admin tools and in `status` until its week is over or you pick again, across
+restarts. Players never see them.
 
 **Commands** (`hcm.games.admin`). `reroll` (and `retry`/`regenerate`), `clear` and `claim` (to clear
 an area) need `confirm`; `promote` needs it when the course's board already has times, and `choose`
@@ -1084,8 +1089,8 @@ point, a checkpoint or finish with its radius, a golf hole's whole bounds box.
 | `/hcm games gen preview <course> [seed]` | Build a new course into the spare half without switching, to try it (`test`) or walk it (`tp <course> idle`). The next scheduled build clears it away (unless it was chosen: see `choose`) |
 | `/hcm games gen preview <course> next [seed]` | A candidate for the NEXT set: its tier or mix and settings, and a seed (random unless you give one; the reply says it), in the spare half. Previewing again replaces it |
 | `/hcm games gen test <course>` | A test run on the preview: its real start, checkpoints, finish, clock and kit (the Dropper offers its practice drop as usual). Records nothing: no board, token, star, Cup time, quest or achievement. Refused with no preview ("No preview yet - /hcm games gen preview <course> first"), near a restart, and while the course is off. Golf previews are walked instead (`tp <course> idle`) |
-| `/hcm games gen promote <course> [confirm]` | The preview (of this set) becomes the current course, on a fresh board |
-| `/hcm games gen choose <course> [confirm]` | The preview's seed becomes the course of exactly the next set: it goes up at the scheduled change on fresh boards, with its own course code and seed on the website, and the set after goes back to its own seed. Kept across restarts (the spare half keeps the chosen preview, which is checked again after a restart, so the change has almost nothing to build). `confirm` when it replaces another pick. Refused for a Classic and while the course is off. Its pin, if any, comes back after it |
+| `/hcm games gen promote <course> [seed] [confirm]` | The preview (of this set) becomes the current course, on a fresh board. With a seed, only while the preview is still that seed (what the Admin tools' Yes sends) |
+| `/hcm games gen choose <course> [seed] [confirm]` | The preview's seed becomes the course of exactly the next set: it goes up at the scheduled change on fresh boards, with its own course code and seed on the website, and the set after goes back to its own seed. Kept across restarts (the spare half keeps the chosen preview, which is checked again after a restart, so the change has almost nothing to build). `confirm` when it replaces another pick. With a seed, only while the preview is still that seed. The pick is built at the change as it was tried, even when its seed is the live one's. Refused for a Classic and while the course is off. Its pin, if any, comes back after it |
 | `/hcm games gen unchoose <course>` | Cancel the pick: the next set gets its own new course |
 | `/hcm games gen reroll <course\|all> confirm` | A new course for the current set, on a fresh board; anyone playing the old one finishes there, and a running Weekly Cup on it is called off and refunded. No second first-finish token |
 | `/hcm games gen retry\|regenerate <course\|all> confirm` | The same as `reroll` |

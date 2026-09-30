@@ -574,7 +574,7 @@ class GenAdminTest {
         assertEquals(List.of("confirm"), admin.tab(console, new String[]{"choose", "fresh_parkour", ""}), "choose confirm");
         assertEquals(List.of("choose"), admin.tab(console, new String[]{"ch"}), "the verb");
         assertTrue(admin.help().stream().anyMatch(l -> l.contains("preview <course> [next] [seed]")), admin.help().toString());
-        assertTrue(admin.help().stream().anyMatch(l -> l.contains("choose <course> [confirm]")), admin.help().toString());
+        assertTrue(admin.help().stream().anyMatch(l -> l.contains("choose <course> [seed] [confirm]")), admin.help().toString());
     }
 
     /** "Will I be able to play the course previews?" */

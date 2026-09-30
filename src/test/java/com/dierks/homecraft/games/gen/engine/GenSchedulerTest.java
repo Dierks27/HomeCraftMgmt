@@ -162,6 +162,26 @@ class GenSchedulerTest {
         assertNull(Pin.parse("nonsense"), "and junk isn't a pin");
     }
 
+    /**
+     * Round 2, G2 #2: an admin's pick of the live seed is built as it was tried, never restamped: the
+     * same seed at the same tier can be another layout (a live one made at a shallower fall depth,
+     * which the boot check keeps), and the pick's promise is the one that was tried.
+     */
+    @Test
+    void aPickOfTheLiveSeedIsBuiltAsTriedNeverRestamped() {
+        long now = GenKit.at(2026, 9, 30, 4, 1);
+        long seed = 0x3f2a91c07d1e55b0L;
+        Pin pick = Pin.oneSet(seed, 1, DAY + 1);
+        assertTrue(pick.pick() && !new Pin(seed, 1, 0).pick(), "a one-set pin is a pick; a plain pin isn't");
+        SlotView picked = new SlotView(SLOT, true, false, tag(DAY, 0, seed), true, "easy", "easy", 0, pick, 1, 0, 0,
+                0, false, SECRET);
+        Decision d = at(picked, now);
+        assertEquals(Kind.BUILD, d.kind(), "the pick is built, into the spare half where its preview stands");
+        assertEquals(seed, d.seed(), "from the picked seed");
+        assertEquals(DAY + 1, d.day(), "for its set");
+        assertEquals(0, d.reroll(), "the set's own build, on its own boards");
+    }
+
     @Test
     void aRerollOrALayoutThatCouldNotBeVouchedForBuildsTheSameDay() {
         long now = GenKit.at(2026, 9, 29, 12, 0);

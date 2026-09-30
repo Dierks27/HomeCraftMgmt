@@ -309,8 +309,10 @@ class PickACourseTest {
         assertTrue(heard().contains("course for Mon 5 Oct-Sun 11 Oct is this preview (seed " + PICK_HEX + ")"),
                 "chosen for next week: " + heard());
         assertTrue(heard().contains("the set after goes back to normal"), heard());
-        assertEquals(PICK_HEX + ":1:" + MON_5_OCT + ":" + MON_5_OCT, host.store.meta(GenAdminKeys.choose(SLOT)),
-                "stored like a pin, holding for the one set that starts on Mon 5 Oct");
+        assertEquals(PICK_HEX + ":1:" + MON_5_OCT + ":" + MON_5_OCT + ":7:easy:0",
+                host.store.meta(GenAdminKeys.choose(SLOT)),
+                "stored like a pin, holding for the one set that starts on Mon 5 Oct, with the set's length and the"
+                        + " tier it was tried at, and no fall depth: easy's layout never reads it (fix2-D)");
         assertTrue(gen.status(null).stream().anyMatch(l -> l.contains("next set: chosen seed " + PICK_HEX
                 + " (Mon 5 Oct-Sun 11 Oct)")), "status says so: " + gen.status(null));
         drive(60);

@@ -121,9 +121,9 @@ public final class GenScheduler {
 
     /**
      * A pinned seed ({@code gen.<slot>.pin} = {@code seed:algo:until}), or an admin's choice for one
-     * set ({@code gen.<slot>.choose} = {@code seed:algo:until:from}, WP-ADM): the same pin, held only
-     * for editions that start from {@code from} to {@code until}, so it is the next set's course and
-     * the set after goes back to its own seed, with no flip path of its own.
+     * set ({@link Choice#pin}, WP-ADM): the same pin, held only for editions that start from
+     * {@code from} to {@code until}, so it is the next set's course and the set after goes back to
+     * its own seed, with no flip path of its own.
      *
      * @param seed  the seed
      * @param algo  the planner version it was pinned under; another version ignores it
@@ -181,6 +181,83 @@ public final class GenScheduler {
             try {
                 return seed == null ? null : new Pin(seed, Integer.parseInt(p[1]), Long.parseLong(p[2]),
                         p.length == 4 ? Long.parseLong(p[3]) : 0);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+    }
+
+    /**
+     * An admin's pick for one set ({@code choose}, WP-ADM; {@code gen.<slot>.choose}): the tried
+     * preview's seed for exactly the set that starts on {@code from} and lasts {@code cadence} days,
+     * as it was tried: at {@code mix}, and at {@code fallDepth} for a course whose layout depends on it.
+     *
+     * <p>Why it carries more than a {@link Pin} (fix2-D, D0-D2): "the course you tested is the
+     * course that goes live". A pick is a seed, but the course is the seed plus the tier or mix and
+     * (for medium and hard parkour) the fall depth its layout is shaped by, and its set is a first
+     * day plus a length. So a pick
+     * applies only to the set it names (the same first day and cadence: around a cadence change a
+     * kept set can start later than the next one, or on the same day) and only while the settings
+     * are the ones it was tried with. The engine drops it, and says so, once either stops being
+     * true, instead of building the seed into a course nobody tried or promising a set that never
+     * comes. To the scheduler it is a {@link #pin one-set pin}.
+     *
+     * <p>Stored as {@code seed:algo:until:from:cadence:mix:fallDepth} (a one-set pin's four fields,
+     * then the rest). One stored before these were kept ({@code seed:algo:until:from}) reads with
+     * {@code cadence} 0, {@code mix} {@code null} and {@code fallDepth} 0: matched by its first day
+     * alone and never checked against the settings, as it always was.
+     *
+     * @param seed      the seed
+     * @param algo      the planner version it was tried under; another version ignores it
+     * @param from      its set's first day (local epoch day)
+     * @param cadence   its set's length in days, or 0 when unknown
+     * @param mix       the tier or mix it was tried at, or {@code null} when unknown
+     * @param fallDepth the fall depth its layout was shaped by ({@code ParkourPlanner.designDepth}:
+     *                  {@code trials.fall_depth} up to 6, for medium and hard parkour), or 0 when the
+     *                  layout doesn't depend on it (easy parkour, the other planners) or it is unknown
+     */
+    public record Choice(long seed, int algo, long from, int cadence, String mix, int fallDepth) {
+
+        /** As the scheduler builds it: a pin held for the one set starting on {@link #from}. */
+        public Pin pin() {
+            return Pin.oneSet(seed, algo, from);
+        }
+
+        /** Whether it is the set that starts on {@code start} and lasts {@code days} days. */
+        public boolean isSet(long start, int days) {
+            return from == start && (cadence <= 0 || cadence == days);
+        }
+
+        /**
+         * Whether its course comes out as tried at {@code mixNow} and a design fall depth of
+         * {@code fallDepthNow} (worked out as {@link #fallDepth} was, not the raw setting).
+         */
+        public boolean fits(String mixNow, int fallDepthNow) {
+            return (mix == null || mix.equals(mixNow)) && (fallDepth <= 0 || fallDepth == fallDepthNow);
+        }
+
+        /** As stored. */
+        public String text() {
+            return pin().text() + ":" + cadence + ":" + (mix == null ? "" : mix) + ":" + fallDepth;
+        }
+
+        /** A stored pick, or {@code null} when it can't be read. */
+        public static Choice parse(String text) {
+            if (text == null) {
+                return null;
+            }
+            String[] p = text.trim().split(":", -1);
+            if (p.length != 4 && p.length != 7) {
+                return null;
+            }
+            Pin pin = Pin.parse(String.join(":", p[0], p[1], p[2], p[3]));
+            if (pin == null || pin.from() <= 0) {
+                return null;
+            }
+            try {
+                return p.length == 4 ? new Choice(pin.seed(), pin.algo(), pin.from(), 0, null, 0)
+                        : new Choice(pin.seed(), pin.algo(), pin.from(), Integer.parseInt(p[4]),
+                        p[5].isEmpty() ? null : p[5], Integer.parseInt(p[6]));
             } catch (NumberFormatException e) {
                 return null;
             }

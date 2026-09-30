@@ -119,12 +119,14 @@ public final class CupDesk {
 
         /**
          * Whether the Cup is worth showing on the course screen: it runs on the course and is taking
-         * entries, or already has some; or this week's was paid out early (an admin's {@code settle}),
-         * which the screen says ("Weekly Cup - already paid out this week") instead of the item going
-         * missing. A Cup called off stays hidden, as before.
+         * entries, or already has some; or this week's was paid out early (an admin's {@code settle})
+         * while the Cup is on, which the screen says ("Weekly Cup - already paid out this week")
+         * instead of the item going missing. A Cup called off stays hidden, as before, and so does
+         * one paid out early once the Cup is switched off ({@code games.cup.enabled: false} hides the
+         * prompts at once; nothing is running, and "It's back next week" wouldn't be true: fix2-D, D9).
          */
         public boolean shown() {
-            return on && (settledEarly() || settledAs == null && (open || pool.in() > 0));
+            return on && (settledEarly() ? open : settledAs == null && (open || pool.in() > 0));
         }
 
         /**

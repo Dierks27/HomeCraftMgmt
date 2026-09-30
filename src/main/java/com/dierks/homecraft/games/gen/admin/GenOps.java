@@ -82,9 +82,19 @@ public interface GenOps {
      * @param chosenSeed  the seed chosen for the next set, or {@code null}
      * @param chosenFor   that set as admins read it ("Mon 5 Oct-Sun 11 Oct"), or {@code null}
      * @param busy        a job for it is queued or running
+     * @param chosenUpNow the chosen set is the one up now (its week is running), not still to come
+     * @param pinned      the slot's own pin ({@code pin}) holds for the set up now, under any pick: once
+     *                    the pick up now is let go, regenerate and promote still wait for an unpin
+     *                    (fix2-D, D5)
      */
     record Tools(boolean on, boolean golf, int cadence, Long previewSeed, boolean previewNext, Long chosenSeed,
-                 String chosenFor, boolean busy) {
+                 String chosenFor, boolean busy, boolean chosenUpNow, boolean pinned) {
+
+        /** As before fix2-D: no pin of its own. */
+        public Tools(boolean on, boolean golf, int cadence, Long previewSeed, boolean previewNext, Long chosenSeed,
+                     String chosenFor, boolean busy, boolean chosenUpNow) {
+            this(on, golf, cadence, previewSeed, previewNext, chosenSeed, chosenFor, busy, chosenUpNow, false);
+        }
 
         /** Whether a preview stands in the spare half. */
         public boolean preview() {

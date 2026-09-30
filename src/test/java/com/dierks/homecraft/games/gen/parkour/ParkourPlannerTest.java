@@ -21,8 +21,10 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -284,6 +286,46 @@ class ParkourPlannerTest {
         assertEquals(six, PLANNER.plan(input(Slots.DAILY_PARKOUR_HARD, 'A', 3, "hard", 12)).hash(),
                 "a deeper fall only lowers the floor: the same layout");
         assertEquals(six, PLANNER.plan(input(Slots.DAILY_PARKOUR_HARD, 'A', 3, "hard", 64)).hash(), "at 64 too");
+    }
+
+    /**
+     * fix2-D (D0): what a chosen course keeps is the design depth, so it must be exactly what shapes
+     * the layout. Two settings with the same design depth make the same plan from the same seed, on
+     * every tier: easy never reads the setting (0), medium and hard read it up to 6. And medium and
+     * hard below 6 really are other courses, so dropping a pick there is not for nothing.
+     */
+    @Test
+    void theDesignDepthIsAllOfFallDepthThatShapesALayout() throws GenFailed {
+        assertEquals(0, ParkourPlanner.designDepth("easy", 3), "easy falls back at a fixed height");
+        assertEquals(0, ParkourPlanner.designDepth("rings", 3), "not a parkour tier");
+        assertEquals(4, ParkourPlanner.designDepth("medium", 4), "below 6: the setting");
+        assertEquals(6, ParkourPlanner.designDepth("hard", 12), "past 6: 6");
+        assertEquals(1, ParkourPlanner.designDepth("HARD", 0), "as the settings allow it, whatever the case");
+        int[] depths = {1, 2, 4, 5, 6, 7, 9, 64};
+        for (Slots.Def slot : SLOTS) {
+            String tier = slot.tierOrMix();
+            int reshaped = 0;
+            for (long seed = 0; seed < 30; seed++) {
+                Map<Integer, String> byDesign = new HashMap<>();
+                Set<String> hashes = new HashSet<>();
+                for (int depth : depths) {
+                    String hash = PLANNER.plan(input(slot, 'A', seed, tier, depth)).hash();
+                    hashes.add(hash);
+                    String same = byDesign.putIfAbsent(ParkourPlanner.designDepth(tier, depth), hash);
+                    assertTrue(same == null || same.equals(hash), tier + " seed " + seed + " at fall_depth " + depth
+                            + ": the same design depth must make the same layout");
+                }
+                if (hashes.size() > 1) {
+                    reshaped++;
+                }
+            }
+            if (tier.equals("easy")) {
+                assertEquals(0, reshaped, "no fall_depth changes an easy layout");
+            } else {
+                assertTrue(reshaped > 0, tier + ": a shallower fall_depth makes other layouts (so a pick is dropped"
+                        + " for a reason)");
+            }
+        }
     }
 
     @Test

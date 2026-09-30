@@ -12,8 +12,10 @@ import java.util.List;
  *   <li>{@code enabled} — the admin's on/off ({@code true}/{@code false}), over config;</li>
  *   <li>{@code tier} — a tier or golf mix, over config, from the next build;</li>
  *   <li>{@code pin} — {@code seed:algo:until} ({@link GenScheduler.Pin});</li>
- *   <li>{@code choose} — {@code seed:algo:until:from}: an admin's pick for the next set only
- *       ({@code /hcm games gen choose}, a one-set {@link GenScheduler.Pin}); gone once that set is over;</li>
+ *   <li>{@code choose} — {@code seed:algo:until:from:cadence:mix:fallDepth}: an admin's pick for the
+ *       next set only ({@code /hcm games gen choose}, a {@link GenScheduler.Choice}: a one-set pin that
+ *       keeps its set's length and the settings it was tried at); gone once that set is over, or once
+ *       the schedule or those settings move away from it;</li>
  *   <li>{@code reroll.<edition>} — how many times an admin rerolled that edition ({@code 7:38});</li>
  *   <li>{@code claim} — {@code world,x,y,z,sx,sy,sz}: the region it may build in ({@link Regions#claim});</li>
  *   <li>{@code mix} — {@code plan:mix}: the tier or mix the live layout was made with, written with the

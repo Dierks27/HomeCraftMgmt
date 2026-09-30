@@ -25,16 +25,18 @@ import java.util.Map;
  * <p>Public for Fresh Courses (GEN-SPEC §4.3): its golf builds replay each hole's witness line on
  * these, the real blocks, and its planner's block model is checked against {@link #surface}.
  *
- * <p><b>Sand (Course Variety §3.4, decision 2).</b> Adventure Golf's bunkers are smooth sandstone,
- * which plays as sand ({@code SLOW}) only on a GENERATED golf course of golf planner version
- * {@value #FIRST_SAND_ALGO} or later ({@link #sandPlays}): the ones whose par, witness line and
- * sloppy-player proof were worked out with sand. Everywhere else — every hand-built course, a kept
- * course (it is a hand-built one from then on), a layout of an older version — smooth sandstone is
- * any stone, exactly as before, so a course someone built by hand never plays differently. So a
- * reading is made either way ({@link #LiveBlocks(World, boolean)}), and a round picks its course's
- * ({@link #forCourse}).
+ * <p><b>Adventure Golf's rules (Course Variety §3.4, decision 2).</b> Adventure Golf's bunkers are
+ * smooth sandstone, which plays as sand ({@code SLOW}) only on a course whose layout the golf
+ * planner made at version {@value #FIRST_SAND_ALGO} or later ({@link #sandPlays}): a generated one,
+ * or one kept from it ({@link GolfCourse#adventure}), whose par, witness line and sloppy-player
+ * proof were worked out with sand. The same courses play the other Adventure rule
+ * ({@link GolfShot.Rules}): a ball that comes to rest with its centre over water has fallen in.
+ * Everywhere else — every hand-built course, a layout of an older version — smooth sandstone is any
+ * stone and a ball plays exactly as before, so a course someone built by hand never plays
+ * differently. So a reading is made either way ({@link #LiveBlocks(World, boolean)}), and a round
+ * picks its course's ({@link #forCourse}).
  */
-public final class LiveBlocks implements BallPhysics.Blocks {
+public final class LiveBlocks implements BallPhysics.Blocks, GolfShot.Rules {
 
     /** The first golf planner version whose smooth sandstone plays as sand (Course Variety §3.4). */
     public static final int FIRST_SAND_ALGO = 3;
@@ -48,7 +50,7 @@ public final class LiveBlocks implements BallPhysics.Blocks {
     private static final Cell NOTHING = new Cell(Material.AIR, List.of());
 
     private final World world;
-    /** Whether smooth sandstone is sand here ({@link #sandPlays}). */
+    /** Whether this course plays Adventure Golf's rules, its smooth sandstone sand ({@link #sandPlays}). */
     private final boolean sand;
     private final Map<Long, Cell> seen = new HashMap<>();
 
@@ -58,8 +60,9 @@ public final class LiveBlocks implements BallPhysics.Blocks {
     }
 
     /**
-     * The world as a course sees it: with {@code sand}, smooth sandstone (full or slab) is sand
-     * ({@code SLOW}); without, it is any stone, as it always was.
+     * The world as a course sees it: with {@code sand} (Adventure Golf's rules), smooth sandstone
+     * (full or slab) is sand ({@code SLOW}) and a ball that stops over water has fallen in
+     * ({@link GolfShot.Rules}); without, it is any stone and a ball plays as it always did.
      */
     public LiveBlocks(World world, boolean sand) {
         this.world = world;
@@ -72,13 +75,17 @@ public final class LiveBlocks implements BallPhysics.Blocks {
     }
 
     /**
-     * Whether smooth sandstone plays as sand on {@code course}: only a generated one (a Fresh
-     * Courses golf slot, a Classics recall) whose layout the golf planner made at version
-     * {@value #FIRST_SAND_ALGO} or later. A hand-built or kept course never ({@code null} neither).
+     * Whether {@code course} plays Adventure Golf's rules, smooth sandstone as sand: a generated one
+     * (a Fresh Courses golf slot, a Classics recall) whose layout the golf planner made at version
+     * {@value #FIRST_SAND_ALGO} or later, or a course kept from one ({@link GolfCourse#adventure}).
+     * A hand-built course never ({@code null} neither).
      */
     public static boolean sandPlays(GolfCourse course) {
-        return course != null && course.generated() && Slots.GOLF.equals(course.gen().generator())
-                && sandPlays(course.gen().algo());
+        if (course == null) {
+            return false;
+        }
+        return course.generated() ? Slots.GOLF.equals(course.gen().generator()) && sandPlays(course.gen().algo())
+                : course.adventure();
     }
 
     /** Whether a golf layout made at planner version {@code algo} has sand ({@value #FIRST_SAND_ALGO} on). */
@@ -86,8 +93,14 @@ public final class LiveBlocks implements BallPhysics.Blocks {
         return algo >= FIRST_SAND_ALGO;
     }
 
-    /** Whether this reading plays smooth sandstone as sand. */
+    /** Whether this reading plays smooth sandstone as sand (Adventure Golf's rules). */
     public boolean sand() {
+        return sand;
+    }
+
+    /** Whether this reading plays Adventure Golf's rules: the same courses whose sandstone is sand. */
+    @Override
+    public boolean adventure() {
         return sand;
     }
 

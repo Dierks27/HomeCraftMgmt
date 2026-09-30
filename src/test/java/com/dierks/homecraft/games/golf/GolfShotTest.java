@@ -29,7 +29,52 @@ class GolfShotTest {
     private static final int FLOOR = 63;
     private static final double GROUND = 64;
 
-    private record Scene(Grid grid, GolfCourse.Hole hole) {
+    private record Scene(BallPhysics.Blocks grid, GolfCourse.Hole hole) {
+    }
+
+    /**
+     * {@code grid} as a course playing Adventure Golf's rules sees it ({@link GolfShot.Rules}: a
+     * golf layout of version 3 or later, or a course kept from one).
+     */
+    record Adventure(BallPhysics.Blocks grid) implements BallPhysics.Blocks, GolfShot.Rules {
+
+        @Override
+        public double top(int x, int y, int z, double px, double pz) {
+            return grid.top(x, y, z, px, pz);
+        }
+
+        @Override
+        public Surface surface(int x, int y, int z) {
+            return grid.surface(x, y, z);
+        }
+
+        @Override
+        public boolean adventure() {
+            return true;
+        }
+    }
+
+    /** A flat lane, x -5..30 and z -3..3, with a pond (3 across) from x = 10 to 12 right across it. */
+    static Grid pondAcross() {
+        Grid g = new Grid().floor(-5, 30, -3, 3, FLOOR, Surface.NORMAL);
+        for (int x = 10; x <= 12; x++) {
+            for (int z = -3; z <= 3; z++) {
+                g.remove(x, FLOOR, z).set(x, FLOOR, z, BallPhysics.Blocks.NONE, Surface.WATER);
+            }
+        }
+        return g;
+    }
+
+    /**
+     * Where to tap from (power 1, along +x, at z 0.5) so the ball stops with its centre 0.05 past
+     * the pond's edge at x = 10, its back edge still on the turf: how far a tap rolls on the flat,
+     * taken back from there (the flat plays the same wherever the tap starts).
+     */
+    static double tapToThePondsEdge() {
+        Grid flat = new Grid().floor(-5, 30, -3, 3, FLOOR, Surface.NORMAL);
+        BallPhysics.Hole area = BallPhysics.Hole.of(29, FLOOR, 0, -5, FLOOR, -3, 30, FLOOR + 3, 3);
+        GolfShot.Result tap = GolfShot.play(flat, area, new BallPhysics.Ball(0.5, GROUND, 0.5), new Putt(-90f, 1));
+        return 10.05 - (tap.x() - 0.5);
     }
 
     private static Scene randomScene(GenRandom r) {
@@ -99,8 +144,10 @@ class GolfShotTest {
         int penalties = 0;
         int scenes = 0;
         while (putts < 500) {
-            Scene s = randomScene(r);
+            Scene drawn = randomScene(r);
             scenes++;
+            // every other scene is played by Adventure Golf's rules: both ways, GolfShot is the round
+            Scene s = scenes % 2 == 0 ? new Scene(new Adventure(drawn.grid()), drawn.hole()) : drawn;
             GolfCourse course = new GolfCourse("t", "Test", "games", true, 1, List.of(s.hole()));
             LiveRound round = new LiveRound(UUID.randomUUID(), course, new GolfRun(course.pars(), 1000), null);
             round.tee(s.grid());
@@ -149,6 +196,39 @@ class GolfShotTest {
         }
         assertTrue(inCup > 0, "some putts dropped (" + inCup + "), so the cup path was compared");
         assertTrue(penalties > 20, "plenty went in the water or out (" + penalties + "), so that path was too");
+    }
+
+    /**
+     * Adventure Golf's pond rule (the review of Course Variety): the ball's physics holds a ball up
+     * by the edge of its footprint, so a tap can stop hanging over a pond's edge — its centre over the
+     * water, its back edge on the turf — or, rolled along a wall's lower block, float on the pond
+     * itself, where almost every putt then splashes and puts it back on the same floating spot. On a
+     * course playing Adventure Golf's rules a ball that comes to rest with its centre over water has
+     * fallen in: +1, back where it was putted from. A hand-built course plays exactly as before.
+     */
+    @Test
+    void onAnAdventureCourseABallThatStopsOverWaterHasFallenIn() {
+        double teeX = tapToThePondsEdge();
+        Grid pond = pondAcross();
+        BallPhysics.Hole area = BallPhysics.Hole.of(29, FLOOR, 0, -5, FLOOR, -3, 30, FLOOR + 3, 3);
+        GolfShot.Result hand = GolfShot.play(pond, area, new BallPhysics.Ball(teeX, GROUND, 0.5), new Putt(-90f, 1));
+        assertEquals(BallPhysics.Outcome.STOPPED, hand.outcome(), "a hand-built course, as it always did: the tap"
+                + " stops on the water's edge");
+        assertEquals(10.05, hand.x(), 1e-9, "its centre over the pond, held up by its back edge on the turf");
+        assertEquals(GROUND, hand.y(), 1e-12, "at the turf's height");
+        BallPhysics.Ball ball = new BallPhysics.Ball(teeX, GROUND, 0.5);
+        GolfShot.Result adventure = GolfShot.play(new Adventure(pond), area, ball, new Putt(-90f, 1));
+        assertEquals(BallPhysics.Outcome.WATER, adventure.outcome(), "on Adventure Golf it has fallen in");
+        assertTrue(adventure.penalty() && adventure.strokes() == 2, "the putt and a penalty stroke");
+        assertEquals(teeX, ball.x(), 0.0, "back on the spot it was putted from");
+        assertEquals(GROUND, ball.y(), 0.0, "on the turf");
+        assertFalse(ball.moving(), "still, ready for the next putt");
+        assertEquals(hand.ticks(), adventure.ticks(), "it rolled exactly the same way: only its rest is judged");
+        GolfShot.Result dry = GolfShot.play(new Adventure(new Grid().floor(-5, 30, -3, 3, FLOOR, Surface.NORMAL)),
+                area, new BallPhysics.Ball(teeX, GROUND, 0.5), new Putt(-90f, 1));
+        assertEquals(BallPhysics.Outcome.STOPPED, dry.outcome(), "the same tap with no pond just stops");
+        assertTrue(GolfShot.adventure(new Adventure(pond)) && !GolfShot.adventure(pond),
+                "blocks say which rules they play by; blocks that don't say play the old ones");
     }
 
     @Test

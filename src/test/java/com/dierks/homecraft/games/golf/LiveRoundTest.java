@@ -99,6 +99,43 @@ class LiveRoundTest {
         assertFalse(r.ball.moving(), "still, ready for the next putt");
     }
 
+    /**
+     * The round plays Adventure Golf's pond rule as {@link GolfShot} does (the review of Course
+     * Variety): a tap that stops with its centre over the water has fallen in — "Splash!", +1, back
+     * on its last spot — so the ball never sits on the water, and "Reset ball" then has nothing to do
+     * (it is already on its spot, and the spot is dry). On a hand-built course it stops there, as
+     * before.
+     */
+    /** A par 3 teed at ({@code teeX}, 0.5) facing +x on {@code g}, its cup far beyond the pond, at x 29. */
+    private static LiveRound pastThePond(double teeX, BallPhysics.Blocks g) {
+        GolfCourse.Hole h = new GolfCourse.Hole(new GolfCourse.Tee(teeX, GROUND, 0.5, -90f),
+                new GolfCourse.Spot(29, FLOOR, 0), 3, new GolfCourse.Spot(-5, FLOOR, -3),
+                new GolfCourse.Spot(30, FLOOR + 3, 3));
+        GolfCourse c = new GolfCourse("t", "Test", "games", true, 1, List.of(h));
+        LiveRound r = new LiveRound(UUID.randomUUID(), c, new GolfRun(c.pars(), 3), null);
+        r.tee(g);
+        return r;
+    }
+
+    @Test
+    void onAnAdventureCourseABallThatStopsOverWaterHasFallenIn() {
+        double teeX = GolfShotTest.tapToThePondsEdge();
+        BallPhysics.Blocks adventure = new GolfShotTest.Adventure(GolfShotTest.pondAcross());
+        LiveRound r = pastThePond(teeX, adventure);
+        r.putt(-90f, 1);
+        assertEquals(LiveRound.Result.BACK, rollOut(r, adventure), "it stopped over the water: in it goes");
+        assertEquals(BallPhysics.Outcome.WATER, r.outcome, "a splash, so the words say so");
+        assertEquals(2, r.run.strokes(), "the putt and the penalty");
+        assertEquals(teeX, r.ball.x(), 0.0, "back on its last spot");
+        assertEquals(GROUND, r.ball.y(), 0.0, "on the turf, not the water");
+        assertTrue(r.atSpot(), "Reset ball has nothing to do: the ball is on its (dry) last spot");
+        LiveRound hand = pastThePond(teeX, GolfShotTest.pondAcross());
+        hand.putt(-90f, 1);
+        assertEquals(LiveRound.Result.STILL, rollOut(hand, GolfShotTest.pondAcross()), "a hand-built course: as"
+                + " it always did, it stops on the water's edge");
+        assertEquals(10.05, hand.ball.x(), 1e-9, "its centre over the water");
+    }
+
     @Test
     void outOfBoundsPutsTheBallBackToo() {
         LiveRound r = round(3, 3);

@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.golf.BallPhysics;
+import com.dierks.homecraft.games.golf.GolfShot;
 
 import java.util.List;
 import java.util.Locale;
@@ -25,14 +26,16 @@ import java.util.Locale;
  * sandstone is sand ({@link #SAND}, a full block; {@link #SAND_SLAB}, a sunken bunker's bottom
  * slab), which is SLOW, as {@code LiveBlocks} reads it on a generated course of golf algo 3 or
  * later; a hand-built course reads it as any stone (Course Variety decision 2), and no layout of
- * an older algo has any. Leaves ({@link #LEAVES}) are full, normal blocks to the ball, exactly like
- * logs and moss; they have their own code only so a validator can tell a canopy from a wall.
+ * an older algo has any. A ball that comes to rest with its centre over the water has fallen in
+ * ({@link GolfShot.Rules}), as on the built layout. Leaves ({@link #LEAVES}) are full, normal
+ * blocks to the ball, exactly like logs and moss; they have their own code only so a validator can
+ * tell a canopy from a wall.
  *
  * <p><b>Why a byte grid.</b> The planner simulates a few hundred thousand putts a course, each
  * asking the grid a few thousand questions; an array index is the cheapest answer there is.
  * Anything outside the box is air. Not thread-safe while it is being filled; read-only after.
  */
-public final class PlanBlocks implements BallPhysics.Blocks {
+public final class PlanBlocks implements BallPhysics.Blocks, GolfShot.Rules {
 
     /** Nothing solid (air, a sign). */
     public static final byte AIR = 0;
@@ -194,6 +197,16 @@ public final class PlanBlocks implements BallPhysics.Blocks {
     @Override
     public BallPhysics.Surface surface(int x, int y, int z) {
         return surface(get(x, y, z));
+    }
+
+    /**
+     * Always: a plan's blocks are played by Adventure Golf's rules ({@link GolfShot.Rules}), as the
+     * built layout of version 3 or later is. A layout of an older version has no water (and no
+     * sandstone) for them to change anything on.
+     */
+    @Override
+    public boolean adventure() {
+        return true;
     }
 
     private boolean inside(int x, int y, int z) {

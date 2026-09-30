@@ -340,6 +340,111 @@ class HoleTemplateTest {
                 + " hole, from anywhere a ball can rest, at any angle");
     }
 
+    /**
+     * The review's floating ball (ISLAND_POND on Hard, seed 2): a wild putt off the causeway stopped
+     * with its centre over the pond, held up by its edge on the lower block of the wall at the
+     * pond's end; almost every putt from there splashed and put it back on the same floating spot,
+     * and "Reset ball" had nothing to put it back to. On Adventure Golf a ball that comes to rest
+     * over water has fallen in, so that putt is itself the splash, and the ball goes back to the
+     * causeway.
+     */
+    @Test
+    void aWildPuttThatStopsOnAPondHasFallenIn() {
+        HoleLayout l = GolfKit.draw(HoleTemplate.ISLAND_POND, 'H', 2);
+        PlanBlocks g = GolfKit.grid(l);
+        GolfCourse.Hole h = GolfKit.hole(l);
+        BallPhysics.Ball b = new BallPhysics.Ball(4873.4534, T, 4106.1254);
+        GolfShot.Result r = GolfShot.play(g, GolfShot.area(g, h), b, new Putt(92.542f, 2));
+        assertEquals(BallPhysics.Outcome.WATER, r.outcome(), l.describe() + ": it stops over the pond, so it has"
+                + " fallen in (" + r + ")");
+        assertEquals(4873.4534, b.x(), 0.0, "back on the causeway, where it was putted from");
+        assertFalse(overWater(g, b.x(), b.y(), b.z()), "and that spot is dry");
+    }
+
+    /** Whether a ball resting at (x, y, z) has its centre over water: water under it before anything solid. */
+    private static boolean overWater(PlanBlocks g, double x, double y, double z) {
+        int bx = (int) Math.floor(x);
+        int bz = (int) Math.floor(z);
+        for (int cy = (int) Math.floor(y - 1e-6); cy >= (int) Math.floor(y) - 4; cy--) {
+            if (g.get(bx, cy, bz) == PlanBlocks.WATER) {
+                return true;
+            }
+            if (g.top(bx, cy, bz, x, z) != BallPhysics.Blocks.NONE) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    @Test
+    void wildPuttsFromTheTeeNeverLeaveAnAcceptedHoleNorRestOnWater() {
+        assertWildPutts(4, 25, 8);
+    }
+
+    @Test
+    @EnabledIfSystemProperty(named = "hcm.slow", matches = "true")
+    void wildPuttsFromTheTeeNeverLeaveAnAcceptedHoleNorRestOnWaterOver60Seeds() {
+        assertWildPutts(60, 100, 8);
+    }
+
+    /**
+     * The review's property (Course Variety review): on the accepted first attempt of {@code seeds}
+     * seeds of every template in every tier (and the fallback), {@code walks} seeded walks of up to
+     * {@code putts} wild putts each from the tee — any yaw, any power, played on from wherever the
+     * ball ends up — never put the ball out of the hole, and never leave it at rest with its centre
+     * over water. (A pond may take it: a stroke, and it comes back.) The proofs cover the modelled
+     * kid; this covers the kid who hits anything.
+     */
+    private static void assertWildPutts(int seeds, int walks, int putts) {
+        List<String> bad = drawn().parallelStream().flatMap(e -> {
+            List<String> out = new ArrayList<>();
+            int accepted = 0;
+            for (long seed = 0; seed < seeds && out.isEmpty(); seed++) {
+                HoleLayout l = GolfKit.draw(e.getKey(), e.getValue(), seed);
+                try {
+                    if (GolfPlanner.solve(l, e.getValue(), 0, new Work(GolfPlanner.ATTEMPT_BUDGET, null)) == null) {
+                        continue;
+                    }
+                } catch (GenFailed never) {
+                    throw new IllegalStateException(never);
+                }
+                accepted++;
+                PlanBlocks g = GolfKit.grid(l);
+                GolfCourse.Hole h = GolfKit.hole(l);
+                BallPhysics.Hole area = GolfShot.area(g, h);
+                GenRandom r = new GenRandom(seed).fork("wild:" + e.getKey() + ":" + e.getValue());
+                for (int w = 0; w < walks && out.isEmpty(); w++) {
+                    BallPhysics.Ball ball = GolfShot.tee(g, h);
+                    for (int k = 0; k < putts; k++) {
+                        double x = ball.x();
+                        double y = ball.y();
+                        double z = ball.z();
+                        Putt putt = new Putt((float) r.nextDouble(0, 360), r.nextInt(1, BallPhysics.clubs()));
+                        GolfShot.Result res = GolfShot.play(g, area, ball, putt);
+                        String what = l.describe() + ": from " + x + " " + y + " " + z + ", " + putt;
+                        if (res.outcome() == BallPhysics.Outcome.OUT) {
+                            out.add(what + " left the hole");
+                            break;
+                        }
+                        if (res.outcome() == BallPhysics.Outcome.STOPPED && overWater(g, ball.x(), ball.y(), ball.z())) {
+                            out.add(what + " came to rest on the water at " + ball.x() + " " + ball.y() + " " + ball.z());
+                            break;
+                        }
+                        if (res.inCup()) {
+                            break;
+                        }
+                    }
+                }
+            }
+            if (accepted == 0) {
+                out.add(e + ": no seed's first attempt was accepted, so nothing was tried");
+            }
+            return out.stream();
+        }).toList();
+        assertEquals(List.of(), bad, "a wild putt may find a pond (a stroke, and the ball comes back), but it never"
+                + " leaves a hole and never leaves the ball sitting on the water");
+    }
+
     @Test
     void theVolcanosRailIsClosed() {
         boolean shown = false;

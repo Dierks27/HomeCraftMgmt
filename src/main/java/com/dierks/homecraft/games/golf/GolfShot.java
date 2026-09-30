@@ -13,7 +13,8 @@ import java.util.List;
  * into a direction with {@link StrictMath} (the same bits on every JVM), and {@link #play} rolls
  * the ball exactly as {@link LiveRound} does — tick by tick until it isn't rolling, stopped where
  * it is after {@value #MAX_ROLL_TICKS} ticks, in the cup if it rests there, and back on its spot
- * with a penalty stroke after water, lava or leaving the bounds.
+ * with a penalty stroke after water, lava or leaving the bounds — or, on Adventure Golf
+ * ({@link Rules}), after coming to rest over water.
  */
 public final class GolfShot {
 
@@ -25,6 +26,57 @@ public final class GolfShot {
 
     /** A horizontal direction, one block long. */
     public record Direction(double dx, double dz) {
+    }
+
+    /**
+     * Blocks that say which rules their course plays by. Adventure Golf (a golf layout the planner
+     * made at version 3 or later, and a course kept from one: Course Variety) has two of its own:
+     * its smooth sandstone is sand, and a ball that comes to rest with its centre over water has
+     * fallen in — the ball's physics holds a ball up by the edge of its footprint, so without the
+     * rule it could stop hanging over a pond's edge, or float on a pond held by a wall's lower
+     * block. Blocks that don't say (a hand-built course's) play exactly as they always did.
+     */
+    public interface Rules {
+
+        /** Whether this course plays Adventure Golf's rules. */
+        boolean adventure();
+    }
+
+    /** Whether {@code blocks} play Adventure Golf's rules ({@link Rules}). */
+    public static boolean adventure(BallPhysics.Blocks blocks) {
+        return blocks instanceof Rules r && r.adventure();
+    }
+
+    /**
+     * How a tick of the ball ends by its course's rules: as the physics says, except that on
+     * Adventure Golf ({@link Rules}) a ball that has come to rest with its centre over water has
+     * fallen in ({@link BallPhysics.Outcome#WATER}: back to its spot, +1). {@link #play} and the
+     * live round ({@link LiveRound}) both ask this, so a proof and a player see the same putt.
+     */
+    public static BallPhysics.Outcome settled(BallPhysics.Blocks blocks, BallPhysics.Ball ball,
+                                              BallPhysics.Outcome o) {
+        return o == BallPhysics.Outcome.STOPPED && adventure(blocks) && overWater(blocks, ball)
+                ? BallPhysics.Outcome.WATER : o;
+    }
+
+    /**
+     * Whether a ball is over water: straight down from where it stands, under its centre, water
+     * comes before anything solid (within {@value BallPhysics#SETTLE} blocks) — held up only by the
+     * edge of its footprint, on a pond's edge or a wall's lower block beside one.
+     */
+    public static boolean overWater(BallPhysics.Blocks blocks, BallPhysics.Ball ball) {
+        int x = (int) Math.floor(ball.x());
+        int z = (int) Math.floor(ball.z());
+        int from = (int) Math.floor(ball.y() - 1e-6);
+        for (int y = from; y >= from - BallPhysics.SETTLE; y--) {
+            if (blocks.surface(x, y, z).wet()) {
+                return true;
+            }
+            if (blocks.top(x, y, z, ball.x(), ball.z()) != BallPhysics.Blocks.NONE) {
+                return false;
+            }
+        }
+        return false;
     }
 
     /**
@@ -102,6 +154,7 @@ public final class GolfShot {
                 o = BallPhysics.restsInCup(ball, blocks, hole) ? BallPhysics.Outcome.IN_CUP
                         : BallPhysics.Outcome.STOPPED;
             }
+            o = settled(blocks, ball, o);
             switch (o) {
                 case ROLLING -> {
                     continue;

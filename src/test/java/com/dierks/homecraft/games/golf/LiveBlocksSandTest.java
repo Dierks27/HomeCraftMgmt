@@ -68,7 +68,7 @@ class LiveBlocksSandTest {
     @Test
     void sandPlaysOnlyOnAGeneratedGolfLayoutOfVersionThreeOrLater() {
         assertFalse(LiveBlocks.sandPlays((GolfCourse) null), "no course, no sand");
-        assertFalse(LiveBlocks.sandPlays(course(null)), "a hand-built (or kept) course: never");
+        assertFalse(LiveBlocks.sandPlays(course(null)), "a hand-built course (or one kept from an older layout): never");
         assertFalse(LiveBlocks.sandPlays(course(tag(Slots.GOLF, 2))), "a generated layout of version 2: no");
         assertTrue(LiveBlocks.sandPlays(course(tag(Slots.GOLF, 3))), "Adventure Golf (version 3): yes");
         assertTrue(LiveBlocks.sandPlays(course(tag(Slots.GOLF, 4))), "and every later version");
@@ -112,6 +112,62 @@ class LiveBlocksSandTest {
             }
         }
         assertEquals(sand, putt(model), "exactly as the planner's model rolls it (PlanBlocks' SAND)");
+    }
+
+    /**
+     * A course kept from an Adventure Golf layout keeps Adventure Golf's rules (the review of
+     * Course Variety: kept, its bunkers used to turn to stone, so its par line and its "Sand is
+     * slow!" sign no longer held): it says so ({@link GolfCourse#adventure}), its rows keep saying
+     * so, and its rounds read its sand as sand. A hand-built course never does.
+     */
+    @Test
+    void aCourseKeptFromAnAdventureLayoutKeepsItsSand() {
+        GolfCourse kept = course(null).withAdventure(true);
+        assertTrue(LiveBlocks.sandPlays(kept), "kept from Adventure Golf: its sand is still sand");
+        assertTrue(LiveBlocks.forCourse(new BlockWorld().world(), kept).adventure(), "and its rounds play the rules");
+        assertFalse(LiveBlocks.forCourse(new BlockWorld().world(), course(null)).adventure(),
+                "a hand-built course's rounds never do");
+        GolfCourse back = CourseCodec.fromRow(CourseCodec.toRow(kept, 1, 2));
+        assertTrue(back.adventure(), "the row keeps it");
+        assertTrue(back.withName("Mine").withRev(3).withEnabled(false).adventure(), "and so do the editor's changes");
+        assertFalse(CourseCodec.toRow(course(null), 1, 2).data().contains("adventure"),
+                "a hand-built course's row is written exactly as it always was");
+        assertFalse(CourseCodec.fromRow(CourseCodec.toRow(course(null), 1, 2)).adventure(), "and reads back hand-built");
+    }
+
+    /** A lane of lime concrete 3 wide, x 0-40, with a pond right across it at x 20-22 (still water on blue concrete). */
+    private static BlockWorld pond() {
+        BlockWorld w = strip(false);
+        for (int x = 20; x <= 22; x++) {
+            for (int z = 0; z <= 2; z++) {
+                w.set(x, 63, z, "minecraft:water[level=0]").set(x, 62, z, "minecraft:blue_concrete");
+            }
+        }
+        return w;
+    }
+
+    /**
+     * On the real blocks, a ball that comes to rest with its centre over a pond has fallen in where
+     * Adventure Golf's rules play (a splash, back to its spot), and stops on the water's edge as it
+     * always did on a hand-built course.
+     */
+    @Test
+    void aBallThatStopsOverAPondFallsInOnlyWhereAdventureGolfsRulesPlay() {
+        BallPhysics.Hole area = BallPhysics.Hole.of(60, 63, 1, -1, 60, -1, 41, 70, 3);
+        GolfShot.Result flat = GolfShot.play(new LiveBlocks(strip(false).world()), area,
+                new BallPhysics.Ball(8.5, 64, 1.5), new Putt(-90, 1));
+        double teeX = 20.05 - (flat.x() - 8.5); // a tap from here stops with its centre just past the pond's edge
+        GolfShot.Result hand = GolfShot.play(LiveBlocks.forCourse(pond().world(), course(null)), area,
+                new BallPhysics.Ball(teeX, 64, 1.5), new Putt(-90, 1));
+        assertEquals(BallPhysics.Outcome.STOPPED, hand.outcome(), "a hand-built course: it stops on the edge");
+        assertEquals(20.05, hand.x(), 1e-9, "its centre over the water");
+        GolfShot.Result adventure = GolfShot.play(LiveBlocks.forCourse(pond().world(), course(tag(Slots.GOLF, 3))),
+                area, new BallPhysics.Ball(teeX, 64, 1.5), new Putt(-90, 1));
+        assertEquals(BallPhysics.Outcome.WATER, adventure.outcome(), "Adventure Golf: it has fallen in");
+        assertEquals(teeX, adventure.x(), 0.0, "and is back on its spot");
+        GolfShot.Result kept = GolfShot.play(LiveBlocks.forCourse(pond().world(), course(null).withAdventure(true)),
+                area, new BallPhysics.Ball(teeX, 64, 1.5), new Putt(-90, 1));
+        assertEquals(adventure, kept, "a course kept from an Adventure layout plays it the same");
     }
 
     /** Every block of {@code plan} in a world of its own. */

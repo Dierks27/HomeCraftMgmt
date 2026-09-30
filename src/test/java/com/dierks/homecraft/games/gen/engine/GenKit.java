@@ -283,12 +283,17 @@ final class GenKit {
 
         /**
          * The blocks as the ball sees them: a bottom slab half a block, still water nothing to stand on
-         * and wet, and (with {@code sand}, a generated golf layout of algo 3 or later) smooth sandstone
-         * slow, as {@code LiveBlocks} reads them.
+         * and wet, and (with {@code sand}, a golf layout of algo 3 or later: Adventure Golf's rules)
+         * smooth sandstone slow and a ball at rest over water fallen in, as {@code LiveBlocks} reads them.
          */
         @Override
         public BallPhysics.Blocks ballBlocks(boolean sand) {
-            return new BallPhysics.Blocks() {
+            final class Reading implements BallPhysics.Blocks, com.dierks.homecraft.games.golf.GolfShot.Rules {
+                @Override
+                public boolean adventure() {
+                    return sand;
+                }
+
                 @Override
                 public double top(int x, int y, int z, double px, double pz) {
                     String b = blocks.get(pos(x, y, z));
@@ -315,7 +320,8 @@ final class GenKit {
                     }
                     return b.contains("soul_soil") ? BallPhysics.Surface.SLOW : BallPhysics.Surface.NORMAL;
                 }
-            };
+            }
+            return new Reading();
         }
 
         @Override

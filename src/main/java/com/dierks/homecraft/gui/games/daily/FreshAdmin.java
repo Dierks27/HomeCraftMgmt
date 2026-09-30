@@ -26,6 +26,12 @@ import java.util.function.LongConsumer;
  * <p>Pure: the tools as data (their NAMEs, lore and command words), so a test can check who sees
  * them and that each click reaches its command exactly once. Every key fact is in the NAME for
  * Bedrock, which shows lore only on tap-and-hold.
+ *
+ * <p>Round 2, G2: a Sure screen can stay open while a whole new preview is built (by another admin,
+ * the console, or the admin's own one still planning), so Promote's and Choose's words carry what
+ * their Sure screen showed (the preview's seed, and the pick still to come or {@code none}) and the
+ * command acts on nothing else (#1); they aren't offered while the slot is being built. A pick a
+ * config or schedule change dropped is said on the item, the header and its lore (#3).
  */
 public final class FreshAdmin {
 

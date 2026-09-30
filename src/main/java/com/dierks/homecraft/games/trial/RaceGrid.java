@@ -17,7 +17,8 @@ import java.util.List;
  * that fails is nudged sideways, up to {@value #NUDGE} blocks in {@value #NUDGE_STEP} steps, but
  * never across the path (a row of two stays two side by side). When rows of two can't seat everyone
  * the grid is single file, {@value #SINGLE_GAP} apart, if that seats more. A few hundred block
- * reads at most, on the main thread, once per race.
+ * reads at most, on the main thread, once per race, and never by loading a chunk: on the server the
+ * surface is a {@link WorldSurface}, whose chunks a race loads first ({@link TrackChunks}, round 2).
  *
  * <p><b>Runners share the start.</b> Players on foot or with wings can't push each other (the
  * session guard stops knockback), and a parkour start is often a small platform, so on a parkour

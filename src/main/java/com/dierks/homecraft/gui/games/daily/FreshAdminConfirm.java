@@ -18,7 +18,9 @@ import org.bukkit.entity.Player;
  * </pre>
  *
  * Yes runs the tool's command with {@code confirm}, once ({@link FreshAdmin#yes}), and the screen
- * closes so the command's answer reads in chat.
+ * closes so the command's answer reads in chat. The command carries what this screen showed (round 2,
+ * G2 #1: Promote's and Choose's preview seed, and the pick Choose replaces), so a Yes pressed after a
+ * new preview came along acts on nothing and says so.
  *
  * <p>A double click never passes it (fix2-D, D4): it drops every click for
  * {@link FreshAdmin#OPEN_HOLD_MS} as it opens (a vanilla client sends the second press to the new

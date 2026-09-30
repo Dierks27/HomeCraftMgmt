@@ -220,8 +220,11 @@ class HoleTemplateTest {
     /**
      * Every spot of an Adventure hole a ball can come to rest at and be putted from: each lane
      * cell's middle; touching each wall round it (rolling sideways, a ball's edge never gets over a
-     * wall); and with its edge out over each open side (lane no more than a step up, a pond), where
-     * it can roll on past the corner of a wall that starts there and ride the wall's lower block.
+     * wall); with its edge out over each open side (lane no more than a step up, a pond), where it
+     * can roll on past the corner of a wall that starts there and ride the wall's lower block; and
+     * hanging off each lip — its centre just past the edge, over the lower lane or the pond, held up
+     * at the upper surface by its edge — where it can roll along the ledge onto the lower block of a
+     * wall the ledge runs into (the review's dogleg: the rail the rest spots missed).
      */
     private static List<double[]> restingSpots(LaneMap lane, GolfCourse.Hole h) {
         List<double[]> out = new ArrayList<>();
@@ -238,17 +241,81 @@ class HoleTemplateTest {
                     boolean open = lane.isHazard(nx, nz) || lane.isLane(nx, nz) && lane.surface(nx, nz) <= s + 0.5;
                     double off = open ? 0.45 : 0.5 - BallPhysics.RADIUS - 0.005;
                     out.add(new double[]{x + 0.5 + d[0] * off, s, z + 0.5 + d[1] * off});
+                    boolean cup = nx == h.cup().x() && nz == h.cup().z();
+                    if (!cup && (lane.isHazard(nx, nz) || lane.isLane(nx, nz) && lane.surface(nx, nz) < s - 1e-6)) {
+                        out.add(new double[]{x + 0.5 + d[0] * LEDGE, s, z + 0.5 + d[1] * LEDGE});
+                    }
                 }
             }
         }
         return out;
     }
 
+    /** A ball hanging off a lip: its centre this far from the upper cell's middle, 0.05 past the edge. */
+    private static final double LEDGE = 0.55;
+
+    /**
+     * The review's escape (Course Variety review, DOGLEG_DOWN): a ball that stopped hanging off the
+     * upper leg's last row — its centre just over the lower leg, held a block above the turf by its
+     * edge — putted along the ledge rode the side wall's lower block and then the lower leg's back
+     * wall, at that height, to the end wall a block above the turf, and over it. Every ring wall of a
+     * dogleg that drops now stands a block above that rail, so the ball bounces off the end wall;
+     * checked at the review's own spot (seed 13 on Hard) and along every ledge of 40 seeds of both
+     * tiers, both ways, at every power.
+     */
+    @Test
+    void aBallHangingOffTheDoglegDownsLedgeNeverRidesAWallOut() {
+        HoleLayout review = GolfKit.draw(HoleTemplate.DOGLEG_DOWN, 'H', 13);
+        PlanBlocks rg = GolfKit.grid(review);
+        GolfCourse.Hole rh = GolfKit.hole(review);
+        GolfShot.Result r = GolfShot.play(rg, GolfShot.area(rg, rh),
+                new BallPhysics.Ball(4870.755364587491, T + 1.0, 4111.041776318689), new Putt(269.802f, 5));
+        assertFalse(r.penalty(), review.describe() + ": the review's ball on the ledge, putted along it, stays in ("
+                + r + ")");
+        int ledges = 0;
+        for (char tier : "MH".toCharArray()) {
+            for (long seed = 0; seed < 40; seed++) {
+                HoleLayout l = GolfKit.draw(HoleTemplate.DOGLEG_DOWN, tier, seed);
+                PlanBlocks g = GolfKit.grid(l);
+                GolfCourse.Hole h = GolfKit.hole(l);
+                LaneMap lane = LaneMap.of(g, h, GolfPlanner.ALGO);
+                BallPhysics.Hole area = GolfShot.area(g, h);
+                for (int x = lane.minX; x < lane.minX + lane.sizeX; x++) {
+                    for (int z = lane.minZ; z < lane.minZ + lane.sizeZ; z++) {
+                        double s = lane.surface(x, z);
+                        if (!lane.isLane(x, z) || s < T + 1 - 1e-6) {
+                            continue;
+                        }
+                        for (int[] d : new int[][]{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
+                            if (!lane.isLane(x + d[0], z + d[1]) || lane.surface(x + d[0], z + d[1]) > s - 1e-6) {
+                                continue;
+                            }
+                            ledges++;
+                            double bx = x + 0.5 + d[0] * LEDGE;
+                            double bz = z + 0.5 + d[1] * LEDGE;
+                            int[] along = d[0] == 0 ? new int[]{90, 270} : new int[]{0, 180};
+                            for (int yaw : along) {
+                                for (int power = 1; power <= BallPhysics.clubs(); power++) {
+                                    GolfShot.Result o = GolfShot.play(g, area, new BallPhysics.Ball(bx, s, bz),
+                                            new Putt(yaw, power));
+                                    assertFalse(o.outcome() == BallPhysics.Outcome.OUT, l.describe() + ": a ball"
+                                            + " hanging off the ledge at " + bx + " " + bz + ", putted along it at "
+                                            + yaw + ", power " + power + ", rode a wall out (" + o + ")");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(ledges >= 400, "enough ledge spots were tried: " + ledges);
+    }
+
     @Test
     void noPuttFromAnySpotABallCanRestLeavesAnAdventureHole() {
         List<String> out = drawn().parallelStream().filter(e -> !old(e.getKey())).flatMap(e -> {
             List<String> bad = new ArrayList<>();
-            for (long seed = 0; seed < 2 && bad.isEmpty(); seed++) {
+            for (long seed = 0; seed < 5 && bad.isEmpty(); seed++) {
                 HoleLayout l = GolfKit.draw(e.getKey(), e.getValue(), seed);
                 PlanBlocks g = GolfKit.grid(l);
                 GolfCourse.Hole h = GolfKit.hole(l);

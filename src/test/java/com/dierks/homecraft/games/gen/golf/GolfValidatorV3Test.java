@@ -471,6 +471,32 @@ class GolfValidatorV3Test {
                 + " is enough");
     }
 
+    /**
+     * The rail rule (the review's dogleg): a ball can rest hanging off a lip, its centre over the
+     * lower lane and its edge on the upper one; rolled along the ledge into a wall the ledge runs
+     * into, its edge rides that wall's lower block at the upper height, over the lower lane, and a
+     * ring wall no higher than that rail is rolled over. So once a rail exists, every ring wall
+     * stands a block above it — checked from the blocks, never trusted to the template.
+     */
+    @Test
+    void aRingWallNoHigherThanARailABallCanRideIsCaught() {
+        HoleLayout l = GolfKit.draw(HoleTemplate.DOGLEG_DOWN, 'H', 13);
+        PlanBlocks g = GolfKit.grid(l);
+        GolfCourse.Hole h = GolfKit.hole(l);
+        assertEquals(List.of(), GolfValidator.holeProblems(g, h, 1, 3), l.describe() + " is sound as drawn");
+        BallPhysics.Ball ledge = new BallPhysics.Ball(4870.755364587491, T + 1.0, 4111.041776318689);
+        assertEquals(BallPhysics.Outcome.STOPPED, GolfShot.play(g, GolfShot.area(g, h), ledge,
+                new Putt(269.802f, 5)).outcome(), "as drawn, a ball riding the rail bounces off the end wall");
+        g.set(4879, T + 1, 4111, PlanBlocks.AIR); // the lower leg's end wall, a block above the turf
+        List<String> p = GolfValidator.holeProblems(g, h, 1, 3);
+        assertTrue(p.stream().anyMatch(s -> s.contains("rail")), "a block lower, the end wall is no higher than the"
+                + " rail a ball hanging off the ledge rides: " + p);
+        GolfShot.Result out = GolfShot.play(g, GolfShot.area(g, h), new BallPhysics.Ball(4870.755364587491, T + 1.0,
+                4111.041776318689), new Putt(269.802f, 5));
+        assertEquals(BallPhysics.Outcome.OUT, out.outcome(), "and it is a real way out: the ball rides the rail over"
+                + " it (" + out + ")");
+    }
+
     @Test
     void aThreeHighRingWallBesideATurfLaneIsCaught() {
         AdventureKit.Drawn d = pondBeside();

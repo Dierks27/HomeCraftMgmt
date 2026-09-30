@@ -43,7 +43,9 @@ import java.util.Set;
  *       Water outside every hole is a decorative pond, 2 columns clear of every hole.</li>
  *   <li><b>Leaks:</b> no lane at the bounds' edge, and none beside nothing but a pond.</li>
  *   <li><b>Ring walls, locally:</b> solid from T - 1 up, more than half a block above the highest
- *       lane beside them (diagonals too), and at most two above the lowest.</li>
+ *       lane beside them (diagonals too), and at most two above the lowest. And the rail: where a
+ *       ball above the turf can get its edge onto a wall's lower block and ride it over lower lane
+ *       or a pond, the wall at the rail's end stands more than half a block above it.</li>
  *   <li><b>The flight rule:</b> a wall or obstacle no more than half a block above a lip's surface
  *       stands further from it than a full-power ball flies before it has dropped enough for that
  *       wall to stop it ({@link LaneMap#flightReach}).</li>
@@ -239,6 +241,7 @@ final class GolfValidatorV3 {
         Columns col = new Columns(grid, lane);
         lanes(grid, lane, h, name, out);
         walls(lane, col, name, out);
+        rails(lane, col, name, out);
         flights(lane, col, h, name, out);
         ponds(grid, lane, col, h, name, out);
         canopies(grid, lane, h, name, out);
@@ -514,6 +517,99 @@ final class GolfValidatorV3 {
                             + " is more than two blocks above the lane beside it");
                 }
             }
+        }
+    }
+
+    /**
+     * Rule 4's rail half (the review of Course Variety: a dogleg's ledge). The ball's physics holds
+     * a ball up by the edges of its footprint and reads each column on its own, so a ball whose
+     * edge is over a wall's column rests on that wall's block at its own height — a rail it can
+     * roll along, held above a lower lane or a pond beside it, and over any ring wall no more than
+     * half a block above it. Its edge gets onto a wall only where the wall's line begins, rolling
+     * along it from a lane or pond column its edge was over: its edge out over a lower side (a
+     * plateau's edge where the approach's wall begins), or its centre out, hanging off a lip with
+     * its edge on the upper cell (a ledge that runs into a side wall). Followed along the wall's
+     * line while its centre's columns let it on, it rides the wall once its centre is over
+     * something lower, to the end of the line: its edge back over lane or a pond, or its centre
+     * meeting a wall or a step it bounces off. A wall there no more than half a block above the
+     * rail is rolled over, so it is caught. A rail at the turf is harmless (the lane is there;
+     * over a pond, a ball that stops has fallen in).
+     */
+    private static void rails(LaneMap lane, Columns col, String name, List<String> out) {
+        int turf = lane.turfY;
+        Set<Long> told = new HashSet<>();
+        for (int qx = lane.minX; qx < lane.minX + lane.sizeX; qx++) {
+            for (int qz = lane.minZ; qz < lane.minZ + lane.sizeZ; qz++) {
+                if (!lane.isLane(qx, qz) && !lane.isHazard(qx, qz)) {
+                    continue; // the column under the ball's centre
+                }
+                for (int[] e : FOUR) {
+                    int px = qx + e[0];
+                    int pz = qz + e[1];
+                    if (!lane.isLane(px, pz) && !lane.isHazard(px, pz)) {
+                        continue; // the column under its edge
+                    }
+                    double s = Math.max(lane.isLane(qx, qz) ? lane.surface(qx, qz) : Double.NEGATIVE_INFINITY,
+                            lane.isLane(px, pz) ? lane.surface(px, pz) : Double.NEGATIVE_INFINITY);
+                    if (s < turf + 1 - EPS) {
+                        continue;
+                    }
+                    for (int[] m : FOUR) {
+                        if (m[0] * e[0] + m[1] * e[1] != 0) {
+                            continue; // along the wall's line only
+                        }
+                        double[] over = rolledOver(lane, col, qx, qz, px, pz, m, s);
+                        if (over != null && told.add(key((int) over[0], 0, (int) over[1]))) {
+                            out.add(name + "'s wall at " + at((int) over[0], (int) Math.floor(over[2]), (int) over[1])
+                                    + " is no higher than the rail a ball rides from " + at(px, (int) Math.floor(s), pz)
+                                    + " (its edge on the wall's lower block at " + at(px + m[0],
+                                    (int) Math.floor(over[3] - EPS), pz + m[1]) + "): riding it, a ball rolls over");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * The wall a ball at {@code s} (its centre over column q, its edge over column p) rolls over
+     * when rolled along {@code m} riding a wall's rail: {x, z, that wall's top, the rail's height},
+     * or null when there is none. Its edge goes onto the wall's line (the columns along from p),
+     * held no higher than each wall's top; its centre goes on over lane no more than a step up,
+     * lower lane, or a pond; once it has been over something lower it is riding the wall, and a
+     * solid column its centre meets then that is no more than a step above the rail is rolled
+     * onto. Its edge back over lane or a pond, a rail at the turf, or its centre meeting a wall or
+     * a step it can't climb, and there is none.
+     */
+    private static double[] rolledOver(LaneMap lane, Columns col, int qx, int qz, int px, int pz, int[] m,
+                                       double s) {
+        double r = s;
+        boolean riding = false;
+        for (int j = 1; ; j++) {
+            int wx = px + j * m[0];
+            int wz = pz + j * m[1];
+            int nx = qx + j * m[0];
+            int nz = qz + j * m[1];
+            double top = col.top(wx, wz);
+            if (!col.solid(lane, wx, wz) || Double.isNaN(top)) {
+                return null; // its edge is back over lane or a pond: its own footing again
+            }
+            r = Math.min(r, top);
+            if (r < lane.turfY + 1 - EPS) {
+                return null; // at the turf: harmless
+            }
+            if (lane.isHazard(nx, nz)) {
+                riding = true;
+                continue;
+            }
+            double ns = lane.surface(nx, nz);
+            if (Double.isNaN(ns) || ns > r + LaneMap.STEP + EPS) {
+                return null; // nothing there (a leak, rule 3's), or a wall or step it bounces off
+            }
+            if (!lane.isLane(nx, nz)) {
+                return riding ? new double[]{nx, nz, ns, r} : null; // a wall rule 4 already judges beside the lane
+            }
+            riding |= ns < r - EPS;
         }
     }
 

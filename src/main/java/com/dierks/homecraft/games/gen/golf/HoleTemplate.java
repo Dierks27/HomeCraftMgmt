@@ -1016,52 +1016,78 @@ public enum HoleTemplate {
         }
 
         /**
-         * The highest raised level (blocks above T) at which a ball can get onto a wall's rail, or
-         * -1 when it never can. The ball's physics reads each block of a column on its own, and
-         * holds a ball up by the edges of its footprint, so a ball whose edge is over a wall rests
-         * on the top of the wall's block at its own height and can roll along it like a rail, held
-         * above a lower lane beside it — and over the first wall no more than half a block above
-         * it. Rolling sideways never puts a ball's edge over a wall; it gets there only at a wall's
-         * outside corner: rolling along the lane past where the wall begins, from a cell whose side
-         * is open (lane no more than a step up, or a pond) into one whose side is the wall. A rail
-         * at the turf is harmless (the lane is there); a rail above it (a plateau's edge where the
-         * approach's wall begins) is closed by standing every ring wall a block above it, so a ball
-         * riding it meets a wall at its end and never rolls over one.
+         * The highest raised level (blocks above T) at which a ball can ride a wall's rail, or -1
+         * when it never can ({@link GolfValidatorV3}'s rail rule, which checks the blocks). The
+         * ball's physics reads each block of a column on its own, and holds a ball up by the edges
+         * of its footprint, so a ball whose edge is over a wall rests on the top of the wall's block
+         * at its own height and can roll along it like a rail, held above a lower lane or a pond
+         * beside it — and over the first wall no more than half a block above it. Rolling sideways
+         * never puts a ball's edge over a wall; it gets there only where the wall's line begins:
+         * rolling along it from a column its edge was over (lane, or a pond) into one that is the
+         * wall. Its edge can be out over a lower side (lane no more than a step up, or a pond, beside
+         * the cell it is on: a plateau's edge where the approach's wall begins), or its centre can be
+         * the one out, hanging off a lip over the lower lane or a pond with its edge on the upper
+         * cell (the dogleg's ledge running into the upper leg's side wall). Either way, followed
+         * along the wall's line while its centre's column lets it on, the ball rides the wall only
+         * once its centre is over something lower. A rail at the turf is harmless (the lane is there;
+         * over a pond, a ball that stops there has fallen in); a rail above it is closed by standing
+         * every ring wall a block above it, so a ball riding it meets a wall at its end and never
+         * rolls over one.
          */
         private int railLevel() {
             int rail = -1;
-            for (int x = 0; x < PLOT_X; x++) {
-                for (int z = 0; z < PLOT_Z; z++) {
-                    if (!lane[x][z] || level[x][z] < 2) {
-                        continue;
+            for (int qx = 0; qx < PLOT_X; qx++) {
+                for (int qz = 0; qz < PLOT_Z; qz++) {
+                    if (!lane[qx][qz] && !water[qx][qz]) {
+                        continue; // the column under the ball's centre
                     }
-                    double l = surface(x, z);
                     for (int[] e : FOUR) {
-                        int sx = x + e[0];
-                        int sz = z + e[1];
-                        boolean open = water(sx, sz) || lane(sx, sz) && surface(sx, sz) <= l + LaneMap.STEP + EPS;
-                        if (!open) {
-                            continue;
+                        int px = qx + e[0];
+                        int pz = qz + e[1];
+                        if (!lane(px, pz) && !water(px, pz)) {
+                            continue; // the column under its edge
+                        }
+                        double s = Math.max(lane[qx][qz] ? surface(qx, qz) : Double.NEGATIVE_INFINITY,
+                                lane(px, pz) ? surface(px, pz) : Double.NEGATIVE_INFINITY);
+                        if (s < 1 - EPS || (int) Math.floor(s + EPS) <= rail) {
+                            continue; // at the turf, over no lane, or no higher than a rail already found
                         }
                         for (int[] m : FOUR) {
-                            if (m[0] * e[0] + m[1] * e[1] != 0) {
-                                continue; // along the wall only
-                            }
-                            int cx = x + m[0];
-                            int cz = z + m[1];
-                            int wx = cx + e[0];
-                            int wz = cz + e[1];
-                            boolean on = lane(cx, cz) && surface(cx, cz) <= l + LaneMap.STEP + EPS;
-                            boolean wall = wx >= 0 && wz >= 0 && wx < PLOT_X && wz < PLOT_Z && !lane[wx][wz]
-                                    && !water[wx][wz] && (obstacle(wx, wz) || walled(wx, wz));
-                            if (on && wall) {
-                                rail = Math.max(rail, (int) Math.floor(l + EPS));
+                            if (m[0] * e[0] + m[1] * e[1] == 0 && rides(qx, qz, px, pz, m, s)) {
+                                rail = (int) Math.floor(s + EPS);
                             }
                         }
                     }
                 }
             }
             return rail;
+        }
+
+        /**
+         * Whether a ball at height {@code s} above T, its centre over column q and its edge over
+         * column p, rolled along {@code m} rides a wall: its edge goes onto a wall's line (the next
+         * columns along from p) while its centre's columns let it on, until its centre is over
+         * lower lane or a pond. Walls are taken to stand more than half a block above {@code s}
+         * (the rail's own rule makes them so), so a centre that meets one stops the ball.
+         */
+        private boolean rides(int qx, int qz, int px, int pz, int[] m, double s) {
+            for (int j = 1; ; j++) {
+                int wx = px + j * m[0];
+                int wz = pz + j * m[1];
+                int nx = qx + j * m[0];
+                int nz = qz + j * m[1];
+                boolean wall = wx >= 0 && wz >= 0 && wx < PLOT_X && wz < PLOT_Z && !lane[wx][wz] && !water[wx][wz]
+                        && (obstacle(wx, wz) || walled(wx, wz));
+                if (!wall) {
+                    return false; // its edge is back over lane or a pond: the ball's own footing again
+                }
+                if (water(nx, nz) || lane(nx, nz) && surface(nx, nz) < s - EPS) {
+                    return true; // held up by the wall alone, over something lower
+                }
+                if (!lane(nx, nz) || surface(nx, nz) > s + LaneMap.STEP + EPS) {
+                    return false; // its centre meets a wall or a step it can't climb: it stops
+                }
+            }
         }
 
         HoleLayout render(HoleTemplate template, boolean mirror, int plotX, int plotZ, int turfY, String describe) {

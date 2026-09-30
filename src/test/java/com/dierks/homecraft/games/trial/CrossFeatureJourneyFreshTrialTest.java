@@ -43,6 +43,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the new layout in the other half and flips it, but the old half stands until the runner on it is done,
  * so her run there still counts on the old board; the Cup is called off because the course changed and
  * refunds everyone, sets no more times and takes no new entry; the new layout starts on a fresh board.
+ *
+ * <p>Why the reroll's runs are checked twice. On the reroll's day, run 1's rewards have left too little of
+ * the shipped {@code skill_daily_cap} for the set's first finish, so a second payment keyed by the layout
+ * would be held back by the cap, not by its ref: the rows alone can't tell the two apart, but the player
+ * can, because a held-back reward says "finish it again another day" and an already-paid one says nothing.
+ * The next day (the same set, today's caps fresh) the rows can: only the set's ref stops a second payment.
  */
 class CrossFeatureJourneyFreshTrialTest {
 
@@ -159,6 +165,31 @@ class CrossFeatureJourneyFreshTrialTest {
         return out;
     }
 
+    /** The set's first finish, paid once: the one {@code DAILY_CLEAR} row, keyed by the set (no reroll). */
+    private void paidOnceBySet(Player p, GenTag tag, String when) throws Exception {
+        assertEquals(List.of(SkillRewards.freshClearRef(SLOT, tag.edition())), refs(p, "DAILY_CLEAR"),
+                when + ": still the set's one first finish, keyed by the set, never by a reroll's layout");
+    }
+
+    /** What a reward held back by today's caps reads: an already-paid one says none of it. */
+    private void toldNothingAboutCaps(Player p, String when) {
+        String heard = j.bench.heard(id(p));
+        assertFalse(heard.contains("token limit"), when + ": the set's first finish is paid, so nothing is left"
+                + " to promise for another day: " + heard);
+        assertFalse(heard.contains("all the game tokens you can today"), when + ": nor is anything capped: " + heard);
+    }
+
+    /**
+     * What today's caps still let through for {@code p} in Time Trials (the smaller of what is left of
+     * {@code skill_daily_cap} and of the game's {@code daily_cap}): the room a capped reward has now.
+     */
+    private int roomToday(Player p) throws Exception {
+        long day = j.games.clock().dayKey();
+        int all = j.games.config().common().skillDailyCap() - j.bench.dao().rewardsToday(id(p), day);
+        int game = j.trials.settings().dailyCap() - j.bench.dao().rewardsToday(id(p), TimeTrials.SPEC.id(), day);
+        return Math.min(all, game);
+    }
+
     @Test
     void aFreshRunWithAWarmUpCountsOnceAndARegenerateLetsTheRunnerFinishOnTheOldLayout() throws Exception {
         Course a = course();
@@ -242,7 +273,7 @@ class CrossFeatureJourneyFreshTrialTest {
         cross(ava, 41_000);
         assertEquals(41_000L, best(ava, tagA), "run 2 counted on the old layout's board");
         assertEquals(0, boardRows(tagB), "nothing on the new layout's board");
-        assertEquals(1, refs(ava, "DAILY_CLEAR").size(), "still one first finish of the set (none for the reroll)");
+        paidOnceBySet(ava, tagA, "run 2, after the flip");
         assertEquals(2, j.told.courses(id(ava)), "FINISH_COURSE twice now");
         assertEquals(42_000L, j.cupTime(id(ava), SLOT), "a called-off Cup takes no time");
         home(ava);
@@ -260,16 +291,35 @@ class CrossFeatureJourneyFreshTrialTest {
         cross(ava, 44_000);
         assertEquals(44_000L, best(ava, tagB), "run 3 is on the new layout's board");
         assertEquals(1, boardRows(tagB), "its only row: a fresh board");
-        assertEquals(1, refs(ava, "DAILY_CLEAR").size(), "still one first finish of the set");
+        paidOnceBySet(ava, tagA, "run 3, on the reroll");
+        toldNothingAboutCaps(ava, "run 3, on the reroll");
         assertEquals(3, j.told.courses(id(ava)), "FINISH_COURSE three times");
         assertEquals(42_000L, j.cupTime(id(ava), SLOT), "no Cup time from run 3");
         home(ava);
 
-        // 9. Ben tries the Cup again
+        // 9. The next day, the same set: today's caps are fresh, so only the set's ref can refuse a second payment
+        j.bench.move(24L * 60 * 60 * 1000);
+        Course b2 = course();
+        assertEquals(tagB.editionKey(), b2.gen().editionKey(), "the next day is still the set's rerolled layout");
+        int clear = com.dierks.homecraft.gui.games.daily.DailyLookup.freshClear(j.games, tagB);
+        assertTrue(clear > 0, "the set's first finish pays something");
+        assertTrue(roomToday(ava) >= clear, "a new day: the caps have room for the whole first finish (" + clear
+                + " of " + roomToday(ava) + "), so only its ref can refuse it now");
+        begin(ava, b2);
+        counted(ava, b2);
+        fresh.drive(44);
+        cross(ava, 43_000);
+        assertEquals(43_000L, best(ava, tagB), "run 4 counted, on the new layout's board");
+        paidOnceBySet(ava, tagA, "run 4, the next day");
+        toldNothingAboutCaps(ava, "run 4, the next day");
+        assertEquals(4, j.told.courses(id(ava)), "FINISH_COURSE four times");
+        home(ava);
+
+        // 10. Ben tries the Cup again
         assertNotNull(j.cup.desk().enter(id(ben), b), "refused: this week's Cup on it is settled");
         assertTrue(refs(ben, "DAILY_CLEAR").isEmpty(), "Ben never finished");
         assertEquals(20, j.bench.balance(id(ben)), "and paid nothing more");
-        assertEquals(3, later.size(), "each counted solo finish got as far as scheduling its result screen");
+        assertEquals(4, later.size(), "each counted solo finish got as far as scheduling its result screen");
         assertEquals(0, j.bench.severe(), "nothing threw: " + j.bench.severeLines());
         assertEquals(0, fresh.severe(), "the engine logged nothing severe: " + fresh.logged());
     }

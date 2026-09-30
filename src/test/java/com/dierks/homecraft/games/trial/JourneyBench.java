@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
@@ -220,8 +221,18 @@ final class JourneyBench implements AutoCloseable {
 
     // ---- the server's side -------------------------------------------------------------------------
 
-    /** A world by name (the few methods race mode and ride along ask of it). */
+    /**
+     * The worlds handed out, held: a {@link Location} keeps its world only weakly, so a proxy nobody else
+     * holds can be collected mid-journey and {@code getWorld()} throws "World unloaded".
+     */
+    private static final Map<String, World> WORLDS = new ConcurrentHashMap<>();
+
+    /** A world by name (the few methods race mode and ride along ask of it); one per name. */
     static World world(String name) {
+        return WORLDS.computeIfAbsent(name, JourneyBench::newWorld);
+    }
+
+    private static World newWorld(String name) {
         return (World) Proxy.newProxyInstance(JourneyBench.class.getClassLoader(), new Class<?>[]{World.class},
                 (proxy, m, a) -> switch (m.getName()) {
                     case "getName" -> name;

@@ -21,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 /**
@@ -318,7 +319,14 @@ public final class GolfBench implements GolfGroups.Port {
         return p == null ? "a player" : p.getName();
     }
 
+    /** The worlds handed out, held: a {@link Location} keeps its world only weakly ("World unloaded"). */
+    private static final Map<String, World> WORLDS = new ConcurrentHashMap<>();
+
     private static World world(String name) {
+        return WORLDS.computeIfAbsent(name, GolfBench::newWorld);
+    }
+
+    private static World newWorld(String name) {
         return (World) Proxy.newProxyInstance(GolfBench.class.getClassLoader(), new Class<?>[]{World.class},
                 (proxy, m, a) -> switch (m.getName()) {
                     case "getName" -> name;

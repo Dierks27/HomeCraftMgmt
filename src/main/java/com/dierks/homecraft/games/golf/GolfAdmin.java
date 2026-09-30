@@ -244,6 +244,9 @@ final class GolfAdmin implements GameAdmin {
                     + (gen.reroll() > 0 ? " (reroll " + gen.reroll() + ")" : "") + ", half " + gen.half()
                     + (golf.games().generated().live(c.id(), gen) ? ", &aopen" : ", &cclosed right now")
                     + " &7- &e/hcm games gen status");
+        } else if (c.adventure()) {
+            tell(sender, "&dKept from Adventure Golf: &7its smooth sandstone plays as sand, and a ball that stops"
+                    + " over water falls in (+1, back to its spot), as when it was made.");
         }
         List<UUID> playing = golf.playing().getOrDefault(c.id(), List.of());
         if (!playing.isEmpty()) {

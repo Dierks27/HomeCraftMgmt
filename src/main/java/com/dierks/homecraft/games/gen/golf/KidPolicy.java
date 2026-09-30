@@ -9,6 +9,7 @@ import com.dierks.homecraft.games.golf.GolfShot;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * The sloppy player, K (GEN-SPEC §4.3): a fixed, simple way of playing with a shaky aim, played
@@ -82,14 +83,18 @@ final class KidPolicy {
     private final BallPhysics.Hole area;
     private final LaneMap lane;
     private final Work work;
+    /** Told every outcome of every putt the kid makes ({@code null}: nobody asked). */
+    private final Consumer<GolfShot.Result> seen;
     /** Per exact spot: the remaining strokes worked out, or a lower bound when cut off. */
     private final Map<List<Double>, int[]> memo = new HashMap<>();
 
-    private KidPolicy(BallPhysics.Blocks blocks, BallPhysics.Hole area, LaneMap lane, Work work) {
+    private KidPolicy(BallPhysics.Blocks blocks, BallPhysics.Hole area, LaneMap lane, Work work,
+                      Consumer<GolfShot.Result> seen) {
         this.blocks = blocks;
         this.area = area;
         this.lane = lane;
         this.work = work;
+        this.seen = seen;
     }
 
     /**
@@ -99,8 +104,22 @@ final class KidPolicy {
      */
     static Result evaluate(BallPhysics.Blocks blocks, GolfCourse.Hole hole, LaneMap lane, int limit, Work work)
             throws GenFailed {
+        return evaluate(blocks, hole, lane, limit, work, null);
+    }
+
+    /**
+     * {@link #evaluate(BallPhysics.Blocks, GolfCourse.Hole, LaneMap, int, Work)}, telling {@code seen}
+     * (when not {@code null}) every outcome of every putt the kid makes in the tree: where each came
+     * to rest, and whether it was a penalty. The tree is the same either way; the validator uses it
+     * to prove every rest spot is on the lane (Course Variety §3.8 rule 12), and a property test that
+     * the kid is never wet (G-T3).
+     *
+     * @throws GenFailed when the job was cancelled
+     */
+    static Result evaluate(BallPhysics.Blocks blocks, GolfCourse.Hole hole, LaneMap lane, int limit, Work work,
+                           Consumer<GolfShot.Result> seen) throws GenFailed {
         BallPhysics.Ball tee = GolfShot.tee(blocks, hole);
-        KidPolicy k = new KidPolicy(blocks, GolfShot.area(blocks, hole), lane, work);
+        KidPolicy k = new KidPolicy(blocks, GolfShot.area(blocks, hole), lane, work, seen);
         try {
             int worst = k.remaining(tee.x(), tee.y(), tee.z(), limit);
             return worst <= limit ? new Result(Status.WITHIN, worst) : new Result(Status.OVER_LIMIT, worst);
@@ -123,6 +142,11 @@ final class KidPolicy {
             return known[0];
         }
         Outcomes chosen = choose(x, y, z);
+        if (seen != null) {
+            for (GolfShot.Result r : chosen.results()) {
+                seen.accept(r);
+            }
+        }
         int worst = 0;
         boolean cut = false;
         for (GolfShot.Result r : chosen.results()) {

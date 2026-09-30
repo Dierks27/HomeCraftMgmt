@@ -14,6 +14,7 @@ import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.Putt;
 import com.dierks.homecraft.games.gen.api.SignText;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.golf.BallPhysics;
 import com.dierks.homecraft.games.golf.GolfCourse;
 import com.dierks.homecraft.games.golf.GolfShot;
 
@@ -21,6 +22,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * The planner for Daily Golf and Tiny Golf (GEN-SPEC §4.3): a course of proven holes from a seed,
@@ -33,23 +35,29 @@ import java.util.Map;
  * to tee anyway). The turf's top is T = the half's floor + {@value #TURF_ABOVE_FLOOR}.
  *
  * <p><b>Holes.</b> The mix ({@code EEEMMMMHH}) gives each hole a tier. Each tier's templates are
- * dealt in a seeded order, so a course doesn't repeat a shape while its tier has others. Every hole
- * is then drawn and proven:
+ * dealt in a seeded order, the first of {@link Quota#DEALS} deals that gives the course its variety
+ * quota (some water, sand, height, a tree hole and a big drop: {@link Quota}), so a course doesn't
+ * repeat a shape while its tier has others. Every hole is then drawn and proven:
  * <ol>
- *   <li>the expert search ({@link ExpertSearch}) finds E, the fewest putts that hole out, and a
- *       witness line that replays exactly; par is E + 1 (clamped to 2-6);</li>
+ *   <li>its blocks pass Adventure Golf's per-hole rules
+ *       ({@link GolfValidator#holeProblems(PlanBlocks, GolfCourse.Hole, int, int)});</li>
+ *   <li>the expert search finds E, the fewest putts that hole out, and a witness line that replays
+ *       exactly — on a hole with water in play {@link SafeExpert}'s, whose every putt stays dry a few
+ *       degrees either side, so par is the safe line; par is E + 1 (clamped to 2-6);</li>
  *   <li>the tier must like the par: Easy 2-3, Medium and Hard 3-4;</li>
- *   <li>the sloppy player ({@link KidPolicy}) must always finish within par + 1.</li>
+ *   <li>the sloppy player ({@link KidPolicy}) must always finish within par + 1, never wet, and
+ *       every spot it or the witness comes to rest is on the lane.</li>
  * </ol>
  * A hole that fails is drawn again from its own stream, {@code fork("hole:" + i + ":try:" + t)}:
  * attempts 0-5 use the hole's template, 6-11 the next one of its tier, and attempt 12 is
  * {@link HoleTemplate#SAFE_STRAIGHT}, which a test proves always passes. So a course is never
- * missing a hole, and re-rolling one hole never changes another.
+ * missing a hole, and re-rolling one hole never changes another. Once a hole is accepted, its plot
+ * gets its scenery ({@link GolfScenery}, {@code fork("scenery:" + i)}), which stands outside the
+ * physics grid and so never changes a proof.
  *
- * <p><b>Checked before it leaves.</b> A finished plan is put through the full, independent
- * {@link GolfValidator} (the sloppy player included) here on the planner thread; a plan with any
- * problem is a failed try. The main thread's pre-build check then only needs
- * {@link GolfValidator#quickProblems}.
+ * <p><b>Tiny Golf stays dry.</b> It is the four-year-old's course: Easy never has water in play,
+ * and even if an admin gives Tiny Golf a Medium or Hard mix, its tiers deal no template that puts
+ * water in play ({@link Quota#list}).
  *
  * <p><b>Counted work.</b> Every simulated putt counts: at most {@value #ATTEMPT_BUDGET} an attempt
  * and {@link PlanInput#workBudget()} (default {@value #COURSE_BUDGET}) a course, a cap the whole
@@ -69,8 +77,11 @@ public final class GolfPlanner implements Planner {
     /**
      * Its version; bumped whenever what it makes for a seed changes (the golden tests pin it). 2: the
      * work kept back for fallbacks is a fallback's cost, so a course near its budget plans differently.
+     * 3: Adventure Golf (Course Variety §3): eleven new templates (sand, ponds, a creek, trees in
+     * play, hills, terraces, a volcano), the variety quota's deal, the safe par on pond holes, the
+     * rest-spot rule, and scenery on every plot. Layouts of version 2 are judged by the frozen rules.
      */
-    public static final int ALGO = 2;
+    public static final int ALGO = 3;
     /** Most simulated putts for one attempt at one hole. */
     public static final long ATTEMPT_BUDGET = 100_000L;
     /** Most simulated putts for a course when the input doesn't say. */
@@ -196,22 +207,51 @@ public final class GolfPlanner implements Planner {
         return FALLBACK_RESERVE * holes + ExpertSearch.MAX_DEPTH;
     }
 
-    /** Prove one drawn hole for its tier ('S' for the fallback: any par the search finds), or null. */
+    /**
+     * Prove one drawn hole for its tier ('S' for the fallback: any par the search finds), or null:
+     * its blocks sound by Adventure Golf's per-hole rules, the expert's line (safe on a pond hole)
+     * inside the tier's range with every rest spot on the lane, and the sloppy player within par + 1,
+     * never wet, every rest spot of its tree on the lane — what the full check will ask of it.
+     */
     static Solved solve(HoleLayout layout, char tier, int attempt, Work work) throws GenFailed {
         PlanBlocks grid = layout.grid(plotBox(layout));
         GolfCourse.Hole hole = layout.hole(GolfCourse.MIN_PAR);
-        LaneMap lane = LaneMap.of(grid, hole);
+        if (!GolfValidator.holeProblems(grid, hole, 1, ALGO).isEmpty()) {
+            return null;
+        }
+        LaneMap lane = LaneMap.of(grid, hole, ALGO);
         int[] range = expertRange(tier);
-        ExpertSearch.Result es = ExpertSearch.search(grid, hole, lane, range[1], work);
-        if (!es.found() || es.strokes() < range[0]) {
+        ExpertSearch.Result es = SafeExpert.search(grid, hole, lane, range[1], work);
+        if (!es.found() || es.strokes() < range[0] || !restsOnLane(grid, hole, lane, es.witness())) {
             return null;
         }
         int par = par(es.strokes());
-        KidPolicy.Result kid = KidPolicy.evaluate(grid, hole, lane, par + 1, work);
-        if (!kid.within()) {
+        boolean[] off = {false};
+        KidPolicy.Result kid = KidPolicy.evaluate(grid, hole, lane, par + 1, work, r -> {
+            if (!r.inCup() && (r.penalty() || !GolfValidatorV3.restsOnLane(lane, r.x(), r.y(), r.z()))) {
+                off[0] = true;
+            }
+        });
+        if (!kid.within() || off[0]) {
             return null;
         }
         return new Solved(attempt, layout, es.strokes(), par, kid.worst(), es.witness());
+    }
+
+    /** Whether every spot {@code witness} comes to rest at, played from the tee, is on the lane (rule 12). */
+    private static boolean restsOnLane(PlanBlocks grid, GolfCourse.Hole hole, LaneMap lane, List<Putt> witness) {
+        BallPhysics.Hole area = GolfShot.area(grid, hole);
+        BallPhysics.Ball ball = GolfShot.tee(grid, hole);
+        for (Putt p : witness) {
+            GolfShot.Result r = GolfShot.play(grid, area, ball, p);
+            if (r.inCup()) {
+                return true;
+            }
+            if (!GolfValidatorV3.restsOnLane(lane, r.x(), r.y(), r.z())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Par for an expert line of {@code expert} putts: one more, 2-6. */
@@ -315,14 +355,22 @@ public final class GolfPlanner implements Planner {
                 half.minZ() + row * (HoleTemplate.PLOT_Z + GAP_Z)};
     }
 
-    /** One course being planned or re-derived: its input, mix, streams and template order. */
+    /**
+     * Whether a slot's courses stay dry whatever their mix: Tiny Golf, the four-year-old's course,
+     * never has water in play.
+     */
+    static boolean dry(Slots.Def slot) {
+        return Slots.TINY_GOLF.id().equals(slot.id());
+    }
+
+    /** One course being planned or re-derived: its input, mix, streams and the quota's deal. */
     private static final class Course {
 
         private final PlanInput in;
         private final String mix;
         private final GenRandom root;
         private final int turfY;
-        private final Map<Character, List<HoleTemplate>> order = new HashMap<>();
+        private final Quota.Deal deal;
 
         Course(PlanInput in, String mix) throws GenFailed {
             this.in = in;
@@ -339,17 +387,7 @@ public final class GolfPlanner implements Planner {
                     throw new GenFailed("hole " + (i + 1) + " doesn't fit the half " + half.describe());
                 }
             }
-            for (char tier : new char[]{'E', 'M', 'H'}) {
-                List<HoleTemplate> list = new ArrayList<>(HoleTemplate.forTier(tier));
-                GenRandom r = root.fork("order:" + tier);
-                for (int k = list.size() - 1; k > 0; k--) {
-                    int j = r.nextInt(k + 1);
-                    HoleTemplate tmp = list.get(k);
-                    list.set(k, list.get(j));
-                    list.set(j, tmp);
-                }
-                order.put(tier, list);
-            }
+            this.deal = Quota.deal(root, mix, dry(in.slot()));
         }
 
         /** Hole {@code i}'s template for attempt {@code t}. */
@@ -357,15 +395,7 @@ public final class GolfPlanner implements Planner {
             if (t >= ATTEMPTS) {
                 return HoleTemplate.SAFE_STRAIGHT;
             }
-            char tier = mix.charAt(i);
-            int k = 0;
-            for (int j = 0; j < i; j++) {
-                if (mix.charAt(j) == tier) {
-                    k++;
-                }
-            }
-            List<HoleTemplate> list = order.get(tier);
-            return list.get((k + (t < SWITCH_AFTER ? 0 : 1)) % list.size());
+            return Quota.template(deal.order(), mix, i, t >= SWITCH_AFTER);
         }
 
         /** Hole {@code i}, attempt {@code t}, drawn. */
@@ -376,19 +406,29 @@ public final class GolfPlanner implements Planner {
         }
 
         Plan assemble(List<Solved> holes, long work) {
-            return GolfPlanner.assemble(in, holes, work);
+            return GolfPlanner.assemble(in, holes, work, Quota.targets(mix, dry(in.slot())), deal.k());
         }
     }
 
     /**
-     * The plan for {@code holes} (in playing order): every block through one palette, a tee sign
-     * per hole, the course Mini Golf runs (world and rev are the engine's to set), and what the
-     * row stores.
+     * The plan for {@code holes} (in playing order), as {@link #assemble(PlanInput, List, long, Map, int)}
+     * makes it with no quota line (a test's plan).
      */
     static Plan assemble(PlanInput in, List<Solved> holes, long work) {
-        List<String> palette = new ArrayList<>();
-        Map<String, Short> index = new HashMap<>();
-        List<BlockOp> ops = new ArrayList<>();
+        return assemble(in, holes, work, null, -1);
+    }
+
+    /**
+     * The plan for {@code holes} (in playing order): every block through one palette, each plot's
+     * scenery ({@link GolfScenery}, from the stream {@code scenery:<hole>}), every leaf at the
+     * distance vanilla gives it over the whole plan, a tee sign per hole saying its par and its main
+     * feature, the course Mini Golf runs (world and rev are the engine's to set), and what the row
+     * stores. The summary says each hole's features and, given the quota's {@code targets}, what the
+     * course ended up with against them.
+     */
+    static Plan assemble(PlanInput in, List<Solved> holes, long work, Map<Quota.Feature, Integer> targets, int deal) {
+        GenRandom root = new GenRandom(in.seed());
+        List<HoleLayout.Placed> placed = new ArrayList<>();
         List<SignText> signs = new ArrayList<>();
         List<GolfCourse.Hole> course = new ArrayList<>();
         List<Integer> attempts = new ArrayList<>();
@@ -397,21 +437,18 @@ public final class GolfPlanner implements Planner {
         List<Integer> kid = new ArrayList<>();
         List<Box> keepClear = new ArrayList<>();
         List<String> summary = new ArrayList<>();
+        List<HoleLayout> layouts = new ArrayList<>();
         int par = 0;
         for (int i = 0; i < holes.size(); i++) {
             Solved s = holes.get(i);
             HoleLayout l = s.layout();
-            for (HoleLayout.Placed p : l.blocks()) {
-                Short state = index.get(p.blockData());
-                if (state == null) {
-                    state = (short) palette.size();
-                    palette.add(p.blockData());
-                    index.put(p.blockData(), state);
-                }
-                ops.add(new BlockOp(p.x(), p.y(), p.z(), state));
-            }
+            layouts.add(l);
+            placed.addAll(l.blocks());
+            placed.addAll(l.scenery());
+            int[] p = plot(in.half(), i);
+            placed.addAll(GolfScenery.trees(root.fork("scenery:" + i), l, p[0], p[1], in.half()));
             signs.add(new SignText(l.signX(), l.signY(), l.signZ(), Palette.sign(0),
-                    GenCopy.golfTee(i + 1, s.par())));
+                    GenCopy.golfTee(i + 1, s.par(), l.teeFeature())));
             course.add(l.hole(s.par()));
             attempts.add(s.attempt());
             witness.add(s.witness());
@@ -421,15 +458,64 @@ public final class GolfPlanner implements Planner {
             }
             keepClear.add(l.bounds());
             par += s.par();
+            String has = l.features().isEmpty() ? "" : "; " + l.features().stream().sorted()
+                    .map(Quota.Feature::words).collect(Collectors.joining(", "));
             summary.add("hole " + (i + 1) + ": " + l.describe() + " - E " + s.expert() + ", par " + s.par()
-                    + (s.kid() >= 0 ? ", K " + s.kid() : "") + " (try " + (s.attempt() + 1) + ")");
+                    + (s.kid() >= 0 ? ", K " + s.kid() : "") + " (try " + (s.attempt() + 1) + ")" + has);
+        }
+        List<String> palette = new ArrayList<>();
+        Map<String, Short> index = new HashMap<>();
+        List<BlockOp> ops = new ArrayList<>();
+        for (HoleLayout.Placed p : leaves(placed)) {
+            Short state = index.get(p.blockData());
+            if (state == null) {
+                state = (short) palette.size();
+                palette.add(p.blockData());
+                index.put(p.blockData(), state);
+            }
+            ops.add(new BlockOp(p.x(), p.y(), p.z(), state));
         }
         Slots.Def slot = in.slot();
         summary.add(0, slot.name() + ": " + holes.size() + " holes, par " + par + ", " + work
                 + " putts simulated");
+        if (targets != null) {
+            summary.add(Quota.line(Quota.countLayouts(layouts), targets, deal));
+        }
         GolfCourse gc = new GolfCourse(slot.id(), slot.name(), "", true, 1, course);
         PlannedGolf planned = new PlannedGolf(gc, attempts, witness, expert, kid);
         return Plan.of(slot.id(), ALGO, in.seed(), in.half(), palette, ops, signs, keepClear, planned, summary,
                 work);
+    }
+
+    /**
+     * {@code placed} with every leaf's distance worked out again over the whole plan (every log and
+     * stripped-wood wall holds leaves), as vanilla will: each hole and tree worked its own out, and
+     * nothing of one stands beside another, so this changes nothing unless something does.
+     */
+    private static List<HoleLayout.Placed> leaves(List<HoleLayout.Placed> placed) {
+        List<int[]> logs = new ArrayList<>();
+        List<int[]> leaves = new ArrayList<>();
+        for (HoleLayout.Placed p : placed) {
+            if (Palette.holdsLeaves(p.blockData())) {
+                logs.add(new int[]{p.x(), p.y(), p.z()});
+            } else if (Palette.isLeaves(p.blockData())) {
+                leaves.add(new int[]{p.x(), p.y(), p.z()});
+            }
+        }
+        if (leaves.isEmpty()) {
+            return placed;
+        }
+        Map<Long, Integer> d = Palette.leafDistances(logs, leaves);
+        List<HoleLayout.Placed> out = new ArrayList<>(placed.size());
+        for (HoleLayout.Placed p : placed) {
+            if (Palette.isLeaves(p.blockData())) {
+                String wood = Palette.id(p.blockData()).substring("minecraft:".length()).replace("_leaves", "");
+                out.add(new HoleLayout.Placed(p.x(), p.y(), p.z(), Palette.leaves(wood,
+                        d.get(Palette.blockKey(p.x(), p.y(), p.z())))));
+            } else {
+                out.add(p);
+            }
+        }
+        return out;
     }
 }

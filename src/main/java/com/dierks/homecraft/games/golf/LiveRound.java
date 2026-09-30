@@ -9,7 +9,8 @@ import java.util.UUID;
  * <p>The round's own rules live here, with no server in them, so they are tested against a fake
  * block grid: a putt goes the way the player looks and counts a stroke; a tick of the ball either
  * leaves it rolling, stops it, drops it in the cup (the hole is done), or — in water, lava or out
- * of bounds — puts it back on its last spot with a penalty stroke; and a ball at rest once the
+ * of bounds, or on Adventure Golf at rest over water ({@link GolfShot#settled}) — puts it back on
+ * its last spot with a penalty stroke; and a ball at rest once the
  * strokes reach the limit is picked up. {@link GolfRounds} plays it on the server: the entities,
  * the chat, the screens.
  */
@@ -127,6 +128,7 @@ final class LiveRound {
             ball.place(ball.x(), ball.y(), ball.z()); // half a minute is enough: it stops here
             o = BallPhysics.restsInCup(ball, blocks, area) ? BallPhysics.Outcome.IN_CUP : BallPhysics.Outcome.STOPPED;
         }
+        o = GolfShot.settled(blocks, ball, o); // Adventure Golf: stopped over water, it has fallen in
         outcome = o;
         if (ball.speed() > BallPhysics.STOP) {
             yaw = (float) Math.toDegrees(Math.atan2(-ball.vx(), ball.vz()));

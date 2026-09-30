@@ -14,15 +14,19 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The golf planner's block model (GEN-SPEC §4.3): a line that holes on it must hole on the real
  * blocks, so every block a plan may use reads here exactly as {@code LiveBlocks} reads it on the
- * server — the same surface (ice, slow, slime or normal, by {@code LiveBlocks.surface(Material)})
- * and the same collision top (a full block 1, a bottom slab 0.5, a sign nothing), at every point
- * of the block.
+ * server for a generated course of golf algo 3 or later (Course Variety §3.4) — the same surface
+ * (ice, slow, slime, water or normal, by {@code LiveBlocks.surface(Material, true)}) and the same
+ * collision top (a full block 1, a bottom slab 0.5, a sign or water nothing), at every point of the
+ * block. Every block but smooth sandstone reads the same on a hand-built course too, and no layout
+ * of an older version has any, so none of their witness lines move.
  */
 class PlanBlocksTest {
 
@@ -38,17 +42,22 @@ class PlanBlocksTest {
             REAL_TOP.put(id, 1.0);
         }
         REAL_TOP.put("minecraft:smooth_stone_slab", 0.5);
+        REAL_TOP.put("minecraft:smooth_sandstone_slab", 0.5);
         REAL_TOP.put("minecraft:oak_sign", BallPhysics.Blocks.NONE);
         REAL_TOP.put("minecraft:oak_wall_sign", BallPhysics.Blocks.NONE);
     }
 
-    /** Block-data text as plans write it: the slab as a bottom slab, signs with a state. */
+    /** Block-data text as plans write it: slabs as bottom slabs, signs, logs and leaves with their states. */
     private static String data(String id) {
+        String wood = id.replace("minecraft:", "").replace("_log", "").replace("_leaves", "");
         return switch (id) {
             case "minecraft:smooth_stone_slab" -> Palette.RAMP;
+            case "minecraft:smooth_sandstone_slab" -> Palette.SAND_SLAB;
             case "minecraft:oak_sign" -> Palette.sign(0);
             case "minecraft:oak_wall_sign" -> Palette.wallSign("north");
             case "minecraft:quartz_pillar" -> id + "[axis=y]";
+            case "minecraft:oak_log", "minecraft:birch_log", "minecraft:cherry_log" -> Palette.log(wood);
+            case "minecraft:oak_leaves", "minecraft:birch_leaves", "minecraft:cherry_leaves" -> Palette.leaves(wood, 2);
             default -> id;
         };
     }
@@ -60,10 +69,62 @@ class PlanBlocksTest {
             Material m = Material.matchMaterial(id);
             assertNotNull(m, id + " is a real block");
             byte code = PlanBlocks.code(data(id));
-            assertEquals(LiveBlocks.surface(m), PlanBlocks.surface(code),
-                    id + " rolls on the same surface as on the server");
+            assertEquals(LiveBlocks.surface(m, true), PlanBlocks.surface(code),
+                    id + " rolls on the same surface as on the server, on a generated course of golf algo 3+");
             assertEquals(REAL_TOP.get(id), PlanBlocks.top(code), id + " is as high as its real collision shape");
+            if (!id.startsWith("minecraft:smooth_sandstone")) {
+                assertEquals(LiveBlocks.surface(m, false), PlanBlocks.surface(code),
+                        id + " reads the same on a hand-built course too: only sand differs");
+            }
         }
+    }
+
+    @Test
+    void adventureGolfsBlocksAreTheOnesTheSpecNames() {
+        assertEquals(PlanBlocks.WATER, PlanBlocks.code("minecraft:water[level=0]"), "a pond's still water");
+        assertEquals(BallPhysics.Blocks.NONE, PlanBlocks.top(PlanBlocks.WATER), "water holds nothing up: the ball"
+                + " drops in");
+        assertEquals(BallPhysics.Surface.WATER, PlanBlocks.surface(PlanBlocks.WATER), "and it is wet");
+        assertEquals(LiveBlocks.surface(Material.WATER, true), PlanBlocks.surface(PlanBlocks.WATER),
+                "as the server reads it");
+        assertEquals(PlanBlocks.SAND, PlanBlocks.code(Palette.SAND), "smooth sandstone is sand");
+        assertEquals(1.0, PlanBlocks.top(PlanBlocks.SAND), "a full block (a flush bunker)");
+        assertEquals(BallPhysics.Surface.SLOW, PlanBlocks.surface(PlanBlocks.SAND), "and slow (§3.4)");
+        assertEquals(PlanBlocks.SAND_SLAB, PlanBlocks.code(Palette.SAND_SLAB), "its bottom slab");
+        assertEquals(0.5, PlanBlocks.top(PlanBlocks.SAND_SLAB), "is half a block (a sunken bunker, top T - 0.5)");
+        assertEquals(BallPhysics.Surface.SLOW, PlanBlocks.surface(PlanBlocks.SAND_SLAB), "and slow too");
+        assertTrue(PlanBlocks.slab(PlanBlocks.SAND_SLAB) && PlanBlocks.slab(PlanBlocks.code(Palette.RAMP))
+                && !PlanBlocks.slab(PlanBlocks.SAND), "both slabs are slabs, the full block isn't");
+        for (String wood : Palette.WOODS) {
+            byte leaf = PlanBlocks.code(Palette.leaves(wood, 3));
+            assertEquals(PlanBlocks.LEAVES, leaf, wood + " leaves have their own code (a canopy is told apart)");
+            assertEquals(1.0, PlanBlocks.top(leaf), "but to the ball they are a full block");
+            assertEquals(BallPhysics.Surface.NORMAL, PlanBlocks.surface(leaf), "of a normal surface");
+            assertEquals(PlanBlocks.FULL, PlanBlocks.code(Palette.log(wood)), wood + " logs are full, normal blocks");
+        }
+        for (String full : List.of(Palette.MOSS, Palette.BLUE_GLASS, Palette.GLASS)) {
+            assertEquals(PlanBlocks.FULL, PlanBlocks.code(full), full + " is a full, normal block");
+        }
+    }
+
+    @Test
+    void waterIsOnlyAStillSourceAndIsNeverSolid() {
+        assertThrows(IllegalArgumentException.class, () -> PlanBlocks.code("minecraft:water[level=1]"),
+                "flowing water is no golf block");
+        assertThrows(IllegalArgumentException.class, () -> PlanBlocks.code("minecraft:water"),
+                "nor is water that doesn't say it is a still source");
+        assertThrows(IllegalArgumentException.class, () -> PlanBlocks.code("minecraft:smooth_sandstone_slab"),
+                "a sand slab must say it is a bottom slab");
+        assertThrows(IllegalArgumentException.class,
+                () -> PlanBlocks.code("minecraft:smooth_sandstone_slab[type=top]"), "and be one");
+        Box box = Box.sized(0, 60, 0, 2, 2, 2);
+        PlanBlocks g = PlanBlocks.of(box, List.of("minecraft:water[level=0]", Palette.SAND_SLAB),
+                List.of(new BlockOp(0, 60, 0, (short) 0), new BlockOp(1, 60, 0, (short) 1)));
+        assertFalse(g.solid(0, 60, 0), "water isn't solid");
+        assertEquals(BallPhysics.Blocks.NONE, g.top(0, 60, 0, 0.5, 0.5), "the ball finds nothing to stand on in it");
+        assertEquals(BallPhysics.Surface.WATER, g.surface(0, 60, 0), "and its surface is wet");
+        assertTrue(g.solid(1, 60, 0), "a sand slab is solid");
+        assertEquals(0.5, g.top(1, 60, 0, 1.9, 0.1), "half a block high everywhere in it");
     }
 
     @Test

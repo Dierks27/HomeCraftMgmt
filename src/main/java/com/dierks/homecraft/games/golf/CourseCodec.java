@@ -33,7 +33,9 @@ import java.util.Map;
  *
  * <p>A course Fresh Courses made also has a {@code gen:} block after the holes ({@link GenTagCodec},
  * with each hole's attempt and witness line); a course without one is written exactly as it
- * always was.
+ * always was. A course kept from an Adventure Golf layout says {@code adventure: true}
+ * ({@link GolfCourse#adventure}: it keeps playing Adventure Golf's rules); every other course
+ * leaves it out.
  */
 public final class CourseCodec {
 
@@ -42,6 +44,8 @@ public final class CourseCodec {
     /** The {@code kind} column of a golf row. */
     public static final String KIND = "golf";
     static final int FORMAT = 1;
+    /** The key a course kept from an Adventure Golf layout carries ({@link GolfCourse#adventure}). */
+    static final String ADVENTURE = "adventure";
 
     private CourseCodec() {
     }
@@ -53,6 +57,14 @@ public final class CourseCodec {
 
     /** The holes and, for a generated course, its {@code gen:} block, as YAML text. */
     public static String write(List<GolfCourse.Hole> holes, GenTag gen) {
+        return write(holes, gen, false);
+    }
+
+    /**
+     * The holes, a generated course's {@code gen:} block, and {@code adventure: true} for a course
+     * kept from an Adventure Golf layout ({@link GolfCourse#adventure}), as YAML text.
+     */
+    public static String write(List<GolfCourse.Hole> holes, GenTag gen, boolean adventure) {
         YamlConfiguration yaml = new YamlConfiguration();
         yaml.set("format", FORMAT);
         List<Map<String, Object>> list = new ArrayList<>();
@@ -75,6 +87,9 @@ public final class CourseCodec {
         yaml.set("holes", list);
         if (gen != null) {
             yaml.set(GenTagCodec.KEY, GenTagCodec.write(gen));
+        }
+        if (adventure) {
+            yaml.set(ADVENTURE, true);
         }
         return yaml.saveToString();
     }
@@ -153,7 +168,23 @@ public final class CourseCodec {
     public static GolfCourse fromRow(GamesDao.CourseRow row) {
         YamlConfiguration yaml = load(row.data());
         return new GolfCourse(row.id(), row.name(), row.world(), row.enabled(), row.rev(),
-                yaml == null ? List.of() : holes(yaml), yaml == null ? null : gen(yaml));
+                yaml == null ? List.of() : holes(yaml), yaml == null ? null : gen(yaml),
+                yaml != null && adventure(yaml));
+    }
+
+    /**
+     * Whether the text says {@code adventure: true}; throws {@link IllegalArgumentException} if it
+     * says something else.
+     */
+    private static boolean adventure(YamlConfiguration yaml) {
+        Object raw = yaml.get(ADVENTURE);
+        if (raw == null) {
+            return false;
+        }
+        if (raw instanceof Boolean b) {
+            return b;
+        }
+        throw new IllegalArgumentException(ADVENTURE + " is not true or false");
     }
 
     /**
@@ -163,8 +194,8 @@ public final class CourseCodec {
      * @param now       this edit
      */
     public static GamesDao.CourseRow toRow(GolfCourse c, long createdAt, long now) {
-        return new GamesDao.CourseRow(c.id(), GAME, KIND, c.name(), c.world(), c.enabled(), write(c.holes(), c.gen()),
-                c.rev(), createdAt, now);
+        return new GamesDao.CourseRow(c.id(), GAME, KIND, c.name(), c.world(), c.enabled(),
+                write(c.holes(), c.gen(), c.adventure()), c.rev(), createdAt, now);
     }
 
     private static void put(Map<String, Object> m, String key, GolfCourse.Spot s) {

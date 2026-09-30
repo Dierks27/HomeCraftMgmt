@@ -46,6 +46,15 @@ public final class FreshBench {
      * @param tester what {@code gen test} starts (Time Trials' test run, mirrored)
      */
     public FreshBench(GamesBench bench, Supplier<List<Person>> people, GenAdmin.Tester tester, String... on) {
+        this(bench, people, tester, null, on);
+    }
+
+    /**
+     * The same, the golf slots planned by {@code golf} ({@code null}: {@link GenKit}'s deterministic
+     * one) — an Adventure Golf course with a pond, say, for a golf journey.
+     */
+    public FreshBench(GamesBench bench, Supplier<List<Person>> people, GenAdmin.Tester tester, Planner golf,
+                      String... on) {
         this.bench = bench;
         log.setUseParentHandlers(false);
         host = new GenKit.Host(bench.db(), bench::now, on);
@@ -55,7 +64,7 @@ public final class FreshBench {
         Map<String, Planner> planners = new LinkedHashMap<>();
         planners.put(Slots.PARKOUR, parkour);
         planners.put(Slots.RINGS, new GenKit.FakePlanner(Slots.RINGS));
-        planners.put(Slots.GOLF, new GenKit.FakePlanner(Slots.GOLF));
+        planners.put(Slots.GOLF, golf != null ? golf : new GenKit.FakePlanner(Slots.GOLF));
         planners.put(Slots.BOAT, new GenKit.FakePlanner(Slots.BOAT));
         planners.put(Slots.DROPPER, new GenKit.FakePlanner(Slots.DROPPER));
         engine = new GenService(host, planners);
@@ -98,6 +107,11 @@ public final class FreshBench {
 
     public GenTag liveTag(String slot) {
         return engine.liveTag(slot);
+    }
+
+    /** The Games world the engine builds in (a map of blocks), as its ports see it. */
+    public WorldPort world() {
+        return host.world();
     }
 
     /** Blocks the fake world holds inside {@code box}. */

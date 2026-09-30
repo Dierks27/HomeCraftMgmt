@@ -72,6 +72,17 @@ public interface WorldPort {
     BallPhysics.Blocks ballBlocks();
 
     /**
+     * The real blocks as the golf ball sees them on a course that plays Adventure Golf's rules
+     * ({@code sand}: a layout of golf algo 3 or later, Course Variety §3.4 — its smooth sandstone is
+     * sand, and a ball at rest over water has fallen in) or not (a hand-built course, and every
+     * older layout: sandstone is any stone). A port whose blocks have no sand or water to tell apart
+     * may ignore it.
+     */
+    default BallPhysics.Blocks ballBlocks(boolean sand) {
+        return ballBlocks();
+    }
+
+    /**
      * No mobs, fire, random ticks or weather cycle; always noon (GEN-SPEC §2.1). Each rule actually
      * changed is reported through {@code changed} once, in admin words.
      */

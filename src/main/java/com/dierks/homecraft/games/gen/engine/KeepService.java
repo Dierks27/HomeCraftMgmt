@@ -12,6 +12,7 @@ import com.dierks.homecraft.games.gen.api.PlannedGolf;
 import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.api.Edition;
+import com.dierks.homecraft.games.golf.LiveBlocks;
 import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.storage.GenArchiveDao;
 
@@ -608,12 +609,17 @@ final class KeepService {
         startBuild(j, port);
     }
 
-    /** The blocks are the plan: prove golf on the real blocks, then register the course (one transaction). */
+    /**
+     * The blocks are the plan: prove golf on the real blocks, read as the kept course will play them
+     * (an Adventure Golf layout's sand as sand, as its par line was planned; Course Variety review),
+     * then register the course (one transaction).
+     */
     private void built(PlotJob j) {
         WorldPort port = host.world(j.world);
         if (j.plan.course() instanceof PlannedGolf g) {
             List<String> problems = port == null ? List.of("the world isn't loaded")
-                    : LiveProof.replay(port.ballBlocks(), g.course().holes(), g.witness());
+                    : LiveProof.replay(port.ballBlocks(LiveBlocks.sandPlays(j.plan.algo())), g.course().holes(),
+                    g.witness());
             if (!problems.isEmpty()) {
                 fail(j, "the live replay failed: " + problems.get(0));
                 return;
@@ -621,7 +627,7 @@ final class KeepService {
         }
         long now = host.now();
         String name = j.name == null ? KeptCourses.name(null, j.id) : j.name;
-        GamesDao.CourseRow row = KeptCourses.row(j.id, name, j.world, j.plan.course(), now);
+        GamesDao.CourseRow row = KeptCourses.row(j.id, name, j.world, j.plan, now);
         List<String> problems = KeptCourses.problems(row, host.gamesWorlds());
         if (!problems.isEmpty()) {
             fail(j, "the kept course wouldn't open: " + String.join("; ", problems));
@@ -826,7 +832,7 @@ final class KeepService {
             return "its plan was refused: " + String.join("; ", problems);
         }
         GamesDao.CourseRow row = KeptCourses.row(j.id, j.name == null ? KeptCourses.name(null, j.id) : j.name, j.world,
-                moved.course(), host.now());
+                moved, host.now());
         List<String> course = KeptCourses.problems(row, host.gamesWorlds());
         if (!course.isEmpty()) {
             return "the kept course wouldn't open: " + String.join("; ", course);

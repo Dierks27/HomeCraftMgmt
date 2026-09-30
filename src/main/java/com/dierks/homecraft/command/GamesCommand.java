@@ -295,12 +295,7 @@ public final class GamesCommand {
         UUID id = player.getUniqueId();
         if (args.length >= 3 && isOnOff(args[2])) {
             boolean on = args[2].equalsIgnoreCase("on");
-            for (String game : Invites.FRIEND_GAMES) {
-                games.invites().setAccepts(id, game, on);
-            }
-            if (!on) {
-                games.invites().setAccepts(id, Invites.COIN_FLIP, false);
-            }
+            games.invites().setAllFriendGames(id, on);
             player.sendMessage(Text.of(on
                     ? "&aInvites to friend games are on. &7Coin Flip invites are set on the Take a break screen."
                     : "&7Game invites are off, Coin Flip too."));

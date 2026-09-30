@@ -177,8 +177,11 @@ class RideAlongTest {
         open(true, true);
         UUID k = kid.getUniqueId();
         assertTrue(games.invites().accepts(k, Riders.INVITE_KEY), "on for a new player");
-        games.invites().setAccepts(k, "connect_four", false); // /hcm play invites off before riders existed
+        games.invites().setAccepts(k, "connect_four", false); // Kid's own switches on the two cabinet screens
         games.invites().setAccepts(k, "tic_tac_toe", false);
+        assertTrue(games.invites().accepts(k, Riders.INVITE_KEY), "each screen's switch is just for that game,"
+                + " so Kid can still be asked to ride");
+        games.invites().setAccepts(k, Invites.COIN_FLIP, false); // with this: the rows an older invites off wrote
         assertFalse(games.invites().accepts(k, Riders.INVITE_KEY), "an earlier 'off' keeps ride invites away too");
         games.invites().setAccepts(k, Riders.INVITE_KEY, true);
         assertTrue(games.invites().accepts(k, Riders.INVITE_KEY), "their own choice rules once stored");

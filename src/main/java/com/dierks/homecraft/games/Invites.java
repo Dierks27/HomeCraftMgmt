@@ -39,7 +39,9 @@ import java.util.logging.Level;
  *
  * <p><b>One switch for every invite.</b> {@code /hcm play invites off} writes a row for each of the
  * {@link #FRIEND_GAMES}; any invite key without a row of its own (one added since: party races, riders,
- * golf together) follows the player's Connect Four choice, so an older "off" keeps it away too.
+ * golf together) is off for a player whose rows carry the mark an older "off" left, so it keeps those
+ * away too. A game's own screen switch is just for that game: it never turns off a ride, a party race or
+ * golf together ({@link #olderInvitesOff}).
  */
 public final class Invites {
 
@@ -58,9 +60,18 @@ public final class Invites {
     public static final List<String> FRIEND_GAMES = List.of("connect_four", "tic_tac_toe", "trials", "rider", "golf");
     /**
      * The friend games there were when {@code /hcm play invites off} first shipped: each keeps its own
-     * default. Every other invite key with no row yet follows the player's Connect Four choice.
+     * default. Every other invite key with no row yet is off only for a player an older "off" marked
+     * ({@link #OFF_MARK}).
      */
     static final List<String> FIRST_FRIEND_GAMES = List.of("connect_four", "tic_tac_toe");
+    /**
+     * The rows every {@code /hcm play invites off} has written, since it first shipped: both first friend
+     * games and Coin Flip, all off, at once. No screen writes all three: Connect Four's and Tic-Tac-Toe's
+     * each write only their own row, and Coin Flip's is written only by the Take a break screen. So all
+     * three stored "off" is the one sign of an older "off" (the final gate's golf check: following
+     * Connect Four alone made its own screen's switch turn off rides, party races and golf together too).
+     */
+    static final List<String> OFF_MARK = List.of("connect_four", "tic_tac_toe", COIN_FLIP);
     /** The same two players can't be asked again for this long after an invite. */
     public static final long PAIR_COOLDOWN_MS = 30_000L;
     /** The shortest and longest an invite may wait. */
@@ -206,16 +217,17 @@ public final class Invites {
     /**
      * Whether the player takes invites to this game (Coin Flip off by default, friend games on).
      * Party races ({@code trials}), riders and golf together joined the friend games later: a player
-     * with no choice stored for such a key yet follows their Connect Four choice, so an earlier
-     * {@code /hcm play invites off} (which wrote rows only for the games there were then) still keeps
-     * those invites away. That holds for ANY key but Coin Flip and the first two friend games, so an
-     * invite added later is covered by the switch without anyone remembering to list it here.
+     * with no choice stored for such a key yet takes them unless an earlier {@code /hcm play invites off}
+     * (which wrote rows only for the games there were then) left its mark ({@link #olderInvitesOff}), so
+     * that "off" still keeps those invites away. That holds for ANY key but Coin Flip and the first two
+     * friend games, so an invite added later is covered by the switch without anyone remembering to list
+     * it here. Turning Connect Four or Tic-Tac-Toe off on its own screen is just for that game.
      */
     public boolean accepts(UUID player, String gameId) {
         try {
             String v = games.dao().pref(player, prefKey(gameId));
             if (v == null && followsFriendGames(gameId)) { // WP-R1 fix (R1 #3); WP-CH riders; final gate: golf
-                v = games.dao().pref(player, prefKey("connect_four"));
+                return !olderInvitesOff(player);
             }
             if (v == null) {
                 return !COIN_FLIP.equals(gameId);
@@ -227,9 +239,24 @@ public final class Invites {
         }
     }
 
-    /** Whether an invite key with no choice stored follows the player's Connect Four choice. */
+    /** Whether an invite key with no choice stored follows an older {@code /hcm play invites off}. */
     static boolean followsFriendGames(String gameId) {
         return gameId != null && !COIN_FLIP.equals(gameId) && !FIRST_FRIEND_GAMES.contains(gameId);
+    }
+
+    /**
+     * Whether the player's rows carry the mark of a {@code /hcm play invites off}: {@link #OFF_MARK} all
+     * stored "off". One game's own screen switch never leaves it, so it never turns off anything else. A
+     * player who later turns one of the three back on (Connect Four's screen, say) has lifted the mark,
+     * and takes invites added later again, as a new player does.
+     */
+    private boolean olderInvitesOff(UUID player) throws SQLException {
+        for (String key : OFF_MARK) {
+            if (!"off".equalsIgnoreCase(games.dao().pref(player, prefKey(key)))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** The player turns this game's invites on or off. */
@@ -238,6 +265,20 @@ public final class Invites {
             games.dao().setPref(player, prefKey(gameId), on ? "on" : "off");
         } catch (SQLException e) {
             games.host().logger().log(Level.SEVERE, "Could not save a player's invite setting", e);
+        }
+    }
+
+    /**
+     * {@code /hcm play invites on|off}: every friend game's row, and for {@code off} Coin Flip's too (only
+     * the Take a break screen turns Coin Flip on). An "off" so leaves {@link #OFF_MARK}, which is how an
+     * invite key added after it knows to stay off.
+     */
+    public void setAllFriendGames(UUID player, boolean on) {
+        for (String game : FRIEND_GAMES) {
+            setAccepts(player, game, on);
+        }
+        if (!on) {
+            setAccepts(player, COIN_FLIP, false);
         }
     }
 

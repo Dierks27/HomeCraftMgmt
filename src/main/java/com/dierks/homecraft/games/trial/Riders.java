@@ -46,7 +46,10 @@ import java.util.function.Predicate;
  */
 public final class Riders {
 
-    /** The invite key ({@code /hcm play invites off} covers it; with no row it follows party invites). */
+    /**
+     * The invite key ({@code /hcm play invites off} covers it; with no row it is off only for a player an
+     * older "off" marked, as party invites are: {@link com.dierks.homecraft.games.Invites#accepts}).
+     */
     public static final String INVITE_KEY = "rider";
     /** How long a rider invite waits for an answer. */
     static final int INVITE_SECONDS = 60;

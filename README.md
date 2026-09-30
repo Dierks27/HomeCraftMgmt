@@ -550,7 +550,7 @@ common keys turns the games off, junk in one game's block closes that game.
 | `featured` | `auto` | `auto` picks a skill game or course each day; a game or course id pins it (`/hcm games feature`). `trials` or `golf` pins every course of that game |
 | `featured_bonus` | `1` | Tokens for the first finish of today's pick (counts toward `skill_daily_cap`) |
 | `feed_top` | `5` | The website's leaderboards: how many of each game's and course's best scores `/api/arcade` lists as `top` (0-25; 0 = none). Past Fresh courses list at most 3. Names only with `web.dashboard.arcade_show_names` |
-| `restart_times` | `["04:00", "16:00"]` | When the host restarts the server each day: the minute it actually stops, not when its warnings start (quoted 24-hour times in `clock.time_zone`; midnight is `"00:00"`). Just before each one, and through that minute until the server stops, nothing a restart would cut off starts: courses and golf, a new Twenty-One or Higher or Lower hand (an open one plays on), a cabinet's scored daily try (today's board isn't dealt until after, and the try is kept; practice after a used try and Classic play go on). Spins and flips aren't held, and the plugin sends no warnings of its own. `[]` = off; an entry that isn't a time is dropped with a WARN |
+| `restart_times` | `["04:00", "16:00"]` | When the host restarts the server each day: the minute it actually stops, not when its warnings start (quoted 24-hour times in `clock.time_zone`; midnight is `"00:00"`). Just before each one, and through that minute until the server stops (a server back up inside the minute isn't held for the restart it just had), nothing a restart would cut off starts: courses and golf, a new Twenty-One or Higher or Lower hand (an open one plays on), a cabinet's scored daily try (today's board isn't dealt until after, and the try is kept; practice after a used try and Classic play go on). Spins and flips aren't held, and the plugin sends no warnings of its own. `[]` = off; an entry that isn't a time is dropped with a WARN |
 | `restart_hold_minutes` | `5` | How many minutes before each restart that hold starts (1-60) |
 | `break.daily_choices` | `[10, 25, 50, 100]` | The daily limits a player can pick (they can also pick none) |
 | `break.pause_days` | `[1, 7, 30]` | The pauses a player can pick, in days |
@@ -1669,9 +1669,11 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
 - **The track.** 2 minutes before the start it is reserved (new solo runs and party races on it are
   refused, and a party race still on it is called off), and 1
   minute before, solo runs still on it end. 15 seconds before, every joined racer who is free goes to
-  the track in their own oak boat, two a tick (their things are kept safe, as in every world game).
-  Anyone busy is asked every second to stand still or use Leave game, until just before Go, and is
-  then out of race 1 ("you'll be in the next one").
+  the track in their own oak boat, two a tick (their things are kept safe, as in every world game),
+  from whatever world they are in, as long as they still have `hcm.games.play`. Anyone busy is asked
+  every second to stand still or use Leave game, until just before Go, and is then out of race 1
+  ("you'll be in the next one"). A racer whose `hcm.games.play` was taken away after joining is told
+  "Games aren't open to you." once and is out of every race until it is back.
 - **The warm-up** (owner decision D3). With `warmup_seconds` above 0 (180 as shipped), racers first
   get free warm-up laps, never timed; each can tap **Ready**. The grid waits for the window to run
   out, or for everyone who joined (and is online) to be at the track and ready; race 1 never starts
@@ -1848,13 +1850,15 @@ earlier teams can't be restored.
 Things come back **exactly once**, even when something goes wrong. If what arrived during the
 game doesn't all fit at home, the rest waits in their saved row: "Some of your things didn't fit.
 Make room, then type /hcm leave to get the rest." If the database refuses a write partway, they
-stay where they are with their things ("Type /hcm leave in a moment to go home") and nothing is
-applied twice. Something delivered in the middle of a game (an auction win, a Mini) is never
+wait with their things, on the game's floor if they were playing ("Type /hcm leave in a moment to go
+home"), and nothing is applied twice. Something delivered in the middle of a game (an auction win, a Mini) is never
 written over by a game's items: it moves to a free slot and comes home with them. Nobody lands
 home with a fall from a game: leaving, being sent home or disconnecting halfway down a drop ends
-with no fall damage. After a crash, a Clubhouse watcher whose things can't be put back yet is never
-left in spectator mode, and never dropped from where they were flying: they are brought down to the
-Games world's spawn first. A game refuses to start while they hold something on the cursor ("Put down what
+with no fall damage. Nobody is let go in mid-air either: a game that has to stop where the player is
+(a trip home that failed, a write refused) first puts them on its last safe spot, and in a Games
+world a fall costs nothing until their things are home, with the games on or off. After a crash, a
+Clubhouse watcher is never left in spectator mode, and never dropped from where they were flying:
+they are brought down to the Games world's spawn first, and only there get their own mode back. A game refuses to start while they hold something on the cursor ("Put down what
 you're holding first."). `/hcm leave` and `/hcm games saved` work even while the games are off,
 and an admin's `restore` or `return` says what really happened.
 

@@ -109,25 +109,15 @@ class FallHomeTest {
     }
 
     /**
-     * The round-2 audit's G1 #3: the fall a trip home spares is spared by the recovery listener, which
-     * listens with the games on, off or failed. The games' own guard stops at "games off and nobody in a
-     * session", which is just how a server is after a crash when the owner switched the games off.
+     * The round-2 audit's G1 #3: the fall a trip home spares depends on nothing but the trip (the recovery
+     * listener asks, with the games on, off or failed: {@link RecoveryFallGuardTest}).
      */
     @Test
-    void theFallATripHomeSparesIsSparedWhateverTheGamesSwitchSays() throws Exception {
-        java.lang.reflect.Method guard = SessionRecoveryListener.class.getMethod("onFall", EntityDamageEvent.class);
-        org.bukkit.event.EventHandler handler = guard.getAnnotation(org.bukkit.event.EventHandler.class);
-        assertTrue(handler != null && !handler.ignoreCancelled(),
-                "the recovery listener, registered once at enable and never gated by the games' switch, spares it");
-        assertEquals(org.bukkit.event.EventPriority.LOWEST, handler.priority(), "before anything else hears the fall");
-        assertFalse(java.util.Arrays.stream(KitGuardListener.class.getDeclaredMethods())
-                        .anyMatch(m -> m.getName().equals("sparesFall")),
-                "and not in the games' guard, which a games-off server with nobody playing never asks");
-
+    void theFallATripHomeSparesDependsOnNothingButTheTrip() throws Exception {
         midDrop();
         core.quit(dan);
         dan.fall = 17f;
-        core.joined(dan); // the games are off: nothing in the core depends on the switch
+        core.joined(dan); // after a crash the owner switched the games off: the core knows no switch
         assertTrue(core.recovering(dan.id), "(on the way home)");
         assertTrue(SessionRecoveryListener.sparesFall(core, dan, EntityDamageEvent.DamageCause.FALL),
                 "the fall on the way home is spared");

@@ -32,6 +32,7 @@ import com.dierks.homecraft.games.gen.golf.GolfPlanner;
 import com.dierks.homecraft.games.gen.parkour.ParkourPlanner;
 import com.dierks.homecraft.games.gen.rings.RingsPlanner;
 import com.dierks.homecraft.games.golf.GolfCourse;
+import com.dierks.homecraft.games.golf.LiveBlocks;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.CourseCodec;
 import com.dierks.homecraft.storage.GamesDao;
@@ -1840,8 +1841,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         WorldPort port = host.world(s.world);
         List<List<Putt>> witness = j.kind == Kind.HEAL ? j.tag.witness() : g.witness();
-        List<String> problems = port == null ? List.of("the world isn't loaded")
-                : LiveProof.replay(port.ballBlocks(), g.course().holes(), witness);
+        List<String> problems = port == null ? List.of("the world isn't loaded") // sand plays from golf algo 3
+                : LiveProof.replay(port.ballBlocks(LiveBlocks.sandPlays(j.plan.algo())), g.course().holes(), witness);
         if (!problems.isEmpty()) {
             host.logger().severe("Fresh Courses: " + s.def.id() + "'s golf didn't replay on the real blocks: "
                     + String.join("; ", problems));

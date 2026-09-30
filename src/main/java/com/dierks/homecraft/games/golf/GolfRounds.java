@@ -327,7 +327,7 @@ public final class GolfRounds {
         r.state = LiveRound.State.PLAYING;
         World world = p.getWorld();
         GolfCourse.Hole h = r.hole();
-        LiveBlocks blocks = new LiveBlocks(world);
+        LiveBlocks blocks = LiveBlocks.forCourse(world, r.course); // sand only on a generated algo-3+ course
         r.tee(blocks);
         BallPhysics.settle(r.ball, blocks);
         r.markSpot();
@@ -374,7 +374,7 @@ public final class GolfRounds {
     }
 
     private void roll(Player p, LiveRound r) {
-        LiveRound.Result result = r.roll(new LiveBlocks(p.getWorld()));
+        LiveRound.Result result = r.roll(LiveBlocks.forCourse(p.getWorld(), r.course));
         show(p, r);
         switch (result) {
             case IN_CUP -> inCup(p, r);

@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.event;
 
 import com.dierks.homecraft.games.EndReason;
+import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.games.trial.RaceLink;
@@ -30,8 +31,10 @@ import java.util.function.Consumer;
  * shared warm-up (free laps, never timed; "Ready" skips the rest) or straight onto the grid. Anyone
  * not free is tried again every second until just before Go, then is DNS for that race ("you'll be
  * in the next one"); so is one whose entry was dropped on the way in (race mode's sweep tells the
- * night they left). The shared warm-up ends early only when EVERY joined racer who is online is at
- * the track and tapped Ready, and race 1 never goes before the advertised start. At the line a
+ * night they left). A racer race mode refuses at the play gate (a parent took {@code hcm.games.play}
+ * away since they joined) reads the gate's own line once, is never nagged to get free, and is DNS
+ * until the gate lets them in again. The shared warm-up ends early only when EVERY joined racer who
+ * is online is at the track and tapped Ready, and race 1 never goes before the advertised start. At the line a
  * racer's place is final at once and they are parked on the stand; when the race ends anyone still
  * racing is parked too and scores the still-racing point. Leave game or {@code /hcm leave} is
  * leaving for good (LEFT); a disconnect scores 0 in that race and, back and free before the next
@@ -104,6 +107,10 @@ public final class NightRunner implements RaceLink {
         final List<Integer> places = new ArrayList<>();
         String refused;
         long naggedAt = Long.MIN_VALUE / 2;
+        /** The last seat was refused at the play gate: no nag, no "you'll be in the next one" (G1 #3). */
+        boolean gated;
+        /** The play gate's line was said to them tonight (it is said once). */
+        boolean toldGate;
 
         Racer(UUID id, String name, long joinedAt) {
             this.id = id;
@@ -627,6 +634,7 @@ public final class NightRunner implements RaceLink {
                 : "busy";
         if (why == null) {
             r.seated = true;
+            r.gated = false;
             r.everSeated = true;
             r.sentHome = false; // at the track again: a later Leave is leaving, for good
             r.refused = null;
@@ -646,6 +654,14 @@ public final class NightRunner implements RaceLink {
             return;
         }
         r.refused = why;
+        r.gated = Refusal.NO_GAMES.message().equals(why); // race mode's play gate: standing still won't help
+        if (r.gated) {
+            if (!r.toldGate) {
+                r.toldGate = true;
+                ports.tell(r.id, "&c" + why, false);
+            }
+            return;
+        }
         long now = ports.now();
         if (now - r.naggedAt >= NAG_MS) {
             r.naggedAt = now;
@@ -720,7 +736,7 @@ public final class NightRunner implements RaceLink {
                 }
             } else {
                 r.leg = Leg.AWAY;
-                if (ports.online(r.id)) {
+                if (ports.online(r.id) && !r.gated) { // a racer the gate refused was told why already
                     ports.tell(r.id, race < rules.races()
                             ? "&7You weren't free when the race began - you'll be in the next one."
                             : "&7You weren't free when the last race began.", false);

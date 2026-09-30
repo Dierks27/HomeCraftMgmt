@@ -46,6 +46,7 @@ class RestartHoldServiceTest {
     private TestGame slots;
     private TestGame course;
     private GamesService games;
+    private List<GameSpec<?>> specs;
     private Fake alex;
 
     @BeforeEach
@@ -57,8 +58,9 @@ class RestartHoldServiceTest {
         ChanceSettings settings = new ChanceSettings(true, List.of(1, 5, 10), 30);
         host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6)
                 .withRestarts(List.of(LocalTime.of(4, 0), LocalTime.of(16, 0)), 5), "test_slots", settings);
-        games = GamesKit.service(host, List.of(GamesKit.spec(slots, settings, (seed, stake, data) -> stake),
-                GamesKit.spec(course, new GamesKit.SkillSettings(true, 10), null)));
+        specs = List.of(GamesKit.spec(slots, settings, (seed, stake, data) -> stake),
+                GamesKit.spec(course, new GamesKit.SkillSettings(true, 10), null));
+        games = GamesKit.service(host, specs);
         alex = new Fake("Alex");
         host.online.put(alex.id, alex.player);
         host.give(alex.id, 100);
@@ -350,5 +352,32 @@ class RestartHoldServiceTest {
         assertEquals(100, host.balanceOf(alex.id), "nothing was taken");
         host.time.now = GamesKit.at(2026, 6, 10, 16, 1);
         assertNull(games.sessions().entryRefusal(course), "from 4:01 PM runs start again");
+    }
+
+    /**
+     * The round-2 audit's G1 #2: a quick restart comes back inside the restart's own minute. The restart
+     * it came back from has happened, so nothing is held for it any more; only a server that has been up
+     * since before the restart's minute still waits for it.
+     */
+    @Test
+    void aServerBackUpInsideTheRestartsMinuteIsNotHeldForTheRestartItCameBackFrom() throws Exception {
+        long four = GamesKit.at(2026, 6, 10, 16, 0);
+        host.time.now = four + 20_000; // the panel stopped it at 4:00:05; the plugin is enabled again at 4:00:20
+        GamesService booted = GamesKit.service(host, specs);
+        host.time.now = four + 30_000; // a child logs straight back in and picks a course
+        assertNull(booted.sessions().entryRefusal(course), "the 4:00 PM restart already happened: the course starts");
+        assertNull(booted.restartHeld(), "nothing is held for it");
+        assertNull(booted.restartRefusal(), "so nothing is refused");
+        assertNotNull(booted.rounds().open(alex.player, slots, 10, "v1"), "a new hand is dealt");
+        assertEquals("Next restart: 4:00 AM (new runs held from 3:55 AM)",
+                booted.restartHold().status(booted.clock().nowMillis()), "the next restart is tomorrow's 4:00 AM");
+
+        assertEquals(HELD, games.sessions().entryRefusal(course).message(),
+                "a server up since 3:50 PM hasn't restarted yet: still held in the restart's minute");
+        host.time.now = four - 30_000;
+        GamesService early = GamesKit.service(host, specs); // up again at 3:59:30, after a crash
+        host.time.now = four + 30_000;
+        assertEquals(HELD, early.sessions().entryRefusal(course).message(),
+                "a boot before the restart's minute still waits for it");
     }
 }

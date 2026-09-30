@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.trial;
 import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.NoPush;
+import com.dierks.homecraft.games.PlayGate;
 import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.clubhouse.ClubDoor;
 import com.dierks.homecraft.games.clubhouse.Clubhouse;
@@ -116,7 +117,17 @@ final class RaceMode {
 
     // ---- seating ------------------------------------------------------------------------------
 
-    /** {@code TimeTrials.race}: seat a racer (see there). {@code null} when they are on their way in. */
+    /**
+     * {@code TimeTrials.race}: seat a racer (see there). {@code null} when they are on their way in.
+     *
+     * <p>A racer seated from home passes the play gate's permission step first (the round-2 audit's G1
+     * #3, as a rider at the boat does): whoever asks (Race Night's grid call, its late joiner or a racer
+     * back after a disconnect, a party race's start), a racer who lost {@code hcm.games.play} since
+     * joining is refused with the gate's own line before anything of theirs is saved or moved. Only the
+     * permission: a joined Race Night racer is taken to the track from whatever world they are in, by
+     * design, and a party race ran the whole gate at its start. A racer waiting in the Clubhouse is in a
+     * session already and is handed over from there.
+     */
     Refusal race(Player p, Course base, Course raced, Course.Spot grid, Location stand, RaceLink link) {
         if (p == null || !p.isOnline() || base == null || raced == null || link == null) {
             return Refusal.of("That racer isn't here.");
@@ -124,12 +135,16 @@ final class RaceMode {
         if (!alive(link)) {
             return Refusal.of("That race is over.");
         }
+        ClubDoor club = door(); // WP-CH: a racer waiting in the Clubhouse is seated from there, in their session
+        boolean fromClub = club != null && club.seatable(p.getUniqueId());
+        if (!fromClub && !p.hasPermission(PlayGate.PERMISSION_PLAY)) {
+            return Refusal.NO_GAMES;
+        }
         World world = base.ready() ? Bukkit.getWorld(base.world()) : null;
         if (world == null || raced.start() == null) {
             return Refusal.of("That course isn't ready right now.");
         }
-        ClubDoor club = door(); // WP-CH: a racer waiting in the Clubhouse is seated from there, in their session
-        if (club != null && club.seatable(p.getUniqueId())) {
+        if (fromClub) {
             return ClubRaces.seat(trials, this, club, p, base, raced, grid, stand, link, world);
         }
         Refusal closed = trials.sessions().entryRefusal(trials);

@@ -6,6 +6,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.PluginDisableEvent;
@@ -38,6 +39,10 @@ import java.util.logging.Level;
  *       session is restored in place and marked RETURN, with no teleport — Multiverse-Inventories
  *       may be going too, and no task can run to finish a trip. The next start or join sends
  *       them home. The games service's own stop then finds nothing left to do.</li>
+ *   <li><b>A fall</b> a game started is spared: on a trip home, or in a Games world while their
+ *       things aren't home yet ({@link SessionCore#sparesFall}). Here, not in the games' own guard,
+ *       because after a crash the games are often switched off, with nobody in a session, while a
+ *       trip home is still under way.</li>
  * </ul>
  *
  * <p>It is O(1) for everyone without a row: an in-memory set, loaded at enable, of the players
@@ -92,6 +97,28 @@ public final class SessionRecoveryListener implements Listener {
             port.disabling();
             port.safely("ending the world sessions at disable", () -> port.core().stop());
         }
+    }
+
+    /**
+     * A fall a game started never costs the player their things (final gate #18; the round-2 audit's G1
+     * #1 and #3): whatever the games' switch says, and whether or not the games service started.
+     */
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onFall(EntityDamageEvent event) {
+        if (port == null || event.getCause() != EntityDamageEvent.DamageCause.FALL
+                || !(event.getEntity() instanceof Player player)) {
+            return;
+        }
+        port.safely("a fall check", () -> {
+            if (sparesFall(port.core(), player, event.getCause())) {
+                event.setCancelled(true);
+            }
+        });
+    }
+
+    /** Whether damage of {@code cause} to {@code player} is a fall the games spare ({@link SessionCore#sparesFall}). */
+    static <P> boolean sparesFall(SessionCore<P, ?> core, P player, EntityDamageEvent.DamageCause cause) {
+        return cause == EntityDamageEvent.DamageCause.FALL && core != null && core.sparesFall(player);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)

@@ -56,6 +56,11 @@ import java.util.logging.Logger;
  *   <li><b>Fail in place.</b> A snapshot or carry that can't be read, or a session world that is
  *       gone, is found before anyone is moved: the row is kept for an admin
  *       ({@code /hcm games saved}) and the player stays where they are.</li>
+ *   <li><b>Never let go in mid-air.</b> A session let go where the player is (RETURN can't be
+ *       written, the trip home failed, nothing could be put back) first puts them on its last safe
+ *       spot, a floor ({@link #ground}); a watcher the crash left flying comes down to a floor before
+ *       their own mode goes on; and a fall in a Games world is spared while their things aren't home
+ *       ({@link #sparesFall}). Whatever an exit banked is saved with the player at once.</li>
  * </ul>
  *
  * <p>Everything runs on the main thread. {@link Port#later} and {@link Port#teleport} complete
@@ -447,6 +452,23 @@ final class SessionCore<P, I> {
         return recovering.containsKey(player);
     }
 
+    /**
+     * Whether a fall of the player's is one the games spare (final gate #18; the round-2 audit's G1 #1
+     * and #3): they are in a game or on the way home from one, or in a Games world while their things
+     * aren't home yet (a live row). The last is the backstop for every way a game lets someone go where
+     * they stand: RETURN couldn't be written, the trip home failed, nothing could be put back, or our
+     * teleport down to a floor didn't happen. A fall there is one a game started, and it never costs them
+     * their things. {@link SessionRecoveryListener} asks it for every player's fall, games on, off or
+     * failed.
+     */
+    boolean sparesFall(P p) {
+        UUID id = port.id(p);
+        if (live.containsKey(id) || recovering.containsKey(id)) {
+            return true;
+        }
+        return port.gamesWorld(port.world(p)) && hasRow(id);
+    }
+
     /** Why a player standing like this can't start, or {@code null} if they can (R2.9). */
     static String refusal(Standing s) {
         if (s.dead()) {
@@ -785,6 +807,7 @@ final class SessionCore<P, I> {
                     + ") - leaving them as they are", e);
             port.stripKit(p);
             noRestore(s);
+            ground(s, inPlace);
             live.remove(id);
             port.tell(p, SAFE_WITH_ADMIN);
             s.hooks.ended(p, reason);
@@ -796,6 +819,7 @@ final class SessionCore<P, I> {
                     + ") - their things are left as they are");
             port.stripKit(p);
             noRestore(s);
+            ground(s, inPlace); // on a floor while the trip home below loads
             live.remove(id);
             s.hooks.ended(p, reason);
             port.tell(p, ENDED);
@@ -809,6 +833,7 @@ final class SessionCore<P, I> {
             port.stripKit(p);
             s.hooks.ended(p, reason);
             if (!SavedState.RETURN.equals(row.phase()) && !markReturn(p, row)) {
+                ground(s, inPlace);
                 live.remove(id);
                 port.tell(p, BACK_STAY);
                 return;
@@ -838,6 +863,7 @@ final class SessionCore<P, I> {
             noRestore(s);
             live.remove(id);
             giveBackUnbanked(s);
+            saveBanked(p);
             failed(p, row, null, "its world is gone");
             s.hooks.ended(p, reason);
             return;
@@ -848,6 +874,7 @@ final class SessionCore<P, I> {
             noRestore(s);
             live.remove(id);
             giveBackUnbanked(s);
+            saveBanked(p);
             failed(p, row, e, "the saved state can't be read");
             s.hooks.ended(p, reason);
             return;
@@ -871,6 +898,7 @@ final class SessionCore<P, I> {
                     }
                     live.remove(id);
                     giveBackUnbanked(s);
+                    saveBanked(p);
                     if (port.online(p)) {
                         port.tell(p, NOT_RESTORED);
                     }
@@ -894,8 +922,10 @@ final class SessionCore<P, I> {
             s.unbanked.addAll(bank(p, row));
             port.stripKit(p);
             noRestore(s);
+            ground(s, inPlace);
             live.remove(id);
             giveBackUnbanked(s);
+            saveBanked(p);
             failed(p, row, e, "the saved state can't be read");
             s.hooks.ended(p, reason);
             return;
@@ -906,8 +936,10 @@ final class SessionCore<P, I> {
         } catch (RuntimeException e) {
             port.stripKit(p);
             noRestore(s); // only if the restore didn't get as far as their mode (it goes first)
+            ground(s, inPlace);
             live.remove(id);
             giveBackUnbanked(s);
+            saveBanked(p);
             failed(p, row, e, "putting it back failed");
             s.hooks.ended(p, reason);
             return;
@@ -921,6 +953,8 @@ final class SessionCore<P, I> {
         if (!returned) {
             // Their things are on them but the row still says ACTIVE: they are not sent home until
             // it says RETURN, and until then nothing applies it again. /hcm leave writes it and goes on.
+            // They wait on a floor, never where the snapshot went on (in mid-air on an elytra course).
+            ground(s, inPlace);
             live.remove(id);
             port.tell(p, BACK_STAY);
             return;
@@ -1255,6 +1289,17 @@ final class SessionCore<P, I> {
         });
     }
 
+    /**
+     * A watcher the crash left flying (the round-2 audit's G1 #1): in a spectator mode that wasn't their
+     * own, where Paper's autosave found them (over Sky Rings, in a Dropper shaft, inside a hill they flew
+     * through). Their own mode must never go on there: it would drop them, or leave them in a wall, with
+     * everything they own on them. So their restore goes to the session world's spawn first, a floor,
+     * as one from another world does; on the way they are still a spectator, who can't fall.
+     */
+    private boolean adrift(P p, SavedState row) {
+        return SPECTATOR.equals(port.gameMode(p)) && !SPECTATOR.equals(row.gameMode());
+    }
+
     /** Whether the player's own data says a game cleared them (for any session). */
     private boolean cleared(P p) {
         String m = port.mark(p);
@@ -1277,6 +1322,37 @@ final class SessionCore<P, I> {
         } catch (RuntimeException e) {
             log.log(Level.WARNING, "Games: could not bring " + port.name(s.player) + " down before putting their"
                     + " things back", e);
+        }
+    }
+
+    /**
+     * A session let go where the player is (their things are back but RETURN isn't written, the trip
+     * home didn't happen, or nothing could be put back) never lets them go in mid-air (the round-2
+     * audit's G1 #1). Out of the session nothing cancels a fall: a Sky Rings flyer 60 blocks up, or a
+     * Dropper player halfway down a drop, would fall with everything they own on them. So they are first
+     * put on the session's last safe spot (its start, or the last checkpoint of ours), a floor, by the
+     * session's own teleport, which lands with no fall, as {@link #land} does for a watcher. Not for an
+     * end in place (a quit: they are leaving; someone else's teleport: it is taking them away; a stop: no
+     * teleport may start), nor outside the session's world (a world change put them somewhere else, on
+     * their feet). If our teleport doesn't happen, a fall there is still spared while their things aren't
+     * home ({@link #sparesFall}).
+     */
+    private void ground(Live s, boolean inPlace) {
+        P p = s.player;
+        Place floor = s.safe != null ? s.safe : s.start;
+        if (inPlace || floor == null || port.stopping() || !port.online(p) || !floor.world().equals(port.world(p))) {
+            return;
+        }
+        try {
+            go(p, floor, true, ok -> {
+                if (!Boolean.TRUE.equals(ok)) {
+                    disarm(s.uuid, floor);
+                    log.warning("Games: could not put " + port.name(p) + " down on a floor (session " + s.sid
+                            + "): a fall in the Games world is still spared until their things are home");
+                }
+            });
+        } catch (RuntimeException e) {
+            log.log(Level.WARNING, "Games: could not put " + port.name(p) + " down on a floor", e);
         }
     }
 
@@ -1399,10 +1475,10 @@ final class SessionCore<P, I> {
         }
         long token = ++tokens;
         recovering.put(id, token);
-        if (row.sessionWorld().equals(port.world(p))) {
+        if (row.sessionWorld().equals(port.world(p)) && !adrift(p, row)) {
             return restoreRow(p, row, why, token);
         }
-        // Apply only in the session world (§7.5): go there first.
+        // Apply only in the session world (§7.5), and only on a floor: go to its spawn first.
         Place there = port.spawn(row.sessionWorld());
         go(p, there, false, ok -> {
             if (!owns(id, token)) {
@@ -1494,6 +1570,7 @@ final class SessionCore<P, I> {
         } catch (RuntimeException e) {
             recovering.remove(id);
             give(p, unbanked);
+            saveBanked(p);
             unstick(p, fresh); // only if the restore didn't get as far as their mode (it goes first)
             failed(p, fresh, e, "putting it back failed");
             return ADMIN_APPLY;
@@ -1534,6 +1611,10 @@ final class SessionCore<P, I> {
     private void arrivedHome(P p, UUID id, String sid, long token, boolean ok) {
         if (!owns(id, token)) {
             return; // a quit, a stop or a newer session took over: the next join finishes it
+        }
+        Live s = live.get(id);
+        if (!ok && s != null && s.token == token) {
+            ground(s, false); // the trip home didn't happen: let go on the session's floor, not where they were
         }
         release(id, token);
         if (!port.online(p)) {
@@ -1864,6 +1945,18 @@ final class SessionCore<P, I> {
         } catch (SQLException | RuntimeException e) {
             log.log(Level.SEVERE, "Games: could not keep " + port.name(p) + "'s things (session " + sid + ")", e);
             return false;
+        }
+    }
+
+    /**
+     * Write, then save (final gate #17; the round-2 audit's G1 #4): an exit that banked what the player
+     * held into the carry and then failed saves them at once, like every restore. Otherwise their own
+     * data file still holds those things beside the "cleared" mark, and after a hard crash the join banks
+     * them a second time (two copies of one numbered Mini).
+     */
+    private void saveBanked(P p) {
+        if (port.online(p)) {
+            port.save(p);
         }
     }
 

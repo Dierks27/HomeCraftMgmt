@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.event;
 
 import com.dierks.homecraft.games.EndReason;
+import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.games.trial.RaceLink;
@@ -70,6 +71,8 @@ class NightRunnerTest {
         long tick = 1_000;
         final Set<UUID> online = new HashSet<>();
         final Set<UUID> busy = new HashSet<>();
+        /** Racers race mode refuses at the play gate: a parent took hcm.games.play away (G1 #3). */
+        final Set<UUID> gated = new HashSet<>();
         final Map<UUID, List<String>> told = new HashMap<>();
         final Map<UUID, Course.Spot> seatedAt = new HashMap<>();
         final Map<UUID, Course.Spot> regridded = new HashMap<>();
@@ -119,6 +122,9 @@ class NightRunnerTest {
 
         @Override
         public String seat(UUID racer, Course base, Course raced, Course.Spot grid, Point stand, RaceLink link) {
+            if (gated.contains(racer)) {
+                return Refusal.NO_GAMES.message(); // RaceMode.race: the play gate's permission step
+            }
             this.link = link;
             seatedAt.put(racer, grid);
             return null;
@@ -418,6 +424,41 @@ class NightRunnerTest {
         runUntil(ports.now + 21_000);
         runUntil(ports.now + 500);
         assertTrue(ports.seatedAt.containsKey(C), "back and free: pulled in for race 2");
+    }
+
+    /**
+     * The round-2 audit's G1 #3: a racer whose parent took {@code hcm.games.play} away after they joined is
+     * refused at the grid by race mode's play gate. They read the gate's own line once, are never nagged to
+     * stand still or told they'll be in the next one, are DNS for every race they can't be seated in, and
+     * are seated again as soon as the permission is back.
+     */
+    @Test
+    void aRacerWhoLostThePlayPermissionIsToldTheGatesLineOnceAndNeverPulledIn() throws Exception {
+        open();
+        join(A, B, C);
+        ports.gated.add(C); // at 6:55 a parent removes hcm.games.play from Cal's group
+        runUntil(T + 250);
+        assertFalse(ports.seatedAt.containsKey(C), "Cal is never pulled onto the grid");
+        assertEquals(2, runner.started(), "2 started race 1");
+        List<String> heard = ports.told.getOrDefault(C, List.of());
+        assertEquals(1, heard.stream().filter(l -> l.contains(Refusal.NO_GAMES.message())).count(),
+                "Cal reads the gate's own line once, though the seat was tried every second: " + heard);
+        assertFalse(ports.heard(C, "Stand still, or use Leave game, to join"), "never asked to get free: " + heard);
+        assertFalse(ports.heard(C, "weren't free"), "nor told they'll be in the next one: " + heard);
+        race(A, B);
+        runUntil(ports.now + 21_000);
+        runUntil(ports.now + 500);
+        assertFalse(ports.seatedAt.containsKey(C), "still refused for race 2");
+        assertEquals(1, ports.told.get(C).stream().filter(l -> l.contains(Refusal.NO_GAMES.message())).count(),
+                "and not told again");
+        assertTrue(dao.races(ID).stream().anyMatch(r -> r.player().equals(C) && r.race() == 1
+                && "DNS".equals(r.result())), "race 1 stored Cal as DNS: " + dao.races(ID));
+
+        ports.gated.remove(C); // the permission is back
+        race(A, B);
+        runUntil(ports.now + 21_000);
+        runUntil(ports.now + 500);
+        assertTrue(ports.seatedAt.containsKey(C), "allowed again: Cal is in race 3");
     }
 
     @Test

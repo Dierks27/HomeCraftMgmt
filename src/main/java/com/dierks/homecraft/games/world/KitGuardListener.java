@@ -274,8 +274,9 @@ public final class KitGuardListener implements Listener {
         }
         safely("a game damage check", () -> {
             Entity victim = e.getEntity();
-            if (inSession(victim) || WorldEntities.gameId(victim) != null
-                    || (victim instanceof Player p && sparesFall(core.recovering(p.getUniqueId()), e.getCause()))) {
+            // A fall on a trip home, or while a game's things aren't home, is SessionRecoveryListener's to
+            // spare: it listens whatever the games' switch says (the round-2 audit's G1 #3).
+            if (inSession(victim) || WorldEntities.gameId(victim) != null) {
                 e.setCancelled(true);
                 return;
             }
@@ -283,15 +284,6 @@ public final class KitGuardListener implements Listener {
                 e.setCancelled(true); // a player in a game can't hurt anyone either
             }
         });
-    }
-
-    /**
-     * A fall while a trip home is under way (final gate #18): a player who disconnected mid-drop loads
-     * back in over the shaft, out of any session, and falls while the trip home loads. It is a fall the
-     * game started, and it never costs them their things.
-     */
-    static boolean sparesFall(boolean onTheWayHome, EntityDamageEvent.DamageCause cause) {
-        return onTheWayHome && cause == EntityDamageEvent.DamageCause.FALL;
     }
 
     private static Entity attacker(Entity damager) {

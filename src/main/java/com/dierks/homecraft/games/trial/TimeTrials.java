@@ -186,7 +186,7 @@ public final class TimeTrials implements Game {
     private final Warmups warmups = new Warmups(this);
     private final PartyRaces party = new PartyRaces(this);
     // ---- WP-CH: ride along (one passenger in the back of a boat); its logic is in Riders ----
-    private final Riders riders = new Riders(RideAlong.live(this));
+    private Riders riders = new Riders(RideAlong.live(this));
 
     /** WP-ADM: an admin's test runs of a Fresh Courses preview ("Play again" plays the preview again). */
     private final PreviewTests previews = new PreviewTests();
@@ -449,8 +449,9 @@ public final class TimeTrials implements Game {
         party.stop();
         riders.stop(); // WP-CH
         for (TrialRun run : new ArrayList<>(runs.values())) {
-            removeBoat(run, Bukkit.getPlayer(run.player));
-            drops.end(run, Bukkit.getPlayer(run.player));
+            Player p = online(run.player); // guarded: never a throw out of a stop (and no server in a test)
+            removeBoat(run, p);
+            drops.end(run, p);
         }
         runs.clear();
         boats.clear();
@@ -1598,12 +1599,12 @@ public final class TimeTrials implements Game {
                 p.sendMessage(Text.of("&dTest run &7- nothing was recorded. " + (verdict.reason() == null
                         ? "It would have counted." : "It wouldn't have counted: " + verdict.reason() + ".")));
                 title(p, "&a" + TrialText.time(ms), "&dTest run", 40);
-                Sounds.received(p);
+                sound(() -> Sounds.received(p));
             }
             case VOID, STALE -> {
                 p.sendMessage(Text.of("&cThat run didn't count. &7(" + verdict.reason() + ")"));
                 title(p, "&f" + TrialText.time(ms), "&cThat run didn't count", 40);
-                Sounds.miss(p);
+                sound(() -> Sounds.miss(p));
             }
             case COUNTED -> summary = settleCounted(p, run, ms, verdict);
         }
@@ -1785,11 +1786,13 @@ public final class TimeTrials implements Game {
             p.sendMessage(Text.of(setBestLine(recordOn(board(c)), p, cadence)));
         }
         title(p, "&a" + TrialText.time(ms), sub, 40);
-        if (set.personalBest()) {
-            Sounds.won(p);
-        } else {
-            Sounds.received(p);
-        }
+        sound(() -> {
+            if (set.personalBest()) {
+                Sounds.won(p);
+            } else {
+                Sounds.received(p);
+            }
+        });
     }
 
     /** Once the player is home (the return teleport done), the result screen with "Play again". */
@@ -1831,6 +1834,15 @@ public final class TimeTrials implements Game {
     /** WP-CH: ride along (one passenger in the back of a boat). */
     Riders riders() {
         return riders;
+    }
+
+    /**
+     * A test's own ride along (over a fake server) in place of the live one, wired as {@link #start}
+     * wires it (a rider sitting down latches the driver's run's {@code hadRider}).
+     */
+    void riders(Riders test) {
+        this.riders = test;
+        test.boarded(this::hadRider);
     }
 
     private long riderTicks;
@@ -2013,6 +2025,24 @@ public final class TimeTrials implements Game {
                     Duration.ofMillis(stayTicks * 50L), Duration.ofMillis(200))));
         } catch (RuntimeException | LinkageError ignored) {
             // a title is decoration
+        }
+    }
+
+    /** A sound is decoration (and has no registry off a server): it never stops a finish. */
+    private static void sound(Runnable play) {
+        try {
+            play.run();
+        } catch (RuntimeException | LinkageError ignored) {
+            // the finish is recorded all the same
+        }
+    }
+
+    /** The player if online, or {@code null} (never a throw: no server in a test). */
+    private static Player online(UUID id) {
+        try {
+            return id == null ? null : Bukkit.getPlayer(id);
+        } catch (RuntimeException | LinkageError e) {
+            return null;
         }
     }
 

@@ -75,7 +75,12 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
         }
 
         Body(String name, Place place) {
-            this.id = UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8));
+            this(UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8)), name, place);
+        }
+
+        /** A body that shares another bench's player id ({@link SessionBench}: one player, two benches). */
+        Body(UUID id, String name, Place place) {
+            this.id = id;
             this.name = name;
             this.place = place;
         }

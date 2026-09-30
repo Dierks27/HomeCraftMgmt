@@ -22,6 +22,7 @@ import com.dierks.homecraft.games.gen.api.PlannedCourse;
 import com.dierks.homecraft.games.gen.api.PlannedGolf;
 import com.dierks.homecraft.games.gen.api.PlannedTrial;
 import com.dierks.homecraft.games.gen.api.Planner;
+import com.dierks.homecraft.games.gen.api.Pools;
 import com.dierks.homecraft.games.gen.api.Putt;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.api.Stars;
@@ -1871,13 +1872,15 @@ public final class GenService implements GeneratedCourses, GenOps {
             return v != null && !v.air(x, y, z);
         };
         LiveProof.Solid water = (x, y, z) -> water(view.apply(x >> 4, z >> 4), x, y, z);
+        LiveProof.Solid seals = (x, y, z) -> seals(view.apply(x >> 4, z >> 4), x, y, z);
         try {
             GamesDao.CourseRow row = host.store().course(s.def.id());
             if (row == null) {
                 return List.of("its row is gone");
             }
-            if (s.def.golf()) {
-                return LiveProof.structure(com.dierks.homecraft.games.golf.CourseCodec.fromRow(row), solid, water);
+            if (s.def.golf()) { // every hole's whole plot, ponds to look at included (§1.3)
+                return LiveProof.structure(com.dierks.homecraft.games.golf.CourseCodec.fromRow(row), s.half(j.half),
+                        solid, seals, water);
             }
             return LiveProof.structure(CourseCodec.decode(row.id(), row.data()).course(), solid, water);
         } catch (SQLException | RuntimeException e) {
@@ -1891,6 +1894,15 @@ public final class GenService implements GeneratedCourses, GenOps {
      */
     static boolean water(WorldPort.ChunkView v, int x, int y, int z) {
         return v != null && !v.air(x, y, z) && BuildJob.fluid(v.block(x, y, z));
+    }
+
+    /**
+     * Whether block (x, y, z) of a chunk snapshot seals a pond (golf's pond scan,
+     * {@link LiveProof#pools}): the plan's own seal test ({@link Pools#seals}), a full block — not a
+     * slab, a sign or leaves, which can hold water; false for air or no snapshot.
+     */
+    static boolean seals(WorldPort.ChunkView v, int x, int y, int z) {
+        return v != null && !v.air(x, y, z) && Pools.seals(v.block(x, y, z));
     }
 
     // ---- the flip -------------------------------------------------------------------------------

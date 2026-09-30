@@ -120,8 +120,8 @@ class V2FixturesTest {
             LiveProof.Solid isSolid = (x, y, z) -> solid.contains(GenKit.pos(x, y, z));
             LiveProof.Solid noWater = (x, y, z) -> false;
             if (f.golf()) {
-                assertEquals(List.of(), LiveProof.structure(f.golfCourse().course(), isSolid, noWater),
-                        f + ": every tee and cup stands, and no pond to leak");
+                assertEquals(List.of(), LiveProof.structure(f.golfCourse().course(), f.plan().half(), isSolid, isSolid,
+                        noWater), f + ": every tee and cup stands, and no pond to leak");
             } else {
                 Course c = f.trial().course();
                 assertEquals(List.of(), LiveProof.structure(c, isSolid),

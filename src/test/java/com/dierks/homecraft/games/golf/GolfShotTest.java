@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -22,7 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the way a round strings them, GolfShot ends every putt the same way as the round — the same
  * outcome, the same ticks, the same strokes and the ball on exactly the same spot, water and out
  * of bounds putting it back where it was putted from; the direction is the StrictMath one the
- * round now uses; and a line replayed from the tee counts its putts and penalty strokes.
+ * round now uses; and a line replayed from the tee counts its putts and penalty strokes. On
+ * Adventure Golf a ball wobbling at a step comes to rest in a second, on what is under it, where a
+ * hand-built course keeps the roll cap.
  */
 class GolfShotTest {
 
@@ -76,6 +79,36 @@ class GolfShotTest {
         GolfShot.Result tap = GolfShot.play(flat, area, new BallPhysics.Ball(0.5, GROUND, 0.5), new Putt(-90f, 1));
         return 10.05 - (tap.x() - 0.5);
     }
+
+    /**
+     * A turf lane (x -5..12, z -3..12) with a sunken sand bunker: sand slabs over x 0..4, z 6..8, half
+     * a block below the turf, so the bunker's lip at x = 5 is a half-block step up.
+     */
+    static Grid bunker() {
+        Grid g = new Grid().floor(-5, 12, -3, 12, FLOOR, Surface.NORMAL);
+        for (int x = 0; x <= 4; x++) {
+            for (int z = 6; z <= 8; z++) {
+                g.remove(x, FLOOR, z).set(x, FLOOR, z, 0.5, Surface.SLOW);
+            }
+        }
+        return g;
+    }
+
+    /** The bunker's hole: bounds round the lane, the cup at ({@code cupX}, {@code cupY}, {@code cupZ}). */
+    static BallPhysics.Hole bunkerHole(int cupX, int cupY, int cupZ) {
+        return BallPhysics.Hole.of(cupX, cupY, cupZ, -5, FLOOR - 1, -3, 12, FLOOR + 4, 12);
+    }
+
+    /** On the bunker's sand at x 4, z 7 ... */
+    static final double WEDGE_X = 4.6764;
+    static final double WEDGE_Z = 7.6773;
+    static final double SAND = FLOOR + 0.5;
+    /**
+     * ...this tap wedges the ball's edge against the lip at x = 5 (the review of Course Variety's
+     * SAND_TRAP M seed 8, moved here): the physics lifts the edge onto the turf a sliver above, the
+     * ball drops back, again and again, with no sideways speed.
+     */
+    static final Putt WEDGE = new Putt(264.827f, 1);
 
     private static Scene randomScene(GenRandom r) {
         Grid g = new Grid();
@@ -229,6 +262,80 @@ class GolfShotTest {
         assertEquals(BallPhysics.Outcome.STOPPED, dry.outcome(), "the same tap with no pond just stops");
         assertTrue(GolfShot.adventure(new Adventure(pond)) && !GolfShot.adventure(pond),
                 "blocks say which rules they play by; blocks that don't say play the old ones");
+    }
+
+    /**
+     * The review of Course Variety (the owner's call, the four-year-old shouldn't watch a hovering
+     * ball): a tap wedged against a half-block step bounced on the spot, "rolling", until the roll
+     * cap stopped it half a minute later, a little above the sand. On Adventure Golf a ball whose
+     * sideways speed stays about nothing while its height stays within a sliver for a second has
+     * come to rest ({@link GolfShot.Rolling}): down on the sand, well before the roll cap. A
+     * hand-built course (and a layout of golf planner version 2) plays exactly as it always did.
+     */
+    @Test
+    void onAnAdventureCourseABallWobblingAtAStepSettlesOnTheSandInASecond() {
+        BallPhysics.Hole area = bunkerHole(10, FLOOR, 0);
+        GolfShot.Result hand = GolfShot.play(bunker(), area, new BallPhysics.Ball(WEDGE_X, SAND, WEDGE_Z), WEDGE);
+        assertEquals(BallPhysics.Outcome.STOPPED, hand.outcome(), "a hand-built course: it stops...");
+        assertEquals(GolfShot.MAX_ROLL_TICKS + 1, hand.ticks(), "...at the roll cap, exactly as it always did");
+        assertTrue(hand.y() > SAND + 0.3 && hand.y() < GROUND, "in the air above the sand, wedged at the lip: "
+                + hand.y());
+
+        BallPhysics.Ball ball = new BallPhysics.Ball(WEDGE_X, SAND, WEDGE_Z);
+        GolfShot.Result adventure = GolfShot.play(new Adventure(bunker()), area, ball, WEDGE);
+        assertEquals(BallPhysics.Outcome.STOPPED, adventure.outcome(), "on Adventure Golf it stops too...");
+        assertEquals(GolfShot.WOBBLE_TICKS, adventure.ticks(), "...a second after it began to wobble, well before"
+                + " the roll cap (" + GolfShot.MAX_ROLL_TICKS + ")");
+        assertEquals(SAND, adventure.y(), 0.0, "down on the sand, not in the air above it");
+        assertEquals(4, (int) Math.floor(adventure.x()), "on the bunker's last column, at the lip");
+        assertFalse(ball.moving(), "still, ready for the next putt");
+        BallPhysics.Ball rested = new BallPhysics.Ball(ball.x(), ball.y(), ball.z());
+        BallPhysics.settle(rested, bunker());
+        assertEquals(ball.y(), rested.y(), 0.0, "resting on the sand: nothing lower to settle onto");
+        GolfShot.Result next = GolfShot.play(new Adventure(bunker()), area, ball, new Putt(90f, 2));
+        assertFalse(next.penalty(), "the next putt plays normally: " + next);
+        assertTrue(next.ticks() < GolfShot.WOBBLE_TICKS * 3, "and rolls to rest on its own: " + next);
+    }
+
+    /**
+     * A wobbling ball comes to rest on whatever is under it, by the course's rules: in the cup if that
+     * is where it rests, in the pond if it settles into one (a splash, as a ball dropping there), and
+     * the pond rule ({@link GolfShot#settled}) still judges it. Here the block under the wedged ball is
+     * swapped a few ticks in, so the same wobble ends over each.
+     */
+    @Test
+    void aWobblingBallSettlesIntoTheCupOrThePondUnderIt() {
+        assertEquals(BallPhysics.Outcome.IN_CUP, wobbleOver(g -> g.remove(4, FLOOR, 7)
+                .set(4, FLOOR - 1, 7, 1.0, Surface.NORMAL), bunkerHole(4, FLOOR - 1, 7)), "a sunken cup under it: in");
+        assertEquals(BallPhysics.Outcome.WATER, wobbleOver(g -> g.remove(4, FLOOR, 7)
+                .set(4, FLOOR, 7, BallPhysics.Blocks.NONE, Surface.WATER).set(4, FLOOR - 1, 7, 1.0, Surface.NORMAL),
+                bunkerHole(10, FLOOR, 0)), "a pond under it: it settles into the water, so it has fallen in");
+        assertEquals(BallPhysics.Outcome.WATER, wobbleOver(g -> g.remove(4, FLOOR, 7)
+                .set(4, FLOOR, 7, BallPhysics.Blocks.NONE, Surface.WATER), bunkerHole(10, FLOOR, 0)),
+                "water with nothing under it to settle on: at rest over water, the pond rule says it has fallen in");
+        assertEquals(BallPhysics.Outcome.STOPPED, wobbleOver(g -> { }, bunkerHole(10, FLOOR, 0)),
+                "and the sand, untouched: it stops");
+    }
+
+    /** The wedge tap on an Adventure bunker whose block under the ball {@code swap} changes 3 ticks in. */
+    private static BallPhysics.Outcome wobbleOver(Consumer<Grid> swap, BallPhysics.Hole area) {
+        Grid g = bunker();
+        BallPhysics.Blocks blocks = new Adventure(g);
+        BallPhysics.Ball ball = new BallPhysics.Ball(WEDGE_X, SAND, WEDGE_Z);
+        GolfShot.Direction d = GolfShot.direction(WEDGE.yaw());
+        ball.putt(d.dx(), d.dz(), BallPhysics.speed(WEDGE.power()));
+        GolfShot.Rolling rolling = new GolfShot.Rolling();
+        BallPhysics.Outcome o = BallPhysics.Outcome.ROLLING;
+        int ticks = 0;
+        while (o == BallPhysics.Outcome.ROLLING) {
+            if (ticks == 3) {
+                swap.accept(g);
+            }
+            o = rolling.tick(blocks, area, ball);
+            ticks++;
+        }
+        assertEquals(GolfShot.WOBBLE_TICKS, ticks, "it came to rest a second in, not at the roll cap (" + o + ")");
+        return o;
     }
 
     @Test

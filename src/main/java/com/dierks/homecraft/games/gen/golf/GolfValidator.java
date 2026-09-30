@@ -81,6 +81,16 @@ public final class GolfValidator {
     }
 
     /**
+     * The grid of {@code plan}'s blocks ({@code inside}: those in its half), played by the rules its
+     * version plays by: Adventure Golf's ({@link GolfShot.Rules}) from version 3, none before — a
+     * layout of version 2 is built and played without them ({@code LiveBlocks} without sand), so its
+     * stored line is replayed the same way.
+     */
+    static PlanBlocks grid(Plan plan, List<BlockOp> inside) {
+        return PlanBlocks.of(plan.half(), plan.palette(), inside, adventure(plan));
+    }
+
+    /**
      * What is wrong with one hole's blocks (numbered {@code n}), without playing it, as a layout of
      * golf planner version {@code algo} is judged: {@link #holeProblems(BallPhysics.Blocks,
      * GolfCourse.Hole, int)} for version 2 or older, Adventure Golf's per-hole rules
@@ -151,7 +161,7 @@ public final class GolfValidator {
         if (!out.isEmpty()) {
             return out;
         }
-        PlanBlocks grid = PlanBlocks.of(half, plan.palette(), inside);
+        PlanBlocks grid = grid(plan, inside);
         for (int i = 0; i < n; i++) {
             GolfCourse.Hole h = course.holes().get(i);
             Box area = areas.get(i);

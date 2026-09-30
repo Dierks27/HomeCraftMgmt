@@ -26,8 +26,9 @@ import java.util.Locale;
  * sandstone is sand ({@link #SAND}, a full block; {@link #SAND_SLAB}, a sunken bunker's bottom
  * slab), which is SLOW, as {@code LiveBlocks} reads it on a generated course of golf algo 3 or
  * later; a hand-built course reads it as any stone (Course Variety decision 2), and no layout of
- * an older algo has any. A ball that comes to rest with its centre over the water has fallen in
- * ({@link GolfShot.Rules}), as on the built layout. Leaves ({@link #LEAVES}) are full, normal
+ * an older algo has any. A ball that comes to rest with its centre over the water has fallen in,
+ * and one that only wobbles on the spot has come to rest ({@link GolfShot.Rules}), as on the built
+ * layout. Leaves ({@link #LEAVES}) are full, normal
  * blocks to the ball, exactly like logs and moss; they have their own code only so a validator can
  * tell a canopy from a wall.
  *
@@ -68,9 +69,17 @@ public final class PlanBlocks implements BallPhysics.Blocks, GolfShot.Rules {
     private final int sizeY;
     private final int sizeZ;
     private final byte[] cells;
+    /** Whether the ball plays Adventure Golf's rules here ({@link #adventure}). */
+    private final boolean adventure;
 
-    /** An empty grid (all air) over {@code box}. */
+    /** An empty grid (all air) over {@code box}, played by Adventure Golf's rules. */
     public PlanBlocks(Box box) {
+        this(box, true);
+    }
+
+    /** An empty grid (all air) over {@code box}; {@code adventure}: by Adventure Golf's rules. */
+    private PlanBlocks(Box box, boolean adventure) {
+        this.adventure = adventure;
         this.minX = box.minX();
         this.minY = box.minY();
         this.minZ = box.minZ();
@@ -89,7 +98,17 @@ public final class PlanBlocks implements BallPhysics.Blocks, GolfShot.Rules {
      * {@code box}. An op outside the box, or a block the golf model doesn't know, throws.
      */
     public static PlanBlocks of(Box box, List<String> palette, List<BlockOp> ops) {
-        PlanBlocks g = new PlanBlocks(box);
+        return of(box, palette, ops, true);
+    }
+
+    /**
+     * {@link #of(Box, List, List)}, played by Adventure Golf's rules ({@link GolfShot.Rules}) only
+     * with {@code adventure}: without, the ball plays as it always did, as on a built layout of golf
+     * planner version 2 or older ({@code LiveBlocks} without sand) — so the frozen version 2 check
+     * replays a stored line exactly as the layout plays it.
+     */
+    public static PlanBlocks of(Box box, List<String> palette, List<BlockOp> ops, boolean adventure) {
+        PlanBlocks g = new PlanBlocks(box, adventure);
         byte[] codes = new byte[palette.size()];
         for (int i = 0; i < codes.length; i++) {
             codes[i] = code(palette.get(i));
@@ -200,13 +219,14 @@ public final class PlanBlocks implements BallPhysics.Blocks, GolfShot.Rules {
     }
 
     /**
-     * Always: a plan's blocks are played by Adventure Golf's rules ({@link GolfShot.Rules}), as the
-     * built layout of version 3 or later is. A layout of an older version has no water (and no
-     * sandstone) for them to change anything on.
+     * Whether a plan's blocks are played by Adventure Golf's rules ({@link GolfShot.Rules}), as the
+     * built layout of version 3 or later is: always, but for the frozen check of a layout of an older
+     * version ({@link #of(Box, List, List, boolean)}), which is played as that layout plays (it has no
+     * water or sandstone, but it has steps a ball can wobble at: {@link GolfShot.Rolling}).
      */
     @Override
     public boolean adventure() {
-        return true;
+        return adventure;
     }
 
     private boolean inside(int x, int y, int z) {

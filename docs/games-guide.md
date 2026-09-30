@@ -38,10 +38,10 @@
 - Top row of the Games screen: a sunflower with your tokens ("You have 42 tokens"), then the tabs. The tabs are All games, Luck (games of chance, plus the Scratch Ticket and each crate), Cabinets (little video games), Courses (time trials), Golf (mini golf) and Together (Race Night and Falling Floors; this tab only shows while one of them is open). Each tab shows how many tiles are in it. If someone has invited you to a game, a glowing book shows in the top-right corner.
 - Bottom row of the Games screen: Today's pick (a nether star), High scores (a sign), Take a break (a blue bed that shows your pause or your limit), Back or Close, and How the games work (a book that opens the Games page of the guide). Arrows show in the bottom corners when there is more than one page.
 - Click a tile to open that game. Every game shows its rules first. A game of chance also shows what it gives back and what each result pays, before you put any tokens in. A time-trial or golf tile opens the course screen first, with a Start button. One tile is different: the Scratch Ticket tile on the Luck tab buys a ticket (10 tokens) as soon as you click it. A crate tile opens the crate screen, which shows the chances first.
-- Type /hcm play <id> to open one game straight away. The ids are: ore_slots, twenty_one (blackjack works too), wheel, higher_lower, coin_flip, creeper_sweeper, ore_merge, snake, mini_match, simon_says, whack_a_zombie, connect_four, tic_tac_toe, trials (the list of time-trial courses, easiest first) and golf (the list of golf courses). Coin Flip is switched off unless the owner turns it on. Press Tab after /hcm play to see every open game and course.
-- Every course has its own id too. The admin who builds a course picks it (for example /hcm play cliffs). Typed in chat, a time-trial course starts your run straight away. A golf course always opens its course screen first, however you get there.
+- Type /hcm play <id> to open one game straight away. The ids are: ore_slots, twenty_one (blackjack works too), wheel, higher_lower, coin_flip, creeper_sweeper, ore_merge, snake, mini_match, simon_says, whack_a_zombie, connect_four, tic_tac_toe, trials (the list of time-trial courses: the Fresh Courses first when they're on, then the rest easiest first), golf (the list of golf courses), race (race_night works too; Race Night), falling_floors (tnt_run works too), fresh_courses (Fresh Courses) and clubhouse. Coin Flip is switched off unless the owner turns it on. Press Tab after /hcm play to see every open game and course (the games of chance only show if they're open to you and you haven't paused them).
+- Every course has its own id too. The admin who builds a course picks it (for example /hcm play cliffs). Typed in chat, a time-trial course first asks: "Warm up (3:00) - then the timed run" or "Go straight to the timed run" (by default; a Dropper starts straight away). A golf course always opens its course screen first, however you get there.
 - Type a name that isn't a game and you read: There's no game called "nope". /hcm play shows them all.
-- [Arcade] join signs are signs in the world that read [Arcade], a game's name, and Click to play. Right-click one to open that game, with the same checks as /hcm play. A time-trial sign starts the run straight away. A golf sign opens the course screen. Join signs only work while the games are on. Only admins can make them. If anyone else writes [Arcade] on a sign, that line is wiped, so nobody can make a fake one. Join signs are waxed, so they can't be changed by accident.
+- [Arcade] join signs are signs in the world that read [Arcade], a game's name, and Click to play. Right-click one to open that game, with the same checks as /hcm play. A time-trial sign first asks "Warm up (3:00)" or "Go straight to the timed run" (a Dropper sign starts straight away). A golf sign opens the course screen. Join signs only work while the games are on. Only admins can make them. If anyone else writes [Arcade] on a sign, that line is wiped, so nobody can make a fake one. Join signs are waxed, so they can't be changed by accident.
 - The games open in the main worlds and in the Games world (plus any extra world the owner adds). Anywhere else you read "Games can't be played in this world."
 - While you are on a course or in a golf round, only /hcm play, /hcm leave and /hcm help work (and /hcm games, for admins). Anything else says "Finish or leave your game first — /hcm leave". Trying to open a different game says "Finish your game first (/hcm leave)."
 - Games of chance can be switched off for one player. For example, a parent can ask an admin to do this. While the games are on, that player sees no Luck tab and no games of chance, and the Arcade shows them no crates and no Scratch Ticket. Card Packs still show in the pack shop, but buying one with tokens is refused. /hcm arcade odds tells them "Games of chance aren't open to you." Skill games stay open.
@@ -52,9 +52,9 @@
 | Command | What it does |
 |---|---|
 | `/hcm play` | Opens the Games screen. |
-| `/hcm play <game or course id>` | Opens one game. You see its rules first, and for a game of chance its odds. A time-trial course starts your run straight away. A golf course opens its course screen. |
+| `/hcm play <game or course id>` | Opens one game. You see its rules first, and for a game of chance its odds. A time-trial course first asks "Warm up (3:00)" or "Go straight to the timed run" (by default; a Dropper starts straight away). A golf course opens its course screen. |
 | `/hcm play blackjack` | Opens Twenty-One. It is another name for /hcm play twenty_one. |
-| `/hcm play trials` | Shows the list of time-trial courses, easiest first. |
+| `/hcm play trials` | Shows the list of time-trial courses: the Fresh Courses first (when they're on), then the rest easiest first. |
 | `/hcm play golf` | Shows the list of mini golf courses. |
 | `/hcm play golf <course id>` | Opens that golf course's screen, where Play with friends makes a golf party. |
 | `/hcm play race` | Opens the Race Night screen: when the next one is, Join, Watch and your season points. |
@@ -70,7 +70,7 @@
 | `/hcm play break` | Opens Take a break, where you can set your own daily limit or a pause for games of chance. Works even while the games are off. |
 | `/hcm play accept` | Says yes to the invite waiting for you. Bedrock players type this. Java players can also click [Accept] in chat. If nothing is waiting: "You have no invite waiting." |
 | `/hcm play deny` | Says no to the invite waiting for you ("Invite turned down."). If nothing is waiting: "You have no invite waiting." |
-| `/hcm play invites` | Shows your invite settings, for example "Your invites: Connect Four on, Tic-Tac-Toe on, Coin Flip off". |
+| `/hcm play invites` | Shows your invite settings, for example "Your invites: Connect Four on, Tic-Tac-Toe on, Party races on, Ride along on, Golf together on, Coin Flip off". |
 | `/hcm play invites on` | Turns on invites to Connect Four, Tic-Tac-Toe, party races, rides and golf together. Coin Flip invites can only be turned on from the Take a break screen. |
 | `/hcm play invites off` | Turns off all game invites (party races, rides and golf together too), Coin Flip too. |
 | `/hcm play news` | Shows whether you get the new-courses line in chat: "New courses in chat: on". |
@@ -82,13 +82,13 @@
 | `/hcm guide games` | Opens the Games page of How It Works. It is the same page as the book on the Games screen. |
 | `/hcm tokens` | Shows how many tokens you have and your login streak. |
 | `/hcm help (or just /hcm)` | Lists the commands you can use. |
-| `Admin-only commands` | /hcm games ... (status, check, feature, break, scores, saved, course, golf, gen, cup, event, floors) and /hcm play <game> <player> are for admins. A player who tries them reads "You don't have permission." Only admins can make [Arcade] join signs or build in the Games world. |
+| `Admin-only commands` | /hcm games ... (status, check, feature, break, scores, saved, course, golf, gen, cup, event, floors, clubhouse) and /hcm play <game> <player> are for admins. A player who tries them reads "You don't have permission." Only admins can make [Arcade] join signs or build in the Games world. |
 
 ## Tokens and the games
 
 - The new games only use tokens. No game takes or pays dollars. No game takes or gives your Cards, Minis or anything you could sell. The only thing a course or golf round gives you is its kit, and the kit stays in the game.
 - Tokens never turn into dollars. Nothing you get with tokens can be sold for money.
-- Ways to earn tokens: log in every day (your streak pays 2, 2, 3, 3, 4, 4, then 5 a day). Play (1 token for every hour). Do quests (3 daily and 2 weekly). Get achievements (35 of them, each pays once). Catch wild Minis (they count toward quests and achievements). Trade in spare Cards. Cabinets, courses, golf and Fresh Courses stars count toward quests and achievements too (see below).
+- Ways to earn tokens: log in every day (your streak pays 2, 2, 3, 3, 4, 4, then 5 a day). Play (1 token for every hour). Do quests (3 daily and 2 weekly). Get achievements (39 of them, each pays once). Catch wild Minis (they count toward quests and achievements). Trade in spare Cards. Cabinets, courses, golf and Fresh Courses stars count toward quests and achievements too (see below).
 - Skill games (cabinets, time trials and mini golf) are free to play, and they pay a few tokens. You can earn milestones (bronze, silver and gold, each pays once ever), today's challenge on each cabinet, today's pick, and course rewards like a first finish or a round of golf at par or under.
 - By default you can win up to 6 tokens a day from all skill games together. Each game also has its own smaller cap: 2 a day for most cabinets, 1 for Connect Four and Tic-Tac-Toe, 4 for time trials and 4 for mini golf.
 - The first time you finish a course pays extra, and it doesn't count toward the 6. By default that is 5, 10, 20 or 40 tokens for an Easy, Medium, Hard or "Why did we build this?" course, and 5 for a golf course.
@@ -528,7 +528,7 @@ These games use tokens. You choose how many tokens to put in, the result is deci
 7. The other player gets a message in chat. On Java they click [Accept] or [Deny]. On Bedrock they type /hcm play accept or /hcm play deny. They can also click the shining invite in the top-right corner of the Games screen. They have 60 seconds.
 8. Accepting opens a screen for them. It shows the tokens each, what the winner gets, and "Each of you has a 1 in 2 chance". Nothing is taken yet.
 9. They click ✓ Flip to go ahead, or ✗ No thanks. Only ✓ Flip takes anyone's tokens.
-10. Everything is checked again for both of you. If something changed (someone left, moved away, ran out of tokens or plays, started a break, or the time ran out), both of you read "The flip was called off." and no tokens are taken.
+10. Everything is checked again for both of you. If something changed when they click ✓ Flip (someone moved away, ran out of tokens or plays, or started a break), both of you read "The flip was called off." and no tokens are taken. If the time runs out first, the screen closes and the invited player reads "That Coin Flip invite ran out." (the player who asked reads "<name> didn't take your Coin Flip invite."). If the player who asked leaves, the screen closes with "That Coin Flip invite is gone." Nothing is taken either way.
 11. You both watch the coin turn over between the gold side (the player who asked) and the blue side (the player who was asked). It lands on the winner's side.
 
 **On the screen**
@@ -591,19 +591,19 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 - Classic play is free and has no limit. Play as much as you like. A new personal best is saved and announced, but a best alone pays no tokens.
 - Milestones: the six solo cabinets (Creeper Sweeper, Ore Merge, Snake, Mini Match, Simon Says, Whack-a-Zombie) have bronze, silver and gold goals on their Classic boards. Each one pays 1 token (by default), once ever. On Creeper Sweeper, Ore Merge and Snake, a green check mark on the board's tile shows a milestone you already got. Connect Four and Tic-Tac-Toe have no milestones.
 - Today's board (the daily challenge): the same board, pattern or round for everyone today. It changes at midnight, server time. Your FIRST try each day is your scored try. It counts the moment the board appears, so closing the screen uses it up. Every try after that is practice: nothing is saved and nothing is paid. Warm up with Classic first!
-- Meeting the daily goal on your scored try pays 1 token (by default), once a day per game. Connect Four and Tic-Tac-Toe work a little differently: their daily token is for your first win of the day against the Arcade (on Tic-Tac-Toe Hard, a draw counts too). See each game.
+- Meeting the daily goal on your scored try pays 1 token (by default), once a day per game. Connect Four and Tic-Tac-Toe work a little differently: their daily token is for your first win of the day against the Arcade (on Connect Four, only a Normal or Hard win counts; on Tic-Tac-Toe Hard, a draw counts too). See each game.
 - The daily boards are made from a secret only the server knows. Nobody can work out tomorrow's board ahead of time.
-- Daily limits (by default): each solo cabinet pays you at most 2 tokens a day. Connect Four and Tic-Tac-Toe pay at most 1 a day each. The Today's pick token is extra and does not count toward a game's own limit. All skill games together (cabinets, time trials and mini golf) pay at most 6 tokens a day. (A course's first-finish prize doesn't count toward the 6.) After that you see: "You've won all the game tokens you can today — scores still count!"
+- Daily limits (by default): each solo cabinet pays you at most 2 tokens a day. Connect Four and Tic-Tac-Toe pay at most 1 a day each. The Today's pick token is extra and does not count toward a game's own limit. All skill games together (cabinets, time trials, mini golf and Falling Floors) pay at most 6 tokens a day. (A course's first-finish prize doesn't count toward the 6.) After that you see: "You've won all the game tokens you can today — scores still count!"
 - A milestone you reach after you hit a limit is not paid, and it is not used up either. Reach it again another day to get it. But today's goal token can't wait: your scored try is used either way. So play today's boards early in the day!
 - Today's pick: each day one skill game or course is picked for everyone. Find it on the Nether Star button on the Games screen (or in the Arcade's Play row). Its tile on the Games screen sparkles and says "Today's pick". If it is a cabinet, your first finished game of it today pays 1 extra token (by default). It pays once a day. This extra token counts toward the 6-a-day limit, but not toward that game's own limit. Practice tries, friend games and a Creeper Sweeper Boom don't count for it.
 - Where you can earn: you must be in survival or adventure mode, in a world where games are played. In creative or spectator mode you read "No tokens can be earned here — scores still count!" Today's board is then only practice ("No tokens can be earned here, so today's board is practice. Your scored try waits for later."), and your scored try waits until you can earn.
 - Games only open in the right worlds. Somewhere else you read "Games can't be played in this world." If you read "Games aren't open to you.", games have been switched off for you (a parent or admin can do this). A game the owner has closed says "That game is closed right now."
-- While you are in a time trial or a mini golf game, the cabinets stay shut: "Finish your game first (/hcm leave)."
+- While you are in a world game (a time trial or race, mini golf, Falling Floors, or the Clubhouse), the cabinets stay shut: "Finish your game first (/hcm leave)."
 - Closing a game in the middle ends it with no score. Closing the screen (Esc) always ends it right away. The Back button on Creeper Sweeper, Ore Merge and Snake asks "click again to quit" first. On Mini Match, Simon Says, Whack-a-Zombie, Connect Four and Tic-Tac-Toe, Back leaves right away.
 - Double clicks are safe. The game ignores the extra clicks for a moment after a new board appears, so you can't dig a square by accident.
 - High scores: each game's first screen has High scores signs. A board shows your best at the top, then the top 10 players with their names. Java shows player heads; Bedrock shows numbered paper instead. The Games screen also has a High scores button in its bottom row. It lists every all-time board of the skill games. Today's boards are only on each game's own screen.
 - Taking a break from games of chance (the blue bed, or /hcm play break) does not close the cabinets. Skill games stay open.
-- Friend games (Connect Four and Tic-Tac-Toe): friend invites are ON until you turn them off. Turn them off on the game's own screen (just for that game), or type /hcm play invites off (that turns off both friend games, party races, rides and golf together, and Coin Flip invites too). Type /hcm play invites on to turn friend invites back on. Type /hcm play invites to see how yours are set.
+- Friend games (Connect Four and Tic-Tac-Toe): friend invites are ON until you turn them off. Turn them off on the game's own screen (just for that game), or type /hcm play invites off (that turns off both friend games, party races, rides and golf together, and Coin Flip invites too). Type /hcm play invites on to turn friend invites back on (party races, rides and golf together too; Coin Flip invites only turn on from the Take a break screen). Type /hcm play invites to see how yours are set.
 - Answering an invite: on Java, click [Accept] or [Deny] in chat. On Bedrock, type /hcm play accept or /hcm play deny. On both, a glowing invite tile also shows at the top right of the Games screen: click it to say yes. An invite lasts 60 seconds. It also ends if either player leaves the server or goes to another world.
 - Invite rules: you can have one invite out at a time, a player can have one invite waiting, and the same two players must wait 30 seconds before asking each other again. The friend list only shows players who take invites and can play right now. If you asked the same player less than 30 seconds ago, you read "That invite couldn't be sent." Wait a little and try again.
 - Friend games are just for fun. They pay no tokens, don't count for Today's pick, and don't go on the high scores.
@@ -667,7 +667,7 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 - Today's board: one scored try a day. It resets at midnight (server time). After that it is practice.
 - At most 2 tokens a day from Creeper Sweeper, and at most 6 a day from all skill games together (by default).
 - Tokens are only paid in survival or adventure mode, in a world where games are played.
-- Can't be opened while you are in a time trial or mini golf game.
+- Can't be opened while you are in a world game (a time trial or race, mini golf, Falling Floors, or the Clubhouse).
 
 **Tips**
 
@@ -734,7 +734,7 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 - Today's board: one scored try a day, reset at midnight (server time). Closing the screen uses it up.
 - At most 2 tokens a day from Ore Merge, and at most 6 a day from all skill games together (by default).
 - Tokens are only paid in survival or adventure mode, in a world where games are played.
-- Can't be opened while you are in a time trial or mini golf game.
+- Can't be opened while you are in a world game (a time trial or race, mini golf, Falling Floors, or the Clubhouse).
 
 **Tips**
 
@@ -798,7 +798,7 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 - Today's board: one scored try a day, reset at midnight (server time). Closing the screen uses it up.
 - At most 2 tokens a day from Snake, and at most 6 a day from all skill games together (by default).
 - Tokens are only paid in survival or adventure mode, in a world where games are played.
-- Can't be opened while you are in a time trial or mini golf game.
+- Can't be opened while you are in a world game (a time trial or race, mini golf, Falling Floors, or the Clubhouse).
 
 **Tips**
 
@@ -860,7 +860,7 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 - Daily challenge: one scored try a day, reset at midnight (server time). Closing the screen uses it up.
 - At most 2 tokens a day from Mini Match, and at most 6 a day from all skill games together (by default).
 - Tokens are only paid in survival or adventure mode, in a world where games are played.
-- Can't be opened while you are in a time trial or mini golf game.
+- Can't be opened while you are in a world game (a time trial or race, mini golf, Falling Floors, or the Clubhouse).
 
 **Tips**
 
@@ -922,7 +922,7 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 - Daily challenge: one scored try a day, reset at midnight (server time). Closing the screen uses it up.
 - At most 2 tokens a day from Simon Says, and at most 6 a day from all skill games together (by default).
 - Tokens are only paid in survival or adventure mode, in a world where games are played.
-- Can't be opened while you are in a time trial or mini golf game.
+- Can't be opened while you are in a world game (a time trial or race, mini golf, Falling Floors, or the Clubhouse).
 
 **Tips**
 
@@ -983,7 +983,7 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 - Daily challenge: one scored try a day, reset at midnight (server time). Closing the screen uses it up.
 - At most 2 tokens a day from Whack-a-Zombie, and at most 6 a day from all skill games together (by default).
 - Tokens are only paid in survival or adventure mode, in a world where games are played.
-- Can't be opened while you are in a time trial or mini golf game.
+- Can't be opened while you are in a world game (a time trial or race, mini golf, Falling Floors, or the Clubhouse).
 
 **Tips**
 
@@ -1053,7 +1053,7 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 - Tokens are only paid in survival or adventure mode, in a world where games are played.
 - Friend invites: one invite out at a time, it lasts 60 seconds, and the same two players wait 30 seconds before asking each other again. Your friend must be online, take invites, and be allowed to play where they are.
 - If you or your friend is busy in another game when the invite is accepted, the game does not start. Ask again in a bit.
-- Can't be opened while you are in a time trial or mini golf game.
+- Can't be opened while you are in a world game (a time trial or race, mini golf, Falling Floors, or the Clubhouse).
 
 **Tips**
 
@@ -1121,7 +1121,7 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 - Tokens are only paid in survival or adventure mode, in a world where games are played.
 - Friend invites: one invite out at a time, it lasts 60 seconds, and the same two players wait 30 seconds before asking each other again. Your friend must be online, take invites, and be allowed to play where they are.
 - If you or your friend is busy in another game when the invite is accepted, the game does not start. Ask again in a bit.
-- Can't be opened while you are in a time trial or mini golf game.
+- Can't be opened while you are in a world game (a time trial or race, mini golf, Falling Floors, or the Clubhouse).
 
 **Tips**
 
@@ -1136,9 +1136,9 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 These are played in the Games world, on courses the server's builders make. Each course has its own id and its own leaderboard.
 
 - These are free skill games played in the Games world. No tokens go in, and how well you play decides your score. They are not games of chance.
-- Every course has its own id, chosen by the builders (short lower-case words, like river_run). /hcm play <course id> opens it. /hcm play trials lists every time-trial course (parkour, elytra and boat), and /hcm play golf lists every golf course. Neither game has any other name (no aliases).
+- Every course has its own id, chosen by the builders (short lower-case words, like river_run). /hcm play <course id> opens it. /hcm play trials lists every time-trial course (parkour, elytra, boat and, with Fresh Courses on, the Dropper), and /hcm play golf lists every golf course. Neither game has any other name (no aliases).
 - You can also find them on the Games screen (/hcm play): the Courses tab has the time trials and the Golf tab has mini golf. The Arcade hub (/hcm arcade) has Courses and Mini golf buttons on its Play row, which open those tabs, and a Today's pick button. A right-click on an [Arcade] sign with a course on it opens that course too.
-- A time trial started by typing /hcm play <course id> or right-clicking its sign starts right away. Clicking a tile or the Today's pick button opens the course screen first. A golf course always opens its course screen first, and only Start takes you anywhere.
+- A time trial started by typing /hcm play <course id> or right-clicking its sign skips the course screen. Instead you get the small choice: Warm up (3:00), or Go straight to the timed run. A Dropper starts right away. Clicking a tile or the Today's pick button opens the course screen first. A golf course always opens its course screen first, and only Start takes you anywhere.
 - When you start, the game saves everything about you: your whole inventory (armour and off-hand too), XP, health, hunger, potion effects, game mode, and where you were standing. Then you get an empty inventory, full health and food, no effects, no XP, adventure mode, and the game's kit.
 - When you finish or leave, everything is put back exactly as it was, and you go back to where you were standing. Things are put back once and never doubled. If you log out or the server restarts during a game, your things come back when you join again.
 - Anything that reaches you during a game (like an auction delivery) is handed to you once you are home. If it doesn't all fit you see: Some of your things didn't fit. Make room, then type /hcm leave to get the rest.
@@ -1164,7 +1164,7 @@ These are played in the Games world, on courses the server's builders make. Each
 - **Race with friends.** Open a course's screen and click Race with friends, or type /hcm play race <course id>. That makes your party. Invite friends from the party screen: they get [Accept] in chat, and Bedrock players type /hcm play accept. A party holds up to 8 by default.
 - The party screen shows who's in and who's ready. Only the host can start the race, and the host chooses if everyone warms up first. In a party warm-up, click Ready when you're set: the race starts when the warm-up ends or everyone is ready.
 - Everyone goes to the start together and gets one 3, 2, 1, Go! at the same moment. Boats line up in rows of two behind the start line. A bar at the top of the screen shows your place, like 2nd of 5 · Lap 1/2. Boats can bump into each other.
-- When the race is over, everyone goes home and a results screen shows the whole group. It ends when everyone is in, 2 minutes after the first person finishes, or after 10 minutes.
+- The race ends when everyone is in, 2 minutes after the first person finishes, or 10 minutes after Go. Then everyone comes back to the Clubhouse, where the board shows the results. If the Clubhouse isn't open (or a restart is only a minute or so away), everyone goes home and a results screen shows the whole group.
 - Party races are free and just for fun: no entry, no prizes. Your time also counts as a normal run on the course, once, with the usual rewards and high scores, and for the Weekly Cup if you're in it (the party screen shows the Cup's button too).
 - On foot or with wings, racers can't push each other. The Dropper has no party races.
 - When Race Night needs the track, a party race on it is called off: everyone goes home with their things, and a race you hadn't finished doesn't count.
@@ -1201,15 +1201,15 @@ These are played in the Games world, on courses the server's builders make. Each
 
 **How to play**
 
-1. Type /hcm play trials to see every open course, easiest first. You can also open the Games screen (/hcm play) and pick the Courses tab. Or click Courses on the Play row of the Arcade hub (/hcm arcade), which opens that same tab. Parkour courses have a feather icon and a label like (Parkour · Easy).
+1. Type /hcm play trials to see every open course: the Fresh Courses first (when they're on), then the rest easiest first. You can also open the Games screen (/hcm play) and pick the Courses tab. Or click Courses on the Play row of the Arcade hub (/hcm arcade), which opens that same tab. Parkour courses have a feather icon and a label like (Parkour · Easy).
 2. Click a course to open its screen. It shows how to play, your best time, the high scores, this week's best time, the course record, and what it pays. Click the green Start button.
-3. Shortcut: type /hcm play <course id> in chat, or right-click the course's [Arcade] sign. The run starts right away, with no screen first. If the course is Today's pick, the Today's pick button opens its course screen.
+3. Shortcut: type /hcm play <course id> in chat, or right-click the course's [Arcade] sign. This skips the course screen. You just choose Warm up (3:00) or Go straight to the timed run, then you go to the start. If the course is Today's pick, the Today's pick button opens its course screen.
 4. Your things are saved and put away. You arrive at the start line with only the course kit.
 5. Wait for the countdown: 3, 2, 1, Go! You can look around, but you can't move yet. The clock starts on Go.
 6. Jump to every checkpoint in order. When you reach one, you hear a ping and see Checkpoint 2 of 5 and your time. The bar above your hotbar shows your time and how many checkpoints you have.
 7. Fall too far and you go back to your last checkpoint, facing the next one. The clock keeps running.
 8. After the last checkpoint, reach the finish. You see your time, your best and the course record.
-9. You are sent home with all your things back. Then a result screen opens. Click Play again to go straight back to the start line.
+9. You are sent home with all your things back. Then a result screen opens. Click Play again, choose Warm up (3:00) or Go straight to the timed run, and you're back at the start line.
 
 **On the screen**
 
@@ -1227,7 +1227,7 @@ These are played in the Games world, on courses the server's builders make. Each
 - A run that counts goes on the course's all-time board and on this week's board.
 - At the finish you may see: ★ Your first finish on (course)!, ★ New best!, ★ New course record!, or ★ Best time this week!
 - A new personal best is shown and saved, but it doesn't pay tokens.
-- These make a run not count: flying, your game mode changing, any potion effect, or your walk speed or movement being changed. You are told right away: This run won't count. You can finish it for fun, or leave.
+- These make a run not count: flying, your game mode changing, any potion effect, or your walk speed or movement being changed. You are told right away: This run won't count - … (the reason, like flying). Finish it for fun, or use Leave game.
 - At the finish, a run also doesn't count if it is quicker than the course's shortest time (5 seconds by default; a course can set its own), or if you got from one checkpoint to the next faster than parkour allows (14 blocks a second).
 - If a builder changes the course's layout during your run, the run records nothing.
 - When a run doesn't count, the finish says That run didn't count. and why. Nothing is saved and no tokens are paid.
@@ -1274,16 +1274,16 @@ These are played in the Games world, on courses the server's builders make. Each
 
 **How to play**
 
-1. Type /hcm play trials to see every open course, easiest first. You can also open the Games screen (/hcm play) and pick the Courses tab. Or click Courses on the Play row of the Arcade hub (/hcm arcade), which opens that same tab. Elytra courses have an elytra icon and a label like (Elytra · Medium).
+1. Type /hcm play trials to see every open course: the Fresh Courses first (when they're on), then the rest easiest first. You can also open the Games screen (/hcm play) and pick the Courses tab. Or click Courses on the Play row of the Arcade hub (/hcm arcade), which opens that same tab. Elytra courses have an elytra icon and a label like (Elytra · Medium).
 2. Click a course to open its screen. It shows how to play, your best time, the high scores, this week's best time, the course record, and what it pays. Click the green Start button.
-3. Shortcut: type /hcm play <course id> in chat, or right-click the course's [Arcade] sign. The run starts right away, with no screen first. If the course is Today's pick, the Today's pick button opens its course screen.
+3. Shortcut: type /hcm play <course id> in chat, or right-click the course's [Arcade] sign. This skips the course screen. You just choose Warm up (3:00) or Go straight to the timed run, then you go to the start. If the course is Today's pick, the Today's pick button opens its course screen.
 4. Your things are saved and put away. You arrive at the start line wearing an elytra, with 3 rockets and the course kit.
 5. Wait for the countdown: 3, 2, 1, Go! You can look around, but you can't move yet. The clock starts on Go.
 6. Take off and glide: jump, then press jump again while you fall to open your wings. Fly through every ring in order. At each one you hear a ping and see Checkpoint 2 of 5 and your time.
 7. Click the rockets while gliding for a boost. Your rockets are filled back up to 3 at every ring, and each time you go back.
 8. If you land anywhere except near the start, inside a ring or at the finish, or if you touch water, you go back to your last ring and keep gliding from it. If you haven't reached a ring yet, you go back to the start. The clock keeps running.
 9. After the last ring, fly into the finish. You see your time, your best and the course record.
-10. You are sent home with all your things back. Then a result screen opens. Click Play again to go straight back to the start line.
+10. You are sent home with all your things back. Then a result screen opens. Click Play again, choose Warm up (3:00) or Go straight to the timed run, and you're back at the start line.
 
 **On the screen**
 
@@ -1302,7 +1302,7 @@ These are played in the Games world, on courses the server's builders make. Each
 - A run that counts goes on the course's all-time board and on this week's board.
 - At the finish you may see: ★ Your first finish on (course)!, ★ New best!, ★ New course record!, or ★ Best time this week!
 - A new personal best is shown and saved, but it doesn't pay tokens.
-- These make a run not count: flying (like creative flying), your game mode changing, any potion effect, or your walk speed or movement being changed. You are told right away: This run won't count. You can finish it for fun, or leave.
+- These make a run not count: flying (like creative flying), your game mode changing, any potion effect, or your walk speed or movement being changed. You are told right away: This run won't count - … (the reason, like flying). Finish it for fun, or use Leave game.
 - At the finish, a run also doesn't count if it is quicker than the course's shortest time (5 seconds by default; a course can set its own), or if you got from one ring to the next faster than elytra courses allow (80 blocks a second).
 - If a builder changes the course's layout during your run, the run records nothing.
 - When a run doesn't count, the finish says That run didn't count. and why. Nothing is saved and no tokens are paid.
@@ -1351,15 +1351,15 @@ These are played in the Games world, on courses the server's builders make. Each
 
 **How to play**
 
-1. Type /hcm play trials to see every open course, easiest first. You can also open the Games screen (/hcm play) and pick the Courses tab. Or click Courses on the Play row of the Arcade hub (/hcm arcade), which opens that same tab. Boat courses have a boat icon and a label like (Boat · Medium).
+1. Type /hcm play trials to see every open course: the Fresh Courses first (when they're on), then the rest easiest first. You can also open the Games screen (/hcm play) and pick the Courses tab. Or click Courses on the Play row of the Arcade hub (/hcm arcade), which opens that same tab. Boat courses have a boat icon and a label like (Boat · Medium).
 2. Click a course to open its screen. It shows how to play, your best time, the high scores, this week's best time, the course record, and what it pays. Click the green Start button.
-3. Shortcut: type /hcm play <course id> in chat, or right-click the course's [Arcade] sign. The run starts right away, with no screen first. If the course is Today's pick, the Today's pick button opens its course screen.
+3. Shortcut: type /hcm play <course id> in chat, or right-click the course's [Arcade] sign. This skips the course screen. You just choose Warm up (3:00) or Go straight to the timed run, then you go to the start. If the course is Today's pick, the Today's pick button opens its course screen.
 4. Your things are saved and put away. You arrive at the start line sitting in a boat of your own, with the course kit.
 5. Wait for the countdown: 3, 2, 1, Go! Your boat is held still until Go. The clock starts on Go.
 6. Row through every checkpoint in order. At each one you hear a ping and see Checkpoint 2 of 5 and your time. The bar above your hotbar shows your time and how many checkpoints you have.
 7. Trying to get out of the boat doesn't let you out. It sends you back to your last checkpoint in a new boat. The clock keeps running.
 8. After the last checkpoint, row into the finish. You see your time, your best and the course record.
-9. You are sent home with all your things back. Then a result screen opens. Click Play again to go straight back to the start line.
+9. You are sent home with all your things back. Then a result screen opens. Click Play again, choose Warm up (3:00) or Go straight to the timed run, and you're back at the start line.
 
 **On the screen**
 
@@ -1378,7 +1378,7 @@ These are played in the Games world, on courses the server's builders make. Each
 - A run that counts goes on the course's all-time board and on this week's board.
 - At the finish you may see: ★ Your first finish on (course)!, ★ New best!, ★ New course record!, or ★ Best time this week!
 - A new personal best is shown and saved, but it doesn't pay tokens.
-- These make a run not count: flying, your game mode changing, any potion effect, or your walk speed or movement being changed. You are told right away: This run won't count. You can finish it for fun, or leave.
+- These make a run not count: flying, your game mode changing, any potion effect, or your walk speed or movement being changed. You are told right away: This run won't count - … (the reason, like flying). Finish it for fun, or use Leave game.
 - At the finish, a run also doesn't count if it is quicker than the course's shortest time (5 seconds by default; a course can set its own), or if you got from one checkpoint to the next faster than boat courses allow (75 blocks a second).
 - If a builder changes the course's layout during your run, the run records nothing.
 - When a run doesn't count, the finish says That run didn't count. and why. Nothing is saved and no tokens are paid.
@@ -1411,7 +1411,7 @@ These are played in the Games world, on courses the server's builders make. Each
 - Keep your finger off sneak. Trying to get out of the boat sends you back.
 - A boat checkpoint counts when your boat passes through the space around it. By default that space is 6 blocks across. A builder can make it bigger or smaller.
 - The clock keeps running when you go back, so a smooth line often beats a risky shortcut.
-- Your boat is yours alone. Nobody else can get in it or break it.
+- Your boat is yours. Nobody can break it, and nobody else can get in, unless you invite a friend to ride along in the back seat (Take a rider).
 - If you cross the finish and nothing happens, you missed a checkpoint. Check the count, or use Back to checkpoint.
 - The first person to finish a course in a new week holds this week's best time.
 - Look for ★ Course of the week and ★ Today's pick on the course screen for extra tokens.
@@ -1524,7 +1524,7 @@ These are played in the Games world, on courses the server's builders make. Each
 5. Everyone starts together on a starting grid: "Race 1 of 3", then 3, 2, 1, Go! The bar at the top shows your place and lap, like "2nd of 5 · Lap 1/2".
 6. Cross the finish line: "You came 2nd!" Then you watch the others from the viewing stand.
 7. After a short break, the next race starts. Whoever has the fewest points starts at the front.
-8. After the last race, the winners are announced, prizes are paid, and everyone goes home with their things.
+8. After the last race, the winners are announced, prizes are paid, and everyone goes to the Clubhouse (see [The Clubhouse](#the-clubhouse)). If the Clubhouse is off (or a restart is only a minute or so away), everyone goes home with their things.
 
 **Points in every race**
 
@@ -1639,7 +1639,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 
 - **Open it:** `/hcm play clubhouse` any time it's open. It's free, and nothing in it pays or costs tokens. Your things are kept safe and come back when you leave, like every world game.
 - **The room:** a big glass-floored hall with windows, lanterns, benches, two tables, a podium for the top three and a board with the results. You can't fall out or get hurt, nobody can push anybody, and nobody can break or place blocks.
-- **The kit:** Results (the last race's results), Party (while you're in a party race's lobby) and Leave game (click twice).
+- **The kit:** Results (the last race's results), Party (while you're in a party race's lobby), Watch live (while a race or golf group is going) and Leave game (click twice).
 - **Before a party race:** on the party screen, tap **Go to the Clubhouse** to wait there. When the host starts the race, you go straight to the grid. You don't have to go.
 - **Before Race Night:** tap **Wait in the Clubhouse** on the Race Night screen, or in the join message. You go to the track when the night starts.
 - **After a party race:** you come back to the Clubhouse instead of going home: "Back in the Clubhouse! Look at the board for the results." The board shows the order, times and gaps. The host can tap **Race again** on the party screen, and everyone still in the Clubhouse goes back to the grid. While your party is racing, Go to the Clubhouse and Take a rider aren't on the party screen; Watch is, for anyone who isn't racing.
@@ -1648,10 +1648,10 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - **Solo runs** go home as always.
 - **The board** shows the positions while a race or golf group is going, then the final result.
 - **Just watching:** anyone can come and watch without racing. Tap **Watch** on the party screen or the Race Night screen, or use `/hcm play clubhouse`. A watcher is never put in a race, never counted and never paid.
-- **Watch live:** while a race or golf group is going, tap **Watch live** in the Clubhouse, or use `/hcm play watch` (or `/hcm play watch <player>` for that player's race). You fly round the course in spectator mode and can click a racer to see what they see. You stay near the course, the racers can't see you, and you can't touch anything. The bar at the bottom shows the positions and "Watching live - /hcm play clubhouse to go back". When the race ends you come back to the Clubhouse by yourself, just in time for the results and the photo. However you leave, your own game mode comes back.
+- **Watch live:** while a race or golf group is going, tap **Watch live** in the Clubhouse, or use `/hcm play watch` (or `/hcm play watch <player>` for that player's race). You fly round the course in spectator mode and can click a racer to see what they see. You stay near the course, the racers can't see you, and you can't touch anything. The bar at the bottom shows the positions, then "| /hcm play clubhouse to go back" (before there are positions it reads "Watching live | /hcm play clubhouse to go back"). When the race ends you come back to the Clubhouse by yourself, just in time for the results and the photo. However you leave, your own game mode comes back.
 - **Cheer!** `/hcm play cheer` shows the racers "<your name> cheers for you!". Once every 10 seconds. Racers who'd rather not see cheers: `/hcm play cheers off` (and `on` to see them again).
 - **Ride along:** in a boat, a driver can take one friend in the back seat, on a solo boat run, a party race or Race Night. Tap **Take a rider (back seat)** on a boat course's screen, the party screen or the Race Night screen once you've joined, or use `/hcm play rider <player>`. Your friend gets an invite ([Accept] in chat, or `/hcm play accept` on Bedrock). They hop in behind you at every start, hold "Riding with Dad - hold on tight!" and can't fall out during the run. Their Leave game takes only them home; you carry on. When you finish or leave, they come with you: to the Clubhouse after a party race or Race Night, home after a solo run, and from the Clubhouse they ride with you again in your next race. A rider is never timed or paid and isn't on any board. Between races they wait on the stand with you, kept on it just like the racers, so they're never on the track when the boats come round. A passenger doesn't make a boat faster, so your run counts as normal (unless the owner has set rides with a rider to be just for fun; then you're told first, and in a party race your place still counts).
-- **Time limits:** after 30 minutes with no race or party going you're sent home, with a warning a minute before. Just before a planned restart, nobody new comes in except from a race or golf round that ends then, and everyone is sent home with a warning a minute later, before the restart. In the last minute or so before it, the Clubhouse takes nobody at all: a race or golf round that ends then takes you home instead, and says why.
+- **Time limits:** after 30 minutes with no race or party going you're sent home, with a warning a minute before. Just before a planned restart, nobody new comes in except from a race or golf round that ends then, and everyone is sent home with a warning a minute later, before the restart. In the last minute or so before it, the Clubhouse takes nobody at all. A party race or golf round that ends then takes you home and says why: "The Clubhouse is closed for the restart, so you're going home. Your things are back." When Race Night ends then, it takes you home with its usual "Race Night is over - great racing! Your things are back."
 - **One thing at a time:** from the Clubhouse, a solo run, another game or golf says "Finish your game first (/hcm leave)".
 - **When it's off** (the owner's switch, or while it's being built), races and golf work exactly as before and the Clubhouse buttons aren't shown.
 <!-- ---- end the Clubhouse ---- -->
@@ -1674,18 +1674,18 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - Per-game extras. The Wheel's rows use spaces and of (24) instead of chance/oneIn, one row per stake per result, including "your N back" and "nothing". Twenty-One has payouts per stake {win, twentyOne, doubleWin} and no paytable. Higher or Lower has maxMultiplier and maxGuesses (where a run cashes out by itself) and no paytable. Coin Flip has one "win the flip" row per stake with chance 0.5. rules is one plain line, where a game gives one.
 - To match the game's own words, show Math.floor(rtp) as "gives back about N of every 100 tokens" (89.7 becomes "about 89"). Never round up. Show the odds next to every game of chance, and never show a prize or pot on its own.
 - Cabinets (kind cabinet) have board, unit (ms, points, flips, apples or wins), lowerIsBetter, and best (the server record; absent until someone sets one). Creeper Sweeper publishes its normal board, Connect Four its hard board (hard wins), and Tic-Tac-Toe its wins board. Show ms as m:ss.t with tenths rounded down, like the game does (1:23.4).
-- Courses have kind parkour, elytra or boat; tier easy, medium, hard or extreme; and record {ms, at}. Golf has holes, par, and record {strokes, at}. at is epoch ms and is present when known. record is absent until someone sets one.
+- Courses have kind parkour, elytra, boat or dropper; tier easy, medium, hard or extreme; and record {ms, at}. Golf has holes, par, and record {strokes, at}. at is epoch ms and is present when known. record is absent until someone sets one.
 - Weekly Cup: a time-trial course that runs this week's Cup (and it isn't paid out yet) carries cup {entry, pool, entrants, endsAt} on its own games[] entry. entry is the tokens to enter (5 by default). pool is the pool right now: every entry, plus the server's top-up (10 by default) once 2 or more are in; the top-up is only paid if 2 or more set a Cup time, so the paid pool can be smaller than the one shown. entrants is how many are in (a count, never who). endsAt is when it is paid out, in epoch ms (Monday 4:00 AM by default). No player, Cup time or prize is ever published. There is no cup on a course without one, and golf never has one. While the owner has the Cup switched off (games.cup.enabled: false), only a Cup that players already entered is still published, until it is paid out. Say "Cup pool: 35 tokens · 5 in" and "Best time wins the pool", like the game.
 - Falling Floors (only while the owner has it on; it ships off): an entry {id: "falling_floors", name, kind: "arena", shape?, top?}. shape is this week's top floor: disc, square, ring, plus or diamond. top is this week's longest solo times in ms, longest first (higher is better). There is no record field.
 - Race Night: the top-level events object, only while Race Night is on (it ships off), with only the parts that have something in them. next {id, name, joinAt, startsAt, course?: {id, name}, races, laps, entry: "free", prizes, finisherPrize, prizeNight, racers, maxRacers}: the next night (open or coming), its join and start times in epoch ms, its track (absent until the server has picked one), prizes [5, 3, 2] and finisherPrize 1 by default, prizeNight false when that week's prize nights are used up (then it's "Just for fun tonight"), and racers joined so far as a count. upcoming: the start times of the nights after it, at most 4. live {id, state, race, of, racers, standings?}: the night on now; state is open, racing, break or results (results stays for 30 minutes after the end); standings [{rank, points, lap, laps, holder?}], at most 8, best first. recent: the last 5 nights, newest first, {id, at, course?, racers, state: done or called_off, top?: [{rank, value, unit: "points", holder?}]} with at most 8 rows. season? {key: "2026-10", name: "October", until, top?}: this month's season table, with top like any board's (in points). entry is always "free": nobody pays to race, so never show a price.
-- featured {game, until}: game is today's pick (a game or course id that is in games[]). until is the next local midnight in epoch ms, good for a countdown. It is never a game of chance. It is absent while the games are off or when there is no pick.
+- featured {game, until}: game is today's pick. It is a game or course id that is in games[], or "trials" / "golf" when the owner pinned a whole world game; then every time-trial course (the Droppers too) or every golf course is today's pick. until is the next local midnight in epoch ms, good for a countdown. It is never a game of chance. It is absent while the games are off or when there is no pick.
 - jackpots [{game: "scratch_ticket", tokens}]: the Scratch Ticket's pot right now. Whenever it is there, games[] also has the scratch_ticket entry, so the pot can always be shown with its odds. That entry's rtp (77.6 as shipped) is the long-run figure with the pot at its steady state.
 - prizes: the visible Prize Counter rows {id, name, category, cost, description?}. category is boosts, hunt, cosmetics, perks, trophies or minis. Trade In, Quest Reroll and the Rare Card are left out, and the +1 Home shows its first price. packs: packs sold for tokens {id, name, cost, odds}, with odds as percents per rarity (COMMON, UNCOMMON, RARE, EPIC, LEGENDARY; only rarities above 0).
 - achievements: the enabled ones {id, name, description, tokens}. name and description are the same one line. The Scratch Ticket's jackpot achievement is left out. first_crate ("Open an Arcade Crate") is still published, because the owner hasn't decided about it yet.
 - While the games are off, games[] has only the scratch_ticket entry (plus the pot, prizes, packs and achievements), and there is no featured. With arcade.enabled false, scratch_ticket, jackpots, prizes, packs and achievements go too. If a game throws while writing its entry, that entry is dropped, and the game switches itself off in game like any failing game. The rest of the feed still goes out.
-- Privacy rule: no player data, ever. That means no UUIDs, balances, per-player limits, Take a break settings, winners or names. A record is only a score or time and a date. The one exception is web.dashboard.arcade_show_names (shipped false). Only while it is true does a record (or a cabinet's best, a top row, a Race Night standing or result row) carry holder, the name of whoever set it. The Weekly Cup's cup object and Falling Floors' entry never name anyone. It is read on every refresh, so /hcm reload applies it. In a game's extra fields, keys that would name a person or a balance (uuid, player, owner, holder, winner, balance and their plurals) and any UUID-shaped text are dropped at any depth.
+- Privacy rule: no player data, ever. That means no UUIDs, balances, per-player limits, Take a break settings, winners or names. A record is only a score or time and a date. The one exception is web.dashboard.arcade_show_names (shipped false). Only while it is true does a record (or a cabinet's best, a top row, a Race Night standing or result row) carry holder, the name of whoever set it. The Weekly Cup's cup object never names anyone. Falling Floors' entry has no record, but its top rows carry holder like any other top row while names are on. It is read on every refresh, so /hcm reload applies it. In a game's extra fields, keys that would name a person or a balance (uuid, player, owner, holder, winner, balance and their plurals) and any UUID-shaped text are dropped at any depth.
 - In game, the high-score screens do show names. Only the website leaves them out. Don't add names to the site from anywhere else.
-- the games only exist once the owner turns them on (games.enabled is false in a fresh install). Every number marked "by default" is a setting the owner can change in config.yml under games:. The daily goals (15 apples, 24 flips, a pattern of 8, 20 points, make a diamond, clear the board) are fixed in the code; only their token amounts are settings.
+- the games only exist once the owner turns them on (games.enabled is false in a fresh install). Every number marked "by default" is a setting the owner can change in config.yml: under games:, except the Arcade's own (the Rare Card and the week start, under arcade:) and the website feed's (under web.dashboard:). The daily goals (15 apples, 24 flips, a pattern of 8, 20 points, make a diamond, clear the board) are fixed in the code; only their token amounts are settings.
 - the website feed /api/arcade lists each cabinet's server record on one board: Creeper Sweeper's Normal board (a time), Ore Merge Classic (points), Snake Classic (apples), Mini Match Classic (flips, lower wins), Simon Says Classic (points), Whack-a-Zombie Classic (points), Connect Four Hard (wins) and Tic-Tac-Toe Wins (wins). Record holders' names are left out of the feed unless the owner turns them on (web.dashboard.arcade_show_names). In game, names always show.
 - the website feed /api/arcade lists every open course with its id and name (plus kind and tier for time trials, holes and par for golf) and its record. The record holder's name is only included when the server allows names on the feed.
 - the shipped config.yml has games.enabled: false, so none of these games show until the owner turns the games on.

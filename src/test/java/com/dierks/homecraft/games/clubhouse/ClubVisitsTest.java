@@ -15,7 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Who is in the Clubhouse and for how long (CLUBHOUSE-SPEC §4, §8): {@code max_minutes} with a
  * warning a minute before, a race or a party stopping the clock, the restart hold sending everyone
- * home a minute after it starts (a late arrival too), and an arrival that never lands.
+ * home a minute after it starts (a late arrival too) and always before the restart's own minute, and
+ * an arrival that never lands.
  */
 class ClubVisitsTest {
 
@@ -67,11 +68,62 @@ class ClubVisitsTest {
         assertEquals(List.of(ClubVisits.What.HOME_HOLD), whats(home, ava), "home at hold start + 1 minute");
         assertEquals(List.of(ClubVisits.What.HOME_HOLD), whats(home, ben), "everyone");
         UUID cal = UUID.randomUUID();
-        v.enter(cal, "Cal", ClubVisits.Kind.PARTY, hold + 3 * MIN); // from a race already going
+        v.enter(cal, "Cal", ClubVisits.Kind.PARTY, hold + 3 * MIN); // in late some other way (a seat handed back)
         assertEquals(List.of(ClubVisits.What.WARN_HOLD), whats(v.second(hold + 3 * MIN, 30, id -> true, true), cal),
                 "a late arrival is warned at once");
         assertEquals(List.of(ClubVisits.What.HOME_HOLD), whats(v.second(hold + 4 * MIN, 30, id -> true, true), cal),
                 "and gets the same minute: never here across a restart");
+    }
+
+    /**
+     * The PRODBUG the journeys found: a visitor warned less than a minute before the restart (a one-minute
+     * hold, or one who got in late) was sent home only in the restart's own minute, maybe after the server
+     * stopped. Home now comes {@link ClubVisits#HOME_BEFORE_RESTART} before the restart at the latest.
+     */
+    @Test
+    void theHoldsMinuteNeverRunsIntoTheRestartsOwnMinute() {
+        ClubVisits v = new ClubVisits();
+        long restart = 60 * MIN;
+        long lastCall = restart - ClubVisits.HOME_BEFORE_RESTART;
+        v.enter(ava, "Ava", ClubVisits.Kind.VISIT, 0);
+        v.enter(ben, "Ben", ClubVisits.Kind.PARTY, 0);
+        assertEquals(List.of(), v.second(restart - MIN - 1_000, 30, id -> true, false, restart), "no hold yet");
+        List<ClubVisits.Act> warn = v.second(restart - MIN + 500, 30, id -> true, true, restart); // a one-minute hold
+        assertEquals(List.of(ClubVisits.What.WARN_HOLD), whats(warn, ava), "warned as the hold starts");
+        assertEquals(List.of(ClubVisits.What.WARN_HOLD), whats(warn, ben), "everyone");
+        assertEquals(List.of(), v.second(lastCall - 1, 30, id -> true, true, restart),
+                "nobody sent home before the last call");
+        List<ClubVisits.Act> home = v.second(lastCall, 30, id -> true, true, restart);
+        assertEquals(List.of(ClubVisits.What.HOME_HOLD), whats(home, ava),
+                "home at the last call, not a minute after the warning (in the restart's own minute)");
+        assertEquals(List.of(ClubVisits.What.HOME_HOLD), whats(home, ben), "everyone");
+        v.leave(ava);
+        v.leave(ben);
+
+        UUID cal = UUID.randomUUID();
+        v.enter(cal, "Cal", ClubVisits.Kind.PARTY, restart - 3_000); // in late, after the last call
+        assertEquals(List.of(ClubVisits.What.HOME_HOLD), whats(v.second(restart - 3_000, 30, id -> true, true, restart),
+                cal), "home at once, never told 'in 1 minute' with seconds left");
+        v.leave(cal);
+        UUID dee = UUID.randomUUID();
+        v.enter(dee, "Dee", ClubVisits.Kind.VISIT, restart + 20_000); // in the restart's own minute, not stopped yet
+        assertEquals(List.of(ClubVisits.What.HOME_HOLD), whats(v.second(restart + 20_000, 30, id -> true, true, restart),
+                dee), "the restart's own minute: home at once");
+        v.leave(dee);
+
+        UUID eve = UUID.randomUUID();
+        long hold = restart - 5 * MIN; // the shipped five-minute hold
+        v.enter(eve, "Eve", ClubVisits.Kind.VISIT, hold - MIN);
+        assertEquals(List.of(ClubVisits.What.WARN_HOLD), whats(v.second(hold, 30, id -> true, true, restart), eve),
+                "a five-minute hold warns as it starts");
+        assertEquals(List.of(), v.second(hold + 30_000, 30, id -> true, true, restart), "nothing in the minute");
+        assertEquals(List.of(ClubVisits.What.HOME_HOLD), whats(v.second(hold + MIN, 30, id -> true, true, restart), eve),
+                "and still sends home a whole minute after the warning, well before the restart");
+        v.leave(eve);
+        UUID fay = UUID.randomUUID();
+        v.enter(fay, "Fay", ClubVisits.Kind.VISIT, restart + MIN);
+        assertEquals(List.of(), v.second(restart + MIN, 30, id -> false, false, restart + 24 * 60 * MIN),
+                "once the restart's minute is over (no hold), nobody is sent anywhere");
     }
 
     @Test

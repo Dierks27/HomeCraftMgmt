@@ -632,7 +632,7 @@ final class JourneyBench implements AutoCloseable {
 
         @Override
         public boolean clubhouse(String trackWorld) {
-            return door != null && door.nightAfter() && trackWorld.equalsIgnoreCase(door.world());
+            return com.dierks.homecraft.games.event.ClubNight.takes(door, trackWorld); // LivePorts.clubhouse (the real rule)
         }
 
         @Override

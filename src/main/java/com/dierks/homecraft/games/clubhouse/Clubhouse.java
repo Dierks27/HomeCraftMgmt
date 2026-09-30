@@ -10,6 +10,7 @@ import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GameSpec;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.NoPush;
+import com.dierks.homecraft.games.RestartHold;
 import com.dierks.homecraft.games.event.NightRunner;
 import com.dierks.homecraft.games.event.RaceNight;
 import com.dierks.homecraft.games.gen.engine.GenRegionGuard;
@@ -75,7 +76,8 @@ import java.util.logging.Logger;
  * changes a block (the box is guarded, like the Falling Floors arena's), chat is the server's. The
  * kit: Party (while in a party race's lobby), Results (the last results screen) and Leave game.
  * Anyone here longer than {@code max_minutes} with no race or party going is sent home, with a
- * warning a minute before; the restart hold sends everyone home a minute after it starts.
+ * warning a minute before; the restart hold sends everyone home a minute after it starts (and always
+ * before the restart's own minute), and nobody is taken in from a race or golf while it is on.
  *
  * <p><b>The board</b> shows the last event's result (a party race's times and gaps, Race Night's
  * points, golf's strokes), drawn only on a new result. At the end of Race Night its top three stand
@@ -582,8 +584,10 @@ public final class Clubhouse implements Game, ClubDoor {
             }
         }
         watch.second();
-        boolean holding = games().restartHold().holding(now);
-        for (ClubVisits.Act a : visits.second(now, settings().maxMinutes(), this::busy, holding)) {
+        RestartHold hold = games().restartHold();
+        boolean holding = hold.holding(now);
+        // home a minute after the warning, and always before the restart's own minute (its start: next())
+        for (ClubVisits.Act a : visits.second(now, settings().maxMinutes(), this::busy, holding, hold.next(now))) {
             Player p = online(a.player());
             if (p == null) {
                 gone(a.player(), null);
@@ -1060,6 +1064,11 @@ public final class Clubhouse implements Game, ClubDoor {
             }
 
             @Override
+            public boolean closingForRestart() {
+                return call(self::closingForRestart, true); // unsure: home, as with no Clubhouse
+            }
+
+            @Override
             public boolean partyAfter() {
                 return call(self::partyAfter, false);
             }
@@ -1156,6 +1165,12 @@ public final class Clubhouse implements Game, ClubDoor {
         if (r == null || !r.open() || p == null || !p.isOnline()) {
             return false;
         }
+        if (closingForRestart()) {
+            // Nobody comes in during the restart hold, not even from a race or a round that ends in it: one
+            // taken in during the restart's last minute was still here when it came, and ClubVisits promises
+            // nobody ever is. The caller sends them home, as with no Clubhouse.
+            return false;
+        }
         World w = Bukkit.getWorld(r.world());
         ClubhouseSite.Spot s = r.spawn(nextSpot++);
         Session sess = games().sessions().session(p);
@@ -1174,6 +1189,11 @@ public final class Clubhouse implements Game, ClubDoor {
         welcome(p, kind, false, line);
         visits.recheck(p.getUniqueId(), now());
         return true;
+    }
+
+    @Override
+    public boolean closingForRestart() {
+        return games().restartHold().holding(now());
     }
 
     @Override

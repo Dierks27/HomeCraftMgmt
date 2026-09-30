@@ -234,9 +234,10 @@ public final class ClubBench {
      */
     public List<ClubVisits.Act> visitsSecond() {
         long now = games.clock().nowMillis();
-        boolean holding = games.restartHold().holding(now);
+        com.dierks.homecraft.games.RestartHold hold = games.restartHold();
+        boolean holding = hold.holding(now);
         List<ClubVisits.Act> acts = club.visits().second(now, club.settings().maxMinutes(),
-                id -> games.parties().of(id) != null || watch.watching(id), holding);
+                id -> games.parties().of(id) != null || watch.watching(id), holding, hold.next(now));
         for (ClubVisits.Act a : acts) {
             Player p = online.apply(a.player());
             if (p == null) {
@@ -348,6 +349,9 @@ public final class ClubBench {
             if (!open || p == null || !p.isOnline()) {
                 return false;
             }
+            if (closingForRestart()) {
+                return false; // nobody comes in during the restart hold: the caller sends them home
+            }
             UUID id = p.getUniqueId();
             Session sess = rail.session(id);
             if (sess == null || sess.phase() != Session.Phase.ACTIVE || !world().equals(sess.world())) {
@@ -366,6 +370,11 @@ public final class ClubBench {
             takenIn.merge(id, 1, Integer::sum);
             afterTakeIn.accept(id);
             return true;
+        }
+
+        @Override
+        public boolean closingForRestart() {
+            return club.closingForRestart(); // the real one: the restart hold, to the end of the restart's minute
         }
 
         @Override

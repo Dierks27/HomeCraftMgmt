@@ -35,10 +35,23 @@ public final class ClubNight {
         return club != null && club.seatable(racer);
     }
 
-    /** Whether the Clubhouse takes the night's racers when done: open, {@code race_night_after}, the track's world. */
+    /**
+     * Whether the Clubhouse takes the night's racers when done: open, {@code race_night_after}, the
+     * track's world, and not in the restart hold.
+     */
     static boolean takes(GamesService games, String trackWorld) {
-        ClubDoor club = Clubhouse.door(games);
-        return club != null && club.nightAfter() && trackWorld != null && trackWorld.equalsIgnoreCase(club.world());
+        return takes(Clubhouse.door(games), trackWorld);
+    }
+
+    /**
+     * {@link #takes(GamesService, String)} through {@code club} ({@code null}: none). Never during the
+     * restart hold ({@link ClubDoor#closingForRestart}): a night that ends in it (a race that ran long)
+     * sends its racers home with its own home line, never "Everyone to the Clubhouse!" to a Clubhouse
+     * that would have them there across the restart.
+     */
+    public static boolean takes(ClubDoor club, String trackWorld) {
+        return club != null && club.nightAfter() && !club.closingForRestart() && trackWorld != null
+                && trackWorld.equalsIgnoreCase(club.world());
     }
 
     /** The night's standings on the board ("1. Sam 28 pts"), and its top three on the podium, in its own order. */

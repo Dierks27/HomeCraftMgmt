@@ -21,9 +21,12 @@ import java.util.function.Predicate;
  * <ul>
  *   <li>anyone here longer than {@code games.clubhouse.max_minutes} with no race and no party going
  *       for them is sent home, with a friendly warning a minute before;</li>
- *   <li>anyone here when the restart hold starts is warned and sent home a minute later (someone
- *       who arrives during the hold, from a race already going, gets the same minute), so nobody is
- *       ever here across a restart.</li>
+ *   <li>anyone here when the restart hold starts is warned and sent home a minute later, and in any
+ *       case {@link #HOME_BEFORE_RESTART} before the restart's own minute starts, so nobody is ever
+ *       here across a restart. Nobody is taken in during the hold ({@code Clubhouse.takeIn}: a race
+ *       or a golf round that ends then sends its players home), so this minute is for those already
+ *       here; the cap is for a short hold ({@code restart_hold_minutes: 1}), whose minute would
+ *       otherwise end in the restart's own, and anyone who got in late some other way.</li>
  * </ul>
  */
 public final class ClubVisits {
@@ -42,6 +45,13 @@ public final class ClubVisits {
 
     /** One minute: the warning before the timeout, and the restart hold's grace. */
     public static final long MINUTE = 60_000L;
+
+    /**
+     * The latest anyone is sent home before a restart: this long before the restart's own minute
+     * starts (a restart time names the minute the server stops in, {@code RestartHold}), so the trip
+     * home is over before it even when the second's timer runs a little late.
+     */
+    public static final long HOME_BEFORE_RESTART = 5_000L;
 
     /** What {@link #second} says to do. */
     public enum What {
@@ -197,15 +207,30 @@ public final class ClubVisits {
     }
 
     /**
-     * Once a second: the timeouts. {@code busy} says whether a race or a party is going for a visitor
-     * (their idle clock stands still); {@code holding} whether the restart hold is on.
+     * {@link #second(long, int, Predicate, boolean, long)} with no restart time known: the hold's
+     * minute runs from the warning.
      */
     public List<Act> second(long now, int maxMinutes, Predicate<UUID> busy, boolean holding) {
+        return second(now, maxMinutes, busy, holding, -1);
+    }
+
+    /**
+     * Once a second: the timeouts. {@code busy} says whether a race or a party is going for a visitor
+     * (their idle clock stands still); {@code holding} whether the restart hold is on, and
+     * {@code restartAt} when the restart it holds for is (the start of its minute, epoch ms; -1 for
+     * none known). In the hold a visitor is warned once and sent home a minute later, or at
+     * {@link #HOME_BEFORE_RESTART} before the restart if that is sooner; one first seen after that
+     * goes home at once, without the warning's "in 1 minute".
+     */
+    public List<Act> second(long now, int maxMinutes, Predicate<UUID> busy, boolean holding, long restartAt) {
         List<Act> out = new ArrayList<>();
         long max = Math.max(2, maxMinutes) * MINUTE;
+        boolean last = holding && restartAt >= 0 && now >= restartAt - HOME_BEFORE_RESTART;
         for (Visit v : visits.values()) {
             if (holding) {
-                if (v.holdWarnedAt < 0) {
+                if (last) {
+                    out.add(new Act(v.id, What.HOME_HOLD)); // the restart's minute is next: home now
+                } else if (v.holdWarnedAt < 0) {
                     v.holdWarnedAt = now;
                     out.add(new Act(v.id, What.WARN_HOLD));
                 } else if (now - v.holdWarnedAt >= MINUTE) {

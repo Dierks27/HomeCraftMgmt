@@ -35,6 +35,8 @@ class ClubGolfTest {
     private static final class Door implements ClubDoor {
         final Map<UUID, ClubVisits.Kind> in = new LinkedHashMap<>();
         boolean golfAfter = true;
+        /** The restart hold is on: the real Clubhouse takes nobody in. */
+        boolean closing;
         ClubBoard.Sheet sheet;
         final List<UUID> handedOut = new ArrayList<>();
         final List<UUID> handedBack = new ArrayList<>();
@@ -92,6 +94,11 @@ class ClubGolfTest {
         }
 
         @Override
+        public boolean closingForRestart() {
+            return closing;
+        }
+
+        @Override
         public void result(ClubBoard.Sheet s, Consumer<Player> opener) {
             sheet = s;
         }
@@ -127,6 +134,25 @@ class ClubGolfTest {
     private static GolfGroup.Card card() {
         return new GolfGroup.Card("meadow", "Meadow Links", List.of(3, 3, 3), 2, List.of(row(SAM, "Sam", 3, 4, 3),
                 row(AVA, "Ava", 2, 3, 3), row(LEE, "Lee", 4, 4, 5)), true, -1);
+    }
+
+    /**
+     * The PRODBUG the journeys found, for golf together: a group whose round ends during the restart hold went
+     * into the Clubhouse (in its last minute, still there at the restart). Now they go home with the group's
+     * card, as with no Clubhouse, and nothing of the Clubhouse's is touched.
+     */
+    @Test
+    void aGroupThatEndsInTheRestartHoldGoesHomeAndLeavesTheClubhouseAlone() {
+        Door door = new Door();
+        door.closing = true;
+        int[] forgot = {0};
+        for (UUID id : List.of(SAM, AVA, LEE)) {
+            assertFalse(ClubGolf.take(door, player(id), "games", () -> forgot[0]++, card(), null),
+                    "the caller sends them home");
+        }
+        assertTrue(door.in.isEmpty(), "nobody taken in");
+        assertEquals(0, forgot[0], "their rounds are left for the trip home, as with no Clubhouse");
+        assertNull(door.sheet, "no board for a Clubhouse closing for the restart");
     }
 
     @Test

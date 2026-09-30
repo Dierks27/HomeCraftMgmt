@@ -78,6 +78,8 @@ class ClubhouseRacesTest {
         ClubBoard.Sheet result;
         List<UUID> podium;
         boolean open = true;
+        /** The restart hold is on ({@link #closingForRestart}). */
+        boolean closing;
 
         @Override
         public String world() {
@@ -110,12 +112,17 @@ class ClubhouseRacesTest {
 
         @Override
         public boolean takeIn(Player p, ClubVisits.Kind kind, String line) {
-            if (!open) {
+            if (!open) { // not refused while closing: what is pinned is that the races ask closingForRestart first
                 return false;
             }
             in.put(p.getUniqueId(), kind);
             lines.put(p.getUniqueId(), line == null ? "" : line);
             return true;
+        }
+
+        @Override
+        public boolean closingForRestart() {
+            return closing;
         }
 
         @Override
@@ -340,6 +347,31 @@ class ClubhouseRacesTest {
         }
     }
 
+    /**
+     * The PRODBUG the journeys found: a racer who finished during the restart hold was taken into the Clubhouse
+     * (in its last minute, still there when the server stopped). {@code ClubRaces.toClub} now asks the door
+     * first and sends them home, as with no Clubhouse, reading why; the finish still counts once.
+     */
+    @Test
+    void aPartyRacerWhoFinishesInTheRestartHoldGoesHomeNotToTheClubhouse() throws Exception {
+        clubOn();
+        door.in.put(id(ava), ClubVisits.Kind.PARTY);
+        door.in.put(id(ben), ClubVisits.Kind.PARTY);
+        door.closing = true; // the race went before the hold; the hold is on when it ends
+        raceOnce(List.of(ava, ben, cal), List.of(ava, ben, cal), 180);
+        assertEquals(1, race.fromClub.get(id(ava)), "Ava was seated from the Clubhouse");
+        for (Player p : List.of(ava, ben, cal)) {
+            assertTrue(race.home.containsKey(id(p)), p.getName() + " went home at the line");
+            assertFalse(door.in.containsKey(id(p)), p.getName() + " is not in the Clubhouse");
+            assertTrue(bench.heard(id(p)).contains("The Clubhouse is closed for the restart, so you're going home"),
+                    p.getName() + " reads why: " + bench.heard(id(p)));
+            assertEquals(1, told.courses(id(p)), p.getName() + ": the finish still counts, once");
+        }
+        assertTrue(door.lines.isEmpty(), "the Clubhouse was never asked to take anyone in: " + door.lines);
+        assertEquals(45_000L, best(ava), "Ava's time is on the course's board");
+        assertEquals(0, bench.severe(), "nothing threw");
+    }
+
     @Test
     void aRacerStillRacingWhenItEndsGoesToTheClubhouseToo() {
         clubOn();
@@ -462,8 +494,7 @@ class ClubhouseRacesTest {
         // LivePorts' Clubhouse hooks, over the bench
         @Override
         public boolean clubhouse(String trackWorld) {
-            ClubDoor club = trials.raceMode().door();
-            return club != null && club.nightAfter() && trackWorld.equalsIgnoreCase(club.world());
+            return ClubNight.takes(trials.raceMode().door(), trackWorld); // LivePorts.clubhouse (the real rule)
         }
 
         @Override
@@ -527,6 +558,11 @@ class ClubhouseRacesTest {
 
     /** A whole night: Ava waits in the Clubhouse; Ava 28, Ben 26, Cal 18 over three races. */
     private NightRunner wholeNight() {
+        return wholeNight(() -> { });
+    }
+
+    /** {@link #wholeNight()}, with {@code beforeLastRace} run as race 3 goes off. */
+    private NightRunner wholeNight(Runnable beforeLastRace) {
         NightRunner night = night(new Ports());
         run(night, 2 * 60 * 20, () -> night.phase() == EventMachine.Phase.OPEN);
         for (Player p : List.of(ava, ben, cal)) {
@@ -538,6 +574,7 @@ class ClubhouseRacesTest {
         run(night, 30 * 20, () -> List.of(ava, ben, cal).stream().allMatch(p -> race.regrids.getOrDefault(id(p), 0) == 1));
         raceIt(night, ava, ben, cal);
         run(night, 30 * 20, () -> List.of(ava, ben, cal).stream().allMatch(p -> race.regrids.getOrDefault(id(p), 0) == 2));
+        beforeLastRace.run();
         raceIt(night, ben, ava, cal);
         run(night, 400, () -> night.phase().over() && trials.run(id(ava)) == null && trials.run(id(ben)) == null
                 && trials.run(id(cal)) == null);
@@ -562,6 +599,28 @@ class ClubhouseRacesTest {
         assertNotNull(door.result, "the board shows the night");
         assertTrue(door.result.rows().get(0).contains("Ava") && door.result.rows().get(0).contains("28 pts"),
                 door.result.rows().toString());
+        assertEquals(0, bench.severe(), "nothing threw");
+    }
+
+    /**
+     * Race Night's end-of-night trip in the restart hold (its last race ran into it): the Clubhouse takes nobody
+     * then ({@code ClubNight.takes}), so everyone goes home with the night's own home line, never "Everyone to the
+     * Clubhouse!", and nothing goes on the Clubhouse's board or podium for a room that is emptying.
+     */
+    @Test
+    void raceNightEndingInTheRestartHoldSendsEveryoneHomeNotToTheClubhouse() {
+        clubOn();
+        door.in.put(id(ava), ClubVisits.Kind.NIGHT); // "Wait in the Clubhouse"
+        wholeNight(() -> door.closing = true);
+        assertEquals(1, race.fromClub.get(id(ava)), "Ava was seated from the Clubhouse before the hold");
+        for (Player p : List.of(ava, ben, cal)) {
+            assertEquals("&7Race Night is over - great racing! Your things are back.", race.home.get(id(p)),
+                    p.getName() + " went home with the night's own line");
+            assertFalse(door.in.containsKey(id(p)), p.getName() + " is not in the Clubhouse");
+        }
+        assertNull(door.result, "no board for a Clubhouse closing for the restart");
+        assertNull(door.podium, "and no podium");
+        assertTrue(door.lines.isEmpty(), "nobody was taken in: " + door.lines);
         assertEquals(0, bench.severe(), "nothing threw");
     }
 

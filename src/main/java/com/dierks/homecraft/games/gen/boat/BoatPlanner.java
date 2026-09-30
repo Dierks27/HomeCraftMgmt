@@ -20,87 +20,258 @@ import com.dierks.homecraft.games.trial.Tier;
 import com.dierks.homecraft.games.trial.TrialKind;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
- * The planner for the Ice Boat loop (GEN-SPEC §4.4; the slot ships switched off): a walled ice
- * track round a closed loop, raced twice.
+ * The planner for Ice Boat's "Mountain Run" (Course Variety §2; the slot ships switched off): a
+ * downhill sprint on a rounded-square spiral that winds from the rim of the half down round the
+ * viewing stand, with real drops of 1-2 blocks, sand, pick-a-path splits, an ice cave, a forest and
+ * the Final Drop, and the finish under the stand.
  *
- * <p><b>Why a polar curve.</b> The centreline is {@code r(θ) = 40 (1 + Σ a_k cos(kθ + φ_k))} for
- * k = 2 to 4, each {@code a_k} at most 0.12, round the middle of the half. With r always above 0
- * a polar curve is one closed loop that can't cross itself, so a layout never needs a
- * self-crossing check to be a loop. What it does need is gentle bends: every three points 2 blocks
- * apart along it have a circumradius of at least 12 (16 on easy), so the track's edges, offset
- * half its width either side, never fold. A loop that bends too hard is drawn again
- * ({@code fork("loop:" + n)}); after ten tries each one is drawn flatter (the amplitudes shrink),
- * and a plain circle always passes, so a course is never missing.
+ * <p><b>Why a sprint.</b> A boat can't climb (fact F1), so a closed loop can never lose height.
+ * Everything the races use already handles a sprint: one lap, the grid straight back from the start,
+ * the stand at the half's middle.
  *
- * <p><b>The track</b> is ice (packed, or blue on hard) at one height, every block within half the
- * width of the centreline; round it a wall one block high above the ice, which a boat can't
- * climb, and magenta arrows set into the wall every 24 blocks pointing the way. Checkpoints sit
- * on the centreline every ~24 blocks, each wide enough to span the track so none can be missed,
- * repeated for two laps; the finish is on the start line, which the course ignores until every
- * checkpoint is behind (Time Trials' own rule), and the start is 4 blocks before it.
+ * <p><b>How a plan is made</b> (§2.9). For up to {@value #TRIES} tries, each from its own seeded
+ * streams: {@link TrackPath} draws the spiral, {@link TrackProfile} the drops and the finish,
+ * {@link TrackPieces} the pieces (kept only while the checkpoints still fit round them),
+ * {@link TrackRaster} lays it on whole blocks with its checkpoints and walls, {@link BoatScenery}
+ * adds the mountain; then {@link DownhillValidator} (V1-V13) must prove it, or the next try comes.
+ * Tries 1-10 have every piece of the tier, 11-15 fewer (no forest, one split, one sand pit), 16-20
+ * only the drops, the bends' sand and the scenery. If none is proven, {@code SAFE_SPIRAL}: the
+ * tier's smallest bends, its fewest drops at fixed places, no pieces, whose track depends only on
+ * the orientation (a test proves all 24 in both halves), so a course is never missing.
  *
- * <p><b>The viewing stand</b> (algo 2, EVENTS-DROPPER-SPEC §A.4.2): Race Night and party races park
- * finished racers where they can watch the rest. It is a 7 × 7 white platform at the half's middle,
- * its top 5 above the race line (above the track's keep-clear space), with a two-high glass rail
- * round its edge so everyone stands on the inner 5 × 5, and a sign. The loop's radius is at least
- * 25.6 and the track at most 9 wide, so the stand is at least 12 blocks from any ice
- * ({@link RaceStand}); races find it from the tag's half alone.
+ * <p><b>No simulator yet</b> (the Course Variety decisions, §11's schedule valve): this is algo 3
+ * without V14. The reference time is the centreline from the start to the finish at
+ * {@value #REF_SPEED} blocks a second (the loop's rule), the landing strips are the spec's constants,
+ * and the proof is unaffected (rule R1). {@code BoatSim}'s fun gates come as algo 4 after the owner's
+ * boat test strip (Gate 0).
  *
- * <p>Pure: no Bukkit, no clock, no {@code java.util.Random}; {@link BoatValidator} checks every plan
- * before it is returned.
+ * <p><b>Nothing configurable shapes a layout</b> (rule R6): it comes only from (algo, seed, day,
+ * reroll, tier, half), so a pin, an admin's pick, a rederive and the Weekly Cup's plan hash always
+ * name the same blocks.
+ *
+ * <p>Pure: no Bukkit, no clock, no {@code java.util.Random}.
  */
 public final class BoatPlanner implements Planner {
 
     /**
-     * Its version; bump it whenever what it makes for a seed changes (golden hashes pin three seeds).
-     * 2 added the viewing stand; a layout of algo 1 keeps its stored plan and has no stand.
+     * Its version; bump it whenever what it makes for a seed changes (golden hashes pin three seeds
+     * a tier). 2 added the viewing stand; 3 is the Mountain Run (a layout of algo 2 keeps its stored
+     * plan, judged by {@link LoopValidatorV2}, until its set ends).
      */
-    public static final int ALGO = 2;
+    public static final int ALGO = 3;
 
-    /** The three tiers: the track's width, the tightest bend, and the ice. */
+    /** How much of the tier's deck a try asks for (§2.9). */
+    public enum Richness {
+        /** The tier's whole deck of pieces. */
+        FULL,
+        /** No forest, one split, one sand pit. */
+        REDUCED,
+        /** Drops, the bends' sand and the scenery. */
+        BASIC
+    }
+
+    /**
+     * The three tiers (§2.4): lane, pit, bends, pitch, how far round, ice, drops, the first drop's
+     * distance, sand, and the deck of pieces. What the proof checks of a tier (the narrowest passage,
+     * the ice line, the drops' limits) is {@link DownhillValidator.Tier}'s, read through
+     * {@link #proof()}.
+     */
     public enum Level {
-        EASY("easy", 9, 16, false),
-        MEDIUM("medium", 7, 12, false),
-        HARD("hard", 5, 12, true);
+        EASY("easy", 9, 9, 16, new int[]{32, 30, 24, 16, 17, 17}, 20, 6, false, 4, 5, 70, 1, 0,
+                new int[]{1, 1}, new int[]{1, 1}, new int[]{0, 1}, 0, new int[]{0, 0}, 4, false),
+        MEDIUM("medium", 7, 7, 12, new int[]{24, 24, 20, 18, 16, 13, 13}, 18, 7, false, 5, 6, 60, 2, 1,
+                new int[]{1, 1}, new int[]{1, 1}, new int[]{1, 1}, 1, new int[]{1, 2}, 4, true),
+        HARD("hard", 5, 7, 12, new int[]{20, 20, 18, 16, 14, 13, 13, 13, 13}, 16, 9, true, 4, 6, 50, 2, 2,
+                new int[]{1, 2}, new int[]{1, 2}, new int[]{1, 2}, 1, new int[]{0, 0}, 3, true);
 
         private final String id;
         private final int width;
-        private final double minRadius;
-        private final boolean fastIce;
+        private final int pitWidth;
+        private final int minRadius;
+        private final int[] radiusCaps;
+        private final int pitch;
+        private final int lastLeg;
+        private final boolean blue;
+        private final int minDrops;
+        private final int maxDrops;
+        private final int firstLip;
+        private final int runoff;
+        private final int kerb;
+        private final int[] pits;
+        private final int[] splits;
+        private final int[] caves;
+        private final int forests;
+        private final int[] boosts;
+        private final int sandPit;
+        private final boolean splitSand;
 
-        Level(String id, int width, double minRadius, boolean fastIce) {
+        Level(String id, int width, int pitWidth, int minRadius, int[] radiusCaps, int pitch, int lastLeg,
+              boolean blue, int minDrops, int maxDrops, int firstLip, int runoff, int kerb, int[] pits, int[] splits,
+              int[] caves, int forests, int[] boosts, int sandPit, boolean splitSand) {
             this.id = id;
             this.width = width;
+            this.pitWidth = pitWidth;
             this.minRadius = minRadius;
-            this.fastIce = fastIce;
+            this.radiusCaps = radiusCaps;
+            this.pitch = pitch;
+            this.lastLeg = lastLeg;
+            this.blue = blue;
+            this.minDrops = minDrops;
+            this.maxDrops = maxDrops;
+            this.firstLip = firstLip;
+            this.runoff = runoff;
+            this.kerb = kerb;
+            this.pits = pits;
+            this.splits = splits;
+            this.caves = caves;
+            this.forests = forests;
+            this.boosts = boosts;
+            this.sandPit = sandPit;
+            this.splitSand = splitSand;
         }
 
         public String id() {
             return id;
         }
 
-        /** The track's width, blocks of ice across. */
+        /** The lane's width w (9, 7, 5), blocks of ice across. */
         public int width() {
             return width;
         }
 
-        /** The tightest bend: the circumradius of any three centreline points 2 blocks apart. */
-        public double minRadius() {
+        /** The launch pit's width: max(w, 7). */
+        public int pitWidth() {
+            return pitWidth;
+        }
+
+        /** The tightest bend: R 16 (easy) or 12. */
+        public int minRadius() {
             return minRadius;
         }
 
-        /** The ice: blue (faster) on hard, packed otherwise. */
-        public String ice() {
-            return fastIce ? Palette.TRACK_FAST : Palette.TRACK;
+        /**
+         * The largest radius corner k may have: the tier's largest on the outer corners, near the
+         * smallest on the inner ones, so the inner straights keep room for a drop and its landing.
+         */
+        public int radiusCap(int corner) {
+            return radiusCaps[Math.min(corner, radiusCaps.length - 1)];
         }
 
-        /** A checkpoint's radius: half the width and a half, so it spans the track. */
+        /** The pitch p: rings on the same side are p apart (20, 18, 16). */
+        public int pitch() {
+            return pitch;
+        }
+
+        /** The last leg (the finish's): 1.25, 1.75 and 2.25 turns round. */
+        public int lastLeg() {
+            return lastLeg;
+        }
+
+        /** Blue ice (hard), else packed. */
+        public boolean blue() {
+            return blue;
+        }
+
+        public String ice() {
+            return blue ? Palette.TRACK_FAST : Palette.TRACK;
+        }
+
+        /** The fewest and most drops a try may have. */
+        public int minDrops() {
+            return minDrops;
+        }
+
+        public int maxDrops() {
+            return maxDrops;
+        }
+
+        /** How far after the start the first drop may come, at least. */
+        public int firstLip() {
+            return firstLip;
+        }
+
+        /** Sand columns on the outside of a bend tighter than R 24, and on its inside at the apex. */
+        public int runoff() {
+            return runoff;
+        }
+
+        public int kerb() {
+            return kerb;
+        }
+
+        /** The deck: sand pits, splits, caves (each {least, most}), forests, boost strips. */
+        public int[] pits() {
+            return pits.clone();
+        }
+
+        public int[] splits() {
+            return splits.clone();
+        }
+
+        public int[] caves() {
+            return caves.clone();
+        }
+
+        public int forests() {
+            return forests;
+        }
+
+        public int[] boosts() {
+            return boosts.clone();
+        }
+
+        /** A sand pit's width: 4 (3 on hard, so both ways round stay P wide). */
+        public int sandPit() {
+            return sandPit;
+        }
+
+        /** Whether a split's branch has a sand patch (medium, hard). */
+        public boolean splitSand() {
+            return splitSand;
+        }
+
+        /** How many trunks a forest has: 3 on medium, 4 on hard. */
+        public int trunks() {
+            return this == HARD ? 4 : 3;
+        }
+
+        /** What the proof asks of this tier. */
+        public DownhillValidator.Tier proof() {
+            return DownhillValidator.Tier.of(id);
+        }
+
+        /** A checkpoint's radius on the lane: w / 2 + 0.5, so it spans it. */
         public double checkpointRadius() {
             return width / 2.0 + 0.5;
+        }
+
+        /** The finish's radius: w / 2 + 1.5. */
+        public double finishRadius() {
+            return width / 2.0 + 1.5;
+        }
+
+        /** A drop's flat straight run-up: at least 8, and room for the checkpoint before it. */
+        public int runUp() {
+            return Math.max(8, width + 3);
+        }
+
+        /** The straight landing strip after a drop of {@code d} (§2.5, fun constants). */
+        public int landing(int d) {
+            if (blue) {
+                return d >= 2 ? 41 : 33;
+            }
+            return d >= 2 ? 26 : 22;
+        }
+
+        /** The most any piece or bend widens one side of the lane. */
+        public int widest() {
+            return MAX_EXTRA * 2;
         }
 
         /** The tier called {@code word} (any case), or {@code null}. */
@@ -118,32 +289,69 @@ public final class BoatPlanner implements Planner {
         }
     }
 
-    /** The loop's mean radius. */
-    public static final double BASE_RADIUS = 40;
-    /** The largest any of the three wobbles may be, as a share of the radius. */
-    public static final double MAX_AMPLITUDE = 0.12;
-    /** The centreline is sampled this often, blocks along it. */
-    public static final double STEP = 0.5;
-    /** Bends are measured over three points this far apart along the centreline. */
-    public static final double BEND_SPAN = 2;
-    /** Checkpoints and arrows come about this often along the track. */
-    public static final double CHECKPOINT_SPACING = 24;
-    public static final double ARROW_SPACING = 24;
-    /** Laps a run goes round. */
-    public static final int LAPS = 2;
-    /** The start is this far before the line. */
-    public static final double START_BACK = 4;
-    /** The ice lies this far above the half's floor. */
-    public static final int ICE_ABOVE_FLOOR = 4;
-    /** Loops drawn before giving up (after ten, each is drawn flatter). */
+    /** a_0: the outermost leg's offset from the stand's centre, seeded from 54 to 56; the safe spiral's. */
+    static final int A0_MIN = 54;
+    static final int A0_MAX = 56;
+    static final int A0_SAFE = 55;
+    /** The start's ice: H0 + 8, the highest start the stand allows (its rail at the half's top). */
+    static final int TOP_ABOVE = 8;
+    /** The last leg ends this far inside the ring outside it on its side (its end wall, a gap, that ring's wall). */
+    static final int END_ROOM = 3;
+    /** Hard's pit narrows from 7 to 5 this far after the pit's end: the first corner's funnel. */
+    static final int FUNNEL = 4;
+    /** A drop's edge is seeded up to this far on from the first place it may go. */
+    static final int LIP_SLACK = 10;
+    /** Drops are at least Z(d) + this apart along the track (§2.6). */
+    static final int LIP_GAP = 12;
+    /** Each drop but the Final Drop becomes a 2 with this chance, while the tier allows. */
+    static final double BIG_CHANCE = 0.6;
+    /** Bends tighter than this have sand on their outside (§2.4). */
+    static final int SANDY_BEND = 24;
+    /** No track, kerb or widening comes nearer the stand's centre than this, along an axis. */
+    static final double STAND_ROOM = 16;
+    /** The most a piece widens one side of the lane, and the lane's farthest edge from the centre. */
+    static final int MAX_EXTRA = 3;
+    static final double OUTER_EDGE = 62;
+    /** A piece keeps this far from its straight's ends and this far from the next piece. */
+    static final int PIECE_END_GAP = 2;
+    static final int PIECE_GAP = 4;
+    /** Places tried for a piece before it is given up. */
+    static final int PIECE_ATTEMPTS = 6;
+    /** The sand pit's widening, and the forest's, blocks long at each end. */
+    static final int PIT_TAPER = 8;
+    static final int FOREST_TAPER = 4;
+    /** A split's island is this long (seeded), with this much wide lane before and after it. */
+    static final int ISLAND_MIN = 8;
+    static final int ISLAND_MAX = 16;
+    static final int SPLIT_APPROACH = 5;
+    /** A cave's ice is at most H0 + this (its roof under the cap), a forest's H0 + this; a trunk's top over its ice. */
+    static final int CAVE_TOP = 7;
+    static final int FOREST_TOP = 6;
+    static final int TRUNK_TOP = 6;
+    /** A cave keeps this far from any drop; a boost strip ends this far before one. */
+    static final int CAVE_LIP = 10;
+    static final int BOOST_LIP = 30;
+    /** Two targets are at most this far apart across the ground (60, with a margin), and normally this far along. */
+    static final double LEG_MAX = 59.5;
+    /** A checkpoint on a bend (one with no sand) is this much over half the lane wide, so its sphere cuts the lane. */
+    static final double ARC_SPOT = 1.5;
+    static final double SPACING = 32;
+    /** Arrows in the walls this often along the track. */
+    static final double ARROW_SPACING = 24;
+    /** Signs stand this far before their piece (and no nearer than {@link #SIGN_NEAR}). */
+    static final int SIGN_BEFORE = 10;
+    static final int SIGN_NEAR = 3;
+
+    /** Tries before {@code SAFE_SPIRAL}; after ten, fewer pieces, after fifteen only the basics. */
     public static final int TRIES = 20;
-    /** The work one plan can take at most (loops drawn). */
-    public static final long WORK_BUDGET = TRIES;
-    /** The top of the stand's rail, blocks above the ice (the half must reach it). */
-    public static final int STAND_TOP = RaceStand.ABOVE + RaceStand.RAIL;
-    /** Reference speed round the track, blocks a second, and the fastest believable one. */
+    /**
+     * The work one plan may take: one per try (and, once {@code BoatSim} is ported as algo 4, one per
+     * simulated tick). {@link #SAFE_RESERVE} of it is kept for {@code SAFE_SPIRAL}.
+     */
+    public static final long WORK_BUDGET = 2_500_000;
+    public static final long SAFE_RESERVE = 100_000;
+    /** The reference speed along the centreline, blocks a second (the schedule valve's rule). */
     public static final double REF_SPEED = 30;
-    public static final double MIN_SPEED = 60;
 
     @Override
     public String id() {
@@ -162,29 +370,28 @@ public final class BoatPlanner implements Planner {
             throw new GenFailed("'" + in.tierOrMix() + "' isn't an Ice Boat tier (easy, medium or hard)");
         }
         Box half = in.half();
-        double reach = BASE_RADIUS * (1 + 3 * MAX_AMPLITUDE) + level.width() / 2.0 + 2;
-        if (half.sizeX() < 2 * reach || half.sizeZ() < 2 * reach || half.sizeY() < ICE_ABOVE_FLOOR + STAND_TOP + 1) {
-            throw new GenFailed("the area " + half.describe() + " is too small for the Ice Boat");
+        if (half.sizeX() < 128 || half.sizeZ() < 128 || half.sizeY() < 16) {
+            throw new GenFailed("the area " + half.describe() + " is too small for the Mountain Run");
         }
-        double cx = half.minX() + half.sizeX() / 2.0;
-        double cz = half.minZ() + half.sizeZ() / 2.0;
         GenRandom root = new GenRandom(in.seed());
+        long budget = in.workBudget();
         for (int t = 0; t < TRIES; t++) {
             in.checkCancelled();
-            if (in.workBudget() > 0 && t + 1 > in.workBudget()) {
-                throw new GenFailed("the Ice Boat plan went over its work budget (" + in.workBudget() + ")");
+            if (budget > 0 && t + 1 > budget - SAFE_RESERVE) {
+                break;
             }
-            double flatten = t < 10 ? 1 : Math.pow(0.7, t - 9);
-            Loop loop = loop(root.fork("loop:" + t), cx, cz, flatten);
-            if (minRadius(loop) < level.minRadius()) {
-                continue;
-            }
-            Plan plan = toPlan(in, level, loop, t + 1);
-            if (BoatValidator.problems(plan, level.id()).isEmpty()) {
-                return plan;
+            Richness rich = t < 10 ? Richness.FULL : t < 15 ? Richness.REDUCED : Richness.BASIC;
+            Made m = attempt(in, level, root, t, rich);
+            if (m != null && DownhillValidator.problems(m.plan, level.id()).isEmpty()) {
+                return m.finished(t + 1, TRIES);
             }
         }
-        throw new GenFailed("no " + level.id() + " Ice Boat loop found for seed " + GenSeed.shortHex(in.seed()));
+        in.checkCancelled();
+        Made safe = safe(in, level, root);
+        if (safe == null || !DownhillValidator.problems(safe.plan, level.id()).isEmpty()) {
+            throw new GenFailed("no " + level.id() + " Mountain Run found for seed " + GenSeed.shortHex(in.seed()));
+        }
+        return safe.finished(TRIES + 1, TRIES);
     }
 
     /** The layout the tag names, made again from its seed (the tier in {@code in} first, then the others). */
@@ -223,330 +430,287 @@ public final class BoatPlanner implements Planner {
         throw new GenFailed("seed " + GenSeed.shortHex(tag.seed()) + " no longer makes layout " + tag.planHash());
     }
 
-    // ---- the loop -------------------------------------------------------------------------------
+    // ---- one try -----------------------------------------------------------------------------------------
 
-    /**
-     * A closed centreline: points every {@code step} blocks along it (the last joins the first),
-     * round (cx, cz), and its length. The direction of travel is the order of the points.
-     */
-    record Loop(double cx, double cz, double[] xs, double[] zs, double step, double length) {
-
-        int size() {
-            return xs.length;
+    /** Try {@code t}: its own streams, its richness; {@code null} when it doesn't come together. */
+    static Made attempt(PlanInput in, Level level, GenRandom root, int t, Richness rich) {
+        Box half = in.half();
+        int standX = RaceStand.centreX(half) - half.minX();
+        int standZ = RaceStand.centreZ(half) - half.minZ();
+        TrackPath path = TrackPath.draw(root.fork("track:" + t), level, standX + 0.5, standZ + 0.5);
+        int top = half.minY() + TOP_ABOVE;
+        TrackProfile profile = TrackProfile.draw(root.fork("drops:" + t), path, level, top, standX, standZ);
+        if (profile == null) {
+            return null;
         }
-
-        /** The point {@code s} blocks along the loop from its start (wrapping round). */
-        double[] at(double s) {
-            double u = ((s % length) + length) % length / step;
-            int i = (int) Math.floor(u);
-            double f = u - i;
-            int j = (i + 1) % xs.length;
-            i = i % xs.length;
-            return new double[]{xs[i] + (xs[j] - xs[i]) * f, zs[i] + (zs[j] - zs[i]) * f};
+        int[] runoff = new int[path.segs.size()];
+        int[] kerb = new int[path.segs.size()];
+        TrackPieces.bends(path, level, runoff, kerb);
+        TrackRaster base = new TrackRaster(half, path, profile, new TrackPieces(List.of(), runoff, kerb), level);
+        if (base.problem() != null) {
+            return null;
         }
-
-        /** The unit direction of travel {@code s} blocks along. */
-        double[] tangent(double s) {
-            double[] a = at(s - step);
-            double[] b = at(s + step);
-            double dx = b[0] - a[0];
-            double dz = b[1] - a[1];
-            double len = Math.sqrt(dx * dx + dz * dz);
-            return new double[]{dx / len, dz / len};
+        List<TrackRaster.Spot> baseSpots = base.spots();
+        if (chain(base, baseSpots, List.of()) == null) {
+            return null;
         }
+        TrackProfile exact = profile.withZones(base.zoneEnds());
+        TrackPieces pieces = TrackPieces.draw(root.fork("pieces:" + t), path, exact, level, rich, half.minY(),
+                blocked -> chain(base, baseSpots, blocked) != null);
+        return build(in, level, root.fork("scenery:" + t), path, profile, pieces);
+    }
+
+    /** The checkpoints' chain: legs of at most {@link #SPACING} where no drop is between, else any that keep the rules. */
+    static List<TrackRaster.Spot> chain(TrackRaster r, List<TrackRaster.Spot> spots, List<double[]> blocked) {
+        return r.chain(spots, blocked, SPACING);
     }
 
     /**
-     * A loop drawn from {@code r}: three wobbles on a circle of {@link #BASE_RADIUS}, their sizes
-     * times {@code flatten}, sampled every {@link #STEP} blocks along its length.
+     * {@code SAFE_SPIRAL} (§2.9): a_0 = 55, every corner the tier's smallest radius, the orientation
+     * from the seed; the tier's fewest drops at the first place each may go (easy 4 x 1, medium 5 x 1,
+     * hard 3 x 1 then a 2); no pieces, no sand but the finish's paddock; the scenery seeded.
      */
-    static Loop loop(GenRandom r, double cx, double cz, double flatten) {
-        double[] a = new double[5];
-        double[] phi = new double[5];
-        for (int k = 2; k <= 4; k++) {
-            a[k] = r.nextDouble(0, MAX_AMPLITUDE) * flatten;
-            phi[k] = r.nextDouble(0, 2 * Math.PI);
-        }
-        int n = 8192;
-        double[] px = new double[n];
-        double[] pz = new double[n];
-        double[] cum = new double[n + 1];
-        for (int i = 0; i < n; i++) {
-            double th = 2 * Math.PI * i / n;
-            double rad = BASE_RADIUS;
-            for (int k = 2; k <= 4; k++) {
-                rad += BASE_RADIUS * a[k] * StrictMath.cos(k * th + phi[k]);
-            }
-            px[i] = cx + rad * StrictMath.cos(th);
-            pz[i] = cz + rad * StrictMath.sin(th);
-            if (i > 0) {
-                cum[i] = cum[i - 1] + Math.hypot(px[i] - px[i - 1], pz[i] - pz[i - 1]);
-            }
-        }
-        double length = cum[n - 1] + Math.hypot(px[0] - px[n - 1], pz[0] - pz[n - 1]);
-        cum[n] = length;
-        int m = (int) Math.round(length / STEP);
-        double step = length / m;
-        double[] xs = new double[m];
-        double[] zs = new double[m];
-        int seg = 0;
-        for (int j = 0; j < m; j++) {
-            double s = j * step;
-            while (seg < n - 1 && cum[seg + 1] < s) {
-                seg++;
-            }
-            int next = (seg + 1) % n;
-            double span = cum[seg + 1] - cum[seg];
-            double f = span <= 0 ? 0 : (s - cum[seg]) / span;
-            xs[j] = px[seg] + (px[next] - px[seg]) * f;
-            zs[j] = pz[seg] + (pz[next] - pz[seg]) * f;
-        }
-        return new Loop(cx, cz, xs, zs, step, length);
+    static Made safe(PlanInput in, Level level, GenRandom root) {
+        GenRandom r = root.fork("safe");
+        int side0 = r.nextInt(4);
+        int dir = r.nextBoolean() ? 1 : -1;
+        return safe(in, level, side0, dir, root.fork("scenery:safe"));
     }
 
-    /** The tightest bend of a loop: the least circumradius of any three points {@link #BEND_SPAN} apart. */
-    static double minRadius(Loop loop) {
-        int k = (int) Math.round(BEND_SPAN / loop.step());
-        int n = loop.size();
-        double min = Double.MAX_VALUE;
-        for (int i = 0; i < n; i++) {
-            min = Math.min(min, circumradius(loop.xs()[(i - k + n) % n], loop.zs()[(i - k + n) % n], loop.xs()[i],
-                    loop.zs()[i], loop.xs()[(i + k) % n], loop.zs()[(i + k) % n]));
+    /** {@code SAFE_SPIRAL} with this orientation. */
+    static Made safe(PlanInput in, Level level, int side0, int dir, GenRandom scenery) {
+        Box half = in.half();
+        int standX = RaceStand.centreX(half) - half.minX();
+        int standZ = RaceStand.centreZ(half) - half.minZ();
+        TrackPath path = TrackPath.safe(side0, dir, level, standX + 0.5, standZ + 0.5);
+        int top = half.minY() + TOP_ABOVE;
+        double finish = TrackProfile.finish(null, path, level, standX, standZ);
+        if (Double.isNaN(finish)) {
+            return null;
         }
-        return min;
+        int[] drops = switch (level) {
+            case EASY -> new int[]{1, 1, 1, 1};
+            case MEDIUM -> new int[]{1, 1, 1, 1, 1};
+            case HARD -> new int[]{1, 1, 2, 1};
+        };
+        List<TrackProfile.Lip> lips = TrackProfile.fixed(path, level, drops, finish);
+        if (lips == null) {
+            return null;
+        }
+        TrackProfile profile = TrackProfile.of(path, level, top, lips, finish);
+        return build(in, level, scenery, path, profile, TrackPieces.none(path));
     }
 
-    /** The radius of the circle through three points (infinite when they are in a line). */
-    static double circumradius(double ax, double az, double bx, double bz, double cx, double cz) {
-        double a = Math.hypot(bx - cx, bz - cz);
-        double b = Math.hypot(ax - cx, az - cz);
-        double c = Math.hypot(ax - bx, az - bz);
-        double cross = Math.abs((bx - ax) * (cz - az) - (bz - az) * (cx - ax));
-        return cross < 1e-12 ? Double.POSITIVE_INFINITY : a * b * c / (2 * cross);
+    /** The plan from a path, its drops and its pieces: the raster, the checkpoints, every block. */
+    static Made build(PlanInput in, Level level, GenRandom scenery, TrackPath path, TrackProfile profile,
+                      TrackPieces pieces) {
+        Box half = in.half();
+        TrackRaster raster = new TrackRaster(half, path, profile, pieces, level);
+        if (raster.problem() != null) {
+            return null;
+        }
+        List<TrackRaster.Spot> cps = chain(raster, raster.spots(), TrackPieces.blocked(pieces.list));
+        if (cps == null) {
+            return null;
+        }
+        raster.terrace = BoatScenery.terraces(raster);
+        raster.blocks();
+        raster.walls();
+        raster.structures(scenery.fork("islands"));
+        raster.markers(cps);
+        int trees = BoatScenery.draw(scenery, raster);
+        List<SignText> signs = signs(raster, pieces);
+        raster.stand();
+        List<BlockOp> ops = raster.ops();
+        if (ops.size() > DownhillValidator.MAX_OPS) {
+            return null;
+        }
+
+        // the course: a sprint from the pit to the gold finish under the stand
+        int wx = half.minX();
+        int wz = half.minZ();
+        double[] st = path.at(TrackProfile.START);
+        double[] tan = path.tangent(TrackProfile.START);
+        Course.Spot start = new Course.Spot(wx + st[0], profile.top + 1, wz + st[1],
+                (float) TrackRaster.yaw(tan[0], tan[1]), 0f);
+        List<Course.Mark> marks = new ArrayList<>();
+        for (TrackRaster.Spot c : cps) {
+            marks.add(new Course.Mark(wx + c.x(), c.ice() + 1, wz + c.z(), c.r()));
+        }
+        double[] fp = path.at(profile.finish);
+        Course.Mark finish = new Course.Mark(wx + fp[0], profile.bottom() + 1, wz + fp[1], level.finishRadius());
+        Slots.Def slot = in.slot();
+        int lowest = raster.lowest();
+        Course draft = new Course(slot.id(), TrialKind.BOAT, slot.name(), Tier.of(level.id()), "", start, marks,
+                finish, (double) (lowest - 3), null, true, false, 1);
+        int min = DownhillValidator.minSeconds(draft);
+        Course course = draft.withMinSeconds(min);
+        double length = profile.finish - TrackProfile.START;
+        long refMs = Math.max(Math.round(length / REF_SPEED * 1000), min * 1000L + 1000);
+        List<Box> keep = keepClear(raster);
+        Plan plan = Plan.of(slot.id(), ALGO, in.seed(), half, raster.palette, ops, signs, keep,
+                new PlannedTrial(course, refMs), List.of(), 0);
+        return new Made(in, level, path, profile, pieces, plan, cps.size(), trees, length);
     }
 
-    // ---- from a loop to a plan --------------------------------------------------------------------
+    /** A plan made, and what its summary says. */
+    static final class Made {
+        final PlanInput in;
+        final Level level;
+        final TrackPath path;
+        final TrackProfile profile;
+        final TrackPieces pieces;
+        final Plan plan;
+        final int checkpoints;
+        final int trees;
+        final double length;
 
-    /** What each column of the half holds: nothing, ice, or wall. */
-    static final byte EMPTY = 0;
-    static final byte ICE = 1;
-    static final byte WALL = 2;
+        Made(PlanInput in, Level level, TrackPath path, TrackProfile profile, TrackPieces pieces, Plan plan,
+             int checkpoints, int trees, double length) {
+            this.in = in;
+            this.level = level;
+            this.path = path;
+            this.profile = profile;
+            this.pieces = pieces;
+            this.plan = plan;
+            this.checkpoints = checkpoints;
+            this.trees = trees;
+            this.length = length;
+        }
 
-    /** The track's footprint: ice within half the width of the centreline, a wall round it. */
-    static byte[][] footprint(Loop loop, Box half, double width) {
-        int sx = half.sizeX();
-        int sz = half.sizeZ();
-        double[][] dist = new double[sx][sz];
-        for (double[] row : dist) {
-            java.util.Arrays.fill(row, Double.MAX_VALUE);
+        /** The plan with its admin summary and the work it took (neither is in its hash). */
+        Plan finished(long work, int tries) {
+            Plan p = plan;
+            return new Plan(p.slot(), p.algo(), p.seed(), p.half(), p.palette(), p.ops(), p.signs(), p.keepClear(),
+                    p.course(), summary(work, tries), work, p.hash());
         }
-        double reach = width / 2 + 2;
-        int n = loop.size();
-        for (int i = 0; i < n; i++) {
-            double ax = loop.xs()[i];
-            double az = loop.zs()[i];
-            double bx = loop.xs()[(i + 1) % n];
-            double bz = loop.zs()[(i + 1) % n];
-            int x0 = Math.max(0, (int) Math.floor(Math.min(ax, bx) - reach) - half.minX());
-            int x1 = Math.min(sx - 1, (int) Math.ceil(Math.max(ax, bx) + reach) - half.minX());
-            int z0 = Math.max(0, (int) Math.floor(Math.min(az, bz) - reach) - half.minZ());
-            int z1 = Math.min(sz - 1, (int) Math.ceil(Math.max(az, bz) + reach) - half.minZ());
-            for (int x = x0; x <= x1; x++) {
-                for (int z = z0; z <= z1; z++) {
-                    double d = segment(ax, az, bx, bz, half.minX() + x + 0.5, half.minZ() + z + 0.5);
-                    if (d < dist[x][z]) {
-                        dist[x][z] = d;
-                    }
-                }
+
+        List<String> summary(long work, int tries) {
+            List<String> out = new ArrayList<>();
+            String how = work > tries ? "the safe spiral after " + tries + " tries" : "try " + work + "/" + tries;
+            out.add(in.slot().name() + " v" + ALGO + " " + level.id() + ": Mountain Run, " + Math.round(length)
+                    + " blocks, " + path.describe() + ", " + how);
+            StringBuilder drops = new StringBuilder();
+            for (TrackProfile.Lip l : profile.lips) {
+                drops.append(drops.length() == 0 ? "" : ",").append(l.drop());
             }
+            TrackProfile.Lip last = profile.last();
+            out.add("drops " + drops + " (" + profile.descent() + " down), Final Drop "
+                    + (last == null ? 0 : last.drop()) + " - sand: run-offs " + pieces.runoffs() + ", kerbs "
+                    + pieces.kerbs() + ", pit " + pieces.count(TrackPieces.Kind.SAND_PIT) + " - split "
+                    + pieces.count(TrackPieces.Kind.SPLIT) + " - cave " + pieces.count(TrackPieces.Kind.CAVE)
+                    + " - forest " + pieces.count(TrackPieces.Kind.FOREST) + " - boost "
+                    + pieces.count(TrackPieces.Kind.BOOST) + " - trees " + trees);
+            out.add("grid " + com.dierks.homecraft.games.trial.RaceGrid.MAX_SPOTS + " (double) - checkpoints "
+                    + checkpoints + " - stand ok - " + String.format(Locale.ROOT, "%,d", plan.ops().size())
+                    + " blocks");
+            Course c = ((PlannedTrial) plan.course()).course();
+            long ref = ((PlannedTrial) plan.course()).refMs();
+            out.add("reference " + String.format(Locale.ROOT, "%.1f", ref / 1000.0) + " s (the centreline at "
+                    + Math.round(REF_SPEED) + " blocks a second), shortest " + c.minSeconds() + " s - seed "
+                    + GenSeed.shortHex(in.seed()));
+            return out;
         }
-        byte[][] cells = new byte[sx][sz];
-        for (int x = 0; x < sx; x++) {
-            for (int z = 0; z < sz; z++) {
-                if (dist[x][z] <= width / 2) {
-                    cells[x][z] = ICE;
-                }
-            }
-        }
-        // the wall: every column next to the ice (sideways or corner to corner) that isn't ice
-        for (int x = 0; x < sx; x++) {
-            for (int z = 0; z < sz; z++) {
-                if (cells[x][z] != EMPTY) {
+    }
+
+    /** One box per leg and level (its ice + 1 to + 4) and one per flight zone (lower ice + 1 to the lip + 3). */
+    static List<Box> keepClear(TrackRaster t) {
+        Map<Long, int[]> runs = new LinkedHashMap<>();
+        Map<Integer, int[]> zones = new LinkedHashMap<>();
+        for (int x = 0; x < t.sx; x++) {
+            for (int z = 0; z < t.sz; z++) {
+                if (t.h[x][z] == TrackRaster.NONE) {
                     continue;
                 }
-                boolean touches = false;
-                for (int dx = -1; dx <= 1 && !touches; dx++) {
-                    for (int dz = -1; dz <= 1; dz++) {
-                        int ox = x + dx;
-                        int oz = z + dz;
-                        if (ox >= 0 && oz >= 0 && ox < sx && oz < sz && cells[ox][oz] == ICE) {
-                            touches = true;
-                            break;
-                        }
-                    }
-                }
-                if (touches) {
-                    cells[x][z] = WALL;
+                long key = ((long) t.segAt[x][z].leg << 20) | (t.h[x][z] & 0xFFFFF);
+                grow(runs.computeIfAbsent(key, k -> box()), x, z, t.h[x][z], t.h[x][z]);
+                if (t.zoneLip[x][z] != TrackRaster.NONE) {
+                    grow(zones.computeIfAbsent(t.zoneLip[x][z] * 1024 + t.h[x][z], k -> box()), x, z, t.h[x][z],
+                            t.zoneLip[x][z]);
                 }
             }
         }
-        return cells;
+        List<Box> out = new ArrayList<>();
+        int wx = t.half.minX();
+        int wz = t.half.minZ();
+        for (int[] b : runs.values()) {
+            out.add(new Box(wx + b[0], b[4] + 1, wz + b[1], wx + b[2], Math.min(t.top, b[4] + 4), wz + b[3]));
+        }
+        for (int[] b : zones.values()) {
+            out.add(new Box(wx + b[0], b[4] + 1, wz + b[1], wx + b[2], Math.min(t.top, b[5] + 3), wz + b[3]));
+        }
+        return out.size() <= DownhillValidator.MAX_BOXES ? out : List.copyOf(out.subList(0, DownhillValidator.MAX_BOXES));
     }
 
-    /** The distance from (px, pz) to the segment a–b. */
-    static double segment(double ax, double az, double bx, double bz, double px, double pz) {
-        double dx = bx - ax;
-        double dz = bz - az;
-        double len2 = dx * dx + dz * dz;
-        double t = len2 == 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / len2));
-        double qx = ax + t * dx - px;
-        double qz = az + t * dz - pz;
-        return Math.sqrt(qx * qx + qz * qz);
+    private static int[] box() {
+        return new int[]{Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE, 0, 0};
     }
 
-    Plan toPlan(PlanInput in, Level level, Loop loop, long work) {
-        Box half = in.half();
-        int iceY = half.minY() + ICE_ABOVE_FLOOR;
-        byte[][] cells = footprint(loop, half, level.width());
-        List<String> palette = new ArrayList<>();
-        List<BlockOp> ops = new ArrayList<>();
-        short ice = index(palette, level.ice());
-        short wall = index(palette, Palette.TRACK_WALL);
-        // arrows in the wall, both sides, every 24 blocks, pointing the way
-        java.util.Map<Long, String> arrows = new java.util.HashMap<>();
-        for (double s = 0; s < loop.length() - 1; s += ARROW_SPACING) {
-            double[] p = loop.at(s);
-            double[] t = loop.tangent(s);
-            for (int side = -1; side <= 1; side += 2) {
-                double nx = -t[1] * side;
-                double nz = t[0] * side;
-                int x = (int) Math.floor(p[0] + nx * (level.width() / 2.0 + 0.8));
-                int z = (int) Math.floor(p[1] + nz * (level.width() / 2.0 + 0.8));
-                int cx = x - half.minX();
-                int cz = z - half.minZ();
-                if (cx >= 0 && cz >= 0 && cx < cells.length && cz < cells[0].length && cells[cx][cz] == WALL) {
-                    arrows.put(key(x, z), arrowToward(t[0], t[1]));
-                }
+    private static void grow(int[] b, int x, int z, int lo, int hi) {
+        b[0] = Math.min(b[0], x);
+        b[1] = Math.min(b[1], z);
+        b[2] = Math.max(b[2], x);
+        b[3] = Math.max(b[3], z);
+        b[4] = lo;
+        b[5] = hi;
+    }
+
+    /** The signs: the start's, one before each drop, piece and sandy bend, and the stand's. */
+    static List<SignText> signs(TrackRaster t, TrackPieces pieces) {
+        List<SignText> out = new ArrayList<>();
+        List<double[]> used = new ArrayList<>();
+        sign(t, out, used, TrackProfile.START - 2, TrackProfile.START - 2, GenCopy.boatRun());
+        for (int i = 0; i < t.profile.lips.size(); i++) {
+            TrackProfile.Lip l = t.profile.lips.get(i);
+            boolean last = i == t.profile.lips.size() - 1;
+            sign(t, out, used, l.s() - SIGN_BEFORE, l.s() - SIGN_NEAR, last ? GenCopy.boatFinalDrop()
+                    : GenCopy.boatDrop(l.drop()));
+        }
+        for (TrackPieces.Piece p : pieces.list) {
+            List<String> lines = switch (p.kind) {
+                case SAND_PIT -> GenCopy.boatSandPit();
+                case SPLIT -> GenCopy.boatSplit();
+                case CAVE -> GenCopy.boatIceCave();
+                case FOREST -> GenCopy.boatForest();
+                case BOOST -> null;
+            };
+            if (lines != null) {
+                sign(t, out, used, p.s1 - SIGN_BEFORE, p.s1 - SIGN_NEAR, lines);
             }
         }
-        for (int x = 0; x < cells.length; x++) {
-            for (int z = 0; z < cells[0].length; z++) {
-                int wx = half.minX() + x;
-                int wz = half.minZ() + z;
-                if (cells[x][z] == ICE) {
-                    ops.add(new BlockOp(wx, iceY, wz, ice));
-                } else if (cells[x][z] == WALL) {
-                    ops.add(new BlockOp(wx, iceY, wz, wall));
-                    String arrow = arrows.get(key(wx, wz));
-                    ops.add(new BlockOp(wx, iceY + 1, wz, arrow == null ? wall : index(palette, arrow)));
-                }
+        for (TrackPath.Seg g : t.path.segs) {
+            if (g.arc && pieces.runoff[g.index] > 0 && g.s0 < t.profile.finish) {
+                sign(t, out, used, g.s0 - SIGN_BEFORE, g.s0 - SIGN_NEAR, GenCopy.boatSandyBend());
             }
         }
+        int wx = t.half.minX();
+        int wz = t.half.minZ();
+        out.add(new SignText(wx + t.standX, t.top + 2, wz + t.standZ - 2, Palette.sign(0), RaceStand.SIGN));
+        return out;
+    }
 
-        // the course: checkpoints every ~24 blocks, two laps; the finish on the start line; the start 4 before it
-        int m = Math.max(3, (int) Math.round(loop.length() / CHECKPOINT_SPACING));
-        double spacing = loop.length() / m;
-        double top = iceY + 1;
-        List<Course.Mark> lap = new ArrayList<>();
-        for (int k = 1; k < m; k++) {
-            double[] p = loop.at(k * spacing);
-            lap.add(new Course.Mark(p[0], top, p[1], level.checkpointRadius()));
-        }
-        List<Course.Mark> checkpoints = new ArrayList<>();
-        for (int l = 0; l < LAPS; l++) {
-            checkpoints.addAll(lap);
-        }
-        double[] line = loop.at(0);
-        Course.Mark finish = new Course.Mark(line[0], top, line[1], level.checkpointRadius());
-        double[] from = loop.at(loop.length() - START_BACK);
-        double[] way = loop.tangent(loop.length() - START_BACK);
-        Course.Spot start = new Course.Spot(from[0], top, from[1], (float) yaw(way[0], way[1]), 0f);
-        double total = LAPS * loop.length();
-        long refMs = Math.round(total / REF_SPEED * 1000);
-        int minSeconds = (int) Math.floor(total / MIN_SPEED);
-        Slots.Def slot = in.slot();
-        Course course = new Course(slot.id(), TrialKind.BOAT, slot.name(), Tier.of(level.id()), "", start, checkpoints,
-                finish, (double) (iceY - 3), minSeconds, true, false, 1);
-
-        // the sign: on the inner wall by the start, facing the start spot
-        List<SignText> signs = new ArrayList<>();
-        double[] by = loop.at(loop.length() - START_BACK - 3);
-        double[] t = loop.tangent(loop.length() - START_BACK - 3);
-        for (int side = -1; side <= 1 && signs.isEmpty(); side += 2) {
-            double nx = -t[1] * side;
-            double nz = t[0] * side;
-            int x = (int) Math.floor(by[0] + nx * (level.width() / 2.0 + 0.8));
-            int z = (int) Math.floor(by[1] + nz * (level.width() / 2.0 + 0.8));
-            int cx = x - half.minX();
-            int cz = z - half.minZ();
-            boolean inner = (x + 0.5 - loop.cx()) * (x + 0.5 - loop.cx()) + (z + 0.5 - loop.cz()) * (z + 0.5 - loop.cz())
-                    < (by[0] - loop.cx()) * (by[0] - loop.cx()) + (by[1] - loop.cz()) * (by[1] - loop.cz());
-            if (inner && cx >= 0 && cz >= 0 && cx < cells.length && cz < cells[0].length && cells[cx][cz] == WALL) {
-                signs.add(new SignText(x, iceY + 2, z, Palette.sign(Math.floorMod((int) Math.round(
-                        yaw(from[0] - (x + 0.5), from[1] - (z + 0.5)) / 22.5), 16)), GenCopy.boatStart(LAPS)));
+    /** A sign between {@code from} and {@code to} along the track, on a wall top, apart from the others. */
+    private static void sign(TrackRaster t, List<SignText> out, List<double[]> used, double from, double to,
+                             List<String> lines) {
+        for (double s = from; s <= to; s += 1) {
+            if (s <= 0) {
+                continue;
             }
-        }
-
-        // the viewing stand (algo 2): a railed platform at the half's middle, above the keep-clear space
-        int standX = RaceStand.centreX(half);
-        int standZ = RaceStand.centreZ(half);
-        int floorY = RaceStand.floorY(top);
-        short floor = index(palette, RaceStand.FLOOR);
-        short rail = index(palette, RaceStand.RAIL_BLOCK);
-        int r = RaceStand.SIZE / 2;
-        for (int x = standX - r; x <= standX + r; x++) {
-            for (int z = standZ - r; z <= standZ + r; z++) {
-                ops.add(new BlockOp(x, floorY, z, floor));
-                if (RaceStand.onRail(x, z, standX, standZ)) {
-                    for (int h = 1; h <= RaceStand.RAIL; h++) {
-                        ops.add(new BlockOp(x, floorY + h, z, rail));
-                    }
-                }
+            boolean crowded = false;
+            for (double[] u : used) {
+                crowded |= Math.abs(u[0] - s) < 6;
             }
+            if (crowded) {
+                return;
+            }
+            int[] spot = t.signSpot(s);
+            if (spot == null) {
+                continue;
+            }
+            out.add(new SignText(t.half.minX() + spot[0], spot[1], t.half.minZ() + spot[2], Palette.sign(spot[3]),
+                    lines));
+            used.add(new double[]{s});
+            return;
         }
-        signs.add(new SignText(standX, floorY + 1, standZ - 2, Palette.sign(0), RaceStand.SIGN));
-
-        List<String> summary = new ArrayList<>();
-        summary.add(slot.name() + " (" + level.id() + "): a " + Math.round(loop.length()) + "-block loop, " + LAPS
-                + " laps, " + lap.size() + " checkpoints a lap, reference " + Math.round(refMs / 100.0) / 10.0 + "s");
-        summary.add("track " + level.width() + " wide, tightest bend " + Math.round(minRadius(loop))
-                + " blocks round, " + Palette.id(level.ice()));
-        summary.add("a viewing stand at " + standX + " " + (floorY + 1) + " " + standZ);
-        summary.add("seed " + GenSeed.shortHex(in.seed()) + ", " + work + " loop(s) drawn");
-        return Plan.of(slot.id(), ALGO, in.seed(), half, palette, ops, signs,
-                List.of(new Box(half.minX(), iceY + 1, half.minZ(), half.maxX(), Math.min(half.maxY(), iceY + 4),
-                        half.maxZ())), new PlannedTrial(course, refMs), summary, work);
-    }
-
-    private static long key(int x, int z) {
-        return ((long) x << 32) ^ (z & 0xFFFFFFFFL);
-    }
-
-    /** The palette index of {@code block}, adding it on first use. */
-    static short index(List<String> palette, String block) {
-        int i = palette.indexOf(block);
-        if (i < 0) {
-            palette.add(block);
-            i = palette.size() - 1;
-        }
-        return (short) i;
-    }
-
-    /** Minecraft's yaw (0 = south, 90 = west) of a direction across the ground. */
-    static double yaw(double dx, double dz) {
-        double y = StrictMath.toDegrees(StrictMath.atan2(-dx, dz));
-        return y < 0 ? y + 360 : y;
-    }
-
-    /**
-     * The magenta arrow pointing the side nearest the direction (dx, dz). Glazed terracotta faces
-     * the player who placed it and its arrow points away from them, so an arrow pointing east is
-     * the block facing west.
-     */
-    static String arrowToward(double dx, double dz) {
-        if (Math.abs(dx) >= Math.abs(dz)) {
-            return Palette.arrow(dx > 0 ? "west" : "east");
-        }
-        return Palette.arrow(dz > 0 ? "north" : "south");
     }
 }

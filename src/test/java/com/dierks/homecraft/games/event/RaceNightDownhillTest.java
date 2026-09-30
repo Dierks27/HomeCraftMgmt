@@ -51,7 +51,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Pinned here (the review found every one of these hooks could be taken out with the whole suite still
  * green): on a Fresh Ice Boat layout of algo 3 the screen, the status line and the admin's status say it is
  * a downhill sprint ("3 downhill races", "a downhill sprint"); on the same marks under the algo-2 planner,
- * or hand-built, they read exactly as before ("3 races, 1 lap").
+ * or hand-built, they read exactly as before ("3 races, 1 lap"). CV final gate: its shared warm-up is
+ * "Warm-up runs" on the hub's sign and screen, the tile and the screen ("Warm-up laps" on the others).
  */
 class RaceNightDownhillTest {
 
@@ -67,9 +68,14 @@ class RaceNightDownhillTest {
 
     /** Race Night on for {@code fresh_boat}, no schedule, 2-8 racers, laps from the course (0). */
     private static RaceNightSettings on() {
+        return on(0);
+    }
+
+    /** The same, with a shared warm-up of {@code warmupSeconds} (0: none). */
+    private static RaceNightSettings on(int warmupSeconds) {
         RaceNightSettings d = RaceNightSettings.defaults();
         return new RaceNightSettings(true, List.of(), Slots.ICE_BOAT.id(), d.races(), 0, d.announceMinutes(),
-                d.joinMinutes(), 10, 2, 8, d.finishWindowSeconds(), d.maxRaceMinutes(), d.breakSeconds(), 0,
+                d.joinMinutes(), 10, 2, 8, d.finishWindowSeconds(), d.maxRaceMinutes(), d.breakSeconds(), warmupSeconds,
                 d.points(), d.finishPoints(), d.stillRacingPoints(), d.prizes(), d.finisherPrize(),
                 d.prizeEventsPerWeek(), d.season(), d.standRadius(), d.hype());
     }
@@ -264,8 +270,13 @@ class RaceNightDownhillTest {
 
     /** An admin's night, 25 minutes from now, on {@code track} (saved as the Ice Boat slot's row). */
     private NightRunner adminNight(Course track) throws Exception {
+        return adminNight(track, on());
+    }
+
+    /** {@link #adminNight(Course)} under {@code settings}. */
+    private NightRunner adminNight(Course track, RaceNightSettings settings) throws Exception {
         bench = new GamesBench(T0, List.of(TimeTrials.SPEC, RaceNight.SPEC), "trials", TimeTrialsSettings.defaults(),
-                "race_night", on());
+                "race_night", settings);
         bench.games().generated(new Gate());
         bench.dao().saveCourse(new GamesDao.CourseRow(track.id(), "trials", track.kind().id(), track.name(),
                 track.world(), track.enabled(), CourseCodec.encode(track), track.rev(), 0, 0), false);
@@ -337,6 +348,47 @@ class RaceNightDownhillTest {
         String heard = bench.heard(admin.getUniqueId());
         assertTrue(heard.contains("of " + races + ", 1 lap"), what + ": /hcm games event status: " + heard);
         assertFalse(heard.contains("downhill"), what + ": " + heard);
+        assertEquals(0, bench.severe(), what + ": nothing threw: " + bench.severeLines());
+    }
+
+    /**
+     * CV final gate: the shared warm-up on the Mountain Run is "Warm-up runs" (a run down from the top) on
+     * the hub's sign and screen, the Race Night tile and its screen; on the same marks under the algo-2
+     * planner, or hand-built, it reads "Warm-up laps" as it always did.
+     */
+    @Test
+    void theWarmUpIsRunsOnTheMountainRunAndLapsOnTheSameMarksOtherwise() throws Exception {
+        warmUp(MountainRuns.medium(), "Warm-up runs", "the Mountain Run");
+        bench.close();
+        bench = null;
+        warmUp(MountainRuns.medium(MountainRuns.tag(2, 7)), "Warm-up laps", "the algo-2 planner's layout");
+        bench.close();
+        bench = null;
+        warmUp(MountainRuns.medium(null), "Warm-up laps", "a hand-built track");
+    }
+
+    /** An admin's night on {@code track} with a warm-up, two racers in, run into its warm-up: what it says. */
+    private void warmUp(Course track, String words, String what) throws Exception {
+        NightRunner n = adminNight(track, on(60));
+        while (n.phase() == EventMachine.Phase.SCHEDULED) {
+            bench.move(1_000);
+            n.tick();
+        }
+        assertEquals(EventMachine.Phase.OPEN, n.phase(), what + ": fixture: the join window opens");
+        assertNull(n.join(new UUID(0, 1), "Ava"), what + ": fixture: Ava joins");
+        assertNull(n.join(new UUID(0, 2), "Ben"), what + ": fixture: Ben joins");
+        while (bench.now() < n.startsAt() - 14_000) {
+            bench.move(1_000);
+            n.tick();
+        }
+        assertEquals(EventMachine.Phase.WARMUP, n.phase(), what + ": fixture: into the shared warm-up");
+        EventBoard.View v = night.board();
+        assertEquals(words, EventBoard.sign(v).get(1), what + ": the hub sign");
+        assertEquals("&6&lRace Night &7- " + words.toLowerCase(java.util.Locale.ROOT), EventBoard.screen(v).get(0),
+                what + ": the hub screen");
+        assertEquals("&cRace Night &7- " + words.toLowerCase(java.util.Locale.ROOT), night.tileName(),
+                what + ": the Race Night tile");
+        assertEquals(words + " are on.", night.view(admin).state(), what + ": the Race Night screen");
         assertEquals(0, bench.severe(), what + ": nothing threw: " + bench.severeLines());
     }
 

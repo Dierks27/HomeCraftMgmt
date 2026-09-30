@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.event;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * What the hub's {@code @event} displays say (EVENTS-DROPPER-SPEC §A.6): a sign's four lines of at
@@ -13,7 +14,7 @@ import java.util.List;
  * Nothing set  RACE NIGHT  / No race set    / Ask an admin! /
  * Upcoming     RACE NIGHT  / Fri 7:00 PM    / in 2h 14m     / Ice Boat
  * Join window  JOIN NOW!   / /hcm play race / 3 of 8 in     / starts 7:00
- * Warm-up      RACE NIGHT  / Warm-up laps   / 5 racers      / Ice Boat
+ * Warm-up      RACE NIGHT  / Warm-up laps   / 5 racers      / Ice Boat  ("Warm-up runs" on a Mountain Run)
  * Racing       RACE 2 OF 3 / 1. Sam 18      / 2. Ava 16     / 3. Lee 10
  * Results      WINNER      / Sam            / 2. Ava        / 3. Lee      (for 30 minutes)
  * </pre>
@@ -43,14 +44,21 @@ public final class EventBoard {
      * @param startsAt the night's start (UPCOMING, OPEN)
      * @param race     the race on now (RACING)
      * @param lines    the standings (RACING) or the result (RESULTS), best first
+     * @param downhill the track is a Mountain Run (CV final gate: its warm-up is "runs", not "laps")
      */
     public record View(Shows shows, long now, long startsAt, String track, int racers, int maxRacers, int race,
-                       int of, List<Line> lines, ZoneId zone) {
+                       int of, List<Line> lines, ZoneId zone, boolean downhill) {
 
         public View {
             lines = lines == null ? List.of() : List.copyOf(lines);
             track = track == null ? "" : track;
             zone = zone == null ? ZoneId.of("UTC") : zone;
+        }
+
+        /** A night on any track but a Mountain Run. */
+        public View(Shows shows, long now, long startsAt, String track, int racers, int maxRacers, int race, int of,
+                    List<Line> lines, ZoneId zone) {
+            this(shows, now, startsAt, track, racers, maxRacers, race, of, lines, zone, false);
         }
 
         /** Nothing set. */
@@ -67,7 +75,7 @@ public final class EventBoard {
                     EventCopy.in(v.startsAt() - v.now()), v.track());
             case OPEN -> List.of("JOIN NOW!", EventCopy.COMMAND, v.racers() + " of " + v.maxRacers() + " in",
                     "starts " + EventCopy.shortClock(v.startsAt(), v.zone()));
-            case WARMUP -> List.of("RACE NIGHT", "Warm-up laps", EventCopy.racers(v.racers()), v.track());
+            case WARMUP -> List.of("RACE NIGHT", EventCopy.warmup(v.downhill()), EventCopy.racers(v.racers()), v.track());
             case RACING -> {
                 List<String> l = new ArrayList<>();
                 l.add("RACE " + v.race() + " OF " + v.of());
@@ -113,7 +121,7 @@ public final class EventBoard {
                 out.add("&e" + EventCopy.COMMAND);
             }
             case WARMUP -> {
-                out.add("&6&lRace Night &7- warm-up laps");
+                out.add("&6&lRace Night &7- " + EventCopy.warmup(v.downhill()).toLowerCase(Locale.ROOT));
                 out.add("&7" + v.track() + " &8· &f" + EventCopy.racers(v.racers()));
             }
             case RACING -> {

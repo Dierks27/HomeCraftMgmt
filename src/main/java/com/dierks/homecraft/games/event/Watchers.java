@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.event;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -73,13 +74,19 @@ public final class Watchers {
      * before and after the racing.
      */
     public static String bar(EventMachine.Phase phase, int race, int of, String leader, int racers) {
+        return bar(phase, race, of, leader, racers, false);
+    }
+
+    /** The same, on a night whose track is a Mountain Run when {@code downhill}: its warm-up is "warm-up runs". */
+    public static String bar(EventMachine.Phase phase, int race, int of, String leader, int racers, boolean downhill) {
         if (phase == null) {
             return "&bRace Night";
         }
         String lead = leader == null ? "" : " &7· leader: &f" + leader;
         return switch (phase) {
             case SCHEDULED, OPEN -> "&bRace Night &7· " + EventCopy.racers(racers) + " in so far";
-            case WARMUP -> "&bRace Night &7· warm-up laps · " + EventCopy.racers(racers);
+            case WARMUP -> "&bRace Night &7· " + EventCopy.warmup(downhill).toLowerCase(Locale.ROOT) + " · "
+                    + EventCopy.racers(racers);
             case GRID, RACING -> "&bRace Night &7· race " + Math.max(1, race) + " of " + of + lead;
             case BREAK -> "&bRace Night &7· break after race " + race + " of " + of + lead;
             case SETTLING, DONE -> "&6Race Night is over" + (leader == null ? "" : " &7· winner: &f" + leader);

@@ -131,6 +131,28 @@ class FreshAdminTest {
                 "the item says what is picked: " + FreshAdmin.state(state(true, true)));
     }
 
+    @Test
+    void aCourseThatIsOffOffersItsPreviewsAndTheirTryButNotUseItNowOrNextWeek() {
+        GenOps.Tools thisOff = new GenOps.Tools(false, false, 7, 0x3f2aL, false, null, null, false, false);
+        assertEquals(List.of("&cAdmin: Make a new course now (regenerate)", "&eAdmin: Build one to try (preview)",
+                "&eAdmin: Build next week's to try (preview next)", "&aAdmin: Try this week's preview (test run)"),
+                names(FreshAdmin.tools(PARKOUR, thisOff)), "CV final gate: switched off (Ice Boat ships off), its"
+                        + " previews are built and tried before it is switched on; promote and choose, which the"
+                        + " commands refuse while it is off, aren't offered");
+        GenOps.Tools nextOff = new GenOps.Tools(false, false, 7, 0x3f2aL, true, null, null, false, false);
+        assertEquals(List.of("&cAdmin: Make a new course now (regenerate)", "&eAdmin: Build one to try (preview)",
+                "&eAdmin: Build next week's to try (preview next)", "&aAdmin: Try next week's preview (test run)"),
+                names(FreshAdmin.tools(PARKOUR, nextOff)), "nor for next week's preview");
+        assertEquals(List.of("tp", "fresh_golf", "idle"), List.of(tool(FreshAdmin.tools(GOLF,
+                new GenOps.Tools(false, true, 7, 0x3f2aL, true, null, null, false, false)), FreshAdmin.Kind.WALK)
+                .command()), "golf's preview is walked while off too");
+        assertTrue(FreshAdmin.state(thisOff).contains("&cThis course is off."), "the item says it is off: "
+                + FreshAdmin.state(thisOff));
+        assertEquals(List.of("promote", "fresh_parkour", "0000000000003f2a", "confirm"),
+                List.of(tool(FreshAdmin.tools(PARKOUR, thisSet()), FreshAdmin.Kind.PROMOTE).command()),
+                "switched on, Use it now is there as before");
+    }
+
     private static List<String> concat(String first, List<String> rest) {
         List<String> out = new ArrayList<>();
         out.add(first);

@@ -649,7 +649,8 @@ public final class NightRunner implements RaceLink {
                 r.startedAny = true;
             }
             if (state.phase() == EventMachine.Phase.WARMUP) {
-                ports.tell(r.id, "&bWarm-up laps &7- not counted. Tap &aReady &7when you're set.", false);
+                ports.tell(r.id, "&b" + EventCopy.warmup(EventCopy.downhill(track.base()))
+                        + " &7- not counted. Tap &aReady &7when you're set.", false);
             } else {
                 gridTitle(r, spot);
             }
@@ -678,8 +679,9 @@ public final class NightRunner implements RaceLink {
 
     private void gridTitle(Racer r, Course.Spot spot) {
         int pos = track.grid().indexOf(spot) + 1;
+        // CV final gate: no laps on a Mountain Run, a sprint (its live bar and tile say none either)
         ports.title(r.id, "&6Race " + Math.max(1, state.race()) + " of " + rules.races(),
-                "&7" + track.name() + " · " + laps + (laps == 1 ? " lap" : " laps")
+                "&7" + track.name() + EventCopy.gridLaps(laps, EventCopy.downhill(track.base()))
                         + (pos > 0 ? " · you start " + NightStandings.ordinal(pos) : ""));
     }
 

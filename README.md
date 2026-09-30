@@ -1855,7 +1855,8 @@ home"), and nothing is applied twice. Something delivered in the middle of a gam
 written over by a game's items: it moves to a free slot and comes home with them. Nobody lands
 home with a fall from a game: leaving, being sent home or disconnecting halfway down a drop ends
 with no fall damage. Nobody is let go in mid-air either: a game that has to stop where the player is
-(a trip home that failed, a write refused) first puts them on its last safe spot, and in a Games
+(a trip home that failed, a write refused) first puts them on its start (the course's start platform,
+or the Clubhouse's arrival spot), never back up on a ring or a watcher's view point, and in a Games
 world a fall costs nothing until their things are home, with the games on or off. After a crash, a
 Clubhouse watcher is never left in spectator mode, and never dropped from where they were flying:
 they are brought down to the Games world's spawn first, and only there get their own mode back. A game refuses to start while they hold something on the cursor ("Put down what

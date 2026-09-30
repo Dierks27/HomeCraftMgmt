@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -25,7 +26,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * it, a Sky Rings flyer 60 blocks up or a Dropper player halfway down a drop would fall with their real
  * things on. So every way a live session is let go where the player stands (RETURN can't be written, the
  * trip home fails, the row can't be read, the snapshot can't be read or won't go on) first puts them on
- * the session's last safe spot, by the session's own teleport, which lands with no fall. A watcher the
+ * the session's start, by the session's own teleport, which lands with no fall. Never on the last spot
+ * the session teleported them to (the round-3 check): a Sky Rings checkpoint is a ring in the air, and a
+ * live watcher's view point and put-back spots are over a course (or inside the hill the watch area
+ * reaches into), so that spot would lift them back up in their own mode and let go. A watcher the
  * crash left flying is brought down to a floor before the restore changes their mode there, so a trip
  * home that then fails leaves them on that floor, not at y 95 or inside a hill.
  *
@@ -44,6 +48,12 @@ class NeverLetGoInMidAirTest {
     private static final Place CLUBHOUSE = Place.of("games", 5390, 161, 4460);
     /** Where a watcher flies, over a course. */
     private static final Place FLYING = Place.of("games", 40, 95, 40);
+    /** Watch live's view point, 4 blocks above a course's start: where the session's own teleport puts a watcher. */
+    private static final Place VIEW = Place.of("games", 10, 74, 10);
+    /** A Sky Rings checkpoint: a ring in the air, where the run's own teleport sends a flyer back. */
+    private static final Place RING = Place.of("games", 120, 120, 100);
+    /** The ground under the rings, where a flyer glided down to and stands. */
+    private static final Place GROUND = Place.of("games", 150, 64, 100);
     private static final String MINI = "Mini #42 (uid 7f3a)";
 
     private Connection conn;
@@ -116,7 +126,7 @@ class NeverLetGoInMidAirTest {
     /** Let go on the course's start platform with no fall: never left where they were flying. */
     private void onTheFloor(String why) {
         assertNull(core.phase(ben.id), why + ": (out of the session)");
-        assertEquals(START, ben.place, why + ": put down on the session's last safe spot, not left 60 blocks up");
+        assertEquals(START, ben.place, why + ": put down on the session's start, not left 60 blocks up");
         assertEquals(0f, ben.fall, why + ": landing with no fall");
         assertEquals(0.0, ben.speed, why + ": and no speed");
         assertTrue(server.syncTeleports.contains(START), why + ": by the session's own teleport");
@@ -207,6 +217,110 @@ class NeverLetGoInMidAirTest {
         core.quit(ben); // they are leaving the server: no teleport, the next join finishes it
         assertEquals(RINGS, ben.place, "a quit never teleports");
         assertTrue(server.syncTeleports.isEmpty(), "(no teleport at all)");
+    }
+
+    // ---- the session's start, never the last spot its own teleport went to --------------------------------
+
+    /** The run's own teleport back to a ring checkpoint (TimeTrials.sendBack), and the server's event for it. */
+    private void sentBackToARing() {
+        Place from = ben.place;
+        assertTrue(core.teleport(ben, RING), "the run's own teleport, inside its world");
+        core.teleported(ben, from, RING, "PLUGIN"); // armed, so OURS: the session's last spot is now the ring
+        assertEquals(Session.Phase.ACTIVE, core.phase(ben.id), "(still playing)");
+        assertEquals(RING, ben.place, "(on the ring, 56 blocks up)");
+    }
+
+    @Test
+    void aRunSentBackToARingThenLeavingWithReturnRefusedIsPutOnTheStartNotLiftedBackToTheRing() throws Exception {
+        flying();
+        sentBackToARing();
+        ben.place = GROUND; // glided down and stands on the ground
+        ben.fall = 0f;
+        ben.speed = 0;
+        server.syncTeleports.clear();
+        refuse(SavedState.RETURN);
+        core.leave(ben, EndReason.QUIT_ITEM);
+        assertTrue(ben.messages.contains(SessionCore.BACK_STAY), "their things are back; RETURN isn't written yet");
+        assertEquals("SURVIVAL", ben.gameMode, "(in their own mode, which can fall, and with no elytra)");
+        assertEquals(1, count(ben, "netherite sword"), "(with everything they own)");
+        assertFalse(server.syncTeleports.contains(RING), "never teleported back up to the ring they were sent to");
+        onTheFloor("RETURN refused after a ring checkpoint");
+    }
+
+    @Test
+    void aRunSentBackToARingWhoseTripHomeFailsIsPutOnTheStartNotLiftedBackToTheRing() {
+        flying();
+        sentBackToARing();
+        ben.place = RINGS; // gliding on from it
+        server.syncTeleports.clear();
+        core.leave(ben, EndReason.QUIT_ITEM); // restored where they glide, RETURN written, the trip home starts
+        assertEquals(1, server.trips.size(), "(the trip home is on its way)");
+        server.fail(0); // another plugin refused it
+        assertTrue(ben.messages.contains(SessionCore.NOT_HOME), "they are told to try /hcm leave");
+        assertFalse(server.syncTeleports.contains(RING), "never teleported back up to the ring they were sent to");
+        onTheFloor("the trip home failed after a ring checkpoint");
+    }
+
+    /** Wes in the Clubhouse, then Watch live: the session's own teleport to the view point, and its spectator mode. */
+    private FakeServer.Body watchingLive() {
+        FakeServer.Body wes = new FakeServer.Body("Wes", HOME);
+        wes.slots[0] = "diamond x3";
+        assertNull(core.enter(wes, "clubhouse", "clubhouse", CLUBHOUSE, club), "into the Clubhouse");
+        server.step();
+        server.arriveAll();
+        assertEquals(CLUBHOUSE, wes.place, "(at the Clubhouse's arrival spot)");
+        assertTrue(core.teleport(wes, VIEW), "Watch live: the session's own teleport to the view point");
+        core.teleported(wes, CLUBHOUSE, VIEW, "PLUGIN"); // armed, so OURS: the session's last spot is now the view
+        assertTrue(core.mode(wes, "SPECTATOR"), "the session's own spectator mode");
+        wes.gameMode = "SPECTATOR";
+        server.step();
+        assertEquals(Session.Phase.ACTIVE, core.phase(wes.id), "(watching, in their session)");
+        assertEquals(VIEW, wes.place, "(at the view point, over the course)");
+        return wes;
+    }
+
+    /** Let go on the Clubhouse floor in their own mode: never lifted back to the view point. */
+    private void onTheClubhouseFloor(FakeServer.Body wes, String why) {
+        assertNull(core.phase(wes.id), why + ": (out of the session)");
+        assertEquals("SURVIVAL", wes.gameMode, why + ": (their own mode, which can fall)");
+        assertEquals(CLUBHOUSE, wes.place, why + ": left on the Clubhouse's arrival spot, not taken back up to the"
+                + " view point in their own mode");
+        assertFalse(server.syncTeleports.contains(VIEW), why + ": never teleported back to the view point");
+        assertEquals(1, count(wes, "diamond x3"), why + ": (with their things)");
+    }
+
+    @Test
+    void aLiveWatcherLeavingWithReturnRefusedStaysOnTheClubhouseFloorNotTheViewPoint() throws Exception {
+        FakeServer.Body wes = watchingLive();
+        server.syncTeleports.clear();
+        refuse(SavedState.RETURN);
+        core.leave(wes, EndReason.COMMAND); // /hcm leave while watching
+        assertEquals(List.of(CLUBHOUSE), wes.appliedAt, "their own mode went on at the Clubhouse floor (land)");
+        assertTrue(wes.messages.contains(SessionCore.BACK_STAY), "their things are back; RETURN isn't written yet");
+        onTheClubhouseFloor(wes, "RETURN refused");
+
+        allow(SavedState.RETURN);
+        core.leave(wes, EndReason.COMMAND); // /hcm leave writes it and goes on
+        server.arriveAll();
+        assertEquals(HOME, wes.place, "home");
+        assertNull(dao.loadState(wes.id), "finished");
+    }
+
+    @Test
+    void aLiveWatcherWhoseTripHomeFailsStaysOnTheClubhouseFloorNotTheViewPoint() throws Exception {
+        FakeServer.Body wes = watchingLive();
+        server.syncTeleports.clear();
+        core.leave(wes, EndReason.COMMAND); // /hcm leave while watching
+        assertEquals(List.of(CLUBHOUSE), wes.appliedAt, "their own mode went on at the Clubhouse floor (land)");
+        assertEquals(1, server.trips.size(), "(the trip home is on its way)");
+        server.fail(0); // another plugin refused it
+        assertTrue(wes.messages.contains(SessionCore.NOT_HOME), "told to try /hcm leave");
+        onTheClubhouseFloor(wes, "the trip home failed");
+
+        core.leave(wes, EndReason.COMMAND);
+        server.arriveAll();
+        assertEquals(HOME, wes.place, "/hcm leave takes them home");
+        assertNull(dao.loadState(wes.id), "finished");
     }
 
     // ---- a watcher the crash left flying -----------------------------------------------------------------

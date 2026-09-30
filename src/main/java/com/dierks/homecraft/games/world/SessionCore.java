@@ -57,8 +57,8 @@ import java.util.logging.Logger;
  *       gone, is found before anyone is moved: the row is kept for an admin
  *       ({@code /hcm games saved}) and the player stays where they are.</li>
  *   <li><b>Never let go in mid-air.</b> A session let go where the player is (RETURN can't be
- *       written, the trip home failed, nothing could be put back) first puts them on its last safe
- *       spot, a floor ({@link #ground}); a watcher the crash left flying comes down to a floor before
+ *       written, the trip home failed, nothing could be put back) first puts them on its start,
+ *       a floor ({@link #ground}); a watcher the crash left flying comes down to a floor before
  *       their own mode goes on; and a fall in a Games world is spared while their things aren't home
  *       ({@link #sparesFall}). Whatever an exit banked is saved with the player at once.</li>
  * </ul>
@@ -318,6 +318,11 @@ final class SessionCore<P, I> {
         final long enteredTick;
         Session.Phase phase = Session.Phase.ENTERING;
         Place from;
+        /**
+         * The last spot the session's own teleport put them (a Sky Rings checkpoint, a watcher's view
+         * point): where a drop below the world goes back to. Not a floor, so never where {@link #ground}
+         * lets them go.
+         */
         Place safe;
         String world;
         EndReason abort;
@@ -1330,8 +1335,12 @@ final class SessionCore<P, I> {
      * home didn't happen, or nothing could be put back) never lets them go in mid-air (the round-2
      * audit's G1 #1). Out of the session nothing cancels a fall: a Sky Rings flyer 60 blocks up, or a
      * Dropper player halfway down a drop, would fall with everything they own on them. So they are first
-     * put on the session's last safe spot (its start, or the last checkpoint of ours), a floor, by the
-     * session's own teleport, which lands with no fall, as {@link #land} does for a watcher. Not for an
+     * put on the session's start (the course's start platform, the Clubhouse's arrival spot, the grid
+     * spot), a floor, by the session's own teleport, which lands with no fall, as {@link #land} does for a
+     * watcher. Never on the last spot the session teleported them to ({@code safe}): that is where a game
+     * last put them, and it is often not a floor (a Sky Rings checkpoint is a ring in the air; a watcher's
+     * view point and put-back spots are in the air above a course, or inside the hill the watch area
+     * reaches into), which would lift them back up, in their own mode, and let go. Not for an
      * end in place (a quit: they are leaving; someone else's teleport: it is taking them away; a stop: no
      * teleport may start), nor outside the session's world (a world change put them somewhere else, on
      * their feet). If our teleport doesn't happen, a fall there is still spared while their things aren't
@@ -1339,7 +1348,7 @@ final class SessionCore<P, I> {
      */
     private void ground(Live s, boolean inPlace) {
         P p = s.player;
-        Place floor = s.safe != null ? s.safe : s.start;
+        Place floor = s.start; // never s.safe: a ring in the air, a watcher's view point
         if (inPlace || floor == null || port.stopping() || !port.online(p) || !floor.world().equals(port.world(p))) {
             return;
         }

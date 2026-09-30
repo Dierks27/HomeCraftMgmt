@@ -2,16 +2,21 @@ package com.dierks.homecraft.games.gen.golf;
 
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.GenRandom;
 import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlanInput;
 import com.dierks.homecraft.games.gen.api.PlannedGolf;
 import com.dierks.homecraft.games.gen.api.Putt;
+import com.dierks.homecraft.games.gen.api.SignText;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.golf.BallPhysics;
 import com.dierks.homecraft.games.golf.GolfCourse;
+import com.dierks.homecraft.games.golf.GolfShot;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
@@ -32,14 +37,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The golf planner (GEN-SPEC §4.3), over 300 seeds of Daily Golf ({@code EEEMMMMHH}) and Tiny Golf
- * ({@code EEE}): every course passes the full independent check (every hole's blocks sound, its
- * witness dropping in E, par 2-4, the sloppy player within par + 1), every tier gets a par it
- * likes unless the proven fallback stood in, and the work stays inside the budget. The fallback
- * hole is valid in every plot of every golf half and far beyond; a stored layout is re-derived
- * from its attempts and lines, without searching, to the same hash; the plan for a seed is
- * pinned by golden hashes; re-rolling one hole never changes another; and a cancelled job stops.
- * A 2,000-seed soak runs under {@code -Pslow}.
+ * The golf planner (GEN-SPEC §4.3, Course Variety §3), over 300 seeds of Golf of the Week
+ * ({@code EEEMMMMHH}) and Tiny Golf ({@code EEE}): every course passes the full independent check
+ * (Adventure Golf's rules: every hole's blocks sound, its witness dropping in E and safe on a pond
+ * hole, par 2-4, the sloppy player within par + 1, every rest spot on the lane, the scenery clear of
+ * the holes); the sloppy player is never wet; Easy holes are always dry, and Tiny Golf is dry whatever
+ * its mix; the variety quota is met; every tier gets a par it likes unless the proven fallback stood
+ * in; and the work stays inside the budget ({@code FreshBench}: the 99th percentile course under 60%
+ * of it). The fallback hole, with scenery, is valid in every plot of every golf half and far beyond;
+ * a stored layout is re-derived from its attempts and lines, without searching, to the same hash; the
+ * plan for a seed is pinned by golden hashes; re-rolling one hole never changes another; and a
+ * cancelled job stops. A 2,000-seed soak runs under {@code -Phcm.slow}.
  */
 class GolfPlannerTest {
 
@@ -138,24 +146,199 @@ class GolfPlannerTest {
         }
     }
 
+    /** The {@code FreshBench} numbers (§3.11): work, time and blocks per course, p50/p95/p99. */
     @Test
-    void p95PlanWorkAndTimeAreWithinBudget() {
+    void freshBenchTheP99CourseIsWithinSixtyPercentOfTheBudget() {
         for (Slots.Def slot : List.of(Slots.DAILY_GOLF, Slots.TINY_GOLF)) {
             long[] work = RUNS.stream().filter(r -> r.slot() == slot).mapToLong(r -> r.plan().work()).sorted()
                     .toArray();
             long[] ms = RUNS.stream().filter(r -> r.slot() == slot).mapToLong(Run::millis).sorted().toArray();
-            long p95Work = work[(int) (work.length * 0.95)];
+            long[] ops = RUNS.stream().filter(r -> r.slot() == slot).mapToLong(r -> r.plan().ops().size()).sorted()
+                    .toArray();
+            long p99Work = work[(int) (work.length * 0.99)];
             long p95Ms = ms[(int) (ms.length * 0.95)];
-            System.out.println(slot.id() + ": work p50 " + work[work.length / 2] + " p95 " + p95Work + " max "
-                    + work[work.length - 1] + " putts; time p50 " + ms[ms.length / 2] + " ms, p95 " + p95Ms
-                    + " ms, max " + ms[ms.length - 1] + " ms (" + Runtime.getRuntime().availableProcessors()
-                    + " threads)");
-            assertTrue(p95Work <= GolfPlanner.COURSE_BUDGET / 10, slot.id() + ": p95 work " + p95Work
-                    + " is well inside the course budget of " + GolfPlanner.COURSE_BUDGET);
+            long p99Ops = ops[(int) (ops.length * 0.99)];
+            System.out.println("FreshBench " + slot.id() + ": work p50 " + work[work.length / 2] + " p95 "
+                    + work[(int) (work.length * 0.95)] + " p99 " + p99Work + " max " + work[work.length - 1]
+                    + " putts (budget " + GolfPlanner.COURSE_BUDGET + "); time p50 " + ms[ms.length / 2] + " ms, p95 "
+                    + p95Ms + " ms, p99 " + ms[(int) (ms.length * 0.99)] + " ms, max " + ms[ms.length - 1] + " ms ("
+                    + Runtime.getRuntime().availableProcessors() + " threads); blocks p50 " + ops[ops.length / 2]
+                    + " p99 " + p99Ops + " max " + ops[ops.length - 1]);
+            assertTrue(p99Work <= GolfPlanner.COURSE_BUDGET * 6 / 10, slot.id() + ": p99 work " + p99Work
+                    + " is within 60% of the course budget of " + GolfPlanner.COURSE_BUDGET);
             assertTrue(work[work.length - 1] <= GolfPlanner.COURSE_BUDGET,
                     slot.id() + ": no course goes past its budget, fallbacks included");
             assertTrue(p95Ms < 30_000, slot.id() + ": p95 plan time " + p95Ms + " ms, far under the 120 s kill");
+            assertTrue(p99Ops <= 30_000, slot.id() + ": p99 blocks " + p99Ops + ", scenery included, within 30,000"
+                    + " (the check's cap is " + GolfValidator.MAX_OPS + ")");
         }
+    }
+
+    @Test
+    void theVarietyQuotaIsMetAndTheSummarySaysWhatEachCourseHas() {
+        for (Slots.Def slot : List.of(Slots.DAILY_GOLF, Slots.TINY_GOLF)) {
+            List<Run> runs = RUNS.stream().filter(r -> r.slot() == slot).toList();
+            long dealt = runs.stream().filter(r -> Quota.deal(new GenRandom(r.plan().seed()), slot.tierOrMix(),
+                    GolfPlanner.dry(slot)).met() == Quota.COUNTED.size()).count();
+            long ended = 0;
+            for (Run r : runs) {
+                List<String> summary = r.plan().summary();
+                String line = summary.get(summary.size() - 1);
+                assertTrue(line.startsWith("quota: water "), slot.id() + " seed " + r.n() + ": the last line is the"
+                        + " quota's: " + line);
+                boolean all = true;
+                for (String part : line.substring("quota: ".length(), line.indexOf(" (deal")).split(", ")) {
+                    String[] got = part.substring(part.lastIndexOf(' ') + 1).split("/");
+                    all &= Integer.parseInt(got[0]) >= Integer.parseInt(got[1]);
+                }
+                ended += all ? 1 : 0;
+            }
+            System.out.println(slot.id() + ": the quota's deal met by " + dealt + " of " + runs.size()
+                    + " courses; after fallbacks, " + ended);
+            assertTrue(dealt * 100 >= runs.size() * 95L, slot.id() + ": the quota is met by at least 95% of deals: "
+                    + dealt + " of " + runs.size());
+            assertTrue(ended * 100 >= runs.size() * 90L, slot.id() + ": and a fallback rarely breaks it: " + ended
+                    + " of " + runs.size());
+        }
+    }
+
+    @Test
+    void theSloppyPlayerIsNeverWetAndEveryRestSpotIsOnTheLane() {
+        List<String> bad = RUNS.parallelStream().filter(r -> r.n() % 10 == 3).flatMap(r -> {
+            List<String> out = new ArrayList<>();
+            PlannedGolf g = golf(r.plan());
+            PlanBlocks grid = PlanBlocks.of(r.plan().half(), r.plan().palette(), r.plan().ops());
+            for (int i = 0; i < g.course().holes().size(); i++) {
+                GolfCourse.Hole h = g.course().holes().get(i);
+                LaneMap lane = LaneMap.of(grid, h, GolfPlanner.ALGO);
+                String what = r.slot().id() + " seed " + r.n() + " hole " + (i + 1);
+                int[] wet = {0};
+                int[] off = {0};
+                try {
+                    KidPolicy.Result k = KidPolicy.evaluate(grid, h, lane, h.par() + 1, Work.unlimited(), res -> {
+                        wet[0] += res.penalty() ? 1 : 0;
+                        off[0] += !res.inCup() && !GolfValidatorV3.restsOnLane(lane, res.x(), res.y(), res.z()) ? 1 : 0;
+                    });
+                    if (!k.within()) {
+                        out.add(what + ": the kid needs " + k.worst());
+                    }
+                } catch (GenFailed never) {
+                    out.add(what + ": cancelled");
+                }
+                if (wet[0] > 0 || off[0] > 0) {
+                    out.add(what + ": " + wet[0] + " splashes or outs and " + off[0] + " rests off the lane in the kid's"
+                            + " tree");
+                }
+                BallPhysics.Hole area = GolfShot.area(grid, h);
+                BallPhysics.Ball ball = GolfShot.tee(grid, h);
+                for (Putt p : g.witness().get(i)) {
+                    GolfShot.Result res = GolfShot.play(grid, area, ball, p);
+                    if (!res.inCup() && !GolfValidatorV3.restsOnLane(lane, res.x(), res.y(), res.z())) {
+                        out.add(what + ": the witness rests off the lane");
+                    }
+                }
+            }
+            return out.stream();
+        }).toList();
+        assertEquals(List.of(), bad, "never wet (G-T3), and every rest spot over a lane cell (rule 12)");
+    }
+
+    @Test
+    void aPuttIntoAPlannedPondCostsAStrokeAndTheBallComesBack() {
+        int ponds = 0;
+        for (Run r : RUNS.subList(0, 40)) {
+            PlannedGolf g = golf(r.plan());
+            PlanBlocks grid = PlanBlocks.of(r.plan().half(), r.plan().palette(), r.plan().ops());
+            for (int i = 0; i < g.course().holes().size(); i++) {
+                GolfCourse.Hole h = g.course().holes().get(i);
+                if (LaneMap.of(grid, h, GolfPlanner.ALGO).hazards() == 0) {
+                    continue;
+                }
+                BallPhysics.Hole area = GolfShot.area(grid, h);
+                List<double[]> spots = new ArrayList<>(); // the tee, and where the par line rests
+                BallPhysics.Ball walk = GolfShot.tee(grid, h);
+                spots.add(new double[]{walk.x(), walk.y(), walk.z()});
+                for (Putt p : g.witness().get(i)) {
+                    GolfShot.Result res = GolfShot.play(grid, area, walk, p);
+                    spots.add(new double[]{res.x(), res.y(), res.z()});
+                }
+                GolfShot.Result splash = null;
+                double[] from = null;
+                for (double[] at : spots) {
+                    for (int yaw = 0; yaw < 360 && splash == null; yaw += 5) {
+                        for (int power = 1; power <= BallPhysics.clubs() && splash == null; power++) {
+                            GolfShot.Result res = GolfShot.play(grid, area, new BallPhysics.Ball(at[0], at[1], at[2]),
+                                    new Putt(yaw, power));
+                            splash = res.outcome() == BallPhysics.Outcome.WATER ? res : null;
+                            from = at;
+                        }
+                    }
+                }
+                String what = r.slot().id() + " seed " + r.n() + " hole " + (i + 1);
+                assertNotNull(splash, what + ": some putt finds the pond");
+                assertEquals(2, splash.strokes(), what + ": a splash is the putt and a stroke more");
+                assertEquals(from[0], splash.x(), 1e-9, what + ": and the ball comes back to where it was putted from");
+                assertEquals(from[2], splash.z(), 1e-9, "...");
+                ponds++;
+            }
+        }
+        assertTrue(ponds > 20, "enough pond holes were tried: " + ponds);
+    }
+
+    @Test
+    void easyHolesAreAlwaysDryAndTinyGolfIsDryWhateverItsMix() throws GenFailed {
+        for (Run r : RUNS) {
+            PlannedGolf g = golf(r.plan());
+            PlanBlocks grid = PlanBlocks.of(r.plan().half(), r.plan().palette(), r.plan().ops());
+            String mix = r.slot().tierOrMix();
+            for (int i = 0; i < mix.length(); i++) {
+                if (mix.charAt(i) == 'E' || r.slot() == Slots.TINY_GOLF) {
+                    assertEquals(0, LaneMap.of(grid, g.course().holes().get(i), GolfPlanner.ALGO).hazards(),
+                            r.slot().id() + " seed " + r.n() + " hole " + (i + 1) + ": no water in play on Easy");
+                }
+            }
+        }
+        for (String mix : List.of("MMM", "HHH", "EMH", "MHM")) {
+            for (long seed = 0; seed < 12; seed++) {
+                Plan p = new GolfPlanner().plan(GolfKit.input(Slots.TINY_GOLF, seed, mix, 0));
+                PlanBlocks grid = PlanBlocks.of(p.half(), p.palette(), p.ops());
+                for (GolfCourse.Hole h : golf(p).course().holes()) {
+                    assertEquals(0, LaneMap.of(grid, h, GolfPlanner.ALGO).hazards(), "Tiny Golf at " + mix + " seed "
+                            + seed + ": the four-year-old's course has no water in play, whatever an admin sets");
+                }
+                assertEquals(List.of(), GolfValidator.quickProblems(p), "and it is sound");
+            }
+        }
+    }
+
+    @Test
+    void everyPlotHasItsSceneryAndEveryTeeSignSaysItsFeature() {
+        int plots = 0;
+        int trees = 0;
+        int bare = 0;
+        for (Run r : RUNS) {
+            Plan p = r.plan();
+            PlannedGolf g = golf(p);
+            for (int i = 0; i < g.course().holes().size(); i++) {
+                int[] at = GolfPlanner.plot(p.half(), i);
+                Box b = p.keepClear().get(i);
+                long here = p.ops().stream().filter(op -> p.blockOf(op).endsWith("_log[axis=y]")
+                        && op.y() == b.minY() + 3 && op.x() >= at[0] && op.x() < at[0] + HoleTemplate.PLOT_X
+                        && op.z() >= at[1] && op.z() < at[1] + HoleTemplate.PLOT_Z
+                        && !b.contains(op.x(), op.y(), op.z())).count();
+                plots++;
+                trees += (int) here;
+                bare += here == 0 ? 1 : 0;
+                assertTrue(here <= GolfScenery.MOST, "at most " + GolfScenery.MOST + " decoration trees a plot: " + here);
+                int n = i + 1;
+                GolfCourse.Hole h = g.course().holes().get(i);
+                assertTrue(p.signs().stream().map(SignText::lines).anyMatch(l -> GenCopy.golfTeeFeature(l, n, h.par())
+                        != null), r.slot().id() + " seed " + r.n() + " hole " + n + " has its tee sign");
+            }
+        }
+        System.out.println("scenery: " + trees + " decoration trees on " + plots + " plots, " + bare + " bare");
+        assertTrue(trees >= plots * GolfScenery.LEAST, "2-5 trees a plot on average: " + trees + " on " + plots);
+        assertTrue(bare * 100 <= plots, "a plot with no room for a tree is rare: " + bare + " of " + plots);
     }
 
     @Test
@@ -182,15 +365,19 @@ class GolfPlannerTest {
     @Test
     void goldenPlansArePinned() throws GenFailed {
         // A change here means the planner makes different courses for the same seed: bump ALGO.
-        assertEquals(2, GolfPlanner.ALGO, "the version these hashes belong to");
-        Map<Long, String> daily = Map.of(1L, "3c87c264a106", 20725L, "e7264a985157",
-                0x3f2a91c07d1e55b0L, "655b02693a68");
+        assertEquals(3, GolfPlanner.ALGO, "the version these hashes belong to");
+        Map<Long, String> daily = Map.of(1L, "cf984e43e170", 20725L, "15c15b307eb2",
+                0x3f2a91c07d1e55b0L, "e4eb31cf3859");
         for (Map.Entry<Long, String> e : new TreeMap<>(daily).entrySet()) {
             Plan p = new GolfPlanner().plan(GolfKit.input(Slots.DAILY_GOLF, e.getKey()));
             assertEquals(e.getValue(), p.hash(), "Daily Golf seed " + Long.toHexString(e.getKey()));
         }
-        Plan tiny = new GolfPlanner().plan(GolfKit.input(Slots.TINY_GOLF, 1));
-        assertEquals("47bd03bb54b0", tiny.hash(), "Tiny Golf seed 1");
+        Map<Long, String> tiny = Map.of(1L, "a61b98fd5199", 20725L, "44b393ccf0a4",
+                0x3f2a91c07d1e55b0L, "dac9542bf147");
+        for (Map.Entry<Long, String> e : new TreeMap<>(tiny).entrySet()) {
+            Plan p = new GolfPlanner().plan(GolfKit.input(Slots.TINY_GOLF, e.getKey()));
+            assertEquals(e.getValue(), p.hash(), "Tiny Golf seed " + Long.toHexString(e.getKey()));
+        }
     }
 
     @Test
@@ -224,6 +411,21 @@ class GolfPlannerTest {
             }
         }
         assertEquals(2 * 9 + 2 * 3 + 7 * 9, checked, "every plot of both golf halves at both origins, and 7 far ones");
+        for (Box half : halves) {
+            int plots = half.sizeZ() >= 128 ? 9 : 3;
+            Slots.Def slot = plots == 9 ? Slots.DAILY_GOLF : Slots.TINY_GOLF;
+            List<GolfPlanner.Solved> safe = new ArrayList<>();
+            for (int i = 0; i < plots; i++) {
+                int[] p = GolfPlanner.plot(half, i);
+                safe.add(GolfPlanner.solve(HoleTemplate.SAFE_STRAIGHT.draw(new GenRandom(i), 'S', p[0], p[1],
+                        half.minY() + GolfPlanner.TURF_ABOVE_FLOOR), 'S', GolfPlanner.ATTEMPTS, Work.unlimited()));
+            }
+            PlanInput in = new PlanInput(slot, half, 'A', 20725, 0, 1, slot.tierOrMix(), 8, 0, null);
+            Plan all = GolfPlanner.assemble(in, safe, 0);
+            assertTrue(all.ops().stream().anyMatch(op -> Palette.isLeaves(all.blockOf(op))), "with its scenery");
+            assertEquals(List.of(), GolfValidator.problems(all), "a course of fallbacks with their scenery is sound in "
+                    + half.describe());
+        }
         long least = GolfPlanner.leastBudget(9);
         Plan spent = new GolfPlanner().plan(GolfKit.input(Slots.DAILY_GOLF, 5, "EEEMMMMHH", least));
         PlannedGolf g = golf(spent);
@@ -281,7 +483,7 @@ class GolfPlannerTest {
         GolfPlanner planner = new GolfPlanner();
         Plan free = planner.plan(GolfKit.input(Slots.DAILY_GOLF, 3, "EEEMMMMHH", 0));
         long least = GolfPlanner.leastBudget(9);
-        for (long budget : new long[]{free.work() + least, 50_000, 150_000}) {
+        for (long budget : new long[]{free.work() + least, free.work() + least + 50_000, 3 * (free.work() + least)}) {
             assertTrue(free.work() + least <= budget, "seed 3 takes " + free.work() + " putts, so " + budget
                     + " is room for all of it and every fallback");
             assertEquals(free.hash(), planner.plan(GolfKit.input(Slots.DAILY_GOLF, 3, "EEEMMMMHH", budget)).hash(),
@@ -299,8 +501,15 @@ class GolfPlannerTest {
 
     @Test
     void rerollingOneHoleNeverChangesAnother() throws GenFailed {
-        PlanInput a = GolfKit.input(Slots.DAILY_GOLF, 77, "EEEMMMMHH", 0);
-        PlanInput b = GolfKit.input(Slots.DAILY_GOLF, 77, "EEEMMMMHM", 0);
+        // The quota's deal reads the whole mix, so a changed mix may deal differently; on a seed where
+        // both mixes take the same deal, changing hole 9's tier leaves holes 1-8 exactly as they were.
+        long seed = 77;
+        while (Quota.deal(new GenRandom(seed), "EEEMMMMHH", false).k()
+                != Quota.deal(new GenRandom(seed), "EEEMMMMHM", false).k()) {
+            seed++;
+        }
+        PlanInput a = GolfKit.input(Slots.DAILY_GOLF, seed, "EEEMMMMHH", 0);
+        PlanInput b = GolfKit.input(Slots.DAILY_GOLF, seed, "EEEMMMMHM", 0);
         PlannedGolf ga = golf(new GolfPlanner().plan(a));
         PlannedGolf gb = golf(new GolfPlanner().plan(b));
         assertEquals(ga.course().holes().subList(0, 8), gb.course().holes().subList(0, 8),

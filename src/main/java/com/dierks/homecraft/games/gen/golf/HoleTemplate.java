@@ -957,6 +957,7 @@ public enum HoleTemplate {
                 }
             }
             Map<Double, Double> reach = new HashMap<>();
+            int rail = railLevel();
             for (int x = 0; x < PLOT_X; x++) {
                 for (int z = 0; z < PLOT_Z; z++) {
                     if (lane[x][z] || water[x][z]) {
@@ -978,11 +979,11 @@ public enum HoleTemplate {
                     if (trunk[x][z] != null) {
                         h = TRUNK_TOP + 1;
                     } else if (high == Double.NEGATIVE_INFINITY) {
-                        h = 2; // round a pond only: a block above the turf
+                        h = Math.max(2, rail + 2); // round a pond only: a block above the turf
                     } else if (obstacle) {
                         h = Math.max(2, (int) Math.ceil(high + 1 - EPS) + 1);
                     } else {
-                        h = (int) Math.floor(high + 0.5 + EPS) + 2;
+                        h = Math.max((int) Math.floor(high + 0.5 + EPS) + 2, rail + 2);
                     }
                     // h blocks from T - 1: the top is at T + h - 1
                     boolean raised = true;
@@ -1012,6 +1013,55 @@ public enum HoleTemplate {
                 }
             }
             return k;
+        }
+
+        /**
+         * The highest raised level (blocks above T) at which a ball can get onto a wall's rail, or
+         * -1 when it never can. The ball's physics reads each block of a column on its own, and
+         * holds a ball up by the edges of its footprint, so a ball whose edge is over a wall rests
+         * on the top of the wall's block at its own height and can roll along it like a rail, held
+         * above a lower lane beside it — and over the first wall no more than half a block above
+         * it. Rolling sideways never puts a ball's edge over a wall; it gets there only at a wall's
+         * outside corner: rolling along the lane past where the wall begins, from a cell whose side
+         * is open (lane no more than a step up, or a pond) into one whose side is the wall. A rail
+         * at the turf is harmless (the lane is there); a rail above it (a plateau's edge where the
+         * approach's wall begins) is closed by standing every ring wall a block above it, so a ball
+         * riding it meets a wall at its end and never rolls over one.
+         */
+        private int railLevel() {
+            int rail = -1;
+            for (int x = 0; x < PLOT_X; x++) {
+                for (int z = 0; z < PLOT_Z; z++) {
+                    if (!lane[x][z] || level[x][z] < 2) {
+                        continue;
+                    }
+                    double l = surface(x, z);
+                    for (int[] e : FOUR) {
+                        int sx = x + e[0];
+                        int sz = z + e[1];
+                        boolean open = water(sx, sz) || lane(sx, sz) && surface(sx, sz) <= l + LaneMap.STEP + EPS;
+                        if (!open) {
+                            continue;
+                        }
+                        for (int[] m : FOUR) {
+                            if (m[0] * e[0] + m[1] * e[1] != 0) {
+                                continue; // along the wall only
+                            }
+                            int cx = x + m[0];
+                            int cz = z + m[1];
+                            int wx = cx + e[0];
+                            int wz = cz + e[1];
+                            boolean on = lane(cx, cz) && surface(cx, cz) <= l + LaneMap.STEP + EPS;
+                            boolean wall = wx >= 0 && wz >= 0 && wx < PLOT_X && wz < PLOT_Z && !lane[wx][wz]
+                                    && !water[wx][wz] && (obstacle(wx, wz) || walled(wx, wz));
+                            if (on && wall) {
+                                rail = Math.max(rail, (int) Math.floor(l + EPS));
+                            }
+                        }
+                    }
+                }
+            }
+            return rail;
         }
 
         HoleLayout render(HoleTemplate template, boolean mirror, int plotX, int plotZ, int turfY, String describe) {

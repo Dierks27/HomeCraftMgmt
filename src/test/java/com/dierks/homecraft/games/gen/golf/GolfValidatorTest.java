@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.gen.golf;
 
+import com.dierks.homecraft.games.gen.V2Fixtures;
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.Palette;
@@ -27,6 +28,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * lane, a filled cup, a pit, a line that doesn't drop, a par that isn't E + 1, a disallowed
  * block, a block outside the half, two blocks in one spot, overlapping holes, and a hole a sloppy
  * player can't finish within par + 1 (which only the full check, with the kid tree, catches).
+ *
+ * <p>These are the frozen rules a layout of golf planner version 2 or older is judged by (Course
+ * Variety §1.4), so they are tried on a frozen version-2 plan: Tiny Golf's fixture, whose second
+ * hole is a flat straight ({@link V2Fixtures}). Today's planner makes version-3 plans, which
+ * {@link GolfValidatorV3Test} covers.
  */
 class GolfValidatorTest {
 
@@ -35,10 +41,17 @@ class GolfValidatorTest {
     private static int turf;
 
     @BeforeAll
-    static void plan() throws GenFailed {
-        good = new GolfPlanner().plan(GolfKit.input(Slots.TINY_GOLF, 11));
-        first = ((PlannedGolf) good.course()).course().holes().get(0);
+    static void plan() {
+        good = V2Fixtures.named("golf-3").plan();
+        assertEquals(2, good.algo(), "a frozen version-2 plan");
+        first = ((PlannedGolf) good.course()).course().holes().get(1);
         turf = (int) first.tee().y();
+    }
+
+    /** {@code plan} as a layout of golf planner version 2 (judged by these frozen rules). */
+    private static Plan v2(Plan plan) {
+        return Plan.of(plan.slot(), 2, plan.seed(), plan.half(), plan.palette(), plan.ops(), plan.signs(),
+                plan.keepClear(), plan.course(), plan.summary(), plan.work());
     }
 
     private static Plan withOps(UnaryOperator<List<BlockOp>> edit) {
@@ -66,7 +79,7 @@ class GolfValidatorTest {
         assertTrue(problems.stream().anyMatch(p -> p.contains(words)), why + ": " + problems);
     }
 
-    /** The wall column right beside the tee (inside the lane's bounds, one out from the lane). */
+    /** The wall column right beside the flat hole's tee (inside the lane's bounds, one out from the lane). */
     private static int wallX() {
         return Math.min(first.corner1().x(), first.corner2().x());
     }
@@ -174,7 +187,7 @@ class GolfValidatorTest {
         witness.set(0, List.of(new Putt(180, 1)));
         caught(withCourse(new PlannedGolf(g.course(), g.attempts(), witness, List.of(1, g.expert().get(1),
                 g.expert().get(2)), g.kid())), "doesn't hole out", "a witness that goes backwards doesn't drop");
-        GolfCourse wrongPar = g.course().withHole(1, first.withPar(first.par() + 1));
+        GolfCourse wrongPar = g.course().withHole(2, first.withPar(first.par() + 1));
         caught(withCourse(new PlannedGolf(wrongPar, g.attempts(), g.witness(), g.expert(), g.kid())), "par is",
                 "par must be E + 1");
         caught(withCourse(new PlannedGolf(g.course(), g.attempts(), g.witness().subList(0, 2), g.expert(),
@@ -202,7 +215,7 @@ class GolfValidatorTest {
     void overlappingHolesAreCaught() throws GenFailed {
         HoleLayout l = GolfKit.straight(13, 0);
         GolfPlanner.Solved s = GolfPlanner.solve(l, 'E', 0, Work.unlimited());
-        Plan twice = GolfPlanner.assemble(GolfKit.input(Slots.DAILY_GOLF, 1), List.of(s, s), 0);
+        Plan twice = v2(GolfPlanner.assemble(GolfKit.input(Slots.DAILY_GOLF, 1), List.of(s, s), 0));
         caught(twice, "overlap", "two holes can't share their area");
     }
 
@@ -223,7 +236,7 @@ class GolfValidatorTest {
             }
         }
         assertTrue(hard != null, "some S-bend is too hard for the sloppy player");
-        Plan plan = GolfPlanner.assemble(GolfKit.input(Slots.DAILY_GOLF, 1), List.of(hard), 0);
+        Plan plan = v2(GolfPlanner.assemble(GolfKit.input(Slots.DAILY_GOLF, 1), List.of(hard), 0));
         assertEquals(List.of(), GolfValidator.quickProblems(plan), "its blocks and line are sound");
         caught(plan, "sloppy player", "but the full check replays the kid tree and refuses it");
     }

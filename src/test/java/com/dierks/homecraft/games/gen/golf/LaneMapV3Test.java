@@ -49,6 +49,9 @@ class LaneMapV3Test {
     @Test
     void anOlderLayoutIsReadAsItAlwaysWasAndVersionThreeReadsTheOldShapesTheSame() {
         for (HoleTemplate t : HoleTemplate.values()) {
+            if (t.ordinal() > HoleTemplate.SAFE_STRAIGHT.ordinal()) {
+                continue; // Adventure Golf's own shapes (terraces, ponds) are only ever read as version 3
+            }
             for (char tier : new char[]{'E', 'M', 'H'}) {
                 if (!t.fits(tier) && t != HoleTemplate.SAFE_STRAIGHT) {
                     continue;

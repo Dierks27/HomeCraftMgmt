@@ -248,7 +248,7 @@ class GolfValidatorV3Test {
         assertTrue(es.found(), "the island hole has a par line");
         GolfPlanner.Solved s = new GolfPlanner.Solved(0, island, es.strokes(), GolfPlanner.par(es.strokes()), -1,
                 es.witness());
-        Plan v2 = GolfPlanner.assemble(GolfKit.input(Slots.DAILY_GOLF, 1), List.of(s), 0);
+        Plan v2 = as(GolfPlanner.assemble(GolfKit.input(Slots.DAILY_GOLF, 1), List.of(s), 0), 2);
         int wx = island.laneMinX() - 1;
         int wz = island.teeZ() - 1; // beside the lane behind the tee: 8 from the green's lip
         List<BlockOp> ops = new ArrayList<>(v2.ops());

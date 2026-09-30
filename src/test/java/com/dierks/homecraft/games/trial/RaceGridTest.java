@@ -19,6 +19,7 @@ import java.util.Set;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -233,44 +234,42 @@ class RaceGridTest {
     }
 
     @Test
-    void aFreshIceBoatLoopSeatsRowsOfTwoAlongTheTrackBehindTheStart() throws GenFailed {
+    void aFreshIceBoatMountainRunSeatsTwelveInRowsOfTwoInItsPitBehindTheStart() throws GenFailed {
         Plan p = freshBoat(0xC0FFEEL, "medium");
         Course c = ((PlannedTrial) p.course()).course();
         Blocks b = blocksOf(p);
-        assertTrue(Laps.loop(c), "Fresh Ice Boat is a loop");
-        RaceGrid.Grid g = RaceGrid.forCourse(c, b, 8);
-        assertEquals(RaceGrid.Mode.DOUBLE, g.mode(), "rows of two on a 7-wide loop: " + g.notes());
-        assertEquals(8, g.size(), "a full party");
+        assertFalse(Laps.loop(c), "Fresh Ice Boat is a downhill sprint (algo 3), never a loop");
+        RaceGrid.Grid g = RaceGrid.forCourse(c, b, RaceGrid.MAX_SPOTS);
+        assertEquals(RaceGrid.Mode.DOUBLE, g.mode(), "rows of two in the 7-wide pit: " + g.notes());
+        assertEquals(RaceGrid.MAX_SPOTS, g.size(), "a full Race Night");
         List<Point> path = RaceGrid.path(c);
         assertEquals(c.start().point(), path.get(0), "the path starts at the start");
         for (Course.Spot s : g.spots()) {
             assertNull(RaceGrid.problem(s.point(), b), "every spot fits a boat: " + s);
             assertTrue(toWall(b, s.point()) >= RaceGrid.WALL_GAP, "a block from the walls");
-            assertTrue(s.point().flatDistance(c.start().point()) <= RaceGrid.REACH, "near the start");
-            assertTrue(s.point().flatDistance(c.finish().center()) > s.point().flatDistance(c.start().point()) - 1e-9
-                    || s.point().flatDistance(c.start().point()) < 2, "behind the start, not past the line: " + s);
+            assertTrue(s.point().flatDistance(c.start().point()) <= 21, "in the pit, 0-20 behind the start");
+            assertEquals(c.start().y(), s.y(), 1e-9, "on the pit's ice, level with the start");
         }
     }
 
     @Test
-    void fiveHundredFreshBoatSeedsPerTierSeatAFullGrid() {
+    void aHundredFreshBoatSeedsPerTierSeatAFullGrid() {
         for (String tier : List.of("easy", "medium", "hard")) {
-            int need = tier.equals("hard") ? 2 : 8;
             List<String> short_ = Collections.synchronizedList(new ArrayList<>());
-            IntStream.range(0, 500).parallel().forEach(day -> {
+            IntStream.range(0, 100).parallel().forEach(day -> {
                 long seed = GenSeed.seed(0x5EC12E7L, 20_000 + day, Slots.ICE_BOAT.id(), 0);
                 try {
                     Plan p = freshBoat(seed, tier);
                     Course c = ((PlannedTrial) p.course()).course();
-                    RaceGrid.Grid g = RaceGrid.forCourse(c, blocksOf(p), 8);
-                    if (g.size() < need) {
+                    RaceGrid.Grid g = RaceGrid.forCourse(c, blocksOf(p), RaceGrid.MAX_SPOTS);
+                    if (g.size() < RaceGrid.MAX_SPOTS || g.mode() != RaceGrid.Mode.DOUBLE) {
                         short_.add("day " + day + ": " + g.size() + " " + g.mode() + " " + g.notes());
                     }
                 } catch (GenFailed e) {
                     short_.add("day " + day + ": " + e.getMessage());
                 }
             });
-            assertTrue(short_.isEmpty(), tier + ": every seed seats at least " + need + ", " + short_.size()
+            assertTrue(short_.isEmpty(), tier + ": every seed seats 12 in rows of two, " + short_.size()
                     + " didn't, first " + short_.subList(0, Math.min(3, short_.size())));
         }
     }

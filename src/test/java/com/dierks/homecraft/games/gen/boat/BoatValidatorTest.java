@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 /**
  * The Ice Boat check's dispatcher (Course Variety §1.4, rule R5): a plan is judged by the rules of
  * its OWN algo. Algo 1 and 2 go to the frozen {@link LoopValidatorV2}, word for word; algo 3 on
- * goes to the Mountain Run's validator, and until that lands every such plan is refused.
+ * goes to the Mountain Run's {@link DownhillValidator}.
  */
 class BoatValidatorTest {
 
@@ -45,14 +45,24 @@ class BoatValidatorTest {
     }
 
     @Test
-    void anAlgoThreePlanIsRefusedUntilItsOwnValidatorLands() {
+    void anAlgoThreePlanIsJudgedByTheMountainRunsOwnCheck() {
         for (V2Fixtures.Fixture f : V2Fixtures.boats()) {
-            assertEquals(List.of(BoatValidator.NO_V3), BoatValidator.problems(withAlgo(f.plan(), 3), f.tierOrMix()),
-                    f + ": a v3 plan is never judged by the loop's rules, and never passes unproven");
+            Plan loop = withAlgo(f.plan(), 3);
+            List<String> v3 = BoatValidator.problems(loop, f.tierOrMix());
+            assertFalse(v3.isEmpty(), f + ": a flat loop is never a Mountain Run, so a v3 plan of one is refused");
+            assertEquals(DownhillValidator.problems(loop, f.tierOrMix()), v3,
+                    f + ": and refused by the downhill check's own words, never the loop's");
         }
-        assertEquals(List.of(BoatValidator.NO_V3), BoatValidator.problems(withAlgo(V2Fixtures.boat("hard").plan(), 4),
-                "hard"), "nor any later algo");
-        assertEquals("no v3 validator yet", BoatValidator.NO_V3, "said plainly to the admin");
+        Plan later = withAlgo(V2Fixtures.boat("hard").plan(), 4);
+        assertEquals(DownhillValidator.problems(later, "hard"), BoatValidator.problems(later, "hard"),
+                "a later algo goes to the downhill check too");
+        for (String tier : List.of("easy", "medium", "hard")) {
+            Plan run = HandRun.of(tier).plan();
+            assertEquals(List.of(), BoatValidator.problems(run, tier),
+                    tier + ": a proven Mountain Run passes through the dispatcher");
+            assertFalse(BoatValidator.problems(withAlgo(run, 2), tier).isEmpty(),
+                    tier + ": and the same blocks called algo 2 are judged as a loop, which they aren't");
+        }
     }
 
     @Test

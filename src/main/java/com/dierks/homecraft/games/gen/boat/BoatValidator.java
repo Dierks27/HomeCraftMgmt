@@ -15,8 +15,8 @@ import java.util.List;
  * <ul>
  *   <li><b>algo {@value LoopValidatorV2#LAST_ALGO} or older</b>, the flat loop:
  *       {@link LoopValidatorV2}, frozen and pinned by the serialised algo-2 plans;</li>
- *   <li><b>algo 3 on</b>, the Mountain Run: the downhill validator (V1-V13). Until it lands this
- *       answers {@value #NO_V3}, so no algo-3 plan is ever built unproven.</li>
+ *   <li><b>algo {@value DownhillValidator#FIRST_ALGO} on</b>, the Mountain Run:
+ *       {@link DownhillValidator} (V1-V13), which reads the plan's blocks alone.</li>
  * </ul>
  * Pure: no Bukkit.
  */
@@ -24,8 +24,6 @@ public final class BoatValidator {
 
     /** The most checkpoints a course may have. */
     public static final int MAX_CHECKPOINTS = Course.MAX_CHECKPOINTS;
-    /** What an algo-3 plan gets until its validator is switched on: a refusal, never a pass. */
-    public static final String NO_V3 = "no v3 validator yet";
 
     private BoatValidator() {
     }
@@ -49,11 +47,8 @@ public final class BoatValidator {
         return downhill(plan, tier);
     }
 
-    /**
-     * The Mountain Run's check (algo 3 on). The boat-proof package switches this on:
-     * {@code DownhillValidator.problems(plan, tier)}.
-     */
+    /** The Mountain Run's check (algo {@value DownhillValidator#FIRST_ALGO} on): {@link DownhillValidator}. */
     static List<String> downhill(Plan plan, String tier) {
-        return List.of(NO_V3);
+        return DownhillValidator.problems(plan, tier);
     }
 }

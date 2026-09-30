@@ -216,9 +216,10 @@ public final class AdventureKit {
             return new Box(minX, turf - 3, minZ, maxX, maxY, maxZ);
         }
 
-        /** A grid of this hole's blocks over the whole half. */
+        /** A grid of this hole's blocks over its plot (and 2 more round it), T - 4 to T + 11. */
         public PlanBlocks grid() {
-            PlanBlocks g = new PlanBlocks(HALF);
+            PlanBlocks g = new PlanBlocks(new Box(plotX - 2, turf - 4, plotZ - 2, plotX + HoleTemplate.PLOT_X + 1,
+                    turf + 11, plotZ + HoleTemplate.PLOT_Z + 1));
             for (Map.Entry<Long, String> e : blocks().entrySet()) {
                 int[] p = at.get(e.getKey());
                 g.set(p[0], p[1], p[2], PlanBlocks.code(e.getValue()));
@@ -361,6 +362,12 @@ public final class AdventureKit {
 
     /** {@link #plan(int, List, List)} with scenery: extra blocks {x, y, z} and their block data. */
     public static Plan plan(int algo, List<Drawn> holes, List<List<Putt>> lines, List<Map.Entry<int[], String>> extra) {
+        return plan(Slots.DAILY_GOLF, HALF, 7, algo, holes, lines, extra);
+    }
+
+    /** The same for {@code slot}'s {@code half}, from {@code seed}. */
+    public static Plan plan(Slots.Def slot, Box half, long seed, int algo, List<Drawn> holes, List<List<Putt>> lines,
+                            List<Map.Entry<int[], String>> extra) {
         List<String> palette = new ArrayList<>();
         Map<String, Short> index = new HashMap<>();
         List<BlockOp> ops = new ArrayList<>();
@@ -390,9 +397,9 @@ public final class AdventureKit {
             int[] p = e.getKey();
             ops.add(new BlockOp(p[0], p[1], p[2], state(palette, index, e.getValue())));
         }
-        GolfCourse gc = new GolfCourse(Slots.DAILY_GOLF.id(), Slots.DAILY_GOLF.name(), "", true, 1, course);
+        GolfCourse gc = new GolfCourse(slot.id(), slot.name(), "", true, 1, course);
         PlannedGolf planned = new PlannedGolf(gc, attempts, lines, expert, List.of());
-        return Plan.of(Slots.DAILY_GOLF.id(), algo, 7, HALF, palette, ops, signs, keep, planned, List.of(), 0);
+        return Plan.of(slot.id(), algo, seed, half, palette, ops, signs, keep, planned, List.of(), 0);
     }
 
     private static short state(List<String> palette, Map<String, Short> index, String block) {

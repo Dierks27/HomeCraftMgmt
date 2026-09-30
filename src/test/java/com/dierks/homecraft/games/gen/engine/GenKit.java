@@ -278,11 +278,21 @@ final class GenKit {
 
         @Override
         public BallPhysics.Blocks ballBlocks() {
+            return ballBlocks(false);
+        }
+
+        /**
+         * The blocks as the ball sees them: a bottom slab half a block, still water nothing to stand on
+         * and wet, and (with {@code sand}, a generated golf layout of algo 3 or later) smooth sandstone
+         * slow, as {@code LiveBlocks} reads them.
+         */
+        @Override
+        public BallPhysics.Blocks ballBlocks(boolean sand) {
             return new BallPhysics.Blocks() {
                 @Override
                 public double top(int x, int y, int z, double px, double pz) {
                     String b = blocks.get(pos(x, y, z));
-                    if (b == null) {
+                    if (b == null || b.startsWith("minecraft:water")) {
                         return NONE;
                     }
                     return b.contains("type=bottom") ? 0.5 : 1.0;
@@ -296,6 +306,12 @@ final class GenKit {
                     }
                     if (b.contains("ice")) {
                         return BallPhysics.Surface.ICE;
+                    }
+                    if (b.startsWith("minecraft:water")) {
+                        return BallPhysics.Surface.WATER;
+                    }
+                    if (sand && b.startsWith("minecraft:smooth_sandstone")) {
+                        return BallPhysics.Surface.SLOW;
                     }
                     return b.contains("soul_soil") ? BallPhysics.Surface.SLOW : BallPhysics.Surface.NORMAL;
                 }

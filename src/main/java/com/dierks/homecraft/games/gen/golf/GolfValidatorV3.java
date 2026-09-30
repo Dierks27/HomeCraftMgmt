@@ -725,9 +725,25 @@ final class GolfValidatorV3 {
         return code != PlanBlocks.LEAVES && code != PlanBlocks.WATER && PlanBlocks.top(code) == 1.0;
     }
 
-    /** Rule 9's second half: no canopy within 2 columns of the tee, the cup ring or the flag. */
+    /**
+     * Rule 9's second half: no canopy within 2 columns of the tee, the cup ring or the flag; and no
+     * leaves in the ball's layer (up to T + 2) anywhere in the hole: a canopy is above it, or the
+     * lane under it reads as a wall (a ball rolls under leaves the lane reading can't see past).
+     */
     private static void canopies(PlanBlocks grid, LaneMap lane, GolfCourse.Hole h, String name, List<String> out) {
         int turf = lane.turfY;
+        search:
+        for (int x = lane.minX; x < lane.minX + lane.sizeX; x++) {
+            for (int z = lane.minZ; z < lane.minZ + lane.sizeZ; z++) {
+                for (int y = turf - 3; y <= turf + LaneMap.WINDOW_UP; y++) {
+                    if (grid.get(x, y, z) == PlanBlocks.LEAVES) {
+                        out.add(name + " has leaves in the ball's layer at " + at(x, y, z) + " (a canopy starts "
+                                + HEADROOM + " above the lane)");
+                        break search;
+                    }
+                }
+            }
+        }
         int tx = (int) Math.floor(h.tee().x());
         int tz = (int) Math.floor(h.tee().z());
         int cx = h.cup().x();

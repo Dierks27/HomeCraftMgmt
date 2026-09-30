@@ -62,6 +62,55 @@ class PlanCheckTest {
     }
 
     @Test
+    void aBlockWhoseStatesWouldChangeOnItsOwnIsRefused() {
+        // Course Variety §1.1.1: Palette.stateProblems, next to the palette lint
+        Plan good = GenKit.plan(DEF, A, 11, 1);
+        for (String bad : List.of("minecraft:oak_leaves[distance=2]", "minecraft:birch_log[axis=x]",
+                "minecraft:smooth_sandstone_slab[type=top]")) {
+            List<String> palette = new ArrayList<>(good.palette());
+            palette.add(bad);
+            Plan p = Plan.of(good.slot(), 1, 11, A, palette, good.ops(), good.signs(), List.of(), good.course(),
+                    List.of(), 0);
+            List<String> problems = PlanCheck.problems(p, DEF, A);
+            assertEquals(1, problems.size(), bad + ": one problem: " + problems);
+            assertTrue(problems.get(0).startsWith("the palette's '" + bad + "'"), "naming the entry: " + problems);
+        }
+        List<String> palette = new ArrayList<>(good.palette());
+        palette.add(com.dierks.homecraft.games.gen.api.Palette.leaves("cherry", 3));
+        palette.add(com.dierks.homecraft.games.gen.api.Palette.log("cherry"));
+        palette.add(com.dierks.homecraft.games.gen.api.Palette.SAND_SLAB);
+        Plan fine = Plan.of(good.slot(), 1, 11, A, palette, good.ops(), good.signs(), List.of(), good.course(),
+                List.of(), 0);
+        assertEquals(List.of(), PlanCheck.problems(fine, DEF, A), "the planners' own leaves, logs and slabs pass");
+    }
+
+    @Test
+    void aMovedGolfPlanIsProvenAgainWhereItWillStand() {
+        // Course Variety §1.2: a moved golf plan runs golf's quick check (ponds sealed, witness lines replayed)
+        com.dierks.homecraft.games.gen.V2Fixtures.Fixture f = com.dierks.homecraft.games.gen.V2Fixtures.named("golf-3");
+        Box to = Slots.CLASSIC_GOLF.half('B');
+        Box at = Box.sized(to.minX(), to.minY(), to.minZ(), f.plan().half().sizeX(), f.plan().half().sizeY(),
+                f.plan().half().sizeZ());
+        Plan moved = com.dierks.homecraft.games.gen.api.PlanShift.to(f.plan(), at);
+        assertEquals(List.of(), PlanCheck.movedProblems(moved, Slots.TINY_GOLF), "a sound course is proven there");
+        GolfCourse.Hole h = f.golfCourse().course().holes().get(0);
+        int dx = at.minX() - f.plan().half().minX();
+        int dz = at.minZ() - f.plan().half().minZ();
+        int dy = at.minY() - f.plan().half().minY();
+        List<BlockOp> ops = new ArrayList<>(moved.ops());
+        ops.removeIf(op -> op.x() == h.cup().x() + dx && op.y() == h.cup().y() + dy && op.z() == h.cup().z() + dz);
+        Plan broken = Plan.of(moved.slot(), moved.algo(), moved.seed(), moved.half(), moved.palette(), ops,
+                moved.signs(), moved.keepClear(), moved.course(), moved.summary(), moved.work());
+        List<String> refused = PlanCheck.movedProblems(broken, Slots.TINY_GOLF);
+        assertTrue(!refused.isEmpty(), "a course whose first cup is gone is refused wherever it would go");
+        assertTrue(refused.stream().anyMatch(r -> r.contains("hole 1")), "naming the hole: " + refused);
+        assertEquals(refused, PlanCheck.movedProblems(broken, Slots.CLASSIC_GOLF), "as Classic Golf's too");
+        assertEquals(List.of(), PlanCheck.movedProblems(broken, Slots.DAILY_PARKOUR_EASY),
+                "the dry generators' moved plans need only the shared checks, as before");
+        assertEquals(List.of(), PlanCheck.movedProblems(broken, Slots.ICE_BOAT), "the ice boat's too");
+    }
+
+    @Test
     void aGolfPlanBecomesAGolfRowThatReadsBackWithItsTag() {
         Slots.Def def = Slots.TINY_GOLF;
         Box half = def.half('A');

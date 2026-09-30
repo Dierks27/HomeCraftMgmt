@@ -139,6 +139,22 @@ class SlotsTest {
     }
 
     @Test
+    void onlyDroppersAndGolfMayHoldWaterTheBoatStaysDry() {
+        // Course Variety §1.2: THE one predicate every water gate asks
+        for (Slots.Def d : List.of(Slots.EASY_DROPPER, Slots.FRESH_DROPPER, Slots.CLASSIC_DROPPER, Slots.DAILY_GOLF,
+                Slots.TINY_GOLF, Slots.CLASSIC_GOLF)) {
+            assertTrue(d.mayHoldWater(), d.id() + " may hold water (pools, ponds)");
+        }
+        for (Slots.Def d : List.of(Slots.DAILY_PARKOUR_EASY, Slots.DAILY_PARKOUR_MEDIUM, Slots.DAILY_PARKOUR_HARD,
+                Slots.SKY_RINGS, Slots.ICE_BOAT, Slots.CLASSIC_PARKOUR, Slots.CLASSIC_RINGS)) {
+            assertFalse(d.mayHoldWater(), d.id() + " stays dry");
+        }
+        for (Slots.Def d : Slots.ALL) {
+            assertEquals(d.dropper() || d.golf(), d.mayHoldWater(), d.id() + ": exactly a dropper or golf");
+        }
+    }
+
+    @Test
     void aDropperTakesAMixOfUpToFiveLevels() {
         assertTrue(Slots.FRESH_DROPPER.dropper() && Slots.FRESH_DROPPER.mixed(), "a dropper is set by a mix");
         assertTrue(Slots.DAILY_GOLF.mixed() && !Slots.DAILY_GOLF.dropper(), "golf is mixed but no dropper");

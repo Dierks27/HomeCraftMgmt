@@ -75,13 +75,17 @@ class DropperEngineTest {
     }
 
     @Test
-    void onlyADroppersPlanMayUseStillPoolWater() {
+    void onlyADroppersOrAGolfPlanMayUseStillPoolWater() {
         List<String> palette = List.of("minecraft:glass", "minecraft:water[level=0]");
         assertEquals(List.of(), PlanCheck.paletteProblems(palette, Slots.FRESH_DROPPER), "a dropper's pool water is fine");
         assertEquals(List.of(), PlanCheck.paletteProblems(palette, Slots.CLASSIC_DROPPER), "and a Classic Dropper's");
-        for (Slots.Def d : List.of(Slots.DAILY_PARKOUR_EASY, Slots.SKY_RINGS, Slots.DAILY_GOLF, Slots.ICE_BOAT)) {
+        for (Slots.Def d : List.of(Slots.DAILY_GOLF, Slots.TINY_GOLF, Slots.CLASSIC_GOLF)) {
+            assertEquals(List.of(), PlanCheck.paletteProblems(palette, d), d.id() + ": golf's ponds (Course Variety §1.2)");
+        }
+        for (Slots.Def d : List.of(Slots.DAILY_PARKOUR_EASY, Slots.DAILY_PARKOUR_HARD, Slots.SKY_RINGS,
+                Slots.CLASSIC_PARKOUR, Slots.CLASSIC_RINGS, Slots.ICE_BOAT)) {
             assertEquals(List.of("minecraft:water[level=0]"), PlanCheck.paletteProblems(palette, d),
-                    d.id() + " still refuses water");
+                    d.id() + " still refuses water (the ice boat stays dry)");
         }
         assertEquals(List.of("minecraft:water[level=3]"), PlanCheck.paletteProblems(List.of("minecraft:water[level=3]"),
                 Slots.FRESH_DROPPER), "flowing water is refused even for a dropper");

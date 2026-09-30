@@ -19,7 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The last word on a built course (GEN-SPEC §3.3 step 6, §3.5): each golf hole's witness line must
  * hole out in exactly its own number of putts on the blocks as they are; and a layout from an older
- * planner gets the quick check of a solid block under every place a player or ball must stand.
+ * planner gets the quick check of a solid block under every place a player or ball must stand (every
+ * boat checkpoint too, Course Variety §2.12), and on golf every pond in a hole's plot still sealed
+ * (§1.3).
  */
 class LiveProofTest {
 
@@ -134,5 +136,82 @@ class LiveProofTest {
                 true, false, 1);
         assertEquals(LiveProof.structure(c, solid), LiveProof.structure(c, solid, water),
                 "every other kind ignores the water check");
+    }
+
+    @Test
+    void aBoatWantsSolidIceUnderItsStartEveryCheckpointAndItsFinish() {
+        // Course Variety §2.12: a boat's marks sit on the ice (every v2 checkpoint does), so BOAT joins PARKOUR
+        FakeWorld w = new FakeWorld("games");
+        for (int x = 0; x <= 40; x++) {
+            w.put(x, 99, 10, "minecraft:packed_ice");
+        }
+        LiveProof.Solid solid = (x, y, z) -> w.at(x, y, z) != null;
+        Course boat = new Course("fresh_boat", TrialKind.BOAT, "Ice Boat", Tier.MEDIUM, "games",
+                new Course.Spot(2.5, 100, 10.5, 270f, 0f), List.of(new Course.Mark(12.5, 100, 10.5, 4),
+                new Course.Mark(24.5, 100, 10.5, 4)), new Course.Mark(36.5, 100, 10.5, 4.5), 96.0, 1, true, false, 1);
+        assertEquals(List.of(), LiveProof.structure(boat, solid), "the ice is under every mark");
+        w.blocks.remove(GenKit.pos(24, 99, 10));
+        assertEquals(List.of("nothing solid under checkpoint 2"), LiveProof.structure(boat, solid),
+                "a boat mark with nothing under it fails");
+        w.blocks.remove(GenKit.pos(36, 99, 10));
+        assertEquals(List.of("nothing solid under checkpoint 2", "nothing solid under the finish"),
+                LiveProof.structure(boat, solid), "and so does the finish");
+        assertEquals(LiveProof.structure(boat, solid), LiveProof.structure(boat, solid, (x, y, z) -> false),
+                "a boat has no water to look for");
+    }
+
+    /** A 3 x 3 pond at FLOOR - 1 in a turf plot (x 0-12, z 0-20), floored and walled. */
+    private static FakeWorld pondPlot() {
+        FakeWorld w = new FakeWorld("games");
+        for (int x = 0; x <= 12; x++) {
+            for (int z = 0; z <= 20; z++) {
+                w.put(x, FLOOR - 2, z, "minecraft:blue_concrete");
+                boolean pond = x >= 5 && x <= 7 && z >= 8 && z <= 10;
+                w.put(x, FLOOR - 1, z, pond ? "minecraft:water[level=0]" : "minecraft:lime_concrete");
+            }
+        }
+        return w;
+    }
+
+    @Test
+    void theGolfQuickCheckScansEveryHolesPlotForAnUnsealedPond() {
+        FakeWorld w = pondPlot();
+        LiveProof.Solid solid = (x, y, z) -> w.at(x, y, z) != null;
+        LiveProof.Solid water = (x, y, z) -> w.at(x, y, z) != null && w.at(x, y, z).startsWith("minecraft:water");
+        w.put(3, FLOOR - 2, 3, "minecraft:black_concrete");
+        GolfCourse golf = new GolfCourse("fresh_golf", "Golf of the Week", "games", true, 1, List.of(new GolfCourse.Hole(
+                new GolfCourse.Tee(6.5, FLOOR, 2.5, 0f), new GolfCourse.Spot(3, FLOOR - 2, 3), 3,
+                new GolfCourse.Spot(1, FLOOR - 3, 1), new GolfCourse.Spot(11, FLOOR + 4, 19))));
+        assertEquals(List.of(), LiveProof.structure(golf, solid, water), "a sealed pond in the plot is fine");
+        assertEquals(List.of(), LiveProof.pools(new com.dierks.homecraft.games.gen.api.Box(0, FLOOR - 3, 0, 12,
+                FLOOR + 3, 20), solid, water), "the scan on its own");
+
+        w.blocks.remove(GenKit.pos(8, FLOOR - 1, 9)); // the turf beside the pond is gone
+        List<String> leak = LiveProof.structure(golf, solid, water);
+        assertEquals(1, leak.size(), "one problem: " + leak);
+        assertTrue(leak.get(0).startsWith("hole 1: 1 water block has air beside or under it (first at 7 "
+                + (FLOOR - 1) + " 9)"), "the hole and the first open block are named: " + leak);
+        assertEquals(List.of(), LiveProof.structure(golf, solid),
+                "without a way to see water only the tee and cup are checked, as before");
+        assertEquals(List.of(), LiveProof.structure(golf, solid, null), "and so with none given");
+
+        w.put(8, FLOOR - 1, 9, "minecraft:lime_concrete");
+        w.blocks.remove(GenKit.pos(6, FLOOR - 2, 9)); // a hole in the pond's floor
+        assertEquals(1, LiveProof.structure(golf, solid, water).size(), "water with nothing under it is caught");
+
+        FakeWorld far = pondPlot();
+        far.blocks.remove(GenKit.pos(8, FLOOR - 1, 9));
+        LiveProof.Solid farSolid = (x, y, z) -> far.at(x, y, z) != null;
+        LiveProof.Solid farWater = (x, y, z) -> far.at(x, y, z) != null
+                && far.at(x, y, z).startsWith("minecraft:water");
+        GolfCourse elsewhere = new GolfCourse("fresh_golf", "Golf of the Week", "games", true, 1, List.of(
+                new GolfCourse.Hole(new GolfCourse.Tee(6.5, FLOOR, 30.5, 0f), new GolfCourse.Spot(6, FLOOR - 2, 40),
+                        3, new GolfCourse.Spot(1, FLOOR - 3, 28), new GolfCourse.Spot(11, FLOOR + 4, 45))));
+        far.put(6, FLOOR - 2, 40, "minecraft:black_concrete");
+        far.put(6, FLOOR - 1, 30, "minecraft:lime_concrete");
+        assertEquals(List.of(), LiveProof.structure(elsewhere, farSolid, farWater),
+                "only each hole's own plot is scanned (bounded)");
+        assertEquals(1, LiveProof.pools(new com.dierks.homecraft.games.gen.api.Box(0, 0, 0, 512, 0, 511), farSolid,
+                farWater).size(), "a box too big to scan says so");
     }
 }

@@ -1832,7 +1832,8 @@ applied twice. Something delivered in the middle of a game (an auction win, a Mi
 written over by a game's items: it moves to a free slot and comes home with them. Nobody lands
 home with a fall from a game: leaving, being sent home or disconnecting halfway down a drop ends
 with no fall damage. After a crash, a Clubhouse watcher whose things can't be put back yet is never
-left in spectator mode. A game refuses to start while they hold something on the cursor ("Put down what
+left in spectator mode, and never dropped from where they were flying: they are brought down to the
+Games world's spawn first. A game refuses to start while they hold something on the cursor ("Put down what
 you're holding first."). `/hcm leave` and `/hcm games saved` work even while the games are off,
 and an admin's `restore` or `return` says what really happened.
 

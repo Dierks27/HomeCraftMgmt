@@ -1208,15 +1208,15 @@ final class SessionCore<P, I> {
      * in their own data) in a Games world: an admin looking round the courses in their own spectator
      * mode is left alone.
      *
-     * <p>Never in mid-air, though (final gate #19, second pass). Where a crash leaves a watcher is where
-     * Paper's autosave found them flying (over Sky Rings, in a Dropper shaft, inside terrain), and
-     * outside a session nothing spares a fall there: the mode change alone would drop them, or leave
-     * them in a wall. As {@link #land} does for a live watcher, they are brought down to a floor first, the
-     * spawn of the world they are in (the landing a recovery already uses), by our own trip (armed,
-     * landing with no fall), and only then put in adventure mode. While it is on its way they are
-     * still a spectator, who can't fall, and in {@code recovering}, so no other recovery starts. A trip
-     * that fails, a world with no spawn or a server that is stopping leaves them in spectator mode for
-     * the next join or an admin: flying is better than falling.
+     * <p>Never in mid-air, though (final gate #19, second pass). Where a crash leaves a watcher is
+     * where Paper's autosave found them flying (over Sky Rings, in a Dropper shaft, inside terrain),
+     * and outside a session nothing spares a fall there: the mode change alone would drop them, or
+     * leave them in a wall. As {@link #land} does for a live watcher, they are brought down to a
+     * floor first, the spawn of the world they are in (the landing a recovery already uses), by our
+     * own trip (armed, landing with no fall), and only then put in adventure mode. On the way they
+     * are still a spectator, who can't fall, and in {@code recovering}, so no other recovery starts.
+     * A trip that fails, a world with no spawn or a server that is stopping leaves them in spectator
+     * mode for the next join or an admin: flying is better than falling.
      */
     private void unstick(P p, SavedState row) {
         if (!port.online(p) || !SPECTATOR.equals(port.gameMode(p))) {

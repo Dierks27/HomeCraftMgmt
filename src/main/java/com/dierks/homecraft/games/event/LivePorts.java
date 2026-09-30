@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.event;
 
 import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.PlayGate;
 import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.gen.NewCoursesNudge;
 import com.dierks.homecraft.games.trial.Course;
@@ -70,6 +71,9 @@ final class LivePorts implements NightPorts {
     @Override
     public boolean free(UUID player) {
         Player p = Bukkit.getPlayer(player);
+        if (p != null && ClubNight.waiting(games(), player)) {
+            return true; // WP-CH: waiting in the Clubhouse: seated from there
+        }
         return p != null && games().sessions().session(p) == null && games().sessions().home(p);
     }
 
@@ -147,6 +151,35 @@ final class LivePorts implements NightPorts {
             }
         }
     }
+
+    // ---- WP-CH: the Clubhouse ----------------------------------------------------------------------
+
+    @Override
+    public boolean clubhouse(String trackWorld) {
+        return ClubNight.takes(games(), trackWorld);
+    }
+
+    @Override
+    public void toClubhouse(UUID racer, String line) {
+        TimeTrials t = game.trials();
+        if (t != null) {
+            t.endRaceToClubhouse(racer, EndReason.FINISH, line);
+            return;
+        }
+        home(racer, EndReason.FINISH, line);
+    }
+
+    @Override
+    public void clubhouseResults(NightRunner night) {
+        ClubNight.results(games(), night);
+    }
+
+    @Override
+    public void offerClubhouse(UUID racer) {
+        ClubNight.offer(games(), Bukkit.getPlayer(racer));
+    }
+
+    // ---- end WP-CH ------------------------------------------------------------------------------
 
     @Override
     public boolean reserve(String courseId, Object holder, String line) {
@@ -240,8 +273,7 @@ final class LivePorts implements NightPorts {
     public void announce(Announcer.Line line, String text, Collection<UUID> racers) {
         for (Player p : new ArrayList<>(Bukkit.getOnlinePlayers())) {
             UUID id = p.getUniqueId();
-            Announcer.Who who = new Announcer.Who(newsOn(id), games().gate().worldAllowed(p.getWorld()),
-                    games().sessions().session(p) != null, racers.contains(id));
+            Announcer.Who who = who(games(), p, newsOn(id), racers.contains(id));
             if (!game.announcer().tell(nightId, id, line, who)) {
                 continue;
             }
@@ -251,6 +283,15 @@ final class LivePorts implements NightPorts {
             }
             p.sendMessage(c);
         }
+    }
+
+    /**
+     * Who {@code p} is to Race Night's news: the one place a chat line and the join bar ask (the final
+     * gate's #1: a player without {@code hcm.games.play} is never nudged, as by every other games nudge).
+     */
+    static Announcer.Who who(GamesService games, Player p, boolean newsOn, boolean racer) {
+        return new Announcer.Who(newsOn, p.hasPermission(PlayGate.PERMISSION_PLAY),
+                games.gate().worldAllowed(p.getWorld()), games.sessions().session(p) != null, racer);
     }
 
     /** The player's news toggle ({@code /hcm play news off} silences Race Night too). */
@@ -273,11 +314,11 @@ final class LivePorts implements NightPorts {
         return best == null ? 0L : best;
     }
 
+    /** By id: the racer may be offline or watching live when the night settles (fx2-C #6). */
     @Override
     public void progress(UUID player, boolean won) {
-        Player p = Bukkit.getPlayer(player);
-        if (p != null) {
-            games().tellProgress(g -> g.raceNightFinished(p, won));
+        if (player != null) {
+            games().tellProgress(g -> g.raceNightFinished(player, won));
         }
     }
 

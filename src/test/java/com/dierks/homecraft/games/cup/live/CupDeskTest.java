@@ -170,6 +170,15 @@ class CupDeskTest {
         public Logger logger() {
             return logger;
         }
+
+        /** The owner's restarts: 04:00 and 4:00 PM, held 5 minutes. */
+        com.dierks.homecraft.games.RestartHold hold = new com.dierks.homecraft.games.RestartHold(
+                List.of(LocalTime.of(4, 0), LocalTime.of(16, 0)), CHICAGO, 5);
+
+        @Override
+        public com.dierks.homecraft.games.RestartHold restartHold() {
+            return hold;
+        }
     }
 
     @BeforeEach
@@ -356,6 +365,45 @@ class CupDeskTest {
         assertEquals(20, balance(alice), "in full, with no top-up");
         assertEquals("&eNobody else entered the Weekly Cup on Lava Leap, so your 5 tokens came back.", queued(alice),
                 "and told why");
+    }
+
+    /**
+     * WP-ADM checklist fix: after an admin's early {@code /hcm games cup settle}, the course screen
+     * used to lose its Cup item. It stays, saying the week's Cup is already paid out (WEEK_OVER's short
+     * form, in the NAME for Bedrock); the tile and the website leave it out, since nothing is running;
+     * a Cup called off stays hidden as before.
+     */
+    @Test
+    void aCupPaidOutEarlyStillShowsOnTheCourseScreenSayingSo() throws Exception {
+        switchOn(lava);
+        threeRace(lava);
+        assertTrue(desk.view(lava, alice).shown(), "running: shown");
+        CupDesk.Closed closed = desk.settle(desk.key(lava.id())); // the admin's early settle
+        assertNotNull(closed, "settled");
+        assertEquals(CupPlan.Outcome.PRIZES, closed.plan().outcome(), "paid out mid-week");
+
+        CupDesk.View v = desk.view(lava, alice);
+        assertEquals(CupRefusal.WEEK_OVER, v.refusal(), "nobody can enter a Cup already paid out");
+        assertTrue(v.settledEarly(), "this week's Cup was settled early");
+        assertTrue(v.shown(), "and the course screen still shows its item");
+        assertEquals("&7Weekly Cup &8- &7already paid out this week", CupWords.buttonName(v),
+                "saying so in its NAME (Bedrock)");
+        assertEquals(List.of("&7This week's Cup on this course is already paid out. It's back next week.",
+                "&eClick to see the Cup"), CupWords.buttonLore(v, "Mon 5 Oct 4:00 AM"),
+                "its lore doesn't promise a payout at the week's end");
+        assertTrue(desk.view(lava, null).shown(), "for someone who wasn't in it too");
+        assertEquals("", CupWords.tileSuffix(v), "the tile's NAME leaves out a Cup that is over");
+        assertEquals(List.of(), CupWords.tileLines(v), "and so does its lore");
+
+        Course cliffs = handBuilt("cliffs", "Cliffs");
+        host.put(cliffs);
+        switchOn(cliffs);
+        assertNull(desk.enter(bob, cliffs));
+        assertNotNull(desk.voidNow(cliffs.id(), CupPlan.VoidReason.CLOSED, "Cliffs"), "a Cup called off");
+        CupDesk.View off = desk.view(cliffs, bob);
+        assertEquals(CupRefusal.CALLED_OFF, off.refusal(), "called off, not paid out");
+        assertFalse(off.settledEarly(), "a Cup called off isn't one settled early");
+        assertFalse(off.shown(), "and stays hidden, as before");
     }
 
     @Test
@@ -653,5 +701,24 @@ class CupDeskTest {
         assertTrue(CupDesk.layout(r).same(CupDesk.layout(r.withName("Sky Rings!"))), "a heal of the same layout");
         assertFalse(CupDesk.layout(r).same(CupDesk.layout(rings(W, 1, "p"))), "a reroll");
         assertFalse(CupDesk.layout(r).same(CupDesk.layout(rings(W, 0, "q"))), "a promoted other layout");
+    }
+
+    /**
+     * fx2-C #12: at 03:56 on the Monday the Cup is paid (the 04:00 restart is holding every run), an
+     * entry could never set a Cup time: it is refused, nothing is paid, and the screen says why.
+     */
+    @Test
+    void anEntryInTheLastRestartHoldBeforeThePayoutIsRefusedAndNothingIsPaid() throws Exception {
+        switchOn(lava);
+        host.now = ROLLOVER - 4 * 60_000L; // Monday 03:56
+        int before = tokens.get(alice).tokens();
+        assertEquals(CupRefusal.CLOSING, desk.enter(alice, lava), "no run could set a Cup time before 04:00");
+        assertEquals(before, tokens.get(alice).tokens(), "nothing was taken");
+        assertEquals(0, dao.entries(desk.key(lava.id())).size(), "and no entry was written");
+        CupDesk.View v = desk.view(lava, alice);
+        assertEquals(CupRefusal.CLOSING, v.refusal(), "the screen shows why");
+        assertTrue(CupWords.enterName(v).contains("nearly over"), "in plain words: " + CupWords.enterName(v));
+        host.now = ROLLOVER - 6 * 60_000L; // 03:54
+        assertNull(desk.enter(alice, lava), "a minute before the hold, entries are still taken");
     }
 }

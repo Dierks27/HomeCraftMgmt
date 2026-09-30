@@ -16,6 +16,9 @@ import com.dierks.homecraft.games.SkillRewards;
 import com.dierks.homecraft.games.arena.ArenaRegions;
 import com.dierks.homecraft.games.arena.FallingFloors;
 import com.dierks.homecraft.games.arena.FallingFloorsSettings;
+import com.dierks.homecraft.games.clubhouse.Clubhouse;
+import com.dierks.homecraft.games.clubhouse.ClubhouseRegions;
+import com.dierks.homecraft.games.clubhouse.ClubhouseSettings;
 import com.dierks.homecraft.games.gen.admin.GenAdmin;
 import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.Edition;
@@ -106,7 +109,7 @@ public final class DailyCourses implements Game {
 
     public DailyCourses(GameContext ctx) {
         this.ctx = ctx;
-        this.admin = new GenAdmin(() -> engine, log());
+        this.admin = new GenAdmin(() -> engine, log(), this::testPreview);
     }
 
     // ---- the Game ---------------------------------------------------------------------------------
@@ -299,9 +302,9 @@ public final class DailyCourses implements Game {
     }
 
     /**
-     * The boxes Fresh Courses keeps its slots and keep area apart from ({@link GenHost#extras}): the
-     * Falling Floors arena as configured ({@code games.falling_floors.origin}), on or off, since its
-     * blocks may stand. None when the settings can't be read.
+     * The Falling Floors arena's box, one of those Fresh Courses keeps its slots and keep area apart
+     * from ({@link #extraBoxes}): as configured ({@code games.falling_floors.origin}), on or off, since
+     * its blocks may stand. None when the settings can't be read.
      */
     public static List<Regions.Extra> arenaExtras(FallingFloorsSettings ff) {
         try {
@@ -311,9 +314,34 @@ public final class DailyCourses implements Game {
         }
     }
 
+    /**
+     * Every box Fresh Courses keeps its slots and keep area apart from ({@link GenHost#extras}, and
+     * {@code /hcm games check}): the Falling Floors arena ({@link #arenaExtras}) and the Clubhouse's
+     * generated room ({@link ClubhouseRegions#extras}, {@code games.clubhouse.origin}), each as
+     * configured, on or off, since its blocks may stand. A box whose settings can't be read is left out.
+     */
+    public static List<Regions.Extra> extraBoxes(FallingFloorsSettings ff, ClubhouseSettings clubhouse) {
+        List<Regions.Extra> out = new ArrayList<>(arenaExtras(ff));
+        out.addAll(ClubhouseRegions.extras(clubhouse)); // WP-CH: the Clubhouse's box
+        return List.copyOf(out);
+    }
+
     /** The running engine, or {@code null} while Fresh Courses is off. */
     public GenService engine() {
         return engine;
+    }
+
+    /**
+     * {@code /hcm games gen test} (WP-ADM): Time Trials' test run on a preview, inside Time Trials'
+     * guard, so anything it throws closes only Time Trials, as a test run from its own command would.
+     */
+    private void testPreview(Player player, com.dierks.homecraft.games.trial.Course course, Runnable again) {
+        GamesService g = games();
+        if (!(g.game(TimeTrials.SPEC.id()) instanceof TimeTrials trials) || g.failed(trials)) {
+            player.sendMessage(Text.of("&cTime trials are closed right now, so there's nothing to run it with."));
+            return;
+        }
+        g.guard(trials, () -> trials.testPreview(player, course, again));
     }
 
     /**
@@ -468,7 +496,7 @@ public final class DailyCourses implements Game {
 
         @Override
         public List<Regions.Extra> extras() {
-            return arenaExtras(games().settings(FallingFloors.SPEC));
+            return extraBoxes(games().settings(FallingFloors.SPEC), games().settings(Clubhouse.SPEC));
         }
 
         @Override

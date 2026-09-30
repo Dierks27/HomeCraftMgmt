@@ -96,4 +96,13 @@ public interface RaceLink {
     default double standRadius() {
         return 4;
     }
+
+    /**
+     * WP-CH: whether a racer done with this race goes to the Clubhouse instead of home (at the line
+     * with no stand to wait on). A party race says yes while the Clubhouse is open and
+     * {@code party_after} is on; everything else, as before, no.
+     */
+    default boolean clubhouseAfter() {
+        return false;
+    }
 }

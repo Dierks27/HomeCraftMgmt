@@ -92,6 +92,8 @@ final class RaceRun {
     boolean noPush;
     /** What the next trial tick does ({@link Due}). */
     Due due = Due.NONE;
+    /** WP-CH: the trip "home" goes to the Clubhouse instead (its session handed over in place). */
+    boolean toClub;
     /** Going home: why, and the line they read (or {@code null}). */
     EndReason why;
     String line;

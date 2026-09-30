@@ -3,7 +3,10 @@ package com.dierks.homecraft.games.trial;
 import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.NoPush;
+import com.dierks.homecraft.games.PlayGate;
 import com.dierks.homecraft.games.Refusal;
+import com.dierks.homecraft.games.clubhouse.ClubDoor;
+import com.dierks.homecraft.games.clubhouse.Clubhouse;
 import com.dierks.homecraft.games.world.KitItems;
 import com.dierks.homecraft.games.world.Session;
 import com.dierks.homecraft.util.Sounds;
@@ -114,7 +117,17 @@ final class RaceMode {
 
     // ---- seating ------------------------------------------------------------------------------
 
-    /** {@code TimeTrials.race}: seat a racer (see there). {@code null} when they are on their way in. */
+    /**
+     * {@code TimeTrials.race}: seat a racer (see there). {@code null} when they are on their way in.
+     *
+     * <p>A racer seated from home passes the play gate's permission step first (the round-2 audit's G1
+     * #3, as a rider at the boat does): whoever asks (Race Night's grid call, its late joiner or a racer
+     * back after a disconnect, a party race's start), a racer who lost {@code hcm.games.play} since
+     * joining is refused with the gate's own line before anything of theirs is saved or moved. Only the
+     * permission: a joined Race Night racer is taken to the track from whatever world they are in, by
+     * design, and a party race ran the whole gate at its start. A racer waiting in the Clubhouse is in a
+     * session already and is handed over from there.
+     */
     Refusal race(Player p, Course base, Course raced, Course.Spot grid, Location stand, RaceLink link) {
         if (p == null || !p.isOnline() || base == null || raced == null || link == null) {
             return Refusal.of("That racer isn't here.");
@@ -122,9 +135,17 @@ final class RaceMode {
         if (!alive(link)) {
             return Refusal.of("That race is over.");
         }
+        ClubDoor club = door(); // WP-CH: a racer waiting in the Clubhouse is seated from there, in their session
+        boolean fromClub = club != null && club.seatable(p.getUniqueId());
+        if (!fromClub && !p.hasPermission(PlayGate.PERMISSION_PLAY)) {
+            return Refusal.NO_GAMES;
+        }
         World world = base.ready() ? Bukkit.getWorld(base.world()) : null;
         if (world == null || raced.start() == null) {
             return Refusal.of("That course isn't ready right now.");
+        }
+        if (fromClub) {
+            return ClubRaces.seat(trials, this, club, p, base, raced, grid, stand, link, world);
         }
         Refusal closed = trials.sessions().entryRefusal(trials);
         if (closed != null) {
@@ -247,7 +268,7 @@ final class RaceMode {
         if (warm && run.beginWarmup(until)) {
             run.progress = new Progress(run.course, TimeTrials.position(p, run), System.nanoTime());
             run.phase = TrialRun.Phase.RUNNING;
-            p.getInventory().setItem(Warmup.KIT_SLOT, KitItems.item(trials, Warmup.READY, Material.LIME_DYE,
+            KitItems.put(p.getInventory(), Warmup.KIT_SLOT, KitItems.item(trials, Warmup.READY, Material.LIME_DYE,
                     Warmup.READY_NAME, "&7Tap when you're set.", "&7The race starts when the warm-up",
                     "&7ends, or everyone is ready."));
             long left = Warmup.secondsLeft(now, run.warmupEnds);
@@ -282,6 +303,9 @@ final class RaceMode {
             case HOME -> {
                 rr.due = RaceRun.Due.NONE;
                 rr.ended = true;
+                if (rr.toClub && ClubRaces.toClub(trials, this, door(), p, run, rr.line)) {
+                    return true; // WP-CH: to the Clubhouse instead of home
+                }
                 if (rr.line != null && !rr.line.isBlank()) {
                     p.sendMessage(Text.of(rr.line));
                 }
@@ -399,6 +423,20 @@ final class RaceMode {
             toStand(p, run);
             p.sendMessage(Text.of(BACK_TO_STAND));
         }
+        holdRider(trials.riders(), p.getUniqueId(), rr, radius, p.getWorld());
+    }
+
+    /**
+     * A parked racer's rider is held to the SAME stand by the SAME rule as the racer: the race's own
+     * {@link RaceRun#offStand(Point, double)} with its {@code stand_radius} (final gate, group B #15). Kept
+     * apart from {@link #onStand} (which needs a live player) so a test pins the wiring.
+     */
+    static void holdRider(Riders riders, UUID driver, RaceRun rr, double radius, World world) {
+        if (riders == null || rr == null || rr.stand == null) {
+            return;
+        }
+        Location stand = new Location(world, rr.stand.x(), rr.stand.y(), rr.stand.z());
+        riders.onStand(driver, at -> rr.offStand(TimeTrials.point(at), radius), stand);
     }
 
     // ---- the line -------------------------------------------------------------------------------
@@ -418,8 +456,12 @@ final class RaceMode {
                 run.progress.reachedTargets(), run.stalls);
         FairPlay.Verdict verdict = FairPlay.judge(false, run.voided, stale, ms,
                 run.course.minSecondsOr(s.minSeconds()), tooFast);
+        // WP-CH (the review's #12): with rider_runs_count false a ride with a rider is just for fun: the
+        // place in the race stands, but it is never the course's normal run (no board, record, rewards,
+        // Cup time or quest step)
+        boolean fun = verdict.counts() && trials.justForFun(p, run);
         boolean normalRun = call(rr.link, rr.link::normalRun, false); // guarded: a link that throws is over
-        RaceRun.Line line = rr.line(verdict.counts(), normalRun);
+        RaceRun.Line line = rr.line(verdict.counts(), normalRun && !fun);
         if (!line.report()) {
             return; // this race's line was crossed already
         }
@@ -428,10 +470,12 @@ final class RaceMode {
             p.sendMessage(Text.of(voidLine(verdict.reason())));
             TimeTrials.title(p, "&f" + TrialText.time(ms), "&cThat race didn't count", 40);
             Sounds.miss(p);
+        } else if (fun) {
+            p.sendMessage(Text.of(Riders.FUN_RACE));
         }
         if (line.normal()) {
             trials.settleCounted(p, run, ms, verdict); // boards, rewards, the Cup and E4, as a solo run
-        } else if (line.e4()) {
+        } else if (line.e4() && !fun) {
             Course c = rr.base;
             trials.games().tellProgress(g -> g.courseFinished(p, c.id(), c.generated(), false)); // E4, once
         }
@@ -445,6 +489,7 @@ final class RaceMode {
                 rr.due = RaceRun.Due.PARK;
             } else {
                 rr.home(EndReason.FINISH, null); // no stand to wait on: home at the line
+                rr.toClub = call(rr.link, rr.link::clubhouseAfter, false); // WP-CH: or the Clubhouse
             }
         }
     }
@@ -478,7 +523,7 @@ final class RaceMode {
         rr.parked();
         if (run.warmup) {
             run.endWarmup();
-            p.getInventory().setItem(Warmup.KIT_SLOT, null);
+            KitItems.clear(p.getInventory(), Warmup.KIT_SLOT); // the Ready only, never a Mini there (#16)
         }
         if (rr.stand != null) {
             toStand(p, run);
@@ -503,6 +548,7 @@ final class RaceMode {
         } else {
             p.setVelocity(new Vector());
             p.setFallDistance(0f);
+            trials.riders().follow(p, at); // WP-CH: the rider stands on the stand with them
         }
     }
 
@@ -522,7 +568,7 @@ final class RaceMode {
         if (old.warmup) {
             old.endWarmup();
         }
-        p.getInventory().setItem(Warmup.KIT_SLOT, null);
+        KitItems.clear(p.getInventory(), Warmup.KIT_SLOT); // the Ready only, never a Mini there (#16)
         rr.regrid(spot);
         rr.due = RaceRun.Due.NONE;
         TrialRun run = new TrialRun(p.getUniqueId(), raced, false, 0);
@@ -534,6 +580,11 @@ final class RaceMode {
 
     /** {@code TimeTrials.endRace}: home with their things, reading {@code line}, on the next trial tick. */
     void endRace(UUID racer, EndReason why, String line) {
+        endRace(racer, why, line, false);
+    }
+
+    /** {@link #endRace(UUID, EndReason, String)}, or with {@code toClub} to the Clubhouse instead of home (WP-CH). */
+    void endRace(UUID racer, EndReason why, String line, boolean toClub) {
         if (racer == null) {
             return;
         }
@@ -550,6 +601,7 @@ final class RaceMode {
         }
         run.phase = TrialRun.Phase.DONE;
         run.race.home(why, line);
+        run.race.toClub = toClub;
     }
 
     // ---- sessions ending --------------------------------------------------------------------------
@@ -708,6 +760,30 @@ final class RaceMode {
         this.pushes = team;
     }
 
+    // ---- WP-CH: the Clubhouse ------------------------------------------------------------------------
+
+    /** The door a test passes; {@code null}: the Clubhouse's own ({@link Clubhouse#door}), if it is open. */
+    private ClubDoor clubDoor;
+    private boolean clubDoorSet;
+
+    /** The Clubhouse's door, or {@code null} while it is off, closed or not built (every flow as before). */
+    ClubDoor door() {
+        if (clubDoorSet) {
+            return clubDoor;
+        }
+        try {
+            return Clubhouse.door(trials.games());
+        } catch (RuntimeException | LinkageError e) {
+            return null; // no framework (a test): no Clubhouse
+        }
+    }
+
+    /** A test's own Clubhouse door ({@code null}: none at all). */
+    void door(ClubDoor door) {
+        this.clubDoor = door;
+        this.clubDoorSet = true;
+    }
+
     /** The player if online, or {@code null} (never a throw: no server in a test). */
     private static Player online(UUID id) {
         try {
@@ -739,7 +815,7 @@ final class RaceMode {
      * The run ended (left, gone, Time Trials stopping): off the no-push team (by id, so a racer who is
      * already gone comes off too) and collisions back on.
      */
-    private void restore(UUID id, Player p, RaceRun rr) {
+    void restore(UUID id, Player p, RaceRun rr) {
         if (rr.noPush) {
             rr.noPush = false;
             NoPush np = noPush();

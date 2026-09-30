@@ -461,7 +461,8 @@ final class ArcadeConfigMigration {
                     + "were not added. Reinstall the jar, or copy them from the jar's config.yml.");
             return;
         }
-        appendRows(c, defaults, "arcade.achievements", EVENT_ACHIEVEMENTS, "new \"Games\" achievements", log);
+        // the WARN already says "the new ...": "\"Games\" achievements" keeps it from reading "new new"
+        appendRows(c, defaults, "arcade.achievements", EVENT_ACHIEVEMENTS, "\"Games\" achievements", log);
     }
 
     /**

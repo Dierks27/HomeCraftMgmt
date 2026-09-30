@@ -14,6 +14,7 @@ import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.gen.NewCoursesNudge;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.TimeTrials;
+import com.dierks.homecraft.games.trial.TrackChunks;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.daily.DailyLookup;
 import com.dierks.homecraft.gui.games.event.RaceNightMenu;
@@ -73,8 +74,6 @@ public final class RaceNight implements Game {
     static final String PAUSED = EventDao.META + "paused";
     /** A scheduled night an admin skipped: {@code race.skip.<id>}. */
     static final String SKIP = EventDao.META + "skip.";
-    /** Owed prizes are tried again this often while their racer is online (ticks). */
-    static final long OWED_TICKS = 20L * 60 * 5;
     /** What a night called off by a stop or a restart says. */
     static final String RESTARTED = "the server restarted during Race Night";
     /** What a track problem reads when there is no track at all. */
@@ -95,7 +94,7 @@ public final class RaceNight implements Game {
     private List<EventSchedule.Entry> entries = List.of();
     /** The schedule as written when {@link #entries} was read (a reload that changes it is read again). */
     private List<String> entriesFrom = List.of();
-    /** Scheduled ids already warned about (a skip is logged once). */
+    /** Scheduled ids already warned about (a skip, and a track read through a load, each logged once a night). */
     private final Set<String> warned = new HashSet<>();
     /** Each online player's news toggle, read once a night. */
     private final Map<UUID, Boolean> news = new HashMap<>();
@@ -249,6 +248,8 @@ public final class RaceNight implements Game {
         bars.clear();
         watchers.clear();
         news.clear();
+        loadingFor = null; // a wait on a track's chunks ends with the game (its callback isn't run once stopped)
+        waiting = null;
     }
 
     /** Why the game stopped with the server still up: its switch, Time Trials', or a problem. */
@@ -284,7 +285,6 @@ public final class RaceNight implements Game {
     @Override
     public void onJoin(Player player) {
         UUID id = player.getUniqueId();
-        games().later(this, 60, () -> payOwed(id, true));
         NightRunner n = night;
         if (n != null && n.in(id) && !n.phase().over()) {
             player.sendMessage(Text.of("&bYou're in tonight's Race Night &7- it starts at "
@@ -300,7 +300,7 @@ public final class RaceNight implements Game {
         news.remove(id);
     }
 
-    /** Every tick: the night; once a second the schedule and the bars; every 5 minutes the owed prizes. */
+    /** Every tick: the night; once a second the schedule and the bars (the owed prizes: {@link #settleOwed}). */
     private void tick() {
         ticks++;
         NightRunner n = night;
@@ -325,22 +325,48 @@ public final class RaceNight implements Game {
                 changed();
             }
         }
-        if (ticks % OWED_TICKS == 0) {
-            for (Player p : new ArrayList<>(Bukkit.getOnlinePlayers())) {
-                payOwed(p.getUniqueId(), false);
-            }
-        }
     }
 
     // ---- the schedule ---------------------------------------------------------------------------
 
-    /** Make the next scheduled night when its heads-up (or its join window) is due. */
-    private void schedule() {
+    /** Make the next scheduled night when its heads-up (or its join window) is due: once a second from the clock. */
+    void schedule() {
+        pass(false);
+    }
+
+    /**
+     * One pass of the schedule; {@code chunksIn}: run because the chunks a read waited for are in
+     * ({@link #trackIn}), not by the clock. Never inside itself: a callback that runs during a pass (a
+     * load Paper hands back already done) has the pass run once more right after it, with those chunks in.
+     */
+    private void pass(boolean chunksIn) {
+        if (scheduling) {
+            again = true;
+            return;
+        }
+        scheduling = true;
+        try {
+            boolean in = chunksIn;
+            for (int i = 0; i <= TrackChunks.MAX_WAITS + 1; i++) { // bounded anyway: loadRounds ends in a read
+                again = false;
+                scheduleNow(in);
+                if (!again || night != null) {
+                    break;
+                }
+                in = true;
+            }
+        } finally {
+            scheduling = false;
+        }
+    }
+
+    /** {@link #pass}'s work. */
+    private void scheduleNow(boolean chunksIn) {
         if (paused()) {
             return;
         }
         RaceNightSettings s = settings();
-        EventSchedule.Occurrence o = next();
+        EventSchedule.Occurrence o = nextNight.get();
         if (o == null) {
             return;
         }
@@ -357,8 +383,34 @@ public final class RaceNight implements Game {
             log(Level.WARNING, "Race Night: could not check " + o.id(), e);
             return;
         }
-        Tracks.Found t = s.autoCourse() ? tracks.pick(o.id(), s.races(), s.minRacers(), s.maxRacers())
-                : tracks.find(s.course(), s.races(), s.minRacers(), s.maxRacers());
+        // round 2, G2 #4 (fx3-G2): read the track from loaded chunks only. Round 3 (fx3-2): while they load, the
+        // read is done again the moment they are all in; chunks that still don't stay loaded after
+        // MAX_WAITS such reads, or TRACK_LOAD_MS, are read once through a load, with a WARN: never a lost night
+        boolean mine = o.id().equals(loadingFor);
+        boolean overdue = mine && (loadRounds >= TrackChunks.MAX_WAITS || now - loadingSince >= TRACK_LOAD_MS);
+        Tracks.Wait wait = overdue ? null : new Tracks.Wait(this::trackIn);
+        Tracks.Found t = s.autoCourse() ? tracks.pick(o.id(), s.races(), s.minRacers(), s.maxRacers(), wait)
+                : tracks.find(s.course(), s.races(), s.minRacers(), s.maxRacers(), wait);
+        if (t.loading() && wait != null) {
+            if (!mine) {
+                loadingFor = o.id();
+                loadingSince = now;
+                loadRounds = 0;
+            } else if (chunksIn) {
+                loadRounds++; // the chunks it waited for came in, and the read still needed more (or lost some)
+            }
+            waiting = wait; // a clock pass meanwhile asks again: only the latest wait reads again
+            wait.asked();
+            return;
+        }
+        if (overdue && warned.add(CHUNKS_WARNED + o.id())) {
+            log(Level.WARNING, "Race Night " + o.id() + ": its track's chunks didn't come in and stay loaded ("
+                    + loadRounds + " round(s) of loads, " + (now - loadingSince) / 1000 + " s; is"
+                    + " chunks.delay-chunk-unloads-by in paper-world-defaults.yml set very low?) - read them once"
+                    + " with a load on the main thread, so the night isn't lost", null);
+        }
+        loadingFor = null;
+        waiting = null;
         if (t.problem() != null) {
             trackFailedAt.put(o.id(), now);
             if (warned.add(o.id())) {
@@ -390,6 +442,44 @@ public final class RaceNight implements Game {
         nextAt = now;
         nextFor = version;
         return nextCached;
+    }
+
+    /**
+     * Round 3 (fx3-2): every chunk a read of the schedule waited for is in (on the main thread, in the
+     * game's guard). Read the track again now, while they are sure to be loaded: a server set to unload
+     * chunks at once ({@code chunks.delay-chunk-unloads-by} 0) has dropped them again by the next
+     * once-a-second pass. A wait a later pass replaced is let go (that pass asked again).
+     */
+    private void trackIn(Tracks.Wait w) {
+        if (w == waiting && night == null) {
+            pass(true);
+        }
+    }
+
+    /**
+     * How long the schedule waits for a track's chunks before it reads them once through a load on the
+     * main thread, with a WARN (ms): chunks that never come in never cost a night, and never silently.
+     * Chunks that come in but don't stay give up sooner, after {@link TrackChunks#MAX_WAITS} reads.
+     */
+    static final long TRACK_LOAD_MS = 10_000L;
+    /** What {@link #warned} keeps a night's "its chunks didn't stay loaded" WARN under (once a night). */
+    private static final String CHUNKS_WARNED = "chunks:";
+    /** The scheduled id whose track is waiting on its chunks, since when, and its reads that still needed more. */
+    private String loadingFor;
+    private long loadingSince;
+    private int loadRounds;
+    /** The wait whose chunks the schedule reads again when they are in; {@code null} for none. */
+    private Tracks.Wait waiting;
+    /** Whether a {@link #pass} is running, and whether a callback asked for another one meanwhile. */
+    private boolean scheduling;
+    private boolean again;
+
+    /** The next night the schedule makes: {@link #next()}; the tests give their own (no plugin, no schedule). */
+    private java.util.function.Supplier<EventSchedule.Occurrence> nextNight = this::next;
+
+    /** The tests: the night the schedule makes from now on. */
+    void nextNight(java.util.function.Supplier<EventSchedule.Occurrence> next) {
+        this.nextNight = next;
     }
 
     /** A night whose track couldn't be raced is looked at again this often (ms), not every second. */
@@ -485,13 +575,24 @@ public final class RaceNight implements Game {
         changed();
     }
 
+    /**
+     * How each night made here reaches the server, by its id: {@link LivePorts}. The tests that race a
+     * night made here, with no server, give it a fake ({@link #portsFor(java.util.function.Function)}).
+     */
+    private java.util.function.Function<String, NightPorts> portsFor = id -> new LivePorts(this, id);
+
+    /** The tests: the ports the nights made from now on use (fx2-C #13: race 1's Go of a night made here). */
+    void portsFor(java.util.function.Function<String, NightPorts> ports) {
+        this.portsFor = ports;
+    }
+
     /** Start running {@code plan} on {@code track} from {@code state}. */
     NightRunner begin(EventPlan plan, NightRunner.Track track, EventMachine.State state) {
         RaceNightSettings s = settings();
         String season = s.seasonOn() ? EventCopy.seasonBoard(EventCopy.seasonKey(plan.startsAt(), zone())) : null;
-        NightRunner r = new NightRunner(plan, track, dao(), new LivePorts(this, plan.id()), payLoop(), zone(), season,
+        NightRunner r = new NightRunner(plan, track, dao(), portsFor.apply(plan.id()), payLoop(), zone(), season,
                 s.announceMinutes(), state);
-        r.prizeWeek(DailyLookup.weekKey(games()), s.prizeEventsPerWeek());
+        r.prizeWeek(() -> DailyLookup.weekKey(games()), s.prizeEventsPerWeek()); // the week at race 1's Go
         r.standRadius(s.standRadius()); // race mode keeps the stand, within this
         r.onEnd(this::ended);
         news.clear();
@@ -561,6 +662,11 @@ public final class RaceNight implements Game {
             case CALL_OFF -> callOffStored(row, RESTARTED, now);
             case CALL_OFF_SETTLE -> {
                 StoredNight.settle(dao(), row, rules, "called off: " + RESTARTED, now);
+                // fx2-C #6: the races done count for the achievements, as for a night called off live
+                for (Map.Entry<UUID, Boolean> r : StoredNight.raced(dao().races(row.id()), dao().entries(row.id()))
+                        .entrySet()) {
+                    games().tellProgress(g -> g.raceNightFinished(r.getKey(), r.getValue()));
+                }
                 int owed = payLoop().payNight(row.id());
                 tellEntrants(row.id(), "&7Race Night was called off - " + RESTARTED + ". The races you finished "
                         + "still count" + (owed > 0 ? ", and prizes are paid when you're back in a world with tokens."
@@ -596,10 +702,15 @@ public final class RaceNight implements Game {
 
     /** The pay loop over the live rewards (EVENT_PRIZE, outside the skill cap, ref {@code event:<id>}). */
     PayLoop payLoop() {
+        return payLoop(RaceNight::online);
+    }
+
+    /** {@link #payLoop()}, finding who is online through {@code online}. */
+    private PayLoop payLoop(java.util.function.Function<UUID, Player> online) {
         return new PayLoop(dao(), new PayLoop.Payer() {
             @Override
             public int pay(UUID player, String ref, int tokens, String detail) {
-                Player p = online(player);
+                Player p = online.apply(player);
                 if (p == null || !games().rewards().canEarnHere(p)) {
                     return -1;
                 }
@@ -620,13 +731,18 @@ public final class RaceNight implements Game {
     }
 
     /** Pay what the player is owed from past nights; tell them once if some has to wait. */
-    private void payOwed(UUID player, boolean tellIfWaiting) {
-        int owed = payLoop().payOwed(player);
-        if (owed > 0 && tellIfWaiting) {
-            Player p = Bukkit.getPlayer(player);
-            if (p != null) {
-                p.sendMessage(Text.of(PayLoop.WAITING));
-            }
+    /**
+     * fx2-C #7: the prizes the player is owed from past nights, paid a moment after their join and
+     * once a minute while they are online, by the framework, even while Race Night or Time Trials is
+     * switched off (the switch closes new nights, never a prize already won). At a join, a prize
+     * still owed says so.
+     */
+    @Override
+    public void settleOwed(Player player, boolean joined) {
+        UUID id = player.getUniqueId();
+        int owed = payLoop(u -> u.equals(id) ? player : online(u)).payOwed(id);
+        if (owed > 0 && joined) {
+            player.sendMessage(Text.of(PayLoop.WAITING));
         }
     }
 
@@ -681,6 +797,15 @@ public final class RaceNight implements Game {
         });
     }
 
+    /**
+     * Whether the join window's bar is for {@code p}: the same {@link Announcer.Who} the chat lines ask
+     * (final gate, group B #1: never for a player without {@code hcm.games.play}, nor one where games aren't
+     * played unless they joined).
+     */
+    boolean joinBar(Player p, boolean racer) {
+        return Announcer.joinBar(LivePorts.who(games(), p, newsOn(p.getUniqueId()), racer));
+    }
+
     /** The screen's news bell: turn Race Night news (and the other game news) on or off. */
     public void setNews(UUID player, boolean on) {
         try {
@@ -694,7 +819,28 @@ public final class RaceNight implements Game {
         }
     }
 
-    /** The join window's bar for everyone with news on; the watchers' bar; nothing for anyone else. */
+    /** Which bar a player sees: a seated racer's own (the night draws it), the watchers', the join window's, none. */
+    enum Bar { OWN, WATCH, JOIN, NONE }
+
+    /**
+     * The bar for {@code p} ({@code racer}: their place in tonight's night, or {@code null}; {@code open}: the
+     * join window is open): the join window's only for a player {@link #joinBar} lets see it (final gate,
+     * group B #1). Kept apart from {@link #drawBars} (which walks the live server) so a test pins it.
+     */
+    Bar barFor(Player p, NightRunner.Racer racer, boolean open) {
+        if (racer != null && racer.seated()) {
+            return Bar.OWN;
+        }
+        if (watchers.watching(p.getUniqueId())) {
+            return Bar.WATCH;
+        }
+        return open && joinBar(p, racer != null) ? Bar.JOIN : Bar.NONE;
+    }
+
+    /**
+     * The join window's bar for everyone {@link Announcer#joinBar} lets see it; the watchers' bar; nothing
+     * for anyone else ({@link #barFor}).
+     */
     private void drawBars() {
         NightRunner n = night;
         long now = now();
@@ -702,19 +848,25 @@ public final class RaceNight implements Game {
         for (Player p : new ArrayList<>(Bukkit.getOnlinePlayers())) {
             UUID id = p.getUniqueId();
             NightRunner.Racer r = n == null ? null : n.racer(id);
-            if (r != null && r.seated()) {
-                continue; // the night draws a racer's own bar
-            }
-            if (watchers.watching(id)) {
-                NightRunner shown = n != null ? n : last;
-                bars.show(id, shown == null ? "&bRace Night" : Watchers.bar(shown.phase(), shown.race(),
-                        shown.plan().races(), shown.leader(), shown.joined().size()), 1f, RaceBars.Tone.WATCH);
-            } else if (open && newsOn(id)) {
-                long window = Math.max(1, n.startsAt() - n.plan().joinAt());
-                bars.show(id, EventCopy.joinBar(n.startsAt() - now, n.joined().size()),
-                        (n.startsAt() - now) / (float) window, RaceBars.Tone.JOIN);
-            } else if (bars.has(id)) {
-                bars.hide(id);
+            switch (barFor(p, r, open)) {
+                case OWN -> {
+                    // the night draws a racer's own bar
+                }
+                case WATCH -> {
+                    NightRunner shown = n != null ? n : last;
+                    bars.show(id, shown == null ? "&bRace Night" : Watchers.bar(shown.phase(), shown.race(),
+                            shown.plan().races(), shown.leader(), shown.joined().size()), 1f, RaceBars.Tone.WATCH);
+                }
+                case JOIN -> {
+                    long window = Math.max(1, n.startsAt() - n.plan().joinAt());
+                    bars.show(id, EventCopy.joinBar(n.startsAt() - now, n.joined().size()),
+                            (n.startsAt() - now) / (float) window, RaceBars.Tone.JOIN);
+                }
+                case NONE -> {
+                    if (bars.has(id)) {
+                        bars.hide(id);
+                    }
+                }
             }
         }
     }

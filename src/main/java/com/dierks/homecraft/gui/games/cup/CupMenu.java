@@ -21,7 +21,8 @@ import java.util.List;
  * paying, then one click to enter. It belongs to the Cup game, so its clicks run in the Cup's guard.
  *
  * <p>4 the Cup and the course; 10 how it's paid (the shares in the NAME); 12 the pool and when it
- * is paid in the NAME ("Cup pool: 35 tokens · 5 in - paid Mon 4:00 AM"); 14 enter ("Pay 5 tokens and
+ * is paid in the NAME ("Cup pool: 35 tokens · 5 in - paid Mon 4:00 AM"; once an admin paid it out
+ * early, that it was: {@link CupWords#poolName}); 14 enter ("Pay 5 tokens and
  * enter this week's Cup"), or that you're in with your Cup time ("your time 0:40.0"), or why you
  * can't, in the NAME; 16 your tokens; 22 back to the course screen. The key facts are in the NAMES
  * for Bedrock, which shows lore only on tap-and-hold.
@@ -53,13 +54,10 @@ public final class CupMenu extends GameMenu {
             set(13, Menus.icon(Material.GRAY_DYE, "&7The Cup can't be read right now"), null);
             return;
         }
-        List<String> pool = new ArrayList<>();
-        pool.add("&7Every entry" + (cup.settings().serverTopup() > 0 ? ", plus " + CupText.tokens(cup.settings()
-                .serverTopup()) + " from the server when 2 or more set a Cup time." : "."));
-        pool.add("&7Paid " + cup.when(v.endsAt()) + ".");
-        set(12, Menus.icon(Material.GOLD_INGOT, "&6" + CupText.poolLine(v.pool().tokens(), v.pool().in())
-                + " &7- paid " + cup.when(v.endsAt()), pool.toArray(new String[0])), null);
-        if (v.in()) {
+        String when = cup.when(v.endsAt());
+        set(12, Menus.icon(Material.GOLD_INGOT, CupWords.poolName(v, when),
+                CupWords.poolLore(v, when, cup.settings().serverTopup()).toArray(new String[0])), null);
+        if (v.in() && !v.settledEarly()) { // paid out early: the grey "already paid out" below
             set(14, Menus.glint(Menus.icon(Material.LIME_CONCRETE, CupWords.enterName(v), CupWords.yourTime(v.mine()),
                     "&7Every counted run this week can beat it."), true), null);
             return;

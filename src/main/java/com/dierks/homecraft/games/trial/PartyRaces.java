@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.Invite;
 import com.dierks.homecraft.games.Refusal;
+import com.dierks.homecraft.games.clubhouse.ClubDoor;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.gui.games.trial.PartyMenu;
 import com.dierks.homecraft.gui.games.trial.PartyResultsMenu;
@@ -81,6 +82,8 @@ public final class PartyRaces {
     private final Map<UUID, BossBar> bars = new HashMap<>();
     /** Racer → the lap their bar last showed (a new lap gets a title). */
     private final Map<UUID, Integer> laps = new HashMap<>();
+    /** Lobbies whose Start waits for the track's chunks (round 2, G2 #4). */
+    private final java.util.Set<Long> loading = new java.util.HashSet<>();
     private long ticks;
 
     PartyRaces(TimeTrials trials) {
@@ -114,6 +117,7 @@ public final class PartyRaces {
         invites.clear();
         results.clear();
         laps.clear();
+        loading.clear();
     }
 
     /** A player quit: a DNF in their race, and out of their party (the host passes on). */
@@ -139,6 +143,10 @@ public final class PartyRaces {
      */
     public void open(Player player, String courseId, Runnable back) {
         GamesService g = games();
+        if (inClub(player) && lobby(player.getUniqueId()) != null) {
+            openLobby(player, back); // WP-CH: in the Clubhouse, their party's screen
+            return;
+        }
         Refusal r = g.canOpen(player, trials);
         if (r != null) {
             g.tell(player, r);
@@ -206,8 +214,10 @@ public final class PartyRaces {
             return false;
         }
         GamesService g = games();
-        return g.parties().of(other.getUniqueId()) == null && g.canOpen(other, trials) == null
-                && trials.sessions().session(other) == null;
+        if (g.parties().of(other.getUniqueId()) != null) {
+            return false;
+        }
+        return inClub(other) || (g.canOpen(other, trials) == null && trials.sessions().session(other) == null); // WP-CH
     }
 
     private void send(Player from, Player to) {
@@ -250,7 +260,7 @@ public final class PartyRaces {
             to.sendMessage(Text.of("&7That party has ended."));
             return;
         }
-        Refusal r = games().canOpen(to, trials);
+        Refusal r = inClub(to) ? null : games().canOpen(to, trials); // WP-CH: from the Clubhouse too
         if (r != null) {
             games().tell(to, r);
             return;
@@ -376,6 +386,22 @@ public final class PartyRaces {
 
     /** The host starts the race: who's free races; grid, warm-up, Go. */
     public void start(Player host) {
+        PartyLobby lobby = lobby(host.getUniqueId());
+        if (lobby != null && loading.contains(lobby.id())) {
+            return; // round 2, G2 #4: this Start is already waiting for the track's chunks
+        }
+        start(host, 0);
+    }
+
+    /**
+     * {@link #start(Player)} after {@code waited} rounds of loading the track's chunks (round 2, G2 #4).
+     * The grid and the stand are read from the live blocks, and those are never read by loading a chunk
+     * on the main thread: from the Clubhouse or home, the boat grid's path behind the start and the stand
+     * are in chunks nobody has loaded. A read that needed some waits for them ({@link TrackChunks}), off
+     * the main thread, and the Start runs again from the top, every check made again (the lobby, who is
+     * free, a restart due), with nothing said twice.
+     */
+    private void start(Player host, int waited) {
         String problem = startProblem(host);
         if (problem != null) {
             games().tell(host, Refusal.of(problem));
@@ -389,14 +415,27 @@ public final class PartyRaces {
             return;
         }
         List<Player> free = new ArrayList<>();
+        ClubDoor club = trials.raceMode().door(); // WP-CH
         for (UUID id : lobby.members()) {
             Player p = Bukkit.getPlayer(id);
             if (p == null) {
                 continue;
             }
+            if (club != null && club.spectator(id)) {
+                if (waited == 0) {
+                    say(lobby, "&7" + p.getName() + " is watching this one from the Clubhouse.");
+                }
+                continue; // WP-CH: a spectator is never seated
+            }
+            if (club != null && club.seatable(id)) {
+                free.add(p); // WP-CH: waiting in the Clubhouse: seated from there
+                continue;
+            }
             if (games().canOpen(p, trials) != null || trials.sessions().session(p) != null
                     || !trials.sessions().home(p)) {
-                say(lobby, "&7" + p.getName() + " isn't free to race right now.");
+                if (waited == 0) {
+                    say(lobby, "&7" + p.getName() + " isn't free to race right now.");
+                }
                 continue;
             }
             free.add(p);
@@ -405,7 +444,22 @@ public final class PartyRaces {
             games().tell(host, Refusal.of("The race needs 2 racers who are free right now."));
             return;
         }
-        RaceGrid.Grid grid = RaceGrid.forCourse(base, new WorldSurface(world), free.size());
+        WorldSurface blocks = new WorldSurface(world); // round 2, G2 #4: loaded chunks only
+        RaceGrid.Grid grid = RaceGrid.forCourse(base, blocks, free.size());
+        Location stand = stand(base, world, blocks);
+        switch (TrackChunks.next(blocks.missing(), waited)) {
+            case WAIT -> {
+                waitForTrack(lobby.id(), host.getUniqueId(), world, blocks.missing(), waited);
+                return;
+            }
+            case GIVE_UP -> {
+                games().tell(host, Refusal.of("The track isn't ready yet - tap Start again in a moment."));
+                return;
+            }
+            default -> {
+                // every block was read from a loaded chunk: the grid and the stand hold
+            }
+        }
         if (grid.size() < free.size()) {
             games().tell(host, Refusal.of("This track's grid fits " + grid.size() + " boats - race with fewer friends."));
             return;
@@ -420,9 +474,9 @@ public final class PartyRaces {
         int warm = warmup(lobby) ? trials.settings().warmupSeconds() : 0;
         PartyRace race = new PartyRace(lobby.id(), base, racers, warm, Bukkit::getCurrentTick,
                 line -> say(lobby, line));
+        race.clubhouse(club != null && club.partyAfter() && base.world().equalsIgnoreCase(club.world())); // WP-CH
         races.put(lobby.id(), race);
         results.remove(lobby.id());
-        Location stand = stand(base, world);
         say(lobby, "&dRace on " + base.name() + "! &7" + free.size() + " racers"
                 + (warm > 0 ? " - warm up first (" + Warmup.clock(warm) + ")" : "") + ". Free, just for fun.");
         for (int i = 0; i < free.size(); i++) {
@@ -604,7 +658,11 @@ public final class PartyRaces {
                 PartyRace.Line mine = lineOf(lines, id);
                 String bye = line != null ? line : mine != null && mine.result() == PartyRace.Result.STILL_RACING
                         ? "&7Race over - great racing!" : null;
-                trials.endRace(id, why, bye);
+                if (line == null && race.clubhouseAfter()) {
+                    trials.endRaceToClubhouse(id, why, bye); // WP-CH: back to the Clubhouse
+                } else {
+                    trials.endRace(id, why, bye);
+                }
             }
         }
         PartyLobby lobby = games().parties().get(race.lobbyId());
@@ -630,7 +688,41 @@ public final class PartyRaces {
                 showResults(id, race.base().name(), lines, RESULT_TRIES);
             }
         }
+        clubResults(race, lines, lobby); // WP-CH
     }
+
+    // ---- WP-CH: the Clubhouse ------------------------------------------------------------------------
+
+    /** The party races going on now (a read-only view for the Clubhouse's board and watchers). */
+    java.util.Collection<PartyRace> running() {
+        return List.copyOf(races.values());
+    }
+
+    /** Whether the player is in the Clubhouse now (their session is its own). */
+    private boolean inClub(Player p) {
+        ClubDoor club = trials.raceMode().door();
+        return club != null && p != null && club.seatable(p.getUniqueId());
+    }
+
+    /**
+     * A party race that went back to the Clubhouse: its results on the board (and on the kit's
+     * Results), and the host reads how to race again.
+     */
+    private void clubResults(PartyRace race, List<PartyRace.Line> lines, PartyLobby lobby) {
+        ClubDoor club = race.clubhouseAfter() ? trials.raceMode().door() : null;
+        if (club == null) {
+            return;
+        }
+        String course = race.base().name();
+        club.result(ClubRaces.partySheet(course, lines, ++clubResults),
+                p -> new PartyResultsMenu(trials.plugin(), trials, p, course, lines).open(p));
+        Player host = lobby == null ? null : Bukkit.getPlayer(lobby.host());
+        if (host != null && club.seatable(host.getUniqueId())) {
+            host.sendMessage(Text.of(com.dierks.homecraft.games.clubhouse.ClubhouseText.RACE_AGAIN));
+        }
+    }
+
+    private long clubResults;
 
     private static PartyRace.Line lineOf(List<PartyRace.Line> lines, UUID id) {
         for (PartyRace.Line l : lines) {
@@ -697,16 +789,33 @@ public final class PartyRaces {
     }
 
     /**
-     * The course's stand, where finishers wait: Fresh Ice Boat from algo 2 (checked in the world: a
-     * stand that isn't standing is never used), else none, and finishers go home at the line.
+     * The course's stand, where finishers wait: Fresh Ice Boat from algo 2 (checked in the world, on
+     * {@code blocks}: a stand that isn't standing is never used), else none, and finishers go home at
+     * the line.
      */
-    private Location stand(Course base, World world) {
+    private Location stand(Course base, World world, WorldSurface blocks) {
         Box half = base.gen() == null ? null : trials.generated().half(base.gen());
         Point at = RaceStand.of(base, half);
-        if (at == null || !RaceStand.standable(new WorldSurface(world), at)) {
+        if (at == null || !RaceStand.standable(blocks, at)) {
             return null;
         }
         return new Location(world, at.x(), at.y(), at.z());
+    }
+
+    /**
+     * Round 2, G2 #4: load the chunks the track's read needed off the main thread, then run the host's
+     * Start again, if they are still this lobby's host (a Start clicked meanwhile waits with it).
+     */
+    private void waitForTrack(long lobbyId, UUID hostId, World world, List<int[]> missing, int waited) {
+        loading.add(lobbyId);
+        TrackChunks.whenLoaded(TrackChunks.server(world, games(), trials), missing, () -> {
+            loading.remove(lobbyId);
+            Player h = Bukkit.getPlayer(hostId);
+            PartyLobby now = h == null ? null : lobby(hostId);
+            if (now != null && now.id() == lobbyId) {
+                start(h, waited + 1);
+            }
+        });
     }
 
     /** Tell every member of the party online. */

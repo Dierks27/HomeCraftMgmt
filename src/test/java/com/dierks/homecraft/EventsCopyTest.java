@@ -18,8 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The events batch's copy (EV-BUILD house rules): Race Night, the Weekly Cup, Falling Floors, golf
- * together, party races, warm-ups and the Dropper never say bet, wager, gamble, casino, lucky,
- * almost, so close or sink, and never use an emoji or a character above U+FFFF.
+ * together, party races, warm-ups, the Dropper and the Clubhouse (waiting, watching live, cheers and
+ * ride along) never say bet, wager, gamble, casino, lucky, almost, so close or sink, and never use an
+ * emoji or a character above U+FFFF.
  *
  * <p>Why a scan of its own. {@link GamesCopyTest} and {@link PlayerCopyTest} read only the
  * '&amp;'-coloured literals, but much of this batch's copy is built from plain pieces (the Cup's
@@ -35,9 +36,9 @@ class EventsCopyTest {
 
     private static final Path BASE = PlayerCopyTest.BASE;
 
-    /** Whole packages of the batch. */
+    /** Whole packages of the batch (the Clubhouse's, WP-CH, included). */
     private static final List<String> PACKAGES = List.of(
-            "games/event", "games/cup", "games/arena", "gui/games/event", "gui/games/cup");
+            "games/event", "games/cup", "games/arena", "gui/games/event", "gui/games/cup", "games/clubhouse");
 
     /** Files of the batch that live beside older code: globs relative to {@link #BASE}. */
     private static final List<String> FILES = List.of(
@@ -46,7 +47,10 @@ class EventsCopyTest {
             "games/trial/Part*.java", "games/trial/Race*.java", "games/trial/Warmup*.java",
             "games/trial/Dropper*.java", "games/trial/Laps.java",
             "gui/games/trial/Party*.java", "gui/games/trial/WarmupChoiceMenu.java",
-            "games/Invites.java", "games/NoPush.java", "display/EventDisplay.java");
+            "games/Invites.java", "games/NoPush.java", "display/EventDisplay.java",
+            // the Clubhouse's bridges into the race, Race Night and golf packages, and its check (WP-CH)
+            "games/trial/Riders.java", "games/trial/RideAlong.java", "games/trial/ClubRaces.java",
+            "games/event/ClubNight.java", "games/golf/ClubGolf.java", "command/ClubhouseCheck.java");
 
     /** A Java string literal. */
     private static final Pattern LITERAL = Pattern.compile("\"((?:[^\"\\\\]|\\\\.)*)\"");
@@ -119,6 +123,17 @@ class EventsCopyTest {
         }
         assertTrue(offences.isEmpty(), "No emoji and nothing above U+FFFF (Bedrock shows a box):\n"
                 + String.join("\n", offences));
+    }
+
+    @Test
+    void theScanCoversTheClubhouseAndItsBridges() throws IOException {
+        List<String> scanned = files().stream().map(p -> BASE.relativize(p).toString().replace('\\', '/')).toList();
+        for (String f : List.of("games/clubhouse/Clubhouse.java", "games/clubhouse/ClubhouseText.java",
+                "games/clubhouse/WatchLive.java", "games/clubhouse/Cheers.java", "games/trial/Riders.java",
+                "games/trial/RideAlong.java", "games/trial/ClubRaces.java", "games/event/ClubNight.java",
+                "games/golf/ClubGolf.java", "command/ClubhouseCheck.java")) {
+            assertTrue(scanned.contains(f), f + " is in the events batch's copy scan");
+        }
     }
 
     @Test

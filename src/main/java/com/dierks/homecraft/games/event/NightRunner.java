@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.event;
 
 import com.dierks.homecraft.games.EndReason;
+import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.games.trial.RaceLink;
@@ -30,8 +31,10 @@ import java.util.function.Consumer;
  * shared warm-up (free laps, never timed; "Ready" skips the rest) or straight onto the grid. Anyone
  * not free is tried again every second until just before Go, then is DNS for that race ("you'll be
  * in the next one"); so is one whose entry was dropped on the way in (race mode's sweep tells the
- * night they left). The shared warm-up ends early only when EVERY joined racer who is online is at
- * the track and tapped Ready, and race 1 never goes before the advertised start. At the line a
+ * night they left). A racer race mode refuses at the play gate (a parent took {@code hcm.games.play}
+ * away since they joined) reads the gate's own line once, is never nagged to get free, and is DNS
+ * until the gate lets them in again. The shared warm-up ends early only when EVERY joined racer who
+ * is online is at the track and tapped Ready, and race 1 never goes before the advertised start. At the line a
  * racer's place is final at once and they are parked on the stand; when the race ends anyone still
  * racing is parked too and scores the still-racing point. Leave game or {@code /hcm leave} is
  * leaving for good (LEFT); a disconnect scores 0 in that race and, back and free before the next
@@ -104,6 +107,10 @@ public final class NightRunner implements RaceLink {
         final List<Integer> places = new ArrayList<>();
         String refused;
         long naggedAt = Long.MIN_VALUE / 2;
+        /** The last seat was refused at the play gate: no nag, no "you'll be in the next one" (G1 #3). */
+        boolean gated;
+        /** The play gate's line was said to them tonight (it is said once). */
+        boolean toldGate;
 
         Racer(UUID id, String name, long joinedAt) {
             this.id = id;
@@ -376,6 +383,7 @@ public final class NightRunner implements RaceLink {
         }
         ports.tell(id, "&aYou're in Race Night! &7It starts at " + EventCopy.clock(plan.startsAt(), zone)
                 + ". Keep playing - we'll take you to the track.", false);
+        ports.offerClubhouse(id); // WP-CH: or wait in the Clubhouse
         if (state.phase() == EventMachine.Phase.WARMUP
                 || (state.phase() == EventMachine.Phase.GRID && started < 0)) {
             Racer in = r;
@@ -626,6 +634,7 @@ public final class NightRunner implements RaceLink {
                 : "busy";
         if (why == null) {
             r.seated = true;
+            r.gated = false;
             r.everSeated = true;
             r.sentHome = false; // at the track again: a later Leave is leaving, for good
             r.refused = null;
@@ -645,6 +654,14 @@ public final class NightRunner implements RaceLink {
             return;
         }
         r.refused = why;
+        r.gated = Refusal.NO_GAMES.message().equals(why); // race mode's play gate: standing still won't help
+        if (r.gated) {
+            if (!r.toldGate) {
+                r.toldGate = true;
+                ports.tell(r.id, "&c" + why, false);
+            }
+            return;
+        }
         long now = ports.now();
         if (now - r.naggedAt >= NAG_MS) {
             r.naggedAt = now;
@@ -719,7 +736,7 @@ public final class NightRunner implements RaceLink {
                 }
             } else {
                 r.leg = Leg.AWAY;
-                if (ports.online(r.id)) {
+                if (ports.online(r.id) && !r.gated) { // a racer the gate refused was told why already
                     ports.tell(r.id, race < rules.races()
                             ? "&7You weren't free when the race began - you'll be in the next one."
                             : "&7You weren't free when the last race began.", false);
@@ -733,19 +750,25 @@ public final class NightRunner implements RaceLink {
 
     private boolean claimSlot() {
         try {
-            return dao.claimPrizeSlot(plan.id(), Long.toString(week), perWeek);
+            return dao.claimPrizeSlot(plan.id(), Long.toString(week.getAsLong()), perWeek);
         } catch (SQLException e) {
             ports.log("Race Night: could not claim a prize slot, so tonight is just for fun: " + e.getMessage(), true);
             return false;
         }
     }
 
-    private long week;
+    /** The prize-night week, read when the slot is claimed (fx2-C #13). */
+    private java.util.function.LongSupplier week = () -> 0L;
     private int perWeek = 3;
 
-    /** The prize-night week key and the week's limit (the runner claims a slot at race 1's Go). */
-    public void prizeWeek(long weekKey, int prizeEventsPerWeek) {
-        this.week = weekKey;
+    /**
+     * The prize-night week and the week's limit. The runner claims a slot at race 1's Go, in the week
+     * {@code weekKey} gives THEN (fx2-C #13): a night is made up to 12 hours before its window (a long
+     * heads-up, an admin's {@code start ... in M}), maybe in the week before, and the screen shows a
+     * prize night by the week it is looked at, so the claim goes by the week the racing is in.
+     */
+    public void prizeWeek(java.util.function.LongSupplier weekKey, int prizeEventsPerWeek) {
+        this.week = weekKey == null ? () -> 0L : weekKey;
         this.perWeek = prizeEventsPerWeek;
     }
 
@@ -850,6 +873,10 @@ public final class NightRunner implements RaceLink {
     private void afterLine(Racer r) {
         if (track.stand() == null) {
             r.seated = false;
+            if (ports.clubhouse(track.base().world())) { // WP-CH: no stand: the Clubhouse, not home
+                toClubhouse(r, "&7Race Night: that was the race. &7Wait in the Clubhouse for the results!");
+                return;
+            }
             sendHome(r, EndReason.FINISH, "&7Race Night: that was the race. Your things are back.");
             return;
         }
@@ -1023,10 +1050,12 @@ public final class NightRunner implements RaceLink {
         } catch (SQLException e) {
             ports.log("Race Night: could not settle " + plan.id() + ": " + e.getMessage(), true);
         }
-        int owed = pay.payNight(plan.id());
-        for (Map.Entry<UUID, RacePrizes.Prize> e : prizes.entrySet()) {
-            if (!ports.online(e.getKey()) && owed > 0) {
-                ports.tell(e.getKey(), PayLoop.WAITING, true);
+        // fx2-C #6: each racer whose prize can't be paid now (offline, or watching live, in creative, in a
+        // world without tokens) reads that it is waiting: now if online, else at their next join
+        List<UUID> owed = pay.payNightOwed(plan.id());
+        for (UUID u : owed == null ? List.<UUID>of() : owed) {
+            if (prizes.containsKey(u)) {
+                ports.tell(u, PayLoop.WAITING, true);
             }
         }
         String results = finishers.isEmpty() ? NOBODY_FINISHED : resultsLine(ranked);
@@ -1131,8 +1160,14 @@ public final class NightRunner implements RaceLink {
         } catch (SQLException e) {
             ports.log("Race Night: could not close " + plan.id() + ": " + e.getMessage(), true);
         }
+        boolean club = end == EventMachine.Phase.DONE && ports.clubhouse(track.base().world()); // WP-CH
+        if (club) {
+            ports.clubhouseResults(this);
+        }
         for (Racer r : racers.values()) {
-            if (r.seated) {
+            if (r.seated && club) {
+                toClubhouse(r, com.dierks.homecraft.games.clubhouse.ClubhouseText.NIGHT_OVER);
+            } else if (r.seated) {
                 sendHome(r, EndReason.FINISH, homeLine == null ? calledOffLine() : homeLine);
             }
             ports.bar(r.id, null, 0, false);
@@ -1162,6 +1197,13 @@ public final class NightRunner implements RaceLink {
         r.sentHome = true;
         r.seated = false;
         queue.add(() -> ports.home(r.id, why, line));
+    }
+
+    /** WP-CH: done with the night, to the Clubhouse (race mode hands their session there). */
+    private void toClubhouse(Racer r, String line) {
+        r.sentHome = true;
+        r.seated = false;
+        queue.add(() -> ports.toClubhouse(r.id, line));
     }
 
     private String callOffLine(String why) {

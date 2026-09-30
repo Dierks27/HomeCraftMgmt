@@ -110,6 +110,12 @@ public final class GamesService {
     private final Map<String, List<BukkitTask>> tasks = new HashMap<>();
     /** Cancels the one-minute round sweep. */
     private Runnable sweep;
+    /**
+     * When this plugin run began (the service is built once, at enable; {@code /hcm reload} keeps it):
+     * the restart hold skips a restart whose minute it fell in, since that is the restart it came back
+     * from (the round-2 audit's G1 #2).
+     */
+    private final long bootedAt;
 
     /**
      * @param breaks Take a break, built earlier and on its own (it also guards the Scratch Ticket
@@ -124,6 +130,7 @@ public final class GamesService {
         this.host = host;
         this.breaks = breaks;
         this.specs = List.copyOf(specs);
+        this.bootedAt = host.clock().nowMillis();
         this.context = new GameContext(host.plugin(), this);
         this.gate = new PlayGate(this);
         this.rounds = new ChanceRounds(this);
@@ -252,6 +259,7 @@ public final class GamesService {
             Player p = host.online(id);
             if (p != null) {
                 deliverNotices(p);
+                settleOwed(p, true); // fx2-C #7
             }
         };
         if (host.later(NOTICE_DELAY_TICKS, deliver) == null) {
@@ -456,11 +464,12 @@ public final class GamesService {
     /**
      * The scheduled-restart hold as configured now ({@code games.restart_times},
      * {@code games.restart_hold_minutes}, read in {@code clock.time_zone}). Built on every call,
-     * so a reload takes effect at once.
+     * so a reload takes effect at once. It knows when this run began, so a server back up inside a
+     * restart's minute isn't held for the restart it came back from.
      */
     public RestartHold restartHold() {
         GamesConfig.Common c = config().common();
-        return new RestartHold(c.restartTimes(), host.clock().zone(), c.restartHoldMinutes());
+        return new RestartHold(c.restartTimes(), host.clock().zone(), c.restartHoldMinutes(), bootedAt);
     }
 
     /**
@@ -785,10 +794,25 @@ public final class GamesService {
         }
     }
 
-    /** The one-minute sweep: stale rounds, lapsed invites. Never throws. */
+    /** The one-minute sweep: stale rounds, lapsed invites, owed prizes. Never throws. */
     void sweep() {
         quietly(rounds::sweep);
         quietly(invites::expireLapsed);
+        for (Player p : online()) { // fx2-C #7
+            settleOwed(p, false);
+        }
+    }
+
+    /**
+     * fx2-C #7: each game's {@link Game#settleOwed} for the player, open or not (a failed game is
+     * skipped), each inside its own guard: a prize won is paid even after its game was switched off.
+     */
+    private void settleOwed(Player player, boolean joined) {
+        for (Game g : games) {
+            if (!failed.contains(g.id())) {
+                guard(g, () -> g.settleOwed(player, joined));
+            }
+        }
     }
 
     /** Build every game not built yet, in catalog order; a constructor that throws leaves that game out. */

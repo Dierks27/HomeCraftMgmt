@@ -10,12 +10,14 @@ import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.HandlerList;
+import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 
 /**
@@ -268,6 +270,107 @@ public final class WorldSessions {
         port().safely("a game's teleport", () -> made[0] = core().teleport(player, place));
         return made[0];
     }
+
+    /**
+     * Hold a session player where they stand, free to look around (a 3-2-1 on a spawn or at a start): a
+     * move that changed position goes back to where it began, with the new look. This is the ONLY way a
+     * game changes a move's {@code to} (HoldSessionTest holds the games to it). The server turns a
+     * changed {@code to} into a PLUGIN teleport, so the spot is armed as the session's own first:
+     * unarmed, it is someone else's short hop, and the session voids the player a tick later — on the
+     * last tick of the hold, after Go (final gate #14). A game that can't use this cancels the move.
+     *
+     * @return whether the move was held (false: it changed only the look, and goes ahead)
+     */
+    public boolean hold(PlayerMoveEvent e) {
+        if (e == null || e.getPlayer() == null) {
+            return false;
+        }
+        if (!live()) {
+            return hold(e, place -> false);
+        }
+        Player p = e.getPlayer();
+        return hold(e, place -> {
+            boolean[] armed = {false};
+            port().safely("a game's hold", () -> armed[0] = core().hold(p, place));
+            return armed[0];
+        });
+    }
+
+    /** {@link #hold(PlayerMoveEvent)} with the arming given ({@code own}: the session's, or a test's). */
+    static boolean hold(PlayerMoveEvent e, Predicate<Place> own) {
+        if (!e.hasExplicitlyChangedPosition()) {
+            return false;
+        }
+        Location held = e.getFrom().clone();
+        held.setYaw(e.getTo().getYaw());
+        held.setPitch(e.getTo().getPitch());
+        own.test(BukkitPort.place(held));
+        e.setTo(held);
+        return true;
+    }
+
+    // ---- WP-CH (the Clubhouse) ----------------------------------------------------------------------
+
+    /**
+     * Hand the player's ACTIVE session to {@code to} ({@code ref} its course, or {@code ""}), in place:
+     * nothing is restored, saved or cleared, and from now on its end, void and kit go to {@code to}.
+     * A racer seated from the Clubhouse, or back in it after a race, stays in one session.
+     *
+     * @return whether it was handed over
+     */
+    public boolean passTo(Player player, Game to, String ref) {
+        if (player == null || to == null || !live()) {
+            return false;
+        }
+        boolean[] done = {false};
+        port().safely("handing a session over", () -> done[0] = core().passTo(player, to.id(), ref, hooks(to, null)));
+        return done[0];
+    }
+
+    /**
+     * Empty a session player's inventory for another game's kit (a session handed over), keeping
+     * everything that isn't a kit item: it is banked in the saved-state row's carry, as at the
+     * session's end, and comes home with them (the Clubhouse review, #3). Never {@code clear()} a
+     * session inventory: an auction win or a Mini can arrive in it mid-session.
+     *
+     * @return whether it was done (false: no ACTIVE session; nothing changed)
+     */
+    public boolean bankExtras(Player player) {
+        if (player == null || !live()) {
+            return false;
+        }
+        boolean[] done = {false};
+        port().safely("keeping a player's things", () -> done[0] = core().bankExtras(player));
+        return done[0];
+    }
+
+    /**
+     * Take the kit items (and only those) off a player: the inventory, the cursor, the crafting grid
+     * and the ender chest. What else they hold stays, for the session's end to bank.
+     */
+    public void stripKit(Player player) {
+        if (player != null) {
+            port().safely("taking a kit off", () -> BukkitStateAdapter.stripKit(player));
+        }
+    }
+
+    /**
+     * Put a session player in {@code mode} (a Clubhouse watcher's SPECTATOR, and ADVENTURE again), as
+     * the session's own change: the game-mode guard keeps them in it for this session only, and every
+     * way out puts back the mode they came in with (it is in their saved state).
+     *
+     * @return whether it was done (false: no ACTIVE session)
+     */
+    public boolean gameMode(Player player, org.bukkit.GameMode mode) {
+        if (player == null || mode == null || !live()) {
+            return false;
+        }
+        boolean[] done = {false};
+        port().safely("a game's game mode", () -> done[0] = port().gameMode(player, mode));
+        return done[0];
+    }
+
+    // ---- end WP-CH --------------------------------------------------------------------------------
 
     /** Run {@code action}, a dismount the game makes itself (re-seating in a boat), past the guard. */
     public void ownDismount(Player player, Runnable action) {

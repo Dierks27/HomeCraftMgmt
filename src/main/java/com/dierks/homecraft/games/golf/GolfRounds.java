@@ -138,11 +138,6 @@ public final class GolfRounds {
             games().tell(player, Refusal.of("That course is closed right now."));
             return false;
         }
-        Refusal refusal = games().canOpen(player, golf);
-        if (refusal != null) {
-            games().tell(player, refusal);
-            return false;
-        }
         World world = golf.plugin().getServer().getWorld(course.world());
         if (world == null) {
             games().tell(player, Refusal.of("That course's world isn't loaded right now."));
@@ -152,6 +147,22 @@ public final class GolfRounds {
         int maxOverPar = golf.settings().maxOverPar();
         GolfCourse.Tee tee = course.hole(1).tee();
         Location start = new Location(world, tee.x(), tee.y(), tee.z(), tee.yaw(), 0);
+        if (group != null) { // WP-CH: "Play again together" for a member waiting in the Clubhouse
+            Boolean fromClub = ClubGolf.fromClubhouse(com.dierks.homecraft.games.clubhouse.Clubhouse.door(games()),
+                    player, golf, course.id(), start, (q, at) -> games().sessions().teleport(q, at),
+                    q -> games().canOpen(q, golf), (q, r) -> games().tell(q, r));
+            if (fromClub != null) {
+                if (fromClub) {
+                    begin(player, course, look, maxOverPar, group);
+                }
+                return fromClub;
+            }
+        }
+        Refusal refusal = games().canOpen(player, golf);
+        if (refusal != null) {
+            games().tell(player, refusal);
+            return false;
+        }
         return games().sessions().enter(player, golf, course.id(), start,
                 p -> begin(p, course, look, maxOverPar, group));
     }
@@ -202,29 +213,120 @@ public final class GolfRounds {
     }
 
     private void giveKit(Player p) {
+        // final gate #16 (fx2-A): KitItems.put, never setItem: a round from the Clubhouse or the next one
+        // gives the kit mid-session, over nothing of theirs that arrived meanwhile
         PlayerInventory inv = p.getInventory();
         for (int i = 0; i < CLUBS.length; i++) {
             int power = i + 1;
-            inv.setItem(i, KitItems.item(golf, CLUB + power, CLUB_ITEMS[i], "&a" + CLUBS[i] + " &7- power " + power,
+            KitItems.put(inv, i, KitItems.item(golf, CLUB + power, CLUB_ITEMS[i],
+                    "&a" + CLUBS[i] + " &7- power " + power,
                     "&7Any click putts your ball", "&7the way you look.", "&7Stand within 4 blocks of it."));
         }
-        inv.setItem(5, KitItems.item(golf, GO, Material.COMPASS, "&bGo to my ball",
+        KitItems.put(inv, 5, KitItems.item(golf, GO, Material.COMPASS, "&bGo to my ball",
                 "&7Takes you right next to it."));
-        inv.setItem(6, KitItems.item(golf, RESET, Material.RECOVERY_COMPASS, "&eReset ball &7(+1 stroke)",
+        KitItems.put(inv, 6, KitItems.item(golf, RESET, Material.RECOVERY_COMPASS, "&eReset ball &7(+1 stroke)",
                 "&7Puts it back where you", "&7last putted from."));
-        inv.setItem(7, KitItems.item(golf, CARD, Material.PAPER, "&fScorecard", "&7Your strokes so far."));
-        inv.setItem(8, KitItems.item(golf, LEAVE, Material.BARRIER, "&cLeave game",
+        KitItems.put(inv, 7, KitItems.item(golf, CARD, Material.PAPER, "&fScorecard", "&7Your strokes so far."));
+        KitItems.put(inv, 8, KitItems.item(golf, LEAVE, Material.BARRIER, "&cLeave game",
                 "&7Click twice to leave.", "&7Your things come back."));
         inv.setHeldItemSlot(1);
     }
 
-    /** The ball on the current hole's tee; the player there too unless it's the first (they're already there). */
+    /**
+     * The chunks a hole reads before its ball goes down (fx2-C #4), seen through the least of a world
+     * so the rule is tested without a server.
+     */
+    interface ChunkLoader {
+        /** Whether the chunk is in memory now. */
+        boolean loaded(int cx, int cz);
+
+        /** Load the chunk off the main thread; {@code done} runs on the main thread once it is in (or failed). */
+        void loadAsync(int cx, int cz, Runnable done);
+    }
+
+    /** The chunks a hole reads when its ball goes on the tee: the tee's, and the cup's (how high it is), once each. */
+    static java.util.List<int[]> holeChunks(GolfCourse.Hole h) {
+        int tx = (int) Math.floor(h.tee().x()) >> 4;
+        int tz = (int) Math.floor(h.tee().z()) >> 4;
+        int cx = h.cup().x() >> 4;
+        int cz = h.cup().z() >> 4;
+        return tx == cx && tz == cz ? java.util.List.of(new int[]{tx, tz})
+                : java.util.List.of(new int[]{tx, tz}, new int[]{cx, cz});
+    }
+
+    /**
+     * Run {@code then} once the hole's chunks are loaded: at once when they are (the player stands at
+     * the tee: the usual case), else after each missing one has come in asynchronously. A chunk is never
+     * loaded here on the main thread: "Play again together" from the Clubhouse starts hole 1 while the
+     * player's own teleport is still on its way, hundreds of blocks from a tee nobody has loaded, and
+     * World.getChunkAt would stall the server on a disk read there.
+     */
+    static void whenLoaded(ChunkLoader chunks, GolfCourse.Hole h, Runnable then) {
+        java.util.List<int[]> missing = new ArrayList<>();
+        for (int[] c : holeChunks(h)) {
+            if (!chunks.loaded(c[0], c[1])) {
+                missing.add(c);
+            }
+        }
+        if (missing.isEmpty()) {
+            then.run();
+            return;
+        }
+        int[] left = {missing.size()};
+        for (int[] c : missing) {
+            chunks.loadAsync(c[0], c[1], () -> {
+                if (--left[0] == 0) {
+                    then.run();
+                }
+            });
+        }
+    }
+
+    /** {@link ChunkLoader} on the server: Paper's async load, back on the main thread inside golf's guard. */
+    private ChunkLoader chunks(World world) {
+        return new ChunkLoader() {
+            @Override
+            public boolean loaded(int cx, int cz) {
+                return world.isChunkLoaded(cx, cz);
+            }
+
+            @Override
+            public void loadAsync(int cx, int cz, Runnable done) {
+                world.getChunkAtAsync(cx, cz, true).whenComplete((chunk, error) -> {
+                    Runnable back = () -> games().guard(golf, done);
+                    if (org.bukkit.Bukkit.isPrimaryThread()) {
+                        back.run();
+                    } else if (golf.plugin().isEnabled()) {
+                        org.bukkit.Bukkit.getScheduler().runTask(golf.plugin(), back);
+                    }
+                });
+            }
+        };
+    }
+
+    /**
+     * The ball on the current hole's tee; the player there too unless it's the first (they're already
+     * there, or on their way). It waits for the hole's chunks ({@link #whenLoaded}): meanwhile the round
+     * is between holes, so nothing is putted and a stale start can't run, and the hole starts once they
+     * are in, if the round is still this player's.
+     */
     private void startHole(Player p, LiveRound r, boolean teleport) {
+        r.state = LiveRound.State.BETWEEN;
+        long token = ++r.between;
+        UUID id = p.getUniqueId();
+        whenLoaded(chunks(p.getWorld()), r.hole(), () -> {
+            Player now = golf.plugin().getServer().getPlayer(id);
+            if (now != null && live.get(id) == r && r.state == LiveRound.State.BETWEEN && r.between == token) {
+                teeOff(now, r, teleport);
+            }
+        });
+    }
+
+    /** The hole's chunks are in: the ball on the tee, the player too when asked, and the hole's title. */
+    private void teeOff(Player p, LiveRound r, boolean teleport) {
         r.state = LiveRound.State.PLAYING;
         World world = p.getWorld();
         GolfCourse.Hole h = r.hole();
-        world.getChunkAt((int) Math.floor(h.tee().x()) >> 4, (int) Math.floor(h.tee().z()) >> 4); // the tee's chunk
-        world.getChunkAt(h.cup().x() >> 4, h.cup().z() >> 4); // and the cup's, to read how high it is
         LiveBlocks blocks = new LiveBlocks(world);
         r.tee(blocks);
         BallPhysics.settle(r.ball, blocks);
@@ -801,6 +903,23 @@ public final class GolfRounds {
         groups.leave(r.player, r);
     }
 
+    /** WP-CH: golf together's groups playing now, with their shared cards (read-only). */
+    java.util.Map<GolfGroup, GolfGroup.Card> liveGroups() {
+        java.util.Map<GolfGroup, GolfGroup.Card> out = new java.util.LinkedHashMap<>();
+        for (GolfGroup g : groups.live()) {
+            out.put(g, groups.card(g));
+        }
+        return out;
+    }
+
+    /** WP-CH: the round is over and its player goes to the Clubhouse: the ball goes, the round is forgotten. */
+    void forget(LiveRound r) {
+        if (live.get(r.player) == r) {
+            live.remove(r.player);
+        }
+        r.view.remove();
+    }
+
     // ---- golf together (EVENTS-OWNER-DECISIONS D4): GolfGroups' server side -------------------------
 
     private Player online(UUID player) {
@@ -876,6 +995,9 @@ public final class GolfRounds {
             Player p = online(player);
             if (p == null) {
                 return;
+            }
+            if (ClubGolf.toClubhouse(golf, GolfRounds.this, p, round, card)) {
+                return; // WP-CH: the group goes to the Clubhouse
             }
             GolfCard own = round.card();
             games().sessions().leave(p, EndReason.FINISH);

@@ -466,8 +466,9 @@ web developer's version.
   open). The bottom row has Today's pick (46), High scores (47), Take a break (48) and How
   the games work (50). A closed game shows no tile at all.
 - **`/hcm play <game>`** opens one game, rules first. **`/hcm play <course>`** from chat or a join
-  sign starts a time trial straight away (its tile on the Games screen opens the course screen
-  first); a golf course always opens its course screen. `/hcm play blackjack` opens Twenty-One.
+  sign skips the course screen and starts a time trial (after the warm-up choice while warm-ups are
+  on; its tile on the Games screen opens the course screen first); a golf course always opens its
+  course screen. `/hcm play blackjack` opens Twenty-One.
 - **The hub's Play row** (row 4, only while the games are on): All games, Today's pick, Luck,
   Cabinets, Courses, Mini golf and Take a break. Row 1's label changes from "Games" to "Luck", and
   its crates and Scratch Ticket follow Take a break: a player on a break sees the "Taking a break"
@@ -550,7 +551,7 @@ common keys turns the games off, junk in one game's block closes that game.
 | `featured` | `auto` | `auto` picks a skill game or course each day; a game or course id pins it (`/hcm games feature`). `trials` or `golf` pins every course of that game |
 | `featured_bonus` | `1` | Tokens for the first finish of today's pick (counts toward `skill_daily_cap`) |
 | `feed_top` | `5` | The website's leaderboards: how many of each game's and course's best scores `/api/arcade` lists as `top` (0-25; 0 = none). Past Fresh courses list at most 3. Names only with `web.dashboard.arcade_show_names` |
-| `restart_times` | `["04:00", "16:00"]` | When the host restarts the server each day: the minute it actually stops, not when its warnings start (quoted 24-hour times in `clock.time_zone`; midnight is `"00:00"`). Just before each one, nothing a restart would cut off starts: courses and golf, a new Twenty-One or Higher or Lower hand (an open one plays on), a cabinet's scored daily try (today's board isn't dealt until after, and the try is kept; practice after a used try and Classic play go on). Spins and flips aren't held, and the plugin sends no warnings of its own. `[]` = off; an entry that isn't a time is dropped with a WARN |
+| `restart_times` | `["04:00", "16:00"]` | When the host restarts the server each day: the minute it actually stops, not when its warnings start (quoted 24-hour times in `clock.time_zone`; midnight is `"00:00"`). Just before each one, and through that minute until the server stops (a server back up inside the minute isn't held for the restart it just had), nothing a restart would cut off starts: courses and golf, a new Twenty-One or Higher or Lower hand (an open one plays on), a cabinet's scored daily try (today's board isn't dealt until after, and the try is kept; practice after a used try and Classic play go on). Spins and flips aren't held, and the plugin sends no warnings of its own. `[]` = off; an entry that isn't a time is dropped with a WARN |
 | `restart_hold_minutes` | `5` | How many minutes before each restart that hold starts (1-60) |
 | `break.daily_choices` | `[10, 25, 50, 100]` | The daily limits a player can pick (they can also pick none) |
 | `break.pause_days` | `[1, 7, 30]` | The pauses a player can pick, in days |
@@ -640,9 +641,10 @@ and its own `/hcm play <course>` id; `/hcm play trials` lists them all, easiest 
 Easy, Medium, Hard and "Why did we build this?".
 
 - **Starting.** `/hcm play <course>` typed in chat, an `[Arcade]` join sign, or
-  `/hcm play <course> <player>` starts the run **straight away**. A tile on the Games screen, the
-  course list or the hub's Today's pick opens the **course screen** first: the rules, your best,
-  this week's best, the record and who holds it, what it pays, and Start.
+  `/hcm play <course> <player>` (admins and the console) skips the course screen (while warm-ups
+  are on it first asks "Warm up (3:00)" or "Go straight to the timed run"). A tile on the Games
+  screen, the course list or the hub's Today's pick opens the **course screen** first: the rules,
+  your best, this week's best, the record and who holds it, what it pays, and Start.
 - **A run.** You arrive at the start line with only the course kit: Back to checkpoint and Leave
   game (click twice), plus a worn elytra and 3 rockets on an elytra course (back to 3 at every
   ring), or a boat of your own on a boat course. A 3-2-1 countdown holds you at the start (you can
@@ -673,10 +675,10 @@ Easy, Medium, Hard and "Why did we build this?".
   or carry it across a gap.
 - **The finish.** The time goes on the course's all-time board and this week's board. Chat shows
   your time, "★ Your first finish…" or "★ New best!", then the record and who holds it (or "★ New
-  course record!"), and "★ Best time this week!" when you set it. "Your first finish" shows only
-  when that first finish is being paid now: after a layout change clears the board, a later
-  finish reads "★ New best!". Then you're sent home with your things, and a result screen offers
-  Play again.
+  course record!"), and "★ Best time this week!" when you set it without setting the record. "Your
+  first finish" shows only when that first finish is being paid now: after a layout change clears
+  the board, a later finish reads "★ New best!". Then you're sent home with your things, and a
+  result screen offers Play again.
 - **Rewards:** a course's first finish pays by tier, once ever and outside every cap; setting the
   week's best time on a course pays `weekly_best_bonus`, once per course per week; finishing the
   course of the week pays `course_of_week_bonus`, once a day; and today's pick (the course, or any
@@ -720,9 +722,10 @@ who's ready, and the course's Weekly Cup item when it runs one. Only the host st
 chooses whether everyone warms up first (the same `warmup_seconds`, with a **Ready** kit item to be done early).
 Then everyone goes to one grid and starts on **one shared 3-2-1**: boats in rows of two behind the
 start line (single file on a narrow track), runners and flyers on the start itself. A bar shows your
-place ("2nd of 5 · Lap 1/2"), finishes and photo finishes go to the group, and a results screen
-ranks everyone. The race ends when everyone is in, 2 minutes after the first finish, or 10 minutes
-after Go. Each racer's finish is also their **normal counted run** on the course, exactly once and
+place ("2nd of 5 · Lap 1/2"), finishes and photo finishes go to the group, and the results (the
+Clubhouse board and its **Results** item, or a results screen at home) rank everyone. The race
+ends when everyone is in, 2 minutes after the first finish, or 10 minutes after Go. Each racer's
+finish is also their **normal counted run** on the course, exactly once and
 under every fair-play rule: its boards, its first finish and other rewards, and the Weekly Cup. A
 party race has no entry, no fees and no prizes of its own. Boats bump, as at Race Night; runners
 and flyers can't push each other (they are on the `hcm_nopush` scoreboard team while they race, and
@@ -736,11 +739,13 @@ called off, its racers go home with their things, and nothing they hadn't finish
 **Race mode** is the engine party races and Race Night share: racers are held on the grid until one
 go tick and all start on one clock, a finish is judged on the course as it is (its layout, and the
 still-standing rule for Fresh Courses), finishers wait on Fresh Ice Boat's **viewing stand** (a railed
-platform in the middle of the loop, built by boat planner v2) or go home at the line where there is
-none, and a racer sent back to a checkpoint is re-seated clear of the other boats. A boat that
-creeps off its grid spot before Go is put back on it and starts once back, on the shared clock (it
-never gains a head start). A racer whose trip to the track falls through (hands full, hurt) is
-dropped from the race at once, so nobody waits for them.
+platform in the middle of the loop, built by boat planner v2), and a racer sent back to a checkpoint
+is re-seated clear of the other boats. Where there is no stand, finishers go to the Clubhouse at the
+line if it is open in the course's world, `party_after` / `race_night_after` is on and it isn't
+closing for a restart; otherwise they go home. A boat that creeps off its grid spot before Go is
+put back on it and starts once back, on the shared clock (it never gains a head start). A racer
+whose trip to the track falls through (hands full, hurt) is dropped from the race at once, so
+nobody waits for them.
 <!-- ---- end WP-R1 ---- -->
 
 **Building a course** (`hcm.games.admin`, standing in a `games.worlds` world; the full list is in
@@ -748,8 +753,9 @@ dropped from the race at once, so nobody waits for them.
 
 1. `/hcm games course create <id> <parkour|elytra|boat> [tier]`. A course id is 2-32 lower-case
    letters, digits or `_`, starting with a letter. It can't be a game id or alias, another
-   course, or one of `accept`, `deny`, `break`, `leave`, `invites`. Nor can it be `auto`, which
-   is how `/hcm games feature` lets the day pick.
+   course, a Fresh Courses id (such as `fresh_parkour`), or one of `accept`, `deny`, `break`,
+   `leave`, `invites`, `news`, `cup`, `watch`, `cheer`, `cheers`, `rider`. Nor can it be `auto`,
+   which is how `/hcm games feature` lets the day pick.
 2. Stand where it starts, facing the way it goes: `<id> start`.
 3. At each checkpoint, in order: `<id> checkpoint add [radius]`. The default radius is 1.5 for
    parkour, 4 for elytra and 3 for boats (0.5-16, at most 64 checkpoints).
@@ -778,10 +784,14 @@ pool counts the top-up once 2 or more are in, and it is paid only if 2 or more s
 At the week's rollover (the quests' week start at 04:00, when Fresh Courses change) the pool is
 shared by Cup time: 70/30 with 2 Cup times, 50/30/20 with 3 or more, rounded down with the rest
 to 1st. An entrant with no Cup time gets no share: their entry stays in the
-pool. It is settled once, and a rollover the server was down for is settled at the next start. The
+pool, so the Cup stops taking entries in its last `games.restart_hold_minutes` (5) before the
+rollover, and during a restart hold that runs into them ("This week's Cup is nearly over, so it takes
+no new entries."): no run started then could set a Cup time. It is settled once, and a rollover the
+server was down for is settled at the next start. The
 server keeps nothing: the pool is every entry, plus `games.cup.server_topup` (10) when 2 or more
-set a Cup time. A lone entrant, fewer than 2 Cup times, or a course deleted, re-made or closed
-mid-week gets every entry back, with the reason. Cup prizes aren't under the
+set a Cup time. A lone entrant, fewer than 2 Cup times, a Cup an admin calls off, or a course
+deleted, changed (a layout edit, or a Fresh course re-rolled) or closed mid-week gets every entry
+back, with the reason. Cup prizes aren't under the
 daily skill caps: it's the players' own pool, and a cap would destroy tokens. Nothing in it is
 chance, so Take a break's chance rules don't apply; `/hcm play cup off` hides it for a player.
 Fresh parkour, Sky Rings, Ice Boat and Dropper courses run one by default (while Fresh Courses
@@ -789,8 +799,8 @@ change once a week), and take entries once the week's own course is up ("The Cup
 this week's course is up"); a hand-built course only after `/hcm games cup on <course>`. Admins
 have `/hcm games cup status [course]`, `on|off|default <course>`, `settle <course> confirm` and
 `void <course> confirm` (see [Commands](#commands)).
-Deleting, closing (`disable`) or re-making a course whose Cup has entrants asks for `confirm`,
-then refunds them; a deleted course's Cup switch goes with it.
+Deleting, closing (`disable`) or changing the layout of a course whose Cup has entrants asks for
+`confirm`, then refunds them; a deleted course's Cup switch goes with it.
 
 **For the owner:** an entry pool can mean the youngest players pay into a pool the oldest win.
 It is small, opt-in per player and refunded when a player is alone. To switch the Cup off
@@ -835,7 +845,8 @@ on the Golf tab ("Meadow Links - 9 holes, par 27") and its own `/hcm play <cours
 - **Golf together** (owner decision D4). The course screen (`/hcm play golf <course>` or
   `/hcm play <course>`) has **Play with friends**: a party of up to 4 through C1's parties (one party
   per player, shared with party races). Anyone in it can invite a friend (the usual invites:
-  [Accept] on Java, `/hcm play accept` on Bedrock; the pair cooldown and invite switches stay); only
+  [Accept] on Java, `/hcm play accept` on Bedrock; the pair cooldown stays, and `/hcm play invites off`
+  turns golf together invites off too, including for a player who turned them off earlier); only
   the host starts, and everyone goes to hole 1 at once. Everyone plays the same hole at the same
   time, each with their own ball; a player whose ball is in waits, and when every ball is in (or
   picked up) everyone moves to the next tee together. The first ball of a hole in starts a 2:00
@@ -900,8 +911,9 @@ to the first tee when the course is closed, changed or deleted goes straight hom
 
 Right after the 04:00 restart, the plugin builds a new set of courses by itself: **Easy Parkour,
 Parkour and Hard Parkour** (three courses, each with its own board), **Sky Rings** (an elytra course:
-fly through the rainbow rings, no rockets needed), **Golf of the Week** (9 holes) and **Tiny Golf**
-(3 short holes for the youngest). By default a new set goes up **every Monday** and stays all week;
+fly through the rainbow rings, no rockets needed), **Golf of the Week** (9 holes), **Tiny Golf**
+(3 short holes for the youngest), and two droppers, **Easy Dropper** and **Dropper** (see "The
+Dropper" below). By default a new set goes up **every Monday** and stays all week;
 it can also change every day, or every few days (`cadence`, below). Everyone gets the same courses.
 Kids earn 1 to 3 stars on each course in each set (1 just for finishing) and fill a weekly **Star
 Chart**. Nothing is built by hand, and your own courses are never touched. The ice-boat generator
@@ -951,8 +963,9 @@ and a run already going always counts. The old half is emptied once nobody is on
   confirm` to clear that area, or use a flat world (below). A course is also refused, with a line in
   the console and in status, when a hand-built course is within 16 blocks of its area, when the
   world's spawn (or `safe_spot`) is, when a hand-built course already uses its id, or when its area
-  comes within 32 blocks of the Falling Floors arena (`games.falling_floors.origin`, on or off);
-  `claim` is refused then too, so it never clears one of your courses, the spawn or the arena.
+  comes within 32 blocks of the Falling Floors arena (`games.falling_floors.origin`) or the Clubhouse
+  (`games.clubhouse.origin`), on or off; `claim` is refused then too, so it never clears one of your
+  courses, the spawn, the arena or the Clubhouse.
 - **A flat world instead** (the fallback when your Games world has hills; no extra plugin needed):
   1. `/mv create games_fresh normal --world-type flat --no-structures` (Multiverse-Core 5; on 4.x
      it was `-t flat -a false`; check `/mv create --help`).
@@ -995,7 +1008,10 @@ cap of the game that pays it (Hard Parkour's weekly first finish is 4 for that r
 first-finish token and a Star Chart goal are paid in full or not at all: if what is left of today's
 caps (the course game's or the server's) is smaller than the reward, nothing is paid and nothing is
 used up, and the player reads once "You've reached today's token limit - finish it again another day
-this week for its tokens." A finish on another day of the same set pays it (a goal: any counted
+this week for its tokens." when the set is weekly (every 2 to 6 days: "... finish it again another
+day before the courses change for its tokens."; daily, where the set has no other day: "You've
+reached today's token limit - your time and stars still count!"; a Star Chart goal always reads the
+weekly line). A finish on another day of the same set pays it (a goal: any counted
 finish later that week). Every other reward keeps paying what is left of the caps. The parkour and
 Sky Rings courses share `games.trials.daily_cap` (4 a day), the golf courses `games.golf.daily_cap`
 (4), the Star Chart `games.fresh.daily_cap` (2), and every skill game together
@@ -1008,7 +1024,8 @@ day that player finishes a course.
 tabs) opens "This week's courses - Mon 28 Sep-Sun 4 Oct" ("Today's courses" when daily, "The
 current courses" for any other cadence): one tile per course, whose NAME carries the player's stars
 in this set, a golf course's holes and par, and its **course code** ("Hard Parkour - ★★☆ · Course
-code HARD-40"); then the three Classics (a course an admin brought back, one being built, or empty
+code HARD-40"); then the four Classics (Classic Parkour, Classic Sky Rings, Classic Golf and
+Classic Dropper: a course an admin brought back, one being built, or empty
 with the tip "Loved an old course? Tell an admin its course code..."), the Star Chart (this week's
 stars, the next goal and what it pays) and How stars work. Every line follows the cadence: "This
 week's best", "Your best this week", "First finish this week: +2 tokens", "(new this week)" on a
@@ -1046,9 +1063,33 @@ droppers `fresh_dropper_easy` and `fresh_dropper` (on, with the rest of Fresh Co
 `/hcm play fresh_courses` opens the Fresh Courses screen and `/hcm play fresh_parkour_tiers` the
 parkour level picker.
 
-**Commands** (`hcm.games.admin`). `reroll`, `clear` and `claim` (to clear an area) need `confirm`;
-`promote` needs it when the course's board already has times. `reroll`, `preview` and `promote` are
-refused within `avoid_before_restart_minutes` of a restart. Every change is logged with who made it.
+**Picking a good course.** Don't like how this week's came out? **Regenerate it**:
+`/hcm games gen regenerate <course> confirm` (or `retry`, the same as `reroll`) makes a new one
+for this week on a fresh board; anyone on the old one finishes first, and a running Weekly Cup there
+is called off and refunded. Or find next week's a week early: `/hcm games gen preview <course> next`
+builds a candidate for next week (next week's tier or mix, a random seed it tells you) in the spare
+half, where nobody can play it; `/hcm games gen test <course>` takes you round it on a test run (its
+real start, checkpoints, finish, clock and kit; nothing is recorded or paid; golf is walked with
+`tp <course> idle`); don't like it, preview next again for another; like it,
+`/hcm games gen choose <course>` makes it next week's course. Monday 4:00 AM it goes up as usual, on
+fresh boards with its own course code (the website shows its code and seed), with almost nothing
+left to build, and the week after goes back to normal. `/hcm games gen unchoose <course>` changes
+your mind; `/hcm games gen status` shows "next set: chosen seed ...". The same tools are on each
+Fresh course's own screen for admins: the **Admin tools** item (bottom left) opens "Make a new
+course now (regenerate)", "Build one to try (preview)", "Build next week's to try (preview next)",
+and once a preview stands "Try the preview (test run)", "Use it now (promote)" and "Use it next week
+(choose)"; regenerate, promote and choose ask "Sure?" first. A Yes acts only on the preview its Sure
+screen showed: if a new one was built while it was open, nothing happens and it says so; and promote
+and choose wait while the course is being built (its name says so). A pick that a later change
+drops (another tier, a fall depth that shapes it differently, a moved rebuild day, in config or by
+command) says so on the Admin tools and in `status` until its week is over or you pick again, across
+restarts. Players never see them.
+
+**Commands** (`hcm.games.admin`). `reroll` (and `retry`/`regenerate`), `clear` and `claim` (to clear
+an area) need `confirm`; `promote` needs it when the course's board already has times, and `choose`
+when it would replace another pick. `reroll`, `preview` (and `preview next`), `test` and `promote`
+are refused within `avoid_before_restart_minutes` of a restart. Every change is logged with who made
+it.
 The course and golf editors refuse a generated course ("This course is made by Fresh Courses - use
 /hcm games gen.") and anything of a hand-built course within 16 blocks of a Fresh Courses area: a
 point, a checkpoint or finish with its radius, a golf hole's whole bounds box.
@@ -1057,19 +1098,24 @@ point, a checkpoint or finish with its radius, a golf hole's whole bounds box.
 |---|---|
 | `/hcm games gen status [course]` | First how often the courses change and when next ("weekly (Mondays at 4:00 AM) · next: Mon 5 Oct 4:00 AM (in 6d 14h)"), then each course: on or off, its tier or mix, which set is live (and its key, like `7:38`), its half, rev and seed, who is playing it, and the last build (plan time, blocks, ticks, chunks, verify). With a course: its set's key and end, its area and pin too |
 | `/hcm games gen plan <course> [seed\|next]` | A dry run, no blocks: what a build would make (its blocks, hash and the planner's own summary), for this set or the `next` one |
-| `/hcm games gen preview <course> [seed]` | Build a new course into the spare half without switching, to walk it (`tp <course> idle`). The next scheduled build clears it away |
-| `/hcm games gen promote <course> [confirm]` | The preview becomes the current course, on a fresh board |
-| `/hcm games gen reroll <course\|all> confirm` | A new course for the current set, on a fresh board; anyone playing the old one finishes there. No second first-finish token |
+| `/hcm games gen preview <course> [seed]` | Build a new course into the spare half without switching, to try it (`test`) or walk it (`tp <course> idle`). The next scheduled build clears it away (unless it was chosen: see `choose`) |
+| `/hcm games gen preview <course> next [seed]` | A candidate for the NEXT set: its tier or mix and settings, and a seed (random unless you give one; the reply says it), in the spare half. Previewing again replaces it |
+| `/hcm games gen test <course>` | A test run on the preview: its real start, checkpoints, finish, clock and kit (the Dropper offers its practice drop as usual). Records nothing: no board, token, star, Cup time, quest or achievement. Refused with no preview ("No preview yet - /hcm games gen preview <course> first"), near a restart, and while the course is off. Golf previews are walked instead (`tp <course> idle`) |
+| `/hcm games gen promote <course> [seed] [confirm]` | The preview (of this set) becomes the current course, on a fresh board. With a seed, only while the preview is still that seed (what the Admin tools' Yes sends) |
+| `/hcm games gen choose <course> [seed] [confirm]` | The preview's seed becomes the course of exactly the next set: it goes up at the scheduled change on fresh boards, with its own course code and seed on the website, and the set after goes back to its own seed. Kept across restarts (the spare half keeps the chosen preview, which is checked again after a restart, so the change has very little to build). `confirm` when it replaces another pick. With a seed, only while the preview is still that seed. The pick is built at the change as it was tried, even when its seed is the live one's. Refused for a Classic, while the course is off or being built, with no preview, or when the preview was built at another tier, mix or (medium and hard parkour) fall depth. A waiting pick is dropped if the tier or mix changes, if a `fall_depth` change would reshape it, or if a `cadence` or `rebuild_day` change moves the next set. You, the console, `status` and the Admin tools are told (the last two until that set is over or you pick again, across restarts), and you choose again. Its pin, if any, comes back after it |
+| `/hcm games gen unchoose <course>` | Cancel the pick: the next set gets its own new course |
+| `/hcm games gen reroll <course\|all> confirm` | A new course for the current set, on a fresh board; anyone playing the old one finishes there, and a running Weekly Cup on it is called off and refunded. No second first-finish token |
+| `/hcm games gen retry\|regenerate <course\|all> confirm` | The same as `reroll` |
 | `/hcm games gen rebuild <course>` | Check the current course against its plan and put back anything missing (same course). After a `clear`, its area is checked for other blocks first and a new course is built |
 | `/hcm games gen on\|off <course>` | Open or close one (kept across restarts). `off` ends runs on it ("Easy Parkour is closed for now."); its blocks stay |
-| `/hcm games gen tier <course> <easy\|medium\|hard>` | Its difficulty from the next build (kept across restarts) |
-| `/hcm games gen mix <golf course\|dropper> <E, M and H>` | The big golf course's or Tiny Golf's holes, or a dropper's levels, from the next build (like `EEEMMMMHH`, `EEMHH`) |
+| `/hcm games gen tier <course> <easy\|medium\|hard>` | Its difficulty from the next build (kept across restarts). A change drops a waiting pick: choose again |
+| `/hcm games gen mix <golf course\|dropper> <E, M and H>` | The big golf course's or Tiny Golf's holes, or a dropper's levels, from the next build (like `EEEMMMMHH`, `EEMHH`). A change drops a waiting pick: choose again |
 | `/hcm games gen pin <course> <seed\|live> [days]` / `unpin <course>` | Keep a good course: the same blocks in every new set (each on fresh boards) until unpinned, or for that many days. A pin ends by itself after its days; one made before a plugin update that changed that course's generator is ignored (the console and status say so) |
 | `/hcm games gen tp <course> [live\|idle]` | Go to the current course, or the spare half |
 | `/hcm games gen claim <course> [confirm]` | Count what is in a new area; with `confirm`, clear it and let the course use it (refused while a hand-built course or the spawn is within 16 blocks) |
 | `/hcm games gen clear <course> confirm` | Empty both halves and switch the course off (do this before moving a course's `origin`) |
 
-The overrides (`on`/`off`, `tier`/`mix`, `pin`, rerolls per set, the claimed area, and the schedule
+The overrides (`on`/`off`, `tier`/`mix`, `pin`, `choose` (a one-set pin), rerolls per set, the claimed area, and the schedule
 with when it was first seen) live in `hcm_meta` under `gen.*`. Generated courses are ordinary
 `game_courses` rows with a `gen:` block (its `day` is the set's first day, its `cadence` the set's
 length), and their boards are ordinary `game_scores` rows: `gfresh:<course>:<set>` (that course's
@@ -1140,10 +1186,11 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
 
 **Verify in game** (Java and Bedrock):
 
-1. `/hcm games gen on fresh_dropper_easy` and `/hcm games gen on fresh_dropper`, then `/hcm games gen
-   reroll fresh_dropper confirm` (and the same for Easy): `/hcm games gen status` shows both live
-   within about 2 minutes; the Fresh Courses screen shows "Easy Dropper - 3 levels" and "Dropper - 5
-   levels · Course code DROP-1".
+1. With Fresh Courses on (both droppers ship on and are built with the rest of the set), `/hcm games
+   gen status` shows `fresh_dropper_easy` and `fresh_dropper` live; on the first set the Fresh
+   Courses screen shows "Easy Dropper - 3 levels · Course code EDROP-1" and "Dropper - 5 levels ·
+   Course code DROP-1". `/hcm games gen reroll fresh_dropper confirm` (and the same for Easy) makes
+   a new one within about 2 minutes, with the next code (DROP-2).
 2. Open Easy Dropper's screen: the Start tile reads "Start - practice drop optional" (Bedrock too).
    Start it: the hotbar shows Practice drop (not timed) and Go straight to the timed run.
    Take the practice drop: nothing is timed, and the splash puts you back on the ledge for the 3-2-1.
@@ -1187,10 +1234,9 @@ line, so they can ask for a favourite back.
 - The keep area is hand-built territory that nothing guards, so every keep checks its plot is empty
   first, however often it was cleared before; blocks there refuse it, and `claim plot <n> confirm`
   clears them. `claim plot <n>` (and every plot job) is refused while keeping is off (the keep area
-  too near a Fresh Courses area, or within 32 blocks of the Falling Floors arena), when the plot
-  overlaps a kept course's old plot (the keep area
-  moved), or when a registered course stands in it or within 16 blocks: it says which, and changes
-  nothing.
+  too near a Fresh Courses area, or within 32 blocks of the Falling Floors arena or the Clubhouse),
+  when the plot overlaps a kept course's old plot (the keep area moved), or when a registered course
+  stands in it or within 16 blocks: it says which, and changes nothing.
 - Refused within `avoid_before_restart_minutes` of a restart: recall and keep. A keep, clear-plot or
   claim plot still waiting when that window begins isn't started (its admin is told to run it again
   after the restart); one cut off by the restart after it began building goes on after the restart.
@@ -1215,7 +1261,7 @@ line, so they can ask for a favourite back.
 
 1. `games.fresh.enabled: true`, `/hcm reload`. Within 3 minutes `/hcm games gen status` shows
    "weekly" and next Monday 4:00 AM, and every course live for this week; `/hcm games status` says
-   "6 courses up for ...". On Tuesday the courses are the same.
+   "8 courses up for ..." (the six plus the two droppers). On Tuesday the courses are the same.
 2. Set `games.fresh.cadence: daily`, `/hcm reload`: status says "daily", the current courses stay
    and it says they stay until the next 4:00 AM; after 4:00 AM they are new, and new every day.
 3. Set `games.fresh.cadence: 3`, `/hcm reload`: status shows the next change date on the fixed
@@ -1259,6 +1305,16 @@ line, so they can ask for a favourite back.
 19. `/hcm games gen unrecall parkour` → closed; its tile reads "Classic Parkour - empty" with the tip.
 20. `/hcm games gen keep HARD-1 dragon_run "Dragon Run"` → what it would do; add `confirm` → "Kept!";
     `/hcm play dragon_run`; `/hcm games course dragon_run info` shows a normal course.
+21. Picking a good course: `/hcm games gen preview fresh_parkour next` → "A preview of Parkour for
+    Mon 5 Oct-Sun 11 Oct (medium, seed …)", then "… is ready in half B". `/hcm games gen test
+    fresh_parkour` → you are at the preview's start with the course kit; finish: "Test run - nothing
+    was recorded", and "Play again" takes you round the preview again. `/hcm games gen choose
+    fresh_parkour` → "Parkour's course for Mon 5 Oct-Sun 11 Oct is this preview"; status shows "next
+    set: chosen seed …". After Monday's change `/hcm games gen status fresh_parkour` shows the chosen
+    seed live and its last build with (almost) no ops; the week after, a new seed of its own.
+22. As an admin, open Parkour's screen: bottom left, "Admin tools - new course, preview, try it,
+    pick one". Its "Admin: Make a new course now (regenerate)" asks "Sure?" first; as a player, the
+    item isn't there.
 
 ### Falling Floors
 
@@ -1307,17 +1363,17 @@ off (`games.falling_floors.enabled: false`).
   it might still be going at the next restart (at its longest: the 10-second countdown,
   `round_seconds`, then about 40 seconds more while the edges fall in), and `/hcm games check` warns
   when `round_seconds` is longer than `games.restart_hold_minutes`.
-- **Safety.** The arena is one box, 48 x 40 x 48 at `origin` (shipped x 5376-5423, y 176-215,
-  z 4352-4399). Before anything is written it must be 32 blocks from every Fresh Courses area
-  (switched on or not) and the kept courses, 16 from every hand-built course and from the world's
-  spawn and `games.fresh.safe_spot`, and inside the world's heights and border. The first time, the
-  box must be empty: anything in it closes the game, touching nothing, until `/hcm games floors claim
-  confirm`. After that nobody, admins included, can change a block in the box while the game is on
-  ("This is the Falling Floors arena - it puts itself back. Use /hcm games floors."),
-  and during a round the only blocks that change are floor blocks turning red, then air (at most 128
-  a tick). After a crash, the next start puts every floor back before anyone comes in, and everyone's
-  things come back as from any world game. A reset that can't put the floors back three times closes
-  the game and names where; `/hcm games floors reset` opens it again.
+- **Safety.** The arena is one box, 48 x 40 x 48 at `origin` (shipped x 5376-5423, y 176-215, z
+  4352-4399). Before anything is written it must be 32 blocks from every Fresh Courses area
+  (switched on or not), the kept courses and the Clubhouse, 16 from every hand-built course and from
+  the world's spawn and `games.fresh.safe_spot`, and inside the world's heights and border. The
+  first time, the box must be empty: anything in it closes the game, touching nothing, until `/hcm
+  games floors claim confirm`. After that nobody, admins included, can change a block in the box
+  while the game is on ("This is the Falling Floors arena - it puts itself back. Use /hcm games
+  floors."), and during a round the only blocks that change are floor blocks turning red, then air
+  (at most 128 a tick). After a crash, the next start puts every floor back before anyone comes in,
+  and everyone's things come back as from any world game. A reset that can't put the floors back
+  three times closes the game and names where; `/hcm games floors reset` opens it again.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -1353,22 +1409,168 @@ off (`games.falling_floors.enabled: false`).
    to watch.
 <!-- ---- end Falling Floors ---- -->
 
+### The Clubhouse
+
+<!-- ---- The Clubhouse (CLUBHOUSE-SPEC, WP-CH) ---- -->
+One room in the Games world where racers wait before a race and hang out after it: "a waiting room,
+and the same room after the race so folks can hang out and joke around and talk about what
+happened." It is part of the world games, not a new game: you are in it inside your normal world-game
+session, so your things are kept safe and come back when you leave. It ships switched on
+(`games.clubhouse.enabled: true`), builds itself, and **while it is off, not built or not checked,
+every race and round works exactly as before**.
+
+- **The room.** A glass-floored hall, 32 x 16 x 32, with windows, a lit roof, lanterns, benches, two
+  tables, a three-step podium (1st in the middle and highest) and a results board. Sixteen spread-out
+  arrival spots, so nobody lands on top of anybody. The walls are high and the roof is closed: there
+  is no way out on foot, and nothing a mob can spawn on.
+- **Visit any time:** `/hcm play clubhouse`. The kit is **Leave game** (click twice), **Results**
+  (the last race's results) and, while in a party, **Party** (the party screen). No damage, no pushing,
+  and nobody can change a block of the room. Chat is normal chat.
+- **Before a party race** every member of the lobby can tap **Go to the Clubhouse** on the party
+  screen and wait there. When the host presses Start, everyone waiting is taken straight to the grid;
+  members who didn't go are seated exactly as before. It's optional.
+- **Before Race Night** the join message and the Race Night screen offer **Wait in the Clubhouse**;
+  racers there are taken to the grid at seating time. Nothing else about the night changes.
+- **After a party race** a racer who finishes (or doesn't) comes back to the Clubhouse instead of
+  going home ("Back in the Clubhouse! Look at the board for the results."). When the race is over the
+  board shows the order, times and gaps, and the host's party screen has **Race again**, which takes
+  everyone still in the Clubhouse back to the grid. While a party is racing, its screen hides **Go to
+  the Clubhouse** and **Take a rider** (like Invite, Ready and the Cup); **Watch** stays for anyone not
+  in the race.
+- **After Race Night** everyone goes to the Clubhouse. The night's top three stand on the podium,
+  "Photo time!" shows for 10 seconds, a firework (no damage) goes off over 1st, and the board shows
+  the night's standings. Ties on points follow the night's own ranking.
+- **After golf together** the group comes to the Clubhouse and the board shows the group's order.
+  **Play again together** works from there: the Results item's card offers it, and the host's Start
+  on the golf party screen takes everyone waiting in the Clubhouse straight to hole 1.
+- **Solo runs** go home as always.
+- **The board** shows, while a party race, Race Night or golf group is going, the live positions
+  (place, name, lap or checkpoint, gap; golf: the group's card), at most once a second; after it ends,
+  the final result. It is one floating text, cleared and made again on every start.
+- **Watchers.** Anyone can come and watch without racing: **Watch** on the party screen and the Race
+  Night screen, or `/hcm play clubhouse`. A watcher is never put in a race, never counted and never
+  paid, and is on no racer list.
+- **Watch live.** **Watch live** in the Clubhouse kit (while a race or golf group is going), or
+  `/hcm play watch [<player>]`, takes you to the course being raced, in **spectator mode**: fly round
+  it, look into the Dropper's shafts, follow a racer by clicking them. You can't leave the course's
+  area (a move out of it just stops at the edge, and the area never reaches below the world's floor)
+  and can only follow players in that race or group. Other players
+  don't see you at all; watchers see each other. The action bar shows the race's positions
+  ("Watching live" before there are any), then "| /hcm play clubhouse to go back"; `/hcm play
+  clubhouse` brings you back in adventure mode with the kit, and so does the race's end, in time for
+  the results and the photo. Every way out (Leave game, a quit, the restart hold, the games off, a
+  crash) puts back the game mode you came with; a watcher who leaves or quits is first brought down
+  to the Clubhouse's floor, never left in mid-air where they flew.
+- **Cheer.** `/hcm play cheer` sends the racers "<name> cheers for you!" on the action bar, once
+  every 10 seconds. A racer who'd rather not: `/hcm play cheers off` (kept; `on` turns them back on).
+- **Ride along.** A boat driver can take **one** passenger in the back seat, on a solo boat run, a
+  party race or Race Night: **Take a rider (back seat)** on a boat course's screen, on the party screen
+  of a boat course, and on the Race Night screen once joined, or `/hcm play rider <player>`. It's an
+  invite (key `rider`: [Accept] on Java, `/hcm play accept` on Bedrock; `/hcm play invites off` covers
+  it). The rider hops in behind the driver at every start, grid and re-grid, holds the item "Riding
+  with Dad - hold on tight!", can't get out mid-run, and is never timed, counted, paid or on a board.
+  Their **Leave game** ends only their ride; when the driver finishes, stops, leaves or disconnects,
+  the rider goes with them (to the Clubhouse after a party race or Race Night, home after a solo run),
+  their things back. A ride that waits in the Clubhouse goes on at the driver's next race from there
+  (Race Night on a track with no viewing stand, a party's Race again), and ends when either leaves
+  the Clubhouse or after 5 minutes with no race. A rider can't be pushed by other players. Off the
+  boat (the driver on the stand) the rider is held to the stand by the racers' own rule and radius
+  (`stand_radius`), so a rider is never on the racing line (being unpushable doesn't stop a boat a
+  player is driving), and elsewhere is kept within 4 blocks of the driver. Nobody racing, watching, in
+  a party or in another game can ride, nor anyone the play gate would refuse (no `hcm.games.play`, or
+  not in a world games are played in: the picker leaves them out, `/hcm play rider` refuses them, and
+  the gate is asked again on Accept and when they get in), and no new rides start in the restart hold. A passenger doesn't change a boat's speed, so the driver's run
+  counts as normal; with `games.trials.rider_runs_count: false` a run with a rider (at any point of it)
+  is just for fun (no board, record, rewards or Cup time, told before the invite and in the finish
+  line; in a party race the driver's place still stands) and Race Night takes no riders. Ride along is
+  part of the Clubhouse: while it isn't open (off, or not built and checked) there's no Take a rider
+  anywhere.
+- **Time limits.** Anyone in the Clubhouse for `max_minutes` (30) with no race or party going is sent
+  home, with a warning a minute before. In the restart hold nobody new comes in, except arriving from
+  a race already going: a party race, golf group or Race Night that ends then still brings its players
+  here. Everyone there is sent home a minute after the hold starts (or after they arrive), with a
+  warning, and always at least 5 seconds before the restart's minute (sooner than the minute with
+  `restart_hold_minutes: 1`), so nobody is in it across a restart. From 66 seconds before the restart
+  to the end of its minute, too late for that minute, it takes nobody at all: a party race or golf
+  group that ends then sends its players home with their things, reading "The Clubhouse is closed for
+  the restart, so you're going home.", and a Race Night sends its racers home with the night's own line
+  (its results skip the board). With a one-minute hold that is the whole hold. After a crash, their
+  things come back at the next join as from any world game.
+- **One place at a time.** A solo run, another game or golf from the Clubhouse is refused, as from
+  any world game: "Finish your game first (/hcm leave)". Going from the Clubhouse to a race hands your
+  session over; nothing is saved or given back twice.
+- **Nothing here pays or counts.** The Clubhouse moves no tokens and counts toward no board, quest,
+  achievement or Cup; a race from it is the same race as always.
+- **Safety.** The generated room is one box, 32 x 16 x 32 at `origin` (shipped x 5376-5407, y
+  160-175, z 4448-4479), checked like the Falling Floors arena: 32 blocks from every Fresh Courses
+  area, the kept courses and the arena, 16 from hand-built courses, spawn and `games.fresh.safe_spot`,
+  inside the world's heights and border. The first time, the box must be empty: anything in it closes
+  the Clubhouse, touching nothing, until `/hcm games clubhouse rebuild confirm`. It is built with the
+  Fresh Courses writer (3 ms a tick, paused when the server is busy), checked block by block, and
+  nobody comes in until the check passes; a failed check closes it, and every flow goes back to
+  today's. Nobody, admins included, can change a block of the generated room while it's on.
+- **Your own room.** Build one by hand, stand where visitors should arrive and run `/hcm games
+  clubhouse here` (in a Games world: another world is refused, and `/hcm games check` warns about a room
+  stored in one); set the podium with `/hcm games clubhouse podium <1|2|3>` and the board with `/hcm
+  games clubhouse board`. Nothing is built or guarded then. `/hcm games clubhouse generated` goes back.
+- **Your things.** Nothing in the Clubhouse ever empties your inventory: a kit change takes only the
+  kit, and anything that arrives while you're in it (an auction win, a Mini) comes home with you.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `clubhouse.enabled` | `true` | The Clubhouse's switch (and Watch, Watch live, cheers and Take a rider). Nothing happens while `games.enabled` is false |
+| `clubhouse.origin` | `[5376, 160, 4448]` | The box's lowest corner; x and z are multiples of 16 |
+| `clubhouse.max_minutes` | `30` | Minutes with no race or party going before a visitor is sent home |
+| `clubhouse.party_after` | `true` | Party racers come back here after the race |
+| `clubhouse.race_night_after` | `true` | Everyone comes here at the end of Race Night, the top three on the podium; on a track with no viewing stand, racers (and their riders) also wait here between races |
+| `clubhouse.golf_after` | `true` | A golf-together group comes here when its round ends |
+| `trials.rider_runs_count` | `true` | `false`: a run with a rider is just for fun, and Race Night takes no riders |
+
+A bad value logs a WARN and uses its shipped value. `/hcm games check` has Clubhouse rows: on or off,
+the box and its problems, the claim, built and checked, and an owner-built room's spots.
+
+**Verify in game** (on Java and on Bedrock)
+
+1. `/hcm reload`. Within a few seconds `/hcm games clubhouse status` shows "ready, built and checked"
+   and `/hcm games check` says "The Clubhouse: box fits (...), claimed, built and checked".
+2. `/hcm play clubhouse`: you're in the room holding Results and Leave game. Walk into a wall and jump
+   on a table: no way out. Leave game: home, your things back.
+3. Two players: one opens a boat course's **Race with friends**, both tap **Go to the Clubhouse**, the
+   host presses Start: both on the grid. Finish: both back in the Clubhouse, the board shows the
+   order and gaps. The host's **Race again** puts both on the grid again.
+4. A third player taps **Watch** on the party screen, then **Watch live**: they fly round the course
+   in spectator mode, the racers can't see them, they can't leave the course's area, and the race's
+   end brings them back to the Clubhouse in adventure mode. `/hcm play cheer` shows on the racers'
+   action bar.
+5. On a boat course's screen tap **Take a rider (back seat)** and choose a friend; they accept (on
+   Bedrock: `/hcm play accept`). Start: they're in the back seat. Fall off at a checkpoint: they come
+   back with you. Their Leave game: you carry on. Your finish: they go home with their things.
+6. Start a Race Night with `/hcm games event start`, wait in the Clubhouse, race it out: everyone ends
+   in the Clubhouse, the top three on the podium with "Photo time!".
+7. `/hcm games clubhouse off`: everyone in it goes home, and a party race ends at home as before.
+   `/hcm games clubhouse generated` opens it again.
+8. **Owner live checks:** a **Bedrock** player can Watch live (Geyser supports spectator mode) and
+   comes back in their own mode; with **Multiverse**, the Games world's game mode isn't forced back
+   while someone is watching (they stay in spectator mode until they come back).
+<!-- ---- end the Clubhouse ---- -->
+
 ### Commands
 
 Admin actions on the Games are logged with who did them, mini golf course edits included. A
 bug in a course or golf command answers "That didn't work - see the console." and never
-switches the game off. `[confirm]` on a course command is needed only when a layout edit would
-clear times or high scores. A player in a world game can use only `/hcm play`, `/hcm leave`,
+switches the game off. `[confirm]` on a course command is needed when a layout edit would
+clear times or high scores, and when a layout edit or `disable` would call off a Weekly Cup that has
+entrants. A player in a world game can use only `/hcm play`, `/hcm leave`,
 `/hcm games` and `/hcm help`; anything else says "Finish or leave your game first — /hcm leave".
 
 | Command | Who | What |
 |---|---|---|
 | `/hcm play` | `hcm.games.play` | The Games screen |
-| `/hcm play <game\|course>` | `hcm.games.play` | Open a game (rules and odds first). A time trial starts straight away; a golf course opens its course screen |
+| `/hcm play <game\|course>` | `hcm.games.play` | Open a game (rules and odds first). A time trial first asks "Warm up (3:00) - then the timed run" or "Go straight to the timed run" (it starts straight away only with `games.trials.warmup_seconds: 0`, or on a Dropper); a golf course opens its course screen |
 | `/hcm play <game\|course> <player>` | `hcm.games.admin` or the console | The same for someone else: NPCs, command blocks, a hub |
 | `/hcm play break` | `hcm.games.play` | The Take a break screen |
 | `/hcm play accept\|deny` | `hcm.games.play` | Answer your latest invite |
-| `/hcm play invites [on\|off]` | `hcm.games.play` | Your invite settings. `off` also turns Coin Flip invites off; only the Take a break screen turns them on |
+| `/hcm play invites [on\|off]` | `hcm.games.play` | Your invite settings: Connect Four, Tic-Tac-Toe, party races, Ride along and golf together (an older `off` covers any added since; Connect Four's or Tic-Tac-Toe's own screen switch is just for that game). `off` also turns Coin Flip invites off; only the Take a break screen turns them on |
 | `/hcm play news [on\|off]` | `hcm.games.play` | The one chat line that says new Fresh Courses are up ("New courses this week! ..."). On unless you turn it off |
 | `/hcm leave` | `hcm.games.play` | Leave the world game you're in; your things come back. Also finishes a trip home that didn't complete |
 | `/hcm games status` | `hcm.games.admin` | Every game, open or closed and why, with the odds of the open games of chance; players in world games, saved things waiting to go back, unfinished rounds, today's pick, and the next scheduled restart and when its hold starts |
@@ -1389,14 +1591,14 @@ clear times or high scores. A player in a world game can use only `/hcm play`, `
 | `/hcm games course <id> tier <tier>` | `hcm.games.admin` | Its tier (a first clear already paid isn't paid again) |
 | `/hcm games course <id> name <words…>` | `hcm.games.admin` | Its player-facing name |
 | `/hcm games course <id> minseconds <n\|default>` | `hcm.games.admin` | Its own shortest believable time, 0-3600 seconds, or back to `trials.min_seconds` |
-| `/hcm games course <id> enable\|disable` | `hcm.games.admin` | Open it (it needs a start, a finish and a world in `games.worlds`) or close it (runs already going finish as normal) |
+| `/hcm games course <id> enable\|disable [confirm]` | `hcm.games.admin` | Open it (it needs a start, a finish and a world in `games.worlds`) or close it (runs already going finish as normal) |
 | `/hcm games course <id> tp` | `hcm.games.admin` | To its start |
 | `/hcm games course <id> test` | `hcm.games.admin` | Run it, open or not: nothing is recorded, and the finish says whether it would have counted |
 | `/hcm games course <id> feature [off]` | `hcm.games.admin` | Pin it as the course of the week, or unpin it |
 | `/hcm games course <id> delete confirm` | `hcm.games.admin` | Delete it and all its times |
 | `/hcm games golf list` | `hcm.games.admin` | Every golf course: open, closed or not ready |
 | `/hcm games golf create <id> [name…]` | `hcm.games.admin` | A new, closed course in the Games world you stand in (named from its id unless given) |
-| `/hcm games golf <id> [info\|list]` | `hcm.games.admin` | Its holes (par, tee, cup, bounds), what's missing, and who is playing it |
+| `/hcm games golf <id> [info\|list]` | `hcm.games.admin` | Its holes (par, tee, cup, bounds), what's missing, and how many are playing it now |
 | `/hcm games golf <id> tp [hole]` | `hcm.games.admin` | To a tee (hole 1 unless given) |
 | `/hcm games golf <id> hole add <par> [confirm]` | `hcm.games.admin` | A new last hole, par 2-6, its tee where you stand, facing the way you face (at most 18 holes) |
 | `/hcm games golf <id> hole <n> cup [confirm]` | `hcm.games.admin` | The block you look at, within 6 blocks, is the cup: the block the ball rests on. Refuses air, anything under 0.2 high (carpet) and hollow blocks (a cauldron) |
@@ -1427,6 +1629,17 @@ clear times or high scores. A player in a world game can use only `/hcm play`, `
 | `/hcm games floors reset` | `hcm.games.admin` | Put the floors back and check them now (a round going finishes first); opens a closed arena again |
 | `/hcm games floors claim [confirm]` | `hcm.games.admin` | Whether its box is claimed; `confirm` claims it even with blocks in it (the next reset clears them) and opens it again |
 | `/hcm games floors tp` | `hcm.games.admin` | Into the gallery to watch (a plain teleport: not a game, nothing is taken); refused until the floors are built and checked, when there may be nothing to stand on |
+| `/hcm play clubhouse` | `hcm.games.play` | Visit the Clubhouse; while watching live, come back to it |
+| `/hcm play watch [<player>]` | `hcm.games.play` | Watch live, from the Clubhouse: the race going on (or that player's race or golf group) in spectator mode. While watching, with no name: back to the Clubhouse. From outside, only where `/hcm play clubhouse` works (a world games are played in) |
+| `/hcm play cheer` | `hcm.games.play` | Cheer the racers on (once every 10 seconds) |
+| `/hcm play cheers [on\|off]` | `hcm.games.play` | Whether cheers reach you |
+| `/hcm play rider <player>` | `hcm.games.play` | Take a friend in the back seat of your boat (an invite) |
+| `/hcm games clubhouse [status]` | `hcm.games.admin` | The Clubhouse: generated or owner-built, built and checked, why it is closed, how many are in it |
+| `/hcm games clubhouse tp` | `hcm.games.admin` | Into the Clubhouse to look (a plain teleport); refused until it is built and checked |
+| `/hcm games clubhouse here\|podium <1\|2\|3>\|board` | `hcm.games.admin` | Use a room you built: its arrival spot (facing your way), podium places and board, where you stand |
+| `/hcm games clubhouse generated` | `hcm.games.admin` | Back to the generated room (built and checked first) |
+| `/hcm games clubhouse rebuild [confirm]` | `hcm.games.admin` | Build the generated room again and check it; claims the box even with blocks in it |
+| `/hcm games clubhouse off` | `hcm.games.admin` | Close it (kept across restarts): everyone in it goes home, every race works as before |
 | `/hcm arcade odds` | `hcm.arcade.use` | Players: one line per open game of chance. Admins: the per-stake detail, the Scratch Ticket and the crates |
 | `/hcm guide games` | `hcm.guide.use` | The Games page of How It Works |
 
@@ -1446,7 +1659,8 @@ completion lists the ids):
 - A hologram or TV shows a title ("Hard Parkour - this week"), the top 5 as "1. Sam 0:42.1" (ties
   share a rank; golf in strokes, cabinets in their own unit) and "/hcm play <id>"; a sign, the title
   in whole words that fit its 15 characters ("Hard Parkour") and the top 3. An empty board reads
-  "No times yet - be the first!".
+  "No times yet - be the first!" (a golf board, or a cabinet board that isn't timed: "No scores
+  yet - be the first!").
 - Names are shown: these are players on the server. `web.dashboard.arcade_show_names` is only the
   website's rule.
 - They are drawn on the display timer (`displays.refresh_seconds`), and again within a second of a
@@ -1464,29 +1678,35 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
   week, with a viewing stand built in from its algo-2 layouts. Turn that on, then
   `games.race_night.enabled: true` and `/hcm reload`. `/hcm games check` says whether the schedule
   fits the restarts and whether the track can be raced.
-- **Joining.** 30 minutes before, one chat line (news on, not in a world game); 10 minutes before
-  (`join_minutes`), joining opens: a chat line, a draining bossbar for everyone with news on, the
-  Together tab glints and the hub `@event` sign reads JOIN NOW!. Players join from the Race Night
+- **Joining.** Race Night's lines and bar never reach a player without `hcm.games.play` (a [Join]
+  they couldn't use). 30 minutes before, one chat line (news on, not in a world game); 10 minutes before
+  (`join_minutes`), joining opens: a chat line, a draining bossbar for everyone with news on who could
+  join (in a world games are played in, or joined already), the
+  Together tab glints and the hub's `@event` TV reads JOIN NOW!. Players join from the Race Night
   screen (`/hcm play race`, the Race Night tile on the **Together** tab, or an `[Arcade] race_night`
   sign): one tap on **Join**. Joining moves nobody; keep playing. Leaving the list before the racing
   is free. At most `max_racers` (8), fewer if the track's grid has fewer spots.
 - **The track.** 2 minutes before the start it is reserved (new solo runs and party races on it are
   refused, and a party race still on it is called off), and 1
   minute before, solo runs still on it end. 15 seconds before, every joined racer who is free goes to
-  the track in their own oak boat, two a tick (their things are kept safe, as in every world game).
-  Anyone busy is asked every second to stand still or use Leave game, until just before Go, and is
-  then out of race 1 ("you'll be in the next one").
+  the track in their own oak boat, two a tick (their things are kept safe, as in every world game),
+  from whatever world they are in, as long as they still have `hcm.games.play`. Anyone busy is tried
+  again every second and asked, at most every 5 seconds, to stand still or use Leave game ("Race
+  Night is starting! Stand still, or use Leave game, to join."), until just before Go, and is then
+  out of race 1 ("you'll be in the next one"). A racer whose `hcm.games.play` was taken away after
+  joining is told "Games aren't open to you." once and is out of every race until it is back.
 - **The warm-up** (owner decision D3). With `warmup_seconds` above 0 (180 as shipped), racers first
   get free warm-up laps, never timed; each can tap **Ready**. The grid waits for the window to run
   out, or for everyone who joined (and is online) to be at the track and ready; race 1 never starts
   before its advertised time. A restart due soon ends the warm-up at once.
-- **A race.** Everyone on the grid, held still, "Race 1 of 3", 3-2-1-Go on one tick. The bossbar shows
-  your place ("2nd of 5 · Lap 1/2", yellow on the last lap). At the line: "You came 2nd! 0:41.2", then
-  onto the stand to watch. A race ends when everyone is in, 60 s after the first finisher, or after 4
-  minutes. Points `[10, 8, 6, 5, 4, 3, 2]` by place, 2 for a finisher beyond that list, **1 for anyone
-  still racing at the end** ("Race over - you still get a point. Great racing!"), 0 for leaving or a
-  voided run (flying, an effect, a changed game mode or speed). A 20 s break shows the standings; the
-  next grid puts the **fewest points tonight in front** (race 1: the fewest season points).
+- **A race.** Everyone on the grid, held still, "Race 1 of 3", 3-2-1-Go on one tick. The bossbar
+  shows your place ("2nd of 5 · Lap 1/2"; on the last lap, in yellow, "LAST LAP! 2nd of 5"). At the
+  line: "You came 2nd! 0:41.2", then onto the stand to watch. A race ends when everyone is in, 60 s
+  after the first finisher, or after 4 minutes. Points `[10, 8, 6, 5, 4, 3, 2]` by place, 2 for a
+  finisher beyond that list, **1 for anyone still racing at the end** ("Race over - you still get a
+  point. Great racing!"), 0 for leaving or a voided run (flying, an effect, a changed game mode or
+  speed). A 20 s break shows the standings; the next grid puts the **fewest points tonight in
+  front** (race 1: the fewest season points).
 - **Leaving.** Leave game (or `/hcm leave`) during the night is leaving for good: your points so far
   stand, your things come back. A disconnect scores 0 in that race; back online and free before the
   next grid, you are pulled back in.
@@ -1498,20 +1718,23 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
   that night and someone ranked below you: racers tied for last came last, and a night where nobody
   finished pays nothing. A racer who only warmed up (never in a race) gets no place. At most **5
   tokens a player a night**, and at most **3 prize nights a week**
-  server-wide (`prize_events_per_week`, the week the weekly boards use). A 4th night that week says
+  server-wide (`prize_events_per_week`, the week the weekly boards use, counted in the week race 1
+  starts in, even for a night announced the evening before). A 4th night that week says
   "Just for fun tonight - points only" and pays nothing; so does an admin's `fun` night. Prizes are a
   new reward kind (`EVENT_PRIZE`) **outside the daily skill cap**, paid once per player per night
-  (ledger source "Race Night"). A racer offline or somewhere tokens can't be earned is owed: it is
-  paid at their next join (and every 5 minutes while they're online), with a line that says so.
+  (ledger source "Race Night"). A racer offline or somewhere tokens can't be earned (watching live,
+  creative) is owed, and reads a line that says so (at once, or at their next join): it is paid at
+  their next join and every minute while they're online, even after Race Night is switched off.
 - **The season.** Every race's points also go on the month's season board (`rnseason:2026-10`,
   "Race Night · October" on the high-score screen); each night's result on its own board
   (`rnnight:<id>`, "Race Night · Fri 2 Oct"). `season: off` turns the season board off.
-- **Hub displays.** Bind a sign, hologram or TV (`/hcm display sign|holo|tv @event`) for Race Night's
-  own board: `RACE NIGHT / Fri 7:00 PM / in 2h 14m / Ice Boat`, `JOIN NOW! / /hcm play race / 3 of 8
-  in / starts 7:00`, `RACE 2 OF 3 / 1. Sam 18 / 2. Ava 16 / 3. Lee 10`, then `WINNER / Sam / 2. Ava /
-  3. Lee` for 30 minutes (`RACE NIGHT / No race set / Ask an admin!` when nothing is set). It redraws
-  within a second of a change, never per tick. `@board:race_night` is the season table and
-  `@board:race_night:last` the last night.
+- **Hub displays.** Bind a TV (`/hcm display tv @event`) for Race Night's own board: `RACE NIGHT /
+  Fri 7:00 PM / in 2h 14m / Ice Boat`, `JOIN NOW! / /hcm play race / 3 of 8 in / starts 7:00`, `RACE
+  2 OF 3 / 1. Sam 18 / 2. Ava 16 / 3. Lee 10`, then `WINNER / Sam / 2. Ava / 3. Lee` for 30 minutes
+  (`RACE NIGHT / No race set / Ask an admin!` when nothing is set). It redraws within a second of a
+  change, never per tick. `@board:race_night` is the season table and `@board:race_night:last` the
+  last night. (`/hcm display sign @event` and `/hcm display hologram @event` don't bind it: those
+  two commands pass only `@board:` targets through, and open the commodity picker instead.)
 - **Watch.** The Race Night screen's **Watch** gives a bossbar with the leader and the finishes in
   chat, from anywhere, until 30 s after the results (or a second tap).
 - **Crash safety** (§A.9). Each race is stored in one transaction (its rows, the night's points, the
@@ -1530,7 +1753,9 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
 - **Boats bump.** Vanilla boats are solid to each other and that can't be switched off: race only on
   tracks with walls on both sides. Java and Bedrock boats can feel slightly different on ice.
 - **Achievements:** "Race at Race Night" (10) and "Win a Race Night" (30), counters, so they unlock
-  back home (config revision 18 adds them to a shipped list).
+  back home (config revision 18 adds them to a shipped list). Every racer who started a race of the
+  night is counted when it ends, wherever they are then (offline, or watching the others live), and so
+  is a night settled at the next boot after a crash.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -1561,7 +1786,7 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
 |---|---|
 | `status` | The night: state, times, racers with points, prize nights this week, the next restart, the night's tick time |
 | `list [days]` | The scheduled nights (7 days), each "fits" or "skipped: why" |
-| `start [course] [races N] [laps N] [in M] [fun]` | Open a join window now (or in M minutes); the start is `admin_join_minutes` later. `fun` = season points only. Refused while another night is on, near a restart, with Race Night or Time Trials closed, or on a track that can't be raced |
+| `start [course] [races N] [laps N] [in M] [fun]` | Open a join window now (or in M minutes); the start is `admin_join_minutes` later. `fun` = season points only. Refused while another night is on, near a restart, too close to a scheduled night, with Race Night or Time Trials closed, or on a track (or with a lap count) that can't be raced |
 | `go` | Close the window and start in 15 s (needs `min_racers`) |
 | `cancel [confirm]` | Call it off (`confirm` once racers are at the track; points so far count) |
 | `skip <id\|next>` / `unskip <id>` | Skip one scheduled night |
@@ -1570,13 +1795,15 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
 | `grid <course> show\|auto\|add\|remove <n>\|clear` | A hand-built track's starting grid (add: where you stand, behind the start, 2.5 apart, at most 8). `auto` says how many the automatic grid seats. A layout change drops it with a WARN |
 | `stand <course> set\|clear` | A hand-built track's viewing stand (set: where you stand, 10+ blocks from the racing line, solid below and 2 air above). Without one a night there is 1 race |
 
-`/hcm games status` has a Race Night line ("waiting · next Fri 2 Oct 7:00 PM on Ice Boat (3 races) ·
+`/hcm games status` has a Race Night line ("waiting · next Fri 7:00 PM on Ice Boat (3 races) ·
 fits before the 4:00 AM restart · prize nights 1/3 this week").
 
 **Race mode (WP-R1).** The races are Time Trials runs in race mode (`TimeTrials.race`, `regrid`,
 `park`, `endRace`, `reserve`), the same race mode party races use: one automatic grid (rows of two
 behind the start, else single file) and, on Fresh Ice Boat from boat planner algo 2, the one
-built-in stand (used only while it really stands; otherwise finishers go home at the line). A heat
+built-in stand (used only while it really stands; otherwise finishers go at the line to the
+Clubhouse, when it is open in the track's world, `race_night_after` / `party_after` is on and it
+isn't closing for a restart, or else home). A heat
 never goes on the course's boards or records and never counts for the Weekly Cup (its start is a
 grid spot), but each finished race counts once toward "finish a course" quests.
 <!-- ---- end race_night ---- -->
@@ -1620,8 +1847,11 @@ Cabinets and games of chance need nothing more. **Courses and mini golf need a G
    Courses (on and how often, every area inside the world border and height and clear of hand-built
    courses and the other areas, each claimed, empty, or with foreign blocks and how many, the next
    change, each course live or why not, the keep area and the Classics); Falling Floors (its box fits
-   and is claimed, or what is wrong and the fix); every hand-built course is
-   ready and its world loaded; the website feed (the dashboard, a feed token, and `/api/arcade`
+   and is claimed, or what is wrong and the fix); the Clubhouse (off, or its world loaded, its box
+   allowed and claimed, built and checked; or an owner-built room's arrival, podium and board set);
+   every hand-built course is ready and its world loaded; Race Night (off, or Time Trials open, the
+   schedule reads, each coming night fits or why it is skipped, the track can be raced with its grid
+   spots, and its viewing stand); the website feed (the dashboard, a feed token, and `/api/arcade`
    built in memory, never over the network); and the LuckPerms line that takes games of chance away
    from one player (`/lp user <player> permission set hcm.games.chance false`). It ends "All good."
    or "N things to fix." (every WARN and FAIL).
@@ -1637,19 +1867,27 @@ knockback and fishing-rod pulls are cancelled.
 
 **Nobody pushes anybody where players crowd.** `setCollidable(false)` stops mobs pushing a
 player but not another player, so the places players share (Falling Floors' rounds, the Dropper's
-shafts, and parkour and elytra party races; boats bump, as the owner chose) put their players on
-one main-scoreboard team, **`hcm_nopush`**, whose collision rule is never. A player is on at most
-one main-scoreboard team, so someone on another plugin's team (nametag colours, a tab-list prefix)
-comes off it for the round or race and goes back on it as soon as that ends, if the team still
-exists. That earlier team is remembered in memory only: stopping the games puts everyone back, but
-after a crash the next start empties `hcm_nopush` and WARNs how many were still on it, and their
+shafts, the Clubhouse, and parkour and elytra party races; boats bump, as the owner chose) put their
+players on one main-scoreboard team, **`hcm_nopush`**, whose collision rule is never. A player is on
+at most one main-scoreboard team, so someone on another plugin's team (nametag colours, a tab-list
+prefix) comes off it for the round or race and goes back on it as soon as that ends, if the team
+still exists. That earlier team is remembered in memory only: stopping the games puts everyone back,
+but after a crash the next start empties `hcm_nopush` and WARNs how many were still on it, and their
 earlier teams can't be restored.
 
 Things come back **exactly once**, even when something goes wrong. If what arrived during the
 game doesn't all fit at home, the rest waits in their saved row: "Some of your things didn't fit.
 Make room, then type /hcm leave to get the rest." If the database refuses a write partway, they
-stay where they are with their things ("Type /hcm leave in a moment to go home") and nothing is
-applied twice. A game refuses to start while they hold something on the cursor ("Put down what
+wait with their things, on the game's floor if they were playing ("Type /hcm leave in a moment to go
+home"), and nothing is applied twice. Something delivered in the middle of a game (an auction win, a Mini) is never
+written over by a game's items: it moves to a free slot and comes home with them. Nobody lands
+home with a fall from a game: leaving, being sent home or disconnecting halfway down a drop ends
+with no fall damage. Nobody is let go in mid-air either: a game that has to stop where the player is
+(a trip home that failed, a write refused) first puts them on its start (the course's start platform,
+or the Clubhouse's arrival spot), never back up on a ring or a watcher's view point, and in a Games
+world a fall costs nothing until their things are home, with the games on or off. After a crash, a
+Clubhouse watcher is never left in spectator mode, and never dropped from where they were flying:
+they are brought down to the Games world's spawn first, and only there get their own mode back. A game refuses to start while they hold something on the cursor ("Put down what
 you're holding first."). `/hcm leave` and `/hcm games saved` work even while the games are off,
 and an admin's `restore` or `return` says what really happened.
 
@@ -1682,9 +1920,9 @@ report a finish, and only a catalog cabinet is taken as a cabinet finish).
   | id | counter | target | tokens | Says |
   |---|---|---|---|---|
   | `game_first_cabinet` | `cabinet_finishes` | 1 | 10 | Finish an arcade cabinet game |
-  | `game_gold` | `cabinet_golds` | 1 | 20 | Earn a gold medal in a cabinet (a scored run, not practice) |
+  | `game_gold` | `cabinet_golds` (scored runs, not practice) | 1 | 20 | Earn a gold medal in a cabinet |
   | `game_all_cabinets` | `cabinets` (different cabinet games) | 8 | 30 | Finish every arcade cabinet game |
-  | `game_first_course` | `course_finishes` | 1 | 15 | Finish a course (a golf round counts) |
+  | `game_first_course` | `course_finishes` (a golf round counts) | 1 | 15 | Finish a course |
   | `game_hole_in_one` | `holes_in_one` | 1 | 25 | Get a hole-in-one |
   | `game_under_par` | `golf_under_par` | 1 | 25 | Finish a golf course under par |
   | `game_fresh_all` | `fresh_sets` | 1 | 40 | Finish every Fresh Course in one set |
@@ -1720,8 +1958,9 @@ cabinet's scored daily try), `game_breaks` (Take a break), `game_scores`, `game_
 `game_saved_state` (a player's things during a world game), `game_courses` and `game_prefs`
 (invites, the golf ball, lines waiting for the next join). No `config_revision` bump: every
 `games` key is new and back-filled with its comments. A bare `games: false` (or
-`games.<id>: false`) is first rewritten as its `enabled` key, so a game you switched off stays
-off. Every token a game moves is in the ledger under that game's own source, so
+`games.<id>: false`, or a Fresh course's `games.fresh.slots.<id>: false`) is first rewritten as its
+`enabled` key, so a game or course you switched off stays off (and one you switched on stays on);
+the backfill never replaces a single value you wrote where a section belongs, it warns instead. Every token a game moves is in the ledger under that game's own source, so
 `/hcm tokens audit` shows each game's real flow.
 
 ### Verify in game
@@ -1746,7 +1985,8 @@ off. Every token a game moves is in the ledger under that game's own source, so
    `clear` removes it.
 8. `lp user <you> permission set hcm.games.chance false`, with the games on: `/hcm arcade` shows no
    crate or Scratch Ticket tiles, `/hcm play` has no Luck tab and no games of chance, and
-   `/hcm arcade odds` says "Games of chance aren't open to you." Unset it after.
+   `/hcm arcade odds` says "Games of chance aren't open to you." (as a non-op; with `hcm.admin` you
+   still get the full odds). Unset it after.
 9. As a non-op, `/hcm arcade odds` gives one line per open game of chance; as op, the per-stake
    detail and the crate values too.
 10. A Scratch Ticket that pays 3 back shows three "Tokens back: 3" squares and "No win this time.
@@ -1779,12 +2019,15 @@ off. Every token a game moves is in the ledger under that game's own source, so
     a break, slot 31); A invites B; B's screen says "10 tokens each - winner gets 18". After the
     flip, one INFO line in the console. After two flips, the same pair can't flip again that day.
 21. `games.ore_slots.rtp: 85` and reload: an INFO line per stake, and the screen shows the new
-    number. `games.max_payout: 1`: one WARN, and the 5-token stake is gone.
+    number. `games.max_payout: 1`: a WARN for every stake that can no longer give back 85 to 95 of
+    every 100 tokens (Ore Slots' 5, and the top stakes of Twenty-One, the Wheel, Higher or Lower and
+    Coin Flip too), and Ore Slots' 5-token stake is gone.
 
 **Cabinets**
 
 22. `/hcm play creeper_sweeper`: pick Normal; the first dig is safe; clearing says "✔ Cleared in
-    m:ss.t!" and "★ New best!". Today's board: the first try is scored, later ones are practice.
+    m:ss.t!" and "★ New best - and the server record!" (just "★ New best!" when someone else holds
+    the record). Today's board: the first try is scored, later ones are practice.
     Double-click "Today's board": the board appears and no square is dug.
 23. Snake: Start, turn with the side buttons, Back pauses. 10 apples pays +1 token once, ever.
     Bedrock players move every 10 ticks.
@@ -1803,18 +2046,19 @@ off. Every token a game moves is in the ledger under that game's own source, so
 28. As admin in the Games world: `/hcm games course create cliffs parkour easy` ("Made cliffs
     (Parkour · Easy)"), then `cliffs start`, `cliffs checkpoint add` at two spots, `cliffs finish`
     and `cliffs enable` ("Cliffs is open: /hcm play cliffs"). `cliffs info` says layout 5.
-29. `/hcm play cliffs` in chat takes you straight to the start with only Back to checkpoint and
-    Leave game; a 3-2-1 holds you there, then "Go!". Its tile on the Courses tab opens the course
-    screen, with Start, instead.
+29. `/hcm play cliffs` in chat first opens a small screen: "Warm up (3:00) - then the timed run" or
+    "Go straight to the timed run". Go straight takes you to the start with only Back to checkpoint
+    and Leave game; a 3-2-1 holds you there, then "Go!". Its tile on the Courses tab opens the
+    course screen, with Start, instead.
 30. Each checkpoint shows "Checkpoint 1 of 2 - 0:04.1" with a ping. Fall well below the
     checkpoints: "Back to checkpoint 1", and the clock keeps going.
 31. Finish: your time, "★ Your first finish on Cliffs!", "★ New course record!", "+5 tokens (Cliffs:
     first finish)" and the best-this-week reward (up to the daily cap). You're sent home with your
-    things, and the result screen offers Play again. Finish faster: "★ New best!", and no tokens
-    for the best itself.
-32. `/effect give @s minecraft:speed` (or `/fly`) mid-run: "This run won't count - a potion
-    effect…". The finish says "That run didn't count. (a potion effect)", and the board doesn't
-    change.
+    things, and the result screen offers Play again. Finish faster: "★ New best! (was …)", and no
+    tokens for the best itself.
+32. `/effect give @s minecraft:speed` mid-run: "This run won't count - a potion effect…" (`/fly`
+    says "- flying" instead). The finish says "That run didn't count. (a potion effect)", and the
+    board doesn't change.
 33. `/hcm games course cliffs test`: "test run: nothing is recorded"; the finish says "Test run -
     nothing was recorded. It would have counted."
 34. `cliffs finish confirm` with times on the board: the layout number goes up and the times are
@@ -1889,7 +2133,8 @@ off. Every token a game moves is in the ledger under that game's own source, so
     then leave: you're home with one, told "Some of your things didn't fit…", and
     `/hcm games saved <you> show` says RETURN. Free a slot, `/hcm leave`: the second arrives and
     the row goes DONE.
-56. Open your inventory holding an item on the cursor, then from the console
+56. With `games.trials.warmup_seconds: 0` (otherwise the command opens the warm-up choice first),
+    open your inventory holding an item on the cursor, then from the console
     `/hcm play cliffs <you>`: "Put down what you're holding first." and nothing drops.
 57. With a RETURN row waiting, set `games.enabled: false`, `/hcm reload`, then `/hcm leave`: it
     finishes.
@@ -1911,11 +2156,11 @@ off. Every token a game moves is in the ledger under that game's own source, so
 
 61. At about 3:02 PM, set `games.restart_times: ["15:10"]` (any time 8 minutes ahead) and
     `/hcm reload`: `/hcm games status` says "Next restart: 3:10 PM (new runs held from 3:05 PM)".
-    Deal a Twenty-One hand and leave it open. From 3:05, `/hcm play cliffs` says "The server
-    restarts at 3:10 PM. New runs open again after it."; the open hand plays to the end, but the
-    next Deal is refused the same way, and so is a cabinet's daily board if you haven't had
-    today's try (Classic still deals). After 3:10 all of them work again. Put
-    `["04:00", "16:00"]` back and reload.
+    Deal a Twenty-One hand and leave it open. From 3:05, `/hcm play cliffs` still opens the warm-up
+    choice, and either button says "The server restarts at 3:10 PM. New runs open again after it.";
+    the open hand plays to the end, but the next Deal is refused the same way, and so is a cabinet's
+    daily board if you haven't had today's try (Classic still deals), right through the 3:10 minute.
+    From 3:11 all of them work again. Put `["04:00", "16:00"]` back and reload.
 
 **The setup check, the new-courses line, and the games' quests and achievements**
 
@@ -1925,10 +2170,10 @@ off. Every token a game moves is in the ledger under that game's own source, so
     worlds.economy_enabled ..." and "1 thing to fix."; put it back. With `games.enabled: false` it
     still runs, and says so as a WARN.
 63. Switch Fresh Courses on (or wait for Monday's new set): once every course is up, everyone in a
-    world the games are played in reads "New courses this week! Easy, Parkour, Hard, Sky Rings and
-    Golf - /hcm play" once; a player mid-course reads it after leaving the course, one on a screen
-    after closing it, one who logs in later a few seconds after joining. A relog doesn't repeat it,
-    and neither does `/hcm games gen reroll`: a reroll is the same set.
+    world the games are played in reads "New courses this week! Easy, Parkour, Hard, Sky Rings, Golf
+    and Dropper - /hcm play" once; a player mid-course reads it after leaving the course, one on a
+    screen after closing it, one who logs in later a few seconds after joining. A relog doesn't
+    repeat it, and neither does `/hcm games gen reroll`: a reroll is the same set.
 64. `/hcm play news off`: "No more new-course lines in chat."; the next set says nothing to you.
     `/hcm play news` shows the setting; `on` turns it back on. Tab completion offers `news`, then
     `on`/`off`.
@@ -1954,11 +2199,13 @@ Dropper and Falling Floors have their own lists in their sections)
     before arriving: the next start asks again.
 69. On `cliffs`' screen, **Race with friends** (slot 20) opens a party; invite a friend (Bedrock:
     `/hcm play accept`). The party screen shows the Cup's item at slot 44 when the course runs one.
-    The host starts: one shared 3-2-1 for everyone. Walk off your spot before Go: you're put back
-    ("Stay on your grid spot until it says Go!"). On parkour and elytra nobody can push anybody, and
-    a player on another plugin's nametag team is back on it after the race; boats bump. The results
-    screen ranks everyone, and each finish is also a normal run on the course (its board, its
-    rewards, the Cup).
+    The host starts: first a shared warm-up ("Warm up first: on (3:00)" at slot 42 is the default;
+    it ends early once everyone taps Ready), then one shared 3-2-1 for everyone. Walk off your spot
+    before Go: you're put back ("Stay on your grid spot until it says Go!"). On parkour and elytra
+    nobody can push anybody, and a player on another plugin's nametag team is back on it after the
+    race; boats bump. Back in the Clubhouse, the board ranks everyone, and so does the screen behind
+    the kit's **Results** item (with the Clubhouse off, the results screen opens at home). Each finish
+    is also a normal run on the course (its board, its rewards, the Cup).
 70. `/hcm play race fresh_dropper`: "The Dropper has no party races - try its practice drop
     instead." A party race on the Race Night track 2 minutes before a night: "Your party race is
     called off - Race Night needs this track now." and everyone goes home with their things.
@@ -1977,7 +2224,8 @@ Dropper and Falling Floors have their own lists in their sections)
 73. `/hcm games cup settle cliffs`: what it would pay; with `confirm`, prizes by Cup time and a line
     to each entrant. With two entrants and only one Cup time, both get their entry back and no
     top-up is added. `/hcm tokens audit` shows the entries, prizes and refunds netting exactly the
-    top-ups paid.
+    top-ups paid. The course screen still shows the Cup item, now "Weekly Cup - already paid out
+    this week" (its tile shows no Cup until next week).
 74. `/hcm games cup off cliffs` with entrants asks for `confirm`, then "This week's was called off:
     N tokens back to M player(s)."; `disable` or `delete` on a course with entrants asks too.
     Put junk in `games.cup` and `/hcm reload`: `/hcm games cup status` says "entries closed
@@ -1987,10 +2235,12 @@ Dropper and Falling Floors have their own lists in their sections)
     `/hcm games event start in 1`, and join from `/hcm play race` with two friends. One player
     tapping Ready doesn't end the warm-up while a joined racer isn't at the track; it never ends
     before the advertised time. Three races, the stand between them, then 5, 3 and 1 tokens with 3
-    racers (a 4th racer adds 2 for 3rd), and "Race Night is over - great racing! Your things are
-    back." `/hcm reload` while racers are at the track warns first. `event cancel confirm` during
-    race 1 gives the prize night back (`/hcm games event status` shows x/3). `event start in 30`,
-    then a restart: the night is still set.
+    racers (a 4th racer adds 2 for 3rd), and everyone goes to the Clubhouse: "Race Night is over -
+    great racing! Everyone to the Clubhouse!" (with `games.clubhouse.race_night_after: false` or no
+    Clubhouse: "Race Night is over - great racing! Your things are back.") `/hcm reload` while
+    racers are at the track warns first. `event cancel confirm` during race 1 gives the prize night
+    back (`/hcm games event status` shows x/3). `event start in 30`, then a restart: the night is
+    still set.
 76. `/api/arcade`: a course running a Cup has `"cup":{"entry":5,"pool":...,"entrants":...,
     "endsAt":...}`; with Race Night on there is an `events` object; with Falling Floors on,
     `falling_floors` is in `games` with `"kind":"arena"`. With `arcade_show_names: false`, no
@@ -2268,12 +2518,12 @@ is the test's (`ArcadeFeedTest`), shortened where it says `…`; a server publis
 | `dailyLimit` | Plays per player per day (the Scratch Ticket has none) |
 | `paytable` | What each result pays. `chance` has 4 significant digits and never reads `0`; `oneIn` is the number the game's screen shows. With `stake`, `pays` is tokens at that stake; without it (Ore Slots), `pays` is a multiple of the tokens put in. The Wheel counts `spaces` of `of` (24) instead of `chance`, one row per stake per prize, "your N back" and nothing included. A row without its odds is never published |
 | `rules` | One plain line, where the game gives one |
-| `payouts` | Twenty-One: per stake, what a `win`, a `twentyOne` and a `doubleWin` pay back (no paytable) |
+| `payouts` | Twenty-One: per stake, what a `win` and a `twentyOne` pay back, plus a `doubleWin` when that stake offers a Double (no paytable) |
 | `maxMultiplier` / `maxGuesses` | Higher or Lower: where a run cashes out by itself |
 | `board` / `unit` / `lowerIsBetter` / `best` | A cabinet's published board, its unit (`ms`, `points`, `flips`, `apples` or `wins`) and the server record, `best` (absent until there is one) |
 | `tier` / `record` | A course's tier (`easy`…) and record `{ms, at}`. Golf has `holes`, `par` and `record` `{strokes, at}`. `at` is epoch ms |
-| `featured` | Today's pick (a game or course id) and `until`, the next local midnight. Only when that id is in `games`, or `trials` / `golf` when the owner pinned a whole world game: then every course of that kind (`parkour`/`elytra`/`boat`, or `golf`) is the pick, and it is published while at least one of them is in `games` |
-| `jackpots` | The Scratch Ticket's pot now. Whenever it is there, `games` has the `scratch_ticket` entry too, so the site never shows a pot without its odds. Its `rtp` is the steady-state figure `/hcm arcade odds` prints |
+| `featured` | Today's pick (a game or course id) and `until`, the next local midnight. Only when that id is in `games`, or `trials` / `golf` when the owner pinned a whole world game: then every course of that kind (`parkour`/`elytra`/`boat`/`dropper`, or `golf`) is the pick, and it is published while at least one of them is in `games` |
+| `jackpots` | The Scratch Ticket's pot now. Whenever it is there, `games` has the `scratch_ticket` entry too, so the site never shows a pot without its odds. Its `rtp` is the steady-state figure `/hcm arcade odds` prints for admins, floored to one decimal like every other RTP (the command rounds it, so the two can differ by 0.1) |
 | `prizes` | The visible Prize Counter rows, without Trade In, Quest Reroll and the Rare Card. `category` is the counter's tab in lower case (`boosts`, `hunt`, `cosmetics`, `perks`, `trophies`, `minis`); the +1 Home gives its first price |
 | `packs` | Packs sold for tokens, with the rarity odds they roll with, as percents |
 | `achievements` | Enabled achievements. `name` and `description` are both the one line the screen shows. One won by a game of chance (`jackpot`) is left out |
@@ -2295,7 +2545,7 @@ ignores them is unaffected; every existing field is unchanged:
 
 ```json
 { "id": "snake", "name": "Snake", "kind": "cabinet", "board": "classic", "unit": "apples",
-  "lowerIsBetter": false, "best": 31,
+  "lowerIsBetter": false, "best": 31, "holder": "Sam",
   "top": [ { "rank": 1, "value": 31, "unit": "apples", "at": 1790100000000, "holder": "Sam" },
            { "rank": 1, "value": 31, "unit": "apples", "at": 1790200000000 },
            { "rank": 3, "value": 24, "unit": "apples", "at": 1790300000000 } ] }
@@ -2315,7 +2565,7 @@ ignores them is unaffected; every existing field is unchanged:
 | `daily.cadence` / `daily.lastDay` | A Fresh course's set: its length in days and its last day (`day` is its first). `nextAt` is absent on a Classic |
 | `fresh` | A Fresh course's live set: its course code, short seed (12 hex), when it went up, when it changes (`to`, absent while pinned for good) and its cadence |
 | `classic` | A Classics slot's entry: the recalled course's code and the recall's window (`to` absent for "forever") |
-| `freshHistory` | Top-level, after `starChart`: every past (and the current) Fresh set, newest first, at most `games.fresh.feed_history` (26) per course: `{code, slot, name, kind, tier?, from, to?, seed, plays, record?: {ms or strokes, at, holder?}, kept?, classic?, top?}`. `to` is absent for a set up for good; `top` is its board's best 3 (as above). Never a set that isn't up yet |
+| `freshHistory` | Top-level, after `starChart`: every past (and the current) Fresh set, newest first, at most `games.fresh.feed_history` (26) per course: `{code, slot, name, kind, tier?, from, to?, seed, plays, record?: {ms or strokes, at, holder?}, kept?, classic?, top?}`. `to` is absent for a set up for good; `top` is its board's best 3 (fewer if `games.feed_top` is lower, none at 0; rows as above). Never a set that isn't up yet |
 | `cup` | On a time-trial course's entry (never golf) while that course runs this week's **Weekly Cup** and it isn't paid out yet: `{entry, pool, entrants, endsAt}`, all whole numbers. `entry` is the tokens to enter (`games.cup.entry`), `pool` the pool now (every entry, plus `games.cup.server_topup` once 2 or more are in; the top-up is paid only if 2 or more set a Cup time), `entrants` a head count, `endsAt` when it is paid out (epoch ms: the quests' week start at 04:00). Never a player, a Cup time or a prize. Absent on a course without a Cup and with Time Trials closed; with `games.cup.enabled: false` (or a `games.cup` that can't be read) only a Cup that already has entrants is published, until it is paid out |
 | `arena` entries | Falling Floors (`kind: "arena"`, id `falling_floors`, only while it is open): `{id, name, kind, shape?, top?}`. `shape` is this week's top floor (`disc`, `square`, `ring`, `plus` or `diamond`); `top` is this week's longest solo times (`unit: "ms"`, higher is better) |
 | `events` | Top-level, after `freshHistory` and before `jackpots` (Race Night, EVENTS-DROPPER-SPEC §A.7): `next {id, name, joinAt, startsAt, course?: {id, name}, races, laps, entry: "free", prizes, finisherPrize, prizeNight, racers, maxRacers}` (`course` absent until `course: auto` has picked a track), `upcoming` (the start times after `next`, at most 4, 14 days ahead), `live {id, state: open\|racing\|break\|results, race, of, racers, standings?: [{rank, points, lap, laps, holder?}]}` (at most 8 rows; a finished night stays as `results` for 30 minutes), `recent` (the last 5 nights, newest first: `{id, at, course?, racers, state: done\|called_off, top?: [{rank, value, unit: "points", holder?}]}`, at most 8 rows each) and `season? {key, name, until, top?}` (this month's table; absent with `season: off`). `racers` is a count; no prize, UUID or balance is ever published. Absent while Race Night is off (it ships off), and empty parts are left out |
@@ -2893,8 +3143,8 @@ block without settings gets fresh ones.
 | `hcm.workbench.use` | all | Open a placed Workbench's GUI |
 | `hcm.courier.use` | all | `/hcm courier` and the Courier Site on the PC |
 | `hcm.arcade.use` | all | `/hcm arcade` — the Arcade hub, and `/hcm arcade odds` |
-| `hcm.games.play` | all | Play the Games: `/hcm play`, the Games screen, the cabinets, courses and mini golf, invites and Take a break, and `/hcm leave`. Nothing opens until `games.enabled: true` |
-| `hcm.games.chance` | all | The games of chance. Revoke it for a group to keep them out of every game of chance, Crates, Scratch Tickets and token Card Packs included; they then don't see those games at all. Skill games are not affected |
+| `hcm.games.play` | all | Play the Games: `/hcm play`, the Games screen, the cabinets, courses and mini golf, invites and Take a break, and `/hcm leave`. The games only open once `games.enabled: true`; Take a break (`/hcm play break`) and `/hcm leave` work even while they're off. Race Night's chat lines and join bar only reach players who have it |
+| `hcm.games.chance` | all | The games of chance. Revoke it for a group to keep them out of every game of chance, Crates, Scratch Tickets and token Card Packs included. While the games are on, the Games screen and the Arcade don't show them the games of chance, the crates or the Scratch Ticket, and Tab after `/hcm play` doesn't offer the games of chance. Token Card Packs still show in the pack shop, and so do the crates and Scratch Ticket in the Arcade while the games are off; trying one says "Games of chance aren't open to you." Skill games are not affected |
 | `hcm.games.admin` | op | Run the Games (`/hcm games …`), open a game for another player (`/hcm play <game> <player>`), write `[Arcade]` join signs and build in the Games worlds (a child of `hcm.admin`) |
 | `hcm.quests.use` | all | `/hcm quests` |
 | `hcm.achievements.use` | all | `/hcm achievements` |

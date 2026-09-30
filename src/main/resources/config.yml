@@ -1855,6 +1855,10 @@ games:
     warmup_seconds: 180
     # "Race with friends": the most racers in one party race on a course (2-12).
     party_max: 8
+    # Ride along: a boat driver may take one passenger in the back seat. A passenger doesn't change a
+    # boat's speed, so a run with a rider counts as normal. false = runs with a rider are just for fun
+    # (no board, record, rewards or Cup time), and Race Night takes no riders.
+    rider_runs_count: true
   # ---- golf ----
   # Mini golf: your Mini is the ball. Courses are built with /hcm games golf.
   golf:
@@ -2098,7 +2102,8 @@ games:
     # Ships OFF. true + /hcm reload to open it.
     enabled: false
     # The box's corner (x y z; x and z a multiple of 16). It is 48 x 40 x 48 and must stay 32 blocks
-    # from every Fresh Courses area and the kept courses, and 16 from hand-built courses.
+    # from every Fresh Courses area, the kept courses and the Clubhouse, and 16 from hand-built
+    # courses.
     origin: [5376, 176, 4352]
     # Ticks a stepped-on block stays red before it falls (6-20; 20 ticks is a second).
     fade_ticks: 10
@@ -2119,3 +2124,25 @@ games:
     milestone_rewards: [1, 2, 3]
     # Most tokens Falling Floors pays a player per day.
     daily_cap: 3
+  # ---- clubhouse ----
+  # The Clubhouse: one room in the Games world where racers wait before a race and hang out after it
+  # (/hcm play clubhouse). It builds itself in an empty box and is checked before anyone comes in;
+  # /hcm games clubhouse here uses a room you built instead. Nothing here moves tokens.
+  clubhouse:
+    # true = the room builds itself; nothing happens while games.enabled is false. false = every race
+    # and round works exactly as before.
+    enabled: true
+    # The box's corner (x y z; x and z a multiple of 16). It is 32 x 16 x 32 and must stay 32 blocks
+    # from every Fresh Courses area, the kept courses and the Falling Floors arena, and 16 from
+    # hand-built courses.
+    origin: [5376, 160, 4448]
+    # Minutes someone may stay with no race or party going before they are sent home (a warning
+    # comes a minute before).
+    max_minutes: 30
+    # Party racers come back here after the race, instead of going home.
+    party_after: true
+    # Everyone at the track comes here at the end of Race Night (the top three on the podium). On a
+    # track with no viewing stand, racers (and their riders) also wait here between races.
+    race_night_after: true
+    # A golf-together group comes here when its round ends.
+    golf_after: true

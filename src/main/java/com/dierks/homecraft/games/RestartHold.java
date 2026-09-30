@@ -31,11 +31,21 @@ import java.util.regex.Pattern;
  * (03:00), where a host's scheduler runs a skipped job; a time that happens twice on a fall-back
  * day is the first of the two.
  *
+ * <p>A restart the plugin came back from is over (the round-2 audit's G1 #2): a quick restart is up
+ * again inside the restart's own minute, and the minute ({@link #RESTART_MINUTE_MS}) must not hold it
+ * for the restart it just had. So the hold knows when the plugin was enabled ({@code bootedAt}), and a
+ * restart whose minute that fell in is skipped.
+ *
  * @param times       the restart times of every day, sorted, no duplicates (empty: never held)
  * @param zone        where the times are read
  * @param holdMinutes how long before each restart nothing new starts
+ * @param bootedAt    when the plugin was enabled (epoch ms; {@link #NEVER_BOOTED} when unknown): a
+ *                    restart whose minute it fell in has happened
  */
-public record RestartHold(List<LocalTime> times, ZoneId zone, int holdMinutes) {
+public record RestartHold(List<LocalTime> times, ZoneId zone, int holdMinutes, long bootedAt) {
+
+    /** No boot time known: every restart counts. */
+    public static final long NEVER_BOOTED = Long.MIN_VALUE;
 
     /** The shipped hold, in minutes. */
     public static final int DEFAULT_MINUTES = 5;
@@ -62,14 +72,31 @@ public record RestartHold(List<LocalTime> times, ZoneId zone, int holdMinutes) {
         holdMinutes = Math.max(MIN_MINUTES, Math.min(MAX_MINUTES, holdMinutes));
     }
 
+    /** The hold with no boot time known (config checks, a status line with no games running). */
+    public RestartHold(List<LocalTime> times, ZoneId zone, int holdMinutes) {
+        this(times, zone, holdMinutes, NEVER_BOOTED);
+    }
+
     /** Whether no restart times are set (nothing is ever held). */
     public boolean off() {
         return times.isEmpty();
     }
 
     /**
-     * The next restart strictly after {@code now}, in epoch milliseconds; -1 when no restart times
-     * are set. A restart at exactly {@code now} is happening, so the next one is the one after it.
+     * How long each restart time lasts: a whole minute. The owner enters the minute the server
+     * actually stops ({@code config.yml}, README), and a host's scheduler stops it some seconds into
+     * that minute (its cron, the save), so the restart is still coming until the minute is over
+     * (fx2-C #11). Every guard reads the restart through {@link #next}, {@link #holding} or
+     * {@link #heldFor}, so none of them opens again in that minute.
+     */
+    public static final long RESTART_MINUTE_MS = 60_000L;
+
+    /**
+     * The next restart still to come at {@code now}, in epoch milliseconds; -1 when no restart times
+     * are set. A restart time names a whole minute ({@link #RESTART_MINUTE_MS}): the restart at R is
+     * the next one until R plus a minute, since the server stops somewhere in that minute; from then
+     * the next is the one after it. A plugin enabled inside R's minute came back from R, so for it the
+     * next is already the one after ({@link #cameBackFrom}).
      */
     public long next(long now) {
         if (off()) {
@@ -82,7 +109,7 @@ public record RestartHold(List<LocalTime> times, ZoneId zone, int holdMinutes) {
             LocalDate date = today.plusDays(d);
             for (LocalTime t : times) {
                 long at = instant(date, t, zone);
-                if (at > now && at < best) {
+                if (at + RESTART_MINUTE_MS > now && at < best && !cameBackFrom(at)) {
                     best = at;
                 }
             }
@@ -90,7 +117,15 @@ public record RestartHold(List<LocalTime> times, ZoneId zone, int holdMinutes) {
         return best == Long.MAX_VALUE ? -1 : best;
     }
 
-    /** Whether {@code now} is inside {@code [restart - hold, restart)} for the next restart. */
+    /** Whether the plugin was enabled inside the minute of the restart at {@code restart}: it is over. */
+    public boolean cameBackFrom(long restart) {
+        return bootedAt >= restart && bootedAt < restart + RESTART_MINUTE_MS;
+    }
+
+    /**
+     * Whether {@code now} is inside {@code [restart - hold, restart + 1 minute)} for the next restart:
+     * from the hold's start to the end of the restart's own minute.
+     */
     public boolean holding(long now) {
         long next = next(now);
         return next >= 0 && now >= next - holdMillis();

@@ -213,7 +213,7 @@ public final class WeeklyCup implements Game {
         for (Course c : trials.openCourses()) {
             try {
                 CupDesk.View v = desk().view(c, null);
-                if (v.shown()) {
+                if (v.shown() && !v.settledEarly()) { // a Cup paid out early is over: not on the website
                     out.cup(c.id(), new FeedWriter.Cup(v.fee(), v.pool().tokens(), v.pool().in(), v.endsAt()));
                 }
             } catch (SQLException e) {
@@ -269,6 +269,29 @@ public final class WeeklyCup implements Game {
                 return null;
             }
             return desk().view(c, viewer);
+        } catch (SQLException e) {
+            logger().log(Level.WARNING, "Weekly Cup: could not read the Cup on " + c.id(), e);
+            return null;
+        }
+    }
+
+    /**
+     * {@code viewer}'s Cup tiles for one screen build (fx2-C #5): whether they hid the Cup is read
+     * once, not once a course. {@code null} when they hid it or it can't be read (no Cup on any tile).
+     */
+    public CupDesk.Reads tileReads(UUID viewer) {
+        try {
+            return hidden(viewer) ? null : desk().reads(viewer);
+        } catch (SQLException e) {
+            logger().log(Level.WARNING, "Weekly Cup: could not read whether " + viewer + " hid the Cup", e);
+            return null;
+        }
+    }
+
+    /** {@code c}'s Cup on its tile through {@code reads}, or {@code null} when none is shown or it can't be read. */
+    public CupDesk.View tileView(CupDesk.Reads reads, Course c) {
+        try {
+            return reads.shown(c);
         } catch (SQLException e) {
             logger().log(Level.WARNING, "Weekly Cup: could not read the Cup on " + c.id(), e);
             return null;
@@ -458,6 +481,11 @@ public final class WeeklyCup implements Game {
                 throw new SQLException("the course row " + id + " can't be read");
             }
             return c.withRev(row.rev());
+        }
+
+        @Override
+        public com.dierks.homecraft.games.RestartHold restartHold() {
+            return games().restartHold();
         }
 
         @Override

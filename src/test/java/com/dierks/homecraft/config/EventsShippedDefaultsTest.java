@@ -3,6 +3,8 @@ package com.dierks.homecraft.config;
 import com.dierks.homecraft.games.GameCatalog;
 import com.dierks.homecraft.games.arena.FallingFloors;
 import com.dierks.homecraft.games.arena.FallingFloorsSettings;
+import com.dierks.homecraft.games.clubhouse.Clubhouse;
+import com.dierks.homecraft.games.clubhouse.ClubhouseSettings;
 import com.dierks.homecraft.games.cup.CupOptIn;
 import com.dierks.homecraft.games.cup.CupRules;
 import com.dierks.homecraft.games.cup.live.CupSettings;
@@ -38,7 +40,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>the Weekly Cup ON, and on by default on Fresh parkour, Sky Rings, Ice Boat and Dropper
  *       courses (the shipped weekly Fresh schedule keeps one layout a whole Cup week), never golf;</li>
  *   <li>the two droppers ON inside {@code games.fresh}, which itself ships OFF (the Ice Boat stays off);</li>
- *   <li>Race Night OFF (with the 5/3/2 + 1 prizes when it is on), Falling Floors OFF.</li>
+ *   <li>Race Night OFF (with the 5/3/2 + 1 prizes when it is on), Falling Floors OFF;</li>
+ *   <li>the Clubhouse ON (it builds itself in its own empty box, and moves no tokens), 30 minutes a
+ *       visit, and back to it after a party race, Race Night and golf together; a boat run with a
+ *       rider in the back counts as normal ({@code games.trials.rider_runs_count: true}).</li>
  * </ul>
  * Each is read from the bundled config.yml through the real parser, so a config.yml edit that
  * switches one of them fails here, not on the owner's server.
@@ -62,7 +67,8 @@ class EventsShippedDefaultsTest {
         List<String> warns = new ArrayList<>();
         GamesConfig.Parsed parsed = GamesConfig.parse(yml.getConfigurationSection("games"), warns::add, null);
         assertEquals(List.of(), warns, "the shipped games block reads without a WARN");
-        for (var spec : List.of(TimeTrials.SPEC, WeeklyCup.SPEC, DailyCourses.SPEC, RaceNight.SPEC, FallingFloors.SPEC)) {
+        for (var spec : List.of(TimeTrials.SPEC, WeeklyCup.SPEC, DailyCourses.SPEC, RaceNight.SPEC, FallingFloors.SPEC,
+                Clubhouse.SPEC)) {
             assertTrue(GameCatalog.SPECS.contains(spec), spec.id() + " is parsed from config.yml, not only defaulted");
             assertTrue(parsed.readable(spec.id()), spec.id() + "'s shipped block is readable");
         }
@@ -72,6 +78,8 @@ class EventsShippedDefaultsTest {
         assertEquals(180, trials.warmupSeconds(), "warm-ups ship ON at 180 seconds (D3)");
         assertTrue(trials.warmupsOn(), "and are offered");
         assertEquals(8, trials.partyMax(), "a party race holds up to 8 (D4)");
+        assertTrue(yml.getBoolean("games.trials.rider_runs_count"), "config.yml: a run with a rider counts");
+        assertTrue(trials.riderRunsCount(), "ride along ships with the driver's run counting as normal (WP-CH)");
 
         CupSettings cup = parsed.settings(WeeklyCup.SPEC);
         assertTrue(yml.getBoolean("games.cup.enabled"), "config.yml: the Cup is on");
@@ -106,5 +114,20 @@ class EventsShippedDefaultsTest {
         FallingFloorsSettings floors = parsed.settings(FallingFloors.SPEC);
         assertFalse(yml.getBoolean("games.falling_floors.enabled"), "config.yml: Falling Floors is off");
         assertFalse(floors.enabled(), "Falling Floors ships OFF");
+
+        ClubhouseSettings club = parsed.settings(Clubhouse.SPEC);
+        assertTrue(yml.getBoolean("games.clubhouse.enabled"), "config.yml: the Clubhouse is on");
+        assertTrue(club.enabled(), "the Clubhouse ships ON: it builds itself in an empty box (CLUBHOUSE-SPEC §5)");
+        assertEquals(30, yml.getInt("games.clubhouse.max_minutes"), "config.yml: 30 minutes");
+        assertEquals(30, club.maxMinutes(), "a visit with nothing going lasts up to 30 minutes");
+        assertTrue(yml.getBoolean("games.clubhouse.party_after"), "config.yml: party_after");
+        assertTrue(club.partyAfter(), "party racers come back to the Clubhouse after the race");
+        assertTrue(yml.getBoolean("games.clubhouse.race_night_after"), "config.yml: race_night_after");
+        assertTrue(club.raceNightAfter(), "everyone at the track goes to the Clubhouse at the end of Race Night");
+        assertTrue(yml.getBoolean("games.clubhouse.golf_after"), "config.yml: golf_after");
+        assertTrue(club.golfAfter(), "a golf-together group goes to the Clubhouse when its round ends");
+        assertEquals(ClubhouseSettings.ORIGIN, yml.getIntegerList("games.clubhouse.origin"),
+                "config.yml: the shipped corner (ExtraBoxesApartTest keeps it apart from everything else)");
+        assertEquals(ClubhouseSettings.defaults(), club, "the shipped block is exactly the Clubhouse's defaults");
     }
 }

@@ -184,7 +184,8 @@ public final class KitGuardListener implements Listener {
         }
         if (!s.gameId().equals(gameId)) {
             deny(e);
-            p.getInventory().setItemInMainHand(null); // another game's: not this one's to use
+            // another game's: not this one's to use (taken out as a kit item, final gate #16)
+            KitItems.clear(p.getInventory(), p.getInventory().getHeldItemSlot());
             return;
         }
         if (s.phase() != Session.Phase.ACTIVE) {
@@ -273,6 +274,8 @@ public final class KitGuardListener implements Listener {
         }
         safely("a game damage check", () -> {
             Entity victim = e.getEntity();
+            // A fall on a trip home, or while a game's things aren't home, is SessionRecoveryListener's to
+            // spare: it listens whatever the games' switch says (the round-2 audit's G1 #3).
             if (inSession(victim) || WorldEntities.gameId(victim) != null) {
                 e.setCancelled(true);
                 return;
@@ -620,7 +623,7 @@ public final class KitGuardListener implements Listener {
         if (!on() || WorldEntities.gameId(e.getVehicle()) == null) {
             return;
         }
-        if (!e.getEntered().getUniqueId().equals(WorldEntities.owner(e.getVehicle()))) {
+        if (!WorldEntities.mayEnter(e.getVehicle(), e.getEntered().getUniqueId())) { // WP-CH: or the owner's rider
             e.setCancelled(true);
         }
     }
@@ -673,8 +676,8 @@ public final class KitGuardListener implements Listener {
         }
         e.setCancelled(true);
         port.later(1, () -> {
-            if (playing(p) && p.getGameMode() != GameMode.ADVENTURE) {
-                port.adventure(p);
+            if (playing(p)) {
+                port.adventure(p); // the session's own mode (ADVENTURE, or a Clubhouse watcher's SPECTATOR: WP-CH)
             }
         });
     }
@@ -682,16 +685,24 @@ public final class KitGuardListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onFlight(PlayerToggleFlightEvent e) {
         Player p = e.getPlayer();
-        if (!e.isFlying() || !playing(p)) {
+        if (!groundsFlight(e.isFlying(), playing(p), p.getGameMode())) { // WP-CH: a watcher flies
             return;
         }
         e.setCancelled(true);
         port.later(1, () -> {
-            if (playing(p)) {
+            if (groundsFlight(true, playing(p), p.getGameMode())) {
                 p.setFlying(false);
                 p.setAllowFlight(false);
             }
         });
+    }
+
+    /**
+     * Whether a player taking off is grounded: a session player, unless they are in spectator mode (a
+     * Clubhouse watcher, WP-CH: flying is how they watch, and the session keeps that mode).
+     */
+    static boolean groundsFlight(boolean takingOff, boolean playing, GameMode mode) {
+        return takingOff && playing && mode != GameMode.SPECTATOR;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

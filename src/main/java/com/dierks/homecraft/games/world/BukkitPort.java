@@ -87,9 +87,64 @@ final class BukkitPort implements SessionCore.Port<Player, ItemStack> {
         return state.ownModeChange(player);
     }
 
-    /** Set ADVENTURE again as our own change (the game-mode guard). */
+    /**
+     * Set the session's own game mode again as our own change (the game-mode guard): ADVENTURE, or
+     * SPECTATOR while a Clubhouse watcher watches live (WP-CH), for THIS session only.
+     */
     void adventure(Player p) {
-        state.gameMode(p, org.bukkit.GameMode.ADVENTURE);
+        state.gameMode(p, intended(p));
+    }
+
+    // ---- WP-CH: a session's own game mode (the Clubhouse's Watch live) -------------------------------
+
+    /**
+     * Put a session player in {@code mode} as our own change, and have the game-mode guard keep them
+     * in it for this session (it is the session's own: {@link SessionCore#mode(Object, String)}; a new
+     * session starts in ADVENTURE again). The saved state still holds the mode they came in with, and
+     * every way out puts that one back.
+     *
+     * @return whether it was done and took (false: no ACTIVE session, or the server kept them in
+     *         another mode, the Clubhouse review's #8; then the session's mode is the usual again)
+     */
+    boolean gameMode(Player p, org.bukkit.GameMode mode) {
+        if (p == null || mode == null || !core.mode(p, mode.name())) {
+            return false;
+        }
+        state.gameMode(p, mode);
+        if (p.getGameMode() != mode) {
+            core.mode(p, null);
+            return false;
+        }
+        return true;
+    }
+
+    /** The mode the guard keeps a session player in: a game's own for this session, else ADVENTURE. */
+    private org.bukkit.GameMode intended(Player p) {
+        return intended(core.mode(p.getUniqueId()));
+    }
+
+    /** {@code mode} as a game mode: a game's own for the session, or ADVENTURE (none, or one we can't read). */
+    static org.bukkit.GameMode intended(String mode) {
+        if (mode == null) {
+            return org.bukkit.GameMode.ADVENTURE;
+        }
+        try {
+            return org.bukkit.GameMode.valueOf(mode);
+        } catch (IllegalArgumentException e) {
+            return org.bukkit.GameMode.ADVENTURE;
+        }
+    }
+
+    @Override
+    public void resetMode(Player p, String sessionMode) {
+        if (p != null && sessionMode != null && p.getGameMode().name().equals(sessionMode)) {
+            state.gameMode(p, org.bukkit.GameMode.ADVENTURE);
+        }
+    }
+
+    @Override
+    public String gameMode(Player p) {
+        return p.getGameMode().name();
     }
 
     /** The plugin is being disabled (PluginDisableEvent, just before onDisable). */
@@ -238,6 +293,11 @@ final class BukkitPort implements SessionCore.Port<Player, ItemStack> {
                     plugin.getLogger().log(Level.WARNING, "Games: a teleport of " + p.getName() + " failed", err);
                 }
                 boolean arrived = err == null && Boolean.TRUE.equals(ok);
+                if (arrived && Bukkit.isPrimaryThread()) {
+                    // the fall stops as they land, before the client's first move there (a tick before
+                    // done, which SessionCore also lands still: final gate #18)
+                    safely("stopping a fall", () -> still(p));
+                }
                 later(0, () -> done.accept(arrived)); // back on the main thread, only while enabled
             });
         } catch (RuntimeException e) {
@@ -382,6 +442,13 @@ final class BukkitPort implements SessionCore.Port<Player, ItemStack> {
             p.saveData();
         } catch (RuntimeException e) {
             plugin.getLogger().log(Level.WARNING, "Games: could not save " + p.getName() + "'s data", e);
+        }
+    }
+
+    @Override
+    public void still(Player p) {
+        if (p.isOnline()) {
+            BukkitStateAdapter.still(p);
         }
     }
 

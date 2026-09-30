@@ -1,5 +1,7 @@
 package com.dierks.homecraft.games.gen.admin;
 
+import com.dierks.homecraft.games.trial.Course;
+
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -30,6 +32,32 @@ public interface GenOps {
     /** The preview becomes the current edition's layout. */
     void promote(String slot, boolean confirm, Consumer<String> report);
 
+    /**
+     * What a "Sure?" screen showed, which its Yes acts on only while it still stands (round 2, G2 #1):
+     * the screen can stay open for as long as a whole new preview takes, so a Yes that ran "whatever
+     * stands now" could promote or choose a course nobody tried.
+     *
+     * @param preview   the preview's seed it showed
+     * @param pickShown whether it also showed the pick still to come ({@code choose}: the one its Yes
+     *                  replaces, or that there was none)
+     * @param pick      that pick's seed, or {@code null} for none
+     */
+    record Shown(long preview, boolean pickShown, Long pick) {
+
+        /** A screen that showed the preview only. */
+        public static Shown preview(long seed) {
+            return new Shown(seed, false, null);
+        }
+    }
+
+    /**
+     * {@link #promote(String, boolean, Consumer)}, refused unless the preview is still the one
+     * {@code shown} ({@code null}: whichever stands, as typed without a seed).
+     */
+    default void promote(String slot, Shown shown, boolean confirm, Consumer<String> report) {
+        promote(slot, confirm, report);
+    }
+
     /** A new layout for the current edition (a fresh board). */
     void reroll(String slot, Consumer<String> report);
 
@@ -55,6 +83,98 @@ public interface GenOps {
 
     /** Empty both halves and switch the slot off (decommission, or before moving it). */
     void clear(String slot, Consumer<String> report);
+
+    // ---- picking a good course (WP-ADM) --------------------------------------------------------------
+
+    /**
+     * A preview an admin can test-run: the course as its flip would make it, in the idle half
+     * ({@code course}), or the line saying why there is none ({@code refusal}).
+     */
+    record PreviewRun(Course course, String refusal) {
+
+        public static PreviewRun refused(String line) {
+            return new PreviewRun(null, line);
+        }
+    }
+
+    /**
+     * What the course screen's admin tools show of a slot.
+     *
+     * @param on          switched on and nothing in the way
+     * @param golf        a golf course (its preview is walked, not test-played)
+     * @param cadence     the set's length in days now (7: "next week")
+     * @param previewSeed the preview's seed, or {@code null} for no preview
+     * @param previewNext the preview was made for the next set ({@code preview <course> next})
+     * @param chosenSeed  the seed chosen for the next set, or {@code null}
+     * @param chosenFor   that set as admins read it ("Mon 5 Oct-Sun 11 Oct"), or {@code null}
+     * @param busy        a job for it is queued or running
+     * @param chosenUpNow the chosen set is the one up now (its week is running), not still to come
+     * @param pinned      the slot's own pin ({@code pin}) holds for the set up now, under any pick: once
+     *                    the pick up now is let go, regenerate and promote still wait for an unpin
+     *                    (fix2-D, D5)
+     * @param dropped     why the last pick was dropped by a config or schedule change ("Your pick for Mon 5
+     *                    Oct-Sun 11 Oct (seed ...) was dropped: ..."), or {@code null}: kept until that set is
+     *                    over or a new pick is made, across restarts (round 2, G2 #3)
+     */
+    record Tools(boolean on, boolean golf, int cadence, Long previewSeed, boolean previewNext, Long chosenSeed,
+                 String chosenFor, boolean busy, boolean chosenUpNow, boolean pinned, String dropped) {
+
+        /** As before round 2: no note of a dropped pick. */
+        public Tools(boolean on, boolean golf, int cadence, Long previewSeed, boolean previewNext, Long chosenSeed,
+                     String chosenFor, boolean busy, boolean chosenUpNow, boolean pinned) {
+            this(on, golf, cadence, previewSeed, previewNext, chosenSeed, chosenFor, busy, chosenUpNow, pinned, null);
+        }
+
+        /** As before fix2-D: no pin of its own. */
+        public Tools(boolean on, boolean golf, int cadence, Long previewSeed, boolean previewNext, Long chosenSeed,
+                     String chosenFor, boolean busy, boolean chosenUpNow) {
+            this(on, golf, cadence, previewSeed, previewNext, chosenSeed, chosenFor, busy, chosenUpNow, false);
+        }
+
+        /** The pick still to come (not the one up now), or {@code null}: what a choose replaces. */
+        public Long waitingPick() {
+            return chosenUpNow ? null : chosenSeed;
+        }
+
+        /** Whether a preview stands in the spare half. */
+        public boolean preview() {
+            return previewSeed != null;
+        }
+    }
+
+    /** Build a candidate for the NEXT set into the idle half: its tier or mix, and {@code seed} (random when null). */
+    default void previewNext(String slot, String seed, Consumer<String> report) {
+        report.accept("&cThat isn't available.");
+    }
+
+    /** The preview's seed becomes the course of exactly the next set (a one-set pin). */
+    default void choose(String slot, boolean confirm, Consumer<String> report) {
+        report.accept("&cThat isn't available.");
+    }
+
+    /**
+     * {@link #choose(String, boolean, Consumer)}, refused unless the preview is still the one
+     * {@code shown}; and {@code confirm} replaces a pick only when it is the one {@code shown} (any
+     * other gets the command's own "already has seed ... chosen" warning). {@code null}: as typed.
+     */
+    default void choose(String slot, Shown shown, boolean confirm, Consumer<String> report) {
+        choose(slot, confirm, report);
+    }
+
+    /** Forget the next set's chosen seed: it gets its own new course. */
+    default void unchoose(String slot, Consumer<String> report) {
+        report.accept("&cThat isn't available.");
+    }
+
+    /** The preview as a course to test-run, or why not. */
+    default PreviewRun previewRun(String slot) {
+        return PreviewRun.refused("&cThat isn't available.");
+    }
+
+    /** The admin tools' view of a slot, or {@code null} for none (a Classics slot, or not running). */
+    default Tools tools(String slot) {
+        return null;
+    }
 
     // ---- the archive: history, recall and keep (GEN-SPEC-KEEP) ------------------------------------------
 

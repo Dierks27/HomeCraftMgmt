@@ -12,6 +12,12 @@ import java.util.List;
  *   <li>{@code enabled} — the admin's on/off ({@code true}/{@code false}), over config;</li>
  *   <li>{@code tier} — a tier or golf mix, over config, from the next build;</li>
  *   <li>{@code pin} — {@code seed:algo:until} ({@link GenScheduler.Pin});</li>
+ *   <li>{@code choose} — {@code seed:algo:until:from:cadence:mix:fallDepth}: an admin's pick for the
+ *       next set only ({@code /hcm games gen choose}, a {@link GenScheduler.Choice}: a one-set pin that
+ *       keeps its set's length and the settings it was tried at); gone once that set is over, or once
+ *       the schedule or those settings move away from it;</li>
+ *   <li>{@code dropped} — {@code seed:from:cadence:why}: why that pick was dropped by a config or schedule
+ *       change, until its set is over or a new pick is made (round 2);</li>
  *   <li>{@code reroll.<edition>} — how many times an admin rerolled that edition ({@code 7:38});</li>
  *   <li>{@code claim} — {@code world,x,y,z,sx,sy,sz}: the region it may build in ({@link Regions#claim});</li>
  *   <li>{@code mix} — {@code plan:mix}: the tier or mix the live layout was made with, written with the
@@ -46,6 +52,19 @@ public final class GenAdminKeys {
 
     public static String pin(String slot) {
         return "gen." + slot + ".pin";
+    }
+
+    /** An admin's pick for the next set ({@code /hcm games gen choose}): a one-set pin. */
+    public static String choose(String slot) {
+        return "gen." + slot + ".choose";
+    }
+
+    /**
+     * Why a pick was dropped by a config or schedule change ({@code seed:from:cadence:why}), shown by
+     * status and the admin tools until that set is over or a new pick is made (round 2, G2 #3).
+     */
+    public static String dropped(String slot) {
+        return "gen." + slot + ".dropped";
     }
 
     /** The reroll count of an edition ({@code edition} without a reroll: {@code 7:38}). */

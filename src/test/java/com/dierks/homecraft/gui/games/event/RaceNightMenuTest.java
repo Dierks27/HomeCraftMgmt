@@ -51,6 +51,23 @@ class RaceNightMenuTest {
     }
 
     @Test
+    void theClubhouseItemsHaveSlotsOfTheirOwnOnFiller() {
+        // WP-CH: the screen paints "Wait in / Watch from the Clubhouse" at 24 and "Take a rider" at 25 over
+        // its layout, so in every state those two are filler in the layout and cover none of its tiles
+        assertEquals(24, RaceNightMenu.CLUB, "the Clubhouse at 24");
+        assertEquals(25, RaceNightMenu.RIDER, "Take a rider at 25");
+        for (RaceNightMenu.Join j : RaceNightMenu.Join.values()) {
+            for (boolean prizes : new boolean[]{true, false}) {
+                List<RaceNightMenu.Tile> tiles = RaceNightMenu.tiles(view(j, prizes), true);
+                for (int slot : new int[]{RaceNightMenu.CLUB, RaceNightMenu.RIDER}) {
+                    assertEquals(Material.GRAY_STAINED_GLASS_PANE, tiles.get(slot).material(),
+                            j + ": slot " + slot + " is filler in the layout, free for the Clubhouse");
+                }
+            }
+        }
+    }
+
+    @Test
     void theFactsAreInTheNames() {
         List<RaceNightMenu.Tile> t = RaceNightMenu.tiles(view(RaceNightMenu.Join.OPEN, true), true);
         assertEquals("&6Race Night &7- Fri 7:00 PM", name(t, RaceNightMenu.HEADER), "when");

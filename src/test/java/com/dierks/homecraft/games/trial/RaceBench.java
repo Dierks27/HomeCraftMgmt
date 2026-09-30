@@ -43,8 +43,8 @@ final class RaceBench {
         }
 
         @Override
-        public void raceNightFinished(Player player, boolean won) {
-            nights.computeIfAbsent(player.getUniqueId(), k -> new ArrayList<>()).add(won);
+        public void raceNightFinished(UUID player, boolean won) { // by id, as LivePorts tells it (fx2-C #6)
+            nights.computeIfAbsent(player, k -> new ArrayList<>()).add(won);
         }
 
         int courses(UUID id) {
@@ -67,6 +67,49 @@ final class RaceBench {
     final Map<UUID, Integer> parked = new HashMap<>();
     /** Who went home, with the line they read ("" for none). */
     final Map<UUID, String> home = new LinkedHashMap<>();
+    /** WP-CH: the Clubhouse's door (race mode's too), or {@code null} for none (off, not built). */
+    com.dierks.homecraft.games.clubhouse.ClubDoor door;
+    /** WP-CH: who was seated from the Clubhouse, how often. */
+    final Map<UUID, Integer> fromClub = new HashMap<>();
+
+    /**
+     * The world sessions under the races (the cross-feature journeys), or {@code null}: then a racer
+     * is seated with no session at all and "home" is Time Trials' {@code onSessionEnd}, as before.
+     */
+    interface Rail {
+        /** Whether the racer is in a world session or still has a saved-state row (can't enter). */
+        boolean busy(UUID id);
+
+        /**
+         * {@code RaceMode.race} from home: the racer's {@code trials} session with ref {@code base}'s
+         * id, entered at {@code at} and ready now. False when it was refused.
+         */
+        boolean enter(UUID id, Course base, Course.Spot at);
+
+        /** Their session ends ({@code sessions().leave}): its hook runs {@code TimeTrials.onSessionEnd}. */
+        void leave(UUID id, EndReason why);
+
+        /** {@code TimeTrials.move}: the run's own teleport (the grid from the Clubhouse, a re-grid). */
+        void move(UUID id, Course base, Course.Spot at);
+
+        /** {@code TimeTrials.giveKit}: the race's kit, the player's own things never overwritten. */
+        void kit(UUID id, Course base);
+    }
+
+    /** The server's boats (the journeys' ride along), or {@code null}: no boats at all, as before. */
+    interface Boats {
+        /** {@code TimeTrials.seat}: a fresh boat for the driver at {@code at}, then {@code riders.seated}. */
+        void seated(UUID driver, Course base, Course.Spot at);
+
+        /** {@code RaceMode.toStand}: the driver stands on the stand ({@code riders.follow}). */
+        void parked(UUID driver, Point stand);
+
+        /** {@code TimeTrials.removeBoat}: the driver's boat is gone. */
+        void gone(UUID driver);
+    }
+
+    Rail rail;
+    Boats boats;
 
     RaceBench(TimeTrials trials) {
         this.trials = trials;
@@ -83,7 +126,7 @@ final class RaceBench {
 
     /** Online and in no world game: a coordinator may take them to the track. */
     boolean free(UUID id) {
-        return players.containsKey(id) && trials.run(id) == null;
+        return players.containsKey(id) && trials.run(id) == null && (rail == null || !rail.busy(id));
     }
 
     // ---- TimeTrials.race / regrid / park / endRace --------------------------------------------------
@@ -97,11 +140,34 @@ final class RaceBench {
         if (!mode.alive(link)) {
             return "That race is over.";
         }
+        boolean waiting = door != null && door.seatable(id);
+        if (!waiting && !p.hasPermission(com.dierks.homecraft.games.PlayGate.PERMISSION_PLAY)) {
+            return Refusal.NO_GAMES.message(); // RaceMode.race: the play gate's permission step (G1 #3)
+        }
         if (trials.run(id) != null) {
             return Refusal.IN_SESSION.message();
         }
+        boolean club = false;
+        if (door != null && door.seatable(id)) { // RaceMode.race -> ClubRaces.seat: the session handed over
+            if (!door.handOut(p, trials, base.id())) {
+                return "Couldn't take you from the Clubhouse right now.";
+            }
+            fromClub.merge(id, 1, Integer::sum);
+            club = true;
+        }
         boolean warm = mode.call(link, () -> link.warmupUntil() > tick, false);
         Course.Spot spot = grid != null ? grid : raced.start();
+        if (club && rail != null) {
+            rail.move(id, base, RaceMode.entrySpot(base, spot, warm)); // ClubRaces.seat: the run's own teleport
+        }
+        if (!club && rail != null) { // RaceMode.race from home: the session entered at the grid (or the warm-up's start)
+            if (rail.busy(id)) {
+                return Refusal.IN_SESSION.message();
+            }
+            if (!rail.enter(id, base, RaceMode.entrySpot(base, spot, warm))) {
+                return "Stand still somewhere safe to join the race.";
+            }
+        }
         RaceRun rr = new RaceRun(link, base, spot, stand, warm);
         // RaceMode.seated, on arrival:
         long until = mode.call(link, link::warmupUntil, 0L);
@@ -110,6 +176,12 @@ final class RaceBench {
         run.race = rr;
         trials.replaceRun(run);
         mode.inRace(p, rr); // collisions off, and a runner on the no-push team
+        if (rail != null) {
+            rail.kit(id, base);
+        }
+        if (boats != null && base.kind() == TrialKind.BOAT) {
+            boats.seated(id, base, spot); // TimeTrials.seat: the boat, and the rider behind the driver
+        }
         if (warmNow && run.beginWarmup(until)) {
             run.progress = new Progress(run.course, base.start().point(), nanos); // free laps from the start
             run.phase = TrialRun.Phase.RUNNING;
@@ -138,6 +210,13 @@ final class RaceBench {
         trials.replaceRun(run);
         regridded.put(id, spot);
         regrids.merge(id, 1, Integer::sum);
+        if (rail != null) {
+            rail.move(id, rr.base, spot);
+        }
+        if (boats != null && rr.base.kind() == TrialKind.BOAT) {
+            boats.gone(id);
+            boats.seated(id, rr.base, spot); // the re-grid's re-seat: the rider sits behind the driver again
+        }
     }
 
     /** {@code TimeTrials.park} (real). */
@@ -178,10 +257,19 @@ final class RaceBench {
                 case HOME -> {
                     rr.due = RaceRun.Due.NONE;
                     rr.ended = true;
+                    if (boats != null) {
+                        boats.gone(run.player); // ClubRaces.toClub and the trip home both remove the boat first
+                    }
+                    if (rr.toClub && ClubRaces.toClub(trials, mode, door, players.get(run.player), run, rr.line)) {
+                        continue; // WP-CH: race mode's own trip to the Clubhouse (the real one)
+                    }
                     leave(run.player, rr.line, rr.why == null ? EndReason.FINISH : rr.why);
                 }
                 case CALLED_OFF -> {
                     rr.ended = true;
+                    if (boats != null) {
+                        boats.gone(run.player);
+                    }
                     leave(run.player, mode.call(rr.link, rr.link::calledOffLine, "&7The race was called off."),
                             EndReason.ADMIN);
                 }
@@ -194,6 +282,15 @@ final class RaceBench {
                         run.endWarmup();
                     }
                     parked.merge(run.player, 1, Integer::sum);
+                    if (rail != null && rr.stand != null) {
+                        rail.move(run.player, rr.base, new Course.Spot(rr.stand.x(), rr.stand.y(), rr.stand.z(), 0f, 0f));
+                    }
+                    if (boats != null) {
+                        boats.gone(run.player); // parkNow: the boat goes
+                        if (rr.stand != null) {
+                            boats.parked(run.player, rr.stand); // toStand: onto the stand, the rider by them
+                        }
+                    }
                 }
                 case GRID -> grid(run);
                 default -> {
@@ -220,7 +317,12 @@ final class RaceBench {
     private void leave(UUID id, String line, EndReason why) {
         home.put(id, line == null ? "" : line);
         Player p = players.get(id);
-        if (p != null) {
+        if (p != null && rail != null) {
+            if (line != null && !line.isBlank()) {
+                p.sendMessage(com.dierks.homecraft.util.Text.of(line));
+            }
+            rail.leave(id, why); // the session's end: its hook runs TimeTrials.onSessionEnd
+        } else if (p != null) {
             trials.onSessionEnd(p, why);
         }
     }

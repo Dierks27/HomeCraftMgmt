@@ -29,6 +29,8 @@ import java.util.List;
  *  16 OAK_SIGN   "Last Race Night - won by Sam" (its results)
  *  20 NETHER_STAR "Season points - you: 12" (the season board)
  *  22 Back/Close          26 BELL "Race news: on"
+ *  24 OAK_DOOR/SPYGLASS "Wait in / Watch from the Clubhouse" and 25 OAK_BOAT "Take a rider (back seat)",
+ *     painted by the screen over filler while the Clubhouse and ride along take the night (WP-CH)
  * </pre>
  *
  * Every build paints every slot; the facts are in the item NAMES (Bedrock shows lore only on
@@ -47,6 +49,10 @@ public final class RaceNightMenu extends GameMenu {
     public static final int SEASON = 20;
     public static final int EXIT = 22;
     public static final int NEWS = 26;
+    /** WP-CH: "Wait in the Clubhouse" (joined) or "Watch from the Clubhouse", while it takes the night. */
+    public static final int CLUB = 24;
+    /** WP-CH: "Take a rider (back seat)", once joined, while riders race at Race Night. */
+    public static final int RIDER = 25;
 
     /** What the Join tile can do for the viewer. */
     public enum Join {
@@ -113,6 +119,31 @@ public final class RaceNightMenu extends GameMenu {
             }
             set(t.slot(), Menus.glint(Menus.icon(t.material(), t.name(), t.lore().toArray(new String[0])),
                     t.slot() == JOIN && v.join() == Join.OPEN), e -> click(t.slot(), v));
+        }
+        if (com.dierks.homecraft.games.event.ClubNight.offered(plugin.games())) { // WP-CH
+            boolean joined = v.join() == Join.IN;
+            set(CLUB, Menus.icon(joined ? Material.OAK_DOOR : Material.SPYGLASS, joined
+                    ? com.dierks.homecraft.games.clubhouse.ClubhouseText.WAIT_BUTTON
+                    : com.dierks.homecraft.games.clubhouse.ClubhouseText.WATCH_BUTTON,
+                    joined ? "&7Hang out with the other racers;" : "&7Watch the races and the podium",
+                    joined ? "&7we take you to the track." : "&7with everyone else."), e -> {
+                viewer.closeInventory();
+                if (joined) {
+                    com.dierks.homecraft.games.clubhouse.Clubhouse.go(plugin.games(), viewer);
+                } else {
+                    com.dierks.homecraft.games.clubhouse.Clubhouse.watch(plugin.games(), viewer);
+                }
+            });
+        }
+        com.dierks.homecraft.games.event.NightRunner night = game.night();
+        if (v.join() == Join.IN && night != null && com.dierks.homecraft.games.trial.RideAlong.nightOffered(
+                plugin.games(), night.track().base())) { // WP-CH
+            set(RIDER, Menus.icon(Material.OAK_BOAT, com.dierks.homecraft.games.trial.RideAlong.BUTTON,
+                    "&7A friend rides in the back of your", "&7boat: not a racer, never scored."), e -> {
+                viewer.closeInventory();
+                com.dierks.homecraft.games.trial.RideAlong.take(plugin.games(), viewer, night.track().base().id(),
+                        com.dierks.homecraft.games.trial.RideAlong.Purpose.NIGHT, null);
+            });
         }
     }
 

@@ -9,6 +9,8 @@ import com.dierks.homecraft.games.ScoreResult;
 import com.dierks.homecraft.games.arena.rules.ArenaScoring;
 import com.dierks.homecraft.games.arena.rules.Feet;
 import com.dierks.homecraft.games.arena.rules.RoundResult;
+import com.dierks.homecraft.games.clubhouse.Clubhouse;
+import com.dierks.homecraft.games.clubhouse.ClubhouseRegions;
 import com.dierks.homecraft.games.gen.DailyCourses;
 import com.dierks.homecraft.games.gen.DailySettings;
 import com.dierks.homecraft.games.gen.api.Box;
@@ -170,7 +172,16 @@ class LiveArenaHost implements ArenaHost {
             facts = new Regions.WorldFacts(port.name(), listed, port.minHeight(), port.maxHeight(), port.border(),
                     port.spawn(), d == null ? null : d.safeSpot());
         }
-        return ArenaRegions.problems(box, d, handBuilt(), facts);
+        return ArenaRegions.problems(box, d, clubhouse(), handBuilt(), facts);
+    }
+
+    /** WP-CH: the Clubhouse's room as configured (on or off: its blocks may stand); none when unreadable. */
+    private List<Regions.Extra> clubhouse() {
+        try {
+            return ClubhouseRegions.extras(games().settings(Clubhouse.SPEC));
+        } catch (RuntimeException e) {
+            return List.of();
+        }
     }
 
     /** Every hand-built course's footprint, or {@code null} when the rows can't be read now. */
@@ -331,20 +342,23 @@ class LiveArenaHost implements ArenaHost {
         fill(p, kit);
     }
 
-    /** Clear the player's inventory and hand out {@code kit}. */
+    /**
+     * Take the old kit off and hand out {@code kit}: the kit items only, never the player's own things
+     * (an auction win or a Mini can arrive mid-session; the session's end banks it).
+     */
     void fill(Player p, Kit kit) {
+        games().sessions().stripKit(p);
         PlayerInventory inv = p.getInventory();
-        inv.clear();
         if (kit.kind() == KitKind.LOBBY) {
-            inv.setItem(0, KitItems.item(game, FallingFloors.READY, kit.ready() ? Material.LIME_DYE : Material.GRAY_DYE,
+            KitItems.put(inv, 0, KitItems.item(game, FallingFloors.READY, kit.ready() ? Material.LIME_DYE : Material.GRAY_DYE,
                     kit.ready() ? FloorsText.KIT_READY_ON : FloorsText.KIT_READY,
                     FloorsText.readyLore(settings().minPlayers()).toArray(new String[0])));
             if (kit.solo()) {
-                inv.setItem(4, KitItems.item(game, FallingFloors.SOLO, Material.CLOCK, FloorsText.KIT_SOLO,
+                KitItems.put(inv, 4, KitItems.item(game, FallingFloors.SOLO, Material.CLOCK, FloorsText.KIT_SOLO,
                         "&7A round just for you.", "&7Keep moving to last longer!"));
             }
         }
-        inv.setItem(8, KitItems.item(game, FallingFloors.LEAVE, Material.BARRIER, FloorsText.KIT_LEAVE,
+        KitItems.put(inv, 8, KitItems.item(game, FallingFloors.LEAVE, Material.BARRIER, FloorsText.KIT_LEAVE,
                 "&7Click twice to leave.", "&7Your things come back."));
         inv.setHeldItemSlot(kit.kind() == KitKind.LOBBY ? 0 : 1);
     }

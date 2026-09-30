@@ -71,7 +71,8 @@ public final class GamesCommand {
     /** The {@code /hcm games saved <player>} verbs (world sessions own them). */
     static final List<String> SAVED_VERBS = List.of("show", "restore", "return", "discard");
     /** Words {@code /hcm play} keeps for itself. */
-    static final List<String> PLAY_WORDS = List.of("break", "accept", "deny", "invites", "news", "leave", "cup");
+    static final List<String> PLAY_WORDS = List.of("break", "accept", "deny", "invites", "news", "leave", "cup",
+            "watch", "cheer", "cheers", "rider"); // WP-CH: the Clubhouse's
 
     private final HomeCraftManagement plugin;
 
@@ -140,7 +141,29 @@ public final class GamesCommand {
             case "leave" -> leave(sender, args);
             case "race" -> race(sender, args); // WP-R1 (D4): /hcm play race <course> is a party race
             case "cup" -> cup(sender, args);
+            case "watch", "cheer", "cheers", "rider" -> clubhouse(sender, args); // WP-CH
             default -> open(sender, args);
+        }
+    }
+
+    /**
+     * WP-CH: {@code /hcm play watch [<player>]} (watch a race live from the Clubhouse, or come back),
+     * {@code /hcm play cheer} (cheer the racers on) and {@code /hcm play cheers [on|off]} (the cheers a
+     * racer sees). The Clubhouse's own words, run inside its guard.
+     */
+    private void clubhouse(CommandSender sender, String[] args) {
+        Player player = self(sender, "Only players can do that.");
+        GamesService games = player == null || deny(sender, PLAY) ? null : running(sender);
+        if (games == null) {
+            return;
+        }
+        switch (args[1].toLowerCase(Locale.ROOT)) {
+            case "watch" -> com.dierks.homecraft.games.clubhouse.Clubhouse.watchCommand(games, player,
+                    args.length >= 3 ? args[2] : null);
+            case "cheer" -> com.dierks.homecraft.games.clubhouse.Clubhouse.cheerCommand(games, player);
+            case "rider" -> com.dierks.homecraft.games.trial.RideAlong.command(games, player,
+                    args.length >= 3 ? args[2] : null);
+            default -> com.dierks.homecraft.games.clubhouse.Clubhouse.cheersCommand(games, player, args);
         }
     }
 
@@ -272,12 +295,7 @@ public final class GamesCommand {
         UUID id = player.getUniqueId();
         if (args.length >= 3 && isOnOff(args[2])) {
             boolean on = args[2].equalsIgnoreCase("on");
-            for (String game : Invites.FRIEND_GAMES) {
-                games.invites().setAccepts(id, game, on);
-            }
-            if (!on) {
-                games.invites().setAccepts(id, Invites.COIN_FLIP, false);
-            }
+            games.invites().setAllFriendGames(id, on);
             player.sendMessage(Text.of(on
                     ? "&aInvites to friend games are on. &7Coin Flip invites are set on the Take a break screen."
                     : "&7Game invites are off, Coin Flip too."));
@@ -337,8 +355,15 @@ public final class GamesCommand {
     }
 
     private static String inviteState(GamesService games, UUID player, String gameId) {
-        Game g = games.game(gameId);
-        String name = g == null ? gameId : g.name();
+        String name = switch (gameId) { // what the invite is for, as the player knows it
+            case "trials" -> "Party races";
+            case "rider" -> "Ride along"; // WP-CH
+            case "golf" -> "Golf together"; // final gate: /hcm play invites on|off covers it
+            default -> {
+                Game g = games.game(gameId);
+                yield g != null ? g.name() : gameId;
+            }
+        };
         return "&f" + name + " " + (games.invites().accepts(player, gameId) ? "&aon" : "&7off");
     }
 
@@ -787,6 +812,10 @@ public final class GamesCommand {
             out.add("&e/hcm play race <course> &7- race a course with friends (free, just for fun)"); // WP-R1 (D4)
             out.add("&e/hcm play news [on|off] &7- a line in chat when new courses are up");
             out.add("&e/hcm play cup [on|off] &7- the Weekly Cup on the course screens");
+            out.add("&e/hcm play clubhouse &7- hang out in the Clubhouse (and back from watching)"); // WP-CH
+            out.add("&e/hcm play watch [player] &7- watch a race live from the Clubhouse");
+            out.add("&e/hcm play cheer &7- cheer the racers on; &e/hcm play cheers [on|off] &7- see cheers");
+            out.add("&e/hcm play rider <player> &7- take a friend in the back of your boat");
             out.add("&e/hcm leave &7- leave the world game you're in (your things come back)");
         }
         if (sender.hasPermission(ADMIN)) {
@@ -834,11 +863,13 @@ public final class GamesCommand {
             if (n == 2) {
                 match(out, last, PLAY_WORDS.toArray(new String[0]));
                 if (games != null) {
-                    playIds(out, games, last);
+                    playIds(out, games, last, sender);
                 }
             } else if (n == 3 && (args[1].equalsIgnoreCase("invites") || args[1].equalsIgnoreCase("news")
-                    || args[1].equalsIgnoreCase("cup"))) {
+                    || args[1].equalsIgnoreCase("cup") || args[1].equalsIgnoreCase("cheers"))) {
                 match(out, last, "on", "off");
+            } else if (n == 3 && (args[1].equalsIgnoreCase("watch") || args[1].equalsIgnoreCase("rider"))) { // WP-CH
+                players(out, last);
             } else if (n == 3 && args[1].equalsIgnoreCase("race") && games != null) { // WP-R1 (D4)
                 match(out, last, com.dierks.homecraft.games.trial.PartyRaces.courseIds(games).toArray(new String[0]));
                 if (!(sender instanceof Player) || sender.hasPermission(ADMIN)) {
@@ -952,10 +983,15 @@ public final class GamesCommand {
         }
     }
 
-    /** Every open game's id and every open course's id. */
-    private static void playIds(List<String> out, GamesService games, String prefix) {
+    /**
+     * Every open game's id and every open course's id. The games of chance only for a sender they are
+     * open to (the final gate's #3): a player without {@code hcm.games.chance}, or on a Take a break pause
+     * (or whose break can't be read), doesn't see them at all, as on the Games screen. The console gets all.
+     */
+    static void playIds(List<String> out, GamesService games, String prefix, CommandSender sender) {
+        boolean chance = chanceOffered(games, sender);
         for (Game g : games.games()) {
-            if (!games.enabled(g)) {
+            if (!games.enabled(g) || (g.kind().chance() && !chance)) {
                 continue;
             }
             match(out, prefix, g.id());
@@ -963,6 +999,22 @@ public final class GamesCommand {
                 match(out, prefix, p.id());
             }
         }
+    }
+
+    /**
+     * Whether the games of chance are offered to {@code sender} now: the Games screen's rule (its Luck is
+     * OPEN), so a name the screen hides is never offered on Tab either.
+     */
+    static boolean chanceOffered(GamesService games, CommandSender sender) {
+        if (!(sender instanceof Player p)) {
+            return true;
+        }
+        if (!p.hasPermission(Breaks.PERMISSION_CHANCE)) {
+            return false;
+        }
+        Breaks breaks = games.breaks();
+        Breaks.Today today = breaks == null ? null : games.guard(null, () -> breaks.today(p.getUniqueId()), null);
+        return today != null && !today.paused(games.clock().nowMillis());
     }
 
     // ---------------------------------------------------------------------

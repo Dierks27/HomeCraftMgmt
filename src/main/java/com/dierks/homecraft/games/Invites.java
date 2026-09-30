@@ -31,6 +31,17 @@ import java.util.logging.Level;
  * <p>What the INVITER hears after sending is the game's to say, through its answer callback
  * ("Sam didn't take your Coin Flip invite."): this class only speaks to the invitee (the invite,
  * how to answer, that it ran out or was called off), so nobody reads the same news twice.
+ *
+ * <p><b>Every invite has an owning game.</b> An invite under a key of its own ({@code rider}) still names
+ * the game that sent it, and its answer always runs, inside that game's guard (the final gate's #0: a
+ * rider invite's answer was looked up by its key, found no game called "rider" and never ran, so
+ * nobody could ever ride).
+ *
+ * <p><b>One switch for every invite.</b> {@code /hcm play invites off} writes a row for each of the
+ * {@link #FRIEND_GAMES}; any invite key without a row of its own (one added since: party races, riders,
+ * golf together) is off for a player whose rows carry the mark an older "off" left, so it keeps those
+ * away too. A game's own screen switch is just for that game: it never turns off a ride, a party race or
+ * golf together ({@link #olderInvitesOff}).
  */
 public final class Invites {
 
@@ -43,10 +54,24 @@ public final class Invites {
     public static final String COIN_FLIP = "coin_flip";
     /**
      * The games you can invite a friend to (their invites are on until a player turns them off).
-     * {@code trials}: party races (WP-R1, owner decision D4), so {@code /hcm play invites off}
-     * covers them too.
+     * {@code trials}: party races (WP-R1, owner decision D4); {@code rider}: a ride in someone's boat
+     * (WP-CH); {@code golf}: Mini Golf together. {@code /hcm play invites on|off} writes each of them.
      */
-    public static final List<String> FRIEND_GAMES = List.of("connect_four", "tic_tac_toe", "trials");
+    public static final List<String> FRIEND_GAMES = List.of("connect_four", "tic_tac_toe", "trials", "rider", "golf");
+    /**
+     * The friend games there were when {@code /hcm play invites off} first shipped: each keeps its own
+     * default. Every other invite key with no row yet is off only for a player an older "off" marked
+     * ({@link #OFF_MARK}).
+     */
+    static final List<String> FIRST_FRIEND_GAMES = List.of("connect_four", "tic_tac_toe");
+    /**
+     * The rows every {@code /hcm play invites off} has written, since it first shipped: both first friend
+     * games and Coin Flip, all off, at once. No screen writes all three: Connect Four's and Tic-Tac-Toe's
+     * each write only their own row, and Coin Flip's is written only by the Take a break screen. So all
+     * three stored "off" is the one sign of an older "off" (the final gate's golf check: following
+     * Connect Four alone made its own screen's switch turn off rides, party races and golf together too).
+     */
+    static final List<String> OFF_MARK = List.of("connect_four", "tic_tac_toe", COIN_FLIP);
     /** The same two players can't be asked again for this long after an invite. */
     public static final long PAIR_COOLDOWN_MS = 30_000L;
     /** The shortest and longest an invite may wait. */
@@ -59,8 +84,8 @@ public final class Invites {
     private final Map<String, Long> lastPair = new HashMap<>();
     private long nextId = 1;
 
-    /** A pending invite, what to call when it is answered, and its expiry task. */
-    private record Pending(Invite invite, BiConsumer<Invite, Boolean> answer, Runnable cancelExpiry) {
+    /** A pending invite, the game that sent it, what to call when it is answered, and its expiry task. */
+    private record Pending(Invite invite, Game owner, BiConsumer<Invite, Boolean> answer, Runnable cancelExpiry) {
     }
 
     public Invites(GamesService games) {
@@ -80,7 +105,24 @@ public final class Invites {
      */
     public Invite send(Player from, Player to, Game game, String summary, int seconds,
                        BiConsumer<Invite, Boolean> answer) {
-        if (from == null || to == null || game == null || from.getUniqueId().equals(to.getUniqueId())) {
+        if (game == null) {
+            return null;
+        }
+        return send(from, to, game, game.id(), game.name(), summary, seconds, answer);
+    }
+
+    /**
+     * {@link #send(Player, Player, Game, String, int, BiConsumer)} under an invite key of its own that
+     * isn't a game's id (WP-CH: {@code rider}, a ride in the back of someone's boat), with the same
+     * switches, cooldown and one-at-a-time rules. {@code owner} is the game that sent it: its answer runs
+     * inside that game's guard, and switching that game off calls it off.
+     *
+     * @param name what it is an invite to ("Ride along"): the Games screen's tile NAME says it
+     */
+    public Invite send(Player from, Player to, Game owner, String key, String name, String summary, int seconds,
+                       BiConsumer<Invite, Boolean> answer) {
+        if (from == null || to == null || owner == null || key == null
+                || from.getUniqueId().equals(to.getUniqueId())) {
             return null;
         }
         expireLapsed();
@@ -88,15 +130,16 @@ public final class Invites {
         UUID b = to.getUniqueId();
         long now = now();
         Long last = lastPair.get(pair(a, b));
-        if (!accepts(b, game.id()) || pending.containsKey(b) || outgoing(a) != null
+        if (!accepts(b, key) || pending.containsKey(b) || outgoing(a) != null
                 || (last != null && now - last < PAIR_COOLDOWN_MS)) {
             return null;
         }
         int secs = Math.max(MIN_SECONDS, Math.min(MAX_SECONDS, seconds));
-        Invite invite = new Invite(nextId++, a, b, game.id(), summary == null ? game.name() : summary, now,
-                now + secs * 1000L);
+        String title = name == null || name.isBlank() ? owner.name() : name;
+        Invite invite = new Invite(nextId++, a, b, key, summary == null ? title : summary, now,
+                now + secs * 1000L, title);
         Runnable cancel = games.host().later(secs * 20L + 1, () -> expire(invite));
-        pending.put(b, new Pending(invite, answer, cancel == null ? () -> {
+        pending.put(b, new Pending(invite, owner, answer, cancel == null ? () -> {
         } : cancel));
         lastPair.put(pair(a, b), now);
         offer(to, from.getName(), invite, secs);
@@ -173,15 +216,18 @@ public final class Invites {
 
     /**
      * Whether the player takes invites to this game (Coin Flip off by default, friend games on).
-     * Party races ({@code trials}) joined the friend games later: a player with no choice stored for
-     * them yet follows their Connect Four choice, so an earlier {@code /hcm play invites off} (which
-     * wrote rows only for the games there were then) still keeps party invites away.
+     * Party races ({@code trials}), riders and golf together joined the friend games later: a player
+     * with no choice stored for such a key yet takes them unless an earlier {@code /hcm play invites off}
+     * (which wrote rows only for the games there were then) left its mark ({@link #olderInvitesOff}), so
+     * that "off" still keeps those invites away. That holds for ANY key but Coin Flip and the first two
+     * friend games, so an invite added later is covered by the switch without anyone remembering to list
+     * it here. Turning Connect Four or Tic-Tac-Toe off on its own screen is just for that game.
      */
     public boolean accepts(UUID player, String gameId) {
         try {
             String v = games.dao().pref(player, prefKey(gameId));
-            if (v == null && "trials".equals(gameId)) { // WP-R1 fix (R1 review #3): an older "off" still holds
-                v = games.dao().pref(player, prefKey("connect_four"));
+            if (v == null && followsFriendGames(gameId)) { // WP-R1 fix (R1 #3); WP-CH riders; final gate: golf
+                return !olderInvitesOff(player);
             }
             if (v == null) {
                 return !COIN_FLIP.equals(gameId);
@@ -193,6 +239,26 @@ public final class Invites {
         }
     }
 
+    /** Whether an invite key with no choice stored follows an older {@code /hcm play invites off}. */
+    static boolean followsFriendGames(String gameId) {
+        return gameId != null && !COIN_FLIP.equals(gameId) && !FIRST_FRIEND_GAMES.contains(gameId);
+    }
+
+    /**
+     * Whether the player's rows carry the mark of a {@code /hcm play invites off}: {@link #OFF_MARK} all
+     * stored "off". One game's own screen switch never leaves it, so it never turns off anything else. A
+     * player who later turns one of the three back on (Connect Four's screen, say) has lifted the mark,
+     * and takes invites added later again, as a new player does.
+     */
+    private boolean olderInvitesOff(UUID player) throws SQLException {
+        for (String key : OFF_MARK) {
+            if (!"off".equalsIgnoreCase(games.dao().pref(player, prefKey(key)))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** The player turns this game's invites on or off. */
     public void setAccepts(UUID player, String gameId, boolean on) {
         try {
@@ -202,12 +268,26 @@ public final class Invites {
         }
     }
 
+    /**
+     * {@code /hcm play invites on|off}: every friend game's row, and for {@code off} Coin Flip's too (only
+     * the Take a break screen turns Coin Flip on). An "off" so leaves {@link #OFF_MARK}, which is how an
+     * invite key added after it knows to stay off.
+     */
+    public void setAllFriendGames(UUID player, boolean on) {
+        for (String game : FRIEND_GAMES) {
+            setAccepts(player, game, on);
+        }
+        if (!on) {
+            setAccepts(player, COIN_FLIP, false);
+        }
+    }
+
     // ---- the framework's side -----------------------------------------------------------------
 
-    /** Cancel every invite to one game (it was switched off). */
+    /** Cancel every invite to one game (it was switched off), keyed ones it sent too. */
     void cancelGame(String gameId) {
         for (Pending p : new ArrayList<>(pending.values())) {
-            if (p.invite().gameId().equals(gameId)) {
+            if (p.invite().gameId().equals(gameId) || p.owner().id().equals(gameId)) {
                 pending.remove(p.invite().to());
                 p.cancelExpiry().run();
                 answer(p, false);
@@ -274,16 +354,16 @@ public final class Invites {
         return p;
     }
 
-    /** Run the game's answer inside its guard, once. */
+    /**
+     * Run the answer inside its owning game's guard, once. Always: the owner is kept with the invite, never
+     * looked up by its key, so an invite under a key of its own is answered like any other (the final
+     * gate's #0).
+     */
     private void answer(Pending p, boolean yes) {
         if (p.answer() == null) {
             return;
         }
-        Game game = games.game(p.invite().gameId());
-        if (game == null) {
-            return;
-        }
-        games.guard(game, () -> p.answer().accept(p.invite(), yes));
+        games.guard(p.owner(), () -> p.answer().accept(p.invite(), yes));
     }
 
     /**

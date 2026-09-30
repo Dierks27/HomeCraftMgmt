@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.event;
 
 import com.dierks.homecraft.games.EndReason;
+import com.dierks.homecraft.games.Refusal;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.games.trial.RaceLink;
@@ -70,6 +71,8 @@ class NightRunnerTest {
         long tick = 1_000;
         final Set<UUID> online = new HashSet<>();
         final Set<UUID> busy = new HashSet<>();
+        /** Racers race mode refuses at the play gate: a parent took hcm.games.play away (G1 #3). */
+        final Set<UUID> gated = new HashSet<>();
         final Map<UUID, List<String>> told = new HashMap<>();
         final Map<UUID, Course.Spot> seatedAt = new HashMap<>();
         final Map<UUID, Course.Spot> regridded = new HashMap<>();
@@ -119,6 +122,9 @@ class NightRunnerTest {
 
         @Override
         public String seat(UUID racer, Course base, Course raced, Course.Spot grid, Point stand, RaceLink link) {
+            if (gated.contains(racer)) {
+                return Refusal.NO_GAMES.message(); // RaceMode.race: the play gate's permission step
+            }
             this.link = link;
             seatedAt.put(racer, grid);
             return null;
@@ -290,7 +296,7 @@ class NightRunnerTest {
         NightRunner r = new NightRunner(plan, new NightRunner.Track(loop(), "Ice Loop", grid(), new Point(0, 70, 0)),
                 dao, ports, new PayLoop(dao, payer, () -> ports.now, Logger.getAnonymousLogger()), ZoneOffset.UTC,
                 SEASON, 30, EventMachine.State.scheduled());
-        r.prizeWeek(2920, 3);
+        r.prizeWeek(() -> 2920L, 3);
         return r;
     }
 
@@ -420,6 +426,41 @@ class NightRunnerTest {
         assertTrue(ports.seatedAt.containsKey(C), "back and free: pulled in for race 2");
     }
 
+    /**
+     * The round-2 audit's G1 #3: a racer whose parent took {@code hcm.games.play} away after they joined is
+     * refused at the grid by race mode's play gate. They read the gate's own line once, are never nagged to
+     * stand still or told they'll be in the next one, are DNS for every race they can't be seated in, and
+     * are seated again as soon as the permission is back.
+     */
+    @Test
+    void aRacerWhoLostThePlayPermissionIsToldTheGatesLineOnceAndNeverPulledIn() throws Exception {
+        open();
+        join(A, B, C);
+        ports.gated.add(C); // at 6:55 a parent removes hcm.games.play from Cal's group
+        runUntil(T + 250);
+        assertFalse(ports.seatedAt.containsKey(C), "Cal is never pulled onto the grid");
+        assertEquals(2, runner.started(), "2 started race 1");
+        List<String> heard = ports.told.getOrDefault(C, List.of());
+        assertEquals(1, heard.stream().filter(l -> l.contains(Refusal.NO_GAMES.message())).count(),
+                "Cal reads the gate's own line once, though the seat was tried every second: " + heard);
+        assertFalse(ports.heard(C, "Stand still, or use Leave game, to join"), "never asked to get free: " + heard);
+        assertFalse(ports.heard(C, "weren't free"), "nor told they'll be in the next one: " + heard);
+        race(A, B);
+        runUntil(ports.now + 21_000);
+        runUntil(ports.now + 500);
+        assertFalse(ports.seatedAt.containsKey(C), "still refused for race 2");
+        assertEquals(1, ports.told.get(C).stream().filter(l -> l.contains(Refusal.NO_GAMES.message())).count(),
+                "and not told again");
+        assertTrue(dao.races(ID).stream().anyMatch(r -> r.player().equals(C) && r.race() == 1
+                && "DNS".equals(r.result())), "race 1 stored Cal as DNS: " + dao.races(ID));
+
+        ports.gated.remove(C); // the permission is back
+        race(A, B);
+        runUntil(ports.now + 21_000);
+        runUntil(ports.now + 500);
+        assertTrue(ports.seatedAt.containsKey(C), "allowed again: Cal is in race 3");
+    }
+
     @Test
     void leaveGameIsLeavingForGood() throws Exception {
         open();
@@ -466,6 +507,35 @@ class NightRunnerTest {
         assertEquals(3, payer.to(B), "Ben 2nd, 3");
         assertEquals(1, payer.to(C), "Cal finished a race: 1");
         assertTrue(ports.home.containsAll(List.of(A, B, C)), "everyone home with their things");
+    }
+
+    /**
+     * fx2-C #13: a night made before the week's rollover (a long heads-up, or an admin's start in 600)
+     * that goes after it claims its prize night in the week race 1 goes in, as the screen shows it:
+     * a full last week doesn't make it just for fun, and it doesn't use up last week's slots.
+     */
+    @Test
+    void thePrizeNightIsClaimedInTheWeekRace1GoesIn() throws Exception {
+        for (int i = 1; i <= 3; i++) { // last week used all three of its prize nights
+            String other = "rn-2026092" + i + "-1900";
+            dao.open(new EventDao.EventRow(other, "ice", T - 5 * 86_400_000L, T - 5 * 86_400_000L, EventDao.DONE, "",
+                    3, false, "", "", T, T, ""));
+            assertTrue(dao.claimPrizeSlot(other, "2919", 3), "last week's prize night " + i);
+        }
+        long[] week = {2919}; // the night is made on the last evening of last week
+        EventPlan plan = new EventPlan(ID, "ice", T - 10 * MIN, T, rules(0), false, "");
+        runner = new NightRunner(plan, new NightRunner.Track(loop(), "Ice Loop", grid(), new Point(0, 70, 0)), dao,
+                ports, new PayLoop(dao, payer, () -> ports.now, Logger.getAnonymousLogger()), ZoneOffset.UTC, SEASON,
+                30, EventMachine.State.scheduled());
+        runner.prizeWeek(() -> week[0], 3);
+        runUntil(T - 10 * MIN + 1_000);
+        join(A, B, C);
+        week[0] = 2920; // the week turns over before race 1's Go
+        runUntil(T + 250);
+        assertTrue(runner.prizeNight(), "the new week has all its prize nights: this is one");
+        assertTrue(ports.titles.get(A).contains("Prizes: 5, 3, 2 tokens"), "and Go says so: " + ports.titles.get(A));
+        assertEquals(1, dao.prizedIn("2920"), "it uses the new week's slot");
+        assertEquals(3, dao.prizedIn("2919"), "never last week's");
     }
 
     @Test
@@ -534,6 +604,29 @@ class NightRunnerTest {
         assertEquals(1, payer.to(C), "the finisher's 1 token");
         assertEquals(0, loop.payOwed(C), "a second join pays nothing");
         assertEquals(1, payer.paid.values().stream().filter(v -> v == 1).count(), "once");
+    }
+
+    /**
+     * fx2-C #6: a racer who is online but can't be paid where they are when the night settles (watching
+     * live in spectator from the Clubhouse, in creative) reads that their prize is waiting, as an
+     * offline one does at their next join; a racer who was paid reads nothing of the kind.
+     */
+    @Test
+    void anOnlineRacerWhosePrizeIsOwedIsToldItIsWaiting() throws Exception {
+        open();
+        join(A, B, C);
+        runUntil(T + 250);
+        payer.canEarn.remove(A); // Ava is watching the others live when the night settles
+        race(A, B, C);
+        runUntil(ports.now + 21_000);
+        race(A, B, C);
+        runUntil(ports.now + 21_000);
+        race(A, B, C);
+        runUntil(ports.now + 1_000);
+        assertEquals(EventMachine.Phase.DONE, runner.phase(), "settled");
+        assertEquals(1, dao.owed(A).size(), "Ava's prize is owed");
+        assertTrue(ports.heard(A, "Your Race Night prize is waiting"), "and she is told so: " + ports.told.get(A));
+        assertFalse(ports.heard(B, "Your Race Night prize is waiting"), "Ben was paid: nothing is waiting for him");
     }
 
     @Test

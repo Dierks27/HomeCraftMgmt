@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.games.trial.RaceGrid;
 import com.dierks.homecraft.games.trial.RaceStand;
 import com.dierks.homecraft.games.trial.TimeTrials;
+import com.dierks.homecraft.games.trial.TrackChunks;
 import com.dierks.homecraft.games.trial.TrialKind;
 import com.dierks.homecraft.games.trial.WorldSurface;
 import com.dierks.homecraft.storage.EventDao;
@@ -25,6 +26,14 @@ import java.util.logging.Level;
  * {@code race.stand.<course>}, each kept with the layout it was set for) and the live blocks. The
  * automatic grid and a Fresh Boat's built-in stand are Time Trials' own ({@link RaceGrid},
  * {@link RaceStand}), the same ones party races use, so there is one grid and one stand.
+ *
+ * <p>Round 2, G2 #4: the live blocks are read through a {@link WorldSurface}, which never loads a chunk
+ * on the main thread. The schedule, which makes a night when its heads-up is due, reads with a
+ * {@link Wait}: a track whose chunks aren't loaded comes back {@link Found#loading}, the chunks are
+ * asked for off the main thread, and the wait's callback runs on the main thread the moment every one
+ * of them is in, so the schedule reads the track again while they are sure to be loaded (round 3,
+ * fx3-2: not a second later, when a server that unloads chunks at once has dropped them again). An
+ * admin's command and the boot's recovery of a night read as before.
  */
 final class Tracks {
 
@@ -40,21 +49,115 @@ final class Tracks {
      * @param races   races it can hold (1 without a stand)
      * @param problem why it can't be raced, or {@code null}
      */
-    record Found(NightRunner.Track track, int races, String problem) {
+    record Found(NightRunner.Track track, int races, String problem, boolean loading) {
+
+        Found(NightRunner.Track track, int races, String problem) {
+            this(track, races, problem, false);
+        }
 
         static Found no(String why) {
             return new Found(null, 0, why);
         }
+
+        /**
+         * Round 2, G2 #4: the track's chunks aren't loaded; they are on their way, off the main thread.
+         * Not a problem with the track: ask again in a moment.
+         */
+        static Found loading(String name) {
+            return new Found(null, 0, name + "'s blocks are still loading - try again in a moment", true);
+        }
+    }
+
+    /**
+     * The server's worlds and their chunk loads, as a track's read reaches them: {@link Bukkit} and
+     * {@link TrackChunks#server} on the live server, a test's own world with no server.
+     */
+    interface Server {
+        /** The loaded world called {@code name}, or {@code null}. */
+        World world(String name);
+
+        /** Loads of {@code world}'s chunks off the main thread, each back on the main thread in the game's guard. */
+        TrackChunks.Loader loader(World world);
+    }
+
+    /**
+     * Round 3 (fx3-2): the chunks one read of the schedule asked for, however many candidates and
+     * worlds they are in, and what runs once every one is in: one callback for the read, not one per
+     * candidate, so the schedule reads again once, with all of them loaded. Main thread only.
+     */
+    static final class Wait {
+        private final java.util.function.Consumer<Wait> then;
+        /** The read itself (until {@link #asked}) and each ask still loading. */
+        private int open = 1;
+        private boolean any;
+        private boolean ran;
+
+        /** {@code then} gets this wait, so the caller can tell a late one from the one it waits on. */
+        Wait(java.util.function.Consumer<Wait> then) {
+            this.then = then;
+        }
+
+        /** One more ask; run what it returns when its chunks are in. */
+        Runnable part() {
+            open++;
+            any = true;
+            return this::close;
+        }
+
+        /**
+         * The read asked for everything it needs: the callback runs once the asks are in (now, if they
+         * already are), never when nothing was asked.
+         */
+        void asked() {
+            close();
+        }
+
+        private void close() {
+            if (--open == 0 && any && !ran) {
+                ran = true;
+                then.accept(this);
+            }
+        }
     }
 
     private final RaceNight game;
+    private Server server;
 
     Tracks(RaceNight game) {
         this.game = game;
+        this.server = new Server() {
+            @Override
+            public World world(String name) {
+                return Bukkit.getWorld(name);
+            }
+
+            @Override
+            public TrackChunks.Loader loader(World world) {
+                return TrackChunks.server(world, game.games(), game);
+            }
+        };
     }
 
-    /** The track {@code courseId} for a night of {@code races} races and up to {@code maxRacers}. */
+    /** The tests: the worlds and chunk loads the reads use from now on (no server to ask). */
+    void server(Server testServer) {
+        this.server = testServer;
+    }
+
+    /**
+     * The track {@code courseId} for a night of {@code races} races and up to {@code maxRacers}, read as
+     * an admin's command or the boot reads it (chunks it needs are loaded, on the main thread).
+     */
     Found find(String courseId, int races, int minRacers, int maxRacers) {
+        return find(courseId, races, minRacers, maxRacers, null);
+    }
+
+    /**
+     * The track {@code courseId}. With a {@code wait} (the schedule), never a chunk loaded on the main
+     * thread: {@link Found#loading} while its chunks come in (round 2, G2 #4), asked for as a part of
+     * {@code wait}, whose callback reads it again once they are in (round 3). {@code null}: read through
+     * loads, as an admin's command.
+     */
+    Found find(String courseId, int races, int minRacers, int maxRacers, Wait wait) {
         TimeTrials t = game.trials();
         if (t == null) {
             return Found.no("Time Trials is closed");
@@ -67,12 +170,19 @@ final class Tracks {
         if (c.kind() != TrialKind.BOAT) {
             return Found.no(c.name() + " isn't a boat course");
         }
-        List<Course.Spot> grid = grid(c, maxRacers, null);
+        Live blocks = new Live(server, c.world(), wait == null);
+        List<Course.Spot> grid = grid(c, maxRacers, null, blocks);
+        Point stand = stand(c, blocks);
+        if (blocks.loading()) {
+            // round 2, G2 #4: what was read isn't the track yet; its chunks come in off the main thread,
+            // and the caller reads it again the moment they are in (round 3), not when it next happens to ask
+            TrackChunks.whenLoaded(server.loader(blocks.world), blocks.surface.missing(), wait.part());
+            return Found.loading(c.name());
+        }
         String problem = RaceTrack.raceProblem(c, grid.size(), minRacers);
         if (problem != null) {
             return Found.no(problem);
         }
-        Point stand = stand(c);
         return new Found(new NightRunner.Track(c, c.name(), grid, stand), RaceTrack.races(races, stand), null);
     }
 
@@ -102,6 +212,16 @@ final class Tracks {
      * that one can't (a grid too small, no start). {@link Found#no} when none can.
      */
     Found pick(String eventId, int races, int minRacers, int maxRacers) {
+        return pick(eventId, races, minRacers, maxRacers, null);
+    }
+
+    /**
+     * {@link #pick(String, int, int, int)}; with a {@code wait} (the schedule), a candidate whose chunks
+     * are still loading is never skipped for the next one in turn (round 2, G2 #4): the pick is
+     * {@link Found#loading} until it can be read. Every candidate's missing chunks are asked for in the
+     * same pass, all as parts of {@code wait} (round 3: its one callback runs once every one is in).
+     */
+    Found pick(String eventId, int races, int minRacers, int maxRacers, Wait wait) {
         List<String> ids = candidates();
         String first = RaceTrack.pick(ids, eventId);
         if (first == null) {
@@ -109,14 +229,19 @@ final class Tracks {
         }
         int at = ids.indexOf(first);
         Found last = null;
+        Found waiting = null;
         for (int i = 0; i < ids.size(); i++) {
-            Found f = find(ids.get((at + i) % ids.size()), races, minRacers, maxRacers);
+            Found f = find(ids.get((at + i) % ids.size()), races, minRacers, maxRacers, wait);
+            if (f.loading()) {
+                waiting = waiting == null ? f : waiting; // an earlier one in turn still to read: wait for it
+                continue;
+            }
             if (f.problem() == null) {
-                return f;
+                return waiting == null ? f : waiting;
             }
             last = last == null ? f : last;
         }
-        return last;
+        return waiting != null ? waiting : last;
     }
 
     /**
@@ -125,20 +250,59 @@ final class Tracks {
      * blocks. {@code why}, when given, gets a line for each thing that was dropped or failed.
      */
     List<Course.Spot> grid(Course c, int n, List<String> why) {
+        return grid(c, n, why, new Live(server, c.world(), true)); // an admin's command
+    }
+
+    /**
+     * The live blocks of a track's world, looked up the first time they are needed (a stored grid and
+     * an admin's stand need none): loaded chunks only unless {@code mayLoad} (round 2, G2 #4).
+     */
+    private static final class Live {
+        private final Server server;
+        private final String name;
+        private final boolean mayLoad;
+        private boolean looked;
+        World world;
+        WorldSurface surface;
+
+        Live(Server server, String name, boolean mayLoad) {
+            this.server = server;
+            this.name = name;
+            this.mayLoad = mayLoad;
+        }
+
+        /** The blocks, or {@code null} when the world isn't loaded. */
+        WorldSurface get() {
+            if (!looked) {
+                looked = true;
+                world = server.world(name);
+                surface = world == null ? null : mayLoad ? WorldSurface.mayLoad(world) : new WorldSurface(world);
+            }
+            return surface;
+        }
+
+        /** Whether a read needed chunks that weren't loaded, so it isn't the track yet. */
+        boolean loading() {
+            return surface != null && !surface.complete();
+        }
+    }
+
+    /** {@link #grid(Course, int, List)} read from {@code live}. */
+    private List<Course.Spot> grid(Course c, int n, List<String> why, Live live) {
         if (!c.generated()) {
             List<Course.Spot> stored = storedGrid(c);
             if (stored != null && !stored.isEmpty()) {
                 return stored.size() > n ? stored.subList(0, n) : stored;
             }
         }
-        World w = Bukkit.getWorld(c.world());
-        if (w == null) {
+        WorldSurface blocks = live.get();
+        if (blocks == null) {
             if (why != null) {
                 why.add("the world " + c.world() + " isn't loaded");
             }
             return List.of();
         }
-        RaceGrid.Grid auto = RaceGrid.forCourse(c, new WorldSurface(w), n); // Time Trials' grid, as party races'
+        RaceGrid.Grid auto = RaceGrid.forCourse(c, blocks, n); // Time Trials' grid, as party races'
         if (why != null && auto.size() < n) {
             why.add("the automatic grid found " + auto.size() + " of " + n + " spots behind the start (walls, "
                     + "blocks or no room)");
@@ -165,14 +329,14 @@ final class Tracks {
     /**
      * A course's viewing stand: built into a Fresh Boat layout of algo 2 or later ({@link RaceStand},
      * used only while it really stands in the world), else an admin's (dropped with a WARN once the
-     * layout changes); {@code null} for none (finishers go home at the line).
+     * layout changes); {@code null} for none (finishers go home at the line). The built one is checked
+     * on {@code live}.
      */
-    Point stand(Course c) {
+    private Point stand(Course c, Live live) {
         if (c.generated()) {
             Box half = game.games().generated().half(c.gen());
             Point built = RaceTrack.freshStand(c, half);
-            World w = built == null ? null : Bukkit.getWorld(c.world());
-            return w != null && RaceStand.standable(new WorldSurface(w), built) ? built : null;
+            return built != null && live.get() != null && RaceStand.standable(live.get(), built) ? built : null;
         }
         String key = STAND + c.id();
         String stored = meta(key);

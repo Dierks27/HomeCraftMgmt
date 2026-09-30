@@ -98,6 +98,34 @@ public final class CupRules {
         return edition.startOf(week + 7);
     }
 
+    /** How long before it is paid a Cup stops taking entries when no restart hold says longer (ms). */
+    public static final long CLOSING_MS = 5 * 60_000L;
+
+    /**
+     * Whether the Cup paid at {@code settlesAt} has stopped taking entries at {@code now} (fx2-C #12):
+     * an entry only counts through a Cup time set by a run started after it and finished before the
+     * payout, so once no such run is possible an entry could only go into the others' shares. That is:
+     * <ul>
+     *   <li>its last {@code restart_hold_minutes} ({@link #CLOSING_MS} without a hold): too short to
+     *       start a run and finish it before the payout, and it is where the week's own restart hold
+     *       falls when a restart is at the rollover (the shipped 04:00);</li>
+     *   <li>a restart hold now whose restart (its whole minute) runs into that last stretch: every run
+     *       is held until the server is back, and then the Cup is over.</li>
+     * </ul>
+     * A hold earlier in the week is only a pause, and entries go on. Pure.
+     */
+    public static boolean closing(long now, long settlesAt, com.dierks.homecraft.games.RestartHold hold) {
+        long closesAt = settlesAt - (hold == null ? CLOSING_MS : hold.holdMillis());
+        if (now >= closesAt) {
+            return true;
+        }
+        if (hold == null || !hold.holding(now)) {
+            return false;
+        }
+        long restart = hold.next(now);
+        return restart >= 0 && restart + com.dierks.homecraft.games.RestartHold.RESTART_MINUTE_MS >= closesAt;
+    }
+
     /**
      * The weeks whose Cups are running at {@code now}: every week whose seven days include now
      * ({@code week <= today < week + 7}), from {@code today - 6} to {@code today}. With the week start
@@ -259,6 +287,17 @@ public final class CupRules {
     public static CupRefusal refusal(boolean cupsOn, boolean courseOn, CupKey key, long currentWeek,
                                      CupPlan.Outcome settledAs, boolean alreadyIn, boolean layoutUp, int fee,
                                      int balance) {
+        return refusal(cupsOn, courseOn, key, currentWeek, settledAs, alreadyIn, false, layoutUp, fee, balance);
+    }
+
+    /**
+     * {@link #refusal(boolean, boolean, CupKey, long, CupPlan.Outcome, boolean, boolean, int, int)}, and
+     * after the player isn't already in: {@link CupRefusal#CLOSING} while the Cup is about to be paid
+     * ({@code closing}, {@link #closing}), when no run started now could set a Cup time in it.
+     */
+    public static CupRefusal refusal(boolean cupsOn, boolean courseOn, CupKey key, long currentWeek,
+                                     CupPlan.Outcome settledAs, boolean alreadyIn, boolean closing, boolean layoutUp,
+                                     int fee, int balance) {
         if (!cupsOn || fee < MIN_ENTRY || fee > MAX_ENTRY) {
             return CupRefusal.OFF;
         }
@@ -276,6 +315,9 @@ public final class CupRules {
         }
         if (alreadyIn) {
             return CupRefusal.ALREADY_IN;
+        }
+        if (closing) {
+            return CupRefusal.CLOSING;
         }
         if (!layoutUp) {
             return CupRefusal.NOT_UP_YET;

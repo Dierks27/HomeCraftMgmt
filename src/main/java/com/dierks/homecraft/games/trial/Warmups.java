@@ -110,7 +110,7 @@ final class Warmups {
         if (!Warmup.begin(run, Bukkit.getCurrentTick(), seconds, TimeTrials.position(p, run), System.nanoTime())) {
             return;
         }
-        p.getInventory().setItem(Warmup.KIT_SLOT, KitItems.item(trials, Warmup.TIMED, Material.LIME_DYE,
+        KitItems.put(p.getInventory(), Warmup.KIT_SLOT, KitItems.item(trials, Warmup.TIMED, Material.LIME_DYE,
                 Warmup.TIMED_NAME, "&7Ends the warm-up now.", "&7Then the 3-2-1 at the start,",
                 "&7and your timed run."));
         p.sendMessage(Text.of(Warmup.started(seconds)));
@@ -177,7 +177,7 @@ final class Warmups {
             return;
         }
         run.warmupReady = true;
-        p.getInventory().setItem(Warmup.KIT_SLOT, null);
+        KitItems.clear(p.getInventory(), Warmup.KIT_SLOT); // the kit item only (final gate #16)
         p.sendActionBar(Text.of(Warmup.BAR_READY));
         TimeTrials.ping(p, 1.6f);
         RaceRun rr = run.race;
@@ -203,7 +203,7 @@ final class Warmups {
     /** The warm-up is over: back to the start, and the normal 3-2-1. */
     private void end(Player p, TrialRun run, String line) {
         Warmup.toCountdown(run);
-        p.getInventory().setItem(Warmup.KIT_SLOT, null);
+        KitItems.clear(p.getInventory(), Warmup.KIT_SLOT); // the kit item only (final gate #16)
         p.sendMessage(Text.of(line));
         trials.toStart(p, run);
     }

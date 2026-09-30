@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.gen.engine;
 
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.Slots;
@@ -20,14 +21,22 @@ final class SlotState {
     /**
      * A preview built into the idle half without a flip ({@code /hcm games gen preview}).
      *
-     * @param half    the half it stands in
-     * @param plan    its plan
-     * @param day     the first day of the edition it was made for
-     * @param seed    its seed
-     * @param mix     the tier or mix it was made with
-     * @param cadence that edition's length in days
+     * @param half      the half it stands in
+     * @param plan      its plan
+     * @param day       the first day of the edition it was made for
+     * @param seed      its seed
+     * @param mix       the tier or mix it was made with
+     * @param cadence   that edition's length in days
+     * @param reroll    the reroll it was made as (0 for a preview of the next set)
+     * @param fallDepth the {@code trials.fall_depth} it was made with (fix2-D: choose keeps the depth
+     *                  that shapes its layout), or 0 when unknown
      */
-    record Preview(char half, Plan plan, long day, long seed, String mix, int cadence) {
+    record Preview(char half, Plan plan, long day, long seed, String mix, int cadence, int reroll, int fallDepth) {
+
+        /** A preview whose fall depth is unknown. */
+        Preview(char half, Plan plan, long day, long seed, String mix, int cadence, int reroll) {
+            this(half, plan, day, seed, mix, cadence, reroll, 0);
+        }
     }
 
     final Slots.Def def;
@@ -43,6 +52,54 @@ final class SlotState {
     /** The tier or mix a build would use now. */
     String mix = "";
     GenScheduler.Pin pin;
+    /**
+     * An admin's pick for the next set ({@code gen.<slot>.choose}, WP-ADM): a one-set pin, used over
+     * {@link #pin} for the one set it names, forgotten once that set is over, or once it no longer
+     * names the next set or fits the settings it was tried with (fix2-D).
+     */
+    GenScheduler.Choice chosen;
+    /**
+     * A pick a config or schedule change dropped (fix2-D), as status and the admin tools show it.
+     *
+     * <p>Round 2, G2 #3: kept in {@code hcm_meta} ({@link GenAdminKeys#dropped}) and through the flips of
+     * the set it was for, since the usual drop is at the restart at the change, a minute before that
+     * set's own build flips, and an owner who uses the course screens looks later; gone once that set is
+     * over ({@link #over}), or at the next pick or cancel.
+     *
+     * @param seed    the pick's seed
+     * @param from    its set's first day (local epoch day)
+     * @param cadence its set's length in days, or 0 when unknown
+     * @param why     why, in the owner's terms ("it was tried as easy, and that set will be hard, ...")
+     */
+    record DroppedPick(long seed, long from, int cadence, String why) {
+
+        /** Whether it is old news for a slot showing the set that starts on {@code start}: its set is over. */
+        boolean over(long start) {
+            return start > from;
+        }
+
+        /** As stored: {@code seed:from:cadence:why}. */
+        String text() {
+            return GenSeed.hex(seed) + ":" + from + ":" + cadence + ":" + why;
+        }
+
+        /** A stored note, or {@code null} when unset or unreadable. */
+        static DroppedPick parse(String text) {
+            if (text == null) {
+                return null;
+            }
+            String[] p = text.split(":", 4);
+            Long seed = p.length == 4 ? GenSeed.parse(p[0]) : null;
+            try {
+                return seed == null ? null : new DroppedPick(seed, Long.parseLong(p[1]), Integer.parseInt(p[2]), p[3]);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+    }
+
+    /** Why the last pick was dropped ({@link DroppedPick}), or {@code null}. */
+    DroppedPick pickDropped;
     /** The current edition's reroll count. */
     int reroll;
     /** The claim matches this world and origin. */

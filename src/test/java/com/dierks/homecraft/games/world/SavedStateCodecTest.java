@@ -88,9 +88,10 @@ class SavedStateCodecTest {
         SavedStateCodec.apply(s, SavedStateCodec.decodeEffects(s.effects()), body);
         assertEquals(List.of("gameMode SURVIVAL", "clearEffects", "addEffect minecraft:health_boost", "health 26.0",
                         "absorption 2.0", "food 17 5.5 1.5", "xp 30 0.5 900", "speeds 0.2 0.1", "flight true true",
-                        "fire 0", "air 300", "contents"), body.calls,
+                        "still", "fire 0", "air 300", "contents"), body.calls,
                 "game mode first (it resets flight), effects before health (Health Boost raises the max), "
-                        + "health kept at 26 because the max is now 28, the inventory last");
+                        + "health kept at 26 because the max is now 28, no fall carried out of the game (a "
+                        + "restore mid-drop), the inventory last");
     }
 
     @Test
@@ -118,7 +119,7 @@ class SavedStateCodecTest {
         Recorder body = new Recorder(20);
         SavedStateCodec.apply(s, List.of(), body);
         assertEquals(List.of("gameMode SURVIVAL", "clearEffects", "health 20.0", "absorption 0.0", "food 20 5.0 40.0",
-                        "xp 0 1.0 0", "speeds 1.0 0.1", "flight false false", "fire 0", "air 300", "contents"),
+                        "xp 0 1.0 0", "speeds 1.0 0.1", "flight false false", "still", "fire 0", "air 300", "contents"),
                 body.calls, "a blank mode reads as survival, and every number lands inside its range");
     }
 
@@ -127,9 +128,10 @@ class SavedStateCodecTest {
         Recorder body = new Recorder(24);
         SavedStateCodec.clearForGame(body);
         assertEquals(List.of("gameMode ADVENTURE", "clearContents", "clearEffects", "fire 0", "flight false false",
-                        "health 24.0", "food 20 5.0 0.0", "xp 0 0.0 0"), body.calls,
+                        "still", "health 24.0", "food 20 5.0 0.0", "xp 0 0.0 0"), body.calls,
                 "ADVENTURE first (a game-mode inventory profile can't swap items in under us), then empty, "
-                        + "full health from the MAX_HEALTH attribute, full food, no XP; speeds and air untouched");
+                        + "no fall, full health from the MAX_HEALTH attribute, full food, no XP; speeds and air "
+                        + "untouched");
         assertFalse(body.calls.stream().anyMatch(c -> c.startsWith("speeds") || c.startsWith("air")),
                 "a world session never changes walk or fly speed");
     }
@@ -206,6 +208,11 @@ class SavedStateCodecTest {
         @Override
         public void flight(boolean allowFlight, boolean flying) {
             calls.add("flight " + allowFlight + " " + flying);
+        }
+
+        @Override
+        public void still() {
+            calls.add("still");
         }
 
         @Override

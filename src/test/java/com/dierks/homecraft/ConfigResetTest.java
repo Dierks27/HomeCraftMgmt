@@ -40,12 +40,12 @@ class ConfigResetTest {
 
     @Test
     void onlyTheAllowedSectionsCanBeReset() {
-        for (String ok : List.of("arcade", "arcade.quests", "arcade.prizes", "ARCADE.Lotto", "packs",
-                "minis.loot.natural", "minis.effects", "clock")) {
+        for (String ok : List.of("arcade", "arcade.quests", "arcade.prizes", "ARCADE.Lotto", "games", "games.break",
+                "games.ore_slots", "Games.Snake", "packs", "minis.loot.natural", "minis.effects", "clock")) {
             assertTrue(ConfigReset.allowed(ok), ok);
         }
         for (String no : List.of("market", "market.catalog", "minis", "minis.catalog", "minis.loot", "courier",
-                "shipping", "arcade.", "", "packsx", "clock.time_zone.x", "config_revision")) {
+                "shipping", "arcade.", "games.", "gamesx", "", "packsx", "clock.time_zone.x", "config_revision")) {
             assertFalse(ConfigReset.allowed(no), no);
         }
     }
@@ -79,6 +79,18 @@ class ConfigResetTest {
         ConfigReset.apply(c, bundled(), "arcade.lotto");
         assertEquals(10, c.getInt("arcade.lotto.ticket_tokens"));
         assertEquals(25, c.getInt("arcade.pity.tokens"), "arcade.pity was not asked for");
+    }
+
+    @Test
+    void oneGamesBlockResetsAndLeavesTheOtherGamesAlone() throws Exception {
+        YamlConfiguration fresh = bundled();
+        YamlConfiguration c = bundled();
+        c.set("games.ore_slots.reels.coal", 99);
+        c.set("games.snake.tick_java", 9);
+        ConfigReset.apply(c, fresh, "games.ore_slots");
+        assertTrue(ConfigReset.plan(c, fresh, "games.ore_slots").none(), "games.ore_slots is back to shipped");
+        assertEquals(10, c.getInt("games.ore_slots.reels.coal"));
+        assertEquals(9, c.getInt("games.snake.tick_java"), "games.snake was not asked for");
     }
 
     @Test

@@ -3,8 +3,13 @@ package com.dierks.homecraft.gui.arcade;
 import com.dierks.homecraft.HomeCraftManagement;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.config.PluginConfig.PrizeTab;
+import com.dierks.homecraft.games.Game;
+import com.dierks.homecraft.games.GameKind;
+import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.gui.Menu;
 import com.dierks.homecraft.gui.Menus;
+import com.dierks.homecraft.gui.games.BreakMenu;
+import com.dierks.homecraft.gui.games.GamesMenu;
 import com.dierks.homecraft.hunt.HuntService;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.util.Bedrock;
@@ -24,16 +29,25 @@ import java.util.Set;
  *
  * <pre>
  *  row 0  border ........ [4 Wallet]
- *  row 1  [9 Games]  10-12 crates · 14 Scratch Ticket (jackpot in its name) · 16 wild Mini status
+ *  row 1  [9 Games / Luck]  10-12 crates · 14 Scratch Ticket (jackpot in its name) · 16 wild Mini
  *  row 2  [18 Prize Counter]  19 Boosts · 20 Hunt Gear · 21 Cosmetics · 22 Perks · 23 Trophies ·
  *                             24 Minis · 25 Card Packs
  *  row 3  [27 You]  29 Quests · 31 Achievements · 33 How It Works
- *  row 4  border
+ *  row 4  border — or, while the games are on, [36 Play]  37 All games · 38 Today's pick ·
+ *         39 Luck · 40 Cabinets · 41 Courses · 42 Mini golf · 43 Take a break
  *  row 5  border · 49 Close
  * </pre>
  *
  * Every button says what it is and its key number in its NAME, because Bedrock shows lore only on
  * tap-and-hold. The wild-Mini tile counts down while the hub is open.
+ *
+ * <p>While {@code games.enabled} is false the hub is exactly what it was before the Games: row 1
+ * is labelled "Games" and row 4 is border. Once they are on, row 1 reads "Luck" (it is the
+ * crates and the ticket) and row 4 becomes the Play row (spec §8.2). Its Luck button follows Take
+ * a break (R1.16): "Taking a break until ..." while paused, border for a player who may not play
+ * games of chance, and closed if the break can't be read. Row 1's crates and Scratch Ticket follow
+ * it too: they are games of chance, so a player on a break sees the same "Taking a break" tile in
+ * their place (or "closed"), and one without {@code hcm.games.chance} sees none of them at all.
  */
 public final class ArcadeMenu extends Menu {
 
@@ -47,6 +61,8 @@ public final class ArcadeMenu extends Menu {
     private static final int QUESTS = 29;
     private static final int ACHIEVEMENTS = 31;
     private static final int GUIDE = 33;
+    /** The Play row, while the games are on: label, All, pick, Luck, Cabinets, Courses, golf, break. */
+    private static final int[] PLAY = {36, 37, 38, 39, 40, 41, 42, 43};
 
     private static final ItemStack BORDER = Menus.icon(Material.PURPLE_STAINED_GLASS_PANE, " ");
 
@@ -65,7 +81,10 @@ public final class ArcadeMenu extends Menu {
             boolean border = i < 9 || i >= 36;
             set(i, border ? BORDER : Menus.FILLER, null);
         }
-        set(9, Menus.icon(Material.ORANGE_STAINED_GLASS_PANE, "&6&lGames", "&7Crates and the Scratch Ticket."), null);
+        GamesService games = plugin.games();
+        boolean playRow = games != null && games.config().enabled();
+        set(9, Menus.icon(Material.ORANGE_STAINED_GLASS_PANE, playRow ? "&6&lLuck" : "&6&lGames",
+                "&7Crates and the Scratch Ticket."), null);
         set(18, Menus.icon(Material.YELLOW_STAINED_GLASS_PANE, "&e&lPrize Counter",
                 "&7Pick what you want. No luck needed."), null);
         set(27, Menus.icon(Material.LIME_STAINED_GLASS_PANE, "&a&lYou",
@@ -73,15 +92,98 @@ public final class ArcadeMenu extends Menu {
 
         PluginConfig.Arcade arc = plugin.config().arcade();
         wallet(arc);
-        crates(arc);
-        scratch(arc);
+        GamesMenu.LuckView luck = playRow ? GamesMenu.luck(plugin, player) : null;
+        if (GamesMenu.hubShowsChance(playRow, luck == null ? null : luck.state())) {
+            crates(arc);
+            scratch(arc);
+        } else {
+            chanceStandIn(luck);
+        }
         set(WILD, wildTile(), null);
         prizeTabs();
         set(PACKS, ArcadeIcons.of(plugin, player, "packs", Material.PAPER, "&bCard Packs",
                 "&7Open a pack, get a Card,", "&7print it into a Mini.", "&eClick to shop"),
                 e -> new com.dierks.homecraft.gui.mini.PackShopMenu(plugin, player, this::reopen).open(player));
         you();
+        if (playRow && player.hasPermission("hcm.games.play")) {
+            play(games, luck);
+        }
         set(49, Menus.icon(Material.BARRIER, "&cClose"), e -> e.getWhoClicked().closeInventory());
+    }
+
+    /** Row 1 in place of the crates and the ticket while games of chance aren't open to the player. */
+    private void chanceStandIn(GamesMenu.LuckView luck) {
+        switch (luck.state()) {
+            case PAUSED -> set(CRATES[0], GamesMenu.breakTile(plugin, luck.until()),
+                    e -> new BreakMenu(plugin, player, this::reopen).open(player));
+            case CLOSED -> set(CRATES[0], GamesMenu.closedTile(), null);
+            case OPEN, HIDDEN -> {
+                // open: drawn as usual; hidden: nothing at all, the row stays filler
+            }
+        }
+    }
+
+    /** Row 4 while the games are on: the doors into the Games screen's tabs, and Take a break. */
+    private void play(GamesService games, GamesMenu.LuckView luck) {
+        set(PLAY[0], Menus.icon(Material.LIGHT_BLUE_STAINED_GLASS_PANE, "&b&lPlay",
+                "&7Games of luck and skill,", "&7for tokens."), null);
+        set(PLAY[1], Menus.icon(Material.BOOKSHELF, "&bAll games"
+                + com.dierks.homecraft.games.event.RaceNight.hubSuffix(games), "&7Every game that's open.",
+                "&eClick to see them"), e -> tab(null));
+        pick(games);
+        switch (luck.state()) {
+            case OPEN -> set(PLAY[3], Menus.icon(Material.GOLD_NUGGET, "&6Luck",
+                    "&7Games of chance, crates", "&7and the Scratch Ticket.", "&eClick to see them"),
+                    e -> tab(Game.Tab.LUCK));
+            case PAUSED -> set(PLAY[3], GamesMenu.breakTile(plugin, luck.until()),
+                    e -> new BreakMenu(plugin, player, this::reopen).open(player));
+            case CLOSED -> set(PLAY[3], GamesMenu.closedTile(), null);
+            case HIDDEN -> {
+                // no games of chance for this player: the slot stays border
+            }
+        }
+        door(games, PLAY[4], GameKind.CABINET, Game.Tab.CABINETS, Material.JUKEBOX, "Cabinets",
+                "Little video games.");
+        door(games, PLAY[5], GameKind.TRIAL, Game.Tab.COURSES, Material.FEATHER, "Courses",
+                "Race the clock.");
+        door(games, PLAY[6], GameKind.GOLF, Game.Tab.GOLF, Material.SNOWBALL, "Mini golf",
+                "Your Mini is the ball.");
+        set(PLAY[7], BreakMenu.stateTile(plugin, player), e -> new BreakMenu(plugin, player, this::reopen).open(player));
+    }
+
+    /** A tab's door, or a plain "closed" tile when no game of its kind is open. */
+    private void door(GamesService games, int slot, GameKind kind, Game.Tab tab, Material icon, String name,
+                      String blurb) {
+        boolean any = false;
+        for (Game g : games.games()) {
+            if (g.kind() == kind && games.enabled(g)) {
+                any = true;
+                break;
+            }
+        }
+        if (!any) {
+            set(slot, Menus.icon(Material.GRAY_DYE, "&7" + name + " &8- closed"), null);
+            return;
+        }
+        set(slot, Menus.icon(icon, "&b" + name, "&7" + blurb, "&eClick to see them"), e -> tab(tab));
+    }
+
+    /** Today's featured skill game or course: a click plays it. */
+    private void pick(GamesService games) {
+        String id = games.guard(null, () -> games.featured().today(), null);
+        GamesService.Target t = id == null ? null : games.resolve(id);
+        if (t == null || t.game().kind() == GameKind.CHANCE || !games.enabled(t.game())) {
+            set(PLAY[2], Menus.glint(Menus.icon(Material.NETHER_STAR, "&7No pick today",
+                    "&7A skill game is picked", "&7every day at midnight."), false), null);
+            return;
+        }
+        String name = t.playable() != null ? t.playable().name() : t.game().name();
+        set(PLAY[2], Menus.glint(Menus.icon(Material.NETHER_STAR, "&eToday's pick: &f" + name,
+                "&7A new pick every midnight.", "&eClick to play"), true), e -> games.open(player, id, this::reopen));
+    }
+
+    private void tab(Game.Tab tab) {
+        new GamesMenu(plugin, player, tab, 0, this::reopen).open(player);
     }
 
     private void wallet(PluginConfig.Arcade arc) {

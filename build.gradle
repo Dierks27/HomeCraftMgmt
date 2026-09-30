@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.dierks.homecraft'
-version = '0.34.0-sound-muffler'
+version = '0.35.0-arcade-games'
 description = 'HomeCraft Management — Paper plugin (market with a live, bounded price mood and Market News, Crate store + Marketplace, Minis and the wild hunt, Card Packs, Courier, web dashboard + website feeds, in-game displays, the Arcade, Sound Mufflers)'
 
 // Target server: Paper 26.2 and 26.3 / Java 25. Compiled against the 26.2 API; the code also
@@ -104,6 +104,8 @@ processResources {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // `gradle test -Pslow` also runs the long soaks (@EnabledIfSystemProperty hcm.slow).
+    systemProperty 'hcm.slow', project.hasProperty('slow') ? 'true' : 'false'
     // Log every test, so the CI transcript proves the regression tests actually ran —
     // a silently-undiscovered suite would let this fix go green without being checked.
     testLogging {

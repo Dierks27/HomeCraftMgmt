@@ -24,13 +24,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The scan is the text a player actually sees: string literals that carry an '&amp;' colour
  * code, in the packages that build player screens and items ({@code gui/}, {@code arcade/},
- * {@code mini/}). Log lines and admin messages are uncoloured and are left alone. Comments are
- * skipped. Like {@link BedrockGlyphTest} it reads source, so it needs no server.
+ * {@code mini/}, {@code games/}). Log lines and admin messages are uncoloured and are left alone.
+ * Comments are skipped. Like {@link BedrockGlyphTest} it reads source, so it needs no server.
+ * {@link GamesCopyTest} runs the same scan with the games' own banned words.
  */
 class PlayerCopyTest {
 
-    private static final Path BASE = Path.of("src", "main", "java", "com", "dierks", "homecraft");
-    private static final String[] PACKAGES = {"gui", "arcade", "mini"};
+    static final Path BASE = Path.of("src", "main", "java", "com", "dierks", "homecraft");
+    private static final String[] PACKAGES = {"gui", "arcade", "mini", "games"};
 
     /** A Java string literal. */
     private static final Pattern LITERAL = Pattern.compile("\"((?:[^\"\\\\]|\\\\.)*)\"");
@@ -56,18 +57,28 @@ class PlayerCopyTest {
             assertTrue(Files.isDirectory(root),
                     "expected to scan " + root.toAbsolutePath() + " — if the working directory moved, "
                             + "this test is silently checking nothing");
-            try (Stream<Path> files = Files.walk(root)) {
-                for (Path file : files.filter(p -> p.toString().endsWith(".java")).sorted().toList()) {
-                    scan(file, offences);
-                }
-            }
+            offences.addAll(offences(root, BANNED));
         }
         assertTrue(offences.isEmpty(),
                 "Player-facing text must not use admin words (sink, burned, (tag:, config keys):\n"
                         + String.join("\n", offences));
     }
 
-    private void scan(Path file, List<String> offences) throws IOException {
+    /**
+     * Every player-facing literal ('&amp;'-coloured, outside comments) in the {@code .java} files
+     * under {@code root} that one of {@code banned} matches, one report line each.
+     */
+    static List<String> offences(Path root, Pattern[] banned) throws IOException {
+        List<String> offences = new ArrayList<>();
+        try (Stream<Path> files = Files.walk(root)) {
+            for (Path file : files.filter(p -> p.toString().endsWith(".java")).sorted().toList()) {
+                scan(file, banned, offences);
+            }
+        }
+        return offences;
+    }
+
+    private static void scan(Path file, Pattern[] banned, List<String> offences) throws IOException {
         List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
         boolean inBlock = false;
         for (int i = 0; i < lines.size(); i++) {
@@ -94,8 +105,8 @@ class PlayerCopyTest {
                 // Match the words, not the codes: "&farcade.quests" has no word boundary before
                 // "arcade" until the "&f" is gone.
                 String words = COLOURED.matcher(literal).replaceAll(" ");
-                for (Pattern banned : BANNED) {
-                    if (banned.matcher(words).find()) {
+                for (Pattern b : banned) {
+                    if (b.matcher(words).find()) {
                         offences.add(String.format("  %s:%d  \"%s\"", BASE.relativize(file), i + 1, literal));
                     }
                 }

@@ -38,6 +38,8 @@ import java.util.Map;
  *   <li>{@code /hcm market news <item> <up|down|wanted> …} and {@code /hcm market sim …} — run
  *       and test the live market; see {@link MarketSimCommand}. (hcm.market.sim, op-only)</li>
  *   <li>{@code /hcm balance} — Vault money + Arcade tokens together. (hcm.market.price)</li>
+ *   <li>{@code /hcm play …}, {@code /hcm leave} and {@code /hcm games …} — playing and running the
+ *       Games; see {@link GamesCommand}. (hcm.games.play / hcm.games.admin)</li>
  * </ul>
  *
  * <p>Each subcommand checks its own permission — the command node itself is ungated, so
@@ -55,10 +57,13 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
     private final Map<String, Long> resetConfirmations = new HashMap<>();
     /** {@code /hcm market news …} and {@code /hcm market sim …} (the live market). */
     private final MarketSimCommand liveMarket;
+    /** {@code /hcm play …}, {@code /hcm leave} and {@code /hcm games …} (the Games). */
+    private final GamesCommand gamesCommand;
 
     public HcmCommand(HomeCraftManagement plugin) {
         this.plugin = plugin;
         this.liveMarket = new MarketSimCommand(plugin);
+        this.gamesCommand = new GamesCommand(plugin);
     }
 
     @Override
@@ -68,11 +73,20 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             usage(sender);
             return true;
         }
+        // Inside a world game only play, leave, games and help work: any other screen could hand
+        // the player items the session would then lose, or take them somewhere it can't follow.
+        if (gamesCommand.refuseInSession(sender, args)) {
+            return true;
+        }
 
         switch (args[0].toLowerCase(Locale.ROOT)) {
             case "reload" -> {
                 if (denyUnless(sender, "hcm.admin")) {
                     return true;
+                }
+                String raceNight = com.dierks.homecraft.games.event.RaceNight.reloadWarning(plugin.games()); // EV fix: §A.9
+                if (raceNight != null) {
+                    sender.sendMessage(Text.of(raceNight));
                 }
                 plugin.reloadAll();
                 sender.sendMessage(Text.of("&aHomeCraft Management configuration reloaded."));
@@ -127,11 +141,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             }
             case "arcade" -> {
                 if (args.length >= 2 && args[1].equalsIgnoreCase("odds")) {
-                    if (!denyUnless(sender, "hcm.admin")) {
-                        for (String line : plugin.arcade().oddsReport()) {
-                            sender.sendMessage(Text.of(line));
-                        }
-                    }
+                    gamesCommand.odds(sender); // players: one line per game of chance; admins: the detail
                     return true;
                 }
                 if (!(sender instanceof Player player)) {
@@ -162,13 +172,16 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 }
             }
             case "tokens" -> handleTokens(sender, args);
+            case "play" -> gamesCommand.play(sender, args);
+            case "leave" -> gamesCommand.leave(sender, args);
+            case "games" -> gamesCommand.admin(sender, args);
             case "config" -> {
                 if (denyUnless(sender, "hcm.admin")) {
                     return true;
                 }
                 if (args.length < 3 || !args[1].equalsIgnoreCase("reset")) {
-                    sender.sendMessage(Text.of("&7Usage: /hcm config reset <arcade|arcade.<part>|packs|minis.loot.natural"
-                            + "|minis.effects|clock> [confirm]"));
+                    sender.sendMessage(Text.of("&7Usage: /hcm config reset <arcade|arcade.<part>|games|games.<part>|packs"
+                            + "|minis.loot.natural|minis.effects|clock> [confirm]"));
                     return true;
                 }
                 boolean confirm = args.length >= 4 && args[3].equalsIgnoreCase("confirm");
@@ -227,7 +240,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     page = switch (args[1].toLowerCase(Locale.ROOT)) {
                         case "minis", "packs", "cards" -> com.dierks.homecraft.gui.arcade.GuideMenu.MINIS;
                         case "wild", "hunt" -> com.dierks.homecraft.gui.arcade.GuideMenu.WILD;
-                        case "arcade", "games" -> com.dierks.homecraft.gui.arcade.GuideMenu.GAMES;
+                        case "arcade" -> com.dierks.homecraft.gui.arcade.GuideMenu.ARCADE;
+                        case "games" -> com.dierks.homecraft.gui.arcade.GuideMenu.GAMES_PAGE;
                         default -> com.dierks.homecraft.gui.arcade.GuideMenu.TOKENS;
                     };
                 }
@@ -1125,7 +1139,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.of("&e/hcm give <card <id>|pack <id>|binder|filament <color> <n>> [player]"));
             sender.sendMessage(Text.of("&e/hcm printer <public|private> &7- flag the Printer you're looking at"));
             sender.sendMessage(Text.of("&e/hcm tokens give|set|take <player> <n> &7- adjust tokens"));
-            sender.sendMessage(Text.of("&e/hcm arcade odds &7- Scratch Ticket RTP and each crate's value"));
+            sender.sendMessage(Text.of("&e/hcm arcade odds &7- what each game of chance gives back, crate values"));
             sender.sendMessage(Text.of("&e/hcm tokens audit [days] [player] &7- tokens earned/spent by source"));
             sender.sendMessage(Text.of("&e/hcm tokens history <player> [n] &7- a player's last token changes"));
         }
@@ -1149,6 +1163,12 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         }
         if (sender.hasPermission("hcm.market.buy")) {
             sender.sendMessage(Text.of("&e/hcm market buy <item> <qty> &7- admin buy, no shipping"));
+        }
+        if (!sender.hasPermission("hcm.admin") && sender.hasPermission("hcm.arcade.use")) {
+            sender.sendMessage(Text.of("&e/hcm arcade odds &7- what each game of chance gives back"));
+        }
+        for (String line : gamesCommand.helpLines(sender)) {
+            sender.sendMessage(Text.of(line));
         }
         sender.sendMessage(Text.of("&e/hcm museum [id] &7- browse the Mini Museum"));
         sender.sendMessage(Text.of("&e/hcm trail [name|off] &7- turn your trail on or off"));
@@ -1388,8 +1408,8 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         }
         String sub = args.length >= 2 ? args[1].toLowerCase(Locale.ROOT) : "";
         switch (sub) {
-            case "sign" -> bindSignDisplay(player);
-            case "hologram", "holo" -> bindHologramDisplay(player);
+            case "sign" -> bindSignDisplay(player, args);
+            case "hologram", "holo" -> bindHologramDisplay(player, args);
             case "tv" -> bindTvPanelDisplay(player, args);
             case "remove" -> removeDisplay(player);
             case "cleanup" -> cleanupDisplays(player);
@@ -1404,19 +1424,26 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 player.sendMessage(Text.of(news
                         ? "&e/hcm display tv [commodity|@news] [scale] &7- mount a flat price-screen panel (or the Market News board) on the wall you're looking at"
                         : "&e/hcm display tv [commodity] [scale] &7- mount a flat price-screen panel on the wall you're looking at"));
+                player.sendMessage(Text.of("&e/hcm display sign|hologram|tv @board:<game or course> &7- a leaderboard:"
+                        + " the top 5 (a sign: 3) of a game, a course, or a Fresh course's current set"));
                 player.sendMessage(Text.of("&e/hcm display remove &7- unbind the display block you're looking at"));
                 player.sendMessage(Text.of("&e/hcm display cleanup &7- despawn every plugin-owned display entity in loaded chunks (wipes strays)"));
             }
         }
     }
 
-    private void bindSignDisplay(Player player) {
+    private void bindSignDisplay(Player player, String[] args) {
         org.bukkit.block.Block target = player.getTargetBlockExact(6);
         if (target == null || !(target.getState() instanceof org.bukkit.block.Sign)) {
             player.sendMessage(Text.of("&cLook at a placed sign, then run &f/hcm display sign&c."));
             return;
         }
         org.bukkit.Location loc = target.getLocation();
+        if (args.length >= 3 && com.dierks.homecraft.display.BoardDisplay.is(args[2])) {
+            var r = plugin.displayService().bindSign(player, loc, args[2]);
+            player.sendMessage(r.ok() ? Text.of("&aSign bound to " + shows(args[2]) + "&a.") : Text.of("&c" + r.error()));
+            return;
+        }
         new com.dierks.homecraft.gui.display.CommodityPickerMenu(plugin, player, "Bind sign → commodity",
                 id -> {
                     var r = plugin.displayService().bindSign(player, loc, id);
@@ -1428,13 +1455,19 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                 player::closeInventory).open(player);
     }
 
-    private void bindHologramDisplay(Player player) {
+    private void bindHologramDisplay(Player player, String[] args) {
         org.bukkit.block.Block target = player.getTargetBlockExact(6);
         if (target == null || target.getType().isAir()) {
             player.sendMessage(Text.of("&cLook at the block you want the hologram to float above, then run &f/hcm display hologram&c."));
             return;
         }
         org.bukkit.Location loc = target.getLocation();
+        if (args.length >= 3 && com.dierks.homecraft.display.BoardDisplay.is(args[2])) {
+            var r = plugin.displayService().bindHologram(player, loc, args[2]);
+            player.sendMessage(r.ok() ? Text.of("&aHologram floating above the block, showing " + shows(args[2]) + "&a.")
+                    : Text.of("&c" + r.error()));
+            return;
+        }
         // offerNews: a hologram can also be the Market News board (@news) - the picker offers it only
         // while the live market runs, and is 0.32's picker while it is off or paused.
         new com.dierks.homecraft.gui.display.CommodityPickerMenu(plugin, player, "Bind hologram → commodity",
@@ -1509,8 +1542,15 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
         return com.dierks.homecraft.gui.MarketNewsMenu.live(plugin) != null;
     }
 
-    /** What a freshly bound display shows: {@code &fwheat}, or the Market News board for {@code @news}. */
+    /**
+     * What a freshly bound display shows: {@code &fwheat}, the Market News board for {@code @news},
+     * or a leaderboard for {@code @board:<id>}.
+     */
     private static String shows(String id) {
+        if (com.dierks.homecraft.display.BoardDisplay.is(id)) {
+            var t = com.dierks.homecraft.display.BoardDisplay.parse(id);
+            return "&fthe " + (t == null ? id : t.id()) + " leaderboard";
+        }
         return com.dierks.homecraft.display.DisplayService.NEWS_ID.equals(id) ? "&fthe Market News board" : "&f" + id;
     }
 
@@ -1536,17 +1576,28 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             } else {
                 addMatches(out, args[0], "market", "mini", "museum", "packs", "binder", "auction", "arcade", "balance", "tokens", "quests", "courier", "trail", "achievements", "guide");
             }
+            if (sender.hasPermission(GamesCommand.PLAY)) {
+                addMatches(out, args[0], "play", "leave");
+            }
+            if (sender.hasPermission(GamesCommand.ADMIN)) {
+                addMatches(out, args[0], "games");
+            }
+        } else if (List.of("play", "leave", "games").contains(args[0].toLowerCase(Locale.ROOT))) {
+            out.addAll(gamesCommand.complete(sender, args));
         } else if (args.length == 2 && args[0].equalsIgnoreCase("config") && sender.hasPermission("hcm.admin")) {
             addMatches(out, args[1], "reset");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("config") && sender.hasPermission("hcm.admin")) {
             addMatches(out, args[2], "arcade", "arcade.quests", "arcade.prizes", "arcade.crates", "arcade.achievements",
-                    "arcade.lotto", "packs", "minis.loot.natural", "minis.effects", "clock");
+                    "arcade.lotto", "games", "games.break", "packs", "minis.loot.natural", "minis.effects", "clock");
+            for (com.dierks.homecraft.games.GameSpec<?> spec : com.dierks.homecraft.games.GameCatalog.SPECS) {
+                addMatches(out, args[2], "games." + com.dierks.homecraft.config.GamesConfig.block(spec.id()));
+            }
         } else if (args.length == 4 && args[0].equalsIgnoreCase("config") && sender.hasPermission("hcm.admin")) {
             addMatches(out, args[3], "confirm");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("homes") && sender.hasPermission("hcm.admin")) {
             addMatches(out, args[1], "refresh");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("guide")) {
-            addMatches(out, args[1], "tokens", "minis", "wild", "arcade");
+            addMatches(out, args[1], "tokens", "minis", "wild", "arcade", "games");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("museum")) {
             String prefix = args[1].toLowerCase(Locale.ROOT);
             for (com.dierks.homecraft.mini.MiniDef def : plugin.miniService().catalog()) {
@@ -1644,7 +1695,7 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
                     out.add(p.getName());
                 }
             }
-        } else if (args.length == 2 && args[0].equalsIgnoreCase("arcade") && sender.hasPermission("hcm.admin")) {
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("arcade") && sender.hasPermission("hcm.arcade.use")) {
             addMatches(out, args[1], "odds");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("trail") && sender instanceof Player tp) {
             addMatches(out, args[1], "off");
@@ -1684,10 +1735,18 @@ public final class HcmCommand implements CommandExecutor, TabCompleter {
             if (newsBoardOffered()) {
                 addMatches(out, prefix, com.dierks.homecraft.display.DisplayService.NEWS_ID);
             }
+            for (String board : plugin.displayService().boardTargets()) {
+                addMatches(out, prefix, board);
+            }
             for (MarketItem item : plugin.market().catalog()) {
                 if (item.id().startsWith(prefix)) {
                     out.add(item.id());
                 }
+            }
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("display")
+                && List.of("sign", "hologram", "holo").contains(args[1].toLowerCase(Locale.ROOT))) {
+            for (String board : plugin.displayService().boardTargets()) {
+                addMatches(out, args[2], board);
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("market")) {
             addMatches(out, args[1], "list", "price", "history", "sell");

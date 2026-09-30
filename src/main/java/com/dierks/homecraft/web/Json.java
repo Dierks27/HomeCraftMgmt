@@ -1,19 +1,22 @@
 package com.dierks.homecraft.web;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
  * The few JSON writers the dashboard feeds need, shared by every feed builder so
- * {@code /api/market} and {@code /api/minis} escape and format values the same way.
+ * {@code /api/market}, {@code /api/minis}, {@code /api/news} and {@code /api/arcade} escape and
+ * format values the same way.
  *
  * <p>Deliberately hand-rolled rather than a Gson tree: the feeds are rebuilt on the main
  * thread every refresh, the shapes are fixed, and the market feed's existing fields must
  * stay byte-for-byte what the website already parses. {@link #string}, {@link #num2} and
  * {@link #plain} are the dashboard's original {@code jsonString}, {@code num} and
- * {@code stripLegacy}, moved here unchanged.
+ * {@code stripLegacy}, moved here unchanged; {@link #num4} is the long histories' and
+ * {@link #sig} the Arcade feed's odds.
  *
  * <p>Plain Java — no Bukkit, no plugin classes — so it is unit-tested without a server.
  */
@@ -88,6 +91,24 @@ public final class Json {
         if (rounded.signum() == 0) {
             return "0";
         }
+        return rounded.stripTrailingZeros().toPlainString();
+    }
+
+    /**
+     * A number to {@code digits} significant digits, for probabilities too small for a fixed
+     * number of decimals ({@code /api/arcade}'s paytable {@code chance}: a 1-in-50,000 line at
+     * four decimals would read {@code 0}). Rounded half-up on the decimal value
+     * ({@code 0.00242149 -> "0.002421"}), trailing zeros dropped ({@code 0.5 -> "0.5"},
+     * {@code 70.0 -> "70"}), never in exponent form ({@code 1.234e-5 -> "0.00001234"},
+     * {@code 123456 -> "123500"}). A positive value never writes {@code 0}: rounding to
+     * significant digits keeps at least one of them. Zero (either sign), NaN and the infinities
+     * write {@code 0}; {@code digits} below 1 counts as 1.
+     */
+    public static String sig(double d, int digits) {
+        if (Double.isNaN(d) || Double.isInfinite(d) || d == 0.0) {
+            return "0";
+        }
+        BigDecimal rounded = BigDecimal.valueOf(d).round(new MathContext(Math.max(1, digits), RoundingMode.HALF_UP));
         return rounded.stripTrailingZeros().toPlainString();
     }
 

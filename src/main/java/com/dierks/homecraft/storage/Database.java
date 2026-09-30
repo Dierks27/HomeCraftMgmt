@@ -737,6 +737,246 @@ public final class Database {
                 updated_at    INTEGER NOT NULL,
                 PRIMARY KEY (world, x, y, z)
             )
+            """,
+            // v34 — the Games (0.35), every table in one block (GamesDao).
+            // game_rounds: one row per round of a game of chance (OPEN while a multi-step round is
+            //   played, SETTLED once paid — stake, payout and the row land in one transaction), plus
+            //   one DAILY row per player per game per day for a skill game's one scored daily attempt.
+            //   day is the LOCAL epoch day; opponent is the other player of a Coin Flip (one row each);
+            //   touched_at moves on open, step and raise (a round left 10 minutes is settled for you).
+            //   At most one OPEN round per player per game, and one DAILY row per day.
+            // game_breaks: Take a break. -1 = no limit, pending_tokens -2 = nothing waiting.
+            // game_scores: each player's best per board, and how many runs.
+            // game_rewards: skill rewards. A one-time reward has a non-empty ref and the partial
+            //   unique index refuses it twice; repeatable ones have ref ''. game is '*' for the
+            //   once-a-day-across-games kinds; played is always the game that paid (its daily cap).
+            // game_saved_state: a player's things while they are in a world game, one row per session,
+            //   written BEFORE anything is changed and marked DONE only once they are back (phases
+            //   ACTIVE, RETURN, DONE; DONE rows are pruned after a week). At most one live row a player.
+            // game_courses: world-game courses (data = the game's own YAML); rev bumps on each edit.
+            // game_prefs: per-player choices (invites on or off, the golf ball, queued join lines).
+            """
+            CREATE TABLE IF NOT EXISTS game_rounds (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                player     TEXT    NOT NULL,
+                game       TEXT    NOT NULL,
+                day        INTEGER NOT NULL,
+                stake      INTEGER NOT NULL DEFAULT 0,
+                payout     INTEGER NOT NULL DEFAULT 0,
+                state      TEXT    NOT NULL,
+                seed       INTEGER NOT NULL DEFAULT 0,
+                data       TEXT,
+                opponent   TEXT,
+                created_at INTEGER NOT NULL,
+                touched_at INTEGER NOT NULL DEFAULT 0,
+                settled_at INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_game_rounds_player_day ON game_rounds (player, game, day);
+            CREATE INDEX IF NOT EXISTS idx_game_rounds_open ON game_rounds (state, player);
+            CREATE INDEX IF NOT EXISTS idx_game_rounds_pair ON game_rounds (game, day, player, opponent);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_game_rounds_one_open ON game_rounds (player, game) WHERE state = 'OPEN';
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_game_rounds_daily ON game_rounds (player, game, day) WHERE state = 'DAILY';
+            CREATE TABLE IF NOT EXISTS game_breaks (
+                player             TEXT    PRIMARY KEY,
+                daily_tokens       INTEGER NOT NULL DEFAULT -1,
+                pending_tokens     INTEGER NOT NULL DEFAULT -2,
+                pending_day        INTEGER NOT NULL DEFAULT 0,
+                paused_until       INTEGER NOT NULL DEFAULT 0,
+                admin_tokens       INTEGER NOT NULL DEFAULT -1,
+                admin_paused_until INTEGER NOT NULL DEFAULT 0,
+                updated_at         INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS game_scores (
+                player TEXT    NOT NULL,
+                game   TEXT    NOT NULL,
+                board  TEXT    NOT NULL,
+                score  INTEGER NOT NULL,
+                at     INTEGER NOT NULL,
+                runs   INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY (player, game, board)
+            );
+            CREATE INDEX IF NOT EXISTS idx_game_scores_board ON game_scores (game, board, score);
+            CREATE TABLE IF NOT EXISTS game_rewards (
+                id     INTEGER PRIMARY KEY AUTOINCREMENT,
+                player TEXT    NOT NULL,
+                game   TEXT    NOT NULL,
+                played TEXT    NOT NULL DEFAULT '',
+                day    INTEGER NOT NULL,
+                kind   TEXT    NOT NULL,
+                ref    TEXT    NOT NULL DEFAULT '',
+                tokens INTEGER NOT NULL,
+                at     INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_game_rewards_player_day ON game_rewards (player, day);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_game_rewards_once ON game_rewards (player, game, kind, ref) WHERE ref <> '';
+            CREATE TABLE IF NOT EXISTS game_saved_state (
+                session_id    TEXT    PRIMARY KEY,
+                player        TEXT    NOT NULL,
+                game          TEXT    NOT NULL,
+                ref           TEXT    NOT NULL DEFAULT '',
+                phase         TEXT    NOT NULL,
+                session_world TEXT    NOT NULL,
+                items         BLOB,
+                carry         BLOB,
+                xp_level      INTEGER,
+                xp_progress   REAL,
+                xp_total      INTEGER,
+                health        REAL,
+                food          INTEGER,
+                saturation    REAL,
+                exhaustion    REAL,
+                fire_ticks    INTEGER,
+                air           INTEGER,
+                game_mode     TEXT,
+                allow_flight  INTEGER,
+                flying        INTEGER,
+                walk_speed    REAL,
+                fly_speed     REAL,
+                absorption    REAL,
+                effects       TEXT,
+                world         TEXT,
+                x             REAL,
+                y             REAL,
+                z             REAL,
+                yaw           REAL,
+                pitch         REAL,
+                created_at    INTEGER NOT NULL,
+                done_at       INTEGER
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_game_saved_state_live ON game_saved_state (player) WHERE phase <> 'DONE';
+            CREATE TABLE IF NOT EXISTS game_courses (
+                id         TEXT    PRIMARY KEY,
+                game       TEXT    NOT NULL,
+                kind       TEXT    NOT NULL,
+                name       TEXT    NOT NULL,
+                world      TEXT    NOT NULL,
+                enabled    INTEGER NOT NULL DEFAULT 1,
+                data       TEXT    NOT NULL,
+                rev        INTEGER NOT NULL DEFAULT 1,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS game_prefs (
+                player TEXT NOT NULL,
+                pref   TEXT NOT NULL,
+                value  TEXT,
+                PRIMARY KEY (player, pref)
+            )
+            """,
+            // v35 — Fresh Courses' archive (GEN-SPEC-KEEP §1, §8): one row per edition that was ever
+            //   playable, written in the same transaction as the flip that made it live (GenArchiveDao).
+            //   edition is the board's key (7:40, 7:40r1); code is the slot's own count (HARD-40),
+            //   unique and never reused (seq, with gen.<slot>.codes in hcm_meta); day is the edition's
+            //   first local day; algo is <generator>/<version>; starts_at is when it went live and
+            //   ends_at when the next flip replaced it (NULL while live); plan is the gzipped, versioned
+            //   plan (PlanCodec), so a past course is rebuilt exactly and never planned again; gold_ms and
+            //   silver_ms are its star times as they were; kept_as is the course it was kept as.
+            """
+            CREATE TABLE IF NOT EXISTS gen_editions (
+                slot        TEXT    NOT NULL,
+                edition     TEXT    NOT NULL,
+                code        TEXT    NOT NULL,
+                seq         INTEGER NOT NULL,
+                day         INTEGER NOT NULL,
+                seed        INTEGER NOT NULL,
+                algo        TEXT    NOT NULL,
+                kind        TEXT    NOT NULL,
+                tier_or_mix TEXT    NOT NULL DEFAULT '',
+                name        TEXT    NOT NULL,
+                starts_at   INTEGER NOT NULL,
+                ends_at     INTEGER,
+                plan        BLOB,
+                gold_ms     INTEGER NOT NULL DEFAULT 0,
+                silver_ms   INTEGER NOT NULL DEFAULT 0,
+                built_at    INTEGER NOT NULL,
+                kept_as     TEXT,
+                PRIMARY KEY (slot, edition)
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_gen_editions_code ON gen_editions (code);
+            CREATE INDEX IF NOT EXISTS idx_gen_editions_start ON gen_editions (slot, starts_at)
+            """,
+            // v36 — Race Night and the Weekly Cup (EVENTS-DROPPER-SPEC §A.9, EVENTS-OWNER-DECISIONS D2),
+            //   one block. Every token that moves is written in the same transaction as its row.
+            // game_events: one row per Race Night, written when its join window opens. id is
+            //   rn-<yyyyMMdd>-<HHmm> (an admin start adds -a<n>); state OPEN, RUNNING, SETTLING, DONE or
+            //   CALLED_OFF; settings the key=value lines it opened with (races, laps, prizes, min, max),
+            //   kept across a reload; races_done the races whose results are stored; prized = 1 once it
+            //   claimed one of the week's prize-night slots (week = the games clock's week key).
+            // game_event_entries: one row per racer and night. status IN or LEFT; points the night's
+            //   total; place its final place; prize the tokens it is owed, paid once (paid_at), retried
+            //   on join for a racer who was offline or couldn't earn where they were.
+            // game_event_races: one row per racer per race, inserted before the points are added so the
+            //   season board is only ever added to once (result FINISHED, STILL_RACING, LEFT, VOID, DNS).
+            // cup_entries: the Weekly Cup, one row per player per course per week (week = the local
+            //   epoch day the Cup week starts on, at the Fresh Courses rollover). paid is the entry,
+            //   taken in the same transaction; best_ms the Cup time (NULL until a counted run) and
+            //   best_at when it was set, for the tie-break.
+            // cup_settlements: one row per settled or voided Cup, written in the same transaction as
+            //   its payouts or refunds, so a Cup is settled exactly once (the primary key refuses a
+            //   second). outcome is the plan's (PRIZES, REFUND_ALONE, REFUND_NO_CONTEST, VOIDED ...),
+            //   pool its tokens, payouts the plan's JSON.
+            """
+            CREATE TABLE IF NOT EXISTS game_events (
+                id         TEXT    PRIMARY KEY,
+                course     TEXT    NOT NULL,
+                join_at    INTEGER NOT NULL,
+                starts_at  INTEGER NOT NULL,
+                state      TEXT    NOT NULL,
+                settings   TEXT    NOT NULL,
+                races_done INTEGER NOT NULL DEFAULT 0,
+                prized     INTEGER NOT NULL DEFAULT 0,
+                week       TEXT    NOT NULL DEFAULT '',
+                made_by    TEXT    NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL,
+                ended_at   INTEGER,
+                note       TEXT    NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_game_events_state ON game_events (state, starts_at);
+            CREATE INDEX IF NOT EXISTS idx_game_events_week ON game_events (week, prized);
+            CREATE TABLE IF NOT EXISTS game_event_entries (
+                event_id  TEXT    NOT NULL,
+                player    TEXT    NOT NULL,
+                name      TEXT    NOT NULL,
+                joined_at INTEGER NOT NULL,
+                status    TEXT    NOT NULL,
+                points    INTEGER NOT NULL DEFAULT 0,
+                place     INTEGER,
+                prize     INTEGER NOT NULL DEFAULT 0,
+                paid_at   INTEGER,
+                PRIMARY KEY (event_id, player)
+            );
+            CREATE INDEX IF NOT EXISTS idx_game_event_entries_owed ON game_event_entries (player, paid_at);
+            CREATE TABLE IF NOT EXISTS game_event_races (
+                event_id TEXT    NOT NULL,
+                race     INTEGER NOT NULL,
+                player   TEXT    NOT NULL,
+                place    INTEGER,
+                ms       INTEGER,
+                targets  INTEGER NOT NULL DEFAULT 0,
+                points   INTEGER NOT NULL,
+                result   TEXT    NOT NULL,
+                PRIMARY KEY (event_id, race, player)
+            );
+            CREATE TABLE IF NOT EXISTS cup_entries (
+                course     TEXT    NOT NULL,
+                week       INTEGER NOT NULL,
+                player     TEXT    NOT NULL,
+                paid       INTEGER NOT NULL,
+                entered_at INTEGER NOT NULL,
+                best_ms    INTEGER,
+                best_at    INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (course, week, player)
+            );
+            CREATE INDEX IF NOT EXISTS idx_cup_entries_player ON cup_entries (player, week);
+            CREATE TABLE IF NOT EXISTS cup_settlements (
+                course     TEXT    NOT NULL,
+                week       INTEGER NOT NULL,
+                settled_at INTEGER NOT NULL,
+                outcome    TEXT    NOT NULL,
+                pool       INTEGER NOT NULL DEFAULT 0,
+                payouts    TEXT    NOT NULL DEFAULT '',
+                PRIMARY KEY (course, week)
+            )
             """
     };
 
@@ -782,12 +1022,34 @@ public final class Database {
         return db;
     }
 
+    /**
+     * As {@link #open}, but only up to schema {@code version}: a database as an older build left it,
+     * so a test can apply the next migration to it the way a server upgrade does.
+     */
+    static Database openAt(Connection connection, java.util.logging.Logger log, int version) throws SQLException {
+        Database db = new Database(connection, log);
+        db.migrate(version);
+        return db;
+    }
+
+    /** The schema version this build migrates to: the number of migrations. */
+    static int latestVersion() {
+        return MIGRATIONS.length;
+    }
+
+    /** Migration {@code v}'s SQL (1-based), for the migration test. */
+    static String migration(int v) {
+        return MIGRATIONS[v - 1];
+    }
+
     public Connection connection() {
         return connection;
     }
 
     /**
-     * Run {@code work} as one transaction: every statement lands or none does.
+     * Run {@code work} as one transaction: every statement lands or none does. Anything thrown
+     * inside it (an SQLException, a RuntimeException, or an Error such as OutOfMemoryError) rolls the
+     * whole unit back and is rethrown as it came.
      *
      * <p>Holds the connection's monitor for the whole unit, the same lock every DAO takes, so
      * nothing else can interleave a statement between a guarded UPDATE and the rows that depend
@@ -805,10 +1067,14 @@ public final class Database {
                 T result = work.run(c);
                 c.commit();
                 return result;
-            } catch (SQLException | RuntimeException e) {
+            } catch (Throwable e) {
+                // ANY Throwable rolls back, an Error too (OutOfMemoryError, StackOverflowError, a
+                // LinkageError): otherwise the finally's setAutoCommit(true) makes sqlite-jdbc COMMIT
+                // the half-done work. Rethrown as it came (the compiler knows it is an SQLException or
+                // unchecked).
                 try {
                     c.rollback();
-                } catch (SQLException rollback) {
+                } catch (SQLException | RuntimeException rollback) {
                     e.addSuppressed(rollback);
                 }
                 throw e;
@@ -846,16 +1112,22 @@ public final class Database {
     }
 
     private void migrate() throws SQLException {
+        migrate(MIGRATIONS.length);
+    }
+
+    /** Apply every migration after the stored version, up to {@code target}. */
+    private void migrate(int target) throws SQLException {
         synchronized (connection) {
             try (Statement st = connection.createStatement()) {
                 st.execute("CREATE TABLE IF NOT EXISTS hcm_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
             }
             int current = schemaVersion();
-            if (current < MIGRATIONS.length && current > 0 && plugin != null) {
+            int last = Math.min(target, MIGRATIONS.length);
+            if (current < last && current > 0 && plugin != null) {
                 // A schema change is about to run: keep a copy of the file first (§11 #6).
                 BackupService.preMigrationCopy(plugin, dbFile);
             }
-            for (int v = current + 1; v <= MIGRATIONS.length; v++) {
+            for (int v = current + 1; v <= last; v++) {
                 log.info("Applying database migration v" + v + "…");
                 try (Statement st = connection.createStatement()) {
                     for (String stmt : MIGRATIONS[v - 1].split(";")) {

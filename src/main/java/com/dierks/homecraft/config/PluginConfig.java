@@ -340,7 +340,24 @@ public final class PluginConfig {
         SELL_MARKET, OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH, FIND_WILD_MINI,
         PLANT_CROPS, HARVEST_CROPS, COOK_FOOD, SMELT_ORE, MINE_BLOCKS, VISIT_BIOMES, COMPLETE_DELIVERY,
         // Pulled from vanilla statistics.
-        CATCH_FISH, KILL_HOSTILES, BREED_ANIMALS, TRADE_VILLAGER, TRAVEL_ON_FOOT
+        CATCH_FISH, KILL_HOSTILES, BREED_ANIMALS, TRADE_VILLAGER, TRAVEL_ON_FOOT,
+        // Pushed by the skill games (EXTRAS E4), through GameProgress. Games of chance never push one.
+        /** A finished run of any arcade cabinet, practice included (not a run closed early or a quit friend game). */
+        FINISH_CABINET,
+        /** A counted time-trial run or a finished round of golf, hand-built or Fresh. */
+        FINISH_COURSE,
+        /** Fresh Courses stars added to the week's Star Chart. */
+        EARN_STARS;
+
+        /**
+         * Whether a skill game pushes it. These count where the games pay tokens (an economy world,
+         * a Games world or a play world, never in creative), because courses are played in the Games
+         * world, which is not an economy world; the reward itself waits until the player is somewhere
+         * tokens can be paid. Every other type counts only where the economy runs.
+         */
+        public boolean game() {
+            return this == FINISH_CABINET || this == FINISH_COURSE || this == EARN_STARS;
+        }
     }
 
     /**
@@ -700,6 +717,8 @@ public final class PluginConfig {
     private Market market;
     /** Off until {@link #load()} has read it: every multiplier is exactly 1.0. */
     private MarketSimConfig.Parsed marketSim = MarketSimConfig.Parsed.OFF;
+    /** Off until {@link #load()} has read it (the games ship off anyway). */
+    private GamesConfig.Parsed games = GamesConfig.Parsed.OFF;
     private Shipping shipping;
     private Store store;
     private MenuTitles menuTitles;
@@ -965,6 +984,14 @@ public final class PluginConfig {
         return marketSim;
     }
 
+    /**
+     * The Games (0.35): the {@code games:} section — the common keys and every game's own
+     * settings. Never null; {@link GamesConfig.Parsed#OFF} until loaded.
+     */
+    public GamesConfig.Parsed games() {
+        return games;
+    }
+
     /** (Re)parse config.yml into the typed views above. */
     public void load() {
         FileConfiguration c = plugin.getConfig();
@@ -1127,6 +1154,7 @@ public final class PluginConfig {
         // ---- Daily/weekly quests (Phase 11) ----
         this.quests = readQuests(c);
         this.courier = readCourier(c);
+        this.games = GamesConfig.parse(c, log::warning, log::info);
 
         // ---- The players' calendar: streaks, quests and Arcade limits roll at local midnight ----
         this.clock = new com.dierks.homecraft.util.GameClock(com.dierks.homecraft.util.GameClock.parseZone(

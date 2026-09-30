@@ -16,8 +16,9 @@ import org.bukkit.inventory.ItemStack;
  *
  * <p>A miss is not a win. This screen used to be titled "You won!", play the level-up fanfare and
  * print "Arcade: you won no win — try again!" for a ticket that paid nothing — three ways of
- * telling a child the opposite of what happened. A loss now says "So close!", plays a soft note,
- * and prints nothing.
+ * telling a child the opposite of what happened. A loss now simply says what happened ("No prize
+ * this time"), plays a soft note and prints nothing: no near-miss wording, no nudge to go again
+ * (spec §2, R1.18).
  */
 public final class RevealMenu extends Menu {
 
@@ -30,7 +31,7 @@ public final class RevealMenu extends Menu {
         this.player = player;
         this.outcome = outcome;
         this.onBack = onBack;
-        init(27, Text.of(outcome.win() ? "&5You won!" : "&8So close!"));
+        init(27, Text.of(outcome.win() ? "&5You won!" : "&8No prize this time"));
     }
 
     /**

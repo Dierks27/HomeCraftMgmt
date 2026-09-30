@@ -59,7 +59,7 @@ clock:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 16
+config_revision: 18
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -1235,6 +1235,9 @@ web:
     # connections arrive from 127.0.0.1 or a LAN address, so with this on the
     # internet would get in without the token.
     lan_skips_token: false
+    # /api/arcade: true adds record holders' names to the website feed. Leave it
+    # false: the feed then publishes scores and times only, never who set them.
+    arcade_show_names: false
 
 # ---------------------------------------------------------------------
 #  Phase 7 — In-game economy displays (§3.8)
@@ -1433,7 +1436,11 @@ arcade:
   #   STAT        `stat:` a lifetime vanilla statistic, or CATCH_FISH | TRAVEL_ON_FOOT |
   #               KILL_HOSTILES | BREED_ANIMALS | TRADE_VILLAGER; `target`
   #   COUNTER     `counter:` wild_finds | rare_wild_finds | quests_done | deliveries |
-  #               crates | jackpots | biomes; `target`
+  #               crates | jackpots | biomes; `target`. The skill games count
+  #               cabinet_finishes | cabinet_golds | cabinets (different cabinet games) |
+  #               course_finishes (courses and golf rounds) | course_records | holes_in_one |
+  #               golf_under_par | fresh_sets | star_chart_tops | dropper_clean | race_nights |
+  #               race_night_wins | floors_minutes (nothing counts a game of chance)
   #   COLLECTION  distinct Minis owned right now; `target`
   #   GRADE       print a Mini of `grade:` (MINT)
   #   FINISH      own a Mini with `finish:` (SHINY)
@@ -1467,6 +1474,21 @@ arcade:
     - { id: balance_1k, group: "Money", type: BALANCE, target: 1000, reward: 10, display: "Have $1,000" }
     - { id: rich_10k, group: "Money", type: BALANCE, target: 10000, reward: 50, display: "Have $10,000" }
     - { id: jackpot, group: "Arcade", type: EVENT, reward: 25, display: "Win the Scratch Ticket jackpot" }
+    # The skill games (never a game of chance). Counters, so a course finished in the Games world
+    # (no tokens there) unlocks as soon as the player is back home.
+    - { id: game_first_cabinet, group: "Games", type: COUNTER, counter: cabinet_finishes, target: 1, reward: 10, display: "Finish an arcade cabinet game" }
+    - { id: game_gold, group: "Games", type: COUNTER, counter: cabinet_golds, target: 1, reward: 20, display: "Earn a gold medal in a cabinet" }
+    - { id: game_all_cabinets, group: "Games", type: COUNTER, counter: cabinets, target: 8, reward: 30, display: "Finish every arcade cabinet game" }
+    - { id: game_first_course, group: "Games", type: COUNTER, counter: course_finishes, target: 1, reward: 15, display: "Finish a course" }
+    - { id: game_hole_in_one, group: "Games", type: COUNTER, counter: holes_in_one, target: 1, reward: 25, display: "Get a hole-in-one" }
+    - { id: game_under_par, group: "Games", type: COUNTER, counter: golf_under_par, target: 1, reward: 25, display: "Finish a golf course under par" }
+    - { id: game_fresh_all, group: "Games", type: COUNTER, counter: fresh_sets, target: 1, reward: 40, display: "Finish every Fresh Course in one set" }
+    - { id: game_star_chart, group: "Games", type: COUNTER, counter: star_chart_tops, target: 1, reward: 30, display: "Reach the top Star Chart goal in a week" }
+    - { id: game_record, group: "Games", type: COUNTER, counter: course_records, target: 1, reward: 30, display: "Set a course record" }
+    - { id: game_dropper_clean, group: "Games", type: COUNTER, counter: dropper_clean, target: 1, reward: 20, display: "Reach the bottom of a Dropper with no bonks" }
+    - { id: game_race_first, group: "Games", type: COUNTER, counter: race_nights, target: 1, reward: 10, display: "Race at Race Night" }
+    - { id: game_race_win, group: "Games", type: COUNTER, counter: race_night_wins, target: 1, reward: 30, display: "Win a Race Night" }
+    - { id: game_floors_minute, group: "Games", type: COUNTER, counter: floors_minutes, target: 1, reward: 15, display: "Last a whole minute on Falling Floors" }
   # Daily/weekly quests. Each player DRAWS their own `daily_draw` / `weekly_draw` from the
   # pools the first time they're needed in a day/week (local time) — no two of one type.
   # A Quest Reroll (Prize Counter) swaps one unfinished daily. Each row:
@@ -1477,7 +1499,11 @@ arcade:
   #   FIND_WILD_MINI, SELL_MARKET (money), OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH.
   #   PULLED from statistics (every 30s) — CATCH_FISH, KILL_HOSTILES, BREED_ANIMALS,
   #   TRADE_VILLAGER, TRAVEL_ON_FOOT (blocks; walking/sprinting/sneaking only).
-  # Nothing counts in a world the economy is disabled in.
+  #   PUSHED by the skill games (never a game of chance) — FINISH_CABINET (a finished cabinet
+  #   run, practice too), FINISH_COURSE (a counted course run or a golf round), EARN_STARS
+  #   (Fresh Courses stars). They are only dealt while those games are open.
+  # Nothing counts in a world the economy is disabled in. The game quests count where the games
+  # pay tokens (the Games world too, never in creative); their tokens come once the player is home.
   quests:
     enabled: true
     # Which day a week rolls over on (local midnight).
@@ -1497,6 +1523,8 @@ arcade:
       - { id: mine_daily,     type: MINE_BLOCKS,       target: 200,  reward: 5, display: "Mine 200 stone or ore" }
       - { id: biome_daily,    type: VISIT_BIOMES,      target: 3,    reward: 5, display: "Visit 3 different biomes" }
       - { id: delivery_daily, type: COMPLETE_DELIVERY, target: 1,    reward: 5, display: "Finish a Courier delivery" }
+      - { id: cabinet_daily,  type: FINISH_CABINET,    target: 3,    reward: 4, display: "Play 3 arcade cabinets" }
+      - { id: course_daily,   type: FINISH_COURSE,     target: 1,    reward: 5, display: "Finish a course or a round of golf" }
     weekly_pool:
       - { id: hostiles_weekly, type: KILL_HOSTILES,     target: 150,  reward: 25, display: "Defeat 150 hostile mobs" }
       - { id: fish_weekly,     type: CATCH_FISH,        target: 40,   reward: 20, display: "Catch 40 fish" }
@@ -1507,6 +1535,9 @@ arcade:
       - { id: biome_weekly,    type: VISIT_BIOMES,      target: 8,    reward: 25, display: "Visit 8 different biomes" }
       - { id: delivery_weekly, type: COMPLETE_DELIVERY, target: 5,    reward: 25, display: "Finish 5 Courier deliveries" }
       - { id: wild_weekly,     type: FIND_WILD_MINI,    target: 1,    reward: 30, display: "Catch a wild Mini" }
+      - { id: cabinet_weekly,  type: FINISH_CABINET,    target: 15,   reward: 20, display: "Play 15 arcade cabinets" }
+      - { id: course_weekly,   type: FINISH_COURSE,     target: 5,    reward: 20, display: "Finish 5 courses or golf rounds" }
+      - { id: stars_weekly,    type: EARN_STARS,        target: 6,    reward: 20, display: "Earn 6 Fresh Courses stars" }
   # The Scratch Ticket: tokens in, tokens out, decided the moment you buy it. The pot
   # starts at `seed`, grows `per_ticket` with every ticket, tops out at `cap`, and goes
   # back to `seed` when someone wins it (with a shout to the whole server).
@@ -1521,3 +1552,597 @@ arcade:
       - { tokens: 50, weight: 3 }
       - { jackpot: true, weight: 1 }
     jackpot: { seed: 50, per_ticket: 1, cap: 1000 }
+
+# ---------------------------------------------------------------------
+#  Games — play games of chance and skill games for tokens (never dollars).
+#  Off until you turn it on. Games of chance give back less than they take
+#  (85-95 of every 100 tokens, worked out and published per stake); skill
+#  games pay small, capped rewards. Players' "Take a break" limits and pauses
+#  also cover Crates, Scratch Tickets and Card Packs bought with tokens.
+# ---------------------------------------------------------------------
+games:
+  # Master switch. false = the games are off and the rest of the plugin is unchanged.
+  enabled: false
+  # Worlds where time-trial and mini golf courses may be built (each its own
+  # Multiverse-Inventories group, Multiverse game mode adventure).
+  worlds: [games]
+  # Extra worlds (besides economy worlds and the ones above) where the Games screen works, e.g. your hub.
+  play_worlds: []
+  # Minimum time between two plays of a game of chance, in milliseconds (never below 250).
+  click_cooldown_ms: 600
+  # Most tokens a player can put into ALL games of chance per day (0 = off, at most 10000).
+  # Players and admins can set a lower limit of their own.
+  chance_daily_tokens: 100
+  # Most tokens any single play of a game of chance can pay (never below the largest stake).
+  max_payout: 250
+  # Most tokens one player can earn from skill games (cabinets, courses, golf) in a day.
+  skill_daily_cap: 6
+  # Today's featured game: auto (a skill game or course picked each day) or a game/course id.
+  featured: auto
+  # Tokens for the first finish of today's featured game (counts toward skill_daily_cap).
+  featured_bonus: 1
+  # The website's leaderboards: how many of each game's and course's best scores /api/arcade
+  # lists ("top"; past Fresh Courses list up to 3). 0 = none. Names only with
+  # web.dashboard.arcade_show_names.
+  feed_top: 5
+  # When your host restarts the server each day: "HH:mm" 24-hour times in clock.time_zone
+  # (keep the quotes; midnight is "00:00"), the minute it actually stops, not when its warnings
+  # start. Just before each one, courses, golf, new card-game hands and the daily scored try
+  # don't start; the host's own chat warnings are left alone. [] = off.
+  restart_times: ["04:00", "16:00"]
+  # How many minutes before each restart nothing new starts (1-60).
+  restart_hold_minutes: 5
+  # "Take a break" (Wallet): the choices players get.
+  break:
+    # Daily token limits a player can pick for games of chance (they can also pick none).
+    daily_choices: [10, 25, 50, 100]
+    # How many days a player can pause games of chance for (a pause can't be shortened).
+    pause_days: [1, 7, 30]
+    # Days a raised or removed limit waits before it starts (never below 1).
+    raise_delay_days: 7
+  # ---- ore_slots ----
+  # Ore Slots: three reels, one line. Three the same pays that ore's multiple of
+  # the tokens put in (a Wild stands in for any ore), two the same pays `two`,
+  # Stone never pays. The game works out Stone's weight so it gives back `rtp`.
+  # Turn a symbol off with weight 0, never by deleting its key.
+  ore_slots:
+    # false = Ore Slots is closed.
+    enabled: true
+    # The tokens a player can put in per spin.
+    stakes: [1, 2, 5]
+    # Spins per player per day (resets at local midnight).
+    daily_limit: 50
+    # Target tokens given back per 100 put in (85-95); the screen shows what it really reaches.
+    rtp: 90
+    # How often each symbol lands on a reel (whole numbers, 0-10000; Stone is worked out).
+    reels:
+      # Coal, the most common ore.
+      coal: 10
+      # Copper.
+      copper: 8
+      # Iron.
+      iron: 6
+      # Gold.
+      gold: 4
+      # Diamond, the rarest ore.
+      diamond: 2
+      # Wild: stands in for any ore.
+      wild: 2
+    # What a line pays, as a multiple of the tokens put in.
+    pays:
+      # Any two the same ore (a Wild counts).
+      two: 2
+      # Three coal.
+      coal: 4
+      # Three copper.
+      copper: 6
+      # Three iron.
+      iron: 10
+      # Three gold.
+      gold: 20
+      # Three diamonds.
+      diamond: 40
+      # Three wilds (5 in → 250, the max_payout).
+      wild: 50
+  # ---- twenty_one ----
+  # Twenty-One: beat the Arcade's hand without going over 21 (/hcm play blackjack
+  # works too). What a win adds is worked out per stake so the best play gives back `rtp`.
+  twenty_one:
+    # false = Twenty-One is closed.
+    enabled: true
+    # The tokens a player can put in per hand (a Double puts the same in again).
+    stakes: [5, 10, 20]
+    # Hands per player per day.
+    daily_limit: 30
+    # Target tokens given back per 100 put in with the best play (85-95).
+    rtp: 90
+    # A two-card 21 adds this many times what a normal win adds.
+    natural_bonus: 1.5
+  # ---- wheel ----
+  # The Wheel: 24 equally likely spaces around the screen. Each space's number is a
+  # base: 0 = nothing, 1 = your tokens back, above 1 = a win (scaled per stake so it
+  # gives back `rtp`). Bases between 0 and 1 aren't allowed.
+  wheel:
+    # false = the Wheel is closed.
+    enabled: true
+    # The tokens a player can put in per spin.
+    stakes: [5, 10, 20]
+    # Spins per player per day.
+    daily_limit: 30
+    # Target tokens given back per 100 put in (85-95).
+    rtp: 90
+    # 24 bases, clockwise from the top-left corner (slots 0-8, 17, 26, 35,
+    # 44-36, 27, 18, 9): 13 x 0, 5 x 1, 3 x 2, 2 x 4, 1 x 5. No three zeros in a row.
+    # 8 or 12 bases are repeated around the ring.
+    segments: [5, 0, 1, 0, 2, 0, 0, 1, 0, 4, 0, 1, 0, 2, 0, 1, 0, 4, 0, 0, 1, 0, 2, 0]
+  # ---- higher_lower ----
+  # Higher or Lower: guess whether the next card is higher or lower; each right
+  # guess grows what you'd get back, cash out any time. The same card loses.
+  higher_lower:
+    # false = Higher or Lower is closed.
+    enabled: true
+    # The tokens a player can put in per run.
+    stakes: [10, 20, 50]
+    # Runs per player per day.
+    daily_limit: 30
+    # Target tokens given back per 100 put in with the best play (85-95).
+    rtp: 90
+    # Cash out automatically at this many times the tokens put in (or max_payout, if lower).
+    max_multiplier: 20
+    # Cash out automatically after this many right guesses.
+    max_guesses: 10
+  # ---- coin_flip ----
+  # Coin Flip: two nearby players put in the same, one wins. The winner gets `rtp`
+  # of the tokens put in; the rest is gone. Players must turn Coin Flip invites on.
+  coin_flip:
+    # Off by default: the one game of chance between players.
+    enabled: false
+    # The tokens each player can put in.
+    stakes: [5, 10, 25]
+    # Flips per player per day.
+    daily_limit: 5
+    # Flips between the same two players per day.
+    pair_daily_limit: 2
+    # Target tokens given back per 100 put in (85-95).
+    rtp: 90
+    # How close the two players must be, in blocks (0 = anywhere in the same world).
+    max_distance: 32
+    # How long an invite stays open, in seconds.
+    invite_seconds: 60
+  # ---- creeper_sweeper ----
+  # Creeper Sweeper: dig every safe square without digging a creeper.
+  creeper_sweeper:
+    # false = Creeper Sweeper is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for clearing the daily board on your scored try.
+    daily_reward: 1
+    # Most tokens Creeper Sweeper pays a player per day.
+    daily_cap: 2
+    # Creepers on the 9x5 board per difficulty (the daily board uses normal's).
+    mines:
+      # Easy board.
+      easy: 6
+      # Normal board.
+      normal: 8
+      # Hard board.
+      hard: 10
+    # Bronze, silver, gold: clear times in seconds (at or under), per difficulty.
+    milestones:
+      # Easy board.
+      easy: [180, 90, 45]
+      # Normal board.
+      normal: [240, 120, 75]
+      # Hard board.
+      hard: [300, 180, 120]
+  # ---- ore_merge ----
+  # Ore Merge: slide and merge ores (2048) from coal up to a dragon egg.
+  ore_merge:
+    # false = Ore Merge is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for making a diamond on the daily board's scored try.
+    daily_reward: 1
+    # Most tokens Ore Merge pays a player per day.
+    daily_cap: 2
+    # Bronze, silver, gold: the biggest tile made (256 diamond, 512 netherite, 1024 nether star).
+    milestones: [256, 512, 1024]
+  # ---- snake ----
+  # Snake: turn left or right to eat apples without hitting the wall or yourself.
+  snake:
+    # false = Snake is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for 15 apples on the daily board's scored try.
+    daily_reward: 1
+    # Most tokens Snake pays a player per day.
+    daily_cap: 2
+    # Ticks between moves for Java players (20 = 1 second; it speeds up, never below 3).
+    tick_java: 6
+    # Ticks between moves for Bedrock players.
+    tick_bedrock: 10
+    # Bronze, silver, gold: apples in one run (32 fills the whole field).
+    milestones: [10, 20, 30]
+  # ---- mini_match ----
+  # Mini Match: find the 8 pairs of Minis in as few flips as you can.
+  mini_match:
+    # false = Mini Match is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for finishing the daily board in 24 flips or fewer on your scored try.
+    daily_reward: 1
+    # Most tokens Mini Match pays a player per day.
+    daily_cap: 2
+    # Bronze, silver, gold: finish in at most this many flips.
+    milestones: [30, 24, 20]
+  # ---- simon_says ----
+  # Simon Says: repeat the growing sequence of lights and notes.
+  simon_says:
+    # false = Simon Says is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for repeating 8 on the daily board's scored try.
+    daily_reward: 1
+    # Most tokens Simon Says pays a player per day.
+    daily_cap: 2
+    # Bronze, silver, gold: the longest sequence repeated.
+    milestones: [5, 10, 15]
+  # ---- whack_a_zombie ----
+  # Whack-a-Zombie: bonk the zombies, not the villagers.
+  whack_a_zombie:
+    # false = Whack-a-Zombie is closed.
+    enabled: true
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
+    # Tokens for 20 points on the daily board's scored try.
+    daily_reward: 1
+    # Most tokens Whack-a-Zombie pays a player per day.
+    daily_cap: 2
+    # How long a round lasts, in seconds.
+    seconds: 30
+    # Bronze, silver, gold: points in one round.
+    milestones: [15, 25, 35]
+  # ---- connect_four ----
+  # Connect Four: four in a row against the Arcade or a friend (friend games pay nothing).
+  connect_four:
+    # false = Connect Four is closed.
+    enabled: true
+    # Tokens for the first win of the day against the Arcade on normal or hard.
+    daily_reward: 1
+    # Most tokens Connect Four pays a player per day.
+    daily_cap: 1
+  # ---- tic_tac_toe ----
+  # Tic-Tac-Toe: against the Arcade or a friend (friend games pay nothing).
+  tic_tac_toe:
+    # false = Tic-Tac-Toe is closed.
+    enabled: true
+    # Tokens for the first win (easy) or draw-or-better (hard) of the day against the Arcade.
+    daily_reward: 1
+    # Most tokens Tic-Tac-Toe pays a player per day.
+    daily_cap: 1
+  # ---- trials ----
+  # Time trials: parkour, elytra and boat courses built with /hcm games course.
+  trials:
+    # false = every time-trial course is closed.
+    enabled: true
+    # Tokens for the first finish of a course, once ever per course, by tier.
+    first_clear:
+      # Easy courses.
+      easy: 5
+      # Medium courses.
+      medium: 10
+      # Hard courses.
+      hard: 20
+      # "Why did we build this?" courses.
+      extreme: 40
+    # Tokens for setting the week's best time on a course (once per course per week).
+    weekly_best_bonus: 5
+    # Tokens for finishing the course of the week (once a day).
+    course_of_week_bonus: 2
+    # Most tokens time trials pay a player per day (first clears don't count).
+    daily_cap: 4
+    # Parkour: blocks below the lower of the last and next checkpoint that count as a fall.
+    fall_depth: 6
+    # A run faster than this many seconds doesn't count (a course can set its own).
+    min_seconds: 5
+    # Starting a course offers "Warm up (3:00)" or "Go straight to the timed run": free laps first,
+    # never timed or rewarded (a Dropper offers one practice drop). Seconds; 0 = no warm-ups.
+    warmup_seconds: 180
+    # "Race with friends": the most racers in one party race on a course (2-12).
+    party_max: 8
+    # Ride along: a boat driver may take one passenger in the back seat. A passenger doesn't change a
+    # boat's speed, so a run with a rider counts as normal. false = runs with a rider are just for fun
+    # (no board, record, rewards or Cup time), and Race Night takes no riders.
+    rider_runs_count: true
+  # ---- golf ----
+  # Mini golf: your Mini is the ball. Courses are built with /hcm games golf.
+  golf:
+    # false = every mini golf course is closed.
+    enabled: true
+    # Tokens for finishing a course at par or better (once per course per day).
+    par_reward: 2
+    # Tokens for a hole-in-one on a course you finish (once per hole per day).
+    hole_in_one_reward: 1
+    # Tokens for the first finish of a course, once ever per course.
+    first_clear: 5
+    # Most tokens mini golf pays a player per day (first clears don't count).
+    daily_cap: 4
+    # Strokes over par before a hole is picked up.
+    max_over_par: 3
+  # ---- cup ----
+  # The Weekly Cup: on a time-trial course that runs one, a player pays a small entry once a week and
+  # their best counted time that week is their Cup time. At the week's rollover (the quests' week
+  # start at 04:00) the pool - every entry, plus the top-up - is shared by Cup time: 70/30 with 2 Cup
+  # times, 50/30/20 with 3 or more; no Cup time, no share. With fewer than 2 Cup times, or when the
+  # course is deleted, changed or closed mid-week, every entry comes back. The server keeps nothing.
+  # Fresh parkour, Sky Rings, Ice Boat and Dropper courses run one; a hand-built course only after
+  # /hcm games cup on <id>. Players hide it with /hcm play cup off. The youngest may pay into a pool
+  # the oldest win: false below switches it off.
+  cup:
+    # false = no new entries and no Cup on the screens. Cups already paid into still finish their
+    # week and pay out (or refund) at the rollover.
+    enabled: true
+    # Tokens to enter one course's Cup for one week (1-100).
+    entry: 5
+    # Tokens the server adds to a pool in which 2 or more set a Cup time (0-100). Never with one.
+    server_topup: 10
+  # ---- fresh ----
+  # Fresh Courses: parkour, Sky Rings, mini golf and droppers the plugin builds itself - a new set every
+  # week (or every day, or every few days: cadence), the same for everyone. Nothing to build by hand.
+  # Check with /hcm games gen status.
+  fresh:
+    # Ships OFF. true + /hcm reload and the first set is up in about two minutes.
+    enabled: false
+    # The world they are built in: "" = the first of games.worlds (it must be listed there).
+    # They sit far out and high up (x 4096-5535, z 4096-4671, y 128-303), away from anything built.
+    world: ""
+    # How often the courses change: weekly, daily, or a number of days from 1 to 28 (like 3).
+    # The dates are fixed: counted from rebuild_day, so they never depend on when you changed it.
+    # A change here keeps the courses that are up until the new setting's first change day (or
+    # their own end, if sooner). /hcm games gen status shows the date.
+    cadence: weekly
+    # The time a new set starts (clock.time_zone, 24-hour, in quotes). Keep it at a restart:
+    # the courses are rebuilt while nobody plays.
+    rebuild_at: "04:00"
+    # The day a weekly set starts, like "monday"; "" = the quests' week start (arcade.quests.week_starts).
+    # Every other cadence counts its days from this day too. After a change the courses that are up
+    # stay until the new day. Moving the change day later keeps this set until the new day comes
+    # round: a new day that would still be the same numbered set (weekly: one before the next
+    # Monday) is not a change, so they stay until the one after. Status shows the date.
+    rebuild_day: ""
+    # Seconds after the server is up before the first build.
+    startup_delay_seconds: 60
+    # No build starts this many minutes before one of games.restart_times.
+    avoid_before_restart_minutes: 15
+    # A build that failed is tried again after this many minutes.
+    retry_minutes: 30
+    # Builds tried per course per day before it keeps the last course until the next day.
+    max_tries_per_day: 4
+    # Minutes someone still on a course the next build needs gets to finish (after an admin's
+    # second quick reroll only).
+    clear_wait_minutes: 20
+    # Course boards and star rows older than this many days are pruned (each course always keeps
+    # its last 8 sets).
+    keep_days: 35
+    # No mobs, fire, random ticks or weather in that world, and always noon.
+    world_rules: true
+    # "x y z" where people standing in a building area are moved; "" = the world's spawn.
+    safe_spot: ""
+    # Most Star Chart tokens a player earns a day (games.skill_daily_cap still applies). A goal is
+    # paid in full or not at all: one the day's caps can't pay whole waits for a finish another day
+    # that week. A week's goals are fixed the first time they are shown, even if a course is
+    # switched off later that week.
+    daily_cap: 2
+    # When a new set goes up, one chat line tells each player once ("New courses this week! Easy,
+    # Parkour, Hard, Sky Rings and Golf - /hcm play"): at login, or at once for anyone on (not while
+    # they play a world game, and after they close a screen). Players turn it off with
+    # /hcm play news off. false = no line for anyone.
+    announce: true
+    # Tokens for each course's first finish in each set: one table for a weekly cadence and one for
+    # a daily one. Anything in between is worked out from the two, so a new cadence needs no retuning.
+    # They count toward games.trials.daily_cap / games.golf.daily_cap (4) and skill_daily_cap (6),
+    # and are paid in full or not at all: if today's caps can't pay all of it, nothing is paid or
+    # used up, and a finish on another day of the same set pays it. Keep each at or under 4: one
+    # bigger than a whole day's cap pays that cap, once.
+    rewards:
+      clear_weekly:
+        fresh_parkour_easy: 2
+        fresh_parkour: 3
+        fresh_parkour_hard: 4
+        fresh_rings: 3
+        fresh_golf: 3
+        fresh_tiny_golf: 2
+        fresh_boat: 3
+        fresh_dropper_easy: 2
+        fresh_dropper: 3
+      clear_daily:
+        fresh_parkour_easy: 1
+        fresh_parkour: 2
+        fresh_parkour_hard: 3
+        fresh_rings: 2
+        fresh_golf: 2
+        fresh_tiny_golf: 1
+        fresh_boat: 2
+        fresh_dropper_easy: 1
+        fresh_dropper: 2
+    # Star Chart goals: stars a player collects in a week, and the tokens each goal pays (once a
+    # week). Weekly and daily ends like the rewards; never above 80% of what the week can give.
+    # A week's goals are fixed the first time they are shown or paid: a change counts from the next.
+    star_goals:
+      weekly: [6, 12]
+      weekly_tokens: [1, 2]
+      daily: [10, 25]
+      daily_tokens: [1, 1]
+    # How much building one server tick may do.
+    budget:
+      # Blocks per tick while anyone is online.
+      blocks_per_tick: 500
+      # Blocks per tick while nobody is.
+      blocks_per_tick_idle: 5000
+      # Milliseconds of building per tick.
+      max_ms_per_tick: 4
+      # Chunk snapshots per tick.
+      snapshots_per_tick: 4
+      # Chunks waiting to load at once.
+      chunk_loads_in_flight: 2
+      # Building pauses while the average tick takes longer than this (ms); it goes on below 3/4 of it.
+      pause_above_mspt: 40
+    # Star times, as a factor of each course's expert time: gold = 3 stars, silver = 2 stars.
+    # Finishing is always 1 star. Tune after the first week if they feel too hard or too easy.
+    stars:
+      gold: {easy: 2.0, medium: 1.5, hard: 1.25}
+      silver: {easy: 3.0, medium: 2.2, hard: 1.8}
+    # Each course: on or off, its difficulty (tier, or mix of golf holes or dropper levels: E easy,
+    # M medium, H hard) and where its area starts (x y z, x and z a multiple of 16; two halves side by
+    # side along x). /hcm games gen on|off|tier|mix wins over these.
+    # The droppers ship ON (they run only while Fresh Courses is on): glass shafts with water pools at
+    # the bottom, one level per letter of their mix (at most 5). A dropper switched on later is built
+    # with the next set (or /hcm games gen reroll).
+    slots:
+      fresh_parkour_easy: {enabled: true, tier: easy, origin: [4096, 160, 4096]}
+      fresh_parkour: {enabled: true, tier: medium, origin: [4352, 160, 4096]}
+      fresh_parkour_hard: {enabled: true, tier: hard, origin: [4608, 160, 4096]}
+      fresh_rings: {enabled: true, tier: easy, origin: [4096, 128, 4352]}
+      fresh_golf: {enabled: true, mix: EEEMMMMHH, origin: [4864, 160, 4096]}
+      fresh_tiny_golf: {enabled: true, mix: EEE, origin: [5120, 160, 4096]}
+      fresh_boat: {enabled: false, tier: medium, origin: [4480, 160, 4352]}
+      fresh_dropper_easy: {enabled: true, mix: EEE, origin: [5376, 160, 4096]}
+      fresh_dropper: {enabled: true, mix: EEMMH, origin: [5376, 160, 4160]}
+    # Every set that was ever up is archived with its whole layout, so a past course can be brought
+    # back exactly (/hcm games gen recall) or kept for good (/hcm games gen keep), and its board with it.
+    # A course is a few KB: a year of weekly sets for every course is well under 5 MB.
+    archive:
+      # Days an old set stays in the archive after it was replaced; 0 = forever. A kept or
+      # recalled course's set is never removed.
+      keep: 0
+    # The website's list of past courses (with their course codes and seeds): at most this many per course.
+    feed_history: 26
+    # The Classics: four empty courses an admin can bring an old course back into
+    # (/hcm games gen recall HARD-40). Its old records are the ones to beat.
+    classics:
+      # How long a recalled course stays up unless the recall says otherwise ("forever" keeps it).
+      days: 7
+      # Where each one is built (x y z, x and z a multiple of 16; two halves side by side along x),
+      # like the courses above. Keep them 32 blocks from every other area.
+      slots:
+        fresh_classic_parkour: {origin: [4096, 160, 4736]}
+        fresh_classic_rings: {origin: [4608, 128, 4736]}
+        fresh_classic_golf: {origin: [4352, 160, 4736]}
+        fresh_classic_dropper: {origin: [5376, 160, 4224]}
+    # Kept courses (/hcm games gen keep): each becomes a normal course with a lasting board, built in
+    # its own plot of this area and never touched by the generator again.
+    keep:
+      # The first plot's corner (x y z). Plots are 144 x 176 x 336, six to a row along x, rows along z.
+      # It must stay at least 16 blocks from every Fresh Courses area; otherwise keeping is off.
+      area: [4096, 128, 5376]
+      # How many plots there are.
+      max_plots: 24
+  # ---- race_night ----
+  # Race Night: boat races for everyone at once, at set times or when an admin starts one
+  # (/hcm games event start). Three short races on one track, points for everyone in every race.
+  # Free to enter. The server gives small token prizes (at most prize_events_per_week nights a week).
+  # Ships OFF: turn on the Ice Boat Fresh course (games.fresh.slots.fresh_boat) first - it is the
+  # default track and has a viewing stand built in.
+  race_night:
+    # false = no Race Night.
+    enabled: false
+    # When it runs: "<days> <HH:mm>" in clock.time_zone, like "FRI 19:00", "SAT,SUN 15:00",
+    # "DAILY 18:30", "WEEKDAYS 17:00" or "WEEKENDS 10:30". [] = only when an admin starts one.
+    schedule: ["FRI 19:00"]
+    # auto = take turns among the tracks it can race on; or a boat course's id.
+    course: auto
+    # Races a night, 1-5 (more than 1 needs a track with a viewing stand).
+    races: 3
+    # Laps a race: 0 = the course's own; 1-5 on a loop track.
+    laps: 0
+    # The heads-up in chat this many minutes before the start (0 = none).
+    announce_minutes: 30
+    # Joining opens this many minutes before a scheduled start...
+    join_minutes: 10
+    # ... and before one an admin starts.
+    admin_join_minutes: 5
+    # Fewer racers than this at the start calls the night off.
+    min_racers: 2
+    # The most racers (2-12), also limited by the track's starting grid.
+    max_racers: 8
+    # A race ends this many seconds after its first finisher...
+    finish_window_seconds: 60
+    # ... or after this many minutes.
+    max_race_minutes: 4
+    # Seconds on the stand between races.
+    break_seconds: 20
+    # Free warm-up laps before the grid, in seconds (0 = none). Racers can tap Ready to skip it; the
+    # grid waits for the time to run out or for everyone to be ready.
+    warmup_seconds: 180
+    # Points by place in each race.
+    points: [10, 8, 6, 5, 4, 3, 2]
+    # Points for a finisher beyond that list.
+    finish_points: 2
+    # Points for anyone still racing when a race ends.
+    still_racing_points: 1
+    # Tokens for the night's 1st, 2nd and 3rd (each 0-10). 2nd needs 3 racers, 3rd needs 4.
+    prizes: [5, 3, 2]
+    # Tokens for everyone else who finished a race (0-2).
+    finisher_prize: 1
+    # Nights a week that pay tokens, server-wide (0-7). Later nights that week are just for fun.
+    prize_events_per_week: 3
+    # month = points also go on a monthly season board; off = no season board.
+    season: month
+    # Watchers who wander further than this from the viewing stand are put back.
+    stand_radius: 4
+  # ---- falling_floors ----
+  # Falling Floors: every block you step on falls away. Last one standing wins - or play solo.
+  # Three glass floors in a box of its own, with a new shape every week. No TNT, no explosions.
+  falling_floors:
+    # Ships OFF. true + /hcm reload to open it.
+    enabled: false
+    # The box's corner (x y z; x and z a multiple of 16). It is 48 x 40 x 48 and must stay 32 blocks
+    # from every Fresh Courses area, the kept courses and the Clubhouse, and 16 from hand-built
+    # courses.
+    origin: [5376, 176, 4352]
+    # Ticks a stepped-on block stays red before it falls (6-20; 20 ticks is a second).
+    fade_ticks: 10
+    # Ready players that start a round at once.
+    min_players: 2
+    # The most players in the arena (2-16).
+    max_players: 12
+    # Whether a player alone can play a solo round ("how long can you last?").
+    solo: true
+    # After this many seconds the edges fall in, so every round ends.
+    round_seconds: 180
+    # Blocks the reset between rounds puts back each tick.
+    reset_blocks_per_tick: 400
+    # Tokens for the first full round of the day.
+    daily_reward: 1
+    # Solo seconds for the three milestones, and the tokens each pays (once ever).
+    milestones: [30, 60, 120]
+    milestone_rewards: [1, 2, 3]
+    # Most tokens Falling Floors pays a player per day.
+    daily_cap: 3
+  # ---- clubhouse ----
+  # The Clubhouse: one room in the Games world where racers wait before a race and hang out after it
+  # (/hcm play clubhouse). It builds itself in an empty box and is checked before anyone comes in;
+  # /hcm games clubhouse here uses a room you built instead. Nothing here moves tokens.
+  clubhouse:
+    # true = the room builds itself; nothing happens while games.enabled is false. false = every race
+    # and round works exactly as before.
+    enabled: true
+    # The box's corner (x y z; x and z a multiple of 16). It is 32 x 16 x 32 and must stay 32 blocks
+    # from every Fresh Courses area, the kept courses and the Falling Floors arena, and 16 from
+    # hand-built courses.
+    origin: [5376, 160, 4448]
+    # Minutes someone may stay with no race or party going before they are sent home (a warning
+    # comes a minute before).
+    max_minutes: 30
+    # Party racers come back here after the race, instead of going home.
+    party_after: true
+    # Everyone at the track comes here at the end of Race Night (the top three on the podium). On a
+    # track with no viewing stand, racers (and their riders) also wait here between races.
+    race_night_after: true
+    # A golf-together group comes here when its round ends.
+    golf_after: true

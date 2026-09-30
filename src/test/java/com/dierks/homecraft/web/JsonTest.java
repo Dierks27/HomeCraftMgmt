@@ -6,6 +6,7 @@ import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The feed's number and string writers.
@@ -15,7 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * {@code 1E+7}, but the website's own sample data and every other number in the feed is
  * plain), and nothing that reads as a negative zero. {@link Json#string}, {@link Json#num2}
  * and {@link Json#plain} are the dashboard's original helpers moved out of the server; these
- * pin that they still write exactly what the website has been parsing.
+ * pin that they still write exactly what the website has been parsing. {@link Json#sig} is the
+ * Arcade feed's odds: significant digits, so a rare line never reads as chance 0, in the same
+ * plain notation.
  */
 class JsonTest {
 
@@ -137,5 +140,64 @@ class JsonTest {
     void plainOfNullIsEmpty() {
         assertEquals("", Json.plain(null));
         assertEquals("", Json.plain("   "));
+    }
+
+    // ---- sig (the Arcade feed's odds) -----------------------------------------------------
+
+    @Test
+    void sigKeepsSignificantDigitsHalfUpOnTheDecimalValue() {
+        assertEquals("0.002421", Json.sig(0.00242149, 4));
+        assertEquals("0.002422", Json.sig(0.0024215, 4), "half-up on the number as it reads");
+        assertEquals("0.1235", Json.sig(0.123456, 4));
+        assertEquals("12.35", Json.sig(12.345, 4));
+        assertEquals("-0.002421", Json.sig(-0.00242149, 4), "a sign is kept");
+        assertEquals("0.06", Json.sig(0.0567, 0), "fewer than one digit counts as one");
+    }
+
+    @Test
+    void sigNeverWritesZeroForAPositiveValue() {
+        assertEquals("0.000001", Json.sig(1e-6, 4), "a one-in-a-million paytable line");
+        assertEquals("0.00001234", Json.sig(1.234e-5, 4));
+        String smallest = Json.sig(Double.MIN_VALUE, 4);
+        assertTrue(new java.math.BigDecimal(smallest).signum() > 0, "even the smallest double: " + smallest.length());
+        for (double d : new double[] {1e-6, 3e-9, 0.00004999, 1e-300}) {
+            assertFalse("0".equals(Json.sig(d, 4)), d + " must not read as 0");
+            assertTrue(new java.math.BigDecimal(Json.sig(d, 4)).signum() > 0, d + " must stay positive");
+        }
+    }
+
+    @Test
+    void sigNeverWritesAnExponentOrTrailingZeros() {
+        assertEquals("10000000", Json.sig(1e7, 4));
+        assertEquals("123500", Json.sig(123456, 4), "rounded to 4 digits, written out");
+        assertEquals("0.0000000001", Json.sig(1e-10, 4));
+        assertEquals("0.5", Json.sig(0.5, 4));
+        assertEquals("70", Json.sig(70.0, 4));
+        assertEquals("1.8", Json.sig(1.7999999999999998, 4), "a percent computed as 0.018 * 100");
+        assertEquals("100", Json.sig(100, 4), "zeros before the point are digits");
+        for (double d : new double[] {1e7, 1e20, 1e-10, 1.234e-5, 123456}) {
+            String s = Json.sig(d, 4);
+            assertFalse(s.contains("E") || s.contains("e"), d + " wrote " + s);
+        }
+    }
+
+    @Test
+    void sigWritesZeroForZeroAndForWhatJsonCannotSpell() {
+        assertEquals("0", Json.sig(0.0, 4));
+        assertEquals("0", Json.sig(-0.0, 4), "never a negative zero");
+        for (double d : new double[] {Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
+            assertEquals("0", Json.sig(d, 4), "sig " + d);
+        }
+    }
+
+    @Test
+    void sigIgnoresTheServerLocale() {
+        Locale before = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.GERMANY);
+            assertEquals("0.002421", Json.sig(0.00242149, 4));
+        } finally {
+            Locale.setDefault(before);
+        }
     }
 }

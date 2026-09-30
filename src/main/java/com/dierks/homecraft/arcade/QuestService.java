@@ -37,6 +37,14 @@ import java.util.concurrent.ThreadLocalRandom;
  * <p>Only a player's own draw counts: fishing does nothing for a fish quest you were not dealt.
  * Pulled types are read from vanilla statistics as before (see {@link QuestStats}); pushed types
  * come from gameplay hooks and {@code QuestListener}. Every type respects the economy sandbox.
+ *
+ * <p><b>The game quests</b> (EXTRAS E4: {@link QuestType#game()}) are pushed by the skill games
+ * through {@link GamesProgress}. Courses are played in the Games world, which is not an economy
+ * world, so these count where the games pay tokens instead ({@link GamesProgress#countsHere}: an
+ * economy, Games or play world, never creative), and one finished there is banked and paid by
+ * {@link #settle} once the player is back where tokens can be paid (every poll, and on a world
+ * change). They are dealt only while a game that can push them is open ({@link GamesProgress#dealable}),
+ * so nobody draws "Play 3 arcade cabinets" with the games switched off.
  */
 public final class QuestService {
 
@@ -62,6 +70,7 @@ public final class QuestService {
             for (Player p : plugin.getServer().getOnlinePlayers()) {
                 pollStats(p);
                 pollBiome(p);
+                settle(p);
             }
         }, 20L * 10L, 20L * POLL_SECONDS);
     }
@@ -80,7 +89,20 @@ public final class QuestService {
      * distinct types. Pure, so it can be tested.
      */
     public static List<Quest> draw(List<Quest> pool, int n, Random random) {
-        List<Quest> shuffled = new ArrayList<>(pool);
+        return draw(pool, n, random, q -> true);
+    }
+
+    /**
+     * {@link #draw(List, int, Random)} from only the rows {@code dealable} accepts: a game quest
+     * whose games are closed is left in the pool but never dealt. Pure, so it can be tested.
+     */
+    public static List<Quest> draw(List<Quest> pool, int n, Random random, java.util.function.Predicate<Quest> dealable) {
+        List<Quest> shuffled = new ArrayList<>();
+        for (Quest q : pool) {
+            if (dealable == null || dealable.test(q)) {
+                shuffled.add(q);
+            }
+        }
         Collections.shuffle(shuffled, random);
         List<Quest> out = new ArrayList<>();
         Set<QuestType> types = EnumSet.noneOf(QuestType.class);
@@ -105,7 +127,8 @@ public final class QuestService {
         try {
             List<String> ids = dao.assignments(player, key);
             if (ids.isEmpty()) {
-                List<Quest> drawn = draw(quests.byPeriod(period), quests.draw(period), ThreadLocalRandom.current());
+                List<Quest> drawn = draw(quests.byPeriod(period), quests.draw(period), ThreadLocalRandom.current(),
+                        this::dealable);
                 if (drawn.isEmpty()) {
                     return List.of();
                 }
@@ -187,7 +210,7 @@ public final class QuestService {
         }
         List<Quest> candidates = new ArrayList<>();
         for (Quest q : plugin.config().quests().byPeriod(QuestPeriod.DAILY)) {
-            if (!dealt.contains(q.id()) && !otherTypes.contains(q.type())) {
+            if (!dealt.contains(q.id()) && !otherTypes.contains(q.type()) && dealable(q)) {
                 candidates.add(q);
             }
         }
@@ -306,8 +329,8 @@ public final class QuestService {
         if (quests == null || !quests.enabled()) {
             return;
         }
-        if (!plugin.sandbox().allowed(player.getWorld())) {
-            return; // the sandbox: nothing counts in a world the economy is off in
+        if (!countsHere(player, type)) {
+            return; // the sandbox: nothing counts in a world the economy is off in (a game quest: see countsHere)
         }
         int delta = (int) Math.min(Integer.MAX_VALUE, amount);
         UUID id = player.getUniqueId();
@@ -325,7 +348,11 @@ public final class QuestService {
                     continue;
                 }
                 // The claim is one-way and the payout can be refused by the sandbox; do not claim
-                // where it cannot pay. Progress is banked, so it claims on the next action.
+                // where it cannot pay. Progress is banked, so it claims on the next action (a game
+                // quest reached in the Games world: quietly, and settle() pays it back home).
+                if (q.reward() > 0 && type.game() && !plugin.sandbox().allowed(player.getWorld())) {
+                    continue;
+                }
                 if (q.reward() > 0 && (plugin.tokens() == null || !plugin.tokens().canEarn(player, "quest " + q.id()))) {
                     continue;
                 }
@@ -336,6 +363,118 @@ public final class QuestService {
                 plugin.getLogger().severe("Failed to record quest '" + q.id() + "': " + e.getMessage());
             }
         }
+    }
+
+    /**
+     * Pay every pushed quest the player has already reached but that couldn't be paid where it was
+     * reached (a course finished in the Games world, say): now, if tokens can be paid here. Run on
+     * every poll and on a world change; one that is paid is claimed first, so it pays once.
+     *
+     * <p>A game quest reached in the Games world stays owed after its day or week is over: a player
+     * who finished "Finish a course" there at 8 PM and logged off is paid the next time they are
+     * back home, whenever that is ({@link #due}).
+     */
+    public void settle(Player player) {
+        Quests quests = plugin.config().quests();
+        if (player == null || quests == null || !quests.enabled()) {
+            return;
+        }
+        if (plugin.tokens() == null || !plugin.sandbox().allowed(player.getWorld())) {
+            return; // quietly: canEarn would log a refusal every 30 seconds
+        }
+        UUID id = player.getUniqueId();
+        Set<String> dealtNow = new HashSet<>();
+        Set<String> ids = new HashSet<>();
+        for (Quest q : assignedAll(id)) {
+            dealtNow.add(q.id());
+            ids.add(q.id());
+        }
+        for (Quest q : quests.all()) {
+            if (q.type().game()) {
+                ids.add(q.id()); // one reached in an earlier day or week, still owed
+            }
+        }
+        List<Due> due;
+        try {
+            due = due(dao.unclaimed(id, ids), periodKey(QuestPeriod.DAILY), periodKey(QuestPeriod.WEEKLY), dealtNow,
+                    quests::byId, QuestStats::isPulled);
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to read the quests to settle: " + e.getMessage());
+            return;
+        }
+        for (Due d : due) {
+            Quest q = d.quest();
+            try {
+                if (q.reward() > 0 && !plugin.tokens().canEarn(player, "quest " + q.id())) {
+                    continue;
+                }
+                if (dao.markClaimed(id, q.id(), d.periodKey())) {
+                    complete(player, q);
+                }
+            } catch (SQLException e) {
+                plugin.getLogger().warning("Failed to settle quest '" + q.id() + "': " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * A reached, unpaid quest {@link #settle} pays now, and the period it was reached in.
+     *
+     * @param periodKey the row's {@code d<day>} or {@code w<week>}: the one {@code markClaimed} flips
+     */
+    public record Due(Quest quest, String periodKey) {
+    }
+
+    /**
+     * Which unpaid rows {@link #settle} pays: a pushed quest (never one the poll reads from the
+     * statistics) that has reached its target, dealt now in the current day or week, or a GAME
+     * quest from an earlier one (reached in the Games world and still owed; any other kind is paid
+     * where it is reached, in its own period). A row of an unknown period or a quest no longer in
+     * the pool is left alone. Pure, so it is tested.
+     *
+     * @param dayKey   today's period key
+     * @param weekKey  this week's period key
+     * @param dealtNow the ids of the player's quests today and this week
+     * @param byId     the pool: a period's quest by id, or {@code null}
+     * @param pulled   whether a type is read from the statistics (the poll pays those)
+     */
+    public static List<Due> due(List<QuestDao.Held> rows, String dayKey, String weekKey, Set<String> dealtNow,
+                                java.util.function.BiFunction<QuestPeriod, String, Quest> byId,
+                                java.util.function.Predicate<QuestType> pulled) {
+        List<Due> out = new ArrayList<>();
+        if (rows == null) {
+            return out;
+        }
+        for (QuestDao.Held row : rows) {
+            String key = row.periodKey() == null ? "" : row.periodKey();
+            QuestPeriod period = key.startsWith("w") ? QuestPeriod.WEEKLY : key.startsWith("d") ? QuestPeriod.DAILY
+                    : null;
+            Quest q = period == null ? null : byId.apply(period, row.questId());
+            if (q == null || pulled.test(q.type()) || row.progress() < q.target()) {
+                continue;
+            }
+            boolean current = key.equals(period == QuestPeriod.WEEKLY ? weekKey : dayKey);
+            if (current ? dealtNow != null && dealtNow.contains(q.id()) : q.type().game()) {
+                out.add(new Due(q, key));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whether {@code type} counts for the player where they are: a game quest where the games pay
+     * tokens ({@link GamesProgress#countsHere}), everything else only where the economy runs.
+     */
+    private boolean countsHere(Player player, QuestType type) {
+        if (type != null && type.game()) {
+            return GamesProgress.countsHere(plugin.games(), player);
+        }
+        return plugin.sandbox().allowed(player.getWorld());
+    }
+
+    /** Whether a quest may be dealt now: a game quest only while a game that pushes it is open. */
+    private boolean dealable(Quest q) {
+        return q == null || !q.type().game() || GamesProgress.dealable(plugin.games(), q.type());
     }
 
     private void complete(Player player, Quest q) {

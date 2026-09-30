@@ -1,0 +1,196 @@
+package com.dierks.homecraft.display;
+
+import com.dierks.homecraft.games.FeedWriter;
+import com.dierks.homecraft.games.Game;
+import com.dierks.homecraft.games.GameKind;
+import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.arena.FallingFloors;
+import com.dierks.homecraft.games.cabinet.CabinetGame;
+import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.engine.GenService;
+import com.dierks.homecraft.games.golf.GolfCourse;
+import com.dierks.homecraft.games.golf.MiniGolf;
+import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.TimeTrials;
+import com.dierks.homecraft.gui.games.daily.DailyLookup;
+import com.dierks.homecraft.storage.GamesDao;
+import org.bukkit.Bukkit;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * The running games as {@link BoardDisplay} asks about them, and a board's rows with the players'
+ * names: the leaderboard displays' one reach into the games module. Every read of a game runs in
+ * that game's guard, so a display can never break a game (or be broken by one: it shows nothing).
+ */
+final class BoardSource implements BoardDisplay.Lookup {
+
+    private final GamesService games;
+
+    BoardSource(GamesService games) {
+        this.games = games;
+    }
+
+    @Override
+    public GenTag liveTag(String slotId) {
+        GenService e = DailyLookup.engine(games);
+        return e == null ? null : e.liveTag(slotId);
+    }
+
+    @Override
+    public int cadence() {
+        return DailyLookup.edition(games).cadenceDays();
+    }
+
+    /** A skill cabinet's board as it publishes it on the website (its {@code Game.feed}). */
+    @Override
+    public BoardDisplay.Cabinet cabinet(String id) {
+        Game g = games.game(id);
+        boolean arena = g instanceof FallingFloors; // WP-F: its published board (this week's solo times)
+        if (g == null || (g.kind() != GameKind.CABINET && !arena) || !g.id().equalsIgnoreCase(id)) {
+            return null;
+        }
+        BoardDisplay.Cabinet[] seen = new BoardDisplay.Cabinet[1];
+        FeedWriter capture = new FeedWriter() {
+            @Override
+            public void board(String bid, String game, String board, boolean lowerIsBetter, String unit) {
+                if (arena && seen[0] == null && board != null && !board.isBlank()) {
+                    seen[0] = new BoardDisplay.Cabinet(g.name(), board, unit, lowerIsBetter);
+                }
+            }
+
+            @Override
+            public void chance(String cid, String name, List<Integer> stakes, Map<Integer, Double> rtpByStake,
+                               Integer dailyLimit, List<PayRow> paytable, String rules, Map<String, ?> extra) {
+            }
+
+            @Override
+            public void cabinet(String cid, String name, String board, String unit, boolean lowerIsBetter, Long best,
+                                String holder) {
+                if (seen[0] == null && board != null && !board.isBlank()) {
+                    seen[0] = new BoardDisplay.Cabinet(name, board, unit, lowerIsBetter);
+                }
+            }
+
+            @Override
+            public void course(String cid, String name, String kind, String tier, Long recordMs, Long recordAt,
+                               String holder) {
+            }
+
+            @Override
+            public void golf(String cid, String name, int holes, int par, Integer recordStrokes, Long recordAt,
+                             String holder) {
+            }
+        };
+        games.guard(g, () -> g.feed(capture));
+        BoardDisplay.Cabinet c = seen[0] != null ? seen[0] : new BoardDisplay.Cabinet(g.name(), "classic", "points", false);
+        return new BoardDisplay.Cabinet(c.name(), c.board(), c.unit(), c.lower(), boards(g));
+    }
+
+    /**
+     * A cabinet's other all-time boards: the ones it says it keeps (Creeper Sweeper's levels) and
+     * any with scores on them (never a daily board, whose name has a ':').
+     */
+    private List<String> boards(Game g) {
+        List<String> out = new ArrayList<>();
+        if (g instanceof CabinetGame cg) {
+            List<String> own = games.guard(g, cg::boards, List.<String>of());
+            out.addAll(own == null ? List.of() : own);
+        }
+        try {
+            for (String b : games.dao().boards(g.id())) {
+                if (b != null && !b.isBlank() && !b.contains(":") && !out.contains(b)) {
+                    out.add(b);
+                }
+            }
+        } catch (java.sql.SQLException | RuntimeException e) {
+            // the boards it says it keeps are enough to check a name against
+        }
+        return out;
+    }
+
+    @Override
+    public boolean chance(String id) {
+        Game g = games.game(id);
+        return g != null && g.kind().chance();
+    }
+
+    @Override
+    public String trialCourse(String id) {
+        Game g = games.game(Slots.GAME_TRIALS);
+        if (g instanceof TimeTrials t) {
+            Course c = games.guard(t, () -> t.course(id), null);
+            return c == null || c.generated() ? null : c.name();
+        }
+        return null;
+    }
+
+    @Override
+    public String golfCourse(String id) {
+        Game g = games.game(Slots.GAME_GOLF);
+        if (g instanceof MiniGolf m) {
+            GolfCourse c = games.guard(m, () -> m.course(id), null);
+            return c == null || c.generated() ? null : c.name();
+        }
+        return null;
+    }
+
+    @Override
+    public BoardDisplay.Result event(BoardDisplay.Target t) {
+        return EventDisplay.board(games, t);
+    }
+
+    /** The board's best rows with their players' names (names are fine in game), ranked, ties sharing one. */
+    List<BoardDisplay.Row> rows(BoardDisplay.Resolved r, int limit) {
+        if (r == null || r.board() == null) {
+            return List.of();
+        }
+        List<GamesDao.ScoreRow> top = games.scores().top(r.game(), r.board(), r.lower(), limit);
+        List<String> names = new ArrayList<>();
+        List<Long> values = new ArrayList<>();
+        for (GamesDao.ScoreRow row : top) {
+            String name;
+            try {
+                name = Bukkit.getOfflinePlayer(row.player()).getName();
+            } catch (RuntimeException e) {
+                name = null;
+            }
+            names.add(name);
+            values.add(row.score());
+        }
+        return BoardDisplay.ranked(names, values);
+    }
+
+    /**
+     * Every id a leaderboard can show, for tab completion: the skill cabinets, the hand-built courses
+     * and golf courses, the Fresh Courses slots and the Classics.
+     */
+    List<String> ids() {
+        List<String> out = new ArrayList<>();
+        for (Game g : games.games()) {
+            if (g.kind().chance()) {
+                continue;
+            }
+            if (g.kind() == GameKind.CABINET || g instanceof FallingFloors) {
+                out.add(g.id());
+            } else if (g.kind() == GameKind.TRIAL || g.kind() == GameKind.GOLF) {
+                Collection<Game.Playable> ps = games.guard(g, g::playables, List.of());
+                for (Game.Playable p : ps == null ? List.<Game.Playable>of() : ps) {
+                    if (!Slots.reserved(p.id()) && !out.contains(p.id())) {
+                        out.add(p.id());
+                    }
+                }
+            }
+        }
+        out.addAll(Slots.ids());
+        out.addAll(Slots.classicIds());
+        if (games.game(com.dierks.homecraft.games.event.RaceNight.SPEC.id()) != null) {
+            out.add(com.dierks.homecraft.games.event.RaceNight.SPEC.id());
+        }
+        return out;
+    }
+}

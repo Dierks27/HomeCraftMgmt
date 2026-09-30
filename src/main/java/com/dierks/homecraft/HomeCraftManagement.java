@@ -66,9 +66,12 @@ public final class HomeCraftManagement extends JavaPlugin {
      * selling) leave the shipped pool. 13 = the wild hunt retune: closer, longer, one at a time.
      * 14 = the token economy: no money in the Arcade, Prize Counter tabs, quest pools, and the
      * achievements list. 15 = packs hold one Card and roll by rarity odds; the shipped prices
-     * drop to $100 / $300. 16 = the Second/Third Home rows become one "+1 Home" row.
+     * drop to $100 / $300. 16 = the Second/Third Home rows become one "+1 Home" row. 17 = the
+     * skill games' quests and "Games" achievements join a pool and a list the owner hasn't edited.
+     * 18 = the events batch's "Games" achievements (the Dropper's and Race Night's) join that list
+     * the same way.
      */
-    static final int CONFIG_REVISION = 16;
+    static final int CONFIG_REVISION = 18;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -178,6 +181,13 @@ public final class HomeCraftManagement extends JavaPlugin {
     private com.dierks.homecraft.courier.CourierService courier;
     /** Sound Mufflers: placed blocks that hush chosen sounds near them. Null only if they failed to start. */
     private com.dierks.homecraft.muffler.SoundMufflerService soundMufflers;
+    /** The Games (0.35). Null until it is built, or if it failed to start; callers null-check. */
+    private com.dierks.homecraft.games.GamesService games;
+    /**
+     * Take a break (0.35): players' own limits and pauses on games of chance, the Scratch Ticket,
+     * Crates and token Card Packs included. Built on its own, outside the Games' error isolation.
+     */
+    private com.dierks.homecraft.games.Breaks breaks;
     /** The live market (0.33): the price multiplier, its events and ticks. Null only if it failed to build. */
     private com.dierks.homecraft.market.sim.MarketSimService marketSim;
     /** Market news delivery: broadcasts, the join catch-up, the per-player mute. Null only if it failed to build. */
@@ -301,6 +311,10 @@ public final class HomeCraftManagement extends JavaPlugin {
         // that spend them (loot crates, the Prize Counter, pity, lotto).
         this.tokens = new com.dierks.homecraft.arcade.TokenService(
                 this, new com.dierks.homecraft.storage.TokenDao(database));
+        // Take a break covers every game of chance, the Scratch Ticket and Crates too, whatever
+        // games.enabled says — so it is its own small service, built right after the tokens and
+        // outside the Games' try/catch. It fails closed: limits it can't read close the games.
+        this.breaks = new com.dierks.homecraft.games.Breaks(this, new com.dierks.homecraft.storage.GamesDao(database));
         this.arcade = new com.dierks.homecraft.arcade.ArcadeService(this);
         com.dierks.homecraft.storage.PrizeDao prizeDao = new com.dierks.homecraft.storage.PrizeDao(database);
         this.prizes = new com.dierks.homecraft.arcade.PrizeService(this, prizeDao);
@@ -338,6 +352,34 @@ public final class HomeCraftManagement extends JavaPlugin {
             }
             this.soundMufflers = null;
         }
+
+        // The Games (0.35): games of chance, arcade cabinets, time trials and mini golf, all
+        // behind games.enabled. Built even while that is false (it still finishes rounds a crash
+        // left open); a failure here leaves the games out and the rest of the plugin as it was.
+        try {
+            this.games = new com.dierks.homecraft.games.GamesService(this, breaks);
+            this.games.screens(new com.dierks.homecraft.gui.games.Screens(this));
+            this.games.progress(new com.dierks.homecraft.arcade.GamesProgress(this)); // quests and achievements
+            this.games.start();
+        } catch (RuntimeException e) {
+            getLogger().log(java.util.logging.Level.SEVERE, "Could not start the Games - they are off.", e);
+            if (this.games != null) {
+                try {
+                    this.games.stop();
+                } catch (RuntimeException ignored) {
+                    // already failing; the SEVERE above says why
+                }
+            }
+            this.games = null;
+        }
+        // Registered whatever happened above: the join/quit hooks do nothing without the service,
+        // and a player's saved things must come back even if the Games never started.
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.games.GamesListener(this), this);
+        getServer().getPluginManager().registerEvents(
+                new com.dierks.homecraft.games.world.SessionRecoveryListener(this), this);
+        // [Arcade] join signs: the hub's door into any game or course (it does nothing while the
+        // Games are off or failed to start).
+        getServer().getPluginManager().registerEvents(new com.dierks.homecraft.games.JoinSigns(this), this);
 
         getServer().getPluginManager().registerEvents(
                 new com.dierks.homecraft.courier.CourierListener(this), this);
@@ -421,6 +463,13 @@ public final class HomeCraftManagement extends JavaPlugin {
                     pallets.refreshSkin(new org.bukkit.Location(w, pb.x(), pb.y(), pb.z()));
                 }
             }
+            if (games != null) {
+                try {
+                    games.worldsReady(); // players whose last world game is still sending them home
+                } catch (RuntimeException e) {
+                    getLogger().log(java.util.logging.Level.SEVERE, "The Games could not finish starting up.", e);
+                }
+            }
         });
 
         // In-Game Economy Displays (Phase 7): the PlaceholderAPI 'hcm' expansion —
@@ -454,6 +503,16 @@ public final class HomeCraftManagement extends JavaPlugin {
                 getLogger().warning("Could not close " + p.getName() + "'s menu on shutdown: " + e.getMessage());
             }
         }
+        if (games != null) {
+            // Synchronously, while the tokens and the database are still here: no task can run now,
+            // so world sessions restore in place and OPEN rounds wait for the next start.
+            try {
+                games.stop();
+            } catch (RuntimeException e) {
+                getLogger().log(java.util.logging.Level.SEVERE, "Could not stop the Games cleanly.", e);
+            }
+            games = null;
+        }
         if (shops != null) {
             shops.stop();
             shops = null;
@@ -478,6 +537,7 @@ public final class HomeCraftManagement extends JavaPlugin {
             tokens.stop();
             tokens = null;
         }
+        breaks = null;
         if (radar != null) {
             radar.stop();
             radar = null;
@@ -599,6 +659,13 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
         if (soundMufflers != null) {
             soundMufflers.reload(); // on/off and the range limits
+        }
+        if (games != null) {
+            try {
+                games.reload(); // games that closed stop (sessions home, rounds finished), new ones start
+            } catch (RuntimeException e) {
+                getLogger().log(java.util.logging.Level.SEVERE, "The Games could not reload.", e);
+            }
         }
         if (homes != null) {
             homes.reload(); // re-read Essentials' sethome-multiple tiers
@@ -987,6 +1054,14 @@ public final class HomeCraftManagement extends JavaPlugin {
             // HomeSlotMigration.
             HomeSlotMigration.apply(c, log);
         }
+        if (from < 17) {
+            // The skill games' quests and achievements. See ArcadeConfigMigration#gamesRows.
+            ArcadeConfigMigration.gamesRows(c, log);
+        }
+        if (from < 18) {
+            // The events batch's "Games" achievements. See ArcadeConfigMigration#eventRows.
+            ArcadeConfigMigration.eventRows(c, log);
+        }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);
             log.add("Config migration: config_revision " + from + " → " + CONFIG_REVISION + ".");
@@ -1003,6 +1078,8 @@ public final class HomeCraftManagement extends JavaPlugin {
 
         // Not revision-gated: an owner can write a bare `market.sim: false` at any time.
         liveMarketSwitch(c, log);
+        // Nor this: a bare `games: false` or `games.ore_slots: false`.
+        gamesSwitch(c, log);
 
         return log;
     }
@@ -1049,6 +1126,75 @@ public final class HomeCraftManagement extends JavaPlugin {
             log.add("Config migration: " + path + ": " + sim + " is now " + path + ".enabled: " + enabled
                     + " (the rest of the section is filled in with the shipped settings"
                     + (enabled ? ")." : "; the live market stays off)."));
+        }
+    }
+
+    /**
+     * A bare switch where a Games section belongs becomes that section's {@code enabled}:
+     * {@code games: false} becomes {@code games.enabled: false}, and {@code games.<id>: false}
+     * becomes {@code games.<id>.enabled: false} for every game in the catalog. Without it the
+     * backfill that follows would replace the scalar with the whole shipped section — and a game
+     * the owner switched off would come back on. A value that is not a switch is written as
+     * {@code false} with a {@link #WARN} (an off switch nobody can read stays off, as
+     * {@code GamesConfig} reads it). The key keeps its place and its comments.
+     */
+    static void gamesSwitch(org.bukkit.configuration.file.FileConfiguration c, java.util.List<String> log) {
+        String root = com.dierks.homecraft.config.GamesConfig.PATH;
+        Object games = c.get(root, null);
+        if (games == null) {
+            return;
+        }
+        if (!(games instanceof org.bukkit.configuration.ConfigurationSection)) {
+            switchToSection(c, root, games, "the Games module", log);
+            return;
+        }
+        for (com.dierks.homecraft.games.GameSpec<?> spec : com.dierks.homecraft.games.GameCatalog.SPECS) {
+            String path = root + "." + com.dierks.homecraft.config.GamesConfig.block(spec.id());
+            Object v = c.get(path, null);
+            if (v != null && !(v instanceof org.bukkit.configuration.ConfigurationSection)) {
+                switchToSection(c, path, v, spec.id(), log);
+            }
+        }
+        // fx2-C #9: a bare Fresh course switch (games.fresh.slots.<id>: false), which DailySettings
+        // reads as that course's enabled, is the same trap one level down.
+        String slots = root + "." + com.dierks.homecraft.config.GamesConfig.block(
+                com.dierks.homecraft.games.gen.DailyCourses.SPEC.id()) + ".slots";
+        if (c.get(slots, null) instanceof org.bukkit.configuration.ConfigurationSection) {
+            for (com.dierks.homecraft.games.gen.api.Slots.Def def : com.dierks.homecraft.games.gen.api.Slots.ALL) {
+                String path = slots + "." + def.id();
+                Object v = c.get(path, null);
+                if (v != null && !(v instanceof org.bukkit.configuration.ConfigurationSection)) {
+                    switchToSection(c, path, v, "the " + def.name() + " course", log);
+                }
+            }
+        }
+    }
+
+    /** Replace the scalar at {@code path} with a section holding only {@code enabled}, keeping its comments. */
+    private static void switchToSection(org.bukkit.configuration.file.FileConfiguration c, String path, Object value,
+                                        String what, java.util.List<String> log) {
+        Boolean read = com.dierks.homecraft.config.GamesConfig.readSwitch(value);
+        boolean enabled = Boolean.TRUE.equals(read);
+        java.util.List<String> above = commentsOf(c, path);
+        java.util.List<String> inline;
+        try {
+            inline = c.getInlineComments(path);
+        } catch (Throwable ignored) {
+            inline = java.util.List.of();
+        }
+        c.createSection(path).set("enabled", enabled);
+        try {
+            c.setComments(path, above);
+            c.setInlineComments(path, inline);
+        } catch (Throwable ignored) {
+            // Comment API unavailable on this server: the switch still stands.
+        }
+        if (read == null) {
+            log.add(WARN + "Config migration: " + path + " was \"" + value + "\", which is not true or false - "
+                    + "wrote " + path + ".enabled: false, so " + what + " stays off until you set it to true.");
+        } else {
+            log.add("Config migration: " + path + ": " + value + " is now " + path + ".enabled: " + enabled
+                    + " (the rest of the section is filled in with the shipped settings).");
         }
     }
 
@@ -1467,7 +1613,12 @@ public final class HomeCraftManagement extends JavaPlugin {
             return;
         }
 
-        java.util.List<String> added = backfillConfig(onDisk, defaults);
+        java.util.List<String> kept = new java.util.ArrayList<>();
+        java.util.List<String> added = backfillConfig(onDisk, defaults, kept);
+        for (String path : kept) { // fx2-C #9
+            getLogger().warning("Config backfill: " + path + " holds a single value where a section of settings "
+                    + "belongs - left as you wrote it; the settings under it use their shipped values.");
+        }
         if (added.isEmpty()) {
             return;
         }
@@ -1499,6 +1650,21 @@ public final class HomeCraftManagement extends JavaPlugin {
     static java.util.List<String> backfillConfig(
             org.bukkit.configuration.file.FileConfiguration current,
             org.bukkit.configuration.file.FileConfiguration defaults) {
+        return backfillConfig(current, defaults, new java.util.ArrayList<>());
+    }
+
+    /**
+     * {@link #backfillConfig(org.bukkit.configuration.file.FileConfiguration,
+     * org.bukkit.configuration.file.FileConfiguration)}, adding to {@code kept} every path where the
+     * owner has a single value and the bundled file a section (fx2-C #9). That value is never
+     * replaced by the shipped section: writing the leaves under it would swap the owner's
+     * {@code false} for the shipped {@code enabled: true}. The switches the plugin reads that way
+     * ({@code games}, {@code games.<block>}, {@code games.fresh.slots.<id>}, {@code market.sim}) are
+     * rewritten as sections by the migration first; anything else is left for the owner.
+     */
+    static java.util.List<String> backfillConfig(
+            org.bukkit.configuration.file.FileConfiguration current,
+            org.bukkit.configuration.file.FileConfiguration defaults, java.util.List<String> kept) {
         java.util.List<String> added = new java.util.ArrayList<>();
         java.util.Set<String> touchedSections = new java.util.LinkedHashSet<>();
         for (String key : defaults.getKeys(true)) {
@@ -1509,6 +1675,13 @@ public final class HomeCraftManagement extends JavaPlugin {
                 continue;
             }
             if (has(current, key)) {
+                continue;
+            }
+            String scalar = scalarAncestor(current, key);
+            if (scalar != null) {
+                if (!kept.contains(scalar)) {
+                    kept.add(scalar);
+                }
                 continue;
             }
             if ("config_revision".equals(key)) {
@@ -1584,7 +1757,8 @@ public final class HomeCraftManagement extends JavaPlugin {
         String path = ConfigReset.normalise(section);
         if (!ConfigReset.allowed(path)) {
             out.add("&c" + (path.isEmpty() ? "Name a section." : "'" + path + "' can't be reset.")
-                    + " &7Allowed: arcade (or arcade.<part>), packs, minis.loot.natural, minis.effects, clock.");
+                    + " &7Allowed: arcade (or arcade.<part>), games (or games.<part>), packs, minis.loot.natural,"
+                    + " minis.effects, clock.");
             return out;
         }
         org.bukkit.configuration.file.YamlConfiguration bundled = ArcadeConfigMigration.bundled();
@@ -1797,6 +1971,25 @@ public final class HomeCraftManagement extends JavaPlugin {
      */
     private static boolean has(org.bukkit.configuration.ConfigurationSection c, String path) {
         return c.get(path, null) != null;
+    }
+
+    /**
+     * The nearest enclosing path of {@code key} that holds a single value (not a section) in
+     * {@code c}, or {@code null}: the owner wrote a value where the bundled file has a section.
+     */
+    private static String scalarAncestor(org.bukkit.configuration.ConfigurationSection c, String key) {
+        char sep = c.getRoot() == null ? '.' : c.getRoot().options().pathSeparator();
+        for (int i = key.indexOf(sep); i > 0; i = key.indexOf(sep, i + 1)) {
+            String path = key.substring(0, i);
+            Object v = c.get(path, null);
+            if (v == null) {
+                return null; // missing here: nothing further down can be the owner's
+            }
+            if (!(v instanceof org.bukkit.configuration.ConfigurationSection)) {
+                return path;
+            }
+        }
+        return null;
     }
 
     /** {@code isConfigurationSection()} that can never be answered by attached defaults. */
@@ -2065,6 +2258,19 @@ public final class HomeCraftManagement extends JavaPlugin {
     /** Sound Mufflers, or null if they failed to start. */
     public com.dierks.homecraft.muffler.SoundMufflerService soundMufflers() {
         return soundMufflers;
+    }
+
+    /** The Games framework, or null if it failed to start. */
+    public com.dierks.homecraft.games.GamesService games() {
+        return games;
+    }
+
+    /**
+     * Take a break (limits and pauses on games of chance), or null before enable / after disable.
+     * Callers that are about to take tokens for a game of chance refuse when it is null.
+     */
+    public com.dierks.homecraft.games.Breaks breaks() {
+        return breaks;
     }
 
     public com.dierks.homecraft.courier.CourierService courier() {

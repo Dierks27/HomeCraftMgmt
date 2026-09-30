@@ -59,7 +59,7 @@ public final class QuestStats {
             case CATCH_FISH, KILL_HOSTILES, BREED_ANIMALS, TRADE_VILLAGER, TRAVEL_ON_FOOT -> true;
             case SELL_MARKET, OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH, FIND_WILD_MINI,
                  PLANT_CROPS, HARVEST_CROPS, COOK_FOOD, SMELT_ORE, MINE_BLOCKS, VISIT_BIOMES,
-                 COMPLETE_DELIVERY -> false;
+                 COMPLETE_DELIVERY, FINISH_CABINET, FINISH_COURSE, EARN_STARS -> false;
         };
     }
 
@@ -98,7 +98,7 @@ public final class QuestStats {
             }
             case SELL_MARKET, OPEN_CRATE, PRINT_MINI, OPEN_PACK, SCRATCH, FIND_WILD_MINI,
                  PLANT_CROPS, HARVEST_CROPS, COOK_FOOD, SMELT_ORE, MINE_BLOCKS, VISIT_BIOMES,
-                 COMPLETE_DELIVERY -> 0;
+                 COMPLETE_DELIVERY, FINISH_CABINET, FINISH_COURSE, EARN_STARS -> 0;
         };
     }
 

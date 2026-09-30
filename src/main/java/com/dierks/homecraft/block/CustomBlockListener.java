@@ -79,8 +79,9 @@ public final class CustomBlockListener implements Listener {
         }
 
         // The Sound Muffler isn't part of the economy — quiet is welcome in every world — so it
-        // alone skips the economy-world check.
-        if (type != CustomBlockType.SOUND_MUFFLER
+        // alone skips the economy-world check. The Arcade Machine also stands wherever the Games
+        // can be played (games.play_worlds — the hub), because that is where it's wanted.
+        if (type != CustomBlockType.SOUND_MUFFLER && !arcadeInGamesWorld(type, player)
                 && !plugin.sandbox().check(player, "place " + type.name().toLowerCase(java.util.Locale.ROOT))) {
             event.setCancelled(true);
             return;
@@ -228,7 +229,7 @@ public final class CustomBlockListener implements Listener {
         Player player = event.getPlayer();
         CustomBlockType type = placed.get().type();
 
-        if (type != CustomBlockType.SOUND_MUFFLER
+        if (type != CustomBlockType.SOUND_MUFFLER && !arcadeInGamesWorld(type, player)
                 && !plugin.sandbox().check(player, "use " + type.name().toLowerCase(java.util.Locale.ROOT))) {
             return; // "the economy is disabled in this world" — the block stays, its GUI doesn't open
         }
@@ -340,5 +341,19 @@ public final class CustomBlockListener implements Listener {
 
     private boolean isProtectedBlock(Block b) {
         return blocks.at(b.getLocation()).isPresent() || blocks.vendingLowerOf(b).isPresent();
+    }
+
+    /**
+     * An Arcade Machine in a world the Games may be played in ({@code games.play_worlds} or
+     * {@code games.worlds}) while the Games are on: it places and opens there even if the economy
+     * is off, so the hub can have one. The hub's crates and Scratch Ticket still ask the economy
+     * sandbox themselves, so nothing that moves money opens outside an economy world.
+     */
+    private boolean arcadeInGamesWorld(CustomBlockType type, Player player) {
+        if (type != CustomBlockType.ARCADE) {
+            return false;
+        }
+        com.dierks.homecraft.games.GamesService games = plugin.games();
+        return games != null && games.config().enabled() && games.gate().worldAllowed(player.getWorld());
     }
 }

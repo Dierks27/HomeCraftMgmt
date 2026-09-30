@@ -191,6 +191,12 @@ public final class PackService {
             if (plugin.tokens() == null) {
                 return BuyResult.fail("The Arcade is offline.");
             }
+            // A pack bought with tokens rolls a rarity, so Take a break covers it like a crate
+            // (spec R1.11); a pack bought with dollars does not.
+            String paused = com.dierks.homecraft.arcade.ArcadeService.chanceRefusal(plugin, player, def.priceTokens());
+            if (paused != null) {
+                return BuyResult.fail(paused);
+            }
             // Build first, then charge: nothing to undo if the charge is refused.
             ItemStack item = packItems.pack(def, new Paid(Currency.TOKENS, def.priceTokens()));
             if (!plugin.tokens().spend(player.getUniqueId(), def.priceTokens(), TokenService.Source.PACK,

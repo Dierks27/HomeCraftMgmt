@@ -45,7 +45,40 @@ public final class TokenService {
         TRADE_IN("Card trade-in"),
         HUNT("Wild hunt"),
         ADMIN("Admin"),
-        REFUND("Refund");
+        REFUND("Refund"),
+        // The Games (0.35): one source per game, so /hcm tokens audit shows each game's real flow.
+        // Games of chance (tokens in and tokens back):
+        ARCADE_SLOTS("Ore Slots"),
+        ARCADE_TWENTY_ONE("Twenty-One"),
+        ARCADE_WHEEL("The Wheel"),
+        ARCADE_HILO("Higher or Lower"),
+        ARCADE_COIN_FLIP("Coin Flip"),
+        // Skill games (capped rewards only; they never take tokens):
+        GAMES_SWEEPER("Creeper Sweeper"),
+        GAMES_MERGE("Ore Merge"),
+        GAMES_SNAKE("Snake"),
+        GAMES_MATCH("Mini Match"),
+        GAMES_SIMON("Simon Says"),
+        GAMES_WHACK("Whack-a-Zombie"),
+        GAMES_CONNECT("Connect Four"),
+        GAMES_TICTACTOE("Tic-Tac-Toe"),
+        GAMES_PARKOUR("Parkour"),
+        GAMES_ELYTRA("Elytra course"),
+        GAMES_BOAT("Boat race"),
+        GAMES_GOLF("Mini golf"),
+        // Fresh Courses' own rewards (the Star Chart goals); its courses pay under their course's source.
+        GAMES_DAILY("Fresh Courses"),
+        // Race Night and the drop games (EVENTS-DROPPER-SPEC C1): the Dropper's courses, Race Night's
+        // server prizes and Falling Floors' rewards. Skill games: they never take tokens in.
+        GAMES_DROPPER("Dropper"),
+        GAMES_RACE_NIGHT("Race Night"),
+        GAMES_FLOORS("Falling Floors"),
+        // The Weekly Cup (EVENTS-OWNER-DECISIONS D2): a player's own entry into a course's week, the
+        // pool paid back by best time, and an entry given back. Not a game of chance: no chance
+        // element anywhere, so these never count as "tokens put into games of chance".
+        GAMES_CUP_ENTRY("Weekly Cup entry"),
+        GAMES_CUP_PRIZE("Weekly Cup prize"),
+        GAMES_CUP_REFUND("Weekly Cup refund");
 
         private final String label;
 

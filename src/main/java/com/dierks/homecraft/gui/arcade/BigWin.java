@@ -13,18 +13,30 @@ import java.time.Duration;
  * Card: a title on screen, a harmless firework at the player and a toast sound. The server-wide
  * shout is sent by the Arcade when the prize is granted, so it goes out even if nobody watches the
  * animation.
+ *
+ * <p>Public for the skill games (a new record, a first clear). Games of chance never use it: a
+ * chance result gets a private title at most, never "BIG WIN", a firework others can see or a
+ * shout (spec R1.4).
  */
-final class BigWin {
+public final class BigWin {
 
     private BigWin() {
     }
 
-    static void celebrate(Player player, String label) {
+    public static void celebrate(Player player, String label) {
+        celebrate(player, "&6&lBIG WIN!", label);
+    }
+
+    /**
+     * The same moment under the skill game's own headline ("Hole in one!"): a skill feat is
+     * celebrated for what it is, not called a win.
+     */
+    public static void celebrate(Player player, String headline, String label) {
         if (player == null || !player.isOnline()) {
             return;
         }
         try {
-            player.showTitle(Title.title(Text.of("&6&lBIG WIN!"), Text.of(label == null ? "" : label),
+            player.showTitle(Title.title(Text.of(headline == null ? "" : headline), Text.of(label == null ? "" : label),
                     Title.Times.times(Duration.ofMillis(200), Duration.ofMillis(2500), Duration.ofMillis(600))));
             player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.9f, 1.0f);
         } catch (RuntimeException ignored) {

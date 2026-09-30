@@ -273,10 +273,33 @@ class InvitesTest {
     @Test
     void switchingOffTheGameThatSentAKeyedInviteCallsItOff() {
         ride(alex, sam);
+        int scheduled = host.tasks.size(); // the invite's own 60 s expiry: it must NOT be what ends the invite
         games.fail(connect, new IllegalStateException("test: the game broke"));
-        host.runTasks();
+        // Run only what the failure scheduled (the switch-off a tick later). runTasks() would run the
+        // invite's expiry first, whatever its delay, and the test would pass with cancelGame doing nothing.
+        List<GamesKit.Task> switchOff = List.copyOf(host.tasks.subList(scheduled, host.tasks.size()));
+        assertFalse(switchOff.isEmpty(), "the failure schedules its switch-off");
+        for (GamesKit.Task t : switchOff) {
+            t.work.run();
+        }
         assertNull(games.invites().pending(sam.id), "the ride invite went with the game that sent it");
         assertEquals(List.of("rider:false"), answers, "and was answered no, once");
+        assertFalse(sam.heard().contains("run out"), "called off by the switch-off, not run out: " + sam.heard());
+        host.runTasks();
+        assertEquals(List.of("rider:false"), answers, "its expiry was cancelled with it: still one answer");
+    }
+
+    @Test
+    void cancelGameCallsOffWhatThatGameSentUnderAnyKeyAndNothingElse() {
+        ride(alex, sam); // a ride sent by Connect Four (standing in for the party races' game), key "rider"
+        assertNotNull(games.invites().send(kim.player, alex.player, flip, "rider", "Ride along", "a ride with Kim",
+                60, (invite, yes) -> answers.add("flip's ride:" + yes)), "the same key, sent by another game");
+        games.invites().cancelGame(connect.id()); // the switch-off's own step
+        assertNull(games.invites().pending(sam.id), "the keyed invite Connect Four sent is called off (#0)");
+        assertEquals(List.of("rider:false"), answers, "answered no, once, inside its own game's guard");
+        assertFalse(sam.heard().contains("run out"), "it didn't run out: it was called off: " + sam.heard());
+        assertNotNull(games.invites().pending(alex.id), "the same key sent by a game still on stays");
+        assertEquals(0, host.severe(), "nothing failed");
     }
 
     @Test

@@ -14,6 +14,7 @@ import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.gen.NewCoursesNudge;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.TimeTrials;
+import com.dierks.homecraft.games.trial.TrackChunks;
 import com.dierks.homecraft.gui.Menus;
 import com.dierks.homecraft.gui.games.daily.DailyLookup;
 import com.dierks.homecraft.gui.games.event.RaceNightMenu;
@@ -93,7 +94,7 @@ public final class RaceNight implements Game {
     private List<EventSchedule.Entry> entries = List.of();
     /** The schedule as written when {@link #entries} was read (a reload that changes it is read again). */
     private List<String> entriesFrom = List.of();
-    /** Scheduled ids already warned about (a skip is logged once). */
+    /** Scheduled ids already warned about (a skip, and a track read through a load, each logged once a night). */
     private final Set<String> warned = new HashSet<>();
     /** Each online player's news toggle, read once a night. */
     private final Map<UUID, Boolean> news = new HashMap<>();
@@ -247,6 +248,8 @@ public final class RaceNight implements Game {
         bars.clear();
         watchers.clear();
         news.clear();
+        loadingFor = null; // a wait on a track's chunks ends with the game (its callback isn't run once stopped)
+        waiting = null;
     }
 
     /** Why the game stopped with the server still up: its switch, Time Trials', or a problem. */
@@ -326,13 +329,44 @@ public final class RaceNight implements Game {
 
     // ---- the schedule ---------------------------------------------------------------------------
 
-    /** Make the next scheduled night when its heads-up (or its join window) is due. */
-    private void schedule() {
+    /** Make the next scheduled night when its heads-up (or its join window) is due: once a second from the clock. */
+    void schedule() {
+        pass(false);
+    }
+
+    /**
+     * One pass of the schedule; {@code chunksIn}: run because the chunks a read waited for are in
+     * ({@link #trackIn}), not by the clock. Never inside itself: a callback that runs during a pass (a
+     * load Paper hands back already done) has the pass run once more right after it, with those chunks in.
+     */
+    private void pass(boolean chunksIn) {
+        if (scheduling) {
+            again = true;
+            return;
+        }
+        scheduling = true;
+        try {
+            boolean in = chunksIn;
+            for (int i = 0; i <= TrackChunks.MAX_WAITS + 1; i++) { // bounded anyway: loadRounds ends in a read
+                again = false;
+                scheduleNow(in);
+                if (!again || night != null) {
+                    break;
+                }
+                in = true;
+            }
+        } finally {
+            scheduling = false;
+        }
+    }
+
+    /** {@link #pass}'s work. */
+    private void scheduleNow(boolean chunksIn) {
         if (paused()) {
             return;
         }
         RaceNightSettings s = settings();
-        EventSchedule.Occurrence o = next();
+        EventSchedule.Occurrence o = nextNight.get();
         if (o == null) {
             return;
         }
@@ -349,12 +383,34 @@ public final class RaceNight implements Game {
             log(Level.WARNING, "Race Night: could not check " + o.id(), e);
             return;
         }
-        // round 2, G2 #4 (fx3-G2): read the track from loaded chunks only; while they load, ask again next second
-        Tracks.Found t = s.autoCourse() ? tracks.pick(o.id(), s.races(), s.minRacers(), s.maxRacers(), false)
-                : tracks.find(s.course(), s.races(), s.minRacers(), s.maxRacers(), false);
-        if (t.loading()) {
+        // round 2, G2 #4 (fx3-G2): read the track from loaded chunks only. Round 3 (fx3-2): while they load, the
+        // read is done again the moment they are all in; chunks that still don't stay loaded after
+        // MAX_WAITS such reads, or TRACK_LOAD_MS, are read once through a load, with a WARN: never a lost night
+        boolean mine = o.id().equals(loadingFor);
+        boolean overdue = mine && (loadRounds >= TrackChunks.MAX_WAITS || now - loadingSince >= TRACK_LOAD_MS);
+        Tracks.Wait wait = overdue ? null : new Tracks.Wait(this::trackIn);
+        Tracks.Found t = s.autoCourse() ? tracks.pick(o.id(), s.races(), s.minRacers(), s.maxRacers(), wait)
+                : tracks.find(s.course(), s.races(), s.minRacers(), s.maxRacers(), wait);
+        if (t.loading() && wait != null) {
+            if (!mine) {
+                loadingFor = o.id();
+                loadingSince = now;
+                loadRounds = 0;
+            } else if (chunksIn) {
+                loadRounds++; // the chunks it waited for came in, and the read still needed more (or lost some)
+            }
+            waiting = wait; // a clock pass meanwhile asks again: only the latest wait reads again
+            wait.asked();
             return;
         }
+        if (overdue && warned.add(CHUNKS_WARNED + o.id())) {
+            log(Level.WARNING, "Race Night " + o.id() + ": its track's chunks didn't come in and stay loaded ("
+                    + loadRounds + " round(s) of loads, " + (now - loadingSince) / 1000 + " s; is"
+                    + " chunks.delay-chunk-unloads-by in paper-world-defaults.yml set very low?) - read them once"
+                    + " with a load on the main thread, so the night isn't lost", null);
+        }
+        loadingFor = null;
+        waiting = null;
         if (t.problem() != null) {
             trackFailedAt.put(o.id(), now);
             if (warned.add(o.id())) {
@@ -386,6 +442,44 @@ public final class RaceNight implements Game {
         nextAt = now;
         nextFor = version;
         return nextCached;
+    }
+
+    /**
+     * Round 3 (fx3-2): every chunk a read of the schedule waited for is in (on the main thread, in the
+     * game's guard). Read the track again now, while they are sure to be loaded: a server set to unload
+     * chunks at once ({@code chunks.delay-chunk-unloads-by} 0) has dropped them again by the next
+     * once-a-second pass. A wait a later pass replaced is let go (that pass asked again).
+     */
+    private void trackIn(Tracks.Wait w) {
+        if (w == waiting && night == null) {
+            pass(true);
+        }
+    }
+
+    /**
+     * How long the schedule waits for a track's chunks before it reads them once through a load on the
+     * main thread, with a WARN (ms): chunks that never come in never cost a night, and never silently.
+     * Chunks that come in but don't stay give up sooner, after {@link TrackChunks#MAX_WAITS} reads.
+     */
+    static final long TRACK_LOAD_MS = 10_000L;
+    /** What {@link #warned} keeps a night's "its chunks didn't stay loaded" WARN under (once a night). */
+    private static final String CHUNKS_WARNED = "chunks:";
+    /** The scheduled id whose track is waiting on its chunks, since when, and its reads that still needed more. */
+    private String loadingFor;
+    private long loadingSince;
+    private int loadRounds;
+    /** The wait whose chunks the schedule reads again when they are in; {@code null} for none. */
+    private Tracks.Wait waiting;
+    /** Whether a {@link #pass} is running, and whether a callback asked for another one meanwhile. */
+    private boolean scheduling;
+    private boolean again;
+
+    /** The next night the schedule makes: {@link #next()}; the tests give their own (no plugin, no schedule). */
+    private java.util.function.Supplier<EventSchedule.Occurrence> nextNight = this::next;
+
+    /** The tests: the night the schedule makes from now on. */
+    void nextNight(java.util.function.Supplier<EventSchedule.Occurrence> next) {
+        this.nextNight = next;
     }
 
     /** A night whose track couldn't be raced is looked at again this often (ms), not every second. */

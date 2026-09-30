@@ -23,6 +23,11 @@ import java.util.List;
  * do; then some become 2s (medium and hard: the Final Drop first, each moving along its leg if it
  * must) within the tier's count of 2s and its whole fall.
  *
+ * <p><b>The Final Drop in front of the stand</b> (§2.5: 43-70 before the finish) comes first where a
+ * leg holds one ({@link #inFront}), and the others go on the legs before it; where none does (easy
+ * and hard: their inner straights are shorter than a run-up and a landing strip) it is the last drop
+ * that fits, and {@link #finalInFront} says so, so its sign doesn't promise the finish next.
+ *
  * <p><b>The finish</b> is on the last leg, the inner ring round the stand, 12-30 blocks from the
  * platform's edge (V11), with 14 blocks of run-out and a 6-block sand paddock after it. The Final
  * Drop (the last) keeps Z(d) + 3 from the finish's middle from every block of its edge, across the
@@ -45,6 +50,11 @@ final class TrackProfile {
     static final double FINISH_FAR = DownhillValidator.FINISH_FAR - 0.5;
     /** The margin kept over Z(d) + 3 from the Final Drop to the finish. */
     static final double FINAL_MARGIN = 0.5;
+    /**
+     * The Final Drop is "in front of the stand" when the finish is at most this far after it along
+     * the track (§2.5: 43-70). Only then does its sign say "Then the gold finish line!".
+     */
+    static final double FINAL_NEAR = 70;
 
     /** One drop: its leg, the s of its edge (upper before, lower after) and how far it falls. */
     record Lip(int leg, double s, int drop) {
@@ -111,6 +121,12 @@ final class TrackProfile {
         return lips.isEmpty() ? null : lips.get(lips.size() - 1);
     }
 
+    /** Whether the Final Drop is in front of the stand: the finish at most {@link #FINAL_NEAR} after it. */
+    boolean finalInFront() {
+        Lip l = last();
+        return l != null && finish - l.s() <= FINAL_NEAR + 1e-9;
+    }
+
     /** The total fall. */
     int descent() {
         int d = 0;
@@ -139,6 +155,10 @@ final class TrackProfile {
         }
         List<Lip> lips = new ArrayList<>();
         List<Double> posts = new ArrayList<>();
+        if (inFront(r, path, level, finish, lips, posts)) {
+            upgrade(r, path, level, lips, posts, finish);
+            return of(path, level, top, lips, finish);
+        }
         int legs = path.legs();
         for (int k = 1; k < legs && lips.size() < level.maxDrops(); k++) {
             List<Lip> ok = new ArrayList<>();
@@ -174,6 +194,76 @@ final class TrackProfile {
         }
         upgrade(r, path, level, lips, posts, finish);
         return of(path, level, top, lips, finish);
+    }
+
+    /**
+     * The Final Drop in front of the stand, placed first (§2.5; review B1): a seeded one of the places
+     * a 1-block drop may have its edge that are Z(d) + 3 from the finish and at most
+     * {@link #FINAL_NEAR} before it, then the other drops on the legs before it, each keeping it where
+     * it is ({@link #keeps}). False, with {@code lips} left empty, when there is no such place or the
+     * tier's fewest drops don't fit before one; then the drops are drawn leg by leg and the Final
+     * Drop is the last that fits, which on easy and hard is always so: easy's fifth straight (25-30)
+     * and hard's inner ones (19-38) are shorter than a run-up and a landing strip (packed 22, blue
+     * 33), and a drop on the finish's own side is too near it.
+     */
+    private static boolean inFront(GenRandom r, TrackPath path, BoatPlanner.Level level, double finish,
+                                   List<Lip> lips, List<Double> posts) {
+        List<Lip> near = new ArrayList<>();
+        List<Double> nearPost = new ArrayList<>();
+        for (int k = 1; k < path.legs(); k++) {
+            List<Lip> ok = new ArrayList<>();
+            List<Double> okPost = new ArrayList<>();
+            options(path, level, List.of(), List.of(), k, 1, finish, ok, okPost);
+            for (int i = 0; i < ok.size(); i++) {
+                Lip c = ok.get(i);
+                if (finish - c.s() <= FINAL_NEAR && finalFits(path, level, c, finish)) {
+                    near.add(c);
+                    nearPost.add(okPost.get(i));
+                }
+            }
+        }
+        if (near.isEmpty()) {
+            return false;
+        }
+        int pick = r.nextInt(near.size());
+        Lip fin = near.get(pick);
+        for (int k = 1; k < fin.leg() && lips.size() + 1 < level.maxDrops(); k++) {
+            List<Lip> ok = new ArrayList<>();
+            List<Double> okPost = new ArrayList<>();
+            options(path, level, lips, posts, k, 1, finish, ok, okPost);
+            List<Lip> keep = new ArrayList<>();
+            List<Double> keepPost = new ArrayList<>();
+            for (int i = 0; i < ok.size(); i++) {
+                if (keeps(path, level, ok.get(i), okPost.get(i), fin)) {
+                    keep.add(ok.get(i));
+                    keepPost.add(okPost.get(i));
+                }
+            }
+            if (keep.isEmpty()) {
+                continue;
+            }
+            int i = r.nextInt(keep.size());
+            lips.add(keep.get(i));
+            posts.add(keepPost.get(i));
+        }
+        if (lips.size() + 1 < level.minDrops()) {
+            lips.clear();
+            posts.clear();
+            return false;
+        }
+        lips.add(fin);
+        posts.add(nearPost.get(pick));
+        return true;
+    }
+
+    /**
+     * Whether drop {@code c} (its checkpoints' crossing ending at {@code post}) leaves the next drop
+     * {@code next} where it is: Z(d) + 12 on, its own checkpoint after that crossing, outside the zone.
+     */
+    private static boolean keeps(TrackPath path, BoatPlanner.Level level, Lip c, double post, Lip next) {
+        return next.s() >= c.s() + BoatEnvelope.zone(c.drop()) + BoatPlanner.LIP_GAP
+                && next.s() - level.checkpointRadius() - 0.5 >= post
+                && apart(path, level, List.of(c), next);
     }
 
     /**
@@ -343,7 +433,8 @@ final class TrackProfile {
     /**
      * Some drops become 2s (medium and hard): the Final Drop first, then others in a seeded order,
      * each only while its landing strip, its checkpoints' crossing, the spacing to the next drop and
-     * that drop's being outside its zone, the tier's count of 2s and the total fall all still hold.
+     * that drop's being outside its zone, the tier's count of 2s and the total fall all still hold
+     * (and a Final Drop in front of the stand stays in front of it).
      */
     private static void upgrade(GenRandom r, TrackPath path, BoatPlanner.Level level, List<Lip> lips,
                                 List<Double> posts, double finish) {
@@ -404,14 +495,12 @@ final class TrackProfile {
             return Double.NaN;
         }
         if (i + 1 < lips.size()) {
-            Lip next = lips.get(i + 1);
-            if (next.s() < l.s() + BoatEnvelope.zone(l.drop()) + BoatPlanner.LIP_GAP
-                    || next.s() - level.checkpointRadius() - 0.5 < post
-                    || !apart(path, level, List.of(l), next)) {
+            if (!keeps(path, level, l, post, lips.get(i + 1))) {
                 return Double.NaN;
             }
-        } else if (!finalFits(path, level, l, finish)) {
-            return Double.NaN;
+        } else if (!finalFits(path, level, l, finish)
+                || (finish - lips.get(i).s() <= FINAL_NEAR && finish - l.s() > FINAL_NEAR)) {
+            return Double.NaN; // too near the finish, or a Final Drop in front of the stand moved away from it
         }
         return post;
     }

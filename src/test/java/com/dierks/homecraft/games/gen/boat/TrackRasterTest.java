@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -115,6 +116,46 @@ class TrackRasterTest {
                     }
                 }
             }
+        }
+    }
+
+    @Test
+    void aBendHasSignSpotsOnItsWallTopOffTheTrackFacingTheBoatsComing() {
+        // Review B2: a piece just past a bend has its sign window on the bend, so a bend has sign spots.
+        for (BoatPlanner.Level level : BoatPlanner.Level.values()) {
+            int bends = 0;
+            int spots = 0;
+            for (MountainRuns.Run run : MountainRuns.of(level).subList(0, 10)) {
+                BoatPlanner.Made m = run.made();
+                TrackRaster r = new TrackRaster(run.raster().half, m.path, m.profile, m.pieces, level);
+                r.terrace = BoatScenery.terraces(r);
+                r.blocks();
+                r.walls();
+                for (TrackPath.Seg g : m.path.segs) {
+                    if (!g.arc || g.s1() > m.profile.finish) {
+                        continue;
+                    }
+                    for (double s = g.s0 + 1; s <= g.s1() - 1; s += 1) {
+                        bends++;
+                        int[] spot = r.signSpot(s);
+                        if (spot == null) {
+                            continue;
+                        }
+                        spots++;
+                        String at = level + " day " + run.day() + ": the spot " + (int) Math.round(s - g.s0)
+                                + " into the bend at s " + Math.round(g.s0);
+                        assertFalse(r.drive(spot[0], spot[2]), at + " is never over the track");
+                        assertTrue(r.beside(spot[0], spot[2]), at + " is on the wall beside it");
+                        assertTrue(r.topOf(spot[0], spot[2]) == spot[1] - 1, at + " stands on the wall top");
+                        assertTrue(spot[1] <= r.top, at + " is under the stand's floor");
+                        double[] t = m.path.tangent(s);
+                        int want = Math.floorMod((int) Math.round(TrackRaster.yaw(-t[0], -t[1]) / 22.5), 16);
+                        assertEquals(want, spot[3], at + " faces back along the bend, toward the boats coming");
+                    }
+                }
+            }
+            assertTrue(spots >= bends * 0.9, level + ": nearly every place on a bend has a wall top for a sign: "
+                    + spots + " of " + bends);
         }
     }
 

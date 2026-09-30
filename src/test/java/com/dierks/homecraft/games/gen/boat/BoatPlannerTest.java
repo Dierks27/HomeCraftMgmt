@@ -95,7 +95,8 @@ class BoatPlannerTest {
             long seed = GenSeed.seed(SECRET, 20_000 + day, SLOT.id(), 0);
             try {
                 long t0 = System.nanoTime();
-                Plan p = PLANNER.plan(input(half, seed, level.id()));
+                BoatPlanner.Made m = BoatPlanner.made(input(half, seed, level.id()));
+                Plan p = m.finished(m.work, BoatPlanner.TRIES);
                 millis.add((System.nanoTime() - t0) / 1_000_000);
                 plans.incrementAndGet();
                 hashes.add(p.hash());
@@ -103,6 +104,9 @@ class BoatPlannerTest {
                     byThird.incrementAndGet();
                 }
                 String why = problem(p, level);
+                if (why == null) {
+                    why = signProblem(m);
+                }
                 if (why != null) {
                     failures.add("day " + day + " half " + half + ": " + why);
                 }
@@ -162,6 +166,64 @@ class BoatPlannerTest {
         return null;
     }
 
+    /**
+     * Every sign a plan's own pieces ask for (§8), null when all are up: each drop's and each piece's
+     * (but a boost strip's) just before it, and the Final Drop's words only where the finish follows
+     * within 70 blocks (§2.5's 43-70), since "Then the gold finish line!" must be true.
+     */
+    static String signProblem(BoatPlanner.Made m) {
+        List<SignText> signs = m.plan.signs();
+        for (TrackPieces.Piece q : m.pieces.list) {
+            List<String> want = switch (q.kind) {
+                case SAND_PIT -> GenCopy.boatSandPit();
+                case SPLIT -> GenCopy.boatSplit();
+                case CAVE -> GenCopy.boatIceCave();
+                case FOREST -> GenCopy.boatForest();
+                case BOOST -> null;
+            };
+            if (want != null && !signedBefore(m, signs, want, q.s1)) {
+                return "no " + want.get(0) + " sign before the " + q.kind.word + " at s " + Math.round(q.s1) + " (leg "
+                        + q.leg + ", " + Math.round(q.s1 - m.path.straight(q.leg).s0) + " into its straight)";
+            }
+        }
+        TrackProfile profile = m.profile;
+        for (int i = 0; i < profile.lips.size(); i++) {
+            TrackProfile.Lip l = profile.lips.get(i);
+            boolean last = i == profile.lips.size() - 1;
+            List<String> want = last && profile.finish - l.s() <= 70 ? GenCopy.boatFinalDrop() : GenCopy.boatDrop(l.drop());
+            if (!signedBefore(m, signs, want, l.s())) {
+                return "no " + want.get(0) + " sign before the drop at s " + Math.round(l.s()) + " (leg " + l.leg() + ")";
+            }
+        }
+        long finals = signs.stream().filter(s -> s.lines().equals(GenCopy.boatFinalDrop())).count();
+        boolean inFront = profile.last() != null && profile.finish - profile.last().s() <= 70;
+        if (finals != (inFront ? 1 : 0)) {
+            return finals + " FINAL DROP! signs, but the finish is " + Math.round(profile.finish - profile.last().s())
+                    + " after the last drop (the words promise the gold finish line next: at most 70)";
+        }
+        return null;
+    }
+
+    /** Whether a sign saying {@code lines} stands on a wall beside the track 3-10 blocks before {@code s}. */
+    private static boolean signedBefore(BoatPlanner.Made m, List<SignText> signs, List<String> lines, double s) {
+        Box half = m.plan.half();
+        double reach = m.level.width() / 2.0 + BoatPlanner.MAX_EXTRA + 2.5;
+        for (SignText sign : signs) {
+            if (!sign.lines().equals(lines)) {
+                continue;
+            }
+            double x = sign.x() - half.minX() + 0.5;
+            double z = sign.z() - half.minZ() + 0.5;
+            for (double u = s - BoatPlanner.SIGN_BEFORE; u <= s - BoatPlanner.SIGN_NEAR + 1e-9; u += 0.5) {
+                double[] c = m.path.at(u);
+                if (Math.hypot(c[0] - x, c[1] - z) <= reach) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /** How many drops a plan's course has: the legs whose next target is lower (Race Night's hype count). */
     static int drops(Plan p) {
         Course c = course(p);
@@ -196,9 +258,9 @@ class BoatPlannerTest {
         // Mountain Run (Course Variety §2) without BoatSim's V14 (the §11 schedule valve); V14 comes as
         // algo 4 after the owner's boat test strip (Gate 0), and re-pins these.
         String golden = """
-                easy 0a5358fb498a c56924f91ec5 19290e52a7fc
-                medium d866de4c5eea 90a90c4b18ce 1ca909467077
-                hard 5285a27b20c3 a7b18a56f7ae 1a1c1458d1a9
+                easy ad32a53c18a5 e9dc62ce8f83 d1c4fce032ad
+                medium 0f32482b7197 7a96ea1288f6 d9e3833052c0
+                hard 8724d626bd2c 43e06d7b4237 b0fbd41ccfc5
                 """;
         long[] seeds = {1L, 0xC0FFEEL, 0x5EED5EEDL};
         StringBuilder made = new StringBuilder();
@@ -484,6 +546,55 @@ class BoatPlannerTest {
                     assertTrue(seen.getOrDefault("bigs", 0) > 0, "and Big Drops: " + seen);
                 }
             }
+        }
+    }
+
+    @Test
+    void theFinalDropSignStandsOnlyWhereTheGoldFinishLineComesNext() throws GenFailed {
+        // Review B1: the Final Drop is the last drop the landing strips let in, which on easy (two legs
+        // on) and hard (a lap on) is far from the finish. "FINAL DROP! / Then the gold / finish line!"
+        // there would be untrue, so such a drop gets its own HOP! or BIG DROP! sign.
+        for (BoatPlanner.Level level : BoatPlanner.Level.values()) {
+            int inFront = 0;
+            for (int day = 0; day < 40; day++) {
+                long seed = GenSeed.seed(SECRET, 20_000 + day, SLOT.id(), 0);
+                BoatPlanner.Made m = BoatPlanner.made(input(day % 2 == 0 ? 'A' : 'B', seed, level.id()));
+                TrackProfile.Lip last = m.profile.last();
+                double after = m.profile.finish - last.s();
+                long finals = m.plan.signs().stream().filter(s -> s.lines().equals(GenCopy.boatFinalDrop())).count();
+                assertEquals(after <= 70 ? 1 : 0, finals, level + " day " + day + ": the finish is " + Math.round(after)
+                        + " after the Final Drop, so " + (after <= 70 ? "one FINAL DROP! sign" : "no FINAL DROP! sign"));
+                if (after <= 70) {
+                    inFront++;
+                    assertTrue(after >= BoatEnvelope.zone(last.drop()) + 3, level + ": and it is Z(d) + 3 before the finish");
+                } else {
+                    long own = m.plan.signs().stream().filter(s -> s.lines().equals(GenCopy.boatDrop(last.drop()))).count();
+                    assertTrue(own >= 1, level + " day " + day + ": the far Final Drop has its own drop sign");
+                }
+            }
+            if (level == BoatPlanner.Level.MEDIUM) {
+                assertTrue(inFront >= 8, "medium's Final Drop is in front of the stand where its sixth leg holds one: "
+                        + inFront + " of 40");
+            }
+        }
+    }
+
+    @Test
+    void everyDropAndEveryPieceHasItsSignJustBeforeIt() throws GenFailed {
+        // Review B2: a piece starting a few blocks into its straight had its whole sign window on the
+        // bend before it, and bends had no sign spots, so a quarter of splits went unsigned.
+        for (BoatPlanner.Level level : BoatPlanner.Level.values()) {
+            List<String> bad = new ArrayList<>();
+            for (int day = 0; day < 100; day++) {
+                long seed = GenSeed.seed(SECRET, 20_000 + day, SLOT.id(), 0);
+                BoatPlanner.Made m = BoatPlanner.made(input(day % 2 == 0 ? 'A' : 'B', seed, level.id()));
+                String why = signProblem(m);
+                if (why != null) {
+                    bad.add("day " + day + ": " + why);
+                }
+            }
+            assertTrue(bad.isEmpty(), level + ": every drop and piece is signed 3-10 blocks before it (§8); "
+                    + bad.size() + " days not, first " + bad.subList(0, Math.min(5, bad.size())));
         }
     }
 

@@ -1022,12 +1022,14 @@ final class TrackRaster {
     /**
      * A standing sign on the wall top beside the lane {@code s} along, facing the boats coming; the
      * outward wall first. Its (x, y, z) and rotation, or null when neither wall has room.
+     *
+     * <p>On a bend too (review B2): a piece may start a few blocks into its straight, so the 3-10
+     * blocks before it are on the bend, and it would get no sign. The wall is found the same way
+     * (the column one past the lane's edge along the normal, which on an arc points at its centre),
+     * {@link #wallAt} keeps it off every drive cell, and the sign faces back along the tangent there.
      */
     int[] signSpot(double s) {
-        TrackPath.Seg g = path.segAt(s);
-        if (g.arc) {
-            return null;
-        }
+        double[] t = path.tangent(s);
         for (int side = -1; side <= 1; side += 2) {
             int[] w = wallAt(s, side);
             if (w == null) {
@@ -1037,7 +1039,7 @@ final class TrackRaster {
             if (y > top || !empty(w[0], y, w[1]) || y <= h0) {
                 continue;
             }
-            int rot = Math.floorMod((int) Math.round(yaw(-g.tx, -g.tz) / 22.5), 16);
+            int rot = Math.floorMod((int) Math.round(yaw(-t[0], -t[1]) / 22.5), 16);
             return new int[]{w[0], y, w[1], rot};
         }
         return null;

@@ -96,6 +96,44 @@ class TrackProfileTest {
     }
 
     @Test
+    void theFinalDropIsInFrontOfTheStandWhereverTheLandingStripsLetOneBe() {
+        // Review B1 (§2.5: the Final Drop 43-70 before the finish, in front of the stand). The landing
+        // strips are fixed (22 / 26 packed, 33 / 41 blue; the schedule valve keeps them), and they
+        // decide where a drop can be: on medium the sixth leg often holds one, so the Final Drop goes
+        // there first; easy's fifth leg (25-30) and hard's inner legs (19-38) never hold a run-up and a
+        // landing strip, so theirs is the last drop that fits, pinned here so it never creeps earlier.
+        for (BoatPlanner.Level level : BoatPlanner.Level.values()) {
+            int inFront = 0;
+            int made = 0;
+            for (int day = 0; day < 150; day++) {
+                Object[] d = drawn(level, day);
+                if (d == null) {
+                    continue;
+                }
+                made++;
+                TrackProfile p = (TrackProfile) d[1];
+                TrackProfile.Lip last = p.last();
+                double after = p.finish - last.s();
+                String at = level + " day " + day + ": the Final Drop is " + Math.round(after) + " before the finish";
+                assertTrue(after >= BoatEnvelope.zone(last.drop()) + 3, at + ", at least Z(d) + 3");
+                if (after <= 70) {
+                    inFront++;
+                }
+                switch (level) {
+                    case EASY -> assertTrue(after <= 135, at + ": on the fourth leg, two before the finish");
+                    case MEDIUM -> assertTrue(after <= 125, at + ": on the fifth leg or the sixth");
+                    case HARD -> assertTrue(after <= 300, at + ": on the fourth leg or the fifth");
+                }
+            }
+            if (level == BoatPlanner.Level.MEDIUM) {
+                assertTrue(inFront >= made / 4, "medium: the Final Drop is 43-70 before the finish on at least a quarter"
+                        + " of days (where the sixth leg holds it and the tier's drops fit before it): " + inFront + " of "
+                        + made);
+            }
+        }
+    }
+
+    @Test
     void theLevelStepsDownAtEachEdgeAndNowhereElse() {
         Object[] d = drawn(BoatPlanner.Level.HARD, 4);
         assertNotNull(d, "a hard profile");

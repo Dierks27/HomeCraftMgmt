@@ -89,6 +89,14 @@ public final class BoatPlanner implements Planner {
      * gets 4 drops, medium 5-6, hard 4-5 (its blue landing strips fit the outer legs only, and a
      * Final Drop on the finish's own side would be too near it). Sand pits and caves need a flat
      * stretch outside every flight zone, so they are common on hard and rare on easy and medium.
+     *
+     * <p><b>The Final Drop</b> (§2.5: 43-70 before the finish, in front of the stand) is placed there
+     * first wherever a leg holds it: on medium, the sixth leg on about a third of seeds. Easy's fifth
+     * straight (25-30) and hard's inner ones (19-38) are shorter than a run-up and a landing strip, so
+     * their Final Drop is the last that fits: two legs before the finish on easy (about 110-130
+     * blocks), a lap on hard (about 265-295, the last five legs flat but for the pieces). Its sign is
+     * then the drop's own, not "Then the gold finish line!". Only shorter landing strips (from the
+     * boat test strip's flights, algo 4) or another spiral can bring it nearer; that is the owner's call.
      */
     public enum Level {
         EASY("easy", 9, 9, 16, new int[]{32, 30, 24, 16, 17, 17}, 20, 6, false, 4, 5, 70, 1, 0,
@@ -338,6 +346,8 @@ public final class BoatPlanner implements Planner {
     /** Signs stand this far before their piece (and no nearer than {@link #SIGN_NEAR}). */
     static final int SIGN_BEFORE = 10;
     static final int SIGN_NEAR = 3;
+    /** Two signs stand at least this far apart along the track. */
+    static final int SIGN_APART = 6;
 
     /** Tries before {@code SAFE_SPIRAL}; after ten, fewer pieces, after fifteen only the basics. */
     public static final int TRIES = 20;
@@ -362,6 +372,12 @@ public final class BoatPlanner implements Planner {
 
     @Override
     public Plan plan(PlanInput in) throws GenFailed {
+        Made m = made(in);
+        return m.finished(m.work, TRIES);
+    }
+
+    /** The proven layout for {@code in} with what it was made from (its path, drops and pieces; the tests read them). */
+    static Made made(PlanInput in) throws GenFailed {
         Level level = Level.of(in.slot().normalise(in.tierOrMix()));
         if (level == null) {
             throw new GenFailed("'" + in.tierOrMix() + "' isn't an Ice Boat tier (easy, medium or hard)");
@@ -385,7 +401,8 @@ public final class BoatPlanner implements Planner {
                 m = null; // a try that can't come together is just a failed try: the next one, or the safe spiral
             }
             if (m != null && DownhillValidator.problems(m.plan, level.id()).isEmpty()) {
-                return m.finished(t + 1, TRIES);
+                m.work = t + 1;
+                return m;
             }
         }
         in.checkCancelled();
@@ -393,7 +410,8 @@ public final class BoatPlanner implements Planner {
         if (safe == null || !DownhillValidator.problems(safe.plan, level.id()).isEmpty()) {
             throw new GenFailed("no " + level.id() + " Mountain Run found for seed " + GenSeed.shortHex(in.seed()));
         }
-        return safe.finished(TRIES + 1, TRIES);
+        safe.work = TRIES + 1;
+        return safe;
     }
 
     /** The layout the tag names, made again from its seed (the tier in {@code in} first, then the others). */
@@ -568,6 +586,8 @@ public final class BoatPlanner implements Planner {
         final int checkpoints;
         final int trees;
         final double length;
+        /** The work it took: its try, or one more than the tries for the safe spiral ({@link #made}). */
+        long work;
 
         Made(PlanInput in, Level level, TrackPath path, TrackProfile profile, TrackPieces pieces, Plan plan,
              int checkpoints, int trees, double length) {
@@ -659,7 +679,13 @@ public final class BoatPlanner implements Planner {
         b[5] = hi;
     }
 
-    /** The signs: the start's, one before each drop, piece and sandy bend, and the stand's. */
+    /**
+     * The signs: the start's, one before each drop, piece and sandy bend, and the stand's. The last
+     * drop's says "FINAL DROP! / Then the gold / finish line!" only when it is in front of the stand
+     * ({@link TrackProfile#finalInFront}); one farther up the mountain (always on easy and hard, whose
+     * landing strips don't fit the inner legs) has its own HOP! or BIG DROP!, so no sign promises the
+     * finish a lap early.
+     */
     static List<SignText> signs(TrackRaster t, TrackPieces pieces) {
         List<SignText> out = new ArrayList<>();
         List<double[]> used = new ArrayList<>();
@@ -667,8 +693,8 @@ public final class BoatPlanner implements Planner {
         for (int i = 0; i < t.profile.lips.size(); i++) {
             TrackProfile.Lip l = t.profile.lips.get(i);
             boolean last = i == t.profile.lips.size() - 1;
-            sign(t, out, used, l.s() - SIGN_BEFORE, l.s() - SIGN_NEAR, last ? GenCopy.boatFinalDrop()
-                    : GenCopy.boatDrop(l.drop()));
+            sign(t, out, used, l.s() - SIGN_BEFORE, l.s() - SIGN_NEAR, last && t.profile.finalInFront()
+                    ? GenCopy.boatFinalDrop() : GenCopy.boatDrop(l.drop()));
         }
         for (TrackPieces.Piece p : pieces.list) {
             List<String> lines = switch (p.kind) {
@@ -693,7 +719,11 @@ public final class BoatPlanner implements Planner {
         return out;
     }
 
-    /** A sign between {@code from} and {@code to} along the track, on a wall top, apart from the others. */
+    /**
+     * A sign between {@code from} and {@code to} along the track, on a wall top (a straight's or a
+     * bend's), apart from the others: a place too near another sign is passed over for the next one,
+     * never the sign itself.
+     */
     private static void sign(TrackRaster t, List<SignText> out, List<double[]> used, double from, double to,
                              List<String> lines) {
         for (double s = from; s <= to; s += 1) {
@@ -702,10 +732,10 @@ public final class BoatPlanner implements Planner {
             }
             boolean crowded = false;
             for (double[] u : used) {
-                crowded |= Math.abs(u[0] - s) < 6;
+                crowded |= Math.abs(u[0] - s) < SIGN_APART;
             }
             if (crowded) {
-                return;
+                continue;
             }
             int[] spot = t.signSpot(s);
             if (spot == null) {

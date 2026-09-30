@@ -172,7 +172,10 @@ public final class CourseCodec {
                 yaml != null && adventure(yaml));
     }
 
-    /** Whether the text says {@code adventure: true}; throws {@link IllegalArgumentException} if it says something else. */
+    /**
+     * Whether the text says {@code adventure: true}; throws {@link IllegalArgumentException} if it
+     * says something else.
+     */
     private static boolean adventure(YamlConfiguration yaml) {
         Object raw = yaml.get(ADVENTURE);
         if (raw == null) {

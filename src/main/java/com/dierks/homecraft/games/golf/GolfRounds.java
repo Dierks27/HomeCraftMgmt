@@ -327,7 +327,7 @@ public final class GolfRounds {
         r.state = LiveRound.State.PLAYING;
         World world = p.getWorld();
         GolfCourse.Hole h = r.hole();
-        LiveBlocks blocks = LiveBlocks.forCourse(world, r.course); // sand only on a generated algo-3+ course
+        LiveBlocks blocks = LiveBlocks.forCourse(world, r.course); // Adventure rules: an algo-3+ layout, or kept one
         r.tee(blocks);
         BallPhysics.settle(r.ball, blocks);
         r.markSpot();

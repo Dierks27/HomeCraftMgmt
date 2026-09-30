@@ -38,8 +38,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * plot, each leaf at vanilla's distance, the tee sign on its wall, the flag three over the cup; Easy
  * never has water in play, and scenery never enters the physics grid. On the real physics no putt
  * from any spot a ball can rest leaves a hole (the rail a wall's lower block makes is closed where a
- * ball can reach it); each template's features are where it says; and each passes its first attempt
- * often enough (a quarter of the time; 2,000 seeds under {@code -Phcm.slow}).
+ * ball can reach it, a ledge's included), no wild putt from the tee leaves an accepted hole or leaves
+ * the ball sitting on a pond (the review of Course Variety); each template's features are where it
+ * says; and each passes its first attempt often enough (a quarter of the time; 2,000 seeds under
+ * {@code -Phcm.slow}).
  */
 class HoleTemplateTest {
 
@@ -443,6 +445,30 @@ class HoleTemplateTest {
         }).toList();
         assertEquals(List.of(), bad, "a wild putt may find a pond (a stroke, and the ball comes back), but it never"
                 + " leaves a hole and never leaves the ball sitting on the water");
+    }
+
+    /**
+     * Known, and left for a later physics fix under an ALGO bump (the review of Course Variety,
+     * minor; the owner is told in C-G2): a tap that wedges the ball's edge against a half-block
+     * step — a sunken bunker's lip here, a hump's or a hill's slab row, a ramp's — can bounce it on
+     * the spot until the roll cap stops it, half a minute later, a little above the sand. Nothing is
+     * stuck: the next putt plays normally. (A ball pinned against a step with no sideways speed
+     * should settle; when {@code BallPhysics} does that, this stop becomes an ordinary one.)
+     */
+    @Test
+    void aTapWedgedAgainstAStepStopsAtTheRollCapAndTheNextPuttPlays() {
+        HoleLayout l = GolfKit.draw(HoleTemplate.SAND_TRAP, 'M', 8);
+        PlanBlocks g = GolfKit.grid(l);
+        GolfCourse.Hole h = GolfKit.hole(l);
+        BallPhysics.Hole area = GolfShot.area(g, h);
+        BallPhysics.Ball b = new BallPhysics.Ball(4874.6764, T - 0.5, 4107.6773);
+        GolfShot.Result tap = GolfShot.play(g, area, b, new Putt(264.827f, 1));
+        assertEquals(BallPhysics.Outcome.STOPPED, tap.outcome(), "it stops, in the hole: " + tap);
+        assertEquals(GolfShot.MAX_ROLL_TICKS + 1, tap.ticks(), "known: stopped by the roll cap, not rolled to rest");
+        assertTrue(tap.y() > T - 0.5 && tap.y() < T, "known: a little above the sand, wedged at the lip: " + tap.y());
+        GolfShot.Result next = GolfShot.play(g, area, b, new Putt(0f, 2));
+        assertFalse(next.penalty(), "the next putt plays normally: " + next);
+        assertTrue(next.ticks() < GolfShot.MAX_ROLL_TICKS, "and rolls to rest (or drops) on its own: " + next);
     }
 
     @Test

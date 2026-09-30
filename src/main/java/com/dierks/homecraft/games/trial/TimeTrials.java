@@ -312,9 +312,10 @@ public final class TimeTrials implements Game {
         List<Course> open = openCourses();
         String week = courseOfWeek(open);
         List<GameTile> out = new ArrayList<>(open.size());
+        CupLink.Tiles cups = CupLink.tiles(games(), viewer); // the Weekly Cup's reads shared by every tile
         for (int i = 0; i < open.size(); i++) {
             Course c = open.get(i);
-            out.add(new GameTile(Tab.COURSES, courseTile(viewer, c, week), c.id(), i));
+            out.add(new GameTile(Tab.COURSES, courseTile(viewer, c, week, cups), c.id(), i));
         }
         return out;
     }
@@ -682,8 +683,16 @@ public final class TimeTrials implements Game {
 
     /** A course's tile: "River Run (Boat · Medium) - best 1:02.3", its rules, the record, what it pays. */
     public ItemStack courseTile(Player viewer, Course c, String courseOfWeek) {
+        return courseTile(viewer, c, courseOfWeek, CupLink.tiles(games(), viewer));
+    }
+
+    /**
+     * {@link #courseTile(Player, Course, String)} with the Weekly Cup read through {@code cups}, one
+     * {@link CupLink.Tiles} for every tile of a screen (fx2-C #5).
+     */
+    public ItemStack courseTile(Player viewer, Course c, String courseOfWeek, CupLink.Tiles cups) {
         if (c.generated()) {
-            return dailyTile(viewer, c, courseOfWeek);
+            return dailyTile(viewer, c, courseOfWeek, cups);
         }
         Long best = best(viewer, c.id());
         GamesDao.ScoreRow record = record(c.id());
@@ -699,7 +708,7 @@ public final class TimeTrials implements Game {
         if (c.id().equals(courseOfWeek)) {
             lore.add("&6★ Course of the week");
         }
-        CupLink.Tile cup = CupLink.tile(games(), viewer, c); // Weekly Cup: read once for the lore and the NAME
+        CupLink.Tile cup = cups.tile(c); // Weekly Cup: read once for the lore and the NAME
         lore.addAll(cup.lines());
         lore.add("&eClick to play");
         return Menus.icon(icon(c.kind()), "&e" + c.name() + " &7(" + TrialText.label(c) + ") &7- "
@@ -715,7 +724,7 @@ public final class TimeTrials implements Game {
      * "&amp;6Classic: Hard Parkour (week of 5 Oct)", its code and that its old records are the ones
      * to beat.
      */
-    private ItemStack dailyTile(Player viewer, Course c, String courseOfWeek) {
+    private ItemStack dailyTile(Player viewer, Course c, String courseOfWeek, CupLink.Tiles cups) {
         GenTag t = c.gen();
         GamesService g = games();
         int cadence = GenCopy.words(t); // a Classic's board holds its original set's times: no "this week"
@@ -743,7 +752,7 @@ public final class TimeTrials implements Game {
         if (c.id().equals(courseOfWeek)) {
             lore.add("&6★ Course of the week");
         }
-        CupLink.Tile cup = CupLink.tile(g, viewer, c); // Weekly Cup: read once for the lore and the NAME
+        CupLink.Tile cup = cups.tile(c); // Weekly Cup: read once for the lore and the NAME
         lore.addAll(cup.lines());
         lore.add("&eClick to play");
         String fact = (c.kind() == TrialKind.DROPPER ? DailyText.levels(DropperLayout.levels(c)) + " · " : "")

@@ -53,13 +53,16 @@ public final class CourseListMenu extends GameMenu {
             set(22, Menus.icon(Material.PAPER, "&7No courses yet", "&7They're built in the Games world.",
                     "&7Check back soon!"), null);
         }
+        // fx2-C #5: one Weekly Cup read-through for every tile on the page
+        com.dierks.homecraft.games.cup.live.CupLink.Tiles cups =
+                com.dierks.homecraft.games.cup.live.CupLink.tiles(plugin.games(), viewer);
         for (int i = 0; i < PER_PAGE; i++) {
             int at = p * PER_PAGE + i;
             if (at >= open.size()) {
                 break;
             }
             Course c = open.get(at);
-            set(FIRST + i, trials.courseTile(viewer, c, week), e -> new CourseMenu(plugin, trials, c, viewer,
+            set(FIRST + i, trials.courseTile(viewer, c, week, cups), e -> new CourseMenu(plugin, trials, c, viewer,
                     this::reopen).open(viewer));
         }
         if (p > 0) {

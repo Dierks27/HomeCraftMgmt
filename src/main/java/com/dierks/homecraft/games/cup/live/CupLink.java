@@ -106,8 +106,48 @@ public final class CupLink {
 
     /** {@code c}'s tile's Cup parts for {@code viewer}: {@link #tileSuffix} and {@link #tileLines} in one. */
     public static Tile tile(GamesService games, Player viewer, Course c) {
-        CupDesk.View v = view(games, viewer, c);
-        return v == null ? Tile.NONE : new Tile(CupWords.tileSuffix(v), CupWords.tileLines(v));
+        return tiles(games, viewer).tile(c);
+    }
+
+    /**
+     * One viewer's Cup tiles over one screen build (fx2-C #5): the Games screen and the course list
+     * make a tile for every open course on every click. The Cup is found and the viewer's hidden
+     * choice and balance read once for all of them, and a course that runs no Cup costs one read
+     * ({@link CupDesk.Reads}). Not kept past the build.
+     */
+    public static final class Tiles {
+
+        /** No Cup on any tile. */
+        static final Tiles NONE = new Tiles(null, null, null);
+
+        private final GamesService games;
+        private final WeeklyCup cup;
+        private final CupDesk.Reads reads;
+
+        private Tiles(GamesService games, WeeklyCup cup, CupDesk.Reads reads) {
+            this.games = games;
+            this.cup = cup;
+            this.reads = reads;
+        }
+
+        /** {@code c}'s tile's Cup parts, as {@link CupLink#tile} says. */
+        public Tile tile(Course c) {
+            if (reads == null || c == null) {
+                return Tile.NONE;
+            }
+            CupDesk.View v = games.guard(cup, () -> cup.tileView(reads, c), null);
+            return v == null ? Tile.NONE : new Tile(CupWords.tileSuffix(v), CupWords.tileLines(v));
+        }
+    }
+
+    /** {@code viewer}'s {@link Tiles} for one screen build. */
+    public static Tiles tiles(GamesService games, Player viewer) {
+        WeeklyCup w = open(games);
+        if (w == null || viewer == null) {
+            return Tiles.NONE;
+        }
+        CupDesk.Reads reads = games.guard(w, () -> w.tileReads(viewer.getUniqueId()), null);
+        return reads == null ? Tiles.NONE : new Tiles(games, w, reads);
     }
 
     /** The course screen's Cup item, with what a click does. */

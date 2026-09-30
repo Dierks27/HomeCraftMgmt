@@ -209,10 +209,20 @@ public final class CupDesk {
      * ({@link CupRefusal#NOT_UP_YET}), since no run on it can set a Cup time this week.
      */
     public View view(Course c, UUID viewer) throws SQLException {
+        return view(c, viewer, runsCup(c), () -> dao.balance(viewer));
+    }
+
+    /** A token balance, read when it is asked for. */
+    @FunctionalInterface
+    private interface Balance {
+        int read() throws SQLException;
+    }
+
+    /** {@link #view(Course, UUID)} once whether {@code c} runs a Cup ({@code on}) is known. */
+    private View view(Course c, UUID viewer, boolean on, Balance tokens) throws SQLException {
         CupSettings s = host.settings();
         long week = week();
         CupKey key = new CupKey(c.id(), week);
-        boolean on = runsCup(c);
         List<CupEntry> entries = dao.entries(key);
         CupEntry mine = null;
         if (viewer != null) {
@@ -223,7 +233,7 @@ public final class CupDesk {
             }
         }
         CupPlan.Outcome settled = dao.settledAs(key);
-        int balance = viewer == null ? 0 : dao.balance(viewer);
+        int balance = viewer == null ? 0 : tokens.read();
         boolean in = mine != null || (viewer != null && on && settled == null
                 && dao.openCup(c.id(), viewer, CupRules.liveWeeks(host.edition(), host.now())) != null);
         boolean closing = CupRules.closing(host.now(), endsAt(key), host.restartHold()); // fx2-C #12
@@ -231,6 +241,44 @@ public final class CupDesk {
                 s.entry(), balance);
         return new View(key, on, s.enabled(), s.entry(), CupRules.livePool(entries, s.serverTopup()), mine, settled,
                 endsAt(key), refusal);
+    }
+
+    /**
+     * {@code viewer}'s reads of many courses' Cups in one screen build (fx2-C #5): the Games screen
+     * makes a tile for every open course on every click, and each tile asks about its Cup.
+     */
+    public Reads reads(UUID viewer) {
+        return new Reads(viewer);
+    }
+
+    /**
+     * One viewer's Cup tiles in one screen build: a course that runs no Cup costs one read (whether it
+     * runs one) and shows nothing, and the viewer's balance is read once for every tile. What a tile
+     * shows is exactly {@link #view}'s. Not kept past the build: the balance would go stale.
+     */
+    public final class Reads {
+        private final UUID viewer;
+        private Integer balance;
+
+        private Reads(UUID viewer) {
+            this.viewer = viewer;
+        }
+
+        /** {@code c}'s Cup this week when it is worth showing ({@link View#shown}), else {@code null}. */
+        public View shown(Course c) throws SQLException {
+            if (!runsCup(c)) {
+                return null; // View.shown() needs the Cup on: nothing more is read for it
+            }
+            View v = view(c, viewer, true, this::balance);
+            return v.shown() ? v : null;
+        }
+
+        private int balance() throws SQLException {
+            if (balance == null) {
+                balance = dao.balance(viewer);
+            }
+            return balance;
+        }
     }
 
     /**

@@ -253,7 +253,7 @@ final class RaceMode {
         if (warm && run.beginWarmup(until)) {
             run.progress = new Progress(run.course, TimeTrials.position(p, run), System.nanoTime());
             run.phase = TrialRun.Phase.RUNNING;
-            p.getInventory().setItem(Warmup.KIT_SLOT, KitItems.item(trials, Warmup.READY, Material.LIME_DYE,
+            KitItems.put(p.getInventory(), Warmup.KIT_SLOT, KitItems.item(trials, Warmup.READY, Material.LIME_DYE,
                     Warmup.READY_NAME, "&7Tap when you're set.", "&7The race starts when the warm-up",
                     "&7ends, or everyone is ready."));
             long left = Warmup.secondsLeft(now, run.warmupEnds);
@@ -494,7 +494,7 @@ final class RaceMode {
         rr.parked();
         if (run.warmup) {
             run.endWarmup();
-            p.getInventory().setItem(Warmup.KIT_SLOT, null);
+            KitItems.clear(p.getInventory(), Warmup.KIT_SLOT); // the Ready only, never a Mini there (#16)
         }
         if (rr.stand != null) {
             toStand(p, run);
@@ -539,7 +539,7 @@ final class RaceMode {
         if (old.warmup) {
             old.endWarmup();
         }
-        p.getInventory().setItem(Warmup.KIT_SLOT, null);
+        KitItems.clear(p.getInventory(), Warmup.KIT_SLOT); // the Ready only, never a Mini there (#16)
         rr.regrid(spot);
         rr.due = RaceRun.Due.NONE;
         TrialRun run = new TrialRun(p.getUniqueId(), raced, false, 0);

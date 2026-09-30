@@ -76,6 +76,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -150,6 +152,8 @@ public final class TimeTrials implements Game {
     static final long SUSPEND_TICKS = 20;
     /** Rockets in the elytra kit, topped up at every checkpoint. */
     static final int ROCKETS = 3;
+    /** Where the elytra kit's rockets go. */
+    static final int ROCKET_SLOT = 1;
     /** The result screen waits up to this many checks, this far apart, for the player to be home. */
     static final int RESULT_TRIES = 30;
     static final long RESULT_EVERY = 10;
@@ -988,20 +992,22 @@ public final class TimeTrials implements Game {
             drops.giveKit(p, DropperRun.Kit.DROP);
             return;
         }
+        // a race seat or a Clubhouse hand-out gives this kit mid-session: every item goes in with
+        // KitItems.put, over nothing that arrived meanwhile (final gate #16)
         PlayerInventory inv = p.getInventory();
-        inv.setItem(0, KitItems.item(this, "checkpoint", Material.RECOVERY_COMPASS, "&eBack to checkpoint",
+        KitItems.put(inv, 0, KitItems.item(this, "checkpoint", Material.RECOVERY_COMPASS, "&eBack to checkpoint",
                 "&7Takes you back to your last checkpoint.", "&7The clock keeps running."));
         if (kind == TrialKind.ELYTRA) {
-            inv.setItem(1, rockets());
+            KitItems.put(inv, ROCKET_SLOT, rockets());
             ItemStack wings = KitItems.item(this, "elytra", Material.ELYTRA, "&bElytra", "&7Glide through the rings.");
             ItemMeta meta = wings.getItemMeta();
             if (meta != null) {
                 meta.setUnbreakable(true);
                 wings.setItemMeta(meta);
             }
-            inv.setChestplate(wings);
+            KitItems.put(inv, KitItems.CHESTPLATE, wings);
         }
-        inv.setItem(8, KitItems.item(this, "leave", Material.OAK_DOOR, "&cLeave game", "&7Click twice to leave.",
+        KitItems.put(inv, 8, KitItems.item(this, "leave", Material.OAK_DOOR, "&cLeave game", "&7Click twice to leave.",
                 "&7Your things come back."));
         inv.setHeldItemSlot(0);
     }
@@ -1016,15 +1022,28 @@ public final class TimeTrials implements Game {
     /** Top the rockets back up to {@value #ROCKETS}. */
     private void refillRockets(Player p) {
         PlayerInventory inv = p.getInventory();
-        for (int i = 0; i < inv.getSize(); i++) {
-            ItemStack it = inv.getItem(i);
-            if ("firework".equals(KitItems.action(it)) && id().equals(KitItems.gameId(it))) {
-                it.setAmount(ROCKETS);
-                inv.setItem(i, it);
+        refill(KitItems.slots(inv), inv.getSize(), it -> "firework".equals(KitItems.action(it))
+                && id().equals(KitItems.gameId(it)), it -> {
+                    it.setAmount(ROCKETS);
+                    return it;
+                }, this::rockets);
+    }
+
+    /**
+     * Top the rockets up: the kit's rocket stack wherever it is ({@code full} of it), or a {@code fresh}
+     * one in {@link #ROCKET_SLOT}. Once the rockets are used that slot is the first empty one, where an
+     * auction win or a Mini lands mid-run: it moves aside, never overwritten (final gate #16).
+     */
+    static <I> void refill(KitItems.Slots<I> inv, int size, Predicate<I> rockets, UnaryOperator<I> full,
+                           Supplier<I> fresh) {
+        for (int i = 0; i < size; i++) {
+            I it = inv.get(i);
+            if (!inv.empty(it) && rockets.test(it)) {
+                KitItems.put(inv, i, full.apply(it));
                 return;
             }
         }
-        inv.setItem(1, rockets());
+        KitItems.put(inv, ROCKET_SLOT, fresh.get());
     }
 
     // ---- the tick: countdowns, clocks and the fair-play watch ---------------------------------
@@ -1181,20 +1200,25 @@ public final class TimeTrials implements Game {
 
     // ---- moves ------------------------------------------------------------------------------
 
-    /** The countdown holds a player on foot still, but lets them look around (no real teleport). */
+    /**
+     * The countdown holds a player on foot still, but lets them look around. The hold is the framework's
+     * ({@code sessions().hold}), armed as the session's own: a changed {@code to} of the game's own is a
+     * PLUGIN teleport nobody armed, a void a tick later, and on the countdown's last tick that void came
+     * after Go (a phantom bonk on a timed Dropper run, "Back to the start" on the rest: final gate #14).
+     */
     private void hold(PlayerMoveEvent e) {
         if (runs.isEmpty()) {
             return;
         }
-        TrialRun run = runs.get(e.getPlayer().getUniqueId());
-        if (run == null || run.phase != TrialRun.Phase.COUNTDOWN || run.course.kind() == TrialKind.BOAT
-                || !e.hasExplicitlyChangedPosition() || (run.drop != null && run.drop.letsGo())) {
-            return;
+        if (holds(runs.get(e.getPlayer().getUniqueId()), e.hasExplicitlyChangedPosition())) {
+            sessions().hold(e);
         }
-        Location held = e.getFrom().clone();
-        held.setYaw(e.getTo().getYaw());
-        held.setPitch(e.getTo().getPitch());
-        e.setTo(held);
+    }
+
+    /** Whether a move of the run's player is held: a step on foot during the countdown (not a practice drop). */
+    static boolean holds(TrialRun run, boolean stepped) {
+        return run != null && stepped && run.phase == TrialRun.Phase.COUNTDOWN && run.course.kind() != TrialKind.BOAT
+                && (run.drop == null || !run.drop.letsGo());
     }
 
     private void moved(PlayerMoveEvent e) {

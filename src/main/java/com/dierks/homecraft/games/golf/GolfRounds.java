@@ -213,18 +213,21 @@ public final class GolfRounds {
     }
 
     private void giveKit(Player p) {
+        // final gate #16 (fx2-A): KitItems.put, never setItem: a round from the Clubhouse or the next one
+        // gives the kit mid-session, over nothing of theirs that arrived meanwhile
         PlayerInventory inv = p.getInventory();
         for (int i = 0; i < CLUBS.length; i++) {
             int power = i + 1;
-            inv.setItem(i, KitItems.item(golf, CLUB + power, CLUB_ITEMS[i], "&a" + CLUBS[i] + " &7- power " + power,
+            KitItems.put(inv, i, KitItems.item(golf, CLUB + power, CLUB_ITEMS[i],
+                    "&a" + CLUBS[i] + " &7- power " + power,
                     "&7Any click putts your ball", "&7the way you look.", "&7Stand within 4 blocks of it."));
         }
-        inv.setItem(5, KitItems.item(golf, GO, Material.COMPASS, "&bGo to my ball",
+        KitItems.put(inv, 5, KitItems.item(golf, GO, Material.COMPASS, "&bGo to my ball",
                 "&7Takes you right next to it."));
-        inv.setItem(6, KitItems.item(golf, RESET, Material.RECOVERY_COMPASS, "&eReset ball &7(+1 stroke)",
+        KitItems.put(inv, 6, KitItems.item(golf, RESET, Material.RECOVERY_COMPASS, "&eReset ball &7(+1 stroke)",
                 "&7Puts it back where you", "&7last putted from."));
-        inv.setItem(7, KitItems.item(golf, CARD, Material.PAPER, "&fScorecard", "&7Your strokes so far."));
-        inv.setItem(8, KitItems.item(golf, LEAVE, Material.BARRIER, "&cLeave game",
+        KitItems.put(inv, 7, KitItems.item(golf, CARD, Material.PAPER, "&fScorecard", "&7Your strokes so far."));
+        KitItems.put(inv, 8, KitItems.item(golf, LEAVE, Material.BARRIER, "&cLeave game",
                 "&7Click twice to leave.", "&7Your things come back."));
         inv.setHeldItemSlot(1);
     }

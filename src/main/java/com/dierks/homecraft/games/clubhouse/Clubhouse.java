@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
@@ -1104,15 +1105,29 @@ public final class Clubhouse implements Game, ClubDoor {
         if (watch != null && watch.watching(id)) {
             watch.stop(p, null); // off the course and back in adventure mode, then to the grid
         }
-        if (!games().sessions().passTo(p, to, ref)) {
+        return handOut(() -> games().sessions().bankExtras(p), () -> games().sessions().passTo(p, to, ref),
+                () -> kitAgain(p), () -> gone(id, p));
+    }
+
+    /**
+     * The hand-out's order. The Clubhouse's kit goes and the next game gives its own, in its own slots:
+     * anything else (an auction win, a Mini that arrived here) is banked in the session's carry FIRST
+     * and comes home (#3). If that can't be done (the database is failing) nobody is handed out, since
+     * the next kit would go over it (final gate #16): they stay, with their things, and the race or
+     * round says it couldn't take them. A hand-over that fails after the bank gives the Clubhouse's
+     * kit back (the bank took it with the rest).
+     *
+     * @return whether they were handed out
+     */
+    static boolean handOut(BooleanSupplier bank, BooleanSupplier pass, Runnable kitBack, Runnable gone) {
+        if (!bank.getAsBoolean()) {
             return false;
         }
-        gone(id, p);
-        // the Clubhouse's kit goes and the race gives its own, in its own slots: anything else (an auction
-        // win, a Mini that arrived here) is banked in the session's carry first and comes home (#3)
-        if (!games().sessions().bankExtras(p)) {
-            games().sessions().stripKit(p);
+        if (!pass.getAsBoolean()) {
+            kitBack.run();
+            return false;
         }
+        gone.run();
         return true;
     }
 

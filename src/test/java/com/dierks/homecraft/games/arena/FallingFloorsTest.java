@@ -110,23 +110,21 @@ class FallingFloorsTest {
         World w = world(FakeArenaHost.WORLD);
         Location from = new Location(w, alex.x, alex.y, alex.z, 10f, 0f);
 
+        // the hold itself (a step undone, the new look kept, armed as the session's own so it is never a
+        // void at Go) is the framework's: HoldSessionTest (final gate #14)
         PlayerMoveEvent step = new PlayerMoveEvent(f.player, from, new Location(w, alex.x + 0.4, alex.y, alex.z, 35f, 20f));
-        FallingFloors.hold(s, step);
-        assertEquals(alex.x, step.getTo().getX(), "a step is undone: still on the spawn");
-        assertEquals(35f, step.getTo().getYaw(), "but the new way they look is kept");
-        assertEquals(20f, step.getTo().getPitch(), "up and down too");
+        assertTrue(FallingFloors.held(s, step), "a step on the spawn is held");
+        assertEquals(alex.x + 0.4, step.getTo().getX(), "by the framework's hold, never a `to` of the game's own");
 
         PlayerMoveEvent look = new PlayerMoveEvent(f.player, from, new Location(w, alex.x, alex.y, alex.z, 90f, 0f));
-        FallingFloors.hold(s, look);
-        assertEquals(90f, look.getTo().getYaw(), "only looking round: nothing to undo");
+        assertFalse(FallingFloors.held(s, look), "only looking round: nothing to undo");
 
         for (int i = 0; i < 100 && s.round().phase() != ArenaRound.Phase.PLAYING; i++) {
             s.tick();
         }
         PlayerMoveEvent run = new PlayerMoveEvent(f.player, from, new Location(w, alex.x + 0.4, alex.y, alex.z, 35f, 0f));
-        FallingFloors.hold(s, run);
-        assertEquals(alex.x + 0.4, run.getTo().getX(), "after Go they run");
-        FallingFloors.hold(null, run); // the game stopped: nothing to hold
+        assertFalse(FallingFloors.held(s, run), "after Go they run");
+        assertFalse(FallingFloors.held(null, run), "the game stopped: nothing to hold");
     }
 
     // ---- however a session ends -----------------------------------------------------------------

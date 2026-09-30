@@ -61,6 +61,18 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
         int saves;
         /** The mark in the player's own data (on the server it is saved with their inventory). */
         String mark;
+        /** How far they have fallen since they last stood on something (the server keeps it through a teleport). */
+        float fall;
+        /** How fast they are moving (the server keeps that through a teleport too). */
+        double speed;
+        /** Where they were when {@code resetMode} last took them out of a game's mode (a watcher's spectator). */
+        Place modeResetAt;
+        /** The player's own data file: the body as of its last save (ours, or the server's autosave). */
+        private DataFile file;
+
+        /** What the player's data file holds. */
+        private record DataFile(String[] slots, String mark, String gameMode, Place place, float fall) {
+        }
 
         Body(String name, Place place) {
             this.id = UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8));
@@ -81,6 +93,33 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
         boolean holdsKit() {
             return items().stream().anyMatch(i -> i.startsWith("kit:")) || ender.stream().anyMatch(i -> i.startsWith("kit:"))
                     || (cursor != null && cursor.startsWith("kit:"));
+        }
+
+        /**
+         * Their data file is written as the body is now: our own {@code save}, or the server's autosave
+         * (Paper saves every online player every few minutes, whatever a game is doing).
+         */
+        void autosave() {
+            file = new DataFile(slots.clone(), mark, gameMode, place, fall);
+        }
+
+        /** A hard crash (power lost, the process killed): the body comes back as its data file last had it. */
+        void crash() {
+            if (file == null) {
+                return; // never written: it comes back as it is
+            }
+            slots = file.slots().clone();
+            mark = file.mark();
+            gameMode = file.gameMode();
+            place = file.place();
+            fall = file.fall();
+            cursor = null;
+            Arrays.fill(grid, null);
+        }
+
+        /** The fall distance in their data file ({@code NaN} if it was never written). */
+        float savedFall() {
+            return file == null ? Float.NaN : file.fall();
         }
 
         int firstEmpty() {
@@ -113,6 +152,10 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
     private final List<Task> tasks = new ArrayList<>();
     /** Runs just before a state is captured (to race another row in). */
     Runnable beforeCapture;
+    /** Runs as each snapshot is decoded (to break the row or the database under a recovery). */
+    Runnable beforePrepare;
+    /** Every restore throws before it changes anything (a snapshot that won't go on). */
+    boolean applyFails;
 
     // ---- the test's controls --------------------------------------------------------------------
 
@@ -313,9 +356,15 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
 
     @Override
     public SessionCore.Restore<Body> prepare(SavedState s) {
+        if (beforePrepare != null) {
+            beforePrepare.run();
+        }
         String[] contents = slots(s.items());
         List<SavedStateCodec.Effect> effects = SavedStateCodec.decodeEffects(s.effects());
         return p -> {
+            if (applyFails) {
+                throw new IllegalStateException("the snapshot won't go on");
+            }
             p.applies++;
             p.appliedIn.add(p.place.world());
             SavedStateCodec.apply(s, effects, new FakeBody(p, contents));
@@ -433,6 +482,13 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
     @Override
     public void save(Body p) {
         p.saves++;
+        p.autosave();
+    }
+
+    @Override
+    public void still(Body p) {
+        p.fall = 0f;
+        p.speed = 0;
     }
 
     @Override
@@ -447,7 +503,13 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
     public void resetMode(Body p, String sessionMode) {
         if (sessionMode != null && sessionMode.equals(p.gameMode)) {
             p.gameMode = "ADVENTURE";
+            p.modeResetAt = p.place;
         }
+    }
+
+    @Override
+    public String gameMode(Body p) {
+        return p.gameMode;
     }
 
     @Override
@@ -554,6 +616,12 @@ final class FakeServer implements SessionCore.Port<FakeServer.Body, String> {
         public void flight(boolean allowFlight, boolean flying) {
             p.allowFlight = allowFlight;
             p.flying = flying;
+        }
+
+        @Override
+        public void still() {
+            p.fall = 0f;
+            p.speed = 0;
         }
 
         @Override

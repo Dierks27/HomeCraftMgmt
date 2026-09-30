@@ -142,6 +142,11 @@ final class BukkitPort implements SessionCore.Port<Player, ItemStack> {
         }
     }
 
+    @Override
+    public String gameMode(Player p) {
+        return p.getGameMode().name();
+    }
+
     /** The plugin is being disabled (PluginDisableEvent, just before onDisable). */
     void disabling() {
         disabling = true;
@@ -288,6 +293,11 @@ final class BukkitPort implements SessionCore.Port<Player, ItemStack> {
                     plugin.getLogger().log(Level.WARNING, "Games: a teleport of " + p.getName() + " failed", err);
                 }
                 boolean arrived = err == null && Boolean.TRUE.equals(ok);
+                if (arrived && Bukkit.isPrimaryThread()) {
+                    // the fall stops as they land, before the client's first move there (a tick before
+                    // done, which SessionCore also lands still: final gate #18)
+                    safely("stopping a fall", () -> still(p));
+                }
                 later(0, () -> done.accept(arrived)); // back on the main thread, only while enabled
             });
         } catch (RuntimeException e) {
@@ -432,6 +442,13 @@ final class BukkitPort implements SessionCore.Port<Player, ItemStack> {
             p.saveData();
         } catch (RuntimeException e) {
             plugin.getLogger().log(Level.WARNING, "Games: could not save " + p.getName() + "'s data", e);
+        }
+    }
+
+    @Override
+    public void still(Player p) {
+        if (p.isOnline()) {
+            BukkitStateAdapter.still(p);
         }
     }
 

@@ -722,9 +722,10 @@ who's ready, and the course's Weekly Cup item when it runs one. Only the host st
 chooses whether everyone warms up first (the same `warmup_seconds`, with a **Ready** kit item to be done early).
 Then everyone goes to one grid and starts on **one shared 3-2-1**: boats in rows of two behind the
 start line (single file on a narrow track), runners and flyers on the start itself. A bar shows your
-place ("2nd of 5 · Lap 1/2"), finishes and photo finishes go to the group, and a results screen
-ranks everyone. The race ends when everyone is in, 2 minutes after the first finish, or 10 minutes
-after Go. Each racer's finish is also their **normal counted run** on the course, exactly once and
+place ("2nd of 5 · Lap 1/2"), finishes and photo finishes go to the group, and the results (the
+Clubhouse board and its **Results** item, or a results screen at home) rank everyone. The race
+ends when everyone is in, 2 minutes after the first finish, or 10 minutes after Go. Each racer's
+finish is also their **normal counted run** on the course, exactly once and
 under every fair-play rule: its boards, its first finish and other rewards, and the Weekly Cup. A
 party race has no entry, no fees and no prizes of its own. Boats bump, as at Race Night; runners
 and flyers can't push each other (they are on the `hcm_nopush` scoreboard team while they race, and
@@ -738,11 +739,13 @@ called off, its racers go home with their things, and nothing they hadn't finish
 **Race mode** is the engine party races and Race Night share: racers are held on the grid until one
 go tick and all start on one clock, a finish is judged on the course as it is (its layout, and the
 still-standing rule for Fresh Courses), finishers wait on Fresh Ice Boat's **viewing stand** (a railed
-platform in the middle of the loop, built by boat planner v2) or go home at the line where there is
-none, and a racer sent back to a checkpoint is re-seated clear of the other boats. A boat that
-creeps off its grid spot before Go is put back on it and starts once back, on the shared clock (it
-never gains a head start). A racer whose trip to the track falls through (hands full, hurt) is
-dropped from the race at once, so nobody waits for them.
+platform in the middle of the loop, built by boat planner v2), and a racer sent back to a checkpoint
+is re-seated clear of the other boats. Where there is no stand, finishers go to the Clubhouse at the
+line if it is open in the course's world, `party_after` / `race_night_after` is on and it isn't
+closing for a restart; otherwise they go home. A boat that creeps off its grid spot before Go is
+put back on it and starts once back, on the shared clock (it never gains a head start). A racer
+whose trip to the track falls through (hands full, hurt) is dropped from the race at once, so
+nobody waits for them.
 <!-- ---- end WP-R1 ---- -->
 
 **Building a course** (`hcm.games.admin`, standing in a `games.worlds` world; the full list is in
@@ -1094,14 +1097,14 @@ point, a checkpoint or finish with its radius, a golf hole's whole bounds box.
 | `/hcm games gen preview <course> next [seed]` | A candidate for the NEXT set: its tier or mix and settings, and a seed (random unless you give one; the reply says it), in the spare half. Previewing again replaces it |
 | `/hcm games gen test <course>` | A test run on the preview: its real start, checkpoints, finish, clock and kit (the Dropper offers its practice drop as usual). Records nothing: no board, token, star, Cup time, quest or achievement. Refused with no preview ("No preview yet - /hcm games gen preview <course> first"), near a restart, and while the course is off. Golf previews are walked instead (`tp <course> idle`) |
 | `/hcm games gen promote <course> [confirm]` | The preview (of this set) becomes the current course, on a fresh board |
-| `/hcm games gen choose <course> [confirm]` | The preview's seed becomes the course of exactly the next set: it goes up at the scheduled change on fresh boards, with its own course code and seed on the website, and the set after goes back to its own seed. Kept across restarts (the spare half keeps the chosen preview, which is checked again after a restart, so the change has almost nothing to build). `confirm` when it replaces another pick. Refused for a Classic and while the course is off. Its pin, if any, comes back after it |
+| `/hcm games gen choose <course> [confirm]` | The preview's seed becomes the course of exactly the next set: it goes up at the scheduled change on fresh boards, with its own course code and seed on the website, and the set after goes back to its own seed. Kept across restarts (the spare half keeps the chosen preview, which is checked again after a restart, so the change has very little to build). `confirm` when it replaces another pick. Refused for a Classic, while the course is off or being built, with no preview, or when the preview was built at another tier, mix or (medium and hard parkour) fall depth. A waiting pick is dropped if the tier or mix changes, if a `fall_depth` change would reshape it, or if a `cadence` or `rebuild_day` change moves the next set. You, the console and `status` are told, and you choose again. Its pin, if any, comes back after it |
 | `/hcm games gen unchoose <course>` | Cancel the pick: the next set gets its own new course |
 | `/hcm games gen reroll <course\|all> confirm` | A new course for the current set, on a fresh board; anyone playing the old one finishes there, and a running Weekly Cup on it is called off and refunded. No second first-finish token |
 | `/hcm games gen retry\|regenerate <course\|all> confirm` | The same as `reroll` |
 | `/hcm games gen rebuild <course>` | Check the current course against its plan and put back anything missing (same course). After a `clear`, its area is checked for other blocks first and a new course is built |
 | `/hcm games gen on\|off <course>` | Open or close one (kept across restarts). `off` ends runs on it ("Easy Parkour is closed for now."); its blocks stay |
-| `/hcm games gen tier <course> <easy\|medium\|hard>` | Its difficulty from the next build (kept across restarts) |
-| `/hcm games gen mix <golf course\|dropper> <E, M and H>` | The big golf course's or Tiny Golf's holes, or a dropper's levels, from the next build (like `EEEMMMMHH`, `EEMHH`) |
+| `/hcm games gen tier <course> <easy\|medium\|hard>` | Its difficulty from the next build (kept across restarts). A change drops a waiting pick: choose again |
+| `/hcm games gen mix <golf course\|dropper> <E, M and H>` | The big golf course's or Tiny Golf's holes, or a dropper's levels, from the next build (like `EEEMMMMHH`, `EEMHH`). A change drops a waiting pick: choose again |
 | `/hcm games gen pin <course> <seed\|live> [days]` / `unpin <course>` | Keep a good course: the same blocks in every new set (each on fresh boards) until unpinned, or for that many days. A pin ends by itself after its days; one made before a plugin update that changed that course's generator is ignored (the console and status say so) |
 | `/hcm games gen tp <course> [live\|idle]` | Go to the current course, or the spare half |
 | `/hcm games gen claim <course> [confirm]` | Count what is in a new area; with `confirm`, clear it and let the course use it (refused while a hand-built course or the spawn is within 16 blocks) |
@@ -1674,7 +1677,7 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
   they couldn't use). 30 minutes before, one chat line (news on, not in a world game); 10 minutes before
   (`join_minutes`), joining opens: a chat line, a draining bossbar for everyone with news on who could
   join (in a world games are played in, or joined already), the
-  Together tab glints and the hub `@event` sign reads JOIN NOW!. Players join from the Race Night
+  Together tab glints and the hub's `@event` TV reads JOIN NOW!. Players join from the Race Night
   screen (`/hcm play race`, the Race Night tile on the **Together** tab, or an `[Arcade] race_night`
   sign): one tap on **Join**. Joining moves nobody; keep playing. Leaving the list before the racing
   is free. At most `max_racers` (8), fewer if the track's grid has fewer spots.
@@ -2190,8 +2193,9 @@ Dropper and Falling Floors have their own lists in their sections)
     it ends early once everyone taps Ready), then one shared 3-2-1 for everyone. Walk off your spot
     before Go: you're put back ("Stay on your grid spot until it says Go!"). On parkour and elytra
     nobody can push anybody, and a player on another plugin's nametag team is back on it after the
-    race; boats bump. The results screen ranks everyone, and each finish is also a normal run on the
-    course (its board, its rewards, the Cup).
+    race; boats bump. Back in the Clubhouse, the board ranks everyone, and so does the screen behind
+    the kit's **Results** item (with the Clubhouse off, the results screen opens at home). Each finish
+    is also a normal run on the course (its board, its rewards, the Cup).
 70. `/hcm play race fresh_dropper`: "The Dropper has no party races - try its practice drop
     instead." A party race on the Race Night track 2 minutes before a night: "Your party race is
     called off - Race Night needs this track now." and everyone goes home with their things.

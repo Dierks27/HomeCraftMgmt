@@ -555,6 +555,32 @@ class RidersTest {
     }
 
     @Test
+    void raceModeHandsTheRiderTheParkedRacersOwnStandAndTheRacesRadius() {
+        riding();
+        dad.vehicle = null; // Dad finished and is parked on the stand
+        RaceRun rr = new RaceRun(new TrialFakes.Link(), LapsTest.loop(6, 2), new Course.Spot(1, 65, -4, 0, 0),
+                new Point(5, 70, 5), false);
+        rr.parked();
+        port.where.put(kid.id, new Location(null, 12.5, 70, 5)); // 7.5 blocks from the stand
+        RaceMode.holdRider(riders, dad.id, rr, 8, null); // a Race Night with stand_radius 8
+        assertEquals(12.5, port.where.get(kid.id).getX(), 1e-9,
+                "inside the race's own 8-block stand: where a racer may stand, so may Kid");
+        RaceMode.holdRider(riders, dad.id, rr, 4, null); // the race's radius, passed through: 4 this time
+        assertEquals(5, port.where.get(kid.id).getX(), 1e-9, "off a 4-block stand: back onto the race's stand"
+                + " (the final gate's #15, as race mode's stand check wires it)");
+        assertEquals(70, port.where.get(kid.id).getY(), 1e-9, "at the stand's own height");
+
+        int before = port.teleports.size();
+        port.where.put(kid.id, new Location(null, 40, 70, 5));
+        RaceMode.holdRider(riders, dad.id, new RaceRun(new TrialFakes.Link(), LapsTest.loop(6, 2),
+                new Course.Spot(1, 65, -4, 0, 0), null, false), 4, null);
+        assertEquals(before, port.teleports.size(), "a race with no stand holds nobody to one");
+        rr.state = RaceRun.State.RACING;
+        RaceMode.holdRider(riders, dad.id, rr, 4, null);
+        assertEquals(before, port.teleports.size(), "nor a race whose racer isn't parked: the racers' rule, exactly");
+    }
+
+    @Test
     void theStandRuleLeavesAloneARiderWhoIsNotOnTheRide() {
         riders.paired(dad.player, kid.player, "loop", null); // paired, but never got in: no session yet
         port.where.put(kid.id, new Location(null, 60, 65, 0));

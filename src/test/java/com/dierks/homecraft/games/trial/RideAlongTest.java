@@ -9,6 +9,7 @@ import com.dierks.homecraft.games.PlayerAs;
 import com.dierks.homecraft.games.clubhouse.Clubhouse;
 import com.dierks.homecraft.games.clubhouse.ClubhouseSettings;
 import com.dierks.homecraft.games.world.WorldEntities;
+import com.dierks.homecraft.gui.games.GamesMenu;
 import com.dierks.homecraft.storage.GamesDao;
 import org.bukkit.entity.Player;
 import org.junit.jupiter.api.AfterEach;
@@ -271,6 +272,10 @@ class RideAlongTest {
         takeARider().chosen.accept(kid);
         assertEquals("Ride along", games.invites().pending(kid.getUniqueId()).name(),
                 "the Games screen's tile NAME reads 'Ride along invite from Dad' (Bedrock reads only names)");
+        assertEquals("&eRide along invite &7from Dad",
+                GamesMenu.inviteName(games.invites().pending(kid.getUniqueId()), "Dad"),
+                "what the tile calls with Kid's real ride invite: a ride, in the NAME (never 'Game invite', the"
+                        + " lookup of the key 'rider' finding no game)");
     }
 
     @Test

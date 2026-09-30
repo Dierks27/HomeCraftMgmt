@@ -159,12 +159,14 @@ class GamesMenuTest {
     void anInviteTileNamesItsGameAndWhoItIsFrom() {
         assertEquals("&eConnect Four invite &7from Sam", GamesMenu.inviteName("Connect Four", "Sam"),
                 "the game in the NAME: Bedrock shows lore only on a long press");
-        assertEquals("&eGame invite &7from a player", GamesMenu.inviteName(null, null),
+        assertEquals("&eGame invite &7from a player", GamesMenu.inviteName((String) null, null),
                 "still reads with nothing known");
         com.dierks.homecraft.games.Invite ride = new com.dierks.homecraft.games.Invite(1, UUID.randomUUID(),
                 UUID.randomUUID(), "rider", "a ride in the back of Dad's boat", 0L, 60_000L, "Ride along");
-        assertEquals("&eRide along invite &7from Dad", GamesMenu.inviteName(ride.name(), "Dad"),
+        assertEquals("&eRide along invite &7from Dad", GamesMenu.inviteName(ride, "Dad"),
                 "a ride's tile says it is a ride in its NAME (the final gate's #0), from the invite's own name");
+        assertEquals("&eGame invite &7from a player", GamesMenu.inviteName((com.dierks.homecraft.games.Invite) null,
+                null), "and still reads with no invite at all (RideAlongTest pins it on a real ride invite)");
     }
 
     // ---- Fresh Courses first ------------------------------------------------------------------

@@ -221,6 +221,15 @@ public final class GamesMenu extends GameMenu {
         return "&e" + (game == null ? "Game" : game) + " invite &7from " + (from == null ? "a player" : from);
     }
 
+    /**
+     * The invite tile's name for this invite: from the invite's OWN name, never a lookup of its key, so a
+     * ride reads "Ride along invite from Dad", not "Game invite from Dad" (the final gate's #0). The tile
+     * calls this, so a test on a real ride invite pins what the tile says.
+     */
+    public static String inviteName(Invite inv, String from) {
+        return inviteName(inv == null ? null : inv.name(), from);
+    }
+
     /** How many tiles each tab has. */
     static Map<Game.Tab, Integer> counts(List<Tile> tiles) {
         Map<Game.Tab, Integer> out = new EnumMap<>(Game.Tab.class);
@@ -524,8 +533,7 @@ public final class GamesMenu extends GameMenu {
             return;
         }
         String from = Bukkit.getOfflinePlayer(inv.from()).getName();
-        // The invite's own name, never a lookup of its key: "Ride along invite from Sam" (final gate, #0)
-        set(INVITE, Menus.glint(Menus.icon(Material.WRITABLE_BOOK, inviteName(inv.name(), from),
+        set(INVITE, Menus.glint(Menus.icon(Material.WRITABLE_BOOK, inviteName(inv, from),
                 "&7" + inv.summary(), "&eClick to say yes", "&7Or type /hcm play deny"), true), e -> {
             if (!games.invites().accept(viewer)) {
                 viewer.sendMessage(Text.of("&cThat invite has ended."));

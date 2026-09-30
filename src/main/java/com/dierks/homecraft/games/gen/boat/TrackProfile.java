@@ -11,19 +11,22 @@ import java.util.List;
  * function of s: a column takes the level at its nearest centreline point, so every drop edge is
  * square to the centreline and runs wall to wall.
  *
- * <p><b>Drops</b> ({@code fork("drops:" + t)}) go only on straights, each with a flat straight run-up
- * (at least 8, and room for the checkpoint before it) and a straight landing strip after it (the
- * fun constants of §2.5: 22 / 26 blocks on packed ice, 33 / 41 on blue, for a 1- or 2-block drop).
- * The first is at least the tier's distance from the start; each next one at least Z(d) + 12 after
- * the one before, and never inside its flight zone: the zone of a drop reaches along the track only
- * while the track stays within Z(d) of the lip, so the next drop comes after the track has left that
- * disc ({@link #exit}), which is what {@code DownhillValidator} proves. Drops are placed as 1s, then
- * some become 2s (medium and hard) within the tier's count of 2s and its total fall, the Final Drop
- * first.
+ * <p><b>Drops</b> ({@code fork("drops:" + t)}) go only on straights, one a leg at most, each with a
+ * flat straight run-up (at least 8, and room for the checkpoint before it) and a straight landing
+ * strip after it (the fun constants of §2.5: 22 / 26 blocks on packed ice, 33 / 41 on blue, for a 1-
+ * or 2-block drop). The first is at least the tier's distance after the start; each next one at
+ * least Z(d) + 12 after the one before and never inside its flight zone ({@link #apart}: the zone is
+ * flooded along the track only while the track stays within Z(d) of the lip, as
+ * {@code DownhillValidator} proves it). Each goes only where its checkpoints can cross it: the one
+ * just before the edge and the first place past the zone where one can go, at most 60 apart
+ * ({@link #post}), so no leg ever holds two drops. The place on its leg is seeded among those that
+ * do; then some become 2s (medium and hard: the Final Drop first, each moving along its leg if it
+ * must) within the tier's count of 2s and its whole fall.
  *
- * <p><b>The finish</b> is on the last leg, the inner ring under the stand, 12-30 blocks from the
+ * <p><b>The finish</b> is on the last leg, the inner ring round the stand, 12-30 blocks from the
  * platform's edge (V11), with 14 blocks of run-out and a 6-block sand paddock after it. The Final
- * Drop (the last) is at least Z(d) + 3 from every block of the finish's middle, across the ground.
+ * Drop (the last) keeps Z(d) + 3 from the finish's middle from every block of its edge, across the
+ * ground.
  *
  * <p>Pure: no Bukkit.
  */
@@ -37,7 +40,7 @@ final class TrackProfile {
     /** The finish's run-out: this many blocks of ice after its middle, then {@link #PADDOCK} of sand, then the end wall. */
     static final int RUN_OUT = 14;
     static final int PADDOCK = 6;
-    /** The finish is this far (and no farther than {@link #FINISH_FAR}) from the platform's edge, with a margin. */
+    /** The finish is at least this far (and at most {@link #FINISH_FAR}) from the platform's edge: V11's, with a margin. */
     static final double FINISH_NEAR = DownhillValidator.FINISH_NEAR + 0.5;
     static final double FINISH_FAR = DownhillValidator.FINISH_FAR - 0.5;
     /** The margin kept over Z(d) + 3 from the Final Drop to the finish. */

@@ -408,8 +408,10 @@ class BoatPlannerTest {
                 List.of(), List.of(), 0);
         assertEquals(live.hash(), PLANNER.rederive(input('A', 0, "hard"), tag).hash(), "from the tag, any tier asked");
         assertEquals(live.hash(), PLANNER.rederive(input('A', 0, "medium"), tag).hash(), "the stored tier first");
+        assertTrue(RaceStand.has(tag), "a Mountain Run layout has its viewing stand (algo 3)");
         GenTag loop = new GenTag(SLOT.id(), Slots.BOAT, 2, 20725, 0, 31, 'A', live.hash(), 1, 2, 3,
                 List.of(), List.of(), 0);
+        assertTrue(RaceStand.has(loop), "and so has an algo-2 loop, at the same fixed spot");
         assertThrows(GenFailed.class, () -> PLANNER.rederive(input('A', 0, "medium"), loop),
                 "an algo-2 loop isn't made again by the Mountain Run's planner (it heals by a scan)");
         GenTag next = new GenTag(SLOT.id(), Slots.BOAT, BoatPlanner.ALGO + 1, 20725, 0, 31, 'A', live.hash(), 1, 2, 3,

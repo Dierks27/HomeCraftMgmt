@@ -330,7 +330,7 @@ final class TrackPieces {
                                List<Piece> placed, int h0) {
         List<Piece> out = new ArrayList<>();
         int len = length(r, level, k);
-        int extra = extra(k, level, r);
+        int extra = extra(k, level);
         int taper = switch (k) {
             case SAND_PIT -> BoatPlanner.PIT_TAPER;
             case FOREST -> BoatPlanner.FOREST_TAPER;
@@ -365,7 +365,7 @@ final class TrackPieces {
             double first = TrackProfile.spotStart(st) + BoatPlanner.PIECE_END_GAP + 0.5;
             for (double s1 = first; s1 + len + BoatPlanner.PIECE_END_GAP <= st.s1() + 1e-9; s1 += 1) {
                 double s2 = s1 + len;
-                if (!free(profile, level, k, s1, s2, placed, h0, st.s0)) {
+                if (!free(profile, level, k, s1, s2, placed, h0)) {
                     continue;
                 }
                 out.add(make(r, k, leg, s1, s2, eIn, eOut, taper, level, hw));
@@ -386,7 +386,7 @@ final class TrackPieces {
     }
 
     /** How far a piece widens the lane in all. */
-    private static int extra(Kind k, BoatPlanner.Level level, GenRandom r) {
+    private static int extra(Kind k, BoatPlanner.Level level) {
         return switch (k) {
             case SAND_PIT, FOREST -> 6;
             case SPLIT -> 2 * level.proof().narrowest() + 3 - level.width();
@@ -405,9 +405,14 @@ final class TrackPieces {
                 Math.max(0, Math.min(BoatPlanner.MAX_EXTRA, out))};
     }
 
-    /** Whether [s1, s2] is free for kind {@code k}. */
+    /**
+     * Whether [s1, s2] is free for kind {@code k}: after the start's 40, before the finish, apart
+     * from the other pieces, on one level (a cave's ice at most H0 + 7, a forest's H0 + 6), off every
+     * run-up and landing strip (a cave 10 further), a boost strip never within 30 before a drop, and
+     * out of every flight zone but a 1-block drop's, where a split or forest may stand.
+     */
     private static boolean free(TrackProfile profile, BoatPlanner.Level level, Kind k, double s1, double s2,
-                                List<Piece> placed, int h0, double straightStart) {
+                                List<Piece> placed, int h0) {
         if (s1 < TrackProfile.START + TrackProfile.CLEAN) {
             return false;
         }

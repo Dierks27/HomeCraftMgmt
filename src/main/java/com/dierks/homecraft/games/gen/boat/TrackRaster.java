@@ -11,7 +11,8 @@ import java.util.List;
 /**
  * The Mountain Run drawn on whole blocks (Course Variety §2.5, §2.6): which columns are track and
  * at what height, the drops' flight zones as {@link DownhillValidator} will see them, where the
- * checkpoints go, and then every block: walls, markers, the pieces' structures.
+ * checkpoints go, and then every block: walls, markers, the pieces' structures, the stand, the signs'
+ * places, and the leaves at vanilla's own distance.
  *
  * <p><b>The lane.</b> A column is track when its middle is within the lane's half width of its
  * nearest centreline point (wider where a piece or a bend's sand widens it), and its height is the
@@ -19,16 +20,18 @@ import java.util.List;
  *
  * <p><b>The proof's own view.</b> The drop edges and their flight zones are worked out here exactly
  * as the validator floods them (every lip cell's disc of Z(d), along the track at or below it), so
- * the walls are raised where it will look and the checkpoints kept where it will allow: on a flat
- * straight of the lane's own width, at least 3 from every drop and every zone, no other ring within
- * reach of their sphere, at most one drop and at most 60 blocks between two targets. The checkpoints
- * are laid by a shortest chain over those places (fewest checkpoints, legs of at most 40 blocks
- * where no drop is between), which is also how a piece is kept or given up: only while a chain
- * still exists round it.
+ * the walls are raised where it will look and the checkpoints kept where it will allow: flat, off
+ * sand, in the open, at least 3 from every drop and every zone, no other ring within reach of their
+ * sphere; on a straight (radius w / 2 + 0.5, its middle row spans the lane) or on a bend with no sand
+ * (a block wider, where its sphere is shown to cut the lane). They are laid by a shortest chain
+ * ({@link #chain}): legs at most 60 across the ground with at most one drop each (the rules), a
+ * checkpoint every 32 along the track wherever one can go, and no more than that. It is also how a
+ * piece is kept or given up: only while a chain still exists round it.
  *
  * <p><b>Walls</b> stand in every column beside the track, from the lowest ice beside it to 2 over
  * the highest (stripped spruce at the ice and the ice + 1, glass above), raised to 2 over the lip
- * round every flight zone and carried up as a spruce cliff to a terrace beside it. Pure: no Bukkit.
+ * round every flight zone and carried up as a spruce cliff to a terrace beside it; an island's rim is
+ * spruce, a forest's trunk logs. Risers fill under every 2-block edge. Pure: no Bukkit.
  */
 final class TrackRaster {
 

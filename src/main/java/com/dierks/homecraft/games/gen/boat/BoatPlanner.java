@@ -81,6 +81,14 @@ public final class BoatPlanner implements Planner {
      * distance, sand, and the deck of pieces. What the proof checks of a tier (the narrowest passage,
      * the ice line, the drops' limits) is {@link DownhillValidator.Tier}'s, read through
      * {@link #proof()}.
+     *
+     * <p>Where §2.4's table and its fixed constants (the landing strips, Z(d) + 12 between drops, a
+     * checkpoint at most 60 on) can't both hold on a 128-block half, the constants win and the table
+     * bends: the inner corners keep near the smallest radius so the inner straights hold a drop and its
+     * landing; easy goes round 1.5 turns (not 1.25) so its last flat leg has room for a piece; easy
+     * gets 4 drops, medium 5-6, hard 4-5 (its blue landing strips fit the outer legs only, and a
+     * Final Drop on the finish's own side would be too near it). Sand pits and caves need a flat
+     * stretch outside every flight zone, so they are common on hard and rare on easy and medium.
      */
     public enum Level {
         EASY("easy", 9, 9, 16, new int[]{32, 30, 24, 16, 17, 17}, 20, 6, false, 4, 5, 70, 1, 0,
@@ -178,10 +186,6 @@ public final class BoatPlanner implements Planner {
             return blue;
         }
 
-        public String ice() {
-            return blue ? Palette.TRACK_FAST : Palette.TRACK;
-        }
-
         /** The fewest and most drops a try may have. */
         public int minDrops() {
             return minDrops;
@@ -269,11 +273,6 @@ public final class BoatPlanner implements Planner {
             return d >= 2 ? 26 : 22;
         }
 
-        /** The most any piece or bend widens one side of the lane. */
-        public int widest() {
-            return MAX_EXTRA * 2;
-        }
-
         /** The tier called {@code word} (any case), or {@code null}. */
         public static Level of(String word) {
             if (word == null) {
@@ -299,8 +298,6 @@ public final class BoatPlanner implements Planner {
     static final int END_ROOM = 3;
     /** Hard's pit narrows from 7 to 5 this far after the pit's end: the first corner's funnel. */
     static final int FUNNEL = 4;
-    /** A drop's edge is seeded up to this far on from the first place it may go. */
-    static final int LIP_SLACK = 10;
     /** Drops are at least Z(d) + this apart along the track (§2.6). */
     static final int LIP_GAP = 12;
     /** Each drop but the Final Drop becomes a 2 with this chance, while the tier allows. */
@@ -381,7 +378,12 @@ public final class BoatPlanner implements Planner {
                 break;
             }
             Richness rich = t < 10 ? Richness.FULL : t < 15 ? Richness.REDUCED : Richness.BASIC;
-            Made m = attempt(in, level, root, t, rich);
+            Made m;
+            try {
+                m = attempt(in, level, root, t, rich);
+            } catch (RuntimeException e) {
+                m = null; // a try that can't come together is just a failed try: the next one, or the safe spiral
+            }
             if (m != null && DownhillValidator.problems(m.plan, level.id()).isEmpty()) {
                 return m.finished(t + 1, TRIES);
             }
@@ -466,9 +468,11 @@ public final class BoatPlanner implements Planner {
     }
 
     /**
-     * {@code SAFE_SPIRAL} (§2.9): a_0 = 55, every corner the tier's smallest radius, the orientation
-     * from the seed; the tier's fewest drops at the first place each may go (easy 4 x 1, medium 5 x 1,
-     * hard 3 x 1 then a 2); no pieces, no sand but the finish's paddock; the scenery seeded.
+     * {@code SAFE_SPIRAL} (§2.9): a_0 = 55, every corner the tier's smallest radius (§2.9 says 1.5
+     * times it, but then the inner straights are too short for the fixed drops, their landing strips
+     * and their checkpoints), the orientation from the seed; the tier's fewest drops at the first place
+     * each may go (easy 4 x 1, medium 5 x 1, hard 1, 1, 2, 1); no pieces, no sand but the finish's
+     * paddock; the scenery seeded. Its track depends only on the orientation.
      */
     static Made safe(PlanInput in, Level level, GenRandom root) {
         GenRandom r = root.fork("safe");

@@ -88,6 +88,18 @@ public final class Slots {
         }
 
         /**
+         * Whether its plans may place water, and so its halves (or a plot a course of it is kept in)
+         * may hold some (Course Variety §1.2): a Dropper's sealed pools, and golf's ponds (the Classic
+         * Golf slot too, whose generator is golf). THE one predicate every water gate asks: the
+         * palette lint, a moved plan's proof, the drain-first warnings, the old wet regions, the
+         * staged builds and the keep plots' flow guard. The ice boat stays dry: no boat plan ever
+         * places water.
+         */
+        public boolean mayHoldWater() {
+            return dropper() || golf();
+        }
+
+        /**
          * Whether its difficulty is a mix of E, M and H (golf's holes, a Dropper's levels) rather
          * than one tier: the config key is {@code mix}, admins use {@code /hcm games gen mix}.
          */

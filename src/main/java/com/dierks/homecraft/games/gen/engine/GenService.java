@@ -51,6 +51,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -237,8 +238,9 @@ public final class GenService implements GeneratedCourses, GenOps {
     private final Map<Long, List<DailyStars.Goal>> weekGoals = new HashMap<>();
     private volatile List<Object[]> areas = List.of();
     /**
-     * The flow-only boxes {world, {@link Box}}: every kept Dropper's plot and a plot job's in flight
-     * ({@link #wetPlots}), whose water must never flow out though nothing else there is guarded.
+     * The flow-only boxes {world, {@link Box}}: every plot of a kept Dropper or golf course and a plot
+     * job's in flight ({@link #wetPlots}), whose water must never flow out though nothing else there
+     * is guarded.
      */
     private volatile List<Object[]> wetPlots = List.of();
     /** Every world {@link #areas} and {@link #wetPlots} touch: a flow anywhere else is a quick no. */
@@ -255,7 +257,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             return guarded(world);
         }
     };
-    /** ...and no fluid flowing out of {@link #wetPlots} or a Dropper keep in flight. */
+    /** ...and no fluid flowing out of {@link #wetPlots} or a keep in flight that may hold water. */
     private final GenRegionGuard.Area wetArea = new GenRegionGuard.Area() {
         @Override
         public boolean in(String world, int x, int y, int z) {
@@ -1035,7 +1037,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                     int[] old = Regions.claimOrigin(claim);
                     String where = old == null ? claim : Regions.describe(s.def, old);
                     warnOnce(s, "Fresh Courses: " + id + " was claimed at another place (" + where + "). "
-                            + (s.def.dropper() ? drainFirst(s) : "Those blocks are left as they are: clear them by"
+                            + (s.def.mayHoldWater() ? drainFirst(s) : "Those blocks are left as they are: clear them by"
                             + " hand.") + " The new region is checked before it is used.");
                 }
                 s.claimed = claimed;
@@ -1068,15 +1070,16 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     /**
-     * A Dropper slot's old regions that may still hold its pools though it stands elsewhere now
+     * The old regions of a slot that {@link Slots.Def#mayHoldWater may hold water} (a Dropper's
+     * pools, golf's ponds) that may still hold it though the slot stands elsewhere now
      * ({@link GenAdminKeys#wet}), added to the guarded {@code kept}: the claim it held when its
      * origin (or the world) moved is remembered the first time it is seen, before a claim at the new
      * place can overwrite it. Each stays guarded (nothing changes there, and nothing flows out) until
      * the slot is claimed there again, which puts it under the claim's guard and lets a {@code clear}
-     * drain it (a CLEAR empties the pools before anything else). Any other slot: nothing.
+     * drain it (a CLEAR empties the water before anything else). Any other slot: nothing.
      */
     private void wetRegions(SlotState s, Map<String, String> meta, String world, int[] origin, List<Object[]> kept) {
-        if (!s.def.dropper()) {
+        if (!s.def.mayHoldWater()) {
             return;
         }
         if (meta != null) {
@@ -1113,18 +1116,20 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     /**
-     * What a moved Dropper's admin reads: its pools may still stand in the old place, which stays
-     * guarded until they are drained there.
+     * What the admin of a moved slot that may hold water reads: a Dropper's pools (golf's ponds) may
+     * still stand in the old place, which stays guarded until they are drained there.
      */
     private static String drainFirst(SlotState s) {
-        return "Its pools may still be there, so that area stays guarded: drain first - move it back and use"
-                + " /hcm games gen clear " + s.def.id() + " (it empties the pools before anything else).";
+        String water = s.def.golf() ? "ponds" : "pools";
+        return "Its " + water + " may still be there, so that area stays guarded: drain first - move it back and use"
+                + " /hcm games gen clear " + s.def.id() + " (it empties the " + water + " before anything else).";
     }
 
     /**
-     * The flow-only boxes {world, {@link Box}} {@code meta} names: every plot holding a kept Dropper,
-     * and a plot job the server stopped halfway ({@link KeepService#wetPending}). The keep area is
-     * hand-built ground the guard leaves alone, but a Dropper's water must never flow out of its plot.
+     * The flow-only boxes {world, {@link Box}} {@code meta} names: every plot holding a kept course
+     * that may hold water (a Dropper, golf: {@link KeepService#mayHoldWater}), and a plot job the
+     * server stopped halfway ({@link KeepService#wetPending}). The keep area is hand-built ground the
+     * guard leaves alone, but a pool's or a pond's water must never flow out of its plot.
      */
     static List<Object[]> wetPlots(Map<String, String> meta) {
         List<Object[]> out = new ArrayList<>();
@@ -1133,7 +1138,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 continue;
             }
             KeptPlot p = KeptPlot.parse(GenAdminKeys.plotOf(e.getKey()), e.getValue());
-            if (p != null && KeepService.dropper(p.slot())) {
+            if (p != null && KeepService.mayHoldWater(p.slot())) {
                 out.add(new Object[]{p.world(), p.box()});
             }
         }
@@ -1196,7 +1201,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         host.logger().warning("Fresh Courses: " + s.def.id() + " moved from " + s.world + " "
                 + Regions.describe(s.def, s.origin) + " to " + world + " " + Regions.describe(s.def, origin)
                 + ". The old halves were not cleared (use /hcm games gen clear before moving a course)."
-                + (s.def.dropper() ? " " + drainFirst(s) : ""));
+                + (s.def.mayHoldWater() ? " " + drainFirst(s) : ""));
         s.verified = false;
         s.healFailed = s.live != null;
         s.previous = null;
@@ -1596,8 +1601,9 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
             Step st = j.steps.get(j.stepIndex);
             try {
-                // a Dropper's half may hold its pools: drained before any wall goes, even when clearing
-                j.build = new BuildJob(port, s.half(st.which()), st.plan(), st.mode(), s.def.dropper());
+                // a half that may hold water (a Dropper's pools, golf's ponds): drained before any wall
+                // goes, even when clearing
+                j.build = new BuildJob(port, s.half(st.which()), st.plan(), st.mode(), s.def.mayHoldWater());
             } catch (IllegalArgumentException e) {
                 fail(j, e.getMessage());
                 return;
@@ -1846,25 +1852,31 @@ public final class GenService implements GeneratedCourses, GenOps {
         return true;
     }
 
-    /** Structural check for a layout an older planner made: read the row, then the blocks. */
+    /**
+     * Structural check for a layout an older planner made: read the row, then the blocks. Each chunk
+     * is snapshotted once for the whole check (golf's pond scan reads every block of every hole's plot).
+     */
     private List<String> structure(Job j) {
         SlotState s = j.slot;
         WorldPort port = host.world(s.world);
         if (port == null) {
             return List.of("the world isn't loaded");
         }
+        Map<Long, Optional<WorldPort.ChunkView>> views = new HashMap<>();
+        java.util.function.BiFunction<Integer, Integer, WorldPort.ChunkView> view = (cx, cz) -> views.computeIfAbsent(
+                ((long) cx << 32) ^ (cz & 0xFFFFFFFFL), k -> Optional.ofNullable(port.snapshot(cx, cz))).orElse(null);
         LiveProof.Solid solid = (x, y, z) -> {
-            WorldPort.ChunkView v = port.snapshot(x >> 4, z >> 4);
+            WorldPort.ChunkView v = view.apply(x >> 4, z >> 4);
             return v != null && !v.air(x, y, z);
         };
-        LiveProof.Solid water = (x, y, z) -> water(port.snapshot(x >> 4, z >> 4), x, y, z);
+        LiveProof.Solid water = (x, y, z) -> water(view.apply(x >> 4, z >> 4), x, y, z);
         try {
             GamesDao.CourseRow row = host.store().course(s.def.id());
             if (row == null) {
                 return List.of("its row is gone");
             }
             if (s.def.golf()) {
-                return LiveProof.structure(com.dierks.homecraft.games.golf.CourseCodec.fromRow(row), solid);
+                return LiveProof.structure(com.dierks.homecraft.games.golf.CourseCodec.fromRow(row), solid, water);
             }
             return LiveProof.structure(CourseCodec.decode(row.id(), row.data()).course(), solid, water);
         } catch (SQLException | RuntimeException e) {
@@ -2400,8 +2412,8 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     /**
-     * Whether a block is in a flow-only box: a kept Dropper's plot, a plot job the server stopped
-     * halfway, or the plot a Dropper keep (or any clearing) is working in now.
+     * Whether a block is in a flow-only box: a kept Dropper's or golf course's plot, a plot job the
+     * server stopped halfway, or the plot a keep that may hold water (or any clearing) is working in now.
      */
     boolean inWet(String world, int x, int y, int z) {
         return in(wetPlots, world, x, y, z) || keeper.inWetJob(world, x, y, z);
@@ -2442,12 +2454,18 @@ public final class GenService implements GeneratedCourses, GenOps {
         return false;
     }
 
-    /** Every change refused: every wanted or claimed half, and a moved Dropper's old ones ({@link GenRegionGuard}). */
+    /**
+     * Every change refused: every wanted or claimed half, and the old ones of a moved slot that may hold
+     * water ({@link GenRegionGuard}).
+     */
     public GenRegionGuard.Area guardArea() {
         return guardArea;
     }
 
-    /** No fluid flowing out: kept Droppers' plots and a Dropper keep in flight ({@link GenRegionGuard}). */
+    /**
+     * No fluid flowing out: the plots of kept Droppers and golf courses, and such a keep in flight
+     * ({@link GenRegionGuard}).
+     */
     public GenRegionGuard.Area wetArea() {
         return wetArea;
     }
@@ -3649,12 +3667,13 @@ public final class GenService implements GeneratedCourses, GenOps {
             fail(j, "its plan was refused: " + String.join("; ", problems));
             return;
         }
-        if (!orig.dropper()) {
+        if (!orig.mayHoldWater()) {
             recallProven(j, moved, List.of(), null);
             return;
         }
-        // A moved dropper is proven again where it stands: its whole validator, on the planner thread
-        // (like PlanCheck.generator: tens of milliseconds), the answer back through the inbox.
+        // A moved plan that may hold water (a dropper, golf) is proven again where it stands
+        // (PlanCheck.movedProblems: its sealed pools or ponds, its solvability or witness lines), on the
+        // planner thread (like PlanCheck.generator), the answer back through the inbox.
         j.stage = Stage.PLANNING;
         j.planStarted = host.now();
         host.planner().execute(() -> {

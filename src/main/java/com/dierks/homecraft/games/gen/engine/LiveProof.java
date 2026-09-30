@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.gen.engine;
 
+import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Putt;
 import com.dierks.homecraft.games.gen.dropper.DropMarks;
 import com.dierks.homecraft.games.golf.BallPhysics;
@@ -23,7 +24,8 @@ import java.util.List;
  *
  * <p><b>The structural check.</b> A layout made by an older planner version can't be derived again
  * after an update. Instead of the full proof it gets a quick one: a solid block under every place
- * a player or a ball must stand. It opens with a WARN, and the new version builds from the next
+ * a player or a ball must stand (and every boat checkpoint: they sit on the ice), and on golf every
+ * pond still sealed ({@link #pools}). It opens with a WARN, and the new version builds from the next
  * day.
  */
 public final class LiveProof {
@@ -72,8 +74,9 @@ public final class LiveProof {
 
     /**
      * The quick check for a trial built by an older planner: a solid block under the start, and
-     * under every checkpoint and the finish of a parkour course (rings and boat marks float or
-     * span the track, so only the start is checked). Empty = fine.
+     * under every checkpoint and the finish of a parkour or an ice boat course (a boat's marks sit
+     * on the ice, on every algo: Course Variety §2.12). Rings float, so only the tower is checked.
+     * Empty = fine.
      */
     public static List<String> structure(Course c, Solid solid) {
         return structure(c, solid, null);
@@ -97,7 +100,7 @@ public final class LiveProof {
         if (!under(solid, c.start().x(), c.start().y(), c.start().z())) {
             out.add("nothing solid under the start");
         }
-        if (c.kind() == TrialKind.PARKOUR) {
+        if (c.kind() == TrialKind.PARKOUR || c.kind() == TrialKind.BOAT) {
             int i = 0;
             for (Course.Mark m : c.targets()) {
                 i++;
@@ -124,6 +127,17 @@ public final class LiveProof {
 
     /** The quick check for golf: a solid block under every tee, and a solid cup block. Empty = fine. */
     public static List<String> structure(GolfCourse g, Solid solid) {
+        return structure(g, solid, null);
+    }
+
+    /**
+     * {@link #structure(GolfCourse, Solid)} with a way to see water (Course Variety §1.3): every
+     * hole's plot box ({@link #plotBox}) is scanned too, and any water in it must be sealed
+     * ({@link #pools}). Without {@code water} only the tees and cups are checked.
+     *
+     * @param water whether block (x, y, z) is water, or {@code null}
+     */
+    public static List<String> structure(GolfCourse g, Solid solid, Solid water) {
         List<String> out = new ArrayList<>();
         int i = 0;
         for (GolfCourse.Hole h : g.holes()) {
@@ -134,8 +148,76 @@ public final class LiveProof {
             if (h.cup() == null || !solid.at(h.cup().x(), h.cup().y(), h.cup().z())) {
                 out.add("hole " + i + "'s cup block is missing");
             }
+            Box plot = plotBox(h);
+            if (water != null && plot != null) {
+                for (String p : pools(plot, solid, water)) {
+                    out.add("hole " + i + ": " + p);
+                }
+            }
         }
         return out;
+    }
+
+    /** The most blocks {@link #pools} scans in one box: a golf hole's plot is a few thousand. */
+    public static final long MAX_SCAN = 1L << 18;
+
+    /**
+     * The sealed-pool test on the real blocks of {@code box} (the live twin of {@code Pools}, §1.3):
+     * every water block in it has water or a solid block on all four sides and below, so none can
+     * flow. Its neighbours outside the box are looked at too. Empty = fine (or no water). A box
+     * bigger than {@link #MAX_SCAN} blocks isn't scanned, and says so.
+     */
+    public static List<String> pools(Box box, Solid solid, Solid water) {
+        List<String> out = new ArrayList<>();
+        if (box == null || solid == null || water == null) {
+            return out;
+        }
+        if (box.volume() > MAX_SCAN) {
+            out.add("the area " + box.describe() + " is too big to scan for ponds");
+            return out;
+        }
+        int open = 0;
+        String first = null;
+        int[][] around = {{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}};
+        for (int x = box.minX(); x <= box.maxX(); x++) {
+            for (int z = box.minZ(); z <= box.maxZ(); z++) {
+                for (int y = box.minY(); y <= box.maxY(); y++) {
+                    if (!water.at(x, y, z)) {
+                        continue;
+                    }
+                    for (int[] d : around) {
+                        int nx = x + d[0];
+                        int ny = y + d[1];
+                        int nz = z + d[2];
+                        if (!water.at(nx, ny, nz) && !solid.at(nx, ny, nz)) {
+                            open++;
+                            if (first == null) {
+                                first = x + " " + y + " " + z;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if (open > 0) {
+            out.add(open + " water block" + (open == 1 ? " has" : "s have") + " air beside or under it (first at "
+                    + first + "): a pond isn't sealed");
+        }
+        return out;
+    }
+
+    /**
+     * A hole's plot box: its bounds (walls included) one block wider on every side and one lower, and
+     * two higher (as the golf planner's own {@code plotBox}); {@code null} for a hole without bounds.
+     */
+    static Box plotBox(GolfCourse.Hole h) {
+        if (h == null || h.corner1() == null || h.corner2() == null) {
+            return null;
+        }
+        Box b = Box.of(h.corner1().x(), h.corner1().y(), h.corner1().z(), h.corner2().x(), h.corner2().y(),
+                h.corner2().z());
+        return new Box(b.minX() - 1, b.minY() - 1, b.minZ() - 1, b.maxX() + 1, b.maxY() + 2, b.maxZ() + 1);
     }
 
     /** A solid block right under feet at (x, y, z). */

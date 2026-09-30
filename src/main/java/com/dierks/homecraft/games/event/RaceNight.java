@@ -594,6 +594,7 @@ public final class RaceNight implements Game {
                 s.announceMinutes(), state);
         r.prizeWeek(() -> DailyLookup.weekKey(games()), s.prizeEventsPerWeek()); // the week at race 1's Go
         r.standRadius(s.standRadius()); // race mode keeps the stand, within this
+        r.hype(s.hype()); // a Mountain Run's drops in the heads-up and join-open lines
         r.onEnd(this::ended);
         news.clear();
         night = r;
@@ -1089,6 +1090,7 @@ public final class RaceNight implements Game {
         String track = null;
         int races = s.races();
         int laps = s.laps();
+        boolean downhill = false;
         List<Integer> prizes = s.prizes();
         int finisher = s.finisherPrize();
         boolean prizeNight = s.prizeEventsPerWeek() > prizedThisWeek();
@@ -1101,6 +1103,7 @@ public final class RaceNight implements Game {
             track = n.track().name();
             races = n.plan().races();
             laps = n.laps();
+            downhill = EventCopy.downhill(n.track().base());
             prizes = n.plan().rules().prizes();
             finisher = n.plan().rules().finisherPrize();
             prizeNight = n.prizeNight() && (n.started() >= 0 || prizeNight);
@@ -1126,6 +1129,7 @@ public final class RaceNight implements Game {
                 Course c = nextTrack(o);
                 track = c == null ? null : c.name();
                 laps = c == null ? laps : RaceTrack.laps(c, laps);
+                downhill = EventCopy.downhill(c);
                 opensAt = EventCopy.clock(o.joinAt(), zone) + " (" + EventCopy.when(o.startsAt(), zone) + ")";
                 join = RaceNightMenu.Join.SOON;
             }
@@ -1136,7 +1140,7 @@ public final class RaceNight implements Game {
         return new RaceNightMenu.View(when, state, track, races, laps, prizes, finisher, prizeNight, join, racers, max,
                 opensAt, watchers.watching(id), lastRow == null ? null : winner(lastRow.id()),
                 lastRow == null ? null : EventCopy.nightBoard(lastRow.id()), seasonName, board, seasonPoints(id),
-                newsOn(id));
+                newsOn(id), downhill);
     }
 
     /** Race Night's {@code events} section of the website feed (§A.7). */
@@ -1157,7 +1161,8 @@ public final class RaceNight implements Game {
         String prizes = "prize nights " + prizedThisWeek() + "/" + settings().prizeEventsPerWeek() + " this week";
         if (n != null) {
             out.add(n.phase().name().toLowerCase(Locale.ROOT) + " · " + n.plan().id() + " on " + n.track().name()
-                    + " (" + EventCopy.format(n.plan().races(), n.laps()) + ") · " + EventCopy.racers(n.joined().size())
+                    + " (" + EventCopy.format(n.plan().races(), n.laps(), n.track().base()) + ") · "
+                    + EventCopy.racers(n.joined().size())
                     + " · " + prizes);
         } else {
             EventSchedule.Occurrence o = next();

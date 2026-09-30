@@ -2095,6 +2095,9 @@ games:
     season: month
     # Watchers who wander further than this from the viewing stand are put back.
     stand_radius: 4
+    # true = on the Ice Boat Mountain Run, the heads-up and "join now" chat lines add how many drops
+    # it has ("This week: 5 drops down the mountain!"). Words only: it never changes a track.
+    hype: true
   # ---- falling_floors ----
   # Falling Floors: every block you step on falls away. Last one standing wins - or play solo.
   # Three glass floors in a box of its own, with a new shape every week. No TNT, no explosions.

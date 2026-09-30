@@ -10,6 +10,7 @@ import com.dierks.homecraft.games.gen.engine.GenService;
 import com.dierks.homecraft.games.golf.GolfCourse;
 import com.dierks.homecraft.games.golf.GolfRun;
 import com.dierks.homecraft.games.golf.MiniGolf;
+import com.dierks.homecraft.games.trial.BoatHype;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.DropperLayout;
 import com.dierks.homecraft.games.trial.TimeTrials;
@@ -170,6 +171,8 @@ final class DailyTiles {
         } else if (v.trial() != null && v.game() instanceof TimeTrials trials) {
             if (slot.dropper()) {
                 holes = DropperLayout.levels(v.trial()); // a dropper's key fact: its levels
+            } else if (BoatHype.mountain(v.trial())) {
+                holes = BoatHype.drops(v.trial()); // a Mountain Run's: its drops
             }
             String board = TimeTrials.board(v.trial());
             lore.add(trials.setBestLine(trials.recordOn(board), viewer, setCadence));

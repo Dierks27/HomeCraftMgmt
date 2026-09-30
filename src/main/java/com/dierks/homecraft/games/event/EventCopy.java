@@ -1,5 +1,8 @@
 package com.dierks.homecraft.games.event;
 
+import com.dierks.homecraft.games.trial.BoatHype;
+import com.dierks.homecraft.games.trial.Course;
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -12,6 +15,11 @@ import java.util.Locale;
  * Race Night's words and numbers, in one place so the chat, the screens, the hub signs and the
  * feed say the same thing (EVENTS-DROPPER-SPEC §A.1, §A.6). Pure: every time is read in the zone
  * handed in. Kid copy: short words, no near-miss wording, nothing above U+FFFF.
+ *
+ * <p><b>The Mountain Run</b> (COURSE-VARIETY-SPEC §5.2): the Ice Boat's downhill sprint has no laps
+ * to count, so its format reads "3 downhill races", and the heads-up and join-open lines can end with
+ * its hype ("This week: 5 drops down the mountain!", {@link BoatHype#line}). Every other track reads
+ * exactly as before.
  */
 public final class EventCopy {
 
@@ -104,6 +112,26 @@ public final class EventCopy {
         return races + (races == 1 ? " race" : " races") + ", " + laps + (laps == 1 ? " lap" : " laps");
     }
 
+    /** "3 downhill races" ({@code downhill}: a Mountain Run, a sprint with no laps), else {@link #format(int, int)}. */
+    public static String format(int races, int laps, boolean downhill) {
+        return downhill ? races + (races == 1 ? " downhill race" : " downhill races") : format(races, laps);
+    }
+
+    /** A night's format on {@code track}: "3 downhill races" on a Mountain Run, "3 races, 2 laps" on anything else. */
+    public static String format(int races, int laps, Course track) {
+        return format(races, laps, downhill(track));
+    }
+
+    /** Whether {@code track} is raced as a downhill sprint: a Mountain Run, which is never a loop. */
+    public static boolean downhill(Course track) {
+        return BoatHype.mountain(track) && !RaceTrack.loop(track);
+    }
+
+    /** A night's laps as the admin's status says them: "2 laps", "1 lap", or "a downhill sprint" on a Mountain Run. */
+    public static String laps(int laps, Course track) {
+        return downhill(track) ? "a downhill sprint" : laps + (laps == 1 ? " lap" : " laps");
+    }
+
     // ---- the season -----------------------------------------------------------------------------
 
     /** The season key at {@code millis}: {@code 2026-10}. */
@@ -192,9 +220,24 @@ public final class EventCopy {
                 + clock(joinAt, zone) + ": &e" + COMMAND;
     }
 
+    /** The heads-up with the track's hype at its end ({@link BoatHype#line}; {@code null}: none). */
+    public static String headsUp(long startsAt, long joinAt, String track, ZoneId zone, String hype) {
+        return withHype(headsUp(startsAt, joinAt, track, zone), hype);
+    }
+
     /** The join window opening. */
     public static String joinOpen(long startsAt, String track, ZoneId zone) {
         return "&bRace Night &7on " + track + " starts at " + clock(startsAt, zone) + " - join now: &e" + COMMAND;
+    }
+
+    /** The join window opening with the track's hype at its end ({@link BoatHype#line}; {@code null}: none). */
+    public static String joinOpen(long startsAt, String track, ZoneId zone, String hype) {
+        return withHype(joinOpen(startsAt, track, zone), hype);
+    }
+
+    /** {@code line}, then {@code hype} after a space when there is one. */
+    static String withHype(String line, String hype) {
+        return hype == null || hype.isBlank() ? line : line + " " + hype;
     }
 
     /** The last call (T − 2 min). */

@@ -792,8 +792,8 @@ public final class TimeTrials implements Game {
         CupLink.Tile cup = cups.tile(c); // Weekly Cup: read once for the lore and the NAME
         lore.addAll(cup.lines());
         lore.add("&eClick to play");
-        String fact = (c.kind() == TrialKind.DROPPER ? DailyText.levels(DropperLayout.levels(c)) + " · " : "")
-                + DailyText.trialFact(cadence, stars);
+        String fact = (c.kind() == TrialKind.DROPPER ? DailyText.levels(DropperLayout.levels(c)) + " · "
+                : BoatHype.fact(c)) + DailyText.trialFact(cadence, stars); // "5 drops · " on a Mountain Run
         String name = t.recalled() ? "&6" + classicName(t, c.name()) + " &7- " + fact
                 : DailyText.tabName(Slots.of(t.slot()), c.name(), fact, DailyLookup.current(g, t.slot()), cadence);
         return new Face(c.id(), icon(c.kind()), name + DailyLookup.codeSuffix(code) + cup.suffix(), lore, stars >= 3);
@@ -1327,7 +1327,8 @@ public final class TimeTrials implements Game {
     private void reached(Player p, TrialRun run, int index) {
         int of = run.course.checkpoints().size();
         String time = TrialText.time(run.elapsedMs(run.progress.times()[index]));
-        title(p, "", "&aCheckpoint " + (index + 1) + " of " + of + " &7- " + time, 25);
+        title(p, BoatHype.checkpointTitle(run.course, index), // "Final drop!" on a Mountain Run
+                "&aCheckpoint " + (index + 1) + " of " + of + " &7- " + time, 25);
         ping(p, 1.4f + 0.4f * (index + 1) / Math.max(1, of));
         if (run.course.kind() == TrialKind.ELYTRA) {
             refillRockets(p);

@@ -41,20 +41,23 @@ import java.util.Locale;
  * @param prizeEventsPerWeek  nights a week that pay tokens, server-wide (0-7)
  * @param season              {@code month} (a monthly season board) or {@code off}
  * @param standRadius         how far from the stand a watcher may wander before being put back
+ * @param hype                the heads-up and join-open chat say how many drops a Mountain Run has
+ *                            ("This week: 5 drops down the mountain!", COURSE-VARIETY-SPEC §5.2, §6);
+ *                            runtime copy only, it never shapes a layout
  */
 public record RaceNightSettings(boolean enabled, List<String> schedule, String course, int races, int laps,
                                 int announceMinutes, int joinMinutes, int adminJoinMinutes, int minRacers,
                                 int maxRacers, int finishWindowSeconds, int maxRaceMinutes, int breakSeconds,
                                 int warmupSeconds, List<Integer> points, int finishPoints, int stillRacingPoints,
                                 List<Integer> prizes, int finisherPrize, int prizeEventsPerWeek, String season,
-                                int standRadius) {
+                                int standRadius, boolean hype) {
 
     /** The leaves under {@code games.race_night}, in config order. */
     public static final List<String> KEYS = List.of("enabled", "schedule", "course", "races", "laps",
             "announce_minutes", "join_minutes", "admin_join_minutes", "min_racers", "max_racers",
             "finish_window_seconds", "max_race_minutes", "break_seconds", "warmup_seconds", "points",
             "finish_points", "still_racing_points", "prizes", "finisher_prize", "prize_events_per_week", "season",
-            "stand_radius");
+            "stand_radius", "hype");
 
     /** {@code season: month}: points also go on a monthly season board. */
     public static final String SEASON_MONTH = "month";
@@ -75,7 +78,21 @@ public record RaceNightSettings(boolean enabled, List<String> schedule, String c
         minRacers = Math.max(2, Math.min(maxRacers, minRacers));
     }
 
-    /** The shipped settings (§A.10): off; Fridays at 7:00 PM; 3 races; prizes 5, 3, 2 and 1. */
+    /** The settings before the {@code hype} key (it reads as on, as shipped): every existing caller's shape. */
+    public RaceNightSettings(boolean enabled, List<String> schedule, String course, int races, int laps,
+                             int announceMinutes, int joinMinutes, int adminJoinMinutes, int minRacers, int maxRacers,
+                             int finishWindowSeconds, int maxRaceMinutes, int breakSeconds, int warmupSeconds,
+                             List<Integer> points, int finishPoints, int stillRacingPoints, List<Integer> prizes,
+                             int finisherPrize, int prizeEventsPerWeek, String season, int standRadius) {
+        this(enabled, schedule, course, races, laps, announceMinutes, joinMinutes, adminJoinMinutes, minRacers,
+                maxRacers, finishWindowSeconds, maxRaceMinutes, breakSeconds, warmupSeconds, points, finishPoints,
+                stillRacingPoints, prizes, finisherPrize, prizeEventsPerWeek, season, standRadius, true);
+    }
+
+    /**
+     * The shipped settings (§A.10): off; Fridays at 7:00 PM; 3 races; prizes 5, 3, 2 and 1; the drop
+     * hype on (COURSE-VARIETY-SPEC §6).
+     */
     public static RaceNightSettings defaults() {
         return new RaceNightSettings(
                 false,
@@ -99,7 +116,8 @@ public record RaceNightSettings(boolean enabled, List<String> schedule, String c
                 1,
                 3,
                 SEASON_MONTH,
-                4);
+                4,
+                true);
     }
 
     /** Read {@code games.race_night} over {@code d}; never throws. */
@@ -138,10 +156,11 @@ public record RaceNightSettings(boolean enabled, List<String> schedule, String c
             season = d.season();
         }
         int standRadius = n.whole("stand_radius", d.standRadius(), 2, 16);
+        boolean hype = n.bool("hype", d.hype());
         return new RaceNightSettings(enabled, schedule, course, races, laps, announceMinutes, joinMinutes,
                 adminJoinMinutes, minRacers, maxRacers, finishWindowSeconds, maxRaceMinutes, breakSeconds,
                 warmupSeconds, points, finishPoints, stillRacingPoints, prizes, finisherPrize, prizeEventsPerWeek,
-                season, standRadius);
+                season, standRadius, hype);
     }
 
     /** Whether points also go on a monthly season board. */

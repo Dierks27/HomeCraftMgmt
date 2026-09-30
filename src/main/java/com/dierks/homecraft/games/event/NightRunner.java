@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.event;
 
 import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.Refusal;
+import com.dierks.homecraft.games.trial.BoatHype;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.games.trial.RaceLink;
@@ -197,6 +198,8 @@ public final class NightRunner implements RaceLink {
     private boolean holdWarned;
     /** How far a racer on the stand may wander ({@code stand_radius}). */
     private double standRadius = 4;
+    /** The heads-up and join-open lines end with a Mountain Run's drops ({@code hype}, shipped on). */
+    private boolean hype = true;
     private Consumer<NightRunner> onEnd = r -> {
     };
 
@@ -534,11 +537,11 @@ public final class NightRunner implements RaceLink {
     private void act(EventMachine.Action a) {
         switch (a.what()) {
             case HEADS_UP -> ports.announce(Announcer.Line.HEADS_UP,
-                    EventCopy.headsUp(startsAt(), plan.joinAt(), track.name(), zone), racers.keySet());
+                    EventCopy.headsUp(startsAt(), plan.joinAt(), track.name(), zone, hypeLine()), racers.keySet());
             case OPEN -> {
                 openRow();
-                ports.announce(Announcer.Line.JOIN_OPEN, EventCopy.joinOpen(startsAt(), track.name(), zone),
-                        racers.keySet());
+                ports.announce(Announcer.Line.JOIN_OPEN, EventCopy.joinOpen(startsAt(), track.name(), zone,
+                        hypeLine()), racers.keySet());
             }
             case LAST_CALL -> {
                 ports.announce(Announcer.Line.LAST_CALL, EventCopy.lastCall(joined().size()), racers.keySet());
@@ -795,6 +798,21 @@ public final class NightRunner implements RaceLink {
     /** How far a racer on the stand may wander before race mode puts them back ({@code stand_radius}). */
     public void standRadius(int blocks) {
         this.standRadius = Math.max(1, blocks);
+    }
+
+    /** Whether the heads-up and join-open lines end with a Mountain Run's drops ({@code hype}). */
+    public boolean hype() {
+        return hype;
+    }
+
+    /** Race Night's {@code hype} switch (COURSE-VARIETY-SPEC §5.2, §6). */
+    public void hype(boolean on) {
+        this.hype = on;
+    }
+
+    /** "&amp;bThis week: 5 drops down the mountain!" on a Mountain Run with the hype on; {@code null} otherwise. */
+    String hypeLine() {
+        return BoatHype.line(track.base(), hype);
     }
 
     /** What a racer reads when the night ends under them: "great racing!" when it ran to the end. */

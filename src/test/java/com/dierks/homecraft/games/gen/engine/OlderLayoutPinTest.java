@@ -1,11 +1,18 @@
 package com.dierks.homecraft.games.gen.engine;
 
+import com.dierks.homecraft.games.gen.admin.GenArgs;
+import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.engine.GenKit.FakePlanner;
 import com.dierks.homecraft.games.gen.engine.GenKit.Host;
+import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.CourseCodec;
+import com.dierks.homecraft.games.trial.Tier;
+import com.dierks.homecraft.games.trial.TrialKind;
+import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.storage.GenArchiveDao;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,18 +40,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * that {@code keep} keeps it for good; so the next set is its own, not "the pinned course" built anew
  * from that seed; once a layout of today's planner is up, {@code pin live} works as before. A typed
  * seed an archived edition of another planner version was made from is pinned, with a warning that the
- * pin makes a new course from that seed (and how to recall that edition); any other seed is pinned as
- * before, with no warning.
+ * pin makes a new course from that seed and how to have that edition back by a command that is taken:
+ * the course up now stays until its set ends and {@code keep <course> current} keeps it (a recall of it is
+ * refused); once its set is over, {@code recall <code>} when its Classics slot is on, else (Ice Boat has
+ * none, or that slot is off) {@code keep <code>}. Any other seed is pinned as before, with no warning.
  */
 class OlderLayoutPinTest {
 
     private static final String SLOT = "fresh_parkour_easy";
+    private static final String BOAT = "fresh_boat";
     /** Monday 28 September 2026: the week the tests start in. */
     private static final long MON_28_SEP = 20724;
     private static final long MON_5_OCT = MON_28_SEP + 7;
 
     private Host host;
     private FakePlanner parkour;
+    private FakePlanner boat;
     private Map<String, Planner> planners;
     private GenService gen;
     private final List<String> said = new ArrayList<>();
@@ -58,7 +69,8 @@ class OlderLayoutPinTest {
         planners.put(Slots.PARKOUR, parkour);
         planners.put(Slots.RINGS, new FakePlanner(Slots.RINGS));
         planners.put(Slots.GOLF, new FakePlanner(Slots.GOLF));
-        planners.put(Slots.BOAT, new FakePlanner(Slots.BOAT));
+        boat = new FakePlanner(Slots.BOAT);
+        planners.put(Slots.BOAT, boat);
     }
 
     @AfterEach
@@ -95,17 +107,21 @@ class OlderLayoutPinTest {
 
     /** This week's set made by planner v2, then the update: planner v3, with the v2 layout still up and open. */
     private GenTag upgradeWeek() {
-        parkour.algo = 2;
+        return upgradeWeek(SLOT, parkour);
+    }
+
+    private GenTag upgradeWeek(String slot, FakePlanner planner) {
+        planner.algo = 2;
         boot();
         drive(70);
-        GenTag v2 = tag();
+        GenTag v2 = gen.liveTag(slot);
         assertNotNull(v2, "fixture: this week's set is up");
         assertEquals(2, v2.algo(), "fixture: made by planner v2");
-        parkour.algo = 3; // the update
+        planner.algo = 3; // the update
         boot();
         drive(5);
-        assertEquals(v2, tag(), "fixture: after the update the v2 layout is still up");
-        assertTrue(gen.live(SLOT, v2), "fixture: and open (checked structurally)");
+        assertEquals(v2, gen.liveTag(slot), "fixture: after the update the v2 layout is still up");
+        assertTrue(gen.live(slot, v2), "fixture: and open (checked structurally)");
         return v2;
     }
 
@@ -153,17 +169,23 @@ class OlderLayoutPinTest {
         assertNotNull(archived, "fixture: the v2 edition was archived when it went live");
         assertEquals(2, archived.algoVersion(), "fixture: as planner v2's");
         String hex = GenSeed.hex(v2.seed());
+        String code = archived.code();
 
+        // Still the course up now: a recall of it is refused, so the warning gives the pin-live advice instead.
         gen.pin(SLOT, hex, 0, said::add);
         assertEquals(2, said.size(), "pinned, and one warning: " + heard());
         assertTrue(said.get(0).contains("is pinned to seed " + hex), "the pin is what was asked for: " + heard());
-        assertTrue(said.get(1).startsWith("&eSeed " + hex + " was " + archived.code() + " ("),
+        assertTrue(said.get(1).startsWith("&eSeed " + hex + " was " + code + " ("),
                 "the warning names the edition that seed made: " + said.get(1));
         assertTrue(said.get(1).contains("made by parkour planner v2. &7This pin makes a new course from that seed with"
                 + " planner v3, not that one."), "and that the pin makes a new course: " + said.get(1));
-        assertTrue(said.get(1).contains("&e/hcm games gen recall " + archived.code()),
-                "and how to bring that one back: " + said.get(1));
+        assertTrue(said.get(1).contains(code + " stays up until its set (Mon 28 Sep-Sun 4 Oct) ends; to keep it for"
+                + " good: &e/hcm games gen keep " + SLOT + " current <new-id> confirm"),
+                "that it stays until its set ends, and how to keep it for good, as pin live says: " + said.get(1));
+        assertFalse(said.get(1).contains("recall"), "never a recall, which is refused for the course up now: "
+                + said.get(1));
         assertEquals(hex + ":3:0", host.store.meta(GenAdminKeys.pin(SLOT)), "the pin is stored for today's planner");
+        assertTaken(() -> keep(SLOT, "current", "old_easy"), "This keeps " + code, "the advised keep");
 
         said.clear();
         gen.pin(SLOT, "5eed", 0, said::add);
@@ -179,5 +201,96 @@ class OlderLayoutPinTest {
         said.clear();
         gen.pin(SLOT, GenSeed.hex(v3.seed()), 0, said::add);
         assertEquals(1, said.size(), "the seed of an edition of today's planner: no warning: " + heard());
+
+        // Its set over, the v2 edition is only archived: recalled into Classic Parkour, when that is on.
+        assertTrue(gen.slot(Slots.CLASSIC_PARKOUR.id()).on(), "fixture: Classic Parkour is on");
+        gen.unpin(SLOT, said::add);
+        said.clear();
+        gen.pin(SLOT, hex, 0, said::add);
+        assertEquals(2, said.size(), "pinned, and one warning: " + heard());
+        assertTrue(said.get(1).contains("This pin makes a new course from that seed with planner v3, not that one. To"
+                + " bring " + code + " back as it was: &e/hcm games gen recall " + code), "a recall now: "
+                + said.get(1));
+        assertFalse(said.get(1).contains("keep"), "not a keep: " + said.get(1));
+
+        // Classic Parkour off (a hand-built course next to its area): the recall would be refused, so keep by code.
+        Box c = gen.slot(Slots.CLASSIC_PARKOUR.id()).half('A');
+        Course near = new Course("river_run", TrialKind.PARKOUR, "River Run", Tier.EASY, GenKit.WORLD,
+                new Course.Spot(c.minX() - 10, c.minY() + 5, c.minZ() + 5, 0f, 0f), List.of(), null, null, null,
+                false, false, 1);
+        host.dao.saveCourse(new GamesDao.CourseRow("river_run", "trials", "parkour", "River Run", GenKit.WORLD, false,
+                CourseCodec.encode(near), 1, 0, 0));
+        vetted();
+        assertFalse(gen.slot(Slots.CLASSIC_PARKOUR.id()).on(), "fixture: Classic Parkour is off");
+        said.clear();
+        gen.pin(SLOT, hex, 0, said::add);
+        assertEquals(2, said.size(), "pinned, and one warning: " + heard());
+        assertTrue(said.get(1).contains("not that one. To keep " + code + " as it was, for good: &e/hcm games gen keep "
+                + code + " <new-id> confirm"), "keep by its code: " + said.get(1));
+        assertFalse(said.get(1).contains("recall"), "never a recall Classic Parkour can't take: " + said.get(1));
+        said.clear();
+        gen.recall(null, null, GenArgs.which(code), GenArgs.DAYS_DEFAULT, false, said::add);
+        assertTrue(heard().contains("Classic Parkour is off"), "fixture: the recall is refused: " + heard());
+        assertTaken(() -> keep(null, code, "old_easy"), "This keeps " + code, "the advised keep");
+
+        // Classic Parkour on again: the recall it suggests is taken.
+        host.dao.deleteCourse("river_run");
+        vetted();
+        said.clear();
+        gen.pin(SLOT, hex, 0, said::add);
+        assertTrue(said.get(1).contains("&e/hcm games gen recall " + code), "a recall again: " + said.get(1));
+        assertTaken(() -> gen.recall(null, null, GenArgs.which(code), GenArgs.DAYS_DEFAULT, false, said::add),
+                "Bringing back &f" + code, "the advised recall");
+    }
+
+    @Test
+    void aTypedSeedOfAnOlderIceBoatPointsToKeepNeverToARecallItHasNoClassicsSlotFor() throws Exception {
+        assertNull(Slots.classicFor(Slots.ICE_BOAT), "fixture: Ice Boat has no Classics slot");
+        host.settings = GenKit.weekly(BOAT);
+        GenTag v2 = upgradeWeek(BOAT, boat);
+        GenArchiveDao.Row archived = host.store.edition(BOAT, v2.editionKey());
+        String hex = GenSeed.hex(v2.seed());
+        String code = archived.code();
+
+        gen.pin(BOAT, hex, 0, said::add);
+        assertEquals(2, said.size(), "pinned, and one warning: " + heard());
+        assertTrue(said.get(1).contains("made by boat planner v2. &7This pin makes a new course from that seed with"
+                + " planner v3, not that one. " + code + " stays up until its set (Mon 28 Sep-Sun 4 Oct) ends; to keep"
+                + " it for good: &e/hcm games gen keep " + BOAT + " current <new-id> confirm"),
+                "up now: the pin-live advice: " + said.get(1));
+        assertFalse(said.get(1).contains("recall"), "no recall: " + said.get(1));
+
+        gen.unpin(BOAT, said::add);
+        host.now = GenKit.at(2026, 10, 5, 4, 0) + 40_000;
+        drive(30);
+        assertEquals(3, gen.liveTag(BOAT).algo(), "fixture: next week's set is planner v3's");
+        said.clear();
+        gen.pin(BOAT, hex, 0, said::add);
+        assertEquals(2, said.size(), "pinned, and one warning: " + heard());
+        assertTrue(said.get(1).contains("not that one. To keep " + code + " as it was, for good: &e/hcm games gen keep "
+                + code + " <new-id> confirm"), "its set over: keep by its code: " + said.get(1));
+        assertFalse(said.get(1).contains("recall"), "never a recall, which Ice Boat can't have: " + said.get(1));
+        said.clear();
+        gen.recall(null, null, GenArgs.which(code), GenArgs.DAYS_DEFAULT, false, said::add);
+        assertTrue(heard().contains("has no Classics slot"), "fixture: a recall is always refused: " + heard());
+        assertTaken(() -> keep(null, code, "old_boat"), "This keeps " + code, "the advised keep");
+    }
+
+    /** {@code keep} as typed without {@code confirm}: it says what it would do, or why not. */
+    private void keep(String slot, String which, String id) {
+        gen.keep(slot, GenArgs.which(which), id, null, false, false, said::add);
+    }
+
+    /** The command the warning suggests is taken, not refused. */
+    private void assertTaken(Runnable command, String taken, String what) {
+        said.clear();
+        command.run();
+        assertTrue(heard().contains(taken), what + " is taken: " + heard());
+    }
+
+    /** The next five-minute check of every area has run (a Classics slot's area problem is found, or gone). */
+    private void vetted() {
+        host.now += GenService.VET_EVERY_MS;
+        gen.check();
     }
 }

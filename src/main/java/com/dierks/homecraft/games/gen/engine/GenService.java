@@ -3190,6 +3190,7 @@ public final class GenService implements GeneratedCourses, GenOps {
     @Override
     public void enable(String slotId, boolean on, Consumer<String> report) {
         SlotState s = slots.get(slotId);
+        boolean wasOff = !s.wanted();
         try {
             host.store().meta(GenAdminKeys.enabled(slotId), Boolean.toString(on));
         } catch (SQLException e) {
@@ -3201,8 +3202,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (on) {
             s.problem = null;
             vet(s, handBuilt());
-            report.accept("&a" + s.def.name() + " is on." + (s.problem == null ? onOverPreview(s) : " &cBut: &7"
-                    + s.problem));
+            report.accept("&a" + s.def.name() + " is on." + (s.problem == null ? onOverPreview(s, wasOff)
+                    : " &cBut: &7" + s.problem));
             return;
         }
         if (job != null && job.slot == s) {
@@ -3222,16 +3223,38 @@ public final class GenService implements GeneratedCourses, GenOps {
     /**
      * CV final gate: what switching on a Fresh slot with a preview standing does to it (the owner's preview
      * made while it was off): with no course of this set up, the set's own is built next, in the spare half
-     * the preview stands in, and opens once it is built. {@code ""} otherwise.
+     * the preview stands in, and opens once it is built. {@code ""} otherwise. A preview still on its way
+     * there ({@code wasOff}: asked for while it was off, queued or being built) is treated the same: the
+     * build would write over it the moment it was ready, so it is dropped now ({@link #dropPreview}) and
+     * never said to be ready to try or promote.
      */
-    private String onOverPreview(SlotState s) {
+    private String onOverPreview(SlotState s, boolean wasOff) {
         SlotState.Preview pv = s.preview;
         GenScheduler.Target t = target(s);
-        if (s.classic || pv == null || t.holds(s.live)) {
+        if (s.classic || t.holds(s.live)) {
             return "";
         }
-        return " &7Its course for " + editionName(t.cadence(), t.start()) + " is built next" + (pv.half() == s.idleHalf()
-                ? ", in half " + pv.half() + " over the preview there," : "") + " and opens once it's built.";
+        boolean dropped = wasOff && dropPreview(s);
+        if (pv == null && !dropped) {
+            return "";
+        }
+        return " &7" + (dropped ? "The preview on its way is dropped: its" : "Its") + " course for "
+                + editionName(t.cadence(), t.start()) + " is built next" + (pv != null && pv.half() == s.idleHalf()
+                ? ", in half " + pv.half() + " over the preview there," : dropped ? ", in half " + s.idleHalf() + ","
+                : "") + " and opens once it's built.";
+    }
+
+    /**
+     * CV final gate: stop the preview queued or being built for {@code s} (one at most: a preview waits for
+     * nothing else of its slot's), as {@code off} stops its jobs. @return whether there was one
+     */
+    private boolean dropPreview(SlotState s) {
+        boolean queued = queue.removeIf(j -> j.slot == s && j.kind == Kind.PREVIEW);
+        if (job != null && job.slot == s && job.kind == Kind.PREVIEW) {
+            cancel(job, "it was switched on before the preview was ready");
+            return true;
+        }
+        return queued;
     }
 
     @Override
@@ -3305,7 +3328,8 @@ public final class GenService implements GeneratedCourses, GenOps {
     /**
      * CV final gate: the warning for a pin on a seed that an archived edition of {@code s} was made from by
      * another planner version (copied from {@code history}, say): the pin makes a new course from that seed
-     * with today's planner, not that one. {@code null} when no such edition is archived (or it can't be read).
+     * with today's planner, not that one; and how to have that one as it was ({@link #asItWas}). {@code null}
+     * when no such edition is archived (or it can't be read).
      */
     private String olderEdition(SlotState s, long seed, int algo) {
         try {
@@ -3313,14 +3337,33 @@ public final class GenService implements GeneratedCourses, GenOps {
                 if (r.seed() == seed && r.algoVersion() != algo) {
                     return "&eSeed " + GenSeed.hex(seed) + " was " + r.code() + " (" + r.name() + ", " + dates(r)
                             + "), made by " + s.def.generator() + " planner v" + r.algoVersion() + ". &7This pin makes a"
-                            + " new course from that seed with planner v" + algo + ", not that one. To bring " + r.code()
-                            + " back as it was: &e/hcm games gen recall " + r.code();
+                            + " new course from that seed with planner v" + algo + ", not that one. " + asItWas(r);
                 }
             }
         } catch (SQLException | RuntimeException e) {
             host.logger().log(Level.WARNING, "Fresh Courses: could not look the pinned seed up in the archive", e);
         }
         return null;
+    }
+
+    /**
+     * How to have an archived edition back as it was, by a command {@link #recall} or {@link #keep} takes: the
+     * course up now can't be recalled, so, as {@code pin live} says, it stays until its set ends and {@code keep
+     * <course> current} keeps it; one whose set is over is recalled when its Classics slot is on, else (Ice Boat
+     * has none, or that slot is off) kept by its code.
+     */
+    private String asItWas(GenArchiveDao.Row r) {
+        if (r.live()) {
+            return r.code() + " stays up until its set (" + editionName(Edition.Key.parse(r.edition()), r.day())
+                    + ") ends; to keep it for good: &e/hcm games gen keep " + r.slot() + " current <new-id> confirm";
+        }
+        Slots.Def classic = Slots.classicFor(Slots.of(r.slot()));
+        SlotState c = classic == null ? null : slots.get(classic.id());
+        if (c == null || !c.on()) {
+            return "To keep " + r.code() + " as it was, for good: &e/hcm games gen keep " + r.code()
+                    + " <new-id> confirm";
+        }
+        return "To bring " + r.code() + " back as it was: &e/hcm games gen recall " + r.code();
     }
 
     @Override

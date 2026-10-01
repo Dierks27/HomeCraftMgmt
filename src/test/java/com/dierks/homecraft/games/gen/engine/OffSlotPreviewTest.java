@@ -43,7 +43,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code tp idle} goes to its start; {@code promote} and {@code choose} are refused while it is off,
  * saying what switching it on does; the preview stands while it stays off; and switching it on builds
  * the set's own course (not the preview) in that half, over the preview, and opens it, as every reply
- * said. The explicit boxes are the slot's halves as the engine holds them.
+ * said. A preview still queued or being built when it is switched on is dropped, the switch-on says so,
+ * and it is never said to be ready (the build would write over it a second later); one switched on with
+ * this set's course still up gets no build, so its preview is kept and ready to promote as before. The
+ * explicit boxes are the slot's halves as the engine holds them.
  */
 class OffSlotPreviewTest {
 
@@ -217,6 +220,161 @@ class OffSlotPreviewTest {
         assertNull(gen.slot(SLOT).preview, "the preview is gone: its half holds the live course");
         assertEquals(GenKit.plan(DEF, half('A'), live.seed(), 1).ops().size() + 1, host.world().count(half('A')),
                 "half A holds exactly the live course");
+    }
+
+    /** What the switch-on and the first build leave: the set's own course open in half A, and no preview. */
+    private void ownCourseOpenAndNoPreview(String when) throws Exception {
+        GenTag live = gen.liveTag(SLOT);
+        assertNotNull(live, when + ": the set's course went up: " + heard());
+        assertEquals(MON_28_SEP, live.day(), when + ": this week's");
+        assertEquals('A', live.half(), when + ": in half A");
+        assertEquals(GenSeed.seed(host.store.secret(), 7, MON_28_SEP, SLOT, 0), live.seed(),
+                when + ": on the set's own seed, not the preview's");
+        assertTrue(gen.live(SLOT, live), when + ": and it is open");
+        assertEquals(GenKit.plan(DEF, half('A'), live.seed(), 1).ops().size() + 1, host.world().count(half('A')),
+                when + ": half A holds exactly the live course, nothing of the preview");
+        assertNull(gen.slot(SLOT).preview, when + ": no preview stands");
+        assertFalse(heard().contains("is ready"), when + ": the dropped preview is never said to be ready: " + heard());
+        assertFalse(heard().contains("promote"), when + ": nor offered to promote: " + heard());
+        said.clear();
+        gen.promote(SLOT, true, said::add);
+        assertTrue(heard().startsWith("&cThere is no preview of Ice Boat."), when + ": there is nothing to promote: "
+                + heard());
+    }
+
+    @Test
+    void switchingOnWhileAPreviewIsQueuedDropsItAndSaysSo() throws Exception {
+        offAndEmpty();
+        gen.preview(SLOT, SEED_HEX, said::add);
+        assertNull(gen.jobKind(), "fixture: the preview is queued, its job not started");
+
+        said.clear();
+        gen.enable(SLOT, true, said::add);
+        assertEquals("&aIce Boat is on. &7The preview on its way is dropped: its course for Mon 28 Sep-Sun 4 Oct is"
+                + " built next, in half A, and opens once it's built.", heard(), "the switch-on tells the truth");
+        drive(20);
+        ownCourseOpenAndNoPreview("queued");
+    }
+
+    @Test
+    void switchingOnWhileAPreviewIsBeingBuiltStopsItAndSaysSo() throws Exception {
+        offAndEmpty();
+        gen.preview(SLOT, SEED_HEX, said::add);
+        // Tick by tick until the preview's job has begun writing its blocks into half A.
+        for (int t = 0; t < 400 && host.world().count(half('A')) == 0; t++) {
+            gen.tick();
+            host.now += 50;
+            if (t % 20 == 19) {
+                gen.check();
+            }
+        }
+        assertEquals(GenService.Kind.PREVIEW, gen.jobKind(), "fixture: the preview is being built");
+        assertTrue(host.world().count(half('A')) > 0, "fixture: some of its blocks are in half A");
+        assertNull(gen.slot(SLOT).preview, "fixture: it isn't ready yet");
+
+        said.clear();
+        gen.enable(SLOT, true, said::add);
+        assertEquals("&7Ice Boat: stopped - it was switched on before the preview was ready\n&aIce Boat is on. &7The"
+                + " preview on its way is dropped: its course for Mon 28 Sep-Sun 4 Oct is built next, in half A, and"
+                + " opens once it's built.", heard(), "the preview's job is stopped and the switch-on tells the truth");
+        assertNull(gen.jobKind(), "nothing of the preview's goes on");
+        drive(20);
+        ownCourseOpenAndNoPreview("being built");
+    }
+
+    @Test
+    void switchingOnWithThisSetsCourseStillUpKeepsAPreviewOnItsWay() throws Exception {
+        offAndEmpty();
+        gen.enable(SLOT, true, said::add);
+        drive(20);
+        GenTag live = gen.liveTag(SLOT);
+        assertNotNull(live, "fixture: this week's course is up");
+        gen.enable(SLOT, false, said::add);
+        gen.preview(SLOT, SEED_HEX, said::add);
+        assertTrue(heard().contains("is on its way into half B"), "fixture: a preview queued while off: " + heard());
+
+        said.clear();
+        gen.enable(SLOT, true, said::add);
+        assertEquals("&aIce Boat is on.", heard(), "no build comes, so nothing is said of the preview");
+        drive(10);
+        assertEquals(live, gen.liveTag(SLOT), "this set's course stays up: no build");
+        assertNotNull(gen.slot(SLOT).preview, "the preview was kept: " + heard());
+        assertTrue(heard().contains("The preview of Ice Boat is ready in half B (seed " + SEED_HEX + ")")
+                && heard().contains("&e/hcm games gen promote " + SLOT), "and is said to be ready to promote: "
+                + heard());
+        said.clear();
+        gen.promote(SLOT, true, said::add);
+        assertTrue(heard().startsWith("&7Making the preview of Ice Boat the current course"), "which is taken: "
+                + heard());
+    }
+
+    /**
+     * The owner's checklist: the course tried while it is off is the one that opens. {@code plan} shows the
+     * set's own seed; previewed on that seed and tried, the switch-on builds that same course (same seed,
+     * tier and half), over the preview, writing next to nothing.
+     */
+    @Test
+    void theSetsOwnSeedPreviewedAndTriedWhileOffIsTheCourseThatOpens() throws Exception {
+        offAndEmpty();
+        long own = GenSeed.seed(host.store.secret(), 7, MON_28_SEP, SLOT, 0);
+        String hex = GenSeed.hex(own);
+        gen.plan(SLOT, null, said::add);
+        drive(1);
+        assertTrue(heard().contains("Mon 28 Sep-Sun 4 Oct, seed " + hex + ":"), "plan shows this set's own seed: "
+                + heard());
+        gen.preview(SLOT, hex, said::add);
+        drive(10);
+        SlotState.Preview pv = gen.slot(SLOT).preview;
+        assertNotNull(pv, "the preview of that seed stands: " + heard());
+        assertNull(gen.previewRun(SLOT).refusal(), "and can be tried");
+
+        long before = host.world().writes;
+        said.clear();
+        gen.enable(SLOT, true, said::add);
+        assertTrue(heard().contains("is built next, in half A over the preview there"), "switched on: " + heard());
+        drive(20);
+        GenTag live = gen.liveTag(SLOT);
+        assertNotNull(live, "the set's course went up: " + heard());
+        assertEquals(own, live.seed(), "on the seed that was tried");
+        assertEquals(pv.plan().hash(), live.planHash(), "the very course that was tried");
+        assertEquals('A', live.half(), "where it was tried");
+        assertTrue(gen.live(SLOT, live), "and it is open");
+        assertTrue(host.world().writes - before < pv.plan().ops().size(), "its blocks were already there: "
+                + (host.world().writes - before) + " written of " + pv.plan().ops().size());
+    }
+
+    /**
+     * The owner's checklist, for a tried seed that isn't the set's own: pinned for one day while it is off,
+     * the switch-on builds that course; the next set is its own again.
+     */
+    @Test
+    void aTriedSeedPinnedForADayWhileOffIsTheCourseThatOpens() throws Exception {
+        offAndEmpty();
+        gen.preview(SLOT, SEED_HEX, said::add);
+        drive(10);
+        SlotState.Preview pv = gen.slot(SLOT).preview;
+        assertNotNull(pv, "the preview stands: " + heard());
+        assertNull(gen.previewRun(SLOT).refusal(), "and can be tried");
+        said.clear();
+        gen.pin(SLOT, SEED_HEX, 1, said::add);
+        assertTrue(heard().contains("is pinned to seed " + SEED_HEX + " for 1 day"), "pinned while off: " + heard());
+
+        long before = host.world().writes;
+        gen.enable(SLOT, true, said::add);
+        drive(20);
+        GenTag live = gen.liveTag(SLOT);
+        assertNotNull(live, "the set's course went up: " + heard());
+        assertEquals(0x5eedL, live.seed(), "on the seed that was tried and pinned");
+        assertEquals(pv.plan().hash(), live.planHash(), "the very course that was tried");
+        assertTrue(gen.live(SLOT, live), "and it is open");
+        assertTrue(host.world().writes - before < pv.plan().ops().size(), "its blocks were already there: "
+                + (host.world().writes - before) + " written of " + pv.plan().ops().size());
+
+        host.now = GenKit.at(2026, 10, 5, 4, 0) + 40_000;
+        drive(30);
+        assertEquals(MON_5_OCT, gen.liveTag(SLOT).day(), "next week's set is up");
+        assertEquals(GenSeed.seed(host.store.secret(), 7, MON_5_OCT, SLOT, 0), gen.liveTag(SLOT).seed(),
+                "on its own seed: the day's pin is over");
     }
 
     @Test

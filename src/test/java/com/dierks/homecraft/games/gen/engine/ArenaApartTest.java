@@ -67,7 +67,8 @@ class ArenaApartTest {
         List<DailySettings.SlotConfig> all = new ArrayList<>(d.slots());
         all.addAll(d.archive().classics());
         for (DailySettings.SlotConfig c : all) {
-            assertNull(Regions.extrasProblem(c.def(), c.origin(), List.of(ARENA)), c.id() + " keeps clear of the arena");
+            assertNull(Regions.extrasProblem(c.def(), c.origin(), c.halfGap(), List.of(ARENA)),
+                    c.id() + " keeps clear of the arena");
         }
         assertNull(Regions.keepExtrasProblem(d.archive().keep(), List.of(ARENA)), "and so does the keep area");
     }
@@ -76,16 +77,18 @@ class ArenaApartTest {
     void aSlotOrTheKeepAreaCrowdingTheArenaIsRefused() {
         Box a = ARENA.box();
         Slots.Def def = Slots.FRESH_DROPPER;
-        String onTop = Regions.extrasProblem(def, new int[]{a.minX(), a.minY(), a.minZ()}, List.of(ARENA));
+        String onTop = Regions.extrasProblem(def, new int[]{a.minX(), a.minY(), a.minZ()}, Slots.HALF_GAP,
+                List.of(ARENA));
         assertNotNull(onTop, "a slot on top of the arena is refused");
         assertTrue(onTop.contains(ArenaRegions.NAME) && onTop.contains("on top of"), onTop);
         int[] near = {a.maxX() + 16, a.minY(), a.minZ()}; // 15 blocks clear of it
-        String close = Regions.extrasProblem(def, near, List.of(ARENA));
+        String close = Regions.extrasProblem(def, near, Slots.HALF_GAP, List.of(ARENA));
         assertNotNull(close, "a slot within " + Regions.APART + " blocks is refused");
         assertTrue(close.contains("only 15 blocks from"), close);
-        assertNull(Regions.extrasProblem(def, new int[]{a.maxX() + 48, a.minY(), a.minZ()}, List.of(ARENA)),
+        assertNull(Regions.extrasProblem(def, new int[]{a.maxX() + 48, a.minY(), a.minZ()}, Slots.HALF_GAP,
+                List.of(ARENA)),
                 "47 blocks away is fine");
-        assertNull(Regions.extrasProblem(def, near, List.of()), "no arena, nothing to keep clear of");
+        assertNull(Regions.extrasProblem(def, near, Slots.HALF_GAP, List.of()), "no arena, nothing to keep clear of");
 
         KeepArea crowding = new KeepArea(a.maxX() + 1, a.minY(), a.minZ(), 4);
         String keep = Regions.keepExtrasProblem(crowding, List.of(ARENA));

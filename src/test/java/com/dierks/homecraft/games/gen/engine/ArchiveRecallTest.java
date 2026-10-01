@@ -31,6 +31,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.logging.Level;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -419,6 +420,124 @@ class ArchiveRecallTest {
         assertNull(gen.liveTag(CLASSIC), "a day later it closes on its own");
         assertNull(host.dao.course(CLASSIC), "row and all");
         assertEquals(0, host.world().count(CDEF.half('A')) + host.world().count(CDEF.half('B')), "and is cleared");
+    }
+
+    /** Give the Classic {@code origin} in config, as an owner moving it by hand would, and /hcm reload. */
+    private void moveClassic(int[] origin) {
+        moveClassic(CLASSIC, origin);
+    }
+
+    private void moveClassic(String id, int[] origin) {
+        List<com.dierks.homecraft.games.gen.DailySettings.SlotConfig> classics = new ArrayList<>();
+        for (com.dierks.homecraft.games.gen.DailySettings.SlotConfig c : host.settings.archive().classics()) {
+            classics.add(c.id().equals(id) ? c.withOrigin(origin) : c);
+        }
+        host.settings = host.settings.withArchive(host.settings.archive().withClassics(classics));
+        gen.check();
+    }
+
+    /** Classic Golf, whose ponds may hold water: claimed where config puts it, as a past recall left it. */
+    private Box claimGolfClassic() throws Exception {
+        com.dierks.homecraft.games.gen.DailySettings.SlotConfig c = host.settings.archive()
+                .classic(Slots.CLASSIC_GOLF.id());
+        host.store.meta(GenAdminKeys.claim(Slots.CLASSIC_GOLF.id()), Regions.claim(Slots.CLASSIC_GOLF, GenKit.WORLD,
+                c.origin(), c.halfGap()));
+        return Regions.half(Slots.CLASSIC_GOLF, c.origin(), c.halfGap(), 'A');
+    }
+
+    private List<String> oldAreaLines() {
+        return gen.summary().stream().filter(l -> l.startsWith(Slots.CLASSIC_GOLF.id() + ": its old area")).toList();
+    }
+
+    @Test
+    void anEmptiedGolfClassicMovedLetsItsOldClaimGoSoNothingIsLeftGuardedAsWet() throws Exception {
+        host.now = on(1);
+        claimGolfClassic();
+        boot();
+        drive(70); // the start empties a claimed, empty Classic's halves
+        assertTrue(host.logged(Level.INFO, Slots.CLASSIC_GOLF.id() + "'s halves are empty") > 0, "the fixture: emptied");
+
+        moveClassic(Slots.CLASSIC_GOLF.id(), new int[]{16_384, 160, 16_384});
+        assertTrue(host.logged(Level.INFO, "Its old halves were emptied first") > 0, "an INFO: " + host.logs.stream()
+                .map(r -> r.getMessage()).toList());
+        assertEquals(0, host.logged(Level.WARNING, "were not cleared"), "no WARN: " + warnings());
+        assertNull(host.store.meta(GenAdminKeys.claim(Slots.CLASSIC_GOLF.id())), "its old claim is let go, as a clear"
+                + " lets a course's go: nothing stands there");
+        drive(5);
+        assertEquals(List.of(), oldAreaLines(), "so status never says its emptied old area is still guarded, nor"
+                + " tells the owner to drain it");
+        assertNull(host.store.meta(GenAdminKeys.wet(Slots.CLASSIC_GOLF.id())), "nothing is remembered as wet");
+    }
+
+    @Test
+    void aGolfClassicMovedBeforeItsHalvesAreEmptiedStaysGuardedAndIsToldHowAClassicIsDrained() throws Exception {
+        host.now = on(1);
+        Box oldA = claimGolfClassic();
+        boot(); // claimed and empty of a recall: its halves are emptied once the start's checks run
+        int[] to = {16_384, 160, 16_384};
+        Box newA = Regions.half(Slots.CLASSIC_GOLF, to, host.settings.archive().classic(Slots.CLASSIC_GOLF.id())
+                .halfGap(), 'A');
+        host.world().put(newA.minX() + 5, newA.minY() + 5, newA.minZ() + 5, "minecraft:stone_bricks"); // the owner's
+        moveClassic(Slots.CLASSIC_GOLF.id(), to);
+        assertTrue(warnings().contains(Slots.CLASSIC_GOLF.id() + " moved from") && warnings().contains("move it back"
+                + " and restart"), "its halves weren't emptied yet: a WARN with the Classic's way: " + warnings());
+        assertFalse(warnings().contains("gen clear " + Slots.CLASSIC_GOLF.id()), "never clear: " + warnings());
+        assertNotNull(host.store.meta(GenAdminKeys.claim(Slots.CLASSIC_GOLF.id())), "its old claim stays");
+        drive(5);
+        List<String> lines = oldAreaLines();
+        assertEquals(1, lines.size(), "status names the old area, still guarded: " + gen.summary());
+        assertTrue(lines.get(0).contains("drain first: move it back and restart"), "with the Classic's way to drain it: "
+                + lines.get(0));
+        assertFalse(lines.get(0).contains("gen clear"), "not clear, which a Classic can't take: " + lines.get(0));
+        assertTrue(gen.inArea(GenKit.WORLD, oldA.minX(), oldA.minY(), oldA.minZ()), "and the old area is still"
+                + " guarded");
+        drive(30);
+        assertEquals(1, host.world().count(newA), "the new spot isn't held yet, so nothing is cleared there: the"
+                + " old halves' clearing stays with the old halves (a recall scans the new spot first)");
+    }
+
+    private String warnings() {
+        return String.join("\n", host.logs.stream().filter(r -> r.getLevel() == Level.WARNING)
+                .map(r -> r.getMessage()).toList());
+    }
+
+    @Test
+    void aClassicClosedAndEmptiedTheReadmeWayMovesWithAnInfoNotAWarnNamingClear() throws Exception {
+        build(1);
+        build(2);
+        recall("HARD-1", GenArgs.DAYS_DEFAULT, false);
+        drive(10);
+        assertNotNull(gen.liveTag(CLASSIC), "HARD-1 is up in the Classic");
+        said.clear();
+        gen.unrecall(CLASSIC, true, said::add); // README "Moving an area by hand": close it first
+        drive(15);
+        assertEquals(0, host.world().count(CDEF.half('A')) + host.world().count(CDEF.half('B')),
+                "both halves are empty");
+        assertNotNull(host.store.meta(GenAdminKeys.claim(CLASSIC)), "an unrecalled Classic keeps its claim");
+
+        moveClassic(new int[]{16_384, 160, 16_384});
+        assertTrue(host.logged(Level.INFO, CLASSIC + " moved from") > 0
+                        && host.logged(Level.INFO, "Its old halves were emptied first") > 0,
+                "said as an INFO: nothing is left at the old place: " + host.logs.stream().map(r -> r.getMessage())
+                        .toList());
+        assertEquals(0, host.logged(Level.WARNING, "were not cleared"), "not the \"not cleared\" WARN: " + warnings());
+        assertFalse(warnings().contains("gen clear " + CLASSIC), "and no command a Classic can't take: " + warnings());
+    }
+
+    @Test
+    void aClassicMovedWhileItHoldsARecallIsToldToCloseItFirstNotToClearIt() throws Exception {
+        build(1);
+        build(2);
+        recall("HARD-1", GenArgs.DAYS_DEFAULT, false);
+        drive(10);
+        assertNotNull(gen.liveTag(CLASSIC), "HARD-1 is up in the Classic");
+
+        moveClassic(new int[]{16_384, 160, 16_384});
+        assertTrue(host.logged(Level.WARNING, CLASSIC + " moved from") > 0, "its halves still stand: a WARN: "
+                + warnings());
+        assertTrue(warnings().contains("close it first with /hcm games gen unrecall " + CLASSIC + " confirm"),
+                "naming how a Classic is emptied: " + warnings());
+        assertFalse(warnings().contains("gen clear " + CLASSIC), "clear doesn't take a Classic: " + warnings());
     }
 
     @Test

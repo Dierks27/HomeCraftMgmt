@@ -219,6 +219,11 @@ public final class BukkitWorldPort implements WorldPort {
     }
 
     @Override
+    public BallPhysics.Blocks ballBlocks(boolean sand) {
+        return new LiveBlocks(world, sand);
+    }
+
+    @Override
     public void worldRules(Consumer<String> changed) {
         rule(changed, Boolean.FALSE, "spawn_mobs");
         rule(changed, Boolean.FALSE, "mob_griefing");

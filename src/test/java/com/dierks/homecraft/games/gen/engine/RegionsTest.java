@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.gen.DailySettings;
 import com.dierks.homecraft.games.gen.DailySettings.SlotConfig;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.golf.GolfCourse;
 import com.dierks.homecraft.games.trial.Course;
@@ -41,27 +42,28 @@ class RegionsTest {
     }
 
     @Test
-    void theShippedLayoutPassesEveryCheckAndEveryHalfIs32Apart() {
+    void theShippedLayoutPassesEveryCheckAndEveryHalfIs576Apart() {
         List<String> warns = new ArrayList<>();
         List<SlotConfig> out = Regions.validate(shipped(), warns::add, "games.fresh.slots");
         assertEquals(List.of(), warns, "the shipped slots need no WARN");
         assertEquals(shipped(), out, "and come out unchanged");
         List<Box> halves = new ArrayList<>();
         for (Slots.Def d : Slots.ALL) {
-            halves.addAll(Regions.halves(d, d.origin()));
+            halves.addAll(Regions.halves(d, d.origin(), Slots.HALF_GAP));
             assertEquals(0, d.originX() % 16, d.id() + " x is on the grid");
             assertEquals(0, d.originZ() % 16, d.id() + " z is on the grid");
-            assertTrue(Regions.worldProblems(d, d.origin(), world()).isEmpty(), d.id() + " fits the Games world");
+            assertTrue(Regions.worldProblems(d, d.origin(), Slots.HALF_GAP, world()).isEmpty(),
+                    d.id() + " fits the Games world");
         }
         for (int i = 0; i < halves.size(); i++) {
             for (int j = i + 1; j < halves.size(); j++) {
-                assertTrue(halves.get(i).gap(halves.get(j)) >= 32, halves.get(i).describe() + " and "
-                        + halves.get(j).describe() + " are at least 32 apart");
+                assertTrue(halves.get(i).gap(halves.get(j)) >= 576, halves.get(i).describe() + " and "
+                        + halves.get(j).describe() + " are at least 576 apart (out of sight of each other)");
             }
         }
         Slots.Def rings = Slots.SKY_RINGS;
-        assertEquals("x 4096..4223, y 128..303, z 4352..4671", rings.half('A').describe(), "the spec's table, half A");
-        assertEquals(4256, rings.half('B').minX(), "and half B");
+        assertEquals("x 6080..6207, y 128..303, z 4096..4415", rings.half('A').describe(), "the spec's table, half A");
+        assertEquals(6784, rings.half('B').minX(), "and half B, 576 past half A");
     }
 
     // ---- named extra boxes (EVENTS-DROPPER-SPEC §B.3.2) ---------------------------------------------
@@ -84,7 +86,8 @@ class RegionsTest {
         Regions.Extra extra = new Regions.Extra("falling_floors", arena);
         assertNull(Regions.extraProblem(extra, everySlotOn(), DailySettings.defaults().archive().keep()),
                 "the shipped arena is 32 from every half (all switched on) and from the kept courses");
-        assertTrue(Regions.worldProblems(Slots.DAILY_PARKOUR_EASY, Slots.DAILY_PARKOUR_EASY.origin(), world()).isEmpty(),
+        assertTrue(Regions.worldProblems(Slots.DAILY_PARKOUR_EASY, Slots.DAILY_PARKOUR_EASY.origin(),
+                Slots.HALF_GAP, world()).isEmpty(),
                 "(the world itself is fine)");
     }
 
@@ -187,6 +190,8 @@ class RegionsTest {
     @Test
     void aSlotTooCloseToAnotherIsSwitchedOffAndTheFirstKeepsItsPlace() {
         List<SlotConfig> slots = shipped();
+        slots.set(0, slots.get(0).withOrigin(LegacyBoxes.origin(Slots.DAILY_PARKOUR_EASY))
+                .withHalfGap(LegacyBoxes.HALF_GAP)); // easy at its 0.35 spot, half B at x 4192..4255
         slots.set(1, slots.get(1).withOrigin(new int[]{4240, 160, 4096})); // onto easy's half B
         List<String> warns = new ArrayList<>();
         List<SlotConfig> out = Regions.validate(slots, warns::add, "games.fresh.slots");
@@ -201,33 +206,41 @@ class RegionsTest {
     @Test
     void theWorldsFloorCeilingBorderSpawnAndSafeSpotAreChecked() {
         Slots.Def d = Slots.DAILY_PARKOUR_EASY;
-        int[] o = d.origin();
+        int[] o = LegacyBoxes.origin(d); // fixed coordinates below: 0.35's spot
+        int g = LegacyBoxes.HALF_GAP;
         Regions.WorldFacts low = new Regions.WorldFacts("games", true, 0, 200, null, new int[]{0, 64, 0}, null);
-        assertTrue(Regions.worldProblems(d, o, low).get(0).contains("160..207"), "a 200-high world has no room");
+        assertTrue(Regions.worldProblems(d, o, g, low).get(0).contains("160..207"),
+                "a 200-high world has no room");
         Regions.WorldFacts unlisted = new Regions.WorldFacts("lobby", false, -64, 320, null, new int[]{0, 64, 0},
                 null);
-        assertTrue(Regions.worldProblems(d, o, unlisted).get(0).contains("games.worlds"), "the world must be listed");
+        assertTrue(Regions.worldProblems(d, o, g, unlisted).get(0).contains("games.worlds"),
+                "the world must be listed");
         Regions.WorldFacts small = new Regions.WorldFacts("games", true, -64, 320, new Box(-1000, -64, -1000, 999, 319,
                 999), new int[]{0, 64, 0}, null);
-        assertTrue(Regions.worldProblems(d, o, small).get(0).contains("border"), "a small border is too small");
+        assertTrue(Regions.worldProblems(d, o, g, small).get(0).contains("border"),
+                "a small border is too small");
         Regions.WorldFacts spawnInside = new Regions.WorldFacts("games", true, -64, 320, null,
                 new int[]{4100, 170, 4100}, null);
-        assertTrue(Regions.worldProblems(d, o, spawnInside).get(0).contains("spawn is inside half A"),
+        assertTrue(Regions.worldProblems(d, o, g, spawnInside).get(0).contains("spawn is inside half A"),
                 "a spawn inside a half");
         Regions.WorldFacts spawnNear = new Regions.WorldFacts("games", true, -64, 320, null,
                 new int[]{4096 - 10, 170, 4100}, null);
-        assertTrue(Regions.worldProblems(d, o, spawnNear).get(0).contains("only 9 blocks"), "a spawn 9 away");
+        assertTrue(Regions.worldProblems(d, o, g, spawnNear).get(0).contains("only 9 blocks"),
+                "a spawn 9 away");
         Regions.WorldFacts safe = new Regions.WorldFacts("games", true, -64, 320, null, new int[]{0, 64, 0},
                 new double[]{4180.5, 170, 4100.5});
-        assertTrue(Regions.worldProblems(d, o, safe).get(0).contains("safe_spot"), "a safe spot between the halves");
+        assertTrue(Regions.worldProblems(d, o, g, safe).get(0).contains("safe_spot"),
+                "a safe spot between the halves");
         Regions.WorldFacts farSpawn = new Regions.WorldFacts("games", true, -64, 320, null,
                 new int[]{4096 - 17, 170, 4100}, null);
-        assertTrue(Regions.worldProblems(d, o, farSpawn).isEmpty(), "16 blocks between is fine");
+        assertTrue(Regions.worldProblems(d, o, g, farSpawn).isEmpty(), "16 blocks between is fine");
     }
 
     @Test
     void aHandBuiltCourseWithin16OfAHalfIsFoundAndOurOwnRowsAreNot() {
         Slots.Def d = Slots.DAILY_PARKOUR_EASY;
+        int[] o = LegacyBoxes.origin(d); // the fixed coordinates below are round 0.35's spot
+        int g = LegacyBoxes.HALF_GAP;
         Course near = new Course("river_run", TrialKind.PARKOUR, "River Run", Tier.EASY, "games",
                 new Course.Spot(0, 70, 0, 0f, 0f), List.of(new Course.Mark(4096 - 14, 170, 4100, 1.5)), null, null,
                 null, false, false, 1);
@@ -247,15 +260,16 @@ class RegionsTest {
                         0, 0));
         List<Regions.Area> areas = Regions.handBuilt(rows);
         assertTrue(areas.stream().noneMatch(a -> a.courseId().equals(d.id())), "our own row is not hand-built");
-        String problem = Regions.handBuiltProblem(d, d.origin(), "games", areas);
+        String problem = Regions.handBuiltProblem(d, o, g, "games", areas);
         assertNotNull(problem, "a checkpoint 14 from half A (13 blocks between, radius 1.5) is too close");
         assertTrue(problem.contains("river_run"), problem);
         List<Regions.Area> onlyFar = Regions.handBuilt(List.of(rows.get(1)));
-        assertNull(Regions.handBuiltProblem(d, d.origin(), "games", onlyFar), "20 away is fine");
+        assertNull(Regions.handBuiltProblem(d, o, g, "games", onlyFar), "20 away is fine");
         List<Regions.Area> onlyGolf = Regions.handBuilt(List.of(rows.get(2)));
-        assertTrue(Regions.handBuiltProblem(d, d.origin(), "games", onlyGolf).contains("meadow"),
+        assertTrue(Regions.handBuiltProblem(d, o, g, "games", onlyGolf).contains("meadow"),
                 "a golf hole's bounds between the halves are found");
-        assertNull(Regions.handBuiltProblem(d, d.origin(), "other_world", areas), "another world is never in the way");
+        assertNull(Regions.handBuiltProblem(d, o, g, "other_world", areas),
+                "another world is never in the way");
     }
 
     @Test
@@ -283,9 +297,9 @@ class RegionsTest {
     @Test
     void aClaimNamesItsWorldAndOriginAndTheRolloverNoteComesOnlyAwayFromARestart() {
         Slots.Def d = Slots.TINY_GOLF;
-        String claim = Regions.claim(d, "Games", d.origin());
+        String claim = Regions.claim(d, "Games", LegacyBoxes.origin(d), LegacyBoxes.HALF_GAP);
         assertEquals("games,5120,160,4096,64,16,48", claim, "world (lower case), origin and one half's size");
-        assertArrayEquals(d.origin(), Regions.claimOrigin(claim), "the origin reads back");
+        assertArrayEquals(LegacyBoxes.origin(d), Regions.claimOrigin(claim), "the origin reads back");
         assertNull(Regions.claimOrigin("garbage"), "junk isn't a claim");
         List<LocalTime> restarts = List.of(LocalTime.of(4, 0), LocalTime.of(16, 0));
         assertNull(Regions.rolloverNote(LocalTime.of(4, 0), restarts), "a rollover at a restart needs no note");

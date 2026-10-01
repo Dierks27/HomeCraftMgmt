@@ -46,6 +46,15 @@ import java.util.Set;
  * <p>The fast check (everything but the sloppy player) costs a few dozen simulated putts and is
  * safe on the main thread; the full check replays the kid tree too (a few thousand putts a hole)
  * and belongs on the planner thread.
+ *
+ * <p><b>By version</b> (Course Variety §1.4, §3.8). The rules above are the ones a layout of golf
+ * planner version 2 or older was made and stored under, and such a plan (a live layout until its
+ * set ends, an archived one recalled into Classics) is judged by exactly them, frozen: the private
+ * check, {@link #holeProblems(BallPhysics.Blocks, GolfCourse.Hole, int)}, {@link #trapped} and the
+ * wall rule below are today's, byte for byte. A plan of version 3 or later
+ * (Adventure Golf: ponds, sand, trees, terraces) goes to {@link GolfValidatorV3}, whose walls are
+ * checked locally with the flight rule, whose ponds are sealed and never beside the tee, and whose
+ * witness line has room to miss on a pond hole ({@link SafeExpert}).
  */
 public final class GolfValidator {
 
@@ -58,12 +67,38 @@ public final class GolfValidator {
 
     /** Every problem, the sloppy player included (planner thread). Empty when the plan is fine. */
     public static List<String> problems(Plan plan) {
-        return problems(plan, true);
+        return adventure(plan) ? GolfValidatorV3.problems(plan, true) : problems(plan, true);
     }
 
     /** Every problem but the sloppy player's: cheap enough for the main thread. */
     public static List<String> quickProblems(Plan plan) {
-        return problems(plan, false);
+        return adventure(plan) ? GolfValidatorV3.problems(plan, false) : problems(plan, false);
+    }
+
+    /** Whether {@code plan} is judged by Adventure Golf's rules: made by golf planner version 3 or later. */
+    static boolean adventure(Plan plan) {
+        return plan != null && plan.algo() > LaneMap.LAST_V2_ALGO;
+    }
+
+    /**
+     * The grid of {@code plan}'s blocks ({@code inside}: those in its half), played by the rules its
+     * version plays by: Adventure Golf's ({@link GolfShot.Rules}) from version 3, none before — a
+     * layout of version 2 is built and played without them ({@code LiveBlocks} without sand), so its
+     * stored line is replayed the same way.
+     */
+    static PlanBlocks grid(Plan plan, List<BlockOp> inside) {
+        return PlanBlocks.of(plan.half(), plan.palette(), inside, adventure(plan));
+    }
+
+    /**
+     * What is wrong with one hole's blocks (numbered {@code n}), without playing it, as a layout of
+     * golf planner version {@code algo} is judged: {@link #holeProblems(BallPhysics.Blocks,
+     * GolfCourse.Hole, int)} for version 2 or older, Adventure Golf's per-hole rules
+     * ({@link GolfValidatorV3#holeProblems}) after. Empty when it is sound. For a planner that wants
+     * to refuse one hole before the whole course is checked.
+     */
+    static List<String> holeProblems(PlanBlocks grid, GolfCourse.Hole h, int n, int algo) {
+        return algo > LaneMap.LAST_V2_ALGO ? GolfValidatorV3.holeProblems(grid, h, n) : holeProblems(grid, h, n);
     }
 
     private static List<String> problems(Plan plan, boolean kid) {
@@ -126,7 +161,7 @@ public final class GolfValidator {
         if (!out.isEmpty()) {
             return out;
         }
-        PlanBlocks grid = PlanBlocks.of(half, plan.palette(), inside);
+        PlanBlocks grid = grid(plan, inside);
         for (int i = 0; i < n; i++) {
             GolfCourse.Hole h = course.holes().get(i);
             Box area = areas.get(i);

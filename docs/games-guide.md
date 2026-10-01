@@ -1,6 +1,6 @@
 # HomeCraft Arcade: the games guide
 
-> **For the web developer (and their agent):** this is the player-facing guide to every game added in plugin release **0.35.0-arcade-games**. It was written from the plugin's code and then checked claim by claim against the code a second time, so the numbers, names and commands match what players see in game. Numbers marked *by default* are settings the server owner can change later in `config.yml`. The games ship switched off (`games.enabled: false`), so they appear on the server once the owner turns them on. Live data for the site (open games, odds, records, today's pick) comes from `GET /api/arcade`; see [For the website](#for-the-website) at the end.
+> **For the web developer (and their agent):** this is the player-facing guide to every game added in plugin release **0.35.0-arcade-games**, updated for **0.36** (Course Variety: Adventure Golf and the Ice Boat's Mountain Run, and the out-of-sight layout). It was written from the plugin's code and then checked claim by claim against the code a second time, so the numbers, names and commands match what players see in game. Numbers marked *by default* are settings the server owner can change later in `config.yml`. The games ship switched off (`games.enabled: false`), so they appear on the server once the owner turns them on. Live data for the site (open games, odds, records, today's pick) comes from `GET /api/arcade`; see [For the website](#for-the-website) at the end.
 
 > **Voice:** the server is for families, and the youngest player is just learning to read. Keep the site copy short and plain. Please keep these words out of player copy: *bet, wager, gamble, casino, lucky, almost, so close*. Say *tokens in* and *tokens back*, *gives back about N of every 100 tokens*, *No win this time.* Games of chance are described honestly: over time they give back less than you put in.
 
@@ -1159,11 +1159,11 @@ These are played in the Games world, on courses the server's builders make. Each
 ### Warm-ups and racing with friends
 
 - **Warm up first.** When you start a time-trial course, a small screen asks: Warm up (3:00), or Go straight to the timed run. Going straight is the run as it always was.
-- In a warm-up you run the course as much as you like. Checkpoints still guide you and Back to checkpoint works, but nothing is timed for the record, saved or paid, and it doesn't count for the Weekly Cup. The bar above your hotbar says Warm-up 2:14 left - not counted.
+- In a warm-up you run the course as much as you like. Checkpoints still guide you and Back to checkpoint works, but nothing is timed for the record, saved or paid, and it doesn't count for the Weekly Cup. The bar above your hotbar says Warm-up 2:14 left - not counted. Each time you cross the finish you go round again from the start (on the Ice Boat's Mountain Run, back to the top for another run down).
 - When you're ready, click Start timed run in your hotbar (or wait for the clock). You go back to the start for the normal 3, 2, 1, Go!, and that run counts as usual. Each run gets one warm-up. If the server restarts in a few minutes, the warm-up ends at once so your timed run still happens.
 - **Race with friends.** Open a course's screen and click Race with friends, or type /hcm play race <course id>. That makes your party. Invite friends from the party screen: they get [Accept] in chat, and Bedrock players type /hcm play accept. A party holds up to 8 by default.
 - The party screen shows who's in and who's ready. Only the host can start the race, and the host chooses if everyone warms up first. In a party warm-up, click Ready when you're set: the race starts when the warm-up ends or everyone is ready.
-- Everyone goes to the start together and gets one 3, 2, 1, Go! at the same moment. Boats line up in rows of two behind the start line. A bar at the top of the screen shows your place, like 2nd of 5 · Lap 1/2. Boats can bump into each other.
+- Everyone goes to the start together and gets one 3, 2, 1, Go! at the same moment. Boats line up in rows of two behind the start line. A bar at the top of the screen shows your place, like 2nd of 5 · Lap 1/2 (on a course that goes one way from start to finish, like the Ice Boat's Mountain Run, just 2nd of 5). Boats can bump into each other.
 - The race ends when everyone is in, 2 minutes after the first person finishes, or 10 minutes after Go. Then everyone comes back to the Clubhouse, where the board shows the results. If the Clubhouse isn't open (or a restart is only a minute or so away), everyone goes home and a results screen shows the whole group.
 - Party races are free and just for fun: no entry, no prizes. Your time also counts as a normal run on the course, once, with the usual rewards and high scores, and for the Weekly Cup if you're in it (the party screen shows the Cup's button too).
 - On foot or with wings, racers can't push each other. The Dropper has no party races.
@@ -1439,7 +1439,7 @@ These are played in the Games world, on courses the server's builders make. Each
 
 - Hotbar slots 1 to 5 are your clubs: Tap (wooden hoe, power 1), Putt (stone hoe, power 2), Chip (iron hoe, power 3), Swing (golden hoe, power 4) and Drive (diamond hoe, power 5). You start holding Putt.
 - Any click with a club (left or right) putts the ball the way you face. Only left and right matter, not looking up or down.
-- How far each club rolls on flat, plain ground: Tap about 2 blocks, Putt about 4, Chip about 6, Swing about 9, Drive about 13. On ice it goes about 5 times as far. On soul sand, soul soil or honey it goes about half as far.
+- How far each club rolls on flat, plain ground: Tap about 2 blocks, Putt about 4, Chip about 6, Swing about 9, Drive about 13. On ice it goes about 5 times as far. On soul sand, soul soil or honey it goes about half as far, and so it does on the sand of a Fresh Courses golf hole (see [Adventure Golf](#adventure-golf)).
 - Hotbar slot 6: Go to my ball (a compass). It takes you right next to your ball, facing it.
 - Hotbar slot 7: Reset ball (a recovery compass). It puts your ball back where you last putted from, for +1 stroke. If the ball is already there, nothing happens and it costs nothing.
 - Hotbar slot 8: Scorecard (paper). It shows your strokes so far.
@@ -1452,6 +1452,7 @@ These are played in the Games world, on courses the server's builders make. Each
 - Get the ball into the cup on every hole. Every putt is 1 stroke.
 - Water or lava, going out of bounds, or using Reset ball each add 1 stroke and put the ball back where you last putted from. You see Splash!, Out of bounds! or Ball reset.
 - Out of bounds means leaving the hole's invisible box sideways, or dropping more than 2 blocks below the bottom of the box.
+- On Fresh Courses golf (Golf of the Week and Tiny Golf), a ball that stops on the very edge of a pond, hanging over the water, has fallen in too: Splash!, 1 stroke, and it goes back where you putted from.
 - A slow ball drops into the cup. A fast ball rolls right over it and keeps going.
 - Par is how many strokes a hole should take (2 to 6). Your hole gets a name: Hole in one!, 4 under par! (2 strokes on a par 6), Albatross! (3 under par), Eagle! (2 under), Birdie! (1 under), Par, Bogey (1 over), Double bogey (2 over), or 3 over par.
 - Pick-up rule: when your ball stops (or a penalty stroke puts it back) and you have used par + 3 strokes (by default) without getting it in, the hole ends. It says Picked up and scores exactly par + 3. A hole never scores more than that.
@@ -1481,7 +1482,7 @@ These are played in the Games world, on courses the server's builders make. Each
 - While you play, only /hcm play, /hcm leave, /hcm games and /hcm help work.
 - Your ball can be any Mini you own that has a head. A Mini that is a posed stand can't be a ball. If you no longer own the Mini you picked, you get the plain white ball.
 - The game only borrows your Mini's look. The Mini stays in your collection, untouched.
-- A ball that keeps rolling for 30 seconds stops where it is.
+- A ball that keeps rolling for 30 seconds stops where it is. On Fresh Courses golf, a ball that only jiggles on the spot against a step stops within about a second instead, on the ground.
 - Several players can play the same course at once. Each has their own ball, and balls don't bump into each other.
 
 **Tips**
@@ -1491,6 +1492,7 @@ These are played in the Games world, on courses the server's builders make. Each
 - Slime bounces the ball. Ice makes it slide far. Soul sand, soul soil and honey slow it down.
 - A half-block step, like a slab, is only climbed if the ball is going fast enough. A full block bounces it back. Carpets are rolled over.
 - Water, lava and out of bounds each cost a stroke, so aim away from them.
+- Sand slows the ball down a lot. If your ball is in a sunken sand bunker, hit it harder to get it out.
 - Only use Reset ball when your ball is stuck, like inside a cauldron. It costs a stroke.
 - Open the Scorecard any time to see how you're doing. Green is under par, white is par, yellow is over par, red is picked up, a star is a hole-in-one, light blue is the hole you're on, and grey is not played yet.
 
@@ -1512,7 +1514,7 @@ These are played in the Games world, on courses the server's builders make. Each
 *Boat races for everyone at once: three short races on one track, points in every race, and a few tokens for the top racers. It's free, so nobody can lose tokens.*
 
 - **Open it:** `/hcm play race`, the Race Night tile on the Together tab of the Games screen, or an [Arcade] Race Night sign.
-- **When:** at set times the owner picks (Fridays at 7:00 PM by default), or when an admin starts one. The Race Night tile's name says when the next one is. Race Night ships switched off: it shows up once the owner turns it on (with the Ice Boat course, its usual track).
+- **When:** at set times the owner picks (Fridays at 7:00 PM by default), or when an admin starts one. The Race Night tile's name says when the next one is. Race Night ships switched off: it shows up once the owner turns it on (with the Ice Boat course, its usual track: the Mountain Run, see [Ice Boat: the Mountain Run](#ice-boat-the-mountain-run)).
 - **Costs:** Free.
 
 **How to play**
@@ -1520,11 +1522,18 @@ These are played in the Games world, on courses the server's builders make. Each
 1. About 30 minutes before, a chat line says Race Night is coming. 10 minutes before, joining opens: a line in chat and a bar at the top of the screen count down.
 2. Open the Race Night screen and click the green **Join Race Night** button. That's all. You can keep playing anything until it starts. Changed your mind? Click **Leave the race list**.
 3. Just before the start, you are taken to the track in your own boat. Your things are kept safe and come back at the end. If you're busy in another game, you're asked to stand still or use Leave game; if you can't in time, you join the next race.
-4. Warm-up: first you get a few minutes of free laps that don't count. Tap **Ready** when you're set. The race starts when the time is up, or when everyone who joined is at the track and ready, but never before the start time.
-5. Everyone starts together on a starting grid: "Race 1 of 3", then 3, 2, 1, Go! The bar at the top shows your place and lap, like "2nd of 5 · Lap 1/2".
+4. Warm-up: first you get a few minutes of free laps that don't count (on the Ice Boat's Mountain Run they are free runs down the mountain: "Warm-up runs"). Tap **Ready** when you're set. The race starts when the time is up, or when everyone who joined is at the track and ready, but never before the start time.
+5. Everyone starts together on a starting grid: "Race 1 of 3", then 3, 2, 1, Go! The bar at the top shows your place and lap, like "2nd of 5 · Lap 1/2". On the Mountain Run each race is one run from the top to the bottom, so there are no laps: the bar just says "2nd of 5".
 6. Cross the finish line: "You came 2nd!" Then you watch the others from the viewing stand.
 7. After a short break, the next race starts. Whoever has the fewest points starts at the front.
 8. After the last race, the winners are announced, prizes are paid, and everyone goes to the Clubhouse (see [The Clubhouse](#the-clubhouse)). If the Clubhouse is off (or a restart is only a minute or so away), everyone goes home with their things.
+
+**On the Ice Boat's Mountain Run**
+
+- The Race Night screen says the night is "3 downhill races": each race is one run from the top of the mountain to the gold finish line at the bottom, below the viewing stand.
+- The chat lines before the night tell you how many drops it has, like "This week: 5 drops down the mountain!" (the owner can turn this line off).
+- The starting grid title says "Race 1 of 3" and "Ice Boat · you start 3rd", with no laps.
+- On some tracks the last drop is the Final Drop, right in front of the stand. Its sign says FINAL DROP! Then the gold finish line!, and a big "Final drop!" shows on your screen just before it.
 
 **Points in every race**
 
@@ -1560,10 +1569,11 @@ These are played in the Games world, on courses the server's builders make. Each
 
 ## Fresh Courses
 
-New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sky Rings, Golf of the Week (9 holes), Tiny Golf (3 holes), Easy Dropper and Dropper (see [The Dropper](#the-dropper)), plus Ice Boat when the owner turns it on. Fresh Courses ship switched off: they show up once the owner turns them on. By default a new set goes up every Monday and stays all week. The owner can make them change every day (then the big golf course is Golf of the Day) or every few days, and every screen says which: "This week's courses", "Today's courses" or "The current courses".
+New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sky Rings, Golf of the Week (9 holes), Tiny Golf (3 holes; both are [Adventure Golf](#adventure-golf)), Easy Dropper and Dropper (see [The Dropper](#the-dropper)), plus Ice Boat (see [Ice Boat: the Mountain Run](#ice-boat-the-mountain-run)) when the owner turns it on. Fresh Courses ship switched off: they show up once the owner turns them on. By default a new set goes up every Monday and stays all week. The owner can make them change every day (then the big golf course is Golf of the Day) or every few days, and every screen says which: "This week's courses", "Today's courses" or "The current courses".
 
 - Open them with /hcm play fresh_courses, or the Fresh Courses tile on the Courses and Golf tabs. /hcm play fresh_parkour_tiers opens Parkour Levels, where the three parkour courses sit side by side.
 - They are free skill games, the same for everyone. They play like the time trials and mini golf above, with the same kit, rules and "your things come back".
+- Each course stands on its own, far out in the sky: from a course you see only that course, never another course (or the next one being built) floating nearby.
 - Each tile's name shows your stars for this week's course and its course code, like "Hard Parkour - ★★☆ · Course code HARD-40". A golf tile also shows its holes and par. A course being built shows grey: "being built, back soon".
 - Stars: finishing a course gives 1 star. A good time (or a good golf score) gives 2, a great one 3. Your best stars on each course this week count. The Star Chart adds up your best stars from every course this week, and it starts again every week.
 - Star Chart goals: by default 6 stars pays 1 token and 12 stars pays 2 tokens, once each a week. The Star Chart tile shows your stars and the next goal. A week's goals stay the same all week.
@@ -1571,9 +1581,54 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - Daily limits: if today's limit can't pay the whole first-finish reward or a whole goal, none of it is paid and none of it is used up: "You've reached today's token limit - finish it again another day this week for its tokens." Finish it on another day this week and it pays.
 - Course codes: every course has a code, like HARD-40. You see it on its tile, on its screen and in chat when you finish. Loved an old course? Tell an admin its course code, and they can bring it back for a week, or keep it forever.
 - Classic courses: the owner can bring back a past course; its old records are the ones to beat. It shows up as Classic Parkour, Classic Sky Rings, Classic Golf or Classic Dropper on the Fresh Courses screen, like "Classic: Hard Parkour (week of 5 Oct)", with when it goes away again. If you got a course's first-finish tokens back when it first came, you don't get them again; if you didn't, you do. Stars on a classic count toward this week's Star Chart.
-- A kept course becomes a normal course with its own name, played like any other course.
+- A kept course becomes a normal course with its own name, played like any other course. A golf course kept from Adventure Golf keeps its sand and pond rules.
 - High scores: each course has its own board for its week, shown as "Hard Parkour · this week" (older weeks by their date). The Star Chart has its own board.
 - Weekly Cup: the parkour courses, Sky Rings, Ice Boat and the Droppers run a Weekly Cup by default (see [The Weekly Cup](#the-weekly-cup)).
+
+<!-- ---- Course Variety ---- -->
+### Adventure Golf
+
+*Golf of the Week and Tiny Golf are full of adventures: sand, ponds, trees, hills, steps and even a volcano. The holes are new with every set.*
+
+- **Open it:** the Golf of the Week and Tiny Golf tiles on the Fresh Courses screen (/hcm play fresh_courses), or /hcm play fresh_golf and /hcm play fresh_tiny_golf. It plays like [Mini Golf](#mini-golf), with the same clubs and kit.
+- **Read the tee sign.** The sign at each tee says the hole, its par, and what is on the hole:
+  - Mind the pond! Splash = +1: a pond, a creek or an island green.
+  - Sand is slow! Hit it harder: a sand trap.
+  - Up and over the hill!: a hump or a hill to putt over.
+  - Down the steps! Watch it roll: terraces, with glass edges like a waterfall.
+  - Up the volcano! Not too hard!: the cup is on top of a volcano. Too soft and the ball stops on the way up; too hard and it rolls off the other side.
+  - Bank off the trees!: trees in the way. Putt round them, or bounce off a trunk.
+  - Pick a path! Short or safe?: two ways round a tree island, a short way past a pond or a longer dry way.
+  - Round the bend and down!: a corner where the lane drops down a step.
+  - Hit the ball to the flag!: any other hole.
+- **Sand** slows the ball down a lot. Some sand is a sunken bunker, half a block down: a soft tap may not get out, so hit it harder.
+- **Ponds and the creek:** a ball in the water is Splash! Back to your last spot, +1 stroke. A ball that stops on the very edge, hanging over the water, has fallen in too. Water is only in play on Medium and Hard holes: Easy holes, and every hole of Tiny Golf, never have water in play (a pond on an Easy hole is behind the wall, just to look at). If you walk into a pond, you can always step out.
+- **Trees:** trunks to putt round or bank off, with leaves above your head. You can always see the flag from the tee. More trees grow round every hole, out of the way of the ball.
+- **Hills, steps and the volcano:** the ball rolls down them by itself. Nothing on a hole can trap your ball.
+- **A wobbly ball:** if your ball gets stuck jiggling against a step, it settles within about a second. Then putt again.
+- **Every hole is tested before it is built.** The computer checks that every hole can be finished, works out its par, and makes sure someone who just aims at the flag finishes within par + 1 and never splashes into a pond. Each course gets a good mix: Golf of the Week aims for two water holes, two sand holes, three with hills or steps, a tree hole and a big drop.
+- Golf courses that builders make by hand are not changed.
+
+### Ice Boat: the Mountain Run
+
+*A boat race down a mountain! Start at the top, take the drops, stay off the sand and race to the gold finish line at the bottom.*
+
+- **Open it:** the Ice Boat tile on the Fresh Courses screen or the Courses tab, or /hcm play fresh_boat. It ships switched off, so it is there once the owner turns it on. The tile's name shows its drops, like "Ice Boat - 5 drops · ★★☆".
+- **How it goes:** it's one run from start to finish, with no laps. The track spirals down the mountain round the viewing stand, and the finish is at the bottom, by the stand.
+- **Drops:** the ice steps down 4 to 6 times. HOP! is a little drop of 1 block. On Medium and Hard some are a BIG DROP! of 2 blocks: hold on! Yellow blocks and a light in both walls show where each drop is, and you always land on a long straight.
+- **Signs and arrows:** a sign on the wall tells you what is coming, just before it, and magenta arrows in the walls point the way.
+  - SANDY BEND: Sand is slow, ice is fast! The outside of a tight bend is sand: go wide and your boat crawls.
+  - SAND PIT! Stay on the ice to go fast! A patch of sand in the middle, with ice round both sides.
+  - PICK A PATH! Left or right? The track splits round a little island with a tree. Both ways work.
+  - ICE CAVE: Lights on! A tunnel with a blue glass roof and lights in the walls.
+  - FOREST: Weave through the trees! Steer round the tree trunks (Medium and Hard).
+  - FINAL DROP! Then the gold finish line! On some tracks the last drop is right in front of the stand. A big "Final drop!" shows on your screen just before it.
+- **Easy, Medium or Hard:** the owner picks one. Easy is the widest (9 blocks of ice) with only little drops. Medium (the usual one) is 7 wide and can have strips of fast blue ice down the middle. Hard is 5 wide, all fast blue ice.
+- **Safe for everyone:** there is no water, the walls are high, and you can always stay on the ice: you never have to go through sand.
+- **Going back:** Back to checkpoint, trying to get out of the boat (sneak), or falling sends you back to your last checkpoint, never more than about 60 blocks up the track, facing down it. The clock keeps running.
+- **Stars, tokens and the Weekly Cup** work like the other Fresh Courses: your first finish of the week pays 3 tokens by default, and it runs a Weekly Cup.
+- **Race Night** races it as three downhill races (see [Race Night](#race-night)).
+<!-- ---- end Course Variety ---- -->
 
 <!-- ---- dropper (WP-D) ---- -->
 ### The Dropper
@@ -1678,6 +1733,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - Weekly Cup: a time-trial course that runs this week's Cup (and it isn't paid out yet) carries cup {entry, pool, entrants, endsAt} on its own games[] entry. entry is the tokens to enter (5 by default). pool is the pool right now: every entry, plus the server's top-up (10 by default) once 2 or more are in; the top-up is only paid if 2 or more set a Cup time, so the paid pool can be smaller than the one shown. entrants is how many are in (a count, never who). endsAt is when it is paid out, in epoch ms (Monday 4:00 AM by default). No player, Cup time or prize is ever published. There is no cup on a course without one, and golf never has one. While the owner has the Cup switched off (games.cup.enabled: false), only a Cup that players already entered is still published, until it is paid out. Say "Cup pool: 35 tokens · 5 in" and "Best time wins the pool", like the game.
 - Falling Floors (only while the owner has it on; it ships off): an entry {id: "falling_floors", name, kind: "arena", shape?, top?}. shape is this week's top floor: disc, square, ring, plus or diamond. top is this week's longest solo times in ms, longest first (higher is better). There is no record field.
 - Race Night: the top-level events object, only while Race Night is on (it ships off), with only the parts that have something in them. next {id, name, joinAt, startsAt, course?: {id, name}, races, laps, entry: "free", prizes, finisherPrize, prizeNight, racers, maxRacers}: the next night (open or coming), its join and start times in epoch ms, its track (absent until the server has picked one), prizes [5, 3, 2] and finisherPrize 1 by default, prizeNight false when that week's prize nights are used up (then it's "Just for fun tonight"), and racers joined so far as a count. upcoming: the start times of the nights after it, at most 4. live {id, state, race, of, racers, standings?}: the night on now; state is open, racing, break or results (results stays for 30 minutes after the end); standings [{rank, points, lap, laps, holder?}], at most 8, best first. recent: the last 5 nights, newest first, {id, at, course?, racers, state: done or called_off, top?: [{rank, value, unit: "points", holder?}]} with at most 8 rows. season? {key: "2026-10", name: "October", until, top?}: this month's season table, with top like any board's (in points). entry is always "free": nobody pays to race, so never show a price.
+- Course Variety (0.36) adds no new fields and changes none. Ice Boat (`fresh_boat`, kind boat, tier easy, medium or hard) appears like any Fresh course once the owner switches it on; how many drops it has is only in the game's own tile name, not in the feed, and a golf hole's features (sand, ponds, trees) aren't published either. A Race Night on the Mountain Run has laps 1 (in next and in each live standing): it is a downhill sprint, so say "3 downhill races" as the game does, not "1 lap".
 - featured {game, until}: game is today's pick. It is a game or course id that is in games[], or "trials" / "golf" when the owner pinned a whole world game; then every time-trial course (the Droppers too) or every golf course is today's pick. until is the next local midnight in epoch ms, good for a countdown. It is never a game of chance. It is absent while the games are off or when there is no pick.
 - jackpots [{game: "scratch_ticket", tokens}]: the Scratch Ticket's pot right now. Whenever it is there, games[] also has the scratch_ticket entry, so the pot can always be shown with its odds. That entry's rtp (77.6 as shipped) is the long-run figure with the pot at its steady state.
 - prizes: the visible Prize Counter rows {id, name, category, cost, description?}. category is boosts, hunt, cosmetics, perks, trophies or minis. Trade In, Quest Reroll and the Rare Card are left out, and the +1 Home shows its first price. packs: packs sold for tokens {id, name, cost, odds}, with odds as percents per rarity (COMMON, UNCOMMON, RARE, EPIC, LEGENDARY; only rarities above 0).
@@ -1694,4 +1750,4 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 
 ---
 
-*Written from the plugin's code for release 0.35.0-arcade-games. If a number here and the game ever disagree, the game is right. Tell the server owner so this guide can be fixed.*
+*Written from the plugin's code for release 0.35.0-arcade-games and updated from the code for 0.36 (Course Variety). If a number here and the game ever disagree, the game is right. Tell the server owner so this guide can be fixed.*

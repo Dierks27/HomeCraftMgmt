@@ -42,7 +42,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * length, tier and a seed (random unless typed, and said in the reply), and previewing again
  * replaces it; the course a test run plays is the preview's own plan, placed in the idle half
  * exactly as its flip would place it, and never live; the test is refused with no preview, on
- * golf (walked instead) and while the course is off; {@code choose} makes exactly the next set use
+ * golf (walked instead) and while the course is off for a problem (switched off, it can still be
+ * tried: CV final gate, a preview before switching it on); {@code choose} makes exactly the next set use
  * the preview's seed, stored like a pin so it holds across a restart (which puts the preview back
  * in the spare half with nothing to write, instead of emptying that half), the change's build
  * finds its blocks already right, the set goes up on fresh boards with its own course code and
@@ -273,7 +274,7 @@ class PickACourseTest {
     }
 
     @Test
-    void aTestIsRefusedWithNoPreviewWhileItIsBuiltOnGolfAndWhileTheCourseIsOff() {
+    void aTestIsRefusedWithNoPreviewWhileItIsBuiltOnGolfAndWhileTheCourseIsOffForAProblem() {
         host.settings = GenKit.weekly(SLOT, "fresh_tiny_golf");
         weekUp();
         assertEquals("&cNo preview yet - /hcm games gen preview " + SLOT + " first", gen.previewRun(SLOT).refusal(),
@@ -292,8 +293,11 @@ class PickACourseTest {
                 gen.previewRun("fresh_tiny_golf").refusal(), "golf has no test round: it is walked");
 
         gen.enable(SLOT, false, said::add);
-        assertTrue(gen.previewRun(SLOT).refusal().contains(DEF.name() + " is off"), "a course that is off: "
-                + gen.previewRun(SLOT).refusal());
+        assertNotNull(gen.previewRun(SLOT).course(), "a course switched off can still be tried (CV final gate: a"
+                + " preview before switching it on): " + gen.previewRun(SLOT).refusal());
+        gen.slot(SLOT).problem = "the world games isn't loaded";
+        assertEquals("&c" + DEF.name() + " is off: &7the world games isn't loaded", gen.previewRun(SLOT).refusal(),
+                "one off for a problem is refused, saying why");
         assertTrue(gen.previewRun("fresh_classic_parkour").refusal().contains("Only a Fresh Course"),
                 "a Classics slot has no previews");
     }

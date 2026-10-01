@@ -1,10 +1,14 @@
 package com.dierks.homecraft.games.gen.api;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * The only blocks a generated course may be built of (GEN-SPEC §4.0), and the names the planners
@@ -12,10 +16,17 @@ import java.util.Set;
  *
  * <p>Why an allowlist: a course is rebuilt from its plan every day and verified block for block,
  * so every block must stay exactly where it was put. That rules out anything that falls (sand,
- * gravel, concrete powder), flows (water, lava), ticks or decays (leaves, crops, plain ICE, which
+ * gravel, concrete powder), flows (water, lava), ticks or decays (crops, grass, plain ICE, which
  * melts), carries power (redstone), holds things (chests, hoppers) or is an entity. Soul SOIL, not
  * soul sand, whose top is 0.875 and would not match the golf model. The list is pinned by a test,
  * so adding a block is a decision, not an accident; air is never in a plan (empty space is air).
+ *
+ * <p><b>Course Variety (§1.1).</b> Smooth sandstone (the "sand" that never falls), its bottom slab,
+ * moss, and oak, birch and cherry logs and leaves join the list. Leaves would decay and logs could
+ * lie on their side, so for those the block's states matter too: {@link #stateProblems} wants every
+ * leaf persistent, dry and at the exact {@code distance} vanilla gives it (so a neighbour update
+ * never changes it and the daily verify pass never churns), every log upright and every slab a
+ * bottom slab. The planners write them through {@link #log} and {@link #leaves}.
  *
  * <p>Plans carry blocks as block-data text ({@code minecraft:smooth_stone_slab[type=bottom]}), so
  * nothing here needs a server; the builder parses each entry once on the main thread.
@@ -74,6 +85,29 @@ public final class Palette {
     public static final String TRACK_FAST = "minecraft:blue_ice";
     public static final String TRACK_WALL = "minecraft:stripped_spruce_wood";
 
+    // ---- Course Variety (§1.1): sand, moss and trees ----------------------------------------------
+
+    /**
+     * The sand that never falls: a full block of smooth sandstone. A boat's sand (a drive floor,
+     * slow), a golf flush bunker (SLOW to the ball on a generated lane of algo 3 or later).
+     */
+    public static final String SAND = "minecraft:smooth_sandstone";
+    /** A golf sunken bunker: its top is half a block below the turf. Bottom slabs only. */
+    public static final String SAND_SLAB = "minecraft:smooth_sandstone_slab[type=bottom]";
+    /** Grass that never spreads or ticks: terraces, the summit cone, island tops, planters. */
+    public static final String MOSS = "minecraft:moss_block";
+    /** The woods a tree may be, in the order the planners pick them. */
+    public static final List<String> WOODS = List.of("oak", "birch", "cherry");
+    /** The farthest a leaf may be from a log ({@code distance=7} is vanilla's cap). */
+    public static final int MAX_LEAF_DISTANCE = 7;
+
+    // ---- existing blocks, their Course Variety jobs (§1.1.3) ---------------------------------------
+
+    /** Yellow drop-ahead caps in both walls at a boat track's lip. */
+    public static final String LIP_CAP = "minecraft:yellow_concrete";
+    /** The Ice Cave's see-through roof, and the golf "glass waterfall" under a terrace's edge. */
+    public static final String BLUE_GLASS = "minecraft:light_blue_stained_glass";
+
     // ---- glass and lights (EVENTS-DROPPER-SPEC C1: the Dropper's shafts, Falling Floors' floors) ----
 
     /** Clear glass: Falling Floors' gallery rails. */
@@ -95,10 +129,11 @@ public final class Palette {
             SEA_LANTERN);
 
     /**
-     * Still water sources, as block-data text: the ONE fluid a plan may place, and only in a Dropper's
-     * sealed pools (EVENTS-DROPPER-SPEC §B.1.9). A separate set, never in {@link #ALLOWED}: every
-     * other generator's lint still refuses water, and only the dropper validator's sealed-pool rule
-     * admits it.
+     * Still water sources, as block-data text: the ONE fluid a plan may place, and only in sealed
+     * pools: a Dropper's (EVENTS-DROPPER-SPEC §B.1.9) and golf's ponds (Course Variety §1.2, the
+     * slots whose {@code Slots.Def.mayHoldWater()}). A separate set, never in {@link #ALLOWED}: every
+     * other generator's lint still refuses water (the ice boat stays dry), and only a sealed-pool
+     * rule ({@link Pools}, the Dropper's own) admits it.
      */
     public static final Set<String> POOL_WATER = Set.of("minecraft:water[level=0]");
 
@@ -111,7 +146,11 @@ public final class Palette {
             "minecraft:magenta_glazed_terracotta", "minecraft:oak_sign", "minecraft:oak_wall_sign",
             "minecraft:quartz_pillar", "minecraft:stripped_spruce_wood", "minecraft:slime_block",
             "minecraft:packed_ice", "minecraft:blue_ice", "minecraft:soul_soil", "minecraft:smooth_stone_slab",
-            "minecraft:red_wool"), GLASS_AND_LIGHTS);
+            "minecraft:red_wool",
+            // Course Variety (§1.1): the sand that never falls, moss, and trees (states: stateProblems)
+            "minecraft:smooth_sandstone", "minecraft:smooth_sandstone_slab", "minecraft:moss_block",
+            "minecraft:oak_log", "minecraft:birch_log", "minecraft:cherry_log", "minecraft:oak_leaves",
+            "minecraft:birch_leaves", "minecraft:cherry_leaves"), GLASS_AND_LIGHTS);
 
     private Palette() {
     }
@@ -139,7 +178,7 @@ public final class Palette {
 
     /**
      * Whether a block-data text is exactly a still water source of {@link #POOL_WATER} (any case,
-     * trimmed). Only the dropper validator asks this, for its sealed pools.
+     * trimmed). Only the sealed-pool rules ask this (the Dropper's validator, {@link Pools}).
      */
     public static boolean poolWater(String blockData) {
         return blockData != null && POOL_WATER.contains(blockData.trim().toLowerCase(Locale.ROOT));
@@ -169,6 +208,285 @@ public final class Palette {
                     out.add(String.valueOf(p));
                 }
             }
+        }
+        return out;
+    }
+
+    /**
+     * What is wrong with the STATES of a plan's palette entries (§1.1.1), in order; empty when
+     * nothing is. {@link #problems} says which blocks a plan may use; this says how some of them
+     * must stand, so they never change on their own:
+     * <ul>
+     *   <li>every {@code *_leaves} says {@code persistent=true} (it never decays) and
+     *       {@code waterlogged=false}, with a {@code distance} of 1 to {@value #MAX_LEAF_DISTANCE}
+     *       (the validators check it is the one vanilla would give it: {@link #leafProblems});</li>
+     *   <li>every {@code *_slab} says {@code type=bottom} (the golf model's half block);</li>
+     *   <li>every {@code *_log} says {@code axis=y} (a trunk);</li>
+     *   <li>nothing says {@code waterlogged=true}, and no state is given twice or can't be read.</li>
+     * </ul>
+     * Pure; entries that aren't on the list at all are {@link #problems}' to report.
+     */
+    public static List<String> stateProblems(List<String> palette) {
+        List<String> out = new ArrayList<>();
+        if (palette == null) {
+            return out;
+        }
+        for (String p : palette) {
+            if (p == null) {
+                continue;
+            }
+            String why = stateProblem(p);
+            if (why != null) {
+                out.add("'" + p + "' " + why);
+            }
+        }
+        return out;
+    }
+
+    /** Why one entry's states break {@link #stateProblems}' rules, or {@code null}. */
+    private static String stateProblem(String blockData) {
+        Map<String, String> states = states(blockData);
+        if (states == null) {
+            return "has states that can't be read";
+        }
+        if ("true".equals(states.get("waterlogged"))) {
+            return "holds water (waterlogged=true)";
+        }
+        String id = id(blockData);
+        if (id.endsWith("_leaves")) {
+            if (!"true".equals(states.get("persistent"))) {
+                return "would decay: leaves must say persistent=true";
+            }
+            if (!"false".equals(states.get("waterlogged"))) {
+                return "must say waterlogged=false";
+            }
+            int d = leafDistance(states.get("distance"));
+            if (d < 1 || d > MAX_LEAF_DISTANCE) {
+                return "needs a distance of 1 to " + MAX_LEAF_DISTANCE;
+            }
+            if (states.size() != 3) {
+                return "has states leaves don't have";
+            }
+        } else if (id.endsWith("_slab")) {
+            if (!"bottom".equals(states.get("type"))) {
+                return "isn't a bottom slab (type=bottom)";
+            }
+        } else if (id.endsWith("_log")) {
+            if (!"y".equals(states.get("axis"))) {
+                return "isn't upright (axis=y)";
+            }
+        }
+        return null;
+    }
+
+    private static int leafDistance(String text) {
+        if (text == null || text.length() != 1 || !Character.isDigit(text.charAt(0))) {
+            return -1;
+        }
+        return text.charAt(0) - '0';
+    }
+
+    /**
+     * The states of a block-data text, lower-case ({@code [distance=2,persistent=true]} is
+     * {distance=2, persistent=true}); empty with none, {@code null} when they can't be read (a
+     * missing bracket, a state without a value, one given twice).
+     */
+    public static Map<String, String> states(String blockData) {
+        Map<String, String> out = new TreeMap<>();
+        if (blockData == null) {
+            return out;
+        }
+        String s = blockData.trim().toLowerCase(Locale.ROOT);
+        int open = s.indexOf('[');
+        if (open < 0) {
+            return s.indexOf(']') < 0 ? out : null;
+        }
+        if (!s.endsWith("]") || s.indexOf('[', open + 1) >= 0) {
+            return null;
+        }
+        String body = s.substring(open + 1, s.length() - 1).trim();
+        if (body.isEmpty()) {
+            return out;
+        }
+        for (String part : body.split(",", -1)) {
+            int eq = part.indexOf('=');
+            if (eq <= 0 || eq == part.length() - 1) {
+                return null;
+            }
+            String k = part.substring(0, eq).trim();
+            String v = part.substring(eq + 1).trim();
+            if (k.isEmpty() || v.isEmpty() || out.put(k, v) != null) {
+                return null;
+            }
+        }
+        return out;
+    }
+
+    /**
+     * An upright log of {@code wood} (one of {@link #WOODS}): {@code minecraft:oak_log[axis=y]}.
+     *
+     * @throws IllegalArgumentException for a wood the palette doesn't have
+     */
+    public static String log(String wood) {
+        return "minecraft:" + wood(wood) + "_log[axis=y]";
+    }
+
+    /**
+     * A persistent, dry leaf of {@code wood} at {@code distance} from its nearest log, as the game
+     * itself spells it (states in alphabetical order), so the builder's parse gives back the same
+     * text: {@code minecraft:oak_leaves[distance=2,persistent=true,waterlogged=false]}.
+     *
+     * @throws IllegalArgumentException for a wood the palette doesn't have, or a distance outside 1-7
+     */
+    public static String leaves(String wood, int distance) {
+        if (distance < 1 || distance > MAX_LEAF_DISTANCE) {
+            throw new IllegalArgumentException("a leaf's distance is 1 to " + MAX_LEAF_DISTANCE + ": " + distance);
+        }
+        return "minecraft:" + wood(wood) + "_leaves[distance=" + distance + ",persistent=true,waterlogged=false]";
+    }
+
+    private static String wood(String wood) {
+        String w = wood == null ? "" : wood.trim().toLowerCase(Locale.ROOT);
+        if (!WOODS.contains(w)) {
+            throw new IllegalArgumentException("not a wood of the palette: " + wood);
+        }
+        return w;
+    }
+
+    // ---- leaf distance (§1.1.2): vanilla's own rule, one copy for every planner and validator ------------
+
+    /**
+     * Whether a block holds leaves up, as vanilla's {@code #logs} tag says: any log or wood, stripped
+     * too (so a {@link #GOLF_WALL}/{@link #TRACK_WALL} of stripped spruce wood counts), and the nether
+     * stems. A leaf beside one is at {@code distance=1}.
+     */
+    public static boolean holdsLeaves(String blockData) {
+        String id = id(blockData);
+        return id.endsWith("_log") || id.endsWith("_wood") || id.endsWith("_stem") || id.endsWith("_hyphae");
+    }
+
+    /** Whether a block is leaves (any wood): a leaf passes its distance on to the next. */
+    public static boolean isLeaves(String blockData) {
+        return id(blockData).endsWith("_leaves");
+    }
+
+    /**
+     * A block position as one number, for {@link #leafDistances}: x and z in 26 bits, y in 12 (any
+     * block of a world).
+     */
+    public static long blockKey(int x, int y, int z) {
+        return ((long) (x & 0x3FFFFFF) << 38) | ((long) (z & 0x3FFFFFF) << 12) | (y & 0xFFF);
+    }
+
+    /**
+     * The {@code distance} vanilla gives each leaf, keyed by {@link #blockKey}: 1 + the least distance
+     * of its six face neighbours, where anything that {@link #holdsLeaves holds leaves} counts 0 and
+     * anything else (air, stone, a block that isn't the plan's) counts 7, capped at
+     * {@value #MAX_LEAF_DISTANCE}. That is the shortest path from any log through leaves, found
+     * breadth first. The rule has one answer, so a plan that writes it never changes when a
+     * neighbour updates. Only the given blocks count: a canopy must stand clear of anything that isn't
+     * the plan's (two columns, §1.1.2).
+     *
+     * @param logs   {x, y, z} of every block that holds leaves
+     * @param leaves {x, y, z} of every leaf
+     */
+    public static Map<Long, Integer> leafDistances(List<int[]> logs, List<int[]> leaves) {
+        Map<Long, Integer> out = new HashMap<>();
+        if (leaves == null || leaves.isEmpty()) {
+            return out;
+        }
+        Set<Long> anchor = new HashSet<>();
+        if (logs != null) {
+            for (int[] l : logs) {
+                anchor.add(blockKey(l[0], l[1], l[2]));
+            }
+        }
+        Map<Long, int[]> leaf = new HashMap<>();
+        for (int[] l : leaves) {
+            leaf.put(blockKey(l[0], l[1], l[2]), l);
+        }
+        int[][] faces = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+        ArrayDeque<int[]> queue = new ArrayDeque<>();
+        for (int[] l : leaves) {
+            long k = blockKey(l[0], l[1], l[2]);
+            if (out.containsKey(k)) {
+                continue;
+            }
+            for (int[] f : faces) {
+                if (anchor.contains(blockKey(l[0] + f[0], l[1] + f[1], l[2] + f[2]))) {
+                    out.put(k, 1);
+                    queue.add(l);
+                    break;
+                }
+            }
+        }
+        while (!queue.isEmpty()) {
+            int[] l = queue.poll();
+            int d = out.get(blockKey(l[0], l[1], l[2]));
+            if (d >= MAX_LEAF_DISTANCE) {
+                continue;
+            }
+            for (int[] f : faces) {
+                long n = blockKey(l[0] + f[0], l[1] + f[1], l[2] + f[2]);
+                int[] next = leaf.get(n);
+                if (next != null && !out.containsKey(n)) {
+                    out.put(n, d + 1);
+                    queue.add(next);
+                }
+            }
+        }
+        for (long k : leaf.keySet()) {
+            out.putIfAbsent(k, MAX_LEAF_DISTANCE);
+        }
+        return out;
+    }
+
+    /**
+     * Every leaf of a plan whose stored {@code distance} isn't the one vanilla gives it
+     * ({@link #leafDistances} over the plan's own blocks), said once with how many and the first;
+     * empty when all are right (or there are none). What both boat and golf validators ask.
+     */
+    public static List<String> leafProblems(List<String> palette, List<BlockOp> ops) {
+        List<String> out = new ArrayList<>();
+        if (palette == null || ops == null) {
+            return out;
+        }
+        List<int[]> logs = new ArrayList<>();
+        List<int[]> leaves = new ArrayList<>();
+        List<BlockOp> leafOps = new ArrayList<>();
+        for (BlockOp op : ops) {
+            if (op.state() < 0 || op.state() >= palette.size()) {
+                continue;
+            }
+            String b = palette.get(op.state());
+            if (holdsLeaves(b)) {
+                logs.add(new int[]{op.x(), op.y(), op.z()});
+            } else if (isLeaves(b)) {
+                leaves.add(new int[]{op.x(), op.y(), op.z()});
+                leafOps.add(op);
+            }
+        }
+        if (leafOps.isEmpty()) {
+            return out;
+        }
+        Map<Long, Integer> want = leafDistances(logs, leaves);
+        int wrong = 0;
+        String first = null;
+        for (BlockOp op : leafOps) {
+            Map<String, String> states = states(palette.get(op.state()));
+            int said = leafDistance(states == null ? null : states.get("distance"));
+            int is = want.get(blockKey(op.x(), op.y(), op.z()));
+            if (said != is) {
+                wrong++;
+                if (first == null) {
+                    first = op.x() + " " + op.y() + " " + op.z() + ": it says " + (said < 0 ? "none" : said)
+                            + ", vanilla gives " + is;
+                }
+            }
+        }
+        if (wrong > 0) {
+            out.add(wrong + " lea" + (wrong == 1 ? "f says" : "ves say") + " the wrong distance (first at " + first
+                    + "): the game would change " + (wrong == 1 ? "it" : "them"));
         }
         return out;
     }

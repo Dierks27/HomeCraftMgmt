@@ -36,6 +36,9 @@ import java.util.List;
  * in plot n and where it stands ({@link KeptPlot}); {@code gen.keep.pending} — a keep or a
  * clear-plot in flight ({@link KeepService}), so a stop halfway is finished or cleaned at the
  * next start. A free plot has no key: nothing guards it, so every keep scans it again.
+ *
+ * <p>And {@code gen.layout.guard}: whether this server kept 0.35's spots or took the new layout, as
+ * decided once at the update ({@code LayoutGuard.STAMP_KEY}).
  */
 public final class GenAdminKeys {
 

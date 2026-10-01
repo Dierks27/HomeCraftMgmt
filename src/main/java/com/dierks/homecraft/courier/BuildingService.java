@@ -1355,6 +1355,11 @@ public final class BuildingService {
     private boolean restoreNow(DeliverySite site) {
         World world = site.bukkitWorld();
         if (world == null) {
+            if (!worldGone(false, Bukkit.getWorldContainer(), site.world())) {
+                // Not loaded (yet): parked, and restored when its chunks load. The start's sweep runs
+                // before Multiverse has loaded its worlds (plugin.yml loads this plugin first).
+                return false;
+            }
             // The world is gone entirely. There are no blocks left to put back, so the record
             // has done its job and holding it forever would only re-run this every enable.
             forget(site.jobId());
@@ -1374,6 +1379,20 @@ public final class BuildingService {
         }
         forget(site.jobId());
         return true;
+    }
+
+    /**
+     * Whether a site's world is gone for good, so its record can go: not {@code loaded}, and no folder of
+     * that name in the server's world {@code container}. A world that isn't loaded yet keeps its sites:
+     * Multiverse loads its worlds while it enables, and plugin.yml loads this plugin before
+     * Multiverse-Core (for the Games' void world), so the sweep at enable runs before any of them is
+     * loaded. Forgetting a site then would leave the courier's building standing for good.
+     */
+    static boolean worldGone(boolean loaded, File container, String world) {
+        if (loaded) {
+            return false;
+        }
+        return container == null || world == null || world.isBlank() || !new File(container, world).isDirectory();
     }
 
     /** Note that this site still owes a restore, and wake on the chunk that would allow it. */

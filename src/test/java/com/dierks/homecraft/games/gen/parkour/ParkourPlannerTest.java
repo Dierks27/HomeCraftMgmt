@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlanInput;
@@ -50,7 +51,7 @@ class ParkourPlannerTest {
             Slots.DAILY_PARKOUR_HARD);
 
     static PlanInput input(Slots.Def slot, char half, long seed, String tier, int fallDepth) {
-        return new PlanInput(slot, slot.half(half), half, 20725, 0, seed, tier, fallDepth, 0, null);
+        return new PlanInput(slot, LegacyBoxes.half(slot, half), half, 20725, 0, seed, tier, fallDepth, 0, null);
     }
 
     static PlanInput input(Slots.Def slot, long seed) {
@@ -85,7 +86,7 @@ class ParkourPlannerTest {
         Set<String> hashes = ConcurrentHashMap.newKeySet();
         List<String> failures = Collections.synchronizedList(new ArrayList<>());
         AtomicInteger rejected = new AtomicInteger();
-        Box half = slot.half('A');
+        Box half = LegacyBoxes.half(slot, 'A');
         IntStream.range(0, n).parallel().forEach(day -> {
             long seed = GenSeed.seed(SECRET, 20_000 + day, slot.id(), 0);
             try {
@@ -166,7 +167,7 @@ class ParkourPlannerTest {
     void halfBGetsItsOwnLayoutInsideHalfB() throws GenFailed {
         for (Slots.Def slot : SLOTS) {
             Plan p = PLANNER.plan(input(slot, 'B', 7, slot.tierOrMix(), 6));
-            Box half = slot.half('B');
+            Box half = LegacyBoxes.half(slot, 'B');
             assertEquals(half, p.half(), slot.id() + ": the plan is for half B");
             for (BlockOp op : p.ops()) {
                 assertTrue(half.contains(op.x(), op.y(), op.z()), slot.id() + ": " + op + " inside half B");
@@ -383,11 +384,12 @@ class ParkourPlannerTest {
     void theBootCheckRefusesALayoutTheLiveFallDepthNoLongerFits() throws GenFailed {
         int refused = 0;
         for (int day = 0; day < 40; day++) {
-            PlanInput at6 = new PlanInput(Slots.DAILY_PARKOUR_HARD, Slots.DAILY_PARKOUR_HARD.half('A'), 'A', 20725, 0,
+            Box hardA = LegacyBoxes.half(Slots.DAILY_PARKOUR_HARD, 'A');
+            PlanInput at6 = new PlanInput(Slots.DAILY_PARKOUR_HARD, hardA, 'A', 20725, 0,
                     GenSeed.seed(0x5EC12E7L, 20_000 + day, Slots.DAILY_PARKOUR_HARD.id(), 0), "hard", 6, 0, null);
             Plan live = PLANNER.plan(at6);
-            PlanInput at1 = new PlanInput(Slots.DAILY_PARKOUR_HARD, Slots.DAILY_PARKOUR_HARD.half('A'), 'A', 20725, 0,
-                    at6.seed(), "hard", 1, 0, null);
+            PlanInput at1 = new PlanInput(Slots.DAILY_PARKOUR_HARD, hardA, 'A', 20725, 0, at6.seed(), "hard", 1, 0,
+                    null);
             if (ParkourValidator.problems(live, "hard", 1).isEmpty()) {
                 assertEquals(live.hash(), PLANNER.rederive(at1, tag(live, ParkourPlanner.ALGO)).hash(),
                         "day " + day + ": a layout that still fits fall_depth 1 is found as before");
@@ -422,12 +424,12 @@ class ParkourPlannerTest {
     void aWrongTierACancelAndAnEmptyBudgetFailCleanly() {
         assertThrows(GenFailed.class, () -> PLANNER.plan(input(Slots.DAILY_PARKOUR_EASY, 'A', 1, "EEE", 6)),
                 "a golf mix isn't a parkour tier");
-        PlanInput cancelled = new PlanInput(Slots.DAILY_PARKOUR_EASY, Slots.DAILY_PARKOUR_EASY.half('A'), 'A', 1, 0,
-                1, "easy", 6, 0, () -> true);
+        PlanInput cancelled = new PlanInput(Slots.DAILY_PARKOUR_EASY, LegacyBoxes.half(Slots.DAILY_PARKOUR_EASY, 'A'),
+                'A', 1, 0, 1, "easy", 6, 0, () -> true);
         GenFailed c = assertThrows(GenFailed.class, () -> PLANNER.plan(cancelled), "a cancelled job gives up");
         assertEquals("cancelled", c.getMessage(), "and says so");
-        PlanInput tiny = new PlanInput(Slots.DAILY_PARKOUR_HARD, Slots.DAILY_PARKOUR_HARD.half('A'), 'A', 1, 0, 1,
-                "hard", 6, 1, null);
+        PlanInput tiny = new PlanInput(Slots.DAILY_PARKOUR_HARD, LegacyBoxes.half(Slots.DAILY_PARKOUR_HARD, 'A'), 'A', 1,
+                0, 1, "hard", 6, 1, null);
         assertThrows(GenFailed.class, () -> PLANNER.plan(tiny), "a budget of one try runs out");
         assertTrue(ParkourPlanner.WORK_BUDGET >= 100_000, "the budget the engine should give covers every start");
     }

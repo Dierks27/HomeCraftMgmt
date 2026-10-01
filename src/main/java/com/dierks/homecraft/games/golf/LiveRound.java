@@ -8,8 +8,10 @@ import java.util.UUID;
  *
  * <p>The round's own rules live here, with no server in them, so they are tested against a fake
  * block grid: a putt goes the way the player looks and counts a stroke; a tick of the ball either
- * leaves it rolling, stops it, drops it in the cup (the hole is done), or — in water, lava or out
- * of bounds — puts it back on its last spot with a penalty stroke; and a ball at rest once the
+ * leaves it rolling, stops it (on Adventure Golf also once it only wobbles on the spot:
+ * {@link GolfShot.Rolling}), drops it in the cup (the hole is done), or — in water, lava or out
+ * of bounds, or on Adventure Golf at rest over water ({@link GolfShot#settled}) — puts it back on
+ * its last spot with a penalty stroke; and a ball at rest once the
  * strokes reach the limit is picked up. {@link GolfRounds} plays it on the server: the entities,
  * the chat, the screens.
  */
@@ -55,8 +57,8 @@ final class LiveRound {
     double lastX;
     double lastY;
     double lastZ;
-    /** Ticks the ball has been moving since the putt. */
-    int rolling;
+    /** The putt on its way: its ticks (the roll cap) and, on Adventure Golf, its wobble ({@link GolfShot.Rolling}). */
+    final GolfShot.Rolling rolling = new GolfShot.Rolling();
     /** Which way the ball last went (for the head to face). */
     float yaw;
     /** Changes whenever the next hole is scheduled, so a stale timer can't start a hole twice. */
@@ -90,7 +92,7 @@ final class LiveRound {
         area = h.physics(blocks);
         ball.place(h.tee().x(), h.tee().y(), h.tee().z());
         yaw = h.tee().yaw();
-        rolling = 0;
+        rolling.reset();
         markSpot();
     }
 
@@ -115,18 +117,14 @@ final class LiveRound {
         GolfShot.Direction d = GolfShot.direction(facing);
         markSpot();
         run.stroke();
-        rolling = 0;
+        rolling.reset();
         yaw = facing;
         ball.putt(d.dx(), d.dz(), BallPhysics.speed(power));
     }
 
     /** One tick of the ball over {@code blocks}, and what it meant for the round. */
     Result roll(BallPhysics.Blocks blocks) {
-        BallPhysics.Outcome o = BallPhysics.tick(ball, blocks, area);
-        if (o == BallPhysics.Outcome.ROLLING && ++rolling > MAX_ROLL_TICKS) {
-            ball.place(ball.x(), ball.y(), ball.z()); // half a minute is enough: it stops here
-            o = BallPhysics.restsInCup(ball, blocks, area) ? BallPhysics.Outcome.IN_CUP : BallPhysics.Outcome.STOPPED;
-        }
+        BallPhysics.Outcome o = rolling.tick(blocks, area, ball); // as GolfShot.play: the cap, Adventure's rules
         outcome = o;
         if (ball.speed() > BallPhysics.STOP) {
             yaw = (float) Math.toDegrees(Math.atan2(-ball.vx(), ball.vz()));
@@ -152,7 +150,7 @@ final class LiveRound {
     Result back() {
         run.penalty();
         ball.place(lastX, lastY, lastZ);
-        rolling = 0;
+        rolling.reset();
         if (run.mustPickUp()) {
             last = run.pickUp();
             return Result.PICKED_UP;

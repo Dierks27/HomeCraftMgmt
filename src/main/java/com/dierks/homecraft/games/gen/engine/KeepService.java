@@ -12,6 +12,7 @@ import com.dierks.homecraft.games.gen.api.PlannedGolf;
 import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.api.Edition;
+import com.dierks.homecraft.games.golf.LiveBlocks;
 import com.dierks.homecraft.storage.GamesDao;
 import com.dierks.homecraft.storage.GenArchiveDao;
 
@@ -36,10 +37,10 @@ import java.util.logging.Level;
  * <p><b>The same guarantees as a build.</b> A plot is built in only right after it was found empty
  * (or cleared with {@code claim plot <n> confirm}), like a half the first time. Unlike a half, a
  * free plot is NOT guarded ({@link GenRegionGuard} leaves the keep area alone: it is hand-built
- * territory, and admins may build there; only a Dropper's plot is guarded against its water flowing
- * out, see {@link #wetPending}), so a plot found empty once proves nothing later: every
- * keep scans its plot first. Only a keep the server stopped halfway skips the scan: its
- * {@code gen.keep.pending} record proves the blocks there are its own. No plot is scanned, cleared
+ * territory, and admins may build there; only the plot of a Dropper or a golf course is guarded
+ * against its water flowing out, see {@link #wetPending}), so a plot found empty once proves
+ * nothing later: every keep scans its plot first. Only a keep the server stopped halfway skips the
+ * scan: its {@code gen.keep.pending} record proves the blocks there are its own. No plot is scanned, cleared
  * or built while keeping is off, while it overlaps another plot's kept course (the area moved), or
  * near a registered course ({@link #plotProblem}). The plan is the archived one moved into the plot
  * ({@link PlanShift}), never planned again (unless an admin asked for a course made again from its
@@ -102,7 +103,7 @@ final class KeepService {
         // CLEAR
         String courseId;
         String courseGame;
-        /** The plot may hold a Dropper's water: the clear drains it all before any wall goes. */
+        /** The plot may hold water (a Dropper's, golf's): the clear drains it all before any wall goes. */
         boolean wet;
 
         PlotJob(Kind kind, int plot, String world, Box box, Consumer<String> report) {
@@ -201,7 +202,7 @@ final class KeepService {
         }
         PlotJob c = new PlotJob(Kind.CLEAR, n, world, box, null);
         c.resumed = true;
-        c.wet = p[0].equals("keep") ? dropper(p.length >= 5 ? p[4] : null) : p.length >= 5 && p[4].equals("wet");
+        c.wet = p[0].equals("keep") ? mayHoldWater(p.length >= 5 ? p[4] : null) : p.length >= 5 && p[4].equals("wet");
         queue.addFirst(c);
     }
 
@@ -378,7 +379,7 @@ final class KeepService {
             planRemade(j);
             return;
         }
-        if (j.def != null && j.def.dropper()) {
+        if (j.def != null && j.def.mayHoldWater()) {
             proveMoved(j);
             return;
         }
@@ -387,10 +388,11 @@ final class KeepService {
     }
 
     /**
-     * A Dropper's archived plan, moved into its plot, is proven again where it will stand (its whole
-     * validator: sealed and solvable) before a block is set, on the planner thread like any plan (it
-     * takes tens of milliseconds), under the same kill rule; refused, the keep fails and nothing is
-     * built.
+     * The archived plan of a course that may hold water (a Dropper's pools, golf's ponds), moved into
+     * its plot, is proven again where it will stand ({@link PlanCheck#movedProblems}: a Dropper's whole
+     * validator, sealed and solvable; golf's quick check, its ponds sealed and every witness line
+     * replayed there) before a block is set, on the planner thread like any plan, under the same kill
+     * rule; refused, the keep fails and nothing is built.
      */
     private void proveMoved(PlotJob j) {
         Plan moved = j.plan;
@@ -607,12 +609,17 @@ final class KeepService {
         startBuild(j, port);
     }
 
-    /** The blocks are the plan: prove golf on the real blocks, then register the course (one transaction). */
+    /**
+     * The blocks are the plan: prove golf on the real blocks, read as the kept course will play them
+     * (an Adventure Golf layout's sand as sand, as its par line was planned; Course Variety review),
+     * then register the course (one transaction).
+     */
     private void built(PlotJob j) {
         WorldPort port = host.world(j.world);
         if (j.plan.course() instanceof PlannedGolf g) {
             List<String> problems = port == null ? List.of("the world isn't loaded")
-                    : LiveProof.replay(port.ballBlocks(), g.course().holes(), g.witness());
+                    : LiveProof.replay(port.ballBlocks(LiveBlocks.sandPlays(j.plan.algo())), g.course().holes(),
+                    g.witness());
             if (!problems.isEmpty()) {
                 fail(j, "the live replay failed: " + problems.get(0));
                 return;
@@ -620,7 +627,7 @@ final class KeepService {
         }
         long now = host.now();
         String name = j.name == null ? KeptCourses.name(null, j.id) : j.name;
-        GamesDao.CourseRow row = KeptCourses.row(j.id, name, j.world, j.plan.course(), now);
+        GamesDao.CourseRow row = KeptCourses.row(j.id, name, j.world, j.plan, now);
         List<String> problems = KeptCourses.problems(row, host.gamesWorlds());
         if (!problems.isEmpty()) {
             fail(j, "the kept course wouldn't open: " + String.join("; ", problems));
@@ -676,7 +683,7 @@ final class KeepService {
         j.report.accept("&cPlot " + j.plot + ": &7" + why);
         if (j.kind == Kind.KEEP && (j.stage == Stage.CONVERGE || j.stage == Stage.PLANNING)) {
             PlotJob c = new PlotJob(Kind.CLEAR, j.plot, j.world, j.box, j.report);
-            c.wet = j.def != null && j.def.dropper();
+            c.wet = j.def != null && j.def.mayHoldWater();
             try {
                 host.store().meta(GenAdminKeys.KEEP_PENDING, c.pending());
                 c.resumed = true;
@@ -818,14 +825,14 @@ final class KeepService {
             return "it doesn't fit a plot";
         }
         Plan moved = PlanShift.to(read.plan(), build);
-        // (a moved Dropper is proven again in its plot too, on the planner thread as the job starts
-        // building: proveMoved)
+        // (a moved Dropper or golf course is proven again in its plot too, on the planner thread as the
+        // job starts building: proveMoved)
         List<String> problems = PlanCheck.problems(moved, j.def, build);
         if (!problems.isEmpty()) {
             return "its plan was refused: " + String.join("; ", problems);
         }
         GamesDao.CourseRow row = KeptCourses.row(j.id, j.name == null ? KeptCourses.name(null, j.id) : j.name, j.world,
-                moved.course(), host.now());
+                moved, host.now());
         List<String> course = KeptCourses.problems(row, host.gamesWorlds());
         if (!course.isEmpty()) {
             return "the kept course wouldn't open: " + String.join("; ", course);
@@ -907,9 +914,11 @@ final class KeepService {
      * {@code null}. The keep area is hand-built territory that nothing guards, so this is all that
      * stands between a clear and someone's course: keeping is off (the area overlaps a generator
      * or Classics half, or comes within {@value Regions#CLEARANCE} blocks of one: config's check);
-     * the box overlaps another plot's kept course (the area moved since it was kept); or a
-     * registered course stands in it or within {@value Regions#CLEARANCE} blocks of it (a kept
-     * course of another plot only when it stands inside).
+     * the plot doesn't fit the world (past its border or height, or within {@value Regions#CLEARANCE}
+     * blocks of the spawn or the safe spot: {@link Regions#plotWorldProblems}); the box overlaps
+     * another plot's kept course (the area moved since it was kept); or a registered course stands in
+     * it or within {@value Regions#CLEARANCE} blocks of it (a kept course of another plot only when it
+     * stands inside).
      */
     String plotProblem(int n, String world, Box box) {
         return plotProblem(n, world, box, kept(), courseAreas());
@@ -920,6 +929,14 @@ final class KeepService {
         String off = keepOff(a);
         if (off != null) {
             return "keeping is off: " + off;
+        }
+        WorldPort port = host.world(world);
+        if (port != null) {
+            List<String> edge = Regions.plotWorldProblems(n, box, new Regions.WorldFacts(port.name(), true,
+                    port.minHeight(), port.maxHeight(), port.border(), port.spawn(), host.settings().safeSpot()));
+            if (!edge.isEmpty()) {
+                return edge.get(0);
+            }
         }
         Map<String, Integer> keptIn = new java.util.HashMap<>();
         for (KeptPlot p : used.values()) {
@@ -1073,7 +1090,7 @@ final class KeepService {
         }
         PlotJob j = new PlotJob(Kind.CLEAR, n, p.world(), p.box(), report);
         j.courseId = p.courseId();
-        j.wet = dropper(p.slot());
+        j.wet = mayHoldWater(p.slot());
         try {
             GamesDao.CourseRow row = host.store().course(p.courseId());
             j.courseGame = row == null ? Slots.GAME_TRIALS : row.game();
@@ -1131,18 +1148,21 @@ final class KeepService {
 
     // ---- the flow guard ---------------------------------------------------------------------------
 
-    /** Whether the slot {@code id} a course was kept from makes Droppers (its plot may hold water). */
-    static boolean dropper(String id) {
+    /**
+     * Whether the slot {@code id} a course was kept from {@link Slots.Def#mayHoldWater may hold water}
+     * (a Dropper, golf), so its plot may too.
+     */
+    static boolean mayHoldWater(String id) {
         Slots.Def d = id == null ? null : Slots.of(id);
         if (d == null && id != null) {
             d = Slots.classic(id);
         }
-        return d != null && d.dropper();
+        return d != null && d.mayHoldWater();
     }
 
     /**
-     * The plot a {@code gen.keep.pending} record names, {world, {@link Box}}, when it may hold a
-     * Dropper's water: a keep of a Dropper, or any clearing (whose course isn't in the record). Else
+     * The plot a {@code gen.keep.pending} record names, {world, {@link Box}}, when it may hold water:
+     * a keep of a Dropper or a golf course, or any clearing (whose course isn't in the record). Else
      * {@code null}. The record is written before the first block, so a keep the server stopped
      * halfway is covered until the next start finishes it or clears its plot.
      */
@@ -1155,26 +1175,26 @@ final class KeepService {
         if (box == null || p[2].isBlank()) {
             return null;
         }
-        boolean wet = p[0].equals("clear") || (p[0].equals("keep") && p.length >= 5 && dropper(p[4]));
+        boolean wet = p[0].equals("clear") || (p[0].equals("keep") && p.length >= 5 && mayHoldWater(p[4]));
         return wet ? new Object[]{p[2], box} : null;
     }
 
     /**
-     * Whether plot job {@code j} may hold a Dropper's water (a keep of a Dropper, or any clearing):
-     * its plot is guarded from its first block, before any record of it is read back.
+     * Whether plot job {@code j} may hold water (a keep of a Dropper or a golf course, or any
+     * clearing): its plot is guarded from its first block, before any record of it is read back.
      */
     private static boolean wet(PlotJob j) {
         return j != null && j.world != null && j.box != null
-                && (j.kind == Kind.CLEAR || (j.kind == Kind.KEEP && j.def != null && j.def.dropper()));
+                && (j.kind == Kind.CLEAR || (j.kind == Kind.KEEP && j.def != null && j.def.mayHoldWater()));
     }
 
-    /** Whether the running plot job may hold a Dropper's water in {@code world}. */
+    /** Whether the running plot job may hold water in {@code world}. */
     boolean wetJobIn(String world) {
         PlotJob j = job;
         return world != null && wet(j) && j.world.equalsIgnoreCase(world);
     }
 
-    /** Whether a block is in the running plot job's plot when it may hold a Dropper's water. */
+    /** Whether a block is in the running plot job's plot when it may hold water. */
     boolean inWetJob(String world, int x, int y, int z) {
         PlotJob j = job;
         return world != null && wet(j) && j.world.equalsIgnoreCase(world) && j.box.contains(x, y, z);

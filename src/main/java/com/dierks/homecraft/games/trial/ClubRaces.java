@@ -83,7 +83,7 @@ public final class ClubRaces {
                     Warmup.READY_NAME, "&7Tap when you're set.", "&7The race starts when the warm-up",
                     "&7ends, or everyone is ready."));
             p.sendMessage(Text.of("&b" + rr.base.name() + " &7- race warm-up"));
-            p.sendMessage(Text.of(Warmup.started((int) Warmup.secondsLeft(now, run.warmupEnds))));
+            p.sendMessage(Text.of(Warmup.started((int) Warmup.secondsLeft(now, run.warmupEnds), rr.base)));
             p.sendMessage(Text.of(Warmup.HOW_TO_READY));
             return null;
         }

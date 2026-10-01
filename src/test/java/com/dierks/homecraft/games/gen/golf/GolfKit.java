@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.gen.golf;
 
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenRandom;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.PlanInput;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.golf.GolfCourse;
@@ -9,8 +10,8 @@ import com.dierks.homecraft.games.golf.GolfCourse;
 /** Holes and inputs the golf generator tests share. */
 final class GolfKit {
 
-    /** Daily Golf's half A at the shipped origin, and its first plot. */
-    static final Box DAILY_A = Slots.DAILY_GOLF.half('A');
+    /** Daily Golf's half A at its 0.35 spot (no golden moves with the shipped layout), and its first plot. */
+    static final Box DAILY_A = LegacyBoxes.half(Slots.DAILY_GOLF, 'A');
     static final int PLOT_X = DAILY_A.minX();
     static final int PLOT_Z = DAILY_A.minZ();
     static final int TURF = DAILY_A.minY() + GolfPlanner.TURF_ABOVE_FLOOR;
@@ -78,12 +79,12 @@ final class GolfKit {
         return t.draw(new GenRandom(seed).fork("test"), tier, PLOT_X, PLOT_Z, TURF);
     }
 
-    /** A plan input for a golf slot's half A at its shipped origin. */
+    /** A plan input for a golf slot's half A at its 0.35 spot. */
     static PlanInput input(Slots.Def slot, long seed) {
         return input(slot, seed, slot.tierOrMix(), 0);
     }
 
     static PlanInput input(Slots.Def slot, long seed, String mix, long budget) {
-        return new PlanInput(slot, slot.half('A'), 'A', 20725, 0, seed, mix, 8, budget, null);
+        return new PlanInput(slot, LegacyBoxes.half(slot, 'A'), 'A', 20725, 0, seed, mix, 8, budget, null);
     }
 }

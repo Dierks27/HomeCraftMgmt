@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.world;
 
 import com.destroystokyo.paper.event.player.PlayerPostRespawnEvent;
 import com.dierks.homecraft.HomeCraftManagement;
+import com.dierks.homecraft.gui.Menu;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -12,7 +13,9 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.PluginDisableEvent;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Players' things come back whatever the switches say (spec §7.6, R2.6).
@@ -39,6 +42,12 @@ import java.util.logging.Level;
  *       session is restored in place and marked RETURN, with no teleport — Multiverse-Inventories
  *       may be going too, and no task can run to finish a trip. The next start or join sends
  *       them home. The games service's own stop then finds nothing left to do.</li>
+ *   <li><b>Multiverse-Inventories' disable</b> ({@link SessionCore#disabling}): it saves every
+ *       player's things as it goes, and it now goes first (this plugin loads before Multiverse-Core,
+ *       for the void world). So at its PluginDisableEvent, just before it saves, our menus close
+ *       first ({@link #closeMenusBefore}: a Card trade-in tray's Cards go back to the player), then
+ *       every session ends, in place while the server stops, so it saves the player's own things and
+ *       never the kit. This works with the games on, off or failed.</li>
  *   <li><b>A fall</b> a game started is spared: on a trip home, or in a Games world while their
  *       things aren't home yet ({@link SessionCore#sparesFall}). Here, not in the games' own guard,
  *       because after a crash the games are often switched off, with nobody in a session, while a
@@ -93,10 +102,38 @@ public final class SessionRecoveryListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onDisable(PluginDisableEvent event) {
-        if (port != null && event.getPlugin() == plugin) {
-            port.disabling();
-            port.safely("ending the world sessions at disable", () -> port.core().stop());
+        if (event.getPlugin() == plugin) {
+            if (port != null) {
+                port.disabling();
+                port.safely("ending the world sessions at disable", () -> port.core().stop());
+            }
+            return;
         }
+        // Multiverse-Inventories disables before this plugin now (it loads after Multiverse-Core, which this
+        // plugin loads before) and saves every player's things as it goes: our menus close first (a Card
+        // trade-in tray's Cards go back into the inventory it saves), then a session ends.
+        String name = event.getPlugin().getName();
+        closeMenusBefore(name, plugin.getServer().getOnlinePlayers(), plugin.getLogger());
+        if (port != null) {
+            port.safely("ending the world sessions before " + name + " disables", () -> port.core().disabling(name));
+        }
+    }
+
+    /**
+     * Before {@code disabling} disables: when it is Multiverse-Inventories, which saves every player's
+     * things as it goes, the menu each of {@code online} is looking at closes first ({@link Menu#closeAll}),
+     * so what a menu holds (the Card trade-in tray) is back in the inventory it saves, never lost with
+     * its load-on-join setting. This plugin's own disable closes them again later, which does nothing to
+     * a menu already closed. Any other plugin: nothing.
+     *
+     * @return whether the menus were closed
+     */
+    static boolean closeMenusBefore(String disabling, Collection<? extends Player> online, Logger log) {
+        if (!SessionCore.INVENTORIES.equalsIgnoreCase(disabling)) {
+            return false;
+        }
+        Menu.closeAll(online, log);
+        return true;
     }
 
     /**

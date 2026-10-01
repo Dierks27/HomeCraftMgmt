@@ -273,7 +273,7 @@ final class RaceMode {
                     "&7ends, or everyone is ready."));
             long left = Warmup.secondsLeft(now, run.warmupEnds);
             p.sendMessage(Text.of("&b" + rr.base.name() + " &7- race warm-up"));
-            p.sendMessage(Text.of(Warmup.started((int) left)));
+            p.sendMessage(Text.of(Warmup.started((int) left, rr.base)));
             p.sendMessage(Text.of(Warmup.HOW_TO_READY));
             return;
         }

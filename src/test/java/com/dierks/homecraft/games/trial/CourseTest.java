@@ -58,6 +58,23 @@ class CourseTest {
     }
 
     @Test
+    void aResetFacesTheNextTargetAcrossTheGroundAsItAlwaysHas() {
+        // Review CV gate: TimeTrials.backTo now reads its yaw from Course.resetYaw so the Mountain Run's proof
+        // can hold resets to it. A hand-built course must reset exactly as before: toward the next target.
+        Course.Mark a = new Course.Mark(0, 64, 0, 2);
+        Course.Mark b = new Course.Mark(10, 64, 0, 2);
+        Course.Mark c = new Course.Mark(5, 60, -5, 2);
+        Course.Mark f = new Course.Mark(5, 60, 5, 2);
+        Course built = Course.create("x1", TrialKind.BOAT, Tier.EASY).plusCheckpoint(a).plusCheckpoint(b)
+                .plusCheckpoint(c).withFinish(f);
+        assertEquals(270f, built.resetYaw(0), 1e-4, "cp 1 faces cp 2, along +x (Minecraft yaw 270)");
+        assertEquals(135f, built.resetYaw(1), 1e-4, "cp 2 faces cp 3, along -x and -z (yaw 135), whatever the height");
+        assertEquals(0f, built.resetYaw(2), 1e-4, "the last checkpoint faces the finish, along +z (yaw 0)");
+        Course open = Course.create("x2", TrialKind.BOAT, Tier.EASY).plusCheckpoint(a).plusCheckpoint(b);
+        assertEquals(0f, open.resetYaw(1), 1e-4, "no finish yet: the last checkpoint has nothing to face (yaw 0)");
+    }
+
+    @Test
     void aRadiusIsKeptInRange() {
         assertEquals(Course.MIN_RADIUS, Course.radius(0), 1e-9, "too small: the smallest");
         assertEquals(Course.MAX_RADIUS, Course.radius(100), 1e-9, "too big: the biggest");

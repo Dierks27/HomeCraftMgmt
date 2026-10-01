@@ -113,7 +113,7 @@ final class Warmups {
         KitItems.put(p.getInventory(), Warmup.KIT_SLOT, KitItems.item(trials, Warmup.TIMED, Material.LIME_DYE,
                 Warmup.TIMED_NAME, "&7Ends the warm-up now.", "&7Then the 3-2-1 at the start,",
                 "&7and your timed run."));
-        p.sendMessage(Text.of(Warmup.started(seconds)));
+        p.sendMessage(Text.of(Warmup.started(seconds, run.course)));
         p.sendMessage(Text.of(Warmup.HOW_TO_END));
     }
 
@@ -189,13 +189,13 @@ final class Warmups {
     }
 
     /**
-     * The finish crossed in a warm-up: a lap, never judged or recorded. It says the lap's time
-     * ("not counted") and sends the player round again from the start, on the next tick.
+     * The finish crossed in a warm-up: a lap (a run, down a Mountain Run), never judged or recorded. It
+     * says the lap's time ("not counted") and sends the player round again from the start, on the next tick.
      */
     void lap(Player p, TrialRun run, long nanos) {
         String time = TrialText.time(run.elapsedMs(nanos));
-        p.sendMessage(Text.of(Warmup.lap(time)));
-        TimeTrials.title(p, "&f" + time, "&7Warm-up lap - not counted", 30);
+        p.sendMessage(Text.of(Warmup.lap(time, run.course)));
+        TimeTrials.title(p, "&f" + time, Warmup.lapTitle(run.course), 30); // "Warm-up run" down a Mountain Run
         TimeTrials.ping(p, 1.2f);
         Warmup.lapDone(run, System.nanoTime()); // round again from the start, sent there on the next tick
     }

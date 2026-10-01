@@ -173,7 +173,7 @@ public final class RaceNight implements Game {
         NightRunner n = night;
         if (n != null) {
             return EventCopy.tileName(n.phase(), n.startsAt(), n.joined().size(), n.maxRacers(), n.race(),
-                    n.plan().races(), zone());
+                    n.plan().races(), zone(), EventCopy.downhill(n.track().base()));
         }
         EventSchedule.Occurrence next = next();
         return next == null ? "&6Race Night &7- no race set" : "&6Race Night &7- " + EventCopy.when(next.startsAt(), zone());
@@ -215,14 +215,20 @@ public final class RaceNight implements Game {
 
     // ---- lifecycle ------------------------------------------------------------------------------
 
-    /** Read the schedule, finish what a stop left (§A.9), and start the one-tick clock. */
+    /**
+     * Read the schedule and start the one-tick clock, whose first tick finishes what a stop left
+     * (§A.9). Not here: this plugin loads before Multiverse-Core (for the void world), so at a server
+     * start the Games world isn't loaded yet when the games start, and a night left open would read its
+     * track as gone. The clock's first tick comes once the server ticks, after every plugin has enabled
+     * and Multiverse has loaded its worlds (the worlds-up pass).
+     */
     @Override
     public void start() {
         if (ctx.plugin() == null) {
             return;
         }
         entries();
-        recover();
+        recovering = true;
         games().every(this, 1, 1, this::tick);
     }
 
@@ -243,6 +249,19 @@ public final class RaceNight implements Game {
                 String why = stopping ? "the server is restarting" : whyStopped();
                 n.stopNow("&7Race Night was called off - " + why + ". Points so far count.", stopping ? RESTARTED
                         : "Race Night stopped: " + why);
+            }
+        }
+        recovering = false;
+        List<Resuming> left = new ArrayList<>(resuming.values());
+        resuming.clear();
+        if (!left.isEmpty() && !stopping()) { // as a night on now: called off, unless the server itself stops
+            String why = whyStopped();
+            for (Resuming w : left) {
+                try {
+                    callOffStored(w.row(), why, now());
+                } catch (SQLException | RuntimeException e) {
+                    log(Level.SEVERE, "Race Night: could not call off " + w.row().id(), e);
+                }
             }
         }
         bars.clear();
@@ -303,6 +322,10 @@ public final class RaceNight implements Game {
     /** Every tick: the night; once a second the schedule and the bars (the owed prizes: {@link #settleOwed}). */
     private void tick() {
         ticks++;
+        if (recovering) { // the clock's first tick: the server ticks, so every plugin's worlds are up
+            recovering = false;
+            recover();
+        }
         NightRunner n = night;
         if (n != null) {
             long t0 = System.nanoTime();
@@ -329,8 +352,18 @@ public final class RaceNight implements Game {
 
     // ---- the schedule ---------------------------------------------------------------------------
 
-    /** Make the next scheduled night when its heads-up (or its join window) is due: once a second from the clock. */
+    /**
+     * Make the next scheduled night when its heads-up (or its join window) is due: once a second from the
+     * clock. A night a restart left open whose track isn't ready yet is looked at first, and the schedule
+     * waits for it, as it waits for a night that is on ({@link #resumeWaiting}).
+     */
     void schedule() {
+        if (!resuming.isEmpty()) {
+            resumeWaiting();
+            if (night != null || !resuming.isEmpty()) {
+                return;
+            }
+        }
         pass(false);
     }
 
@@ -594,6 +627,7 @@ public final class RaceNight implements Game {
                 s.announceMinutes(), state);
         r.prizeWeek(() -> DailyLookup.weekKey(games()), s.prizeEventsPerWeek()); // the week at race 1's Go
         r.standRadius(s.standRadius()); // race mode keeps the stand, within this
+        r.hype(s.hype()); // a Mountain Run's drops in the heads-up and join-open lines
         r.onEnd(this::ended);
         news.clear();
         night = r;
@@ -615,7 +649,11 @@ public final class RaceNight implements Game {
 
     // ---- after a stop (§A.9) --------------------------------------------------------------------
 
-    /** Finish what a stop or a crash left: resume, call off, settle or finish paying each live night. */
+    /**
+     * Finish what a stop or a crash left: resume, call off, settle or finish paying each live night. Run
+     * once the worlds are up (the clock's first tick, {@link #start}). An open night whose track isn't
+     * ready yet waits for it ({@link #resumeWaiting}).
+     */
     void recover() {
         List<EventDao.EventRow> rows;
         try {
@@ -637,28 +675,15 @@ public final class RaceNight implements Game {
     }
 
     private void recover(EventDao.EventRow row, NightRules rules, long now) throws SQLException {
+        if (on(row.id())) {
+            return; // the night on now: already recovered, never twice
+        }
         EventMachine.Boot boot = EventMachine.boot(row.state(), row.startsAt(), row.racesDone(), now);
         switch (boot) {
             case NOTHING -> {
                 // over, or never opened
             }
-            case RESUME -> {
-                Tracks.Found t = night == null && EventPlan.isId(row.id())
-                        ? tracks.find(row.course(), rules.races(), rules.minRacers(), rules.maxRacers())
-                        : Tracks.Found.no("another night is on");
-                if (t.problem() != null) {
-                    callOffStored(row, "its track can't be raced now (" + t.problem() + ")", now);
-                    return;
-                }
-                EventPlan plan = new EventPlan(row.id(), row.course(), row.joinAt(), row.startsAt(), rules,
-                        EventPlan.adminId(row.id()), row.madeBy());
-                // an admin's "start ... in M" set before a restart: its window opens when it said
-                NightRunner r = begin(plan, t.track(), now < row.joinAt() ? EventMachine.State.scheduled()
-                        : EventMachine.State.open(now));
-                r.restore(dao().entries(row.id()));
-                log(Level.INFO, "Race Night " + row.id() + " resumed after a restart with " + r.joined().size()
-                        + " racer(s)", null);
-            }
+            case RESUME -> resume(row, rules, now);
             case CALL_OFF -> callOffStored(row, RESTARTED, now);
             case CALL_OFF_SETTLE -> {
                 StoredNight.settle(dao(), row, rules, "called off: " + RESTARTED, now);
@@ -682,6 +707,89 @@ public final class RaceNight implements Game {
             }
         }
     }
+
+    /**
+     * Resume {@code row}, an open night a stop left far enough from its start: on its track, with its
+     * sign-ups. A track that isn't ready yet ({@link Tracks.Found#notYet}: its world isn't loaded, or its
+     * course isn't open, as a Fresh track until the boot heal has checked its blocks) is no reason to call
+     * it off: the night stays OPEN and waits ({@link #resumeWaiting}). Any other problem calls it off, as
+     * before.
+     */
+    private void resume(EventDao.EventRow row, NightRules rules, long now) throws SQLException {
+        Tracks.Found t = night == null && EventPlan.isId(row.id())
+                ? tracks.find(row.course(), rules.races(), rules.minRacers(), rules.maxRacers())
+                : Tracks.Found.no("another night is on");
+        if (t.problem() != null) {
+            if (t.notYet()) {
+                if (resuming.put(row.id(), new Resuming(row, rules, t.problem())) == null) {
+                    log(Level.INFO, "Race Night " + row.id() + " waits for its track after a restart (" + t.problem()
+                            + "); called off at " + EventCopy.clock(deadline(row), zone()) + " if it isn't ready",
+                            null);
+                }
+                return;
+            }
+            resuming.remove(row.id());
+            callOffStored(row, "its track can't be raced now (" + t.problem() + ")", now);
+            return;
+        }
+        resuming.remove(row.id());
+        EventPlan plan = new EventPlan(row.id(), row.course(), row.joinAt(), row.startsAt(), rules,
+                EventPlan.adminId(row.id()), row.madeBy());
+        // an admin's "start ... in M" set before a restart: its window opens when it said
+        NightRunner r = begin(plan, t.track(), now < row.joinAt() ? EventMachine.State.scheduled()
+                : EventMachine.State.open(now));
+        r.restore(dao().entries(row.id()));
+        log(Level.INFO, "Race Night " + row.id() + " resumed after a restart with " + r.joined().size()
+                + " racer(s)", null);
+    }
+
+    /**
+     * The open nights waiting for their track, looked at again (once a second, from {@link #schedule}):
+     * each is resumed once its track is ready, and called off with its track's problem once its start is
+     * too close to resume ({@link EventMachine#RESUME_MIN_MS}), as the boot would have done.
+     */
+    private void resumeWaiting() {
+        long now = now();
+        for (Resuming w : new ArrayList<>(resuming.values())) {
+            String id = w.row().id();
+            try {
+                EventDao.EventRow row = dao().event(id); // as stored now
+                if (row == null || on(id) || !EventDao.OPEN.equals(row.state())) {
+                    resuming.remove(id); // settled elsewhere meanwhile
+                    continue;
+                }
+                if (EventMachine.boot(row.state(), row.startsAt(), row.racesDone(), now) != EventMachine.Boot.RESUME) {
+                    resuming.remove(id);
+                    callOffStored(row, "its track can't be raced now (" + w.problem() + ")", now);
+                    continue;
+                }
+                resume(row, w.rules(), now);
+            } catch (SQLException | RuntimeException e) {
+                resuming.remove(id); // never a throw every second: the next start looks at it again
+                log(Level.SEVERE, "Race Night: could not finish " + id + " after a stop", e);
+            }
+        }
+    }
+
+    /** When a night left open is too close to its start to resume: {@link EventMachine#RESUME_MIN_MS} before it. */
+    private static long deadline(EventDao.EventRow row) {
+        return row.startsAt() - EventMachine.RESUME_MIN_MS;
+    }
+
+    /** Whether night {@code id} is the one on now. */
+    private boolean on(String id) {
+        NightRunner n = night;
+        return n != null && n.plan().id().equals(id);
+    }
+
+    /** An open night a restart left, waiting for its track; {@code problem}: what its last read said. */
+    private record Resuming(EventDao.EventRow row, NightRules rules, String problem) {
+    }
+
+    /** The open nights waiting for their track after a restart, by id ({@link #resume}). */
+    private final Map<String, Resuming> resuming = new java.util.LinkedHashMap<>();
+    /** Set at {@link #start}: the clock's first tick finishes what a stop left. */
+    private boolean recovering;
 
     private void callOffStored(EventDao.EventRow row, String why, long now) throws SQLException {
         dao().setState(row.id(), EventDao.CALLED_OFF, "called off: " + why, now);
@@ -855,7 +963,8 @@ public final class RaceNight implements Game {
                 case WATCH -> {
                     NightRunner shown = n != null ? n : last;
                     bars.show(id, shown == null ? "&bRace Night" : Watchers.bar(shown.phase(), shown.race(),
-                            shown.plan().races(), shown.leader(), shown.joined().size()), 1f, RaceBars.Tone.WATCH);
+                            shown.plan().races(), shown.leader(), shown.joined().size(),
+                            EventCopy.downhill(shown.track().base())), 1f, RaceBars.Tone.WATCH);
                 }
                 case JOIN -> {
                     long window = Math.max(1, n.startsAt() - n.plan().joinAt());
@@ -978,7 +1087,8 @@ public final class RaceNight implements Game {
                 case OPEN -> new EventBoard.View(EventBoard.Shows.OPEN, now, n.startsAt(), track, n.joined().size(),
                         n.maxRacers(), 0, n.plan().races(), List.of(), zone);
                 case WARMUP -> new EventBoard.View(EventBoard.Shows.WARMUP, now, n.startsAt(), track,
-                        n.joined().size(), n.maxRacers(), 0, n.plan().races(), List.of(), zone);
+                        n.joined().size(), n.maxRacers(), 0, n.plan().races(), List.of(), zone,
+                        EventCopy.downhill(n.track().base())); // CV final gate: "Warm-up runs" on a Mountain Run
                 default -> new EventBoard.View(n.phase().over() ? EventBoard.Shows.RESULTS : EventBoard.Shows.RACING,
                         now, n.startsAt(), track, n.joined().size(), n.maxRacers(), Math.max(1, n.race()),
                         n.plan().races(), lines(n), zone);
@@ -1078,6 +1188,20 @@ public final class RaceNight implements Game {
         return String.format(Locale.ROOT, "%.2f ms average, %.2f ms at most", tickAvgNanos / 1e6, tickMaxNanos / 1e6);
     }
 
+    /**
+     * A scheduled night's track as the Race Night screen shows it before the night is made: its name
+     * ({@code null} while it isn't picked), the laps it will be raced over, and whether it is the Ice Boat
+     * Mountain Run, a downhill sprint ("3 downhill races", COURSE-VARIETY-SPEC §5.2).
+     */
+    record Upcoming(String track, int laps, boolean downhill) {
+
+        /** {@code c} ({@code null}: not picked yet) for a night of {@code laps} laps. */
+        static Upcoming of(Course c, int laps) {
+            return c == null ? new Upcoming(null, laps, false)
+                    : new Upcoming(c.name(), RaceTrack.laps(c, laps), EventCopy.downhill(c));
+        }
+    }
+
     /** What the Race Night screen shows the viewer now. */
     public RaceNightMenu.View view(Player viewer) {
         UUID id = viewer.getUniqueId();
@@ -1089,6 +1213,7 @@ public final class RaceNight implements Game {
         String track = null;
         int races = s.races();
         int laps = s.laps();
+        boolean downhill = false;
         List<Integer> prizes = s.prizes();
         int finisher = s.finisherPrize();
         boolean prizeNight = s.prizeEventsPerWeek() > prizedThisWeek();
@@ -1101,6 +1226,7 @@ public final class RaceNight implements Game {
             track = n.track().name();
             races = n.plan().races();
             laps = n.laps();
+            downhill = EventCopy.downhill(n.track().base());
             prizes = n.plan().rules().prizes();
             finisher = n.plan().rules().finisherPrize();
             prizeNight = n.prizeNight() && (n.started() >= 0 || prizeNight);
@@ -1110,7 +1236,7 @@ public final class RaceNight implements Game {
             state = switch (n.phase()) {
                 case SCHEDULED -> "Joining opens at " + opensAt + ".";
                 case OPEN -> "Joining is open: " + EventCopy.racers(racers) + " in so far.";
-                case WARMUP -> "Warm-up laps are on.";
+                case WARMUP -> EventCopy.warmup(downhill) + " are on.";
                 case GRID, RACING -> "Race " + Math.max(1, n.race()) + " of " + races + " is on.";
                 case BREAK -> "A break after race " + n.race() + " of " + races + ".";
                 default -> null;
@@ -1123,9 +1249,10 @@ public final class RaceNight implements Game {
             EventSchedule.Occurrence o = next();
             if (o != null) {
                 when = EventCopy.when(o.startsAt(), zone);
-                Course c = nextTrack(o);
-                track = c == null ? null : c.name();
-                laps = c == null ? laps : RaceTrack.laps(c, laps);
+                Upcoming u = Upcoming.of(nextTrack(o), laps);
+                track = u.track();
+                laps = u.laps();
+                downhill = u.downhill();
                 opensAt = EventCopy.clock(o.joinAt(), zone) + " (" + EventCopy.when(o.startsAt(), zone) + ")";
                 join = RaceNightMenu.Join.SOON;
             }
@@ -1136,7 +1263,7 @@ public final class RaceNight implements Game {
         return new RaceNightMenu.View(when, state, track, races, laps, prizes, finisher, prizeNight, join, racers, max,
                 opensAt, watchers.watching(id), lastRow == null ? null : winner(lastRow.id()),
                 lastRow == null ? null : EventCopy.nightBoard(lastRow.id()), seasonName, board, seasonPoints(id),
-                newsOn(id));
+                newsOn(id), downhill);
     }
 
     /** Race Night's {@code events} section of the website feed (§A.7). */
@@ -1157,7 +1284,8 @@ public final class RaceNight implements Game {
         String prizes = "prize nights " + prizedThisWeek() + "/" + settings().prizeEventsPerWeek() + " this week";
         if (n != null) {
             out.add(n.phase().name().toLowerCase(Locale.ROOT) + " · " + n.plan().id() + " on " + n.track().name()
-                    + " (" + EventCopy.format(n.plan().races(), n.laps()) + ") · " + EventCopy.racers(n.joined().size())
+                    + " (" + EventCopy.format(n.plan().races(), n.laps(), n.track().base()) + ") · "
+                    + EventCopy.racers(n.joined().size())
                     + " · " + prizes);
         } else {
             EventSchedule.Occurrence o = next();
@@ -1167,6 +1295,10 @@ public final class RaceNight implements Game {
                     + settings().races() + (settings().races() == 1 ? " race)" : " races)")
                     + (restart > 0 ? " · fits before the " + hold.clock(restart) + " restart" : ""))
                     + " · " + prizes);
+        }
+        for (Resuming w : resuming.values()) {
+            out.add("resuming · " + w.row().id() + " after a restart, once its track is ready (" + w.problem()
+                    + ") · called off at " + EventCopy.clock(deadline(w.row()), zone()) + " if it isn't");
         }
         return out;
     }

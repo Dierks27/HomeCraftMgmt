@@ -74,12 +74,128 @@ public final class GenCopy {
 
     /** A golf tee sign: "HOLE 3" / "Par 3" / "Hit the ball" / "to the flag!". */
     public static List<String> golfTee(int hole, int par) {
-        return List.of("HOLE " + hole, "Par " + par, "Hit the ball", "to the flag!");
+        return golfTee(hole, par, TeeFeature.NONE);
     }
 
-    /** The ice boat's start sign. */
+    /**
+     * What a golf hole's tee sign tells about it (Course Variety §8): its main feature, lines 3-4 of
+     * the sign. Lines 1-2 are always "HOLE n" / "Par p".
+     */
+    public enum TeeFeature {
+        /** Nothing special: "Hit the ball" / "to the flag!" (every hole before Course Variety). */
+        NONE("Hit the ball", "to the flag!"),
+        /** A pond, a creek or an island green: water in play. */
+        WATER("Mind the pond!", "Splash = +1"),
+        /** A sand bunker. */
+        SAND("Sand is slow!", "Hit it harder"),
+        /** A hill or a hump to putt over. */
+        HILL("Up and over", "the hill!"),
+        /** Terraces: steps down (the glass waterfall). */
+        TERRACES("Down the steps!", "Watch it roll"),
+        /** The volcano green. */
+        VOLCANO("Up the volcano!", "Not too hard!"),
+        /** Trees in play. */
+        TREES("Bank off the", "trees!"),
+        /** Two ways round an island. */
+        TWO_WAY("Pick a path!", "Short or safe?"),
+        /** A dogleg that drops at the corner. */
+        DOGLEG_DOWN("Round the bend", "and down!");
+
+        private final String line3;
+        private final String line4;
+
+        TeeFeature(String line3, String line4) {
+            this.line3 = line3;
+            this.line4 = line4;
+        }
+
+        /** Lines 3 and 4 of the tee sign. */
+        public List<String> lines() {
+            return List.of(line3, line4);
+        }
+    }
+
+    /**
+     * A golf tee sign with its hole's main feature: "HOLE 5" / "Par 3" / "Down the steps!" /
+     * "Watch it roll". {@code null} is {@link TeeFeature#NONE}.
+     */
+    public static List<String> golfTee(int hole, int par, TeeFeature feature) {
+        TeeFeature f = feature == null ? TeeFeature.NONE : feature;
+        return List.of("HOLE " + hole, "Par " + par, f.line3, f.line4);
+    }
+
+    /**
+     * The feature a tee sign's lines name when they are hole {@code hole}'s tee sign of par
+     * {@code par} (any feature, {@link #golfTee(int, int, TeeFeature)}), or {@code null} when they
+     * aren't: what a validator reads off a plan's tee sign.
+     */
+    public static TeeFeature golfTeeFeature(List<String> lines, int hole, int par) {
+        if (lines == null) {
+            return null;
+        }
+        for (TeeFeature f : TeeFeature.values()) {
+            if (golfTee(hole, par, f).equals(lines)) {
+                return f;
+            }
+        }
+        return null;
+    }
+
+    /** The ice boat's start sign (the algo 1-2 loop; kept for its doc and tests). */
     public static List<String> boatStart(int laps) {
         return List.of("ICE BOAT", "Go " + laps + " laps,", "follow the", "arrows!");
+    }
+
+    // ---- the Mountain Run (Course Variety §8): a standing sign by the start, the rest on wall tops ----
+
+    /** The Mountain Run's start sign, on the pit wall beside the start. */
+    public static List<String> boatRun() {
+        return List.of("DOWNHILL RACE!", "Follow arrows", "down to the", "gold finish!");
+    }
+
+    /** Before a Hop (a 1-block drop). */
+    public static List<String> boatHop() {
+        return List.of("HOP!", "Little drop");
+    }
+
+    /** Before a Big Drop (a 2-block drop). */
+    public static List<String> boatBigDrop() {
+        return List.of("BIG DROP!", "Hold on!");
+    }
+
+    /** The sign before a drop of {@code blocks}: a Hop for 1, a Big Drop for more. */
+    public static List<String> boatDrop(int blocks) {
+        return blocks <= 1 ? boatHop() : boatBigDrop();
+    }
+
+    /** Before the Final Drop, the last lip before the finish under the stand. */
+    public static List<String> boatFinalDrop() {
+        return List.of("FINAL DROP!", "Then the gold", "finish line!");
+    }
+
+    /** Before a bend with a sand run-off on its outside. */
+    public static List<String> boatSandyBend() {
+        return List.of("SANDY BEND", "Sand is slow,", "ice is fast!");
+    }
+
+    /** Before a sand pit with its two ice ways round. */
+    public static List<String> boatSandPit() {
+        return List.of("SAND PIT!", "Stay on the ice", "to go fast!");
+    }
+
+    /** Before a split round a tree island. */
+    public static List<String> boatSplit() {
+        return List.of("PICK A PATH!", "Left or right?");
+    }
+
+    /** Before the Ice Cave. */
+    public static List<String> boatIceCave() {
+        return List.of("ICE CAVE", "Lights on!");
+    }
+
+    /** Before the forest slalom. */
+    public static List<String> boatForest() {
+        return List.of("FOREST", "Weave through", "the trees!");
     }
 
     /**
@@ -503,9 +619,14 @@ public final class GenCopy {
     /** Every sign, with sample values, for the copy test. */
     public static List<List<String>> everySign() {
         List<List<String>> out = new ArrayList<>(List.of(parkourStart("easy"), parkourStart("medium"),
-                parkourStart("hard"), finish(), ringsStart(), ringsHow(), boatStart(2)));
+                parkourStart("hard"), finish(), ringsStart(), ringsHow(), boatStart(2), boatRun(), boatHop(),
+                boatBigDrop(), boatDrop(1), boatDrop(2), boatFinalDrop(), boatSandyBend(), boatSandPit(), boatSplit(),
+                boatIceCave(), boatForest()));
         for (int hole = 1; hole <= 18; hole++) {
             out.add(golfTee(hole, 6));
+            for (TeeFeature f : TeeFeature.values()) {
+                out.add(golfTee(hole, 6, f));
+            }
         }
         for (int levels = 1; levels <= 5; levels++) {
             for (int level = 1; level <= levels; level++) {

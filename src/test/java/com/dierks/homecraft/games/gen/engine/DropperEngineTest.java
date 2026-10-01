@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.GenSeed;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlanCodec;
@@ -45,7 +46,7 @@ class DropperEngineTest {
     private static Plan plan(Slots.Def slot, String mix, int n) {
         long day = 20_000 + n;
         try {
-            return new DropperPlanner().plan(new PlanInput(slot, slot.half('A'), 'A', day, 0,
+            return new DropperPlanner().plan(new PlanInput(slot, LegacyBoxes.half(slot, 'A'), 'A', day, 0,
                     GenSeed.seed(0x5EC12E7L, day, slot.id(), 0), mix, 6, 0, null));
         } catch (GenFailed e) {
             throw new AssertionError(mix + " plans: " + e.getMessage(), e);
@@ -69,19 +70,23 @@ class DropperEngineTest {
         assertEquals(144, KeepArea.PLOT_X, "the keep plot is as wide as before (Sky Rings' 128 + 16)");
         assertEquals(176, KeepArea.PLOT_Y, "as tall");
         assertEquals(336, KeepArea.PLOT_Z, "as long: a dropper fits in the plot size that was already there");
-        Box build = new KeepArea(4096, 128, 5376, 24).build(1, Slots.FRESH_DROPPER);
+        Box build = LegacyBoxes.keep().build(1, Slots.FRESH_DROPPER);
         assertEquals(List.of(64, 64, 16), List.of(build.sizeX(), build.sizeY(), build.sizeZ()),
                 "a kept dropper stands in its plot at its own size");
     }
 
     @Test
-    void onlyADroppersPlanMayUseStillPoolWater() {
+    void onlyADroppersOrAGolfPlanMayUseStillPoolWater() {
         List<String> palette = List.of("minecraft:glass", "minecraft:water[level=0]");
         assertEquals(List.of(), PlanCheck.paletteProblems(palette, Slots.FRESH_DROPPER), "a dropper's pool water is fine");
         assertEquals(List.of(), PlanCheck.paletteProblems(palette, Slots.CLASSIC_DROPPER), "and a Classic Dropper's");
-        for (Slots.Def d : List.of(Slots.DAILY_PARKOUR_EASY, Slots.SKY_RINGS, Slots.DAILY_GOLF, Slots.ICE_BOAT)) {
+        for (Slots.Def d : List.of(Slots.DAILY_GOLF, Slots.TINY_GOLF, Slots.CLASSIC_GOLF)) {
+            assertEquals(List.of(), PlanCheck.paletteProblems(palette, d), d.id() + ": golf's ponds (Course Variety §1.2)");
+        }
+        for (Slots.Def d : List.of(Slots.DAILY_PARKOUR_EASY, Slots.DAILY_PARKOUR_HARD, Slots.SKY_RINGS,
+                Slots.CLASSIC_PARKOUR, Slots.CLASSIC_RINGS, Slots.ICE_BOAT)) {
             assertEquals(List.of("minecraft:water[level=0]"), PlanCheck.paletteProblems(palette, d),
-                    d.id() + " still refuses water");
+                    d.id() + " still refuses water (the ice boat stays dry)");
         }
         assertEquals(List.of("minecraft:water[level=3]"), PlanCheck.paletteProblems(List.of("minecraft:water[level=3]"),
                 Slots.FRESH_DROPPER), "flowing water is refused even for a dropper");
@@ -98,8 +103,8 @@ class DropperEngineTest {
 
     private static PlanInput input(Slots.Def slot, String mix, int n) {
         long day = 20_000 + n;
-        return new PlanInput(slot, slot.half('A'), 'A', day, 0, GenSeed.seed(0x5EC12E7L, day, slot.id(), 0), mix, 6, 0,
-                null);
+        return new PlanInput(slot, LegacyBoxes.half(slot, 'A'), 'A', day, 0, GenSeed.seed(0x5EC12E7L, day, slot.id(), 0),
+                mix, 6, 0, null);
     }
 
     @Test
@@ -126,7 +131,7 @@ class DropperEngineTest {
         assertTrue(read.ok(), "it reads back: " + read.problem());
         assertEquals(p, read.plan(), "every block, pool, sign and mark exactly");
 
-        for (Box to : List.of(Slots.CLASSIC_DROPPER.half('B'), new KeepArea(4096, 128, 5376, 24).build(3,
+        for (Box to : List.of(LegacyBoxes.half(Slots.CLASSIC_DROPPER, 'B'), LegacyBoxes.keep().build(3,
                 Slots.EASY_DROPPER))) {
             Plan moved = PlanShift.to(read.plan(), to);
             assertEquals(to, moved.half(), "moved to " + to.describe());
@@ -150,7 +155,7 @@ class DropperEngineTest {
         }
         Plan leaky = Plan.of(p.slot(), p.algo(), p.seed(), p.half(), p.palette(), spoiled, p.signs(), p.keepClear(),
                 p.course(), p.summary(), p.work());
-        Plan movedLeaky = PlanShift.to(leaky, Slots.CLASSIC_DROPPER.half('A'));
+        Plan movedLeaky = PlanShift.to(leaky, LegacyBoxes.half(Slots.CLASSIC_DROPPER, 'A'));
         assertFalse(PlanCheck.movedProblems(movedLeaky, Slots.EASY_DROPPER).isEmpty(),
                 "a pool with a hole in its wall is refused wherever it would go");
         assertFalse(DropperValidator.problems(leaky).isEmpty(), "(the validator's own verdict)");

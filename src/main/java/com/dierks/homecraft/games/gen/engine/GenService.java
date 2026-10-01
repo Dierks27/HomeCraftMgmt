@@ -22,6 +22,7 @@ import com.dierks.homecraft.games.gen.api.PlannedCourse;
 import com.dierks.homecraft.games.gen.api.PlannedGolf;
 import com.dierks.homecraft.games.gen.api.PlannedTrial;
 import com.dierks.homecraft.games.gen.api.Planner;
+import com.dierks.homecraft.games.gen.api.Pools;
 import com.dierks.homecraft.games.gen.api.Putt;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.api.Stars;
@@ -32,6 +33,7 @@ import com.dierks.homecraft.games.gen.golf.GolfPlanner;
 import com.dierks.homecraft.games.gen.parkour.ParkourPlanner;
 import com.dierks.homecraft.games.gen.rings.RingsPlanner;
 import com.dierks.homecraft.games.golf.GolfCourse;
+import com.dierks.homecraft.games.golf.LiveBlocks;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.CourseCodec;
 import com.dierks.homecraft.storage.GamesDao;
@@ -51,6 +53,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -237,8 +240,9 @@ public final class GenService implements GeneratedCourses, GenOps {
     private final Map<Long, List<DailyStars.Goal>> weekGoals = new HashMap<>();
     private volatile List<Object[]> areas = List.of();
     /**
-     * The flow-only boxes {world, {@link Box}}: every kept Dropper's plot and a plot job's in flight
-     * ({@link #wetPlots}), whose water must never flow out though nothing else there is guarded.
+     * The flow-only boxes {world, {@link Box}}: every plot of a kept Dropper or golf course and a plot
+     * job's in flight ({@link #wetPlots}), whose water must never flow out though nothing else there
+     * is guarded.
      */
     private volatile List<Object[]> wetPlots = List.of();
     /** Every world {@link #areas} and {@link #wetPlots} touch: a flow anywhere else is a quick no. */
@@ -255,7 +259,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             return guarded(world);
         }
     };
-    /** ...and no fluid flowing out of {@link #wetPlots} or a Dropper keep in flight. */
+    /** ...and no fluid flowing out of {@link #wetPlots} or a keep in flight that may hold water. */
     private final GenRegionGuard.Area wetArea = new GenRegionGuard.Area() {
         @Override
         public boolean in(String world, int x, int y, int z) {
@@ -988,7 +992,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         } catch (SQLException | RuntimeException e) {
             meta = null;
         }
-        String world = st.world().isBlank() ? first(host.gamesWorlds()) : st.world();
+        String configWorld = st.world().isBlank() ? first(host.gamesWorlds()) : st.world();
         noticeSchedule(meta);
         List<Object[]> kept = new ArrayList<>();
         if (meta != null) {
@@ -999,20 +1003,44 @@ public final class GenService implements GeneratedCourses, GenOps {
             if (c == null) {
                 continue;
             }
+            String world = configWorld;
             int[] origin = c.origin();
-            if (!s.sameRegion(world, origin) && (s.claimed || s.live != null) && !s.world.isBlank()) {
-                moved(s, world, origin);
+            int gap = c.halfGap();
+            boolean was = s.unplaced;
+            s.unplaced = !c.placed();
+            if (s.unplaced && !was) {
+                vet(s, null); // off at once, and why said once
+            } else if (was && !s.unplaced && UNPLACED.equals(s.problem)) {
+                s.problem = null; // config reads again: the next check says whether anything else is in the way
+            }
+            if (s.unplaced) {
+                // Config can't say where it stands (an origin or half_gap it can't read): it stays where it
+                // was claimed, else where it was, so this is never a move (a reroll at a spot nobody chose,
+                // the built course left standing), and it is off until config is fixed (SlotState#wanted).
+                String claim = meta == null ? null : meta.get(GenAdminKeys.claim(s.def.id()));
+                boolean known = Regions.claimOrigin(claim) != null && Regions.claimWorld(claim) != null;
+                world = known ? Regions.claimWorld(claim) : s.world;
+                origin = known ? Regions.claimOrigin(claim) : s.origin;
+                gap = known ? Regions.claimGap(claim) : s.gap;
+            }
+            if (!s.sameRegion(world, origin, gap) && (s.claimed || s.live != null) && !s.world.isBlank()
+                    && moved(s, world, origin, gap, !s.classic && !s.claimed && meta != null
+                    && meta.get(GenAdminKeys.claim(s.def.id())) == null) && meta != null) {
+                meta = new HashMap<>(meta); // an emptied Classic let its old claim go: nothing to remember as wet
+                meta.remove(GenAdminKeys.claim(s.def.id()));
             }
             s.world = world;
             s.origin = origin;
+            s.gap = gap;
             s.configOn = c.enabled();
             if (s.classic) {
                 s.mix = s.def.tierOrMix();
                 if (meta != null) {
                     s.want = ClassicWant.parse(meta.get(GenAdminKeys.recall(s.def.id())));
-                    s.claimed = Regions.claim(s.def, world, origin).equals(meta.get(GenAdminKeys.claim(s.def.id())));
+                    s.claimed = Regions.claim(s.def, world, origin, gap)
+                            .equals(meta.get(GenAdminKeys.claim(s.def.id())));
                 }
-                wetRegions(s, meta, world, origin, kept);
+                wetRegions(s, meta, world, origin, gap, kept);
                 if (s.wanted() || s.claimed) {
                     for (char h : new char[]{'A', 'B'}) {
                         kept.add(new Object[]{world, s.half(h)});
@@ -1030,17 +1058,17 @@ public final class GenService implements GeneratedCourses, GenOps {
                 s.pickDropped = SlotState.DroppedPick.parse(meta.get(GenAdminKeys.dropped(id))); // round 2, G2 #3
                 s.reroll = GenAdminKeys.whole(meta.get(GenAdminKeys.reroll(id, target(s).key())));
                 String claim = meta.get(GenAdminKeys.claim(id));
-                boolean claimed = Regions.claim(s.def, world, origin).equals(claim);
+                boolean claimed = Regions.claim(s.def, world, origin, gap).equals(claim);
                 if (claim != null && !claimed) {
                     int[] old = Regions.claimOrigin(claim);
-                    String where = old == null ? claim : Regions.describe(s.def, old);
+                    String where = old == null ? claim : Regions.describe(s.def, old, Regions.claimGap(claim));
                     warnOnce(s, "Fresh Courses: " + id + " was claimed at another place (" + where + "). "
-                            + (s.def.dropper() ? drainFirst(s) : "Those blocks are left as they are: clear them by"
+                            + (s.def.mayHoldWater() ? drainFirst(s) : "Those blocks are left as they are: clear them by"
                             + " hand.") + " The new region is checked before it is used.");
                 }
                 s.claimed = claimed;
             }
-            wetRegions(s, meta, world, origin, kept);
+            wetRegions(s, meta, world, origin, gap, kept);
             if (s.wanted() || s.claimed) {
                 for (char h : new char[]{'A', 'B'}) {
                     kept.add(new Object[]{world, s.half(h)});
@@ -1068,22 +1096,24 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     /**
-     * A Dropper slot's old regions that may still hold its pools though it stands elsewhere now
+     * The old regions of a slot that {@link Slots.Def#mayHoldWater may hold water} (a Dropper's
+     * pools, golf's ponds) that may still hold it though the slot stands elsewhere now
      * ({@link GenAdminKeys#wet}), added to the guarded {@code kept}: the claim it held when its
      * origin (or the world) moved is remembered the first time it is seen, before a claim at the new
      * place can overwrite it. Each stays guarded (nothing changes there, and nothing flows out) until
      * the slot is claimed there again, which puts it under the claim's guard and lets a {@code clear}
-     * drain it (a CLEAR empties the pools before anything else). Any other slot: nothing.
+     * drain it (a CLEAR empties the water before anything else). Any other slot: nothing.
      */
-    private void wetRegions(SlotState s, Map<String, String> meta, String world, int[] origin, List<Object[]> kept) {
-        if (!s.def.dropper()) {
+    private void wetRegions(SlotState s, Map<String, String> meta, String world, int[] origin, int gap,
+                            List<Object[]> kept) {
+        if (!s.def.mayHoldWater()) {
             return;
         }
         if (meta != null) {
             String key = GenAdminKeys.wet(s.def.id());
             List<String> stored = Regions.wetClaims(meta.get(key));
             List<String> now = new ArrayList<>(stored);
-            String here = Regions.claim(s.def, world, origin);
+            String here = Regions.claim(s.def, world, origin, gap);
             String claim = meta.get(GenAdminKeys.claim(s.def.id()));
             if (claim != null && !claim.equals(here) && Regions.claimOrigin(claim) != null && !now.contains(claim)) {
                 now.add(claim);
@@ -1105,7 +1135,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             String w = Regions.claimWorld(c);
             int[] o = Regions.claimOrigin(c);
             if (w != null && o != null) {
-                for (Box h : Regions.halves(s.def, o)) {
+                for (Box h : Regions.halves(s.def, o, Regions.claimGap(c))) {
                     kept.add(new Object[]{w, h});
                 }
             }
@@ -1113,18 +1143,25 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     /**
-     * What a moved Dropper's admin reads: its pools may still stand in the old place, which stays
-     * guarded until they are drained there.
+     * What the admin of a moved slot that may hold water reads: a Dropper's pools (golf's ponds) may
+     * still stand in the old place, which stays guarded until they are drained there.
      */
     private static String drainFirst(SlotState s) {
-        return "Its pools may still be there, so that area stays guarded: drain first - move it back and use"
-                + " /hcm games gen clear " + s.def.id() + " (it empties the pools before anything else).";
+        String water = s.def.golf() ? "ponds" : "pools";
+        if (s.classic) {
+            // clear doesn't take a Classic: back at its claimed place, a start empties both halves of an empty one
+            return "Its " + water + " may still be there, so that area stays guarded: drain first - move it back and"
+                    + " restart (an empty Classic's halves are emptied then, the " + water + " before anything else).";
+        }
+        return "Its " + water + " may still be there, so that area stays guarded: drain first - move it back and use"
+                + " /hcm games gen clear " + s.def.id() + " (it empties the " + water + " before anything else).";
     }
 
     /**
-     * The flow-only boxes {world, {@link Box}} {@code meta} names: every plot holding a kept Dropper,
-     * and a plot job the server stopped halfway ({@link KeepService#wetPending}). The keep area is
-     * hand-built ground the guard leaves alone, but a Dropper's water must never flow out of its plot.
+     * The flow-only boxes {world, {@link Box}} {@code meta} names: every plot holding a kept course
+     * that may hold water (a Dropper, golf: {@link KeepService#mayHoldWater}), and a plot job the
+     * server stopped halfway ({@link KeepService#wetPending}). The keep area is hand-built ground the
+     * guard leaves alone, but a pool's or a pond's water must never flow out of its plot.
      */
     static List<Object[]> wetPlots(Map<String, String> meta) {
         List<Object[]> out = new ArrayList<>();
@@ -1133,7 +1170,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 continue;
             }
             KeptPlot p = KeptPlot.parse(GenAdminKeys.plotOf(e.getKey()), e.getValue());
-            if (p != null && KeepService.dropper(p.slot())) {
+            if (p != null && KeepService.mayHoldWater(p.slot())) {
                 out.add(new Object[]{p.world(), p.box()});
             }
         }
@@ -1187,23 +1224,53 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
     }
 
-    /** A slot's region moved (config): nothing at the old place is vouched for or cleared. */
-    private void moved(SlotState s, String world, int[] origin) {
+    /**
+     * A slot's region moved (config): nothing at the old place is vouched for or cleared. A slot that
+     * was {@code cleared} first (its claim given up: README "Moving an area by hand") left nothing there,
+     * so that is said as an INFO, not the "not cleared" WARN. So did a Classic closed first (unrecalled:
+     * a Classic keeps its claim, and {@code clear} doesn't take one) whose halves have been emptied since;
+     * its old claim is let go here, as a clear lets a course's go, so a Golf or Dropper Classic's old
+     * place isn't remembered as one that may still hold water.
+     *
+     * @return whether it was such an emptied Classic and its old claim is gone
+     */
+    private boolean moved(SlotState s, String world, int[] origin, int gap, boolean cleared) {
+        boolean emptied = s.classic && s.want == null && s.live == null && s.previous == null && !s.bothDirty
+                && !s.oldDirty && !s.clearing && (job == null || job.slot != s);
+        if (emptied) {
+            try {
+                host.store().meta(GenAdminKeys.claim(s.def.id()), null);
+            } catch (SQLException | RuntimeException e) {
+                host.logger().log(Level.WARNING, "Fresh Courses: could not let " + s.def.id() + "'s old claim go", e);
+                emptied = false; // still claimed there: its old place stays guarded
+            }
+        }
+        cleared |= emptied;
         if (job != null && job.slot == s) {
             cancel(job, "its region moved");
         }
         queue.removeIf(j -> j.slot == s);
-        host.logger().warning("Fresh Courses: " + s.def.id() + " moved from " + s.world + " "
-                + Regions.describe(s.def, s.origin) + " to " + world + " " + Regions.describe(s.def, origin)
-                + ". The old halves were not cleared (use /hcm games gen clear before moving a course)."
-                + (s.def.dropper() ? " " + drainFirst(s) : ""));
+        String line = "Fresh Courses: " + s.def.id() + " moved from " + s.world + " "
+                + Regions.describe(s.def, s.origin, s.gap) + " to " + world + " "
+                + Regions.describe(s.def, origin, gap);
+        if (!cleared) {
+            host.logger().warning(line + ". The old halves were not cleared (" + (s.classic
+                    ? "close it first with /hcm games gen unrecall " + s.def.id() + " confirm and wait until its"
+                    + " halves are empty" : "use /hcm games gen clear before moving a course") + ")."
+                    + (s.def.mayHoldWater() ? " " + drainFirst(s) : ""));
+        } else {
+            host.logger().info(line + ". Its old halves were emptied first, so nothing is left there; the new area is"
+                    + " checked before it is used.");
+        }
         s.verified = false;
         s.healFailed = s.live != null;
         s.previous = null;
         s.clearing = false;
         s.oldDirty = false;
+        s.bothDirty = false; // a Classic's halves are the new ones now, which nothing holds yet: never cleared unscanned
         s.preview = null;
         s.claimed = false;
+        return emptied;
     }
 
     private void vetAll() {
@@ -1217,7 +1284,9 @@ public final class GenService implements GeneratedCourses, GenOps {
     /** §2.4 at start and before a build: sets (and logs once) the slot's problem, or clears it. */
     private String vet(SlotState s, List<Regions.Area> built) {
         String why = null;
-        if (s.wanted()) {
+        if (s.unplaced) {
+            why = UNPLACED;
+        } else if (s.wanted()) {
             why = vetProblem(s, built);
         }
         if (why == null && s.problem != null && s.problem.startsWith(FOREIGN)) {
@@ -1231,6 +1300,9 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     private static final String FOREIGN = "Region has ";
+    /** Why a slot whose origin or half_gap config can't read is off ({@link SlotState#unplaced}). */
+    public static final String UNPLACED = "its origin or half_gap in config.yml can't be read (the WARN at the last start or"
+            + " /hcm reload says which), so it stays where it was built and is off until that is fixed";
 
     private String vetProblem(SlotState s, List<Regions.Area> built) {
         if (planners.get(s.def.generator()) == null) {
@@ -1247,27 +1319,29 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (port == null) {
             return "the world " + s.world + " isn't loaded";
         }
-        List<String> world = Regions.worldProblems(s.def, s.origin, facts(port));
+        List<String> world = Regions.worldProblems(s.def, s.origin, s.gap, facts(port));
         if (!world.isEmpty()) {
             return world.get(0);
         }
         List<DailySettings.SlotConfig> others = new ArrayList<>();
         for (SlotState o : slots.values()) {
             if (o != s && (o.wanted() || o.claimed)) {
-                DailySettings.SlotConfig oc = DailySettings.SlotConfig.shipped(o.def).withOrigin(o.origin);
+                DailySettings.SlotConfig oc = DailySettings.SlotConfig.shipped(o.def).withOrigin(o.origin)
+                        .withHalfGap(o.gap);
                 others.add(oc);
             }
         }
-        String apart = Regions.apartProblem(DailySettings.SlotConfig.shipped(s.def).withOrigin(s.origin), others);
+        String apart = Regions.apartProblem(DailySettings.SlotConfig.shipped(s.def).withOrigin(s.origin)
+                .withHalfGap(s.gap), others);
         if (apart != null) {
             return apart;
         }
-        String extra = Regions.extrasProblem(s.def, s.origin, extras());
+        String extra = Regions.extrasProblem(s.def, s.origin, s.gap, extras());
         if (extra != null) {
             return extra; // the Falling Floors arena: neither is ever built into the other
         }
         if (built != null) {
-            String near = Regions.handBuiltProblem(s.def, s.origin, s.world, built);
+            String near = Regions.handBuiltProblem(s.def, s.origin, s.gap, s.world, built);
             if (near != null) {
                 return near;
             }
@@ -1460,6 +1534,11 @@ public final class GenService implements GeneratedCourses, GenOps {
     private void beginBuild(Job j) {
         SlotState s = j.slot;
         String why = vet(s, handBuilt());
+        if (why == null && !s.wanted()) {
+            // CV final gate: a preview of a slot that is off (vet checks only one that is on) passes §2.4 as a
+            // build does before it scans, claims or writes anything
+            why = claimProblem(s);
+        }
         if (why != null) {
             end(j);
             j.report.accept("&c" + s.def.name() + " can't be built: &7" + why);
@@ -1596,8 +1675,9 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
             Step st = j.steps.get(j.stepIndex);
             try {
-                // a Dropper's half may hold its pools: drained before any wall goes, even when clearing
-                j.build = new BuildJob(port, s.half(st.which()), st.plan(), st.mode(), s.def.dropper());
+                // a half that may hold water (a Dropper's pools, golf's ponds): drained before any wall
+                // goes, even when clearing
+                j.build = new BuildJob(port, s.half(st.which()), st.plan(), st.mode(), s.def.mayHoldWater());
             } catch (IllegalArgumentException e) {
                 fail(j, e.getMessage());
                 return;
@@ -1742,6 +1822,10 @@ public final class GenService implements GeneratedCourses, GenOps {
         boolean next = isNextSet(s, j.day, j.cadence); // fix2-D: a set's first day and length (D1)
         String look = s.def.golf() ? "Walk it: &e/hcm games gen tp " + id + " idle" : "Try it: &e/hcm games gen test "
                 + id + " &7(or walk it: &e/hcm games gen tp " + id + " idle&7)";
+        if (!s.classic && !s.wanted()) { // CV final gate: a slot that is off has nothing to promote or choose it for
+            return "&aThe preview of " + s.def.name() + (next ? " for " + editionName(j.cadence, j.day) : "") + " is ready"
+                    + " in half " + j.half + " (seed " + GenSeed.hex(j.seed) + "). &7" + look + "." + offNote(s);
+        }
         return "&aThe preview of " + s.def.name() + (next ? " for " + editionName(j.cadence, j.day) : "") + " is ready in"
                 + " half " + j.half + " (seed " + GenSeed.hex(j.seed) + "). &7" + look + "; " + (next ? "use it for that"
                 + " set: &e/hcm games gen choose " + id : "make it the current course: &e/hcm games gen promote " + id
@@ -1783,13 +1867,13 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     private void claimed(SlotState s) {
         try {
-            host.store().meta(GenAdminKeys.claim(s.def.id()), Regions.claim(s.def, s.world, s.origin));
+            host.store().meta(GenAdminKeys.claim(s.def.id()), Regions.claim(s.def, s.world, s.origin, s.gap));
             s.claimed = true;
             if (s.problem != null && s.problem.startsWith(FOREIGN)) {
                 s.problem = null;
             }
             host.logger().info("Fresh Courses: " + s.def.id() + " claimed " + s.world + " "
-                    + Regions.describe(s.def, s.origin));
+                    + Regions.describe(s.def, s.origin, s.gap));
         } catch (SQLException e) {
             host.logger().log(Level.WARNING, "Fresh Courses: could not record " + s.def.id() + "'s claim", e);
         }
@@ -1834,8 +1918,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         WorldPort port = host.world(s.world);
         List<List<Putt>> witness = j.kind == Kind.HEAL ? j.tag.witness() : g.witness();
-        List<String> problems = port == null ? List.of("the world isn't loaded")
-                : LiveProof.replay(port.ballBlocks(), g.course().holes(), witness);
+        List<String> problems = port == null ? List.of("the world isn't loaded") // sand plays from golf algo 3
+                : LiveProof.replay(port.ballBlocks(LiveBlocks.sandPlays(j.plan.algo())), g.course().holes(), witness);
         if (!problems.isEmpty()) {
             host.logger().severe("Fresh Courses: " + s.def.id() + "'s golf didn't replay on the real blocks: "
                     + String.join("; ", problems));
@@ -1846,25 +1930,33 @@ public final class GenService implements GeneratedCourses, GenOps {
         return true;
     }
 
-    /** Structural check for a layout an older planner made: read the row, then the blocks. */
+    /**
+     * Structural check for a layout an older planner made: read the row, then the blocks. Each chunk
+     * is snapshotted once for the whole check (golf's pond scan reads every block of every hole's plot).
+     */
     private List<String> structure(Job j) {
         SlotState s = j.slot;
         WorldPort port = host.world(s.world);
         if (port == null) {
             return List.of("the world isn't loaded");
         }
+        Map<Long, Optional<WorldPort.ChunkView>> views = new HashMap<>();
+        java.util.function.BiFunction<Integer, Integer, WorldPort.ChunkView> view = (cx, cz) -> views.computeIfAbsent(
+                ((long) cx << 32) ^ (cz & 0xFFFFFFFFL), k -> Optional.ofNullable(port.snapshot(cx, cz))).orElse(null);
         LiveProof.Solid solid = (x, y, z) -> {
-            WorldPort.ChunkView v = port.snapshot(x >> 4, z >> 4);
+            WorldPort.ChunkView v = view.apply(x >> 4, z >> 4);
             return v != null && !v.air(x, y, z);
         };
-        LiveProof.Solid water = (x, y, z) -> water(port.snapshot(x >> 4, z >> 4), x, y, z);
+        LiveProof.Solid water = (x, y, z) -> water(view.apply(x >> 4, z >> 4), x, y, z);
+        LiveProof.Solid seals = (x, y, z) -> seals(view.apply(x >> 4, z >> 4), x, y, z);
         try {
             GamesDao.CourseRow row = host.store().course(s.def.id());
             if (row == null) {
                 return List.of("its row is gone");
             }
-            if (s.def.golf()) {
-                return LiveProof.structure(com.dierks.homecraft.games.golf.CourseCodec.fromRow(row), solid);
+            if (s.def.golf()) { // every hole's whole plot, ponds to look at included (§1.3)
+                return LiveProof.structure(com.dierks.homecraft.games.golf.CourseCodec.fromRow(row), s.half(j.half),
+                        solid, seals, water);
             }
             return LiveProof.structure(CourseCodec.decode(row.id(), row.data()).course(), solid, water);
         } catch (SQLException | RuntimeException e) {
@@ -1878,6 +1970,15 @@ public final class GenService implements GeneratedCourses, GenOps {
      */
     static boolean water(WorldPort.ChunkView v, int x, int y, int z) {
         return v != null && !v.air(x, y, z) && BuildJob.fluid(v.block(x, y, z));
+    }
+
+    /**
+     * Whether block (x, y, z) of a chunk snapshot seals a pond (golf's pond scan,
+     * {@link LiveProof#pools}): the plan's own seal test ({@link Pools#seals}), a full block — not a
+     * slab, a sign or leaves, which can hold water; false for air or no snapshot.
+     */
+    static boolean seals(WorldPort.ChunkView v, int x, int y, int z) {
+        return v != null && !v.air(x, y, z) && Pools.seals(v.block(x, y, z));
     }
 
     // ---- the flip -------------------------------------------------------------------------------
@@ -2400,8 +2501,8 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     /**
-     * Whether a block is in a flow-only box: a kept Dropper's plot, a plot job the server stopped
-     * halfway, or the plot a Dropper keep (or any clearing) is working in now.
+     * Whether a block is in a flow-only box: a kept Dropper's or golf course's plot, a plot job the
+     * server stopped halfway, or the plot a keep that may hold water (or any clearing) is working in now.
      */
     boolean inWet(String world, int x, int y, int z) {
         return in(wetPlots, world, x, y, z) || keeper.inWetJob(world, x, y, z);
@@ -2442,12 +2543,18 @@ public final class GenService implements GeneratedCourses, GenOps {
         return false;
     }
 
-    /** Every change refused: every wanted or claimed half, and a moved Dropper's old ones ({@link GenRegionGuard}). */
+    /**
+     * Every change refused: every wanted or claimed half, and the old ones of a moved slot that may hold
+     * water ({@link GenRegionGuard}).
+     */
     public GenRegionGuard.Area guardArea() {
         return guardArea;
     }
 
-    /** No fluid flowing out: kept Droppers' plots and a Dropper keep in flight ({@link GenRegionGuard}). */
+    /**
+     * No fluid flowing out: the plots of kept Droppers and golf courses, and such a keep in flight
+     * ({@link GenRegionGuard}).
+     */
     public GenRegionGuard.Area wetArea() {
         return wetArea;
     }
@@ -2668,8 +2775,9 @@ public final class GenService implements GeneratedCourses, GenOps {
             for (String c : s.wet) {
                 int[] o = Regions.claimOrigin(c);
                 out.add(s.def.id() + ": its old area in " + Regions.claimWorld(c) + " (" + (o == null ? c
-                        : Regions.describe(s.def, o)) + ") is still guarded - drain first: move it back and /hcm"
-                        + " games gen clear " + s.def.id());
+                        : Regions.describe(s.def, o, Regions.claimGap(c))) + ") is still guarded - drain first:"
+                        + " move it back and " + (s.classic ? "restart (an empty Classic's halves are emptied then;"
+                        + " clear doesn't take a Classic)" : "/hcm games gen clear " + s.def.id()));
             }
         }
         return out;
@@ -2804,7 +2912,8 @@ public final class GenService implements GeneratedCourses, GenOps {
                 out.add("  &7" + pick);
             }
             if (slotId != null && s.classic) {
-                out.add("  &7region " + s.world + " " + Regions.describe(s.def, s.origin) + (s.claimed ? " (claimed)"
+                out.add("  &7region " + s.world + " " + Regions.describe(s.def, s.origin, s.gap)
+                        + (s.claimed ? " (claimed)"
                         : " (not claimed yet)"));
                 if (s.want != null) {
                     out.add("  &7recalled " + s.want.slot() + " " + s.want.edition() + " on " + GenCopy.whenDated(
@@ -2815,7 +2924,8 @@ public final class GenService implements GeneratedCourses, GenOps {
                 out.add("  &7edition " + target.key() + " (" + editionName(target.cadence(), target.start())
                         + ") until " + GenCopy.whenDated(target.endsAt(), host.zone())
                         + (target.kept() ? " - kept from the old setting" : ""));
-                out.add("  &7region " + s.world + " " + Regions.describe(s.def, s.origin) + (s.claimed ? " (claimed)"
+                out.add("  &7region " + s.world + " " + Regions.describe(s.def, s.origin, s.gap)
+                        + (s.claimed ? " (claimed)"
                         : " (not claimed yet)"));
                 if (s.pin != null) {
                     String ignored = pinIgnored(s);
@@ -2997,7 +3107,7 @@ public final class GenService implements GeneratedCourses, GenOps {
     @Override
     public void preview(String slotId, String seedText, Consumer<String> report) {
         SlotState s = slots.get(slotId);
-        if (!ready(s, report)) {
+        if (!readyToTry(s, report)) { // CV final gate: a slot that is off can be previewed before it is switched on
             return;
         }
         GenScheduler.Target t = target(s);
@@ -3021,7 +3131,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         j.mix = s.mix;
         queue.add(j);
         report.accept("&7A preview of " + s.def.name() + " (seed " + GenSeed.hex(seed) + ") is on its way into half "
-                + s.idleHalf() + "." + choiceStays(s));
+                + s.idleHalf() + "." + choiceStays(s) + offNote(s));
     }
 
     /** WP-ADM: what a preview, reroll or promote adds while a choice waits: it stays chosen. */
@@ -3064,6 +3174,11 @@ public final class GenService implements GeneratedCourses, GenOps {
     @Override
     public void promote(String slotId, Shown shown, boolean confirm, Consumer<String> report) {
         SlotState s = slots.get(slotId);
+        String off = offUse(s, "promote"); // CV final gate: previews, not promotes, while it is off
+        if (off != null) {
+            report.accept(off);
+            return;
+        }
         if (!ready(s, report)) {
             return;
         }
@@ -3157,6 +3272,7 @@ public final class GenService implements GeneratedCourses, GenOps {
     @Override
     public void enable(String slotId, boolean on, Consumer<String> report) {
         SlotState s = slots.get(slotId);
+        boolean wasOff = !s.wanted();
         try {
             host.store().meta(GenAdminKeys.enabled(slotId), Boolean.toString(on));
         } catch (SQLException e) {
@@ -3168,7 +3284,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (on) {
             s.problem = null;
             vet(s, handBuilt());
-            report.accept("&a" + s.def.name() + " is on." + (s.problem == null ? "" : " &cBut: &7" + s.problem));
+            report.accept("&a" + s.def.name() + " is on." + (s.problem == null ? onOverPreview(s, wasOff)
+                    : " &cBut: &7" + s.problem));
             return;
         }
         if (job != null && job.slot == s) {
@@ -3183,6 +3300,43 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         report.accept("&a" + s.def.name() + " is off. &7Its blocks stay; &e/hcm games gen on " + slotId
                 + " &7opens it again.");
+    }
+
+    /**
+     * CV final gate: what switching on a Fresh slot with a preview standing does to it (the owner's preview
+     * made while it was off): with no course of this set up, the set's own is built next, in the spare half
+     * the preview stands in, and opens once it is built. {@code ""} otherwise. A preview still on its way
+     * there ({@code wasOff}: asked for while it was off, queued or being built) is treated the same: the
+     * build would write over it the moment it was ready, so it is dropped now ({@link #dropPreview}) and
+     * never said to be ready to try or promote.
+     */
+    private String onOverPreview(SlotState s, boolean wasOff) {
+        SlotState.Preview pv = s.preview;
+        GenScheduler.Target t = target(s);
+        if (s.classic || t.holds(s.live)) {
+            return "";
+        }
+        boolean dropped = wasOff && dropPreview(s);
+        if (pv == null && !dropped) {
+            return "";
+        }
+        return " &7" + (dropped ? "The preview on its way is dropped: its" : "Its") + " course for "
+                + editionName(t.cadence(), t.start()) + " is built next" + (pv != null && pv.half() == s.idleHalf()
+                ? ", in half " + pv.half() + " over the preview there," : dropped ? ", in half " + s.idleHalf() + ","
+                : "") + " and opens once it's built.";
+    }
+
+    /**
+     * CV final gate: stop the preview queued or being built for {@code s} (one at most: a preview waits for
+     * nothing else of its slot's), as {@code off} stops its jobs. @return whether there was one
+     */
+    private boolean dropPreview(SlotState s) {
+        boolean queued = queue.removeIf(j -> j.slot == s && j.kind == Kind.PREVIEW);
+        if (job != null && job.slot == s && job.kind == Kind.PREVIEW) {
+            cancel(job, "it was switched on before the preview was ready");
+            return true;
+        }
+        return queued;
     }
 
     @Override
@@ -3211,9 +3365,20 @@ public final class GenService implements GeneratedCourses, GenOps {
         SlotState s = slots.get(slotId);
         Planner p = planners.get(s.def.generator());
         long seed;
+        String remade = null;
         if (seedText.equalsIgnoreCase("live") || seedText.equalsIgnoreCase("today")) {
             if (s.live == null) {
                 report.accept("&c" + s.def.name() + " has no course to pin yet.");
+                return;
+            }
+            if (p != null && s.live.algo() != p.algo()) {
+                // CV final gate: a pin is the seed for today's planner, so on a layout an older one made (the
+                // upgrade's algo-2 sets) it would put up a different course at the next set, "pinned"
+                report.accept("&c" + s.def.name() + "'s course up now was made by an older planner (" + s.def.generator()
+                        + " v" + s.live.algo() + "; this is v" + p.algo() + "), so it can't be made again after the"
+                        + " update: a pin would build a different course from its seed. &7Nothing was pinned. It stays"
+                        + " up until its set (" + editionName(s.live.cadence(), s.live.day()) + ") ends; to keep it for"
+                        + " good: &e/hcm games gen keep " + slotId + " current <new-id> confirm");
                 return;
             }
             seed = s.live.seed();
@@ -3224,6 +3389,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 return;
             }
             seed = parsed;
+            remade = p == null ? null : olderEdition(s, seed, p.algo());
         }
         long today = edition().day(host.now());
         GenScheduler.Pin pin = new GenScheduler.Pin(seed, p == null ? 0 : p.algo(), days > 0 ? today + days - 1 : 0);
@@ -3236,6 +3402,50 @@ public final class GenService implements GeneratedCourses, GenOps {
         s.pin = pin;
         report.accept("&a" + s.def.name() + " is pinned to seed " + GenSeed.hex(seed) + (days > 0 ? " for " + days
                 + " day" + (days == 1 ? "" : "s") : " until unpinned") + ". &7Each new set gets fresh boards.");
+        if (remade != null) {
+            report.accept(remade);
+        }
+    }
+
+    /**
+     * CV final gate: the warning for a pin on a seed that an archived edition of {@code s} was made from by
+     * another planner version (copied from {@code history}, say): the pin makes a new course from that seed
+     * with today's planner, not that one; and how to have that one as it was ({@link #asItWas}). {@code null}
+     * when no such edition is archived (or it can't be read).
+     */
+    private String olderEdition(SlotState s, long seed, int algo) {
+        try {
+            for (GenArchiveDao.Row r : host.store().editionsBySeed(s.def.id(), GenSeed.hex(seed))) {
+                if (r.seed() == seed && r.algoVersion() != algo) {
+                    return "&eSeed " + GenSeed.hex(seed) + " was " + r.code() + " (" + r.name() + ", " + dates(r)
+                            + "), made by " + s.def.generator() + " planner v" + r.algoVersion() + ". &7This pin makes a"
+                            + " new course from that seed with planner v" + algo + ", not that one. " + asItWas(r);
+                }
+            }
+        } catch (SQLException | RuntimeException e) {
+            host.logger().log(Level.WARNING, "Fresh Courses: could not look the pinned seed up in the archive", e);
+        }
+        return null;
+    }
+
+    /**
+     * How to have an archived edition back as it was, by a command {@link #recall} or {@link #keep} takes: the
+     * course up now can't be recalled, so, as {@code pin live} says, it stays until its set ends and {@code keep
+     * <course> current} keeps it; one whose set is over is recalled when its Classics slot is on, else (Ice Boat
+     * has none, or that slot is off) kept by its code.
+     */
+    private String asItWas(GenArchiveDao.Row r) {
+        if (r.live()) {
+            return r.code() + " stays up until its set (" + editionName(Edition.Key.parse(r.edition()), r.day())
+                    + ") ends; to keep it for good: &e/hcm games gen keep " + r.slot() + " current <new-id> confirm";
+        }
+        Slots.Def classic = Slots.classicFor(Slots.of(r.slot()));
+        SlotState c = classic == null ? null : slots.get(classic.id());
+        if (c == null || !c.on()) {
+            return "To keep " + r.code() + " as it was, for good: &e/hcm games gen keep " + r.code()
+                    + " <new-id> confirm";
+        }
+        return "To bring " + r.code() + " back as it was: &e/hcm games gen recall " + r.code();
     }
 
     @Override
@@ -3256,7 +3466,7 @@ public final class GenService implements GeneratedCourses, GenOps {
     @Override
     public void previewNext(String slotId, String seedText, Consumer<String> report) {
         SlotState s = slots.get(slotId);
-        if (!ready(s, report)) {
+        if (!readyToTry(s, report)) { // CV final gate: a slot that is off can be previewed before it is switched on
             return;
         }
         Long seed = seedText == null ? null : GenSeed.parse(seedText);
@@ -3277,7 +3487,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         queue.add(j);
         report.accept("&7A preview of " + s.def.name() + " for " + editionName(n.cadence(), n.day()) + " (" + s.mix
                 + ", seed " + GenSeed.hex(seed) + ") is on its way into half " + s.idleHalf() + "."
-                + choiceStays(s)); // fix2-D (D6): building another candidate doesn't replace the pick
+                + choiceStays(s) // fix2-D (D6): building another candidate doesn't replace the pick
+                + offNote(s));
     }
 
     @Override
@@ -3290,6 +3501,11 @@ public final class GenService implements GeneratedCourses, GenOps {
         SlotState s = slots.get(slotId);
         if (s == null || s.classic) {
             report.accept("&cA Classics slot holds a course brought back with recall; choose is for Fresh Courses.");
+            return;
+        }
+        String off = offUse(s, "choose"); // CV final gate: previews, not picks, while it is off
+        if (off != null) {
+            report.accept(off);
             return;
         }
         if (!s.on()) {
@@ -3394,8 +3610,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (!running || readyAt < 0) {
             return PreviewRun.refused("&cFresh Courses is still starting; try in a moment.");
         }
-        if (!s.on()) {
-            return PreviewRun.refused("&c" + s.def.name() + " is off" + (s.problem == null ? "." : ": &7" + s.problem));
+        if (s.problem != null) { // CV final gate: switched off with nothing in the way, its preview can be tried
+            return PreviewRun.refused("&c" + s.def.name() + " is off: &7" + s.problem);
         }
         if (busyWith(s)) {
             return PreviewRun.refused("&c" + s.def.name() + " is being built right now; try when it's done.");
@@ -3511,7 +3727,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         queue.add(new Job(confirm ? Kind.CLAIM : Kind.SCAN, s, report));
-        report.accept(confirm ? "&7Clearing " + s.def.name() + "'s area (" + Regions.describe(s.def, s.origin)
+        report.accept(confirm ? "&7Clearing " + s.def.name() + "'s area ("
+                + Regions.describe(s.def, s.origin, s.gap)
                 + ") and claiming it..." : "&7Counting what is in " + s.def.name() + "'s area...");
     }
 
@@ -3539,6 +3756,64 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
         }
         return false;
+    }
+
+    /**
+     * A preview may start: as {@link #ready}, and on a Fresh slot that is switched off too (CV final gate:
+     * the owner's "Gate 0 and a preview before switching it on", Ice Boat ships off). Off, it must pass the
+     * checks a build passes (§2.4: {@link #claimProblem}) or its standing problem (foreign blocks) is said;
+     * the preview's job then scans and claims an unclaimed area first, like a build, builds into the spare
+     * half only and never flips, so nothing opens to players ({@link #offNote}).
+     */
+    private boolean readyToTry(SlotState s, Consumer<String> report) {
+        if (s.classic || s.wanted()) {
+            return ready(s, report);
+        }
+        if (!running || readyAt < 0) {
+            report.accept("&cFresh Courses is still starting; try in a moment.");
+            return false;
+        }
+        String why = s.problem != null ? s.problem : claimProblem(s);
+        if (why != null) {
+            report.accept("&c" + s.def.name() + " can't be previewed: &7" + why);
+            return false;
+        }
+        if (busyWith(s)) {
+            report.accept("&c" + s.def.name() + " is being built right now; try when it's done.");
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * CV final gate: what a preview of a Fresh slot that is switched off adds to its replies: it stays off
+     * (only an admin's test run plays it, nothing is recorded), and what switching it on does instead.
+     * {@code ""} for a slot that is on.
+     */
+    private String offNote(SlotState s) {
+        if (s.classic || s.wanted()) {
+            return "";
+        }
+        return " &7" + s.def.name() + " stays off: only an admin's test run can play the preview, and nothing is"
+                + " recorded or paid. Switching it on (&e/hcm games gen on " + s.def.id() + "&7) opens its own course"
+                + " for this set, not the preview.";
+    }
+
+    /**
+     * CV final gate: why a preview of a Fresh slot that is switched off can't be put up ({@code promote}) or
+     * picked ({@code choose}), and what to do instead; {@code null} for a slot that is on (or a Classic).
+     * A pick kept while it is off would not be what opens at the switch-on (the set's own course is built
+     * then), so neither is taken: previews and test runs are what an owner does before switching it on.
+     */
+    private String offUse(SlotState s, String verb) {
+        if (s == null || s.classic || s.wanted()) {
+            return null;
+        }
+        String id = s.def.id();
+        return "&c" + s.def.name() + " is off, so no preview can be " + (verb.equals("choose") ? "picked for a set"
+                : "made its course") + ". &7Previews and test runs work while it's off. &e/hcm games gen on " + id
+                + " &7opens it with its own course for this set; then &e/hcm games gen preview " + id + " next&7, try"
+                + " it and &echoose &7it for the next set, or &epreview&7, try and &epromote &7one now.";
     }
 
     /** An admin job may start: running, the world is up, nothing else of this slot's is going. */
@@ -3649,12 +3924,13 @@ public final class GenService implements GeneratedCourses, GenOps {
             fail(j, "its plan was refused: " + String.join("; ", problems));
             return;
         }
-        if (!orig.dropper()) {
+        if (!orig.mayHoldWater()) {
             recallProven(j, moved, List.of(), null);
             return;
         }
-        // A moved dropper is proven again where it stands: its whole validator, on the planner thread
-        // (like PlanCheck.generator: tens of milliseconds), the answer back through the inbox.
+        // A moved plan that may hold water (a dropper, golf) is proven again where it stands
+        // (PlanCheck.movedProblems: its sealed pools or ponds, its solvability or witness lines), on the
+        // planner thread (like PlanCheck.generator), the answer back through the inbox.
         j.stage = Stage.PLANNING;
         j.planStarted = host.now();
         host.planner().execute(() -> {

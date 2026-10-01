@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.GameSpec;
 import com.dierks.homecraft.games.PlayGate;
 import com.dierks.homecraft.games.RestartHold;
 import com.dierks.homecraft.games.RtpLimits;
+import com.dierks.homecraft.games.gen.DailySettings;
 import com.dierks.homecraft.games.gen.api.Slots;
 import org.bukkit.configuration.ConfigurationSection;
 
@@ -65,6 +66,12 @@ public final class GamesConfig {
      * exactly these.
      */
     public static final List<String> KEYS = keys();
+    /**
+     * {@link #KEYS} plus the optional leaves a game reads but config.yml doesn't ship (Fresh Courses'
+     * {@code half_gap} and {@code keep.plot_gap}: {@link DailySettings#OPTIONAL_KEYS}): every key
+     * that is never reported as a typo.
+     */
+    public static final List<String> KNOWN = known();
 
     /** The most tokens a day's limit on games of chance may allow, whatever config says. */
     public static final int MAX_CHANCE_DAILY_TOKENS = 10_000;
@@ -287,7 +294,7 @@ public final class GamesConfig {
                 return Parsed.OFF;
             }
             Node root = new Node(PATH, map, w, i, null, "the games are off until it is fixed", new boolean[1]);
-            root.unknownKeys(KEYS);
+            root.unknownKeys(KNOWN);
             Common common = common(root);
             if (root.invalid()) {
                 common = common.withEnabled(false);
@@ -937,6 +944,14 @@ public final class GamesConfig {
             out.put(spec.id(), spec.defaults());
         }
         return out;
+    }
+
+    private static List<String> known() {
+        List<String> out = new ArrayList<>(KEYS);
+        for (String k : DailySettings.OPTIONAL_KEYS) {
+            out.add(block(Slots.DAILY) + "." + k);
+        }
+        return List.copyOf(out);
     }
 
     private static List<String> keys() {

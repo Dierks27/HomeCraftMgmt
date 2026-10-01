@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.GenSeed;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlanInput;
 import com.dierks.homecraft.games.gen.api.PlannedTrial;
@@ -55,7 +56,7 @@ final class DropperFixtures {
     /** The planner's input for {@code mix} and seed {@code n} in half {@code h}. */
     static PlanInput input(String mix, int n, char h) {
         Slots.Def slot = slotFor(mix);
-        return new PlanInput(slot, slot.half(h), h, DAY + n, 0, seed(slot, n), mix, 6, 0, null);
+        return new PlanInput(slot, LegacyBoxes.half(slot, h), h, DAY + n, 0, seed(slot, n), mix, 6, 0, null);
     }
 
     /** The plan for {@code mix} and seed {@code n} in half A (cached). */

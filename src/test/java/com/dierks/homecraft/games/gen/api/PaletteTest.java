@@ -34,14 +34,18 @@ class PaletteTest {
                 // EVENTS-DROPPER-SPEC C1: the Dropper's shafts and lights, Falling Floors' floors
                 "minecraft:glass", "minecraft:red_stained_glass", "minecraft:orange_stained_glass",
                 "minecraft:yellow_stained_glass", "minecraft:blue_stained_glass", "minecraft:purple_stained_glass",
-                "minecraft:pink_stained_glass", "minecraft:light_blue_stained_glass", "minecraft:sea_lantern")),
+                "minecraft:pink_stained_glass", "minecraft:light_blue_stained_glass", "minecraft:sea_lantern",
+                // Course Variety §1.1: the sand that never falls, moss, and trees (their states: stateProblems)
+                "minecraft:smooth_sandstone", "minecraft:smooth_sandstone_slab", "minecraft:moss_block",
+                "minecraft:oak_log", "minecraft:birch_log", "minecraft:cherry_log", "minecraft:oak_leaves",
+                "minecraft:birch_leaves", "minecraft:cherry_leaves")),
                 new TreeSet<>(Palette.ALLOWED),
                 "adding a block to generated courses is a decision: change this test with it");
     }
 
     @Test
     void waterIsOnlyInPoolWaterNeverOnTheAllowlist() {
-        // §B.1.9: the one fluid, only in a Dropper's sealed pools; every other generator refuses it
+        // §B.1.9, Course Variety §1.2: the one fluid, only in sealed pools (a Dropper's, golf's ponds)
         assertEquals(Set.of("minecraft:water[level=0]"), Palette.POOL_WATER, "still water sources only");
         for (String water : List.of("minecraft:water[level=0]", "minecraft:water", "water", "minecraft:water[level=1]")) {
             assertFalse(Palette.allowed(water), water + " is never on the shared allowlist");
@@ -87,11 +91,156 @@ class PaletteTest {
     void nothingThatFallsFlowsMeltsOrTicksIsAllowed() {
         for (String banned : List.of("sand", "red_sand", "gravel", "white_concrete_powder", "anvil", "dragon_egg",
                 "scaffolding", "pointed_dripstone", "water", "lava", "ice", "frosted_ice", "snow", "snow_block",
-                "soul_sand", "oak_leaves", "wheat", "redstone_block", "redstone_wire", "piston", "sticky_piston",
+                "soul_sand", "wheat", "redstone_block", "redstone_wire", "piston", "sticky_piston",
                 "chest", "hopper", "barrier", "light", "tnt", "fire", "magma_block", "honey_block", "air",
-                "player_head", "cactus", "sugar_cane", "grass_block", "dirt", "farmland")) {
+                "player_head", "cactus", "sugar_cane", "grass_block", "dirt", "farmland", "moss_carpet",
+                "sandstone_slab", "spruce_leaves", "azalea_leaves", "oak_sapling", "bubble_column")) {
             assertFalse(Palette.allowed(banned), banned + " must never be in a generated course");
         }
+    }
+
+    @Test
+    void leavesAreAllowedOnlyPersistentDryAndAtADistanceLogsOnlyUprightSlabsOnlyBottom() {
+        // §1.1.1: the new blocks are on the list by id; their STATES are what keeps them from changing
+        assertEquals(List.of(), Palette.stateProblems(List.of(Palette.leaves("oak", 1), Palette.leaves("birch", 4),
+                Palette.leaves("cherry", 7), Palette.log("oak"), Palette.log("birch"), Palette.log("cherry"),
+                Palette.SAND, Palette.SAND_SLAB, Palette.MOSS, Palette.RAMP, Palette.TRACK, Palette.arrow("north"),
+                Palette.sign(3), Palette.PILLAR + "[axis=y]")), "every block the planners write is fine");
+        List<String> bad = List.of("minecraft:oak_leaves", "minecraft:oak_leaves[distance=2]",
+                "minecraft:oak_leaves[distance=2,persistent=false,waterlogged=false]",
+                "minecraft:birch_leaves[distance=2,persistent=true]",
+                "minecraft:birch_leaves[distance=2,persistent=true,waterlogged=true]",
+                "minecraft:cherry_leaves[distance=0,persistent=true,waterlogged=false]",
+                "minecraft:cherry_leaves[distance=8,persistent=true,waterlogged=false]",
+                "minecraft:oak_leaves[distance=x,persistent=true,waterlogged=false]",
+                "minecraft:oak_leaves[distance=2,persistent=true,waterlogged=false,extra=1]",
+                "minecraft:oak_log", "minecraft:oak_log[axis=x]", "minecraft:birch_log[axis=z]",
+                "minecraft:smooth_sandstone_slab", "minecraft:smooth_sandstone_slab[type=top]",
+                "minecraft:smooth_stone_slab[type=double]", "minecraft:smooth_stone_slab[type=bottom,waterlogged=true]",
+                "minecraft:oak_sign[rotation=4,waterlogged=true]", "minecraft:oak_leaves[distance=2,distance=3]",
+                "minecraft:oak_log[axis=y", "minecraft:oak_log[axis]");
+        List<String> problems = Palette.stateProblems(bad);
+        assertEquals(bad.size(), problems.size(), "each bad entry is said once: " + problems);
+        for (int i = 0; i < bad.size(); i++) {
+            assertTrue(problems.get(i).startsWith("'" + bad.get(i) + "'"), "in order, naming the entry: "
+                    + problems.get(i));
+        }
+        assertTrue(problems.get(0).contains("persistent=true"), "a bare leaf would decay: " + problems.get(0));
+        assertTrue(problems.get(9).contains("axis=y"), "a log on its side: " + problems.get(9));
+        assertTrue(problems.get(12).contains("type=bottom"), "a slab of no type: " + problems.get(12));
+        assertTrue(problems.get(15).contains("water"), "a waterlogged slab holds water: " + problems.get(15));
+        assertEquals(List.of(), Palette.stateProblems(null), "no palette, nothing to say");
+        assertEquals(List.of(), Palette.stateProblems(java.util.Arrays.asList((String) null)),
+                "a missing entry is the allowlist's to report");
+    }
+
+    @Test
+    void leavesAndLogsAreWrittenAsTheGameSpellsThem() {
+        // §1.1.2: states in alphabetical order, so the builder's parse gives back the same text
+        assertEquals("minecraft:oak_leaves[distance=2,persistent=true,waterlogged=false]", Palette.leaves("oak", 2),
+                "a leaf two from its log");
+        assertEquals("minecraft:cherry_leaves[distance=7,persistent=true,waterlogged=false]",
+                Palette.leaves(" Cherry ", 7), "any case, the farthest");
+        assertEquals("minecraft:birch_log[axis=y]", Palette.log("birch"), "an upright trunk");
+        assertEquals(List.of("oak", "birch", "cherry"), Palette.WOODS, "the three woods");
+        for (String wood : Palette.WOODS) {
+            assertTrue(Palette.allowed(Palette.log(wood)), wood + " logs are allowed");
+            assertNotNull(Material.matchMaterial(Palette.id(Palette.log(wood))), wood + " log is a real block");
+            for (int d = 1; d <= Palette.MAX_LEAF_DISTANCE; d++) {
+                assertTrue(Palette.allowed(Palette.leaves(wood, d)), wood + " leaves are allowed");
+                assertEquals(List.of(), Palette.stateProblems(List.of(Palette.leaves(wood, d))),
+                        wood + " leaves at " + d + " keep the state rules");
+                assertEquals(Palette.id(Palette.leaves(wood, d)), Palette.id(Palette.leaves(wood, d).toUpperCase()),
+                        "and read to one id");
+            }
+        }
+        assertEquals(7, Palette.MAX_LEAF_DISTANCE, "vanilla's cap");
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> Palette.log("spruce"),
+                "a wood the palette doesn't have");
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> Palette.leaves("oak", 0),
+                "a leaf touching nothing");
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> Palette.leaves("oak", 8),
+                "or past the cap");
+        assertEquals(java.util.Map.of("axis", "y"), Palette.states("minecraft:oak_log[ Axis = Y ]"),
+                "states read lower-case and trimmed");
+        assertEquals(java.util.Map.of(), Palette.states("minecraft:moss_block"), "none");
+        assertEquals(null, Palette.states("minecraft:oak_log]"), "a stray bracket can't be read");
+    }
+
+    @Test
+    void leafDistancesAreVanillasShortestPathFromALogCappedAtSeven() {
+        // §1.1.2: a trunk at (0, 0..3, 0), a 3 x 3 canopy round its top at y 3 and a plus above it at y 4
+        List<int[]> logs = new java.util.ArrayList<>();
+        for (int y = 0; y <= 3; y++) {
+            logs.add(new int[]{0, y, 0});
+        }
+        List<int[]> leaves = new java.util.ArrayList<>();
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                if (x != 0 || z != 0) {
+                    leaves.add(new int[]{x, 3, z});
+                }
+            }
+        }
+        leaves.add(new int[]{0, 4, 0});
+        leaves.add(new int[]{1, 4, 0});
+        java.util.Map<Long, Integer> d = Palette.leafDistances(logs, leaves);
+        assertEquals(10, d.size(), "every leaf has one");
+        assertEquals(1, d.get(Palette.blockKey(1, 3, 0)), "beside the trunk: 1");
+        assertEquals(2, d.get(Palette.blockKey(1, 3, 1)), "a corner, two steps round: 2");
+        assertEquals(1, d.get(Palette.blockKey(0, 4, 0)), "on top of the trunk: 1");
+        assertEquals(2, d.get(Palette.blockKey(1, 4, 0)), "beside that, or over a 1: 2");
+
+        List<int[]> chain = new java.util.ArrayList<>();
+        for (int x = 1; x <= 9; x++) {
+            chain.add(new int[]{x, 0, 0});
+        }
+        java.util.Map<Long, Integer> far = Palette.leafDistances(List.of(new int[]{0, 0, 0}), chain);
+        for (int x = 1; x <= 9; x++) {
+            assertEquals(Math.min(x, 7), far.get(Palette.blockKey(x, 0, 0)), "a chain counts up, capped at 7: " + x);
+        }
+        assertEquals(7, Palette.leafDistances(List.of(), List.of(new int[]{5, 5, 5})).get(Palette.blockKey(5, 5, 5)),
+                "a leaf no log holds is 7");
+        assertTrue(Palette.leafDistances(logs, List.of()).isEmpty(), "no leaves, nothing");
+        assertEquals(1, Palette.leafDistances(List.of(new int[]{0, 0, 0}), List.of(new int[]{0, -1, 0}))
+                .get(Palette.blockKey(0, -1, 0)), "under a log counts too, and below y 0");
+
+        assertTrue(Palette.holdsLeaves(Palette.log("oak")) && Palette.holdsLeaves(Palette.TRACK_WALL)
+                && Palette.holdsLeaves("minecraft:stripped_oak_log"), "logs and wood, stripped too (vanilla's #logs)");
+        assertFalse(Palette.holdsLeaves(Palette.MOSS) || Palette.holdsLeaves(Palette.leaves("oak", 1))
+                || Palette.holdsLeaves(Palette.GLASS), "moss, leaves and glass hold no leaf up");
+        assertTrue(Palette.isLeaves(Palette.leaves("birch", 3)) && !Palette.isLeaves(Palette.log("birch")),
+                "leaves are leaves");
+    }
+
+    @Test
+    void aLeafWhoseDistanceIsNotVanillasIsCaught() {
+        List<String> palette = List.of(Palette.log("oak"), Palette.leaves("oak", 1), Palette.leaves("oak", 2),
+                Palette.leaves("oak", 3), Palette.TRACK_WALL, Palette.MOSS);
+        List<BlockOp> tree = List.of(new BlockOp(0, 0, 0, (short) 0), new BlockOp(1, 0, 0, (short) 1),
+                new BlockOp(2, 0, 0, (short) 2), new BlockOp(2, 1, 0, (short) 3), new BlockOp(0, 1, 0, (short) 5));
+        assertEquals(List.of(), Palette.leafProblems(palette, tree), "1, 2 and 3 steps from the log");
+        List<BlockOp> wrong = List.of(new BlockOp(0, 0, 0, (short) 0), new BlockOp(1, 0, 0, (short) 2),
+                new BlockOp(2, 0, 0, (short) 2), new BlockOp(2, 1, 0, (short) 3));
+        assertEquals(List.of("1 leaf says the wrong distance (first at 1 0 0: it says 2, vanilla gives 1): the game"
+                + " would change it"), Palette.leafProblems(palette, wrong), "a leaf beside the log that says 2");
+        List<BlockOp> wall = List.of(new BlockOp(5, 0, 5, (short) 4), new BlockOp(5, 1, 5, (short) 2));
+        assertEquals(1, Palette.leafProblems(palette, wall).size(),
+                "a stripped-wood wall holds a leaf as a log does: beside one a leaf is 1, not 2");
+        assertEquals(List.of(), Palette.leafProblems(palette, List.of(new BlockOp(0, 0, 0, (short) 0))), "no leaves");
+        assertEquals(List.of(), Palette.leafProblems(null, List.of()), "nothing, nothing to say");
+    }
+
+    @Test
+    void theSandIsSmoothSandstoneAndNeverFalls() {
+        assertEquals("minecraft:smooth_sandstone", Palette.SAND, "a full block that never falls, flows or ticks");
+        assertEquals("minecraft:smooth_sandstone_slab[type=bottom]", Palette.SAND_SLAB, "a sunken bunker's slab");
+        assertEquals("minecraft:moss_block", Palette.MOSS, "moss never spreads on its own");
+        assertFalse(Palette.allowed("minecraft:sand"), "real sand falls: never");
+        assertTrue(Palette.allowed(Palette.SAND) && Palette.allowed(Palette.SAND_SLAB) && Palette.allowed(Palette.MOSS),
+                "the new ground blocks are allowed");
+        assertEquals("minecraft:yellow_concrete", Palette.LIP_CAP, "drop caps are yellow");
+        assertEquals("minecraft:light_blue_stained_glass", Palette.BLUE_GLASS, "the cave roof and glass waterfall");
     }
 
     @Test

@@ -1,0 +1,116 @@
+name: Ice Boat
+kind: boat
+tier: hard
+world: games
+enabled: true
+pinned: false
+rev: 1
+start:
+  x: 4578.186
+  y: 165.0
+  z: 4412.385
+  yaw: 24.6
+  pitch: 0.0
+checkpoints:
+- x: 4575.65
+  y: 165.0
+  z: 4439.92
+  radius: 3.0
+- x: 4564.595
+  y: 165.0
+  z: 4460.087
+  radius: 3.0
+- x: 4541.243
+  y: 165.0
+  z: 4457.037
+  radius: 3.0
+- x: 4518.974
+  y: 165.0
+  z: 4447.165
+  radius: 3.0
+- x: 4507.403
+  y: 165.0
+  z: 4427.604
+  radius: 3.0
+- x: 4512.426
+  y: 165.0
+  z: 4403.958
+  radius: 3.0
+- x: 4515.173
+  y: 165.0
+  z: 4380.196
+  radius: 3.0
+- x: 4536.476
+  y: 165.0
+  z: 4372.217
+  radius: 3.0
+- x: 4559.364
+  y: 165.0
+  z: 4380.531
+  radius: 3.0
+- x: 4579.519
+  y: 165.0
+  z: 4392.751
+  radius: 3.0
+- x: 4575.65
+  y: 165.0
+  z: 4439.92
+  radius: 3.0
+- x: 4564.595
+  y: 165.0
+  z: 4460.087
+  radius: 3.0
+- x: 4541.243
+  y: 165.0
+  z: 4457.037
+  radius: 3.0
+- x: 4518.974
+  y: 165.0
+  z: 4447.165
+  radius: 3.0
+- x: 4507.403
+  y: 165.0
+  z: 4427.604
+  radius: 3.0
+- x: 4512.426
+  y: 165.0
+  z: 4403.958
+  radius: 3.0
+- x: 4515.173
+  y: 165.0
+  z: 4380.196
+  radius: 3.0
+- x: 4536.476
+  y: 165.0
+  z: 4372.217
+  radius: 3.0
+- x: 4559.364
+  y: 165.0
+  z: 4380.531
+  radius: 3.0
+- x: 4579.519
+  y: 165.0
+  z: 4392.751
+  radius: 3.0
+finish:
+  x: 4576.474
+  y: 165.0
+  z: 4416.0
+  radius: 3.0
+fall_y: 161.0
+min_seconds: 8
+gen:
+  slot: fresh_boat
+  generator: boat
+  algo: 2
+  day: 20725
+  date: '2026-09-29'
+  cadence: 7
+  reroll: 0
+  seed: 000000005eed5eed
+  half: A
+  plan: b3ce7c41112a
+  ref_ms: 17884
+  gold_ms: 23000
+  silver_ms: 33000
+  built_at: 1790000000000

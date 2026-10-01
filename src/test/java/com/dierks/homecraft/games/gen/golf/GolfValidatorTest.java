@@ -1,6 +1,8 @@
 package com.dierks.homecraft.games.gen.golf;
 
+import com.dierks.homecraft.games.gen.V2Fixtures;
 import com.dierks.homecraft.games.gen.api.BlockOp;
+import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
@@ -27,6 +29,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * lane, a filled cup, a pit, a line that doesn't drop, a par that isn't E + 1, a disallowed
  * block, a block outside the half, two blocks in one spot, overlapping holes, and a hole a sloppy
  * player can't finish within par + 1 (which only the full check, with the kid tree, catches).
+ *
+ * <p>These are the frozen rules a layout of golf planner version 2 or older is judged by (Course
+ * Variety §1.4), so they are tried on a frozen version-2 plan: Tiny Golf's fixture, whose second
+ * hole is a flat straight ({@link V2Fixtures}). Today's planner makes version-3 plans, which
+ * {@link GolfValidatorV3Test} covers.
  */
 class GolfValidatorTest {
 
@@ -35,10 +42,17 @@ class GolfValidatorTest {
     private static int turf;
 
     @BeforeAll
-    static void plan() throws GenFailed {
-        good = new GolfPlanner().plan(GolfKit.input(Slots.TINY_GOLF, 11));
-        first = ((PlannedGolf) good.course()).course().holes().get(0);
+    static void plan() {
+        good = V2Fixtures.named("golf-3").plan();
+        assertEquals(2, good.algo(), "a frozen version-2 plan");
+        first = ((PlannedGolf) good.course()).course().holes().get(1);
         turf = (int) first.tee().y();
+    }
+
+    /** {@code plan} as a layout of golf planner version 2 (judged by these frozen rules). */
+    private static Plan v2(Plan plan) {
+        return Plan.of(plan.slot(), 2, plan.seed(), plan.half(), plan.palette(), plan.ops(), plan.signs(),
+                plan.keepClear(), plan.course(), plan.summary(), plan.work());
     }
 
     private static Plan withOps(UnaryOperator<List<BlockOp>> edit) {
@@ -66,7 +80,7 @@ class GolfValidatorTest {
         assertTrue(problems.stream().anyMatch(p -> p.contains(words)), why + ": " + problems);
     }
 
-    /** The wall column right beside the tee (inside the lane's bounds, one out from the lane). */
+    /** The wall column right beside the flat hole's tee (inside the lane's bounds, one out from the lane). */
     private static int wallX() {
         return Math.min(first.corner1().x(), first.corner2().x());
     }
@@ -80,6 +94,45 @@ class GolfValidatorTest {
         assertEquals(List.of(), GolfValidator.problems(good), "the planner's own plan is sound");
         assertEquals(List.of(), GolfValidator.quickProblems(good), "the quick check agrees");
         assertEquals(List.of("not a golf plan"), GolfValidator.problems(null), "and nothing is not a golf plan");
+    }
+
+    /**
+     * A layout of golf planner version 2 is built and played without Adventure Golf's rules
+     * ({@code LiveBlocks} without sand), so this frozen check replays its stored line the same way:
+     * a ball wobbling at a step on a version-2 plan's blocks runs to the roll cap exactly as it always
+     * did, where a version-3 plan's blocks bring it to rest in a second (Course Variety's final gate).
+     * The bunker is drawn in its own box, clear of any slot.
+     */
+    @Test
+    void aVersion2PlanIsPlayedWithoutAdventureGolfsRulesSoAWobbleRunsToTheRollCapAsItAlwaysDid() {
+        Box box = new Box(-5, 60, -3, 12, 70, 12);
+        List<String> palette = List.of(Palette.TURF_LIGHT, Palette.SAND_SLAB);
+        List<BlockOp> ops = new ArrayList<>();
+        for (int x = -5; x <= 12; x++) {
+            for (int z = -3; z <= 12; z++) {
+                boolean sand = x >= 0 && x <= 4 && z >= 6 && z <= 8; // a sunken bunker, its lip at x = 5
+                ops.add(new BlockOp(x, 63, z, (short) (sand ? 1 : 0)));
+            }
+        }
+        BallPhysics.Hole area = BallPhysics.Hole.of(10, 63, 0, -5, 62, -3, 12, 67, 12);
+        Putt wedge = new Putt(264.827f, 1); // wedges the ball's edge against the lip (the review's tap)
+        int[] ticks = new int[4];
+        double[] y = new double[4];
+        for (int algo = 2; algo <= 3; algo++) {
+            Plan plan = Plan.of(good.slot(), algo, good.seed(), box, palette, ops, List.of(), List.of(),
+                    good.course(), good.summary(), good.work());
+            PlanBlocks grid = GolfValidator.grid(plan, plan.ops());
+            assertEquals(algo > 2, GolfShot.adventure(grid), "version " + algo + " plays Adventure Golf's rules: "
+                    + (algo > 2));
+            GolfShot.Result tap = GolfShot.play(grid, area, new BallPhysics.Ball(4.6764, 63.5, 7.6773), wedge);
+            assertEquals(BallPhysics.Outcome.STOPPED, tap.outcome(), "version " + algo + ": it stops");
+            ticks[algo] = tap.ticks();
+            y[algo] = tap.y();
+        }
+        assertEquals(GolfShot.MAX_ROLL_TICKS + 1, ticks[2], "version 2: at the roll cap, exactly as it always did");
+        assertTrue(y[2] > 63.8 && y[2] < 64, "in the air above the sand, wedged at the lip: " + y[2]);
+        assertEquals(GolfShot.WOBBLE_TICKS, ticks[3], "version 3: at rest a second after it began to wobble");
+        assertEquals(63.5, y[3], 0.0, "down on the sand");
     }
 
     @Test
@@ -174,7 +227,7 @@ class GolfValidatorTest {
         witness.set(0, List.of(new Putt(180, 1)));
         caught(withCourse(new PlannedGolf(g.course(), g.attempts(), witness, List.of(1, g.expert().get(1),
                 g.expert().get(2)), g.kid())), "doesn't hole out", "a witness that goes backwards doesn't drop");
-        GolfCourse wrongPar = g.course().withHole(1, first.withPar(first.par() + 1));
+        GolfCourse wrongPar = g.course().withHole(2, first.withPar(first.par() + 1));
         caught(withCourse(new PlannedGolf(wrongPar, g.attempts(), g.witness(), g.expert(), g.kid())), "par is",
                 "par must be E + 1");
         caught(withCourse(new PlannedGolf(g.course(), g.attempts(), g.witness().subList(0, 2), g.expert(),
@@ -202,7 +255,7 @@ class GolfValidatorTest {
     void overlappingHolesAreCaught() throws GenFailed {
         HoleLayout l = GolfKit.straight(13, 0);
         GolfPlanner.Solved s = GolfPlanner.solve(l, 'E', 0, Work.unlimited());
-        Plan twice = GolfPlanner.assemble(GolfKit.input(Slots.DAILY_GOLF, 1), List.of(s, s), 0);
+        Plan twice = v2(GolfPlanner.assemble(GolfKit.input(Slots.DAILY_GOLF, 1), List.of(s, s), 0));
         caught(twice, "overlap", "two holes can't share their area");
     }
 
@@ -223,7 +276,7 @@ class GolfValidatorTest {
             }
         }
         assertTrue(hard != null, "some S-bend is too hard for the sloppy player");
-        Plan plan = GolfPlanner.assemble(GolfKit.input(Slots.DAILY_GOLF, 1), List.of(hard), 0);
+        Plan plan = v2(GolfPlanner.assemble(GolfKit.input(Slots.DAILY_GOLF, 1), List.of(hard), 0));
         assertEquals(List.of(), GolfValidator.quickProblems(plan), "its blocks and line are sound");
         caught(plan, "sloppy player", "but the full check replays the kid tree and refuses it");
     }

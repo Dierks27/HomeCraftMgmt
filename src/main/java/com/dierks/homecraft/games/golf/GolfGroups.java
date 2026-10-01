@@ -311,7 +311,7 @@ final class GolfGroups {
                 continue;
             }
             r.ball.place(r.ball.x(), r.ball.y(), r.ball.z()); // stopped where it is
-            r.rolling = 0;
+            r.rolling.reset();
             r.last = r.run.pickUp();
             port.tell(id, "&eTime's up on this hole &7- your ball is picked up.");
             port.pickedUp(id, r);

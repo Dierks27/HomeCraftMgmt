@@ -99,6 +99,93 @@ class LiveRoundTest {
         assertFalse(r.ball.moving(), "still, ready for the next putt");
     }
 
+    /**
+     * The round plays Adventure Golf's pond rule as {@link GolfShot} does (the review of Course
+     * Variety): a tap that stops with its centre over the water has fallen in — "Splash!", +1, back
+     * on its last spot — so the ball never sits on the water, and "Reset ball" then has nothing to do
+     * (it is already on its spot, and the spot is dry). On a hand-built course it stops there, as
+     * before.
+     */
+    /** A par 3 teed at ({@code teeX}, 0.5) facing +x on {@code g}, its cup far beyond the pond, at x 29. */
+    private static LiveRound pastThePond(double teeX, BallPhysics.Blocks g) {
+        GolfCourse.Hole h = new GolfCourse.Hole(new GolfCourse.Tee(teeX, GROUND, 0.5, -90f),
+                new GolfCourse.Spot(29, FLOOR, 0), 3, new GolfCourse.Spot(-5, FLOOR, -3),
+                new GolfCourse.Spot(30, FLOOR + 3, 3));
+        GolfCourse c = new GolfCourse("t", "Test", "games", true, 1, List.of(h));
+        LiveRound r = new LiveRound(UUID.randomUUID(), c, new GolfRun(c.pars(), 3), null);
+        r.tee(g);
+        return r;
+    }
+
+    @Test
+    void onAnAdventureCourseABallThatStopsOverWaterHasFallenIn() {
+        double teeX = GolfShotTest.tapToThePondsEdge();
+        BallPhysics.Blocks adventure = new GolfShotTest.Adventure(GolfShotTest.pondAcross());
+        LiveRound r = pastThePond(teeX, adventure);
+        r.putt(-90f, 1);
+        assertEquals(LiveRound.Result.BACK, rollOut(r, adventure), "it stopped over the water: in it goes");
+        assertEquals(BallPhysics.Outcome.WATER, r.outcome, "a splash, so the words say so");
+        assertEquals(2, r.run.strokes(), "the putt and the penalty");
+        assertEquals(teeX, r.ball.x(), 0.0, "back on its last spot");
+        assertEquals(GROUND, r.ball.y(), 0.0, "on the turf, not the water");
+        assertTrue(r.atSpot(), "Reset ball has nothing to do: the ball is on its (dry) last spot");
+        LiveRound hand = pastThePond(teeX, GolfShotTest.pondAcross());
+        hand.putt(-90f, 1);
+        assertEquals(LiveRound.Result.STILL, rollOut(hand, GolfShotTest.pondAcross()), "a hand-built course: as"
+                + " it always did, it stops on the water's edge");
+        assertEquals(10.05, hand.ball.x(), 1e-9, "its centre over the water");
+    }
+
+    /** A par 3 teed on {@link GolfShotTest#bunker}'s sand where the wedge tap starts, on {@code g}. */
+    private static LiveRound inTheBunker(BallPhysics.Blocks g) {
+        GolfCourse.Hole h = new GolfCourse.Hole(new GolfCourse.Tee(GolfShotTest.WEDGE_X, GolfShotTest.SAND,
+                GolfShotTest.WEDGE_Z, -90f), new GolfCourse.Spot(10, FLOOR, 0), 3,
+                new GolfCourse.Spot(-5, FLOOR - 1, -3), new GolfCourse.Spot(12, FLOOR + 4, 12));
+        GolfCourse c = new GolfCourse("t", "Test", "games", true, 1, List.of(h));
+        LiveRound r = new LiveRound(UUID.randomUUID(), c, new GolfRun(c.pars(), 3), null);
+        r.tee(g);
+        return r;
+    }
+
+    /**
+     * The round plays Adventure Golf's wobble as {@link GolfShot} does (the review of Course Variety,
+     * the owner's call): a tap wedged against the bunker's lip comes to rest on the sand a second
+     * after it began to wobble, where a hand-built course lets it hang there, "rolling", until the roll
+     * cap half a minute later. Each putt starts the wobble's second afresh.
+     */
+    @Test
+    void aBallWobblingAtAStepComesToRestInASecondOnAnAdventureCourseAndAtTheRollCapOnAHandBuiltOne() {
+        BallPhysics.Blocks adventure = new GolfShotTest.Adventure(GolfShotTest.bunker());
+        LiveRound r = inTheBunker(adventure);
+        for (int putt = 1; putt <= 2; putt++) {
+            r.ball.place(GolfShotTest.WEDGE_X, GolfShotTest.SAND, GolfShotTest.WEDGE_Z);
+            r.putt(GolfShotTest.WEDGE.yaw(), GolfShotTest.WEDGE.power());
+            int ticks = 0;
+            LiveRound.Result res = LiveRound.Result.ROLLING;
+            while (res == LiveRound.Result.ROLLING && ticks < 2 * GolfShot.MAX_ROLL_TICKS) {
+                res = r.roll(adventure);
+                ticks++;
+            }
+            assertEquals(LiveRound.Result.STILL, res, "putt " + putt + ": at rest, putt again");
+            assertEquals(GolfShot.WOBBLE_TICKS, ticks, "putt " + putt + ": a second after it began to wobble");
+            assertEquals(GolfShotTest.SAND, r.ball.y(), 0.0, "putt " + putt + ": down on the sand");
+            assertEquals(putt, r.run.strokes(), "putt " + putt + ": a stroke each, no penalty");
+        }
+
+        BallPhysics.Blocks hand = GolfShotTest.bunker();
+        LiveRound h = inTheBunker(hand);
+        h.putt(GolfShotTest.WEDGE.yaw(), GolfShotTest.WEDGE.power());
+        int ticks = 0;
+        LiveRound.Result res = LiveRound.Result.ROLLING;
+        while (res == LiveRound.Result.ROLLING && ticks < 2 * GolfShot.MAX_ROLL_TICKS) {
+            res = h.roll(hand);
+            ticks++;
+        }
+        assertEquals(LiveRound.Result.STILL, res, "a hand-built course: it stops too...");
+        assertEquals(GolfShot.MAX_ROLL_TICKS + 1, ticks, "...at the roll cap, exactly as it always did");
+        assertTrue(h.ball.y() > GolfShotTest.SAND + 0.3, "in the air above the sand: " + h.ball.y());
+    }
+
     @Test
     void outOfBoundsPutsTheBallBackToo() {
         LiveRound r = round(3, 3);

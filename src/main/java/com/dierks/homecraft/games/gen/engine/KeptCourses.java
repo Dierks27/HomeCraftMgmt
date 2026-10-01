@@ -2,11 +2,13 @@ package com.dierks.homecraft.games.gen.engine;
 
 import com.dierks.homecraft.games.GameCatalog;
 import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlannedCourse;
 import com.dierks.homecraft.games.gen.api.PlannedGolf;
 import com.dierks.homecraft.games.gen.api.PlannedTrial;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.golf.GolfCourse;
+import com.dierks.homecraft.games.golf.LiveBlocks;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.CourseCodec;
 import com.dierks.homecraft.games.trial.TrialText;
@@ -28,6 +30,8 @@ import java.util.function.Predicate;
  * normal boards and rewards. Everything here goes through the games' public API
  * ({@code Course}, {@code CourseCodec}, {@code GolfCourse}, golf's {@code CourseCodec},
  * {@code GameCatalog}, {@code Scores}) and nothing else, so a change there touches only this file.
+ * The one thing a kept golf course carries from its plan is the rules it was proven by: kept from
+ * an Adventure Golf layout, it says so ({@link GolfCourse#adventure}), so its sand stays sand.
  */
 public final class KeptCourses {
 
@@ -72,8 +76,23 @@ public final class KeptCourses {
      * (no {@code gen:} block), open, at layout 1.
      */
     public static GamesDao.CourseRow row(String id, String name, String world, PlannedCourse moved, long now) {
+        return row(id, name, world, moved, false, now);
+    }
+
+    /**
+     * The row of a course kept from {@code moved} (its plan, already moved into its plot):
+     * {@link #row(String, String, String, PlannedCourse, long)}, and a golf course planned at a
+     * version that plays Adventure Golf's rules keeps playing by them ({@link GolfCourse#adventure}:
+     * its sand stays sand, as its par and proofs were worked out; Course Variety review).
+     */
+    public static GamesDao.CourseRow row(String id, String name, String world, Plan moved, long now) {
+        return row(id, name, world, moved.course(), LiveBlocks.sandPlays(moved.algo()), now);
+    }
+
+    private static GamesDao.CourseRow row(String id, String name, String world, PlannedCourse moved,
+                                          boolean adventure, long now) {
         if (moved instanceof PlannedGolf g) {
-            GolfCourse c = new GolfCourse(id, name, world, true, 1, g.course().holes());
+            GolfCourse c = new GolfCourse(id, name, world, true, 1, g.course().holes(), null, adventure);
             return com.dierks.homecraft.games.golf.CourseCodec.toRow(c, now, now);
         }
         Course p = ((PlannedTrial) moved).course();

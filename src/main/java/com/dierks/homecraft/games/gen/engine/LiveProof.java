@@ -1,7 +1,10 @@
 package com.dierks.homecraft.games.gen.engine;
 
+import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Putt;
 import com.dierks.homecraft.games.gen.dropper.DropMarks;
+import com.dierks.homecraft.games.gen.golf.GolfPlanner;
+import com.dierks.homecraft.games.gen.golf.HoleTemplate;
 import com.dierks.homecraft.games.golf.BallPhysics;
 import com.dierks.homecraft.games.golf.GolfCourse;
 import com.dierks.homecraft.games.golf.GolfShot;
@@ -23,8 +26,9 @@ import java.util.List;
  *
  * <p><b>The structural check.</b> A layout made by an older planner version can't be derived again
  * after an update. Instead of the full proof it gets a quick one: a solid block under every place
- * a player or a ball must stand. It opens with a WARN, and the new version builds from the next
- * day.
+ * a player or a ball must stand (and every boat checkpoint: they sit on the ice), and on golf every
+ * pond still sealed ({@link #pools}) — in play or to look at, anywhere in a hole's plot. It opens
+ * with a WARN, and the new version builds from the next day.
  */
 public final class LiveProof {
 
@@ -72,8 +76,9 @@ public final class LiveProof {
 
     /**
      * The quick check for a trial built by an older planner: a solid block under the start, and
-     * under every checkpoint and the finish of a parkour course (rings and boat marks float or
-     * span the track, so only the start is checked). Empty = fine.
+     * under every checkpoint and the finish of a parkour or an ice boat course (a boat's marks sit
+     * on the ice, on every algo: Course Variety §2.12). Rings float, so only the tower is checked.
+     * Empty = fine.
      */
     public static List<String> structure(Course c, Solid solid) {
         return structure(c, solid, null);
@@ -97,7 +102,7 @@ public final class LiveProof {
         if (!under(solid, c.start().x(), c.start().y(), c.start().z())) {
             out.add("nothing solid under the start");
         }
-        if (c.kind() == TrialKind.PARKOUR) {
+        if (c.kind() == TrialKind.PARKOUR || c.kind() == TrialKind.BOAT) {
             int i = 0;
             for (Course.Mark m : c.targets()) {
                 i++;
@@ -124,6 +129,23 @@ public final class LiveProof {
 
     /** The quick check for golf: a solid block under every tee, and a solid cup block. Empty = fine. */
     public static List<String> structure(GolfCourse g, Solid solid) {
+        return structure(g, null, solid, null, null);
+    }
+
+    /**
+     * {@link #structure(GolfCourse, Solid)} with a way to see water and what seals it (Course
+     * Variety §1.3): each hole's whole plot is scanned too ({@link #scanBox}: its bounds and one more,
+     * and the planner's plot it stands in, where an Easy hole's decorative pond lies outside the
+     * bounds), and any water in it must be sealed ({@link #pools}). Without {@code water} (or
+     * {@code seals}) only the tees and cups are checked.
+     *
+     * @param half  the half the course stands in, whose plots its holes take in order
+     *              ({@code GolfPlanner.plot}), or {@code null} to scan only round each hole's bounds
+     * @param seals whether block (x, y, z) seals a pond: a full block ({@code Pools.seals} on the real
+     *              block), not a slab, a sign, leaves or air
+     * @param water whether block (x, y, z) is water, or {@code null}
+     */
+    public static List<String> structure(GolfCourse g, Box half, Solid solid, Solid seals, Solid water) {
         List<String> out = new ArrayList<>();
         int i = 0;
         for (GolfCourse.Hole h : g.holes()) {
@@ -134,8 +156,102 @@ public final class LiveProof {
             if (h.cup() == null || !solid.at(h.cup().x(), h.cup().y(), h.cup().z())) {
                 out.add("hole " + i + "'s cup block is missing");
             }
+            Box plot = scanBox(h, i - 1, half);
+            if (water != null && seals != null && plot != null) {
+                for (String p : pools(plot, seals, water)) {
+                    out.add("hole " + i + ": " + p);
+                }
+            }
         }
         return out;
+    }
+
+    /** The most blocks {@link #pools} scans in one box: a golf hole's whole plot is about twelve thousand. */
+    public static final long MAX_SCAN = 1L << 18;
+
+    /**
+     * The sealed-pool test on the real blocks of {@code box} (the live twin of {@code Pools}, §1.3):
+     * every water block in it has water or a block that {@code seals} on all four sides and below, so
+     * none can flow — the same seal test as the plan's: a full block, never a slab, a sign or leaves
+     * (they can hold water). Its neighbours outside the box are looked at too. Empty = fine (or no
+     * water). A box bigger than {@link #MAX_SCAN} blocks isn't scanned, and says so.
+     */
+    public static List<String> pools(Box box, Solid seals, Solid water) {
+        List<String> out = new ArrayList<>();
+        if (box == null || seals == null || water == null) {
+            return out;
+        }
+        if (box.volume() > MAX_SCAN) {
+            out.add("the area " + box.describe() + " is too big to scan for ponds");
+            return out;
+        }
+        int open = 0;
+        String first = null;
+        int[][] around = {{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}};
+        for (int x = box.minX(); x <= box.maxX(); x++) {
+            for (int z = box.minZ(); z <= box.maxZ(); z++) {
+                for (int y = box.minY(); y <= box.maxY(); y++) {
+                    if (!water.at(x, y, z)) {
+                        continue;
+                    }
+                    for (int[] d : around) {
+                        int nx = x + d[0];
+                        int ny = y + d[1];
+                        int nz = z + d[2];
+                        if (!water.at(nx, ny, nz) && !seals.at(nx, ny, nz)) {
+                            open++;
+                            if (first == null) {
+                                first = x + " " + y + " " + z;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if (open > 0) {
+            out.add(open + " water block" + (open == 1 ? " has" : "s have") + " air, a slab, a sign or leaves beside"
+                    + " or under it (first at " + first + "): a pond isn't sealed");
+        }
+        return out;
+    }
+
+    /**
+     * A hole's plot box: its bounds (walls included) one block wider on every side and one lower, and
+     * two higher (as the golf planner's own {@code plotBox}); {@code null} for a hole without bounds.
+     */
+    static Box plotBox(GolfCourse.Hole h) {
+        if (h == null || h.corner1() == null || h.corner2() == null) {
+            return null;
+        }
+        Box b = Box.of(h.corner1().x(), h.corner1().y(), h.corner1().z(), h.corner2().x(), h.corner2().y(),
+                h.corner2().z());
+        return new Box(b.minX() - 1, b.minY() - 1, b.minZ() - 1, b.maxX() + 1, b.maxY() + 2, b.maxZ() + 1);
+    }
+
+    /**
+     * What {@link #structure(GolfCourse, Box, Solid, Solid, Solid)} scans for hole {@code i} (from 0)
+     * of a course in {@code half}: its {@link #plotBox}, spread over the whole plot the golf planner
+     * gave it ({@code GolfPlanner.plot}: {@value HoleTemplate#PLOT_X} x {@value HoleTemplate#PLOT_Z},
+     * clipped to the half) at the plot box's heights — so an Easy hole's decorative pond, two or more
+     * columns outside its bounds, is scanned too (Course Variety §3.8 rule 13). Just the plot box
+     * without a half; {@code null} for a hole without bounds.
+     */
+    static Box scanBox(GolfCourse.Hole h, int i, Box half) {
+        Box b = plotBox(h);
+        if (b == null || half == null) {
+            return b;
+        }
+        int[] p = GolfPlanner.plot(half, i);
+        int minX = Math.max(half.minX(), p[0]);
+        int minZ = Math.max(half.minZ(), p[1]);
+        int maxX = Math.min(half.maxX(), p[0] + HoleTemplate.PLOT_X - 1);
+        int maxZ = Math.min(half.maxZ(), p[1] + HoleTemplate.PLOT_Z - 1);
+        if (minX > maxX || minZ > maxZ) {
+            return b;
+        }
+        return new Box(Math.min(b.minX(), minX), b.minY(), Math.min(b.minZ(), minZ), Math.max(b.maxX(), maxX),
+                b.maxY(), Math.max(b.maxZ(), maxZ));
     }
 
     /** A solid block right under feet at (x, y, z). */

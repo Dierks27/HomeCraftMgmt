@@ -41,7 +41,11 @@ import java.util.Set;
  */
 public final class PlanCheck {
 
-    /** The most blocks a plan may place (the boat, the largest, is about 3,300). */
+    /**
+     * The most blocks a plan may place. The largest are the Mountain Run boat track (typically
+     * 10,000-18,000; its own validator caps it at 30,000) and a golf course with its scenery (under
+     * 30,000); each generator's validator has its own, lower cap.
+     */
     public static final int MAX_OPS = 100_000;
 
     private PlanCheck() {
@@ -63,6 +67,9 @@ public final class PlanCheck {
         }
         for (String bad : paletteProblems(plan.palette(), def)) {
             out.add("the palette has " + bad + ", which a course may not use");
+        }
+        for (String bad : Palette.stateProblems(plan.palette())) {
+            out.add("the palette's " + bad);
         }
         if (plan.ops().size() > MAX_OPS) {
             out.add("the plan places " + plan.ops().size() + " blocks, more than " + MAX_OPS);
@@ -113,14 +120,16 @@ public final class PlanCheck {
 
     /**
      * The palette entries {@code def}'s plans may not use ({@link Palette#problems}): water never,
-     * except a still source ({@link Palette#POOL_WATER}) in a Dropper's plan, whose own validator
-     * proves every pool sealed (EVENTS-DROPPER-SPEC §B.1.9). Every other generator still refuses water.
+     * except a still source ({@link Palette#POOL_WATER}) in the plan of a slot that
+     * {@link Slots.Def#mayHoldWater may hold water}: a Dropper's pools (EVENTS-DROPPER-SPEC §B.1.9)
+     * and golf's ponds (Course Variety §1.2), each proven sealed by its own validator. Parkour, Sky
+     * Rings and the ice boat still refuse water.
      */
     public static List<String> paletteProblems(List<String> palette, Slots.Def def) {
         List<String> out = new ArrayList<>();
-        boolean dropper = def != null && def.dropper();
+        boolean wet = def != null && def.mayHoldWater();
         for (String bad : Palette.problems(palette)) {
-            if (!(dropper && Palette.poolWater(bad))) {
+            if (!(wet && Palette.poolWater(bad))) {
                 out.add(bad);
             }
         }
@@ -129,16 +138,19 @@ public final class PlanCheck {
 
     /**
      * The extra proof a plan MOVED from where it was made needs (a recall into a Classics slot, a
-     * keep into its plot), or empty: a Dropper's is its whole validator again
-     * ({@link DropperValidator#problems(Plan)}, which reads its mix back from its own pools), so a
-     * moved dropper is proven sealed and solvable where it will stand. The other generators' shared
-     * checks ({@link #problems}) are enough for a plan that is only translated.
+     * keep into its plot), or empty. A plan whose slot {@link Slots.Def#mayHoldWater may hold water}
+     * is proven again where it will stand: a Dropper by its whole validator
+     * ({@link DropperValidator#problems(Plan)}, which reads its mix back from its own pools, so it is
+     * proven sealed and solvable there), golf by its quick check
+     * ({@link GolfValidator#quickProblems}: its ponds sealed and every witness line replayed where it
+     * now stands). The other generators' shared checks ({@link #problems}) are enough for a plan that
+     * is only translated. Pure; run on the planner thread.
      */
     public static List<String> movedProblems(Plan plan, Slots.Def def) {
-        if (plan == null || def == null || !def.dropper()) {
+        if (plan == null || def == null || !def.mayHoldWater()) {
             return List.of();
         }
-        return DropperValidator.problems(plan);
+        return def.dropper() ? DropperValidator.problems(plan) : GolfValidator.quickProblems(plan);
     }
 
     /**

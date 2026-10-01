@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.storage.GamesDao;
 import org.junit.jupiter.api.Test;
@@ -28,12 +29,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * whole seconds and the finish line leads with the stars, then the next one, then the week (the
  * spec's own example); golf star lines follow par; the Star Chart's lines with each goal's own
  * tokens; the quests' and achievements' sums (a first finish in a set, the week's top goal reached,
- * a whole set finished); and the editors' "within 16 blocks of a Fresh Courses half" check finds a
- * point on every side of a half and no further.
+ * a whole set finished); the editors' "within 16 blocks of a Fresh Courses half" check finds a
+ * point on every side of a half and no further; and the Ice Boat Mountain Run's tile says its drops
+ * the way a Dropper's says its levels (COURSE-VARIETY-SPEC §5.2), while the flat loop's is unchanged.
  */
 class DailyTextTest {
 
     private static final ZoneId CHICAGO = ZoneId.of("America/Chicago");
+
+    @Test
+    void theMountainRunsTileSaysItsDropsLikeADroppersLevels() {
+        assertEquals("&bIce Boat &7- 5 drops · ★★☆", DailyText.slotName(Slots.ICE_BOAT, 7, 2, 5, 0),
+                "§8's own example: the drops, then the stars, in the NAME for Bedrock");
+        assertEquals("&bIce Boat &7- 5 drops · ★★☆", DailyTiles.name(Slots.ICE_BOAT, 7, true, 2, 5, 0, null),
+                "the Fresh Courses screen's tile");
+        assertEquals("&bIce Boat &7- 5 drops &8· &7Course code BOAT-7", DailyTiles.name(Slots.ICE_BOAT, 7, true, 0, 5, 0,
+                "BOAT-7"), "no stars yet: the drops, then the course code");
+        assertEquals("&bIce Boat &7- 1 drop", DailyText.slotName(Slots.ICE_BOAT, 7, 0, 1, 0), "one drop");
+        assertEquals("&bIce Boat &7- ★★☆", DailyText.slotName(Slots.ICE_BOAT, 7, 2, 0, 0),
+                "the flat algo-2 loop (no drops): exactly as before");
+        assertEquals("&bIce Boat", DailyText.slotName(Slots.ICE_BOAT, 7, 0, 0, 0), "and before a finish");
+        assertEquals("&aEasy Parkour &7- ★★☆", DailyText.slotName(Slots.DAILY_PARKOUR_EASY, 7, 2, 5, 0),
+                "another trial ignores the count, as before");
+    }
 
     private static long at(int month, int day, int hour, int minute) {
         return LocalDateTime.of(2026, month, day, hour, minute).atZone(CHICAGO).toInstant().toEpochMilli();
@@ -196,7 +214,7 @@ class DailyTextTest {
 
     @Test
     void theEditorsCheckFindsEverySideOfAHalfAndNoFurther() {
-        Box half = Slots.DAILY_GOLF.half('A'); // x 4864-4927, y 160-175, z 4096-4223
+        Box half = LegacyBoxes.half(Slots.DAILY_GOLF, 'A'); // x 4864-4927, y 160-175, z 4096-4223
         GeneratedCourses g = new GeneratedCourses() {
             @Override
             public boolean live(String courseId, GenTag tag) {

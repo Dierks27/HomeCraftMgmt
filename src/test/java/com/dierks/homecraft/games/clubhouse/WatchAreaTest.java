@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.clubhouse;
 
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.golf.GolfCourse;
 import com.dierks.homecraft.games.trial.Course;
@@ -74,7 +75,7 @@ class WatchAreaTest {
         GolfCourse g = new GolfCourse("meadow", "Meadow", "games", true, 1, List.of(h1, h2));
         assertEquals(new Box(8 - 16, 63 - 16, -6 - 16, 40 + 16, 66 + 16, 50 + 16), WatchArea.forGolf(g, null).box(),
                 "every tee, cup and bound corner, grown by 16");
-        Box half = Slots.DAILY_GOLF.half(4864, 160, 4096, 'B');
+        Box half = LegacyBoxes.half(Slots.DAILY_GOLF, 'B');
         assertEquals(half.expand(8), WatchArea.forGolf(g, half).box(), "Fresh golf: its half grown by 8");
     }
 

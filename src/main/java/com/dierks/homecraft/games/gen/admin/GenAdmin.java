@@ -116,8 +116,8 @@ public final class GenAdmin implements GameAdmin {
         return List.of(
                 "&e/hcm games gen status [course] &7- how often they change, when next, what is up, and why not",
                 "&e/hcm games gen plan <course> [seed|next] &7- a dry run: what a build would make, no blocks",
-                "&e/hcm games gen preview <course> [next] [seed] &7- build into the spare half to try it (no switch);"
-                        + " next: a candidate for the next set",
+                "&e/hcm games gen preview <course> [next] [seed] &7- build into the spare half to try it (no switch,"
+                        + " even while it's off); next: a candidate for the next set",
                 "&e/hcm games gen test <course> &7- a test run on the preview (nothing is recorded; golf: tp idle)",
                 "&e/hcm games gen promote <course> [seed] [confirm] &7- the preview becomes the current course (with"
                         + " a seed: only while the preview is that seed)",
@@ -363,7 +363,8 @@ public final class GenAdmin implements GameAdmin {
 
     /**
      * {@code test <course>}: an admin's test run on the preview in the spare half (WP-ADM), refused
-     * near a restart, with no preview, on golf (walked instead) and while the course is off.
+     * near a restart, with no preview, on golf (walked instead) and while the course is off for a problem
+     * (switched off, its preview can be tried: CV final gate, a preview before switching it on).
      */
     private void test(CommandSender sender, GenOps engine, String id) {
         if (!(sender instanceof Player player)) {

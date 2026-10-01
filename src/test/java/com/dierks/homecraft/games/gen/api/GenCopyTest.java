@@ -8,6 +8,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -29,6 +30,47 @@ class GenCopyTest {
         assertEquals("PARKOUR", GenCopy.parkourStart(null).get(0), "and anything else is plain Parkour");
         assertEquals(List.of("HOLE 18", "Par 6", "Hit the ball", "to the flag!"), GenCopy.golfTee(18, 6),
                 "the longest tee sign still fits");
+    }
+
+    @Test
+    void theMountainRunAndAdventureGolfSignsAreTheSpecsWords() {
+        // Course Variety §8, character for character
+        assertEquals(List.of("DOWNHILL RACE!", "Follow arrows", "down to the", "gold finish!"), GenCopy.boatRun(),
+                "the start sign");
+        assertEquals(List.of("HOP!", "Little drop"), GenCopy.boatHop(), "before a 1-block drop");
+        assertEquals(List.of("BIG DROP!", "Hold on!"), GenCopy.boatBigDrop(), "before a 2-block drop");
+        assertEquals(GenCopy.boatHop(), GenCopy.boatDrop(1), "a drop of 1 is a Hop");
+        assertEquals(GenCopy.boatBigDrop(), GenCopy.boatDrop(2), "a drop of 2 a Big Drop");
+        assertEquals(List.of("FINAL DROP!", "Then the gold", "finish line!"), GenCopy.boatFinalDrop(), "the Final Drop");
+        assertEquals(List.of("SANDY BEND", "Sand is slow,", "ice is fast!"), GenCopy.boatSandyBend(), "a sandy bend");
+        assertEquals(List.of("SAND PIT!", "Stay on the ice", "to go fast!"), GenCopy.boatSandPit(), "the sand pit");
+        assertEquals(List.of("PICK A PATH!", "Left or right?"), GenCopy.boatSplit(), "a split");
+        assertEquals(List.of("ICE CAVE", "Lights on!"), GenCopy.boatIceCave(), "the Ice Cave");
+        assertEquals(List.of("FOREST", "Weave through", "the trees!"), GenCopy.boatForest(), "the forest");
+        assertEquals(List.of("ICE BOAT", "Go 2 laps,", "follow the", "arrows!"), GenCopy.boatStart(2),
+                "the loop's sign stays for the v2 doc and tests");
+
+        assertEquals(GenCopy.golfTee(3, 2), GenCopy.golfTee(3, 2, GenCopy.TeeFeature.NONE), "no feature: as today");
+        assertEquals(GenCopy.golfTee(3, 2), GenCopy.golfTee(3, 2, null), "and so for none given");
+        String[][] lines = {{"WATER", "Mind the pond!", "Splash = +1"}, {"SAND", "Sand is slow!", "Hit it harder"},
+                {"HILL", "Up and over", "the hill!"}, {"TERRACES", "Down the steps!", "Watch it roll"},
+                {"VOLCANO", "Up the volcano!", "Not too hard!"}, {"TREES", "Bank off the", "trees!"},
+                {"TWO_WAY", "Pick a path!", "Short or safe?"}, {"DOGLEG_DOWN", "Round the bend", "and down!"}};
+        for (String[] l : lines) {
+            GenCopy.TeeFeature f = GenCopy.TeeFeature.valueOf(l[0]);
+            assertEquals(List.of("HOLE 5", "Par 3", l[1], l[2]), GenCopy.golfTee(5, 3, f), f + "'s tee sign");
+            assertEquals(f, GenCopy.golfTeeFeature(GenCopy.golfTee(5, 3, f), 5, 3), f + " is read back off its sign");
+        }
+        assertEquals(9, GenCopy.TeeFeature.values().length, "none and the eight features");
+        assertEquals(GenCopy.TeeFeature.NONE, GenCopy.golfTeeFeature(GenCopy.golfTee(1, 2), 1, 2), "a plain tee");
+        assertNull(GenCopy.golfTeeFeature(GenCopy.golfTee(1, 2), 2, 2), "another hole's sign is none of these");
+        assertNull(GenCopy.golfTeeFeature(GenCopy.golfTee(1, 2), 1, 3), "nor another par's");
+        assertNull(GenCopy.golfTeeFeature(List.of("HOLE 1", "Par 2", "Mind the pond!"), 1, 2), "nor a line short");
+        assertNull(GenCopy.golfTeeFeature(null, 1, 2), "nor nothing");
+        for (List<String> sign : List.of(GenCopy.boatRun(), GenCopy.boatFinalDrop(), GenCopy.boatSandPit(),
+                GenCopy.golfTee(18, 6, GenCopy.TeeFeature.TERRACES))) {
+            assertTrue(GenCopy.everySign().contains(sign), "every new sign is in the copy test's list: " + sign);
+        }
     }
 
     @Test

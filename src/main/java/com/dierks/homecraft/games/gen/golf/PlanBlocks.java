@@ -4,6 +4,7 @@ import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.golf.BallPhysics;
+import com.dierks.homecraft.games.golf.GolfShot;
 
 import java.util.List;
 import java.util.Locale;
@@ -16,15 +17,26 @@ import java.util.Locale;
  * worst case are all worked out on this grid, and the build then replays the witness on the real
  * blocks ({@code LiveBlocks}); a line that holes here must hole there. That is why golf plans use
  * only full blocks and bottom slabs: for those, {@code LiveBlocks}' collision boxes give the same
- * top at every point of the block (1 or 0.5), and the surface is one of four. A test pins every
- * palette entry against {@code LiveBlocks.surface(Material)} and the blocks' real heights. Signs
- * are passable, so to the ball they are air, exactly as {@code LiveBlocks} reads them.
+ * top at every point of the block (1 or 0.5), and the surface is one of five. A test pins every
+ * palette entry against {@code LiveBlocks.surface(Material, true)} and the blocks' real heights.
+ * Signs are passable, so to the ball they are air, exactly as {@code LiveBlocks} reads them.
+ *
+ * <p><b>Adventure Golf's blocks (Course Variety §3.4).</b> A pond's still water ({@link #WATER}) is
+ * passable and wet: a ball over it drops in, and the round puts it back for a stroke. Smooth
+ * sandstone is sand ({@link #SAND}, a full block; {@link #SAND_SLAB}, a sunken bunker's bottom
+ * slab), which is SLOW, as {@code LiveBlocks} reads it on a generated course of golf algo 3 or
+ * later; a hand-built course reads it as any stone (Course Variety decision 2), and no layout of
+ * an older algo has any. A ball that comes to rest with its centre over the water has fallen in,
+ * and one that only wobbles on the spot has come to rest ({@link GolfShot.Rules}), as on the built
+ * layout. Leaves ({@link #LEAVES}) are full, normal
+ * blocks to the ball, exactly like logs and moss; they have their own code only so a validator can
+ * tell a canopy from a wall.
  *
  * <p><b>Why a byte grid.</b> The planner simulates a few hundred thousand putts a course, each
  * asking the grid a few thousand questions; an array index is the cheapest answer there is.
  * Anything outside the box is air. Not thread-safe while it is being filled; read-only after.
  */
-public final class PlanBlocks implements BallPhysics.Blocks {
+public final class PlanBlocks implements BallPhysics.Blocks, GolfShot.Rules {
 
     /** Nothing solid (air, a sign). */
     public static final byte AIR = 0;
@@ -38,6 +50,17 @@ public final class PlanBlocks implements BallPhysics.Blocks {
     public static final byte SLIME = 4;
     /** A bottom slab: half a block high, a normal surface. */
     public static final byte SLAB = 5;
+    /** A pond's still water: nothing to stand on, and wet (Course Variety §3.4). */
+    public static final byte WATER = 6;
+    /** Smooth sandstone: a full block of sand, SLOW (a flush bunker). */
+    public static final byte SAND = 7;
+    /** A smooth sandstone bottom slab: half a block of sand, SLOW (a sunken bunker). */
+    public static final byte SAND_SLAB = 8;
+    /** Leaves: a full, normal block to the ball, told apart only so a canopy can be checked. */
+    public static final byte LEAVES = 9;
+
+    /** Each code's top ({@link #top(byte)}), by code. */
+    private static final double[] TOPS = {NONE, 1.0, 1.0, 1.0, 1.0, 0.5, NONE, 1.0, 0.5, 1.0};
 
     private final int minX;
     private final int minY;
@@ -46,9 +69,17 @@ public final class PlanBlocks implements BallPhysics.Blocks {
     private final int sizeY;
     private final int sizeZ;
     private final byte[] cells;
+    /** Whether the ball plays Adventure Golf's rules here ({@link #adventure}). */
+    private final boolean adventure;
 
-    /** An empty grid (all air) over {@code box}. */
+    /** An empty grid (all air) over {@code box}, played by Adventure Golf's rules. */
     public PlanBlocks(Box box) {
+        this(box, true);
+    }
+
+    /** An empty grid (all air) over {@code box}; {@code adventure}: by Adventure Golf's rules. */
+    private PlanBlocks(Box box, boolean adventure) {
+        this.adventure = adventure;
         this.minX = box.minX();
         this.minY = box.minY();
         this.minZ = box.minZ();
@@ -67,7 +98,17 @@ public final class PlanBlocks implements BallPhysics.Blocks {
      * {@code box}. An op outside the box, or a block the golf model doesn't know, throws.
      */
     public static PlanBlocks of(Box box, List<String> palette, List<BlockOp> ops) {
-        PlanBlocks g = new PlanBlocks(box);
+        return of(box, palette, ops, true);
+    }
+
+    /**
+     * {@link #of(Box, List, List)}, played by Adventure Golf's rules ({@link GolfShot.Rules}) only
+     * with {@code adventure}: without, the ball plays as it always did, as on a built layout of golf
+     * planner version 2 or older ({@code LiveBlocks} without sand) — so the frozen version 2 check
+     * replays a stored line exactly as the layout plays it.
+     */
+    public static PlanBlocks of(Box box, List<String> palette, List<BlockOp> ops, boolean adventure) {
+        PlanBlocks g = new PlanBlocks(box, adventure);
         byte[] codes = new byte[palette.size()];
         for (int i = 0; i < codes.length; i++) {
             codes[i] = code(palette.get(i));
@@ -83,49 +124,59 @@ public final class PlanBlocks implements BallPhysics.Blocks {
     }
 
     /**
-     * What a block is to the ball, from its block-data text: a bottom slab, ice, soul soil, slime,
-     * a sign (air: passable), or any other allowed block (a full, normal block). A block that
-     * isn't on the {@link Palette#ALLOWED} list, or a slab that isn't a bottom slab, throws: the
-     * model can't promise to match it.
+     * What a block is to the ball, from its block-data text: a bottom slab (stone or sand), ice,
+     * soul soil, sand, slime, leaves, a sign (air: passable), a pond's still water, or any other
+     * allowed block (a full, normal block). A block that isn't on the {@link Palette#ALLOWED} list
+     * (other than {@link Palette#POOL_WATER}), or a slab that isn't a bottom slab, throws: the model
+     * can't promise to match it.
      */
     public static byte code(String blockData) {
+        if (Palette.poolWater(blockData)) {
+            return WATER;
+        }
         if (!Palette.allowed(blockData)) {
             throw new IllegalArgumentException("not a golf block: " + blockData);
         }
         String id = Palette.id(blockData);
         return switch (id) {
-            case "minecraft:smooth_stone_slab" -> {
+            case "minecraft:smooth_stone_slab", "minecraft:smooth_sandstone_slab" -> {
                 String states = blockData.toLowerCase(Locale.ROOT).replace(" ", "");
                 if (!states.contains("type=bottom")) {
                     throw new IllegalArgumentException("golf slabs are bottom slabs: " + blockData);
                 }
-                yield SLAB;
+                yield id.equals("minecraft:smooth_stone_slab") ? SLAB : SAND_SLAB;
             }
             case "minecraft:packed_ice", "minecraft:blue_ice" -> ICE;
             case "minecraft:soul_soil" -> SLOW;
+            case "minecraft:smooth_sandstone" -> SAND;
             case "minecraft:slime_block" -> SLIME;
             case "minecraft:oak_sign", "minecraft:oak_wall_sign" -> AIR;
-            default -> FULL;
+            default -> Palette.isLeaves(blockData) ? LEAVES : FULL;
         };
     }
 
-    /** How high a block of this code reaches ({@link BallPhysics.Blocks#NONE} for air). */
+    /** How high a block of this code reaches ({@link BallPhysics.Blocks#NONE} for air and water). */
     public static double top(byte code) {
-        return switch (code) {
-            case AIR -> NONE;
-            case SLAB -> 0.5;
-            default -> 1.0;
-        };
+        return code >= 0 && code < TOPS.length ? TOPS[code] : 1.0;
     }
 
-    /** What a block of this code is to the ball (air is {@code NORMAL}, as {@code LiveBlocks} reads it). */
+    /**
+     * What a block of this code is to the ball (air is {@code NORMAL}, as {@code LiveBlocks} reads
+     * it; sand is {@code SLOW}, as it reads it on a generated course of golf algo 3 or later).
+     */
     public static BallPhysics.Surface surface(byte code) {
         return switch (code) {
             case ICE -> BallPhysics.Surface.ICE;
-            case SLOW -> BallPhysics.Surface.SLOW;
+            case SLOW, SAND, SAND_SLAB -> BallPhysics.Surface.SLOW;
             case SLIME -> BallPhysics.Surface.SLIME;
+            case WATER -> BallPhysics.Surface.WATER;
             default -> BallPhysics.Surface.NORMAL;
         };
+    }
+
+    /** Whether a block of this code is a bottom slab (stone or sand): its top is half a block up. */
+    public static boolean slab(byte code) {
+        return code == SLAB || code == SAND_SLAB;
     }
 
     /** Put a block (by its code) at (x, y, z); outside the box throws. */
@@ -141,9 +192,9 @@ public final class PlanBlocks implements BallPhysics.Blocks {
         return inside(x, y, z) ? cells[index(x, y, z)] : AIR;
     }
 
-    /** Whether (x, y, z) is solid. */
+    /** Whether (x, y, z) is solid (not air, a sign or water). */
     public boolean solid(int x, int y, int z) {
-        return get(x, y, z) != AIR;
+        return top(get(x, y, z)) != NONE;
     }
 
     /** The box this grid covers. */
@@ -159,13 +210,23 @@ public final class PlanBlocks implements BallPhysics.Blocks {
         if (dx < 0 || dy < 0 || dz < 0 || dx >= sizeX || dy >= sizeY || dz >= sizeZ) {
             return NONE;
         }
-        byte c = cells[(dy * sizeZ + dz) * sizeX + dx];
-        return c == AIR ? NONE : c == SLAB ? 0.5 : 1.0;
+        return top(cells[(dy * sizeZ + dz) * sizeX + dx]);
     }
 
     @Override
     public BallPhysics.Surface surface(int x, int y, int z) {
         return surface(get(x, y, z));
+    }
+
+    /**
+     * Whether a plan's blocks are played by Adventure Golf's rules ({@link GolfShot.Rules}), as the
+     * built layout of version 3 or later is: always, but for the frozen check of a layout of an older
+     * version ({@link #of(Box, List, List, boolean)}), which is played as that layout plays (it has no
+     * water or sandstone, but it has steps a ball can wobble at: {@link GolfShot.Rolling}).
+     */
+    @Override
+    public boolean adventure() {
+        return adventure;
     }
 
     private boolean inside(int x, int y, int z) {

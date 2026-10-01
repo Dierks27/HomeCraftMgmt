@@ -328,7 +328,8 @@ class GamesConfigTest {
                 "its round knobs are the pure rules' shipped ones");
         assertEquals(com.dierks.homecraft.games.arena.rules.ArenaScoring.Rewards.defaults(), ff.rewards(),
                 "and its rewards");
-        assertEquals("x 5376..5423, y 176..215, z 4352..4399", ff.box().describe(), "the box of §B.3.2");
+        assertEquals("x 6688..6735, y 176..215, z 8544..8591", ff.box().describe(),
+                "the box of §B.3.2 at its shipped spot (LAYOUT-SPEC §1.5)");
 
         for (Map.Entry<String, Object> junk : Map.<String, Object>of("race_night.season", "weekly",
                 "race_night.course", "Ice Boat!", "race_night.prizes", List.of(5, 3),

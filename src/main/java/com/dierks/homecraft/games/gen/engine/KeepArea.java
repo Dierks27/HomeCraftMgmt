@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.gen.engine;
 
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.Sight;
 import com.dierks.homecraft.games.gen.api.Slots;
 
 import java.util.ArrayList;
@@ -13,7 +14,10 @@ import java.util.List;
  * <p>Every plot is the same size: the largest half of any generator (Sky Rings', 128 x 176 x 320)
  * plus 16 blocks along x and z, so any course fits any plot and two kept courses side by side are
  * at least 16 blocks apart. A course is built at its plot's corner plus {@value #MARGIN} along x and
- * z. Plots run {@value #COLUMNS} to a row along +x, rows along +z, from {@code keep.area}.
+ * z. Plots run {@value #COLUMNS} to a row along +x, rows along +z, from {@code keep.area}, with
+ * {@code gap} empty blocks between neighbours ({@code keep.plot_gap}): 0 in 0.35 (the plots touch,
+ * so every kept course is in plain sight of its neighbours), {@link Sight#GAP} to keep each out of
+ * the others' sight (LAYOUT-SPEC §1.2).
  *
  * <p>Why a separate area and not the generator's halves: a kept course is hand-built territory
  * from then on (admins may edit it, the generator never writes into its plot again), so it must
@@ -24,11 +28,26 @@ import java.util.List;
  * @param y        ...
  * @param z        ...
  * @param maxPlots how many plots there are
+ * @param gap      empty blocks between two neighbouring plots, along x and along z (0 or more)
  */
-public record KeepArea(int x, int y, int z, int maxPlots) {
+public record KeepArea(int x, int y, int z, int maxPlots, int gap) {
 
     /** Plots in a row. */
     public static final int COLUMNS = 6;
+    /** The gap between plots in 0.35.0: none, the plots touch. */
+    public static final int LEGACY_GAP = 0;
+    /**
+     * The gap that keeps every kept course out of its neighbours' sight at every view distance
+     * ({@link Sight#GAP}).
+     */
+    public static final int SIGHT_GAP = Sight.GAP;
+    /**
+     * The gap when config names none ({@code keep.plot_gap}): {@link #SIGHT_GAP}. An install that
+     * kept courses in 0.35 has {@code plot_gap: 0} written, so its plots stay where they are.
+     */
+    public static final int DEFAULT_GAP = SIGHT_GAP;
+    /** The largest {@code keep.plot_gap} config takes; it is a multiple of {@link Slots#GAP_GRID}. */
+    public static final int MAX_GAP = 4096;
     /** A course stands this far in from its plot's edges along x and z. */
     public static final int MARGIN = 8;
     /** One plot's size. */
@@ -52,6 +71,17 @@ public record KeepArea(int x, int y, int z, int maxPlots) {
         PLOT_Z = sz + 2 * MARGIN;
     }
 
+    public KeepArea {
+        if (gap < 0) {
+            throw new IllegalArgumentException("a plot gap is 0 or more blocks: " + gap);
+        }
+    }
+
+    /** An area whose plots stand {@link #DEFAULT_GAP} apart. */
+    public KeepArea(int x, int y, int z, int maxPlots) {
+        this(x, y, z, maxPlots, DEFAULT_GAP);
+    }
+
     /** Plot {@code n} (1 to {@link #maxPlots}). */
     public Box plot(int n) {
         if (n < 1 || n > maxPlots) {
@@ -59,7 +89,16 @@ public record KeepArea(int x, int y, int z, int maxPlots) {
         }
         int col = (n - 1) % COLUMNS;
         int row = (n - 1) / COLUMNS;
-        return Box.sized(x + col * PLOT_X, y, z + row * PLOT_Z, PLOT_X, PLOT_Y, PLOT_Z);
+        return Box.sized(x + col * (PLOT_X + gap), y, z + row * (PLOT_Z + gap), PLOT_X, PLOT_Y, PLOT_Z);
+    }
+
+    /** Every plot, 1 to {@link #maxPlots}. */
+    public List<Box> plots() {
+        List<Box> out = new ArrayList<>();
+        for (int n = 1; n <= maxPlots; n++) {
+            out.add(plot(n));
+        }
+        return out;
     }
 
     /** Where a course of {@code def}'s size stands in plot {@code n}: its half's size, {@value #MARGIN} in. */
@@ -68,11 +107,11 @@ public record KeepArea(int x, int y, int z, int maxPlots) {
         return Box.sized(p.minX() + MARGIN, p.minY(), p.minZ() + MARGIN, def.sizeX(), def.sizeY(), def.sizeZ());
     }
 
-    /** Every plot together. */
+    /** Every plot together, the gaps between them included. */
     public Box area() {
         int rows = (maxPlots + COLUMNS - 1) / COLUMNS;
         int cols = Math.min(maxPlots, COLUMNS);
-        return Box.sized(x, y, z, cols * PLOT_X, PLOT_Y, rows * PLOT_Z);
+        return Box.sized(x, y, z, cols * PLOT_X + (cols - 1) * gap, PLOT_Y, rows * PLOT_Z + (rows - 1) * gap);
     }
 
     /**
@@ -102,8 +141,8 @@ public record KeepArea(int x, int y, int z, int maxPlots) {
         return null;
     }
 
-    /** "x 4096..4959, y 128..303, z 5376..6719" for admins. */
+    /** "x 1760..5503, y 128..303, z 7296..10367, plots 576 apart" for admins (the gap when there is one). */
     public String describe() {
-        return area().describe();
+        return area().describe() + (gap == 0 ? "" : ", plots " + gap + " apart");
     }
 }

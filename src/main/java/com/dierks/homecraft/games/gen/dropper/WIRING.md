@@ -42,8 +42,9 @@ The slot rows (§2) are still WP-D's: they come with their config rows and the p
   - Add `Def.dropper()`. `tierProblem` gives a dropper the mix rule `DropRules.mixProblem` (1-5 of
     E, M and H). `normalise` upper-cases a dropper's mix, as it does golf's.
   - `classicFor` maps a dropper to `fresh_classic_dropper`, and `classicByWord("dropper")` does too.
-  - The halves are 64 × 64 × 16 at x 5376, y 160, z 4096 / 4160 / 4224. That is inside the keep plot
-    size, so `KeepArea` doesn't move.
+  - The halves are 64 × 64 × 16 at x 7488 (half B at x 8128, 576 further), y 160, z 6768 / 7360 /
+    7952, in the east column of the layout (LAYOUT-SPEC §1.5; 0.35 had them at x 5376, z 4096 / 4160
+    / 4224). That is inside the keep plot size, so `KeepArea` doesn't move.
 - **`gen/api/CourseCode`**: add `EDROP` (`fresh_dropper_easy`) and `DROP` (`fresh_dropper`).
 - **`gen/api/GenCopy`**: the slot names and "This week's courses" lines.
 - **`gen/{DailyCourses, DailySettings}`** and `config.yml` (`games.fresh`):

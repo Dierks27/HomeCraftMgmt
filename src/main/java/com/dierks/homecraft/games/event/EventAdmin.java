@@ -289,7 +289,7 @@ final class EventAdmin implements GameAdmin {
         } else {
             tell(sender, "&f" + n.plan().id() + " &7on &f" + n.track().name() + " &7- " + n.phase().name().toLowerCase(
                     Locale.ROOT) + ", race " + Math.max(0, n.race()) + " of " + n.plan().races() + ", "
-                    + n.laps() + (n.laps() == 1 ? " lap" : " laps") + (n.plan().rules().fun() ? " (fun)" : ""));
+                    + EventCopy.laps(n.laps(), n.track().base()) + (n.plan().rules().fun() ? " (fun)" : ""));
             tell(sender, "&7Joining " + EventCopy.clock(n.plan().joinAt(), game.zone()) + ", start "
                     + EventCopy.clock(n.startsAt(), game.zone()) + ", " + n.joined().size() + " of " + n.maxRacers()
                     + " in, " + (n.started() >= 0 ? n.started() + " started race 1, " : "")

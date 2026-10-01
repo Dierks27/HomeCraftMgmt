@@ -1,8 +1,16 @@
 package com.dierks.homecraft.games.trial;
 
+import com.dierks.homecraft.games.event.EventCopy;
+import com.dierks.homecraft.games.gen.V2Fixtures;
 import com.dierks.homecraft.util.Text;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.title.Title;
+import org.bukkit.entity.Player;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Proxy;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -149,6 +157,108 @@ class WarmupTest {
         TrialRun test = new TrialRun(UUID.randomUUID(), COURSE, true, 0);
         assertFalse(Warmups.wants(COURSE.id(), test, on), "never on an admin's test run");
         assertFalse(Warmups.wants(COURSE.id(), here, withWarmup(0)), "never with warm-ups switched off");
+    }
+
+    // ---- CV final gate: a warm-up down a Mountain Run is runs, not laps -----------------------------
+
+    /**
+     * A Mountain Run is raced once, down from the top: its solo warm-up offers "free runs" and every go
+     * ends as a "Warm-up run", as Race Night's shared warm-up there says "Warm-up runs". The item NAMEs
+     * never named laps ("Warm up (3:00)", "Start timed run - ends the warm-up"), so they read as before.
+     */
+    @Test
+    void aWarmUpDownTheMountainRunSaysRuns() {
+        Course mountain = MountainRuns.medium();
+        assertTrue(EventCopy.downhill(mountain), "fixture: the Mountain Run is downhill, as Race Night reads it");
+        assertEquals("run", Warmup.lapWord(mountain), "one go down it is a run");
+        assertEquals("Warm-up: 3:00 of free runs. Nothing is timed or counted.",
+                Text.plain(Warmup.started(180, mountain)), "the warm-up's first line: free runs, not free laps");
+        assertEquals("Warm-up run: 0:42.10 (not counted)", Text.plain(Warmup.lap("0:42.10", mountain)),
+                "a go that reaches the finish: a warm-up run");
+        assertEquals("Warm-up run - not counted", Text.plain(Warmup.lapTitle(mountain)), "and its title");
+        assertEquals("Warm up (3:00)", Warmup.choice(180), "the choice's NAME is the same everywhere");
+        assertEquals("Start timed run - ends the warm-up", Text.plain(Warmup.TIMED_NAME), "and so is the kit item's");
+    }
+
+    /** An algo-2 loop, the same marks under the algo-2 planner, and hand-built courses read exactly as before. */
+    @Test
+    void aWarmUpOnALoopOrAHandBuiltCourseStillSaysLaps() {
+        List<V2Fixtures.Fixture> boats = V2Fixtures.boats();
+        assertFalse(boats.isEmpty(), "fixture: the algo-2 boat layouts");
+        for (V2Fixtures.Fixture f : boats) {
+            Course loop = f.trial().course().withGen(f.tag());
+            assertTrue(Laps.loop(loop), f + ": fixture: an algo-2 loop");
+            readsAs(loop, "lap", "an algo-2 loop (" + f + ")");
+        }
+        readsAs(MountainRuns.medium(MountainRuns.tag(2, 7)), "lap", "the same marks under the algo-2 planner");
+        readsAs(MountainRuns.medium(null), "lap", "the same marks hand-built");
+        readsAs(COURSE, "lap", "a hand-built parkour course");
+        readsAs(null, "lap", "no course");
+    }
+
+    /** What a warm-up on {@code c} says, with {@code word} for one go round it. */
+    private static void readsAs(Course c, String word, String what) {
+        assertEquals(word, Warmup.lapWord(c), what);
+        assertEquals("Warm-up: 3:00 of free " + word + "s. Nothing is timed or counted.",
+                Text.plain(Warmup.started(180, c)), what + ": the warm-up's first line, as always");
+        assertEquals("Warm-up " + word + ": 0:42.10 (not counted)", Text.plain(Warmup.lap("0:42.10", c)),
+                what + ": a lap's line, as always");
+        assertEquals("Warm-up " + word + " - not counted", Text.plain(Warmup.lapTitle(c)), what + ": its title");
+    }
+
+    /**
+     * Where a solo warm-up's go ends ({@link Warmups#lap}, the finish routed there): the line and the title
+     * say "run" down the Mountain Run and "lap" round an algo-2 loop.
+     */
+    @Test
+    void theFinishOfAWarmUpGoSaysRunDownTheMountainAndLapRoundALoop() {
+        Course loop = V2Fixtures.boats().get(0).trial().course().withGen(V2Fixtures.boats().get(0).tag());
+        assertEquals(List.of("Warm-up run - not counted"), finishWarmUpGo(MountainRuns.medium(), "Warm-up run: "),
+                "the Mountain Run: a warm-up run, in chat and on the title");
+        assertEquals(List.of("Warm-up lap - not counted"), finishWarmUpGo(loop, "Warm-up lap: "),
+                "an algo-2 loop: a warm-up lap, as always");
+    }
+
+    /** A solo warm-up on {@code c}, one go through its finish: the titles shown (its chat line starts {@code line}). */
+    private static List<String> finishWarmUpGo(Course c, String line) {
+        List<String> said = new ArrayList<>();
+        List<String> titles = new ArrayList<>();
+        Player p = (Player) Proxy.newProxyInstance(Player.class.getClassLoader(), new Class<?>[]{Player.class},
+                (proxy, m, a) -> {
+                    switch (m.getName()) {
+                        case "sendMessage" -> {
+                            if (a != null && a.length == 1 && a[0] instanceof Component t) {
+                                said.add(plain(t));
+                            }
+                            return null;
+                        }
+                        case "showTitle" -> {
+                            if (a != null && a.length == 1 && a[0] instanceof Title t) {
+                                titles.add(plain(t.subtitle()));
+                            }
+                            return null;
+                        }
+                        case "hashCode" -> {
+                            return System.identityHashCode(proxy);
+                        }
+                        case "equals" -> {
+                            return proxy == a[0];
+                        }
+                        default -> {
+                            return m.getReturnType() == boolean.class ? false : null;
+                        }
+                    }
+                });
+        TrialRun run = new TrialRun(UUID.randomUUID(), c, false, TimeTrials.COUNTDOWN_TICKS + 1);
+        assertTrue(Warmup.begin(run, 1_000, 180, c.start().point(), 0L), "fixture: warming up on " + c.name());
+        new Warmups(null).lap(p, run, 42_100_000_000L);
+        assertEquals(1, said.size(), c.name() + ": one line: " + said);
+        assertTrue(said.get(0).startsWith(line), c.name() + ": " + said.get(0));
+        return titles;
+    }
+
+    private static String plain(Component c) {
+        return LegacyComponentSerializer.legacySection().serialize(c).replaceAll("\u00a7.", "");
     }
 
     @Test

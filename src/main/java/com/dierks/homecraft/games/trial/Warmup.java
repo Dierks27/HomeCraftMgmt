@@ -1,5 +1,7 @@
 package com.dierks.homecraft.games.trial;
 
+import com.dierks.homecraft.games.event.EventCopy;
+
 /**
  * The warm-up before a counted run (owner decision D3), its words and its clock, pure and tested.
  *
@@ -15,7 +17,8 @@ package com.dierks.homecraft.games.trial;
  * <p>A race has a shared warm-up instead ({@link RaceLink#warmupUntil()}), with "Ready" in place of
  * "Start timed run": the coordinator sends everyone to the grid together.
  *
- * <p>The words carry the key facts in item NAMES (Bedrock shows no lore without a tap and hold).
+ * <p>The words carry the key facts in item NAMES (Bedrock shows no lore without a tap and hold). On
+ * a Mountain Run, raced down once from the top, a go round is a "run", not a "lap" ({@link #lapWord}).
  */
 public final class Warmup {
 
@@ -72,9 +75,12 @@ public final class Warmup {
     /** The action bar once a racer tapped Ready. */
     public static final String BAR_READY = "&aReady! &7Warm up as much as you like - not counted";
 
-    /** What a player reads when a warm-up starts. */
-    public static String started(int seconds) {
-        return "&bWarm-up: " + clock(seconds) + " of free laps. &7Nothing is timed or counted.";
+    /**
+     * What a player reads when a warm-up on {@code course} starts: "Warm-up: 3:00 of free laps.", or
+     * "free runs" on a Mountain Run ({@link #lapsWord}).
+     */
+    public static String started(int seconds, Course course) {
+        return "&bWarm-up: " + clock(seconds) + " of free " + lapsWord(course) + ". &7Nothing is timed or counted.";
     }
 
     /** How to end a solo warm-up early. */
@@ -82,9 +88,29 @@ public final class Warmup {
     /** How to end a race warm-up early. */
     public static final String HOW_TO_READY = "&7Tap &aReady &7when you're set - the race starts when everyone is.";
 
-    /** A lap finished in the warm-up. */
-    public static String lap(String time) {
-        return "&7Warm-up lap: &f" + time + " &8(not counted)";
+    /** A lap finished in a warm-up on {@code course}: "Warm-up lap: 0:42.10 (not counted)" ("Warm-up run" downhill). */
+    public static String lap(String time, Course course) {
+        return "&7Warm-up " + lapWord(course) + ": &f" + time + " &8(not counted)";
+    }
+
+    /** The title's small line as a warm-up lap on {@code course} ends: "Warm-up lap - not counted" ("Warm-up run"). */
+    public static String lapTitle(Course course) {
+        return "&7Warm-up " + lapWord(course) + " - not counted";
+    }
+
+    /**
+     * What one go round {@code course} is called in a warm-up: "lap", or "run" on a Mountain Run, which
+     * is raced once, down from the top, and never comes back round (CV final gate; the same test as Race
+     * Night's "Warm-up runs", {@link EventCopy#downhill}). A loop, an algo-2 layout and a hand-built
+     * course say "lap", as they always did.
+     */
+    public static String lapWord(Course course) {
+        return EventCopy.downhill(course) ? "run" : "lap";
+    }
+
+    /** {@link #lapWord}, more than one: "laps", or "runs" on a Mountain Run. */
+    public static String lapsWord(Course course) {
+        return lapWord(course) + "s";
     }
 
     /** A warm-up ended early because the server restarts soon: "The server restarts at 4:00 PM...". */

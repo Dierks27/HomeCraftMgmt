@@ -103,12 +103,53 @@ public abstract class Menu implements InventoryHolder {
 
     /**
      * Run this menu's close handling and close it, for when no close event will reach
-     * {@link MenuListener} (the plugin is shutting down). Running it twice is harmless: a menu
-     * that hands items back empties itself as it does.
+     * {@link MenuListener} (the plugin is shutting down), or before one would come too late
+     * (Multiverse-Inventories saves every player's things as it disables, before this plugin does).
+     *
+     * <p>Once per open, however many ways a shutdown reaches it: nothing happens when the player
+     * isn't looking at this menu any more (an earlier close already ran it), and the close event
+     * the close itself fires, while {@link MenuListener} still hears them, is this same close, not
+     * a second one. A menu that hands items back also empties itself as it does.
      */
     public void closeNow(org.bukkit.entity.Player player) {
+        if (!isOpenFor(player)) {
+            return;
+        }
         handleClose(player);
-        player.closeInventory();
+        closingNow = player.getUniqueId();
+        try {
+            player.closeInventory();
+        } finally {
+            closingNow = null;
+        }
+    }
+
+    /** The player {@link #closeNow} is closing this menu for, while it does, or {@code null}. */
+    private java.util.UUID closingNow;
+
+    /** A close event ({@link MenuListener}): the close handling, unless {@link #closeNow} is running it already. */
+    void closed(org.bukkit.entity.Player player) {
+        if (!player.getUniqueId().equals(closingNow)) {
+            handleClose(player);
+        }
+    }
+
+    /**
+     * Close the menu each of {@code players} is looking at, if it is one of these
+     * ({@link #closeNow}): at a shutdown, so a menu holding a player's items (the Card trade-in
+     * tray) hands them back while the player's inventory is still going to be saved. A menu whose
+     * close throws is logged and the rest still close.
+     */
+    public static void closeAll(Iterable<? extends org.bukkit.entity.Player> players, java.util.logging.Logger log) {
+        for (org.bukkit.entity.Player p : players) {
+            try {
+                if (p.getOpenInventory().getTopInventory().getHolder(false) instanceof Menu menu) {
+                    menu.closeNow(p);
+                }
+            } catch (RuntimeException e) {
+                log.warning("Could not close " + p.getName() + "'s menu on shutdown: " + e.getMessage());
+            }
+        }
     }
 
     void handleClick(InventoryClickEvent event) {

@@ -1892,9 +1892,9 @@ games:
     # Tokens the server adds to a pool in which 2 or more set a Cup time (0-100). Never with one.
     server_topup: 10
   # ---- fresh ----
-  # Fresh Courses: parkour, Sky Rings, mini golf and droppers the plugin builds itself - a new set every
-  # week (or every day, or every few days: cadence), the same for everyone. Nothing to build by hand.
-  # Check with /hcm games gen status.
+  # Fresh Courses: parkour, Sky Rings, Adventure Golf, droppers and the Ice Boat Mountain Run the plugin
+  # builds itself - a new set every week (or every day, or every few days: cadence), the same for
+  # everyone. Nothing to build by hand. Check with /hcm games gen status.
   fresh:
     # Ships OFF. true + /hcm reload and the first set is up in about two minutes.
     enabled: false
@@ -2011,6 +2011,10 @@ games:
     # The droppers ship ON (they run only while Fresh Courses is on): glass shafts with water pools at
     # the bottom, one level per letter of their mix (at most 5). A dropper switched on later is built
     # with the next set (or /hcm games gen reroll).
+    # Golf is Adventure Golf: sand, trees, hills, and ponds in play on M and H holes only (never on
+    # Tiny Golf, whatever its mix). fresh_boat (Ice Boat) is the Mountain Run, a downhill race with 4-6
+    # drops; it ships OFF: ride the boat test strip and a preview first (README "Ice Boat: the
+    # Mountain Run"). /hcm games gen preview and test work on it while it is off.
     slots:
       fresh_parkour_easy: {enabled: true, tier: easy, origin: [6080, 160, 6592]}
       fresh_parkour: {enabled: true, tier: medium, origin: [6080, 160, 7232]}
@@ -2023,7 +2027,8 @@ games:
       fresh_dropper: {enabled: true, mix: EEMMH, origin: [7488, 160, 7360]}
     # Every set that was ever up is archived with its whole layout, so a past course can be brought
     # back exactly (/hcm games gen recall) or kept for good (/hcm games gen keep), and its board with it.
-    # A course is a few KB: a year of weekly sets for every course is well under 5 MB.
+    # A course is a few KB (a Mountain Run about 50 KB): a year of weekly sets for every course is
+    # about 6 MB with Ice Boat on.
     archive:
       # Days an old set stays in the archive after it was replaced; 0 = forever. A kept or
       # recalled course's set is never removed.
@@ -2067,9 +2072,10 @@ games:
     schedule: ["FRI 19:00"]
     # auto = take turns among the tracks it can race on; or a boat course's id.
     course: auto
-    # Races a night, 1-5 (more than 1 needs a track with a viewing stand).
+    # Races a night, 1-5 (more than 1 needs a track with a viewing stand). The Ice Boat Mountain Run is
+    # a short downhill sprint ("3 downhill races"): 5, with finish_window_seconds: 90, suits family nights.
     races: 3
-    # Laps a race: 0 = the course's own; 1-5 on a loop track.
+    # Laps a race: 0 = the course's own; 1-5 on a loop track. The Mountain Run is one run, no laps.
     laps: 0
     # The heads-up in chat this many minutes before the start (0 = none).
     announce_minutes: 30
@@ -2087,8 +2093,9 @@ games:
     max_race_minutes: 4
     # Seconds on the stand between races.
     break_seconds: 20
-    # Free warm-up laps before the grid, in seconds (0 = none). Racers can tap Ready to skip it; the
-    # grid waits for the time to run out or for everyone to be ready.
+    # Free warm-up laps before the grid (warm-up runs from the top on the Mountain Run), in seconds
+    # (0 = none). Racers can tap Ready to skip it; the grid waits for the time to run out or for
+    # everyone to be ready.
     warmup_seconds: 180
     # Points by place in each race.
     points: [10, 8, 6, 5, 4, 3, 2]

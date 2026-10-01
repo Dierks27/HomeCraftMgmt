@@ -1513,8 +1513,9 @@ glass-roofed tunnel. Then, on a Java client and on a Bedrock one:
 5. *Preview:* the Ice Cave: no head bump, the camera is fine on Bedrock, and it is bright enough.
 6. *Preview:* on Easy and Hard there is no "Final drop!" title; on a Medium run with the FINAL DROP!
    sign, the title shows at the checkpoint before it.
-7. *Live:* the automatic grid: 12 spots in two rows in the pit (`/hcm games event grid fresh_boat
-   show`), boats held until Go.
+7. *Live:* the automatic grid in the pit (`/hcm games event grid fresh_boat show`): the layout
+   proves 12 spots, and Race Night seats up to `race_night.max_racers` of them (8 by default);
+   boats are held until Go.
 8. *Live:* 4-8 boats over the first drop and the Final Drop: nobody leaves the track.
 9. *Live:* watch from the stand: you see every drop and the finish, and the trees stay below eye
    level.

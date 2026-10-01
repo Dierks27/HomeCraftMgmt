@@ -719,8 +719,9 @@ timed run". Going straight is the run as it always was. A warm-up takes you to t
 you run the course freely, as many laps as you like: checkpoints guide you and Back to checkpoint
 works, but nothing is timed for the record, recorded, paid, or counted for the Weekly Cup. The
 action bar reads "Warm-up 2:14 left - not counted", and each lap says "Warm-up lap: 0:48.2 (not
-counted)" and goes round again from the start (on a one-way course such as the Ice Boat's Mountain
-Run, each lap is a run from the top). When the time is up, or you tap the **Start timed run** kit
+counted)" and goes round again from the start. On a one-way course such as the Ice Boat's Mountain
+Run each go is a run from the top, and the words say so: "3:00 of free runs" and "Warm-up run:
+0:42.1 (not counted)". When the time is up, or you tap the **Start timed run** kit
 item, you go back to the start and the normal 3-2-1 begins; that run is timed and counted as
 usual. A run gets one warm-up, and a restart due soon (the restart hold) ends it at once. An admin's
 test run never warms up, and the Dropper has its own practice drop instead.
@@ -2162,7 +2163,10 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
   season points, `races_done`). A stop, a reload that closes Race Night, or switching it (or Time
   Trials) off while racers are at the track calls the night off at once: the races done stand, and
   prizes are paid (or owed) if it held a prize slot. A crash does the same at the next boot. A night
-  still in its join window resumes after a restart if its start is at least 2 minutes away. Prizes
+  still in its join window resumes after a restart if its start is at least 2 minutes away. If its
+  track isn't ready yet (the Games world still loading, or a Fresh track before its boot check), it
+  waits (`/hcm games status` shows "resuming · ...") and is called off only once its start is 2
+  minutes away. Prizes
   can never be paid twice (the payment's ref is the night's id). A night called off before any race
   was stored gives its prize night back to the week. An admin's `start ... in M` is saved at once, so
   a restart before its window keeps it. `/hcm reload` while racers are at the track says first that a

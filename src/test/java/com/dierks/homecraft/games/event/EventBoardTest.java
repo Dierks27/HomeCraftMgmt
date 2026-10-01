@@ -44,6 +44,18 @@ class EventBoardTest {
     }
 
     @Test
+    void aMountainRunsWarmUpIsRunsOnTheSignAndTheScreen() {
+        EventBoard.View downhill = new EventBoard.View(EventBoard.Shows.WARMUP, NOW, START, "Ice Boat", 3, 8, 0, 3,
+                List.of(), CHICAGO, true);
+        assertEquals(List.of("RACE NIGHT", "Warm-up runs", "3 racers", "Ice Boat"), EventBoard.sign(downhill),
+                "CV final gate: a Mountain Run's warm-up is a run down from the top, not laps");
+        assertEquals("&6&lRace Night &7- warm-up runs", EventBoard.screen(downhill).get(0), "and on the screen");
+        EventBoard.View loop = view(EventBoard.Shows.WARMUP, List.of());
+        assertEquals("Warm-up laps", EventBoard.sign(loop).get(1), "any other track as before");
+        assertEquals("&6&lRace Night &7- warm-up laps", EventBoard.screen(loop).get(0), "on the screen too");
+    }
+
+    @Test
     void everySignLineIsShortPlainAscii() {
         List<EventBoard.Line> long_ = List.of(new EventBoard.Line(1, "Supercalifragilistic", 108),
                 new EventBoard.Line(2, "Émile★", 96), new EventBoard.Line(3, null, 0));

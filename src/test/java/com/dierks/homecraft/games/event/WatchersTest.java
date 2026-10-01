@@ -49,6 +49,19 @@ class WatchersTest {
     }
 
     @Test
+    void aMountainRunsWarmUpIsRunsOnTheWatchersBarAndTheTile() {
+        long fri7 = 1_790_967_600_000L;
+        assertEquals("&bRace Night &7· warm-up runs · 5 racers", Watchers.bar(EventMachine.Phase.WARMUP, 0, 3, null, 5,
+                true), "CV final gate: a run down the mountain, not laps");
+        assertEquals("&bRace Night &7· warm-up laps · 5 racers", Watchers.bar(EventMachine.Phase.WARMUP, 0, 3, null, 5),
+                "any other track as before");
+        assertEquals("&cRace Night &7- warm-up runs",
+                EventCopy.tileName(EventMachine.Phase.WARMUP, fri7, 5, 8, 0, 3, ZoneOffset.UTC, true), "the tile");
+        assertEquals("&cRace Night &7- warm-up laps",
+                EventCopy.tileName(EventMachine.Phase.WARMUP, fri7, 5, 8, 0, 3, ZoneOffset.UTC), "as before");
+    }
+
+    @Test
     void theTileNameCarriesTheState() {
         long fri7 = 1_790_967_600_000L;
         assertEquals("&6Race Night &7- Fri 7:00 PM",

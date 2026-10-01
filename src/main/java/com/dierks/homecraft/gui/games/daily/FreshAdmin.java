@@ -32,6 +32,10 @@ import java.util.function.LongConsumer;
  * their Sure screen showed (the preview's seed, and the pick still to come or {@code none}) and the
  * command acts on nothing else (#1); they aren't offered while the slot is being built. A pick a
  * config or schedule change dropped is said on the item, the header and its lore (#3).
+ *
+ * <p>CV final gate: while the course is switched off (Ice Boat ships off) its previews are built and
+ * tried before it is switched on, so Preview, Preview next and Try (or Walk) stay, and Use it now and
+ * Use it next week aren't offered (their commands refuse them while it is off).
  */
 public final class FreshAdmin {
 
@@ -246,7 +250,8 @@ public final class FreshAdmin {
             // Round 2, G2 #1: while the slot is being built (the admin's own new preview may still be
             // planning, with this one still shown) there is nothing to promote or choose yet: its Sure
             // screen would sit open over a preview about to be replaced. The header NAME says why.
-            if (!t.previewNext() && !t.busy()) {
+            // CV final gate: while the course is off its preview is only tried (the commands refuse the rest)
+            if (!t.previewNext() && !t.busy() && t.on()) {
                 // the words carry the preview it showed: the command refuses once another stands
                 out.add(new Tool(Kind.PROMOTE, 15, "&6Admin: Use it now (promote)", lines(List.of(
                         "&7The preview becomes this set's course,", "&7on a fresh board."), finishFirst,
@@ -265,7 +270,7 @@ public final class FreshAdmin {
                 choose.add("&cReplaces your pick: seed " + GenSeed.hex(waiting) + ".");
             }
             String over = waiting == null ? "none" : GenSeed.hex(waiting);
-            if (!t.busy()) {
+            if (!t.busy() && t.on()) {
                 out.add(new Tool(Kind.CHOOSE, 16, "&6Admin: Use it " + nextTime(n)
                         + (replaces ? " instead of your pick" : "") + " (choose)",
                         lines(choose, List.of(), "/hcm games gen choose " + id + " " + seed + " confirm"),

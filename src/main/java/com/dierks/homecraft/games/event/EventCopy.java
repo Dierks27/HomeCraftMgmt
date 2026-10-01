@@ -132,6 +132,22 @@ public final class EventCopy {
         return downhill(track) ? "a downhill sprint" : laps + (laps == 1 ? " lap" : " laps");
     }
 
+    /**
+     * The grid title's laps, after the track's name: {@code " · 2 laps"}, {@code " · 1 lap"}, or nothing on
+     * a Mountain Run (CV final gate: a sprint has no laps to count, as its live bar and tile say).
+     */
+    public static String gridLaps(int laps, boolean downhill) {
+        return downhill ? "" : " · " + laps + (laps == 1 ? " lap" : " laps");
+    }
+
+    /**
+     * What the shared warm-up is called: "Warm-up runs" on a Mountain Run (a run down from the top, CV
+     * final gate), "Warm-up laps" on anything else, as always.
+     */
+    public static String warmup(boolean downhill) {
+        return downhill ? "Warm-up runs" : "Warm-up laps";
+    }
+
     // ---- the season -----------------------------------------------------------------------------
 
     /** The season key at {@code millis}: {@code 2026-10}. */
@@ -199,13 +215,19 @@ public final class EventCopy {
      */
     public static String tileName(EventMachine.Phase phase, long startsAt, int racers, int maxRacers, int race,
                                   int races, ZoneId zone) {
+        return tileName(phase, startsAt, racers, maxRacers, race, races, zone, false);
+    }
+
+    /** The same, on a night whose track is a Mountain Run when {@code downhill}: its warm-up is "warm-up runs". */
+    public static String tileName(EventMachine.Phase phase, long startsAt, int racers, int maxRacers, int race,
+                                  int races, ZoneId zone, boolean downhill) {
         if (phase == null) {
             return "&6Race Night &7- no race set";
         }
         return switch (phase) {
             case SCHEDULED -> "&6Race Night &7- " + when(startsAt, zone);
             case OPEN -> "&aRace Night &7- join now! " + racers + "/" + maxRacers;
-            case WARMUP -> "&cRace Night &7- warm-up laps";
+            case WARMUP -> "&cRace Night &7- " + warmup(downhill).toLowerCase(Locale.ROOT);
             case GRID, RACING, BREAK -> "&cRace Night &7- racing (race " + Math.max(1, race) + " of " + races + ")";
             case SETTLING, DONE -> "&6Race Night &7- results";
             case CALLED_OFF -> "&7Race Night &7- called off";

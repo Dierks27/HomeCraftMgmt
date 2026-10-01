@@ -173,7 +173,7 @@ public final class RaceNight implements Game {
         NightRunner n = night;
         if (n != null) {
             return EventCopy.tileName(n.phase(), n.startsAt(), n.joined().size(), n.maxRacers(), n.race(),
-                    n.plan().races(), zone());
+                    n.plan().races(), zone(), EventCopy.downhill(n.track().base()));
         }
         EventSchedule.Occurrence next = next();
         return next == null ? "&6Race Night &7- no race set" : "&6Race Night &7- " + EventCopy.when(next.startsAt(), zone());
@@ -856,7 +856,8 @@ public final class RaceNight implements Game {
                 case WATCH -> {
                     NightRunner shown = n != null ? n : last;
                     bars.show(id, shown == null ? "&bRace Night" : Watchers.bar(shown.phase(), shown.race(),
-                            shown.plan().races(), shown.leader(), shown.joined().size()), 1f, RaceBars.Tone.WATCH);
+                            shown.plan().races(), shown.leader(), shown.joined().size(),
+                            EventCopy.downhill(shown.track().base())), 1f, RaceBars.Tone.WATCH);
                 }
                 case JOIN -> {
                     long window = Math.max(1, n.startsAt() - n.plan().joinAt());
@@ -979,7 +980,8 @@ public final class RaceNight implements Game {
                 case OPEN -> new EventBoard.View(EventBoard.Shows.OPEN, now, n.startsAt(), track, n.joined().size(),
                         n.maxRacers(), 0, n.plan().races(), List.of(), zone);
                 case WARMUP -> new EventBoard.View(EventBoard.Shows.WARMUP, now, n.startsAt(), track,
-                        n.joined().size(), n.maxRacers(), 0, n.plan().races(), List.of(), zone);
+                        n.joined().size(), n.maxRacers(), 0, n.plan().races(), List.of(), zone,
+                        EventCopy.downhill(n.track().base())); // CV final gate: "Warm-up runs" on a Mountain Run
                 default -> new EventBoard.View(n.phase().over() ? EventBoard.Shows.RESULTS : EventBoard.Shows.RACING,
                         now, n.startsAt(), track, n.joined().size(), n.maxRacers(), Math.max(1, n.race()),
                         n.plan().races(), lines(n), zone);
@@ -1127,7 +1129,7 @@ public final class RaceNight implements Game {
             state = switch (n.phase()) {
                 case SCHEDULED -> "Joining opens at " + opensAt + ".";
                 case OPEN -> "Joining is open: " + EventCopy.racers(racers) + " in so far.";
-                case WARMUP -> "Warm-up laps are on.";
+                case WARMUP -> EventCopy.warmup(downhill) + " are on.";
                 case GRID, RACING -> "Race " + Math.max(1, n.race()) + " of " + races + " is on.";
                 case BREAK -> "A break after race " + n.race() + " of " + races + ".";
                 default -> null;

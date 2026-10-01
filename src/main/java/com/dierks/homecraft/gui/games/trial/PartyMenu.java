@@ -142,7 +142,8 @@ public final class PartyMenu extends GameMenu {
             String warmName = !trials.settings().warmupsOn() ? "&7Warm up first: off on this server"
                     : warm ? "&bWarm up first: on &7(" + Warmup.clock(seconds) + ")" : "&7Warm up first: off";
             set(42, Menus.icon(Material.CLOCK, warmName, host ? "&7Click to change." : "&7The host chooses.",
-                    "&7Free laps before the grid,", "&7never timed or counted."), host ? e -> {
+                    "&7Free " + Warmup.lapsWord(trials.course(lobby.course())) + " before the grid,", // "runs" downhill
+                    "&7never timed or counted."), host ? e -> {
                 party.toggleWarmup(viewer);
                 refresh();
             } : null);

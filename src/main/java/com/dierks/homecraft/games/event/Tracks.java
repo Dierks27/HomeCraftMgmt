@@ -48,11 +48,13 @@ final class Tracks {
      * @param track   the track (its grid, pole first, and its stand or {@code null}), or {@code null}
      * @param races   races it can hold (1 without a stand)
      * @param problem why it can't be raced, or {@code null}
+     * @param loading its chunks are on their way ({@link #loading})
+     * @param notYet  it isn't ready yet, though nothing is known to be wrong with it ({@link #notYet})
      */
-    record Found(NightRunner.Track track, int races, String problem, boolean loading) {
+    record Found(NightRunner.Track track, int races, String problem, boolean loading, boolean notYet) {
 
         Found(NightRunner.Track track, int races, String problem) {
-            this(track, races, problem, false);
+            this(track, races, problem, false, false);
         }
 
         static Found no(String why) {
@@ -64,7 +66,18 @@ final class Tracks {
          * Not a problem with the track: ask again in a moment.
          */
         static Found loading(String name) {
-            return new Found(null, 0, name + "'s blocks are still loading - try again in a moment", true);
+            return new Found(null, 0, name + "'s blocks are still loading - try again in a moment", true, false);
+        }
+
+        /**
+         * The track can't be raced yet, though nothing is known to be wrong with it: its world isn't
+         * loaded, or its course isn't open. Right after a start both are normal for a while: this plugin
+         * loads before Multiverse-Core (for the void world), so the Games world comes up after it, and a
+         * Fresh track's gate opens only once the boot heal has checked its blocks. A night a restart left
+         * open waits for it ({@link RaceNight#recover}); everything else reads it as a problem, as before.
+         */
+        static Found notYet(String why) {
+            return new Found(null, 0, why, false, true);
         }
     }
 
@@ -165,7 +178,8 @@ final class Tracks {
         Course c = t.openCourse(courseId);
         if (c == null) {
             Course any = t.course(courseId);
-            return Found.no(any == null ? "there's no course called " + courseId : any.name() + " isn't open right now");
+            return any == null ? Found.no("there's no course called " + courseId)
+                    : Found.notYet(any.name() + " isn't open right now"); // a Fresh track until its blocks are checked
         }
         if (c.kind() != TrialKind.BOAT) {
             return Found.no(c.name() + " isn't a boat course");
@@ -173,6 +187,10 @@ final class Tracks {
         Live blocks = new Live(server, c.world(), wait == null);
         List<Course.Spot> grid = grid(c, maxRacers, null, blocks);
         Point stand = stand(c, blocks);
+        if (blocks.looked && blocks.world == null) {
+            // its blocks were needed and its world isn't up (yet): not "a grid of 0", which reads as a broken track
+            return Found.notYet("the world " + c.world() + " isn't loaded");
+        }
         if (blocks.loading()) {
             // round 2, G2 #4: what was read isn't the track yet; its chunks come in off the main thread,
             // and the caller reads it again the moment they are in (round 3), not when it next happens to ask

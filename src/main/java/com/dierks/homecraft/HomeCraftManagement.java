@@ -538,16 +538,10 @@ public final class HomeCraftManagement extends JavaPlugin {
     public void onDisable() {
         // Paper skips a disabled plugin's listeners, so MenuListener never sees the close events
         // that follow a shutdown. A menu holding a player's items (the Card trade-in tray) must
-        // hand them back now, while the player's inventory is still going to be saved.
-        for (org.bukkit.entity.Player p : getServer().getOnlinePlayers()) {
-            try {
-                if (p.getOpenInventory().getTopInventory().getHolder(false) instanceof com.dierks.homecraft.gui.Menu menu) {
-                    menu.closeNow(p);
-                }
-            } catch (RuntimeException e) {
-                getLogger().warning("Could not close " + p.getName() + "'s menu on shutdown: " + e.getMessage());
-            }
-        }
+        // hand them back now, while the player's inventory is still going to be saved. With
+        // Multiverse-Inventories, which disables (and saves) before this plugin, the recovery
+        // listener has closed them already, at its PluginDisableEvent: a menu closes once.
+        com.dierks.homecraft.gui.Menu.closeAll(getServer().getOnlinePlayers(), getLogger());
         if (games != null) {
             // Synchronously, while the tokens and the database are still here: no task can run now,
             // so world sessions restore in place and OPEN rounds wait for the next start.

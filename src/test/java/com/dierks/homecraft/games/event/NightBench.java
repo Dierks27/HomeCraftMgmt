@@ -24,7 +24,7 @@ public final class NightBench {
     private NightBench() {
     }
 
-    /** What a boot does ({@code RaceNight.start}'s {@code recover()}): over {@code dao}. */
+    /** What a boot does (the {@code recover()} of RaceNight's first tick, once the worlds are up): over {@code dao}. */
     public static void recover(RaceNight night, EventDao dao) {
         night.dao(dao);
         night.recover();

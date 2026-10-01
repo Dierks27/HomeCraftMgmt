@@ -58,7 +58,8 @@ class DownhillValidatorTest {
             assertTrue(p.ops().size() > 5_000 && p.ops().size() <= DownhillValidator.MAX_OPS,
                     tier + ": a real-sized plan (" + p.ops().size() + " blocks) under the cap");
             Course c = HandRun.course(p);
-            assertEquals(8, c.checkpoints().size(), tier + ": two checkpoints round each of the four drops");
+            assertEquals(9, c.checkpoints().size(), tier + ": two checkpoints round each of the four drops, and one"
+                    + " round the square corner before the Final Drop's");
             RaceGrid.Grid g = RaceGrid.plan(RaceGrid.path(c), c.start().y(), new PlanSurface(p), 12);
             assertEquals(12, g.size(), tier + ": the live grid seats twelve on the plan's own blocks");
             assertEquals(RaceGrid.Mode.DOUBLE, g.mode(), tier + ": in rows of two");
@@ -367,8 +368,13 @@ class DownhillValidatorTest {
     void checkpointsOnSandUnderARoofOrTooCloseToADropAreRefused() {
         HandRun easy = HandRun.easy();
         Plan p = easy.plan();
-        caught(HandRun.withCheckpoint(p, 3, HandRun.mark(110.5, 118.5, easy.after(1), easy.r())), "easy",
-                "is on sand", "a reset lands on ice");
+        caught(HandRun.withCheckpoint(p, 3, HandRun.mark(110.5, 120.5, easy.after(1), easy.r())), "easy",
+                "is on sand", "a reset lands on ice: the kerb is a block from its middle");
+        // review CV gate: a bend's run-off or kerb at the rim of a sphere is fine, its middle (where a reset
+        // puts the boat down, 2.5 round) on ice: on hard every bend has sand, and legs past a piece need them
+        List<String> rim = DownhillValidator.problems(
+                HandRun.withCheckpoint(p, 3, HandRun.mark(110.5, 118.5, easy.after(1), easy.r())), "easy");
+        assertFalse(says(rim, "is on sand"), "the kerb 3 from its middle, at the sphere's rim: " + rim);
         caught(HandRun.withCheckpoint(p, 4, HandRun.mark(25.5, 118.5, easy.after(2), easy.r())), "easy",
                 "under a roof or trees", "not in the cave");
         HandRun hard = HandRun.hard();
@@ -413,6 +419,49 @@ class DownhillValidatorTest {
         Course g = c.withCheckpoints(first);
         caught(HandRun.withCourse(p, g.withMinSeconds(DownhillValidator.minSeconds(g)), 60_000), "easy",
                 "at most 60.0", "no leg longer than 60");
+    }
+
+    @Test
+    void aLegWithNoDropLongerThan60AlongTheTrackIsRefusedThoughItIsShortAcross() {
+        // Review CV gate: hard legs ran up to 178 along the track (29 across the ground) past a sand pit,
+        // a split and the cave, so a reset sent a kid far back. Checkpoint 1 moved back to x 64 is 57
+        // across the ground from checkpoint 2 round the corner, and about 64 along the track.
+        HandRun run = HandRun.easy();
+        Plan p = HandRun.withCheckpoint(run.plan(), 0, HandRun.mark(64.5, 10.5, run.after(0), run.rPit()));
+        Course c = HandRun.course(p);
+        Course.Mark a = c.checkpoints().get(0);
+        Course.Mark b = c.checkpoints().get(1);
+        assertTrue(Math.hypot(b.x() - a.x(), b.z() - a.z()) < DownhillValidator.MAX_LEG,
+                "fixture: under 60 across the ground, so only the new rule can catch it");
+        List<String> problems = DownhillValidator.problems(p, "easy");
+        assertTrue(says(problems, "checkpoint 1 and checkpoint 2 are 6") && says(problems, "apart along the track with no"
+                + " drop between; at most 60.0"), "at most 60 along the track with no drop between: " + problems);
+        assertEquals(1, problems.size(), "and that is all that is wrong with it: " + problems);
+    }
+
+    @Test
+    void aResetThatWouldFaceOffItsLaneIsRefused() {
+        // Review CV gate: a reset (Back to checkpoint, a Bedrock sneak, a stuck boat) turns the boat toward
+        // the next target (TimeTrials.backTo), and a hard seed's faced 146 degrees off its lane, back up the
+        // track. Without the checkpoint just round the square corner onto the inner ring, a reset at the
+        // one on the leg up -z faces the Final Drop's checkpoint 61 degrees off that leg.
+        Plan p = HandRun.easy().plan();
+        Course c = HandRun.course(p);
+        List<Course.Mark> fewer = new ArrayList<>(c.checkpoints());
+        fewer.remove(7);
+        Course f = c.withCheckpoints(fewer);
+        List<String> problems = DownhillValidator.problems(
+                HandRun.withCourse(p, f.withMinSeconds(DownhillValidator.minSeconds(f)), 60_000), "easy");
+        assertTrue(says(problems, "checkpoint 7's reset faces 60.8 degrees off the lane (toward the next target); at most"
+                + " 60.0"), "a reset faces within 60 degrees of its lane: " + problems);
+        assertEquals(1, problems.size(), "and that is all that is wrong with it: " + problems);
+        // the first two swapped: a reset at the one down the leg along +z faces back round the corner
+        List<Course.Mark> swapped = new ArrayList<>(c.checkpoints());
+        swapped.set(0, c.checkpoints().get(1));
+        swapped.set(1, c.checkpoints().get(0));
+        Course g = c.withCheckpoints(swapped);
+        caught(HandRun.withCourse(p, g.withMinSeconds(DownhillValidator.minSeconds(g)), 60_000), "easy",
+                "checkpoint 1's reset faces 114.1 degrees off the lane", "a reset facing back up the track");
     }
 
     @Test

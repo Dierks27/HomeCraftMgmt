@@ -33,10 +33,11 @@ import java.util.function.Predicate;
  * finish at z 64.5 (26.5 from the stand's edge), 14 of run-out, a sand paddock and the end wall.
  * Easy drops 1, 1, 1, 1 (a fall of 4); medium 1, 2, 1, 1 (5); hard 1, 2, 2, 1 (6). Lanes are 9, 7
  * and 5 wide (hard's pit 7). Checkpoints sit where §2.6 puts them: r + 0.5 before each drop's edge
- * and 3 past its flight zone. Walls are wood two above the ice then glass, raised round every
- * landing, with risers under the 2-block drops, yellow caps at the lips, light-blue checkpoint and
- * gold finish markers, a lime pit wall, arrows and cave lanterns. Two trees (on the island and on a
- * terrace), both with vanilla's own leaf distances.
+ * and 3 past its flight zone, and one more just round the square corner onto the inner ring, so a
+ * reset at the one before it faces within 60 degrees of its lane (V6). Walls are wood two above the
+ * ice then glass, raised round every landing, with risers under the 2-block drops, yellow caps at the
+ * lips, light-blue checkpoint and gold finish markers, a lime pit wall, arrows and cave lanterns. Two
+ * trees (on the island and on a terrace), both with vanilla's own leaf distances.
  *
  * <p>Its fields are open so a test can build a variant ({@link #extra} drive areas, {@link #carve}d
  * obstacles, the pit's length, a tier's drops, corners rounded to arcs as a planner draws them) and
@@ -425,6 +426,8 @@ final class HandRun {
         checkpoints.add(mark(96.5 - BoatEnvelope.zone(drops[1]) - 3, 118.5, levels[2], r));
         checkpoints.add(mark(10.5, 96.5 + r, levels[2], r));
         checkpoints.add(mark(10.5, 96.5 - BoatEnvelope.zone(drops[2]) - 3, levels[3], r));
+        // just round the square corner: a reset at the one before faces it within 60 degrees of its lane
+        checkpoints.add(mark(22.5, 34.5, levels[3], r));
         checkpoints.add(mark(49 - r + 0.5, 34.5, levels[3], r));
         finish = mark(94.5, 64.5, levels[4], h + 2.0);
         for (Course.Mark m : checkpoints) {

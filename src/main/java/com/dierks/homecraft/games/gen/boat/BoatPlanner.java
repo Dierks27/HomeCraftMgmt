@@ -95,8 +95,10 @@ public final class BoatPlanner implements Planner {
      * straight (25-30) and hard's inner ones (19-38) are shorter than a run-up and a landing strip, so
      * their Final Drop is the last that fits: two legs before the finish on easy (about 110-130
      * blocks), a lap on hard (about 265-295, the last five legs flat but for the pieces). Its sign is
-     * then the drop's own, not "Then the gold finish line!". Only shorter landing strips (from the
-     * boat test strip's flights, algo 4) or another spiral can bring it nearer; that is the owner's call.
+     * then the drop's own, not "Then the gold finish line!", a checkpoint stands between it and the
+     * finish, and the race's "Final drop!" title stays for a Final Drop in front of the stand. Only
+     * shorter landing strips (from the boat test strip's flights, algo 4) or another spiral can bring
+     * it nearer; that is the owner's call.
      */
     public enum Level {
         EASY("easy", 9, 9, 16, new int[]{32, 30, 24, 16, 17, 17}, 20, 6, false, 4, 5, 70, 1, 0,
@@ -248,7 +250,10 @@ public final class BoatPlanner implements Planner {
             return splitSand;
         }
 
-        /** How many trunks a forest has: 3 on medium, 4 on hard. */
+        /**
+         * How many trunks a forest has: 3 on medium, 4 on hard; one fewer where those leave the
+         * checkpoints no way round it (§2.4: 2-3 and 3-4; {@link TrackPieces#draw}).
+         */
         public int trunks() {
             return this == HARD ? 4 : 3;
         }
@@ -338,7 +343,23 @@ public final class BoatPlanner implements Planner {
     static final int BOOST_LIP = 30;
     /** Two targets are at most this far apart across the ground (60, with a margin), and normally this far along. */
     static final double LEG_MAX = 59.5;
-    /** A checkpoint on a bend (one with no sand) is this much over half the lane wide, so its sphere cuts the lane. */
+    /**
+     * A leg with no drop in it is at most this long along the track (§2.6: "normally every 20-40
+     * along s; across a lip up to 60, never more"; 60 with a margin, as the proof measures it on the
+     * blocks): a rule, not a cost, so a reset never sends a boat far back (review CV gate: hard legs
+     * of 150-178 blocks past a sand pit, a split and a cave).
+     */
+    static final double FLAT_LEG = 59.5;
+    /**
+     * From every checkpoint, the way a reset faces ({@code TimeTrials.backTo}: toward the next target)
+     * is within this many degrees of the lane's direction there: a rule (review CV gate: a hard reset
+     * faced 146 degrees off, back up the track and into the wall).
+     */
+    static final double FACING = 60;
+    /**
+     * A checkpoint on a bend is this much over half the lane wide (and a bend's sand more), so its
+     * sphere cuts the lane; one is put about every {@link #SPACING} along the track where it can go.
+     */
     static final double ARC_SPOT = 1.5;
     static final double SPACING = 32;
     /** Arrows in the walls this often along the track. */
@@ -480,7 +501,11 @@ public final class BoatPlanner implements Planner {
         return build(in, level, root.fork("scenery:" + t), path, profile, pieces);
     }
 
-    /** The checkpoints' chain: legs of at most {@link #SPACING} where no drop is between, else any that keep the rules. */
+    /**
+     * The checkpoints' chain: legs of at most {@link #SPACING} where no drop is between, else any that
+     * keep the rules ({@link TrackRaster#chain}: 60 across, one drop, {@link #FLAT_LEG} along with no
+     * drop, a reset facing within {@link #FACING} degrees of the lane).
+     */
     static List<TrackRaster.Spot> chain(TrackRaster r, List<TrackRaster.Spot> spots, List<double[]> blocked) {
         return r.chain(spots, blocked, SPACING);
     }
@@ -572,7 +597,7 @@ public final class BoatPlanner implements Planner {
         List<Box> keep = keepClear(raster);
         Plan plan = Plan.of(slot.id(), ALGO, in.seed(), half, raster.palette, ops, signs, keep,
                 new PlannedTrial(course, refMs), List.of(), 0);
-        return new Made(in, level, path, profile, pieces, plan, cps.size(), trees, length);
+        return new Made(in, level, path, profile, pieces, plan, cps, trees, length);
     }
 
     /** A plan made, and what its summary says. */
@@ -583,6 +608,8 @@ public final class BoatPlanner implements Planner {
         final TrackProfile profile;
         final TrackPieces pieces;
         final Plan plan;
+        /** Where its checkpoints are, in order: the course's marks with their place along the track. */
+        final List<TrackRaster.Spot> spots;
         final int checkpoints;
         final int trees;
         final double length;
@@ -590,14 +617,15 @@ public final class BoatPlanner implements Planner {
         long work;
 
         Made(PlanInput in, Level level, TrackPath path, TrackProfile profile, TrackPieces pieces, Plan plan,
-             int checkpoints, int trees, double length) {
+             List<TrackRaster.Spot> spots, int trees, double length) {
             this.in = in;
             this.level = level;
             this.path = path;
             this.profile = profile;
             this.pieces = pieces;
             this.plan = plan;
-            this.checkpoints = checkpoints;
+            this.spots = List.copyOf(spots);
+            this.checkpoints = spots.size();
             this.trees = trees;
             this.length = length;
         }

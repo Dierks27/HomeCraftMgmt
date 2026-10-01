@@ -121,6 +121,19 @@ public record Course(String id, TrialKind kind, String name, Tier tier, String w
         return out;
     }
 
+    /**
+     * The way a run sent back to checkpoint {@code last} (0-based) faces: across the ground toward
+     * the next target, so the racer looks at the next one ({@code TimeTrials.backTo}); toward itself
+     * (yaw 0) when there is no next. Here so the Mountain Run's proof can hold its resets to the very
+     * yaw a race uses.
+     */
+    public float resetYaw(int last) {
+        List<Mark> targets = targets();
+        Mark m = checkpoints.get(last);
+        Point next = last + 1 < targets.size() ? targets.get(last + 1).center() : m.center();
+        return Geometry.yawToward(m.center(), next);
+    }
+
     /** The checkpoints, then the finish: everything a run must reach, in order. */
     public List<Mark> targets() {
         List<Mark> out = new ArrayList<>(checkpoints);

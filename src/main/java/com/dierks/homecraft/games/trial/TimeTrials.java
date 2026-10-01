@@ -1351,7 +1351,9 @@ public final class TimeTrials implements Game {
     /**
      * The big title as a racer reaches checkpoint {@code index} (0-based) of {@code c}, over the small
      * "Checkpoint 3 of 10 - 0:21.4": "&amp;aFinal drop!" at the checkpoint before a Mountain Run's last
-     * lip (COURSE-VARIETY-SPEC §5.2), nothing anywhere else, so every other course reads as it always did.
+     * lip when the gold finish comes right after it, where the layout's FINAL DROP! sign stands
+     * (COURSE-VARIETY-SPEC §5.2, {@link BoatHype#finalDrop}), nothing anywhere else, so every other
+     * course reads as it always did.
      */
     static String checkpointBig(Course c, int index) {
         return BoatHype.checkpointTitle(c, index);
@@ -1507,9 +1509,7 @@ public final class TimeTrials implements Game {
             return new Location(w, s.x(), s.y(), s.z(), s.yaw(), s.pitch());
         }
         Course.Mark m = c.checkpoints().get(last);
-        List<Course.Mark> targets = c.targets();
-        Point next = last + 1 < targets.size() ? targets.get(last + 1).center() : m.center();
-        return new Location(w, m.x(), m.y(), m.z(), Geometry.yawToward(m.center(), next), 0f);
+        return new Location(w, m.x(), m.y(), m.z(), c.resetYaw(last), 0f);
     }
 
     // ---- boats --------------------------------------------------------------------------------

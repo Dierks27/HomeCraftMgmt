@@ -136,7 +136,11 @@ class TrackPiecesTest {
                     assertTrue(level != BoatPlanner.Level.EASY, "no forest on easy");
                     int ice = r.profile.level((pc.s1 + pc.s2) / 2);
                     assertTrue(ice <= r.h0 + BoatPlanner.FOREST_TOP, "the forest is on the lower rings (ice <= H0 + 6)");
-                    assertEquals(level.trunks(), pc.trunks.size(), level + ": its trunks");
+                    assertTrue(pc.trunks.size() == level.trunks() || pc.trunks.size() == level.trunks() - 1,
+                            level + ": its trunks, or one fewer where its own leave the checkpoints no way round"
+                                    + " (§2.4: medium 2-3, hard 3-4): " + pc.trunks.size());
+                    assertEquals(TrackPieces.forestLength(pc.trunks.size()), pc.s2 - pc.s1, 1e-9,
+                            level + ": as long as its trunks need");
                     int leaves = 0;
                     for (double[] t : pc.trunks) {
                         for (double s : along(run.made().path.straight(pc.leg), t[0], t[0] + 2)) {

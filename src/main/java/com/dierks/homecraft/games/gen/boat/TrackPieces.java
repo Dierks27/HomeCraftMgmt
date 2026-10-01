@@ -24,7 +24,8 @@ import java.util.List;
  *       ice, with sea lanterns in its walls and moss portals.</li>
  *   <li><b>The forest slalom</b> (medium, hard): the lane widens by 6 and 2 x 2 trunks stand in it,
  *       alternately near each wall, every gap at least P, under a leafy roof 5 and 6 over the
- *       ice.</li>
+ *       ice: 3 trunks on medium and 4 on hard, or one fewer (§2.4: 2-3 and 3-4) where the tier's own
+ *       forest leaves the checkpoints no way round it.</li>
  *   <li><b>Boost strips</b> (medium): the middle 3 columns blue ice for 10-20 blocks, never within
  *       30 before a drop.</li>
  * </ul>
@@ -245,21 +246,36 @@ final class TrackPieces {
         }
         List<Kind> deck = deck(r, level, richness);
         for (Kind k : deck) {
-            List<Piece> options = options(r, path, profile, level, k, placed, h0);
-            for (int attempt = 0; attempt < BoatPlanner.PIECE_ATTEMPTS && !options.isEmpty(); attempt++) {
-                Piece p = options.remove(r.nextInt(options.size()));
-                List<double[]> blocked = blocked(placed);
-                if (p.kind != Kind.BOOST) {
-                    blocked.add(new double[]{p.s1, p.s2});
-                }
-                if (feasible.ok(blocked)) {
-                    placed.add(p);
-                    break;
-                }
+            if (!place(r, path, profile, level, k, placed, h0, feasible, level.trunks()) && k == Kind.FOREST) {
+                // a forest one trunk shorter where the tier's own leaves the checkpoints no way round it: on
+                // medium the 3-trunk forest mostly fits only between a far Final Drop and the finish,
+                // where a reset before that drop would face the finish round two bends (review CV gate)
+                place(r, path, profile, level, k, placed, h0, feasible, level.trunks() - 1);
             }
         }
         placed.sort((a, b) -> Double.compare(a.s1, b.s1));
         return new TrackPieces(placed, runoff, kerb);
+    }
+
+    /**
+     * Places one piece of kind {@code k} (a forest of {@code trunks} trunks) at one of its seeded
+     * options that {@code feasible} keeps; whether it did.
+     */
+    private static boolean place(GenRandom r, TrackPath path, TrackProfile profile, BoatPlanner.Level level, Kind k,
+                                 List<Piece> placed, int h0, Feasible feasible, int trunks) {
+        List<Piece> options = options(r, path, profile, level, k, placed, h0, trunks);
+        for (int attempt = 0; attempt < BoatPlanner.PIECE_ATTEMPTS && !options.isEmpty(); attempt++) {
+            Piece p = options.remove(r.nextInt(options.size()));
+            List<double[]> blocked = blocked(placed);
+            if (p.kind != Kind.BOOST) {
+                blocked.add(new double[]{p.s1, p.s2});
+            }
+            if (feasible.ok(blocked)) {
+                placed.add(p);
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Where checkpoints can't go because of {@code placed}: every piece but a boost strip. */
@@ -328,8 +344,14 @@ final class TrackPieces {
     /** Every place a piece of kind {@code k} fits, each drawn ready to place (its sizes seeded). */
     static List<Piece> options(GenRandom r, TrackPath path, TrackProfile profile, BoatPlanner.Level level, Kind k,
                                List<Piece> placed, int h0) {
+        return options(r, path, profile, level, k, placed, h0, level.trunks());
+    }
+
+    /** The options for a piece of kind {@code k}, a forest having {@code trunks} trunks. */
+    static List<Piece> options(GenRandom r, TrackPath path, TrackProfile profile, BoatPlanner.Level level, Kind k,
+                               List<Piece> placed, int h0, int trunks) {
         List<Piece> out = new ArrayList<>();
-        int len = length(r, level, k);
+        int len = k == Kind.FOREST ? forestLength(trunks) : length(r, level, k);
         int extra = extra(k, level);
         int taper = switch (k) {
             case SAND_PIT -> BoatPlanner.PIT_TAPER;
@@ -368,7 +390,7 @@ final class TrackPieces {
                 if (!free(profile, level, k, s1, s2, placed, h0)) {
                     continue;
                 }
-                out.add(make(r, k, leg, s1, s2, eIn, eOut, taper, level, hw));
+                out.add(make(r, k, leg, s1, s2, eIn, eOut, taper, level, hw, trunks));
             }
         }
         return out;
@@ -380,9 +402,14 @@ final class TrackPieces {
             case SAND_PIT -> 2 * BoatPlanner.PIT_TAPER + 2 + r.nextInt(8, 12);
             case SPLIT -> 10 + r.nextInt(BoatPlanner.ISLAND_MIN, BoatPlanner.ISLAND_MAX);
             case CAVE -> r.nextInt(12, 20);
-            case FOREST -> 2 * BoatPlanner.FOREST_TAPER + 2 + 6 * level.trunks() - 4;
+            case FOREST -> forestLength(level.trunks());
             case BOOST -> r.nextInt(10, 20);
         };
+    }
+
+    /** A forest's length with {@code trunks} trunks: its tapers, a block, and 6 a trunk but the last's gap. */
+    static int forestLength(int trunks) {
+        return 2 * BoatPlanner.FOREST_TAPER + 2 + 6 * trunks - 4;
     }
 
     /** How far a piece widens the lane in all. */
@@ -458,7 +485,7 @@ final class TrackPieces {
 
     /** A piece of kind {@code k} at [s1, s2], its inner features drawn. */
     private static Piece make(GenRandom r, Kind k, int leg, double s1, double s2, int eIn, int eOut, int taper,
-                              BoatPlanner.Level level, double hw) {
+                              BoatPlanner.Level level, double hw, int trunks) {
         Piece p = new Piece(k, leg, s1, s2, eIn, eOut, taper);
         int half = (int) Math.floor(hw);
         int centre = (eIn - eOut) / 2;
@@ -500,7 +527,7 @@ final class TrackPieces {
                 int narrow = level.proof().narrowest();
                 boolean outer = r.nextBoolean();
                 double at = s1 + taper + 1;
-                for (int i = 0; i < level.trunks(); i++) {
+                for (int i = 0; i < trunks; i++) {
                     int lo = outer ? -(half + eOut) + narrow : (half + eIn) - narrow - 1;
                     p.trunks.add(new double[]{at, lo});
                     at += 6;

@@ -15,6 +15,7 @@ import com.dierks.homecraft.games.gen.api.SignText;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.engine.LiveProof;
 import com.dierks.homecraft.games.gen.engine.PlanCheck;
+import com.dierks.homecraft.games.trial.BoatHype;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.Laps;
 import com.dierks.homecraft.games.trial.Point;
@@ -59,6 +60,19 @@ class BoatPlannerTest {
 
     static PlanInput input(char half, long seed, String tier) {
         return new PlanInput(SLOT, SLOT.half(half), half, 20725, 0, seed, tier, 6, 0, null);
+    }
+
+    /**
+     * Two halves at fixed places (the review CV gate's tests): A where the gate's probe had it, so H0 is
+     * 160; B one half and a 32-block gap along +X. Written out, not read off the slot, so they stay put
+     * whatever the shipped origins become.
+     */
+    static final Box BOX_A = Box.sized(4480, 160, 4352, 128, 16, 128);
+    static final Box BOX_B = Box.sized(4640, 160, 4352, 128, 16, 128);
+
+    /** The planner's input for {@code half} (half id {@code id}). */
+    static PlanInput inputIn(Box half, char id, long seed, String tier) {
+        return new PlanInput(SLOT, half, id, 20725, 0, seed, tier, 6, 0, null);
     }
 
     static Course course(Plan p) {
@@ -106,6 +120,12 @@ class BoatPlannerTest {
                 String why = problem(p, level);
                 if (why == null) {
                     why = signProblem(m);
+                }
+                if (why == null) {
+                    why = legProblem(m);
+                }
+                if (why == null) {
+                    why = titleProblem(m);
                 }
                 if (why != null) {
                     failures.add("day " + day + " half " + half + ": " + why);
@@ -204,6 +224,61 @@ class BoatPlannerTest {
         return null;
     }
 
+    /**
+     * The checkpoints' legs and resets (review CV gate), null when fine: every leg with no drop at most
+     * {@link BoatPlanner#FLAT_LEG} along the track (the planner's own s, start to finish), and from every
+     * checkpoint the reset's yaw ({@link Course#resetYaw}: what {@code TimeTrials.backTo} turns the boat
+     * to, toward the next target) within {@link BoatPlanner#FACING} degrees of the lane's direction there.
+     */
+    static String legProblem(BoatPlanner.Made m) {
+        Course c = course(m.plan);
+        List<TrackRaster.Spot> spots = m.spots;
+        if (spots.size() != c.checkpoints().size()) {
+            return spots.size() + " places for " + c.checkpoints().size() + " checkpoints";
+        }
+        double prev = TrackProfile.START;
+        for (int i = 0; i <= spots.size(); i++) {
+            double s = i < spots.size() ? spots.get(i).s() : m.profile.finish;
+            if (m.profile.lipsBetween(prev, s) == 0 && s - prev > BoatPlanner.FLAT_LEG + 1e-9) {
+                return "a leg of " + Math.round(s - prev) + " along the track with no drop, to "
+                        + (i < spots.size() ? "checkpoint " + (i + 1) : "the finish") + " at s " + Math.round(s);
+            }
+            prev = s;
+        }
+        for (int i = 0; i < spots.size(); i++) {
+            double[] t = m.path.tangent(spots.get(i).s());
+            double lane = TrackRaster.yaw(t[0], t[1]);
+            double off = Math.abs(((c.resetYaw(i) - lane) % 360 + 540) % 360 - 180);
+            if (off > BoatPlanner.FACING + 1e-3) {
+                return "a reset at checkpoint " + (i + 1) + " (s " + Math.round(spots.get(i).s()) + ") faces "
+                        + Math.round(off) + " degrees off the lane";
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The race copy's "Final drop!" title (review CV gate), null when fine: {@link BoatHype} reads it off
+     * the marks of the live course (a Fresh Ice Boat tag of this algo), and it shows at the checkpoint
+     * just before the last drop exactly where the layout's own FINAL DROP! sign stands, the Final Drop
+     * in front of the stand with the finish next; nowhere on a run whose last drop is far up the mountain.
+     */
+    static String titleProblem(BoatPlanner.Made m) {
+        Course c = course(m.plan).withGen(new GenTag(SLOT.id(), Slots.BOAT, BoatPlanner.ALGO, 20725, 0, m.in.seed(),
+                m.in.halfId(), m.plan.hash(), 1, 2, 3, List.of(), List.of(), 0L, 7));
+        boolean sign = m.plan.signs().stream().anyMatch(t -> t.lines().equals(GenCopy.boatFinalDrop()));
+        int at = BoatHype.finalDrop(c);
+        if (sign != (at >= 0)) {
+            return sign ? "a FINAL DROP! sign but no \"Final drop!\" title"
+                    : "a \"Final drop!\" title at checkpoint " + (at + 1) + " but no FINAL DROP! sign (the finish is "
+                    + Math.round(m.profile.finish - m.profile.last().s()) + " after it)";
+        }
+        if (at >= 0 && !(at == m.spots.size() - 1 && m.spots.get(at).s() < m.profile.last().s())) {
+            return "the \"Final drop!\" title at checkpoint " + (at + 1) + " isn't the one just before the Final Drop";
+        }
+        return null;
+    }
+
     /** Whether a sign saying {@code lines} stands on a wall beside the track 3-10 blocks before {@code s}. */
     private static boolean signedBefore(BoatPlanner.Made m, List<SignText> signs, List<String> lines, double s) {
         Box half = m.plan.half();
@@ -256,11 +331,14 @@ class BoatPlannerTest {
     void goldenHashesPinThreeSeedsPerTier() throws GenFailed {
         // A change here means the planner makes different layouts: bump BoatPlanner.ALGO. Algo 3 is the
         // Mountain Run (Course Variety §2) without BoatSim's V14 (the §11 schedule valve); V14 comes as
-        // algo 4 after the owner's boat test strip (Gate 0), and re-pins these.
+        // algo 4 after the owner's boat test strip (Gate 0), and re-pins these. Re-pinned without a bump
+        // by the CV final gate (algo 3 is unreleased): checkpoint legs at most 60 along the track with no
+        // drop, resets facing within 60 degrees of the lane, a checkpoint after a far Final Drop, and a
+        // forest one trunk shorter where the tier's own leaves no way round it.
         String golden = """
-                easy ad32a53c18a5 e9dc62ce8f83 d1c4fce032ad
-                medium 0f32482b7197 7a96ea1288f6 d9e3833052c0
-                hard 8724d626bd2c 43e06d7b4237 b0fbd41ccfc5
+                easy ad32a53c18a5 bd93802fedcd 1b8d5ae94114
+                medium ebc9f7b0b1ee 77d73a7b11ea a73e435fee13
+                hard 9425bf6770a4 aa015bd4930b d0c241f0f961
                 """;
         long[] seeds = {1L, 0xC0FFEEL, 0x5EED5EEDL};
         StringBuilder made = new StringBuilder();
@@ -522,6 +600,11 @@ class BoatPlannerTest {
                 seen.merge("runoffs", m.pieces.runoffs(), Integer::sum);
                 seen.merge("kerbs", m.pieces.kerbs(), Integer::sum);
                 seen.merge("trees", m.trees, Integer::sum);
+                for (TrackPieces.Piece pc : m.pieces.list) {
+                    if (pc.kind == TrackPieces.Kind.FOREST && pc.trunks.size() < level.trunks()) {
+                        seen.merge("shortForests", 1, Integer::sum);
+                    }
+                }
             }
             assertTrue(seen.getOrDefault("drops", 0) >= 50, level + ": most first tries come together: " + seen);
             assertTrue(seen.getOrDefault("runoffs", 0) > 0, level + ": sandy bends: " + seen);
@@ -537,6 +620,12 @@ class BoatPlannerTest {
                 case MEDIUM -> {
                     assertTrue(seen.getOrDefault("BOOST", 0) > 0 && seen.getOrDefault("FOREST", 0) > 0,
                             "medium has boost strips and forests: " + seen);
+                    // review CV gate: medium's 3-trunk forest mostly fits only between a far Final Drop and
+                    // the finish, where the checkpoints can't keep the reset rules round it; a 2-trunk one
+                    // (§2.4: 2-3) fits where it doesn't, so medium keeps its forests (a quarter of runs before)
+                    assertTrue(seen.getOrDefault("FOREST", 0) >= 15, "at least a quarter of medium runs have a"
+                            + " forest: " + seen);
+                    assertTrue(seen.getOrDefault("shortForests", 0) > 0, "some with 2 trunks: " + seen);
                     assertTrue(seen.getOrDefault("bigs", 0) > 0, "and some Big Drops: " + seen);
                 }
                 case HARD -> {
@@ -578,6 +667,30 @@ class BoatPlannerTest {
             if (level == BoatPlanner.Level.MEDIUM) {
                 assertTrue(inFront >= 8, "medium's Final Drop is in front of the stand where its sixth leg holds one: "
                         + inFront + " of 40");
+            }
+        }
+    }
+
+    @Test
+    void theFinalDropTitleShowsOnlyWhereItsSignStands() throws GenFailed {
+        // Review CV gate: "Final drop!" showed at the checkpoint before every Mountain Run's last drop,
+        // where on easy and hard (and most medium runs) the sign says HOP! or BIG DROP! and the finish is
+        // 110 blocks to a lap away. The chain now has a checkpoint after such a drop, and the Final Drop's
+        // leg runs to the finish only in front of the stand, so the title and the sign agree.
+        for (BoatPlanner.Level level : BoatPlanner.Level.values()) {
+            int titles = 0;
+            for (int day = 0; day < 60; day++) {
+                long seed = GenSeed.seed(SECRET, 20_000 + day, SLOT.id(), 0);
+                BoatPlanner.Made m = BoatPlanner.made(day % 2 == 0 ? inputIn(BOX_A, 'A', seed, level.id())
+                        : inputIn(BOX_B, 'B', seed, level.id()));
+                String why = titleProblem(m);
+                assertEquals(null, why, level + " day " + day + ": " + why);
+                titles += m.profile.finalInFront() ? 1 : 0;
+            }
+            if (level == BoatPlanner.Level.MEDIUM) {
+                assertTrue(titles >= 10, "medium still hears \"Final drop!\" in front of the stand: " + titles + " of 60");
+            } else {
+                assertEquals(0, titles, level + ": its Final Drop is never in front of the stand, so no title");
             }
         }
     }

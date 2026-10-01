@@ -97,6 +97,38 @@ public final class MountainRuns {
                 new Course.Mark(4599.5, 168, 4440.5, 6), 165.0, 5, true, false, 1, tag());
     }
 
+    /**
+     * An Easy or Hard run as the planner lays one (§2.4: four drops; review CV gate): its last drop,
+     * between cp 7 and cp 8, is up the mountain, where the landing strips let it in, and three more
+     * checkpoints and about 120 blocks of flat track come before the finish. Its sign is its own HOP!,
+     * never FINAL DROP!, so no racer hears "Final drop!" at cp 7 (radius w/2 + 0.5: 5 on easy, 3 on hard).
+     *
+     * <pre>
+     * cp 1, cp 2           169   north side
+     *   Hop
+     * cp 3, cp 4           168   east side
+     *   Hop
+     * cp 5                 167   south side
+     *   Hop
+     * cp 6, cp 7           166   south, then west side
+     *   Hop (the last)
+     * cp 8, cp 9, cp 10    165   west, north and east (inner rings)
+     * finish               165   the lowest deck, under the stand
+     * </pre>
+     */
+    public static Course farFinalDrop(Tier tier) {
+        double r = tier == Tier.EASY ? 5 : 3;
+        List<Course.Mark> cps = List.of(
+                new Course.Mark(4540.5, 169, 4361.5, r), new Course.Mark(4575.5, 169, 4361.5, r),
+                new Course.Mark(4599.5, 168, 4395.5, r), new Course.Mark(4599.5, 168, 4430.5, r),
+                new Course.Mark(4580.5, 167, 4462.5, r),
+                new Course.Mark(4530.5, 166, 4462.5, r), new Course.Mark(4502.5, 166, 4430.5, r),
+                new Course.Mark(4502.5, 165, 4385.5, r), new Course.Mark(4540.5, 165, 4379.5, r),
+                new Course.Mark(4576.5, 165, 4400.5, r));
+        return new Course("fresh_boat", TrialKind.BOAT, "Ice Boat", tier, "games", START, cps,
+                new Course.Mark(4560.5, 165, 4444.5, r + 1), (double) (H0 + 5 - 3), 5, true, false, 1, tag());
+    }
+
     /** The Medium run's marks laid flat at the pit's height: what a flat layout would count (nothing). */
     public static Course flat(GenTag tag) {
         List<Course.Mark> cps = new ArrayList<>();

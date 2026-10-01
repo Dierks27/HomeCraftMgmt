@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.gen.api.PlannedTrial;
 import com.dierks.homecraft.games.trial.Course;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -25,12 +26,15 @@ class TrackRasterTest {
     }
 
     @Test
-    void everyCheckpointIsFlatOffSandClearOfDropsAndZonesAndSpansItsLane() {
+    void everyCheckpointIsFlatOnIceWhereAResetLandsClearOfDropsAndZonesAndSpansItsLane() {
+        int sandyBends = 0;
         for (BoatPlanner.Level level : BoatPlanner.Level.values()) {
             for (MountainRuns.Run run : MountainRuns.of(level)) {
                 TrackRaster r = run.raster();
                 Box half = r.half;
-                for (Course.Mark m : course(run).checkpoints()) {
+                List<TrackRaster.Spot> spots = run.made().spots;
+                for (int i = 0; i < spots.size(); i++) {
+                    Course.Mark m = course(run).checkpoints().get(i);
                     double px = m.x() - half.minX();
                     double pz = m.z() - half.minZ();
                     int cx = (int) Math.floor(px);
@@ -38,10 +42,14 @@ class TrackRasterTest {
                     assertTrue(r.drive(cx, cz), "on the track");
                     int ice = r.h[cx][cz];
                     assertEquals(ice + 1, m.y(), 1e-9, "at the ice's surface");
-                    boolean arc = r.segAt[cx][cz].arc;
-                    double want = level.width() / 2.0 + (arc ? BoatPlanner.ARC_SPOT : 0.5);
+                    TrackPath.Seg g = run.made().path.segAt(spots.get(i).s());
+                    int sand = g.arc ? Math.max(run.made().pieces.runoff[g.index], run.made().pieces.kerb[g.index]) : 0;
+                    assertEquals(sand > 0, spots.get(i).sandy(), "a checkpoint on a bend with sand says so");
+                    sandyBends += sand > 0 ? 1 : 0;
+                    double want = level.width() / 2.0 + (g.arc ? BoatPlanner.ARC_SPOT + sand : 0.5);
                     boolean pit = Math.abs(m.radius() - (level.pitWidth() / 2.0 + 0.5)) < 1e-9;
-                    assertTrue(Math.abs(m.radius() - want) < 1e-9 || pit, "its radius spans its lane: " + m.radius());
+                    assertTrue(Math.abs(m.radius() - want) < 1e-9 || pit, "its radius spans its lane and a bend's sand: "
+                            + m.radius());
                     for (int x = cx - 8; x <= cx + 8; x++) {
                         for (int z = cz - 8; z <= cz + 8; z++) {
                             if (!r.drive(x, z)) {
@@ -50,7 +58,8 @@ class TrackRasterTest {
                             double d = Math.hypot(x + 0.5 - px, z + 0.5 - pz);
                             if (d <= m.radius()) {
                                 assertEquals(ice, r.h[x][z], "a checkpoint is on flat track");
-                                assertTrue(r.mat[x][z] != TrackRaster.SAND, "and on ice");
+                                assertTrue(d > DownhillValidator.RESET_ROOM || r.mat[x][z] != TrackRaster.SAND,
+                                        "and on ice where a reset puts the boat down (sand only at a bend's rim)");
                                 for (int y = ice + 1; y <= r.top; y++) {
                                     assertEquals(null, run.at(x, y, z), "and in the open");
                                 }
@@ -64,6 +73,9 @@ class TrackRasterTest {
                 }
             }
         }
+        // review CV gate: on hard every bend has sand, and a checkpoint on one (its middle on ice) is what
+        // keeps a leg past a piece within 60 along the track, and a reset facing on
+        assertTrue(sandyBends > 0, "some checkpoints stand on a sandy bend's ice: " + sandyBends);
     }
 
     @Test
@@ -105,8 +117,10 @@ class TrackRasterTest {
                         continue;
                     }
                     for (TrackRaster.Spot m : spots) {
+                        // a place on plain track (a sandy bend's is only for the rules) that keeps both resets facing on
                         boolean splits = m.s() - a.s() <= BoatPlanner.SPACING && b.s() - m.s() <= BoatPlanner.SPACING
-                                && m.s() - a.s() > a.r() + m.r() + 1 && b.s() - m.s() > b.r() + m.r() + 1;
+                                && m.s() - a.s() > a.r() + m.r() + 1 && b.s() - m.s() > b.r() + m.r() + 1
+                                && !m.sandy() && r.faces(a, m) && r.faces(m, b);
                         boolean free = true;
                         for (double[] bl : blocked) {
                             free &= !(m.s() + m.r() + 1.5 > bl[0] && m.s() - m.r() - 1.5 < bl[1]);
@@ -117,6 +131,179 @@ class TrackRasterTest {
                 }
             }
         }
+    }
+
+    /**
+     * Review CV gate (major): a reset ({@code TimeTrials.backTo}, "Back to checkpoint", a Bedrock sneak,
+     * a stuck boat) sends a kid back to the last checkpoint facing the next target. Hard legs ran up to
+     * 178 blocks past a sand pit, a split and a cave, and a reset could face 146 degrees off the lane.
+     * Every leg with no drop is at most 60 along the track, and every reset faces within 60 degrees of
+     * the lane there, by the very yaw a race uses.
+     */
+    @Test
+    void aLegWithNoDropIsAtMostSixtyAlongTheTrackAndEveryResetFacesOnDownIt() {
+        for (BoatPlanner.Level level : BoatPlanner.Level.values()) {
+            for (MountainRuns.Run run : MountainRuns.of(level)) {
+                String why = BoatPlannerTest.legProblem(run.made());
+                assertEquals(null, why, level + " day " + run.day() + ": " + why);
+            }
+        }
+    }
+
+    @Test
+    void theGatesHardSeedHasNoLongLegAndNoResetFacingBackUpTheTrack() throws Exception {
+        // the review's case: hard, half A at (4480, 160, 4352), seed 39595 had checkpoint 11 (s 494) -> 12
+        // (s 665) 171 along the track (29 across), past the sand pit, a split and the cave, and a reset at 11
+        // facing 146 degrees off the lane
+        BoatPlanner.Made m = BoatPlanner.made(BoatPlannerTest.inputIn(BoatPlannerTest.BOX_A, 'A', 39595, "hard"));
+        assertEquals(null, BoatPlannerTest.legProblem(m), "the gate's seed keeps the rules");
+        double prev = TrackProfile.START;
+        for (TrackRaster.Spot sp : m.spots) {
+            assertTrue(sp.s() - prev <= BoatPlanner.FLAT_LEG || m.profile.lipsBetween(prev, sp.s()) > 0,
+                    "no leg with no drop longer than 60 along the track, to s " + Math.round(sp.s()));
+            prev = sp.s();
+        }
+        assertTrue(m.pieces.list.size() >= 3, "and the run keeps its pieces: " + m.pieces.list.size());
+    }
+
+    @Test
+    void aFinalDropFarUpTheMountainNeverSharesTheFinishsLeg() {
+        // Review CV gate (minor): the race copy's "Final drop!" title is read off the marks (BoatHype.finalDrop:
+        // the finish is the next target after the last drop), so it must stand exactly where the FINAL DROP!
+        // sign does. On easy and hard the Final Drop is up the mountain (its sign says HOP! or BIG DROP!), so
+        // the chain never lets its leg run on to the finish, even when nothing else would refuse it: here a
+        // place 5 before the last drop and 40 straight back from the finish along the lane there.
+        int checked = 0;
+        for (BoatPlanner.Level level : List.of(BoatPlanner.Level.EASY, BoatPlanner.Level.HARD)) {
+            for (MountainRuns.Run run : MountainRuns.of(level).subList(0, 5)) {
+                TrackRaster r = run.raster();
+                TrackProfile p = r.profile;
+                assertFalse(p.finalInFront(), level + " fixture: the Final Drop is up the mountain");
+                double[] fp = r.path.at(p.finish);
+                TrackRaster.Spot finish = new TrackRaster.Spot(p.finish, fp[0], fp[1], r.level.finishRadius(), p.bottom());
+                double s = p.last().s() - 5;
+                double[] t = r.path.tangent(s);
+                TrackRaster.Spot a = new TrackRaster.Spot(s, fp[0] - 40 * t[0], fp[1] - 40 * t[1], 3, p.level(s), false,
+                        t[0], t[1]);
+                assertEquals(1, p.lipsBetween(a.s(), finish.s()), "fixture: the last drop is in the leg");
+                assertTrue(r.faces(a, finish), "fixture: a reset there faces the finish dead ahead");
+                assertFalse(r.leg(a, finish, false, true), level + " day " + run.day()
+                        + ": a Final Drop far from the finish has a checkpoint after it, so no \"Final drop!\" title");
+                checked++;
+            }
+        }
+        assertEquals(10, checked, "five runs a tier");
+    }
+
+    @Test
+    void aLegRoundABendLongerThanSixtyAlongIsRefusedThoughItIsShortAcrossAndFacesOn() {
+        // Review CV gate (major): spacing along the track was only a cost, so a leg could run on past a bend
+        // wherever the ground distance allowed. Two real places with no drop between, more than 60 apart
+        // along the track but under 60 across and a reset at the first facing the second within 60 degrees
+        // of its lane: only the rule along the track refuses the leg.
+        int found = 0;
+        for (BoatPlanner.Level level : BoatPlanner.Level.values()) {
+            for (MountainRuns.Run run : MountainRuns.of(level).subList(0, 20)) {
+                TrackRaster r = run.raster();
+                List<TrackRaster.Spot> spots = r.spots();
+                for (TrackRaster.Spot a : spots) {
+                    TrackRaster.Spot b = null;
+                    for (TrackRaster.Spot c : spots) {
+                        if (b == null && c.s() - a.s() > BoatPlanner.FLAT_LEG + 1) {
+                            b = c;
+                        }
+                    }
+                    if (b == null || r.profile.lipsBetween(a.s(), b.s()) > 0) {
+                        continue;
+                    }
+                    double across = Math.hypot(b.x() - a.x(), b.z() - a.z());
+                    if (across > BoatPlanner.LEG_MAX - 1 || across <= a.r() + b.r() + 1 || !r.faces(a, b)) {
+                        continue;
+                    }
+                    assertFalse(r.leg(a, b, false, false), level + " day " + run.day() + ": a leg of "
+                            + Math.round(b.s() - a.s()) + " along the track (" + Math.round(across)
+                            + " across) with no drop");
+                    found++;
+                    break;
+                }
+            }
+        }
+        assertTrue(found >= 5, "fixture: legs round a bend, short across and facing on (" + found + ")");
+    }
+
+    @Test
+    void aLegWhoseResetWouldFaceOffItsLaneIsRefusedThoughItIsShortAlongAndAcross() {
+        // Review CV gate (major): a reset turns the boat toward the next target (TimeTrials.backTo), and a hard
+        // seed's faced 146 degrees off its lane. Two real places with no drop between, under 60 apart along the
+        // track and across, the line from the first to the second more than 60 degrees off the lane at the
+        // first (round a bend): only the facing rule refuses the leg.
+        int found = 0;
+        for (BoatPlanner.Level level : BoatPlanner.Level.values()) {
+            for (MountainRuns.Run run : MountainRuns.of(level).subList(0, 20)) {
+                TrackRaster r = run.raster();
+                List<TrackRaster.Spot> spots = r.spots();
+                search:
+                for (TrackRaster.Spot a : spots) {
+                    for (TrackRaster.Spot b : spots) {
+                        double along = b.s() - a.s();
+                        double across = Math.hypot(b.x() - a.x(), b.z() - a.z());
+                        if (along <= 0 || along > BoatPlanner.FLAT_LEG - 1 || r.profile.lipsBetween(a.s(), b.s()) > 0
+                                || across > BoatPlanner.LEG_MAX - 1 || across <= a.r() + b.r() + 1) {
+                            continue;
+                        }
+                        double[] t = r.path.tangent(a.s());
+                        double off = Math.toDegrees(Math.acos(((b.x() - a.x()) * t[0] + (b.z() - a.z()) * t[1]) / across));
+                        if (off <= BoatPlanner.FACING + 1) {
+                            continue;
+                        }
+                        assertFalse(r.leg(a, b, false, false), level + " day " + run.day() + ": a reset at s "
+                                + Math.round(a.s()) + " facing " + Math.round(off) + " degrees off its lane");
+                        found++;
+                        break search;
+                    }
+                }
+            }
+        }
+        assertTrue(found >= 5, "fixture: legs round a bend whose reset faces off the lane (" + found + ")");
+    }
+
+    @Test
+    void theChainRefusesALongFlatLegThatTheGroundDistanceAloneWouldAllow() {
+        // a stretch of 70 with no drop and no place for a checkpoint (as a piece filling a straight and its
+        // bends would leave), the places either side of it under 60 apart across the ground (the spiral
+        // folds back on itself): the chain used to jump it in one leg, and now can't
+        int found = 0;
+        for (MountainRuns.Run run : MountainRuns.of(BoatPlanner.Level.HARD)) {
+            TrackRaster r = run.raster();
+            TrackProfile p = r.profile;
+            List<TrackRaster.Spot> spots = r.spots();
+            for (TrackRaster.Spot a : spots) {
+                double from = a.s() + a.r() + 2;
+                double to = from + 70;
+                if (a.s() < TrackProfile.START + 60 || to > p.finish - 20 || p.lipsBetween(a.s() - 60, to + 60) > 0) {
+                    continue;
+                }
+                TrackRaster.Spot b = null;
+                for (TrackRaster.Spot c : spots) {
+                    if (b == null && c.s() - c.r() - 1.5 >= to) {
+                        b = c;
+                    }
+                }
+                if (b == null || Math.hypot(b.x() - a.x(), b.z() - a.z()) > BoatPlanner.LEG_MAX - 1) {
+                    continue;
+                }
+                List<double[]> blocked = new ArrayList<>(TrackPieces.blocked(run.made().pieces.list));
+                blocked.add(new double[]{from, to});
+                assertEquals(null, BoatPlanner.chain(r, spots, blocked), "day " + run.day() + ": 70 blocks from "
+                        + Math.round(from) + " with no checkpoint and no drop leave no chain");
+                found++;
+                break;
+            }
+            if (found >= 5) {
+                break;
+            }
+        }
+        assertTrue(found >= 1, "fixture: a flat stretch to block (" + found + ")");
     }
 
     @Test

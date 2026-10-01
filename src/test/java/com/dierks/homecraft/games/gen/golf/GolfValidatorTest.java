@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.gen.golf;
 
 import com.dierks.homecraft.games.gen.V2Fixtures;
 import com.dierks.homecraft.games.gen.api.BlockOp;
+import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
@@ -93,6 +94,45 @@ class GolfValidatorTest {
         assertEquals(List.of(), GolfValidator.problems(good), "the planner's own plan is sound");
         assertEquals(List.of(), GolfValidator.quickProblems(good), "the quick check agrees");
         assertEquals(List.of("not a golf plan"), GolfValidator.problems(null), "and nothing is not a golf plan");
+    }
+
+    /**
+     * A layout of golf planner version 2 is built and played without Adventure Golf's rules
+     * ({@code LiveBlocks} without sand), so this frozen check replays its stored line the same way:
+     * a ball wobbling at a step on a version-2 plan's blocks runs to the roll cap exactly as it always
+     * did, where a version-3 plan's blocks bring it to rest in a second (Course Variety's final gate).
+     * The bunker is drawn in its own box, clear of any slot.
+     */
+    @Test
+    void aVersion2PlanIsPlayedWithoutAdventureGolfsRulesSoAWobbleRunsToTheRollCapAsItAlwaysDid() {
+        Box box = new Box(-5, 60, -3, 12, 70, 12);
+        List<String> palette = List.of(Palette.TURF_LIGHT, Palette.SAND_SLAB);
+        List<BlockOp> ops = new ArrayList<>();
+        for (int x = -5; x <= 12; x++) {
+            for (int z = -3; z <= 12; z++) {
+                boolean sand = x >= 0 && x <= 4 && z >= 6 && z <= 8; // a sunken bunker, its lip at x = 5
+                ops.add(new BlockOp(x, 63, z, (short) (sand ? 1 : 0)));
+            }
+        }
+        BallPhysics.Hole area = BallPhysics.Hole.of(10, 63, 0, -5, 62, -3, 12, 67, 12);
+        Putt wedge = new Putt(264.827f, 1); // wedges the ball's edge against the lip (the review's tap)
+        int[] ticks = new int[4];
+        double[] y = new double[4];
+        for (int algo = 2; algo <= 3; algo++) {
+            Plan plan = Plan.of(good.slot(), algo, good.seed(), box, palette, ops, List.of(), List.of(),
+                    good.course(), good.summary(), good.work());
+            PlanBlocks grid = GolfValidator.grid(plan, plan.ops());
+            assertEquals(algo > 2, GolfShot.adventure(grid), "version " + algo + " plays Adventure Golf's rules: "
+                    + (algo > 2));
+            GolfShot.Result tap = GolfShot.play(grid, area, new BallPhysics.Ball(4.6764, 63.5, 7.6773), wedge);
+            assertEquals(BallPhysics.Outcome.STOPPED, tap.outcome(), "version " + algo + ": it stops");
+            ticks[algo] = tap.ticks();
+            y[algo] = tap.y();
+        }
+        assertEquals(GolfShot.MAX_ROLL_TICKS + 1, ticks[2], "version 2: at the roll cap, exactly as it always did");
+        assertTrue(y[2] > 63.8 && y[2] < 64, "in the air above the sand, wedged at the lip: " + y[2]);
+        assertEquals(GolfShot.WOBBLE_TICKS, ticks[3], "version 3: at rest a second after it began to wobble");
+        assertEquals(63.5, y[3], 0.0, "down on the sand");
     }
 
     @Test

@@ -513,8 +513,15 @@ public final class HomeCraftManagement extends JavaPlugin {
     /**
      * The built-in void world for the Games ({@link VoidWorld}):
      * {@code /mv create sky normal -g HomeCraftManagement}. Every world that names this plugin as its
-     * generator gets it; the id after a {@code :} is ignored. Needs nothing of the plugin, so it works
-     * even when Bukkit asks before the plugin is enabled.
+     * generator gets it; the id after a {@code :} is ignored.
+     *
+     * <p>Bukkit only asks a plugin that is already enabled ({@code WorldCreator.getGeneratorForName}
+     * and the server's own lookup both refuse one that isn't, and the world then loads with vanilla
+     * terrain). Multiverse loads its worlds while it enables, at every start, so plugin.yml loads this
+     * plugin before Multiverse-Core ({@code loadbefore}); otherwise {@code sky} would get vanilla
+     * ground, biomes and mobs in every chunk made after a restart ({@code PluginLoadOrderTest}). A world
+     * named in bukkit.yml instead is made before any plugin that isn't {@code load: STARTUP} is enabled,
+     * so the void world is made with Multiverse, never bukkit.yml.
      */
     @Override
     public ChunkGenerator getDefaultWorldGenerator(@NotNull String worldName, @Nullable String id) {
@@ -1866,9 +1873,14 @@ public final class HomeCraftManagement extends JavaPlugin {
             out.add("&c'" + path + "' isn't in the bundled config, so there's nothing to reset it to.");
             return out;
         }
-        ConfigReset.Plan plan = ConfigReset.plan(onDisk, bundled, path);
+        // Where the Games places stand (every origin and gap, the keep area, the Games worlds) stays as it is:
+        // putting the bundled values back would move what is built there, and places move by hand only.
+        java.util.List<String> keep = ConfigReset.kept(onDisk, path);
+        ConfigReset.Plan plan = ConfigReset.plan(onDisk, bundled, path, keep);
         if (plan.none()) {
-            out.add("&a" + path + " already matches the defaults. Nothing to do.");
+            out.add("&a" + path + " already matches the defaults" + (plan.kept().isEmpty() ? ""
+                    : ", apart from where the Games places stand") + ". Nothing to do.");
+            keptLines(plan, out);
             return out;
         }
         out.add((confirm ? "&6Resetting " : "&6Dry run — resetting ") + "&f" + path + "&6 would change "
@@ -1894,15 +1906,18 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (shown > 40) {
             out.add("&7…and " + (shown - 40) + " more (all of them are in the server log).");
         }
+        keptLines(plan, out);
         if (!confirm) {
             out.add("&7Nothing has changed. Run &f/hcm config reset " + path + " confirm&7 to do it.");
             return out;
         }
         getLogger().info("Config reset of " + path + ": " + plan.changed().keySet() + " changed, "
-                + plan.added().keySet() + " added, " + plan.removed().keySet() + " removed.");
+                + plan.added().keySet() + " added, " + plan.removed().keySet() + " removed"
+                + (plan.kept().isEmpty() ? "" : ", " + plan.kept().keySet() + " kept (where the Games places stand)")
+                + ".");
         configSnapshotTaken = false;
         snapshotConfig(file);
-        ConfigReset.apply(onDisk, bundled, path);
+        ConfigReset.apply(onDisk, bundled, path, keep);
         if (!saveTo(onDisk, file, "reset")) {
             out.add("&cCouldn't write config.yml — nothing changed. See the server log.");
             return out;
@@ -1915,6 +1930,24 @@ public final class HomeCraftManagement extends JavaPlugin {
                     + " draw rows cleared; progress kept).");
         }
         return out;
+    }
+
+    /** What a reset leaves as it is: where the Games places stand ({@link ConfigReset#kept}), for the dry run and the reset. */
+    private static void keptLines(ConfigReset.Plan plan, java.util.List<String> out) {
+        if (plan.kept().isEmpty()) {
+            return;
+        }
+        out.add("&7Kept as they are, since they say where the Games places stand (a reset would move what is built"
+                + " there; README \"Moving an area by hand\" moves one):");
+        int shown = 0;
+        for (java.util.Map.Entry<String, Object> e : plan.kept().entrySet()) {
+            if (shown++ < 20) {
+                out.add("&7= &f" + e.getKey() + "&7: " + (e.getValue() == null ? "not set" : ConfigReset.brief(e.getValue())));
+            }
+        }
+        if (shown > 20) {
+            out.add("&7…and " + (shown - 20) + " more.");
+        }
     }
 
     /** The admin's own config.yml inside the plugin's data folder. */

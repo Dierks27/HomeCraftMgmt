@@ -59,9 +59,13 @@ class HalfGapEngineTest {
     }
 
     private void place(int[] origin, int gap) {
+        place(SLOT, origin, gap);
+    }
+
+    private void place(String slot, int[] origin, int gap) {
         List<DailySettings.SlotConfig> slots = new ArrayList<>();
         for (DailySettings.SlotConfig c : host.settings.slots()) {
-            slots.add(c.id().equals(SLOT) ? c.withOrigin(origin).withHalfGap(gap) : c);
+            slots.add(c.id().equals(slot) ? c.withOrigin(origin).withHalfGap(gap) : c);
         }
         host.settings = host.settings.withSlots(slots);
     }
@@ -119,6 +123,51 @@ class HalfGapEngineTest {
         assertEquals('B', day2.half(), "the next set goes into half B");
         assertEquals(b, gen.half(day2), "576 blocks along x from half A");
         assertTrue(host.world().count(b) > 0, "built there");
+    }
+
+    @Test
+    void theNextSetGoesIntoHalfBAtTheSlotsOwnGapNotTheDefaultOne() throws Exception {
+        int gap = Slots.LEGACY_HALF_GAP; // a guarded 0.35 install's gap, not the default 576
+        place(FAR, gap);
+        Box b = Regions.half(DEF, FAR, gap, 'B');
+        Box defaultB = Regions.half(DEF, FAR, Slots.HALF_GAP, 'B');
+        assertFalse(b.equals(defaultB), "the two gaps put half B in different places");
+        boot();
+        drive(70);
+        assertEquals(Regions.half(DEF, FAR, gap, 'A'), gen.half(gen.liveTag(SLOT)), "the first set in half A");
+
+        host.now = GenKit.at(2026, 9, 30, 4, 0) + 40_000;
+        drive(90);
+        GenTag day2 = gen.liveTag(SLOT);
+        assertEquals('B', day2.half(), "the next set goes into half B");
+        assertEquals(b, gen.half(day2), "at the slot's own gap: " + gap + " blocks along x from half A");
+        assertTrue(host.world().count(b) > 0, "built there");
+        assertEquals(0, host.world().count(defaultB), "and nothing where half B would stand at the default gap (on"
+                + " 0.35's Hard Parkour, for a guarded install)");
+        assertTrue(guarded(b), "the half it is in is guarded");
+        assertFalse(gen.inArea(W, defaultB.minX(), defaultB.minY(), defaultB.minZ()), "the default-gap spot isn't");
+    }
+
+    @Test
+    void theTooCloseCheckBeforeABuildUsesEachSlotsOwnGap() throws Exception {
+        host.connection.close();
+        host = new Host(GenKit.at(2026, 9, 29, 4, 0) + 40_000, SLOT, "fresh_parkour", "fresh_parkour_hard");
+        int gap = Slots.LEGACY_HALF_GAP;
+        int size = DEF.sizeX();
+        place(FAR, gap);
+        // west: where its half B would stand at the default gap is this slot's half A
+        place("fresh_parkour", new int[]{FAR[0] - size - Slots.HALF_GAP, FAR[1], FAR[2]}, gap);
+        // east: this slot's half B at the default gap would be that slot's half A
+        place("fresh_parkour_hard", new int[]{FAR[0] + size + Slots.HALF_GAP, FAR[1], FAR[2]}, gap);
+        boot();
+        drive(70);
+        assertEquals(null, report().problem(), "at their own 32-block gaps the three stand well apart: "
+                + host.logs.stream().map(r -> r.getMessage()).toList());
+        assertNotNull(gen.liveTag(SLOT), "so the course is built");
+        for (String other : List.of("fresh_parkour", "fresh_parkour_hard")) {
+            GenService.SlotReport r = gen.report().stream().filter(x -> x.id().equals(other)).findFirst().orElseThrow();
+            assertEquals(null, r.problem(), other + " is not too close either");
+        }
     }
 
     @Test

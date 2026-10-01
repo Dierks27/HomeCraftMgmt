@@ -5,13 +5,20 @@ import com.dierks.homecraft.command.GamesCheck.Status;
 import com.dierks.homecraft.command.SightCheck.Ground;
 import com.dierks.homecraft.command.SightCheck.Kind;
 import com.dierks.homecraft.command.SightCheck.Place;
+import com.dierks.homecraft.games.event.RaceTrack;
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Sight;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.Point;
+import com.dierks.homecraft.games.trial.Tier;
+import com.dierks.homecraft.games.trial.TrialKind;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -160,8 +167,106 @@ class SightCheckTest {
         assertTrue(l.what().startsWith("From the spawn of games, players can see Parkour"), "from the spawn: " + l.what());
         assertTrue(l.fix().startsWith("move Parkour by hand"), "the course is still the one to move: " + l.fix());
         Line safe = rows(facts(List.of(new Place(Kind.SAFE_SPOT, "safe_spot", "the safe spot", new Box(0, 64, 0, 0, 64,
-                0)), new Place(Kind.SPAWN, "spawn", "the spawn", new Box(40, 64, 0, 40, 64, 0))), List.of())).get(1);
-        assertEquals("move games.fresh.safe_spot away from the spawn", safe.fix(), "two points: the first one moves");
+                0)), new Place(Kind.SLOT, "fresh_parkour", "Parkour", course)), List.of())).get(1);
+        assertTrue(safe.what().startsWith("From the safe spot, players can see Parkour"), "from the safe spot too: "
+                + safe.what());
+    }
+
+    @Test
+    void theSpawnAndTheSafeSpotAreNeverAPairNothingBuiltStandsAtEither() {
+        Place safe = new Place(Kind.SAFE_SPOT, "safe_spot", "the safe spot (games.fresh.safe_spot)",
+                new Box(0, 100, 0, 0, 100, 0));
+        Place spawn = new Place(Kind.SPAWN, "spawn", "the spawn of sky", new Box(0, 100, 0, 0, 100, 0));
+        List<Line> out = rows(facts(List.of(safe, spawn), List.of()));
+        assertEquals(List.of(Line.ok("View distance used: 10 (games' view distance 10, its send distance 8, nobody"
+                        + " there now)"), Line.ok("Nothing else built by the games can be seen from any course, the"
+                        + " Clubhouse or the arena (view distance 10)")), out,
+                "the safe spot on the void world's platform, at the spawn, is not a WARN, so the check can say All good");
+        Slots.Def rings = Slots.SKY_RINGS;
+        List<Place> places = new ArrayList<>(halves(Kind.SLOT, rings, rings.half(6080, 128, 4096, 'A', Sight.GAP),
+                rings.half(6080, 128, 4096, 'B', Sight.GAP)));
+        places.add(safe);
+        places.add(spawn);
+        assertEquals(Line.ok("Nothing else built by the games can be seen from any course, the Clubhouse or the arena"
+                        + " (view distance 10; the closest two places are 36 chunks apart, clear up to view distance 34)"),
+                rows(facts(places, List.of())).get(1), "the closest two places are the courses' halves, not the two"
+                        + " points 0 chunks apart");
+    }
+
+    @Test
+    void aPairExactlyViewPlusOneChunksApartIsAWarnAndViewPlusTwoIsNot() {
+        Box club = Box.sized(0, 160, 0, 32, 16, 32); // chunks 0-1; its reach ends in chunk 2
+        Box edge = Box.sized(16 * (VIEW + 3), 160, 0, 64, 16, 48);
+        Box past = Box.sized(16 * (VIEW + 4), 160, 0, 64, 16, 48);
+        Line l = rows(facts(List.of(new Place(Kind.CLUBHOUSE, "clubhouse", "the Clubhouse", club),
+                new Place(Kind.SLOT, "fresh_tiny_golf", "Tiny Golf", edge)), List.of())).get(1);
+        assertEquals(Status.WARN, l.status(), "V + 1 chunks away is sent, so it is a WARN: " + l);
+        assertEquals("From the Clubhouse, players can see Tiny Golf (" + (VIEW + 1) + " chunks away; view distance "
+                + VIEW + ")", l.what(), "exactly V + 1 away");
+        Line clear = rows(facts(List.of(new Place(Kind.CLUBHOUSE, "clubhouse", "the Clubhouse", club),
+                new Place(Kind.SLOT, "fresh_tiny_golf", "Tiny Golf", past)), List.of())).get(1);
+        assertEquals(Status.OK, clear.status(), "V + 2 chunks away is not sent: " + clear);
+        assertTrue(clear.what().contains("the closest two places are " + (VIEW + 2) + " chunks apart, clear up to view"
+                + " distance " + VIEW + ")"), "and clear up to exactly V: " + clear.what());
+    }
+
+    @Test
+    void aRaceNightStandSetFarFromItsCourseIsAWarnThatSaysToSetItNearer() {
+        Slots.Def rings = Slots.SKY_RINGS;
+        Box a = rings.half(6080, 128, 4096, 'A', Sight.GAP);
+        Place stand = new Place(Kind.STAND, "cool_jumps", "the Race Night stand of \"Cool Jumps\"",
+                new Box(a.minX() - 16 * 20, 150, a.minZ(), a.minX() - 16 * 20, 150, a.minZ()), "cool_jumps");
+        List<Place> places = new ArrayList<>(halves(Kind.SLOT, rings, a, rings.half(6080, 128, 4096, 'B', Sight.GAP)));
+        places.add(stand);
+        List<Line> out = rows(new SightCheck.Facts("games", 32, "why", places, List.of()));
+        Line l = out.get(1);
+        assertEquals(Status.WARN, l.status(), "spectators on the stand see a course: " + out);
+        assertEquals("From the Race Night stand of \"Cool Jumps\", players can see Sky Rings (19 chunks away; view"
+                + " distance 32)", l.what(), "in the spec's words: the stand is the one that sees");
+        assertTrue(l.fix().startsWith("set the stand nearer its course: /hcm games event stand cool_jumps set"),
+                "the stand is what moves: " + l.fix());
+        assertEquals(Sight.REACH, stand.reach(), "spectators move about on a stand: a spectator's reach");
+
+        Place kept = new Place(Kind.KEPT, "3", "the kept course \"cool_jumps\" (plot 3)",
+                Box.sized(1760, 128, 7296, 144, 176, 336), "cool_jumps");
+        Place own = new Place(Kind.STAND, "cool_jumps", "the Race Night stand of \"Cool Jumps\"",
+                new Box(1700, 150, 7300, 1700, 150, 7300), "cool_jumps");
+        Place spawn = new Place(Kind.SPAWN, "spawn", "the spawn of games", new Box(1690, 150, 7300, 1690, 150, 7300));
+        List<Line> beside = rows(facts(List.of(kept, own, spawn), List.of()));
+        assertEquals(Status.WARN, beside.get(1).status(), "the spawn still sees the kept course: " + beside);
+        assertTrue(beside.get(1).what().startsWith("From the spawn of games, players can see the kept course"),
+                "that pair is one: " + beside.get(1));
+        assertEquals(2, beside.size(), "but a stand beside its own kept course, and a stand and the spawn (nothing built"
+                + " at either), are not: " + beside);
+    }
+
+    @Test
+    void theStandsReadAreTheKeptAndHandBuiltCoursesOwnInTheGamesWorldForTheirLayout() {
+        Course hand = new Course("cool_jumps", TrialKind.BOAT, "Cool Jumps", Tier.EASY, "games",
+                new Course.Spot(100.5, 150, 200.5, 0f, 0f), List.of(), new Course.Mark(140.5, 150, 200.5, 2.0),
+                140.0, null, true, false, 1);
+        Course elsewhere = new Course("far_away", TrialKind.BOAT, "Far Away", Tier.EASY, "creative",
+                new Course.Spot(0.5, 70, 0.5, 0f, 0f), List.of(), new Course.Mark(10.5, 70, 0.5, 2.0), 60.0, null, true,
+                false, 1);
+        GenTag tag = new GenTag("fresh_boat", "boat", 2, 20_731, 0, 1L, 'A', "abc", 1, 2, 3, List.of(), List.of(), 1L, 7);
+        Course fresh = new Course("fresh_boat", TrialKind.BOAT, "Ice Boat", Tier.EASY, "games",
+                new Course.Spot(6090.5, 161, 5890.5, 0f, 0f), List.of(), new Course.Mark(6100.5, 161, 5890.5, 2.0),
+                150.0, null, true, false, 1, tag);
+        Map<String, Course> courses = Map.of(hand.id(), hand, elsewhere.id(), elsewhere, fresh.id(), fresh);
+        Map<String, String> meta = new LinkedHashMap<>();
+        meta.put("race.stand.cool_jumps", RaceTrack.encodeStand(hand.layoutHash(), new Point(90.5, 151, 210.5)));
+        meta.put("race.stand.far_away", RaceTrack.encodeStand(elsewhere.layoutHash(), new Point(5, 70, 5)));
+        meta.put("race.stand.fresh_boat", RaceTrack.encodeStand(fresh.layoutHash(), new Point(6100, 170, 5900)));
+        meta.put("race.stand.gone", RaceTrack.encodeStand(1, new Point(0, 0, 0)));
+        meta.put("race.grid.cool_jumps", "1|0,0,0,0");
+        List<Place> stands = SightCheck.stands(meta, courses, "GAMES");
+        assertEquals(List.of(new Place(Kind.STAND, "cool_jumps", "the Race Night stand of \"Cool Jumps\"",
+                new Box(90, 151, 210, 90, 151, 210), "cool_jumps")), stands, "only the hand-built course's stand in"
+                + " the Games world (matched ignoring case): not another world's, a Fresh course's (built in), a gone"
+                + " course's, or a grid");
+        meta.put("race.stand.cool_jumps", RaceTrack.encodeStand(hand.layoutHash() + 1, new Point(90.5, 151, 210.5)));
+        assertEquals(List.of(), SightCheck.stands(meta, courses, "games"), "a stand set for another layout is"
+                + " dropped when it is next used, so it isn't one");
     }
 
     @Test
@@ -228,10 +333,19 @@ class SightCheckTest {
         GamesCheck.fresh(fr, out);
         Line l = out.get(out.size() - 1);
         assertEquals(Status.WARN, l.status(), "a WARN, not a FAIL: the other plots are used");
-        assertEquals("7 kept-course plots (3, 19-24) can't be used: the world's spawn is inside plot 3", l.what(),
-                "every plot, as ranges, and the first one's problem");
-        assertTrue(l.fix().startsWith("make the world border bigger (stand in games and use /worldborder set)"),
-                "with the fix: " + l.fix());
+        List<Line> plots = out.stream().filter(x -> x.what().contains("kept-course plot")).toList();
+        assertEquals(3, plots.size(), "one WARN per kind of problem: " + plots);
+        assertEquals("1 kept-course plot (3) can't be used: the world's spawn is inside plot 3", plots.get(0).what(),
+                "the spawn's plot, lowest first");
+        assertTrue(plots.get(0).fix().startsWith("move the world's spawn out of the keep area (stand elsewhere in games"
+                + " and use /setworldspawn)"), "a bigger border can't fix a spawn inside a plot: " + plots.get(0).fix());
+        assertEquals("2 kept-course plots (19, 24) can't be used: plot 19 reaches past the world border (x"
+                + " 1760..1903)", plots.get(1).what(), "the border's plots, as ranges, with the first one's problem");
+        assertTrue(plots.get(1).fix().startsWith("make the world border bigger (stand in games and use /worldborder"
+                + " set)"), "with the border's fix: " + plots.get(1).fix());
+        assertEquals("4 kept-course plots (20-23) can't be used: x", plots.get(2).what(),
+                "a problem of no known kind is still said, with the general fix");
+        assertEquals(Status.WARN, plots.get(2).status(), "each a WARN");
         assertEquals("1", GamesCheck.plotList(List.of(1)), "one plot");
         assertEquals("1-3, 5, 7-8", GamesCheck.plotList(List.of(1, 2, 3, 5, 7, 8)), "runs as ranges");
         List<Line> fine = new ArrayList<>();

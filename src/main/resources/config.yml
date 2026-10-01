@@ -1903,7 +1903,8 @@ games:
     # each place 576 blocks (36 chunks) from the next, so from any course you can't see another one,
     # or even the spare half where the next course is built, at any view distance. Keep the sky there
     # free of your own builds, and a world border at least 21,000 across. A void world (nothing below
-    # the courses) is made with /mv create <name> normal -g HomeCraftManagement (README "A void world").
+    # the courses) is made with /mv create <name> normal -g HomeCraftManagement (README "A void world");
+    # it stays void after every restart, since this plugin starts before Multiverse-Core.
     world: ""
     # How often the courses change: weekly, daily, or a number of days from 1 to 28 (like 3).
     # The dates are fixed: counted from rebuild_day, so they never depend on when you changed it.

@@ -15,8 +15,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * {@code games.clubhouse} (CLUBHOUSE-SPEC §5): shipped on, at the pinned corner, 30 minutes, back to
  * the Clubhouse after everything; a value that can't be read logs one WARN and uses its shipped value
- * (the Clubhouse stays open); an origin off the grid is rounded down; only {@code enabled} itself
- * fails closed.
+ * (the Clubhouse stays open); an origin off the grid is rounded down; only {@code enabled} and
+ * {@code origin} fail closed (the shipped corner in place of an unreadable origin would be a second
+ * room beside the one that stands).
  */
 class ClubhouseSettingsTest {
 
@@ -47,15 +48,29 @@ class ClubhouseSettingsTest {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("max_minutes", "lots");
         m.put("party_after", "maybe");
-        m.put("origin", "here");
         List<String> warns = new ArrayList<>();
         ClubhouseSettings s = read(m, warns);
         assertEquals(ClubhouseSettings.defaults(), s, "every bad value is its shipped one");
         assertFalse(warns.contains("INVALID"), "and the Clubhouse stays open: " + warns);
-        assertEquals(3, warns.size(), "one WARN each: " + warns);
+        assertEquals(2, warns.size(), "one WARN each: " + warns);
         for (String w : warns) {
             assertTrue(w.startsWith("games.clubhouse.") && w.endsWith("using its shipped value"), w);
         }
+    }
+
+    @Test
+    void anUnreadableOriginClosesTheClubhouseRatherThanBuildASecondRoomAtTheShippedCorner() {
+        for (Object bad : new Object[]{"here", List.of(5376, 160), java.util.Arrays.asList(5376, 160, "east")}) {
+            List<String> warns = new ArrayList<>();
+            read(Map.of("origin", bad), warns);
+            assertTrue(warns.contains("INVALID"), bad + ": the Clubhouse is closed until it is fixed: " + warns);
+            assertTrue(warns.get(0).startsWith("games.clubhouse.origin") && warns.get(0).endsWith("is off until it is"
+                    + " fixed"), bad + ": one WARN says so: " + warns);
+        }
+        List<String> warns = new ArrayList<>();
+        ClubhouseSettings s = read(Map.of("origin", java.util.Arrays.asList(5376, 160, "4448")), warns);
+        assertEquals(List.of(5376, 160, 4448), s.origin(), "numbers written as text are read, as before");
+        assertEquals(List.of(), warns, "without a WARN");
     }
 
     @Test

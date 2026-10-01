@@ -1,7 +1,11 @@
 package com.dierks.homecraft.command;
 
+import com.dierks.homecraft.games.event.RaceTrack;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Sight;
+import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.Point;
+import com.dierks.homecraft.storage.EventDao;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -19,9 +23,15 @@ import java.util.Map;
  * {@code problems} (those are FAILs that say "move it").
  *
  * <p>The places are what stands or will stand: each Fresh course's and Classic's two halves where its
- * config puts them, each kept course's stored plot, the Clubhouse's and Falling Floors' boxes, and
- * the world's spawn and {@code games.fresh.safe_spot} as points (reach 0). Moving a place is done by
- * hand (there is no automatic move): the fix says how for each kind.
+ * config puts them, each kept course's stored plot, the Clubhouse's and Falling Floors' boxes, the
+ * Race Night stand an admin set for a kept or hand-built course (a point with a spectator's reach:
+ * it can be set anywhere, LAYOUT-SPEC §1.1), and the world's spawn and {@code games.fresh.safe_spot} as
+ * points (reach 0). Moving a place is done by hand (there is no automatic move): the fix says how for
+ * each kind.
+ *
+ * <p>Only what the games build is worth a WARN: a pair of two points (the spawn, the safe spot, a
+ * stand) has nothing built at either end, so it is never listed, nor named as the closest two places;
+ * nor is a stand and its own kept course, which it is set beside on purpose.
  */
 public final class SightCheck {
 
@@ -41,25 +51,40 @@ public final class SightCheck {
         /** The Games world's spawn: a point. */
         SPAWN,
         /** {@code games.fresh.safe_spot}: a point. */
-        SAFE_SPOT
+        SAFE_SPOT,
+        /**
+         * The Race Night stand an admin set for a kept or hand-built course ({@code race.stand.<course>};
+         * {@code id}: the course): a point where spectators stand, with a spectator's reach.
+         */
+        STAND
     }
 
     /**
      * One place.
      *
-     * @param id   the slot id, the plot number, or the extra's name
-     * @param name what an admin reads: "Parkour", "the Clubhouse", "the kept course "cliff_hop""
-     * @param box  its blocks (a point is a 1 x 1 x 1 box)
+     * @param id     the slot id, the plot number, the extra's name, or a stand's course
+     * @param name   what an admin reads: "Parkour", "the Clubhouse", "the kept course "cliff_hop""
+     * @param box    its blocks (a point is a 1 x 1 x 1 box)
+     * @param course the course a kept plot holds or a stand belongs to, or {@code null}
      */
-    public record Place(Kind kind, String id, String name, Box box) {
+    public record Place(Kind kind, String id, String name, Box box, String course) {
 
-        /** How far outside it a player can be: none for a point, {@link Sight#REACH} for a place the games build. */
-        public int reach() {
-            return point() ? 0 : Sight.REACH;
+        /** A place that belongs to no course. */
+        public Place(Kind kind, String id, String name, Box box) {
+            this(kind, id, name, box, null);
         }
 
+        /**
+         * How far outside it a player can be: none at the spawn or the safe spot, {@link Sight#REACH} for a
+         * place the games build and for a stand (spectators move about on it).
+         */
+        public int reach() {
+            return kind == Kind.SPAWN || kind == Kind.SAFE_SPOT ? 0 : Sight.REACH;
+        }
+
+        /** A spot where players are put and nothing is built: the spawn, the safe spot, a stand. */
         boolean point() {
-            return kind == Kind.SPAWN || kind == Kind.SAFE_SPOT;
+            return kind == Kind.SPAWN || kind == Kind.SAFE_SPOT || kind == Kind.STAND;
         }
 
         boolean half() {
@@ -141,9 +166,20 @@ public final class SightCheck {
             of.put(s, p);
             spots.add(s);
         }
-        List<Sight.Pair> pairs = Sight.pairs(spots, view);
+        List<Sight.Pair> every = new ArrayList<>();
+        for (Sight.Pair p : Sight.every(spots)) {
+            if (counts(of.get(p.a()), of.get(p.b()))) {
+                every.add(p);
+            }
+        }
+        List<Sight.Pair> pairs = new ArrayList<>();
+        for (Sight.Pair p : every) {
+            if (Sight.within(p.chunks(), view)) {
+                pairs.add(p);
+            }
+        }
         if (pairs.isEmpty()) {
-            Sight.Pair near = Sight.nearest(spots);
+            Sight.Pair near = every.isEmpty() ? null : every.get(0);
             out.add(GamesCheck.Line.ok("Nothing else built by the games can be seen from any course, the Clubhouse or"
                     + " the arena (view distance " + view + (near == null ? ")" : "; the closest two places are "
                     + near.chunks() + " chunks apart, clear up to view distance " + near.clearUpTo() + ")")));
@@ -158,6 +194,51 @@ public final class SightCheck {
             out.add(GamesCheck.Line.warn("...and " + more + " more pair" + (more == 1 ? "" : "s")
                     + " of places that can see each other", "the same fixes; run the check again after the ones above"));
         }
+    }
+
+    /**
+     * Whether a pair is worth a line: something the games build at one end at least (two points hold
+     * nothing built), and not a stand beside its own kept course.
+     */
+    static boolean counts(Place a, Place b) {
+        if (a.point() && b.point()) {
+            return false;
+        }
+        return !(a.course() != null && a.course().equalsIgnoreCase(b.course() == null ? "" : b.course())
+                && (a.kind() == Kind.STAND || b.kind() == Kind.STAND));
+    }
+
+    /**
+     * The Race Night stands an admin set ({@code race.stand.<course>}, {@code meta}) for the kept and
+     * hand-built courses in {@code world}: each a point with a spectator's reach. A stand set for another
+     * layout of its course (dropped when it is next used), one of a Fresh course (built in, inside its
+     * half) or of a course that is gone isn't one.
+     *
+     * @param courses every time-trial course by id
+     */
+    static List<Place> stands(Map<String, String> meta, Map<String, Course> courses, String world) {
+        List<Place> out = new ArrayList<>();
+        String prefix = EventDao.META + "stand.";
+        for (Map.Entry<String, String> e : meta.entrySet()) {
+            if (!e.getKey().startsWith(prefix)) {
+                continue;
+            }
+            String id = e.getKey().substring(prefix.length());
+            Course c = courses.get(id);
+            if (c == null || c.generated() || c.world() == null || !c.world().equalsIgnoreCase(world)) {
+                continue;
+            }
+            Point p = RaceTrack.decodeStand(e.getValue(), c.layoutHash());
+            if (p == null) {
+                continue;
+            }
+            int x = (int) Math.floor(p.x());
+            int y = (int) Math.floor(p.y());
+            int z = (int) Math.floor(p.z());
+            out.add(new Place(Kind.STAND, c.id(), "the Race Night stand of \"" + c.name() + "\"",
+                    new Box(x, y, z, x, y, z), c.id()));
+        }
+        return out;
     }
 
     /** One pair in sight, {@code chunks} apart at view distance {@code view}. */
@@ -184,6 +265,7 @@ public final class SightCheck {
         Place other = m == a ? b : a;
         String apart = " (" + Sight.GAP + " blocks from everything else keeps it out of sight)";
         return switch (m.kind()) {
+            case STAND -> "set the stand nearer its course: /hcm games event stand " + m.id() + " set";
             case SLOT, CLASSIC -> "move " + m.name() + " by hand: " + clearFirst(m) + ", then change " + section(m)
                     + ".origin" + apart;
             case CLUBHOUSE -> "move the Clubhouse with games.clubhouse.origin (the old room's blocks stay where they"
@@ -197,9 +279,13 @@ public final class SightCheck {
         };
     }
 
-    /** Which of two places to suggest moving: a course first (its clear is clean), a kept course last. */
+    /**
+     * Which of two places to suggest moving: a stand first (one command, nothing is built there), then a
+     * course (its clear is clean), a kept course last.
+     */
     private static int rank(Place p) {
         return switch (p.kind()) {
+            case STAND -> -1;
             case SLOT, CLASSIC -> 0;
             case CLUBHOUSE, ARENA -> 1;
             case SPAWN, SAFE_SPOT -> 2;

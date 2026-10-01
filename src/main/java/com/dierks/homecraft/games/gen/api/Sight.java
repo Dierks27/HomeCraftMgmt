@@ -71,7 +71,16 @@ public final class Sight {
      * distance {@code view}.
      */
     public static boolean inSight(Box on, int reach, Box seen, int view) {
-        return chunksApart(on, reach, seen) <= (long) view + 1;
+        return within(chunksApart(on, reach, seen), view);
+    }
+
+    /**
+     * The one sight rule, for {@link #inSight} and {@link #pairs} alike: {@code chunks} apart is in sight
+     * at view distance {@code view} exactly when {@code chunks <= view + 1} (out of sight from
+     * {@code view + 2} on).
+     */
+    public static boolean within(long chunks, int view) {
+        return chunks <= (long) view + 1;
     }
 
     /**
@@ -126,8 +135,8 @@ public final class Sight {
      */
     public static List<Pair> pairs(List<Spot> spots, int view) {
         List<Pair> out = new ArrayList<>();
-        for (Pair p : all(spots)) {
-            if (p.chunks() <= (long) view + 1) {
+        for (Pair p : every(spots)) {
+            if (within(p.chunks(), view)) {
                 out.add(p);
             }
         }
@@ -136,12 +145,15 @@ public final class Sight {
 
     /** The nearest pair of spots in one world, or {@code null} when no world holds two. */
     public static Pair nearest(List<Spot> spots) {
-        List<Pair> all = all(spots);
+        List<Pair> all = every(spots);
         return all.isEmpty() ? null : all.get(0);
     }
 
-    /** Every unordered pair in one world, nearest first (a stable sort: ties in the order given). */
-    private static List<Pair> all(List<Spot> spots) {
+    /**
+     * Every unordered pair in one world, nearest first (a stable sort: ties in the order given), in sight
+     * or not: for a caller that leaves some pairs out before it applies {@link #within}.
+     */
+    public static List<Pair> every(List<Spot> spots) {
         List<Pair> out = new ArrayList<>();
         List<Spot> list = spots == null ? List.of() : spots;
         for (int i = 0; i < list.size(); i++) {

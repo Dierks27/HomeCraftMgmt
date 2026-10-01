@@ -235,8 +235,8 @@ public final class Regions {
             return extra.name() + " needs y " + b.minY() + ".." + b.maxY() + ", outside " + MIN_Y + ".." + MAX_Y;
         }
         for (SlotConfig c : slots == null ? List.<SlotConfig>of() : slots) {
-            if (c == null || !c.enabled() || c.def() == null) {
-                continue;
+            if (c == null || !c.enabled() || !c.placed() || c.def() == null) {
+                continue; // an unplaced slot's origin is only a placeholder
             }
             for (char which : new char[]{'A', 'B'}) {
                 int gap = b.gap(half(c.def(), c.origin(), c.halfGap(), which));
@@ -447,26 +447,62 @@ public final class Regions {
     public static List<String> plotWorldProblems(int n, Box plot, WorldFacts w) {
         List<String> out = new ArrayList<>();
         if (w.minHeight() + HEADROOM > plot.minY() || plot.maxY() + 1 > w.maxHeight() - HEADROOM) {
-            out.add("plot " + n + " needs y " + plot.minY() + ".." + plot.maxY() + ", but " + w.name()
+            out.add("plot " + n + PlotIssue.HEIGHT.words + plot.minY() + ".." + plot.maxY() + ", but " + w.name()
                     + " has room for " + (w.minHeight() + HEADROOM) + ".." + (w.maxHeight() - HEADROOM - 1));
         }
         if (outside(plot, w.border())) {
-            out.add("plot " + n + " reaches past the world border (" + plot.describe() + ")");
+            out.add("plot " + n + PlotIssue.BORDER.words + " (" + plot.describe() + ")");
         }
         if (w.spawn() != null) {
             String near = near(plot, w.spawn()[0], w.spawn()[1], w.spawn()[2]);
             if (near != null) {
-                out.add("the world's spawn is " + near + " plot " + n);
+                out.add(PlotIssue.SPAWN.words + near + " plot " + n);
             }
         }
         if (w.safeSpot() != null) {
             double[] s = w.safeSpot();
             String near = near(plot, (int) Math.floor(s[0]), (int) Math.floor(s[1]), (int) Math.floor(s[2]));
             if (near != null) {
-                out.add("games.fresh.safe_spot is " + near + " plot " + n);
+                out.add(PlotIssue.SAFE_SPOT.words + near + " plot " + n);
             }
         }
         return out;
+    }
+
+    /**
+     * What a kept plot's problem ({@link #plotWorldProblems}) is about, so the check can give the fix
+     * that goes with it: a bigger world border can't move a spawn out of a plot.
+     */
+    public enum PlotIssue {
+        /** It doesn't fit the world's height. */
+        HEIGHT(" needs y "),
+        /** It reaches past the world border. */
+        BORDER(" reaches past the world border"),
+        /** The world's spawn is in it or next to it. */
+        SPAWN("the world's spawn is "),
+        /** {@code games.fresh.safe_spot} is in it or next to it. */
+        SAFE_SPOT("games.fresh.safe_spot is "),
+        /** Anything else. */
+        OTHER("");
+
+        /** The words {@link #plotWorldProblems} says it with (one source, so the two can't drift apart). */
+        final String words;
+
+        PlotIssue(String words) {
+            this.words = words;
+        }
+
+        /** The kind of {@code problem}, one of {@link #plotWorldProblems}'s lines. */
+        public static PlotIssue of(String problem) {
+            if (problem != null) {
+                for (PlotIssue i : values()) {
+                    if (i != OTHER && problem.contains(i.words)) {
+                        return i;
+                    }
+                }
+            }
+            return OTHER;
+        }
     }
 
     /**

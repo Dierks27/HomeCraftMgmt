@@ -209,6 +209,24 @@ class SightTest {
     }
 
     @Test
+    void pairsTakeTheSameBoundaryAsInSightAPairAtViewPlusOneIsInSightAndAtViewPlusTwoIsNot() {
+        Sight.Spot a = new Sight.Spot("a", "games", chunkRow(0, 0), Sight.REACH); // the reach ends in chunk 1
+        for (int view : new int[]{2, 10, 32}) {
+            Sight.Spot edge = new Sight.Spot("edge", "games", chunkRow(view + 2, view + 2), Sight.REACH);
+            Sight.Spot past = new Sight.Spot("past", "games", chunkRow(view + 3, view + 3), Sight.REACH);
+            assertEquals(view + 1, Sight.apart(a, edge), "edge is V + 1 chunks away at V = " + view);
+            assertEquals(view + 2, Sight.apart(a, past), "past is V + 2 chunks away at V = " + view);
+            assertTrue(Sight.inSight(a.box(), a.reach(), edge.box(), view), "V + 1 is sent at V = " + view);
+            assertEquals(1, Sight.pairs(List.of(a, edge), view).size(), "so a pair V + 1 apart is listed at V = "
+                    + view + ", as inSight says");
+            assertFalse(Sight.inSight(a.box(), a.reach(), past.box(), view), "V + 2 is not sent at V = " + view);
+            assertEquals(0, Sight.pairs(List.of(a, past), view).size(), "and a pair V + 2 apart isn't listed at V = "
+                    + view);
+        }
+        assertTrue(Sight.within(11, 10) && !Sight.within(12, 10), "the one rule both use: in sight up to V + 1");
+    }
+
+    @Test
     void aPairIsJudgedTheNearerWayRound() {
         Sight.Spot place = new Sight.Spot("course", "games", chunkRow(10, 11), Sight.REACH);
         Sight.Spot point = new Sight.Spot("spawn", "games", new Box(0, 100, 0, 0, 100, 0), 0);

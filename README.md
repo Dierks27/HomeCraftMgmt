@@ -428,7 +428,7 @@ player-facing guide, also in game with `/hcm guide`).
 | `/hcm hunt spawn [rarity] [player]` | admin | A wild Mini now — with no player named it lands like a natural roll (a Mini Lure wins) |
 | `/hcm hunt status\|clear` | admin | Live hunts; clear them |
 | `/hcm mini repair-escaped [confirm]` | admin | Give back mint numbers old wild escapes burned (dry run first) |
-| `/hcm config reset <section> [confirm]` | admin | Put `arcade` (or `arcade.<part>`), `games` (or `games.<part>`), `packs`, `minis.loot.natural`, `minis.effects` or `clock` back to the bundled defaults. Dry run without `confirm`; snapshots config.yml first |
+| `/hcm config reset <section> [confirm]` | admin | Put `arcade` (or `arcade.<part>`), `games` (or `games.<part>`), `packs`, `minis.loot.natural`, `minis.effects` or `clock` back to the bundled defaults. Dry run without `confirm`; snapshots config.yml first. It never changes where a Games place stands: every `origin` and `half_gap`, `keep.area`, `keep.plot_gap`, `games.worlds` and `games.fresh.world` are kept as they are (the dry run lists them) |
 | `/hcm homes refresh [player]` | admin | Recheck the +1 Home perk (re-reads Essentials' `sethome-multiple`) |
 
 Every daily limit — the Arcade's, the market's and the Courier's — rolls over at local
@@ -537,7 +537,10 @@ web developer's version.
 Everything under `games:` reloads with `/hcm reload`. A value out of range is clamped with one
 WARN naming the key. A value that can't be read at all closes what it belongs to: junk in these
 common keys turns the games off, junk in one game's block closes that game.
-`/hcm config reset games` (or `games.<part>`) puts it back as shipped.
+`/hcm config reset games` (or `games.<part>`) puts it back as shipped, all but where the Games places
+stand: every `origin` and `half_gap`, `keep.area`, `keep.plot_gap`, `games.worlds` and
+`games.fresh.world` stay as they are (the dry run lists them as kept), since putting those back would
+move what is built. Places move by hand only (see "Moving an area by hand").
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -1022,6 +1025,26 @@ move by hand (below): clear first. `/hcm games check` says for each Games world 
 ("Games world 'sky' is void (nothing below the courses)") and warns when a world's spawn has nothing
 under it ("... someone arriving there would fall").
 
+**After a restart.** The generator isn't saved with the world: at every start Multiverse makes `sky`
+again and asks for HomeCraftManagement's generator by name, and the server hands out only the
+generator of a plugin that is already running. So HomeCraftManagement starts before Multiverse-Core
+(plugin.yml: `loadbefore: [Multiverse-Core]`; neither Multiverse plugin is a soft dependency), and
+`sky` stays void after every restart. Nothing else changes for you: the games wait a tick for their
+world, and a game going on during a stop still gives every player their own things back before
+Multiverse-Inventories saves them. Make `sky` with Multiverse only (not in `bukkit.yml`, which the
+server reads before any plugin is running), and check it once:
+
+1. Make `sky` (above), stand in it, and look: nothing below the platform.
+2. Restart the server. In the start-up log, HomeCraftManagement is enabled before Multiverse-Core, and
+   there is no line "Could not set generator for world 'sky'".
+3. `/hcm games check` still says "Games world 'sky' is void (nothing below the courses)".
+4. Fly a few hundred blocks from the platform, into chunks nobody has been to yet: still only sky.
+
+If the check says "isn't a void world" after a restart, the chunks made since then have ordinary
+ground, biomes and mobs: don't build there. Make sure HomeCraftManagement's jar is this version, then
+delete the world with Multiverse (`/mv delete sky`, then confirm) and make it again (step 1 of the list
+above).
+
 **Moving an area by hand.** Nothing moves by itself: a place stays where it was built until you empty
 it and give it another spot. Change an `origin` (or `half_gap`, or `games.fresh.world`) without
 emptying first and the course is treated as a new one: a new course on a fresh board at the new
@@ -1033,14 +1056,25 @@ you drain it: status says "drain first").
   (and take out its `half_gap`, or set it to 576), `/hcm reload` and `/hcm games gen on <course>`: the
   new area is checked empty and the next course is built there.
 - **A Classic:** `/hcm games gen unrecall <classic> confirm` (it empties both halves once nobody is on
-  them), then change `games.fresh.classics.slots.<classic>.origin` (and its `half_gap`) and `/hcm
-  reload`; the next recall is built there. Classic Dropper and Classic Golf keep their old, empty
-  halves guarded afterwards (status lists them); that is harmless.
+  them) and wait for the console's "<classic>'s halves are empty" (status says "empty"). Then change
+  `games.fresh.classics.slots.<classic>.origin` (and its `half_gap`) and `/hcm reload`: the console
+  says "Its old halves were emptied first", and the next recall checks the new spot empty and is
+  built there. Changed before its halves are empty, it WARNs and leaves the old halves as they are (a
+  Classic Dropper's or Classic Golf's stay guarded, and status says to move it back and restart, which
+  empties them).
 - **The Clubhouse** (`games.clubhouse.origin`) and **Falling Floors** (`games.falling_floors.origin`):
   change the origin and `/hcm reload`. The new box must be empty; the old room's or arena's blocks stay
   where they are, for you to take down.
 - **Kept courses** stay where they were kept. `keep.area` and `keep.plot_gap` only place the courses
   kept from then on.
+- **A typo in a spot** (say `half_gap: "32"` in quotes, or an origin with a word in it) never moves
+  anything: that course or Classic stays where it stands, switched off (even after `/hcm games gen on`),
+  until the value reads again; the WARN names the key and `/hcm games gen status` says why. A bad
+  `enabled` or tier switches the course off where its origin puts it. An unreadable
+  `games.clubhouse.origin` or `games.falling_floors.origin` closes that room until it is fixed. Nothing
+  is ever built at the shipped spot in its place. (A key that is missing is different: the next start
+  fills it in from the shipped config.yml. On a server that kept 0.35's spots, don't delete an `origin`
+  or `half_gap`, or write a course as a bare `false`: write the value you want instead.)
 - A spot 576 blocks from every other place (x and z) is out of sight; `/hcm games check` shows what
   can still be seen. The shipped spots (config.yml) are all free once nothing else is built there.
 
@@ -1053,8 +1087,11 @@ chunks apart, clear up to view distance 34)" or one WARN per pair of places clos
 other, nearest first (at most 8, then "...and N more"), like "From Tiny Golf, players can see the
 Clubhouse (9 chunks away; view distance 10)", each with how to move one by hand, and the view distance
 that would hide them when there is one. Places are the courses' and Classics' halves, the kept
-courses' plots, the Clubhouse, the arena, the world's spawn and `safe_spot`. It is never a FAIL: a
-course that can see another still works.
+courses' plots, the Clubhouse, the arena, the Race Night stands set for kept and hand-built courses
+("From the Race Night stand of "Cool Jumps", players can see Sky Rings", fixed with `/hcm games event
+stand <course> set` nearer its course), the world's spawn and `safe_spot`. Two spots where nothing is
+built (the spawn, `safe_spot`, a stand) are never a pair, nor is a stand and its own kept course. It is
+never a FAIL: a course that can see another still works.
 
 **Coming from 0.35 (a server that already built).** At the first start after the update, before the
 games start, the plugin looks in its database for anything 0.35 built: a Fresh set or a claimed area,
@@ -1068,9 +1105,13 @@ it by hand (above). If nothing was built, every spot you never changed takes the
 set yourself stays, with `half_gap: 32` (or `plot_gap: 0`) so its shape stays too, and a WARN names
 it. A fresh install needs none of this: its config.yml is the new layout. The answer is found once and
 stored (`gen.layout.guard` in `hcm_meta`); a stop halfway just finds the same answer at the next
-start, and the games don't start until it is stored. Don't run `/hcm config reset games` (or
-`games.fresh`, `games.clubhouse`, `games.falling_floors`) on a server that kept 0.35's spots: it puts
-the new spots back, which is a move without a clear.
+start, and the games don't start until it is stored. If config.yml can't be written at that start (a
+read-only file), the console says so and the games stay off until it can: they never start on a file
+that doesn't hold the answer yet. Never delete the `gen.layout.guard` row: if it is ever damaged the
+console names the word to write back (`legacy|...` or `new|...`). `/hcm config reset games` (or
+`games.fresh`, `games.clubhouse`, `games.falling_floors`, ...) never puts the new spots in: it leaves
+every `origin`, `half_gap`, `keep.area`, `keep.plot_gap` and the Games worlds as they are (the dry run
+lists them as kept).
 
 **Stars and tokens.** Parkour and Sky Rings: 3 stars under the gold time, 2 under the silver time
 (both fixed when the course is made, from its expert time: see `stars`), 1 for finishing. Golf: 3 at
@@ -2355,6 +2396,11 @@ Dropper and Falling Floors have their own lists in their sections)
     smooth-stone platform with a light, and there is nothing else, not even below. With `sky` in
     `games.worlds` and `/hcm reload`, `/hcm games check` says "Games world 'sky' is void (nothing
     below the courses)" (finish the steps in "A void world", or take it out again).
+80. Restart the server with `sky` made. The start-up log enables HomeCraftManagement before
+    Multiverse-Core and has no "Could not set generator for world 'sky'" line; `/hcm games check`
+    still says "Games world 'sky' is void", and flying to chunks nobody has visited shows only sky.
+    Start a course in `sky`, then stop the server while you are on it: after the next start you are
+    sent home with your own things, and entering `sky` again shows no kit items left over.
 
 ---
 

@@ -1,6 +1,7 @@
 package com.dierks.homecraft.command;
 
 import com.dierks.homecraft.games.RestartHold;
+import com.dierks.homecraft.games.gen.engine.Regions;
 import org.bukkit.configuration.ConfigurationSection;
 
 import java.util.ArrayList;
@@ -467,13 +468,32 @@ public final class GamesCheck {
         out.add(fr.keepProblem() == null ? Line.ok("Keep area: " + fr.keepArea())
                 : Line.fail("The keep area can't be used: " + fr.keepProblem(), "move it with games.fresh.keep.area"));
         if (fr.keepProblem() == null && !fr.keepPlots().isEmpty()) {
-            List<Integer> plots = new ArrayList<>(new java.util.TreeSet<>(fr.keepPlots().keySet()));
-            int n = plots.size();
-            out.add(Line.warn(n + " kept-course plot" + (n == 1 ? "" : "s") + " (" + plotList(plots)
-                            + ") can't be used: " + fr.keepPlots().get(plots.get(0)),
-                    "make the world border bigger (stand in " + fr.world() + " and use /worldborder set), or move"
-                            + " games.fresh.keep.area; a course is only ever kept in a plot that fits"));
+            // one WARN per kind of problem, lowest plot first, each with the fix that fits it
+            Map<Regions.PlotIssue, List<Integer>> byKind = new LinkedHashMap<>();
+            for (int n : new java.util.TreeSet<>(fr.keepPlots().keySet())) {
+                byKind.computeIfAbsent(Regions.PlotIssue.of(fr.keepPlots().get(n)), k -> new ArrayList<>()).add(n);
+            }
+            for (Map.Entry<Regions.PlotIssue, List<Integer>> e : byKind.entrySet()) {
+                List<Integer> plots = e.getValue();
+                int n = plots.size();
+                out.add(Line.warn(n + " kept-course plot" + (n == 1 ? "" : "s") + " (" + plotList(plots)
+                        + ") can't be used: " + fr.keepPlots().get(plots.get(0)), plotFix(e.getKey(), fr.world())));
+            }
         }
+    }
+
+    /** The fix for kept plots with problem {@code kind} in {@code world}. */
+    static String plotFix(Regions.PlotIssue kind, String world) {
+        String fits = "; a course is only ever kept in a plot that fits";
+        return switch (kind) {
+            case BORDER -> "make the world border bigger (stand in " + world + " and use /worldborder set), or move"
+                    + " games.fresh.keep.area" + fits;
+            case SPAWN -> "move the world's spawn out of the keep area (stand elsewhere in " + world + " and use"
+                    + " /setworldspawn), or move games.fresh.keep.area" + fits;
+            case SAFE_SPOT -> "move games.fresh.safe_spot out of the keep area, or move games.fresh.keep.area" + fits;
+            case HEIGHT -> "move games.fresh.keep.area to a height " + world + " has room for" + fits;
+            case OTHER -> "move games.fresh.keep.area" + fits;
+        };
     }
 
     /** "3" / "19-24" / "3, 19-24": plot numbers as ranges. */
@@ -495,7 +515,11 @@ public final class GamesCheck {
         List<Line> problems = new ArrayList<>();
         String origin = r.classic() ? "games.fresh.classics.slots." + r.id() + ".origin" : "games.fresh.slots." + r.id() + ".origin";
         if (!r.problems().isEmpty()) {
-            problems.add(Line.fail(r.name() + ": " + r.problems().get(0), "move it with " + origin));
+            // a spot config can't read isn't one to move away from: fixing the value is the whole fix
+            boolean typo = com.dierks.homecraft.games.gen.engine.GenService.UNPLACED.equals(r.problems().get(0));
+            problems.add(Line.fail(r.name() + ": " + r.problems().get(0), typo ? "write " + origin + " (or its"
+                    + " half_gap) as the console's WARN says, then /hcm reload; nothing moves meanwhile"
+                    : "move it with " + origin));
         }
         List<String> state = new ArrayList<>();
         if (running && s != null) {

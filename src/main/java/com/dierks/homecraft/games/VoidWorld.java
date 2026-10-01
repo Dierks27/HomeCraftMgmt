@@ -30,6 +30,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * walks off a course is caught by the game session's own "fell out of the world" check long before
  * vanilla's void damage (64 blocks under the floor).
  *
+ * <p>The generator isn't stored with the world: at every start Multiverse makes it again and asks
+ * Bukkit for this plugin's generator by name, and Bukkit hands out only an enabled plugin's. So
+ * plugin.yml loads this plugin before Multiverse-Core ({@code loadbefore}); a chunk first made while
+ * the generator was missing would keep vanilla ground for good ({@code /hcm games check} says
+ * "isn't a void world").
+ *
  * <p>The platform and the spawn are pure data here ({@link #platform()}, {@link #inChunk}) and tested
  * without a server; only {@link Generator} touches Bukkit. The platform is hundreds of chunks from
  * every place the games build, far past {@code Regions.CLEARANCE}.

@@ -17,7 +17,8 @@ import java.util.Map;
  * the defaults and never throws. Unlike a game's usual block, a key that can't be read is NOT junk
  * that closes the Clubhouse: it logs one WARN and uses its shipped value (§5: "an unreadable block
  * logs a WARN and uses the defaults"). Only {@code enabled} itself fails closed, as every games
- * switch does (the framework's rule), and then every flow behaves exactly as it did before.
+ * switch does (the framework's rule), and so does {@code origin}, where the room stands (the shipped
+ * corner in its place would be a second room); then every flow behaves exactly as it did before.
  *
  * @param enabled        the Clubhouse's own switch (it also needs {@code games.enabled})
  * @param origin         the box's min corner {x, y, z}; x and z on the 16-block grid
@@ -55,11 +56,17 @@ public record ClubhouseSettings(boolean enabled, List<Integer> origin, int maxMi
         return new ClubhouseSettings(true, ORIGIN, 30, true, true, true);
     }
 
-    /** Read {@code games.clubhouse} over {@code d}; never throws, and a bad value is its shipped one. */
+    /**
+     * Read {@code games.clubhouse} over {@code d}; never throws, and a bad value is its shipped one, except
+     * {@code origin}: one that can't be read closes the Clubhouse until it is fixed (one WARN,
+     * {@link GamesConfig.Node#invalid}). The shipped corner isn't where a server that kept 0.35's spots,
+     * or an owner who moved the room, built it: the room would read it as a move and build a second
+     * Clubhouse there, leaving the first standing.
+     */
     public static ClubhouseSettings parse(GamesConfig.Node n, ClubhouseSettings d) {
         boolean enabled = n.enabled(d.enabled());
         GamesConfig.Node k = lenient(n);
-        List<Integer> origin = k.intList("origin", d.origin(), -Regions.MAX_XZ, Regions.MAX_XZ, 3);
+        List<Integer> origin = n.intList("origin", d.origin(), -Regions.MAX_XZ, Regions.MAX_XZ, 3);
         if (origin != d.origin()) {
             int x = Math.floorDiv(origin.get(0), 16) * 16;
             int z = Math.floorDiv(origin.get(2), 16) * 16;

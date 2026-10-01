@@ -222,5 +222,13 @@ class HalfGapTest {
         assertTrue(low.get(0).contains("plot 1 needs y 128..303"), "a world too low for a plot: " + low);
         assertEquals(List.of(), Regions.plotWorldProblems(1, plot, world(null, null, null)), "nothing in the way");
         assertEquals(Map.of(), Regions.keepWorldProblems(null, world(border, null, null)), "no area, nothing to say");
+
+        // each problem says what it is about, so the check gives the fix that goes with it
+        assertEquals(Regions.PlotIssue.BORDER, Regions.PlotIssue.of(bad.get(19)), "past the border: " + bad.get(19));
+        assertEquals(Regions.PlotIssue.SPAWN, Regions.PlotIssue.of(near.get(0)), "the spawn: " + near.get(0));
+        assertEquals(Regions.PlotIssue.SAFE_SPOT, Regions.PlotIssue.of(Regions.plotWorldProblems(1, plot,
+                world(null, null, safeInside)).get(0)), "the safe spot");
+        assertEquals(Regions.PlotIssue.HEIGHT, Regions.PlotIssue.of(low.get(0)), "the height: " + low.get(0));
+        assertEquals(Regions.PlotIssue.OTHER, Regions.PlotIssue.of("something else"), "anything else");
     }
 }

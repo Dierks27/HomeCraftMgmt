@@ -308,9 +308,15 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
      * @param halfGap    the blocks between its half A and half B along +X ({@code half_gap}, optional;
      *                   {@link Slots#HALF_GAP} when config names none). Where half B stands, so it is
      *                   part of the claim: changing it moves the spare half like changing the origin.
+     * @param placed     config says where it stands. False when its {@code origin} or {@code half_gap}
+     *                   can't be read ({@link #unplaced}): then {@code origin} and {@code halfGap} are only
+     *                   placeholders, it is off, and the engine keeps it where it was claimed. The shipped
+     *                   spot is never taken for it, since that isn't where a server that kept 0.35's
+     *                   spots (or an owner who moved it) built it: the engine would call it moved,
+     *                   reroll it there and leave the built one standing.
      */
     public record SlotConfig(String id, boolean enabled, String tierOrMix, int[] origin, int dailyClear,
-                             int halfGap) {
+                             int halfGap, boolean placed) {
 
         public SlotConfig {
             origin = origin == null ? new int[3] : origin.clone();
@@ -320,6 +326,11 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             if (halfGap < 0) {
                 throw new IllegalArgumentException("a half gap is 0 or more blocks: " + halfGap);
             }
+        }
+
+        /** A slot config places. */
+        public SlotConfig(String id, boolean enabled, String tierOrMix, int[] origin, int dailyClear, int halfGap) {
+            this(id, enabled, tierOrMix, origin, dailyClear, halfGap, true);
         }
 
         /** A slot at the default gap ({@link Slots#HALF_GAP}). */
@@ -339,23 +350,31 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         }
 
         public SlotConfig withEnabled(boolean on) {
-            return new SlotConfig(id, on, tierOrMix, origin, dailyClear, halfGap);
+            return new SlotConfig(id, on, tierOrMix, origin, dailyClear, halfGap, placed);
         }
 
         public SlotConfig withOrigin(int[] o) {
-            return new SlotConfig(id, enabled, tierOrMix, o, dailyClear, halfGap);
+            return new SlotConfig(id, enabled, tierOrMix, o, dailyClear, halfGap, placed);
         }
 
         public SlotConfig withTierOrMix(String t) {
-            return new SlotConfig(id, enabled, t, origin, dailyClear, halfGap);
+            return new SlotConfig(id, enabled, t, origin, dailyClear, halfGap, placed);
         }
 
         public SlotConfig withDailyClear(int tokens) {
-            return new SlotConfig(id, enabled, tierOrMix, origin, tokens, halfGap);
+            return new SlotConfig(id, enabled, tierOrMix, origin, tokens, halfGap, placed);
         }
 
         public SlotConfig withHalfGap(int gap) {
-            return new SlotConfig(id, enabled, tierOrMix, origin, dailyClear, gap);
+            return new SlotConfig(id, enabled, tierOrMix, origin, dailyClear, gap, placed);
+        }
+
+        /**
+         * The same slot, off and not placed ({@link #placed}): what config says of a slot whose origin or
+         * half_gap can't be read.
+         */
+        public SlotConfig unplaced() {
+            return new SlotConfig(id, false, tierOrMix, origin, dailyClear, halfGap, false);
         }
 
         /** The shipped settings of a slot (at the shipped, weekly, cadence). */
@@ -368,19 +387,19 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         public boolean equals(Object o) {
             return o instanceof SlotConfig s && id.equals(s.id) && enabled == s.enabled
                     && tierOrMix.equals(s.tierOrMix) && Arrays.equals(origin, s.origin) && dailyClear == s.dailyClear
-                    && halfGap == s.halfGap;
+                    && halfGap == s.halfGap && placed == s.placed;
         }
 
         @Override
         public int hashCode() {
-            return ((id.hashCode() * 31 + Arrays.hashCode(origin)) * 31 + tierOrMix.hashCode() + dailyClear
-                    + (enabled ? 1 : 0)) * 31 + halfGap;
+            return (((id.hashCode() * 31 + Arrays.hashCode(origin)) * 31 + tierOrMix.hashCode() + dailyClear
+                    + (enabled ? 1 : 0)) * 31 + halfGap) * 2 + (placed ? 1 : 0);
         }
 
         @Override
         public String toString() {
             return "SlotConfig[" + id + ", " + (enabled ? "on" : "off") + ", " + tierOrMix + ", "
-                    + Arrays.toString(origin) + ", " + dailyClear + ", gap " + halfGap + "]";
+                    + (placed ? Arrays.toString(origin) + ", gap " + halfGap : "not placed") + ", " + dailyClear + "]";
         }
     }
 
@@ -471,18 +490,20 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             SlotConfig c = shipped == null ? SlotConfig.shipped(def) : shipped;
             Object raw = cs.raw(def.id());
             if (raw != null) {
+                // as a course's (slot()): an origin or gap that can't be read leaves it unplaced, never at
+                // the shipped spot
                 Object o = raw instanceof Map<?, ?> ? cs.child(def.id()).raw("origin") : raw;
                 int[] read = o == null ? c.origin() : origin(o);
                 if (read == null) {
                     cs.warn(cs.key(def.id()) + ".origin should be three whole numbers [x, y, z] - that Classics slot"
                             + " is off");
-                    c = c.withEnabled(false);
+                    c = c.unplaced();
                 } else {
                     c = c.withOrigin(read);
                 }
-                if (raw instanceof Map<?, ?> && c.enabled()) {
+                if (raw instanceof Map<?, ?> && c.placed()) {
                     Integer gap = halfGap(cs.child(def.id()), c.halfGap());
-                    c = gap == null ? c.withEnabled(false) : c.withHalfGap(gap);
+                    c = gap == null ? c.unplaced() : c.withHalfGap(gap);
                 }
             }
             both.add(c);
@@ -527,7 +548,7 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             List<Box> halves = new ArrayList<>();
             for (SlotConfig c : both) {
                 Slots.Def def = c.def();
-                if (def != null) {
+                if (def != null && c.placed()) { // an unplaced one's origin is a placeholder
                     halves.addAll(Regions.halves(def, c.origin(), c.halfGap()));
                 }
             }
@@ -837,6 +858,12 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
      * {@code slots.<id>}: its switch, tier (or {@code mix} for golf and the droppers) and origin. Anything here that
      * can't be used switches this slot off with one WARN; it never closes the rest of Fresh
      * Courses. (Its first-finish tokens are in {@code rewards}.)
+     *
+     * <p>Where it stands is read first, and a bad switch or tier keeps it: that course is off where
+     * config puts it. An origin or {@code half_gap} that can't be read leaves it {@link SlotConfig#unplaced
+     * unplaced}, never at the shipped spot: on a server that kept 0.35's spots (or where the owner moved
+     * it) that isn't where it was built, and the engine would read the shipped spot as a move, reroll the
+     * course there and leave the built one standing.
      */
     private static SlotConfig slot(GamesConfig.Node slots, Slots.Def def, SlotConfig d) {
         Object raw = slots.raw(def.id());
@@ -848,20 +875,39 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             Boolean on = GamesConfig.readSwitch(raw);
             if (on == null) {
                 slots.warn(key + " should be a section of settings, not \"" + raw + "\" - that course is off");
-                return d.withEnabled(false);
+                return d.unplaced();
             }
             slots.warn(key + " should be a section of settings - reading it as " + key + ".enabled: " + on
                     + " and the rest as shipped");
             return d.withEnabled(on);
         }
         GamesConfig.Node n = slots.child(def.id());
+        int[] origin = d.origin();
+        boolean placed = true;
+        Object o = n.raw("origin");
+        if (o != null) {
+            int[] read = origin(o);
+            if (read == null) {
+                n.warn(n.key("origin") + " should be three whole numbers [x, y, z], not " + o
+                        + " - that course is off");
+                placed = false;
+            } else {
+                origin = read;
+            }
+        }
+        Integer gap = halfGap(n, d.halfGap());
+        SlotConfig here = new SlotConfig(def.id(), d.enabled(), d.tierOrMix(), origin, d.dailyClear(),
+                gap == null ? d.halfGap() : gap);
+        if (!placed || gap == null) {
+            return here.unplaced();
+        }
         boolean enabled = d.enabled();
         Object en = n.raw("enabled");
         if (en != null) {
             Boolean on = GamesConfig.readSwitch(en);
             if (on == null) {
                 n.warn(n.key("enabled") + " should be true or false, not \"" + en + "\" - that course is off");
-                return d.withEnabled(false);
+                return here.withEnabled(false);
             }
             enabled = on;
         }
@@ -871,24 +917,9 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         if (t != null) {
             if (t instanceof Map<?, ?> || t instanceof List<?>) {
                 n.warn(n.key(which) + " should be a single value - that course is off");
-                return d.withEnabled(false);
+                return here.withEnabled(false);
             }
             tierOrMix = def.normalise(String.valueOf(t));
-        }
-        int[] origin = d.origin();
-        Object o = n.raw("origin");
-        if (o != null) {
-            int[] read = origin(o);
-            if (read == null) {
-                n.warn(n.key("origin") + " should be three whole numbers [x, y, z], not " + o
-                        + " - that course is off");
-                return d.withEnabled(false);
-            }
-            origin = read;
-        }
-        Integer gap = halfGap(n, d.halfGap());
-        if (gap == null) {
-            return d.withEnabled(false);
         }
         return new SlotConfig(def.id(), enabled, tierOrMix, origin, d.dailyClear(), gap);
     }

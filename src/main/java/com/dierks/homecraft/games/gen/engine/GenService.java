@@ -990,7 +990,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         } catch (SQLException | RuntimeException e) {
             meta = null;
         }
-        String world = st.world().isBlank() ? first(host.gamesWorlds()) : st.world();
+        String configWorld = st.world().isBlank() ? first(host.gamesWorlds()) : st.world();
         noticeSchedule(meta);
         List<Object[]> kept = new ArrayList<>();
         if (meta != null) {
@@ -1001,11 +1001,31 @@ public final class GenService implements GeneratedCourses, GenOps {
             if (c == null) {
                 continue;
             }
+            String world = configWorld;
             int[] origin = c.origin();
             int gap = c.halfGap();
-            if (!s.sameRegion(world, origin, gap) && (s.claimed || s.live != null) && !s.world.isBlank()) {
-                moved(s, world, origin, gap, !s.classic && !s.claimed && meta != null
-                        && meta.get(GenAdminKeys.claim(s.def.id())) == null);
+            boolean was = s.unplaced;
+            s.unplaced = !c.placed();
+            if (s.unplaced && !was) {
+                vet(s, null); // off at once, and why said once
+            } else if (was && !s.unplaced && UNPLACED.equals(s.problem)) {
+                s.problem = null; // config reads again: the next check says whether anything else is in the way
+            }
+            if (s.unplaced) {
+                // Config can't say where it stands (an origin or half_gap it can't read): it stays where it
+                // was claimed, else where it was, so this is never a move (a reroll at a spot nobody chose,
+                // the built course left standing), and it is off until config is fixed (SlotState#wanted).
+                String claim = meta == null ? null : meta.get(GenAdminKeys.claim(s.def.id()));
+                boolean known = Regions.claimOrigin(claim) != null && Regions.claimWorld(claim) != null;
+                world = known ? Regions.claimWorld(claim) : s.world;
+                origin = known ? Regions.claimOrigin(claim) : s.origin;
+                gap = known ? Regions.claimGap(claim) : s.gap;
+            }
+            if (!s.sameRegion(world, origin, gap) && (s.claimed || s.live != null) && !s.world.isBlank()
+                    && moved(s, world, origin, gap, !s.classic && !s.claimed && meta != null
+                    && meta.get(GenAdminKeys.claim(s.def.id())) == null) && meta != null) {
+                meta = new HashMap<>(meta); // an emptied Classic let its old claim go: nothing to remember as wet
+                meta.remove(GenAdminKeys.claim(s.def.id()));
             }
             s.world = world;
             s.origin = origin;
@@ -1126,6 +1146,11 @@ public final class GenService implements GeneratedCourses, GenOps {
      */
     private static String drainFirst(SlotState s) {
         String water = s.def.golf() ? "ponds" : "pools";
+        if (s.classic) {
+            // clear doesn't take a Classic: back at its claimed place, a start empties both halves of an empty one
+            return "Its " + water + " may still be there, so that area stays guarded: drain first - move it back and"
+                    + " restart (an empty Classic's halves are emptied then, the " + water + " before anything else).";
+        }
         return "Its " + water + " may still be there, so that area stays guarded: drain first - move it back and use"
                 + " /hcm games gen clear " + s.def.id() + " (it empties the " + water + " before anything else).";
     }
@@ -1200,9 +1225,25 @@ public final class GenService implements GeneratedCourses, GenOps {
     /**
      * A slot's region moved (config): nothing at the old place is vouched for or cleared. A slot that
      * was {@code cleared} first (its claim given up: README "Moving an area by hand") left nothing there,
-     * so that is said as an INFO, not the "not cleared" WARN.
+     * so that is said as an INFO, not the "not cleared" WARN. So did a Classic closed first (unrecalled:
+     * a Classic keeps its claim, and {@code clear} doesn't take one) whose halves have been emptied since;
+     * its old claim is let go here, as a clear lets a course's go, so a Golf or Dropper Classic's old
+     * place isn't remembered as one that may still hold water.
+     *
+     * @return whether it was such an emptied Classic and its old claim is gone
      */
-    private void moved(SlotState s, String world, int[] origin, int gap, boolean cleared) {
+    private boolean moved(SlotState s, String world, int[] origin, int gap, boolean cleared) {
+        boolean emptied = s.classic && s.want == null && s.live == null && s.previous == null && !s.bothDirty
+                && !s.oldDirty && !s.clearing && (job == null || job.slot != s);
+        if (emptied) {
+            try {
+                host.store().meta(GenAdminKeys.claim(s.def.id()), null);
+            } catch (SQLException | RuntimeException e) {
+                host.logger().log(Level.WARNING, "Fresh Courses: could not let " + s.def.id() + "'s old claim go", e);
+                emptied = false; // still claimed there: its old place stays guarded
+            }
+        }
+        cleared |= emptied;
         if (job != null && job.slot == s) {
             cancel(job, "its region moved");
         }
@@ -1211,8 +1252,10 @@ public final class GenService implements GeneratedCourses, GenOps {
                 + Regions.describe(s.def, s.origin, s.gap) + " to " + world + " "
                 + Regions.describe(s.def, origin, gap);
         if (!cleared) {
-            host.logger().warning(line + ". The old halves were not cleared (use /hcm games gen clear before moving a"
-                    + " course)." + (s.def.mayHoldWater() ? " " + drainFirst(s) : ""));
+            host.logger().warning(line + ". The old halves were not cleared (" + (s.classic
+                    ? "close it first with /hcm games gen unrecall " + s.def.id() + " confirm and wait until its"
+                    + " halves are empty" : "use /hcm games gen clear before moving a course") + ")."
+                    + (s.def.mayHoldWater() ? " " + drainFirst(s) : ""));
         } else {
             host.logger().info(line + ". Its old halves were emptied first, so nothing is left there; the new area is"
                     + " checked before it is used.");
@@ -1222,8 +1265,10 @@ public final class GenService implements GeneratedCourses, GenOps {
         s.previous = null;
         s.clearing = false;
         s.oldDirty = false;
+        s.bothDirty = false; // a Classic's halves are the new ones now, which nothing holds yet: never cleared unscanned
         s.preview = null;
         s.claimed = false;
+        return emptied;
     }
 
     private void vetAll() {
@@ -1237,7 +1282,9 @@ public final class GenService implements GeneratedCourses, GenOps {
     /** §2.4 at start and before a build: sets (and logs once) the slot's problem, or clears it. */
     private String vet(SlotState s, List<Regions.Area> built) {
         String why = null;
-        if (s.wanted()) {
+        if (s.unplaced) {
+            why = UNPLACED;
+        } else if (s.wanted()) {
             why = vetProblem(s, built);
         }
         if (why == null && s.problem != null && s.problem.startsWith(FOREIGN)) {
@@ -1251,6 +1298,9 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     private static final String FOREIGN = "Region has ";
+    /** Why a slot whose origin or half_gap config can't read is off ({@link SlotState#unplaced}). */
+    public static final String UNPLACED = "its origin or half_gap in config.yml can't be read (the WARN at the last start or"
+            + " /hcm reload says which), so it stays where it was built and is off until that is fixed";
 
     private String vetProblem(SlotState s, List<Regions.Area> built) {
         if (planners.get(s.def.generator()) == null) {
@@ -2704,8 +2754,8 @@ public final class GenService implements GeneratedCourses, GenOps {
                 int[] o = Regions.claimOrigin(c);
                 out.add(s.def.id() + ": its old area in " + Regions.claimWorld(c) + " (" + (o == null ? c
                         : Regions.describe(s.def, o, Regions.claimGap(c))) + ") is still guarded - drain first:"
-                        + " move it back and /hcm"
-                        + " games gen clear " + s.def.id());
+                        + " move it back and " + (s.classic ? "restart (an empty Classic's halves are emptied then;"
+                        + " clear doesn't take a Classic)" : "/hcm games gen clear " + s.def.id()));
             }
         }
         return out;

@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.engine.GenAdminKeys;
 import com.dierks.homecraft.games.gen.engine.KeepArea;
+import com.dierks.homecraft.games.gen.engine.KeptPlot;
 import com.dierks.homecraft.games.gen.engine.Regions;
 import com.dierks.homecraft.storage.Database;
 import com.dierks.homecraft.storage.GamesDao;
@@ -50,7 +51,12 @@ import java.util.function.Function;
  * then stamp. Applying a decision to a file that already has it changes nothing, so a stop anywhere
  * before the stamp just decides again with the same inputs and writes the same file; a stop after it
  * finds nothing to do. The Games start only once the guard has finished, so nothing is ever built
- * before the stamp exists: "no stamp" always means "anything built was built by 0.35".
+ * before the stamp exists: "no stamp" means "anything built was built by 0.35", unless the stamp was
+ * lost since. A claim of this version's shape says so ({@link #builtNew}: 0.35 never wrote one), and
+ * then the server keeps the new layout: a file already through revision 19 is left as it is, rather
+ * than given 0.35's spots over the courses built at the new ones. A file still below revision 19 (the
+ * migration couldn't save it, so it was never marked) counts as marked, so nothing is stamped or
+ * started until the decision is in the file.
  *
  * <p><b>What each decision writes</b> ({@link #apply}), for the 16 places ({@link #AREAS}):
  * <ul>
@@ -216,6 +222,30 @@ public final class LayoutGuard {
     private LayoutGuard() {
     }
 
+    // ---- what a config reset leaves alone -------------------------------------------------------
+
+    /**
+     * The config paths that say where the Games places stand and how their halves and plots are spaced
+     * ({@code /hcm config reset} leaves them as they are: {@code ConfigReset.kept}),
+     * as {@code c} holds them: each course's and Classic's {@code origin} and {@code half_gap} (a Classic
+     * written as a bare {@code [x, y, z]} list: its whole entry), {@code keep.area} and
+     * {@code keep.plot_gap}, and the Clubhouse's and the arena's {@code origin}.
+     */
+    public static List<String> spotPaths(FileConfiguration c) {
+        List<String> out = new ArrayList<>();
+        for (Area a : AREAS) {
+            if (a.kind() == Kind.CLASSIC && c.get(a.entry(), null) instanceof List<?>) {
+                out.add(a.entry());
+                continue;
+            }
+            out.add(a.originPath());
+            if (a.gapPath() != null) {
+                out.add(a.gapPath());
+            }
+        }
+        return out;
+    }
+
     // ---- revision 19: the mark --------------------------------------------------------------
 
     /**
@@ -246,6 +276,20 @@ public final class LayoutGuard {
     /** Whether {@code c} carries the mark. */
     public static boolean pending(FileConfiguration c) {
         return c.get(PENDING_KEY, null) != null;
+    }
+
+    /** The config revision that brings this layout (and the mark): {@code HomeCraftManagement.CONFIG_REVISION} 19. */
+    public static final int REVISION = 19;
+
+    /**
+     * Whether {@code c} is still below {@link #REVISION}: the config migration couldn't save it (a
+     * read-only file, say), so revision 19 never marked it, though it came from an older version. It is
+     * pending all the same ({@link #run}): the decision is written into it before anything is stamped, so
+     * while it can't be written the run stops and the Games stay off, rather than start on 0.35's origins
+     * at this version's gaps and be moved from there once the file is marked at a later start.
+     */
+    public static boolean unmigrated(FileConfiguration c) {
+        return !(c.get("config_revision", null) instanceof Number n) || n.intValue() < REVISION;
     }
 
     /** The places the mark notes as having had no origin before the backfill. */
@@ -338,6 +382,65 @@ public final class LayoutGuard {
         return out;
     }
 
+    /**
+     * What was built at this version's own spots and shapes, which 0.35 never wrote: a course's or
+     * Classic's claim (or old wet halves) with its gap as an 8th field (0.35's claims have 7), the
+     * Clubhouse or the arena claimed at its new box, a course kept in a plot of the new keep area. With
+     * no stamp these can only mean one was lost after this version built at the new spots: the server
+     * took the new layout ({@link #run}), and 0.35's spots would move what stands there.
+     */
+    static List<String> builtNew(Facts f) {
+        return located(f, true);
+    }
+
+    /** What was built at 0.35's own spots and shapes: the same places, as {@link #builtNew}. */
+    static List<String> builtOld(Facts f) {
+        return located(f, false);
+    }
+
+    private static List<String> located(Facts f, boolean shipped) {
+        List<String> out = new ArrayList<>();
+        for (Slots.Def d : all()) {
+            List<String> claims = new ArrayList<>();
+            String claim = f.meta().get(GenAdminKeys.claim(d.id()));
+            if (Regions.claimOrigin(claim) != null) {
+                claims.add(claim);
+            }
+            claims.addAll(Regions.wetClaims(f.meta().get(GenAdminKeys.wet(d.id()))));
+            for (String c : claims) {
+                if ((c.split(",").length == 8) == shipped) {
+                    out.add(d.name() + " was claimed at " + (shipped ? "this version's" : "0.35's") + " shape (" + c
+                            + ")");
+                    break;
+                }
+            }
+        }
+        for (Area a : AREAS) {
+            if (a.kind() != Kind.CLUBHOUSE && a.kind() != Kind.ARENA) {
+                continue;
+            }
+            String claim = f.meta().get(a.kind() == Kind.CLUBHOUSE ? CLUBHOUSE_CLAIM : ARENA_CLAIM);
+            Box box = a.boxes(ints(shipped ? a.shipped() : a.legacy()), 0, 1).get(0);
+            String at = box.minX() + "," + box.minY() + "," + box.minZ() + "," + box.sizeX() + "," + box.sizeY() + ","
+                    + box.sizeZ();
+            if (claim != null && claim.indexOf(',') >= 0 && claim.substring(claim.indexOf(',') + 1).trim().equals(at)) {
+                out.add(a.name() + " was claimed at its " + (shipped ? "new" : "0.35") + " spot");
+            }
+        }
+        List<Integer> keep = AREAS.stream().filter(a -> a.kind() == Kind.KEEP).findFirst().orElseThrow()
+                .legacy();
+        keep = shipped ? DailySettings.Archive.KEEP_AREA : keep;
+        for (Map.Entry<String, String> e : f.meta().entrySet()) {
+            int n = GenAdminKeys.plotOf(e.getKey());
+            KeptPlot p = n < 1 ? null : KeptPlot.parse(n, e.getValue());
+            if (p != null && p.box().equals(new KeepArea(keep.get(0), keep.get(1), keep.get(2), n,
+                    shipped ? KeepArea.DEFAULT_GAP : KeepArea.LEGACY_GAP).plot(n))) {
+                out.add("a course was kept in plot " + n + " of the " + (shipped ? "new" : "0.35") + " keep area");
+            }
+        }
+        return out;
+    }
+
     /** Why the server counts as built, by every rule: empty when nothing was. */
     public static List<String> built(Facts f) {
         return built(f, RULES);
@@ -417,6 +520,16 @@ public final class LayoutGuard {
      */
     public static boolean apply(FileConfiguration c, Decision d, boolean pending, List<String> why, Stamp stamp,
                                 List<String> log) {
+        return apply(c, d, pending, why, stamp, false, log);
+    }
+
+    /**
+     * {@link #apply(FileConfiguration, Decision, boolean, List, Stamp, List)}; {@code lost}: the decision is
+     * {@link Decision#NEW} because the server built at the new spots though no stamp was found ({@link #run}
+     * has said so).
+     */
+    static boolean apply(FileConfiguration c, Decision d, boolean pending, List<String> why, Stamp stamp,
+                         boolean lost, List<String> log) {
         boolean changed = false;
         List<String> missing = pending ? missing(c) : null;
         if (pending) {
@@ -426,12 +539,49 @@ public final class LayoutGuard {
         if (d == Decision.LEGACY) {
             changed |= keepLegacy(c, missing, why, stamp, log);
         } else if (pending) {
-            changed |= takeNew(c, stamp, log);
-        } else if (stamp == null) {
+            changed |= takeNew(c, stamp, lost, log);
+        } else if (stamp == null && !lost) {
             log.add("Games layout: a new install, so the Games places use the new spots, far apart, and from any"
                     + " course you can't see another.");
         }
         return changed;
+    }
+
+    /**
+     * What an owner reads when the stamp holds something else: which word to write back, and never to
+     * delete the row. Without one, the guard decides again from what was built, and a server that took
+     * the new spots, where nothing says where it built, would be put back on 0.35's, moving every course
+     * built since. A file already through revision 19 says which it has: 0.35's spots and gaps written
+     * out ({@link #keepLegacy}), or not.
+     */
+    static String unreadableStamp(String text, FileConfiguration c, long now) {
+        String advice;
+        if (pending(c) || unmigrated(c)) {
+            advice = "set it back to what this server chose: " + new Stamp(Decision.LEGACY, now, "").text()
+                    + " if it kept its 0.35 Games spots (half_gap: 32 under every course in the config.yml it ran"
+                    + " with), " + new Stamp(Decision.NEW, now, "").text() + " if it took the new ones";
+        } else {
+            Decision d = legacyShaped(c) ? Decision.LEGACY : Decision.NEW;
+            advice = "config.yml has " + (d == Decision.LEGACY ? "0.35's Games spots and gaps written out" : "the new"
+                    + " Games spots") + ", so set it back to " + new Stamp(d, now, "").text();
+        }
+        return STAMP_KEY + " (in hcm_meta) holds \"" + text + "\", which isn't a layout decision (legacy or new): "
+                + advice + ". Don't delete it: the check would decide again from what was built, and that can move a"
+                + " server that took the new spots back to 0.35's";
+    }
+
+    /** Whether every course and Classic in {@code c} that has a gap holds 0.35's, as {@link #keepLegacy} writes. */
+    static boolean legacyShaped(FileConfiguration c) {
+        boolean any = false;
+        for (Area a : AREAS) {
+            if ((a.kind() == Kind.SLOT || a.kind() == Kind.CLASSIC) && !blocked(c, a)) {
+                any = true;
+                if (!(c.get(a.gapPath(), null) instanceof Number n) || n.intValue() != a.legacyGap()) {
+                    return false;
+                }
+            }
+        }
+        return any;
     }
 
     /**
@@ -451,7 +601,9 @@ public final class LayoutGuard {
             Held h = held(c, a);
             boolean gapSet = gapSet(c, a);
             boolean backfilled = h == Held.SHIPPED && (missing == null || missing.contains(a.id()));
-            if ((h == Held.ABSENT || backfilled) && !gapSet) {
+            // One the plugin can't read: 0.35 fell back to its own shipped spot there, so that is where it built.
+            boolean unreadable = h == Held.OWN && !readable(a, origin(c, a));
+            if ((h == Held.ABSENT || backfilled || unreadable) && !gapSet) {
                 writeOrigin(c, a, a.legacy());
                 changed = true;
             } else if (h == Held.OWN || h == Held.SHIPPED) {
@@ -477,7 +629,7 @@ public final class LayoutGuard {
     }
 
     /** {@link Decision#NEW} for a file from an older version: the untouched 0.35 spots move. */
-    private static boolean takeNew(FileConfiguration c, Stamp stamp, List<String> log) {
+    private static boolean takeNew(FileConfiguration c, Stamp stamp, boolean lost, List<String> log) {
         boolean changed = false;
         int plots = plots(c);
         List<Area> candidates = new ArrayList<>();
@@ -545,10 +697,10 @@ public final class LayoutGuard {
                         + " /hcm games check says what can be seen from it.");
             }
         }
-        if (stamp != null) {
-            log.add("Games layout: config.yml came from an older version again; it keeps the choice made on "
-                    + stamp.day() + ": the new spots" + (moved.isEmpty() ? "." : " (moved there again: "
-                    + String.join(", ", moved) + ")."));
+        if (stamp != null || lost) {
+            log.add("Games layout: config.yml came from an older version again; it keeps "
+                    + (stamp != null ? "the choice made on " + stamp.day() : "the layout it built with") + ": the new"
+                    + " spots" + (moved.isEmpty() ? "." : " (moved there again: " + String.join(", ", moved) + ")."));
         } else if (!moved.isEmpty()) {
             log.add("Games layout: nothing was built yet, so the Games places take their new spots, far apart, and"
                     + " from any course you can't see another. Moved the spots you hadn't changed: "
@@ -624,6 +776,38 @@ public final class LayoutGuard {
                     return false;
                 }
             } else if (!(o instanceof Number n) || n.doubleValue() != v.get(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether the plugin reads {@code raw} as {@code a}'s origin, as 0.35 did: three whole numbers for a
+     * course, a Classic and the keep area ({@link #readOrigin}); for the Clubhouse and the arena also
+     * numbers written as text ({@code GamesConfig}'s lists), each whole.
+     */
+    static boolean readable(Area a, Object raw) {
+        if (a.kind() == Kind.SLOT || a.kind() == Kind.CLASSIC || a.kind() == Kind.KEEP) {
+            return readOrigin(raw) != null;
+        }
+        if (!(raw instanceof List<?> l) || l.size() != 3) {
+            return false;
+        }
+        for (Object o : l) {
+            double d;
+            if (o instanceof Number n) {
+                d = n.doubleValue();
+            } else if (o instanceof String t) {
+                try {
+                    d = Double.parseDouble(t.trim().replace("%", ""));
+                } catch (NumberFormatException e) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+            if (!Double.isFinite(d) || d != Math.rint(d)) {
                 return false;
             }
         }
@@ -810,14 +994,14 @@ public final class LayoutGuard {
         if (c == null) {
             throw new IllegalStateException("config.yml could not be read");
         }
-        boolean pending = pending(c);
+        boolean unmigrated = unmigrated(c);
+        boolean pending = pending(c) || unmigrated;
         Stamp stamp;
         try {
             String text = store.stamp();
             stamp = Stamp.parse(text);
             if (text != null && stamp == null) {
-                throw new IllegalStateException(STAMP_KEY + " holds \"" + text + "\", which isn't a layout decision"
-                        + " (legacy or new): delete that hcm_meta row to decide again");
+                throw new IllegalStateException(unreadableStamp(text, c, now));
             }
         } catch (SQLException e) {
             throw new IllegalStateException("the database could not be read (" + e.getMessage() + ")", e);
@@ -827,21 +1011,36 @@ public final class LayoutGuard {
         }
         Decision d;
         List<String> why;
+        List<String> log = new ArrayList<>();
         if (stamp != null) {
             d = stamp.decision();
             why = List.of();
         } else {
+            Facts facts;
             try {
-                why = built(store.facts(), rules);
+                facts = store.facts();
             } catch (SQLException e) {
                 throw new IllegalStateException("the database could not be read (" + e.getMessage() + ")", e);
             }
-            d = why.isEmpty() ? Decision.NEW : Decision.LEGACY;
+            why = built(facts, rules);
+            // Built at the new spots with no stamp: the stamp was lost after this version built there. A file
+            // already through revision 19 is left exactly as it is then; a marked one moves only if nothing
+            // stands at an old spot too (never both ways at once).
+            List<String> newer = why.isEmpty() ? List.of() : builtNew(facts);
+            d = why.isEmpty() || !newer.isEmpty() && (!pending || builtOld(facts).isEmpty()) ? Decision.NEW
+                    : Decision.LEGACY;
+            if (d == Decision.NEW && !why.isEmpty()) {
+                log.add(WARN + "Games layout: no decision was stored (" + STAMP_KEY + "), but this server has built at"
+                        + " the new spots (" + String.join("; ", newer) + "), so it keeps the new layout"
+                        + (pending ? "" : "; config.yml is left as it is") + ".");
+                why = List.of();
+            }
         }
-        List<String> log = new ArrayList<>();
-        boolean changed = apply(c, d, pending, why, stamp, log);
+        boolean changed = apply(c, d, pending, why, stamp, d == Decision.NEW && !log.isEmpty(), log) || unmigrated;
         if (changed && !file.save(c)) {
-            throw new IllegalStateException("config.yml could not be written");
+            throw new IllegalStateException("config.yml could not be written" + (unmigrated ? " (it is still at config"
+                    + " revision " + c.getInt("config_revision", 0) + ": the update's config migration couldn't save it"
+                    + " either, so the Games wait until it can be)" : ""));
         }
         if (stamp == null) {
             try {

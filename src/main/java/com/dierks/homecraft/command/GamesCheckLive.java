@@ -171,7 +171,7 @@ final class GamesCheckLive implements GamesCheck.Facts {
         all.addAll(st.archive().classics());
         List<DailySettings.SlotConfig> used = new ArrayList<>();
         for (DailySettings.SlotConfig c : all) {
-            if (c.enabled() || Slots.isClassic(c.id())) {
+            if ((c.enabled() || Slots.isClassic(c.id())) && c.placed()) {
                 used.add(c);
             }
         }
@@ -186,6 +186,11 @@ final class GamesCheckLive implements GamesCheck.Facts {
         for (DailySettings.SlotConfig c : all) {
             Slots.Def def = Slots.any(c.id());
             if (def == null) {
+                continue;
+            }
+            if (!c.placed()) { // its origin is only a placeholder: nothing about it can be checked
+                regions.add(new GamesCheck.Region(def.id(), GenCopy.slotName(def, st.cadenceDays()),
+                        Slots.isClassic(def.id()), true, List.of(GenService.UNPLACED), "where it was built"));
                 continue;
             }
             List<String> problems = new ArrayList<>();
@@ -251,7 +256,8 @@ final class GamesCheckLive implements GamesCheck.Facts {
      * the server's view distance when it isn't loaded), and every place the games build or put players
      * there: each Fresh course's and Classic's halves where config puts them (a course that is on or
      * claimed), each kept course's stored plot, the Clubhouse's and Falling Floors' boxes (on or claimed,
-     * the Clubhouse not in hand mode), the world's spawn and the safe spot. Read-only.
+     * the Clubhouse not in hand mode), the Race Night stands set for kept and hand-built courses there,
+     * the world's spawn and the safe spot. Read-only.
      */
     @Override
     public SightCheck.Facts sight() {
@@ -310,47 +316,61 @@ final class GamesCheckLive implements GamesCheck.Facts {
                 engine.put(r.id(), r);
             }
         }
-        List<DailySettings.SlotConfig> all = new ArrayList<>(st.slots());
-        all.addAll(st.archive().classics());
-        for (DailySettings.SlotConfig c : all) {
-            Slots.Def def = c.def();
-            GenService.SlotReport r = engine.get(c.id());
-            boolean stands = r != null ? r.wanted() || r.claimed() : c.enabled() && st.enabled();
-            if (def == null || !stands) {
-                continue;
-            }
-            SightCheck.Kind kind = Slots.isClassic(def.id()) ? SightCheck.Kind.CLASSIC : SightCheck.Kind.SLOT;
-            for (Box half : Regions.halves(c)) {
-                out.add(new SightCheck.Place(kind, def.id(), GenCopy.slotName(def, st.cadenceDays()), half));
-            }
-        }
         java.util.Map<String, String> meta;
         try {
             meta = new GenMetaDao(plugin.database()).like("gen.");
         } catch (SQLException | RuntimeException e) {
             meta = java.util.Map.of();
         }
+        List<DailySettings.SlotConfig> all = new ArrayList<>(st.slots());
+        all.addAll(st.archive().classics());
+        for (DailySettings.SlotConfig c : all) {
+            Slots.Def def = c.def();
+            GenService.SlotReport r = engine.get(c.id());
+            boolean stands = r != null ? r.wanted() || r.claimed() : c.enabled() && st.enabled();
+            List<Box> halves = def == null ? List.of() : Regions.halves(c);
+            if (def != null && !c.placed()) {
+                // config can't say where it is: it stands where it was claimed, if anywhere (GenService)
+                String claim = meta.get(GenAdminKeys.claim(def.id()));
+                int[] at = Regions.claimOrigin(claim);
+                stands = at != null && world.equalsIgnoreCase(Regions.claimWorld(claim));
+                halves = stands ? Regions.halves(def, at, Regions.claimGap(claim)) : List.of();
+            }
+            if (def == null || !stands) {
+                continue;
+            }
+            SightCheck.Kind kind = Slots.isClassic(def.id()) ? SightCheck.Kind.CLASSIC : SightCheck.Kind.SLOT;
+            for (Box half : halves) {
+                out.add(new SightCheck.Place(kind, def.id(), GenCopy.slotName(def, st.cadenceDays()), half));
+            }
+        }
         for (java.util.Map.Entry<String, String> e : meta.entrySet()) {
             int n = GenAdminKeys.plotOf(e.getKey());
             KeptPlot p = n < 1 ? null : KeptPlot.parse(n, e.getValue());
             if (p != null && p.world().equalsIgnoreCase(world)) {
                 out.add(new SightCheck.Place(SightCheck.Kind.KEPT, Integer.toString(n), "the kept course \""
-                        + p.courseId() + "\" (plot " + n + ")", p.box()));
+                        + p.courseId() + "\" (plot " + n + ")", p.box(), p.courseId()));
             }
         }
+        out.addAll(stands(world));
         com.dierks.homecraft.games.clubhouse.ClubhouseSettings cs =
                 cfg.settings(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC);
         GamesService g = games();
         Game club = g == null ? null : g.game(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC.id());
         boolean hand = club instanceof com.dierks.homecraft.games.clubhouse.Clubhouse c && c.running() && c.handBuilt();
-        if (!hand && (cfg.enabled() && cs.enabled() || meta.containsKey(
-                com.dierks.homecraft.games.clubhouse.ClubhouseRoom.CLAIM_KEY))) {
+        String clubClaim = meta.get(com.dierks.homecraft.games.clubhouse.ClubhouseRoom.CLAIM_KEY);
+        // a block that can't be read (its origin, say) is closed: the room stands where it was claimed
+        Box clubBox = cfg.readable(com.dierks.homecraft.games.clubhouse.Clubhouse.SPEC.id()) ? cs.box()
+                : claimedBox(clubClaim, world);
+        if (!hand && clubBox != null && (cfg.enabled() && cs.enabled() || clubClaim != null)) {
             out.add(new SightCheck.Place(SightCheck.Kind.CLUBHOUSE,
-                    com.dierks.homecraft.games.clubhouse.ClubhouseRegions.NAME, "the Clubhouse", cs.box()));
+                    com.dierks.homecraft.games.clubhouse.ClubhouseRegions.NAME, "the Clubhouse", clubBox));
         }
         FallingFloorsSettings ff = cfg.settings(FallingFloors.SPEC);
-        if (cfg.enabled() && ff.enabled() || meta.containsKey(ArenaService.CLAIM_KEY)) {
-            out.add(new SightCheck.Place(SightCheck.Kind.ARENA, ArenaRegions.NAME, "Falling Floors", ff.box()));
+        String arenaClaim = meta.get(ArenaService.CLAIM_KEY);
+        Box arenaBox = cfg.readable(FallingFloors.SPEC.id()) ? ff.box() : claimedBox(arenaClaim, world);
+        if (arenaBox != null && (cfg.enabled() && ff.enabled() || arenaClaim != null)) {
+            out.add(new SightCheck.Place(SightCheck.Kind.ARENA, ArenaRegions.NAME, "Falling Floors", arenaBox));
         }
         if (w != null) {
             org.bukkit.Location s = w.getSpawnLocation();
@@ -366,6 +386,50 @@ final class GamesCheckLive implements GamesCheck.Facts {
                     new Box(x, y, z, x, y, z)));
         }
         return out;
+    }
+
+    /**
+     * The box a Clubhouse or arena claim ({@code world,x,y,z,sx,sy,sz}) names in {@code world}, or
+     * {@code null} when it names none there.
+     */
+    static Box claimedBox(String claim, String world) {
+        String[] p = claim == null ? new String[0] : claim.split(",");
+        if (p.length != 7 || !p[0].trim().equalsIgnoreCase(world)) {
+            return null;
+        }
+        try {
+            int[] v = new int[6];
+            for (int i = 0; i < 6; i++) {
+                v[i] = Integer.parseInt(p[i + 1].trim());
+            }
+            return v[3] < 1 || v[4] < 1 || v[5] < 1 ? null : Box.sized(v[0], v[1], v[2], v[3], v[4], v[5]);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * The Race Night stands admins set for the kept and hand-built courses in {@code world}
+     * ({@link SightCheck#stands}); none when they can't be read.
+     */
+    private List<SightCheck.Place> stands(String world) {
+        try {
+            GamesService g = games();
+            GamesDao dao = g != null ? g.dao() : new GamesDao(plugin.database());
+            java.util.Map<String, com.dierks.homecraft.games.trial.Course> courses = new java.util.HashMap<>();
+            for (GamesDao.CourseRow row : dao.courses(Slots.GAME_TRIALS)) {
+                com.dierks.homecraft.games.trial.Course c = com.dierks.homecraft.games.trial.CourseCodec
+                        .decode(row.id(), row.data()).course();
+                if (c != null) {
+                    courses.put(row.id(), c);
+                }
+            }
+            java.util.Map<String, String> meta = new com.dierks.homecraft.storage.EventDao(plugin.database(), dao)
+                    .metaLike(com.dierks.homecraft.storage.EventDao.META + "stand.");
+            return SightCheck.stands(meta, courses, world);
+        } catch (SQLException | RuntimeException e) {
+            return List.of();
+        }
     }
 
     /**

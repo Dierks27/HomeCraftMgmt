@@ -471,6 +471,36 @@ class KeepTest {
     }
 
     @Test
+    void aPlotPastTheWorldBorderIsPassedOverByAKeepAndRefusedByAScan() throws Exception {
+        build(1);
+        Box p1 = area().plot(1);
+        // a border whose west edge cuts plot 1 and holds everything east of it (a smaller world, say)
+        host.world().border = new Box(p1.minX() + 16, -64, -30_000_000, 30_000_000, 320, 30_000_000);
+        said.clear();
+        gen.claimPlot(1, false, said::add);
+        assertTrue(heard().contains("Plot 1 can't be used") && heard().contains("plot 1 reaches past the world border"),
+                "plots scan 1 is refused, saying why: " + heard());
+        drive(20);
+        assertEquals(0, host.world().count(p1), "nothing is scanned or written there");
+
+        keep("HARD-1", "dragon_run", null, false, true);
+        drive(25);
+        assertNotNull(host.dao.course("dragon_run"), "the keep goes on: " + heard());
+        assertEquals(List.of(2), gen.usedPlots(), "into plot 2: plot 1 is passed over, since it reaches past the"
+                + " border");
+        assertEquals(0, host.world().count(p1), "nothing was built past the border");
+
+        build(2);
+        host.world().border = new Box(DEF.half('A').minX() - 64, -64, -30_000_000, 30_000_000, 320, 30_000_000);
+        keep("HARD-2", "second_run", null, false, true);
+        assertTrue(heard().contains("No free plot can be used") && heard().contains("plot 1 reaches past the world"
+                + " border"), "with every free plot past the border, the keep is refused with the first one's"
+                + " reason: " + heard());
+        drive(20);
+        assertNull(host.dao.course("second_run"), "and nothing is kept");
+    }
+
+    @Test
     void aPlotWithARegisteredCourseInItIsNeverClearedOrBuiltIn() throws Exception {
         build(1);
         Box plot = area().plot(1);

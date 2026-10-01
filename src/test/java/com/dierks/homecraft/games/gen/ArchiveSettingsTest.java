@@ -55,10 +55,13 @@ class ArchiveSettingsTest {
         m.put(parts[parts.length - 1], value);
     }
 
-    private static DailySettings with(String key, Object value, List<String> warns) throws Exception {
+    private static DailySettings with(String key, Object value, List<String> warns, Object... more) throws Exception {
         Map<String, Object> fresh = shipped();
         if (key != null) {
             put(fresh, key, value);
+        }
+        for (int i = 0; i < more.length; i += 2) { // more keys, so a test's spots never depend on the shipped layout
+            put(fresh, (String) more[i], more[i + 1]);
         }
         GamesConfig.Node n = new GamesConfig.Node("games.fresh", fresh, warns::add);
         return DailySettings.parse(n, DailySettings.defaults());
@@ -73,7 +76,7 @@ class ArchiveSettingsTest {
         assertEquals(0, a.keepDays(), "archived forever");
         assertEquals(26, a.feedHistory(), "26 past courses a slot on the website");
         assertEquals(7, a.classicDays(), "a recall stays a week");
-        assertEquals(new KeepArea(4096, 128, 5376, 24), a.keep(), "24 plots, well apart");
+        assertEquals(new KeepArea(1760, 128, 7296, 24, 576), a.keep(), "24 plots from x 1760, z 7296, 576 apart");
         assertNull(a.keepProblem(), "keeping is on");
         for (Slots.Def d : Slots.CLASSICS) {
             assertArrayEquals(d.origin(), a.classic(d.id()).origin(), d.id() + " where the code places it");
@@ -86,16 +89,21 @@ class ArchiveSettingsTest {
     @Test
     void aKeepAreaOnTopOfAFreshCoursesAreaTurnsKeepingOff() throws Exception {
         List<String> warns = new ArrayList<>();
-        DailySettings.Archive a = with("keep.area", List.of(4096, 160, 4096), warns).archive();
+        DailySettings.Archive a = with("keep.area", List.of(4096, 160, 4096), warns,
+                "slots.fresh_parkour_easy.origin", List.of(4096, 160, 4096)).archive();
         assertNotNull(a.keepProblem(), "an area on the parkour halves can't be used");
         assertEquals(1, warns.size(), "one WARN: " + warns);
         assertTrue(warns.get(0).contains("games.fresh.keep.area") && warns.get(0).contains("keeping a course is off"),
                 warns.get(0));
+        // Classic Sky Rings moved far out (its halves 32 apart), and the keep area placed just past it
+        Object[] rings = {"classics.slots.fresh_classic_rings", Map.of("origin", List.of(16_384, 128, 16_384),
+                "half_gap", 32)};
         warns.clear();
-        assertNotNull(with("keep.area", List.of(4096, 128, 5060), warns).archive().keepProblem(),
+        assertNotNull(with("keep.area", List.of(16_384, 128, 16_384 + 320 + 4), warns, rings).archive().keepProblem(),
                 "4 blocks past Classic Sky Rings is too close (16 are needed)");
         warns.clear();
-        assertNull(with("keep.area", List.of(4096, 128, 5072), warns).archive().keepProblem(), "16 past is fine");
+        assertNull(with("keep.area", List.of(16_384, 128, 16_384 + 320 + 16), warns, rings).archive().keepProblem(),
+                "16 past is fine");
         assertEquals(List.of(), warns, "without a WARN");
         warns.clear();
         assertNotNull(with("keep.area", "nowhere", warns).archive().keepProblem(), "junk turns keeping off too");
@@ -105,7 +113,8 @@ class ArchiveSettingsTest {
     @Test
     void aClassicsSlotOnAnotherAreaIsOffAloneAndNumbersAreClamped() throws Exception {
         List<String> warns = new ArrayList<>();
-        DailySettings s = with("classics.slots.fresh_classic_golf.origin", List.of(4096, 160, 4096), warns);
+        DailySettings s = with("classics.slots.fresh_classic_golf.origin", List.of(16_384, 160, 16_384), warns,
+                "slots.fresh_parkour_easy.origin", List.of(16_384, 160, 16_384));
         assertFalse(s.archive().classic("fresh_classic_golf").enabled(), "Classic Golf on the parkour is off");
         assertTrue(s.archive().classic("fresh_classic_parkour").enabled(), "the others keep working");
         assertEquals(1, warns.size(), "one WARN: " + warns);

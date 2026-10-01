@@ -992,6 +992,31 @@ public final class PluginConfig {
         return games;
     }
 
+    /**
+     * Put back the Games settings read before a {@code /hcm reload}: the Games layout check couldn't
+     * give the new file its decision ({@code LayoutGuard}), so the running Games keep what they had
+     * rather than read spots nobody has decided.
+     */
+    public void keepGames(GamesConfig.Parsed before) {
+        this.games = before == null ? GamesConfig.Parsed.OFF : before;
+    }
+
+    /**
+     * The Games settings of {@code c}, their WARNs and INFOs to {@code warn} and {@code info}; read quietly
+     * while config.yml carries the Games layout check's mark, or is still below the revision that brings it
+     * because the update couldn't save it ({@code LayoutGuard.pending}, {@code unmigrated}): the update's
+     * first start reads the file before the database can say which spots this server keeps, and its 0.35
+     * origins at this version's gaps would give WARNs that aren't true (a Classic "on top of" another).
+     * The Games don't use that reading: the check runs next, and the file is read again, aloud, once it
+     * has the decision (or the Games stay off, saying why).
+     */
+    static GamesConfig.Parsed games(org.bukkit.configuration.file.FileConfiguration c,
+                                    java.util.function.Consumer<String> warn, java.util.function.Consumer<String> info) {
+        boolean undecided = c != null && (com.dierks.homecraft.games.gen.LayoutGuard.pending(c)
+                || com.dierks.homecraft.games.gen.LayoutGuard.unmigrated(c));
+        return undecided ? GamesConfig.parse(c, null, null) : GamesConfig.parse(c, warn, info);
+    }
+
     /** (Re)parse config.yml into the typed views above. */
     public void load() {
         FileConfiguration c = plugin.getConfig();
@@ -1154,7 +1179,7 @@ public final class PluginConfig {
         // ---- Daily/weekly quests (Phase 11) ----
         this.quests = readQuests(c);
         this.courier = readCourier(c);
-        this.games = GamesConfig.parse(c, log::warning, log::info);
+        this.games = games(c, log::warning, log::info);
 
         // ---- The players' calendar: streaks, quests and Arcade limits roll at local midnight ----
         this.clock = new com.dierks.homecraft.util.GameClock(com.dierks.homecraft.util.GameClock.parseZone(

@@ -76,7 +76,7 @@ class DropperGuardTest {
 
     /** Fresh Courses claimed {@code def}'s region at {@code origin} (what a scan or a claim leaves). */
     private void claimAt(Slots.Def def, int[] origin) throws Exception {
-        host.store.meta(GenAdminKeys.claim(def.id()), Regions.claim(def, W, origin));
+        host.store.meta(GenAdminKeys.claim(def.id()), Regions.claim(def, W, origin, Slots.HALF_GAP));
     }
 
     private boolean guarded(Box b) {
@@ -91,8 +91,8 @@ class DropperGuardTest {
     void aMovedDroppersOldRegionStaysGuardedUntilItIsClaimedThereAgain() throws Exception {
         int[] here = DEF.origin();
         int[] there = away(here, 2048);
-        Box oldA = Regions.half(DEF, here, 'A');
-        Box oldB = Regions.half(DEF, here, 'B');
+        Box oldA = Regions.half(DEF, here, Slots.HALF_GAP, 'A');
+        Box oldB = Regions.half(DEF, here, Slots.HALF_GAP, 'B');
         claimAt(DEF, here);
         boot();
         assertTrue(guarded(oldA) && guarded(oldB), "claimed: both halves guarded, as before");
@@ -101,7 +101,7 @@ class DropperGuardTest {
         moveTo(SLOT, there);
         gen.check();
         assertTrue(guarded(oldA) && guarded(oldB), "moved away: the old halves (maybe full of water) stay guarded");
-        assertEquals(Regions.claim(DEF, W, here), host.store.meta(GenAdminKeys.wet(SLOT)),
+        assertEquals(Regions.claim(DEF, W, here, Slots.HALF_GAP), host.store.meta(GenAdminKeys.wet(SLOT)),
                 "remembered before a claim at the new place can overwrite the old one");
         assertTrue(host.logged(Level.WARNING, "drain first - move it back and use /hcm games gen clear " + SLOT) > 0,
                 "and the admin is told to drain first");
@@ -111,20 +111,22 @@ class DropperGuardTest {
         claimAt(DEF, there); // the new place is claimed: the claim key names it now
         gen.check();
         assertTrue(guarded(oldA) && guarded(oldB), "the old halves are still guarded");
-        assertTrue(guarded(Regions.half(DEF, there, 'A')), "and so is the new region");
+        assertTrue(guarded(Regions.half(DEF, there, Slots.HALF_GAP, 'A')), "and so is the new region");
         boot();
         assertTrue(guarded(oldA) && guarded(oldB), "across a restart too");
 
         moveTo(SLOT, here); // moved back, while the claim names the other place
         gen.check();
         assertTrue(guarded(oldA), "back at the old place, still guarded");
-        assertTrue(guarded(Regions.half(DEF, there, 'B')), "and now the place it left is remembered as well");
-        assertEquals(List.of(Regions.claim(DEF, W, here), Regions.claim(DEF, W, there)),
+        assertTrue(guarded(Regions.half(DEF, there, Slots.HALF_GAP, 'B')),
+                "and now the place it left is remembered as well");
+        assertEquals(List.of(Regions.claim(DEF, W, here, Slots.HALF_GAP), Regions.claim(DEF, W, there, Slots.HALF_GAP)),
                 Regions.wetClaims(host.store.meta(GenAdminKeys.wet(SLOT))), "both old regions");
 
         claimAt(DEF, here); // a claim confirm cleared it (drains first) and claimed it
         gen.check();
-        assertEquals(List.of(Regions.claim(DEF, W, there)), Regions.wetClaims(host.store.meta(GenAdminKeys.wet(SLOT))),
+        assertEquals(List.of(Regions.claim(DEF, W, there, Slots.HALF_GAP)),
+                Regions.wetClaims(host.store.meta(GenAdminKeys.wet(SLOT))),
                 "claimed here again: the claim guards it now, and a clear drains it");
         assertTrue(guarded(oldA), "(guarded as the claimed region)");
     }
@@ -137,7 +139,7 @@ class DropperGuardTest {
         boot();
         moveTo(parkour.id(), away(here, 2048));
         gen.check();
-        Box old = Regions.half(parkour, here, 'A');
+        Box old = Regions.half(parkour, here, Slots.HALF_GAP, 'A');
         assertFalse(gen.inArea(W, old.minX(), old.minY(), old.minZ()), "a parkour's old region isn't guarded (no water)");
         assertNull(host.store.meta(GenAdminKeys.wet(parkour.id())), "nor remembered");
         assertTrue(host.logged(Level.WARNING, "clear them by hand") > 0, "its copy is the old one");

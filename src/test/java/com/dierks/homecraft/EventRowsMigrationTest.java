@@ -113,7 +113,8 @@ class EventRowsMigrationTest {
                 "revision 17 adds exactly what the final-round build's did (an owner may have run it)");
         assertEquals(REVISION_18, ArcadeConfigMigration.EVENT_ACHIEVEMENTS,
                 "ONE revision 18 adds the whole events batch: the Dropper's, Race Night's and Falling Floors'");
-        assertEquals(18, HomeCraftManagement.CONFIG_REVISION, "and it is the newest");
+        assertEquals(19, HomeCraftManagement.CONFIG_REVISION,
+                "the newest is 19 now (the Games layout, LayoutGuardTest): it adds no achievement row");
     }
 
     @Test
@@ -137,7 +138,8 @@ class EventRowsMigrationTest {
         assertEquals(List.of(), warns(log), "nothing was the owner's: " + log);
         assertTrue(log.stream().anyMatch(l -> l.contains(String.join(", ", REVISION_17))), "17's rows logged: " + log);
         assertTrue(log.stream().anyMatch(l -> l.contains(String.join(", ", REVISION_18))), "18's rows logged: " + log);
-        assertEquals(18, onDisk.getInt("config_revision"), "stamped 18");
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"),
+                "stamped the newest revision");
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"), "a second start is a no-op");
         everyRowOnce(ids(onDisk), "after a second start");
     }
@@ -164,7 +166,8 @@ class EventRowsMigrationTest {
         assertEquals(List.of(), warns(log), "nothing was the owner's: " + log);
         assertTrue(log.stream().anyMatch(l -> l.contains("added the \"Games\" achievements to arcade.achievements ("
                 + String.join(", ", REVISION_18) + ")")), "the INFO line reads plainly too: " + log);
-        assertEquals(18, onDisk.getInt("config_revision"), "stamped 18");
+        assertEquals(HomeCraftManagement.CONFIG_REVISION, onDisk.getInt("config_revision"),
+                "stamped the newest revision");
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(onDisk, "world"), "a second start is a no-op");
     }
 

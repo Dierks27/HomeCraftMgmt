@@ -750,6 +750,31 @@ final class SessionCore<P, I> {
     }
 
     /**
+     * The plugin that saves every online player's things, for the group of the world they stand in, as it
+     * disables (its {@code onDisable}). It used to disable after this plugin; since plugin.yml loads this one
+     * before Multiverse-Core (for the void world's generator, {@code loadbefore}), it now disables first,
+     * and a player in a game would have the kit saved as their Games world's things.
+     */
+    static final String INVENTORIES = "Multiverse-Inventories";
+
+    /**
+     * Another plugin is disabling ({@code PluginDisableEvent}, which comes just before its
+     * {@code onDisable}). When it is {@link #INVENTORIES}, every session ends first ({@link #stop}), as it
+     * did when this plugin disabled before it: while the server is stopping each player's own things are
+     * put back in place, so that is what it saves; otherwise (a {@code /reload}) they go home while it is
+     * still there to swap their things. Any other plugin: nothing.
+     *
+     * @return whether the sessions were ended
+     */
+    boolean disabling(String plugin) {
+        if (!INVENTORIES.equalsIgnoreCase(plugin)) {
+            return false;
+        }
+        stop();
+        return true;
+    }
+
+    /**
      * Every session ends. While the server is stopping (or the plugin disabling) it restores in
      * place and marks RETURN without a teleport; otherwise it is the full leave with a synchronous
      * teleport home (R3.12).

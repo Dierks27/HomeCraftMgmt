@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.gen.engine;
 
+import com.dierks.homecraft.games.gen.DailySettings;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Slots;
 import org.junit.jupiter.api.Test;
@@ -20,13 +21,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class KeepAreaTest {
 
+    /** Every shipped slot's and Classic's halves, each at its shipped origin and gap. */
     private static List<Box> halves() {
         List<Box> out = new ArrayList<>();
-        for (Slots.Def d : Slots.ALL) {
-            out.addAll(Regions.halves(d, d.origin()));
+        DailySettings d = DailySettings.defaults();
+        for (DailySettings.SlotConfig c : d.slots()) {
+            out.addAll(Regions.halves(c));
         }
-        for (Slots.Def d : Slots.CLASSICS) {
-            out.addAll(Regions.halves(d, d.origin()));
+        for (DailySettings.SlotConfig c : d.archive().classics()) {
+            out.addAll(Regions.halves(c));
         }
         return out;
     }
@@ -58,14 +61,16 @@ class KeepAreaTest {
 
     @Test
     void theShippedAreaIsApartAndAnOverlappingOneIsRefused() {
-        assertNull(new KeepArea(4096, 128, 5376, 24).problem(halves()), "the shipped area is clear of every half");
-        String on = new KeepArea(4096, 128, 4096, 24).problem(halves());
+        assertNull(DailySettings.defaults().archive().keep().problem(halves()),
+                "the shipped area is clear of every half");
+        int[] easy = Slots.DAILY_PARKOUR_EASY.origin();
+        String on = new KeepArea(easy[0], 128, easy[2], 24).problem(halves());
         assertNotNull(on, "an area on top of the parkour halves is refused");
         assertTrue(on.contains("on top of"), on);
         Box last = halves().stream().max(java.util.Comparator.comparingInt(Box::maxZ)).orElseThrow();
-        String near = new KeepArea(4096, 128, last.maxZ() + 10, 24).problem(halves());
-        assertNotNull(near, "one only 9 blocks from a half is refused (it must be 16 away)");
-        assertNull(new KeepArea(4096, 128, last.maxZ() + 17, 24).problem(halves()), "16 away is fine");
+        String near = new KeepArea(last.minX(), 128, last.maxZ() + 10, 24).problem(halves());
+        assertNotNull(near, "one only 9 blocks past the southernmost half is refused (it must be 16 away)");
+        assertNull(new KeepArea(last.minX(), 128, last.maxZ() + 17, 24).problem(halves()), "16 away is fine");
         assertNotNull(new KeepArea(4096, 200, 5376, 24).problem(halves()), "too high for the tallest course");
         assertNotNull(new KeepArea(29_000_000, 128, 5376, 24).problem(halves()), "past the world's edge");
     }

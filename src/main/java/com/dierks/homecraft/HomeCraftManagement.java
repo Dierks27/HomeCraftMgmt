@@ -6,6 +6,8 @@ import com.dierks.homecraft.command.HcmCommand;
 import com.dierks.homecraft.config.PluginConfig;
 import com.dierks.homecraft.crafting.RecipeManager;
 import com.dierks.homecraft.crafting.WorkbenchListener;
+import com.dierks.homecraft.games.VoidWorld;
+import com.dierks.homecraft.games.gen.LayoutGuard;
 import com.dierks.homecraft.gui.MenuListener;
 import com.dierks.homecraft.input.ChatPromptService;
 import com.dierks.homecraft.integration.EconomyService;
@@ -34,8 +36,12 @@ import com.dierks.homecraft.trade.WildDropListener;
 import com.dierks.homecraft.trade.WildDropService;
 import com.dierks.homecraft.util.Keys;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.generator.BiomeProvider;
+import org.bukkit.generator.ChunkGenerator;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.sql.SQLException;
 
@@ -69,9 +75,11 @@ public final class HomeCraftManagement extends JavaPlugin {
      * drop to $100 / $300. 16 = the Second/Third Home rows become one "+1 Home" row. 17 = the
      * skill games' quests and "Games" achievements join a pool and a list the owner hasn't edited.
      * 18 = the events batch's "Games" achievements (the Dropper's and Race Night's) join that list
-     * the same way.
+     * the same way. 19 = the Games places move far apart, out of sight of each other: a file from an
+     * older version is marked, and once the database is open {@link LayoutGuard} keeps 0.35's spots and
+     * shapes on a server that built anything there and moves the untouched ones on one that didn't.
      */
-    static final int CONFIG_REVISION = 18;
+    static final int CONFIG_REVISION = 19;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -219,6 +227,13 @@ public final class HomeCraftManagement extends JavaPlugin {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
+        // The Games layout (LayoutGuard): decided once the database can say what was built, and before
+        // anything reads the Games settings. The Games only start once it has finished, so nothing is
+        // ever built at spots it hasn't decided.
+        LayoutGuard.Outcome layout = layoutGuard();
+        if (layout != null && layout.changed()) {
+            config.load(); // the Games settings as the layout check wrote them
+        }
 
         this.backups = new com.dierks.homecraft.storage.BackupService(this, database); // §11 #6
         this.backups.start();
@@ -356,21 +371,27 @@ public final class HomeCraftManagement extends JavaPlugin {
         // The Games (0.35): games of chance, arcade cabinets, time trials and mini golf, all
         // behind games.enabled. Built even while that is false (it still finishes rounds a crash
         // left open); a failure here leaves the games out and the rest of the plugin as it was.
-        try {
-            this.games = new com.dierks.homecraft.games.GamesService(this, breaks);
-            this.games.screens(new com.dierks.homecraft.gui.games.Screens(this));
-            this.games.progress(new com.dierks.homecraft.arcade.GamesProgress(this)); // quests and achievements
-            this.games.start();
-        } catch (RuntimeException e) {
-            getLogger().log(java.util.logging.Level.SEVERE, "Could not start the Games - they are off.", e);
-            if (this.games != null) {
-                try {
-                    this.games.stop();
-                } catch (RuntimeException ignored) {
-                    // already failing; the SEVERE above says why
+        // Not at all while the layout check couldn't finish (its SEVERE says why).
+        if (layout == null) {
+            getLogger().severe("The Games are off this start, because the Games layout check could not finish"
+                    + " (above). Fix that and restart.");
+        } else {
+            try {
+                this.games = new com.dierks.homecraft.games.GamesService(this, breaks);
+                this.games.screens(new com.dierks.homecraft.gui.games.Screens(this));
+                this.games.progress(new com.dierks.homecraft.arcade.GamesProgress(this)); // quests and achievements
+                this.games.start();
+            } catch (RuntimeException e) {
+                getLogger().log(java.util.logging.Level.SEVERE, "Could not start the Games - they are off.", e);
+                if (this.games != null) {
+                    try {
+                        this.games.stop();
+                    } catch (RuntimeException ignored) {
+                        // already failing; the SEVERE above says why
+                    }
                 }
+                this.games = null;
             }
-            this.games = null;
         }
         // Registered whatever happened above: the join/quit hooks do nothing without the service,
         // and a player's saved things must come back even if the Games never started.
@@ -487,6 +508,30 @@ public final class HomeCraftManagement extends JavaPlugin {
         }
 
         getLogger().info("HomeCraft Management enabled.");
+    }
+
+    /**
+     * The built-in void world for the Games ({@link VoidWorld}):
+     * {@code /mv create sky normal -g HomeCraftManagement}. Every world that names this plugin as its
+     * generator gets it; the id after a {@code :} is ignored.
+     *
+     * <p>Bukkit only asks a plugin that is already enabled ({@code WorldCreator.getGeneratorForName}
+     * and the server's own lookup both refuse one that isn't, and the world then loads with vanilla
+     * terrain). Multiverse loads its worlds while it enables, at every start, so plugin.yml loads this
+     * plugin before Multiverse-Core ({@code loadbefore}); otherwise {@code sky} would get vanilla
+     * ground, biomes and mobs in every chunk made after a restart ({@code PluginLoadOrderTest}). A world
+     * named in bukkit.yml instead is made before any plugin that isn't {@code load: STARTUP} is enabled,
+     * so the void world is made with Multiverse, never bukkit.yml.
+     */
+    @Override
+    public ChunkGenerator getDefaultWorldGenerator(@NotNull String worldName, @Nullable String id) {
+        return new VoidWorld.Generator();
+    }
+
+    /** The void world's biomes ({@code minecraft:the_void}), for a world that names this plugin's biomes. */
+    @Override
+    public BiomeProvider getDefaultBiomeProvider(@NotNull String worldName, @Nullable String id) {
+        return VoidWorld.biomes();
     }
 
     @Override
@@ -616,7 +661,15 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (migrateConfig()) {
             backfillConfig();
         }
+        // A config.yml from an older version put back by hand comes marked again: the layout check
+        // gives it this server's decision before the Games read it. If it can't, the running Games keep
+        // the settings they had.
+        com.dierks.homecraft.config.GamesConfig.Parsed gamesBefore = config.games();
+        LayoutGuard.Outcome layout = layoutGuard();
         config.load();
+        if (layout == null) {
+            config.keepGames(gamesBefore);
+        }
         recipeManager.registerRecipes();
         market.reload(); // also tells the live market the catalog changed
         if (marketSim != null) {
@@ -671,6 +724,48 @@ public final class HomeCraftManagement extends JavaPlugin {
             homes.reload(); // re-read Essentials' sethome-multiple tiers
             homes.refreshAll();
         }
+    }
+
+    /**
+     * Run the Games layout check ({@link LayoutGuard}) against config.yml on disk and the database,
+     * logging what it did. Reads the file again when it was rewritten.
+     *
+     * @return what it did, or {@code null} when it couldn't finish (logged as SEVERE): the Games must
+     *         not use the file then
+     */
+    private LayoutGuard.Outcome layoutGuard() {
+        java.io.File file = configFile();
+        LayoutGuard.ConfigFile onDisk = new LayoutGuard.ConfigFile() {
+            @Override
+            public org.bukkit.configuration.file.FileConfiguration load() {
+                return loadOnDisk(file);
+            }
+
+            @Override
+            public boolean save(org.bukkit.configuration.file.FileConfiguration c) {
+                snapshotConfig(file);
+                return saveTo(c, file, "layout-checked");
+            }
+        };
+        LayoutGuard.Outcome out;
+        try {
+            out = LayoutGuard.run(LayoutGuard.Store.of(database), onDisk, System.currentTimeMillis());
+        } catch (RuntimeException e) {
+            getLogger().log(java.util.logging.Level.SEVERE, "The Games layout check could not finish: "
+                    + e.getMessage() + ". It runs again at the next start or /hcm reload.", e);
+            return null;
+        }
+        for (String line : out.log()) {
+            if (line.startsWith(WARN)) {
+                getLogger().warning(line.substring(WARN.length()));
+            } else {
+                getLogger().info(line);
+            }
+        }
+        if (out.changed()) {
+            reloadConfig();
+        }
+        return out;
     }
 
     /**
@@ -1061,6 +1156,12 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (from < 18) {
             // The events batch's "Games" achievements. See ArcadeConfigMigration#eventRows.
             ArcadeConfigMigration.eventRows(c, log);
+        }
+        if (from < 19) {
+            // The Games places move far apart. Whether this server keeps 0.35's spots depends on what
+            // it built, which only the database knows, and it isn't open yet: mark the file, and
+            // LayoutGuard decides right after database.connect(), before the Games read anything.
+            LayoutGuard.markPending(c);
         }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);
@@ -1772,9 +1873,14 @@ public final class HomeCraftManagement extends JavaPlugin {
             out.add("&c'" + path + "' isn't in the bundled config, so there's nothing to reset it to.");
             return out;
         }
-        ConfigReset.Plan plan = ConfigReset.plan(onDisk, bundled, path);
+        // Where the Games places stand (every origin and gap, the keep area, the Games worlds) stays as it is:
+        // putting the bundled values back would move what is built there, and places move by hand only.
+        java.util.List<String> keep = ConfigReset.kept(onDisk, path);
+        ConfigReset.Plan plan = ConfigReset.plan(onDisk, bundled, path, keep);
         if (plan.none()) {
-            out.add("&a" + path + " already matches the defaults. Nothing to do.");
+            out.add("&a" + path + " already matches the defaults" + (plan.kept().isEmpty() ? ""
+                    : ", apart from where the Games places stand") + ". Nothing to do.");
+            keptLines(plan, out);
             return out;
         }
         out.add((confirm ? "&6Resetting " : "&6Dry run — resetting ") + "&f" + path + "&6 would change "
@@ -1800,15 +1906,18 @@ public final class HomeCraftManagement extends JavaPlugin {
         if (shown > 40) {
             out.add("&7…and " + (shown - 40) + " more (all of them are in the server log).");
         }
+        keptLines(plan, out);
         if (!confirm) {
             out.add("&7Nothing has changed. Run &f/hcm config reset " + path + " confirm&7 to do it.");
             return out;
         }
         getLogger().info("Config reset of " + path + ": " + plan.changed().keySet() + " changed, "
-                + plan.added().keySet() + " added, " + plan.removed().keySet() + " removed.");
+                + plan.added().keySet() + " added, " + plan.removed().keySet() + " removed"
+                + (plan.kept().isEmpty() ? "" : ", " + plan.kept().keySet() + " kept (where the Games places stand)")
+                + ".");
         configSnapshotTaken = false;
         snapshotConfig(file);
-        ConfigReset.apply(onDisk, bundled, path);
+        ConfigReset.apply(onDisk, bundled, path, keep);
         if (!saveTo(onDisk, file, "reset")) {
             out.add("&cCouldn't write config.yml — nothing changed. See the server log.");
             return out;
@@ -1821,6 +1930,24 @@ public final class HomeCraftManagement extends JavaPlugin {
                     + " draw rows cleared; progress kept).");
         }
         return out;
+    }
+
+    /** What a reset leaves as it is: where the Games places stand ({@link ConfigReset#kept}), for the dry run and the reset. */
+    private static void keptLines(ConfigReset.Plan plan, java.util.List<String> out) {
+        if (plan.kept().isEmpty()) {
+            return;
+        }
+        out.add("&7Kept as they are, since they say where the Games places stand (a reset would move what is built"
+                + " there; README \"Moving an area by hand\" moves one):");
+        int shown = 0;
+        for (java.util.Map.Entry<String, Object> e : plan.kept().entrySet()) {
+            if (shown++ < 20) {
+                out.add("&7= &f" + e.getKey() + "&7: " + (e.getValue() == null ? "not set" : ConfigReset.brief(e.getValue())));
+            }
+        }
+        if (shown > 20) {
+            out.add("&7…and " + (shown - 20) + " more.");
+        }
     }
 
     /** The admin's own config.yml inside the plugin's data folder. */

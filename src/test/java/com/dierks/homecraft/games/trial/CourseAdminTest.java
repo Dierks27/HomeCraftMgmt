@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenRandom;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.engine.Regions;
 import com.dierks.homecraft.storage.GamesDao;
@@ -178,7 +179,7 @@ class CourseAdminTest {
 
     @Test
     void aPointInsideADailyAreaOrWithinSixteenBlocksOfOneIsRefused() {
-        Box half = Slots.DAILY_PARKOUR_EASY.half('A'); // x 4096-4159, y 160-207, z 4096-4159
+        Box half = LegacyBoxes.half(Slots.DAILY_PARKOUR_EASY, 'A'); // x 4096-4159, y 160-207, z 4096-4159
         GeneratedCourses g = keeping(half);
         assertEquals(GenCopy.EDITOR_REFUSED, CourseAdmin.areaRefusal(g, "games", 4100.5, 170, 4100.5),
                 "inside the half");
@@ -197,8 +198,8 @@ class CourseAdminTest {
     @Test
     void aMarkIsKeptOutWithItsRadiusExactlyAsTheEngineMeasuresAHandBuiltCourse() {
         Slots.Def d = Slots.DAILY_PARKOUR_EASY;
-        Box a = d.half('A');
-        Box b = d.half('B');
+        Box a = LegacyBoxes.half(d, 'A');
+        Box b = LegacyBoxes.half(d, 'B');
         GeneratedCourses g = keeping(a, b);
         double x = b.maxX() + 17.5;
         assertNull(CourseAdmin.areaRefusal(g, "games", x, 180, b.minZ() + 20.5), "the point alone is 17 out");
@@ -214,9 +215,9 @@ class CourseAdminTest {
             Course c = new Course("my_course", TrialKind.ELYTRA, "My Course", Tier.EASY, "games",
                     new Course.Spot(0, 70, 0, 0f, 0f), List.of(new Course.Mark(px, py, pz, radius)), null, null, null,
                     false, false, 1);
-            String engine = Regions.handBuiltProblem(d, d.origin(), "games", Regions.handBuilt(List.of(
-                    new GamesDao.CourseRow("my_course", "trials", "elytra", "My Course", "games", true,
-                            CourseCodec.encode(c), 1, 0, 0))));
+            String engine = Regions.handBuiltProblem(d, LegacyBoxes.origin(d), LegacyBoxes.HALF_GAP, "games",
+                    Regions.handBuilt(List.of(new GamesDao.CourseRow("my_course", "trials", "elytra", "My Course",
+                            "games", true, CourseCodec.encode(c), 1, 0, 0))));
             String editor = CourseAdmin.areaRefusal(g, "games", px, py, pz, radius);
             assertEquals(engine == null, editor == null, "the editor takes a checkpoint at " + px + "," + py + "," + pz
                     + " r " + radius + " exactly when the engine would still build next to it: " + engine);

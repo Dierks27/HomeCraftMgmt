@@ -31,7 +31,7 @@ class PlanCodecTest {
 
     /** A small parkour plan with a bit of everything: blocks, a sign, a keep-clear box, a fall height. */
     static Plan trialPlan() {
-        Box half = Slots.DAILY_PARKOUR_HARD.half('A');
+        Box half = LegacyBoxes.half(Slots.DAILY_PARKOUR_HARD, 'A');
         List<String> palette = List.of(Palette.PATH_EASY, Palette.CHECKPOINT, Palette.FINISH);
         List<BlockOp> ops = List.of(new BlockOp(4611, 170, 4099, (short) 0), new BlockOp(4620, 171, 4108, (short) 1),
                 new BlockOp(4630, 170, 4118, (short) 2));
@@ -47,7 +47,7 @@ class PlanCodecTest {
 
     /** A two-hole golf plan with attempts, witness lines, expert and kid strokes. */
     static Plan golfPlan() {
-        Box half = Slots.TINY_GOLF.half('B');
+        Box half = LegacyBoxes.half(Slots.TINY_GOLF, 'B');
         List<GolfCourse.Hole> holes = List.of(
                 new GolfCourse.Hole(new GolfCourse.Tee(5220.5, 164.0, 4100.5, 180.0f), new GolfCourse.Spot(5220, 162,
                         4112), 2, new GolfCourse.Spot(5217, 161, 4097), new GolfCourse.Spot(5224, 168, 4115)),

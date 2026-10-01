@@ -79,8 +79,8 @@ class DropperSlotsConfigTest {
         assertFalse(s.enabled(), "Fresh Courses itself ships off, so nothing is built until the owner switches it on");
         assertEquals("EEE", easy.tierOrMix(), "Easy Dropper: three easy levels");
         assertEquals("EEMMH", drop.tierOrMix(), "the Dropper: five, easy to hard");
-        assertArrayEquals(new int[]{5376, 160, 4096}, easy.origin(), "Easy Dropper's area");
-        assertArrayEquals(new int[]{5376, 160, 4160}, drop.origin(), "the Dropper's, 48 further along z");
+        assertArrayEquals(new int[]{7488, 160, 6768}, easy.origin(), "Easy Dropper's area (the east column)");
+        assertArrayEquals(new int[]{7488, 160, 7360}, drop.origin(), "the Dropper's, a row further along z");
         assertEquals(2, s.dailyClear("fresh_dropper_easy", 7), "Easy Dropper's first finish in a week pays 2");
         assertEquals(1, s.dailyClear("fresh_dropper_easy", 1), "and 1 a day");
         assertEquals(3, s.dailyClear("fresh_dropper", 7), "the Dropper's 3");
@@ -91,7 +91,7 @@ class DropperSlotsConfigTest {
         assertTrue(DailySettings.KEYS.contains("classics.slots.fresh_classic_dropper.origin"),
                 "Classic Dropper's place is a key");
         assertTrue(s.archive().classics().stream().anyMatch(c -> c.id().equals("fresh_classic_dropper")
-                && java.util.Arrays.equals(c.origin(), new int[]{5376, 160, 4224})), "at the spec's origin");
+                && java.util.Arrays.equals(c.origin(), new int[]{7488, 160, 7952})), "at the spec's origin");
     }
 
     @Test

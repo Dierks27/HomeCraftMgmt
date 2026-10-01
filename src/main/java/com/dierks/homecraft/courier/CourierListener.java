@@ -220,7 +220,13 @@ public final class CourierListener implements Listener {
 
     // ---- the live-job cache ---------------------------------------------------
 
-    @EventHandler
+    /**
+     * HIGH: after Multiverse's own join handling (NORMAL), which may send the player to another world
+     * and swap their things for that world's. Settling a run looks for its crate in the bag, so it must
+     * see the things the player ends up with. This plugin loads before Multiverse-Core now (for the
+     * void world), so at the same priority it would run first.
+     */
+    @EventHandler(priority = EventPriority.HIGH)
     public void onJoin(PlayerJoinEvent event) {
         plugin.courier().onJoin(event.getPlayer());
     }

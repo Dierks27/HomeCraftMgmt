@@ -11,6 +11,7 @@ import com.dierks.homecraft.games.gen.DailyCourses;
 import com.dierks.homecraft.games.gen.DailySettings;
 import com.dierks.homecraft.games.gen.admin.GenArgs;
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.engine.GenKit.FakePlanner;
@@ -113,10 +114,10 @@ class ExtraBoxesApartTest {
         List<DailySettings.SlotConfig> slots = everySlot(fresh);
         for (DailySettings.SlotConfig c : slots) {
             assertNull(Regions.apartProblem(c, slots), c.id() + " keeps apart from every other slot");
-            assertNull(Regions.extrasProblem(c.def(), c.origin(), extras),
+            assertNull(Regions.extrasProblem(c.def(), c.origin(), c.halfGap(), extras),
                     c.id() + " keeps apart from the arena and the Clubhouse (Fresh Courses' vet)");
             for (Regions.Extra e : extras) {
-                for (Box half : Regions.halves(c.def(), c.origin())) {
+                for (Box half : Regions.halves(c)) {
                     assertTrue(half.gap(e.box()) >= Regions.APART, c.id() + "'s half " + half.describe() + " is "
                             + half.gap(e.box()) + " blocks from " + e.name());
                 }
@@ -161,14 +162,18 @@ class ExtraBoxesApartTest {
         Box room = ClubhouseSettings.defaults().box();
         List<Regions.Extra> extras = DailyCourses.extraBoxes(FallingFloorsSettings.defaults(), ClubhouseSettings.defaults());
         Slots.Def def = Slots.FRESH_DROPPER;
-        String onTop = Regions.extrasProblem(def, new int[]{room.minX(), room.minY(), room.minZ()}, extras);
+        int gap = LegacyBoxes.HALF_GAP; // half B just past the room, clear of the arena wherever it ships
+        String onTop = Regions.extrasProblem(def, new int[]{room.minX(), room.minY(), room.minZ()}, gap,
+                extras);
         assertNotNull(onTop, "a slot on top of the Clubhouse is refused");
         assertTrue(onTop.contains(ClubhouseRegions.NAME) && onTop.contains("on top of"), onTop);
-        String close = Regions.extrasProblem(def, new int[]{room.maxX() + 16, room.minY(), room.minZ()}, extras);
+        String close = Regions.extrasProblem(def, new int[]{room.maxX() + 16, room.minY(), room.minZ()},
+                gap, extras);
         assertNotNull(close, "a slot within " + Regions.APART + " blocks is refused");
         assertTrue(close.contains(ClubhouseRegions.NAME) && close.contains("only 15 blocks from"), close);
 
-        KeepArea crowding = new KeepArea(room.maxX() + 1, room.minY(), room.minZ(), 4);
+        // one plot: an area that reaches no further than the room's side, wherever the arena ships
+        KeepArea crowding = new KeepArea(room.maxX() + 1, room.minY(), room.minZ(), 1, KeepArea.LEGACY_GAP);
         String keep = Regions.keepExtrasProblem(crowding, extras);
         assertNotNull(keep, "a keep area next to the Clubhouse is refused");
         assertTrue(keep.contains(ClubhouseRegions.NAME) && keep.contains("kept courses' area"), keep);
@@ -198,7 +203,7 @@ class ExtraBoxesApartTest {
 
         // a neighbour that itself crowds a slot still counts: its blocks may stand
         DailySettings.SlotConfig slot = fresh.slots().get(0);
-        Box half = Regions.half(slot.def(), slot.origin(), 'A');
+        Box half = Regions.half(slot.def(), slot.origin(), slot.halfGap(), 'A');
         Box crowdingArena = Box.sized(half.maxX() + 5, half.minY(), half.minZ(), 48, 40, 48);
         assertNotNull(Regions.extraProblem(new Regions.Extra(ArenaRegions.NAME, crowdingArena), everySlot(fresh), null),
                 "this arena crowds " + slot.id());

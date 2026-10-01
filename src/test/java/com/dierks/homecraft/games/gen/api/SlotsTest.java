@@ -53,27 +53,27 @@ class SlotsTest {
         record Row(String id, int ax, int bx, int z1, int z2, int y1, int y2) {
         }
         List<Row> table = List.of(
-                new Row("fresh_parkour_easy", 4096, 4192, 4096, 4159, 160, 207),
-                new Row("fresh_parkour", 4352, 4448, 4096, 4159, 160, 207),
-                new Row("fresh_parkour_hard", 4608, 4704, 4096, 4159, 160, 207),
-                new Row("fresh_golf", 4864, 4960, 4096, 4223, 160, 175),
-                new Row("fresh_tiny_golf", 5120, 5216, 4096, 4143, 160, 175),
-                new Row("fresh_rings", 4096, 4256, 4352, 4671, 128, 303),
-                new Row("fresh_boat", 4480, 4640, 4352, 4479, 160, 175),
-                new Row("fresh_dropper_easy", 5376, 5472, 4096, 4111, 160, 223),
-                new Row("fresh_dropper", 5376, 5472, 4160, 4175, 160, 223));
+                new Row("fresh_parkour_easy", 6080, 6720, 6592, 6655, 160, 207),
+                new Row("fresh_parkour", 6080, 6720, 7232, 7295, 160, 207),
+                new Row("fresh_parkour_hard", 6080, 6720, 7872, 7935, 160, 207),
+                new Row("fresh_golf", 7488, 8128, 4096, 4223, 160, 175),
+                new Row("fresh_tiny_golf", 7488, 8128, 5504, 5551, 160, 175),
+                new Row("fresh_rings", 6080, 6784, 4096, 4415, 128, 303),
+                new Row("fresh_boat", 6080, 6784, 5888, 6015, 160, 175),
+                new Row("fresh_dropper_easy", 7488, 8128, 6768, 6783, 160, 223),
+                new Row("fresh_dropper", 7488, 8128, 7360, 7375, 160, 223));
         for (Row row : table) {
             Slots.Def s = Slots.of(row.id());
             Box a = s.half('A');
             Box b = s.half('b');
             assertEquals(row.ax(), a.minX(), row.id() + ": half A starts at its origin");
-            assertEquals(row.bx(), b.minX(), row.id() + ": half B is 32 blocks further along +X");
+            assertEquals(row.bx(), b.minX(), row.id() + ": half B is 576 blocks further along +X");
             assertEquals(a.sizeX(), b.sizeX(), row.id() + ": the halves are the same size");
             assertEquals(row.z1(), a.minZ(), row.id() + ": z from");
             assertEquals(row.z2(), a.maxZ(), row.id() + ": z to");
             assertEquals(row.y1(), a.minY(), row.id() + ": y from");
             assertEquals(row.y2(), a.maxY(), row.id() + ": y to");
-            assertEquals(32, a.gap(b), row.id() + ": 32 blocks between the halves");
+            assertEquals(576, a.gap(b), row.id() + ": 576 blocks (36 chunks) between the halves");
             assertEquals(Box.of(a.minX(), a.minY(), a.minZ(), b.maxX(), b.maxY(), b.maxZ()),
                     s.region(s.originX(), s.originY(), s.originZ()), row.id() + ": the region is both halves");
             assertEquals(0, s.originX() % 16, row.id() + ": x on a chunk line");
@@ -177,7 +177,7 @@ class SlotsTest {
     void theDropperRegionsAreTheSpecsAndClearOfEverythingElse() {
         assertEquals(Slots.DROPPER, Slots.CLASSIC_DROPPER.generator(), "Classic Dropper holds droppers");
         Box classic = Slots.CLASSIC_DROPPER.half('A');
-        assertEquals(List.of(5376, 160, 4224, 5439, 223, 4239), List.of(classic.minX(), classic.minY(), classic.minZ(),
+        assertEquals(List.of(7488, 160, 7952, 7551, 223, 7967), List.of(classic.minX(), classic.minY(), classic.minZ(),
                 classic.maxX(), classic.maxY(), classic.maxZ()), "Classic Dropper's half A (the spec's table)");
         assertSame(Slots.CLASSIC_DROPPER, Slots.classicFor(Slots.EASY_DROPPER), "Easy Dropper is recalled into it");
         assertSame(Slots.CLASSIC_DROPPER, Slots.classicFor(Slots.FRESH_DROPPER), "and so is the Dropper");
@@ -200,9 +200,10 @@ class SlotsTest {
                 }
             }
         }
-        assertEquals(48, Slots.FRESH_DROPPER.half('A').minZ() - Slots.EASY_DROPPER.half('A').maxZ() - 1,
-                "the dropper regions stand 48 apart in z");
-        assertEquals(96, Slots.EASY_DROPPER.half('A').minX() - Slots.TINY_GOLF.half('B').maxX() - 1,
-                "96 from Tiny Golf's half B");
+        assertEquals(576, Slots.FRESH_DROPPER.half('A').minZ() - Slots.EASY_DROPPER.half('A').maxZ() - 1,
+                "the dropper regions stand a row (576 blocks) apart in z, in the east column");
+        assertEquals(576, Slots.CLASSIC_DROPPER.half('A').minZ() - Slots.FRESH_DROPPER.half('A').maxZ() - 1,
+                "and Classic Dropper a row after the Dropper");
+        assertEquals(Slots.TINY_GOLF.originX(), Slots.EASY_DROPPER.originX(), "the same column as Tiny Golf");
     }
 }

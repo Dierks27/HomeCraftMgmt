@@ -395,6 +395,37 @@ class SessionCoreTest {
         assertHomeWithEverything("after a reload closed the games");
     }
 
+    // ---- Multiverse-Inventories disables first (plugin.yml loads this plugin before Multiverse-Core) ----
+
+    @Test
+    void whenMultiverseInventoriesDisablesAtAStopEveryPlayersOwnThingsAreBackBeforeItSavesThem() throws Exception {
+        play();
+        assertTrue(alice.holdsKit(), "the fixture: playing, with the kit");
+        server.stopping = true;
+        assertFalse(core.disabling("Vault"), "another plugin going ends nothing");
+        assertEquals(Session.Phase.ACTIVE, core.phase(alice.id), "still playing");
+
+        assertTrue(core.disabling("Multiverse-Inventories"), "Multiverse-Inventories saves everyone's things as it"
+                + " disables, and since this plugin loads before Multiverse-Core it now disables first");
+        assertArrayEquals(original(), Arrays.copyOf(alice.slots, FakeServer.SLOTS), "so her own things are on her"
+                + " when it saves them, never the kit");
+        assertFalse(alice.holdsKit(), "no kit item left for it to save");
+        assertEquals(SavedState.RETURN, row().phase(), "restored in place and marked RETURN");
+        assertTrue(server.trips.isEmpty() && server.syncTeleports.isEmpty(), "no teleport while the server stops");
+        assertNull(core.session(alice.id), "the session is over: this plugin's own disable finds nothing left");
+        assertEquals(List.of(EndReason.STOP), trials.ended, "the game hears it once");
+        core.stop(); // this plugin's own disable, later in the same shutdown
+        assertEquals(1, alice.applies, "applied once");
+    }
+
+    @Test
+    void whenMultiverseInventoriesIsDisabledWithoutAStopPlayersGoHomeWhileItStillSwapsTheirThings() throws Exception {
+        play();
+        assertTrue(core.disabling("multiverse-inventories"), "matched ignoring case");
+        assertEquals(List.of(HOME), server.syncTeleports, "a synchronous teleport home, at once");
+        assertHomeWithEverything("after Multiverse-Inventories was disabled by a /reload");
+    }
+
     @Test
     void aGameSwitchedOffSendsItsPlayersHomeSynchronously() throws Exception {
         play();

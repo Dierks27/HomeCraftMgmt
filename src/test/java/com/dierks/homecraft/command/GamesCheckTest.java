@@ -385,6 +385,18 @@ class GamesCheckTest {
         assertEquals("Easy Parkour: it reaches past the world border (x 4096..4255)", l.what());
         assertEquals("move it with games.fresh.slots.fresh_parkour_easy.origin", l.fix());
 
+        // a spot config can't read (L3): fixing the value is the fix, not a move
+        regions.set(0, new Region("fresh_parkour_easy", "Easy Parkour", false, true,
+                List.of(com.dierks.homecraft.games.gen.engine.GenService.UNPLACED), "where it was built"));
+        g = new Good();
+        g.fresh = new Fresh(true, "weekly", "New courses every Monday", "games", true, true, regions, f.slots(),
+                f.nextChange(), null, f.keepArea());
+        l = only(GamesCheck.run(g));
+        assertEquals("Easy Parkour: " + com.dierks.homecraft.games.gen.engine.GenService.UNPLACED, l.what(), "why it is"
+                + " off");
+        assertEquals("write games.fresh.slots.fresh_parkour_easy.origin (or its half_gap) as the console's WARN says,"
+                + " then /hcm reload; nothing moves meanwhile", l.fix(), "the fix is the value, never a move");
+
         g = new Good();
         List<SlotFact> slots = new ArrayList<>(f.slots());
         slots.set(0, new SlotFact("fresh_parkour_easy", "Easy Parkour", false, true, null, true, false, false, false,

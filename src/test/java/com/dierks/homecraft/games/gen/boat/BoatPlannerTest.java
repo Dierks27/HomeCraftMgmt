@@ -7,6 +7,7 @@ import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.GenRandom;
 import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlanInput;
@@ -59,7 +60,7 @@ class BoatPlannerTest {
     private static final Slots.Def SLOT = Slots.ICE_BOAT;
 
     static PlanInput input(char half, long seed, String tier) {
-        return new PlanInput(SLOT, SLOT.half(half), half, 20725, 0, seed, tier, 6, 0, null);
+        return new PlanInput(SLOT, LegacyBoxes.half(SLOT, half), half, 20725, 0, seed, tier, 6, 0, null);
     }
 
     /**
@@ -358,7 +359,7 @@ class BoatPlannerTest {
         for (BoatPlanner.Level level : BoatPlanner.Level.values()) {
             Plan p = PLANNER.plan(input('B', 21, level.id()));
             Course c = course(p);
-            Box half = SLOT.half('B');
+            Box half = LegacyBoxes.half(SLOT, 'B');
             int h0 = half.minY();
             assertEquals(TrialKind.BOAT, c.kind(), "a boat course");
             assertEquals(SLOT.id(), c.id(), "the slot's id");
@@ -531,7 +532,7 @@ class BoatPlannerTest {
     @Test
     void aSeedWhoseTriesAllFailGetsTheSafeSpiral() throws GenFailed {
         // a work budget that leaves nothing for a try but the safe spiral's share
-        PlanInput tight = new PlanInput(SLOT, SLOT.half('A'), 'A', 20725, 0, 77, "medium", 6,
+        PlanInput tight = new PlanInput(SLOT, LegacyBoxes.half(SLOT, 'A'), 'A', 20725, 0, 77, "medium", 6,
                 BoatPlanner.SAFE_RESERVE, null);
         Plan p = PLANNER.plan(tight);
         assertEquals(BoatPlanner.TRIES + 1, p.work(), "no try fitted the budget: the safe spiral");
@@ -562,7 +563,8 @@ class BoatPlannerTest {
     @Test
     void aWrongTierOrACancelFailsCleanly() {
         assertThrows(GenFailed.class, () -> PLANNER.plan(input('A', 1, "EEE")), "a golf mix isn't a boat tier");
-        PlanInput cancelled = new PlanInput(SLOT, SLOT.half('A'), 'A', 1, 0, 1, "medium", 6, 0, () -> true);
+        PlanInput cancelled = new PlanInput(SLOT, LegacyBoxes.half(SLOT, 'A'), 'A', 1, 0, 1, "medium", 6, 0,
+                () -> true);
         assertThrows(GenFailed.class, () -> PLANNER.plan(cancelled), "a cancelled job gives up");
         PlanInput small = new PlanInput(SLOT, new Box(0, 0, 0, 99, 15, 99), 'A', 1, 0, 1, "medium", 6, 0, null);
         assertThrows(GenFailed.class, () -> PLANNER.plan(small), "an area smaller than 128 x 16 x 128 is refused");

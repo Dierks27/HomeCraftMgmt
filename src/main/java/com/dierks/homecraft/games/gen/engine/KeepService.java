@@ -914,9 +914,11 @@ final class KeepService {
      * {@code null}. The keep area is hand-built territory that nothing guards, so this is all that
      * stands between a clear and someone's course: keeping is off (the area overlaps a generator
      * or Classics half, or comes within {@value Regions#CLEARANCE} blocks of one: config's check);
-     * the box overlaps another plot's kept course (the area moved since it was kept); or a
-     * registered course stands in it or within {@value Regions#CLEARANCE} blocks of it (a kept
-     * course of another plot only when it stands inside).
+     * the plot doesn't fit the world (past its border or height, or within {@value Regions#CLEARANCE}
+     * blocks of the spawn or the safe spot: {@link Regions#plotWorldProblems}); the box overlaps
+     * another plot's kept course (the area moved since it was kept); or a registered course stands in
+     * it or within {@value Regions#CLEARANCE} blocks of it (a kept course of another plot only when it
+     * stands inside).
      */
     String plotProblem(int n, String world, Box box) {
         return plotProblem(n, world, box, kept(), courseAreas());
@@ -927,6 +929,14 @@ final class KeepService {
         String off = keepOff(a);
         if (off != null) {
             return "keeping is off: " + off;
+        }
+        WorldPort port = host.world(world);
+        if (port != null) {
+            List<String> edge = Regions.plotWorldProblems(n, box, new Regions.WorldFacts(port.name(), true,
+                    port.minHeight(), port.maxHeight(), port.border(), port.spawn(), host.settings().safeSpot()));
+            if (!edge.isEmpty()) {
+                return edge.get(0);
+            }
         }
         Map<String, Integer> keptIn = new java.util.HashMap<>();
         for (KeptPlot p : used.values()) {

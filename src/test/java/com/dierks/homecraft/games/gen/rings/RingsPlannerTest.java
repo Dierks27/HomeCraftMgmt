@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Palette;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlanInput;
@@ -44,7 +45,7 @@ class RingsPlannerTest {
     private static final Slots.Def SLOT = Slots.SKY_RINGS;
 
     static PlanInput input(char half, long seed, String tier) {
-        return new PlanInput(SLOT, SLOT.half(half), half, 20725, 0, seed, tier, 6, 0, null);
+        return new PlanInput(SLOT, LegacyBoxes.half(SLOT, half), half, 20725, 0, seed, tier, 6, 0, null);
     }
 
     @Test
@@ -74,7 +75,7 @@ class RingsPlannerTest {
         Set<String> hashes = ConcurrentHashMap.newKeySet();
         List<String> failures = Collections.synchronizedList(new ArrayList<>());
         AtomicInteger rejected = new AtomicInteger();
-        Box half = SLOT.half('A');
+        Box half = LegacyBoxes.half(SLOT, 'A');
         IntStream.range(0, n).parallel().forEach(day -> {
             long seed = GenSeed.seed(SECRET, 20_000 + day, SLOT.id(), 0);
             try {
@@ -159,7 +160,7 @@ class RingsPlannerTest {
     @Test
     void halfBGetsItsOwnLayoutInsideHalfB() throws GenFailed {
         Plan p = PLANNER.plan(input('B', 4, "easy"));
-        Box half = SLOT.half('B');
+        Box half = LegacyBoxes.half(SLOT, 'B');
         for (BlockOp op : p.ops()) {
             assertTrue(half.contains(op.x(), op.y(), op.z()), op + " inside half B");
         }
@@ -207,8 +208,8 @@ class RingsPlannerTest {
             for (Course.Mark m : allRings(c)) {
                 lowest = Math.min(lowest, m.y());
             }
-            assertEquals(Math.max(SLOT.half('A').minY() + 2, lowest - level.radius() - 12), c.fallY(), 1e-9,
-                    "fall height: 12 under the lowest ring's frame");
+            assertEquals(Math.max(LegacyBoxes.half(SLOT, 'A').minY() + 2, lowest - level.radius() - 12), c.fallY(),
+                    1e-9, "fall height: 12 under the lowest ring's frame");
             assertTrue(p.ops().size() < 1_000, "a light build: " + p.ops().size() + " blocks");
             assertTrue(Palette.problems(p.palette()).isEmpty(), "only allowed blocks: " + p.palette());
         }
@@ -237,7 +238,7 @@ class RingsPlannerTest {
     void theTowerIsWhereTheCourseStarts() throws GenFailed {
         Plan p = PLANNER.plan(input('A', 13, "easy"));
         Course c = ((PlannedTrial) p.course()).course();
-        Box half = SLOT.half('A');
+        Box half = LegacyBoxes.half(SLOT, 'A');
         assertEquals(half.maxY() - RingsPlanner.TOWER_TOP, c.start().y(), 1e-9, "the platform's top is 16 under the roof");
         assertEquals(180f, c.start().yaw(), 0f, "facing north along the board");
         int under = 0;
@@ -303,9 +304,9 @@ class RingsPlannerTest {
     @Test
     void aWrongTierACancelAndAnEmptyBudgetFailCleanly() {
         assertThrows(GenFailed.class, () -> PLANNER.plan(input('A', 1, "extreme")), "no such tier");
-        PlanInput cancelled = new PlanInput(SLOT, SLOT.half('A'), 'A', 1, 0, 1, "easy", 6, 0, () -> true);
+        PlanInput cancelled = new PlanInput(SLOT, LegacyBoxes.half(SLOT, 'A'), 'A', 1, 0, 1, "easy", 6, 0, () -> true);
         assertThrows(GenFailed.class, () -> PLANNER.plan(cancelled), "a cancelled job gives up");
-        PlanInput tiny = new PlanInput(SLOT, SLOT.half('A'), 'A', 1, 0, 1, "easy", 6, 10, null);
+        PlanInput tiny = new PlanInput(SLOT, LegacyBoxes.half(SLOT, 'A'), 'A', 1, 0, 1, "easy", 6, 10, null);
         assertThrows(GenFailed.class, () -> PLANNER.plan(tiny), "a budget of ten runs out");
         assertEquals(Slots.RINGS, PLANNER.id(), "its id");
         assertEquals(RingsPlanner.ALGO, PLANNER.algo(), "its version");

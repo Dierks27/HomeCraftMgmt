@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.storage.GamesDao;
 import org.junit.jupiter.api.Test;
@@ -213,7 +214,7 @@ class DailyTextTest {
 
     @Test
     void theEditorsCheckFindsEverySideOfAHalfAndNoFurther() {
-        Box half = Slots.DAILY_GOLF.half('A'); // x 4864-4927, y 160-175, z 4096-4223
+        Box half = LegacyBoxes.half(Slots.DAILY_GOLF, 'A'); // x 4864-4927, y 160-175, z 4096-4223
         GeneratedCourses g = new GeneratedCourses() {
             @Override
             public boolean live(String courseId, GenTag tag) {

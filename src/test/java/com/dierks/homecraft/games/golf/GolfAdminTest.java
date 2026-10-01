@@ -7,6 +7,7 @@ import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenRandom;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.engine.Regions;
 import net.kyori.adventure.text.Component;
@@ -106,7 +107,7 @@ class GolfAdminTest {
 
     @Test
     void aTeeCupOrBoundNearADailyAreaIsRefused() {
-        Box half = Slots.TINY_GOLF.half('B'); // x 5216-5279, y 160-175, z 4096-4143
+        Box half = LegacyBoxes.half(Slots.TINY_GOLF, 'B'); // x 5216-5279, y 160-175, z 4096-4143
         GeneratedCourses g = new GeneratedCourses() {
             @Override
             public boolean live(String courseId, GenTag tag) {
@@ -145,8 +146,8 @@ class GolfAdminTest {
     @Test
     void aHolesBoundsAreKeptOutAsAWholeBoxNotCornerByCorner() {
         Slots.Def d = Slots.DAILY_PARKOUR_EASY;
-        Box a = d.half('A');
-        Box b = d.half('B');
+        Box a = LegacyBoxes.half(d, 'A');
+        Box b = LegacyBoxes.half(d, 'B');
         GeneratedCourses g = com.dierks.homecraft.games.trial.CourseAdminTestAccess.keeping(a, b);
         GolfCourse.Spot west = new GolfCourse.Spot(a.minX() - 17, 170, a.minZ() + 10);
         GolfCourse.Spot east = new GolfCourse.Spot(b.maxX() + 17, 173, a.minZ() + 20);
@@ -163,7 +164,7 @@ class GolfAdminTest {
             GolfCourse course = new GolfCourse("wide", "Wide", "games", true, 1, List.of(new GolfCourse.Hole(
                     new GolfCourse.Tee(c1.x() + 0.5, c1.y(), c1.z() + 0.5, 0f), new GolfCourse.Spot(c1.x(), c1.y() - 1,
                     c1.z()), 3, c1, c2)));
-            String engine = Regions.handBuiltProblem(d, d.origin(), "games",
+            String engine = Regions.handBuiltProblem(d, LegacyBoxes.origin(d), LegacyBoxes.HALF_GAP, "games",
                     Regions.handBuilt(List.of(CourseCodec.toRow(course, 0, 0))));
             String editor = GolfAdmin.boundsRefusal(g, "games", c1, c2);
             assertEquals(engine == null, editor == null, "the editor takes bounds " + c1 + " to " + c2

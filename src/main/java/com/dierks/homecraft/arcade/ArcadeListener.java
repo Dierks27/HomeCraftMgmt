@@ -23,7 +23,12 @@ public final class ArcadeListener implements Listener {
         this.plugin = plugin;
     }
 
-    @EventHandler
+    /**
+     * HIGH: after Multiverse's own join handling (NORMAL), which may send the player to another world.
+     * Whether tokens are paid depends on the world they end up in. This plugin loads before
+     * Multiverse-Core now (for the void world), so at the same priority it would run first.
+     */
+    @EventHandler(priority = EventPriority.HIGH)
     public void onJoin(PlayerJoinEvent event) {
         if (plugin.tokens() != null) {
             plugin.tokens().onJoin(event.getPlayer());

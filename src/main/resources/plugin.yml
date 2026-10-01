@@ -14,6 +14,19 @@ api-version: '1.21'
 # them guarantees HomeCraft's recipes are registered by then (JEI visibility).
 loadbefore:
   - JEIServerProxy
+  # The built-in void world (/mv create sky normal -g HomeCraftManagement). Multiverse loads its
+  # worlds while it enables, at every start, and Bukkit only hands a world the generator of a plugin
+  # that is already enabled: after Multiverse, 'sky' would come back with vanilla terrain in every
+  # new chunk. So this plugin enables first (PluginLoadOrderTest). What that changes, and how:
+  # - Multiverse's worlds aren't loaded yet while this plugin enables. The Games wait for their world
+  #   (the worlds-up pass runs a tick after the start, once Multiverse has loaded its worlds), and a
+  #   courier site in one of them waits for its chunks instead of being forgotten.
+  # - Join handlers that look at the player's world or bag run at HIGH, after Multiverse's (NORMAL).
+  # - Multiverse-Inventories now disables first and saves everyone's things as it goes: the world
+  #   sessions end just before it does (SessionRecoveryListener), so it never saves a game's kit.
+  # - A player's things are saved after the trip into the Games world, whatever order listeners run
+  #   in. The Multiverse lines of /hcm games check read Multiverse only when the check runs.
+  - Multiverse-Core
 
 # All integrations are OPTIONAL. We load after them when present and degrade
 # gracefully when absent (see integration.ProtectionService). We never hard-depend.
@@ -29,10 +42,9 @@ softdepend:
   # Sound Mufflers reach sounds on their way to each player through ProtocolLib. Without it
   # mufflers still place and save their settings, but hush nothing.
   - ProtocolLib
-  # The Games world: loading after Multiverse means the Games world exists when world games start,
-  # and a player's saved things are captured after Multiverse-Inventories has swapped them.
-  - Multiverse-Core
-  - Multiverse-Inventories
+  # Not Multiverse-Core or Multiverse-Inventories: this plugin enables BEFORE Multiverse-Core
+  # (loadbefore, above), and Multiverse-Inventories depends on Multiverse-Core, so naming either
+  # here would be a loop, and Paper would pick the order instead.
 
 commands:
   hcm:

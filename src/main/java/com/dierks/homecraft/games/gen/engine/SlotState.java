@@ -46,7 +46,15 @@ final class SlotState {
     // ---- where and how (refreshed from config and hcm_meta at every check) ----------------------
     String world = "";
     int[] origin;
+    /** The blocks between its halves ({@code half_gap}): half B stands {@code def.sizeX() + gap} from the origin. */
+    int gap = Slots.HALF_GAP;
     boolean configOn;
+    /**
+     * Config can't say where it stands (its origin or half_gap can't be read: {@code SlotConfig#placed}):
+     * it stays where it was claimed, and is off whatever an admin's override says, so nothing is built
+     * or moved until config is fixed.
+     */
+    boolean unplaced;
     /** The admin's on/off, or {@code null} for none. */
     Boolean override;
     /** The tier or mix a build would use now. */
@@ -102,7 +110,7 @@ final class SlotState {
     DroppedPick pickDropped;
     /** The current edition's reroll count. */
     int reroll;
-    /** The claim matches this world and origin. */
+    /** The claim matches this world, origin and gap. */
     boolean claimed;
     /**
      * A Dropper's old regions that may still hold its pools ({@link GenAdminKeys#wet}), as last read:
@@ -160,9 +168,9 @@ final class SlotState {
         this.classic = Slots.isClassic(def.id());
     }
 
-    /** Switched on: the admin's override, else config. */
+    /** Switched on: the admin's override, else config; never while config can't say where it stands. */
     boolean wanted() {
-        return override != null ? override : configOn;
+        return !unplaced && (override != null ? override : configOn);
     }
 
     /** Switched on and nothing in the way. */
@@ -171,7 +179,7 @@ final class SlotState {
     }
 
     Box half(char which) {
-        return Regions.half(def, origin, which);
+        return Regions.half(def, origin, gap, which);
     }
 
     /**
@@ -200,7 +208,7 @@ final class SlotState {
         lastError = why;
     }
 
-    boolean sameRegion(String w, int[] o) {
-        return world.equalsIgnoreCase(w) && Arrays.equals(origin, o);
+    boolean sameRegion(String w, int[] o, int g) {
+        return world.equalsIgnoreCase(w) && Arrays.equals(origin, o) && gap == g;
     }
 }

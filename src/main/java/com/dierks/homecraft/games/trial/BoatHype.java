@@ -10,7 +10,8 @@ import java.util.Locale;
 /**
  * What the Ice Boat "Mountain Run" says about itself (COURSE-VARIETY-SPEC §5.2, §8): how many drops
  * it has, for the tile NAME ("5 drops · ") and Race Night's hype line ("This week: 5 drops down the
- * mountain!"), and which checkpoint comes just before the Final Drop. Pure: no Bukkit, never throws.
+ * mountain!"), and which checkpoint comes just before a Final Drop in front of the stand. Pure: no
+ * Bukkit, never throws.
  *
  * <p><b>Why the drops are read off the marks.</b> A course stores no drop count, and the race copy
  * must not wait for the planner or re-derive a plan on the main thread. The Mountain Run puts exactly
@@ -18,6 +19,14 @@ import java.util.Locale;
  * (start to the first checkpoint, checkpoint to checkpoint, the last checkpoint to the finish) holds
  * at most one drop, and a leg holds a drop exactly when its next mark is lower. Counting those legs is
  * the drop count, exactly; a 2-block Big Drop is one drop, like a Hop.
+ *
+ * <p><b>"Final drop!" only where the gold finish comes next.</b> The layout's own FINAL DROP! sign
+ * ("Then the gold finish line!") stands only when its Final Drop is in front of the stand, at most 70
+ * blocks before the finish (the Course Variety decisions); on easy and hard, and on most medium runs,
+ * the last drop is farther up the mountain and has its own HOP! or BIG DROP! sign. The planner lays
+ * the checkpoints so that the Final Drop's leg runs straight on to the finish exactly then, and has a
+ * checkpoint after it otherwise, so the title is read off the marks the same way: it shows at the
+ * checkpoint before the last drop only when the next target after that drop is the finish.
  *
  * <p><b>Only the Mountain Run.</b> A Fresh Ice Boat layout from boat planner algo {@value #FIRST_ALGO}
  * on; the flat algo-2 loops, kept courses (their tag is gone) and hand-built tracks say nothing new,
@@ -65,8 +74,9 @@ public final class BoatHype {
 
     /**
      * The index (0-based) of the checkpoint just before a Mountain Run's last drop, where the racer
-     * hears {@link #FINAL_DROP}; -1 when {@code c} isn't a Mountain Run, has no drop, or its last drop
-     * comes before the first checkpoint.
+     * hears {@link #FINAL_DROP}, when the finish comes right after that drop; -1 when {@code c} isn't a
+     * Mountain Run, has no drop, its last drop comes before the first checkpoint, or a checkpoint stands
+     * between its last drop and the finish (a Final Drop up the mountain, with no FINAL DROP! sign).
      */
     public static int finalDrop(Course c) {
         if (!mountain(c) || c.start() == null) {
@@ -82,11 +92,17 @@ public final class BoatHype {
             }
             y = next;
         }
+        if (last != targets.size() - 1) {
+            return -1; // the finish doesn't come next: the drop's sign is its own HOP! or BIG DROP!
+        }
         int at = last - 1; // the mark before the leg with the last drop in it
         return at >= 0 && at < c.checkpoints().size() ? at : -1;
     }
 
-    /** The big title for reaching checkpoint {@code index} (0-based) of {@code c}: "Final drop!" or nothing. */
+    /**
+     * The big title for reaching checkpoint {@code index} (0-based) of {@code c}: "Final drop!" before a
+     * Final Drop the finish comes right after ({@link #finalDrop}), or nothing.
+     */
     public static String checkpointTitle(Course c, int index) {
         return index >= 0 && index == finalDrop(c) ? FINAL_DROP : "";
     }

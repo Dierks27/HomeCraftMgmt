@@ -24,7 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * one, so its face is read).
  *
  * <p>Pinned here (the review found that taking either hook out left the whole suite green): the
- * Mountain Run's tile says "5 drops · " before its stars and its racers see "Final drop!" at cp 10;
+ * Mountain Run's tile says "5 drops · " before its stars and its racers see "Final drop!" at cp 10, where
+ * the finish comes next, and nowhere on a run whose last drop is far up the mountain;
  * a flat loop, a hand-built track and a parkour course read exactly as before; a Dropper still says its
  * levels.
  */
@@ -99,8 +100,15 @@ class MountainRunHooksTest {
                     "checkpoint " + (i + 1) + " of " + run.checkpoints().size()
                             + ": the big title only before the Final Drop (the small line has the count)");
         }
-        assertEquals("&aFinal drop!", TimeTrials.checkpointBig(MountainRuns.oneDrop(), 0),
-                "one Hop between cp 1 and cp 2: heard at cp 1");
+        assertEquals("", TimeTrials.checkpointBig(MountainRuns.oneDrop(), 0),
+                "one Hop between cp 1 and cp 2, then cp 3 before the finish: the finish doesn't come next");
+        for (Tier tier : List.of(Tier.EASY, Tier.HARD)) {
+            Course far = MountainRuns.farFinalDrop(tier);
+            for (int i = 0; i < far.checkpoints().size(); i++) {
+                assertEquals("", TimeTrials.checkpointBig(far, i), tier + ", checkpoint " + (i + 1)
+                        + ": a last drop far up the mountain (its sign says HOP!) has no big title");
+            }
+        }
     }
 
     @Test

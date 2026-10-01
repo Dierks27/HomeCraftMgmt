@@ -21,12 +21,16 @@ import java.util.List;
  * <p><b>The proof's own view.</b> The drop edges and their flight zones are worked out here exactly
  * as the validator floods them (every lip cell's disc of Z(d), along the track at or below it), so
  * the walls are raised where it will look and the checkpoints kept where it will allow: flat, off
- * sand, in the open, at least 3 from every drop and every zone, no other ring within reach of their
- * sphere; on a straight (radius w / 2 + 0.5, its middle row spans the lane) or on a bend with no sand
- * (a block wider, where its sphere is shown to cut the lane). They are laid by a shortest chain
- * ({@link #chain}): legs at most 60 across the ground with at most one drop each (the rules), a
- * checkpoint every 32 along the track wherever one can go, and no more than that. It is also how a
- * piece is kept or given up: only while a chain still exists round it.
+ * sand where a reset puts the boat down, in the open, at least 3 from every drop and every zone, no
+ * other ring within reach of their sphere; on a straight (radius w / 2 + 0.5, its middle row spans
+ * the lane) or on a bend (a block wider, where its sphere is shown to cut the lane; on a bend with sand
+ * as much wider again as its run-off or kerb, the sand at the sphere's rim, the middle on ice). They
+ * are laid by a shortest chain ({@link #chain}): legs at most 60 across the ground with at most one
+ * drop each, a leg with no drop at most 60 along the track, a reset at every checkpoint facing the
+ * next target within 60 degrees of the lane, and the Final Drop's leg running on to the finish
+ * exactly when the Final Drop is in front of the stand (the rules); then as few checkpoints on a sandy
+ * bend as that allows, a checkpoint every 32 along the track wherever one can go, and no more than
+ * that. It is also how a piece is kept or given up: only while a chain still exists round it.
  *
  * <p><b>Walls</b> stand in every column beside the track, from the lowest ice beside it to 2 over
  * the highest (stripped spruce at the ice and the ice + 1, glass above), raised to 2 over the lip
@@ -289,24 +293,35 @@ final class TrackRaster {
 
     // ---- checkpoints ------------------------------------------------------------------------------------
 
-    /** A place a checkpoint may go: {@code s} along, its middle (half columns), its radius and ice. */
-    record Spot(double s, double x, double z, double r, int ice) {
+    /**
+     * A place a checkpoint may go: {@code s} along, its middle (half columns), its radius and ice,
+     * whether it is on a bend with sand (the chain takes those only where the rules need them), and
+     * the lane's direction there as the proof reads it off the blocks ({@link #laneRead}; a unit
+     * vector, 0 for the start and the finish).
+     */
+    record Spot(double s, double x, double z, double r, int ice, boolean sandy, double lx, double lz) {
+
+        Spot(double s, double x, double z, double r, int ice) {
+            this(s, x, z, r, ice, false, 0, 0);
+        }
     }
 
     /**
      * Every place a checkpoint may go, in order along the track (pieces aside: {@link #chain}
      * leaves those out): on the straights, radius w / 2 + 0.5 (its middle row spans the lane); on a
-     * bend with no sand, radius w / 2 + 1.5 where its sphere is shown to cut the lane there.
+     * bend, radius w / 2 + 1.5 where its sphere is shown to cut the lane there, and on a bend with a
+     * sand run-off or kerb that much more than the sand's width, so the sphere spans the sand too (a
+     * boat going round on the sand still meets it) while its middle, where a reset puts the boat
+     * down, is ice (review CV gate: on hard every bend has sand, and a checkpoint on one is what keeps
+     * a leg past a piece within the rules).
      */
     List<Spot> spots() {
         List<Spot> out = new ArrayList<>();
         for (TrackPath.Seg g : path.segs) {
-            if (g.arc && (pieces.runoff[g.index] > 0 || pieces.kerb[g.index] > 0)) {
-                continue;
-            }
+            int sand = g.arc ? Math.max(pieces.runoff[g.index], pieces.kerb[g.index]) : 0;
             double first = g.arc ? g.s0 + 0.5 : TrackProfile.spotStart(g);
             for (double s = first; s <= g.s1(); s += 1) {
-                double r = baseHalf(s) + (g.arc ? BoatPlanner.ARC_SPOT : 0.5);
+                double r = baseHalf(s) + (g.arc ? BoatPlanner.ARC_SPOT + sand : 0.5);
                 if (!g.arc && (s - r < g.s0 - 1e-9 || s + r > g.s1() + 1e-9)) {
                     continue; // the whole disk along the straight
                 }
@@ -324,7 +339,10 @@ final class TrackRaster {
                 }
                 double[] p = path.at(s);
                 if (ok(p[0], p[1], r) && (!g.arc || cuts(s, p[0], p[1], r))) {
-                    out.add(new Spot(s, p[0], p[1], r, profile.level(s)));
+                    double[] lane = laneRead(s, p[0], p[1], r);
+                    if (lane != null) {
+                        out.add(new Spot(s, p[0], p[1], r, profile.level(s), sand > 0, lane[0], lane[1]));
+                    }
                 }
             }
         }
@@ -370,6 +388,82 @@ final class TrackRaster {
         return true;
     }
 
+    /**
+     * The lane's direction at the checkpoint (px, pz) of radius r, {@code s} along, read off the blocks
+     * exactly as {@link DownhillValidator} reads it for its facing rule: from the middle of the ice
+     * cells just before the blocks wholly inside the sphere (those a boat reaches from before it
+     * without crossing them) to the middle of the ice cells just past them; a unit {x, z}, or
+     * {@code null} when either side has none. On a bend it lags or leads the centreline's own
+     * tangent by a few degrees near the bend's ends, so the chain holds a reset to both.
+     */
+    double[] laneRead(double s, double px, double pz, double r) {
+        int cx = (int) Math.floor(px);
+        int cz = (int) Math.floor(pz);
+        int span = (int) Math.ceil(r) + 2;
+        int w = span + 2;
+        int n = 2 * w + 1;
+        boolean[][] in = new boolean[n][n];
+        for (int x = cx - w; x <= cx + w; x++) {
+            for (int z = cz - w; z <= cz + w; z++) {
+                in[x - cx + w][z - cz + w] = drive(x, z) && whollyIn(x, z, px, pz, r);
+            }
+        }
+        // the side a boat comes from: the track before the sphere, flooded round it but never through it
+        boolean[][] before = new boolean[n][n];
+        ArrayDeque<int[]> queue = new ArrayDeque<>();
+        for (int x = cx - w; x <= cx + w; x++) {
+            for (int z = cz - w; z <= cz + w; z++) {
+                if (drive(x, z) && !in[x - cx + w][z - cz + w] && sAt[x][z] < s - r - 1.5) {
+                    before[x - cx + w][z - cz + w] = true;
+                    queue.add(new int[]{x, z});
+                }
+            }
+        }
+        while (!queue.isEmpty()) {
+            int[] c = queue.poll();
+            for (int[] d : SIDES) {
+                int x = c[0] + d[0];
+                int z = c[1] + d[1];
+                if (x < cx - w || z < cz - w || x > cx + w || z > cz + w || !drive(x, z)
+                        || in[x - cx + w][z - cz + w] || before[x - cx + w][z - cz + w]
+                        || h[x][z] > h[c[0]][c[1]]) {
+                    continue;
+                }
+                before[x - cx + w][z - cz + w] = true;
+                queue.add(new int[]{x, z});
+            }
+        }
+        double[] a = new double[3];
+        double[] b = new double[3];
+        for (int x = cx - span; x <= cx + span; x++) {
+            for (int z = cz - span; z <= cz + span; z++) {
+                if (!drive(x, z) || in[x - cx + w][z - cz + w] || mat[x][z] == SAND) {
+                    continue;
+                }
+                boolean edge = false;
+                for (int[] d : SIDES) {
+                    int ex = x + d[0] - cx + w;
+                    int ez = z + d[1] - cz + w;
+                    edge |= ex >= 0 && ez >= 0 && ex < n && ez < n && in[ex][ez];
+                }
+                if (!edge) {
+                    continue;
+                }
+                double[] side = before[x - cx + w][z - cz + w] ? a : b;
+                side[0] += x + 0.5;
+                side[1] += z + 0.5;
+                side[2]++;
+            }
+        }
+        if (a[2] == 0 || b[2] == 0) {
+            return null;
+        }
+        double lx = b[0] / b[2] - a[0] / a[2];
+        double lz = b[1] / b[2] - a[1] / a[2];
+        double len = Math.hypot(lx, lz);
+        return len < EPS ? null : new double[]{lx / len, lz / len};
+    }
+
     private boolean band(int x, int z, double s, double r) {
         return Math.abs(sAt[x][z] - s) <= r + 5;
     }
@@ -381,7 +475,10 @@ final class TrackRaster {
         return fx * fx + fz * fz <= r * r + EPS;
     }
 
-    /** DownhillValidator's checkpoint rules at (px, pz), radius r (§2.6, V6). */
+    /**
+     * DownhillValidator's checkpoint rules at (px, pz), radius r (§2.6, V6): flat, no sand within
+     * {@link DownhillValidator#RESET_ROOM} of its middle, clear of drops and zones, no other ring in reach.
+     */
     private boolean ok(double px, double pz, double r) {
         int cx = (int) Math.floor(px);
         int cz = (int) Math.floor(pz);
@@ -398,7 +495,8 @@ final class TrackRaster {
                 }
                 double d2 = sq(x + 0.5 - px) + sq(z + 0.5 - pz);
                 if (d2 <= r * r + EPS) {
-                    if (h[x][z] != ice || mat[x][z] == SAND) {
+                    if (h[x][z] != ice || (mat[x][z] == SAND
+                            && d2 <= DownhillValidator.RESET_ROOM * DownhillValidator.RESET_ROOM + EPS)) {
                         return false;
                     }
                     nearCells.add(new int[]{x, z});
@@ -467,13 +565,24 @@ final class TrackRaster {
     /**
      * The checkpoints from the start to the finish through {@code spots}, none within a block of a
      * {@code blocked} stretch (a piece): legs at most {@link BoatPlanner#LEG_MAX} across the ground
-     * and at most one drop each (the rules), then a checkpoint at least every {@code spacing} along
-     * the track wherever one can go, then as few as that allows. {@code null} when no chain keeps
-     * the rules.
+     * and at most one drop each, a leg with no drop at most {@link BoatPlanner#FLAT_LEG} along the
+     * track, and from every checkpoint a reset facing the next target within
+     * {@link BoatPlanner#FACING} degrees of the lane ({@link #faces}; the rules); the Final Drop's leg
+     * runs to the finish exactly when the Final Drop is in front of the stand
+     * ({@link TrackProfile#finalInFront}, where its FINAL DROP! sign stands), so the race copy's
+     * "Final drop!" title, read off the marks ({@code BoatHype.finalDrop}), shows only there; then
+     * as few checkpoints on a sandy bend as that allows, then a checkpoint at least every
+     * {@code spacing} along the track wherever one can go, then as few as that allows. {@code null}
+     * when no chain keeps the rules.
      */
     List<Spot> chain(List<Spot> spots, List<double[]> blocked, double spacing) {
+        TrackProfile.Lip last = profile.last();
+        boolean front = profile.finalInFront();
         List<Spot> use = new ArrayList<>();
         for (Spot sp : spots) {
+            if (front && sp.s() > last.s()) {
+                continue; // the gold finish comes next after a Final Drop in front of the stand
+            }
             boolean free = true;
             for (double[] b : blocked) {
                 if (sp.s() + sp.r() + 1.5 > b[0] && sp.s() - sp.r() - 1.5 < b[1]) {
@@ -490,14 +599,14 @@ final class TrackRaster {
         Spot start = new Spot(TrackProfile.START, st[0], st[1], 0, profile.top);
         Spot finish = new Spot(profile.finish, fp[0], fp[1], level.finishRadius(), profile.bottom());
         int n = use.size();
-        // fewest legs longer than the spacing first, then fewest checkpoints
+        // fewest checkpoints on sandy bends first, then fewest legs longer than the spacing, then fewest checkpoints
         long[] best = new long[n + 1];
         int[] prev = new int[n + 1];
         java.util.Arrays.fill(best, Long.MAX_VALUE);
         for (int i = 0; i <= n; i++) {
             Spot b = i < n ? use.get(i) : finish;
-            long add = i < n ? 1 : 0;
-            if (leg(start, b, true)) {
+            long add = i < n ? (b.sandy() ? SANDY : 1) : 0;
+            if (leg(start, b, true, i == n)) {
                 best[i] = add + LONG * missed(start, b, spacing);
                 prev[i] = -1;
             }
@@ -510,7 +619,7 @@ final class TrackRaster {
                     continue;
                 }
                 long c = best[j] + add;
-                if (c <= best[i] && leg(a, b, false)) {
+                if (c <= best[i] && leg(a, b, false, i == n)) {
                     c += LONG * missed(a, b, spacing);
                     if (c < best[i] || (c == best[i] && prev[i] < j)) {
                         best[i] = c;
@@ -531,6 +640,8 @@ final class TrackRaster {
 
     /** What a checkpoint missed costs against one more checkpoint: many. */
     private static final long LONG = 1_000;
+    /** What a checkpoint on a sandy bend costs: more than any spacing it could save, so it is there only for the rules. */
+    private static final long SANDY = 1_000_000;
 
     /**
      * How many checkpoints leg a-b misses: one for every {@code spacing} along the track past the
@@ -544,8 +655,15 @@ final class TrackRaster {
         return along <= spacing ? 0 : (long) Math.ceil(along / spacing) - 1;
     }
 
-    /** Whether a checkpoint leg from a to b keeps the rules (a the start when {@code fromStart}). */
-    private boolean leg(Spot a, Spot b, boolean fromStart) {
+    /**
+     * Whether a checkpoint leg from a to b keeps the rules (a the start when {@code fromStart}, b the
+     * finish when {@code toFinish}): at most {@link BoatPlanner#LEG_MAX} across the ground, the disks
+     * apart, at most one drop, at most {@link BoatPlanner#FLAT_LEG} along the track when no drop is in
+     * it, a Final Drop far from the finish not in the finish's leg, and a reset at {@code a} facing on
+     * down the lane ({@link #faces}; a reset before the first checkpoint goes to the start, facing
+     * along the pit).
+     */
+    boolean leg(Spot a, Spot b, boolean fromStart, boolean toFinish) {
         if (b.s() <= a.s()) {
             return false;
         }
@@ -560,7 +678,43 @@ final class TrackRaster {
         } else if (across <= a.r() + b.r() + 0.5) {
             return false; // the disks would touch
         }
-        return profile.lipsBetween(a.s(), b.s()) <= 1;
+        int drops = profile.lipsBetween(a.s(), b.s());
+        if (drops > 1) {
+            return false;
+        }
+        if (drops == 0 && b.s() - a.s() > BoatPlanner.FLAT_LEG) {
+            return false; // review CV gate: a reset never sends a boat far back
+        }
+        if (drops == 1 && toFinish && !profile.finalInFront()) {
+            return false; // a Final Drop far from the finish has its own HOP! or BIG DROP!, and a checkpoint after it
+        }
+        return fromStart || faces(a, b);
+    }
+
+    /**
+     * Whether a reset at checkpoint {@code a} faces on down the track: {@code TimeTrials.backTo} turns
+     * the boat toward the next target {@code b} ({@link com.dierks.homecraft.games.trial.Course#resetYaw}),
+     * and that line is within {@link BoatPlanner#FACING} degrees of the lane's direction at {@code a},
+     * both the centreline's tangent there and the lane as the proof reads it off the blocks
+     * ({@link #laneRead}; a hair inside, for the stored yaw's float), so the proof never refuses what
+     * this lays (review CV gate: a leg round two bends had a kid reset facing back up the track).
+     */
+    boolean faces(Spot a, Spot b) {
+        double[] t = path.tangent(a.s());
+        return offLane(a, b, t[0], t[1]) <= BoatPlanner.FACING + 1e-6
+                && offLane(a, b, a.lx(), a.lz()) <= BoatPlanner.FACING - 1e-3;
+    }
+
+    /** The angle, in degrees, between the line from {@code a} to {@code b} and the unit direction (tx, tz). */
+    private static double offLane(Spot a, Spot b, double tx, double tz) {
+        double dx = b.x() - a.x();
+        double dz = b.z() - a.z();
+        double len = Math.hypot(dx, dz);
+        if (len < EPS) {
+            return 180;
+        }
+        double cos = Math.max(-1, Math.min(1, (dx * tx + dz * tz) / len));
+        return Math.toDegrees(Math.acos(cos));
     }
 
     private static double sq(double v) {

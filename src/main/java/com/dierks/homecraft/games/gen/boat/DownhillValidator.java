@@ -11,6 +11,7 @@ import com.dierks.homecraft.games.trial.FairPlay;
 import com.dierks.homecraft.games.trial.Laps;
 import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.games.trial.RaceGrid;
+import com.dierks.homecraft.games.trial.RaceSeat;
 import com.dierks.homecraft.games.trial.RaceStand;
 import com.dierks.homecraft.games.trial.TrialKind;
 
@@ -55,11 +56,14 @@ import java.util.Map;
  *       all-ice line B wide run from the start to the finish, so sand is never forced; every block
  *       of track is within 3 of the wide path; every gap between walls is at least P, or 0; both
  *       ways round every island are wide.</li>
- *   <li><b>V6 checkpoints.</b> Each is at least 3 in radius, on flat open ice in a single lane (no
- *       sand, roof, trees or island in reach), at least 3 from any drop and any flight zone, and a
- *       cut: the blocks wholly inside its sphere separate the start from the finish, with the one
- *       before on the start side. Its sphere never reaches another ring. At most one drop between
- *       two targets, and at most {@value #MAX_LEG} blocks; stored once (a sprint).</li>
+ *   <li><b>V6 checkpoints.</b> Each is at least 3 in radius, on flat open track in a single lane
+ *       (ice where a reset puts the boat down, {@value #RESET_ROOM} round its middle; no roof, trees
+ *       or island in reach), at least 3 from any drop and any flight zone, and a cut: the blocks
+ *       wholly inside its sphere separate the start from the finish, with the one before on the
+ *       start side. Its sphere never reaches another ring. At most one drop between two targets,
+ *       and at most {@value #MAX_LEG} blocks across the ground; with no drop between, at most
+ *       {@value #MAX_ALONG} along the track. A reset at each faces the next target within
+ *       {@value #MAX_FACING} degrees of the lane. Stored once (a sprint).</li>
  *   <li><b>V7 headroom.</b> Four blocks of air over every drive cell; a cave roof exactly 5 over
  *       the ice; canopies 5 or more; nothing over a landing up to 2 above the lip's surface; scenery
  *       at least 2 columns from the track unless it is 5 or more over it.</li>
@@ -85,9 +89,10 @@ import java.util.Map;
  * blocks wholly inside the sphere, so any boat crossing them is inside it; "at least 14 drive cells
  * follow the finish" is its sand paddock starting at least 14 past its centre. What only shapes the
  * fun is the planner's to keep and isn't checked here: the first lip's distance from the start, the
- * landing strips, the pieces' placement, checkpoints "normally 20-40" apart and exactly one between
- * two drops (this proves the safety half: never two drops in one leg), and keep-clear boxes
- * covering the runs (only their count, the half and the stand are checked, their one use).
+ * landing strips, the pieces' placement, checkpoints "normally 20-40" apart (the "never more" half,
+ * 60 along a leg with no drop, is proven) and exactly one between two drops (this proves the safety
+ * half: never two drops in one leg), and keep-clear boxes covering the runs (only their count, the
+ * half and the stand are checked, their one use).
  *
  * <p>Pure: no Bukkit. Milliseconds a plan. It never throws: a plan it can't read is refused.
  */
@@ -111,6 +116,30 @@ public final class DownhillValidator {
     public static final double MIN_RADIUS = 3;
     /** The farthest two targets may be apart, across the ground (§2.6). */
     public static final double MAX_LEG = 60;
+    /**
+     * The longest a leg with no drop in it may run along the track (§2.6: "normally every 20-40 along
+     * s ... never more"; review CV gate), so a reset never sends a boat far back: the shortest way
+     * from one mark to the next through the track's own columns (its drive cells at the leg's level
+     * and the islands standing in it), sixteen ways ({@code along}). A bend's inside is shorter than
+     * its centreline, so this reads a little under the planner's own measure along the centreline,
+     * which it holds to {@link BoatPlanner#FLAT_LEG} (over thousands of legs this read at most 0.3
+     * over it).
+     */
+    public static final double MAX_ALONG = 60;
+    /**
+     * From every checkpoint, the way a reset faces ({@link Course#resetYaw}: toward the next target,
+     * as {@code TimeTrials.backTo} turns the boat) is within this many degrees of the lane's direction
+     * there, read off the blocks as the line from the track just before the checkpoint's sphere to the
+     * track just past it (review CV gate: a reset faced 146 degrees off, back up the track).
+     */
+    public static final double MAX_FACING = 60;
+    /**
+     * A reset puts the boat down within this of a checkpoint's middle ({@link RaceSeat#SIDEWAYS} to a
+     * side, and a block for the hull): every drive cell there is ice. Sand farther out, a bend's
+     * run-off or kerb at the rim of its sphere, is allowed: the sphere spans it, so a boat going round
+     * on the sand still meets it, and V5b keeps an all-ice line through it.
+     */
+    public static final double RESET_ROOM = RaceSeat.SIDEWAYS + 1;
     /** A checkpoint's centre keeps at least this far from a drop and from a flight zone (§2.6). */
     public static final double DROP_CLEAR = 3;
     /** Blocks of ice after the finish before its sand paddock (§2.8). */
@@ -300,6 +329,9 @@ public final class DownhillValidator {
     }
 
     private static final int[][] SIDES = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+    /** The moves the along-the-track measure takes: sixteen ways (a knight's too), so a curve reads nearly its true length. */
+    private static final int[][] MOVES = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1},
+            {2, 1}, {2, -1}, {-2, 1}, {-2, -1}, {1, 2}, {1, -2}, {-1, 2}, {-1, -2}};
     private static final double EPS = 1e-9;
 
     /** One drop: its lip cells (the high side's edge), its height, and how far it falls. */
@@ -1294,6 +1326,8 @@ public final class DownhillValidator {
                     }
                     if (round) {
                         found.add(d.name() + " doesn't span the track: a boat can go round it");
+                    } else {
+                        facing(i, d, reach);
                     }
                 }
                 if (i > 0) {
@@ -1349,8 +1383,130 @@ public final class DownhillValidator {
                 if (apart > MAX_LEG + EPS) {
                     found.add(a + " and " + b + " are " + fmt(apart) + " apart; at most " + fmt(MAX_LEG));
                 }
+                if (perLeg[leg] == 0) {
+                    double along = along(ax - half.minX(), az - half.minZ(), disks.get(leg).px(), disks.get(leg).pz());
+                    if (along == Double.MAX_VALUE) {
+                        found.add("no way along the track at one level from " + a + " to " + b
+                                + ", though no drop is between them");
+                    } else if (along > MAX_ALONG + EPS) {
+                        found.add(a + " and " + b + " are " + fmt(along) + " apart along the track with no drop"
+                                + " between; at most " + fmt(MAX_ALONG) + ", so a reset never sends a boat far back");
+                    }
+                }
             }
             finish(finish, after);
+        }
+
+        /**
+         * A reset at checkpoint {@code i} faces on down the track: the yaw a race turns the boat to
+         * ({@link Course#resetYaw}) is within {@link #MAX_FACING} degrees of the lane's direction,
+         * the line from the middle of the track just before the checkpoint's sphere (reached from the
+         * start without crossing it, {@code reach}) to the middle of the track just past it.
+         */
+        void facing(int i, Disk d, boolean[][] reach) {
+            double[] in = new double[3];
+            double[] out = new double[3];
+            int span = (int) Math.ceil(d.mark().radius()) + 2;
+            for (int x = Math.max(0, d.cx() - span); x <= Math.min(sx - 1, d.cx() + span); x++) {
+                for (int z = Math.max(0, d.cz() - span); z <= Math.min(sz - 1, d.cz() + span); z++) {
+                    if (h[x][z] == DeckGraph.NONE || d.inside()[x][z] || at(x, h[x][z], z) == SAND) {
+                        continue;
+                    }
+                    boolean edge = false;
+                    for (int[] s : SIDES) {
+                        edge |= inside(x + s[0], z + s[1]) && d.inside()[x + s[0]][z + s[1]];
+                    }
+                    if (!edge) {
+                        continue;
+                    }
+                    double[] side = reach[x][z] ? in : out;
+                    side[0] += x + 0.5;
+                    side[1] += z + 0.5;
+                    side[2]++;
+                }
+            }
+            double lx = in[2] == 0 || out[2] == 0 ? 0 : out[0] / out[2] - in[0] / in[2];
+            double lz = in[2] == 0 || out[2] == 0 ? 0 : out[1] / out[2] - in[1] / in[2];
+            double len = Math.hypot(lx, lz);
+            if (len < EPS) {
+                found.add(d.name() + ": the lane's direction can't be read off the ice either side of it, so a"
+                        + " reset there can't be shown to face down the track");
+                return;
+            }
+            double yaw = Math.toRadians(course.resetYaw(i));
+            double fx = -Math.sin(yaw);
+            double fz = Math.cos(yaw);
+            double off = Math.toDegrees(Math.acos(Math.max(-1, Math.min(1, (fx * lx + fz * lz) / len))));
+            if (off > MAX_FACING + EPS) {
+                found.add(d.name() + "'s reset faces " + fmt(off) + " degrees off the lane (toward the next target);"
+                        + " at most " + fmt(MAX_FACING));
+            }
+        }
+
+        /**
+         * How far it is along the track from (ax, az) to (bx, bz) (half columns) at the same level, at
+         * least: the shortest way from the middle of the one's column to the middle of the other's
+         * through that level's drive cells and the islands standing in the lane, sixteen ways (a move
+         * only over open columns), less how far each point is from its column's middle;
+         * {@code Double.MAX_VALUE} when there is no such way.
+         */
+        double along(double ax, double az, double bx, double bz) {
+            int x0 = (int) Math.floor(ax);
+            int z0 = (int) Math.floor(az);
+            int x1 = (int) Math.floor(bx);
+            int z1 = (int) Math.floor(bz);
+            if (!driveAt(x0, z0) || !driveAt(x1, z1) || h[x0][z0] != h[x1][z1]) {
+                return Double.MAX_VALUE;
+            }
+            double slack = Math.hypot(ax - x0 - 0.5, az - z0 - 0.5) + Math.hypot(bx - x1 - 0.5, bz - z1 - 0.5);
+            int level = h[x0][z0];
+            double[] dist = new double[sx * sz];
+            java.util.Arrays.fill(dist, Double.MAX_VALUE);
+            java.util.PriorityQueue<double[]> queue = new java.util.PriorityQueue<>((p, q) -> Double.compare(p[0], q[0]));
+            dist[x0 * sz + z0] = 0;
+            queue.add(new double[]{0, x0, z0});
+            while (!queue.isEmpty()) {
+                double[] q = queue.poll();
+                int x = (int) q[1];
+                int z = (int) q[2];
+                if (q[0] > dist[x * sz + z]) {
+                    continue;
+                }
+                if (x == x1 && z == z1) {
+                    return Math.max(0, q[0] - slack);
+                }
+                for (int[] m : MOVES) {
+                    if (!open(x + m[0], z + m[1], level) || !passes(x, z, m[0], m[1], level)) {
+                        continue;
+                    }
+                    double nd = q[0] + Math.sqrt(m[0] * m[0] + m[1] * m[1]);
+                    int k = (x + m[0]) * sz + z + m[1];
+                    if (nd < dist[k]) {
+                        dist[k] = nd;
+                        queue.add(new double[]{nd, x + m[0], z + m[1]});
+                    }
+                }
+            }
+            return Double.MAX_VALUE;
+        }
+
+        /** Whether the straight move from (x, z) by (dx, dz) crosses only open columns (the cells its line runs through). */
+        private boolean passes(int x, int z, int dx, int dz, int level) {
+            if (Math.abs(dx) == 1 && Math.abs(dz) == 1) {
+                return open(x + dx, z, level) && open(x, z + dz, level);
+            }
+            if (Math.abs(dx) == 2) {
+                return open(x + dx / 2, z, level) && open(x + dx / 2, z + dz, level);
+            }
+            if (Math.abs(dz) == 2) {
+                return open(x, z + dz / 2, level) && open(x + dx, z + dz / 2, level);
+            }
+            return true;
+        }
+
+        /** Whether column (x, z) is the track's own at {@code level}: a drive cell there, or an island in the lane. */
+        private boolean open(int x, int z, int level) {
+            return inside(x, z) && (h[x][z] == level || (h[x][z] == DeckGraph.NONE && island[x][z]));
         }
 
         /** One mark's own rules; false when it isn't on the track at all. */
@@ -1373,7 +1529,8 @@ public final class DownhillValidator {
             boolean covered = false;
             for (int[] c : d.nearCells()) {
                 flat &= h[c[0]][c[1]] == level;
-                sand |= at(c[0], h[c[0]][c[1]], c[1]) == SAND;
+                sand |= at(c[0], h[c[0]][c[1]], c[1]) == SAND
+                        && sq(c[0] + 0.5 - d.px()) + sq(c[1] + 0.5 - d.pz()) <= RESET_ROOM * RESET_ROOM + EPS;
                 for (int y = h[c[0]][c[1]] + 1; y <= top && !covered; y++) {
                     covered = at(c[0], y, c[1]) != AIR;
                 }
@@ -1402,7 +1559,8 @@ public final class DownhillValidator {
                 return true;
             }
             if (sand) {
-                found.add(d.name() + " is on sand: a checkpoint is on ice");
+                found.add(d.name() + " is on sand: a reset puts the boat down on ice, " + fmt(RESET_ROOM)
+                        + " round its middle");
             }
             if (covered) {
                 found.add(d.name() + " is under a roof or trees: a checkpoint is in the open");

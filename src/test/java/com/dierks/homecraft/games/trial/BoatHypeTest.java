@@ -24,7 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Fresh Ice Boat layout of algo 3 or later is a Mountain Run, so the flat loops, kept courses and
  * hand-built tracks say nothing new; the tile fact reads "5 drops · " like a Dropper's levels; the hype
  * line follows the set's cadence and the {@code hype} switch, and says "1 drop" for one; "Final drop!"
- * is heard at the checkpoint before the last lip, and nowhere else; a race from the grid keeps it all;
+ * is heard at the checkpoint before the last lip when the finish comes next (the layout's FINAL DROP!
+ * sign), and nowhere else, never at a last drop far up the mountain; a race from the grid keeps it all;
  * every line is kid-safe and Bedrock can draw it; and nothing here throws on a half-made course.
  */
 class BoatHypeTest {
@@ -113,11 +114,30 @@ class BoatHypeTest {
                     "checkpoint " + (i + 1) + ": the title only before the Final Drop");
         }
         assertEquals("", BoatHype.checkpointTitle(run, -1), "no checkpoint: no title");
-        assertEquals(0, BoatHype.finalDrop(MountainRuns.oneDrop()), "one Hop between cp 1 and cp 2: heard at cp 1");
+        assertEquals(-1, BoatHype.finalDrop(MountainRuns.oneDrop()),
+                "one Hop between cp 1 and cp 2, then cp 3 before the finish: the finish doesn't come next");
         assertEquals(-1, BoatHype.finalDrop(MountainRuns.dropBeforeTheFirstCheckpoint()),
                 "a drop before the first checkpoint has no checkpoint before it");
         assertEquals(-1, BoatHype.finalDrop(MountainRuns.medium(null)), "a hand-built downhill track: nothing new");
         assertEquals(-1, BoatHype.finalDrop(MountainRuns.flat(MountainRuns.tag())), "no drop: no title");
+    }
+
+    @Test
+    void aFinalDropFarUpTheMountainHasNoTitleWhereItsSignSaysHop() {
+        // Review CV gate: easy and hard can't put their last drop in front of the stand, so it has its
+        // own HOP! sign and the finish is about 120 blocks (easy) or a lap (hard) further on. The title
+        // said "Final drop!" at the checkpoint before it anyway; now only where the finish comes next.
+        for (Tier tier : List.of(Tier.EASY, Tier.HARD)) {
+            Course far = MountainRuns.farFinalDrop(tier);
+            assertTrue(BoatHype.mountain(far), tier + ": fixture is a Mountain Run");
+            assertEquals(4, BoatHype.drops(far), tier + ": fixture has its four drops");
+            assertEquals(-1, BoatHype.finalDrop(far), tier + ": three checkpoints stand between its last drop and"
+                    + " the finish, so there is no Final Drop checkpoint");
+            for (int i = 0; i < far.checkpoints().size(); i++) {
+                assertEquals("", BoatHype.checkpointTitle(far, i), tier + ": checkpoint " + (i + 1)
+                        + " has no big title (cp 7, before the last Hop, least of all)");
+            }
+        }
     }
 
     @Test

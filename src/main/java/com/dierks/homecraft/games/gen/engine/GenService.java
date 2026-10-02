@@ -3954,6 +3954,10 @@ public final class GenService implements GeneratedCourses, GenOps {
                 out.add("  &7region " + s.world + " " + Regions.describe(s.def, s.origin, s.gap)
                         + (s.claimed ? " (claimed)"
                         : " (not claimed yet)"));
+                String style = styleLine(s);
+                if (style != null) {
+                    out.add("  &7" + style);
+                }
                 if (s.pin != null) {
                     String ignored = pinIgnored(s);
                     out.add("  &7pinned seed " + GenSeed.hex(s.pin.seed()) + (s.pin.until() > 0 ? " until "
@@ -4175,6 +4179,27 @@ public final class GenService implements GeneratedCourses, GenOps {
         queue.add(j);
         report.accept("&7A preview of " + s.def.name() + " (seed " + GenSeed.hex(seed) + ") is on its way into half "
                 + s.idleHalf() + "." + styleNote(s, seed, style) + choiceStays(s) + offNote(s));
+    }
+
+    /**
+     * Ice Boat's style line for its status (MOUNTAIN-V2-SPEC §5.1): "style random: the Winding Road every week
+     * while Race Night is on" and the like; {@code null} for every other slot and for Ice Boat still in its old
+     * box (the spiral has no styles).
+     */
+    private String styleLine(SlotState s) {
+        if (!Slots.BOAT.equals(s.def.generator()) || !BoatPlanner.mountain(s.half('A'))) {
+            return null;
+        }
+        DailySettings.SlotConfig c = host.settings().slot(s.def.id());
+        BoatStyle config = c == null ? null : c.style();
+        BoatStyle want = style(s);
+        String live = s.live == null || s.live.algo() < BoatPlanner.ALGO ? ""
+                : "; this set's is " + StyleSeed.words(BoatStyle.of(s.live.seed()));
+        if (config != null) {
+            return "style " + config.id() + ": " + StyleSeed.words(config) + " every week" + live;
+        }
+        return "style random: " + (want == BoatStyle.ROAD ? "the Winding Road every week while Race Night is on"
+                : "each week's own (Winding Road or Slalom)") + live;
     }
 
     /**

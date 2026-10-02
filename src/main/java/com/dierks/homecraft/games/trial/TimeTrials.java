@@ -1349,6 +1349,19 @@ public final class TimeTrials implements Game {
     }
 
     private void reached(Player p, TrialRun run, int index) {
+        announce(p, run, index);
+        if (run.course.kind() == TrialKind.ELYTRA) {
+            refillRockets(p);
+        }
+    }
+
+    /**
+     * What a racer sees and hears reaching checkpoint {@code index} (0-based): the title "Checkpoint 3 of 10 -
+     * 0:21.4" (with its big word, {@link #checkpointBig}) and a ping; on a Mountain Run v2's quiet checkpoints
+     * (MOUNTAIN-V2-SPEC §12, {@link BoatHype#loud}) the action-bar line "Checkpoint 37/74 · 1:12.4" instead,
+     * held {@value #QUIET_HOLD} ticks before the clock line comes back, and a soft ping.
+     */
+    static void announce(Player p, TrialRun run, int index) {
         int of = run.course.checkpoints().size();
         String time = TrialText.time(run.elapsedMs(run.progress.times()[index]));
         float pitch = 1.4f + 0.4f * (index + 1) / Math.max(1, of);
@@ -1356,19 +1369,15 @@ public final class TimeTrials implements Game {
             title(p, checkpointBig(run.course, index), "&aCheckpoint " + (index + 1) + " of " + of + " &7- " + time,
                     25);
             ping(p, pitch);
-        } else {
-            // Mountain Run v2's quiet checkpoints (§12): a line on the action bar, held a moment, and a soft ping
-            try {
-                p.sendActionBar(Text.of(BoatHype.quietBar(index, of, time)));
-            } catch (RuntimeException | LinkageError ignored) {
-                // a line is decoration
-            }
-            run.barHold = run.ticks + QUIET_HOLD;
-            ping(p, pitch, SOFT_PING);
+            return;
         }
-        if (run.course.kind() == TrialKind.ELYTRA) {
-            refillRockets(p);
+        try {
+            p.sendActionBar(Text.of(BoatHype.quietBar(index, of, time)));
+        } catch (RuntimeException | LinkageError ignored) {
+            // a line is decoration
         }
+        run.barHold = run.ticks + QUIET_HOLD;
+        ping(p, pitch, SOFT_PING);
     }
 
     /**

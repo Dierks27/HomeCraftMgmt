@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.boat.BoatStyle;
 import com.dierks.homecraft.games.gen.engine.FreshFeed;
 import com.dierks.homecraft.games.gen.engine.GenService;
 import com.dierks.homecraft.games.golf.GolfCourse;
@@ -135,7 +136,13 @@ final class DailyTiles {
      * soon" when it can't be played.
      */
     static String name(Slots.Def slot, int cadence, boolean playable, int stars, int holes, int par, String code) {
-        return playable ? DailyText.slotName(slot, cadence, stars, holes, par) + DailyLookup.codeSuffix(code)
+        return name(slot, cadence, playable, stars, holes, par, code, null);
+    }
+
+    /** {@link #name(Slots.Def, int, boolean, int, int, int, String)} naming a Mountain Run v2's {@code style}. */
+    static String name(Slots.Def slot, int cadence, boolean playable, int stars, int holes, int par, String code,
+                       BoatStyle style) {
+        return playable ? DailyText.slotName(slot, cadence, stars, holes, par, style) + DailyLookup.codeSuffix(code)
                 : DailyText.closedName(slot, cadence);
     }
 
@@ -198,7 +205,8 @@ final class DailyTiles {
         }
         lore.add("&eClick to play");
         return Menus.glint(Menus.icon(icon(slot), name(slot, setCadence, true, stars, holes, par,
-                DailyLookup.code(games, t)), lore.toArray(new String[0])), stars >= 3);
+                DailyLookup.code(games, t), v.trial() == null ? null : BoatHype.style(v.trial())),
+                lore.toArray(new String[0])), stars >= 3);
     }
 
     // ---- the Classics (GEN-SPEC-KEEP §3, §8) ---------------------------------------------------------

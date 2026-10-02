@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.gen.api.Edition;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.api.Stars;
+import com.dierks.homecraft.games.gen.boat.BoatStyle;
 import com.dierks.homecraft.games.trial.TrialText;
 
 import java.time.LocalDate;
@@ -91,6 +92,15 @@ public final class DailyText {
      * @param par   golf: the course's par
      */
     public static String slotName(Slots.Def slot, int cadence, int stars, int holes, int par) {
+        return slotName(slot, cadence, stars, holes, par, null);
+    }
+
+    /**
+     * {@link #slotName(Slots.Def, int, int, int, int)} for a Mountain Run v2 of {@code style} (MOUNTAIN-V2-SPEC
+     * §12): its style before its drops, "&amp;bIce Boat &amp;7- Winding Road · 27 drops · ★★☆"
+     * ({@link GenCopy#boatV2Tile}); {@code null} for any other course, which reads as before.
+     */
+    public static String slotName(Slots.Def slot, int cadence, int stars, int holes, int par, BoatStyle style) {
         String head = colour(slot) + (slot == null ? GenCopy.NAME : GenCopy.slotName(slot, cadence));
         String starText = stars > 0 ? Stars.text(stars) : null;
         if (slot != null && slot.golf()) {
@@ -98,6 +108,10 @@ public final class DailyText {
         }
         if (slot != null && slot.dropper() && holes > 0) {
             return head + " &7- " + levels(holes) + (starText == null ? "" : " · " + starText);
+        }
+        if (slot != null && Slots.BOAT.equals(slot.generator()) && holes > 0 && style != null) {
+            String fact = GenCopy.boatV2Tile(style == BoatStyle.SLALOM, holes); // "Winding Road · 27 drops · "
+            return head + " &7- " + (starText == null ? fact.substring(0, fact.length() - 3) : fact + starText);
         }
         if (slot != null && Slots.BOAT.equals(slot.generator()) && holes > 0) {
             return head + " &7- " + TrialText.drops(holes) + (starText == null ? "" : " · " + starText);

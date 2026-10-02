@@ -34,7 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code random}, and the week's own seed (unchanged) with {@code random} and no Race Night; {@code plan} and
  * {@code plan next} show the seed a build would use; {@code preview} (now and {@code next}) without a seed is
  * of the style a build would have, or of the {@code style:} asked; a typed seed is used as given, with a note
- * when it isn't the style asked; and {@code style:} on another course is refused with a line that says why.
+ * when it isn't the style asked; {@code style:} on another course is refused with a line that says why; and
+ * Ice Boat's status says its style rule.
  */
 class BoatStyleEngineTest {
 
@@ -217,6 +218,24 @@ class BoatStyleEngineTest {
         said.clear();
         gen.previewNext("fresh_golf", null, BoatStyle.SLALOM, said::add);
         assertEquals(List.of("&cOnly Ice Boat has styles (style:road or style:slalom)."), said, "preview next too");
+    }
+
+    @Test
+    void iceBoatsStatusSaysItsStyleRule() throws Exception {
+        style(null, false);
+        host.raceNight = true;
+        boot();
+        drive(2);
+        assertTrue(gen.status(SLOT).stream().anyMatch(l -> l.contains("style random: the Winding Road every week while"
+                + " Race Night is on")), "random with Race Night on: " + gen.status(SLOT));
+        host.raceNight = false;
+        assertTrue(gen.status(SLOT).stream().anyMatch(l -> l.contains("style random: each week's own (Winding Road or"
+                + " Slalom)")), "random with no Race Night: " + gen.status(SLOT));
+        style(BoatStyle.SLALOM, false);
+        assertTrue(gen.status(SLOT).stream().anyMatch(l -> l.contains("style slalom: the Slalom every week")),
+                "style: slalom: " + gen.status(SLOT));
+        assertTrue(gen.status("fresh_parkour").stream().noneMatch(l -> l.contains("style")),
+                "another course has no style line: " + gen.status("fresh_parkour"));
     }
 
     /** Seeds of each style, found once. */

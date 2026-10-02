@@ -246,12 +246,20 @@ class GolfPlannerV4Test {
         }
     }
 
+    /** A made-up solved hole of {@code cls} at μ {@code mean}, {@code path} blocks long. */
+    private static GolfPlannerV4.Solved made(int attempt, LengthClass cls, double mean, List<Putt> line, int kid,
+                                             long[] clubs, double path) {
+        return new GolfPlannerV4.Solved(attempt, null, cls, mean, line, kid, clubs, path);
+    }
+
     /**
-     * Red-team F01: settling a course (made-up holes): a Tiny Golf course of three M holes each at 3.45
-     * can't be balanced by moving a par (3 is Tiny Golf's most), so a hole is drawn again rather than
-     * any par going to 4; a hole the balance lowers below its witness is drawn again; a course whose
-     * every hole is its fallback can't be settled; the club gate draws again the hole that chose the
-     * missing club least, and only when it applies.
+     * Red-team F01 and audit GOLF-R3-00: settling a course (made-up holes). On Tiny Golf (no band) a
+     * course of three M holes each at 3.45 can't be balanced by moving a par (3 is Tiny Golf's most), so
+     * a hole is drawn again, a hole the balance lowers below its witness is drawn again, and a course of
+     * fallbacks can't be settled. Off Tiny Golf no par moves off its length: a course 0.8 under its means
+     * draws again (to improve, not a must) the hole furthest under, one 1.15 under must, and once every
+     * hole is stuck the first stands and the second can't be balanced. The club gate draws again the hole
+     * that chose the missing club least, and only when it applies.
      */
     @Test
     void settlingACourseDrawsAHoleAgainAndNeverMovesAParOutOfItsClass() {
@@ -259,74 +267,118 @@ class GolfPlannerV4Test {
         long[] clubs = {0, 10, 10, 10, 10, 10};
         GolfPlannerV4.Solved[] tiny = new GolfPlannerV4.Solved[3];
         for (int i = 0; i < 3; i++) {
-            tiny[i] = new GolfPlannerV4.Solved(0, null, LengthClass.M, 3.45, two, 3, clubs);
+            tiny[i] = made(0, LengthClass.M, 3.45, two, 3, clubs, 18);
         }
-        assertArrayEquals(new int[]{3, 3, 3}, GolfPlannerV4.pars(tiny, 3), "Tiny Golf's par 3 can't go up");
-        GolfPlannerV4.Settle s = GolfPlannerV4.settle(tiny, 3, 1, false);
+        assertArrayEquals(new int[]{3, 3, 3}, GolfPlannerV4.pars(tiny, 3, false), "Tiny Golf's par 3 can't go up");
+        GolfPlannerV4.Settle s = GolfPlannerV4.settle(tiny, 3, 1, false, false, null);
         assertNotNull(s, "a course 1.35 under its means isn't settled");
         assertEquals(0, s.hole(), "the hole furthest under (the first on a tie) is drawn again: " + s.words());
-        assertFalse(s.gate(), "for the balance, not the gate");
+        assertTrue(!s.gate() && s.must() && s.toward() == 0, "for the balance, from its next attempt: " + s);
         GolfPlannerV4.Solved[] fallbacks = new GolfPlannerV4.Solved[3];
         for (int i = 0; i < 3; i++) {
-            fallbacks[i] = new GolfPlannerV4.Solved(GolfPlannerV4.ATTEMPTS, null, LengthClass.M, 3.45, two, 3, clubs);
+            fallbacks[i] = made(GolfPlannerV4.ATTEMPTS, LengthClass.M, 3.45, two, 3, clubs, 18);
         }
-        assertEquals(-1, GolfPlannerV4.settle(fallbacks, 3, 1, false).hole(), "every hole its fallback: nothing to draw");
-        // 2.50, 3.60, 4.70 round to 3, 4, 5 = 12, the means 10.80: the balance lowers the M hole to 2...
+        assertEquals(-1, GolfPlannerV4.settle(fallbacks, 3, 1, false, false, null).hole(),
+                "every hole its fallback: nothing to draw");
+        // unbanded, 2.50, 3.60, 4.70 round to 3, 4, 5 = 12, the means 10.80: the balance lowers the M hole to 2...
         GolfPlannerV4.Solved[] over = {
-                new GolfPlannerV4.Solved(0, null, LengthClass.M, 2.50, List.of(new Putt(0, 5), new Putt(0, 2),
-                        new Putt(0, 1)), 3, clubs),
-                new GolfPlannerV4.Solved(0, null, LengthClass.L, 3.60, two, 4, clubs),
-                new GolfPlannerV4.Solved(0, null, LengthClass.X, 4.70, two, 5, clubs)};
-        assertArrayEquals(new int[]{2, 4, 5}, GolfPlannerV4.pars(over, 6), "the hole nearest rounding down goes a stroke"
-                + " under its class's 3");
-        assertEquals(0, GolfPlannerV4.settle(over, 6, 2, false).hole(), "...where its 3-putt line is over par: drawn again");
+                made(0, LengthClass.M, 2.50, List.of(new Putt(0, 5), new Putt(0, 2), new Putt(0, 1)), 3, clubs, 18),
+                made(0, LengthClass.L, 3.60, two, 4, clubs, 30),
+                made(0, LengthClass.X, 4.70, two, 5, clubs, 42)};
+        assertArrayEquals(new int[]{2, 4, 5}, GolfPlannerV4.pars(over, 6, false), "the hole nearest rounding down goes a"
+                + " stroke under its class's 3");
+        assertEquals(0, GolfPlannerV4.settle(over, 6, 2, false, false, null).hole(),
+                "...where its 3-putt line is over par: drawn again");
+        // banded (Golf of the Week): no par leaves its length, so the course is balanced by drawing again
+        assertArrayEquals(new int[]{3, 4, 5}, GolfPlannerV4.pars(over, 6, true), "an 18-block hole stays a par 3");
+        GolfPlannerV4.Solved[] under = {
+                made(1, LengthClass.M, 3.40, two, 3, clubs, 18), made(0, LengthClass.L, 4.30, two, 4, clubs, 28),
+                made(0, LengthClass.X, 5.10, two, 5, clubs, 41)};
+        GolfPlannerV4.Settle soft = GolfPlannerV4.settle(under, 6, 2, true, false, new boolean[3]);
+        assertNotNull(soft, "a course 0.8 under its means is drawn nearer");
+        assertTrue(soft.hole() == 0 && soft.toward() < 0 && !soft.must(), "the hole furthest under, to a lower μ, as an"
+                + " aim (a stroke is the rule): " + soft);
+        assertNull(GolfPlannerV4.settle(under, 6, 2, true, false, new boolean[]{true, true, true}),
+                "every hole stuck: it stands, within a stroke");
+        GolfPlannerV4.Solved[] far = {
+                made(1, LengthClass.M, 3.40, two, 3, clubs, 18), made(0, LengthClass.L, 4.45, two, 4, clubs, 28),
+                made(0, LengthClass.X, 5.30, two, 5, clubs, 41)};
+        GolfPlannerV4.Settle hard = GolfPlannerV4.settle(far, 6, 2, true, false, new boolean[3]);
+        assertNotNull(hard, "a course 1.15 under its means isn't settled");
+        assertTrue(hard.hole() == 1 && hard.toward() < 0 && hard.must(), "1.15 under: the hole must improve: " + hard);
+        assertEquals(-1, GolfPlannerV4.settle(far, 6, 2, true, false, new boolean[]{true, true, true}).hole(),
+                "and with every hole stuck it can't be balanced");
         // the gate: no Chip on the course
         long[] noChip = {0, 10, 10, 0, 10, 10};
         long[] someChip = {0, 10, 10, 1, 10, 10};
         GolfPlannerV4.Solved[] gated = {
-                new GolfPlannerV4.Solved(0, null, LengthClass.M, 3.0, two, 3, someChip),
-                new GolfPlannerV4.Solved(0, null, LengthClass.M, 3.0, two, 3, noChip),
-                new GolfPlannerV4.Solved(0, null, LengthClass.M, 3.0, two, 3, someChip)};
-        GolfPlannerV4.Settle g = GolfPlannerV4.settle(gated, 6, 2, true);
+                made(0, LengthClass.M, 3.0, two, 3, someChip, 18), made(0, LengthClass.M, 3.0, two, 3, noChip, 18),
+                made(0, LengthClass.M, 3.0, two, 3, someChip, 18)};
+        GolfPlannerV4.Settle g = GolfPlannerV4.settle(gated, 6, 2, true, true, new boolean[3]);
         assertNotNull(g, "Chip under 4% of the shots: not settled");
-        assertTrue(g.gate() && g.hole() == 1, "the gate draws again the hole that chose Chip least: " + g);
-        assertNull(GolfPlannerV4.settle(gated, 6, 2, false), "the gate holds only where it applies");
-        GolfPlannerV4.Solved plenty = new GolfPlannerV4.Solved(0, null, LengthClass.M, 3.0, two, 3,
-                new long[]{0, 10, 10, 2, 10, 10});
-        assertNull(GolfPlannerV4.settle(new GolfPlannerV4.Solved[]{plenty, plenty, plenty}, 6, 2, true),
-                "Chip at 6 of 126 shots (4.8%): met");
+        assertTrue(g.gate() && g.hole() == 1 && !g.must(), "the gate draws again the hole that chose Chip least: " + g);
+        assertNull(GolfPlannerV4.settle(gated, 6, 2, true, false, new boolean[3]), "the gate holds only where it applies");
+        GolfPlannerV4.Solved plenty = made(0, LengthClass.M, 3.0, two, 3, new long[]{0, 10, 10, 2, 10, 10}, 18);
+        assertNull(GolfPlannerV4.settle(new GolfPlannerV4.Solved[]{plenty, plenty, plenty}, 6, 2, true, true,
+                new boolean[3]), "Chip at 6 of 126 shots (4.8%): met");
     }
 
+    /**
+     * Audit GOLF-R3-00 (V4-DECISIONS D1): on every Golf of the Week course every hole but a fallback is its
+     * class's length, give or take a block (S 8-12, M 16-25, L 27-38, X 40-52), and a par is its length's:
+     * no par 4 under 26 blocks, no par 5 under 39, no par p+1 shorter than a par p on the course.
+     */
     @Test
-    void theCoursesParIsWithinAStrokeOfWhatTheOrdinaryPlayerTakes() {
-        for (Slots.Def slot : List.of(Slots.DAILY_GOLF, Slots.TINY_GOLF)) {
-            double sum = 0;
-            for (Run r : runs(slot)) {
-                double means = 0;
-                for (String line : holeLines(r.plan())) {
-                    means += mean(line);
+    void everyHoleIsItsClasssLengthAndEveryParItsLengths() {
+        Map<Integer, List<Double>> byPar = new TreeMap<>();
+        List<Double> totals = new ArrayList<>();
+        Map<String, Integer> mixes = new TreeMap<>();
+        int inverted = 0;
+        for (Run r : runs(Slots.DAILY_GOLF)) {
+            PlannedGolf g = golf(r.plan());
+            PlanBlocks grid = PlanBlocks.of(r.plan().half(), r.plan().palette(), r.plan().ops());
+            List<LengthClass> classes = DealV4.classes(new GenRandom(r.plan().seed()), r.slot().tierOrMix(), false);
+            double total = 0;
+            int[] count = new int[7];
+            double[] shortest = new double[7];
+            double[] longest = new double[7];
+            Arrays.fill(shortest, Double.POSITIVE_INFINITY);
+            for (int i = 0; i < classes.size(); i++) {
+                GolfCourse.Hole h = g.course().holes().get(i);
+                double path = GolfPlannerV4.path(grid, h, LaneMap.of(grid, h, GolfPlanner.ALGO));
+                String what = "Golf of the Week seed " + r.n() + " hole " + (i + 1) + String.format(Locale.ROOT,
+                        " (%.1f blocks, par %d, class %s)", path, h.par(), classes.get(i));
+                if (g.attempts().get(i) < GolfPlannerV4.ATTEMPTS) {
+                    assertTrue(GolfPlannerV4.inBand(path, classes.get(i)), what + ": in its class's band");
                 }
-                int par = golf(r.plan()).course().holes().stream().mapToInt(GolfCourse.Hole::par).sum();
-                // (the summary prints each mean to two places: nine of them can be 0.045 off)
-                assertTrue(Math.abs(par - means) <= 1.05, slot.id() + " seed " + r.n() + ": par " + par
-                        + " is within a stroke of the ordinary player's " + means);
-                sum += means - par;
+                assertTrue(GolfPlannerV4.inBand(path, LengthClass.ofPar(h.par())), what + ": its par's length");
+                assertTrue(h.par() != 4 || path >= 26 - 1e-9, what + ": no par 4 under 27 (less a block)");
+                assertTrue(h.par() != 5 || path >= 39 - 1e-9, what + ": no par 5 under 40 (less a block)");
+                byPar.computeIfAbsent(h.par(), k -> new ArrayList<>()).add(path);
+                total += path;
+                count[h.par()]++;
+                shortest[h.par()] = Math.min(shortest[h.par()], path);
+                longest[h.par()] = Math.max(longest[h.par()], path);
             }
-            double avg = sum / SEEDS;
-            System.out.println(slot.id() + ": the ordinary player's mean over par, per course " + avg);
-            // Golf of the Week's first-timer lands about half a stroke over (the spec's prototype: +0.64; its
-            // greens' run-out leaves a missed putt further to come back); Tiny Golf's three holes and its par
-            // of at most 3 leave the balance little to move, so the child lands a little over (within a stroke)
-            double most = slot == Slots.TINY_GOLF ? 1.0 : 0.75;
-            assertTrue(Math.abs(avg) <= most, slot.id() + ": on average the player who sets par lands on it: " + avg);
+            for (int p = 2; p < 6; p++) {
+                if (count[p] > 0 && count[p + 1] > 0 && shortest[p + 1] < longest[p]) {
+                    inverted++;
+                }
+            }
+            totals.add(total);
+            mixes.merge("par 2 x" + count[2] + ", 3 x" + count[3] + ", 4 x" + count[4] + ", 5 x" + count[5], 1,
+                    Integer::sum);
         }
-        int[] pars = runs(Slots.DAILY_GOLF).stream().mapToInt(r -> golf(r.plan()).course().holes().stream()
-                .mapToInt(GolfCourse.Hole::par).sum()).sorted().toArray();
-        assertTrue(pars[0] >= 28 && pars[pars.length - 1] <= 33, "Golf of the Week's par is about 30-31: "
-                + pars[0] + "-" + pars[pars.length - 1]);
-        int[] tiny = runs(Slots.TINY_GOLF).stream().mapToInt(r -> golf(r.plan()).course().holes().stream()
-                .mapToInt(GolfCourse.Hole::par).sum()).sorted().toArray();
-        assertTrue(tiny[0] >= 6 && tiny[tiny.length - 1] <= 9, "Tiny Golf's three holes are par 6-9");
+        assertEquals(0, inverted, "no course has a par p+1 hole shorter than a par p hole");
+        StringBuilder b = new StringBuilder("Golf v4 hole lengths by par:");
+        for (Map.Entry<Integer, List<Double>> e : byPar.entrySet()) {
+            double[] v = e.getValue().stream().mapToDouble(Double::doubleValue).sorted().toArray();
+            b.append(String.format(Locale.ROOT, " par %d %.1f-%.1f (median %.1f, %d holes);", e.getKey(), v[0],
+                    v[v.length - 1], v[v.length / 2], v.length));
+        }
+        double[] t = totals.stream().mapToDouble(Double::doubleValue).sorted().toArray();
+        System.out.println(b + String.format(Locale.ROOT, " course %.0f-%.0f blocks (median %.0f); par mixes %s", t[0],
+                t[t.length - 1], t[t.length / 2], mixes));
     }
 
     @Test
@@ -638,8 +690,8 @@ class GolfPlannerV4Test {
     void goldenPlansArePinnedAtTheV4Boxes() throws GenFailed {
         // A change here means the planner makes different courses for the same seed: bump ALGO.
         assertEquals(4, GolfPlanner.ALGO, "the version these hashes belong to");
-        Map<Long, String> daily = Map.of(1L, "785c5005a1c6", 20725L, "b28b1af8cd19", 0x3f2a91c07d1e55b0L,
-                "6a8eed122137");
+        Map<Long, String> daily = Map.of(1L, "891bb9ee83fc", 20725L, "aadfc7e04b58", 0x3f2a91c07d1e55b0L,
+                "c26300281e47");
         for (Map.Entry<Long, String> e : new TreeMap<>(daily).entrySet()) {
             Plan p = new GolfPlanner().plan(input(Slots.DAILY_GOLF, e.getKey(), Slots.DAILY_GOLF.tierOrMix(), 0));
             assertEquals(e.getValue(), p.hash(), "Golf of the Week seed " + Long.toHexString(e.getKey()));

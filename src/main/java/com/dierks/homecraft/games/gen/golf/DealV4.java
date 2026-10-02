@@ -96,10 +96,11 @@ final class DealV4 {
     /**
      * The holes that take a recipe of {@link #PINNED}'s features (red-team F00: a Swing layup, a Chip
      * layup and a guarded par 3 on every course of 7 holes or more), from the course's stream
-     * {@code root}: for each feature in turn whose target is more than 0, one hole of the classes and
-     * tiers that have such a recipe and isn't pinned yet, picked from fork {@code pin:<feature>}; it
-     * takes the first such recipe of its group's list. Dealt before the shuffles, so the quota's deal
-     * is left only Adventure Golf's own targets and the legs to meet.
+     * {@code root}: for each feature in turn whose target is more than 0, one hole of the shortest class
+     * and the tiers that have such a recipe and isn't pinned yet (a Swing layup goes to an L hole where
+     * the course has one free: an X layup measures a par 6 more often), picked from fork
+     * {@code pin:<feature>}; it takes the first such recipe of its group's list. Dealt before the
+     * shuffles, so the quota's deal is left only Adventure Golf's own targets and the legs to meet.
      */
     static Map<Integer, HoleRecipe> pins(GenRandom root, String mix, List<LengthClass> classes, boolean dry) {
         Map<Integer, HoleRecipe> out = new HashMap<>();
@@ -116,8 +117,14 @@ final class DealV4 {
                 }
                 for (HoleRecipe h : HoleRecipe.list(mix.charAt(i), classes.get(i), dry)) {
                     if (h.features(mix.charAt(i), dry).contains(f)) {
-                        can.add(i);
-                        with.add(h);
+                        if (!with.isEmpty() && h.cls.compareTo(with.get(0).cls) < 0) {
+                            can.clear(); // the shortest class with one: a Swing layup is an L hole where it can be
+                            with.clear();
+                        }
+                        if (with.isEmpty() || h.cls == with.get(0).cls) {
+                            can.add(i);
+                            with.add(h);
+                        }
                         break;
                     }
                 }

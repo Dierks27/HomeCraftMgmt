@@ -47,7 +47,13 @@ public final class Quota {
         /** A drop of a whole block the ball flies off (a hill, a volcano, terraces, a dogleg that drops). */
         BIG_DROP("big drop"),
         /** A pond to look at beyond the wall (Easy's pond side): Tiny Golf counts it as its tree hole. */
-        VIEW("pond view");
+        VIEW("pond view"),
+        /** Golf v4: a layup, a hazard straight on past the first corner a Drive reaches. */
+        LAYUP("layup"),
+        /** Golf v4: three legs (an S-bend, a hairpin). */
+        THREE_LEGS("three legs"),
+        /** Golf v4: two legs (a dogleg, a layup). */
+        TWO_LEGS("two legs");
 
         private final String words;
 

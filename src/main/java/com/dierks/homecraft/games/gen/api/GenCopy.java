@@ -99,7 +99,19 @@ public final class GenCopy {
         /** Two ways round an island. */
         TWO_WAY("Pick a path!", "Short or safe?"),
         /** A dogleg that drops at the corner. */
-        DOGLEG_DOWN("Round the bend", "and down!");
+        DOGLEG_DOWN("Round the bend", "and down!"),
+        /** Golf v4 (GOLF-V4-SPEC §3.7): a pond straight on past the corner; a Drive splashes. */
+        LAYUP_WATER("Lay up short", "of the water"),
+        /** Golf v4: a sand trap straight on past the corner; a Drive stops in it. */
+        LAYUP_SAND("Lay up short", "of the sand"),
+        /** Golf v4: off a terrace and over a pond across the lane. */
+        CARRY("Fly the pond!", "Chip or more"),
+        /** Golf v4: a dogleg turning left (as the player faces from the tee). */
+        DOGLEG_LEFT("Dogleg", "left"),
+        /** Golf v4: a dogleg turning right. */
+        DOGLEG_RIGHT("Dogleg", "right"),
+        /** Golf v4: a hole of three legs (an S-bend, a hairpin). */
+        THREE_LEGS("Three legs", "use every club");
 
         private final String line3;
         private final String line4;

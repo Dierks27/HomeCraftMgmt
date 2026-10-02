@@ -99,10 +99,13 @@ public final class GolfGroup {
     /**
      * A snapshot of the shared scorecard.
      *
-     * @param clock seconds left on the hole clock, or -1 when it isn't running
+     * @param clock     seconds left on the hole clock, or -1 when it isn't running
+     * @param holeClock the clock the hole being played gives once its first ball is in
+     *                  ({@link GolfGroup#holeClock()}: longer on a Golf v4 course's long holes), for the card's
+     *                  own words about it
      */
     public record Card(String courseId, String courseName, List<Integer> pars, int hole, List<Row> rows,
-                       boolean over, int clock) {
+                       boolean over, int clock, int holeClock) {
 
         public Card {
             pars = List.copyOf(pars);
@@ -403,7 +406,8 @@ public final class GolfGroup {
             rows.add(new Row(m.id, m.name, m.scores, m.seat == Seat.PLAYING ? m.strokes : 0, m.seat));
         }
         boolean over = over();
-        return new Card(courseId, courseName, pars, Math.min(hole, pars.size() - 1), rows, over, over ? -1 : clock);
+        return new Card(courseId, courseName, pars, Math.min(hole, pars.size() - 1), rows, over, over ? -1 : clock,
+                holeClock());
     }
 
     /**

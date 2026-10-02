@@ -215,7 +215,7 @@ public final class GamesMenu extends GameMenu {
 
     /**
      * The invite tile's name: what it is for, then who from ("&amp;eConnect Four invite &amp;7from Sam",
-     * "&amp;eRide along invite &amp;7from Dad"): the key fact in the NAME, for Bedrock.
+     * "&amp;eRide along invite &amp;7from Alex"): the key fact in the NAME, for Bedrock.
      */
     static String inviteName(String game, String from) {
         return "&e" + (game == null ? "Game" : game) + " invite &7from " + (from == null ? "a player" : from);
@@ -223,7 +223,7 @@ public final class GamesMenu extends GameMenu {
 
     /**
      * The invite tile's name for this invite: from the invite's OWN name, never a lookup of its key, so a
-     * ride reads "Ride along invite from Dad", not "Game invite from Dad" (the final gate's #0). The tile
+     * ride reads "Ride along invite from Alex", not "Game invite from Alex" (the final gate's #0). The tile
      * calls this, so a test on a real ride invite pins what the tile says.
      */
     public static String inviteName(Invite inv, String from) {

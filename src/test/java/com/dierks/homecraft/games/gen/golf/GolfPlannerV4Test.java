@@ -300,6 +300,12 @@ class GolfPlannerV4Test {
                 + " aim (a stroke is the rule): " + soft);
         assertNull(GolfPlannerV4.settle(under, 6, 2, true, false, new boolean[]{true, true, true}),
                 "every hole stuck: it stands, within a stroke");
+        GolfPlannerV4.Settle spared = GolfPlannerV4.settle(under, 6, 2, true, false, new boolean[3],
+                new boolean[]{false, true, true});
+        assertTrue(spared.hole() == 1 && spared.toward() < 0, "a spare hole (unpinned, not S) goes first, the furthest"
+                + " of them: " + spared);
+        assertEquals(0, GolfPlannerV4.settle(under, 6, 2, true, false, new boolean[]{false, true, true},
+                new boolean[]{false, true, true}).hole(), "and once they are stuck, any hole");
         GolfPlannerV4.Solved[] far = {
                 made(1, LengthClass.M, 3.40, two, 3, clubs, 18), made(0, LengthClass.L, 4.45, two, 4, clubs, 28),
                 made(0, LengthClass.X, 5.30, two, 5, clubs, 41)};
@@ -321,6 +327,38 @@ class GolfPlannerV4Test {
         GolfPlannerV4.Solved plenty = made(0, LengthClass.M, 3.0, two, 3, new long[]{0, 10, 10, 2, 10, 10}, 18);
         assertNull(GolfPlannerV4.settle(new GolfPlannerV4.Solved[]{plenty, plenty, plenty}, 6, 2, true, true,
                 new boolean[3]), "Chip at 6 of 126 shots (4.8%): met");
+    }
+
+    @Test
+    void theCoursesParIsWithinAStrokeOfWhatTheOrdinaryPlayerTakes() {
+        for (Slots.Def slot : List.of(Slots.DAILY_GOLF, Slots.TINY_GOLF)) {
+            double sum = 0;
+            for (Run r : runs(slot)) {
+                double means = 0;
+                for (String line : holeLines(r.plan())) {
+                    means += mean(line);
+                }
+                int par = golf(r.plan()).course().holes().stream().mapToInt(GolfCourse.Hole::par).sum();
+                // (the summary prints each mean to two places: nine of them can be 0.045 off)
+                assertTrue(Math.abs(par - means) <= 1.05, slot.id() + " seed " + r.n() + ": par " + par
+                        + " is within a stroke of the ordinary player's " + means);
+                sum += means - par;
+            }
+            double avg = sum / SEEDS;
+            System.out.println(slot.id() + ": the ordinary player's mean over par, per course " + avg);
+            // Golf of the Week's first-timer lands about half a stroke over (the spec's prototype: +0.64; its
+            // greens' run-out leaves a missed putt further to come back); Tiny Golf's three holes and its par
+            // of at most 3 leave the balance little to move, so the child lands a little over (within a stroke)
+            double most = slot == Slots.TINY_GOLF ? 1.0 : 0.75;
+            assertTrue(Math.abs(avg) <= most, slot.id() + ": on average the player who sets par lands on it: " + avg);
+        }
+        int[] pars = runs(Slots.DAILY_GOLF).stream().mapToInt(r -> golf(r.plan()).course().holes().stream()
+                .mapToInt(GolfCourse.Hole::par).sum()).sorted().toArray();
+        assertTrue(pars[0] >= 28 && pars[pars.length - 1] <= 33, "Golf of the Week's par is about 30-31: "
+                + pars[0] + "-" + pars[pars.length - 1]);
+        int[] tiny = runs(Slots.TINY_GOLF).stream().mapToInt(r -> golf(r.plan()).course().holes().stream()
+                .mapToInt(GolfCourse.Hole::par).sum()).sorted().toArray();
+        assertTrue(tiny[0] >= 6 && tiny[tiny.length - 1] <= 9, "Tiny Golf's three holes are par 6-9");
     }
 
     /**
@@ -379,6 +417,85 @@ class GolfPlannerV4Test {
         double[] t = totals.stream().mapToDouble(Double::doubleValue).sorted().toArray();
         System.out.println(b + String.format(Locale.ROOT, " course %.0f-%.0f blocks (median %.0f); par mixes %s", t[0],
                 t[t.length - 1], t[t.length / 2], mixes));
+    }
+
+    /** A hole line's recipe and shape, mirrored or not ("M_GUARDED 8 up, 13 across, ..."). */
+    private static String shapeOf(String line) {
+        String words = line.substring(line.indexOf(": ") + 4, line.indexOf(" - mean "));
+        return words.endsWith(", mirrored") ? words.substring(0, words.length() - ", mirrored".length()) : words;
+    }
+
+    /**
+     * The owner's complaint ("every hole is the same... it felt pretty repetitive"), GOLF-R3 skeptics: no
+     * Golf of the Week course has two holes of the same recipe and shape, nor the same recipe twice in a
+     * row (fallbacks aside); the pinned holes come in many shapes; the Swing layup is an X hole's often
+     * and never leaves a course both of whose par 4s are corner-pond layups while an X hole could take
+     * it.
+     */
+    @Test
+    void noCourseRepeatsAHoleAndThePinnedHolesComeInManyShapes() {
+        Map<String, Set<String>> shapes = new TreeMap<>();
+        Map<String, Integer> holes = new TreeMap<>();
+        int xLayups = 0;
+        int bothLayups = 0;
+        int twoL = 0;
+        for (Run r : runs(Slots.DAILY_GOLF)) {
+            List<String> lines = holeLines(r.plan());
+            Set<String> seen = new HashSet<>();
+            String before = "";
+            int layupLs = 0;
+            int ls = 0;
+            for (String line : lines) {
+                String shape = shapeOf(line);
+                String recipe = shape.substring(0, shape.indexOf(' '));
+                String what = "Golf of the Week seed " + r.n() + " (" + line + ")";
+                if (!recipe.startsWith("SAFE_")) {
+                    assertTrue(seen.add(shape), what + ": no other hole of the course is this recipe and shape");
+                    assertFalse(recipe.equals(before), what + ": nor the recipe of the hole before");
+                }
+                before = recipe;
+                shapes.computeIfAbsent(recipe, k -> new HashSet<>()).add(shape);
+                holes.merge(recipe, 1, Integer::sum);
+                xLayups += recipe.equals("X_LAYUP") ? 1 : 0;
+                if (cls(line) == 'L') {
+                    ls++;
+                    layupLs += recipe.contains("LAYUP") ? 1 : 0;
+                }
+            }
+            twoL += ls == 2 ? 1 : 0;
+            bothLayups += ls == 2 && layupLs == 2 ? 1 : 0;
+        }
+        StringBuilder b = new StringBuilder("Golf v4 shapes (holes, shapes):");
+        for (Map.Entry<String, Integer> e : holes.entrySet()) {
+            b.append(' ').append(e.getKey()).append(' ').append(e.getValue()).append('/').append(shapes.get(e.getKey())
+                    .size());
+        }
+        System.out.println(b + "; X_LAYUP on " + xLayups + " courses; both par 4s layups on " + bothLayups + " of "
+                + twoL + " courses with two");
+        assertEquals(0, bothLayups, "an X hole takes the Swing layup before both par 4s are layups");
+        assertTrue(xLayups * 4 >= SEEDS, "the X layup is back: " + xLayups + " of " + SEEDS + " courses");
+        assertTrue(shapes.get("M_GUARDED").size() >= 12, "the guarded par 3 in many shapes: " + shapes.get("M_GUARDED"));
+        assertTrue(shapes.get("L_CHIP_LAYUP").size() >= 30, "the Chip layup: " + shapes.get("L_CHIP_LAYUP").size());
+        int swing = shapes.getOrDefault("L_LAYUP", Set.of()).size() + shapes.getOrDefault("L_LAYUP_BEND", Set.of()).size()
+                + shapes.getOrDefault("X_LAYUP", Set.of()).size();
+        assertTrue(swing >= 100, "the Swing layup: " + swing);
+    }
+
+    /**
+     * GOLF-R3 skeptics: a custom mix with no Hard tier (EEEEMMMMM, EEEMMMM) has two L holes and no X;
+     * the layups take both, so the Swing layup is the three-leg one and the course still has its hole of
+     * three legs (G3).
+     */
+    @Test
+    void aCustomMixWithNoHardTierStillHasAHoleOfThreeLegs() {
+        for (String mix : List.of("EEEEMMMMM", "EEEMMMM")) {
+            List<String> missed = IntStream.range(0, 12).parallel().mapToObj(n -> {
+                Plan p = plan(input(Slots.DAILY_GOLF, seed(Slots.DAILY_GOLF, n), mix, 0));
+                String line = p.summary().stream().filter(l -> l.startsWith("quota: ")).findFirst().orElse("");
+                return line.contains("three legs 0/") ? mix + " seed " + n + ": " + line : null;
+            }).filter(x -> x != null).toList();
+            assertEquals(List.of(), missed, mix + ": every course has a hole of three legs");
+        }
     }
 
     @Test
@@ -690,8 +807,8 @@ class GolfPlannerV4Test {
     void goldenPlansArePinnedAtTheV4Boxes() throws GenFailed {
         // A change here means the planner makes different courses for the same seed: bump ALGO.
         assertEquals(4, GolfPlanner.ALGO, "the version these hashes belong to");
-        Map<Long, String> daily = Map.of(1L, "891bb9ee83fc", 20725L, "aadfc7e04b58", 0x3f2a91c07d1e55b0L,
-                "c26300281e47");
+        Map<Long, String> daily = Map.of(1L, "a1401a04deae", 20725L, "f555558cfa74", 0x3f2a91c07d1e55b0L,
+                "b135e58ecd7b");
         for (Map.Entry<Long, String> e : new TreeMap<>(daily).entrySet()) {
             Plan p = new GolfPlanner().plan(input(Slots.DAILY_GOLF, e.getKey(), Slots.DAILY_GOLF.tierOrMix(), 0));
             assertEquals(e.getValue(), p.hash(), "Golf of the Week seed " + Long.toHexString(e.getKey()));

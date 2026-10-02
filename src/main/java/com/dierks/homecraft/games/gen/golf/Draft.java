@@ -134,6 +134,33 @@ final class Draft {
         return r.nextInt(lo, shorter ? lo + (top - lo) / 2 : top);
     }
 
+    /**
+     * A routing {@code total} blocks long split into legs, leg k {@code lo[k]}..{@code hi[k]} (a total
+     * they can't make is moved to the nearest they can): each leg in turn uniformly within what the legs
+     * after it can still take, so the legs vary while the whole stays the length its par is.
+     */
+    int[] split(int total, int[] lo, int[] hi) {
+        int min = 0;
+        int max = 0;
+        for (int k = 0; k < lo.length; k++) {
+            min += lo[k];
+            max += hi[k];
+        }
+        int left = Math.max(min, Math.min(max, total));
+        int[] out = new int[lo.length];
+        for (int k = 0; k < lo.length; k++) {
+            int restLo = 0;
+            int restHi = 0;
+            for (int q = k + 1; q < lo.length; q++) {
+                restLo += lo[q];
+                restHi += hi[q];
+            }
+            out[k] = r.nextInt(Math.max(lo[k], left - restHi), Math.min(hi[k], left - restLo));
+            left -= out[k];
+        }
+        return out;
+    }
+
     /** {@code lo}..{@code hi}, uniformly (a number that isn't a length). */
     int pick(int lo, int hi) {
         return r.nextInt(lo, hi);

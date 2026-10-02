@@ -143,8 +143,8 @@ class HoleRecipeTest {
     @Test
     void aLayupLaysUpAlongTheLineTheFirstTimerAims() throws Exception {
         Map<String, String> rates = new TreeMap<>();
-        for (HoleRecipe h : List.of(HoleRecipe.L_LAYUP, HoleRecipe.X_LAYUP, HoleRecipe.M_GUARDED,
-                HoleRecipe.L_CHIP_LAYUP)) {
+        for (HoleRecipe h : List.of(HoleRecipe.L_LAYUP, HoleRecipe.L_LAYUP_BEND, HoleRecipe.X_LAYUP,
+                HoleRecipe.M_GUARDED, HoleRecipe.L_CHIP_LAYUP)) {
             char tier = h.fits('M') ? 'M' : 'H';
             int club = h == HoleRecipe.L_CHIP_LAYUP ? 3 : 4;
             int held = 0;
@@ -302,8 +302,11 @@ class HoleRecipeTest {
         assertFalse(HoleRecipe.list('H', LengthClass.X, false).isEmpty(), "Hard has X");
         assertTrue(HoleRecipe.list('H', LengthClass.X, false).stream().allMatch(h -> h.cls == LengthClass.X),
                 "and only X there");
-        assertEquals(EnumSet.of(HoleRecipe.L_LAYUP, HoleRecipe.X_LAYUP), with(Quota.Feature.LAYUP),
-                "the Swing layups: L's and X's");
+        assertEquals(EnumSet.of(HoleRecipe.L_LAYUP, HoleRecipe.L_LAYUP_BEND, HoleRecipe.X_LAYUP),
+                with(Quota.Feature.LAYUP), "the Swing layups: L's (of two legs or three) and X's");
+        assertTrue(HoleRecipe.L_LAYUP_BEND.features('M', false).contains(Quota.Feature.THREE_LEGS)
+                && HoleRecipe.X_LAYUP.features('H', false).contains(Quota.Feature.THREE_LEGS),
+                "a three-leg Swing layup on L and X, so the layup can carry the course's three legs");
         assertEquals(EnumSet.of(HoleRecipe.L_CHIP_LAYUP), with(Quota.Feature.CHIP_LAYUP),
                 "the Chip layup: an L hole's (an M one is never a par 3 at a par 3's length)");
         assertEquals(EnumSet.of(HoleRecipe.M_GUARDED), with(Quota.Feature.GUARDED), "the guarded par 3");
@@ -383,6 +386,63 @@ class HoleRecipeTest {
         assertEquals(0, tiny.get(Quota.Feature.WATER), "Tiny Golf: no water");
         assertEquals(1, tiny.get(Quota.Feature.SAND), "sand 1");
         assertEquals(1, tiny.get(Quota.Feature.TREES), "a tree hole or a pond to look at");
+    }
+
+    /**
+     * Owner's complaint, GOLF-R3 skeptics: the pins don't make both par 4s corner-pond layups where an X
+     * hole can take the Swing layup, they leave a course a hole of three legs (a custom mix with no Hard
+     * tier, whose only L holes take the layups, gets the three-leg Swing layup), no other hole is dealt
+     * a pinned feature's recipe, and a hole's later recipe isn't one its group's other holes start with.
+     */
+    @Test
+    void thePinsLeaveRoomForThreeLegsAndNoRecipeIsDealtTwice() {
+        int xLayups = 0;
+        int bent = 0;
+        for (String mix : List.of("EEEMMMMHH", "EEEEMMMMM", "EEEMMMM", "MMMMMMMMM", "HHHHHHHHH", "MMMMHHHHH")) {
+            for (long seed = 0; seed < 200; seed++) {
+                DealV4.Deal deal = DealV4.deal(new GenRandom(seed), mix, false);
+                List<LengthClass> c = deal.classes();
+                String what = mix + " seed " + seed;
+                long ls = c.stream().filter(x -> x == LengthClass.L).count();
+                boolean x = c.contains(LengthClass.X);
+                long layupLs = deal.pinned().entrySet().stream().filter(e -> c.get(e.getKey()) == LengthClass.L).count();
+                if (x && ls >= 1) {
+                    assertTrue(layupLs < ls, what + ": an X hole takes the Swing layup before the last L hole does");
+                }
+                Map<Quota.Feature, Integer> t = DealV4.targets(mix, c, false);
+                assertTrue(deal.counts().get(Quota.Feature.THREE_LEGS) >= t.get(Quota.Feature.THREE_LEGS), what
+                        + ": a hole of three legs is dealt (" + deal.counts() + ")");
+                Set<HoleRecipe> first = new HashSet<>();
+                for (int i = 0; i < mix.length(); i++) {
+                    HoleRecipe h = deal.recipe(mix, i, false);
+                    if (!deal.pinned().containsKey(i)) {
+                        for (Quota.Feature f : DealV4.PINNED) {
+                            assertFalse(h.features(mix.charAt(i), false).contains(f), what + " hole " + (i + 1)
+                                    + ": only a pinned hole has " + f.words());
+                        }
+                        String g = DealV4.group(mix.charAt(i), c.get(i));
+                        int holes = 0;
+                        for (int k = 0; k < mix.length(); k++) {
+                            holes += !deal.pinned().containsKey(k) && DealV4.group(mix.charAt(k), c.get(k)).equals(g) ? 1 : 0;
+                        }
+                        HoleRecipe later = deal.recipe(mix, i, true);
+                        for (int k = 0; k < mix.length() && deal.order().get(g).size() >= 2 * holes; k++) {
+                            assertTrue(!DealV4.group(mix.charAt(k), c.get(k)).equals(g) || later != deal.recipe(mix, k,
+                                    false), what + " hole " + (i + 1) + "'s later recipe isn't its group's hole " + (k + 1)
+                                    + "'s first");
+                        }
+                    }
+                    first.add(h);
+                }
+                assertEquals(mix.length(), first.size(), what + ": every hole starts with its own recipe");
+                for (HoleRecipe h : deal.pinned().values()) {
+                    xLayups += h == HoleRecipe.X_LAYUP ? 1 : 0;
+                    bent += h == HoleRecipe.L_LAYUP_BEND ? 1 : 0;
+                }
+            }
+        }
+        System.out.println("Golf v4 pins over 1,200 deals: X_LAYUP " + xLayups + ", L_LAYUP_BEND " + bent);
+        assertTrue(xLayups > 200 && bent > 100, "the Swing layup comes in all three shapes: " + xLayups + ", " + bent);
     }
 
     @Test

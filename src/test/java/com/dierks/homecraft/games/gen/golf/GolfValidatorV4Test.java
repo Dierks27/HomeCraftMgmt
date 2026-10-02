@@ -235,7 +235,9 @@ class GolfValidatorV4Test {
         Plan asThree = Plan.of(sound.slot(), 3, sound.seed(), sound.half(), sound.palette(), sound.ops(), sound.signs(),
                 sound.keepClear(), sound.course(), sound.summary(), sound.work());
         assertTrue(!GolfValidator.v4(asThree), "a version-3 plan isn't judged by Golf v4's play rules");
-        says(GolfValidator.quickProblems(asThree), "for an expert line of",
-                "Adventure Golf's frozen rules judge it: par must be E + 1 there");
+        List<String> problems = GolfValidator.quickProblems(asThree);
+        assertTrue(problems.stream().anyMatch(s -> s.contains("for an expert line of") || s.contains("'s line has")),
+                "Adventure Golf's frozen rules judge it: par must be E + 1 there, and an expert line at most "
+                        + ExpertSearch.MAX_DEPTH + " putts: " + problems);
     }
 }

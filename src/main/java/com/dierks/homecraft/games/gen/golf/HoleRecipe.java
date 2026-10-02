@@ -17,21 +17,24 @@ import java.util.Set;
  * block rules. Every green has {@value Draft#RUNOUT} rows of run-out behind its cup on a 40 x 64 plot.
  *
  * <p><b>Layups</b> (red-team F00: every club has a job). A corner pond past the first elbow, where the
- * first-timer's tee shot goes when it aims across the corner: on a Swing layup ({@link #L_LAYUP},
- * {@link #X_LAYUP}) a first leg of 7-8 puts it 11-12 out along that line, so a Drive goes in and a
- * Swing stops in the elbow, and the fairway past it is 7 wide; on a guarded par 3 ({@link #M_GUARDED})
- * the same, and water behind the green; on a Chip layup ({@link #L_CHIP_LAYUP}) a first leg of 4-5
- * and a rock at the inner corner, which keeps the player's aim nearly straight on, so a Swing reaches
- * the pond and a Chip doesn't. The planner checks each on the real physics
- * ({@link GolfPlannerV4#layupHolds}).
+ * first-timer's tee shot goes when it aims across the corner: on a Swing layup ({@link #L_LAYUP};
+ * {@link #L_LAYUP_BEND} and {@link #X_LAYUP}, an S-bend after it, so the layup can be a course's hole
+ * of three legs) a first leg of 7-8 puts it 11-12 out along that line, so a Drive goes in and a Swing
+ * stops in the elbow, and the fairway past it is 7 wide; on a guarded par 3 ({@link #M_GUARDED}) the
+ * same, and water behind the green; on a Chip layup ({@link #L_CHIP_LAYUP}) a first leg of 4-5 and a
+ * rock at the inner corner, which keeps the player's aim nearly straight on, so a Swing reaches the
+ * pond and a Chip doesn't (its pond 3-5 deep and 6-10 along). The planner checks each on the real
+ * physics ({@link GolfPlannerV4#layupHolds}).
  *
  * <p><b>Lengths</b> (V4-DECISIONS D1, audit GOLF-R3-00). Off Tiny Golf a hole's path along the lane is
  * held to its class's band, give or take a block ({@link GolfPlannerV4#inBand}), and it must measure
  * its class's par there. The first-timer pays a stroke for every awkward corner, so the routings are
- * drawn to the length its par is: a guarded par 3 of about 16-19 (no Chip layup is short enough to be
- * a par 3: it is an L hole only), layups of about 28-33, and par 5s of about 40-44 with a 7-wide middle
+ * drawn to the length its par is: a guarded par 3 of about 16-20 (no Chip layup is short enough to be
+ * a par 3: it is an L hole only), layups of about 27-34, and par 5s of about 40-45 with a 7-wide middle
  * and last leg (two 5-wide corners cost a stroke), or straights of 44-50 ({@link #X_STRAIGHT},
- * GOLF-V4-SPEC §3.3).
+ * GOLF-V4-SPEC §3.3). A routing of several legs draws its whole length from the range its par is
+ * measured at and splits it any way its legs allow ({@link Draft#split}), so its holes vary in shape,
+ * not in par (the owner found Golf v4 "pretty repetitive"); Golf of the Week's S holes are 7-12 long.
  *
  * <p>Each recipe is one length class and one set of features, so the deal ({@link DealV4}) can count
  * a course's quota before a block is drawn, exactly as Adventure Golf's templates are counted. Each
@@ -78,6 +81,7 @@ enum HoleRecipe {
 
     // ---- L: par 4, 27-38 ----------------------------------------------------------------------------
     L_LAYUP(LengthClass.L, "MH"),
+    L_LAYUP_BEND(LengthClass.L, "MH"),
     L_CHIP_LAYUP(LengthClass.L, "MH"),
     L_DOGLEG_SAND_POND(LengthClass.L, "MH"),
     L_DOGLEG_TREES_GREEN(LengthClass.L, "MH"),
@@ -196,7 +200,8 @@ enum HoleRecipe {
             case X_LONG_DOGLEG_TREES -> f.addAll(EnumSet.of(Quota.Feature.TREES, Quota.Feature.TWO_LEGS));
             case X_LONG_DOGLEG_POND -> f.addAll(EnumSet.of(Quota.Feature.WATER, Quota.Feature.TWO_LEGS));
             case X_LONG_DOGLEG_ISLAND -> f.addAll(EnumSet.of(Quota.Feature.HEIGHT, Quota.Feature.TWO_LEGS));
-            case X_LAYUP -> f.addAll(EnumSet.of(Quota.Feature.LAYUP, Quota.Feature.WATER, Quota.Feature.THREE_LEGS));
+            case X_LAYUP, L_LAYUP_BEND -> f.addAll(EnumSet.of(Quota.Feature.LAYUP, Quota.Feature.WATER,
+                    Quota.Feature.THREE_LEGS));
             case X_STRAIGHT -> f.addAll(EnumSet.of(Quota.Feature.SAND, Quota.Feature.HEIGHT, Quota.Feature.BIG_DROP));
             default -> throw new IllegalStateException("no features for " + this);
         }
@@ -239,7 +244,7 @@ enum HoleRecipe {
         int mid = (d.sx - 1) / 2;
         switch (this) {
             case S_STRAIGHT -> {
-                int length = d.len(8, 12);
+                int length = dry ? d.len(8, 12) : d.len(7, 12);
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
                 d.first(mid, length, 2);
@@ -247,7 +252,7 @@ enum HoleRecipe {
                 what = length + " long";
             }
             case S_BUMPERS -> {
-                int length = d.len(10, 12);
+                int length = dry ? d.len(10, 12) : d.len(7, 12);
                 int off = d.pick(-1, 1);
                 int rocks = d.pick(1, 2);
                 mirror = r.nextBoolean();
@@ -257,18 +262,19 @@ enum HoleRecipe {
                 what = length + " long";
             }
             case S_HUMP -> {
-                int length = d.len(10, 12);
+                // off Tiny Golf 9-11 long, the hump 3-4 out: further on, the first-timer takes a par 3
+                int length = dry ? d.len(10, 12) : d.len(9, 11);
                 int top = 2;
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
                 d.first(mid, length, 2);
                 d.lay(off);
-                d.hump(0, d.pick(d.from(0), d.to(0) - top - 1), top);
+                d.hump(0, d.pick(d.from(0), dry ? d.to(0) - top - 1 : Math.min(d.from(0) + 1, d.to(0) - top - 1)), top);
                 sign = GenCopy.TeeFeature.HILL;
                 what = length + " long";
             }
             case S_SAND -> {
-                int length = d.len(10, 12);
+                int length = dry ? d.len(10, 12) : d.len(9, 11);
                 int before = d.pick(3, 4);
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
@@ -279,7 +285,9 @@ enum HoleRecipe {
                 what = length + " long";
             }
             case S_TREE -> {
-                int length = d.len(10, 12);
+                // off Tiny Golf 9, 10 or 12 long (at 11 the first-timer mostly takes a par 3)
+                int length = dry ? d.len(10, 12) : d.len(9, 11);
+                length += !dry && length == 11 ? 1 : 0;
                 int off = d.pick(-2, 2);
                 mirror = r.nextBoolean();
                 d.first(mid, length, 3);
@@ -289,7 +297,7 @@ enum HoleRecipe {
                 what = length + " long";
             }
             case S_RAMP -> {
-                int approach = d.pick(4, 6);
+                int approach = d.pick(dry ? 4 : 3, 6);
                 int onGreen = d.len(4, 6);
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
@@ -299,7 +307,9 @@ enum HoleRecipe {
                 what = (approach + onGreen) + " long, the cup " + onGreen + " on the green";
             }
             case S_ISLAND -> {
-                int approach = d.len(5, 9);
+                // off Tiny Golf 4-9 but 7, whose tee shot the first-timer leaves short of the island (par 3)
+                int approach = dry ? d.len(5, 9) : d.pick(4, 8);
+                approach += !dry && approach >= 7 ? 1 : 0;
                 int ox = d.pick(-1, 1);
                 mirror = r.nextBoolean();
                 d.first(mid, approach + 3, 2);
@@ -308,7 +318,7 @@ enum HoleRecipe {
                 what = "approach " + approach;
             }
             case S_POND_VIEW -> {
-                int length = d.len(10, 12);
+                int length = dry ? d.len(10, 12) : d.len(7, 12);
                 int off = d.pick(-1, 1);
                 int long_ = d.pick(6, 10);
                 mirror = r.nextBoolean();
@@ -484,9 +494,11 @@ enum HoleRecipe {
                 boolean chip = this == L_CHIP_LAYUP;
                 boolean guarded = this == M_GUARDED;
                 int up = chip ? d.pick(4, 5) : d.pick(7, 8);
-                int across = guarded ? d.len(12, 13) : chip ? d.len(24, 26) : d.len(22, 26);
-                int deep = d.pick(3, 4);
-                int reach = guarded ? across - 5 : d.pick(6, 8); // clear of the guarded green's cup ring
+                // a Chip layup measures par 4 only at these: 4 up, 24-25 across; 5 up, 23 or 27
+                int across = guarded ? d.len(11, 14) : !chip ? d.len(21, 27) : up == 4 ? d.len(24, 25)
+                        : d.pick(0, 1) == 0 ? 23 : 27;
+                int deep = chip ? d.pick(3, 5) : d.pick(3, 4);
+                int reach = guarded ? across - 5 : chip ? d.pick(6, 10) : d.pick(6, 8); // (clear of a guarded cup ring)
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
                 // past a Swing layup the fairway is 7 wide (the corner the tee shot lands in, then the green);
@@ -634,12 +646,16 @@ enum HoleRecipe {
                 boolean island = this == X_SBEND_ISLAND;
                 boolean ice = this == X_SBEND_ICE;
                 // the middle leg 7 wide, and the last too but under an island green: the first-timer's line
-                // through two corners then measures par 5 at 40-43 blocks (5 wide, it is a stroke more)
+                // through two corners then measures par 5 at 40-45 blocks (5 wide, it is a stroke more); the
+                // legs come from a total of 45-52 (its recipe's), split any way the legs allow
                 boolean pond = this == X_SBEND_POND;
                 boolean creek = this == X_SBEND_CREEK;
-                int first = pond ? d.len(17, 18) : island || creek ? 16 : d.len(16, 17);
-                int across = ice ? d.len(17, 18) : island || creek ? 14 : d.len(14, 15);
-                int lastLeg = island ? 16 : d.len(16, 17);
+                int total = island ? d.len(45, 46) : creek || pond ? d.len(46, 49) : ice ? d.len(48, 52)
+                        : d.len(46, 50);
+                int[] legs = d.split(total, new int[]{pond ? 16 : 13, ice ? 16 : 12, 13}, new int[]{19, 18, 19});
+                int first = legs[0];
+                int across = legs[1];
+                int lastLeg = legs[2];
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
                 d.first(d.centred(across, 7), first, 2);
@@ -673,8 +689,10 @@ enum HoleRecipe {
             }
             case X_LONG_DOGLEG_TREES, X_LONG_DOGLEG_POND, X_LONG_DOGLEG_ISLAND -> {
                 boolean island = this == X_LONG_DOGLEG_ISLAND;
-                int up = island ? d.len(24, 25) : d.len(26, 28);
-                int across = island ? 18 : d.len(16, 18);
+                int total = island ? d.len(42, 44) : this == X_LONG_DOGLEG_POND ? d.len(43, 48) : d.len(43, 47);
+                int[] legs = d.split(total, new int[]{22, 14}, new int[]{30, 20});
+                int up = legs[0];
+                int across = legs[1];
                 int off = d.pick(-1, 1);
                 boolean trees = this == X_LONG_DOGLEG_TREES;
                 mirror = r.nextBoolean();
@@ -699,9 +717,10 @@ enum HoleRecipe {
                 what = up + " up, " + across + " across";
             }
             case X_HAIRPIN -> {
-                int up = d.len(28, 29);
-                int across = d.pick(8, 9);
-                int down = d.len(10, 11);
+                int[] legs = d.split(46, new int[]{26, 7, 8}, new int[]{28, 10, 13});
+                int up = legs[0];
+                int across = legs[1];
+                int down = legs[2];
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
                 d.first(d.centred(across, 4), up, 2);
@@ -713,10 +732,13 @@ enum HoleRecipe {
                 sign = GenCopy.TeeFeature.THREE_LEGS;
                 what = up + " up, " + across + " across, " + down + " back down";
             }
-            case X_LAYUP -> {
-                int up = d.pick(7, 8);
-                int across = d.len(9, 11);
-                int lastLeg = d.len(28, 30);
+            case X_LAYUP, L_LAYUP_BEND -> {
+                // the Swing layup's first leg, then an S-bend: 31-36 blocks of legs a par 4, 46-47 a par 5
+                int up = 8;
+                int[] legs = this == X_LAYUP ? d.split(d.len(38, 39), new int[]{8, 23}, new int[]{14, 31})
+                        : d.split(d.len(23, 28), new int[]{8, 13}, new int[]{12, 18});
+                int across = legs[0];
+                int lastLeg = legs[1];
                 int deep = d.pick(3, 4);
                 int reach = d.pick(6, 8);
                 int off = d.pick(-1, 1);

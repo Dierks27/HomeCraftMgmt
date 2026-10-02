@@ -1905,9 +1905,9 @@ games:
     # twice the entry, nobody in a Cup of 2 or 3 who sets a Cup time gets back less than they paid.
     server_topup: 20
   # ---- fresh ----
-  # Fresh Courses: parkour, Sky Rings, golf, droppers and the Ice Boat Mountain Run the plugin builds
-  # itself - a new set every week (or every day, or every few days: cadence), the same for everyone.
-  # Nothing to build by hand. Check with /hcm games gen status.
+  # Fresh Courses: parkour, Sky Rings, Adventure Golf, droppers and the Ice Boat Mountain Run the plugin
+  # builds itself - a new set every week (or every day, or every few days: cadence), the same for
+  # everyone. Nothing to build by hand. Check with /hcm games gen status.
   fresh:
     # Ships OFF. true + /hcm reload and the first set is up in about two minutes.
     enabled: false
@@ -2077,8 +2077,7 @@ games:
       # The first plot's corner (x y z). Plots are 144 x 176 x 336, six to a row along x, rows along z,
       # 576 blocks apart (plot_gap: optional, 0-4096, a multiple of 16; 576 keeps kept courses out of
       # sight of each other). It must stay at least 16 blocks from every Fresh Courses area; otherwise
-      # keeping is off. Each plot must be inside the world border (24 plots reach z 10367). A course whose
-      # half doesn't fit a plot can't be kept: Golf v4 fits, a Mountain Run v2 doesn't (it stays in the archive).
+      # keeping is off. Each plot must be inside the world border (24 plots reach z 10367).
       area: [1760, 128, 7296]
       # How many plots there are.
       max_plots: 24

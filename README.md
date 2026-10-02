@@ -8,7 +8,7 @@ so every screen is short, plain and readable on **Bedrock** as well as Java.
 
 - **Target server:** Paper **26.2 / 26.3**, Java **25** (compiled against the 26.2 API; the
   code is also compiled and tested against the 26.3 API with no errors or removals)
-- **Version:** `0.36.0-course-variety`
+- **Version:** `0.37.0-mountain-golf`
 - **Build:** Gradle (toolchain pinned to Java 25), shaded jar with SQLite bundled
 - **Design spec:** [`DESIGN.md`](DESIGN.md) · **Player guide:** [`docs/how-it-works.md`](docs/how-it-works.md) · **Games guide (for the website):** [`docs/games-guide.md`](docs/games-guide.md)
 
@@ -450,23 +450,35 @@ says how it is built; [`docs/how-it-works.md`](docs/how-it-works.md) is the play
 
 **The events batch** adds things to do together and a weekly goal, on the same house rules:
 **warm-ups** before a timed run (on as shipped: `games.trials.warmup_seconds: 180`), **Race with
-friends** (party races on any time-trial course but a Dropper) and **golf together** (with a 2:00
-hole clock), the **Weekly Cup** (on as shipped, on Fresh parkour, Sky Rings, Ice Boat and Dropper
+friends** (party races on any time-trial course but a Dropper) and **golf together** (with a hole
+clock: 2:00, longer on Golf of the Week's long holes), the **Weekly Cup** (on as shipped, on Fresh parkour, Sky Rings, Ice Boat and Dropper
 courses), **the Dropper** (two Fresh Courses, on inside `games.fresh`, which itself ships off), and
 two that ship off: **Race Night** and **Falling Floors**. See [Time trials](#time-trials), [The
 Weekly Cup](#the-weekly-cup), [Mini golf](#mini-golf), [The Dropper](#the-dropper), [Falling
 Floors](#falling-floors) and [Race Night](#race-night); `docs/games-guide.md` is the players' and the
 web developer's version.
 
-**Course Variety (0.36)** changes two of the Fresh Courses, and nothing a builder made by hand:
+**Course Variety (0.36)** changed two of the Fresh Courses, and nothing a builder made by hand:
 **Adventure Golf** (Golf of the Week and Tiny Golf: eleven new hole shapes, a weekly variety quota,
 sand that slows the ball, ponds and a creek in play on Medium and Hard holes only, trees, hills and
-tee signs that name each hole's feature) and the Ice Boat's **Mountain Run** (a downhill sprint that
-spirals round the viewing stand: 4 to 6 drops, sandy bends, sand pits, pick-a-path splits, an ice
-cave and a forest; Race Night races it as "3 downhill races"). Ice Boat still ships off: run the boat
-test strip and a preview first. See [Adventure Golf](#adventure-golf) and [Ice Boat: the Mountain
-Run](#ice-boat-the-mountain-run). The same release moves every Games place out of sight of the others
-and adds a built-in void world (see "Where they are" in [Fresh Courses](#fresh-courses)).
+tee signs that name each hole's feature) and the Ice Boat's first **Mountain Run** (a short downhill
+spiral round the viewing stand). The same release moved every Games place out of sight of the others
+and added a built-in void world (see "Where they are" in [Fresh Courses](#fresh-courses)). 0.37
+replaces both of those courses again (below).
+
+**Golf v4 and Mountain Run v2 (0.37)** answer the owner's first ride on 0.36. **Golf of the Week**
+has real hole lengths, par 2 to par 5 (8 to 52 blocks), so every club has a job: Drive off the tee,
+Swing or Chip to lay up short of a corner pond, Putt and Tap on the green. Par is what a first-time
+player usually takes, so a course is about par 30-31, and Golf of the Week and Classic Golf get bigger
+areas (128 x 16 x 224 a half, at x 8768). Tiny Golf stays short and dry for the youngest. The Ice
+Boat's **Mountain Run v2** is a real mountain (480 x 176 x 640 a half, north of everything at z 2880):
+a 2-3 minute run from the summit down to a viewing stand at the bottom, as the **Winding Road** (a
+fast, flowing road for racing, which Race Night always races) or the **Slalom** (back and forth
+through red and blue gates), chosen each week or set in config (`style`). The moved areas need nothing
+typed: config revision 21 gives each its new spot, and the old areas empty themselves. Ice Boat still
+ships off: preview and ride it first. See [Golf v4](#golf-v4), [Ice Boat: the Mountain
+Run](#ice-boat-the-mountain-run) and "When an update moves or grows an area" in [Fresh
+Courses](#fresh-courses).
 
 **The token balance (0.37)** pays the skill games about **a token a minute of first-time play**, the
 same rate as the quests: a course's first finish of the week 10 to 25, a cabinet's daily goal and
@@ -586,7 +598,8 @@ once per set.
 250 and `chance_daily_tokens` 100, which is now about half as large next to what a player earns);
 quests and achievements (already on the token-a-minute rate); the login streak and playtime; the
 Prize Counter, crates, packs and the Rare Card (to retune after two weeks of the new income: read
-`/hcm tokens audit 14`).
+`/hcm tokens audit 14`). More to spend tokens on is coming in a later update; this release only
+changes what the games pay.
 
 **The limits that moved with it:** Race Night pays at most **30** a player a night (was 5), each prize
 0-30 and the finisher prize 0-10; Falling Floors' rewards are 0-50 (were 0-10). **A cabinet's medal is
@@ -852,8 +865,9 @@ called off, its racers go home with their things, and nothing they hadn't finish
 **Race mode** is the engine party races and Race Night share: racers are held on the grid until one
 go tick and all start on one clock, a finish is judged on the course as it is (its layout, and the
 still-standing rule for Fresh Courses), finishers wait on Fresh Ice Boat's **viewing stand** (a railed
-platform in the middle of the track, which the boat planner builds into every layout from its algo 2
-on: the Mountain Run spirals down round it), and a racer sent back to a checkpoint
+platform the boat planner builds into every layout from its algo 2 on: in the middle of the track up
+to 0.36, and on Mountain Run v2 a white platform at the bottom, beside the finish, where racers park
+facing north up the mountain), and a racer sent back to a checkpoint
 is re-seated clear of the other boats. Where there is no stand, finishers go to the Clubhouse at the
 line if it is open in the course's world, `party_after` / `race_night_after` is on and it isn't
 closing for a restart; otherwise they go home. A boat that creeps off its grid spot before Go is
@@ -872,7 +886,7 @@ nobody waits for them.
    which is how `/hcm games feature` lets the day pick.
 2. Stand where it starts, facing the way it goes: `<id> start`.
 3. At each checkpoint, in order: `<id> checkpoint add [radius]`. The default radius is 1.5 for
-   parkour, 4 for elytra and 3 for boats (0.5-16, at most 64 checkpoints).
+   parkour, 4 for elytra and 3 for boats (0.5-16, at most 128 checkpoints).
 4. `<id> finish [radius]`, then `<id> test` (a run that records nothing and says whether it would
    have counted) and `<id> enable`.
 
@@ -954,12 +968,12 @@ on the Golf tab ("Meadow Links - 9 holes, par 27") and its own `/hcm play <cours
   on your last spot, +1 stroke. A fast ball can roll over a flush cup; a slow one drops in. A
   ball that drops into the hole, or stops anywhere on the cup block, is in. A ball still rolling
   after 30 seconds is stopped where it is.
-- **Adventure Golf's three rules** apply only to Fresh Courses' Adventure Golf (a golf layout from
-  golf planner algo 3 on, a Classic Golf recall of one, or a course kept from one): smooth
+- **Fresh golf's three rules** apply only to Fresh Courses' golf from golf planner algo 3 on
+  (Adventure Golf and Golf v4, a Classic Golf recall of one, or a course kept from one): smooth
   sandstone is sand and slows the ball like soul sand, a ball that comes to rest over water has
   fallen in (+1, back to its spot), and a ball that only wobbles on the spot at a step comes to rest
   within about a second. A hand-built course plays exactly as before, its smooth sandstone ordinary
-  stone. See [Adventure Golf](#adventure-golf).
+  stone. See [Golf v4](#golf-v4) and [Adventure Golf](#adventure-golf).
 - **Picked up.** Once the ball stops with the strokes at par + `max_over_par` (3), the hole is over
   and scores exactly that.
 - **Between holes** the scorecard shows for 5 seconds (or until Next hole). After the last hole
@@ -973,10 +987,11 @@ on the Golf tab ("Meadow Links - 9 holes, par 27") and its own `/hcm play <cours
   turns golf together invites off too, including for a player who turned them off earlier); only
   the host starts, and everyone goes to hole 1 at once. Everyone plays the same hole at the same
   time, each with their own ball; a player whose ball is in waits, and when every ball is in (or
-  picked up) everyone moves to the next tee together. The first ball of a hole in starts a 2:00
+  picked up) everyone moves to the next tee together. The first ball of a hole in starts the
   **hole clock** (on the action bar of anyone still out, and "picked up in 1:45" in the card's
-  Still playing name); when it runs out, every ball still out is picked up at par +
-  `max_over_par`. The kit's Scorecard (and the card between
+  Still playing name): 2:00, or on a Golf v4 course (golf planner algo 4 on, kept ones too) by the
+  hole's par, max(2:00, 30 s × (par + 1)): 2:00 for par 2 and 3, 2:30 for par 4, 3:00 for par 5 and
+  3:30 for par 6. When it runs out, every ball still out is picked up at par + `max_over_par`. The kit's Scorecard (and the card between
   holes) is the **shared scorecard**: one row per player, 8 holes a page, and at the end the group
   ranking (fewest strokes first, level totals sharing a place). Each round is a normal round for
   the boards and rewards, with nothing extra for being in a party, recorded once at the player's
@@ -1035,11 +1050,11 @@ to the first tee when the course is closed, changed or deleted goes straight hom
 
 Right after the 04:00 restart, the plugin builds a new set of courses by itself: **Easy Parkour,
 Parkour and Hard Parkour** (three courses, each with its own board), **Sky Rings** (an elytra course:
-fly through the rainbow rings, no rockets needed), **Golf of the Week** (9 holes) and **Tiny Golf**
-(3 short holes for the youngest), both Adventure Golf with sand, ponds, trees and hills (see
-"Adventure Golf" below), and two droppers, **Easy Dropper** and **Dropper** (see "The Dropper"
-below). **Ice Boat**, a downhill race down a mountain (see "Ice Boat: the Mountain Run" below), ships
-switched off. By default a new set goes up **every Monday** and stays all week;
+fly through the rainbow rings, no rockets needed), **Golf of the Week** (9 holes of four lengths,
+par 2 to 5) and **Tiny Golf** (3 short holes for the youngest), both with sand, ponds, trees and hills
+(see "Golf v4" below), and two droppers, **Easy Dropper** and **Dropper** (see "The Dropper" below).
+**Ice Boat**, a 2-3 minute run down a whole mountain, the Winding Road or the Slalom (see "Ice Boat:
+the Mountain Run" below), ships switched off. By default a new set goes up **every Monday** and stays all week;
 it can also change every day, or every few days (`cadence`, below). Everyone gets the same courses.
 Kids earn 1 to 3 stars on each course in each set (1 just for finishing) and fill a weekly **Star
 Chart**. Nothing is built by hand, and your own courses are never touched.
@@ -1124,14 +1139,16 @@ going always counts. The old half is emptied once nobody is on it.
   pistons, explosions and the like are refused inside its areas for everyone, admins included
   ("This area is built by Fresh Courses - use /hcm games gen"). WorldEdit can't be stopped; the
   next restart (or `/hcm games gen rebuild`) puts the blocks back.
-- **After a crash** every course is checked against its plan before it opens, and anything the
-  world didn't save is put back first (the console says so). The smallest courses are checked
+- **At every start, and after a crash,** every course is checked against its plan before it opens,
+  and anything the world didn't save is put back first (the console says so: "Fresh Courses: checked
+  fresh_dropper_easy in half A - 0 blocks healed; it is open."). The smallest courses are checked
   first, so the Droppers open within seconds of a restart. The Mountain Run (1,200 chunks a half) is
-  checked by a sample of its chunks when the world was saved since its last full check, so it opens
-  within seconds too, and is checked whole a minute or so later with the course open; after a crash
-  it is checked whole first, closed (about a minute). A spare half known to be empty isn't loaded at
-  all. A build a restart interrupts simply
-  carries on after it. A course that can't be vouched for (say `trials.fall_depth` was lowered and
+  checked by a sample of its chunks when the world was saved since its last full check ("... by a
+  sample of N of its 1200 chunks ... - it is open; the whole half is checked once nothing else is
+  being built"), so it opens within seconds too, and is checked whole a minute or so later with the
+  course open; after a crash, or when the sample finds a difference, it is checked whole first,
+  closed (about a minute). A spare half known to be empty isn't loaded at all. A build a restart
+  interrupts simply carries on after it. A course that can't be vouched for (say `trials.fall_depth` was lowered and
   one of its jumps would now send players back) stays closed and is replaced by a new one for the
   same set (a pinned course is built again from its seed), on a fresh board.
 - **In that world** (`world_rules: true`): no mobs, fire or weather, no random ticks, always noon.
@@ -1178,10 +1195,15 @@ above).
 
 **When an update moves or grows an area** (v4: Golf of the Week and Classic Golf grow to 128 x 16 x
 224 and move to x 8768; the Ice Boat's Mountain Run grows to 480 x 176 x 640 and moves north to z
-2880), nothing is asked of you. The update moves each shipped spot you never changed (an origin you set
-yourself stays, and the course grows in place there). At the restart the course is built again at its
-new spot, this set's next course on a fresh board (a first-finish reward isn't paid twice), and its old
-area is emptied by itself: only once nothing else is being built (so the course is down as briefly as
+2880), nothing is asked of you. Config revision 21 moves each shipped spot you never changed (the
+console: "Config migration: the bigger Golf v4 and Mountain Run v2 areas get their new spots (Golf of
+the Week [7488, 160, 4096] -> [8768, 160, 4096]; ...)"). An origin you set yourself stays, with one
+WARN naming it and the shipped spot, and the course grows in place there if it fits (`/hcm games
+check` says if it doesn't). At the restart the course is built again at its new spot, this set's next
+course on a fresh board (a first-finish reward isn't paid twice: "Fresh Courses: fresh_golf stands in
+its new area now (...): a new course for ... on a fresh board; its first-finish reward isn't paid
+twice."); a course that was off (Ice Boat ships off) stays off, and its next preview or build goes to
+the new spot. Its old area is emptied by itself: only once nothing else is being built (so the course is down as briefly as
 it can be), the water drained before any wall goes, and only the plugin's own blocks taken away
 (anything else is left where it is and listed). Nothing is written if something of yours, a kept
 course, the Clubhouse or the arena is within 16 blocks of the old area: it stays guarded and listed,
@@ -1341,6 +1363,7 @@ result screens show it in their header's NAME. `/hcm play fresh_parkour_tiers` i
 | `fresh.stars.gold.*` / `fresh.stars.silver.*` | easy 2.0 / 3.0, medium 1.5 / 2.2, hard 1.25 / 1.8 | The 3-star and 2-star times as a factor of each course's expert time (tune after the first week) |
 | `fresh.slots.<course>` | see config.yml | Each course: `enabled`, `tier` (or `mix` of golf holes, E/M/H) and `origin` (x y z of its area, x and z a multiple of 16). Move one by hand only (see "Moving an area by hand") |
 | `fresh.slots.<course>.half_gap` | not set (576) | Optional: blocks between a course's two halves along x (32-4096, a multiple of 16). 576 keeps the spare half, where the next course is built, out of sight; a server that built in 0.35 has `32` written |
+| `fresh.slots.fresh_boat.style` | `random` | Which Mountain Run v2 the Ice Boat makes: `random` (each week's own, the Winding Road or the Slalom, about half and half; the Winding Road every week while Race Night is on), `road` (always the Winding Road) or `slalom` (always the Slalom; Race Night then holds no night on it, and `/hcm games check` says so). Anything else: one WARN, random. A week already built keeps its style: a change counts from the next build (`/hcm games gen reroll fresh_boat confirm` makes one now) |
 
 The courses (their ids are also their `/hcm play` ids): `fresh_parkour_easy`, `fresh_parkour`,
 `fresh_parkour_hard`, `fresh_rings`, `fresh_golf`, `fresh_tiny_golf`, `fresh_boat` (off), and the
@@ -1396,10 +1419,11 @@ point, a checkpoint or finish with its radius, a golf hole's whole bounds box.
 
 | Command | What |
 |---|---|
-| `/hcm games gen status [course]` | First how often the courses change and when next ("weekly (Mondays at 4:00 AM) · next: Mon 5 Oct 4:00 AM (in 6d 14h)"), then each course: on or off, its tier or mix, which set is live (and its key, like `7:38`), its half, rev and seed, who is playing it, and the last build (plan time, blocks, ticks, chunks, verify). With a course: its set's key and end, its area and pin too |
+| `/hcm games gen status [course]` | First how often the courses change and when next ("weekly (Mondays at 4:00 AM) · next: Mon 5 Oct 4:00 AM (in 6d 14h)"), then each course: on or off, its tier or mix, which set is live (and its key, like `7:38`), its half, rev and seed, who is playing it, and the last build (plan time, blocks, ticks, chunks, verify). With a course: its set's key and end, its area and pin too. Ice Boat adds its style rule ("style random: each week's own (Winding Road or Slalom); this set's is the Winding Road"), and a course an update moved adds its old area's state ("its old area (...) is emptied by itself once nothing else is being built") |
 | `/hcm games gen plan <course> [seed\|next]` | A dry run, no blocks: what a build would make (its blocks, hash and the planner's own summary), for this set or the `next` one |
 | `/hcm games gen preview <course> [seed]` | Build a new course into the spare half without switching, to try it (`test`) or walk it (`tp <course> idle`). The next scheduled build clears it away (unless it was chosen: see `choose`). Works while the course is switched off too: the first one checks and claims its area, and the course stays closed (see "Trying a course that is switched off") |
 | `/hcm games gen preview <course> next [seed]` | A candidate for the NEXT set: its tier or mix and settings, and a seed (random unless you give one; the reply says it), in the spare half. Previewing again replaces it |
+| `/hcm games gen preview fresh_boat [next] [seed] style:road\|slalom` | Ice Boat only: a preview of that Mountain Run v2 style (the word goes anywhere after the course). The seed is picked to be that style; a seed you type is used as typed, with a note when it is the other style. Every Ice Boat preview reply says which it is ("... is on its way into half A. It is the Slalom.") |
 | `/hcm games gen test <course>` | A test run on the preview: its real start, checkpoints, finish, clock and kit (the Dropper offers its practice drop as usual). Records nothing: no board, token, star, Cup time, quest or achievement. Refused with no preview ("No preview yet - /hcm games gen preview <course> first"), near a restart, and while the course is off for a problem ("Ice Boat is off: Region has ..."); a course that is only switched off can be tested. Golf previews are walked instead (`tp <course> idle`) |
 | `/hcm games gen promote <course> [seed] [confirm]` | The preview (of this set) becomes the current course, on a fresh board. With a seed, only while the preview is still that seed (what the Admin tools' Yes sends). Refused while the course is switched off |
 | `/hcm games gen choose <course> [seed] [confirm]` | The preview's seed becomes the course of exactly the next set: it goes up at the scheduled change on fresh boards, with its own course code and seed on the website, and the set after goes back to its own seed. Kept across restarts (the spare half keeps the chosen preview, which is checked again after a restart, so the change has very little to build). `confirm` when it replaces another pick. With a seed, only while the preview is still that seed. The pick is built at the change as it was tried, even when its seed is the live one's. Refused for a Classic, while the course is off or being built, with no preview, or when the preview was built at another tier, mix or (medium and hard parkour) fall depth. A waiting pick is dropped if the tier or mix changes, if a `fall_depth` change would reshape it, or if a `cadence` or `rebuild_day` change moves the next set. You, the console, `status` and the Admin tools are told (the last two until that set is over or you pick again, across restarts), and you choose again. Its pin, if any, comes back after it |
@@ -1417,20 +1441,110 @@ point, a checkpoint or finish with its radius, a golf hole's whole bounds box.
 | `/hcm games gen tidy <course> [confirm]` (also `retire`) | The old area a course (or Classic) left when an update moved or grew it, or an owner's move left: lists it, and with `confirm` empties it now (only the plugin's own blocks, water first; anything else stays and is listed). An area an update moved is emptied by itself, so this is the fallback (see "When an update moves or grows an area") |
 
 The overrides (`on`/`off`, `tier`/`mix`, `pin`, `choose` (a one-set pin), rerolls per set, the claimed area, and the schedule
-with when it was first seen) live in `hcm_meta` under `gen.*`. Generated courses are ordinary
+with when it was first seen) live in `hcm_meta` under `gen.*`, with (from 0.37) an area an update left
+behind (`gen.<course>.old`, with the sizes it was claimed at; marked emptied until the world is saved),
+the last one emptied (`gen.<course>.retired`, shown in `/hcm games check` for 14 days) and what is known
+to be on disk in each half (`gen.<course>.ondisk`, for the quick boot check). Generated courses are ordinary
 `game_courses` rows with a `gen:` block (its `day` is the set's first day, its `cadence` the set's
 length), and their boards are ordinary `game_scores` rows: `gfresh:<course>:<set>` (that course's
 board for one set; the set is `<days>:<number>`, like `7:38` for the week of 28 Sep 2026, so a daily
 and a weekly set never share one), `gstars:<course>:<set>` and `gweek:<week>` (the Star Chart). No
 new tables.
 
+<!-- ---- Golf v4 (GOLF-V4-SPEC) ---- -->
+#### Golf v4
+
+New in 0.37 (golf planner algo 4): **Golf of the Week and Classic Golf have real hole lengths, every
+club has a job, and par is honest.** In 0.36 every hole had to fit a 20 x 40 plot, so its lane was
+12-20 blocks long. The clubs roll Tap 2, Putt 4, Chip 6, Swing 9 and Drive 13 blocks on flat turf, so
+Swing and Putt played every hole, Drive was never needed, and a first-time player shot two under
+par. The clubs are unchanged; the holes grew. Hand-built golf courses don't change at all.
+
+| Length class | Par | Path, tee to cup | What it is |
+|---|---|---|---|
+| S | 2 | 8-12 | A short straight, sometimes with a hump, sand, a tree, a ramp, an island green or a pond to look at |
+| M | 3 | 16-25 | A longer straight or a dogleg with a piece: sand, a hill, a creek, a pond, trees, ice, terraces, two ways, the volcano; a guarded par 3; a Chip layup |
+| L | 4 | 27-38 | A dogleg, a layup, an S-bend or a long straight with a piece |
+| X | 5 | 40-52 | Two or three legs: S-bends, long doglegs, a hairpin, a layup |
+
+- **The mix keeps its meaning.** A mix's Easy holes take the lengths S, S, M in turn, its Medium holes
+  M, M, L, L and its Hard holes L, X (X, X one time in three), shuffled within each tier. Golf of the
+  Week's `EEEMMMMHH` gets S2 M3 L3 X1 or S2 M3 L2 X2, about par 30-31. (Tiny Golf's Easy holes take S,
+  M and one more of either.)
+- **Every club has a job.** Drive off the tee on the long holes. Swing to **lay up** short of a corner
+  pond: on a Swing layup a Drive aimed across the corner splashes and a Swing stops at the elbow; on a
+  **guarded par 3** the tee shot is a Swing past a corner pond, with water behind the green too. Chip
+  on a **Chip layup** (a rock at the inner corner keeps your aim straight on, so a Swing reaches the
+  pond and a Chip doesn't) and for approaches. Putt and Tap on the green. Every green on a 40 x 64
+  plot has 4 rows of **run-out** behind the cup, so a Drive at the cup rolls on past instead of
+  banking back in off the wall. Every course of 7 holes or more is dealt one Swing layup, one Chip
+  layup and one guarded par 3, each checked on the real ball physics along the line a first-timer
+  actually aims, and the planner draws holes again until a first-timer chooses Putt, Chip and Swing at
+  least 4% of the time each (the summary's `clubs:` line says "met", or "MISSED" if it never could; a
+  course is never held back for it). On 300 test courses the typical course is Tap 23%, Putt 11%, Chip 12%,
+  Swing 21%, Drive 33%, and a first-timer with only Tap, Putt and Drive in the bag takes about 4
+  strokes more.
+- **Honest par.** Par is what a first-time player usually takes. A model first-timer plays every hole
+  64 times on the real ball physics (it aims at the furthest point of the lane it can see, picks the
+  club that ends nearest the cup, takes the wrong club one time in four, and aims a few degrees off),
+  and par is its average, rounded, which must be the hole's class par. The course is then balanced so
+  its total is within one stroke of the summed averages: a hole moves at most one stroke from its
+  class par, and never outside 2-6. On 300 test courses the first-timer averages about half a stroke
+  over par. The sloppy kid player still always finishes within par + 2, never wet, always on the lane.
+- **Tee signs:** Adventure Golf's (below), plus "Lay up short / of the water" (every layup and the
+  guarded par 3), "Dogleg / left" or "Dogleg / right" (the way it turns as you face it from the tee)
+  and "Three legs / use every club".
+- **The same block rules as Adventure Golf:** sand slows the ball, ponds and the creek are in play
+  only on Medium and Hard holes, trees, walls where a ball could reach, the wobble rule, and a ball at
+  rest over water has fallen in (see [Adventure Golf](#adventure-golf)).
+- **The plots** are 40 x 64, 4 apart in a row and 16 between rows, three to a row: 9 holes need a
+  128 x 224 half, so Golf of the Week's and Classic Golf's halves are 128 x 16 x 224, at x 8768 (see
+  "Where they are").
+- **Tiny Golf stays as it was:** 3 short holes on its 20 x 40 plots in its own small area (64 x 16 x
+  48, where it was), par 2-3, and never water in play, whatever its mix. Its holes come from the same
+  designs, at their shortest (S and M, at most 22 blocks of path), with its one-row greens, and its
+  par is what a young child usually takes: the kid player always finishes within par + 1.
+- **Older layouts keep their rules and their size.** An Adventure Golf course (algo 3), live,
+  archived, recalled into Classic Golf (it stands in a corner of the bigger half) or kept, keeps its
+  own 20 x 40 plots, its par and the 2:00 hole clock. A `seed:` remake builds a Golf v4 course. A kept
+  Golf v4 course fits a keep plot and keeps its longer hole clock.
+- **Golf together:** the hole clock grows with par on a Golf v4 course: 2:00 for par 2 and 3, 2:30
+  for par 4, 3:00 for par 5 (see "Golf together" in [Mini golf](#mini-golf)).
+- **Planning** runs on the planner thread: about 2 seconds a course (3 at most in testing), some
+  30,000 simulated putts and about 5,600 blocks. `/hcm games gen plan fresh_golf` shows:
+  - "Golf of the Week: 9 holes, par 31, ... putts simulated (golf v4: par from the first-timer, 30.62
+    over the course; every hole its class's par; kid within par + 2)";
+  - one line per hole: its class and recipe, its legs, the first-timer's mean, E (the fewest putts
+    found), par, K (the kid's worst) and the try, then its features; a hole the balance moved says
+    "(its class's 4, a stroke up to balance the course)";
+  - "quota: water 2/2, sand 2/2, height 3/3, trees 1/1, big drop 1/1, layup 1/1, chip layup 1/1,
+    guarded par 3 1/1, three legs 1/1, two legs 3/3 (deal ...)";
+  - "clubs: Tap 23%, Putt 11%, Chip 12%, Swing 21%, Drive 33%; Putt, Chip, Swing 4%+ each: met".
+- **No new settings.** Lengths, recipes, par and the quota are part of the planner's version, so a pin
+  or a pick always names the same blocks.
+
+**Verify in game**
+
+1. `/hcm games gen plan fresh_golf`: 9 holes, par about 30-31, the classes S, M, L and X, a quota
+   line and a `clubs:` line ending "met".
+2. On a "Lay up short / of the water" hole, a Drive from the tee aimed across the corner splashes; a
+   Swing (a Chip on a short layup) stays dry.
+3. A "Dogleg left" or "Dogleg right" sign matches the way the hole turns.
+4. Tiny Golf: 3 holes, par 2-3, no water in play.
+5. Golf together on a par-5 hole: "Hole clock: 3:00 to finish this hole - then any ball still out is
+   picked up."
+<!-- ---- end Golf v4 ---- -->
+
 <!-- ---- Course Variety (COURSE-VARIETY-SPEC) ---- -->
 #### Adventure Golf
 
-New in 0.36 (golf planner algo 3): **Golf of the Week and Tiny Golf are Adventure Golf.** Each hole
-is still drawn from a shape with seeded lengths, widths and a mirror, and still proven before a block
-is placed, but the planner now has eleven more shapes, sand, water and trees to draw with, and a
-weekly quota that makes every course a mix of them. Hand-built golf courses don't change at all.
+New in 0.36 (golf planner algo 3): **Golf of the Week and Tiny Golf were Adventure Golf.** Since 0.37
+new courses are [Golf v4](#golf-v4) (above), which keeps Adventure Golf's sand, water, trees, wobble
+rule and tee signs; what follows is how an Adventure Golf layout (still in the archive, recalled or
+kept) was made and plays. Each hole is drawn from a shape with seeded lengths, widths and a mirror,
+and proven before a block is placed: the planner has eleven more shapes than before, sand, water and
+trees to draw with, and a weekly quota that makes every course a mix of them. Hand-built golf courses
+don't change at all.
 
 | Shape | Tiers | What it is |
 |---|---|---|
@@ -1527,142 +1641,158 @@ still dealt, and the flat safe straight is still the fallback a hole always has.
 
 #### Ice Boat: the Mountain Run
 
-New in 0.36 (boat planner algo 3): **Ice Boat is a downhill race**, not a flat loop. Each set's track
-is a sprint from the top of a mountain to the bottom: it starts high on the rim of its area and
-spirals in round the viewing stand as a rounded square, stepping down at **4 to 6 drops** to the gold
-finish line at the foot of the stand, so everyone who has finished watches the rest come in. A
-**Hop** drops 1 block; on Medium and Hard some drops are a **Big Drop** of 2. Every drop lands on a
-long straight. In both walls, yellow blocks under a light mark each drop's edge, light blue blocks
-each checkpoint and gold blocks the finish; magenta arrows point the way; and a sign on the wall a few
-blocks before each drop, sandy bend and piece (but a boost strip) says what comes next. There is no
-water anywhere on the track, and sand is never forced: an all-ice line always runs from the top to
-the bottom.
+New in 0.37 (boat planner algo 4): **Mountain Run v2.** The 0.36 Mountain Run was a short spiral in a
+box 16 blocks tall: about 40 seconds, 7 blocks down, tight bends that all turned the same way ("a
+twisted circle"). v2 is a whole mountain. Each half is 480 x 176 x 640 (north of every other area:
+see "Where they are"); the start is on the summit and the finish at the foot, in front of a viewing
+stand. The track folds down the face from side to side in 5 to 8 long rows, joined by wide turns that
+alternate left and right, and each row mixes long straights, sweeping bends, S-curves and drops, so it
+flows instead of "go fast, turn, go fast, turn". A run is planned for **2 to 3 minutes**: a model boat
+rides it in 90-120 s on Easy and 105-135 s on Medium and Hard (its model time, T_m), and people are
+slower.
 
-| Tier | Lane | Ice | Drops | Its deck of pieces |
-|---|---|---|---|---|
-| Easy | 9 wide | packed | 4-5 Hops (at most 5 blocks down in all) | sandy bends, a sand pit, a split, sometimes an ice cave |
-| Medium (shipped) | 7 wide | packed | 5-6, at most two Big Drops (7 down at most) | sandy bends with kerbs, a sand pit, a split, an ice cave, a forest, 1-2 boost strips |
-| Hard | 5 wide | blue | 4-6, at most three Big Drops (7 down at most) | sandy bends with kerbs, 1-2 sand pits, 1-2 splits, 1-2 ice caves, a forest |
+**Two styles,** read from the week's seed:
 
-Each piece goes only where it fits (never in the first 40 blocks, on a drop's run-up or landing, or
-at the finish), so a run often has fewer than its deck: sand pits and caves need a flat stretch away
-from every drop, so they are commoner on Hard than on Easy and Medium.
-
-- **Sandy bends** ("SANDY BEND / Sand is slow, / ice is fast!"): every bend tighter than a radius of
-  24 has sand on its outside (1 column on Easy, 2 on Medium and Hard) and, on Medium and Hard, a sand
-  kerb on its inside. Go wide and you crawl; the full lane of ice is still there.
-- **The sand pit** ("SAND PIT! / Stay on the ice / to go fast!"): the lane widens round a pit of sand,
-  with an ice way past it on both sides.
-- **Pick a path** ("PICK A PATH! / Left or right?"): the lane splits round a moss island with a tree;
-  both ways are wide enough and at the same height, and on Medium and Hard one has a patch of sand.
-- **The Ice Cave** ("ICE CAVE / Lights on!"): 12-20 blocks under a light blue glass roof, with sea
-  lanterns in the walls.
-- **The forest** ("FOREST / Weave through / the trees!", Medium and Hard): tree trunks to weave
-  round, alternately near each wall under a leafy roof: 3 on Medium and 4 on Hard, or one fewer where
-  the checkpoints need the room.
-- **Boost strips** (Medium): the middle 3 columns blue ice for 10-20 blocks, never just before a drop.
-- **The drops**: "HOP! / Little drop" and "BIG DROP! / Hold on!". On some Medium runs (about one in
-  three) the last drop, the **Final Drop**, is right in front of the stand with the gold finish line
-  next: its sign says "FINAL DROP! / Then the gold / finish line!", and each racer sees a big "Final
-  drop!" title at the checkpoint before it. Everywhere else the last drop is further up the mountain,
-  with its own HOP! or BIG DROP! sign and no title.
-- **The mountain**: moss terraces between the rings, a stepped moss cone under the stand, and oak,
-  birch and cherry trees, all kept clear of the track and below the stand's floor, so the view from
-  the stand is clear.
-- **The start** ("DOWNHILL RACE! / Follow arrows / down to the / gold finish!") is in a launch pit
-  where the automatic grid seats 12 boats in rows of two.
-- **Checkpoints** are at most about 60 blocks apart, with one between every two drops. Back to
-  checkpoint, getting out of the boat (a sneak on Bedrock) or a fall puts you back at the last one, at
-  most about 60 blocks up the track, facing down it.
-- **The tile** shows the drops: "Ice Boat - 5 drops · ★★☆" on the Fresh Courses screen and the
-  Courses tab. A kept Mountain Run is an ordinary boat course, and its tile doesn't count drops.
-- **Race Night** races it as **"3 downhill races"** (one run each, no laps): the heads-up and
-  join-now chat lines add "This week: 5 drops down the mountain!" (`games.race_night.hype`, shipped
-  `true`), the warm-up is "Warm-up runs", the grid title says "Ice Boat · you start 3rd" with no lap,
-  and finishers wait on the stand. See [Race Night](#race-night).
-- **Still proven.** Before a block is placed, every Mountain Run is proven from its blocks alone,
-  without simulating anyone's driving: downhill only (a boat can't climb), walls 2 blocks above
-  anything a boat can reach and round the whole of every drop's flight zone (how far a boat at top
-  speed could fly before it lands), at most one drop between two checkpoints, checkpoints nobody can
-  skip, four blocks of headroom, 12 grid spots, and the stand out of reach. A plan gets 20 tries
-  (the last ten with fewer pieces); if none is proven, a plain safe spiral with the tier's fewest
-  drops is built, so the course is never missing. `/hcm games gen plan fresh_boat` shows the run:
-  "Ice Boat v3 medium: Mountain Run, ... blocks, clockwise from north, try 3/20", its drops, Final
-  Drop and pieces, then the grid, checkpoints and blocks, and its reference time (the centreline at
-  30 blocks a second).
-- **An older flat loop** still up when the plugin is updated keeps its stored layout until its set
-  ends (it races as 2 laps); every new set is a Mountain Run.
-
-**Before switching it on (the owner's checklist).** Ice Boat ships switched off on purpose: the
-Mountain Run's proof rests on how far a boat really flies off a drop on Java and on Bedrock, which is
-checked by hand first.
-
-*Gate 0, the boat test strip* (about 30 minutes, no plugin commands). In a test area, build a
-straight of packed ice and one of blue ice, each with a 1-block and a 2-block drop; walls of wood with
-glass on top, 2 above the ice; a smooth sandstone patch; a 4-wide gap between log posts; and a 4-high
-glass-roofed tunnel. Then, on a Java client and on a Bedrock one:
-
-| # | Do this | It passes if |
+| | The Winding Road (for racing) | The Slalom (for solo runs) |
 |---|---|---|
-| TS1 | Drive into a 1-block step and into the 2-high wall, at full speed and at an angle | You never climb onto either |
-| TS2 | Take each drop at full speed and mark the landing | Every landing is within 40 blocks (1-block drop) or 51 (2-block drop) of the edge |
-| TS3 | 2-block landings, 10 times | The boat never breaks, the rider never gets out, no damage, nothing dropped |
-| TS4 | Watch the console at the drops on Bedrock | No "moved too quickly" or "moved wrongly" lines |
-| TS5 | Drive onto sand, and out of sand while facing a wall | It crawls; you can always turn and paddle out |
-| TS6 | Blue ice at top speed | Under 75 blocks a second (a clean run is never voided) |
-| TS7 | Two or three boats over a drop together | Stacked boats stay inside the walls |
-| TS8 | Push against a wall and turn | You can always turn away |
+| The track | A road 9 wide on Easy, 7 on Medium and Hard | A corridor 15, 13 or 11 wide |
+| What is on it | Long straights, sweepers, S-curves, wide hairpins; chicanes on Medium and Hard; sand run-offs and sand pits, pick-a-path splits round a tree island, an ice cave on Easy (sometimes on Medium), tunnels through the rock on Hard (sometimes on Medium), a forest on Medium and Hard; boost strips of blue ice on Medium, whole blue-ice straights on Hard | Sets of red and blue gate fences down the slope ("SLALOM / 8 gates / Go through / the gaps!"): ride through the gaps, back and forth; open runs with drops between the sets |
+| Race Night | Always races it | Never: a night refuses it |
 
-*Then a preview, while it is still off:*
+- **Drops** are 1 block (HOP!) or 2 (BIG DROP!), never more. A run has many: a Medium road about 22-30,
+  some 35-50 blocks down in all; Easy has fewer and at most 4 Big Drops; the Slalom about half as many
+  as the road. THE CLIFFS! marks 2 or 3 drops down one straight. Every run ends with the **Final
+  Drop** just before the finish (its sign: "FINAL DROP! / Then the gold / finish line!"). Every drop
+  lands on a straight. Packed ice only on Easy.
+- **The style** (`games.fresh.slots.fresh_boat.style`, shipped `random`): each week's own, about half
+  and half, but **the Winding Road every week while Race Night is on** (the owner: racing is the
+  Winding Road, the Slalom is for solo runs). `road` or `slalom` makes every week that one. The style
+  is a function of the seed alone, so the engine picks the week's seed to be the style it wants; a pin,
+  an admin's pick or a typed seed is used as given. A week already built keeps its style: switching
+  Race Night on (or changing `style`) counts from the next build, and the status, `/hcm games status`
+  and `/hcm games check` say how to make a new one now. `/hcm games gen status fresh_boat` gives the
+  rule: "style random: each week's own (Winding Road or Slalom); this set's is the Winding Road" (with
+  Race Night on: "... the Winding Road every week while Race Night is on").
+- **The start** is a pit on the summit, its sign "WINDING ROAD / Medium run / It's a long / way down!"
+  or "SLALOM! / Medium run / Weave through / the gates!". The automatic grid seats 12 boats in rows of
+  two.
+- **Signs** stand on the wall 10 blocks before what they announce: HOP!, BIG DROP!, THE CLIFFS!, FINAL
+  DROP!, HAIRPIN "Ease off!", CHICANE "Left, right!", SAND PIT! "Stay on the ice to go fast!", PICK A
+  PATH! "Left or right?", ICE CAVE and TUNNEL "Lights on!", FOREST "Weave through the trees!", the
+  Slalom's gate sets, and HALFWAY! "Keep going!" by the checkpoint half way down. Arrows in the walls
+  point the way every 40 blocks. The walls are stripped spruce with glass on top, 2 above the ice (and
+  above every drop's flight zone).
+- **Checkpoints** are about 45 and never more than about 60 blocks apart (a run has about 50-75; up to
+  128 are allowed), with at most one drop between two. A reset puts you at the last one, on flat ice,
+  facing down the track. **Most checkpoints are quiet:** the action bar shows
+  "Checkpoint 37/74 · 1:12.4" with a soft ping, and the big title shows only at every 10th, at
+  "Halfway!" (the same checkpoint for every racer, wherever they started on the grid) and at "Final
+  drop!" before the Final Drop.
+- **Falling off the track** goes back to the last checkpoint: a boat more than 4 blocks under the lower
+  of its leg's two checkpoints is off the track (never looser than the course's own fall height). So
+  do Back to checkpoint and getting out of the boat (sneak on Bedrock), as on every boat course.
+- **The viewing stand** is a 7 x 7 white platform with a glass rail at the bottom, beside the finish
+  (the half's middle, 40 blocks in from its south edge, 5 above the finish ice), with a clear line of
+  sight to the finish line and no ice within 12 blocks. Finishers (party races and Race Night) park
+  there facing north, up the mountain, and Watch live starts 6 above it looking north. How much of
+  the mountain shows from it depends on the server's view distance: the finish and the lower slopes,
+  and more the higher it is, but never the summit, 34 to 36 chunks away (Java's largest view distance
+  is 32).
+- **The mountain**: a stone and snow summit 30-40 blocks above the start, a cliff rim behind it,
+  ridges along the sides, snow on the top quarter, stone on the steep faces, moss elsewhere, spruce
+  higher up and oak and birch lower down, all kept clear of the track; moss in the valley round the
+  stand. Scenery only: nothing on it is in play, and no water anywhere.
+- **Stars** come from the model time: the reference is 0.8 of T_m, and the tier's factors (`fresh.stars`)
+  multiply it, so on Medium gold needs about 0.83 of the model boat's pace (a 2-minute model run: gold
+  about 2:24, silver about 3:31), and silver about 0.57.
+- **The tile** says the style and the drops: "Ice Boat - Winding Road · 27 drops · ★★☆".
+- **A test run** (`/hcm games gen test fresh_boat`) ends "Test run - nothing was recorded. It would have
+  counted. Top leg speed 38 b/s.": the fastest leg between two checkpoints (a leg a server stall
+  touched is skipped). It is about 40 or less on packed ice; a leg with blue ice (a boost strip, a Hard
+  blue straight) can reach about 73.
+- **Races.** A party race there waits max(120 s, ⌈1.25 T_m⌉) after the first finisher (150 s on a
+  2-minute run), and a party race started on the Slalom gets a heads-up: "Heads up: Ice Boat is the
+  Slalom this week. The gates are narrow and boats bump, so give each other room!". Race Night's
+  windows grow with the track (see [Race Night](#race-night)).
+- **Still proven.** Before a block is placed, every run is proven from its blocks alone
+  (`MountainValidator`): downhill only (a boat can't climb), drops of at most 2, walls 2 above anything
+  a boat can reach and round every drop's flight zone, at most one drop and at most about 60 blocks
+  between two checkpoints, checkpoints nobody can skip, resets facing down the track, a real descent
+  (a floor and a cap per style and tier), 12 grid spots, the stand's clearance and sight line, the
+  Final Drop in the finish's own leg, at most 128 checkpoints and 400,000 blocks. The planner scores
+  cheap candidates on the line model and a **flow score** (turns both ways, no beat repeated over and
+  over, speed carried through the bends, few hard brakes), builds and proves the best few, and if none
+  is proven falls back to a fixed proven layout for the style and tier, so the course is never missing.
+- **Size.** Up to about 340,000 blocks a run. Planning takes 1-8 seconds on the planner thread
+  (a Hard road up to about 15), and every plan-sized step (the proof, the archive copy, the build index)
+  stays off the main thread. The first build in the new area checks the area first (2 x 1,200 empty
+  chunks), so it takes a few minutes; later builds pause above `budget.pause_above_mspt` like any
+  other.
+- `/hcm games gen plan fresh_boat` shows 5 lines (your numbers differ): "Ice Boat v4 medium: Winding
+  Road, 3,412 blocks, 6 bands (2 hairpins, 3 elbows, 0 bulbs), candidate 3 (6 kept), build 1" (the
+  length is the track's, or "the safe road after ..." when the fixed layout was used); "flow 0.81
+  (carry ..., balance ..., period ..., variety ..., brakes .../km) - model T_m 120.6 s"; "drops 26 (9
+  big, 44 down), Final Drop 2 (31 before the finish) - staircases 2 - pits 2, splits 1, ..." (on the
+  Slalom "gate sets 3 (21 gates)") and trees; "grid 12 (double) - checkpoints 72 - stand at the bottom
+  - 318,604 blocks"; and "reference 96.48 s for the stars (0.8 of T_m 120.6 s), shortest ... s - seed
+  ...".
+- **Keep and the archive.** A Mountain Run v2 can't be kept ("Mountain Run v2 courses are too big to
+  keep; they stay in the archive"); there is no Classic boat slot to recall it into. Its archive row is
+  about 0.2-0.4 MB (stored compact), and `history <code>` answers a moment later, because the row is read
+  off the main thread.
+- **0.36's spiral** (algo 3) keeps its own rules and size wherever it is still stored (the archive, a
+  kept course): 64 checkpoints at most, the old proof, the "5 drops" tile. A preview of one left in the
+  old area is emptied with that area (see "When an update moves or grows an area").
 
-1. `/hcm games gen status fresh_boat` shows it off.
-2. `/hcm games gen tier fresh_boat easy`, then `/hcm games gen preview fresh_boat`: "A preview of Ice
-   Boat (seed ...) is on its way into half A. Ice Boat stays off: ...", then "The preview of Ice Boat
-   is ready in half A (seed ...)". Watch the tick time while it builds. If the area has blocks in it
-   ("Ice Boat: Region has N blocks that aren't Fresh Courses' ... - /hcm games gen claim fresh_boat
-   confirm clears them"), run that claim and preview again.
-3. `/hcm games gen test fresh_boat` on Java, then again as a Bedrock admin; `/hcm games gen tp
-   fresh_boat idle` to walk it. Do the checks marked *preview* below.
-4. The same with `medium` and `hard` (for more seeds, `preview fresh_boat <seed>` or `preview
-   fresh_boat next`).
-5. On one day, so the set doesn't change: set the tier you want live. For this set's own course,
-   `/hcm games gen plan fresh_boat` names its seed: `preview fresh_boat <that seed>`, wait for
+**Before switching it on (the owner's checklist).** Ice Boat ships off. The drops are still at most 2
+blocks with the same flight numbers, so the 0.36 boat test strip (Gate 0) isn't needed again: preview
+and ride it instead.
+
+1. `/hcm games gen status fresh_boat` shows it off, with its style rule.
+2. `/hcm games gen preview fresh_boat style:road`: "A preview of Ice Boat (seed ...) is on its way into
+   half A. It is the Winding Road. Ice Boat stays off: ...". The first preview in the new area checks
+   and claims it first; a few minutes later "The preview of Ice Boat is ready in half A (seed ...)".
+3. `/hcm games gen test fresh_boat` on Java, then again as a Bedrock admin, and `/hcm games gen tp
+   fresh_boat idle` to walk it. Do the *preview* checks below.
+4. The same with `style:slalom` (a new preview replaces the last).
+5. With Race Night planned, switch it on first (`games.race_night.enabled: true`, `/hcm reload`), so
+   `plan` and `on` pick the Winding Road.
+6. On one day, so the set doesn't change: set the tier you want live. For this set's own course,
+   `/hcm games gen plan fresh_boat` names its seed and style: `preview fresh_boat <that seed>`, wait for
    "ready", `test`. For another seed you liked: preview it, `test`, then `/hcm games gen pin fresh_boat
    <seed> 1`.
-6. With Race Night planned, switch it on first (`games.race_night.enabled: true`, `/hcm reload`), so
-   `plan` and `on` pick the Winding Road. At a quiet hour, `/hcm games gen on fresh_boat`: "Ice Boat
-   is on. Its course for <set> is built next, in half A over the preview there, and opens once it's
-   built." (`on` before "ready" drops the preview; the set's course still opens, untested.)
-7. `/hcm games gen tp fresh_boat live` and ride it, then the checks marked *live*. If anything is
-   wrong, `/hcm games gen off fresh_boat`: runs end, the course closes, its blocks stay.
-8. Later weeks: `preview fresh_boat next`, `test`, `choose fresh_boat`.
+7. At a quiet hour, `/hcm games gen on fresh_boat`: "Ice Boat is on. Its course for <set> is built next,
+   in half A over the preview there, and opens once it's built." (`on` before "ready" drops the
+   preview; the set's course still opens, untested.)
+8. Ride it live (`/hcm play fresh_boat`), then the checks marked *live*. If anything is wrong,
+   `/hcm games gen off fresh_boat`: runs end, the course closes, its blocks stay.
+9. Later weeks: `preview fresh_boat next` (with a `style:` if you like), `test`, `choose fresh_boat`.
 
 **Verify in game** (each on Java and on Bedrock)
 
-1. *Preview:* ride all three tiers top to bottom: every drop feels like a little jump, and the sand
-   pit and splits are easy to read.
-2. *Preview:* go wide on purpose at every sandy bend: slower, never stuck.
-3. *Preview:* cross checkpoints fast, and right after landings: every one counts, in order.
-4. *Preview:* on Hard, use Back to checkpoint at the sand pit, a split or the cave: you come back
-   within about 60 blocks, facing down the track. Get out (sneak on Bedrock) on a lower ring, in the
-   cave, on a sandy bend and just after a drop: back to the last checkpoint, on flat ice, facing
-   onward.
-5. *Preview:* the Ice Cave: no head bump, the camera is fine on Bedrock, and it is bright enough.
-6. *Preview:* on Easy and Hard there is no "Final drop!" title; on a Medium run with the FINAL DROP!
-   sign, the title shows at the checkpoint before it.
-7. *Live:* the automatic grid in the pit (`/hcm games event grid fresh_boat show`): the layout
-   proves 12 spots, and Race Night seats up to `race_night.max_racers` of them (8 by default);
-   boats are held until Go.
-8. *Live:* 4-8 boats over the first drop and the Final Drop: nobody leaves the track.
-9. *Live:* watch from the stand: you see every drop and the finish, and the trees stay below eye
-   level.
-10. *Live:* a warm-up: each run at the finish goes back to the top.
-11. *Live:* a 4-year-old on a tablet rides Easy: they finish, or at least enjoy the back seat (Take a
-    rider).
-12. *Live:* the tick time while a Mountain Run is built (about 15,000 blocks) stays under
-    `games.fresh.budget.pause_above_mspt`.
-13. A family Race Night of 3 to 5 races: the drops line in the heads-up, the bar with no lap, the
-    finish below the stand.
+1. *Preview:* both styles from the top to the bottom: the drops feel like hops, the bends flow, turns
+   go both ways, no boat breaks or throws you out. The test summary's top leg speed is 40 b/s or less
+   on packed ice (73 or less on a Hard blue straight).
+2. *Preview:* quiet checkpoints: the action-bar line and a soft ping; the big title at checkpoints
+   10, 20, ..., at "Halfway!" by the HALFWAY! sign, and at "Final drop!" just before the last drop.
+3. *Preview:* steer off the track at a drop or a run-off: you are back at the last checkpoint within
+   about 4 blocks of falling, facing down the track.
+4. *Preview:* the Slalom's gates are easy to read, the fences turn you and never trap you, and the
+   corners behind them are fine to drive into.
+5. *Preview:* stand on the viewing stand: the finish line is in clear view and nothing stands over
+   the platform.
+6. *Live:* the tile reads "Ice Boat - Winding Road · N drops · ★★☆" (or Slalom).
+7. *Live:* finish a party race: you park on the white stand at the bottom, facing north up the
+   mountain. Watch live from the Clubhouse starts about 6 above the stand, looking north.
+8. *Live:* 3-4 boats over THE CLIFFS together: nobody leaves the track, and any accident resets at the
+   leg's floor.
+9. *Live:* a warm-up: each run at the finish goes back to the summit.
+10. *Live:* the tick time stays even while a run is planned, built and switched to (no hitch at the
+    plan, the build's start or the flip).
+11. `/hcm games gen history <its code>`: "Plan: N blocks, hash H (it can be brought back exactly)";
+    `/hcm games gen keep <its code> x confirm`: "... too big to keep ...".
+12. `style: fast` and `/hcm reload`: one WARN, "games.fresh.slots.fresh_boat.style should be random,
+    road or slalom, not "fast" - using random". Put it back.
 <!-- ---- end Course Variety ---- -->
 
 <!-- ---- dropper (EVENTS-DROPPER-SPEC §B.1, WP-D) ---- -->
@@ -1755,8 +1885,9 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
 Every set that goes up is archived with its whole layout, its **course code** (`HARD-40`: the
 course's code word and how many sets it has had, never reused), its dates, seed and board.
 `games.fresh.archive.keep` (0 = forever) removes old ones after that many days; kept and recalled
-ones never go. A course's layout is a few KB in the database, a Mountain Run about 50 KB, so a year
-of weekly sets for every course is about 6 MB with Ice Boat on. Players see the code on every Fresh
+ones never go. A course's layout is a few KB in the database and a Mountain Run v2 about 0.2-0.4 MB
+(stored compact, in the archive's version 2 format; older rows still read), so a year of weekly sets
+for every course is about 25 MB with Ice Boat on. Players see the code on every Fresh
 course's tile, on its screen and in the finish line, so they can ask for a favourite back.
 
 | Command | What |
@@ -1772,7 +1903,9 @@ course's tile, on its screen and in the finish line, so they can ask for a favou
 
 - A course up now can't be recalled (by `current`, its code, its number or its date): recall an older one.
 - A set is kept once: a second keep of it is refused and names the course it was kept as (clear
-  that plot to keep it again). `keep <course> last` without an id is refused ("Give the new course
+  that plot to keep it again). A course whose half doesn't fit a plot (144 x 176 x 336) can't be kept:
+  a Mountain Run v2 says "Mountain Run v2 courses are too big to keep; they stay in the archive". Golf
+  v4 (128 x 16 x 224) fits. `keep <course> last` without an id is refused ("Give the new course
   an id too").
 - The keep area is hand-built territory that nothing guards, so every keep checks its plot is empty
   first, however often it was cleared before; blocks there refuse it, and `claim plot <n> confirm`
@@ -2001,7 +2134,8 @@ every race and round works exactly as before**.
   paid, and is on no racer list.
 - **Watch live.** **Watch live** in the Clubhouse kit (while a race or golf group is going), or
   `/hcm play watch [<player>]`, takes you to the course being raced, in **spectator mode**: fly round
-  it, look into the Dropper's shafts, follow a racer by clicking them. You can't leave the course's
+  it, look into the Dropper's shafts, follow a racer by clicking them. On a Mountain Run v2 you start 6
+  above the viewing stand at the bottom, looking north up the mountain. You can't leave the course's
   area (a move out of it just stops at the edge, and the area never reaches below the world's floor)
   and can only follow players in that race or group. Other players
   don't see you at all; watchers see each other. The action bar shows the race's positions
@@ -2017,7 +2151,7 @@ every race and round works exactly as before**.
   of a boat course, and on the Race Night screen once joined, or `/hcm play rider <player>`. It's an
   invite (key `rider`: [Accept] on Java, `/hcm play accept` on Bedrock; `/hcm play invites off` covers
   it). The rider hops in behind the driver at every start, grid and re-grid, holds the item "Riding
-  with Dad - hold on tight!", can't get out mid-run, and is never timed, counted, paid or on a board.
+  with <driver> - hold on tight!", can't get out mid-run, and is never timed, counted, paid or on a board.
   Their **Leave game** ends only their ride; when the driver finishes, stops, leaves or disconnects,
   the rider goes with them (to the Clubhouse after a party race or Race Night, home after a solo run),
   their things back. A ride that waits in the Clubhouse goes on at the driver's next race from there
@@ -2225,8 +2359,11 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
 
 - **Turning it on.** Race Night needs Time Trials and a boat track. The default track is Fresh
   Courses' **Ice Boat** (`games.fresh.slots.fresh_boat`, which ships off): a new walled Mountain Run
-  every week, a downhill sprint with the viewing stand built in (see [Ice Boat: the Mountain
-  Run](#ice-boat-the-mountain-run), and its checklist before switching it on). Switch Race Night on
+  every week, with the viewing stand built in at the bottom (see [Ice Boat: the Mountain
+  Run](#ice-boat-the-mountain-run), and its checklist before switching it on). Race Night races only
+  the **Winding Road**: a Slalom week holds no night (`start` refuses it, a scheduled night is skipped
+  with the reason, and under `course: auto` the Race Night screen, `/hcm games status` and the
+  website never name a Slalom as the next track). Switch Race Night on
   first (`games.race_night.enabled: true` and `/hcm reload`), then Ice Boat (`/hcm games gen on
   fresh_boat`), so the week Ice Boat builds is the Winding Road (with `style: random`, every week is
   while Race Night is on). If Ice Boat is already on and this week's is the Slalom, the night refuses
@@ -2234,16 +2371,21 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
   status` and `/hcm games check` say so with the exact command (`/hcm games gen reroll fresh_boat
   confirm`; `unpin` first if it is pinned; under `style: slalom`, change the style first). `/hcm games
   check` says whether the schedule fits the restarts and whether the track can be raced.
-- **On the Mountain Run** a race is one run from the top to the finish below the stand, so a night is
-  "3 downhill races" (the Race Night screen, and `/hcm games status` while a night is on; `/hcm games
-  event status` says "a downhill sprint"), with no laps anywhere: not in the grid title ("Race 1 of
-  3" / "Ice Boat · you start 3rd") or the bar, and the feed's `laps` is 1. The warm-up is "Warm-up
-  runs" (on the hub sign, the Race Night screen and tile, the watchers' bar and in chat). The
-  heads-up and join-now lines end "This week: 5 drops down the mountain!" while `hype` is on, and a
-  racer sees a "Final drop!" title where the run has a FINAL DROP! sign. A sprint is short, so for
-  family nights try `races: 5` and `finish_window_seconds: 90` (shipped 3 and 60). Keep `laps: 0`: a
-  sprint can't be given laps (`event start ... laps 2` there says "Ice Boat isn't a loop, so it
-  can't have laps").
+- **On the Mountain Run** a race is one run from the summit to the finish beside the stand at the
+  bottom, so a night is "3 downhill races on the Winding Road" (the Race Night screen and tile, and
+  `/hcm games status` while a night is on; `/hcm games event status` says "a downhill sprint"), with
+  no laps anywhere: not in the grid title ("Race 1 of 3" / "Ice Boat · you start 3rd") or the bar, and
+  the feed's `laps` is 1. The warm-up is "Warm-up runs" (on the hub sign, the Race Night screen and
+  tile, the watchers' bar and in chat). The heads-up and join-now lines end "This week: the Winding
+  Road - 27 drops, 48 blocks down the mountain!" while `hype` is on, and racers see the big "Final
+  drop!" title before the Final Drop and "Halfway!" at the same checkpoint, wherever they started.
+  **The windows grow with the track:** a v2 race is 2-3 minutes, so a race ends max(`finish_window_seconds`,
+  ⌈1.25 × T_m⌉) after the first finisher and lasts at most max(`max_race_minutes`, 3 × T_m rounded up to whole minutes),
+  never over 15 minutes (on a 2-minute run, 150 s and 6 minutes), so a young racer at about half the
+  leader's pace still gets down. The config is never made shorter, and a night resumed after a restart
+  takes the windows of the track it resumes on (one INFO line when they grew). The shipped 3 races make
+  a night of about 20-25 minutes. Keep `laps: 0`: a downhill run can't be given laps (`event start ...
+  laps 2` there says "Ice Boat isn't a loop, so it can't have laps").
 - **Joining.** Race Night's lines and bar never reach a player without `hcm.games.play` (a [Join]
   they couldn't use). 30 minutes before, one chat line (news on, not in a world game); 10 minutes before
   (`join_minutes`), joining opens: a chat line, a draining bossbar for everyone with news on who could
@@ -2274,7 +2416,7 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
   shows your place ("2nd of 5 · Lap 1/2" on a loop, "2nd of 5" on a one-way track like the Mountain
   Run; on a loop's last lap, in yellow, "LAST LAP! 2nd of 5"). At the
   line: "You came 2nd! 0:41.2", then onto the stand to watch. A race ends when everyone is in, 60 s
-  after the first finisher, or after 4 minutes. Points `[10, 8, 6, 5, 4, 3, 2]` by place, 2 for a
+  after the first finisher, or after 4 minutes (longer on a Mountain Run v2: above). Points `[10, 8, 6, 5, 4, 3, 2]` by place, 2 for a
   finisher beyond that list, **1 for anyone still racing at the end** ("Race over - you still get a
   point. Great racing!"), 0 for leaving or a voided run (flying, an effect, a changed game mode or
   speed). A 20 s break shows the standings; the next grid puts the **fewest points tonight in
@@ -2322,8 +2464,9 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
   a restart before its window keeps it. `/hcm reload` while racers are at the track says first that a
   reload switching Race Night or Time Trials off calls it off.
 - **The restart hold.** A scheduled night runs only if its whole window, from joining to its worst
-  case (`races × (max_race_minutes + break) + 2 min`, plus the warm-up: 18 minutes as shipped), ends 2
-  minutes before a restart's hold; otherwise it is skipped, with the reason in `event list` and
+  case (`races × (max_race_minutes + break) + 2 min`, plus the warm-up: 18 minutes as shipped, more on a
+  Mountain Run v2, whose longest race grows with it; under `auto` the longest track it could race
+  counts), ends 2 minutes before a restart's hold; otherwise it is skipped, with the reason in `event list` and
   `/hcm games check`. On a Fresh course it also keeps 15 minutes from `games.fresh.rebuild_at`.
 - **Boats bump.** Vanilla boats are solid to each other and that can't be switched off: race only on
   tracks with walls on both sides. Java and Bedrock boats can feel slightly different on ice.
@@ -2343,8 +2486,8 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
 | `race_night.join_minutes` | `10` | Joining opens this long before a scheduled start |
 | `race_night.admin_join_minutes` | `5` | ... and before one an admin starts |
 | `race_night.min_racers` / `max_racers` | `2` / `8` | Fewer at the start calls it off; the most (2-12, and the grid's spots) |
-| `race_night.finish_window_seconds` | `60` | A race ends this long after its first finisher |
-| `race_night.max_race_minutes` | `4` | ... or after this long |
+| `race_night.finish_window_seconds` | `60` | A race ends this long after its first finisher (on a Mountain Run v2 at least ⌈1.25 × its model time⌉) |
+| `race_night.max_race_minutes` | `4` | ... or after this long (on a Mountain Run v2 at least 3 times its model time, rounded up to whole minutes, at most 15) |
 | `race_night.break_seconds` | `20` | The break between races |
 | `race_night.warmup_seconds` | `180` | Free warm-up laps before the grid ("Warm-up runs" on the Mountain Run; 0 = none); "Ready" skips |
 | `race_night.points` | `[10, 8, 6, 5, 4, 3, 2]` | Points by place in each race |
@@ -2354,7 +2497,7 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
 | `race_night.prize_events_per_week` | `3` | Nights a week that pay tokens, server-wide (0-7) |
 | `race_night.season` | `month` | `month` (a monthly season board) or `off` |
 | `race_night.stand_radius` | `4` | How far a racer may wander from the stand (race mode puts them back) |
-| `race_night.hype` | `true` | On the Ice Boat Mountain Run, the heads-up and join-now chat lines end with its drops: "This week: 5 drops down the mountain!" ("Today: ..." on a daily set). Words only: it never changes a track |
+| `race_night.hype` | `true` | On the Ice Boat Mountain Run, the heads-up and join-now chat lines end with what this week's run is: "This week: the Winding Road - 27 drops, 48 blocks down the mountain!" (0.36's spiral: "This week: 5 drops down the mountain!"; "Today: ..." on a daily set). Words only: it never changes a track |
 
 **Admin** (`/hcm games event ...`, `hcm.games.admin`):
 
@@ -2416,7 +2559,8 @@ Cabinets and games of chance need nothing more. **Courses and mini golf need a G
 6. **Check it: `/hcm games check`.** It only looks (nothing is changed, and it works with the games
    on, off or failed to start), and prints one line per check, each OK, WARN or FAIL with the fix:
    `games.enabled`; every `worlds.economy_enabled` world exists; every Games world is loaded, not
-   an economy world, and set to adventure in Multiverse (when Multiverse can't say, it tells you to
+   an economy world, and set to adventure in Multiverse (asked through Multiverse-Core 5's or 4's own
+   API, then read from Multiverse-Core 5's `worlds.yml`; when Multiverse can't say, it tells you to
    check `/mv info <world>`); Multiverse-Inventories gives the Games worlds a group of their own and
    keeps no per-game-mode profiles (read from its `groups.yml` and `config.yml`; when they can't be
    read, what to check by hand); `games.restart_times` reads, with the next restart and hold; Fresh
@@ -2794,7 +2938,7 @@ Dropper and Falling Floors have their own lists in their sections)
     called off - Race Night needs this track now." and everyone goes home with their things.
 71. Golf together: **Play with friends** on a golf course's screen, invite, Start. When the first
     ball of a hole drops: "Hole clock: 2:00 to finish this hole - then any ball still out is picked
-    up."; the others' action bar counts down and the card reads "Still playing: Ava - picked up in
+    up." (on Golf of the Week, 2:30 on a par 4 and 3:00 on a par 5); the others' action bar counts down and the card reads "Still playing: Ava - picked up in
     1:45"; at 0:00 "Time's up on this hole - your ball is picked up." (par + 3). Finish your last
     hole: your round is recorded and paid at once, even if you leave before the others. A friend
     whose trip never arrives: "Ava didn't make it to the course - the rest of you carry on."
@@ -2825,7 +2969,7 @@ Dropper and Falling Floors have their own lists in their sections)
     racers are at the track warns first. `event cancel confirm` during race 1 gives the prize night
     back (`/hcm games event status` shows x/3). `event start in 30`, then a restart: the night is
     still set.
-76. `/api/arcade`: a course running a Cup has `"cup":{"entry":5,"pool":...,"entrants":...,
+76. `/api/arcade`: a course running a Cup has `"cup":{"entry":10,"pool":...,"entrants":...,
     "endsAt":...}`; with Race Night on there is an `events` object; with Falling Floors on,
     `falling_floors` is in `games` with `"kind":"arena"`. With `arcade_show_names: false`, no
     `holder` appears anywhere.

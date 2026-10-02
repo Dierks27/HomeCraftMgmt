@@ -125,7 +125,7 @@ class HoleTemplateTest {
         if (old(l.template())) {
             out.addAll(GolfValidator.holeProblems(g, h, 1).stream().map(p -> what + " (frozen rules): " + p).toList());
         }
-        out.addAll(GolfValidator.holeProblems(g, h, 1, GolfPlanner.ALGO).stream().map(p -> what + ": " + p).toList());
+        out.addAll(GolfValidator.holeProblems(g, h, 1, GolfPlanner.ALGO_V3).stream().map(p -> what + ": " + p).toList());
         boolean onWall = plot.contains(l.signX(), l.signY(), l.signZ()) && !g.solid(l.signX(), l.signY(), l.signZ())
                 && g.solid(l.signX(), l.signY() - 1, l.signZ()) && l.bounds().contains(l.signX(), l.signY(), l.signZ());
         if (!onWall) {
@@ -134,7 +134,7 @@ class HoleTemplateTest {
         if (flagY(g, l) != l.cupTop() + 3 || l.cupTop() + 3 > l.boundsTop()) {
             out.add(what + ": the flag doesn't float three over the cup, inside the bounds");
         }
-        LaneMap lane = LaneMap.of(g, h, GolfPlanner.ALGO);
+        LaneMap lane = LaneMap.of(g, h, GolfPlanner.ALGO_V3);
         for (int x = lane.minX; x < lane.minX + lane.sizeX; x++) {
             for (int z = lane.minZ; z < lane.minZ + lane.sizeZ; z++) {
                 if (lane.isLane(x, z)) {
@@ -162,7 +162,7 @@ class HoleTemplateTest {
                 String what = t + " seed " + seed;
                 assertTrue(l.blocks().stream().noneMatch(p -> Palette.poolWater(p.blockData())),
                         what + ": no water among the blocks the ball plays (for Tiny Golf and the four-year-old)");
-                assertEquals(0, LaneMap.of(GolfKit.grid(l), GolfKit.hole(l), GolfPlanner.ALGO).hazards(),
+                assertEquals(0, LaneMap.of(GolfKit.grid(l), GolfKit.hole(l), GolfPlanner.ALGO_V3).hazards(),
                         what + ": and no pond in its bounds");
                 assertFalse(l.features().contains(Quota.Feature.WATER), what + ": it says so");
             }
@@ -280,7 +280,7 @@ class HoleTemplateTest {
                 HoleLayout l = GolfKit.draw(HoleTemplate.DOGLEG_DOWN, tier, seed);
                 PlanBlocks g = GolfKit.grid(l);
                 GolfCourse.Hole h = GolfKit.hole(l);
-                LaneMap lane = LaneMap.of(g, h, GolfPlanner.ALGO);
+                LaneMap lane = LaneMap.of(g, h, GolfPlanner.ALGO_V3);
                 BallPhysics.Hole area = GolfShot.area(g, h);
                 for (int x = lane.minX; x < lane.minX + lane.sizeX; x++) {
                     for (int z = lane.minZ; z < lane.minZ + lane.sizeZ; z++) {
@@ -322,7 +322,7 @@ class HoleTemplateTest {
                 PlanBlocks g = GolfKit.grid(l);
                 GolfCourse.Hole h = GolfKit.hole(l);
                 BallPhysics.Hole area = GolfShot.area(g, h);
-                for (double[] at : restingSpots(LaneMap.of(g, h, GolfPlanner.ALGO), h)) {
+                for (double[] at : restingSpots(LaneMap.of(g, h, GolfPlanner.ALGO_V3), h)) {
                     for (int yaw = 0; yaw < 360 && bad.isEmpty(); yaw += 15) {
                         for (int power : new int[]{1, 3, 5}) {
                             GolfShot.Result r = GolfShot.play(g, area, new BallPhysics.Ball(at[0], at[1], at[2]),
@@ -481,7 +481,7 @@ class HoleTemplateTest {
             HoleLayout l = GolfKit.draw(HoleTemplate.VOLCANO, 'H', seed);
             PlanBlocks g = GolfKit.grid(l);
             GolfCourse.Hole h = GolfKit.hole(l);
-            LaneMap lane = LaneMap.of(g, h, GolfPlanner.ALGO);
+            LaneMap lane = LaneMap.of(g, h, GolfPlanner.ALGO_V3);
             String what = l.describe();
             // every ring wall stands at least two above the turf, so a ball riding a wall's lower block at
             // the plateau's height (it can roll onto one where the approach's wall begins) meets a wall at
@@ -660,7 +660,7 @@ class HoleTemplateTest {
         assertTrue(pond.blocks().stream().filter(p -> Palette.poolWater(p.blockData())).count() >= 18,
                 "Medium's pond side: a pond 3-4 wide and 6-10 long, in play");
         HoleLayout isle = GolfKit.draw(HoleTemplate.ISLAND_POND, 'H', 3);
-        LaneMap il = LaneMap.of(GolfKit.grid(isle), GolfKit.hole(isle), GolfPlanner.ALGO);
+        LaneMap il = LaneMap.of(GolfKit.grid(isle), GolfKit.hole(isle), GolfPlanner.ALGO_V3);
         assertTrue(il.isHazard(isle.cupX() - 4, isle.cupZ()) && il.isHazard(isle.cupX() + 4, isle.cupZ())
                 && il.isHazard(isle.cupX(), isle.cupZ() + 4), "the island green has water on three sides");
         HoleLayout two = GolfKit.draw(HoleTemplate.TWO_WAY, 'M', 3);
@@ -670,7 +670,7 @@ class HoleTemplateTest {
         assertTrue(GolfKit.draw(HoleTemplate.TWO_WAY, 'H', 3).blocks().stream().anyMatch(p ->
                 p.blockData().equals(Palette.SAND)), "on Hard, sand before the pond on the short way");
         HoleLayout creek = GolfKit.draw(HoleTemplate.CREEK, 'M', 3);
-        LaneMap cl = LaneMap.of(GolfKit.grid(creek), GolfKit.hole(creek), GolfPlanner.ALGO);
+        LaneMap cl = LaneMap.of(GolfKit.grid(creek), GolfKit.hole(creek), GolfPlanner.ALGO_V3);
         int across = 0;
         for (int z = cl.minZ; z < cl.minZ + cl.sizeZ; z++) {
             int wet = 0;

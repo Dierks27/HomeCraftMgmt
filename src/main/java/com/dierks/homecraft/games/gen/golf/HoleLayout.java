@@ -22,7 +22,8 @@ import java.util.Set;
  * play: Easy's decorative pond beyond the side wall, kept two columns clear of the bounds, so it is
  * outside that grid and can never change a proof.
  *
- * @param template   the template that drew it
+ * @param template   the template that drew it; {@code null} for a Golf v4 hole (a {@link HoleRecipe}'s
+ *                   routing and pieces, which {@link #describe} names)
  * @param mirrored   whether it was mirrored in X
  * @param turfY      T: the turf's top; the ball stands on T on a level-0 lane
  * @param teeX       the tee block's column

@@ -77,7 +77,11 @@ class GolfGroupsTest {
         long day = 1;
 
         Bench(int holes) {
-            course = course(holes);
+            this(course(holes));
+        }
+
+        Bench(GolfCourse course) {
+            this.course = course;
         }
 
         /** GolfTogether's Start: these players, in join order. */
@@ -474,6 +478,25 @@ class GolfGroupsTest {
         assertEquals(1, g.hole(), "everyone moves on");
         assertEquals(-1, g.clock(), "with no clock on the new hole");
         assertEquals(0, b.records(AVA), "hole 1 of 2: nothing recorded yet");
+    }
+
+    @Test
+    void aGolfV4CoursesGroupGetsEachHolesOwnClock() {
+        // GOLF-V4-SPEC §6.4: a par-5 hole of a v4 layout gives max(120, 30 x 6) = 180 seconds
+        GolfCourse plain = course(2);
+        List<GolfCourse.Hole> holes = new ArrayList<>();
+        for (GolfCourse.Hole h : plain.holes()) {
+            holes.add(new GolfCourse.Hole(h.tee(), h.cup(), 5, h.corner1(), h.corner2()));
+        }
+        com.dierks.homecraft.games.gen.api.GenTag tag = new com.dierks.homecraft.games.gen.api.GenTag("fresh_golf",
+                com.dierks.homecraft.games.gen.api.Slots.GOLF, 4, 20725, 0, 1, 'A', "", 0, 0, 0, List.of(), List.of(), 0);
+        Bench b = new Bench(new GolfCourse("fresh_golf", "Golf of the Week", "games", true, 1, holes, tag));
+        assertTrue(b.start(SAM, AVA), "the group starts");
+        b.arrive(SAM);
+        b.arrive(AVA);
+        b.holeIn(SAM, 4);
+        assertEquals(180, b.group().clock(), "the first ball in starts the v4 hole's own clock");
+        assertTrue(b.heard(AVA).contains(GolfGroups.clockLine(180)), "Ava hears it: " + b.heard(AVA));
     }
 
     @Test

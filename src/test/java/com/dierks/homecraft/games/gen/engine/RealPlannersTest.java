@@ -1,12 +1,14 @@
 package com.dierks.homecraft.games.gen.engine;
 
 import com.dierks.homecraft.games.GeneratedCourses;
+import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.boat.BoatPlanner;
 import com.dierks.homecraft.games.gen.engine.GenKit.Host;
 import com.dierks.homecraft.games.gen.golf.GolfPlanner;
+import com.dierks.homecraft.games.gen.golf.PlotGrid;
 import com.dierks.homecraft.games.gen.parkour.ParkourPlanner;
 import com.dierks.homecraft.games.gen.rings.RingsPlanner;
 import com.dierks.homecraft.games.golf.GolfCourse;
@@ -67,9 +69,21 @@ class RealPlannersTest {
         host.connection.close();
     }
 
+    /**
+     * The golf planner the shipped Golf of the Week half holds: Golf v4 once its 128 x 224 area is
+     * the shipped one (GOLF-V4-SPEC §4.1, the area package), until then the frozen Adventure Golf
+     * planner ({@link GolfPlanner#v3()}), so the engine's end-to-end golf path is proven at the
+     * shipped size either way. Tiny Golf plans Golf v4 in its unchanged half.
+     */
+    static Planner golf() {
+        int[] need = PlotGrid.V4.needs(Slots.DAILY_GOLF.tierOrMix().length());
+        Box half = Slots.DAILY_GOLF.half('A');
+        return half.sizeX() >= need[0] && half.sizeZ() >= need[1] ? new GolfPlanner() : GolfPlanner.v3();
+    }
+
     static Map<String, Planner> planners() {
         Map<String, Planner> out = new LinkedHashMap<>();
-        for (Planner p : List.<Planner>of(new ParkourPlanner(), new RingsPlanner(), new GolfPlanner(),
+        for (Planner p : List.<Planner>of(new ParkourPlanner(), new RingsPlanner(), golf(),
                 new BoatPlanner())) {
             out.put(p.id(), p);
         }

@@ -25,8 +25,16 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * The planner for Daily Golf and Tiny Golf (GEN-SPEC §4.3): a course of proven holes from a seed,
- * as pure data.
+ * The planner for Golf of the Week, Tiny Golf and Classic Golf (GEN-SPEC §4.3): a course of proven
+ * holes from a seed, as pure data.
+ *
+ * <p><b>Two versions.</b> The engine's planner ({@code new GolfPlanner()}) is Golf v4, version
+ * {@value #ALGO} ({@link GolfPlannerV4}, GOLF-V4-SPEC): real hole lengths in four classes, honest par
+ * from the ordinary player, every club with a job, 40 x 64 plots ({@link PlotGrid}). Adventure Golf,
+ * version {@value #ALGO_V3}, is kept frozen as {@link #v3()} — what made every algo-3 layout, for their
+ * goldens and fixtures; a live or archived algo-3 layout keeps its rules, its plots and its size
+ * (the engine checks its structure instead of re-deriving it). The rest of this comment describes
+ * Adventure Golf's planner.
  *
  * <p><b>Plots.</b> A golf half is a grid of plots, each {@value HoleTemplate#PLOT_X} x
  * {@value HoleTemplate#PLOT_Z}, {@value #GAP_X} blocks apart in X and {@value #GAP_Z} in Z, three to
@@ -80,8 +88,13 @@ public final class GolfPlanner implements Planner {
      * 3: Adventure Golf (Course Variety §3): eleven new templates (sand, ponds, a creek, trees in
      * play, hills, terraces, a volcano), the variety quota's deal, the safe par on pond holes, the
      * rest-spot rule, and scenery on every plot. Layouts of version 2 are judged by the frozen rules.
+     * 4: Golf v4 (GOLF-V4-SPEC): real hole lengths (par 2-5), honest par from the ordinary player, every
+     * club with a job, 40 x 64 plots ({@link GolfPlannerV4}). Layouts of version 3 keep their rules,
+     * their plots and their size; {@link #v3()} still plans them, for their goldens and fixtures.
      */
-    public static final int ALGO = 3;
+    public static final int ALGO = 4;
+    /** Adventure Golf's version, the frozen planner {@link #v3()} plans with (its goldens, its fixtures). */
+    public static final int ALGO_V3 = 3;
     /** Most simulated putts for one attempt at one hole. */
     public static final long ATTEMPT_BUDGET = 100_000L;
     /** Most simulated putts for a course when the input doesn't say. */
@@ -104,6 +117,26 @@ public final class GolfPlanner implements Planner {
     /** T, the turf's top, above the half's floor. */
     public static final int TURF_ABOVE_FLOOR = 4;
 
+    /** Which version this planner plans: {@link #ALGO}, or {@link #ALGO_V3} for {@link #v3()}. */
+    private final int algo;
+
+    /** The golf planner: Golf v4 ({@link #ALGO}). */
+    public GolfPlanner() {
+        this(ALGO);
+    }
+
+    private GolfPlanner(int algo) {
+        this.algo = algo;
+    }
+
+    /**
+     * Adventure Golf's planner, version {@value #ALGO_V3}, frozen: what made every algo-3 layout, for
+     * their goldens, their fixtures and the tests that need one. The engine never registers it.
+     */
+    public static GolfPlanner v3() {
+        return new GolfPlanner(ALGO_V3);
+    }
+
     @Override
     public String id() {
         return Slots.GOLF;
@@ -111,13 +144,13 @@ public final class GolfPlanner implements Planner {
 
     @Override
     public int algo() {
-        return ALGO;
+        return algo;
     }
 
     @Override
     public Plan plan(PlanInput in) throws GenFailed {
         try {
-            return planChecked(in);
+            return algo == ALGO ? GolfPlannerV4.plan(in) : planChecked(in);
         } catch (GenFailed e) {
             throw e;
         } catch (RuntimeException e) {
@@ -128,6 +161,9 @@ public final class GolfPlanner implements Planner {
     @Override
     public Plan rederive(PlanInput in, GenTag tag) throws GenFailed {
         try {
+            if (tag != null && Slots.GOLF.equals(tag.generator()) && tag.algo() == algo && algo == ALGO) {
+                return GolfPlannerV4.rederive(in, tag);
+            }
             return rederiveChecked(in, tag);
         } catch (GenFailed e) {
             throw e;
@@ -216,10 +252,10 @@ public final class GolfPlanner implements Planner {
     static Solved solve(HoleLayout layout, char tier, int attempt, Work work) throws GenFailed {
         PlanBlocks grid = layout.grid(plotBox(layout));
         GolfCourse.Hole hole = layout.hole(GolfCourse.MIN_PAR);
-        if (!GolfValidator.holeProblems(grid, hole, 1, ALGO).isEmpty()) {
+        if (!GolfValidator.holeProblems(grid, hole, 1, ALGO_V3).isEmpty()) {
             return null;
         }
-        LaneMap lane = LaneMap.of(grid, hole, ALGO);
+        LaneMap lane = LaneMap.of(grid, hole, ALGO_V3);
         int[] range = expertRange(tier);
         ExpertSearch.Result es = SafeExpert.search(grid, hole, lane, range[1], work);
         if (!es.found() || es.strokes() < range[0] || !restsOnLane(grid, hole, lane, es.witness())) {
@@ -287,9 +323,9 @@ public final class GolfPlanner implements Planner {
         if (!Slots.GOLF.equals(tag.generator())) {
             throw new GenFailed("the stored layout wasn't made by the golf planner");
         }
-        if (tag.algo() != ALGO) {
+        if (tag.algo() != algo) {
             throw new GenFailed("the stored layout was made by golf planner version " + tag.algo() + ", this is "
-                    + ALGO);
+                    + algo);
         }
         String mix = mix(in);
         if (tag.attempts().size() != mix.length() || tag.witness().size() != mix.length()) {
@@ -347,12 +383,13 @@ public final class GolfPlanner implements Planner {
         return mix;
     }
 
-    /** Where hole {@code i}'s plot starts in {@code half}: {x, z}. */
+    /**
+     * Where hole {@code i}'s plot starts in {@code half}, {x, z}, on Adventure Golf's 20 x 40 grid
+     * ({@link PlotGrid#V3}: every layout of version 3 or older, and Tiny Golf's at every version). A
+     * Golf v4 layout's plots come from {@link PlotGrid#of(String, int)}.
+     */
     public static int[] plot(Box half, int i) {
-        int row = i / COLUMNS;
-        int col = row % 2 == 0 ? i % COLUMNS : COLUMNS - 1 - i % COLUMNS;
-        return new int[]{half.minX() + col * (HoleTemplate.PLOT_X + GAP_X),
-                half.minZ() + row * (HoleTemplate.PLOT_Z + GAP_Z)};
+        return PlotGrid.V3.plot(half, i);
     }
 
     /**
@@ -360,7 +397,12 @@ public final class GolfPlanner implements Planner {
      * never has water in play.
      */
     static boolean dry(Slots.Def slot) {
-        return Slots.TINY_GOLF.id().equals(slot.id());
+        return dry(slot.id());
+    }
+
+    /** {@link #dry(Slots.Def)} by the slot's id. */
+    static boolean dry(String slotId) {
+        return Slots.TINY_GOLF.id().equals(slotId);
     }
 
     /** One course being planned or re-derived: its input, mix, streams and the quota's deal. */
@@ -483,7 +525,7 @@ public final class GolfPlanner implements Planner {
         }
         GolfCourse gc = new GolfCourse(slot.id(), slot.name(), "", true, 1, course);
         PlannedGolf planned = new PlannedGolf(gc, attempts, witness, expert, kid);
-        return Plan.of(slot.id(), ALGO, in.seed(), in.half(), palette, ops, signs, keepClear, planned, summary,
+        return Plan.of(slot.id(), ALGO_V3, in.seed(), in.half(), palette, ops, signs, keepClear, planned, summary,
                 work);
     }
 
@@ -492,7 +534,7 @@ public final class GolfPlanner implements Planner {
      * stripped-wood wall holds leaves), as vanilla will: each hole and tree worked its own out, and
      * nothing of one stands beside another, so this changes nothing unless something does.
      */
-    private static List<HoleLayout.Placed> leaves(List<HoleLayout.Placed> placed) {
+    static List<HoleLayout.Placed> leaves(List<HoleLayout.Placed> placed) {
         List<int[]> logs = new ArrayList<>();
         List<int[]> leaves = new ArrayList<>();
         for (HoleLayout.Placed p : placed) {

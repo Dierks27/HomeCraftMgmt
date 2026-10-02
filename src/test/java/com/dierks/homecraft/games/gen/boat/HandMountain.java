@@ -23,7 +23,8 @@ import java.util.Set;
 
 /**
  * A Mountain Run v2 made by hand for the proof's tests (MOUNTAIN-V2-SPEC §4, §7, §9): a serpentine
- * of square-cornered traverses down a 480 x 176 x 640 half, built block by block from a few
+ * of traverses down a 480 x 176 x 640 half, joined by square corners (roads) or quarter rings of
+ * {@link #radius} (slaloms, or any variant), built block by block from a few
  * numbers, with every piece {@link MountainValidator} has a rule for, so a mutation can break one
  * rule at a time.
  *
@@ -31,12 +32,12 @@ import java.util.Set;
  * {@code bandZ[0]} from the pit's lime back wall at x {@link #pitBack}; then down a link at x
  * {@value #XE}, back along -x, down at x {@value #XW}, and so on, every traverse x {@value #XW} to
  * {@value #XE}; the last link drops at x {@value #XW} into the finish band along +x at z
- * {@value #FINISH_Z}, through a stone tunnel (roads), over the Final Drop (a 1, at x
+ * {@value #FINISH_Z}, through a stone tunnel (roads, x {@value #TUNNEL} on), over the Final Drop (a 1, at x
  * {@value #FINAL_LIP}) to the finish at x 240.5 (24.5 from the stand's platform), 14 of run-out, a
  * sand paddock (x 255-260) and the end wall at x 261. The stand stands at {@link MountainValidator#standSpot},
  * the platform at x 237-243, z 597-603, the finish's ice + 5. Drops sit on the traverses in order
  * (each a checkpoint r before its edge and Z(d) + 3 past it, as §7.2 puts them), with checkpoints
- * round every square corner and at most {@link #fill} apart elsewhere. Walls are wood two above the
+ * round every corner and at most {@link #fill} apart elsewhere. Walls are wood two above the
  * ice then glass, raised round every landing, with risers under the 2-block drops, yellow caps and
  * lanterns at the lips, light-blue checkpoint and gold finish markers. Scenery: a stone and snow
  * summit by the pit, a moss valley under the stand, a spruce and an oak with vanilla's leaf
@@ -48,7 +49,8 @@ import java.util.Set;
  * pair.
  *
  * <p>Its fields are open so a test can build a variant ({@link #extra} drive areas, {@link #carve}d
- * columns, the drops, the pit), and the static helpers edit single blocks of a built plan.
+ * columns, the drops, the pit, the corners, the Final Drop); {@code HandRun}'s static helpers edit
+ * single blocks, signs and marks of a built plan.
  */
 final class HandMountain {
 
@@ -61,6 +63,8 @@ final class HandMountain {
     /** The finish band's centreline row, and its end. */
     static final int FINISH_Z = 572;
     static final int FINAL_LIP = 190;
+    /** The finish band's tunnel starts at this x and runs 20 (roads). */
+    static final int TUNNEL = 80;
     static final double FINISH_X = 240.5;
     static final int PADDOCK = 255;
     static final int END = 260;
@@ -84,6 +88,9 @@ final class HandMountain {
     int fill = 40;
     /** A stone tunnel on the finish band (roads). */
     boolean tunnel = true;
+    /** The Final Drop's last high column (x), and whether a checkpoint stands after it (then it isn't in the finish's leg). */
+    int finalLip = FINAL_LIP;
+    boolean finalAfter = false;
     /** A moss skin over every column away from the track: a real-sized plan. */
     boolean skin = false;
     /** The slalom's gate field on the summit traverse: how many fences, how far apart, how wide the openings. */
@@ -274,7 +281,7 @@ final class HandMountain {
         if (next < last) {
             throw new IllegalStateException("the hand-made mountain has room for " + next + " of " + last + " drops");
         }
-        out.get(legs.size() - 1).add(new int[]{FINAL_LIP - XW, drops.get(last)});
+        out.get(legs.size() - 1).add(new int[]{finalLip - XW, drops.get(last)});
         return out;
     }
 
@@ -534,10 +541,10 @@ final class HandMountain {
         }
     }
 
-    /** A stone tunnel on the finish band, x 70-89: stone walls to ice + 5, a stone roof 5 over the ice, rock and snow over it, lanterns. */
+    /** A stone tunnel on the finish band, x 80-99: stone walls to ice + 5, a stone roof 5 over the ice, rock and snow over it, lanterns. */
     private void tunnel() {
         int ice = BOTTOM + drops.get(drops.size() - 1);
-        for (int x = 70; x <= 89; x++) {
+        for (int x = TUNNEL; x <= TUNNEL + 19; x++) {
             for (int z = FINISH_Z - h - 1; z <= FINISH_Z + h + 1; z++) {
                 boolean wall = Math.abs(z - FINISH_Z) == h + 1;
                 if (wall) {
@@ -598,15 +605,15 @@ final class HandMountain {
                 here.add(new Anchor(j, gateFrom + (gates - 1) * gateSpacing + r + 3, "fill", false));
             }
             if (j == finalLeg && tunnel && !slalom) {
-                here.add(new Anchor(j, 70 - XW - r - 2, "tunnel", true));
-                here.add(new Anchor(j, 89 - XW + r + 2, "tunnel", false));
+                here.add(new Anchor(j, TUNNEL - XW - r - 2, "tunnel", true));
+                here.add(new Anchor(j, TUNNEL + 19 - XW + r + 2, "tunnel", false));
             }
             for (int[] l : lips) {
                 if (l[0] != j) {
                     continue;
                 }
                 here.add(new Anchor(j, l[1] - r, "before", true));
-                if (l != lips.get(lips.size() - 1)) {
+                if (l != lips.get(lips.size() - 1) || finalAfter) {
                     // the Final Drop's leg runs on to the finish
                     here.add(new Anchor(j, l[1] + BoatEnvelope.zone(l[2]) + 3, "after", false));
                 }

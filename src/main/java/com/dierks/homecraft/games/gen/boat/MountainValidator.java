@@ -31,7 +31,7 @@ import java.util.PriorityQueue;
  * sends it every plan of algo {@value #FIRST_ALGO} or later; the planner runs it on every Stage-B
  * attempt, and {@code PlanCheck.generator} again before a build and at a heal.
  *
- * <h2>CONTRACT (for the planner, package MA, and the engine and runtime, packages E1 and MD)</h2>
+ * <p><b>CONTRACT</b> (for the planner, package MA, and the engine and runtime, packages E1 and MD):
  * <ul>
  *   <li>{@code List<String> MountainValidator.problems(Plan plan, String tier)}: what is wrong with
  *       {@code plan} as a {@code tier} ({@code easy}, {@code medium}, {@code hard}) Mountain Run v2;
@@ -59,7 +59,7 @@ import java.util.PriorityQueue;
  *       {@value #SIZE_X} × {@value #SIZE_Y} × {@value #SIZE_Z} and 16-aligned.</li>
  * </ul>
  *
- * <h2>The rules (MOUNTAIN-V2-SPEC §9.1; the deltas from {@link DownhillValidator})</h2>
+ * <p><b>The rules</b> (MOUNTAIN-V2-SPEC §9.1; the deltas from {@link DownhillValidator}):
  * <ul>
  *   <li><b>V1 palette.</b> v3's blocks, plus {@code snow_block} and {@code stone} (wall and
  *       scenery), {@code spruce_log} and {@code spruce_leaves} (scenery, a log and leaves like any
@@ -70,7 +70,7 @@ import java.util.PriorityQueue;
  *       nothing stands on the half's outermost ring of columns.</li>
  *   <li><b>V5</b> P and B per style and tier ({@link Rules}); the side-pocket rule is waived within
  *       {@value #GATE_FIELD} columns of a gate fence on a SLALOM plan (the corners behind a fence are
- *       drivable pockets by design), and on a slalom it measures from a road-wide middle
+ *       drivable pockets by design), and it measures from a middle at most 5 wide
  *       ({@link Rules#pocketWidth}).</li>
  *   <li><b>V6</b> as v3, at most {@value #MAX_CHECKPOINTS} checkpoints.</li>
  *   <li><b>V7</b> as v3; stone and snow may stand over the track 5 up or more (a tunnel's roof and
@@ -186,9 +186,9 @@ public final class MountainValidator {
      * @param descentCap  the most it falls
      * @param blueIce     whether blue ice may be used (not on easy)
      * @param pocketWidth the width of the wide middle every block of track keeps within 3 of (V5c):
-     *                    P on a road; on a slalom the road's P of its tier (5, 4, 4), since a
-     *                    corridor 15 wide has no slack round its 9-wide P-7 middle on whole-block
-     *                    arcs, and its P is the gates' narrowest opening
+     *                    P, but at most 5 (so easy's slalom measures from a 5-wide middle, not its
+     *                    P of 7: a corridor 15 wide has no slack round a 9-wide middle on
+     *                    whole-block arcs, and its P is the gates' narrowest opening)
      */
     public record Rules(String tier, boolean slalom, int narrowest, int iceLine, int bigDrops, int bigShareNum,
                         int bigShareDen, int descentMin, int descentCap, boolean blueIce, int pocketWidth) {
@@ -219,7 +219,7 @@ public final class MountainValidator {
             return switch (t) {
                 case "easy" -> slalom ? new Rules(t, true, 7, 5, 2, 0, 0, 8, 16, false, 5)
                         : new Rules(t, false, 5, 5, 4, 0, 0, 16, 28, false, 5);
-                case "medium" -> slalom ? new Rules(t, true, 5, 4, 0, 2, 3, 16, 34, true, 4)
+                case "medium" -> slalom ? new Rules(t, true, 5, 4, 0, 2, 3, 16, 34, true, 5)
                         : new Rules(t, false, 4, 4, 0, 2, 3, 32, 52, true, 4);
                 case "hard" -> slalom ? new Rules(t, true, 4, 3, 0, 4, 5, 20, 40, true, 4)
                         : new Rules(t, false, 4, 3, 0, 4, 5, 44, 64, true, 4);

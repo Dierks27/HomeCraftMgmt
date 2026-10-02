@@ -470,7 +470,10 @@ public final class GamesMenu extends GameMenu {
         PluginConfig.Lotto lotto = arc.lotto();
         if (!lotto.payouts().isEmpty()) {
             double rtp = ArcadeService.rtp(lotto);
-            ItemStack icon = ArcadeIcons.of(plugin, viewer, "scratch", Material.FILLED_MAP,
+            ItemStack icon = ArcadeService.ticketClosed(lotto)
+                    ? ArcadeIcons.of(plugin, viewer, "scratch", Material.FILLED_MAP,
+                    "&aScratch Ticket &7- &6" + lotto.ticketTokens() + " tokens", "&7" + ArcadeService.TICKET_CLOSED)
+                    : ArcadeIcons.of(plugin, viewer, "scratch", Material.FILLED_MAP,
                     "&aScratch Ticket &7- &6" + lotto.ticketTokens() + " tokens",
                     "&7It " + RtpLimits.playerLine(rtp) + ",", "&7over lots of tickets.",
                     "&7Scratch three squares.", "&eClick to buy one");

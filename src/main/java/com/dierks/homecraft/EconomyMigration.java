@@ -35,9 +35,12 @@ import static com.dierks.homecraft.HomeCraftManagement.WARN;
  * <p><b>The Scratch Ticket is one unit.</b> Its return is the prizes, the price and the jackpot together
  * ({@code ArcadeService.rtp}), so its prizes move only while {@code ticket_tokens} and the jackpot's
  * {@code seed}, {@code per_ticket} and {@code cap} are each absent or still what 0.35 and 0.36 shipped
- * ({@link TokenBalance#TICKET_SHIPPED}). An owner who brought the ticket into the band through one of those
- * (the 0.36 README asked them to) keeps their prizes too, with one WARN naming the key and what the new
- * prizes would give back with it: 0.37's prizes on a 9-token ticket give back 99.4%, past the band.
+ * ({@link TokenBalance#TICKET_SHIPPED}), each read as the plugin plays it, and so long as together they leave
+ * the new prizes' return as shipped (a cap the pot never reaches changes nothing). An owner who brought the
+ * ticket into the band through one of those (the 0.36 README asked them to) keeps their prizes too, with one
+ * WARN naming the key and what the new prizes would give back with it: 0.37's prizes on a 9-token ticket give
+ * back 99.4%, past the band. Prizes the owner deleted beside such a key are written back as 0.36 shipped them,
+ * with the same WARN, rather than left to the backfill, which would write 0.37's.
  *
  * <p><b>The table is data.</b> {@link #STEPS} is {@link TokenBalance#ROWS}: each row's "old" (what 0.35
  * and 0.36 shipped) and its "new" (what 0.37.0 ships), both frozen as literal numbers. It is read neither
@@ -100,7 +103,12 @@ final class EconomyMigration {
         /** it already held the new default */
         ALREADY,
         /** it held the owner's own value, which stays */
-        KEPT
+        KEPT,
+        /**
+         * it was missing while the owner had retuned a key of its unit: the old value is written, so the backfill
+         * doesn't add the new one on top of their key (the Scratch Ticket's prizes)
+         */
+        RESTORED
     }
 
     /** Run revision 20 against {@code c} (defaults-free), appending what it did to {@code log}. */
@@ -117,11 +125,14 @@ final class EconomyMigration {
                 if (bundled != null) {
                     copyComments(bundled, c, step.path());
                 }
-            } else if (o == Outcome.KEPT) {
+            } else if (o == Outcome.KEPT || o == Outcome.RESTORED) {
                 kept.add(step);
                 List<String> with = retuned(c, step);
-                log.add(WARN + "Config migration: kept " + step.path() + " = " + show(c.get(step.path(), null))
-                        + (same(c.get(step.path(), null), step.old()) && !with.isEmpty()
+                String head = o == Outcome.RESTORED
+                        ? "Config migration: " + step.path() + " was missing, so it is written back as 0.35 and 0.36"
+                        + " shipped it, " + show(step.old()) + ", not as this version ships it,"
+                        : "Config migration: kept " + step.path() + " = " + show(c.get(step.path(), null));
+                log.add(WARN + head + (same(c.get(step.path(), null), step.old()) && !with.isEmpty()
                         ? " because you have changed " + String.join(" and ", with) + effect(c, step) + "."
                         : " because you have changed it (the new default is " + show(step.now()) + ")."));
             }
@@ -145,6 +156,12 @@ final class EconomyMigration {
     static Outcome apply(FileConfiguration c, Step step) {
         Object current = c.get(step.path(), null);
         if (current == null) {
+            if (!retuned(c, step).isEmpty()) {
+                // the backfill would write the new value beside the owner's retuned key (0.37's prizes on their
+                // 9-token ticket give back 99.4%): write what shipped with the key they changed instead
+                c.set(step.path(), copy(step.old()));
+                return Outcome.RESTORED;
+            }
             return Outcome.ABSENT;
         }
         if (same(current, step.now())) {
@@ -162,9 +179,16 @@ final class EconomyMigration {
 
     /**
      * The keys of {@code step}'s unit ({@link Step#with}) that hold the owner's own value, each as
-     * {@code key = value (shipped N)}, in table order; empty when each is absent or still what was shipped.
+     * {@code key = value (shipped N)}, in table order; empty when each is absent or still what was shipped. The
+     * Scratch Ticket's are read as the plugin plays them ({@link #retunedTicket}).
      */
     static List<String> retuned(FileConfiguration c, Step step) {
+        if (step.with().isEmpty()) {
+            return List.of();
+        }
+        if (TICKET.equals(step.path())) {
+            return retunedTicket(c, step);
+        }
         List<String> out = new ArrayList<>();
         for (Map.Entry<String, Object> e : step.with().entrySet()) {
             Object v = c.get(e.getKey(), null);
@@ -173,6 +197,47 @@ final class EconomyMigration {
             }
         }
         return out;
+    }
+
+    /**
+     * The Scratch Ticket's companions the owner changed, read as the plugin plays them ({@link PluginConfig#lotto}:
+     * a number read whole, anything else as the shipped value), and only when together they change what the new
+     * prizes give back. So {@code ticket_tokens: "10"} or {@code 10.0} is the shipped 10, and a
+     * {@code jackpot.cap} the pot never reaches (2000, with the pot at its steady 150 under either table: the
+     * jackpot's chance is the same in both) is no retune; the ticket then moves like an untouched one.
+     */
+    private static List<String> retunedTicket(FileConfiguration c, Step step) {
+        YamlConfiguration shippedFile = new YamlConfiguration();
+        step.with().forEach(shippedFile::set);
+        PluginConfig.Lotto shipped = PluginConfig.lotto(shippedFile, null);
+        PluginConfig.Lotto mine = PluginConfig.lotto(c, null);
+        @SuppressWarnings("unchecked")
+        List<PluginConfig.LottoPayout> prizes = PluginConfig.lottoPayouts((List<? extends Map<?, ?>>) step.now(), null);
+        double theirs = ArcadeService.rtp(new PluginConfig.Lotto(mine.ticketTokens(), prizes, mine.jackpot()));
+        double ours = ArcadeService.rtp(new PluginConfig.Lotto(shipped.ticketTokens(), prizes, shipped.jackpot()));
+        List<String> out = new ArrayList<>();
+        if (Math.abs(theirs - ours) < 1e-9) {
+            return out;
+        }
+        for (String key : step.with().keySet()) {
+            int read = ticketKey(mine, key);
+            int was = ticketKey(shipped, key);
+            if (read != was) {
+                out.add(key + " = " + read + " (shipped " + was + ")");
+            }
+        }
+        return out;
+    }
+
+    /** One of the ticket's companion keys as {@code l} holds it. */
+    private static int ticketKey(PluginConfig.Lotto l, String key) {
+        return switch (key.substring(key.lastIndexOf('.') + 1)) {
+            case "ticket_tokens" -> l.ticketTokens();
+            case "seed" -> l.jackpot().seed();
+            case "per_ticket" -> l.jackpot().perTicket();
+            case "cap" -> l.jackpot().cap();
+            default -> throw new IllegalArgumentException("not a Scratch Ticket key: " + key);
+        };
     }
 
     /**

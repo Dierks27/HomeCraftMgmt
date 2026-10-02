@@ -115,6 +115,36 @@ class ScratchTicketBandTest {
     }
 
     @Test
+    void aClosedTicketShowsAsClosedOnTheScreensAndTheFeed() throws Exception {
+        // the screens need a server: the closed tile's wiring, read from the source
+        for (String file : List.of("gui/games/GamesMenu.java", "gui/arcade/ArcadeMenu.java")) {
+            String code = java.nio.file.Files.readString(
+                    java.nio.file.Path.of("src/main/java/com/dierks/homecraft/" + file));
+            int closed = code.indexOf("ArcadeService.ticketClosed(");
+            assertTrue(closed > 0, file + " asks whether the ticket is closed");
+            String branch = code.substring(closed, code.indexOf(":", closed));
+            assertTrue(branch.contains("ArcadeService.TICKET_CLOSED") && !branch.contains("Click to buy one"),
+                    file + ": a closed ticket's tile says so, and offers no buy: " + branch);
+        }
+        String guide = java.nio.file.Files.readString(
+                java.nio.file.Path.of("src/main/java/com/dierks/homecraft/gui/arcade/GuideMenu.java"));
+        assertTrue(guide.contains("!ArcadeService.ticketClosed(lotto)"), "the guide leaves a closed ticket out");
+
+        // the website: an optional "closed": true on the ticket's games[] entry, only when it is closed
+        com.dierks.homecraft.web.ArcadeFeed.Scratch open =
+                com.dierks.homecraft.web.ArcadeFeed.scratch(read(LayoutFixtures.bundled()), 150);
+        assertFalse(open.closed(), "the shipped ticket is open");
+        String openJson = new com.dierks.homecraft.web.ArcadeFeed(false).json(0L, null, open, null, null, null);
+        assertFalse(openJson.contains("\"closed\""), "and its entry is as before: " + openJson);
+        com.dierks.homecraft.web.ArcadeFeed.Scratch shut =
+                com.dierks.homecraft.web.ArcadeFeed.scratch(shippedWith("arcade.lotto.ticket_tokens", 8), 150);
+        assertTrue(shut.closed(), "111.8%: closed");
+        String shutJson = new com.dierks.homecraft.web.ArcadeFeed(false).json(0L, null, shut, null, null, null);
+        assertTrue(shutJson.contains("\"id\":\"scratch_ticket\"") && shutJson.contains("\"closed\":true"),
+                "the feed says so: " + shutJson);
+    }
+
+    @Test
     void theReaderClampsAsBeforeAndSkipsARowWithNoPrize() {
         YamlConfiguration c = new YamlConfiguration();
         c.set("arcade.lotto.ticket_tokens", 0);

@@ -60,6 +60,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 
 /**
@@ -106,12 +107,25 @@ import java.util.logging.Level;
  *
  * <p>Driven by the game: {@link #start} and {@link #stop}, {@link #worldsReady} a tick after enable,
  * {@link #tick} every tick and {@link #check} every second. Everything runs on the main thread;
- * only plans are made elsewhere, and they come back through {@link #tick}'s inbox.
+ * only plans are made elsewhere, and they come back through {@link #tick}'s inbox. So does all the
+ * work the size of a plan (MOUNTAIN-V2-SPEC F11: a Mountain Run v2 is 350,000 blocks): its checks
+ * ({@link PlanCheck#problems}), its archive row and its build index are made with it on the planner
+ * thread, a big plan that comes another way (a promote, a recall) has its index and row made there
+ * before they are needed, and an admin's {@code history} or {@code keep} reads a big archived row
+ * there too; the main thread only stores and builds what comes back.
  */
 public final class GenService implements GeneratedCourses, GenOps {
 
     /** A plan still running after this long is given up (a failed try, never a different plan). */
     public static final long PLAN_KILL_MS = 120_000L;
+    /**
+     * A plan with more blocks than this (a Mountain Run v2: 350,000) never has plan-sized work done on the
+     * main thread (MOUNTAIN-V2-SPEC F11): its checks, archive row and build index are made on the planner
+     * thread. A smaller one's index and row take a millisecond or two and are made in place, as always.
+     */
+    static final int OFF_MAIN_OPS = 20_000;
+    /** A stored plan bigger than this (gzipped) is read on the planner thread for an admin command (F11). */
+    static final int OFF_MAIN_BYTES = 16 * 1024;
     /** CLEAR_OLD looks for an empty half this often. */
     public static final long CLEAR_EVERY_MS = 10_000L;
     /** A missing seed secret is logged at most this often. */
@@ -232,6 +246,17 @@ public final class GenService implements GeneratedCourses, GenOps {
          * stands in this region, so its flip leaves nothing to clear (GOLF-V4-SPEC §5.2 step 4, RePlot).
          */
         boolean claimedHere;
+        /**
+         * The plan's archive row, written on the planner thread (F11): a BUILD's with its plan, a big
+         * PROMOTE's as it starts; {@code archivedReady} once it is (a row that couldn't be written is
+         * {@code null}: it reads as unreadable, as before).
+         */
+        byte[] archived;
+        boolean archivedReady;
+        /** The next step's build index, made on the planner thread (F11), or {@code null}. */
+        BuildIndex.Prepared prepared;
+        /** Since when a step waits for its index from the planner thread, or -1. */
+        long preparing = -1;
 
         Job(Kind kind, SlotState slot, Consumer<String> report) {
             this.kind = kind;
@@ -1887,6 +1912,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                     j.plan = s.preview.plan();
                     j.steps.add(new Step(j.half, j.plan, BuildJob.Mode.CONVERGE));
                     j.stage = Stage.CONVERGE;
+                    archiveOffMain(j); // ready long before its verify pass is done
                 }
                 case CLEAR_OLD -> {
                     s.clearing = true; // the previous layout stops standing now
@@ -2025,15 +2051,27 @@ public final class GenService implements GeneratedCourses, GenOps {
         j.stage = Stage.PLANNING;
         j.planStarted = host.now();
         boolean heal = j.kind == Kind.HEAL;
+        boolean archive = j.kind == Kind.BUILD;
+        Box build = s.half(j.half); // where its one step builds it (a remade recall's plan may be smaller)
         GenTag tag = j.tag;
         host.planner().execute(() -> {
             long t0 = System.nanoTime();
             Plan made = null;
             List<String> refused = List.of();
             Throwable error = null;
+            byte[] row = null;
+            BuildIndex.Prepared index = null;
             try {
                 made = heal ? p.rederive(in, tag) : p.plan(in);
-                refused = PlanCheck.generator(p, made, in, heal); // §3.3 step 2, with today's settings
+                List<String> generator = PlanCheck.generator(p, made, in, heal); // §3.3 step 2, today's settings
+                // Plan-sized work stays off the main thread (F11): the shared checks, the archive row, the index.
+                List<String> problems = new ArrayList<>(PlanCheck.problems(made, def, half));
+                problems.addAll(generator);
+                refused = problems;
+                if (problems.isEmpty()) {
+                    row = archive ? encode(made) : null;
+                    index = BuildIndex.prepare(build, made);
+                }
             } catch (Throwable e) {
                 error = e;
             }
@@ -2041,7 +2079,9 @@ public final class GenService implements GeneratedCourses, GenOps {
             Plan result = made;
             List<String> checked = refused;
             Throwable failure = error;
-            inbox.add(() -> planned(j, result, checked, failure, ms));
+            byte[] archived = row;
+            BuildIndex.Prepared ready = index;
+            inbox.add(() -> planned(j, result, checked, failure, ms, half, archived, ready));
         });
     }
 
@@ -2072,7 +2112,14 @@ public final class GenService implements GeneratedCourses, GenOps {
         };
     }
 
-    private void planned(Job j, Plan plan, List<String> refused, Throwable error, long ms) {
+    /**
+     * The plan came back from the planner thread with everything plan-sized already done there (F11): its
+     * problems ({@link PlanCheck#problems} for {@code checked}, then the generator's own), a BUILD's archive
+     * row and its build index. Here, on the main thread, only what can have changed since is looked at:
+     * the half it is for.
+     */
+    private void planned(Job j, Plan plan, List<String> refused, Throwable error, long ms, Box checked,
+                         byte[] archived, BuildIndex.Prepared index) {
         if (job != j || j.stage != Stage.PLANNING) {
             return; // cancelled, killed or superseded: dropped
         }
@@ -2085,9 +2132,13 @@ public final class GenService implements GeneratedCourses, GenOps {
             fail(j, error instanceof GenFailed ? String.valueOf(error.getMessage()) : "the planner threw " + error);
             return;
         }
-        List<String> problems = new ArrayList<>(PlanCheck.problems(plan, j.planDef != null ? j.planDef : s.def,
-                j.planBox != null ? j.planBox : s.half(j.half)));
-        problems.addAll(refused);
+        List<String> problems = new ArrayList<>(refused);
+        Box half = j.planBox != null ? j.planBox : s.half(j.half);
+        if (plan != null && !half.equals(checked) && !half.equals(plan.half())) {
+            // the slot moved while it was planning: the plan was checked for where it was
+            problems.add(0, "the plan is for " + (plan.half() == null ? "no half" : plan.half().describe())
+                    + ", not " + half.describe());
+        }
         if (!problems.isEmpty()) {
             fail(j, "its plan was refused: " + String.join("; ", problems));
             return;
@@ -2097,6 +2148,9 @@ public final class GenService implements GeneratedCourses, GenOps {
             return;
         }
         j.plan = plan;
+        j.archived = archived;
+        j.archivedReady = j.kind == Kind.BUILD;
+        j.prepared = index;
         j.steps.add(new Step(j.half, plan, BuildJob.Mode.CONVERGE));
         if (j.kind == Kind.HEAL) {
             j.stage = Stage.CONVERGE;
@@ -2135,15 +2189,22 @@ public final class GenService implements GeneratedCourses, GenOps {
                 return;
             }
             Step st = j.steps.get(j.stepIndex);
+            Box box = st.box() != null ? st.box() : s.half(st.which());
+            BuildIndex.Prepared ready = st.plan() == null ? null : readyIndex(j, st.plan(), box, now);
+            if (ready == null && st.plan() != null && st.plan().ops().size() > OFF_MAIN_OPS) {
+                return; // its index is being made on the planner thread (F11)
+            }
             try {
                 // a half that may hold water (a Dropper's pools, golf's ponds): drained before any wall
                 // goes, even when clearing; an old area keeps whatever isn't Fresh Courses' (RETIRE)
-                j.build = new BuildJob(port, st.box() != null ? st.box() : s.half(st.which()), st.plan(), st.mode(),
-                        s.def.mayHoldWater(), j.kind == Kind.RETIRE ? OldAreas::foreign : null);
+                Predicate<String> leave = j.kind == Kind.RETIRE ? OldAreas::foreign : null;
+                j.build = ready != null ? BuildJob.ready(port, box, ready, st.mode(), s.def.mayHoldWater(), leave)
+                        : new BuildJob(port, box, st.plan(), st.mode(), s.def.mayHoldWater(), leave);
             } catch (IllegalArgumentException e) {
                 fail(j, e.getMessage());
                 return;
             }
+            j.prepared = null;
         }
         DailySettings.Budget cfg = host.settings().budget();
         if (!j.budget.begin(cfg, online, host.mspt())) {
@@ -2209,6 +2270,57 @@ public final class GenService implements GeneratedCourses, GenOps {
                 stepsDone(j);
             }
         }
+    }
+
+    /**
+     * A step's build index when it is ready (F11): the one the planner thread made with the plan, or, for a
+     * big plan that came another way (a promote, a recall, a boot check), one asked of the planner thread
+     * now and ready a tick or so later; {@code null} meanwhile (the job waits, at most {@link #PLAN_KILL_MS}),
+     * and for a small plan, whose index is made in place as always.
+     */
+    private BuildIndex.Prepared readyIndex(Job j, Plan plan, Box box, long now) {
+        BuildIndex.Prepared p = j.prepared;
+        if (p != null && p.plan() == plan && p.half().equals(box)) {
+            return p;
+        }
+        if (plan.ops().size() <= OFF_MAIN_OPS) {
+            return null;
+        }
+        if (j.preparing < 0) {
+            j.preparing = now;
+            host.planner().execute(() -> {
+                BuildIndex.Prepared made = BuildIndex.prepare(box, plan);
+                inbox.add(() -> {
+                    if (job == j) {
+                        j.preparing = -1;
+                        j.prepared = made;
+                    }
+                });
+            });
+        } else if (now - j.preparing > PLAN_KILL_MS) {
+            fail(j, "its build couldn't be made ready in " + PLAN_KILL_MS / 1000 + " seconds");
+        }
+        return null;
+    }
+
+    /**
+     * A big plan's archive row, written on the planner thread as the job starts (a PROMOTE: its plan was
+     * made by the preview), so the flip only stores it (F11). A small plan's is written at the flip.
+     */
+    private void archiveOffMain(Job j) {
+        Plan plan = j.plan;
+        if (plan == null || j.archivedReady || plan.ops().size() <= OFF_MAIN_OPS) {
+            return;
+        }
+        host.planner().execute(() -> {
+            byte[] row = encode(plan);
+            inbox.add(() -> {
+                if (job == j && j.plan == plan) {
+                    j.archived = row;
+                    j.archivedReady = true;
+                }
+            });
+        });
     }
 
     /** Every step of the job is done; the last one's chunks are still loaded (for the golf replay). */
@@ -2481,8 +2593,11 @@ public final class GenService implements GeneratedCourses, GenOps {
                 // a promote, or a replacement for a layout nobody could vouch for, takes the next reroll
                 meta.put(GenAdminKeys.reroll(def.id(), tag.edition()), Integer.toString(j.reroll));
             }
-            // The archive row lands in the same transaction: every edition that goes live is archived.
-            GenStore.Flipped f = host.store().flip(row, meta, archiveEntry(def, tag, encode(j.plan), j.mix, now), now);
+            // The archive row lands in the same transaction: every edition that goes live is archived. It was
+            // written on the planner thread with the plan (F11); only a small plan's (or a promote's whose
+            // planner thread was busy all through its verify pass) is written here.
+            byte[] plan = j.archivedReady ? j.archived : encode(j.plan);
+            GenStore.Flipped f = host.store().flip(row, meta, archiveEntry(def, tag, plan, j.mix, now), now);
             rev = f.rev();
             if (f.archived() != null) {
                 codes.put(def.id() + "|" + tag.editionKey(), f.archived().code());
@@ -4869,11 +4984,28 @@ public final class GenService implements GeneratedCourses, GenOps {
     @Override
     public List<String> historyOf(String slotId, GenArgs.Which which) {
         List<String> out = new ArrayList<>();
+        historyOf(slotId, which, out::add, false);
+        return out;
+    }
+
+    /** As {@link #historyOf(String, GenArgs.Which)}, a big stored plan read on the planner thread (F11). */
+    @Override
+    public void historyOf(String slotId, GenArgs.Which which, Consumer<String> report) {
+        historyOf(slotId, which, report, true);
+    }
+
+    private void historyOf(String slotId, GenArgs.Which which, Consumer<String> report, boolean offMain) {
         String slot = slotId != null ? slotId : which.slot();
-        GenArchiveDao.Row r = resolve(slot, which, out::add);
+        GenArchiveDao.Row r = resolve(slot, which, report);
         if (r == null) {
-            return out;
+            return;
         }
+        readStored(r.plan(), offMain, read -> historyLines(r, read).forEach(report));
+    }
+
+    /** One past course's lines: what it was, its plan ({@code read}), its players and top 5. */
+    private List<String> historyLines(GenArchiveDao.Row r, PlanCodec.Read read) {
+        List<String> out = new ArrayList<>();
         Slots.Def d = Slots.of(r.slot());
         String game = d == null ? Slots.GAME_TRIALS : d.game();
         Edition.Key key = Edition.Key.parse(r.edition());
@@ -4881,7 +5013,6 @@ public final class GenService implements GeneratedCourses, GenOps {
                 + r.edition() + ")" + flags(r));
         out.add("&7Up " + dates(r) + " · " + r.kind() + " " + r.tierOrMix() + " · seed " + GenSeed.hex(r.seed())
                 + " · " + r.algo() + " · built " + GenCopy.whenDated(r.builtAt(), host.zone()));
-        PlanCodec.Read read = PlanCodec.decode(r.plan());
         out.add(read.ok() ? "&7Plan: " + read.plan().ops().size() + " blocks, hash " + read.plan().hash()
                 + " &8(it can be brought back exactly)" : "&cPlan: can't be read (" + read.problem()
                 + ") &7- it can be made again from its seed: recall ... seed:" + GenSeed.hex(r.seed()));
@@ -5130,8 +5261,11 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
             return;
         }
-        if (!which.remade()) {
-            PlanCodec.Read read = PlanCodec.decode(row.plan());
+        if (which.remade()) {
+            keeper.keep(row, true, id, name, freshBoard, confirm, report);
+            return;
+        }
+        readStored(row.plan(), true, read -> { // a Mountain Run's row is read on the planner thread (F11)
             if (!read.ok()) {
                 report.accept("&c" + row.code() + "'s stored plan can't be read (" + read.problem() + "), so it can't"
                         + " be kept as it was.");
@@ -5139,8 +5273,24 @@ public final class GenService implements GeneratedCourses, GenOps {
                         + " keep " + row.slot() + " seed:" + GenSeed.hex(row.seed()) + " " + id);
                 return;
             }
+            keeper.keep(row, false, id, name, freshBoard, confirm, report);
+        });
+    }
+
+    /**
+     * Read a stored plan, then go on with {@code then} on the main thread: a big row (over
+     * {@value #OFF_MAIN_BYTES} bytes, a Mountain Run v2's) on the planner thread when {@code offMain}, its
+     * answer back through the inbox (F11); a small one here and now, as always.
+     */
+    private void readStored(byte[] stored, boolean offMain, Consumer<PlanCodec.Read> then) {
+        if (!offMain || stored == null || stored.length <= OFF_MAIN_BYTES) {
+            then.accept(PlanCodec.decode(stored));
+            return;
         }
-        keeper.keep(row, which.remade(), id, name, freshBoard, confirm, report);
+        host.planner().execute(() -> {
+            PlanCodec.Read read = PlanCodec.decode(stored);
+            inbox.add(() -> then.accept(read));
+        });
     }
 
     @Override

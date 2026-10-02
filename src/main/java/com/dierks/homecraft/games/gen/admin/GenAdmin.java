@@ -477,7 +477,7 @@ public final class GenAdmin implements GameAdmin {
                 if (h.error() != null) {
                     say(sender, "&c" + h.error());
                 } else if (h.detail() != null) {
-                    engine.historyOf(h.slot(), h.detail()).forEach(report);
+                    engine.historyOf(h.slot(), h.detail(), report);
                 } else {
                     engine.history(h.slot(), h.page()).forEach(report);
                 }

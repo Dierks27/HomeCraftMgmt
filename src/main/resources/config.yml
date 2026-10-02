@@ -2031,8 +2031,8 @@ games:
       fresh_dropper: {enabled: true, mix: EEMMH, origin: [7488, 160, 7360]}
     # Every set that was ever up is archived with its whole layout, so a past course can be brought
     # back exactly (/hcm games gen recall) or kept for good (/hcm games gen keep), and its board with it.
-    # A course is a few KB (a Mountain Run about 50 KB): a year of weekly sets for every course is
-    # about 6 MB with Ice Boat on.
+    # A course is a few KB (a Mountain Run about 0.4 MB, stored compact): a year of weekly sets for every
+    # course is about 25 MB with Ice Boat on.
     archive:
       # Days an old set stays in the archive after it was replaced; 0 = forever. A kept or
       # recalled course's set is never removed.

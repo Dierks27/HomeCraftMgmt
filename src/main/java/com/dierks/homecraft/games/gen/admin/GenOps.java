@@ -199,6 +199,14 @@ public interface GenOps {
     }
 
     /**
+     * {@link #historyOf(String, GenArgs.Which)} told to {@code report}: the engine may read a big stored plan
+     * (a Mountain Run v2's) off the main thread and answer a tick or so later (MOUNTAIN-V2-SPEC F11).
+     */
+    default void historyOf(String slot, GenArgs.Which which, Consumer<String> report) {
+        historyOf(slot, which).forEach(report);
+    }
+
+    /**
      * Bring an archived course back into a Classics slot.
      *
      * @param classic the Classics slot or kind typed, or {@code null} (it follows the course's kind)

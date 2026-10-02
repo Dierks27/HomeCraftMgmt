@@ -812,6 +812,10 @@ final class KeepService {
             }
             return null;
         }
+        PlanCodec.Head head = PlanCodec.head(j.row.plan());
+        if (head != null && !KeepArea.fits(head.half())) {
+            return tooBig(j.def, head.half()); // told from its first bytes: a Mountain Run's row is never read here (F11)
+        }
         PlanCodec.Read read = PlanCodec.decode(j.row.plan());
         if (!read.ok()) {
             return "its stored plan can't be read (" + read.problem() + "). Make it again from its seed with today's"

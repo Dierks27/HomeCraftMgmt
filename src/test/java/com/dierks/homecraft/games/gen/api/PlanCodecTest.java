@@ -23,9 +23,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The archive's plan codec (GEN-SPEC-KEEP §1): a plan round-trips exactly (every block, sign,
- * keep-clear box and the whole course, trial or golf), the version-1 payload is pinned by golden
- * bytes and a fixed stored blob decodes to the same plan, and junk of every kind is reported as
- * unreadable, never thrown and never half-read.
+ * keep-clear box and the whole course, trial or golf), the version-1 payload (written by name since
+ * version 2 became the default) is pinned by golden bytes and a fixed stored blob decodes to the same
+ * plan, and junk of every kind, in either version, is reported as unreadable, never thrown and never
+ * half-read. Version 2 itself: {@link PlanCodecV2Test}.
  */
 class PlanCodecTest {
 
@@ -74,13 +75,15 @@ class PlanCodecTest {
 
     @Test
     void theVersionOnePayloadIsPinnedByGoldenBytes() throws Exception {
-        byte[] payload = PlanCodec.payload(trialPlan());
+        byte[] payload = PlanCodec.payload(trialPlan(), PlanCodec.V1);
         assertEquals("HCMP", new String(Arrays.copyOf(payload, 4), java.nio.charset.StandardCharsets.US_ASCII),
                 "it starts with its magic");
-        assertEquals(PlanCodec.VERSION, payload[4], "then its version");
+        assertEquals(PlanCodec.V1, payload[4], "then its version");
         assertEquals(GOLDEN_TRIAL_SHA, sha(payload), "the trial payload's bytes are pinned: a change to the format"
                 + " must bump PlanCodec.VERSION and keep reading version 1");
-        assertEquals(GOLDEN_GOLF_SHA, sha(PlanCodec.payload(golfPlan())), "and the golf payload's");
+        assertEquals(GOLDEN_GOLF_SHA, sha(PlanCodec.payload(golfPlan(), PlanCodec.V1)), "and the golf payload's");
+        assertEquals(trialPlan(), PlanCodec.decode(PlanCodec.encode(trialPlan(), PlanCodec.V1)).plan(),
+                "and a version-1 row written by name reads back exactly");
     }
 
     @Test
@@ -92,9 +95,15 @@ class PlanCodecTest {
 
     @Test
     void junkIsReportedAsUnreadableAndNeverThrows() throws Exception {
-        byte[] good = PlanCodec.encode(trialPlan());
-        byte[] payload = PlanCodec.payload(trialPlan());
         assertUnreadable(null, "nothing stored");
+        for (int version : new int[]{PlanCodec.V1, PlanCodec.VERSION}) {
+            junkOf(version);
+        }
+    }
+
+    private static void junkOf(int version) throws Exception {
+        byte[] good = PlanCodec.encode(trialPlan(), version);
+        byte[] payload = PlanCodec.payload(trialPlan(), version);
         assertUnreadable(new byte[0], "an empty blob");
         assertUnreadable("not gzip at all".getBytes(), "text that isn't gzip");
         assertUnreadable(Arrays.copyOf(good, good.length / 2), "a blob cut in half");
@@ -103,10 +112,13 @@ class PlanCodecTest {
         wrongMagic[0] = 'X';
         assertUnreadable(gzip(wrongMagic), "the wrong magic");
         byte[] newer = payload.clone();
-        newer[4] = 2;
-        PlanCodec.Read v2 = PlanCodec.decode(gzip(newer));
-        assertFalse(v2.ok(), "a newer format is never guessed at");
-        assertTrue(v2.problem().contains("format 2"), "and says which: " + v2.problem());
+        newer[4] = PlanCodec.VERSION + 1;
+        PlanCodec.Read v3 = PlanCodec.decode(gzip(newer));
+        assertFalse(v3.ok(), "a newer format is never guessed at");
+        assertTrue(v3.problem().contains("format " + (PlanCodec.VERSION + 1)), "and says which: " + v3.problem());
+        byte[] older = payload.clone();
+        older[4] = 0;
+        assertUnreadable(gzip(older), "a format before the first");
         assertUnreadable(gzip(Arrays.copyOf(payload, payload.length - 3)), "a payload cut short");
         byte[] trailing = Arrays.copyOf(payload, payload.length + 1);
         assertUnreadable(gzip(trailing), "a byte after the end");

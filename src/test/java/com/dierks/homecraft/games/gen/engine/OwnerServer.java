@@ -394,7 +394,7 @@ final class OwnerServer {
      */
     OwnerServer upgrade(GenService.OldHalves geometry, int minutes) {
         startUpgrade(geometry);
-        for (int s = 0; s < minutes * 60 && !(golfUp() && gen.oldAreas().isEmpty()); s++) {
+        for (int s = 0; s < minutes * 60 && !(golfUp() && allEmptied()); s++) {
             drive(1);
         }
         drive(60); // and whatever else is due (the other courses' idle halves)
@@ -411,6 +411,42 @@ final class OwnerServer {
         gen.start();
         golfGuarded = guarded(GOLF_A) && guarded(GOLF_B);
         boatGuarded = guarded(BOAT_A) && guarded(BOAT_B);
+        gen.worldsReady();
+        return this;
+    }
+
+    /** Every old area emptied (F09: each still recorded and guarded until the world has been saved). */
+    boolean allEmptied() {
+        return gen.oldAreas().stream().allMatch(a -> a.state() == OldAreas.State.EMPTIED);
+    }
+
+    /** Two autosaves of the Games world: what was emptied is on disk. */
+    void saved() {
+        gen.worldSaved(W);
+        gen.worldSaved(W);
+    }
+
+    /**
+     * F10: the restart into v4 with config.yml still at revision 19 (the update couldn't save it): the three areas
+     * v4 moves read at 0.36's spots, held ({@code SlotConfig#held}) as {@code PluginConfig.games} reads them.
+     */
+    OwnerServer startHeld(String why) {
+        List<String> on = new ArrayList<>(OTHERS);
+        on.add(GOLF);
+        com.dierks.homecraft.games.gen.DailySettings d = GenKit.weekly(on.toArray(String[]::new));
+        List<com.dierks.homecraft.games.gen.DailySettings.SlotConfig> slots = new ArrayList<>();
+        for (com.dierks.homecraft.games.gen.DailySettings.SlotConfig c : d.slots()) {
+            slots.add(c.id().equals(GOLF) ? c.withOrigin(new int[]{7488, 160, 4096}).held(why)
+                    : c.id().equals(BOAT) ? c.withOrigin(new int[]{6080, 160, 5888}).held(why) : c);
+        }
+        List<com.dierks.homecraft.games.gen.DailySettings.SlotConfig> classics = new ArrayList<>();
+        for (com.dierks.homecraft.games.gen.DailySettings.SlotConfig c : d.archive().classics()) {
+            classics.add(c.id().equals(CLASSIC) ? c.withOrigin(new int[]{7488, 160, 4800}).held(why) : c);
+        }
+        host.settings = d.withSlots(slots).withArchive(d.archive().withClassics(classics));
+        upgradeAt = world.log.size();
+        gen = new GenService(host, planners(4));
+        gen.start();
         gen.worldsReady();
         return this;
     }
@@ -487,8 +523,9 @@ final class OwnerServer {
             out.add("the boat isn't off and empty: " + boat);
         }
         for (String id : List.of(GOLF, BOAT, CLASSIC)) {
-            if (host.store.meta(GenAdminKeys.old(id)) != null) {
-                out.add(id + "'s old area is still recorded: " + host.store.meta(GenAdminKeys.old(id)));
+            String old = host.store.meta(GenAdminKeys.old(id));
+            if (old != null && !Regions.oldEmptied(old).keySet().containsAll(Regions.oldClaims(old))) {
+                out.add(id + "'s old area is still recorded as not emptied: " + old);
             }
             if (OldAreas.Retired.parse(host.store.meta(GenAdminKeys.retired(id))) == null) {
                 out.add(id + "'s emptied old area isn't on record for the check");
@@ -499,7 +536,7 @@ final class OwnerServer {
                 out.add(id + " still claims " + host.store.meta(GenAdminKeys.claim(id)));
             }
         }
-        if (!gen.oldAreas().isEmpty()) {
+        if (!allEmptied()) {
             out.add("old areas still stand: " + gen.oldAreas());
         }
         // every write went into the moved areas: the old ones' recorded halves, or golf's new one

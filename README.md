@@ -1124,7 +1124,12 @@ going always counts. The old half is emptied once nobody is on it.
   ("This area is built by Fresh Courses - use /hcm games gen"). WorldEdit can't be stopped; the
   next restart (or `/hcm games gen rebuild`) puts the blocks back.
 - **After a crash** every course is checked against its plan before it opens, and anything the
-  world didn't save is put back first (the console says so). A build a restart interrupts simply
+  world didn't save is put back first (the console says so). The smallest courses are checked
+  first, so the Droppers open within seconds of a restart. The Mountain Run (1,200 chunks a half) is
+  checked by a sample of its chunks when the world was saved since its last full check, so it opens
+  within seconds too, and is checked whole a minute or so later with the course open; after a crash
+  it is checked whole first, closed (about a minute). A spare half known to be empty isn't loaded at
+  all. A build a restart interrupts simply
   carries on after it. A course that can't be vouched for (say `trials.fall_depth` was lowered and
   one of its jumps would now send players back) stays closed and is replaced by a new one for the
   same set (a pinned course is built again from its seed), on a fresh board.
@@ -1181,7 +1186,13 @@ it can be), the water drained before any wall goes, and only the plugin's own bl
 course, the Clubhouse or the arena is within 16 blocks of the old area: it stays guarded and listed,
 with one WARN. `/hcm games check` shows each old area ("Golf of the Week moved to its new area; its old
 area is empty") and what is in the way of one; `/hcm games gen tidy <course> confirm` (also called
-`retire`) empties one by hand. A stop in the middle is finished at the next start.
+`retire`) empties one by hand. A stop in the middle is finished at the next start. An emptied area stays
+guarded until the world has been saved twice (Paper's autosave, every 5 minutes by default) or the next
+start finds it still empty; only then is it let go. If the server is killed before that save, the old
+blocks come back with the world, and the next start empties them again (a WARN says so). If config.yml
+can't be written at the update (a read-only file, a full disk), those three areas stay where they were
+built, closed, and nothing is built or emptied for them until it can: the console says why (SEVERE) and
+`/hcm games check` shows it; fix the file and restart.
 
 **Moving an area by hand.** Nothing you set moves by itself: a place stays where it was built until you
 empty it and give it another spot. Change an `origin` (or `half_gap`, or `games.fresh.world`) without

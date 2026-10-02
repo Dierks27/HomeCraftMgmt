@@ -321,9 +321,13 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
      *                   spot is never taken for it, since that isn't where a server that kept 0.35's
      *                   spots (or an owner who moved it) built it: the engine would call it moved,
      *                   reroll it there and leave the built one standing.
+     * @param held       why config's spot isn't used yet though it can be read ({@link #held(String)}), or
+     *                   {@code null}: config.yml is still below the revision that moves this area (the update
+     *                   couldn't save it), so the spot it holds is an older version's. Never {@code null} with
+     *                   {@code placed} true.
      */
     public record SlotConfig(String id, boolean enabled, String tierOrMix, int[] origin, int dailyClear,
-                             int halfGap, boolean placed) {
+                             int halfGap, boolean placed, String held) {
 
         public SlotConfig {
             origin = origin == null ? new int[3] : origin.clone();
@@ -333,6 +337,15 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             if (halfGap < 0) {
                 throw new IllegalArgumentException("a half gap is 0 or more blocks: " + halfGap);
             }
+            if (placed) {
+                held = null;
+            }
+        }
+
+        /** A slot config places, or (not {@code placed}) can't read the place of. */
+        public SlotConfig(String id, boolean enabled, String tierOrMix, int[] origin, int dailyClear, int halfGap,
+                          boolean placed) {
+            this(id, enabled, tierOrMix, origin, dailyClear, halfGap, placed, null);
         }
 
         /** A slot config places. */
@@ -357,23 +370,23 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         }
 
         public SlotConfig withEnabled(boolean on) {
-            return new SlotConfig(id, on, tierOrMix, origin, dailyClear, halfGap, placed);
+            return new SlotConfig(id, on, tierOrMix, origin, dailyClear, halfGap, placed, held);
         }
 
         public SlotConfig withOrigin(int[] o) {
-            return new SlotConfig(id, enabled, tierOrMix, o, dailyClear, halfGap, placed);
+            return new SlotConfig(id, enabled, tierOrMix, o, dailyClear, halfGap, placed, held);
         }
 
         public SlotConfig withTierOrMix(String t) {
-            return new SlotConfig(id, enabled, t, origin, dailyClear, halfGap, placed);
+            return new SlotConfig(id, enabled, t, origin, dailyClear, halfGap, placed, held);
         }
 
         public SlotConfig withDailyClear(int tokens) {
-            return new SlotConfig(id, enabled, tierOrMix, origin, tokens, halfGap, placed);
+            return new SlotConfig(id, enabled, tierOrMix, origin, tokens, halfGap, placed, held);
         }
 
         public SlotConfig withHalfGap(int gap) {
-            return new SlotConfig(id, enabled, tierOrMix, origin, dailyClear, gap, placed);
+            return new SlotConfig(id, enabled, tierOrMix, origin, dailyClear, gap, placed, held);
         }
 
         /**
@@ -382,6 +395,16 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
          */
         public SlotConfig unplaced() {
             return new SlotConfig(id, false, tierOrMix, origin, dailyClear, halfGap, false);
+        }
+
+        /**
+         * The same slot, off and not placed, for {@code why} (F10): config.yml holds a spot an older version
+         * shipped, because the update that moves this area couldn't save the file. The engine keeps it where
+         * it was claimed and does nothing there (no claim, build, reroll or emptying of its old area) until
+         * the file is saved at that revision.
+         */
+        public SlotConfig held(String why) {
+            return new SlotConfig(id, false, tierOrMix, origin, dailyClear, halfGap, false, why);
         }
 
         /** The shipped settings of a slot (at the shipped, weekly, cadence). */
@@ -394,7 +417,7 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         public boolean equals(Object o) {
             return o instanceof SlotConfig s && id.equals(s.id) && enabled == s.enabled
                     && tierOrMix.equals(s.tierOrMix) && Arrays.equals(origin, s.origin) && dailyClear == s.dailyClear
-                    && halfGap == s.halfGap && placed == s.placed;
+                    && halfGap == s.halfGap && placed == s.placed && java.util.Objects.equals(held, s.held);
         }
 
         @Override
@@ -406,7 +429,8 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         @Override
         public String toString() {
             return "SlotConfig[" + id + ", " + (enabled ? "on" : "off") + ", " + tierOrMix + ", "
-                    + (placed ? Arrays.toString(origin) + ", gap " + halfGap : "not placed") + ", " + dailyClear + "]";
+                    + (placed ? Arrays.toString(origin) + ", gap " + halfGap : held != null ? "held: " + held
+                    : "not placed") + ", " + dailyClear + "]";
         }
     }
 

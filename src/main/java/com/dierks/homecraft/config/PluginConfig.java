@@ -1014,7 +1014,15 @@ public final class PluginConfig {
                                     java.util.function.Consumer<String> warn, java.util.function.Consumer<String> info) {
         boolean undecided = c != null && (com.dierks.homecraft.games.gen.LayoutGuard.pending(c)
                 || com.dierks.homecraft.games.gen.LayoutGuard.unmigrated(c));
-        return undecided ? GamesConfig.parse(c, null, null) : GamesConfig.parse(c, warn, info);
+        if (undecided) {
+            return GamesConfig.parse(c, null, null);
+        }
+        GamesConfig.Parsed p = GamesConfig.parse(c, warn, info);
+        // F10: revision 21 couldn't be saved: the areas it moves wait where they were built, rather than be
+        // built at an older spot at their new size and moved again once the file is saved
+        return com.dierks.homecraft.games.gen.GamesAreaMigration.unsaved(c)
+                ? com.dierks.homecraft.games.gen.GamesAreaMigration.hold(p,
+                com.dierks.homecraft.games.gen.GamesAreaMigration.heldWhy(c)) : p;
     }
 
     /** (Re)parse config.yml into the typed views above. */

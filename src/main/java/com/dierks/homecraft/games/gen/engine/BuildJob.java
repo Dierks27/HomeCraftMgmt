@@ -223,6 +223,22 @@ public final class BuildJob {
         }
     }
 
+    /**
+     * Read only the chunks {@code keep} names (F12: a big half's check at a start, when it was saved right after
+     * its last full check): the others aren't loaded or read. A {@link Mode#SCAN} before its first tick; a
+     * converge always reads its whole half.
+     *
+     * @return this job
+     * @throws IllegalStateException for a converge, or a job that has started
+     */
+    public BuildJob only(java.util.function.BiPredicate<Integer, Integer> keep) {
+        if (mode != Mode.SCAN || nextLoad > 0 || phase != Phase.LOAD) {
+            throw new IllegalStateException("only a scan that hasn't started reads part of its half");
+        }
+        chunks.removeIf(c -> !keep.test(c[0], c[1]));
+        return this;
+    }
+
     // ---- driving it ---------------------------------------------------------------------------
 
     /**

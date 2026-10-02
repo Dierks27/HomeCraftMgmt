@@ -89,6 +89,18 @@ class OwnerServerUpgradeTest {
                 "golf's old course was taken away");
         assertEquals(0, OldAreas.Retired.parse(server.host.store.meta(GenAdminKeys.retired(CLASSIC))).removed(),
                 "Classic Golf's old halves were empty: read, not written");
+        for (String id : List.of(GOLF, BOAT, CLASSIC)) {
+            String old = server.host.store.meta(GenAdminKeys.old(id));
+            assertTrue(old != null && old.contains("|emptied@"), id + ": kept, marked emptied, until it is on disk: "
+                    + old);
+        }
+        assertTrue(server.guarded(GOLF_A) && server.guarded(BOAT_A), "and still guarded");
+        server.saved();
+        for (String id : List.of(GOLF, BOAT, CLASSIC)) {
+            assertNull(server.host.store.meta(GenAdminKeys.old(id)), id + ": let go once the world was saved");
+        }
+        assertFalse(server.guarded(GOLF_A) || server.guarded(BOAT_A), "and no longer guarded");
+        assertEquals(List.of(), server.failures(), "everything else as it was");
     }
 
     @Test
@@ -136,7 +148,7 @@ class OwnerServerUpgradeTest {
         assertTrue(waiting.what().startsWith("Golf of the Week moved to its new area; its old area"), waiting.what());
 
         boolean sawRunning = false;
-        for (int t = 0; t < 20 * 60 * 20 && !server.gen.oldAreas().isEmpty(); t++) {
+        for (int t = 0; t < 20 * 60 * 20 && !server.allEmptied(); t++) {
             server.tick(t);
             for (OldAreas.Area a : server.gen.oldAreas()) {
                 if (a.state() == OldAreas.State.RUNNING) {
@@ -147,6 +159,10 @@ class OwnerServerUpgradeTest {
             }
         }
         assertTrue(sawRunning, "each was seen being emptied");
+        assertTrue(server.gen.summary().stream().anyMatch(l -> l.startsWith(GOLF + ": its old area (half A x"
+                + " 7488..7551") && l.contains("is empty; it stays guarded until the world has been saved")),
+                "status says each waits for the world to be saved: " + server.gen.summary());
+        server.saved();
         assertEquals(List.of(), server.gen.oldAreas(), "then none is left");
         Map<String, OldAreas.Retired> done = server.gen.retiredAreas();
         assertEquals(List.of(GOLF, BOAT, CLASSIC), List.copyOf(done.keySet()), "and the check has each on record");
@@ -186,13 +202,56 @@ class OwnerServerUpgradeTest {
         assertTrue(server.guarded(GOLF_A) && server.guarded(GOLF_B), "after the restart it is guarded again, at its"
                 + " recorded size");
         server.gen.worldsReady();
-        for (int s = 0; s < 20 * 60 && !(server.golfUp() && server.gen.oldAreas().isEmpty()); s++) {
+        for (int s = 0; s < 20 * 60 && !(server.golfUp() && server.allEmptied()); s++) {
             server.drive(1);
         }
         assertEquals(0, server.world.count(GOLF_A) + server.world.count(GOLF_B), "the rest went at the next start");
-        assertNull(server.host.store.meta(GenAdminKeys.old(GOLF)), "and the record with it");
+        assertTrue(server.host.store.meta(GenAdminKeys.old(GOLF)).contains("|emptied@"), "the record marked emptied");
         assertTrue(server.golfUp(), "golf's new course checked and open again");
+        server.saved();
+        assertNull(server.host.store.meta(GenAdminKeys.old(GOLF)), "and gone once the world was saved");
         assertFalse(server.guarded(GOLF_A), "the guard let the emptied area go");
+    }
+
+    // ---- F10: config.yml couldn't be saved at revision 21 ----------------------------------------------------
+
+    @Test
+    void aConfigTheUpdateCouldntSaveKeepsTheMovedAreasWhereTheyWereBuiltAndDoesNothingThere() throws Exception {
+        server = new OwnerServer().at036();
+        String why = "config.yml couldn't be saved at this update (it is still at config revision 19, and revision 21"
+                + " moves this area), so it stays where it was built, closed, and nothing is built or emptied there"
+                + " until the file can be written";
+        server.startHeld(why);
+        server.drive(10 * 60);
+        assertEquals(List.of(), server.writesSinceUpgrade(), "not one block written: no claim, build, reroll or"
+                + " emptying for the held areas (and nothing to heal anywhere else)");
+        assertEquals(OwnerServer.GOLF_036, server.host.store.meta(GenAdminKeys.claim(GOLF)),
+                "golf's claim is 0.36's: nothing was claimed at 7488 at the new size");
+        assertEquals(OwnerServer.BOAT_036, server.host.store.meta(GenAdminKeys.claim(BOAT)), "nor for the boat");
+        assertEquals(OwnerServer.CLASSIC_036, server.host.store.meta(GenAdminKeys.claim(CLASSIC)), "nor Classic Golf");
+        GenTag oldGolf = server.gen.liveTag(GOLF);
+        assertFalse(oldGolf != null && server.gen.live(GOLF, oldGolf), "golf's 0.36 course stays closed");
+        GenService.SlotReport golf = server.gen.report().stream().filter(r -> r.id().equals(GOLF)).findFirst()
+                .orElseThrow();
+        assertEquals(why, golf.problem(), "and says why");
+        assertEquals(1, server.host.logged(Level.SEVERE, GOLF + " is off: " + why), "once, as a SEVERE");
+        assertTrue(server.guarded(GOLF_A) && server.guarded(GOLF_B), "its 0.36 area stays guarded at its own size");
+        List<OldAreas.Area> held = server.gen.oldAreas();
+        assertTrue(held.stream().allMatch(a -> a.state() == OldAreas.State.HELD && why.equals(a.detail())),
+                "each old area waits for the file, saying so: " + held);
+        assertEquals(0, server.host.logged(Level.INFO, "area changed with this version"), "no move is announced");
+        List<String> said = new ArrayList<>();
+        server.gen.tidy(GOLF, true, said::add);
+        assertFalse(said.stream().anyMatch(l -> l.contains("Emptying")), "tidy empties nothing there either: " + said);
+        for (String id : OwnerServer.OTHERS) {
+            assertTrue(server.gen.live(id, server.gen.liveTag(id)), id + " opens as usual");
+        }
+
+        // the next start reads a saved revision 21: the update goes as it always would
+        server.gen.stop();
+        server.upgrade(GenService.RECORDED, 20);
+        assertEquals(List.of(), server.failures(), "moved once, straight to the new spots");
+        assertEquals(1, server.gen.liveTag(GOLF).reroll(), "golf rerolled once, not twice");
     }
 
     private String severe() {

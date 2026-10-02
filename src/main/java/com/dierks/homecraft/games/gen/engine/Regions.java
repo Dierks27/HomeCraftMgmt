@@ -693,18 +693,74 @@ public final class Regions {
         return w.isEmpty() ? null : w;
     }
 
+    /** What follows an old claim emptied but not yet known to be on disk: {@code <claim>|emptied@<epoch ms>}. */
+    static final String EMPTIED = "|emptied@";
+
     /**
      * The claims a stored list of old regions names ({@link GenAdminKeys#old}, and 0.35's
-     * {@link GenAdminKeys#wet}): ';' between them, each a whole claim; blanks, unreadable ones and repeats
-     * dropped, in order.
+     * {@link GenAdminKeys#wet}): ';' between them, each a whole claim (an emptied one's mark,
+     * {@code |emptied@T}, left off); blanks, unreadable ones and repeats dropped, in order.
      */
     public static List<String> oldClaims(String stored) {
-        return wetClaims(stored);
+        List<String> out = new ArrayList<>();
+        if (stored == null) {
+            return out;
+        }
+        for (String c : stored.split(";")) {
+            int bar = c.indexOf('|');
+            String t = (bar < 0 ? c : c.substring(0, bar)).trim();
+            if (claimOrigin(t) != null && claimWorld(t) != null && !out.contains(t)) {
+                out.add(t);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * F09: the old claims of a stored list that RETIRE has emptied, each with when ({@code <claim>|emptied@T}).
+     * Such an entry stays recorded and guarded until the world is known to have been saved after T, or a later
+     * start finds both its halves still empty: an emptied area exists only in memory until the chunks are
+     * written, so a hard stop before that brings its blocks (and ponds) back.
+     */
+    public static Map<String, Long> oldEmptied(String stored) {
+        Map<String, Long> out = new LinkedHashMap<>();
+        if (stored == null) {
+            return out;
+        }
+        for (String c : stored.split(";")) {
+            int at = c.indexOf(EMPTIED);
+            if (at < 0) {
+                continue;
+            }
+            String claim = c.substring(0, at).trim();
+            try {
+                long t = Long.parseLong(c.substring(at + EMPTIED.length()).trim());
+                if (claimOrigin(claim) != null && claimWorld(claim) != null) {
+                    out.putIfAbsent(claim, t);
+                }
+            } catch (NumberFormatException e) {
+                // an unreadable mark: the claim reads as not yet emptied, and is emptied again (writing nothing)
+            }
+        }
+        return out;
     }
 
     /** A list of old regions as stored, or {@code null} (the key unset) when it is empty. */
     public static String oldText(List<String> claims) {
-        return wetText(claims);
+        return oldText(claims, Map.of());
+    }
+
+    /** As {@link #oldText(List)}, each claim in {@code emptied} with its mark ({@link #oldEmptied}). */
+    public static String oldText(List<String> claims, Map<String, Long> emptied) {
+        if (claims == null || claims.isEmpty()) {
+            return null;
+        }
+        List<String> out = new ArrayList<>();
+        for (String c : claims) {
+            Long t = emptied == null ? null : emptied.get(c);
+            out.add(t == null ? c : c + EMPTIED + t);
+        }
+        return String.join(";", out);
     }
 
     /**

@@ -55,6 +55,12 @@ final class SlotState {
      * or moved until config is fixed.
      */
     boolean unplaced;
+    /**
+     * Why it is {@link #unplaced} though config's spot can be read ({@code SlotConfig#held}, F10: config.yml is
+     * still below the revision that moves this area), or {@code null}. Nothing is claimed, built or emptied for
+     * it then, its old area included.
+     */
+    String heldWhy;
     /** The admin's on/off, or {@code null} for none. */
     Boolean override;
     /** The tier or mix a build would use now. */
@@ -117,6 +123,17 @@ final class SlotState {
      * recorded, guarded until RETIRE empties it (or it is claimed there again).
      */
     java.util.List<String> old = java.util.List.of();
+    /**
+     * F09: the old claims RETIRE has emptied, each with when (epoch ms), as {@link GenAdminKeys#old} marks them.
+     * Still recorded and guarded: an emptied area is only in memory until its chunks are written, so it is let
+     * go once the world has been saved since ({@link #emptiedSaves}), or a later start finds it still empty.
+     */
+    final java.util.Map<String, Long> emptied = new java.util.LinkedHashMap<>();
+    /**
+     * The claims of {@link #emptied} emptied in this run, each with how many saves of its world had been seen
+     * then ({@code GenService#worldSaved}); one emptied in an earlier run isn't here, and is looked at again.
+     */
+    final java.util.Map<String, Integer> emptiedSaves = new java.util.HashMap<>();
     /** The old claims RETIRE can't empty now, each with what is in the way; tried again every few minutes. */
     final java.util.Map<String, String> retireHeld = new java.util.LinkedHashMap<>();
     /** When the last of {@link #retireHeld} was found (epoch ms). */
@@ -152,6 +169,29 @@ final class SlotState {
     boolean oldDirty;
     /** A preview in the idle half, or {@code null}. */
     Preview preview;
+
+    // ---- what is known to be on disk (F12) ------------------------------------------------------------
+    /**
+     * A fact about one half reached in memory this run ({@code empty}, or {@code plan:<hash>}: verified against
+     * that plan), with how many saves of the slot's world had been seen then: it is on disk, and recorded in
+     * {@link GenAdminKeys#onDisk}, once the world has been saved twice since.
+     */
+    record DiskFact(String fact, int saves) {
+    }
+
+    /**
+     * What each half held when the world was last known to be saved ({@link GenAdminKeys#onDisk}, for the
+     * current claim only): read at every check. Any write into a half drops its fact first, so a fact left
+     * after a stop of any kind is still true on disk.
+     */
+    final java.util.Map<Character, String> onDisk = new java.util.HashMap<>();
+    /** Facts reached this run, waiting for saves. */
+    final java.util.Map<Character, DiskFact> pendingDisk = new java.util.HashMap<>();
+    /**
+     * The live half was opened at this start on a sampled check (a big half saved right after its last full
+     * check): the whole half is checked once nothing else is being built, with the course open.
+     */
+    boolean fullCheckDue;
 
     // ---- tries and status -----------------------------------------------------------------------
     long triesDay = Long.MIN_VALUE;

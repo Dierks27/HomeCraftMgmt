@@ -104,10 +104,21 @@ public final class GenAdminKeys {
      * halves may still hold its blocks, each with the world, origin, half size and gap it RECORDED. Guarded
      * until it is emptied (RETIRE: by itself when this version changed the slot's size, or by
      * {@code /hcm games gen tidy}), or claimed there again. It replaces 0.35's {@link #wet}, which is read
-     * into it once. Unset when there are none.
+     * into it once. Unset when there are none. A claim RETIRE has emptied carries {@code |emptied@<epoch ms>}
+     * ({@link Regions#oldEmptied}) and stays, guarded, until the world has been saved twice since or a later
+     * start finds it still empty (F09).
      */
     public static String old(String slot) {
         return "gen." + slot + ".old";
+    }
+
+    /**
+     * F12: what a slot's halves held when its world was last known to be saved, for the claim it names:
+     * {@code claim=<claim>;A=<fact>;B=<fact>}, a fact being {@code empty} or {@code plan:<hash>}. A start reads
+     * it to skip loading a spare half known to be empty, and to check a big live half by a sample first.
+     */
+    public static String onDisk(String slot) {
+        return "gen." + slot + ".ondisk";
     }
 
     /**

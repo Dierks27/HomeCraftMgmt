@@ -69,9 +69,22 @@ public final class OldAreas {
         if (halves == null || halves.isEmpty()) {
             return "its halves can't be read";
         }
+        List<Character> which = new ArrayList<>();
         for (int i = 0; i < halves.size(); i++) {
-            Box h = halves.get(i);
-            char which = (char) ('A' + i);
+            which.add((char) ('A' + i));
+        }
+        return inTheWay(halves, which, world, obstacles, spawn, safe);
+    }
+
+    /**
+     * As {@link #inTheWay(List, String, List, int[], double[])} for parts of the old halves ({@link #minus}),
+     * each named by the half it is part of ({@code which}); nothing is in the way of no parts at all.
+     */
+    public static String inTheWay(List<Box> parts, List<Character> which, String world, List<Obstacle> obstacles,
+                                  int[] spawn, double[] safe) {
+        for (int i = 0; i < parts.size(); i++) {
+            Box h = parts.get(i);
+            char half = which.get(i);
             for (Obstacle o : obstacles == null ? List.<Obstacle>of() : obstacles) {
                 if (o == null || o.world() == null || world == null || !o.world().equalsIgnoreCase(world)) {
                     continue;
@@ -79,15 +92,15 @@ public final class OldAreas {
                 int gap = h.gap(o.box());
                 if (gap < Regions.CLEARANCE) {
                     return o.name() + " is " + (gap < 0 ? "inside" : "only " + gap + " blocks from") + " its old half "
-                            + which + " (" + o.box().describe() + "; it must be " + Regions.CLEARANCE + " away)";
+                            + half + " (" + o.box().describe() + "; it must be " + Regions.CLEARANCE + " away)";
                 }
             }
             if (spawn != null && point(spawn[0], spawn[1], spawn[2]).gap(h) < Regions.CLEARANCE) {
-                return "the world's spawn is in or next to its old half " + which;
+                return "the world's spawn is in or next to its old half " + half;
             }
             if (safe != null && point((int) Math.floor(safe[0]), (int) Math.floor(safe[1]), (int) Math.floor(safe[2]))
                     .gap(h) < Regions.CLEARANCE) {
-                return "games.fresh.safe_spot is in or next to its old half " + which;
+                return "games.fresh.safe_spot is in or next to its old half " + half;
             }
         }
         return null;
@@ -111,6 +124,52 @@ public final class OldAreas {
             }
         }
         return false;
+    }
+
+    /**
+     * The parts of {@code box} outside every one of {@code cut}: at most six boxes per cut, none overlapping.
+     * An old half that a course of the same slot claims again in part (F09: the next start's look at an area
+     * emptied before its slot was resized in place) is looked at only where that course doesn't stand.
+     */
+    public static List<Box> minus(Box box, List<Box> cut) {
+        List<Box> out = new ArrayList<>(List.of(box));
+        for (Box c : cut == null ? List.<Box>of() : cut) {
+            List<Box> next = new ArrayList<>();
+            for (Box b : out) {
+                if (!b.intersects(c)) {
+                    next.add(b);
+                    continue;
+                }
+                int x0 = b.minX();
+                int x1 = b.maxX();
+                int y0 = b.minY();
+                int y1 = b.maxY();
+                if (c.minX() > x0) {
+                    next.add(Box.of(x0, y0, b.minZ(), c.minX() - 1, y1, b.maxZ()));
+                    x0 = c.minX();
+                }
+                if (c.maxX() < x1) {
+                    next.add(Box.of(c.maxX() + 1, y0, b.minZ(), x1, y1, b.maxZ()));
+                    x1 = c.maxX();
+                }
+                if (c.minY() > y0) {
+                    next.add(Box.of(x0, y0, b.minZ(), x1, c.minY() - 1, b.maxZ()));
+                    y0 = c.minY();
+                }
+                if (c.maxY() < y1) {
+                    next.add(Box.of(x0, c.maxY() + 1, b.minZ(), x1, y1, b.maxZ()));
+                    y1 = c.maxY();
+                }
+                if (c.minZ() > b.minZ()) {
+                    next.add(Box.of(x0, y0, b.minZ(), x1, y1, c.minZ() - 1));
+                }
+                if (c.maxZ() < b.maxZ()) {
+                    next.add(Box.of(x0, y0, c.maxZ() + 1, x1, y1, b.maxZ()));
+                }
+            }
+            out = next;
+        }
+        return out;
     }
 
     // ---- the record of an old area emptied ----------------------------------------------------------
@@ -171,7 +230,12 @@ public final class OldAreas {
         /** An admin's move left it (an origin or world change): it stays guarded until {@code tidy}. */
         MANUAL,
         /** Its world isn't loaded: it waits for it. */
-        ELSEWHERE
+        ELSEWHERE,
+        /**
+         * F09: it was emptied, and stays recorded and guarded until the world has been saved since, or the next
+         * start finds it still empty: only then is it let go.
+         */
+        EMPTIED
     }
 
     /**
@@ -199,6 +263,8 @@ public final class OldAreas {
             case HELD -> it + " can't be emptied: " + a.detail() + " - it stays guarded";
             case MANUAL -> it + " is still guarded - empty it with /hcm games gen tidy " + a.slot() + " confirm";
             case ELSEWHERE -> it + " waits for its world " + a.detail() + " to be loaded";
+            case EMPTIED -> it + " is empty; it stays guarded until the world has been saved (or the next start finds"
+                    + " it still empty), then it is let go";
         };
     }
 }

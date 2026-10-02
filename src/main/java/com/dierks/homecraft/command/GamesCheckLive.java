@@ -247,6 +247,9 @@ final class GamesCheckLive implements GamesCheck.Facts {
                 next = GenCopy.whenDated(at, zone) + " (in " + GenCopy.span(at - now) + ")";
             }
             for (OldAreas.Area a : engine.oldAreas()) {
+                if (a.state() == OldAreas.State.EMPTIED) {
+                    continue; // emptied, only waiting to be known on disk (F09): its record below says so
+                }
                 Slots.Def def = Slots.any(a.slot());
                 String name = def == null ? a.slot() : GenCopy.slotName(def, st.cadenceDays());
                 old.add(new GamesCheck.OldArea(a.slot(), name, GamesCheck.OldState.valueOf(a.state().name()), a.where(),

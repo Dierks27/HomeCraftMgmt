@@ -264,6 +264,9 @@ public final class DailyCourses implements Game {
         g.generated(engine);
         GenService running = engine;
         GenRegionGuard.register(g, this, running::guardArea, running::wetArea, log());
+        // F09/F12: when what the engine emptied or checked is known to be on disk
+        g.on(this, org.bukkit.event.world.WorldSaveEvent.class, org.bukkit.event.EventPriority.MONITOR, false,
+                e -> running.worldSaved(e.getWorld().getName()));
         g.every(this, 1, 1, running::tick);
         g.every(this, 20, 20, running::check);
         g.later(this, 1, running::worldsReady);

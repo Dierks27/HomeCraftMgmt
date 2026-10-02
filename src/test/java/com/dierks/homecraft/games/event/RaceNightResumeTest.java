@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.GamesBench;
 import com.dierks.homecraft.games.GeneratedCourses;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.CourseCodec;
@@ -68,7 +69,7 @@ class RaceNightResumeTest {
     private static final String ID = EventPlan.scheduledId(LocalDate.of(2026, 9, 29), LocalTime.of(12, 20));
     private static final long STARTS_AT = T0 + 20 * MIN;
     /** The Ice Boat slot's half A, where {@link MountainRuns} is laid out, and its stand. */
-    private static final Box HALF = Slots.ICE_BOAT.half('A');
+    private static final Box HALF = LegacyBoxes.v036(Slots.ICE_BOAT, 'A');
     private static final Point STAND = RaceStand.spot(HALF, MountainRuns.TOP);
 
     private GamesBench bench;

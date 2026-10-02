@@ -81,8 +81,11 @@ public final class HomeCraftManagement extends JavaPlugin {
      * 20 = the whole-arcade token balance: the games' rewards, caps, Cup, Race Night and Falling Floors
      * prizes and the Scratch Ticket's prizes move from 0.35/0.36's defaults to about a token a minute of
      * play, wherever the owner hasn't changed them ({@link EconomyMigration}).
+     * 21 = the v4 areas: Golf of the Week and Classic Golf (128 x 16 x 224 now) move to x 8768 and the Ice
+     * Boat (the Mountain Run v2, 480 x 176 x 640) north to z 2880, wherever the owner kept the shipped spot
+     * ({@link com.dierks.homecraft.games.gen.GamesAreaMigration}); the engine empties their old areas.
      */
-    static final int CONFIG_REVISION = 20;
+    static final int CONFIG_REVISION = 21;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -1164,6 +1167,11 @@ public final class HomeCraftManagement extends JavaPlugin {
             // The whole-arcade token balance: every reward, cap and prize still at 0.35/0.36's default
             // moves to the new one; the owner's own values stay, with a WARN each. See EconomyMigration.
             EconomyMigration.apply(c, log);
+        }
+        if (from < 21) {
+            // The v4 areas: the bigger golf halves and the Mountain Run v2 move to their new spots, wherever the
+            // shipped spot is untouched; the owner's own stay. See GamesAreaMigration.
+            com.dierks.homecraft.games.gen.GamesAreaMigration.apply(c, log);
         }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);

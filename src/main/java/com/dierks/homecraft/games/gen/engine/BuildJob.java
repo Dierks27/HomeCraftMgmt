@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
  * "Make this half equal to the plan" (GEN-SPEC §0.2 R3, §3.3 steps 4-6 and 8), a few blocks a tick.
@@ -52,6 +53,11 @@ import java.util.UUID;
  *       {@link Phase#FAILED} naming the first five.</li>
  * </ol>
  * Every write goes through a {@link HalfWriter}, which refuses anything outside the half.
+ *
+ * <p><b>Leaving what isn't ours</b> (RETIRE, an old area emptied after a move): a job given a
+ * {@code leave} test never writes a block the plan doesn't name when the test says it isn't Fresh
+ * Courses' (a block no plan may use): it is counted and named ({@link #left}, {@link #leftAt}) and
+ * stays as it is, so the verify pass passes with it standing.
  */
 public final class BuildJob {
 
@@ -137,6 +143,11 @@ public final class BuildJob {
      */
     private boolean staged;
     private final List<String> named = new ArrayList<>();
+    /** Blocks the plan doesn't name that stay because they aren't Fresh Courses' ({@code leave}), or {@code null}. */
+    private final Predicate<String> leave;
+    /** This pass's blocks left as they are, and the first few, "x,y,z block". */
+    private long left;
+    private final List<String> leftAt = new ArrayList<>();
     private final Set<UUID> stuck = new LinkedHashSet<>();
     private Phase phase = Phase.LOAD;
     private int nextLoad;
@@ -165,6 +176,18 @@ public final class BuildJob {
      * @throws IllegalArgumentException when a plan block or sign is outside the half or isn't a block
      */
     public BuildJob(WorldPort port, Box half, Plan plan, Mode mode, boolean mayHoldWater) {
+        this(port, half, plan, mode, mayHoldWater, null);
+    }
+
+    /**
+     * @param plan         what the half must hold, or {@code null} for nothing
+     * @param mayHoldWater as {@link #BuildJob(WorldPort, Box, Plan, Mode, boolean)}
+     * @param leave        whether a block (its block-data text) the plan doesn't name is someone else's and
+     *                     stays as it is, counted ({@link #left}); {@code null}: nothing is left
+     * @throws IllegalArgumentException when a plan block or sign is outside the half or isn't a block
+     */
+    public BuildJob(WorldPort port, Box half, Plan plan, Mode mode, boolean mayHoldWater, Predicate<String> leave) {
+        this.leave = leave;
         this.port = port;
         this.half = half;
         this.writer = new HalfWriter(port, half);
@@ -348,6 +371,8 @@ public final class BuildJob {
         chunkIndex = 0;
         passDiffs = 0;
         named.clear();
+        left = 0;
+        leftAt.clear();
         stage = Stage.DRAIN;
     }
 
@@ -465,9 +490,17 @@ public final class BuildJob {
                             continue;
                         }
                         if (!v.air(x, y, z)) {
+                            String there = v.block(x, y, z);
+                            if (leave != null && leave.test(there)) {
+                                left++; // someone else's: it stays, and is named
+                                if (leftAt.size() < NAMED) {
+                                    leftAt.add(x + "," + y + "," + z + " " + there);
+                                }
+                                continue;
+                            }
                             Op clear = new Op(x, y, z, WorldPort.AIR, null);
                             d.differs(clear);
-                            (fluid(v.block(x, y, z)) ? d.drain : out).add(clear);
+                            (fluid(there) ? d.drain : out).add(clear);
                         }
                     }
                 }
@@ -537,6 +570,33 @@ public final class BuildJob {
     /** The first few differing blocks of the latest pass, "x,y,z". */
     public List<String> firstFound() {
         return List.copyOf(named);
+    }
+
+    /**
+     * The blocks the latest pass left as they are because they aren't Fresh Courses' ({@code leave}); 0
+     * without a {@code leave} test. Counted afresh each pass, so once it is done it is what stands there.
+     */
+    public long left() {
+        return left;
+    }
+
+    /** The first few of {@link #left}, "x,y,z block". */
+    public List<String> leftAt() {
+        return List.copyOf(leftAt);
+    }
+
+    /**
+     * How far it is, 0 to 1, for status: loading the chunks is the first quarter, reading them on the first
+     * pass the rest; a verify pass, or the end, is 1.
+     */
+    public double progress() {
+        if (phase == Phase.DONE || pass > 1) {
+            return 1.0;
+        }
+        if (phase == Phase.LOAD) {
+            return chunks.isEmpty() ? 0 : 0.25 * loaded / chunks.size();
+        }
+        return chunks.isEmpty() ? 1.0 : 0.25 + 0.75 * Math.min(chunkIndex, chunks.size()) / chunks.size();
     }
 
     /** Which pass it is on (1 = the converge). */

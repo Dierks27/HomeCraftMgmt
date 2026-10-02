@@ -151,7 +151,8 @@ class CrossFeatureJourneyFreshOffPreviewTest {
 
         // 2. Preview: built in the spare half, the course still off
         click(FreshAdmin.Kind.PREVIEW);
-        assertTrue(fresh.driveUntil(() -> fresh.engine().tools(SLOT).preview(), 60), "the preview stands: " + said);
+        // the Mountain Run v2's halves are 1,200 chunks each: checking both empty and building one takes minutes
+        assertTrue(fresh.driveUntil(() -> fresh.engine().tools(SLOT).preview(), 600), "the preview stands: " + said);
         String heard = String.join("\n", said);
         assertTrue(heard.contains("ready in half A") && heard.contains("Ice Boat stays off"),
                 "ready in half A, and still off: " + heard);

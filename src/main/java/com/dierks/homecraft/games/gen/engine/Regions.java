@@ -694,6 +694,20 @@ public final class Regions {
     }
 
     /**
+     * The claims a stored list of old regions names ({@link GenAdminKeys#old}, and 0.35's
+     * {@link GenAdminKeys#wet}): ';' between them, each a whole claim; blanks, unreadable ones and repeats
+     * dropped, in order.
+     */
+    public static List<String> oldClaims(String stored) {
+        return wetClaims(stored);
+    }
+
+    /** A list of old regions as stored, or {@code null} (the key unset) when it is empty. */
+    public static String oldText(List<String> claims) {
+        return wetText(claims);
+    }
+
+    /**
      * The claims a stored wet list names ({@link GenAdminKeys#wet}): ';' between them, each a whole
      * claim; blanks, unreadable ones and repeats dropped, in order.
      */
@@ -734,6 +748,58 @@ public final class Regions {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    /**
+     * The size of one half a claim was made with, {sx, sy, sz} (fields 5-7), or {@code null} when the claim
+     * can't be read or a size isn't a whole number above 0. A claim records the sizes so an old region is
+     * always found where it was built, whatever size its slot has now.
+     */
+    public static int[] claimSize(String claim) {
+        if (claimOrigin(claim) == null) {
+            return null;
+        }
+        String[] p = claim.split(",");
+        try {
+            int[] out = {Integer.parseInt(p[4].trim()), Integer.parseInt(p[5].trim()), Integer.parseInt(p[6].trim())};
+            return out[0] > 0 && out[1] > 0 && out[2] > 0 ? out : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Both halves of a claim, A then B, at the origin, the half's size and the gap it RECORDED (GOLF-V4-SPEC
+     * §5.2 step 2: never the slot's size now, which a newer version may have changed); {@code null} when it
+     * can't be read. Half B stands {@code sx + gap} along +x from half A, as {@link Slots.Def#half} puts it.
+     */
+    public static List<Box> claimHalves(String claim) {
+        int[] o = claimOrigin(claim);
+        int[] size = claimSize(claim);
+        Integer gap = claimGap(claim);
+        if (o == null || size == null || gap == null) {
+            return null;
+        }
+        return List.of(Box.sized(o[0], o[1], o[2], size[0], size[1], size[2]),
+                Box.sized(o[0] + size[0] + gap, o[1], o[2], size[0], size[1], size[2]));
+    }
+
+    /** "half A x ..; half B x .." of a claim at its recorded sizes, for admins; the claim itself when unreadable. */
+    public static String describeClaim(String claim) {
+        List<Box> h = claimHalves(claim);
+        return h == null ? String.valueOf(claim) : "half A " + h.get(0).describe() + "; half B " + h.get(1).describe();
+    }
+
+    /**
+     * Whether a readable claim was made at another half size than {@code def}'s now: this version changed
+     * the slot's shape (Golf v4's 128 x 16 x 224, the Mountain Run v2's 480 x 176 x 640), so what stands
+     * there is an older version's and its area is emptied by itself (RETIRE). An origin, gap or world
+     * change alone is the owner's move and is not this.
+     */
+    public static boolean resized(Slots.Def def, String claim) {
+        int[] size = claimSize(claim);
+        return def != null && size != null && (size[0] != def.sizeX() || size[1] != def.sizeY()
+                || size[2] != def.sizeZ());
     }
 
     private static Box sphere(double x, double y, double z, double r) {

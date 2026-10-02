@@ -40,8 +40,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class RealPlannersTest {
 
-    private static final List<String> SHIPPED = List.of("fresh_parkour_easy", "fresh_parkour",
-            "fresh_parkour_hard", "fresh_rings", "fresh_golf", "fresh_tiny_golf", "fresh_boat");
+    private static final List<String> SHIPPED = shipped();
+
+    /**
+     * Every shipped slot. The ice boat only once its planner makes the Mountain Run v2 (boat algo 4, package
+     * MA): its shipped half is the v4 one now (480 x 176 x 640), which the v3 spiral planner doesn't plan; the
+     * v3 planner keeps its own tests at its 0.36 box (LegacyBoxes.v036).
+     */
+    private static List<String> shipped() {
+        List<String> out = new java.util.ArrayList<>(List.of("fresh_parkour_easy", "fresh_parkour",
+                "fresh_parkour_hard", "fresh_rings", "fresh_golf", "fresh_tiny_golf"));
+        if (BoatPlanner.ALGO >= PlanCheck.BOAT_MOUNTAIN_ALGO) {
+            out.add("fresh_boat");
+        }
+        return List.copyOf(out);
+    }
 
     private Host host;
     private GenService gen;
@@ -118,7 +131,8 @@ class RealPlannersTest {
         assertEquals(SHIPPED, open(gen), "Time Trials and Mini Golf open every generated row, through the gate,"
                 + " Fresh Courses first in slot order");
         assertEquals(List.of(), open(GeneratedCourses.NONE), "and none of them without Fresh Courses");
-        assertTrue(host.changed.getOrDefault("trials", 0) >= 5 && host.changed.getOrDefault("golf", 0) >= 2,
+        long trials = SHIPPED.stream().filter(id -> !Slots.of(id).golf()).count();
+        assertTrue(host.changed.getOrDefault("trials", 0) >= trials && host.changed.getOrDefault("golf", 0) >= 2,
                 "each flip told Time Trials or Mini Golf to read its courses again: " + host.changed);
         List<String> status = adminSays("status");
         for (String id : SHIPPED) {

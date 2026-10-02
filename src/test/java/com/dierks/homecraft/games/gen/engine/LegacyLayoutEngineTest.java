@@ -166,7 +166,7 @@ class LegacyLayoutEngineTest {
                     id + ": the claim is left exactly as 0.35 wrote it");
         }
         assertTrue(report(DROPPER.id()).claimed(), "the switched-off Dropper is still claimed where its pools stand");
-        assertNull(host.store.meta(GenAdminKeys.wet(DROPPER.id())), "so no old region is left to guard and drain");
+        assertNull(host.store.meta(GenAdminKeys.old(DROPPER.id())), "so no old region is left to guard and drain");
     }
 
     @Test
@@ -183,8 +183,8 @@ class LegacyLayoutEngineTest {
             assertFalse(report(id).claimed(), id + ": the 0.35 claim doesn't cover the wider shape");
         }
         assertFalse(report(DROPPER.id()).claimed(), "nor the Dropper's");
-        assertEquals(LayoutScenarios.Install.claim035(DROPPER), host.store.meta(GenAdminKeys.wet(DROPPER.id())),
-                "whose old halves, pools and all, would be guarded until someone drains them by hand");
+        assertEquals(LayoutScenarios.Install.claim035(DROPPER), host.store.meta(GenAdminKeys.old(DROPPER.id())),
+                "whose old halves, pools and all, would be guarded until someone empties them (tidy)");
         assertTrue(moveWarnings() >= ON.size() + 1, "each is said as a region claimed elsewhere, the path that rerolls: "
                 + host.logs.stream().map(r -> r.getMessage()).toList());
     }

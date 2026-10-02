@@ -114,6 +114,11 @@ class GenAdminTest {
         }
 
         @Override
+        public void tidy(String slot, boolean confirm, Consumer<String> report) {
+            calls.add("tidy " + slot + " " + confirm);
+        }
+
+        @Override
         public List<String> history(String slot, int page) {
             calls.add("history " + slot + " " + page);
             return List.of("&fHARD-1");
@@ -237,6 +242,32 @@ class GenAdminTest {
 
     private String heard() {
         return String.join("\n", said);
+    }
+
+    @Test
+    void tidyAndItsOtherNameRetireListAnOldAreaAndEmptyItOnConfirm() {
+        run("tidy fresh_golf");
+        run("retire fresh_boat");
+        run("tidy fresh_classic_golf");
+        assertEquals(List.of("tidy fresh_golf false", "tidy fresh_boat false", "tidy fresh_classic_golf false"),
+                ops.calls, "without confirm it only looks (a Classics slot is taken too)");
+        assertTrue(logs.isEmpty(), "looking isn't logged as a change");
+        run("retire fresh_boat confirm");
+        assertEquals("tidy fresh_boat true", ops.calls.get(3), "retire is tidy");
+        assertTrue(logs.stream().anyMatch(r -> r.getMessage().equals("Fresh Courses: Console ran /hcm games gen retire"
+                + " fresh_boat confirm")), "a change is logged as it was typed");
+        assertEquals("tidy", GenAdmin.verb("Retire"), "the alias names the verb");
+        ops.restart = "&cA restart is coming at 4:00 PM - try after it.";
+        run("tidy fresh_golf confirm");
+        assertEquals(4, ops.calls.size(), "refused near a restart: emptying never starts that close to one");
+        assertTrue(heard().contains("A restart is coming at 4:00 PM"), heard());
+        run("tidy mystery confirm");
+        assertTrue(heard().contains("'mystery'"), "an unknown course never reaches the engine: " + heard());
+        assertEquals(List.of("confirm"), admin.tab(console, new String[]{"tidy", "fresh_golf", ""}), "then confirm");
+        assertTrue(admin.tab(console, new String[]{"retire", ""}).contains("fresh_classic_golf"),
+                "tab offers the Classics slots too");
+        assertTrue(admin.help().stream().anyMatch(l -> l.contains("tidy|retire <course> [confirm]")),
+                "one help line names both");
     }
 
     @Test
@@ -471,8 +502,8 @@ class GenAdminTest {
         assertEquals(List.of("live"), admin.tab(console, new String[]{"pin", "fresh_rings", "l"}), "pin live");
         assertEquals(List.of(), admin.tab(console, new String[]{"nonsense", ""}), "nothing for an unknown verb");
         assertEquals("gen", admin.name(), "it is /hcm games gen");
-        assertEquals(GenAdmin.VERBS.size() - 4, admin.help().size(),
-                "one help line per verb (on/off, pin/unpin, choose/unchoose and retry/regenerate share one)");
+        assertEquals(GenAdmin.VERBS.size() - 5, admin.help().size(), "one help line per verb (on/off, pin/unpin,"
+                + " choose/unchoose, retry/regenerate and tidy/retire share one)");
     }
 
     // ---- picking a good course (WP-ADM) --------------------------------------------------------
@@ -528,7 +559,8 @@ class GenAdminTest {
                 + " confirm")), "a change is logged as it was typed");
         assertEquals("reroll", GenAdmin.verb("Regenerate"), "the alias names the verb");
         assertEquals("reroll", GenAdmin.verb("retry"), "both of them");
-        assertEquals(List.of("reroll", "retry", "regenerate", "rebuild", "recall"), admin.tab(console, new String[]{"re"}),
+        assertEquals(List.of("reroll", "retry", "regenerate", "rebuild", "retire", "recall"), admin.tab(console,
+                new String[]{"re"}),
                 "tab completion offers them beside reroll");
         assertTrue(admin.tab(console, new String[]{"regenerate", ""}).contains("all"), "regenerate all, as reroll");
         assertEquals(List.of("confirm"), admin.tab(console, new String[]{"retry", "fresh_rings", ""}), "then confirm");

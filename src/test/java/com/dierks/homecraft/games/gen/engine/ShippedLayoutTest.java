@@ -26,8 +26,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * config.yml: the spec's table exactly; not one pair of places in sight of each other at view distance
  * 32 (Paper's largest) for all 26 halves, the Clubhouse, the arena and a keep area at its largest (100
  * plots), which a brute force over every chunk agrees with; every half in the number range the golf
- * ball and the pilots were proven in (x, z 4096..8191); every box on the chunk grid; nothing
- * overlapping or within the build rule's 32 blocks; nothing near a 0.35 spot or the world's spawn.
+ * ball and the pilots were proven in (x, z 4096..8191), but golf's column and the boat, each with its
+ * proof ({@link LayoutSightTest#rangeProblem}); every box on the chunk grid; nothing overlapping or within
+ * the build rule's 32 blocks; nothing near a 0.35 spot, a 0.36 one v4 left behind, or the world's spawn;
+ * and the kept-course plots still 144 x 176 x 336, so no kept course moves when a generator grows.
  * A new place or a moved default has to pass all of it.
  */
 class ShippedLayoutTest {
@@ -81,6 +83,8 @@ class ShippedLayoutTest {
         assertEquals(LayoutSightTest.NEW_CLUBHOUSE, ClubhouseSettings.defaults().box(), "the Clubhouse's box");
         assertEquals(LayoutSightTest.NEW_ARENA, FallingFloorsSettings.defaults().box(), "the arena's box");
         assertEquals(LayoutSightTest.NEW_KEEP, DailySettings.Archive.shipped().keep(), "24 plots from x 1760, z 7296");
+        assertEquals(List.of(144, 176, 336), List.of(KeepArea.PLOT_X, KeepArea.PLOT_Y, KeepArea.PLOT_Z),
+                "the kept plots are pinned: the Mountain Run v2's bigger half moves no kept course");
         assertEquals(Sight.GAP, Slots.HALF_GAP, "a course's halves stand 576 apart by default");
         assertEquals(Sight.GAP, KeepArea.DEFAULT_GAP, "and so do kept plots");
         assertEquals(576, Sight.GAP, "36 chunk columns");
@@ -118,16 +122,17 @@ class ShippedLayoutTest {
             Box b = e.getValue();
             assertTrue(b.minX() % 16 == 0 && b.minZ() % 16 == 0 && (b.maxX() + 1) % 16 == 0
                     && (b.maxZ() + 1) % 16 == 0, e.getKey() + " is chunk-aligned: " + b.describe());
-            assertTrue(b.minY() >= 128 && b.maxY() <= 303, e.getKey() + " keeps 0.35's heights: " + b.describe());
+            assertTrue(b.minY() >= (e.getKey().startsWith(Slots.ICE_BOAT.id()) ? 96 : 128) && b.maxY() <= 303,
+                    e.getKey() + " keeps 0.35's heights (the Mountain Run v2 from y 96): " + b.describe());
             if (e.getKey().contains(":")) {
-                assertTrue(b.minX() >= 4096 && b.maxX() <= 8191 && b.minZ() >= 4096 && b.maxZ() <= 8191,
-                        e.getKey() + " stays in x, z 4096..8191: " + b.describe());
+                assertNull(LayoutSightTest.rangeProblem(e.getKey(), b), e.getKey() + ": the number-range rule");
             }
         }
         for (Map.Entry<String, Box> e : shipped(24).entrySet()) {
             Box b = e.getValue();
-            assertTrue(b.minX() >= 1760 && b.maxX() <= 8191 && b.minZ() >= 4096 && b.maxZ() <= 10367,
-                    e.getKey() + " is inside the owner's footprint x 1760..8191, z 4096..10367: " + b.describe());
+            assertTrue(b.minX() >= 1760 && b.maxX() <= 9599 && b.minZ() >= 2880 && b.maxZ() <= 10367,
+                    e.getKey() + " is inside the owner's \"don't build here\" footprint x 1760..9599, z 2880..10367: "
+                            + b.describe());
         }
     }
 
@@ -169,6 +174,18 @@ class ShippedLayoutTest {
         assertNull(d.archive().keep().problem(new ArrayList<>(shipped(24).entrySet().stream()
                         .filter(e -> e.getKey().contains(":")).map(Map.Entry::getValue).toList())),
                 "the keep area is clear of every half");
+    }
+
+    @Test
+    void nothingShippedMeetsOrSeesAnOldAreaV4LeavesBehind() {
+        for (Map.Entry<String, Box> n : shipped(BIG_KEEP).entrySet()) {
+            for (Map.Entry<String, Box> o : LayoutSightTest.OLD_036.entrySet()) {
+                assertFalse(n.getValue().intersects(o.getValue()), n.getKey() + " is clear of " + o.getKey());
+                int dist = Math.min(Sight.chunksApart(n.getValue(), Sight.REACH, o.getValue()),
+                        Sight.chunksApart(o.getValue(), Sight.REACH, n.getValue()));
+                assertTrue(dist >= 36, n.getKey() + " is " + dist + " chunks from " + o.getKey());
+            }
+        }
     }
 
     @Test

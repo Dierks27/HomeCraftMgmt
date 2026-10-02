@@ -190,11 +190,12 @@ class HalfGapTest {
     void a035ClaimParsesBackTo035sBoxes() {
         for (Slots.Def d : Slots.CLASSICS) {
             int[] o = LegacyBoxes.origin(d);
-            String claim = "games," + o[0] + "," + o[1] + "," + o[2] + "," + d.sizeX() + "," + d.sizeY() + ","
-                    + d.sizeZ();
-            List<Box> back = Regions.halves(d, Regions.claimOrigin(claim), Regions.claimGap(claim));
+            int[] size = LegacyBoxes.size(d);
+            String claim = "games," + o[0] + "," + o[1] + "," + o[2] + "," + size[0] + "," + size[1] + "," + size[2];
+            List<Box> back = Regions.claimHalves(claim);
             assertEquals(List.of(LegacyBoxes.half(d, 'A'), LegacyBoxes.half(d, 'B')), back,
-                    d.id() + ": the halves a 0.35 claim names are exactly where 0.35 built them");
+                    d.id() + ": the halves a 0.35 claim names are exactly where (and as big as) 0.35 built them,"
+                            + " whatever size the slot has now");
         }
     }
 

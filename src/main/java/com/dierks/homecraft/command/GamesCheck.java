@@ -112,10 +112,19 @@ public final class GamesCheck {
      */
     public record Fresh(boolean enabled, String cadence, String schedule, String world, boolean worldLoaded,
                         boolean worldListed, List<Region> regions, List<SlotFact> slots, String nextChange,
-                        String keepProblem, String keepArea, Map<Integer, String> keepPlots) {
+                        String keepProblem, String keepArea, Map<Integer, String> keepPlots, List<OldArea> oldAreas) {
 
         public Fresh {
             keepPlots = keepPlots == null ? Map.of() : Map.copyOf(keepPlots);
+            oldAreas = oldAreas == null ? List.of() : List.copyOf(oldAreas);
+        }
+
+        /** Fresh Courses with no old area to tell about. */
+        public Fresh(boolean enabled, String cadence, String schedule, String world, boolean worldLoaded,
+                     boolean worldListed, List<Region> regions, List<SlotFact> slots, String nextChange,
+                     String keepProblem, String keepArea, Map<Integer, String> keepPlots) {
+            this(enabled, cadence, schedule, world, worldLoaded, worldListed, regions, slots, nextChange, keepProblem,
+                    keepArea, keepPlots, List.of());
         }
 
         /** Fresh Courses with every plot fitting the world. */
@@ -125,6 +134,40 @@ public final class GamesCheck {
             this(enabled, cadence, schedule, world, worldLoaded, worldListed, regions, slots, nextChange, keepProblem,
                     keepArea, Map.of());
         }
+    }
+
+    /**
+     * An old area a Fresh course left behind when its area moved or grew with an update (V4-DECISIONS "One
+     * move mechanism"), or one emptied lately.
+     *
+     * @param id      the course (or Classics slot), for the fix's command
+     * @param name    what an owner reads
+     * @param state   where it is
+     * @param where   its halves ("half A x ..; half B ..")
+     * @param detail  what is in the way ({@link OldState#HELD}), the world it waits for, the first block left
+     *                ({@link OldState#EMPTIED}), or {@code null}
+     * @param percent how far a running one is
+     * @param removed blocks taken away ({@link OldState#EMPTIED})
+     * @param left    blocks left there because they weren't Fresh Courses' ({@link OldState#EMPTIED})
+     */
+    public record OldArea(String id, String name, OldState state, String where, String detail, int percent,
+                          long removed, long left) {
+    }
+
+    /** Where an old area is. */
+    public enum OldState {
+        /** Emptied by itself once nothing else is being built (or being emptied now). */
+        WAITING,
+        /** Being emptied now. */
+        RUNNING,
+        /** Something is in the way: nothing there was changed, and it stays guarded. */
+        HELD,
+        /** An owner's move left it: guarded until {@code tidy}. */
+        MANUAL,
+        /** Its world isn't loaded. */
+        ELSEWHERE,
+        /** Emptied lately. */
+        EMPTIED
     }
 
     /**
@@ -462,6 +505,9 @@ public final class GamesCheck {
             }
             slot(r, s, fr.slots() != null, out);
         }
+        for (OldArea a : fr.oldAreas()) {
+            out.add(oldArea(a));
+        }
         if (fr.nextChange() != null) {
             out.add(Line.ok("Next change: " + fr.nextChange()));
         }
@@ -480,6 +526,31 @@ public final class GamesCheck {
                         + ") can't be used: " + fr.keepPlots().get(plots.get(0)), plotFix(e.getKey(), fr.world())));
             }
         }
+    }
+
+    /** One old area's line: news while it is emptied, a WARN with the one fix when it can't be. */
+    public static Line oldArea(OldArea a) {
+        String tidy = "/hcm games gen tidy " + a.id() + " confirm";
+        return switch (a.state()) {
+            case WAITING -> Line.ok(a.name() + " moved to its new area; its old area (" + a.where() + ") is emptied by"
+                    + " itself once nothing else is being built");
+            case RUNNING -> Line.ok(a.name() + " moved to its new area; its old area (" + a.where() + ") is being"
+                    + " emptied, " + a.percent() + "%");
+            case HELD -> Line.warn(a.name() + "'s old area (" + a.where() + ") can't be emptied: " + a.detail()
+                    + ". Nothing there was changed and it stays guarded", "move what is in the way, then " + tidy);
+            case MANUAL -> Line.warn(a.name() + "'s old area (" + a.where() + ") still stands, guarded",
+                    tidy + " empties it (only Fresh Courses' own blocks, water first)");
+            case ELSEWHERE -> Line.warn(a.name() + "'s old area (" + a.where() + ") is in " + a.detail() + ", which"
+                    + " isn't loaded, so it waits", "load " + a.detail() + " (Multiverse) and it is emptied by itself, or "
+                    + tidy + " once it is");
+            case EMPTIED -> a.left() > 0
+                    ? Line.warn(a.name() + "'s old area (" + a.where() + ") is empty of Fresh Courses' blocks ("
+                    + a.removed() + " taken away), but " + a.left() + " block" + (a.left() == 1 ? " that isn't" : "s that"
+                    + " aren't") + " Fresh Courses' " + (a.left() == 1 ? "was" : "were") + " left there (first at "
+                    + a.detail() + ")", "they are yours: remove them by hand if you like; nothing guards that area now")
+                    : Line.ok(a.name() + " moved to its new area; its old area is empty (" + a.removed() + " blocks"
+                    + " taken away)");
+        };
     }
 
     /** The fix for kept plots with problem {@code kind} in {@code world}. */

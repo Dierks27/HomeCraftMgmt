@@ -157,6 +157,7 @@ class LayoutGuardTest {
         Map<String, List<String>> cases = new java.util.LinkedHashMap<>();
         cases.put("claims", LayoutGuard.built(meta(GenAdminKeys.claim("fresh_parkour"), "games,4352,160,4096,64,48,64")));
         cases.put("wet", LayoutGuard.built(meta(GenAdminKeys.wet("fresh_dropper"), "games,5376,160,4160,64,64,16")));
+        cases.put("old", LayoutGuard.built(meta(GenAdminKeys.old("fresh_golf"), "games,7488,160,4096,64,16,128,576")));
         cases.put("recalls", LayoutGuard.built(meta(GenAdminKeys.recall("fresh_classic_golf"), "fresh_golf|7:38|1|2|0")));
         cases.put("kept", LayoutGuard.built(meta(GenAdminKeys.plot(3), "cliff_hop|games|4400,128,5376,4543,303,5711|x|y")));
         cases.put("keeping", LayoutGuard.built(meta(GenAdminKeys.KEEP_PENDING, "keep|3|cliff_hop")));
@@ -206,6 +207,13 @@ class LayoutGuardTest {
                 "the file changes");
         assertFalse(LayoutGuard.pending(c), "the mark is gone");
         for (Area a : LayoutGuard.AREAS) {
+            if (a.resized()) {
+                assertEquals(Held.SHIPPED, LayoutGuard.held(c, a), a.id() + " takes its v4 spot: v4 grew it");
+                if (a.gapPath() != null) {
+                    assertNull(c.get(a.gapPath()), a.gapPath() + ": no 0.35 gap, so the default 576");
+                }
+                continue;
+            }
             assertEquals(Held.LEGACY, LayoutGuard.held(c, a), a.id() + " keeps its 0.35 spot");
             if (a.gapPath() != null) {
                 assertEquals(a.legacyGap(), c.getInt(a.gapPath(), -1), a.gapPath() + " is its 0.35 gap");
@@ -214,8 +222,15 @@ class LayoutGuardTest {
         assertEquals(1, log.size(), "one line: " + log);
         assertTrue(log.get(0).startsWith(LayoutGuard.WARN) && log.get(0).contains("Parkour's area is claimed")
                 && log.get(0).contains("Moving an area by hand"), "a warning that says why and how to move: " + log);
-        assertEquals(LayoutFixtures.legacyPlaces(), LayoutFixtures.places(LayoutFixtures.reread(c)),
-                "every place reads back exactly where and as 0.35 built it");
+        assertTrue(log.get(0).contains("Golf of the Week, Classic Golf and the Ice Boat are bigger now"),
+                "and that the three grown areas take their new spots: " + log);
+        Map<String, List<Box>> want = new java.util.LinkedHashMap<>(
+                LayoutFixtures.legacyPlaces());
+        for (String id : LayoutGuard.RESIZED) {
+            want.put(id, LayoutFixtures.shippedPlaces().get(id));
+        }
+        assertEquals(want, LayoutFixtures.places(LayoutFixtures.reread(c)),
+                "every place reads back exactly where and as 0.35 built it, the three grown ones at their v4 spots");
         String once = c.saveToString();
         assertFalse(LayoutGuard.apply(c, Decision.LEGACY, false, List.of(), null, new ArrayList<>()),
                 "a second run changes nothing");
@@ -225,17 +240,22 @@ class LayoutGuardTest {
     @Test
     void legacyPutsBackAnOriginTheBackfillWroteForAMissingKeyButNotOneTheOwnerTyped() {
         YamlConfiguration c = LayoutFixtures.v035();
+        c.set(area("fresh_tiny_golf").originPath(), null);
         c.set(area("fresh_golf").originPath(), null);
         c.set(area("clubhouse").originPath(), null);
         c.set(area("fresh_parkour").originPath(), new ArrayList<>(area("fresh_parkour").shipped()));
         LayoutGuard.markPending(c);
-        assertEquals(List.of("fresh_golf", "clubhouse"), LayoutGuard.missing(c), "the mark notes what was missing");
-        c.set(area("fresh_golf").originPath(), new ArrayList<>(area("fresh_golf").shipped())); // the backfill
+        assertEquals(List.of("fresh_golf", "fresh_tiny_golf", "clubhouse"), LayoutGuard.missing(c),
+                "the mark notes what was missing");
+        c.set(area("fresh_tiny_golf").originPath(), new ArrayList<>(area("fresh_tiny_golf").shipped())); // the backfill
+        c.set(area("fresh_golf").originPath(), new ArrayList<>(area("fresh_golf").shipped()));
         c.set(area("clubhouse").originPath(), new ArrayList<>(area("clubhouse").shipped()));
         List<String> log = new ArrayList<>();
         LayoutGuard.apply(c, Decision.LEGACY, true, List.of("x"), null, log);
-        assertEquals(Held.LEGACY, LayoutGuard.held(c, area("fresh_golf")),
+        assertEquals(Held.LEGACY, LayoutGuard.held(c, area("fresh_tiny_golf")),
                 "the owner had deleted it, so 0.35's default was what it built at");
+        assertEquals(Held.SHIPPED, LayoutGuard.held(c, area("fresh_golf")),
+                "but Golf of the Week keeps the v4 spot the backfill wrote: v4 grew it, so 0.35's can't hold it");
         assertEquals(Held.LEGACY, LayoutGuard.held(c, area("clubhouse")), "the Clubhouse too");
         assertEquals(Held.SHIPPED, LayoutGuard.held(c, area("fresh_parkour")),
                 "a value the owner typed is theirs, even when it is this version's spot");

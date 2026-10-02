@@ -1880,9 +1880,10 @@ games:
     hole_in_one_reward: 3
     # Tokens for the first finish of a course, once ever per course.
     first_clear: 15
-    # Most tokens mini golf pays a player per day (first clears don't count; Fresh Courses' first
-    # finishes do, so keep it at least as big as Golf of the Week's).
-    daily_cap: 40
+    # Most tokens mini golf pays a player per day, every golf course together (first clears don't
+    # count; Fresh Courses' first finishes do, so keep it big enough for Golf of the Week's and Tiny
+    # Golf's on one day, after par and a few holes-in-one).
+    daily_cap: 50
     # Strokes over par before a hole is picked up.
     max_over_par: 3
   # ---- cup ----
@@ -1900,7 +1901,7 @@ games:
     enabled: true
     # Tokens to enter one course's Cup for one week (1-100).
     entry: 10
-    # Tokens the server adds to a pool in which 2 or more set a Cup time (0-100). Never with one. At
+    # Tokens the server adds to a pool in which 2 or more set a Cup time (0-200). Never with one. At
     # twice the entry, nobody in a Cup of 2 or 3 who sets a Cup time gets back less than they paid.
     server_topup: 20
   # ---- fresh ----
@@ -2169,8 +2170,9 @@ games:
     milestones: [30, 60, 120]
     # Each 0-50, paid in full: one today's caps can't pay waits for another day.
     milestone_rewards: [5, 10, 15]
-    # Most tokens Falling Floors pays a player per day.
-    daily_cap: 20
+    # Most tokens Falling Floors pays a player per day. A round that first lasts 2:00 passes every
+    # milestone, so keep it at least their sum (and the daily: 5 + 10 + 15 + 5).
+    daily_cap: 35
   # ---- clubhouse ----
   # The Clubhouse: one room in the Games world where racers wait before a race and hang out after it
   # (/hcm play clubhouse). It builds itself in an empty box and is checked before anyone comes in;

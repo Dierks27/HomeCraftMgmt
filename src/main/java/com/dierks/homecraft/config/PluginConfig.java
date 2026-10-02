@@ -1542,23 +1542,13 @@ public final class PluginConfig {
             prizes.add(prize);
         }
 
-        int ticketTokens = Math.max(1, c.getInt("arcade.lotto.ticket_tokens", 10));
-        List<LottoPayout> payouts = new ArrayList<>();
-        for (Map<?, ?> row : c.getMapList("arcade.lotto.payouts")) {
-            double weight = Math.max(0.0001, number(row.get("weight"), 1));
-            if (Boolean.TRUE.equals(row.get("jackpot"))) {
-                payouts.add(new LottoPayout(0, true, weight));
-            } else if (row.get("tokens") != null) {
-                payouts.add(new LottoPayout((int) Math.max(0, number(row.get("tokens"), 0)), false, weight));
-            } else {
-                log.warning("A Scratch Ticket payout has neither tokens: nor jackpot: true — skipped. (Money "
-                        + "payouts were removed: the ticket costs and pays tokens now.)");
-            }
+        Lotto lotto = lotto(c, log::warning);
+        // The ticket isn't clamped like the games of chance (RtpLimits): say so when its return is outside
+        // the house's band; at 100% or more it is closed (ArcadeService.ticketClosed).
+        String ticket = com.dierks.homecraft.arcade.ArcadeService.ticketWarning(lotto);
+        if (ticket != null) {
+            log.warning(ticket);
         }
-        Jackpot jackpot = new Jackpot(
-                Math.max(0, c.getInt("arcade.lotto.jackpot.seed", 50)),
-                Math.max(0, c.getInt("arcade.lotto.jackpot.per_ticket", 1)),
-                Math.max(0, c.getInt("arcade.lotto.jackpot.cap", 1000)));
 
         Map<Rarity, Integer> tradeIn = new java.util.EnumMap<>(Rarity.class);
         int[] tradeDefaults = {3, 5, 12, 25, 50};
@@ -1576,7 +1566,41 @@ public final class PluginConfig {
 
         return new Arcade(enabled, streakEnabled, streakRewards, ptEnabled, minsPerToken,
                 crates, prizes, pityTokens, pityRarity, pityPerWeek,
-                new Lotto(ticketTokens, payouts, jackpot), tradeIn, block, machines);
+                lotto, tradeIn, block, machines);
+    }
+
+    /**
+     * {@code arcade.lotto} as the plugin plays it: the ticket's price, its weighted prizes and the jackpot,
+     * read and clamped here only. Static so config revision 20 can work out the return of a ticket it is
+     * deciding about exactly as it will be read ({@code EconomyMigration}).
+     *
+     * @param warn gets one line per prize row skipped; may be {@code null}
+     */
+    public static Lotto lotto(ConfigurationSection c, java.util.function.Consumer<String> warn) {
+        int ticketTokens = Math.max(1, c.getInt("arcade.lotto.ticket_tokens", 10));
+        Jackpot jackpot = new Jackpot(
+                Math.max(0, c.getInt("arcade.lotto.jackpot.seed", 50)),
+                Math.max(0, c.getInt("arcade.lotto.jackpot.per_ticket", 1)),
+                Math.max(0, c.getInt("arcade.lotto.jackpot.cap", 1000)));
+        return new Lotto(ticketTokens, lottoPayouts(c.getMapList("arcade.lotto.payouts"), warn), jackpot);
+    }
+
+    /** {@code arcade.lotto.payouts}' rows as prizes ({@link #lotto}); {@code warn} may be {@code null}. */
+    public static List<LottoPayout> lottoPayouts(List<? extends Map<?, ?>> rows,
+                                                 java.util.function.Consumer<String> warn) {
+        List<LottoPayout> payouts = new ArrayList<>();
+        for (Map<?, ?> row : rows) {
+            double weight = Math.max(0.0001, number(row.get("weight"), 1));
+            if (Boolean.TRUE.equals(row.get("jackpot"))) {
+                payouts.add(new LottoPayout(0, true, weight));
+            } else if (row.get("tokens") != null) {
+                payouts.add(new LottoPayout((int) Math.max(0, number(row.get("tokens"), 0)), false, weight));
+            } else if (warn != null) {
+                warn.accept("A Scratch Ticket payout has neither tokens: nor jackpot: true — skipped. (Money "
+                        + "payouts were removed: the ticket costs and pays tokens now.)");
+            }
+        }
+        return payouts;
     }
 
     /** {@code arcade.icons}: key → {texture, material}. A bad material falls back per button. */
@@ -2826,7 +2850,7 @@ public final class PluginConfig {
         return new BuyLimits(enabled, maxMoney, maxUnits, bypass, ranks);
     }
 
-    private double number(Object value, double fallback) {
+    private static double number(Object value, double fallback) {
         if (value instanceof Number n) {
             return n.doubleValue();
         }

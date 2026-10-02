@@ -1,5 +1,8 @@
 package com.dierks.homecraft;
 
+import com.dierks.homecraft.arcade.ArcadeService;
+import com.dierks.homecraft.config.PluginConfig;
+import com.dierks.homecraft.games.RtpLimits;
 import com.dierks.homecraft.games.TokenBalance;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -29,11 +32,18 @@ import static com.dierks.homecraft.HomeCraftManagement.WARN;
  * writes the new default. Numbers compare by value, lists element by element, and the Scratch
  * Ticket's rows field by field ({@link ArcadeConfigMigration#sameRows}).
  *
- * <p><b>The table is data.</b> {@link #STEPS} is {@link TokenBalance#ROWS}: each row's frozen "old"
- * (what 0.35 and 0.36 shipped) and its "new", the same constants the settings records' defaults read.
- * It is never read from the bundled config.yml, so a later release that changes the file can't change
- * what revision 20 did; a test pins every "old" to 0.35.0's and 0.36.0's config.yml and every "new" to
- * this release's. Retuning before release is an edit to {@link TokenBalance} and config.yml alone.
+ * <p><b>The Scratch Ticket is one unit.</b> Its return is the prizes, the price and the jackpot together
+ * ({@code ArcadeService.rtp}), so its prizes move only while {@code ticket_tokens} and the jackpot's
+ * {@code seed}, {@code per_ticket} and {@code cap} are each absent or still what 0.35 and 0.36 shipped
+ * ({@link TokenBalance#TICKET_SHIPPED}). An owner who brought the ticket into the band through one of those
+ * (the 0.36 README asked them to) keeps their prizes too, with one WARN naming the key and what the new
+ * prizes would give back with it: 0.37's prizes on a 9-token ticket give back 99.4%, past the band.
+ *
+ * <p><b>The table is data.</b> {@link #STEPS} is {@link TokenBalance#ROWS}: each row's "old" (what 0.35
+ * and 0.36 shipped) and its "new" (what 0.37.0 ships), both frozen as literal numbers. It is read neither
+ * from the bundled config.yml nor from the constants the settings records' defaults read, so a later
+ * release that retunes either can't change what revision 20 did; a test pins every "old" to 0.35.0's and
+ * 0.36.0's config.yml and every "new" to this release's, so a retune fails it until it adds a revision.
  *
  * <p><b>Comments.</b> A key that moves takes the bundled file's comment with it, so the owner's file
  * stops saying "Keep each at or under 4" or "(each 0-10)" for limits that have changed. A section
@@ -55,9 +65,13 @@ final class EconomyMigration {
      * @param path its full config key
      * @param old  what 0.35.0 and 0.36.0 shipped
      * @param now  the new default
+     * @param with the keys it moves only with, at what 0.35.0 and 0.36.0 shipped ({@link TokenBalance.Row#with})
      */
-    record Step(String path, Object old, Object now) {
+    record Step(String path, Object old, Object now, Map<String, Object> with) {
     }
+
+    /** The Scratch Ticket's prizes: the one step that moves with other keys ({@link TokenBalance#TICKET_SHIPPED}). */
+    static final String TICKET = "arcade.lotto.payouts";
 
     /** Section comments that describe the shipped numbers under them. */
     static final List<String> COMMENT_SECTIONS = List.of("games.fresh.rewards", "games.fresh.star_goals",
@@ -72,7 +86,7 @@ final class EconomyMigration {
     private static List<Step> steps() {
         List<Step> s = new ArrayList<>();
         for (TokenBalance.Row r : TokenBalance.ROWS) {
-            s.add(new Step(r.path(), r.old(), r.now()));
+            s.add(new Step(r.path(), r.old(), r.now(), r.with()));
         }
         return List.copyOf(s);
     }
@@ -105,8 +119,11 @@ final class EconomyMigration {
                 }
             } else if (o == Outcome.KEPT) {
                 kept.add(step);
+                List<String> with = retuned(c, step);
                 log.add(WARN + "Config migration: kept " + step.path() + " = " + show(c.get(step.path(), null))
-                        + " because you have changed it (the new default is " + show(step.now()) + ").");
+                        + (same(c.get(step.path(), null), step.old()) && !with.isEmpty()
+                        ? " because you have changed " + String.join(" and ", with) + effect(c, step) + "."
+                        : " because you have changed it (the new default is " + show(step.now()) + ")."));
             }
         }
         if (bundled != null) {
@@ -134,10 +151,56 @@ final class EconomyMigration {
             return Outcome.ALREADY;
         }
         if (same(current, step.old())) {
+            if (!retuned(c, step).isEmpty()) {
+                return Outcome.KEPT; // the owner retuned it through a key beside it: the unit is theirs
+            }
             c.set(step.path(), copy(step.now()));
             return Outcome.MOVED;
         }
         return Outcome.KEPT;
+    }
+
+    /**
+     * The keys of {@code step}'s unit ({@link Step#with}) that hold the owner's own value, each as
+     * {@code key = value (shipped N)}, in table order; empty when each is absent or still what was shipped.
+     */
+    static List<String> retuned(FileConfiguration c, Step step) {
+        List<String> out = new ArrayList<>();
+        for (Map.Entry<String, Object> e : step.with().entrySet()) {
+            Object v = c.get(e.getKey(), null);
+            if (v != null && !same(v, e.getValue())) {
+                out.add(e.getKey() + " = " + show(v) + " (shipped " + show(e.getValue()) + ")");
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The rest of the WARN for a step kept for a key beside it. For the Scratch Ticket: what the owner's ticket
+     * gives back, and what the new prizes would give back with their price and jackpot ({@code ArcadeService.rtp},
+     * read as the plugin reads it).
+     */
+    private static String effect(FileConfiguration c, Step step) {
+        String plain = ", which goes with it";
+        if (!TICKET.equals(step.path())) {
+            return plain;
+        }
+        try {
+            PluginConfig.Lotto mine = PluginConfig.lotto(c, null);
+            @SuppressWarnings("unchecked")
+            List<? extends Map<?, ?>> rows = (List<? extends Map<?, ?>>) step.now();
+            PluginConfig.Lotto would = new PluginConfig.Lotto(mine.ticketTokens(), PluginConfig.lottoPayouts(rows, null),
+                    mine.jackpot());
+            return ", and the ticket's return is all of them together: yours gives back " + percent(mine)
+                    + ", and the new prizes " + show(step.now()) + " would give back " + percent(would)
+                    + " (the house band is 85-95)";
+        } catch (RuntimeException e) {
+            return plain;
+        }
+    }
+
+    private static String percent(PluginConfig.Lotto l) {
+        return RtpLimits.tenthPercent(ArcadeService.rtp(l)) + "%";
     }
 
     /**

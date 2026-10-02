@@ -311,21 +311,26 @@ class FloorsRewardsTest {
     }
 
     /**
-     * The shipped rewards under the shipped {@code daily_cap}: the cap holds the biggest milestone and the
-     * daily, so a player who reaches every milestone at once is paid each of them in full within a few days,
-     * every day's daily too, and no milestone is ever recorded short.
+     * The shipped rewards under the shipped {@code daily_cap}: the cap holds every milestone and the daily (the v4
+     * audit, ECON-R3-00: the round that first lasts 2:00 passes 0:30 and 1:00 on the way, and at 20 its 2:00
+     * medal waited for another day's 2:00), so a player's first 2:00 round is paid each medal in full that day,
+     * the daily too, and no milestone is ever recorded short.
      */
     @Test
     void theShippedRewardsFitTheShippedCap() throws Exception {
         FallingFloorsSettings d = FallingFloorsSettings.defaults();
         List<Integer> ms = d.milestoneRewards();
-        int biggest = ms.stream().mapToInt(Integer::intValue).max().orElse(0);
-        assertTrue(d.dailyCap() >= biggest + d.dailyReward(), "the cap holds the biggest milestone and the daily");
+        int all = ms.stream().mapToInt(Integer::intValue).sum();
+        assertTrue(d.dailyCap() >= all + d.dailyReward(), "the cap holds every milestone and the daily");
         int skill = com.dierks.homecraft.config.GamesConfig.Common.defaults().skillDailyCap();
+        assertTrue(skill >= d.dailyCap(), "and so does the skill cap");
         for (int day = 0; day < ms.size(); day++) {
             FloorsRewards.apply(solo(CAT, 125 * 20, OutReason.FELL), DAY + day, WEEK, d.rewards(), 0,
                     db(DAY + day, d.dailyCap(), skill));
             assertTrue(dao.rewardsToday(CAT, FloorsRewards.GAME, DAY + day) <= d.dailyCap(), "day " + day + " within the cap");
+            if (day == 0) {
+                assertEquals(all + d.dailyReward(), balance(CAT), "a first 2:00 round pays every medal and the daily");
+            }
         }
         for (int n = 1; n <= ms.size(); n++) {
             assertTrue(dao.rewardPaid(CAT, FloorsRewards.GAME, RewardKind.MILESTONE, ArenaScoring.milestoneRef(n)),

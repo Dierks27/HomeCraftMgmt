@@ -37,7 +37,7 @@ import java.util.Map;
  * ({@link GolfCourse#adventure}: it keeps playing Adventure Golf's rules); every other course
  * leaves it out. A course kept from a plan also says which golf planner version made it,
  * {@code kept_algo: 4} ({@link GolfCourse#keptAlgo}: a kept Golf v4 course keeps its hole clock by
- * par); a row without it reads as 0, as every row kept before 0.37 does.
+ * par); a row without it reads as 0, as every row kept before Golf v4 does.
  */
 public final class CourseCodec {
 
@@ -48,7 +48,7 @@ public final class CourseCodec {
     static final int FORMAT = 1;
     /** The key a course kept from an Adventure Golf layout carries ({@link GolfCourse#adventure}). */
     static final String ADVENTURE = "adventure";
-    /** The key a course kept from a plan carries: the golf planner version that made it ({@link GolfCourse#keptAlgo}). */
+    /** The key a course kept from a plan carries: the planner version that made it ({@link GolfCourse#keptAlgo}). */
     static final String KEPT_ALGO = "kept_algo";
 
     private CourseCodec() {

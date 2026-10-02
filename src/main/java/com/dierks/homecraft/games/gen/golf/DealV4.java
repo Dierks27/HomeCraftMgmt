@@ -29,22 +29,30 @@ import java.util.Set;
  * can hold), and the first deal that meets every target is used, else the one meeting the most.
  *
  * <p><b>The v4 quota</b> for 7 holes or more: water 2, sand 2, height 3, trees 1, big drop 1 (as
- * Adventure Golf), plus a layup, a hole of three legs and three of two. Tiny Golf: sand 1, height 1,
- * and a tree hole or a pond to look at (as Adventure Golf).
+ * Adventure Golf), plus a Swing layup, a Chip layup, a guarded par 3 (red-team F00: every club has a
+ * job), a hole of three legs and three of two. The layups and the guarded par 3 are pinned to holes
+ * before the shuffles ({@link #pins}), so every course has them. Tiny Golf: sand 1, height 1, and a
+ * tree hole or a pond to look at (as Adventure Golf).
  */
 final class DealV4 {
 
     /**
-     * How many recipe deals are tried. Golf v4 counts eight targets, not Adventure Golf's five
-     * ({@link Quota#DEALS} is 64): a random deal of Golf of the Week meets all eight about one time in
-     * thirty-five, so 64 deals left about one course in seven short; 256 leave about one in three
-     * hundred. Dealing is only shuffling, so it costs nothing.
+     * How many recipe deals are tried. Golf v4 counts ten targets, not Adventure Golf's five
+     * ({@link Quota#DEALS} is 64): with the layups pinned, 256 deals left about one course in thirty
+     * short of its sand and 1,024 one in five hundred; 4,096 met all ten on 20,000 seeds of 20,000.
+     * Dealing is only shuffling (a course stops at its first deal that meets them all): those 20,000
+     * courses were dealt in 8 seconds.
      */
-    static final int DEALS = 256;
+    static final int DEALS = 4096;
     /** The features that have targets, in the order the summary says them. */
     static final List<Quota.Feature> COUNTED = List.of(Quota.Feature.WATER, Quota.Feature.SAND,
             Quota.Feature.HEIGHT, Quota.Feature.TREES, Quota.Feature.BIG_DROP, Quota.Feature.LAYUP,
-            Quota.Feature.THREE_LEGS, Quota.Feature.TWO_LEGS);
+            Quota.Feature.CHIP_LAYUP, Quota.Feature.GUARDED, Quota.Feature.THREE_LEGS, Quota.Feature.TWO_LEGS);
+    /** A course of this many holes or more has the full quota ({@link #table}). */
+    static final int TABLE_FULL = 7;
+    /** The features every course of 7 holes or more is sure of, a hole pinned to each ({@link #pins}). */
+    static final List<Quota.Feature> PINNED = List.of(Quota.Feature.GUARDED, Quota.Feature.LAYUP,
+            Quota.Feature.CHIP_LAYUP);
     /** One time in this many, Hard deals two X holes rather than an L and an X. */
     static final int TWO_X_IN = 3;
 
@@ -60,24 +68,66 @@ final class DealV4 {
      * @param counts  what the holes' first-attempt recipes have
      * @param met     how many targets they meet
      */
-    record Deal(int k, List<LengthClass> classes, Map<String, List<HoleRecipe>> order,
-                Map<Quota.Feature, Integer> counts, int met) {
+    record Deal(int k, List<LengthClass> classes, Map<Integer, HoleRecipe> pinned,
+                Map<String, List<HoleRecipe>> order, Map<Quota.Feature, Integer> counts, int met) {
 
         /**
-         * Hole {@code i}'s recipe: the j-th of its group's list for the group's j-th hole, or with
-         * {@code next} the one after it (a hole's last attempts).
+         * Hole {@code i}'s recipe: its pinned one ({@link #pins}, on every attempt), else the j-th of
+         * its group's list for the group's j-th hole that isn't pinned, or with {@code next} the one
+         * after it (a hole's last attempts).
          */
         HoleRecipe recipe(String mix, int i, boolean next) {
+            HoleRecipe pin = pinned.get(i);
+            if (pin != null) {
+                return pin;
+            }
             String g = group(mix.charAt(i), classes.get(i));
             int j = 0;
             for (int h = 0; h < i; h++) {
-                if (group(mix.charAt(h), classes.get(h)).equals(g)) {
+                if (!pinned.containsKey(h) && group(mix.charAt(h), classes.get(h)).equals(g)) {
                     j++;
                 }
             }
             List<HoleRecipe> list = order.get(g);
             return list.get((j + (next ? 1 : 0)) % list.size());
         }
+    }
+
+    /**
+     * The holes that take a recipe of {@link #PINNED}'s features (red-team F00: a Swing layup, a Chip
+     * layup and a guarded par 3 on every course of 7 holes or more), from the course's stream
+     * {@code root}: for each feature in turn whose target is more than 0, one hole of the classes and
+     * tiers that have such a recipe and isn't pinned yet, picked from fork {@code pin:<feature>}; it
+     * takes the first such recipe of its group's list. Dealt before the shuffles, so the quota's deal
+     * is left only Adventure Golf's own targets and the legs to meet.
+     */
+    static Map<Integer, HoleRecipe> pins(GenRandom root, String mix, List<LengthClass> classes, boolean dry) {
+        Map<Integer, HoleRecipe> out = new HashMap<>();
+        Map<Quota.Feature, Integer> table = table(mix.length());
+        for (Quota.Feature f : PINNED) {
+            if (table.get(f) == 0) {
+                continue;
+            }
+            List<Integer> can = new ArrayList<>();
+            List<HoleRecipe> with = new ArrayList<>();
+            for (int i = 0; i < mix.length(); i++) {
+                if (out.containsKey(i)) {
+                    continue;
+                }
+                for (HoleRecipe h : HoleRecipe.list(mix.charAt(i), classes.get(i), dry)) {
+                    if (h.features(mix.charAt(i), dry).contains(f)) {
+                        can.add(i);
+                        with.add(h);
+                        break;
+                    }
+                }
+            }
+            if (!can.isEmpty()) {
+                int pick = root.fork("pin:" + f.name()).nextInt(can.size());
+                out.put(can.get(pick), with.get(pick));
+            }
+        }
+        return Map.copyOf(out);
     }
 
     /** A (tier, class) group's key: "ML". */
@@ -136,20 +186,20 @@ final class DealV4 {
 
     /**
      * The targets for a course of {@code holes} holes, before they are capped to what its groups can
-     * hold: 7 or more {water 2, sand 2, height 3, trees 1, big drop 1, layup 1, three legs 1, two legs
-     * 3}; 4-6 {1, 1, 2, 1, 0, 0, 0, 1}; 3 {0, 1, 1, 1, 0, 0, 0, 0}, the tree hole a tree hole or a pond
-     * to look at; 2 or fewer, none.
+     * hold: 7 or more {water 2, sand 2, height 3, trees 1, big drop 1, layup 1, chip layup 1, guarded
+     * par 3 1, three legs 1, two legs 3}; 4-6 {1, 1, 2, 1, 0, 0, 0, 0, 0, 1}; 3 {0, 1, 1, 1, 0, ...},
+     * the tree hole a tree hole or a pond to look at; 2 or fewer, none.
      */
     static Map<Quota.Feature, Integer> table(int holes) {
         int[] t;
-        if (holes >= 7) {
-            t = new int[]{2, 2, 3, 1, 1, 1, 1, 3};
+        if (holes >= TABLE_FULL) {
+            t = new int[]{2, 2, 3, 1, 1, 1, 1, 1, 1, 3};
         } else if (holes >= 4) {
-            t = new int[]{1, 1, 2, 1, 0, 0, 0, 1};
+            t = new int[]{1, 1, 2, 1, 0, 0, 0, 0, 0, 1};
         } else if (holes == 3) {
-            t = new int[]{0, 1, 1, 1, 0, 0, 0, 0};
+            t = new int[]{0, 1, 1, 1, 0, 0, 0, 0, 0, 0};
         } else {
-            t = new int[]{0, 0, 0, 0, 0, 0, 0, 0};
+            t = new int[]{0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         }
         Map<Quota.Feature, Integer> out = new EnumMap<>(Quota.Feature.class);
         for (int i = 0; i < COUNTED.size(); i++) {
@@ -195,6 +245,7 @@ final class DealV4 {
     static Deal deal(GenRandom root, String mix, boolean dry) {
         List<LengthClass> classes = classes(root, mix, dry);
         Map<Quota.Feature, Integer> targets = targets(mix, classes, dry);
+        Map<Integer, HoleRecipe> pinned = pins(root, mix, classes, dry);
         Deal best = null;
         for (int k = 0; k < DEALS; k++) {
             Map<String, List<HoleRecipe>> order = new HashMap<>();
@@ -218,7 +269,7 @@ final class DealV4 {
                 }
                 order.put(g, List.copyOf(list));
             }
-            Deal d = new Deal(k, classes, Map.copyOf(order), Map.of(), 0);
+            Deal d = new Deal(k, classes, pinned, Map.copyOf(order), Map.of(), 0);
             List<Set<Quota.Feature>> first = new ArrayList<>();
             for (int i = 0; i < mix.length(); i++) {
                 first.add(d.recipe(mix, i, false).features(mix.charAt(i), dry));
@@ -226,7 +277,7 @@ final class DealV4 {
             Map<Quota.Feature, Integer> counts = count(first, mix.length());
             int met = met(counts, targets);
             if (best == null || met > best.met()) {
-                best = new Deal(k, classes, Map.copyOf(order), counts, met);
+                best = new Deal(k, classes, pinned, Map.copyOf(order), counts, met);
             }
             if (met == COUNTED.size()) {
                 break;

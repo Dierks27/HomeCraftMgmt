@@ -54,7 +54,10 @@ public record GolfCourse(String id, String name, String world, boolean enabled, 
         keptAlgo = Math.max(0, keptAlgo);
     }
 
-    /** A course with Fresh Courses' tag ({@code null}: hand-built) that wasn't kept from a plan, or was before 0.37. */
+    /**
+     * A course with Fresh Courses' tag ({@code null}: hand-built) that wasn't kept from a plan, or was
+     * kept before Golf v4 recorded the version ({@link #keptAlgo} 0).
+     */
     public GolfCourse(String id, String name, String world, boolean enabled, int rev, List<Hole> holes, GenTag gen,
                       boolean adventure) {
         this(id, name, world, enabled, rev, holes, gen, adventure, 0);

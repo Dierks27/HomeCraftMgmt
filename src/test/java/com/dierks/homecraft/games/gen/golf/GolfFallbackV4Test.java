@@ -17,7 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The proven fallbacks (GOLF-V4-SPEC §3.6): SAFE_S (a straight of 10), SAFE_M (a straight of 20), SAFE_L
- * (a dogleg of 20 and 16) and SAFE_X (an S-bend of 18, 14 and 16), plain
+ * (a dogleg of 20 and 16) and SAFE_X (an S-bend of 16, 14 and 16: with the green's run-out, 18 left
+ * the kid a stroke over), plain
  * and 5 wide, each measure their class's par and keep the kid within its bound in every plot of every
  * golf half — at Col G, at the legacy boxes (where a v4 plot fits) and far out — at a cost well under
  * what is kept back for them, and never with a μ under their par, so the course balance never lowers
@@ -69,7 +70,7 @@ class GolfFallbackV4Test {
                     Work work = new Work(GolfPlannerV4.FALLBACK_RESERVE, null);
                     try {
                         GolfPlannerV4.Solved s = GolfPlannerV4.solve(l, c, w.model(), w.kidOver(), w.most(),
-                                w.model() == OrdinaryPar.Model.CHILD, GolfPlannerV4.ATTEMPTS, true, work);
+                                w.model() == OrdinaryPar.Model.CHILD, GolfPlannerV4.ATTEMPTS, work);
                         if (s == null) {
                             problems.add(what + ": doesn't solve within " + GolfPlannerV4.FALLBACK_RESERVE + " putts");
                             continue;
@@ -114,8 +115,8 @@ class GolfFallbackV4Test {
         assertTrue(l.describe().contains("dogleg 20 up, 16 across") && l.features().contains(Quota.Feature.TWO_LEGS),
                 "SAFE_L a dogleg of 20 and 16");
         HoleLayout x = HoleRecipe.fallback(LengthClass.X, PlotGrid.V4, 8768, 4096, t);
-        assertTrue(x.describe().contains("S-bend 18 up, 14 across, 16 up") && x.features().contains(Quota.Feature.THREE_LEGS),
-                "SAFE_X an S-bend of 18, 14 and 16");
+        assertTrue(x.describe().contains("S-bend 16 up, 14 across, 16 up") && x.features().contains(Quota.Feature.THREE_LEGS),
+                "SAFE_X an S-bend of 16, 14 and 16");
         assertEquals(x.blocks(), HoleRecipe.fallback(LengthClass.X, PlotGrid.V4, 8768, 4096, t).blocks(),
                 "nothing random: the same blocks every time");
         GolfCourse.Hole h = x.hole(5);

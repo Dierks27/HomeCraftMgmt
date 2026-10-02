@@ -183,6 +183,49 @@ class OrdinaryParTest {
         }
     }
 
+    /**
+     * Red-team F01: whatever the holes measure, so long as each measures its class's par (μ in
+     * [par - ½, par + ½), an S hole down to 1.5), the balance never makes a par 1, never leaves 2-6 (on
+     * Tiny Golf 2-3), never moves a hole more than a stroke from its class's par, and when the course
+     * stays more than a stroke off it is because no hole could move that way (the planner then draws
+     * one again).
+     */
+    @Test
+    void theBalanceNeverMakesAPar1OrMovesAHoleMoreThanAStrokeFromItsClass() {
+        GenRandom r = new GenRandom(11);
+        int stuck = 0;
+        for (int trial = 0; trial < 20_000; trial++) {
+            int most = r.nextBoolean() ? 3 : 6;
+            int n = 1 + r.nextInt(18);
+            double[] means = new double[n];
+            int[] cls = new int[n];
+            for (int i = 0; i < n; i++) {
+                cls[i] = 2 + r.nextInt(most == 3 ? 2 : 4); // S-X, Tiny Golf S and M
+                int edge = r.nextInt(8);
+                means[i] = edge == 0 ? cls[i] - 0.5 : edge == 1 ? cls[i] + 0.5 - 1e-9 : cls[i] - 0.5 + r.nextInt(64) / 64.0;
+            }
+            int[] par = OrdinaryPar.balance(means, most);
+            String what = "trial " + trial + " (most " + most + ")";
+            for (int i = 0; i < n; i++) {
+                assertTrue(par[i] >= GolfCourse.MIN_PAR && par[i] <= most, what + " hole " + (i + 1) + ": par " + par[i]
+                        + " is 2-" + most + ", never 1");
+                assertTrue(Math.abs(par[i] - cls[i]) <= 1, what + " hole " + (i + 1) + ": par " + par[i]
+                        + " within a stroke of its class's " + cls[i]);
+            }
+            double off = OrdinaryPar.off(par, means);
+            if (Math.abs(off) > 1 + 1e-9) {
+                stuck++;
+                for (int i = 0; i < n; i++) {
+                    boolean canMove = off < 0 ? par[i] < means[i] && par[i] < most
+                            : par[i] > means[i] && par[i] > GolfCourse.MIN_PAR;
+                    assertFalse(canMove, what + ": still " + off + " off only because no hole can move (hole " + (i + 1)
+                            + " could)");
+                }
+            }
+        }
+        assertTrue(stuck > 0, "some made-up courses can't be balanced by moving pars (the planner draws a hole again)");
+    }
+
     @Test
     void theBalanceRaisesTheHoleNearestRoundingUpAndLowersTheOneNearestRoundingDown() {
         // three holes each a little under: 2.40, 3.30, 4.45 round to 2, 3, 4 = 9, the means 10.15: raise one

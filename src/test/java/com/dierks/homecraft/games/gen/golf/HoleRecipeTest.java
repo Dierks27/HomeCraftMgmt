@@ -4,7 +4,10 @@ import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenRandom;
 import com.dierks.homecraft.games.gen.api.Palette;
+import com.dierks.homecraft.games.gen.api.Putt;
+import com.dierks.homecraft.games.golf.BallPhysics;
 import com.dierks.homecraft.games.golf.GolfCourse;
+import com.dierks.homecraft.games.golf.GolfShot;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -24,8 +27,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Golf v4's recipes and deal (GOLF-V4-SPEC §3.3, §3.6, §3.7), before any solving: every recipe in
  * every tier it serves (and on Tiny Golf's plots, the dry ones) draws, for 40 seeds, a hole that is
  * inside its plot, has the features it declares, passes Adventure Golf's per-hole rules (all but a
- * few draws), is drawn both ways round, and says its class; layups do their job; the length deal
- * gives each tier its pattern; and Tiny Golf never deals water, L or X.
+ * few draws), is drawn both ways round, and says its class; layups do their job along the line the
+ * first-timer really aims (red-team F00); greens have run-out a Drive can't bank back in from; the
+ * length deal gives each tier its pattern and pins every course its layups and guarded par 3; and Tiny
+ * Golf never deals water, L or X.
  */
 class HoleRecipeTest {
 
@@ -126,11 +131,15 @@ class HoleRecipeTest {
     }
 
     @Test
-    void aLayupCatchesADriveAndLetsASwingThrough() throws Exception {
-        int held = 0;
-        int drawn = 0;
-        for (HoleRecipe h : List.of(HoleRecipe.L_LAYUP, HoleRecipe.L_LAYUP_SAND, HoleRecipe.X_LAYUP)) {
+    void aLayupLaysUpAlongTheLineTheFirstTimerAims() throws Exception {
+        Map<String, String> rates = new TreeMap<>();
+        for (HoleRecipe h : List.of(HoleRecipe.L_LAYUP, HoleRecipe.X_LAYUP, HoleRecipe.M_GUARDED, HoleRecipe.L_CHIP_LAYUP,
+                HoleRecipe.M_CHIP_LAYUP)) {
             char tier = h.fits('M') ? 'M' : 'H';
+            int club = h == HoleRecipe.L_CHIP_LAYUP || h == HoleRecipe.M_CHIP_LAYUP ? 3 : 4;
+            int held = 0;
+            int laidUp = 0;
+            int drawn = 0;
             for (long seed = 0; seed < 20; seed++) {
                 HoleLayout l;
                 try {
@@ -139,25 +148,130 @@ class HoleRecipeTest {
                     continue;
                 }
                 drawn++;
-                assertTrue(l.features().contains(Quota.Feature.LAYUP), h + " is a layup");
-                GenCopy.TeeFeature want = h == HoleRecipe.L_LAYUP_SAND ? GenCopy.TeeFeature.LAYUP_SAND
-                        : GenCopy.TeeFeature.LAYUP_WATER;
-                assertEquals(want, l.teeFeature(), h + "'s tee sign says lay up short");
+                assertEquals(club, GolfPlannerV4.layupClub(l.features()), h + " lays up with " + club);
+                assertEquals(GenCopy.TeeFeature.LAYUP_WATER, l.teeFeature(), h + "'s tee sign says lay up short");
                 PlanBlocks g = l.grid(GolfPlanner.plotBox(l));
-                if (GolfPlannerV4.layupHolds(g, l.hole(4), Work.unlimited())) {
+                GolfCourse.Hole hole = l.hole(4);
+                LaneMap lane = LaneMap.of(g, hole, GolfPlannerV4.ALGO);
+                if (GolfValidatorV3.holeProblems(g, hole, 1).isEmpty() && GolfPlannerV4.layupHolds(l, g, hole, lane,
+                        Work.unlimited())) {
                     held++;
+                    OrdinaryPar.Measure m = OrdinaryPar.measure(g, hole, lane, OrdinaryPar.Model.FIRST_TIMER,
+                            Work.unlimited());
+                    laidUp += m.teeClub() == club ? 1 : 0;
                 }
             }
+            rates.put(h.name(), held + " of " + drawn + " hold, " + laidUp + " laid up");
+            assertTrue(held * 10 >= drawn * 6, h + ": along the first-timer's own aim from the tee, its Drive (and on a"
+                    + " chip layup its Swing) goes in and its layup club stays dry, on most draws: " + held + " of " + drawn);
+            assertTrue(laidUp * 10 >= held * 7, h + ": and the first-timer then chooses to lay up: " + laidUp + " of " + held);
         }
-        assertTrue(held * 10 >= drawn * 8, "a Drive off the tee ends in the hazard and a Swing short of it on most"
-                + " layups as drawn: " + held + " of " + drawn);
+        System.out.println("Golf v4 layups: " + rates);
+    }
+
+    /**
+     * Red-team F00: a pond straight on past the elbow, checked along the leg's bearing, catches a Drive
+     * played up the leg; but the first-timer aims across the corner, misses it, and Drives anyway.
+     */
+    @Test
+    void aPondStraightOnIsNoLayupForAPlayerWhoAimsAcrossTheCorner() throws Exception {
+        Draft d = new Draft(new GenRandom(7), 'M', PlotGrid.V4, false, false);
+        Draft.Leg a = d.first(12, 9, 2);
+        d.then(1, 0, 20, 2);
+        d.lay(0);
+        int u0 = a.length() + 3;
+        d.water(a, u0, u0 + 2, -2, 2);
+        d.features.add(Quota.Feature.LAYUP);
+        HoleLayout l = d.s.render(null, "STRAIGHT_ON", false, X0, Z0, T, "a pond straight on past the elbow",
+                d.features(), GenCopy.TeeFeature.LAYUP_WATER);
+        PlanBlocks g = l.grid(GolfPlanner.plotBox(l));
+        GolfCourse.Hole hole = l.hole(4);
+        assertEquals(List.of(), GolfValidatorV3.holeProblems(g, hole, 1), "a sound hole");
+        LaneMap lane = LaneMap.of(g, hole, GolfPlannerV4.ALGO);
+        GolfShot.Result upTheLeg = GolfShot.play(g, GolfShot.area(g, hole), GolfShot.tee(g, hole), new Putt(0f, 5));
+        assertTrue(upTheLeg.penalty(), "a Drive straight up the leg splashes: the old check (the leg's bearing) holds");
+        assertFalse(GolfPlannerV4.layupHolds(l, g, hole, lane, Work.unlimited()),
+                "but along the line the first-timer aims (across the corner) its Drive stays dry: no layup");
+        assertEquals(5, OrdinaryPar.measure(g, hole, lane, OrdinaryPar.Model.FIRST_TIMER, Work.unlimited()).teeClub(),
+                "and the first-timer Drives off the tee");
     }
 
     @Test
-    void aStraightOnHoleIsNoLayup() throws Exception {
+    void aHoleThatIsntALayupHasNoLayupClub() throws Exception {
         HoleLayout l = HoleRecipe.S_STRAIGHT.draw(new GenRandom(1), 'E', PlotGrid.V4, X0, Z0, T, false, false);
-        assertFalse(GolfPlannerV4.layupHolds(l.grid(GolfPlanner.plotBox(l)), l.hole(2), Work.unlimited()),
-                "a Drive straight up a 12-long straight isn't caught by any hazard");
+        assertEquals(0, GolfPlannerV4.layupClub(l.features()), "a straight has no layup club");
+        PlanBlocks g = l.grid(GolfPlanner.plotBox(l));
+        assertTrue(GolfPlannerV4.layupHolds(l, g, l.hole(2), LaneMap.of(g, l.hole(2), 4), Work.unlimited()),
+                "and nothing to check");
+    }
+
+    /**
+     * Red-team F00: a green has run-out behind its cup. Played straight at the cup on the level from 3 to
+     * 9 blocks out (where a Drive is still too fast to drop on the way in), a Drive never comes back off
+     * the back wall into the cup — on Adventure Golf's green, one row deep, it does.
+     */
+    @Test
+    void aGreensRunOutStopsADriveBankingBackIn() throws Exception {
+        int tried = 0;
+        List<String> banked = new ArrayList<>();
+        List<HoleLayout> greens = new ArrayList<>();
+        for (LengthClass c : LengthClass.values()) {
+            greens.add(HoleRecipe.fallback(c, PlotGrid.V4, X0, Z0, T));
+        }
+        for (HoleRecipe h : HoleRecipe.values()) {
+            char tier = h.fits('M') ? 'M' : h.fits('E') ? 'E' : 'H';
+            for (long seed = 0; seed < 6; seed++) {
+                try {
+                    greens.add(h.draw(new GenRandom(seed).fork("green"), tier, PlotGrid.V4, X0, Z0, T, false, false));
+                } catch (Draft.Redraw e) {
+                    // that draw didn't fit
+                }
+            }
+        }
+        for (HoleLayout l : greens) {
+            int[] n = driveInFrom(l);
+            tried += n[0];
+            if (n[1] > 0) {
+                banked.add(l.describe() + ": " + n[1] + " of " + n[0]);
+            }
+        }
+        assertTrue(tried > 1000, "Drives played at the cup from 3-9 out: " + tried);
+        assertEquals(List.of(), banked, "no Drive banks back into the cup off the back wall");
+        // Adventure Golf's green, the lane one row past the cup: the same Drive banks in
+        HoleLayout v3 = HoleTemplate.SAFE_STRAIGHT.draw(new GenRandom(1), 'E', X0, Z0, T);
+        assertTrue(driveInFrom(v3)[1] > 0, "on an Adventure Golf green a Drive does bank in");
+    }
+
+    /** {Drives played, Drives in the cup}: straight at the cup along the lane, 3-9 blocks out, on the cup's level. */
+    private static int[] driveInFrom(HoleLayout l) {
+        PlanBlocks g = l.grid(GolfPlanner.plotBox(l));
+        GolfCourse.Hole hole = l.hole(4);
+        LaneMap lane = LaneMap.of(g, hole, GolfPlannerV4.ALGO);
+        BallPhysics.Hole area = GolfShot.area(g, hole);
+        double cx = hole.cup().x() + 0.5;
+        double cz = hole.cup().z() + 0.5;
+        int last = lane.waypoints() - 2; // the waypoint before the cup: the green's level
+        double green = lane.surface((int) Math.floor(lane.waypointX(last)), (int) Math.floor(lane.waypointZ(last)));
+        int[] out = new int[2];
+        for (int w = last; w >= 0; w--) {
+            double x = lane.waypointX(w);
+            double z = lane.waypointZ(w);
+            double d = Math.hypot(x - cx, z - cz);
+            if (d > 9.01) {
+                break;
+            }
+            if (d < 3 || !lane.clear(x, z, cx, cz)
+                    || Math.abs(lane.surface((int) Math.floor(x), (int) Math.floor(z)) - green) > 1e-9) {
+                continue;
+            }
+            BallPhysics.Ball b = new BallPhysics.Ball(x, green + 0.5, z);
+            BallPhysics.settle(b, g);
+            out[0]++;
+            if (GolfShot.play(g, area, b, new Putt((float) LaneMap.bearing(x, z, cx, cz), 5)).inCup()) {
+                out[1]++;
+            }
+        }
+        return out;
     }
 
     @Test
@@ -178,14 +292,28 @@ class HoleRecipeTest {
         assertFalse(HoleRecipe.list('H', LengthClass.X, false).isEmpty(), "Hard has X");
         assertTrue(HoleRecipe.list('H', LengthClass.X, false).stream().allMatch(h -> h.cls == LengthClass.X),
                 "and only X there");
-        Set<HoleRecipe> layups = EnumSet.noneOf(HoleRecipe.class);
-        for (HoleRecipe h : HoleRecipe.values()) {
-            if (h.features('M', false).contains(Quota.Feature.LAYUP) || h.features('H', false).contains(Quota.Feature.LAYUP)) {
-                layups.add(h);
+        assertEquals(EnumSet.of(HoleRecipe.L_LAYUP, HoleRecipe.X_LAYUP), with(Quota.Feature.LAYUP),
+                "the Swing layups: L's and X's");
+        assertEquals(EnumSet.of(HoleRecipe.L_CHIP_LAYUP, HoleRecipe.M_CHIP_LAYUP), with(Quota.Feature.CHIP_LAYUP),
+                "the Chip layups: L's and M's");
+        assertEquals(EnumSet.of(HoleRecipe.M_GUARDED), with(Quota.Feature.GUARDED), "the guarded par 3");
+        for (Quota.Feature f : DealV4.PINNED) {
+            for (HoleRecipe h : with(f)) {
+                assertTrue(h.wet('M') && h.wet('H') && !h.fits('E'), h + " has water in play: never on Tiny Golf or Easy");
             }
         }
-        assertEquals(EnumSet.of(HoleRecipe.L_LAYUP, HoleRecipe.L_LAYUP_SAND, HoleRecipe.X_LAYUP), layups,
-                "the layups: L's pond and sand, X's pond");
+    }
+
+    private static Set<HoleRecipe> with(Quota.Feature f) {
+        Set<HoleRecipe> out = EnumSet.noneOf(HoleRecipe.class);
+        for (HoleRecipe h : HoleRecipe.values()) {
+            for (char tier : "EMH".toCharArray()) {
+                if (h.fits(tier) && h.features(tier, false).contains(f)) {
+                    out.add(h);
+                }
+            }
+        }
+        return out;
     }
 
     @Test
@@ -223,7 +351,24 @@ class HoleRecipeTest {
         assertEquals(d.k(), DealV4.deal(new GenRandom(42), mix, false).k(), "the same seed deals the same");
         Map<Quota.Feature, Integer> t = DealV4.targets(mix, d.classes(), false);
         assertEquals(2, t.get(Quota.Feature.WATER), "Golf of the Week: water 2");
-        assertEquals(1, t.get(Quota.Feature.LAYUP), "a layup");
+        assertEquals(1, t.get(Quota.Feature.LAYUP), "a Swing layup");
+        assertEquals(1, t.get(Quota.Feature.CHIP_LAYUP), "a Chip layup");
+        assertEquals(1, t.get(Quota.Feature.GUARDED), "a guarded par 3");
+        for (long seed = 0; seed < 300; seed++) {
+            DealV4.Deal deal = DealV4.deal(new GenRandom(seed), mix, false);
+            assertEquals(DealV4.PINNED.size(), deal.pinned().size(), "seed " + seed + ": a hole pinned to each");
+            for (Quota.Feature f : DealV4.PINNED) {
+                long holes = deal.pinned().entrySet().stream().filter(e -> e.getValue().features(mix.charAt(e.getKey()),
+                        false).contains(f)).count();
+                assertEquals(1, holes, "seed " + seed + ": one hole pinned to " + f.words());
+            }
+            for (Map.Entry<Integer, HoleRecipe> e : deal.pinned().entrySet()) {
+                assertEquals(e.getValue(), deal.recipe(mix, e.getKey(), false), "a pinned hole takes its recipe");
+                assertEquals(e.getValue(), deal.recipe(mix, e.getKey(), true), "on every attempt");
+            }
+            assertEquals(DealV4.COUNTED.size(), deal.met(), "seed " + seed + ": the deal meets the whole v4 quota");
+        }
+        assertTrue(DealV4.deal(new GenRandom(42), "EEE", true).pinned().isEmpty(), "Tiny Golf pins nothing");
         Map<Quota.Feature, Integer> tiny = DealV4.targets("EEE", List.of(LengthClass.S, LengthClass.S, LengthClass.M), true);
         assertEquals(0, tiny.get(Quota.Feature.WATER), "Tiny Golf: no water");
         assertEquals(1, tiny.get(Quota.Feature.SAND), "sand 1");

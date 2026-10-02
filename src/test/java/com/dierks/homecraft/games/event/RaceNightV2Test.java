@@ -345,4 +345,27 @@ class RaceNightV2Test {
         assertTrue(night.check().stream().anyMatch(c -> c.what().contains(RaceTrack.SLALOM) && c.fix() != null
                 && c.fix().contains("/hcm games gen reroll fresh_boat confirm")), "/hcm games check says what to do");
     }
+
+    @Test
+    void withCourseAutoASlalomAsTheOnlyBoatCourseSkipsTheNightToo() throws Exception {
+        Course slalom = MountainRunsV2.slalom();
+        RaceNightSettings d = on();
+        RaceNightSettings auto = new RaceNightSettings(true, List.of(), "auto", d.races(), 0, d.announceMinutes(),
+                d.joinMinutes(), 10, 2, 8, d.finishWindowSeconds(), d.maxRaceMinutes(), d.breakSeconds(),
+                d.warmupSeconds(), d.points(), d.finishPoints(), d.stillRacingPoints(), d.prizes(), d.finisherPrize(),
+                d.prizeEventsPerWeek(), d.season(), d.standRadius(), d.hype());
+        assertTrue(auto.autoCourse(), "fixture: course auto");
+        bench = new GamesBench(T0, List.of(TimeTrials.SPEC, RaceNight.SPEC), "trials", TimeTrialsSettings.defaults(),
+                "race_night", auto);
+        bench.games().generated(new Gate());
+        bench.dao().saveCourse(new GamesDao.CourseRow(slalom.id(), "trials", slalom.kind().id(), slalom.name(),
+                slalom.world(), slalom.enabled(), CourseCodec.encode(slalom), slalom.rev(), 0, 0), false);
+        night = (RaceNight) bench.games().game("race_night");
+        night.dao(new EventDao(bench.db(), bench.dao()));
+        night.tracks().server(new Server());
+        String problem = night.fit().trackProblem();
+        assertTrue(problem != null && problem.contains(RaceTrack.SLALOM), "the schedule skips its nights: " + problem);
+        String why = night.adminStart("Admin", null, null, null, 25, false);
+        assertTrue(why != null && why.contains(RaceTrack.SLALOM), "and an admin's night is refused: " + why);
+    }
 }

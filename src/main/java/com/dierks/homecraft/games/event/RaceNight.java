@@ -575,10 +575,20 @@ public final class RaceNight implements Game {
             if (ids.isEmpty()) {
                 problem = NO_TRACK;
             }
+            String slalom = null;
+            boolean raceable = false;
             for (String id : ids) {
                 Course c = t == null ? null : t.course(id);
                 fresh |= c != null && c.generated();
                 model = Math.max(model, BoatHype.modelMs(c));
+                if (BoatHype.slalom(c)) {
+                    slalom = slalom == null ? RaceTrack.raceProblem(c, s.minRacers(), s.minRacers()) : slalom;
+                } else {
+                    raceable = true;
+                }
+            }
+            if (!ids.isEmpty() && !raceable && slalom != null) {
+                problem = slalom; // F05: the only boat course is a Mountain Run v2 Slalom this week
             }
         } else {
             Course c = t == null ? null : t.openCourse(s.course());

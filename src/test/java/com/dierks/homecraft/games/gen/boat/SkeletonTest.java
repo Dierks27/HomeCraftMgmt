@@ -175,6 +175,42 @@ class SkeletonTest {
     }
 
     @Test
+    void aRouteHasNoMoreChicanesThanItsTierAllows() {
+        // audit MTN01: the grammar stops drawing chicanes at the tier's most (§5.3: road medium 1-2, hard 1-3,
+        // none on easy or a slalom), counted over the whole run, whose bands share the count
+        for (MountainTier tier : tiers()) {
+            int routes = 0;
+            int most = 0;
+            for (int i = 0; i < CHICANE_SEEDS; i++) {
+                GenRandom root = new GenRandom(0xC41CA9EL + 7919L * i);
+                Frame f = Frame.draw(root.fork("frame:0"), tier);
+                Skeleton sk = f == null ? null : Skeleton.draw(root.fork("route:0"), f);
+                if (sk == null) {
+                    continue;
+                }
+                routes++;
+                int chicanes = 0;
+                int beat = -1;
+                for (Centreline.Element e : sk.line.elements()) {
+                    Skeleton.Tag tag = sk.tag(e);
+                    if (tag.role() == Skeleton.Role.CHICANE && tag.beat() != beat) {
+                        chicanes++;
+                        beat = tag.beat();
+                    }
+                }
+                assertTrue(chicanes <= tier.chicMax, tier + " stream " + i + ": " + chicanes + " chicanes, at most "
+                        + tier.chicMax);
+                most = Math.max(most, chicanes);
+            }
+            assertTrue(routes >= CHICANE_SEEDS / 2, tier + ": fixture: " + routes + " routes");
+            assertTrue(most >= Math.min(1, tier.chicMax), tier + ": the chicanes still come: at most " + most);
+        }
+    }
+
+    /** Streams per tier the chicane cap is held over. */
+    private static final int CHICANE_SEEDS = 200;
+
+    @Test
     void bothMirrorsComeUp() {
         for (MountainTier tier : tiers()) {
             int west = 0;

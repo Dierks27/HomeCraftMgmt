@@ -21,8 +21,10 @@ import com.dierks.homecraft.games.trial.RaceGrid;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -69,11 +71,13 @@ class MountainPlannerTest {
     void goldenHashesPinThreeSeedsPerStyleAndTier() {
         // A change here means the planner makes different layouts: Mountain Run v2 is unreleased (it ships
         // off), so re-pin with the change; once it is on, bump BoatPlanner.ALGO instead. Re-pinned for audit M00
-        // (the HALFWAY! sign by BoatHype.halfway's checkpoint, measured from checkpoint 1): 10 of 18 moved.
+        // (the HALFWAY! sign by BoatHype.halfway's checkpoint, measured from checkpoint 1): 10 of 18 moved. Then
+        // for audit MTN00/MTN01: road medium 2, hard 4 and 5 only by a chicane sign's words (it bends right
+        // first), road medium 4 and 5 by the chicane cap (they had four; the most is two).
         String golden = """
                 road easy 39fccf88f729 0671210ecb90 da67680f8855
-                road medium e33e654ffb93 0e4ad205e5ce 36a0c1920a69
-                road hard 27aee206b321 4cec42a89d96 d0178f911a30
+                road medium 3efc0c94fbe3 d4ea61476eea 98ec047c54c2
+                road hard 27aee206b321 49686497ac9c 35fcf2dde74d
                 slalom easy e5437e73e554 52be95a3b5fd 0df883d71e01
                 slalom medium f874b0413052 c1208132055e 2a1bdd16f106
                 slalom hard fe19c45a486d e6cb568e821d 92c0cf205316
@@ -235,6 +239,32 @@ class MountainPlannerTest {
     }
 
     @Test
+    void cancelsAreCheckedInsideEveryLongStageAndChangeNoBlock() throws GenFailed {
+        // audit MTN04: the raster's passes, the pieces' trials, the mountain and the proof each check (and so
+        // give GenService's online throttle its turn), and a check only throws or sleeps
+        Set<String> from = new HashSet<>();
+        int[] calls = {0};
+        PlanInput watched = new PlanInput(Slots.ICE_BOAT, HALF_A, 'A', 20725, 0, 2, "medium", 6, 0, () -> {
+            calls[0]++;
+            StackWalker.getInstance().forEach(f -> from.add(f.getClassName().replaceAll(".*\\.", "")));
+            return false;
+        });
+        Plan p = MountainPlanner.made(watched).finished();
+        assertEquals(made(HALF_A, 2, "medium").finished().hash(), p.hash(), "the checks change no block");
+        List<String> stages = List.of("RasterV4", "PiecesV4", "MountainScenery", "MountainValidator$Survey");
+        for (String stage : stages) {
+            assertTrue(from.contains(stage), "a check inside " + stage + " (" + calls[0] + " checks): " + from);
+        }
+        // and a cancel there ends the job as a cancel: never a refusal, the next candidate or the safe layout
+        for (String stage : stages) {
+            PlanInput stop = new PlanInput(Slots.ICE_BOAT, HALF_A, 'A', 20725, 0, 2, "medium", 6, 0,
+                    () -> StackWalker.getInstance().walk(f -> f.anyMatch(x -> x.getClassName().endsWith("." + stage))));
+            GenFailed e = assertThrows(GenFailed.class, () -> MountainPlanner.made(stop), "a cancel inside " + stage);
+            assertEquals("cancelled", e.getMessage(), "a cancel inside " + stage + " is a cancel");
+        }
+    }
+
+    @Test
     void theSummarySaysWhatWasMade() {
         Plan road = made(HALF_A, 2, "medium").finished();
         List<String> s = road.summary();
@@ -254,10 +284,12 @@ class MountainPlannerTest {
     /**
      * The seeds the audit found the sign and the title a checkpoint apart on (easy road 5 and 19, medium slalom
      * 26, hard road 13 and 16), the grid that moved the title (medium road 2), and the one with no sign at all
-     * (medium slalom 23), besides every pinned layout.
+     * (medium slalom 23), besides every pinned layout; and easy slalom 20, whose checkpoint's own spot is taken
+     * by another sign, so its HALFWAY! stands a few blocks along (audit MTN03: no plan of 600 went without).
      */
     static final List<Object[]> HALFWAY_SEEDS = List.of(new Object[]{"easy", 19L}, new Object[]{"medium", 23L},
-            new Object[]{"medium", 26L}, new Object[]{"hard", 13L}, new Object[]{"hard", 16L});
+            new Object[]{"medium", 26L}, new Object[]{"hard", 13L}, new Object[]{"hard", 16L},
+            new Object[]{"easy", 20L});
 
     @Test
     void theHalfwaySignStandsByTheCheckpointEveryRacerHearsHalfwayAt() {
@@ -299,6 +331,146 @@ class MountainPlannerTest {
                 assertTrue(BoatHype.loud(raced, title), name + ": loud from grid spot " + (k + 1));
             }
         }
+    }
+
+    // ---- the chicane and staircase signs, the chicane cap (audit MTN00-MTN02) ------------------------------
+
+    /** The first element of every chicane beat (its first arc), in order along. */
+    static List<Centreline.Element> chicanes(Skeleton sk) {
+        List<Centreline.Element> out = new ArrayList<>();
+        int beat = -1;
+        for (Centreline.Element e : sk.line.elements()) {
+            Skeleton.Tag tag = sk.tag(e);
+            if (tag.role() == Skeleton.Role.CHICANE && tag.beat() != beat) {
+                out.add(e);
+                beat = tag.beat();
+            }
+        }
+        return out;
+    }
+
+    /** How far along the centreline a sign stands (its nearest point to the sign's column). */
+    static double along(MountainPlanner.Made m, SignText t) {
+        Centreline.Near near = m.cand.sk().line.nearest(t.x() - m.in.half().minX() + 0.5,
+                t.z() - m.in.half().minZ() + 0.5);
+        assertNotNull(near, "a sign beside the lane: " + t);
+        return near.s();
+    }
+
+    @Test
+    void theChicaneSignSaysWhichWayTheFirstBendGoes() {
+        assertEquals(List.of("CHICANE", "Right, left!"), GenCopy.boatChicane(true), "a chicane that bends right first");
+        assertEquals(List.of("CHICANE", "Left, right!"), GenCopy.boatChicane(false), "and left first");
+        assertTrue(GenCopy.everySign().contains(GenCopy.boatChicane(true))
+                && GenCopy.everySign().contains(GenCopy.boatChicane(false)), "both in the copy test's list");
+        int[] hands = new int[2];
+        for (String tier : List.of("medium", "hard")) {
+            for (long seed : ROADS) {
+                MountainPlanner.Made m = made(HALF_A, seed, tier);
+                String name = "road " + tier + " seed " + seed;
+                List<Centreline.Element> firsts = chicanes(m.cand.sk());
+                List<SignText> signs = m.finished().signs().stream()
+                        .filter(t -> t.lines().get(0).equals("CHICANE")).toList();
+                assertEquals(firsts.size(), signs.size(), name + ": a sign before every chicane");
+                for (Centreline.Element e : firsts) {
+                    assertTrue(e.arc(), name + ": a chicane opens with its first bend");
+                    // the rider's right, facing along the line: (-sin h, cos h) in (x, z), z running south; the
+                    // bend's centre lies on the side it turns to
+                    boolean right = (e.cx - e.x0) * -Math.sin(e.h0) + (e.cz - e.z0) * Math.cos(e.h0) > 0;
+                    SignText sign = null;
+                    for (SignText t : signs) {
+                        double d = e.s0 - along(m, t);
+                        if (d > 0 && d <= RasterV4.SIGN_BEFORE + 6) {
+                            sign = t;
+                        }
+                    }
+                    assertNotNull(sign, name + ": the sign stands just before the chicane at " + Math.round(e.s0));
+                    assertEquals(GenCopy.boatChicane(right), sign.lines(), name + ": the chicane at " + Math.round(e.s0)
+                            + " bends " + (right ? "right" : "left") + " first");
+                    hands[right ? 1 : 0]++;
+                }
+            }
+        }
+        assertTrue(hands[0] > 0 && hands[1] > 0, "chicanes opening both ways were read: " + hands[0] + " left, "
+                + hands[1] + " right");
+    }
+
+    @Test
+    void aRoadHasNoMoreChicanesThanItsTierAllows() {
+        // road medium 4 and 5 shipped four chicanes before the cap (the most is 2), road hard 18 four (3)
+        List<Object[]> runs = new ArrayList<>();
+        for (String tier : List.of("easy", "medium", "hard")) {
+            for (long seed : ROADS) {
+                runs.add(new Object[]{tier, seed});
+            }
+        }
+        runs.add(new Object[]{"hard", 18L});
+        for (Object[] run : runs) {
+            String tier = (String) run[0];
+            long seed = (Long) run[1];
+            MountainPlanner.Made m = made(HALF_A, seed, tier);
+            MountainTier mt = MountainTier.of(BoatStyle.ROAD, tier);
+            String name = "road " + tier + " seed " + seed;
+            int beats = chicanes(m.cand.sk()).size();
+            long geometric = m.cand.flow().beats.stream().filter(b -> b == FlowScore.Beat.C).count();
+            long signs = m.finished().signs().stream().filter(t -> t.lines().get(0).equals("CHICANE")).count();
+            assertTrue(beats >= mt.chicMin && beats <= mt.chicMax, name + ": " + beats + " chicanes, "
+                    + mt.chicMin + "-" + mt.chicMax);
+            assertEquals(beats, geometric, name + ": the flow score counts the same chicanes");
+            assertEquals(beats, signs, name + ": and the signs");
+        }
+    }
+
+    /** Each staircase's lips (the STAIR lips of one straight run, two or more), in order along. */
+    static List<Integer> staircases(MountainPlanner.Made m) {
+        DropPlan dp = m.cand.drops();
+        List<Integer> out = new ArrayList<>();
+        for (DropPlan.Run run : new DropPlan.Planner(new GenRandom(0), dp.sk).runs) {
+            int n = 0;
+            for (int i = 0; i < dp.drops.size() - 1; i++) {
+                DropPlan.Drop d = dp.drops.get(i);
+                n += d.kind() == DropPlan.Kind.STAIR && d.s() >= run.s0() && d.s() <= run.s1() ? 1 : 0;
+            }
+            if (n >= 2) {
+                out.add(n);
+            }
+        }
+        return out;
+    }
+
+    @Test
+    void everyStaircaseHasItsOwnCliffsSignWithItsOwnCount() {
+        // hard road 7 (two staircases of 3) and 41 (two of 2) had theirs next to each other in the drop list:
+        // one sign for both before audit MTN02
+        List<Object[]> runs = new ArrayList<>(List.of(new Object[]{"hard", 7L}, new Object[]{"hard", 41L}));
+        for (BoatStyle style : BoatStyle.values()) {
+            for (String tier : List.of("easy", "medium", "hard")) {
+                for (long seed : style == BoatStyle.ROAD ? ROADS : SLALOMS) {
+                    runs.add(new Object[]{tier, seed});
+                }
+            }
+        }
+        int two = 0;
+        for (Object[] run : runs) {
+            String tier = (String) run[0];
+            long seed = (Long) run[1];
+            MountainPlanner.Made m = made(HALF_A, seed, tier);
+            String name = tier + " " + BoatStyle.of(seed).id() + " seed " + seed;
+            List<SignText> cliffs = new ArrayList<>(m.finished().signs().stream()
+                    .filter(t -> t.lines().get(0).equals("THE CLIFFS!")).toList());
+            cliffs.sort((a, b) -> Double.compare(along(m, a), along(m, b)));
+            List<List<String>> got = new ArrayList<>();
+            for (SignText t : cliffs) {
+                got.add(t.lines());
+            }
+            List<List<String>> want = new ArrayList<>();
+            for (int n : staircases(m)) {
+                want.add(GenCopy.boatCliffs(n));
+            }
+            assertEquals(want, got, name + ": one THE CLIFFS! sign a staircase, with its own count");
+            two += want.size() >= 2 ? 1 : 0;
+        }
+        assertTrue(two >= 2, "fixture: courses with two staircases were read: " + two);
     }
 
     // ---- BoatPlanner: algo 4 in the mountain's half, the spiral elsewhere --------------------------------

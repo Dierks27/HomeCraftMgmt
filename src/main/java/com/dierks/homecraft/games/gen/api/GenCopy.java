@@ -236,9 +236,12 @@ public final class GenCopy {
         return List.of("HAIRPIN", "Ease off!");
     }
 
-    /** Before a chicane. */
-    public static List<String> boatChicane() {
-        return List.of("CHICANE", "Left, right!");
+    /**
+     * Before a chicane, the way its first bend turns for a rider coming down (audit MTN00):
+     * {@code rightFirst} "Right, left!", else "Left, right!".
+     */
+    public static List<String> boatChicane(boolean rightFirst) {
+        return List.of("CHICANE", rightFirst ? "Right, left!" : "Left, right!");
     }
 
     /** At a staircase of {@code drops} lips down one straight (§7.1: "THE CLIFFS - 3 big drops!"). */
@@ -704,8 +707,8 @@ public final class GenCopy {
                 boatBigDrop(), boatDrop(1), boatDrop(2), boatFinalDrop(), boatSandyBend(), boatSandPit(), boatSplit(),
                 boatIceCave(), boatForest(), boatRoadStart("easy"), boatRoadStart("medium"), boatRoadStart("hard"),
                 boatSlalomStart("easy"), boatSlalomStart("medium"), boatSlalomStart("hard"), boatHairpin(),
-                boatChicane(), boatCliffs(2), boatCliffs(3), boatGates(4), boatGates(11), boatHalfway(),
-                boatTunnel()));
+                boatChicane(true), boatChicane(false), boatCliffs(2), boatCliffs(3), boatGates(4), boatGates(11),
+                boatHalfway(), boatTunnel()));
         for (int hole = 1; hole <= 18; hole++) {
             out.add(golfTee(hole, 6));
             for (TeeFeature f : TeeFeature.values()) {

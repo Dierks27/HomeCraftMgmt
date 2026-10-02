@@ -93,8 +93,28 @@ final class RasterV4 {
     String problem;
     Voxels vox;
     final List<SignText> signs = new ArrayList<>();
+    /**
+     * The planner's cancel check (audit MTN04, §5.2): run every {@value #TICK_ROWS} x-rows of a pass over the
+     * half, here and in {@link MountainScenery}, so a stop lands within a few milliseconds and GenService's
+     * online throttle gets its turn. It only throws or sleeps: the raster is the same with it or without.
+     */
+    final Runnable tick;
+
+    /**
+     * How many x-rows of a pass run between two {@link #tick} calls: §5.2 asks for every 32 at most; 8 keeps a
+     * stretch near GenService's 10 ms throttle step on the slowest pass (the lane's nearest-point search).
+     */
+    static final int TICK_ROWS = 8;
+    /** Checkpoint places tried, or chain spots joined, between two {@link #tick} calls. */
+    static final int TICK_SPOTS = 64;
 
     RasterV4(Box half, Skeleton sk, DropPlan dp, PiecesV4 pieces) {
+        this(half, sk, dp, pieces, () -> {
+        });
+    }
+
+    RasterV4(Box half, Skeleton sk, DropPlan dp, PiecesV4 pieces, Runnable tick) {
+        this.tick = tick;
         this.half = half;
         this.sx = half.sizeX();
         this.sy = half.sizeY();
@@ -129,6 +149,13 @@ final class RasterV4 {
         return x * sz + z;
     }
 
+    /** At the head of x-row {@code x} of a pass over the half: the {@link #tick} every {@value #TICK_ROWS} rows. */
+    void row(int x) {
+        if (x % TICK_ROWS == 0) {
+            tick.run();
+        }
+    }
+
     boolean inside(int x, int z) {
         return x >= 0 && z >= 0 && x < sx && z < sz;
     }
@@ -157,6 +184,7 @@ final class RasterV4 {
         double[] p1 = line.at(end);
         double[] t1 = line.tangent(end);
         for (int x = 0; x < sx; x++) {
+            row(x);
             for (int z = 0; z < sz; z++) {
                 if (!line.indexed(x, z)) {
                     continue;
@@ -220,6 +248,7 @@ final class RasterV4 {
         int[][] dirs = {{1, 0}, {0, 1}, {1, 1}, {1, -1}};
         boolean[] nearPole = new boolean[sx * sz];
         for (int x = 0; x < sx; x++) {
+            row(x);
             for (int z = 0; z < sz; z++) {
                 if (fence[idx(x, z)] < 3) {
                     continue;
@@ -236,6 +265,7 @@ final class RasterV4 {
         for (int pass = 0; pass < 8; pass++) {
             boolean changed = false;
             for (int x = 1; x < sx - 1; x++) {
+                row(x);
                 for (int z = 1; z < sz - 1; z++) {
                     int i = idx(x, z);
                     if (fence[i] != 1 && fence[i] != 2) {
@@ -345,6 +375,7 @@ final class RasterV4 {
     private void lips() {
         lipDrop = new int[sx * sz];
         for (int x = 0; x < sx; x++) {
+            row(x);
             for (int z = 0; z < sz; z++) {
                 int i = idx(x, z);
                 if (h[i] == NONE) {
@@ -369,6 +400,7 @@ final class RasterV4 {
         int flood = 0;
         ArrayDeque<int[]> queue = new ArrayDeque<>();
         for (int x = 0; x < sx; x++) {
+            row(x);
             for (int z = 0; z < sz; z++) {
                 int i = idx(x, z);
                 if (lipDrop[i] == 0) {
@@ -414,6 +446,7 @@ final class RasterV4 {
         }
         int r = RaceStand.SIZE / 2;
         for (int x = 0; x < sx; x++) {
+            row(x);
             for (int z = 0; z < sz; z++) {
                 if (h[idx(x, z)] == NONE) {
                     continue;
@@ -477,7 +510,11 @@ final class RasterV4 {
         List<Spot> out = new ArrayList<>();
         DropPlan.Drop last = dp.last();
         double until = last == null ? sk.finish : last.s();
+        int tried = 0;
         for (double s = sk.start + 6; s < until; s += nearLip(s) ? 0.5 : 1) {
+            if (++tried % TICK_SPOTS == 0) {
+                tick.run();
+            }
             double r = spotRadius(s);
             if (s - r < sk.start + 1.5 || inGates(s, r + GROW) || isBlocked(blocked, s, r + GROW)) {
                 continue;
@@ -794,6 +831,9 @@ final class RasterV4 {
         Arrays.fill(best, Long.MAX_VALUE);
         int lo = 0;
         for (int i = 0; i <= n; i++) {
+            if (i % TICK_SPOTS == 0) {
+                tick.run();
+            }
             Spot b = i < n ? spots.get(i) : finish;
             long add = i < n ? 1 : 0;
             if (leg(start, b, true, i == n)) {
@@ -890,6 +930,7 @@ final class RasterV4 {
     void blocks() {
         vox = new Voxels(sx, sy, sz, y0);
         for (int x = 0; x < sx; x++) {
+            row(x);
             for (int z = 0; z < sz; z++) {
                 int i = idx(x, z);
                 if (h[i] == NONE) {
@@ -908,6 +949,7 @@ final class RasterV4 {
      */
     void walls() {
         for (int x = 0; x < sx; x++) {
+            row(x);
             for (int z = 0; z < sz; z++) {
                 if (!beside(x, z)) {
                     continue;
@@ -959,6 +1001,7 @@ final class RasterV4 {
         }
         // W3: under the high side of a 2-block edge, a riser from the low ice up
         for (int x = 0; x < sx; x++) {
+            row(x);
             for (int z = 0; z < sz; z++) {
                 int i = idx(x, z);
                 if (h[i] == NONE) {
@@ -1154,6 +1197,7 @@ final class RasterV4 {
      */
     void markers(List<Spot> checkpoints) {
         for (int x = 0; x < sx; x++) {
+            row(x);
             for (int z = 0; z < sz; z++) {
                 int i = idx(x, z);
                 if (near[i] && sAt[i] <= 1e-9 && beside(x, z)) {

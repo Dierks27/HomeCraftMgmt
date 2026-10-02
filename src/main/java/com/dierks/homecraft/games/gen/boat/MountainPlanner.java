@@ -46,9 +46,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * skeleton per style, tier and mirror ({@link #safe}).
  *
  * <p><b>Work</b> ({@link #BUDGET} units): a Stage A candidate 1, a Stage B attempt {@value #UNIT_B},
- * {@value #SAFE_RESERVE} kept for the safe layout. Cancels are checked between candidates and inside the
- * raster's rows. Everything is counted work, never time, so a seed makes the same course on every host
- * (rule R6). Pure: no Bukkit.
+ * {@value #SAFE_RESERVE} kept for the safe layout. Cancels are checked between candidates, between a build's
+ * stages, every {@value RasterV4#TICK_ROWS} rows of the raster's and the mountain's passes, and before and after
+ * the proof (audit MTN04); a check only throws or sleeps (GenService's online throttle), never changes a block.
+ * Everything is counted work, never time, so a seed makes the same course on every host (rule R6). Pure: no
+ * Bukkit.
  */
 final class MountainPlanner {
 
@@ -364,7 +366,9 @@ final class MountainPlanner {
             if (m == null) {
                 return null;
             }
-            List<String> problems = proof(m.plan, tier.id);
+            cancel(in);
+            List<String> problems = proof(m.plan, tier.id, in);
+            cancel(in);
             return problems.isEmpty() ? m : null;
         } catch (Cancelled e) {
             throw new GenFailed("cancelled");
@@ -373,9 +377,12 @@ final class MountainPlanner {
         }
     }
 
-    /** The proof every Stage B plan must pass: {@link MountainValidator}, the same the engine runs again. */
-    static List<String> proof(Plan plan, String tier) {
-        return MountainValidator.problems(plan, tier);
+    /**
+     * The proof every Stage B plan must pass: {@link MountainValidator}, the same the engine runs again, with
+     * {@code in}'s cancel check between its steps (audit MTN04; it changes no verdict).
+     */
+    static List<String> proof(Plan plan, String tier, PlanInput in) {
+        return MountainValidator.problems(plan, tier, () -> cancel(in));
     }
 
     /** Thrown inside a build when the job was cancelled. */
@@ -391,20 +398,26 @@ final class MountainPlanner {
         Box half = in.half();
         Skeleton sk = c.sk();
         DropPlan dp = c.drops();
+        // the cancel check between the stages and inside their passes (audit MTN04): it only throws or sleeps
+        Runnable tick = () -> cancel(in);
         cancel(in);
         PiecesV4 bare = PiecesV4.none(sk);
-        RasterV4 base = new RasterV4(half, sk, dp, bare);
+        RasterV4 base = new RasterV4(half, sk, dp, bare, tick);
         if (base.problem != null) {
             return null;
         }
         cancel(in);
         List<RasterV4.Spot> baseSpots = base.spots(List.of());
+        cancel(in);
         if (base.chain(baseSpots) == null) {
             return null;
         }
-        PiecesV4 pieces = PiecesV4.draw(pieceStream, sk, dp, richness,
-                blocked -> base.chain(without(baseSpots, blocked)) != null);
-        RasterV4 raster = pieces.list.isEmpty() ? base : new RasterV4(half, sk, dp, pieces);
+        PiecesV4 pieces = PiecesV4.draw(pieceStream, sk, dp, richness, blocked -> {
+            cancel(in);
+            return base.chain(without(baseSpots, blocked)) != null;
+        });
+        cancel(in);
+        RasterV4 raster = pieces.list.isEmpty() ? base : new RasterV4(half, sk, dp, pieces, tick);
         if (raster.problem != null) {
             return null;
         }
@@ -413,16 +426,20 @@ final class MountainPlanner {
         if (cps == null || cps.size() > MountainValidator.MAX_CHECKPOINTS) {
             return null;
         }
+        cancel(in);
         raster.blocks();
         raster.walls();
+        cancel(in);
         raster.structures(scenery.fork("islands"));
         raster.markers(cps);
         raster.stand();
         signs(raster, cps, pieces);
         cancel(in);
         int trees = MountainScenery.draw(scenery, raster);
+        cancel(in);
         List<String> palette = new ArrayList<>();
         List<BlockOp> ops = finishBlocks(raster, palette);
+        cancel(in);
         if (ops.size() > MountainValidator.MAX_OPS) {
             return null;
         }
@@ -450,6 +467,7 @@ final class MountainPlanner {
             return null; // never on a real run (the shortest time is the top-speed line); keeps T_m exact in the tag
         }
         long refMs = starRefMs(ride.seconds(), min);
+        cancel(in);
         Plan plan = Plan.of(slot.id(), ALGO, in.seed(), half, palette, ops, raster.signs, keepClear(raster),
                 new PlannedTrial(course, refMs), List.of(), 0);
         return new Made(in, tier, c, pieces, raster, cps, plan, trees, ride.seconds());
@@ -485,6 +503,7 @@ final class MountainPlanner {
         Voxels v = t.vox;
         List<int[]> logs = new ArrayList<>();
         for (int x = 0; x < v.sx; x++) {
+            t.row(x);
             for (int z = 0; z < v.sz; z++) {
                 if (!v.any(x, z)) {
                     continue;
@@ -496,7 +515,9 @@ final class MountainPlanner {
                 }
             }
         }
+        t.tick.run();
         Map<Long, Integer> d = Palette.leafDistances(logs, t.leafAt);
+        t.tick.run();
         for (int i = 0; i < t.leafAt.size(); i++) {
             int[] l = t.leafAt.get(i);
             v.put(l[0], l[1], l[2], Palette.leaves(t.leafWood.get(i), d.get(Palette.blockKey(l[0], l[1], l[2]))));
@@ -508,6 +529,7 @@ final class MountainPlanner {
     static List<Box> keepClear(RasterV4 t) {
         Map<Integer, int[]> boxes = new HashMap<>();
         for (int x = 0; x < t.sx; x++) {
+            t.row(x);
             for (int z = 0; z < t.sz; z++) {
                 int i = t.idx(x, z);
                 if (t.h[i] == RasterV4.NONE) {
@@ -547,23 +569,22 @@ final class MountainPlanner {
         t.sign(sk.start - 4, sk.start + 4, sk.tier.road() ? GenCopy.boatRoadStart(sk.tier.id)
                 : GenCopy.boatSlalomStart(sk.tier.id), used);
         DropPlan dp = t.dp;
-        boolean stairOpen = false;
+        // a staircase is the STAIR lips of one straight run (audit MTN02): THE CLIFFS! at its first lip, with
+        // that run's count, whatever lies next to it in the list; its other lips get their drop signs
+        List<DropPlan.Run> runs = new DropPlan.Planner(new GenRandom(0), sk).runs;
+        DropPlan.Run signed = null;
         for (int i = 0; i < dp.drops.size(); i++) {
             DropPlan.Drop l = dp.drops.get(i);
+            DropPlan.Run run = l.kind() == DropPlan.Kind.STAIR ? runOf(runs, l.s()) : null;
+            int steps = run == null ? 0 : stairsOn(dp, run);
             List<String> lines;
             if (i == dp.drops.size() - 1) {
                 lines = GenCopy.boatFinalDrop();
-            } else if (l.kind() == DropPlan.Kind.STAIR && !stairOpen) {
-                int n = 0;
-                for (int j = i; j < dp.drops.size() && dp.drops.get(j).kind() == DropPlan.Kind.STAIR
-                        && dp.drops.get(j).s() - l.s() < 200; j++) {
-                    n++;
-                }
-                lines = GenCopy.boatCliffs(Math.max(2, n));
-                stairOpen = true;
+            } else if (steps >= 2 && !run.equals(signed)) {
+                lines = GenCopy.boatCliffs(steps);
+                signed = run;
             } else {
                 lines = GenCopy.boatDrop(l.drop());
-                stairOpen = l.kind() == DropPlan.Kind.STAIR && stairOpen;
             }
             t.sign(l.s() - RasterV4.SIGN_BEFORE, l.s() - RasterV4.SIGN_NEAR, lines, used);
         }
@@ -590,7 +611,9 @@ final class MountainPlanner {
                 t.sign(e.s0 - RasterV4.SIGN_BEFORE - 4, e.s0 - RasterV4.SIGN_NEAR, GenCopy.boatHairpin(), used);
                 beat = tag.beat();
             } else if (tag.role() == Skeleton.Role.CHICANE) {
-                t.sign(e.s0 - RasterV4.SIGN_BEFORE - 4, e.s0 - RasterV4.SIGN_NEAR, GenCopy.boatChicane(), used);
+                // a chicane beat opens with its first arc: the sign says which way that bends (audit MTN00)
+                t.sign(e.s0 - RasterV4.SIGN_BEFORE - 4, e.s0 - RasterV4.SIGN_NEAR, GenCopy.boatChicane(e.turn > 0),
+                        used);
                 beat = tag.beat();
             }
         }
@@ -601,6 +624,26 @@ final class MountainPlanner {
         if (!cps.isEmpty()) {
             halfwaySign(t, cps, used);
         }
+    }
+
+    /** The straight run holding {@code s}, or {@code null}. */
+    static DropPlan.Run runOf(List<DropPlan.Run> runs, double s) {
+        for (DropPlan.Run run : runs) {
+            if (s >= run.s0() && s <= run.s1()) {
+                return run;
+            }
+        }
+        return null;
+    }
+
+    /** How many STAIR lips (the Final Drop's never one) stand on {@code run}. */
+    static int stairsOn(DropPlan dp, DropPlan.Run run) {
+        int n = 0;
+        for (int i = 0; i < dp.drops.size() - 1; i++) {
+            DropPlan.Drop d = dp.drops.get(i);
+            n += d.kind() == DropPlan.Kind.STAIR && d.s() >= run.s0() && d.s() <= run.s1() ? 1 : 0;
+        }
+        return n;
     }
 
     /**
@@ -666,7 +709,7 @@ final class MountainPlanner {
      * shipped range, and names the next good stream should a change to the generator move one).
      */
     static final int[][][] SAFE_STREAMS = {
-            {{10, 0}, {10, 0}, {84, 76}},
+            {{10, 0}, {22, 0}, {247, 76}},
             {{1, 2}, {1, 0}, {5, 0}}};
 
     /**

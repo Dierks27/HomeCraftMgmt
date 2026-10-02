@@ -33,9 +33,10 @@ import java.util.Map;
  *   <li><b>F-L rhythm:</b> the coefficient of variation of the straights' lengths (≥ 0.45, road); a
  *       slalom's of its gate-to-gate distances along the run, the open runs between sets included
  *       (≥ 0.12).</li>
- *   <li><b>F-F features:</b> the tier's S-curves, chicanes, long straights (≥ 120), hairpins (1 to its most
- *       on a road), staircases, and at least 80% of the lips brake drops (a link, or an arc slower than the
- *       landing speed + 4 b/s, within 60 after the landing strip) or on a straight of 100 or more.</li>
+ *   <li><b>F-F features:</b> the tier's S-curves, chicanes (its least to its most), long straights (≥ 120),
+ *       hairpins (1 to its most on a road), staircases, and at least 80% of the lips brake drops (a link, or an
+ *       arc slower than the landing speed + 4 b/s, within 60 after the landing strip) or on a straight of 100
+ *       or more.</li>
  * </ul>
  * The score is 0.15 B + 0.10 (1 - K/km) + 0.20 C + 0.15 (1 - P) + 0.20 V + 0.10 min(1, CV) + 0.10 F, in
  * [0, 1]; a candidate passes when every gate holds and the score is at least {@value #PASS}. Pure and
@@ -571,8 +572,8 @@ public final class FlowScore {
         if (sCurves < tier.sCurvesMin) {
             out.add(sCurves + " S-curves (" + tier.sCurvesMin + " wanted)");
         }
-        if (chicanes < tier.chicMin) {
-            out.add(chicanes + " chicanes (" + tier.chicMin + " wanted)");
+        if (chicanes < tier.chicMin || chicanes > tier.chicMax) {
+            out.add(chicanes + " chicanes (" + tier.chicMin + "-" + tier.chicMax + ")");
         }
         if (longs < tier.longMin) {
             out.add(longs + " long straights (" + tier.longMin + " wanted)");

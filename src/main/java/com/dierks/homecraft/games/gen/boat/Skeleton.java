@@ -469,7 +469,8 @@ public final class Skeleton {
                     default -> Role.SHORT;
                 };
             }
-            double chic = tier.chicMax > 0 ? 1 : 0;
+            // chicanes up to the tier's most (§5.3, audit MTN01): the count is the whole run's, shared by its bands
+            double chic = made[1] < tier.chicMax ? 1 : 0;
             // quota: a run behind on the tier's S-curves or chicanes leans on them for the bands left
             double left = Math.max(1, bands - band);
             double sBoost = 1 + 4 * Math.max(0, tier.sCurvesMin + 1 - made[0]) / left;

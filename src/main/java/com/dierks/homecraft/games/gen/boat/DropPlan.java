@@ -114,6 +114,33 @@ public final class DropPlan {
         return drops.isEmpty() ? null : drops.get(drops.size() - 1);
     }
 
+    /** The line's straight runs (consecutive straight elements), in order along. */
+    List<Run> runs() {
+        return new Planner(new GenRandom(0), sk).runs;
+    }
+
+    /** How many STAIR lips stand on {@code run} (the Final Drop, the last lip, is never one). */
+    int stairsOn(Run run) {
+        int n = 0;
+        for (int i = 0; i < drops.size() - 1; i++) {
+            Drop d = drops.get(i);
+            n += d.kind() == Kind.STAIR && d.s() >= run.s0() && d.s() <= run.s1() ? 1 : 0;
+        }
+        return n;
+    }
+
+    /**
+     * The staircases ("THE CLIFFS!", §7.1): straight runs holding two or more STAIR lips (audit MTN-R3-03: not
+     * any two lips on a straight).
+     */
+    public int staircases() {
+        int n = 0;
+        for (Run run : runs()) {
+            n += stairsOn(run) >= 2 ? 1 : 0;
+        }
+        return n;
+    }
+
     /** The track's level {@code s} along, relative to the finish's (0): the drops still to come. */
     public int levelAbove(double s) {
         int h = 0;

@@ -53,6 +53,9 @@ import java.util.PriorityQueue;
  *       ({@code minX + sizeX/2}, {@code minZ + sizeZ - }{@value #STAND_BACK}), at
  *       {@code finishY + RaceStand.ABOVE}; the platform's block height is
  *       {@code RaceStand.floorY(finishY)}.</li>
+ *   <li>The planner's own call, {@code problems(Plan plan, String tier, Runnable tick)} (package-private),
+ *       runs its cancel check between the survey's steps; what that throws goes straight back to the
+ *       planner, and the verdict is the same (audit MTN04).</li>
  *   <li>Its caps: {@value #MAX_OPS} blocks, {@value #MAX_BOXES} keep-clear boxes,
  *       {@value #MAX_CHECKPOINTS} checkpoints ({@code Course.MAX_CHECKPOINTS} becomes 128 with v4,
  *       package MD; this class keeps its own copy so the proof never moves with it), the half exactly
@@ -235,6 +238,16 @@ public final class MountainValidator {
 
     /** What is wrong with {@code plan} as a {@code tier} Mountain Run v2 in its seed's style; empty when nothing is. */
     public static List<String> problems(Plan plan, String tier) {
+        return problems(plan, tier, NO_TICK);
+    }
+
+    /**
+     * The same, with the planner's cancel check (audit MTN04): {@code tick} runs between the survey's steps and
+     * every {@value #TICK_CHECKPOINTS} checkpoints of its longest (a flood from the start per checkpoint).
+     * Whatever it throws goes straight through to the caller (a cancel is never a refusal), and it changes no
+     * verdict; the engine's call runs none.
+     */
+    static List<String> problems(Plan plan, String tier, Runnable tick) {
         if (plan == null) {
             return List.of("there is no plan");
         }
@@ -242,8 +255,13 @@ public final class MountainValidator {
         if (rules == null) {
             return List.of("'" + tier + "' isn't an Ice Boat tier");
         }
-        return problems(plan, rules);
+        return survey(plan, Limits.v4(rules), tick);
     }
+
+    private static final Runnable NO_TICK = () -> {
+    };
+    /** Checkpoints judged between two of the caller's ticks. */
+    static final int TICK_CHECKPOINTS = 8;
 
     /** What is wrong with {@code plan} as a Mountain Run v2 of this style and tier; empty when nothing is. */
     public static List<String> problems(Plan plan, Rules rules) {
@@ -253,7 +271,7 @@ public final class MountainValidator {
         if (rules == null) {
             return List.of("no rules to judge the plan by");
         }
-        return survey(plan, Limits.v4(rules));
+        return survey(plan, Limits.v4(rules), NO_TICK);
     }
 
     /**
@@ -296,10 +314,10 @@ public final class MountainValidator {
         if (t == null) {
             return List.of("'" + tier + "' isn't an Ice Boat tier");
         }
-        return survey(plan, Limits.v3(t));
+        return survey(plan, Limits.v3(t), NO_TICK);
     }
 
-    private static List<String> survey(Plan plan, Limits limits) {
+    private static List<String> survey(Plan plan, Limits limits, Runnable tick) {
         if (!(plan.course() instanceof PlannedTrial trial) || trial.course().kind() != TrialKind.BOAT) {
             return List.of("the plan isn't a boat course");
         }
@@ -307,11 +325,23 @@ public final class MountainValidator {
             return List.of("the course has no start or no finish");
         }
         try {
-            return new Survey(plan, limits, trial).run();
+            return new Survey(plan, limits, trial, tick).run();
+        } catch (Ticked t) {
+            throw t.thrown; // the caller's own check (a cancel), never the plan's fault
         } catch (RuntimeException e) {
             // a refusal, never a pass: a plan this can't read is never built
             return List.of((limits.v4 ? "the Mountain Run v2 check" : "the Mountain Run check")
                     + " couldn't read this plan (" + e + ")");
+        }
+    }
+
+    /** What the caller's tick threw, carried through the survey's own catch untouched. */
+    private static final class Ticked extends RuntimeException {
+        final RuntimeException thrown;
+
+        Ticked(RuntimeException thrown) {
+            super(null, thrown, false, false);
+            this.thrown = thrown;
         }
     }
 
@@ -453,7 +483,11 @@ public final class MountainValidator {
         int[] distStamp;
         int distGen;
 
-        Survey(Plan plan, Limits lim, PlannedTrial trial) {
+        /** The caller's tick ({@link #problems(Plan, String, Runnable)}). */
+        final Runnable onTick;
+
+        Survey(Plan plan, Limits lim, PlannedTrial trial, Runnable onTick) {
+            this.onTick = onTick;
             this.plan = plan;
             this.lim = lim;
             this.trial = trial;
@@ -480,27 +514,53 @@ public final class MountainValidator {
             } else if ((long) sx * sy * sz > 4_000_000L) {
                 return List.of("the area " + half.describe() + " is too big for an Ice Boat course");
             }
-            if (!palette() || !blocks() || !floors()) {
+            if (!palette()) {
                 return found.lines();
             }
+            tick();
+            if (!blocks()) {
+                return found.lines();
+            }
+            tick();
+            if (!floors()) {
+                return found.lines();
+            }
+            tick();
             graph = DeckGraph.of(h);
+            tick();
             steps();
             lips();
             reachable();
+            tick();
             zones();
+            tick();
             columns();
+            tick();
             signs();
             widths();
+            tick();
             targets();
+            tick();
             falls();
             stand();
+            tick();
             grid();
             times();
             boxes();
+            tick();
             for (String p : Palette.leafProblems(plan.palette(), plan.ops())) {
                 found.add(p);
             }
             return found.lines();
+        }
+
+        /** The caller's tick, its throw carried through {@code survey}'s catch ({@link Ticked}). */
+        void tick() {
+            try {
+                onTick.run();
+            } catch (RuntimeException e) {
+                throw new Ticked(e);
+            }
         }
 
         boolean wall(byte m) {
@@ -1586,6 +1646,9 @@ public final class MountainValidator {
             int[] lipLeg = new int[lips.size()];
             boolean[][] after = null;
             for (int i = 0; i <= n; i++) {
+                if (i % TICK_CHECKPOINTS == 0) {
+                    tick(); // a flood from the start per checkpoint: the caller's tick every few
+                }
                 Disk d = disks.get(i);
                 if (d.inside(startX, startZ)) {
                     found.add("the start is inside " + d.name());

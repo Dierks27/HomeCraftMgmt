@@ -236,14 +236,20 @@ public final class GenCopy {
         return List.of("HAIRPIN", "Ease off!");
     }
 
-    /** Before a chicane. */
-    public static List<String> boatChicane() {
-        return List.of("CHICANE", "Left, right!");
+    /**
+     * Before a chicane, the way its first bend turns for a rider coming down (audit MTN00):
+     * {@code rightFirst} "Right, left!", else "Left, right!".
+     */
+    public static List<String> boatChicane(boolean rightFirst) {
+        return List.of("CHICANE", rightFirst ? "Right, left!" : "Left, right!");
     }
 
-    /** At a staircase of {@code drops} lips down one straight (§7.1: "THE CLIFFS - 3 big drops!"). */
-    public static List<String> boatCliffs(int drops) {
-        return List.of("THE CLIFFS!", drops + " big drops!");
+    /**
+     * At a staircase of {@code drops} lips down one straight (§7.1: "THE CLIFFS - 3 big drops!"); "big" only when
+     * every step is a 2-block drop (audit MTN-R3-01), else "3 drops ahead!".
+     */
+    public static List<String> boatCliffs(int drops, boolean big) {
+        return List.of("THE CLIFFS!", drops + (big ? " big drops!" : " drops ahead!"));
     }
 
     /** Before a slalom's gate set of {@code gates} gates ("SLALOM - 8 gates"). */
@@ -719,8 +725,9 @@ public final class GenCopy {
                 boatBigDrop(), boatDrop(1), boatDrop(2), boatFinalDrop(), boatSandyBend(), boatSandPit(), boatSplit(),
                 boatIceCave(), boatForest(), boatRoadStart("easy"), boatRoadStart("medium"), boatRoadStart("hard"),
                 boatSlalomStart("easy"), boatSlalomStart("medium"), boatSlalomStart("hard"), boatHairpin(),
-                boatChicane(), boatCliffs(2), boatCliffs(3), boatGates(4), boatGates(11), boatHalfway(),
-                boatTunnel()));
+                boatChicane(true), boatChicane(false), boatCliffs(2, true), boatCliffs(3, true),
+                boatCliffs(2, false), boatCliffs(3, false), boatGates(4), boatGates(11),
+                boatHalfway(), boatTunnel()));
         for (int hole = 1; hole <= 18; hole++) {
             out.add(golfTee(hole, 6));
             for (TeeFeature f : TeeFeature.values()) {

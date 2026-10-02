@@ -60,7 +60,9 @@ final class MountainScenery {
 
     /**
      * The mountain round raster {@code t} from stream {@code r}; how many trees it grew. The raster's blocks
-     * (the track, walls, pieces, stand) are already down; the mountain fills only what the rules allow.
+     * (the track, walls, pieces, stand) are already down; the mountain fills only what the rules allow. The
+     * raster's {@link RasterV4#tick} runs between the passes and every {@value RasterV4#TICK_ROWS} rows of
+     * each (audit MTN04).
      */
     static int draw(GenRandom r, RasterV4 t) {
         int sx = t.sx;
@@ -70,6 +72,7 @@ final class MountainScenery {
         byte[] kind = new byte[n];
         int[] lo = new int[n];
         for (int x = 0; x < sx; x++) {
+            t.row(x);
             for (int z = 0; z < sz; z++) {
                 int i = x * sz + z;
                 if (t.h[i] != RasterV4.NONE) {
@@ -101,7 +104,11 @@ final class MountainScenery {
                 queue.add(i);
             }
         }
+        int polled = 0;
         while (!queue.isEmpty()) {
+            if (++polled % (sz * RasterV4.TICK_ROWS) == 0) {
+                t.tick.run(); // as often as a pass's rows: TICK_ROWS rows' worth of cells
+            }
             int i = queue.poll();
             int x = i / sz;
             int z = i % sz;
@@ -123,8 +130,10 @@ final class MountainScenery {
         }
         // the ground: a shelf below the road downhill, a cut above it uphill, falling away from it
         double[] g = new double[n];
+        t.tick.run();
         double[] relief = relief(r.fork("relief"), sx, sz);
         for (int x = 0; x < sx; x++) {
+            t.row(x);
             for (int z = 0; z < sz; z++) {
                 int i = x * sz + z;
                 int s = seed[i];
@@ -140,7 +149,9 @@ final class MountainScenery {
                 g[i] = base + (d > 6 ? relief[i] : 0);
             }
         }
+        t.tick.run();
         double[] smooth = blur(g, sx, sz, SMOOTH);
+        t.tick.run();
         int[] top = new int[n];
         int topIce = t.topIce;
         double[] pit = t.sk.line.at(0);
@@ -155,6 +166,7 @@ final class MountainScenery {
         int valley = y0 + VALLEY_LY;
         double finishZ = t.sk.frame.zFinish;
         for (int x = 0; x < sx; x++) {
+            t.row(x);
             for (int z = 0; z < sz; z++) {
                 int i = x * sz + z;
                 int d = dist[i];
@@ -203,6 +215,7 @@ final class MountainScenery {
         }
         int standFloor = t.standFloor();
         for (int x = 2; x < sx - 2; x++) {
+            t.row(x);
             for (int z = 2; z < sz - 2; z++) {
                 int i = x * sz + z;
                 if (dist[i] > farLimit) {
@@ -230,6 +243,7 @@ final class MountainScenery {
                 }
             }
         }
+        t.tick.run();
         return trees(r.fork("trees"), t, kind, top, dist, snowline, lowest, highest, budget - planned);
     }
 
@@ -238,6 +252,7 @@ final class MountainScenery {
         int count = 0;
         int sz = t.sz;
         for (int x = 2; x < t.sx - 2; x++) {
+            t.row(x);
             for (int z = 2; z < sz - 2; z++) {
                 int i = x * sz + z;
                 if (dist[i] > farLimit) {

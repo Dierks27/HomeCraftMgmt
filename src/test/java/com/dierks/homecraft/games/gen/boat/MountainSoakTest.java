@@ -20,7 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Mountain Run v2's soak (MOUNTAIN-V2-SPEC §15; {@code gradle test -Pslow}): {@value #SEEDS} seeds of each
  * style at each tier, every plan proven, in its window and under its caps, the safe layout rare, the
- * planner's time bounded; the distributions printed for tuning.
+ * planner's time bounded, a road's deck of pieces placed (three in four or more); the distributions printed
+ * for tuning.
  */
 class MountainSoakTest {
 
@@ -30,13 +31,22 @@ class MountainSoakTest {
     /** What one style and tier did over its seeds. */
     record Tally(String name, List<String> problems, int safe, int plans, List<Double> seconds, List<Double> ms,
                  List<Double> ops, List<Double> cps, List<Double> drops, List<Double> descent, List<Double> length,
-                 List<Double> flow, List<Double> carry, List<Double> period, List<Double> variety) {
+                 List<Double> flow, List<Double> carry, List<Double> period, List<Double> variety,
+                 List<Double> pieces, int[] placed, int[] dealt) {
 
         String print() {
+            StringBuilder deck = new StringBuilder();
+            for (PiecesV4.Kind k : PiecesV4.Kind.values()) {
+                if (dealt[k.ordinal()] > 0) {
+                    deck.append(' ').append(k.word).append(' ').append(placed[k.ordinal()]).append('/')
+                            .append(dealt[k.ordinal()]);
+                }
+            }
             return String.format(Locale.ROOT, "%s: %d plans, safe %d, problems %d%n  T_m %s%n  planner ms %s%n"
                             + "  ops %s%n  checkpoints %s%n  drops %s%n  descent %s%n  length %s%n  flow %s%n"
-                            + "  carry %s%n  period %s%n  variety %s", name, plans, safe, problems.size(), d(seconds),
-                    d(ms), d(ops), d(cps), d(drops), d(descent), d(length), d(flow), d(carry), d(period), d(variety));
+                            + "  carry %s%n  period %s%n  variety %s%n  pieces placed of dealt %s,%s", name, plans, safe,
+                    problems.size(), d(seconds), d(ms), d(ops), d(cps), d(drops), d(descent), d(length), d(flow),
+                    d(carry), d(period), d(variety), d(pieces), deck);
         }
     }
 
@@ -53,9 +63,12 @@ class MountainSoakTest {
 
     /** {@code n} seeds of {@code style} at {@code tier}, from {@code first} on. */
     static Tally soak(BoatStyle style, String tier, int n, long first) {
+        int[] placed = new int[PiecesV4.Kind.values().length];
+        int[] dealt = new int[PiecesV4.Kind.values().length];
         Tally t = new Tally(style + " " + tier, new ArrayList<>(), 0, 0, new ArrayList<>(), new ArrayList<>(),
                 new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(),
-                new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+                new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), placed,
+                dealt);
         int safe = 0;
         int plans = 0;
         for (long seed = first; plans < n; seed++) {
@@ -87,9 +100,20 @@ class MountainSoakTest {
             t.carry().add(m.cand.flow().carry);
             t.period().add(m.cand.flow().period);
             t.variety().add(m.cand.flow().variety);
+            int here = 0;
+            int deck = 0;
+            for (PiecesV4.Kind k : PiecesV4.Kind.values()) {
+                placed[k.ordinal()] += m.pieces.count(k);
+                dealt[k.ordinal()] += m.pieces.dealt(k);
+                here += m.pieces.count(k);
+                deck += m.pieces.dealt(k);
+            }
+            if (deck > 0) {
+                t.pieces().add(here / (double) deck);
+            }
         }
         return new Tally(t.name(), t.problems(), safe, plans, t.seconds(), t.ms(), t.ops(), t.cps(), t.drops(),
-                t.descent(), t.length(), t.flow(), t.carry(), t.period(), t.variety());
+                t.descent(), t.length(), t.flow(), t.carry(), t.period(), t.variety(), t.pieces(), placed, dealt);
     }
 
     @Test
@@ -116,6 +140,16 @@ class MountainSoakTest {
                 assertTrue(ms.get(ms.size() * 99 / 100) <= 30_000, t.name() + ": p99 planning under 30 s");
                 for (double c : t.cps()) {
                     assertTrue(c <= MountainValidator.MAX_CHECKPOINTS, t.name() + ": " + c + " checkpoints");
+                }
+                if (style == BoatStyle.ROAD) {
+                    // audit MTN-R3-00: the §5.3 deck is placed, not mostly dropped
+                    int in = 0;
+                    int of = 0;
+                    for (PiecesV4.Kind k : PiecesV4.Kind.values()) {
+                        in += t.placed()[k.ordinal()];
+                        of += t.dealt()[k.ordinal()];
+                    }
+                    assertTrue(in * 4 >= of * 3, t.name() + ": " + in + " pieces of " + of + " dealt");
                 }
             }
         }

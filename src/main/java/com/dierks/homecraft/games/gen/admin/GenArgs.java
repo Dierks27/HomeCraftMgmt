@@ -19,8 +19,9 @@ import java.util.Locale;
  * code from a tile or the website ({@code HARD-40}), its number alone ({@code 40}), its edition key
  * from status ({@code 7:40}), {@code last} (the one before the current), {@code current}, the date
  * it was up ({@code date 2026-10-05} or just {@code 2026-10-05}), or {@code seed:<hex>} to make it
- * again from its seed with today's generator (when its stored plan can't be read) — at least 8 hex
- * digits, like the 12 the website shows.
+ * again from its seed (when its stored plan can't be read: by the planner that made it when that version is
+ * kept, so an Adventure Golf edition is the same course, else by today's, {@code Planner.remake}) — at least 8
+ * hex digits, like the 12 the website shows.
  */
 public final class GenArgs {
 

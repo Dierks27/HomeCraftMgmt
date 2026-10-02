@@ -21,7 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Pinned here: the owner's 0.36 file, migrated and backfilled, ends with exactly the bundled file's comments
  * on every key, so it no longer says "x 1760-8191 ... Keep the sky there free", "a Mountain Run about 50 KB",
- * "skill games pay small, capped rewards" or "a short downhill sprint"; a 0.35 file's are refreshed too; a
+ * "skill games pay small, capped rewards", "a short downhill sprint" or "Adventure Golf" in its header, and its
+ * keep area says Golf v4 fits a plot and a Mountain Run v2 can't be kept; a 0.35 file's are refreshed too; a
  * comment the owner edited by one character is kept, word for word; each revision refreshes only its own;
  * and every fingerprint is what 0.35.0 or 0.36.0 shipped on that key.
  */
@@ -47,12 +48,18 @@ class ShippedCommentsTest {
         }
         String text = after.saveToString();
         for (String stale : List.of("x 1760-8191", "Keep the sky there", "about 50 KB", "about 6 MB",
-                "pay small, capped rewards", "short downhill sprint", "a downhill race with 4-6")) {
+                "pay small, capped rewards", "short downhill sprint", "a downhill race with 4-6",
+                "Adventure Golf")) {
             assertFalse(text.contains(stale), "no \"" + stale + "\" is left in the migrated file");
         }
         assertTrue(text.contains("x 1760-9599, z 2880-10367, y 96 and up"), "the new don't-build-here bounds");
         assertTrue(text.contains("/hcm games gen tidy"), "and the slots' tidy note");
         assertTrue(text.contains("about 0.4 MB"), "and the archive's new size");
+        assertTrue(String.join("\n", after.getComments("games.fresh")).contains("mini golf (Golf v4: Golf of the Week"
+                + " and Tiny Golf)"), "the header names this version's golf");
+        String keep = String.join("\n", after.getComments("games.fresh.keep.area"));
+        assertTrue(keep.contains("Golf v4's") && keep.contains("128 x 16 x 224 does")
+                && keep.contains("a Mountain Run v2") && keep.contains("can't be kept"), "and what fits a plot: " + keep);
     }
 
     @Test
@@ -99,8 +106,9 @@ class ShippedCommentsTest {
 
         YamlConfiguration c = LayoutFixtures.v036();
         assertEquals(List.of("games"), ShippedComments.refresh(c, EconomyMigration.REVISION), "20: the header");
-        assertEquals(List.of("games.fresh.world", "games.fresh.slots", "games.fresh.archive", "games.race_night",
-                "games.race_night.races", "games.race_night.max_race_minutes"),
+        assertEquals(List.of("games.fresh", "games.fresh.world", "games.fresh.slots", "games.fresh.archive",
+                "games.fresh.keep.area", "games.race_night", "games.race_night.races",
+                "games.race_night.max_race_minutes"),
                 ShippedComments.refresh(c, GamesAreaMigration.REVISION), "21: the areas' and the run's");
         assertEquals(List.of(), ShippedComments.refresh(c, GamesAreaMigration.REVISION), "and a second run has none left");
     }

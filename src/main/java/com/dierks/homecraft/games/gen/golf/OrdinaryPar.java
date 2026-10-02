@@ -29,7 +29,8 @@ import java.util.Map;
  *       nearest the cup along the lane ({@link LaneMap#pathDistance}); a holed putt counts −1, a
  *       penalty +∞, and a tie goes to the lower power. (The choice from one exact spot is the same
  *       in every rollout, so it is worked out once.)</li>
- *   <li><b>Slip:</b> with chance <i>s</i> it takes the club one up or one down (50/50, kept to 1-5).</li>
+ *   <li><b>Slip:</b> with chance <i>s</i> it takes the club one up or one down (50/50); when its bag
+ *       has no such club (below Tap, above Drive) it keeps the one it chose.</li>
  *   <li><b>Aim error:</b> it turns a whole number of degrees <i>e</i> drawn by
  *       {@link GenRandom#weighted} from −⌊3σ⌋..⌊3σ⌋, weights exp(−e²/2σ²) ({@link StrictMath}, the
  *       same on every JVM), and plays {@code Putt((float) (b + e), club)}. A penalty puts the ball
@@ -54,6 +55,12 @@ import java.util.Map;
  *
  * <p><b>Counted work.</b> Every simulated putt (a club tried, a putt played, a twin) spends one unit
  * of {@link Work}; the club chosen at an exact spot is remembered, so it is simulated once.
+ *
+ * <p><b>What a club is worth</b> (red-team F00). The same player can play with only some clubs in
+ * its bag ({@link #mean(BallPhysics.Blocks, GolfCourse.Hole, LaneMap, Model, int[], Work)}): it chooses
+ * among them, and a wrong club is the next one up or down when the bag has it, else the one it chose.
+ * With every club that is exactly the player above; with Tap, Putt and Drive alone
+ * ({@link #NO_CHIP_NO_SWING}) the extra strokes are what Chip and Swing are worth on the hole.
  */
 final class OrdinaryPar {
 
@@ -71,6 +78,10 @@ final class OrdinaryPar {
     static final double CHILD_SLIP = 0.35;
     /** The stream every hole's rollouts are forked from: par depends on the blocks, not the seed. */
     static final long STREAM = GenRandom.fnv1a64("golf v4 par");
+    /** Every club, 1-5: the bag par is set with. */
+    static final int[] ALL_CLUBS = {1, 2, 3, 4, 5};
+    /** Tap, Putt and Drive: the bag the club-value test plays without Chip and Swing (GOLF-V4-SPEC §3.7). */
+    static final int[] NO_CHIP_NO_SWING = {1, 2, 5};
     private static final double EPS = 1e-9;
 
     private OrdinaryPar() {
@@ -134,8 +145,10 @@ final class OrdinaryPar {
      * @param chosen  per club (index 1-5), how often the player chose it (before a slip), over the rollouts
      * @param played  per club (index 1-5), how often it played it (after a slip)
      * @param holed   every candidate that holed out (the steady line first, then the rollouts in order)
+     * @param teeClub the club the player chooses from the tee (a layup's is the club it lays up with)
      */
-    record Measure(double mean, int[] strokes, List<Putt> witness, long[] chosen, long[] played, List<Line> holed) {
+    record Measure(double mean, int[] strokes, List<Putt> witness, long[] chosen, long[] played, List<Line> holed,
+                   int teeClub) {
 
         /** The par the hole measures alone: ⌊μ + ½⌋, not clamped. */
         int rounded() {
@@ -165,7 +178,7 @@ final class OrdinaryPar {
         }
     }
 
-    /** The club the player chooses from one exact spot, and the bearing it aims along. */
+    /** The club the player chooses from one exact spot (its index in the bag), and the bearing it aims along. */
     private record Choice(double bearing, int club) {
     }
 
@@ -184,16 +197,21 @@ final class OrdinaryPar {
         final BallPhysics.Hole area;
         final LaneMap lane;
         final Work work;
+        /** The clubs in the bag, ascending (a slip takes the next one up or down in it). */
+        final int[] bag;
+        /** Whether the player ever takes the wrong club. */
+        boolean slips = true;
         final Map<Spot, Choice> choices = new HashMap<>();
         final long[] chosen = new long[6];
         final long[] played = new long[6];
 
-        Play(BallPhysics.Blocks blocks, GolfCourse.Hole hole, LaneMap lane, Work work) {
+        Play(BallPhysics.Blocks blocks, GolfCourse.Hole hole, LaneMap lane, Work work, int[] bag) {
             this.blocks = blocks;
             this.hole = hole;
             this.area = GolfShot.area(blocks, hole);
             this.lane = lane;
             this.work = work;
+            this.bag = bag;
         }
 
         GolfShot.Result putt(double x, double y, double z, Putt p) throws GenFailed, Spent {
@@ -204,7 +222,23 @@ final class OrdinaryPar {
             return GolfShot.play(blocks, area, new BallPhysics.Ball(x, y, z), p);
         }
 
-        /** The player's choice from (x, y, z): the bearing to the furthest waypoint in sight, the best club. */
+        boolean inBag(int club) {
+            return indexOf(club) >= 0;
+        }
+
+        int indexOf(int club) {
+            for (int k = 0; k < bag.length; k++) {
+                if (bag[k] == club) {
+                    return k;
+                }
+            }
+            return -1;
+        }
+
+        /**
+         * The player's choice from (x, y, z): the bearing to the furthest waypoint in sight, and the best
+         * club of the bag (its index in {@link #bag}).
+         */
         Choice choose(double x, double y, double z) throws GenFailed, Spent {
             Spot key = new Spot(x, y, z);
             Choice known = choices.get(key);
@@ -213,15 +247,15 @@ final class OrdinaryPar {
             }
             int aim = lane.target(x, z);
             double bearing = LaneMap.bearing(x, z, lane.waypointX(aim), lane.waypointZ(aim));
-            int best = 1;
+            int best = 0;
             double bestScore = Double.POSITIVE_INFINITY;
-            for (int power = 1; power <= BallPhysics.clubs(); power++) {
-                GolfShot.Result r = putt(x, y, z, new Putt((float) bearing, power));
+            for (int k = 0; k < bag.length; k++) {
+                GolfShot.Result r = putt(x, y, z, new Putt((float) bearing, bag[k]));
                 double score = r.inCup() ? -1 : r.penalty() ? Double.POSITIVE_INFINITY
                         : lane.pathDistance(r.x(), r.z());
                 if (score < bestScore - EPS) {
                     bestScore = score;
-                    best = power;
+                    best = k;
                 }
             }
             Choice c = new Choice(bearing, best);
@@ -243,17 +277,22 @@ final class OrdinaryPar {
                 double y = ball.y();
                 double z = ball.z();
                 Choice c = choose(x, y, z);
-                int club = c.club();
+                int k = c.club();
                 double yaw = c.bearing();
                 if (r != null) {
+                    int club = bag[k];
                     chosen[club]++;
-                    if (r.chance(model.slip)) {
-                        club = Math.max(1, Math.min(BallPhysics.clubs(), club + (r.nextBoolean() ? 1 : -1)));
+                    if (slips && r.chance(model.slip)) {
+                        int wrong = club + (r.nextBoolean() ? 1 : -1);
+                        if (inBag(wrong)) { // the club next to it, when the bag has it (Tap has none below)
+                            club = wrong;
+                        }
                     }
                     played[club]++;
                     yaw += model.errors[r.weighted(model.weights)];
+                    k = indexOf(club);
                 }
-                Putt p = new Putt((float) yaw, club);
+                Putt p = new Putt((float) yaw, bag[k]);
                 GolfShot.Result res = putt(x, y, z, p);
                 ball.place(res.x(), res.y(), res.z());
                 strokes += res.strokes();
@@ -282,7 +321,30 @@ final class OrdinaryPar {
      */
     static Double mean(BallPhysics.Blocks blocks, GolfCourse.Hole hole, LaneMap lane, Model model, Work work)
             throws GenFailed {
-        Play play = new Play(blocks, hole, lane, work);
+        return mean(blocks, hole, lane, model, ALL_CLUBS, work);
+    }
+
+    /**
+     * μ with only the clubs of {@code bag} (ascending powers; a slip takes the next one up or down in
+     * it): what a club is worth, the extra strokes the player takes without it (GOLF-V4-SPEC §3.7's
+     * club-value test). {@code null} when the work ran out.
+     *
+     * @throws GenFailed when the job was cancelled
+     */
+    static Double mean(BallPhysics.Blocks blocks, GolfCourse.Hole hole, LaneMap lane, Model model, int[] bag,
+                       Work work) throws GenFailed {
+        return mean(blocks, hole, lane, model, bag, true, work);
+    }
+
+    /**
+     * {@link #mean(BallPhysics.Blocks, GolfCourse.Hole, LaneMap, Model, int[], Work)}, and without
+     * {@code slips} a player who never takes the wrong club (its aim still errs): the red-team's own
+     * measure of what the clubs are worth, reported beside the model's.
+     */
+    static Double mean(BallPhysics.Blocks blocks, GolfCourse.Hole hole, LaneMap lane, Model model, int[] bag,
+                       boolean slips, Work work) throws GenFailed {
+        Play play = new Play(blocks, hole, lane, work, bag);
+        play.slips = slips;
         try {
             long total = 0;
             for (int r = 0; r < ROLLOUTS; r++) {
@@ -302,7 +364,7 @@ final class OrdinaryPar {
      */
     static Measure measure(BallPhysics.Blocks blocks, GolfCourse.Hole hole, LaneMap lane, Model model, Work work)
             throws GenFailed {
-        Play play = new Play(blocks, hole, lane, work);
+        Play play = new Play(blocks, hole, lane, work, ALL_CLUBS);
         try {
             List<Played> candidates = new ArrayList<>(ROLLOUTS + 1);
             candidates.add(play.roll(model, null));
@@ -337,8 +399,10 @@ final class OrdinaryPar {
                     witness = List.copyOf(p.line());
                 }
             }
+            BallPhysics.Ball tee = GolfShot.tee(blocks, hole);
+            int teeClub = play.bag[play.choose(tee.x(), tee.y(), tee.z()).club()];
             return new Measure((double) total / ROLLOUTS, strokes, witness, play.chosen.clone(), play.played.clone(),
-                    List.copyOf(holed));
+                    List.copyOf(holed), teeClub);
         } catch (Spent e) {
             return null;
         }

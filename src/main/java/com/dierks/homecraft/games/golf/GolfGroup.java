@@ -33,7 +33,8 @@ import java.util.UUID;
  * (GOLF-V4-SPEC §6.4). A v4 hole is longer: a stroke takes at most the roll (2.4 s on turf, 12 s on an
  * ice express) and about 10 s for a player to walk, aim and click, so about 22 s; once the first ball
  * is in, a kid-policy player needs at most par + 1 more strokes, and 22 (par + 1) is under 30 (par + 1).
- * Hand-built courses and older layouts (algo 2 and 3, their recalls) keep 120 s ({@link #clocks}).
+ * A course kept from a v4 plan keeps it ({@link GolfCourse#keptAlgo}). Hand-built courses and older
+ * layouts (algo 2 and 3, their recalls and the courses kept from them) keep 120 s ({@link #clocks}).
  *
  * <p><b>The shared scorecard</b> ({@link #card}) shows every player's holes, and the ranking
  * ({@link #ranking}) orders the players who finished by total strokes (fewest first), level totals
@@ -289,21 +290,32 @@ public final class GolfGroup {
     }
 
     /**
-     * Each hole's clock (seconds) on {@code course}: on a Golf v4 hole (its tag golf planner version
-     * {@value #FIRST_LONG_CLOCK_ALGO} or later) max({@value #HOLE_CLOCK_SECONDS},
-     * {@value #CLOCK_PER_STROKE} x (par + 1)); on a hand-built course, a kept one (no tag) and every
-     * older layout (and its recall), {@value #HOLE_CLOCK_SECONDS}.
+     * Each hole's clock (seconds) on {@code course}: on a Golf v4 hole — a generated course whose tag
+     * is golf planner version {@value #FIRST_LONG_CLOCK_ALGO} or later, or a course kept from such a
+     * plan ({@link GolfCourse#keptAlgo}, red-team F02) — max({@value #HOLE_CLOCK_SECONDS},
+     * {@value #CLOCK_PER_STROKE} x (par + 1)); on a hand-built course and every older layout (its
+     * recall, or a course kept from it), {@value #HOLE_CLOCK_SECONDS}.
      */
     public static List<Integer> clocks(GolfCourse course) {
         List<Integer> out = new ArrayList<>();
-        boolean v4 = course != null && course.generated() && Slots.GOLF.equals(course.gen().generator())
-                && course.gen().algo() >= FIRST_LONG_CLOCK_ALGO;
+        boolean v4 = course != null && plannedAlgo(course) >= FIRST_LONG_CLOCK_ALGO;
         if (course != null) {
             for (GolfCourse.Hole h : course.holes()) {
                 out.add(v4 ? holeClock(h.par()) : HOLE_CLOCK_SECONDS);
             }
         }
         return out;
+    }
+
+    /**
+     * The golf planner version {@code course}'s layout came from: its tag's for a generated golf
+     * course, the one it was kept from for a kept course, else 0 (hand-built).
+     */
+    static int plannedAlgo(GolfCourse course) {
+        if (course.generated()) {
+            return Slots.GOLF.equals(course.gen().generator()) ? course.gen().algo() : 0;
+        }
+        return course.keptAlgo();
     }
 
     /**

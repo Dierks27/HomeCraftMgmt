@@ -12,8 +12,17 @@ import java.util.Set;
 /**
  * Golf v4's hole recipes (GOLF-V4-SPEC §3.3, §3.6): a routing (a straight, a dogleg, an S-bend, a
  * hairpin) of a length class, at most one piece per leg (sand, a hump, a hill, a creek, a pond, trees,
- * ice, bumpers, terraces, a layup) and a green (flat, a ramp, an island, a volcano), drawn by a
- * {@link Draft} on the size-aware {@link HoleTemplate.Sketch} with Adventure Golf's block rules.
+ * ice, bumpers, terraces, a corner pond) and a green (flat, a ramp, an island, a volcano, water behind
+ * it), drawn by a {@link Draft} on the size-aware {@link HoleTemplate.Sketch} with Adventure Golf's
+ * block rules. Every green has {@value Draft#RUNOUT} rows of run-out behind its cup on a 40 x 64 plot.
+ *
+ * <p><b>Layups</b> (red-team F00: every club has a job). A corner pond past the first elbow, where the
+ * first-timer's tee shot goes when it aims across the corner: on a Swing layup ({@link #L_LAYUP},
+ * {@link #X_LAYUP}) a first leg of 7-9 puts it 10.5-12 out along that line, so a Drive goes in and a
+ * Swing stops in the elbow; on a guarded par 3 ({@link #M_GUARDED}) the same, and water behind the
+ * green; on a Chip layup ({@link #L_CHIP_LAYUP}, {@link #M_CHIP_LAYUP}) a first leg of 4-6 and a rock
+ * at the inner corner, which keeps the player's aim nearly straight on, so a Swing reaches the pond
+ * and a Chip doesn't. The planner checks each on the real physics ({@link GolfPlannerV4#layupHolds}).
  *
  * <p>Each recipe is one length class and one set of features, so the deal ({@link DealV4}) can count
  * a course's quota before a block is drawn, exactly as Adventure Golf's templates are counted. Each
@@ -56,10 +65,12 @@ enum HoleRecipe {
     M_TERRACES(LengthClass.M, "MH"),
     M_TWO_WAY(LengthClass.M, "MH"),
     M_VOLCANO(LengthClass.M, "H"),
+    M_GUARDED(LengthClass.M, "MH"),
+    M_CHIP_LAYUP(LengthClass.M, "MH"),
 
     // ---- L: par 4, 27-38 ----------------------------------------------------------------------------
     L_LAYUP(LengthClass.L, "MH"),
-    L_LAYUP_SAND(LengthClass.L, "EM"),
+    L_CHIP_LAYUP(LengthClass.L, "MH"),
     L_DOGLEG_SAND_POND(LengthClass.L, "MH"),
     L_DOGLEG_TREES_GREEN(LengthClass.L, "MH"),
     L_DOGLEG_HILL_SAND(LengthClass.L, "MH"),
@@ -155,7 +166,9 @@ enum HoleRecipe {
                 }
             }
             case L_LAYUP -> f.addAll(EnumSet.of(Quota.Feature.LAYUP, Quota.Feature.WATER, Quota.Feature.TWO_LEGS));
-            case L_LAYUP_SAND -> f.addAll(EnumSet.of(Quota.Feature.LAYUP, Quota.Feature.SAND, Quota.Feature.TWO_LEGS));
+            case L_CHIP_LAYUP, M_CHIP_LAYUP -> f.addAll(EnumSet.of(Quota.Feature.CHIP_LAYUP, Quota.Feature.WATER,
+                    Quota.Feature.TWO_LEGS));
+            case M_GUARDED -> f.addAll(EnumSet.of(Quota.Feature.GUARDED, Quota.Feature.WATER, Quota.Feature.TWO_LEGS));
             case L_DOGLEG_SAND_POND -> f.addAll(EnumSet.of(Quota.Feature.SAND, Quota.Feature.WATER,
                     Quota.Feature.TWO_LEGS));
             case L_DOGLEG_TREES_GREEN -> f.addAll(EnumSet.of(Quota.Feature.TREES, Quota.Feature.HEIGHT,
@@ -403,7 +416,7 @@ enum HoleRecipe {
                 int across = d.len(6, 10);
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
-                d.first(d.centred(across, 3), up, 2);
+                d.first(d.centred(across + d.runout - 1, 3), up, 2);
                 d.then(1, 0, across, 2);
                 d.lay(off);
                 d.bank(0);
@@ -415,7 +428,7 @@ enum HoleRecipe {
                 int across = d.len(6, 10);
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
-                d.first(d.centred(across, 4), up, 2);
+                d.first(d.centred(across + d.runout - 1, 4), up, 2);
                 d.then(1, 0, across, 2);
                 d.lay(off);
                 d.dropAtElbow();
@@ -427,7 +440,7 @@ enum HoleRecipe {
                 int across = d.len(6, 9);
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
-                d.first(d.centred(across, 4), up, 3);
+                d.first(d.centred(across + d.runout - 1, 4), up, 3);
                 d.then(1, 0, across, 2);
                 d.lay(off);
                 d.trees(0, 1);
@@ -457,19 +470,30 @@ enum HoleRecipe {
                 what = volcano(d, mid);
                 sign = GenCopy.TeeFeature.VOLCANO;
             }
-            case L_LAYUP, L_LAYUP_SAND -> {
-                boolean sand = this == L_LAYUP_SAND;
-                int up = d.pick(8, 10);
-                int across = d.len(18, 24);
-                int wide = d.pick(4, 6);
+            case L_LAYUP, L_CHIP_LAYUP, M_GUARDED, M_CHIP_LAYUP -> {
+                boolean chip = this == L_CHIP_LAYUP || this == M_CHIP_LAYUP;
+                boolean m = cls == LengthClass.M;
+                boolean guarded = this == M_GUARDED;
+                int up = chip ? d.pick(4, 6) : d.pick(7, m ? 8 : 9);
+                int across = m ? d.len(10, 12) : d.len(18, 24);
                 int deep = d.pick(3, 4);
+                int reach = m ? across - 5 : d.pick(6, 8); // an M hole's pond keeps clear of its cup ring
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
-                d.first(d.centred(across, 4), up, 2);
+                d.first(d.centred(across + d.runout - 1 + (guarded ? 3 : 0), 4), up, 2);
                 d.then(1, 0, across, 2);
                 d.lay(off);
-                d.layup(wide, deep, sand);
-                sign = d.tee;
+                d.cornerPond(0, deep, reach);
+                if (chip) {
+                    d.cornerRock(0);
+                    d.features.add(Quota.Feature.CHIP_LAYUP);
+                } else if (guarded) {
+                    d.backPond(3);
+                    d.features.add(Quota.Feature.GUARDED);
+                } else {
+                    d.features.add(Quota.Feature.LAYUP);
+                }
+                sign = GenCopy.TeeFeature.LAYUP_WATER;
                 what = up + " up, " + across + " across";
             }
             case L_DOGLEG_SAND_POND -> {
@@ -480,7 +504,7 @@ enum HoleRecipe {
                 int long_ = d.pick(6, 8);
                 int wide = d.pick(3, 4);
                 mirror = r.nextBoolean();
-                d.first(d.centred(across, 5), up, 3);
+                d.first(d.centred(across + d.runout - 1, 5), up, 3);
                 d.then(1, 0, across, 2);
                 d.lay(off);
                 int at = d.landing(rows);
@@ -501,7 +525,7 @@ enum HoleRecipe {
                 int off = d.pick(-1, 1);
                 int onGreen = d.pick(4, 6);
                 mirror = r.nextBoolean();
-                d.first(d.centred(across, 4), up, 3);
+                d.first(d.centred(across + d.runout - 1, 4), up, 3);
                 d.then(1, 0, across, 2);
                 d.lay(off);
                 d.trees(0, want);
@@ -516,7 +540,7 @@ enum HoleRecipe {
                 int rows = d.pick(3, 4);
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
-                d.first(d.centred(across, 4), up, 3);
+                d.first(d.centred(across + d.runout - 1, 4), up, 3);
                 d.then(1, 0, across, 3);
                 d.lay(off);
                 d.hill(0, d.pick(d.from(0), Math.max(d.from(0), Math.min(7, d.to(0) - crest - 3))), crest);
@@ -529,7 +553,7 @@ enum HoleRecipe {
                 int across = d.len(12, 16);
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
-                d.first(d.centred(across, 4), up, 2);
+                d.first(d.centred(across + d.runout - 1, 4), up, 2);
                 d.then(1, 0, across, 2);
                 d.lay(off);
                 d.dropAtElbow();
@@ -637,7 +661,7 @@ enum HoleRecipe {
                 int off = d.pick(-1, 1);
                 boolean trees = this == X_LONG_DOGLEG_TREES;
                 mirror = r.nextBoolean();
-                d.first(d.centred(across, 4), up, trees ? 3 : 2);
+                d.first(d.centred(across + d.runout - 1, 4), up, trees ? 3 : 2);
                 d.then(1, 0, across, 2);
                 d.lay(off);
                 d.bank(0);
@@ -673,11 +697,11 @@ enum HoleRecipe {
                 what = up + " up, " + across + " across, " + down + " back down";
             }
             case X_LAYUP -> {
-                int up = d.pick(8, 10);
+                int up = d.pick(7, 9);
                 int across = d.len(14, 18);
                 int lastLeg = d.len(14, 18);
-                int wide = d.pick(4, 6);
                 int deep = d.pick(3, 4);
+                int reach = d.pick(6, 8);
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
                 d.first(d.centred(across, 4), up, 2);
@@ -685,8 +709,9 @@ enum HoleRecipe {
                 d.then(0, 1, lastLeg, 2);
                 d.lay(off);
                 d.bank(1);
-                d.layup(wide, deep, false);
-                sign = d.tee;
+                d.cornerPond(0, deep, reach);
+                d.features.add(Quota.Feature.LAYUP);
+                sign = GenCopy.TeeFeature.LAYUP_WATER;
                 what = up + " up, " + across + " across, " + lastLeg + " up";
             }
             default -> throw new IllegalStateException("unknown recipe " + this);
@@ -699,7 +724,8 @@ enum HoleRecipe {
     /**
      * The proven fallback for a hole of {@code cls} (GOLF-V4-SPEC §3.6, attempt 12): plain 5-wide,
      * flat, never mirrored, nothing random — SAFE_S a straight of 10, SAFE_M a straight of 20, SAFE_L a
-     * dogleg of 20 up and 16 across, SAFE_X an S-bend of 18, 14 and 16. A test proves each in every plot
+     * dogleg of 20 up and 16 across, SAFE_X an S-bend of 16, 14 and 16 (with the green's run-out, 18
+     * left the kid a stroke over its bound). A test proves each measures its class's par in every plot
      * of every golf half.
      */
     static HoleLayout fallback(LengthClass cls, PlotGrid grid, int plotX, int plotZ, int turfY) {
@@ -722,10 +748,10 @@ enum HoleRecipe {
                     what = "dogleg 20 up, 16 across";
                 }
                 default -> {
-                    d.first((d.sx - 1 - 14) / 2, 18, 2);
+                    d.first((d.sx - 1 - 14) / 2, 16, 2);
                     d.then(1, 0, 14, 2);
                     d.then(0, 1, 16, 2);
-                    what = "S-bend 18 up, 14 across, 16 up";
+                    what = "S-bend 16 up, 14 across, 16 up";
                 }
             }
             d.lay(0);
@@ -776,11 +802,11 @@ enum HoleRecipe {
         int s0 = island + 3;
         int x1 = s0 + narrow - 1;
         int cupZ = at + 5 + after;
-        if (x0 < 1 || x1 + 4 > d.sx - 2 || cupZ + 2 > d.sz - 2) {
+        if (x0 < 1 || x1 + 4 > d.sx - 2 || cupZ + d.runout + 1 > d.sz - 2) {
             throw new Draft.Redraw("no room for two ways");
         }
         HoleTemplate.Sketch s = d.s;
-        s.lane(x0, x1, 2, cupZ + 1, 0);
+        s.lane(x0, x1, 2, cupZ + d.runout, 0);
         s.island(island, island + 2, at, at + 5);
         s.trunk(island + 1, at + 1, wood);
         s.trunk(island + 1, at + 4, wood);

@@ -19,7 +19,8 @@ import java.util.Set;
  * leg. A leg has a length (centre to centre) and a half-width (5 wide: 2; 7 wide: 3). Pieces are
  * placed in a leg's own coordinates: u along it from its start centre, v across it (+X on a leg along
  * Z, +Z on a leg along X). The lane of a leg covers u from just behind its start (the row behind the
- * tee, or the elbow box) to its end's elbow box, or one past the cup on the last leg.
+ * tee, or the elbow box) to its end's elbow box, or on the last leg {@link #runout} rows past the
+ * cup (the green's run-out).
  *
  * <p><b>The rules kept.</b> Pieces keep their distance from the tee row, the elbow boxes and the cup
  * ring ({@link #clear}); a raised slab always has lane round it; ponds are 3 x 3 or more. A draw
@@ -30,6 +31,17 @@ final class Draft {
 
     /** Rows a piece keeps clear of the tee row, an elbow box and the cup ring. */
     static final int CLEAR = 3;
+    /**
+     * Rows of green behind the cup before the back wall on Golf v4's 40 x 64 plots (GOLF-V4-SPEC §3.6,
+     * red-team F00): a ball that passes the cup at holing speed (at most 0.35 a tick) rolls at most 3.5
+     * more, so it stops on the green; and a Drive too fast to drop meets the wall 4.5 past the cup and
+     * comes back at most 60% as fast, too slow to reach the cup again from anywhere a block out or
+     * more. (Adventure Golf's greens end one row behind the cup: a Drive banked back off that wall
+     * into the cup from 8-13 blocks, so a Drive and a putter did every job.) Tiny Golf's 20 x 40 plots
+     * keep Adventure Golf's one row ({@link #runout}): a child's course, whose par and kid bound were
+     * set on those greens.
+     */
+    static final int RUNOUT = 4;
 
     /** A draw that didn't work out: the attempt fails (deterministically: the stored attempt never did). */
     static final class Redraw extends Exception {
@@ -82,6 +94,8 @@ final class Draft {
     GenCopy.TeeFeature tee = GenCopy.TeeFeature.NONE;
     /** The cup's offset across the last leg (v). */
     int cupOff;
+    /** Rows of green past the cup: {@value #RUNOUT} on a 40 x 64 plot, Adventure Golf's 1 on Tiny Golf's 20 x 40. */
+    final int runout;
 
     /**
      * @param r       the attempt's stream
@@ -97,6 +111,7 @@ final class Draft {
         this.dry = dry;
         this.sx = grid.plotX();
         this.sz = grid.plotZ();
+        this.runout = sz >= PlotGrid.V4.plotZ() ? RUNOUT : 1;
         this.s = new HoleTemplate.Sketch(sx, sz);
         s.adventure();
         s.tier = this.tier;
@@ -157,7 +172,7 @@ final class Draft {
         for (int i = 0; i < legs.size(); i++) {
             Leg l = legs.get(i);
             int u0 = i == 0 ? -1 : -legs.get(i - 1).half();
-            int u1 = i == legs.size() - 1 ? l.length() + 1 : l.length() + legs.get(i + 1).half();
+            int u1 = i == legs.size() - 1 ? l.length() + runout : l.length() + legs.get(i + 1).half();
             lane(l, u0, u1, -l.half(), l.half(), 0);
         }
         Leg f = legs.get(0);
@@ -491,37 +506,65 @@ final class Draft {
     }
 
     /**
-     * A layup hazard straight on past the first leg's elbow: sand on Easy, a pond on Medium and Hard,
-     * {@code across} wide (4-6, centred on the leg) and {@code deep} rows, starting the row after the
-     * elbow box. Its near edge is then the first leg's length + 2.5 from the tee's centre; a Drive
-     * from the tee ends in it and a Swing short of it (the planner checks both on the real physics).
+     * A corner pond (a layup, GOLF-V4-SPEC §3.6 after red-team F00): the far wall of the elbow after leg
+     * {@code i} is water, {@code deep} rows from the row past the elbow box, reaching from beyond the
+     * leg's outer side to {@code reach} across along the next leg's outer side. A ball played from the
+     * tee towards the corner — the first-timer aims across it, at the furthest waypoint it sees — that
+     * still rolls when it gets there goes in; one that stops short stays in the elbow. The planner
+     * checks which clubs reach it along the line the player aims ({@link GolfPlannerV4#layupHolds}).
      */
-    void layup(int across, int deep, boolean sand) throws Redraw {
-        Leg a = legs.get(0);
-        Leg b = legs.get(1);
-        int u0 = a.length() + b.half() + 1;
-        int v0 = -(across / 2);
-        int v1 = v0 + across - 1;
-        if (sand) {
-            lane(a, u0, u0 + deep - 1, v0, v1, 0);
-            floor(a, u0, u0 + deep - 1, v0, v1, HoleTemplate.Sketch.SAND);
-            features.add(Quota.Feature.SAND);
-            tee = GenCopy.TeeFeature.LAYUP_SAND;
-        } else {
-            if (dry) {
-                throw new Redraw("a pond on a dry course");
-            }
-            water(a, u0, u0 + deep - 1, v0, v1);
-            features.add(Quota.Feature.WATER);
-            tee = GenCopy.TeeFeature.LAYUP_WATER;
+    void cornerPond(int i, int deep, int reach) throws Redraw {
+        if (dry) {
+            throw new Redraw("a pond on a dry course");
         }
-        features.add(Quota.Feature.LAYUP);
-        words.add("a layup " + (sand ? "bunker" : "pond") + " " + across + " by " + deep + " past the elbow");
+        Leg a = legs.get(i);
+        Leg b = legs.get(i + 1);
+        int turn = a.dz() != 0 ? b.dx() : b.dz(); // the turn's sign along this leg's v
+        int u0 = a.length() + b.half() + 1;
+        int out = -turn * (a.half() + 1);
+        int far = turn * reach;
+        water(a, u0, u0 + deep - 1, Math.min(out, far), Math.max(out, far));
+        features.add(Quota.Feature.WATER);
+        words.add("a corner pond " + deep + " deep, " + reach + " along");
+    }
+
+    /**
+     * A wooden rock at the inner corner of the elbow after leg {@code i}, in the leg's last row
+     * before the elbow box on the side it turns to (a chip layup's): it hides the next leg from the
+     * tee, so the first-timer aims nearly straight on, into the corner pond a Swing reaches and a
+     * Chip doesn't.
+     */
+    void cornerRock(int i) throws Redraw {
+        Leg a = legs.get(i);
+        Leg b = legs.get(i + 1);
+        int turn = a.dz() != 0 ? b.dx() : b.dz();
+        int x = a.x(a.length() - b.half() - 1, turn * a.half());
+        int z = a.z(a.length() - b.half() - 1, turn * a.half());
+        if (!s.canRock(x, z)) {
+            throw new Redraw("no room for a rock at the corner");
+        }
+        s.rock(x, z, false);
+        words.add("a rock at the corner");
+    }
+
+    /**
+     * Water behind the green ({@code deep} rows past its run-out, the back wall's width and its
+     * corners): a ball played too hard at the cup goes in rather than banking back off a wall.
+     */
+    void backPond(int deep) throws Redraw {
+        if (dry) {
+            throw new Redraw("a pond on a dry course");
+        }
+        Leg l = last();
+        int u0 = l.length() + runout + 1;
+        water(l, u0, u0 + deep - 1, -l.half() - 1, l.half() + 1);
+        features.add(Quota.Feature.WATER);
+        words.add("water behind the green");
     }
 
     /**
      * A raised green at the end of the last leg: a full step up at u0 with a slab ramp across its
-     * middle (3 wide), the green to the cup and one past it. The cup is then a block up.
+     * middle (3 wide), the green to the cup and its run-out past it. The cup is then a block up.
      */
     void rampGreen(int u0) throws Redraw {
         int i = legs.size() - 1;
@@ -529,15 +572,15 @@ final class Draft {
         if (!clear(i, u0, u0)) {
             throw new Redraw("no room for a ramp green");
         }
-        lane(l, u0, l.length() + 1, -l.half(), l.half(), 2);
+        lane(l, u0, l.length() + runout, -l.half(), l.half(), 2);
         lane(l, u0, u0, -l.half() + 1, l.half() - 1, 1);
         features.add(Quota.Feature.HEIGHT);
         words.add("a raised green from " + u0);
     }
 
     /**
-     * An island green: the last 6 rows of the last leg (5 wide) raised a block, entered by a slab
-     * ramp 3 wide (2 on Hard) across its first row; the cup in its middle.
+     * An island green: the end of the last leg (5 wide) raised a block from 3 rows before the cup to
+     * its run-out, entered by a slab ramp 3 wide (2 on Hard) across its first row.
      */
     void islandGreen() throws Redraw {
         int i = legs.size() - 1;
@@ -545,11 +588,11 @@ final class Draft {
         if (l.half() != 2) {
             throw new IllegalStateException("an island green on a leg " + l.width() + " wide");
         }
-        int g0 = l.length() - 3; // six rows, the cup in the fourth
+        int g0 = l.length() - 3; // the cup in its fourth row, its run-out behind
         if (!clear(i, g0, g0)) {
             throw new Redraw("no room for an island green");
         }
-        lane(l, g0, g0 + 5, -2, 2, 2);
+        lane(l, g0, l.length() + Math.max(2, runout), -2, 2, 2); // Adventure Golf's island ran two past its cup
         int width = hard() ? 2 : 3;
         int e0 = hard() ? pick(-1, 0) : -1;
         lane(l, g0, g0, e0, e0 + width - 1, 1);

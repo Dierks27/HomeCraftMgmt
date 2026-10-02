@@ -2082,8 +2082,10 @@ games:
   # Race Night: boat races for everyone at once, at set times or when an admin starts one
   # (/hcm games event start). Three short races on one track, points for everyone in every race.
   # Free to enter. The server gives small token prizes (at most prize_events_per_week nights a week).
-  # Ships OFF: turn on the Ice Boat Fresh course (games.fresh.slots.fresh_boat) first - it is the
-  # default track and has a viewing stand built in.
+  # Ships OFF. Its default track is the Ice Boat Fresh course (games.fresh.slots.fresh_boat), with a
+  # viewing stand built in: switch this on (and /hcm reload) BEFORE /hcm games gen on fresh_boat, so
+  # the week it builds is the Winding Road. Switched on after this week's Ice Boat was built as the
+  # Slalom, that week has no night until /hcm games gen reroll fresh_boat confirm (never done by itself).
   race_night:
     # false = no Race Night.
     enabled: false

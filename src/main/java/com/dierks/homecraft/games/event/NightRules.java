@@ -24,7 +24,8 @@ import java.util.Map;
  * {@value #MAX_RACE_MINUTES} minutes): a young rider at 0.45 of model speed behind a leader at 0.85 still
  * finishes inside the window. They are worked out once the track is known ({@link #of(RaceNightSettings,
  * int, int, boolean, int, long)}) and stored with the night like every other rule; config is untouched, and
- * any other track (T_m 0) keeps the configured values exactly.
+ * any other track (T_m 0) keeps the configured values exactly. A night resumed after a restart widens them to
+ * the track it resumes on ({@link #onTrack}, audit M05).
  *
  * @param races               races tonight (1-5; 1 without a stand)
  * @param laps                0 = the course's own laps, else 1-5 on a loop track
@@ -110,6 +111,22 @@ public record NightRules(int races, int laps, int minRacers, int maxRacers, List
         }
         long want = Math.min(MAX_RACE_MINUTES, Math.ceilDiv(modelMs * 3, 60_000L));
         return (int) Math.max(configMinutes, want);
+    }
+
+    /**
+     * These rules on the track a night actually runs on, of model time {@code modelMs} (audit M05): the finish
+     * window and the longest race widened to that track's ({@link #finishWindow}, {@link #maxRace}, each the
+     * larger of the stored value and the track's), never lowered; these rules themselves for {@code modelMs} 0
+     * (any track that doesn't scale). A night resumed after a restart runs with these, since the track it
+     * resumes on may not be the one its row was stored for (a rebuilt week, a row from 0.36).
+     */
+    public NightRules onTrack(long modelMs) {
+        if (modelMs <= 0) {
+            return this;
+        }
+        return new NightRules(races, laps, minRacers, maxRacers, points, finishPoints, stillRacingPoints, prizes,
+                finisherPrize, fun, warmupSeconds, finishWindow(finishWindowSeconds, modelMs),
+                maxRace(maxRaceMinutes, modelMs), breakSeconds);
     }
 
     /**

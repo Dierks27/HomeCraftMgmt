@@ -138,16 +138,19 @@ public final class RaceTrack {
     // ---- raceable ------------------------------------------------------------------------------
 
     /**
-     * What a night says of a Mountain Run v2 Slalom, after the course's name (red-team F05: racing is the
-     * Winding Road, the Slalom is for solo runs; a Slalom week with Race Night on comes only from an admin's
-     * seed, {@code style: slalom}, or Race Night switched on after the week's course was made).
+     * The end of what a night says of a Mountain Run v2 Slalom (red-team F05: racing is the Winding Road, the
+     * Slalom is for solo runs; a Slalom week with Race Night on comes only from an admin's seed, {@code style:
+     * slalom}, or Race Night switched on after the week's course was made): the same whatever the set's cadence,
+     * so callers can tell the refusal by it.
      */
-    public static final String SLALOM = "is the Slalom this week, and Race Night races only on the Winding Road";
+    public static final String SLALOM = "Race Night races only on the Winding Road";
 
     /**
      * Why a night can't race on {@code c} with {@code spots} grid spots, or {@code null} (§A.4.1): it
-     * must be a boat course with a start, not a Mountain Run v2 Slalom ({@link #SLALOM}), and seat at least
-     * {@code minRacers}.
+     * must be a boat course with a start, not a Mountain Run v2 Slalom ("Ice Boat is the Slalom this week, and
+     * {@value #SLALOM}", in its set's own words: {@link BoatHype#slalomNow}), and seat at least {@code minRacers}.
+     * The Slalom's line names no fix: what fixes it depends on config (its style, a pin), which Race Night adds
+     * where an admin reads it (audit M08, M11), and players never see a command.
      */
     public static String raceProblem(Course c, int spots, int minRacers) {
         if (c == null) {
@@ -160,8 +163,7 @@ public final class RaceTrack {
             return c.name() + " has no start";
         }
         if (BoatHype.slalom(c)) {
-            return c.name() + " " + SLALOM + " - a reroll makes it a Winding Road (/hcm games gen reroll "
-                    + c.id() + " confirm)";
+            return c.name() + " is " + BoatHype.slalomNow(c) + ", and " + SLALOM;
         }
         if (spots < minRacers) {
             return c.name() + "'s starting grid seats " + spots + " - Race Night needs " + minRacers

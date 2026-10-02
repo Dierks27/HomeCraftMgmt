@@ -3,9 +3,12 @@ package com.dierks.homecraft.games.event;
 import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.GamesBench;
 import com.dierks.homecraft.games.GeneratedCourses;
+import com.dierks.homecraft.games.gen.DailySettings;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.boat.BoatStyle;
+import com.dierks.homecraft.games.trial.BoatHype;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.CourseCodec;
 import com.dierks.homecraft.games.trial.MountainRuns;
@@ -13,9 +16,11 @@ import com.dierks.homecraft.games.trial.MountainRunsV2;
 import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.games.trial.RaceLink;
 import com.dierks.homecraft.games.trial.RaceStand;
+import com.dierks.homecraft.games.trial.Tier;
 import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.games.trial.TimeTrialsSettings;
 import com.dierks.homecraft.games.trial.TrackChunks;
+import com.dierks.homecraft.games.trial.TrialKind;
 import com.dierks.homecraft.gui.games.event.RaceNightMenu;
 import com.dierks.homecraft.storage.EventDao;
 import com.dierks.homecraft.storage.GamesDao;
@@ -59,6 +64,8 @@ class RaceNightV2Test {
     private GamesBench bench;
     private RaceNight night;
     private Player admin;
+    /** What the nights announced and warned solo riders, in order ({@link Ports}). */
+    private final List<String> said = new java.util.ArrayList<>();
 
     /** Race Night on for {@code fresh_boat}, no schedule, 2-8 racers, laps from the course (0). */
     private static RaceNightSettings on() {
@@ -222,6 +229,7 @@ class RaceNightV2Test {
 
         @Override
         public void warnSoloRuns(String courseId, Collection<UUID> racers, String line) {
+            said.add("warn: " + line);
         }
 
         @Override
@@ -242,6 +250,7 @@ class RaceNightV2Test {
 
         @Override
         public void announce(Announcer.Line line, String text, Collection<UUID> racers) {
+            said.add(line + ": " + text);
         }
 
         @Override
@@ -367,5 +376,178 @@ class RaceNightV2Test {
         assertTrue(problem != null && problem.contains(RaceTrack.SLALOM), "the schedule skips its nights: " + problem);
         String why = night.adminStart("Admin", null, null, null, 25, false);
         assertTrue(why != null && why.contains(RaceTrack.SLALOM), "and an admin's night is refused: " + why);
+    }
+
+    // ---- audit fixes (FX-MD) ----------------------------------------------------------------------------
+
+    /** Race Night under {@code settings} with {@code tracks} saved as Time Trials courses, and Fresh Courses' {@code fresh}. */
+    private void boot(RaceNightSettings settings, DailySettings fresh, Course... tracks) throws Exception {
+        bench = fresh == null
+                ? new GamesBench(T0, List.of(TimeTrials.SPEC, RaceNight.SPEC), "trials", TimeTrialsSettings.defaults(),
+                "race_night", settings)
+                : new GamesBench(T0, List.of(TimeTrials.SPEC, RaceNight.SPEC), "trials", TimeTrialsSettings.defaults(),
+                "race_night", settings, Slots.DAILY, fresh);
+        bench.games().generated(new Gate());
+        for (Course c : tracks) {
+            bench.dao().saveCourse(new GamesDao.CourseRow(c.id(), "trials", c.kind().id(), c.name(), c.world(),
+                    c.enabled(), CourseCodec.encode(c), c.rev(), 0, 0), false);
+        }
+        night = (RaceNight) bench.games().game("race_night");
+        night.dao(new EventDao(bench.db(), bench.dao()));
+        night.tracks().server(new Server());
+        night.portsFor(id -> new Ports());
+    }
+
+    /** Fresh Courses' settings with Ice Boat's {@code style} ({@code null}: random). */
+    private static DailySettings freshWith(BoatStyle style) {
+        DailySettings d = DailySettings.defaults();
+        List<DailySettings.SlotConfig> slots = new java.util.ArrayList<>();
+        for (DailySettings.SlotConfig c : d.slots()) {
+            slots.add(c.id().equals(Slots.ICE_BOAT.id()) ? c.withStyle(style) : c);
+        }
+        return d.withSlots(slots);
+    }
+
+    /** Race Night on with {@code course: auto}. */
+    private static RaceNightSettings auto() {
+        RaceNightSettings d = on();
+        return new RaceNightSettings(true, List.of(), "auto", d.races(), 0, d.announceMinutes(), d.joinMinutes(), 10, 2,
+                8, d.finishWindowSeconds(), d.maxRaceMinutes(), d.breakSeconds(), d.warmupSeconds(), d.points(),
+                d.finishPoints(), d.stillRacingPoints(), d.prizes(), d.finisherPrize(), d.prizeEventsPerWeek(),
+                d.season(), d.standRadius(), d.hype());
+    }
+
+    /** A hand-built boat course in the Games world, on the fake world's ice (y 169), a grid's room behind its start. */
+    private static Course handBuilt() {
+        return new Course("lane", TrialKind.BOAT, "Ice Lane", Tier.EASY, "games",
+                new Course.Spot(6300.5, MountainRunsV2.TOP, 3000.5, 0f, 0f),
+                List.of(new Course.Mark(6300.5, MountainRunsV2.TOP, 3010.5, 4)),
+                new Course.Mark(6300.5, MountainRunsV2.TOP, 3020.5, 4), 60.0, null, true, false, 1);
+    }
+
+    @Test
+    void theSlalomsFixFollowsTheConfiguredStyle() throws Exception {
+        boot(on(), freshWith(null), MountainRunsV2.slalom());
+        String why = night.adminStart("Admin", Slots.ICE_BOAT.id(), null, null, 25, false);
+        assertEquals("Can't race there: Ice Boat is the Slalom this week, and " + RaceTrack.SLALOM + " - /hcm games gen"
+                + " reroll fresh_boat confirm makes it the Winding Road.", why,
+                "style random: a reroll makes it the Winding Road (F05)");
+        bench.close();
+
+        boot(on(), freshWith(BoatStyle.SLALOM), MountainRunsV2.slalom());
+        why = night.adminStart("Admin", Slots.ICE_BOAT.id(), null, null, 25, false);
+        assertNotNull(why, "fixture: still refused");
+        assertTrue(why.contains(" - set games.fresh.slots.fresh_boat.style to random or road and /hcm reload, then"
+                + " /hcm games gen reroll fresh_boat confirm"), "audit M08/M11: under style: slalom a reroll alone only"
+                + " makes another Slalom, so the line says to change the style first: " + why);
+        assertTrue(!why.contains(" - /hcm games gen reroll"), "and never offers the reroll alone: " + why);
+        assertTrue(night.fit().trackProblem().contains("style to random or road"), "the schedule's skip line too: "
+                + night.fit().trackProblem());
+        assertTrue(night.check().stream().anyMatch(c -> c.what().contains(RaceTrack.SLALOM) && c.fix() != null
+                && c.fix().startsWith("set games.fresh.slots.fresh_boat.style to random or road")),
+                "and /hcm games check's fix: " + night.check());
+    }
+
+    @Test
+    void aLiveSlalomWithRaceNightOnIsInTheStatusWithTheExactCommand() throws Exception {
+        boot(on(), freshWith(null), MountainRunsV2.slalom());
+        List<String> status = night.statusLines();
+        assertTrue(status.contains("slalom · Ice Boat is the Slalom this week, and " + RaceTrack.SLALOM
+                + " - /hcm games gen reroll fresh_boat confirm makes it the Winding Road"), "audit M10: Race Night"
+                + " switched on after the week's Ice Boat was built as a Slalom says so, with the command: " + status);
+        assertTrue(night.check().stream().anyMatch(c -> c.what().contains(RaceTrack.SLALOM)
+                && "/hcm games gen reroll fresh_boat confirm makes it the Winding Road".equals(c.fix())),
+                "and /hcm games check: " + night.check());
+        assertTrue(BoatHype.slalom(((TimeTrials) bench.games().game("trials")).course(Slots.ICE_BOAT.id())),
+                "nothing rerolled it: the live course is never changed silently");
+        bench.close();
+
+        boot(on(), freshWith(null), MountainRunsV2.road());
+        assertTrue(night.statusLines().stream().noneMatch(l -> l.startsWith("slalom")), "a Winding Road needs no line");
+        bench.close();
+
+        RaceNightSettings d = on();
+        RaceNightSettings off = new RaceNightSettings(false, List.of(), Slots.ICE_BOAT.id(), d.races(), 0,
+                d.announceMinutes(), d.joinMinutes(), 10, 2, 8, d.finishWindowSeconds(), d.maxRaceMinutes(),
+                d.breakSeconds(), d.warmupSeconds(), d.points(), d.finishPoints(), d.stillRacingPoints(), d.prizes(),
+                d.finisherPrize(), d.prizeEventsPerWeek(), d.season(), d.standRadius(), d.hype());
+        boot(off, freshWith(null), MountainRunsV2.slalom());
+        assertTrue(night.statusLines().stream().noneMatch(l -> l.startsWith("slalom")),
+                "with Race Night off the Slalom is a solo week, and nothing to fix: " + night.statusLines());
+    }
+
+    @Test
+    void underCourseAutoTheNextNightNeverNamesASlalomItWillRefuse() throws Exception {
+        boot(auto(), null, handBuilt(), MountainRunsV2.slalom());
+        assertEquals(List.of("fresh_boat", "lane"), night.tracks().candidates(), "fixture: both are candidates");
+        EventSchedule.Occurrence o = null;
+        for (int h = 0; h < 24 && o == null; h++) {
+            String id = EventPlan.scheduledId(java.time.LocalDate.of(2026, 10, 9), java.time.LocalTime.of(h, 0));
+            if ("fresh_boat".equals(RaceTrack.pick(night.tracks().candidates(), id))) {
+                o = new EventSchedule.Occurrence(id, java.time.LocalDate.of(2026, 10, 9), java.time.LocalTime.of(h, 0),
+                        T0, T0 + 600_000, null);
+            }
+        }
+        assertNotNull(o, "fixture: a night whose turn falls on the Slalom");
+        Course next = night.nextTrack(o);
+        assertNotNull(next, "a track is named");
+        assertEquals("lane", next.id(), "audit M07: the next in turn the night can race, as Tracks.pick makes it");
+        assertEquals("Ice Lane", night.nextTrackName(o), "the board, the status and the feed name it");
+        assertEquals("", RaceNight.Upcoming.of(next, 0).where(), "the screen's TRACK tile has no \" on the Slalom\"");
+        Tracks.Found made = night.tracks().pick(o.id(), 3, 2, 8);
+        assertNull(made.problem(), "fixture: the night is made: " + made.problem());
+        assertEquals(next.id(), made.track().base().id(), "on the very track the screen named");
+    }
+
+    @Test
+    void aNightResumedAfterARestartRunsWithTheWindowsOfTheTrackItResumesOn() throws Exception {
+        for (long model : new long[]{MountainRunsV2.MODEL_MS, 132_000}) {
+            Course track = MountainRunsV2.of(MountainRunsV2.tag(MountainRunsV2.ROAD_SEED, model));
+            boot(on(), null, track);
+            EventDao dao = new EventDao(bench.db(), bench.dao());
+            String id = EventPlan.scheduledId(java.time.LocalDate.of(2026, 10, 2), java.time.LocalTime.of(12, 20));
+            NightRules stored = NightRules.of(RaceNightSettings.defaults(), 3, 0, false, 8); // a row 0.36 stored
+            assertEquals(60, stored.finishWindowSeconds(), "fixture: 0.36's 60 s window");
+            assertEquals(4, stored.maxRaceMinutes(), "fixture: and 4 minutes");
+            dao.open(new EventDao.EventRow(id, track.id(), T0 - 10 * 60_000L, T0 + 20 * 60_000L, EventDao.OPEN,
+                    stored.encode(), 0, false, "", "", T0 - 15 * 60_000L, null, ""));
+            night.recover();
+            NightRunner resumed = night.night();
+            assertNotNull(resumed, "T_m " + model + ": the night resumes on its track");
+            NightRules r = resumed.plan().rules();
+            assertEquals(NightRules.finishWindow(60, model), r.finishWindowSeconds(),
+                    "audit M05: the window of the track it resumes on, not the row's 60 s");
+            assertEquals(NightRules.maxRace(4, model), r.maxRaceMinutes(), "and its longest race");
+            long leader = Math.round(model / 0.85);
+            long kid = Math.round(model / 0.45);
+            assertTrue(leader + r.finishWindowSeconds() * 1000L >= kid, "T_m " + model + ": a racer at 0.45 behind"
+                    + " a leader at 0.85 is in before the window closes");
+            assertTrue(r.maxRaceMinutes() * 60_000L >= kid, "and before the race's longest");
+            bench.close();
+        }
+        assertEquals(150, NightRules.finishWindow(60, 120_000), "120 s: 150 s");
+        assertEquals(165, NightRules.finishWindow(60, 132_000), "132 s: 165 s");
+        assertEquals(7, NightRules.maxRace(4, 132_000), "and 7 minutes");
+        bench = null;
+    }
+
+    @Test
+    void aV2NightHoldsItsTrackLongEnoughForASoloRunStartedBeforeToFinish() throws Exception {
+        NightRunner n = adminNight(MountainRunsV2.road());
+        long reserve = EventMachine.reserveMs(MountainRunsV2.MODEL_MS);
+        assertEquals(330_000, reserve, "audit M06: 1 minute plus 2.25 T_m, 5:30 on a two-minute run");
+        long startsAt = n.startsAt();
+        bench.move(startsAt - reserve - 1_000 - bench.now());
+        n.step();
+        assertTrue(said.stream().noneMatch(l -> l.startsWith("LAST_CALL")), "no hold 5:31 before: " + said);
+        bench.move(1_000);
+        n.step();
+        assertTrue(said.contains("LAST_CALL: &bRace Night &7starts in 6 minutes! &70 racers in so far - last call: &e"
+                + EventCopy.COMMAND), "the last call says when it really starts: " + said);
+        assertTrue(said.contains("warn: &eRace Night needs this track in 4 minutes."),
+                "and a rider on a solo run is told how long they have, in whole minutes: " + said);
+        long kid = Math.round(MountainRunsV2.MODEL_MS / 0.45);
+        assertTrue(startsAt - reserve - 1 + kid <= startsAt - EventMachine.SOLO_END_MS,
+                "a 0.45 rider who set off just before the hold is in before solo runs end");
     }
 }

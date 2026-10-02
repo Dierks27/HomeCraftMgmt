@@ -360,29 +360,44 @@ public final class FairPlay {
     }
 
     /**
+     * The fastest leg of a run, in blocks a second (MOUNTAIN-V2-SPEC §12, §14 R1: the admin's test-run readout),
+     * for a run that saw no stall: {@link #topLegSpeed(Course, long, long[], int, List)} with none.
+     */
+    public static double topLegSpeed(Course course, long startNanos, long[] times, int reached) {
+        return topLegSpeed(course, startNanos, times, reached, List.of());
+    }
+
+    /**
      * The fastest leg of a run, in blocks a second (MOUNTAIN-V2-SPEC §12, §14 R1: the admin's test-run readout):
-     * over every leg reached (the start to the first target, then target to target), the straight-line
-     * distance between the two points over the time the leg took. 0 when no leg was reached or none took time.
+     * over every leg reached (the start to the first target, then target to target), the distance from where
+     * the boat entered one sphere to where it entered the next, on the straight line between their middles
+     * ({@code d + rPrev - rCur}; the start is a point), over the time the leg took. A leg whose time overlaps a
+     * server stall isn't counted, as in {@link #tooFast(Course, long, long[], int, List)}: its time is when the
+     * server caught up, so it would read far too fast (audit M01). 0 when no leg was reached or none counts.
      *
      * @param startNanos when the run started
      * @param times      when each target was reached ({@link Progress#times()})
      * @param reached    how many targets were reached
+     * @param stalls     the stalls seen while the run ran
      */
-    public static double topLegSpeed(Course course, long startNanos, long[] times, int reached) {
+    public static double topLegSpeed(Course course, long startNanos, long[] times, int reached, List<Stall> stalls) {
         if (course == null || course.start() == null || times == null) {
             return 0;
         }
         List<Course.Mark> targets = course.targets();
         Point prev = course.start().point();
+        double prevRadius = 0; // the run leaves from the start point itself
         long prevAt = startNanos;
         double top = 0;
         for (int i = 0; i < Math.min(reached, Math.min(times.length, targets.size())); i++) {
-            Point at = targets.get(i).center();
+            Course.Mark cur = targets.get(i);
             long nanos = times[i] - prevAt;
-            if (nanos > 0) {
-                top = Math.max(top, prev.distance(at) / (nanos / 1e9));
+            if (nanos > 0 && !stalled(stalls, prevAt, times[i])) {
+                double d = Math.max(0, prev.distance(cur.center()) + prevRadius - cur.radius());
+                top = Math.max(top, d / (nanos / 1e9));
             }
-            prev = at;
+            prev = cur.center();
+            prevRadius = cur.radius();
             prevAt = times[i];
         }
         return top;

@@ -59,6 +59,12 @@ class PartyRaceV2Test {
         String note = PartyRaces.slalomNote(MountainRunsV2.slalom());
         assertEquals("Heads up: Ice Boat is the Slalom this week. The gates are narrow and boats bump, so give each"
                 + " other room!", Text.plain(note), "red-team F05: party races warn");
+        assertEquals("Heads up: Ice Boat is the Slalom today. The gates are narrow and boats bump, so give each other"
+                + " room!", Text.plain(PartyRaces.slalomNote(MountainRunsV2.of(MountainRunsV2.tag(
+                MountainRunsV2.SLALOM_SEED, 120_000, 4, 1)))), "audit M02: a daily set's words, never \"this week\"");
+        assertEquals("Heads up: Ice Boat is a Slalom. The gates are narrow and boats bump, so give each other room!",
+                Text.plain(PartyRaces.slalomNote(MountainRunsV2.of(MountainRunsV2.tag(MountainRunsV2.SLALOM_SEED,
+                        120_000, 4, 3)))), "any other cadence: no time word");
         assertNull(PartyRaces.slalomNote(MountainRunsV2.road()), "the Winding Road needs none");
         assertNull(PartyRaces.slalomNote(MountainRuns.medium()), "nor the spiral");
         assertNull(PartyRaces.slalomNote(MountainRunsV2.of(null)), "nor a hand-built track");

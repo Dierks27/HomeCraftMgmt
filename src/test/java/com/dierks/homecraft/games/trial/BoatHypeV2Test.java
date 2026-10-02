@@ -23,7 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * down the mountain!", or the Slalom's "through the gates") always say what the run really is; its model
  * time is its tag's T_m (5/4 of the star reference), and any other course has none; its checkpoints are
  * quiet except every 10th, the one nearest half way and the one before the Final Drop, each with its own
- * title; and an algo-3 run, a hand-built track and every other course read exactly as before.
+ * title; half way is measured from checkpoint 1, never the start, so every grid spot hears "Halfway!" at the
+ * same checkpoint (audit M00); and an algo-3 run, a hand-built track and every other course read exactly as
+ * before.
  */
 class BoatHypeV2Test {
 
@@ -87,32 +89,59 @@ class BoatHypeV2Test {
     }
 
     @Test
-    void halfwayIsTheCheckpointNearestHalfTheDistanceAlongTheMarks() {
+    void halfwayIsTheCheckpointNearestHalfTheDistanceAlongTheMarksFromCheckpoint1() {
         Course c = MountainRunsV2.road();
         List<Course.Mark> cps = c.checkpoints();
         List<Double> at = new ArrayList<>();
-        Point prev = c.start().point();
         double run = 0;
-        for (Course.Mark m : cps) {
-            run += prev.distance(m.center());
+        for (int i = 0; i < cps.size(); i++) {
+            run += i == 0 ? 0 : cps.get(i - 1).center().distance(cps.get(i).center());
             at.add(run);
-            prev = m.center();
         }
-        double mid = (run + prev.distance(c.finish().center())) / 2;
+        double mid = (run + cps.get(cps.size() - 1).center().distance(c.finish().center())) / 2;
         int best = 0;
         for (int i = 0; i < at.size(); i++) {
             if (Math.abs(at.get(i) - mid) < Math.abs(at.get(best) - mid)) {
                 best = i;
             }
         }
-        assertEquals(best, BoatHype.halfway(c), "the checkpoint nearest half way along");
+        assertEquals(best, BoatHype.halfway(c), "the checkpoint nearest half way along, from the first checkpoint");
         GenTag tag = MountainRunsV2.tag(MountainRunsV2.ROAD_SEED, 120_000);
+        assertEquals(5, BoatHype.halfway(MountainRunsV2.straight(10, tag)),
+                "10 checkpoints 10 apart, finish 10 on: 100 from checkpoint 1, so half way is checkpoint 6 (index 5)");
         assertEquals(5, BoatHype.halfway(MountainRunsV2.straight(11, tag)),
-                "11 checkpoints 10 apart, finish 10 on: half of 120 is checkpoint 6 (index 5)");
-        assertEquals(4, BoatHype.halfway(MountainRunsV2.straight(10, tag)),
-                "10 checkpoints: the 5th and 6th are as near; the first of them");
+                "11 checkpoints: the 6th and 7th are as near half of 110; the first of them");
         assertEquals(-1, BoatHype.halfway(MountainRuns.medium()), "an algo-3 run has no HALFWAY title");
         assertEquals(-1, BoatHype.halfway(MountainRunsV2.of(null)), "nor a hand-built track");
+    }
+
+    @Test
+    void halfwayNeverReadsTheStartSoEveryGridSpotHearsItAtTheSameCheckpoint() {
+        for (Course c : List.of(MountainRunsV2.road(), MountainRunsV2.straight(10,
+                MountainRunsV2.tag(MountainRunsV2.ROAD_SEED, 120_000)))) {
+            int pole = BoatHype.halfway(c);
+            Course.Spot s = c.start();
+            for (int back = 2; back <= 48; back += 2) {
+                // a race moves the start back to each racer's own grid spot (RaceTrack.raced), up to 48 blocks
+                Course raced = c.withStart(new Course.Spot(s.x() + back, s.y(), s.z() - back / 2.0, s.yaw(), 0f));
+                assertEquals(pole, BoatHype.halfway(raced), "audit M00: " + back + " back, the same checkpoint");
+                assertEquals(BoatHype.HALFWAY, BoatHype.checkpointTitle(raced, pole), "with its title");
+            }
+        }
+    }
+
+    @Test
+    void thePlannerAndTheRuntimeShareOneHalfwayRule() {
+        Course c = MountainRunsV2.road();
+        List<Point> centres = new ArrayList<>();
+        for (Course.Mark m : c.checkpoints()) {
+            centres.add(m.center());
+        }
+        assertEquals(BoatHype.halfway(c), BoatHype.halfway(centres, c.finish().center()),
+                "BoatHype.halfway(course) is the shared rule on its marks (MountainPlanner places the sign with it)");
+        assertEquals(0, BoatHype.halfway(List.of(new Point(0, 0, 0)), new Point(9, 0, 0)), "one checkpoint: it");
+        assertEquals(-1, BoatHype.halfway(List.of(), new Point(9, 0, 0)), "none: -1");
+        assertEquals(-1, BoatHype.halfway(null, new Point(9, 0, 0)), "nothing: -1");
     }
 
     @Test

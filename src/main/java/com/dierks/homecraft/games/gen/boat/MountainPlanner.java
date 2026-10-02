@@ -12,7 +12,9 @@ import com.dierks.homecraft.games.gen.api.PlanInput;
 import com.dierks.homecraft.games.gen.api.PlannedTrial;
 import com.dierks.homecraft.games.gen.api.SignText;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.trial.BoatHype;
 import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.games.trial.RaceGrid;
 import com.dierks.homecraft.games.trial.Tier;
 import com.dierks.homecraft.games.trial.TrialKind;
@@ -433,11 +435,9 @@ final class MountainPlanner {
                 (float) TrackRaster.yaw(tan[0], tan[1]), 0f);
         List<Course.Mark> marks = new ArrayList<>();
         for (RasterV4.Spot s : cps) {
-            marks.add(new Course.Mark(wx + exact(s.x()), s.ice() + 1, wz + exact(s.z()), s.r()));
+            marks.add(mark(half, s));
         }
-        double[] fp = sk.line.at(sk.finish);
-        Course.Mark finish = new Course.Mark(wx + exact(fp[0]), raster.finishIce + 1, wz + exact(fp[1]),
-                raster.finishRadius());
+        Course.Mark finish = finishMark(raster);
         Slots.Def slot = in.slot();
         Course draft = new Course(slot.id(), TrialKind.BOAT, slot.name(), Tier.of(tier.id), "", start, marks, finish,
                 (double) (raster.lowest() - 3), null, true, false, 1);
@@ -539,7 +539,7 @@ final class MountainPlanner {
 
     /**
      * The signs (§7.1): the start's, before every lip (the Final Drop's its own, a staircase's THE CLIFFS),
-     * piece, hairpin, chicane and gate set, and HALFWAY by the checkpoint nearest half way down.
+     * piece, hairpin, chicane and gate set, and HALFWAY by the checkpoint nearest half way down ({@link #halfwaySign}).
      */
     static void signs(RasterV4 t, List<RasterV4.Spot> cps, PiecesV4 pieces) {
         Skeleton sk = t.sk;
@@ -599,15 +599,56 @@ final class MountainPlanner {
             t.sign(from - RasterV4.SIGN_BEFORE - 6, from - RasterV4.SIGN_NEAR, GenCopy.boatGates(g.gates()), used);
         }
         if (!cps.isEmpty()) {
-            double mid = (sk.start + sk.finish) / 2;
-            RasterV4.Spot best = cps.get(0);
-            for (RasterV4.Spot s : cps) {
-                if (Math.abs(s.s() - mid) < Math.abs(best.s() - mid)) {
-                    best = s;
-                }
-            }
-            t.sign(best.s() - 2, best.s() + 2, GenCopy.boatHalfway(), used);
+            halfwaySign(t, cps, used);
         }
+    }
+
+    /**
+     * The HALFWAY! sign (audit M00): by the checkpoint the runtime's "Halfway!" title shows at, chosen by the
+     * same rule on the course's own marks ({@code BoatHype.halfway}), so the sign and the title can't disagree.
+     * Where another sign crowds that spot (or there's no wall top), it moves along the lane, nearest first, but
+     * never past half way to the next checkpoint either side, so the sign still stands by its own checkpoint.
+     * Whether one went up.
+     */
+    static boolean halfwaySign(RasterV4 t, List<RasterV4.Spot> cps, List<Double> used) {
+        List<Point> at = new ArrayList<>(cps.size());
+        for (RasterV4.Spot s : cps) {
+            at.add(mark(t.half, s).center());
+        }
+        int h = BoatHype.halfway(at, finishMark(t).center());
+        RasterV4.Spot best = cps.get(h);
+        List<String> lines = GenCopy.boatHalfway();
+        if (t.sign(best.s() - 2, best.s() + 2, lines, used)) {
+            return true;
+        }
+        double lo = h > 0 ? (cps.get(h - 1).s() + best.s()) / 2 + HALFWAY_MARGIN : t.sk.start;
+        double hi = h + 1 < cps.size() ? (best.s() + cps.get(h + 1).s()) / 2 - HALFWAY_MARGIN : t.sk.finish;
+        for (int d = 3; best.s() - d >= lo || best.s() + d <= hi; d++) {
+            double before = best.s() - d;
+            double after = best.s() + d;
+            if (before >= lo && t.sign(before, before, lines, used)) {
+                return true;
+            }
+            if (after <= hi && t.sign(after, after, lines, used)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** How far short of half way to the next checkpoint a moved HALFWAY! sign stays (blocks along). */
+    static final double HALFWAY_MARGIN = 3;
+
+    /** Checkpoint {@code s}'s mark in the course: its middle on the 1/4096 grid ({@link #exact}), on the ice. */
+    static Course.Mark mark(Box half, RasterV4.Spot s) {
+        return new Course.Mark(half.minX() + exact(s.x()), s.ice() + 1, half.minZ() + exact(s.z()), s.r());
+    }
+
+    /** The finish line's mark in the course: in front of the stand, on the finish ice. */
+    static Course.Mark finishMark(RasterV4 t) {
+        double[] fp = t.sk.line.at(t.sk.finish);
+        return new Course.Mark(t.half.minX() + exact(fp[0]), t.finishIce + 1, t.half.minZ() + exact(fp[1]),
+                t.finishRadius());
     }
 
     // ---- the safe layouts ---------------------------------------------------------------------------------

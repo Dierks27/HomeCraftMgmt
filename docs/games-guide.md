@@ -1164,7 +1164,7 @@ These are played in the Games world, on courses the server's builders make. Each
 - **Race with friends.** Open a course's screen and click Race with friends, or type /hcm play race <course id>. That makes your party. Invite friends from the party screen: they get [Accept] in chat, and Bedrock players type /hcm play accept. A party holds up to 8 by default.
 - The party screen shows who's in and who's ready. Only the host can start the race, and the host chooses if everyone warms up first. In a party warm-up, click Ready when you're set: the race starts when the warm-up ends or everyone is ready.
 - Everyone goes to the start together and gets one 3, 2, 1, Go! at the same moment. Boats line up in rows of two behind the start line. A bar at the top of the screen shows your place, like 2nd of 5 · Lap 1/2 (on a course that goes one way from start to finish, like the Ice Boat's Mountain Run, just 2nd of 5). Boats can bump into each other.
-- The race ends when everyone is in, 2 minutes after the first person finishes, or 10 minutes after Go. Then everyone comes back to the Clubhouse, where the board shows the results. If the Clubhouse isn't open (or a restart is only a minute or so away), everyone goes home and a results screen shows the whole group.
+- The race ends when everyone is in, 2 minutes after the first person finishes (on the Ice Boat's Mountain Run it waits longer: about 2 and a half minutes on a 2-minute run, so younger racers still finish), or 10 minutes after Go. Then everyone comes back to the Clubhouse, where the board shows the results. If the Clubhouse isn't open (or a restart is only a minute or so away), everyone goes home and a results screen shows the whole group.
 - Party races are free and just for fun: no entry, no prizes. Your time also counts as a normal run on the course, once, with the usual rewards and high scores, and for the Weekly Cup if you're in it (the party screen shows the Cup's button too).
 - On foot or with wings, racers can't push each other. The Dropper has no party races.
 - When Race Night needs the track, a party race on it is called off: everyone goes home with their things, and a race you hadn't finished doesn't count.
@@ -1535,6 +1535,7 @@ These are played in the Games world, on courses the server's builders make. Each
 - The starting grid on the summit: "Race 1 of 3" and "Ice Boat · you start 3rd", with no laps.
 - The last drop is the Final Drop, right in front of the stand. Its sign says FINAL DROP! Then the gold finish line!, and a big "Final drop!" shows on your screen just before it.
 - The run is long, so the race waits longer for everyone to get down: on a 2-minute run, about 2 and a half minutes after the first finisher, so younger racers still finish. Finishers wait on the stand at the bottom and watch the others come down to the finish.
+- Before the night, the Ice Boat closes to new solo runs and party races earlier than other tracks: about 5 and a half minutes before the start on a 2-minute run (the last call says how long is left). A run you started before that has time to get all the way down.
 
 **Points in every race**
 
@@ -1619,7 +1620,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - **Two kinds of run.** Each week's Ice Boat is one of these:
   - **The Winding Road:** a fast road for racing (9 blocks wide on Easy, 7 on Medium and Hard), with long straights, sweeping bends, S-bends, hairpins and drops. This is the one Race Night races on.
   - **The Slalom:** a wider run (15, 13 or 11 blocks) that goes back and forth through red and blue gate fences. Steer through the gaps. It's best for riding on your own.
-  - By default it's random each week, but while Race Night is switched on it is always the Winding Road. The owner can also pick one for every week.
+  - By default it's random each week, but while Race Night is switched on each new week's run is the Winding Road. (A week already built as the Slalom when the owner switches Race Night on stays the Slalom, with no Race Night on it, until the next week or until the owner makes a new one.) The owner can also pick one for every week.
 - **Drops:** the ice steps down many times on the way. HOP! is a little drop of 1 block. BIG DROP! is 2 blocks: hold on! THE CLIFFS! is a few drops in a row, and the FINAL DROP! comes just before the gold finish line. You always land on a straight.
 - **Signs and arrows:** a sign on the wall tells you what is coming, just before it, and arrows in the walls point the way.
   - WINDING ROAD or SLALOM! at the start, with the run's level.
@@ -1628,8 +1629,8 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
   - SLALOM: how many gates are coming. Go through the gaps!
   - SAND PIT! Stay on the ice to go fast! PICK A PATH! Left or right? (both ways work). ICE CAVE and TUNNEL: Lights on! FOREST: Weave through the trees!
   - HALFWAY! Keep going! You are half way down.
-- **Checkpoints:** there are lots of them, so most are quiet: the bar above your hotbar shows "Checkpoint 37/74 · 1:12.4" and you hear a soft ping. The big title shows at every 10th checkpoint, at "Halfway!" and at "Final drop!" just before the last drop.
-- **Easy, Medium or Hard:** the owner picks one. Easy is the widest, with fewer drops and only a few big ones. Hard has more drops, and the Winding Road gets strips of fast blue ice.
+- **Checkpoints:** there are lots of them, so most are quiet: the bar above your hotbar shows "Checkpoint 37/74 · 1:12.4" and you hear a soft ping. The big title shows at every 10th checkpoint, at "Halfway!" by the HALFWAY! sign (the same checkpoint for every racer, wherever they started on the grid) and at "Final drop!" just before the last drop.
+- **Easy, Medium or Hard:** the owner picks one. Easy is the widest, with fewer drops and only a few big ones. Hard has more drops. On the Winding Road, Medium can have a strip or two of fast blue ice down the middle, and Hard has whole straights of fast blue ice.
 - **Safe for everyone:** there is no water, the walls are high, and you never have to go through sand.
 - **Going back:** falling off the track sends you back to your last checkpoint, facing down the track. So do Back to checkpoint and trying to get out of the boat (sneak). Checkpoints are never more than about 60 blocks apart. The clock keeps running.
 - **Stars, tokens and the Weekly Cup** work like the other Fresh Courses: your first finish of the week pays 15 tokens by default, and it runs a Weekly Cup.

@@ -1691,7 +1691,7 @@ public final class TimeTrials implements Game {
             return "";
         }
         return topLegLine(FairPlay.topLegSpeed(run.course, run.progress.startNanos(), run.progress.times(),
-                run.progress.reachedTargets()));
+                run.progress.reachedTargets(), run.stalls));
     }
 
     /** " Top leg speed 38 b/s." for {@code speed} blocks a second, rounded. */

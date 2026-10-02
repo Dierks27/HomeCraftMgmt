@@ -3721,6 +3721,20 @@ public final class GenService implements GeneratedCourses, GenOps {
         return ed.weekKey(ed.day(host.now()));
     }
 
+    /**
+     * The command that must come before a reroll of {@code slotId} can go ahead ({@link #reroll} refuses while
+     * either holds the set): {@code /hcm games gen unchoose <id>} while an admin's pick does, {@code /hcm games
+     * gen unpin <id>} while a pin does; {@code null} when nothing holds it (audit M11: Race Night's Slalom line
+     * never offers a reroll that would be refused).
+     */
+    public String rerollHeldBy(String slotId) {
+        SlotState s = slots.get(slotId);
+        if (s == null || activePin(s) == null) {
+            return null;
+        }
+        return (chosenNow(s) != null ? "/hcm games gen unchoose " : "/hcm games gen unpin ") + s.def.id();
+    }
+
     /** The live tag of a slot, or {@code null}. */
     public GenTag liveTag(String slotId) {
         SlotState s = slots.get(slotId);
@@ -4193,8 +4207,17 @@ public final class GenService implements GeneratedCourses, GenOps {
         DailySettings.SlotConfig c = host.settings().slot(s.def.id());
         BoatStyle config = c == null ? null : c.style();
         BoatStyle want = style(s);
-        String live = s.live == null || s.live.algo() < BoatPlanner.ALGO ? ""
-                : "; this set's is " + StyleSeed.words(BoatStyle.of(s.live.seed()));
+        BoatStyle got = s.live == null || s.live.algo() < BoatPlanner.ALGO ? null : BoatStyle.of(s.live.seed());
+        String live = got == null ? "" : "; this set's is " + StyleSeed.words(got);
+        if (got != null && want != null && got != want) {
+            // audit M10: made before the rule applied (Race Night or the style switched on after the set was built,
+            // or an admin's seed); never rerolled silently, so say how
+            String held = rerollHeldBy(s.def.id());
+            live += held != null ? " &e(held: " + held + ", then /hcm games gen reroll " + s.def.id() + " confirm makes"
+                    + " it " + StyleSeed.words(want) + ")"
+                    : " &e(made before; the next set is " + StyleSeed.words(want) + ", or /hcm games gen reroll "
+                    + s.def.id() + " confirm makes this one now)";
+        }
         if (config != null) {
             return "style " + config.id() + ": " + StyleSeed.words(config) + " every week" + live;
         }

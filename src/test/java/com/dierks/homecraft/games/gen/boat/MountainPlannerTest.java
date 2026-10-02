@@ -1,7 +1,9 @@
 package com.dierks.homecraft.games.gen.boat;
 
+import com.dierks.homecraft.games.event.RaceTrack;
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
+import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.GenRandom;
 import com.dierks.homecraft.games.gen.api.GenTag;
@@ -10,8 +12,12 @@ import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlanInput;
 import com.dierks.homecraft.games.gen.api.PlanShift;
 import com.dierks.homecraft.games.gen.api.PlannedTrial;
+import com.dierks.homecraft.games.gen.api.SignText;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.trial.BoatHype;
 import com.dierks.homecraft.games.trial.Course;
+import com.dierks.homecraft.games.trial.Point;
+import com.dierks.homecraft.games.trial.RaceGrid;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -62,14 +68,15 @@ class MountainPlannerTest {
     @Test
     void goldenHashesPinThreeSeedsPerStyleAndTier() {
         // A change here means the planner makes different layouts: Mountain Run v2 is unreleased (it ships
-        // off), so re-pin with the change; once it is on, bump BoatPlanner.ALGO instead.
+        // off), so re-pin with the change; once it is on, bump BoatPlanner.ALGO instead. Re-pinned for audit M00
+        // (the HALFWAY! sign by BoatHype.halfway's checkpoint, measured from checkpoint 1): 10 of 18 moved.
         String golden = """
-                road easy ff6dcecd75c8 23f36577b57f da67680f8855
-                road medium e33e654ffb93 4627ead0faef 2335478fdcda
-                road hard 97f6f09e9e2a 4cec42a89d96 69eb5d76d404
-                slalom easy e5437e73e554 52be95a3b5fd f357a1fef281
-                slalom medium 149cbae6029c 14fc57abc896 7a91b5b2ca5a
-                slalom hard fe19c45a486d e6cb568e821d 575de678aa42
+                road easy 39fccf88f729 0671210ecb90 da67680f8855
+                road medium e33e654ffb93 0e4ad205e5ce 36a0c1920a69
+                road hard 27aee206b321 4cec42a89d96 d0178f911a30
+                slalom easy e5437e73e554 52be95a3b5fd 0df883d71e01
+                slalom medium f874b0413052 c1208132055e 2a1bdd16f106
+                slalom hard fe19c45a486d e6cb568e821d 92c0cf205316
                 """;
         StringBuilder got = new StringBuilder();
         for (BoatStyle style : BoatStyle.values()) {
@@ -240,6 +247,58 @@ class MountainPlannerTest {
         assertTrue(s.get(4).startsWith("reference ") && s.get(4).contains("0.8 of T_m"), "the times: " + s.get(4));
         List<String> slalom = made(HALF_A, 1, "medium").finished().summary();
         assertTrue(slalom.get(0).contains("Slalom") && slalom.get(2).contains("gate sets"), "a slalom's: " + slalom);
+    }
+
+    // ---- the HALFWAY! sign and the "Halfway!" title (audit M00) ------------------------------------------
+
+    /**
+     * The seeds the audit found the sign and the title a checkpoint apart on (easy road 5 and 19, medium slalom
+     * 26, hard road 13 and 16), the grid that moved the title (medium road 2), and the one with no sign at all
+     * (medium slalom 23), besides every pinned layout.
+     */
+    static final List<Object[]> HALFWAY_SEEDS = List.of(new Object[]{"easy", 19L}, new Object[]{"medium", 23L},
+            new Object[]{"medium", 26L}, new Object[]{"hard", 13L}, new Object[]{"hard", 16L});
+
+    @Test
+    void theHalfwaySignStandsByTheCheckpointEveryRacerHearsHalfwayAt() {
+        List<Object[]> runs = new ArrayList<>(HALFWAY_SEEDS);
+        for (BoatStyle style : BoatStyle.values()) {
+            for (String tier : List.of("easy", "medium", "hard")) {
+                for (long seed : style == BoatStyle.ROAD ? ROADS : SLALOMS) {
+                    runs.add(new Object[]{tier, seed});
+                }
+            }
+        }
+        for (Object[] run : runs) {
+            String tier = (String) run[0];
+            long seed = (Long) run[1];
+            String name = tier + " " + BoatStyle.of(seed).id() + " seed " + seed;
+            Plan p = made(HALF_A, seed, tier).finished();
+            PlannedTrial pt = (PlannedTrial) p.course();
+            Course c = pt.course().withGen(new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, BoatPlanner.ALGO, 20725, 0, seed,
+                    'A', p.hash(), pt.refMs(), 2, 3, List.of(), List.of(), 0, 7));
+            List<SignText> halfway = p.signs().stream().filter(t -> t.lines().equals(GenCopy.boatHalfway())).toList();
+            assertEquals(1, halfway.size(), name + ": one HALFWAY! sign");
+            SignText sign = halfway.get(0);
+            Point at = new Point(sign.x() + 0.5, sign.y(), sign.z() + 0.5);
+            int near = 0;
+            List<Course.Mark> cps = c.checkpoints();
+            for (int i = 1; i < cps.size(); i++) {
+                if (cps.get(i).center().distance(at) < cps.get(near).center().distance(at)) {
+                    near = i;
+                }
+            }
+            int title = BoatHype.halfway(c);
+            assertEquals(near, title, name + ": the sign stands by the checkpoint the \"Halfway!\" title shows at");
+            assertEquals(BoatHype.HALFWAY, BoatHype.checkpointTitle(c, title), name + ": \"Halfway!\" there");
+            RaceGrid.Grid grid = RaceGrid.forCourse(c, new PlanSurface(p), RaceGrid.MAX_SPOTS);
+            assertTrue(grid.size() >= 2, name + ": fixture: a grid");
+            for (int k = 0; k < grid.size(); k++) {
+                Course raced = RaceTrack.raced(c, grid.spot(k), 0);
+                assertEquals(title, BoatHype.halfway(raced), name + ": grid spot " + (k + 1) + " hears it there too");
+                assertTrue(BoatHype.loud(raced, title), name + ": loud from grid spot " + (k + 1));
+            }
+        }
     }
 
     // ---- BoatPlanner: algo 4 in the mountain's half, the spiral elsewhere --------------------------------

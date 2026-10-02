@@ -70,10 +70,15 @@ class BoatStyleEngineTest {
         host.settings = host.settings.withSlots(slots);
     }
 
+    /** The boat planner's algo ({@link FakePlanner#algo}; 4 makes the live tag a Mountain Run v2's). */
+    private int boatAlgo = 1;
+
     private void boot() {
         Map<String, Planner> planners = new LinkedHashMap<>();
         for (String g : List.of(Slots.PARKOUR, Slots.RINGS, Slots.GOLF, Slots.BOAT)) {
-            planners.put(g, new FakePlanner(g));
+            FakePlanner p = new FakePlanner(g);
+            p.algo = Slots.BOAT.equals(g) ? boatAlgo : p.algo;
+            planners.put(g, p);
         }
         gen = new GenService(host, planners);
         gen.start();
@@ -236,6 +241,40 @@ class BoatStyleEngineTest {
                 "style: slalom: " + gen.status(SLOT));
         assertTrue(gen.status("fresh_parkour").stream().noneMatch(l -> l.contains("style")),
                 "another course has no style line: " + gen.status("fresh_parkour"));
+    }
+
+    @Test
+    void aSlalomBuiltBeforeRaceNightWasSwitchedOnSaysSoWithTheExactCommand() throws Exception {
+        boatAlgo = 4; // a Mountain Run v2 layout, whose status names its style
+        GenTag live = builtWith(BoatStyle.SLALOM, false); // the week went up a Slalom, as random with no night may
+        assertEquals(BoatStyle.SLALOM, BoatStyle.of(live.seed()), "fixture: this week's Ice Boat is a Slalom");
+        style(null, true);
+        host.raceNight = true; // then the owner switches Race Night on (audit M10)
+        drive(30);
+        assertEquals(live.seed(), gen.liveTag(SLOT).seed(), "the live course is never rerolled silently");
+        String line = styleLine();
+        assertTrue(line.contains("style random: the Winding Road every week while Race Night is on; this set's is the"
+                + " Slalom &e(made before; the next set is the Winding Road, or /hcm games gen reroll fresh_boat confirm"
+                + " makes this one now)"), "the status says so, with the exact command: " + line);
+        assertNull(gen.rerollHeldBy(SLOT), "nothing holds a reroll back");
+
+        gen.pin(SLOT, "live", 0, said::add);
+        assertEquals("/hcm games gen unpin fresh_boat", gen.rerollHeldBy(SLOT), "a pin holds it (audit M11)");
+        assertTrue(styleLine().contains("(held: /hcm games gen unpin fresh_boat, then /hcm games gen reroll fresh_boat"
+                + " confirm makes it the Winding Road)"), "and the status says to unpin first: " + styleLine());
+        said.clear();
+        gen.reroll(SLOT, said::add);
+        assertTrue(said.get(0).contains("/hcm games gen unpin fresh_boat first"), "as the reroll itself says: " + said);
+
+        gen.unpin(SLOT, said::add);
+        style(BoatStyle.SLALOM, true);
+        assertTrue(styleLine().endsWith("style slalom: the Slalom every week; this set's is the Slalom")
+                && !styleLine().contains("&e"), "style: slalom and a Slalom up: nothing to fix here: " + styleLine());
+    }
+
+    /** Ice Boat's style line in its status. */
+    private String styleLine() {
+        return gen.status(SLOT).stream().filter(l -> l.contains("style ")).findFirst().orElse("");
     }
 
     /** Seeds of each style, found once. */

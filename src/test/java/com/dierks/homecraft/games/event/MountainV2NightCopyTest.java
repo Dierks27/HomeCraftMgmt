@@ -18,8 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Pinned here: a v2 night's format names its style, "3 downhill races on the Winding Road", read off the
  * track's seed so the copy always follows the real run, and the Race Night screen says the same; Race Night
  * races only the Winding Road, so a Slalom (a week an admin's seed, {@code style: slalom} or a Race Night
- * switched on mid-week made one) is refused with a line that says why and what fixes it, whatever its grid;
- * and the algo-3 run and every other track read and race exactly as before.
+ * switched on mid-week made one) is refused with a line that says why, in its set's own time word ("this
+ * week", "today", or none), whatever its grid (what fixes it depends on config: {@link RaceNightV2Test}); and
+ * the algo-3 run and every other track read and race exactly as before.
  */
 class MountainV2NightCopyTest {
 
@@ -59,8 +60,9 @@ class MountainV2NightCopyTest {
     void raceNightRacesOnlyTheWindingRoad() {
         Course slalom = MountainRunsV2.slalom();
         String why = RaceTrack.raceProblem(slalom, 12, 2);
-        assertTrue(why != null && why.startsWith("Ice Boat " + RaceTrack.SLALOM), "a Slalom is refused: " + why);
-        assertTrue(why.contains("/hcm games gen reroll fresh_boat confirm"), "and the line says what fixes it: " + why);
+        assertEquals("Ice Boat is the Slalom this week, and " + RaceTrack.SLALOM, why, "a Slalom is refused, saying why");
+        assertTrue(!why.contains("/hcm"), "with no command in it: a call-off reason reaches players, and the fix"
+                + " depends on config, so Race Night adds it where an admin reads it (audit M08, M11): " + why);
         assertNull(RaceTrack.raceProblem(MountainRunsV2.road(), 12, 2), "a Winding Road is raced");
         assertNull(RaceTrack.raceProblem(MountainRuns.medium(), 12, 2), "the algo-3 run as before");
         assertTrue(RaceTrack.raceProblem(MountainRunsV2.road(), 1, 2).contains("starting grid seats 1"),
@@ -68,5 +70,17 @@ class MountainV2NightCopyTest {
         assertTrue(RaceTrack.raceProblem(slalom, 1, 2).contains(RaceTrack.SLALOM),
                 "a Slalom says it is a Slalom first, not that its grid is small");
         assertTrue(why.codePoints().allMatch(cp -> cp <= 0xFFFF), "nothing Bedrock can't draw");
+    }
+
+    @Test
+    void theSlalomLineSaysTheSetsOwnTimeWord() {
+        Course daily = MountainRunsV2.of(MountainRunsV2.tag(MountainRunsV2.SLALOM_SEED, 120_000, 4, 1));
+        assertEquals("Ice Boat is the Slalom today, and " + RaceTrack.SLALOM, RaceTrack.raceProblem(daily, 12, 2),
+                "audit M08: a daily set's Slalom is today's, never \"this week\"");
+        Course threeDay = MountainRunsV2.of(MountainRunsV2.tag(MountainRunsV2.SLALOM_SEED, 120_000, 4, 3));
+        assertEquals("Ice Boat is a Slalom, and " + RaceTrack.SLALOM, RaceTrack.raceProblem(threeDay, 12, 2),
+                "any other cadence: no time word");
+        assertEquals("Race Night races only on the Winding Road", RaceTrack.SLALOM,
+                "the end every cadence shares, which callers tell the refusal by");
     }
 }

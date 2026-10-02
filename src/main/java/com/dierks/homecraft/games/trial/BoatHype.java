@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.boat.BoatPlanner;
 import com.dierks.homecraft.games.gen.boat.BoatStyle;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -90,6 +91,16 @@ public final class BoatHype {
     }
 
     /**
+     * A Slalom as its set's cadence says it (audit M02, M08): "the Slalom this week" on a weekly set, "the Slalom
+     * today" on a daily one, and "a Slalom" on any other cadence or a Classic, whose words ("on this course")
+     * would read badly after it.
+     */
+    public static String slalomNow(Course c) {
+        int words = GenCopy.words(c == null ? null : c.gen());
+        return words == 1 || words == 7 ? "the Slalom " + GenCopy.when(words) : "a Slalom";
+    }
+
+    /**
      * A Mountain Run v2's model time T_m in milliseconds ({@code BoatPlanner.modelMs} of its tag, red-team F04),
      * what its Race Night and party-race windows scale with; 0 for any other course, whose windows stay as
      * configured. Never the star reference ({@code refMs}, 4/5 of T_m).
@@ -153,24 +164,38 @@ public final class BoatHype {
     }
 
     /**
-     * The checkpoint (0-based) nearest half way along a Mountain Run v2, where its HALFWAY! sign stands: the
-     * one whose distance along the marks (start, checkpoints, finish, mark to mark) is nearest half the whole
-     * (the first of two as near); -1 for any other course or one with no checkpoint.
+     * The checkpoint (0-based) nearest half way along a Mountain Run v2, where its HALFWAY! sign stands
+     * ({@link #halfway(List, Point)} of its checkpoints and finish, the planner's own rule); -1 for any other
+     * course or one with no checkpoint. Its start is never read, so every racer on a grid, however far back,
+     * hears "Halfway!" at the same checkpoint, the sign's.
      */
     public static int halfway(Course c) {
-        if (!mountainV2(c) || c.start() == null || c.finish() == null || c.checkpoints().isEmpty()) {
+        if (!mountainV2(c) || c.finish() == null || c.checkpoints().isEmpty()) {
             return -1;
         }
-        List<Course.Mark> cps = c.checkpoints();
-        double[] at = new double[cps.size()];
-        Point prev = c.start().point();
-        double run = 0;
-        for (int i = 0; i < cps.size(); i++) {
-            run += prev.distance(cps.get(i).center());
-            at[i] = run;
-            prev = cps.get(i).center();
+        List<Point> cps = new ArrayList<>(c.checkpoints().size());
+        for (Course.Mark m : c.checkpoints()) {
+            cps.add(m.center());
         }
-        double mid = (run + prev.distance(c.finish().center())) / 2;
+        return halfway(cps, c.finish().center());
+    }
+
+    /**
+     * The one rule for half way down a Mountain Run v2, shared by the planner's HALFWAY! sign and the runtime's
+     * "Halfway!" title (audit M00): the checkpoint (0-based) whose distance from checkpoint 0, mark to mark,
+     * is nearest half the distance from checkpoint 0 to {@code finish} (the first of two as near); -1 with no
+     * checkpoint. It starts at checkpoint 0, not at the start, because a race moves the start back to each
+     * racer's grid spot.
+     */
+    public static int halfway(List<Point> cps, Point finish) {
+        if (cps == null || cps.isEmpty() || finish == null) {
+            return -1;
+        }
+        double[] at = new double[cps.size()];
+        for (int i = 1; i < cps.size(); i++) {
+            at[i] = at[i - 1] + cps.get(i - 1).distance(cps.get(i));
+        }
+        double mid = (at[at.length - 1] + cps.get(cps.size() - 1).distance(finish)) / 2;
         int best = 0;
         for (int i = 1; i < at.length; i++) {
             if (Math.abs(at[i] - mid) < Math.abs(at[best] - mid)) {

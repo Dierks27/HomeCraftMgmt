@@ -218,7 +218,7 @@ public final class NightRunner implements RaceLink {
         this.pay = pay;
         this.zone = zone;
         this.seasonBoard = seasonBoard;
-        this.timing = EventMachine.Timing.of(plan, announceMinutes);
+        this.timing = EventMachine.Timing.of(plan, announceMinutes, BoatHype.modelMs(track.base())); // audit M06
         this.laps = RaceTrack.laps(track.base(), rules.laps());
         this.state = state;
     }
@@ -469,9 +469,7 @@ public final class NightRunner implements RaceLink {
     private EventPlan moved;
 
     private EventMachine.Timing timing() {
-        return moved == null ? timing : new EventMachine.Timing(moved.joinAt(), moved.startsAt(), timing.announceMs(),
-                timing.races(), timing.minRacers(), timing.warmupMs(), timing.finishWindowMs(), timing.maxRaceMs(),
-                timing.breakMs());
+        return moved == null ? timing : timing.moved(moved.joinAt(), moved.startsAt());
     }
 
     /** The start as it stands (moved by an admin's {@code go}). */
@@ -544,9 +542,15 @@ public final class NightRunner implements RaceLink {
                         hypeLine()), racers.keySet());
             }
             case LAST_CALL -> {
-                ports.announce(Announcer.Line.LAST_CALL, EventCopy.lastCall(joined().size()), racers.keySet());
+                long now = ports.now();
+                ports.announce(Announcer.Line.LAST_CALL, EventCopy.lastCall(joined().size(),
+                        EventCopy.minutes(startsAt() - now)), racers.keySet());
                 holdTrack();
-                ports.warnSoloRuns(track.base().id(), racers.keySet(), "&eRace Night needs this track in 1 minute.");
+                // audit M06: on a Mountain Run v2 the hold comes minutes earlier, so the warning says how long, in
+                // whole minutes left (never more than there is): "in 1 minute" at the 2-minute hold, as before
+                ports.warnSoloRuns(track.base().id(), racers.keySet(), "&eRace Night needs this track in "
+                        + EventCopy.minutesWord((int) Math.max(1, (startsAt() - EventMachine.SOLO_END_MS - now)
+                        / 60_000L)) + ".");
             }
             case END_SOLO_RUNS -> {
                 ports.endSoloRuns(track.base().id(), racers.keySet(),

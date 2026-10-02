@@ -106,7 +106,7 @@ public final class MountainRunsV2 {
 
     /**
      * A straight run of {@code n} checkpoints 10 apart east of the start, the finish 10 past the last: its
-     * halfway checkpoint is plain to see (the first of two as near when n is even).
+     * halfway checkpoint is plain to see (measured from checkpoint 1: the first of two as near when n is odd).
      */
     public static Course straight(int n, GenTag tag) {
         List<Course.Mark> cps = new ArrayList<>();

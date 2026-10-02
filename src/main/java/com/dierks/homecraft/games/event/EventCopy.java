@@ -279,7 +279,26 @@ public final class EventCopy {
 
     /** The last call (T − 2 min). */
     public static String lastCall(int racers) {
-        return "&bRace Night &7starts in 2 minutes! &7" + racers(racers) + " in so far - last call: &e" + COMMAND;
+        return lastCall(racers, 2);
+    }
+
+    /**
+     * The last call, {@code minutes} before the start: T − 2 min, or earlier on a Mountain Run v2, whose track is
+     * held longer before its start (audit M06, {@link EventMachine#reserveMs}).
+     */
+    public static String lastCall(int racers, int minutes) {
+        return "&bRace Night &7starts in " + minutesWord(minutes) + "! &7" + racers(racers) + " in so far - last call: &e"
+                + COMMAND;
+    }
+
+    /** {@code ms} as whole minutes, to the nearest, at least 1 (a step lands a moment after the minute it is due). */
+    public static int minutes(long ms) {
+        return (int) Math.max(1, Math.round(ms / 60_000.0));
+    }
+
+    /** "1 minute", "5 minutes". */
+    public static String minutesWord(int n) {
+        return n + (n == 1 ? " minute" : " minutes");
     }
 
     /** The join bossbar: "&amp;bRace Night &amp;7in &amp;e9:58 &amp;7· 0 racers · &amp;e/hcm play race". */

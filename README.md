@@ -836,7 +836,8 @@ Then everyone goes to one grid and starts on **one shared 3-2-1**: boats in rows
 start line (single file on a narrow track), runners and flyers on the start itself. A bar shows your
 place ("2nd of 5 · Lap 1/2"), finishes and photo finishes go to the group, and the results (the
 Clubhouse board and its **Results** item, or a results screen at home) rank everyone. The race
-ends when everyone is in, 2 minutes after the first finish, or 10 minutes after Go. Each racer's
+ends when everyone is in, 2 minutes after the first finish (on a Mountain Run v2, max(120 s,
+⌈1.25 × its model time⌉): 150 s on a 2-minute run), or 10 minutes after Go. Each racer's
 finish is also their **normal counted run** on the course, exactly once and
 under every fair-play rule: its boards, its first finish and other rewards, and the Weekly Cup. A
 party race has no entry, no fees and no prizes of its own. Boats bump, as at Race Night; runners
@@ -1628,9 +1629,10 @@ glass-roofed tunnel. Then, on a Java client and on a Bedrock one:
    `/hcm games gen plan fresh_boat` names its seed: `preview fresh_boat <that seed>`, wait for
    "ready", `test`. For another seed you liked: preview it, `test`, then `/hcm games gen pin fresh_boat
    <seed> 1`.
-6. At a quiet hour, `/hcm games gen on fresh_boat`: "Ice Boat is on. Its course for <set> is built
-   next, in half A over the preview there, and opens once it's built." (`on` before "ready" drops the
-   preview; the set's course still opens, untested.)
+6. With Race Night planned, switch it on first (`games.race_night.enabled: true`, `/hcm reload`), so
+   `plan` and `on` pick the Winding Road. At a quiet hour, `/hcm games gen on fresh_boat`: "Ice Boat
+   is on. Its course for <set> is built next, in half A over the preview there, and opens once it's
+   built." (`on` before "ready" drops the preview; the set's course still opens, untested.)
 7. `/hcm games gen tp fresh_boat live` and ride it, then the checks marked *live*. If anything is
    wrong, `/hcm games gen off fresh_boat`: runs end, the course closes, its blocks stay.
 8. Later weeks: `preview fresh_boat next`, `test`, `choose fresh_boat`.
@@ -2224,9 +2226,14 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
 - **Turning it on.** Race Night needs Time Trials and a boat track. The default track is Fresh
   Courses' **Ice Boat** (`games.fresh.slots.fresh_boat`, which ships off): a new walled Mountain Run
   every week, a downhill sprint with the viewing stand built in (see [Ice Boat: the Mountain
-  Run](#ice-boat-the-mountain-run), and its checklist before switching it on). Turn that on, then
-  `games.race_night.enabled: true` and `/hcm reload`. `/hcm games check` says whether the schedule
-  fits the restarts and whether the track can be raced.
+  Run](#ice-boat-the-mountain-run), and its checklist before switching it on). Switch Race Night on
+  first (`games.race_night.enabled: true` and `/hcm reload`), then Ice Boat (`/hcm games gen on
+  fresh_boat`), so the week Ice Boat builds is the Winding Road (with `style: random`, every week is
+  while Race Night is on). If Ice Boat is already on and this week's is the Slalom, the night refuses
+  it and the course is never rerolled by itself: `/hcm games gen status fresh_boat`, `/hcm games
+  status` and `/hcm games check` say so with the exact command (`/hcm games gen reroll fresh_boat
+  confirm`; `unpin` first if it is pinned; under `style: slalom`, change the style first). `/hcm games
+  check` says whether the schedule fits the restarts and whether the track can be raced.
 - **On the Mountain Run** a race is one run from the top to the finish below the stand, so a night is
   "3 downhill races" (the Race Night screen, and `/hcm games status` while a night is on; `/hcm games
   event status` says "a downhill sprint"), with no laps anywhere: not in the grid title ("Race 1 of
@@ -2247,9 +2254,13 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
   is free. At most `max_racers` (8), fewer if the track's grid has fewer spots.
 - **The track.** 2 minutes before the start it is reserved (new solo runs and party races on it are
   refused, and a party race still on it is called off), and 1
-  minute before, solo runs still on it end. 15 seconds before, every joined racer who is free goes to
-  the track in their own oak boat, two a tick (their things are kept safe, as in every world game),
-  from whatever world they are in, as long as they still have `hcm.games.play`. Anyone busy is tried
+  minute before, solo runs still on it end. On a Mountain Run v2 it is reserved earlier, 1 minute plus
+  ⌈2.25 × its model time⌉ before (5:30 on a 2-minute run, at most 15 minutes), so a solo run started
+  just before is down by then even at a young rider's 0.45 of model speed; the last call says the real
+  minutes ("starts in 6 minutes!") and riders on the track are told how long they have. 15 seconds
+  before, every joined racer who is free goes to the track in their own oak boat, two a tick (their
+  things are kept safe, as in every world game), from whatever world they are in, as long as they
+  still have `hcm.games.play`. Anyone busy is tried
   again every second and asked, at most every 5 seconds, to stand still or use Leave game ("Race
   Night is starting! Stand still, or use Leave game, to join."), until just before Go, and is then
   out of race 1 ("you'll be in the next one"). A racer whose `hcm.games.play` was taken away after
@@ -2778,7 +2789,8 @@ Dropper and Falling Floors have their own lists in their sections)
     the kit's **Results** item (with the Clubhouse off, the results screen opens at home). Each finish
     is also a normal run on the course (its board, its rewards, the Cup).
 70. `/hcm play race fresh_dropper`: "The Dropper has no party races - try its practice drop
-    instead." A party race on the Race Night track 2 minutes before a night: "Your party race is
+    instead." A party race on the Race Night track when it is held (2 minutes before a night; on a
+    2-minute Mountain Run v2, 5:30 before): "Your party race is
     called off - Race Night needs this track now." and everyone goes home with their things.
 71. Golf together: **Play with friends** on a golf course's screen, invite, Start. When the first
     ball of a hole drops: "Hole clock: 2:00 to finish this hole - then any ball still out is picked
@@ -2802,8 +2814,8 @@ Dropper and Falling Floors have their own lists in their sections)
     Put junk in `games.cup` and `/hcm reload`: `/hcm games cup status` says "entries closed
     (games.cup can't be read - see the console)", and running Cups still pay. `games.cup.enabled:
     false` takes the Cup off the screens; Cups already paid into still pay at the rollover.
-75. Race Night: switch on Ice Boat (after its checklist in "Ice Boat: the Mountain Run") and
-    `games.race_night.enabled`, reload,
+75. Race Night: switch on `games.race_night.enabled` and reload first, then Ice Boat (after its
+    checklist in "Ice Boat: the Mountain Run"), so this week's run is the Winding Road,
     `/hcm games event start in 1`, and join from `/hcm play race` with two friends. One player
     tapping Ready doesn't end the warm-up while a joined racer isn't at the track; it never ends
     before the advertised time. Three races, the stand between them, then 20, 12 and 5 tokens with 3

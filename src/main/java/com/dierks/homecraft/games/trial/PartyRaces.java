@@ -377,21 +377,22 @@ public final class PartyRaces {
      * Why a party race can't be on {@code c} at all: the course is closed, or it is a Dropper
      * ({@link #offered}); {@code null} when it can.
      */
-    /**
-     * The heads-up a party race on a Mountain Run v2 Slalom gets (red-team F05: Race Night races only the
-     * Winding Road; friends may still race the Slalom): its gates are narrow, so boats bump. {@code null} for
-     * any other course.
-     */
-    static String slalomNote(Course c) {
-        return BoatHype.slalom(c) ? "&eHeads up: &7" + c.name() + " is the Slalom this week. The gates are narrow and"
-                + " boats bump, so give each other room!" : null;
-    }
-
     static String courseProblem(Course c) {
         if (c == null) {
             return "That course is closed right now.";
         }
         return offered(c.kind()) ? null : NO_DROPPER;
+    }
+
+    /**
+     * The heads-up a party race on a Mountain Run v2 Slalom gets (red-team F05: Race Night races only the
+     * Winding Road; friends may still race the Slalom): its gates are narrow, so boats bump. In its set's own
+     * words ({@link BoatHype#slalomNow}: "this week", "today", or no time word). {@code null} for any other
+     * course.
+     */
+    static String slalomNote(Course c) {
+        return BoatHype.slalom(c) ? "&eHeads up: &7" + c.name() + " is " + BoatHype.slalomNow(c) + ". The gates are"
+                + " narrow and boats bump, so give each other room!" : null;
     }
 
     /** The host starts the race: who's free races; grid, warm-up, Go. */

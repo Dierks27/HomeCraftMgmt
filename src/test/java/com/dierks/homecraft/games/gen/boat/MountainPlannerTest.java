@@ -275,10 +275,12 @@ class MountainPlannerTest {
                 }
                 assertTrue(m.finished().summary().get(2).contains("pieces " + here + " of " + deck + " (pits "
                         + p.count(PiecesV4.Kind.SAND_PIT) + "/" + p.dealt(PiecesV4.Kind.SAND_PIT) + ", "),
-                        name + ": the summary says what was placed of what was dealt: " + m.finished().summary().get(2));
+                        name + ": the summary says what was placed of what was dealt: "
+                                + m.finished().summary().get(2));
                 assertTrue(deck > 0 && here * 2 >= deck, name + ": " + here + " of a deck of " + deck);
                 assertTrue(p.count(PiecesV4.Kind.SAND_PIT) >= 1, name + ": a sand pit");
-                assertTrue(p.count(PiecesV4.Kind.CAVE) + p.count(PiecesV4.Kind.TUNNEL) >= 1, name + ": a cave or a tunnel");
+                assertTrue(p.count(PiecesV4.Kind.CAVE) + p.count(PiecesV4.Kind.TUNNEL) >= 1,
+                        name + ": a cave or a tunnel");
                 if (!tier.equals("easy")) {
                     assertTrue(p.count(PiecesV4.Kind.FOREST) >= 1, name + ": a forest");
                     assertTrue(p.count(PiecesV4.Kind.SPLIT) >= 1, name + ": a split");
@@ -337,6 +339,38 @@ class MountainPlannerTest {
             }
         }
         assertTrue(bends >= 6, "fixture: tight bends were read: " + bends);
+    }
+
+    @Test
+    void aRefusedBuildLeavesOutOnlyThePiecesNearWhereItFailed() {
+        // hard road 9046: the best-fit sand pit at 2536-2564 pushed checkpoint 58 up against a 1-block lip and the
+        // proof refused the run ("no way along the track at one level from checkpoint 58 to checkpoint 59"); the
+        // fewer-pieces build put the pit in the same place, so the road shipped with no pieces at all
+        MountainPlanner.Made m = made(HALF_A, 9046, "hard");
+        Plan p = m.finished();
+        assertEquals(List.of(), MountainValidator.problems(p, "hard"), "proven");
+        assertTrue(m.how.contains("build 1 (1 piece left out for the proof)"),
+                "the first build, less one piece: " + m.how);
+        assertEquals(1, m.leftOut, "one piece left out");
+        int dealt = 0;
+        for (PiecesV4.Kind k : PiecesV4.Kind.values()) {
+            dealt += m.pieces.dealt(k);
+        }
+        assertEquals(dealt - 1, m.pieces.list.size(), "the rest of the deck kept: " + p.summary().get(2));
+        MountainTier mt = MountainTier.of(BoatStyle.ROAD, "hard");
+        assertTrue(m.seconds >= mt.tMin && m.seconds <= mt.tMax, "T_m " + m.seconds + " in the window");
+        // where a problem points: between the checkpoints it names, or round the blocks it names, a leg either way
+        RasterV4.Spot a = m.checkpoints.get(57);
+        RasterV4.Spot b = m.checkpoints.get(58);
+        List<double[]> near = MountainPlanner.near(m, List.of("no way from checkpoint 58 to checkpoint 59"));
+        assertEquals(1, near.size(), "one stretch");
+        assertEquals(a.s() - MountainPlanner.LEAVE_OUT_REACH, near.get(0)[0], 1e-9, "a leg before the first");
+        assertEquals(b.s() + MountainPlanner.LEAVE_OUT_REACH, near.get(0)[1], 1e-9, "a leg past the second");
+        int x = (int) Math.floor(HALF_A.minX() + b.x());
+        int z = (int) Math.floor(HALF_A.minZ() + b.z());
+        List<double[]> block = MountainPlanner.near(m, List.of("a side pocket at " + x + " 150 " + z + ": wide"));
+        assertEquals(b.s(), (block.get(0)[0] + block.get(0)[1]) / 2, 1.5, "round the block named");
+        assertEquals(List.of(), MountainPlanner.near(m, List.of("the plan isn't a boat course")), "nowhere named");
     }
 
     @Test
@@ -550,7 +584,7 @@ class MountainPlannerTest {
         }
     }
 
-    /** Each staircase's sign (the STAIR lips of one straight run, two or more: "big" when every step is 2), in order. */
+    /** Each staircase's sign (two or more STAIR lips on one straight run; "big" when every step is 2), in order. */
     static List<List<String>> staircases(MountainPlanner.Made m) {
         DropPlan dp = m.cand.drops();
         List<List<String>> out = new ArrayList<>();

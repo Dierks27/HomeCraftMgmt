@@ -274,8 +274,12 @@ class OlderLayoutPinTest {
         gen.recall(null, null, GenArgs.which(code), GenArgs.DAYS_DEFAULT, false, said::add);
         assertTrue(heard().contains("has no Classics slot"), "fixture: a recall is always refused: " + heard());
         // This fixture's boats are built at today's shipped half, the Mountain Run v2's 480 x 176 x 640, which is
-        // bigger than a kept plot: the keep the advice names answers that it stays in the archive (KeepArea.fits).
-        // A real older Ice Boat (128 x 16 x 128) fits a plot and is kept (KeepPlotPinTest).
+        // bigger than a kept plot: the recall doesn't advise a keep that would be refused, and the keep itself
+        // answers that it stays in the archive (KeepArea.fits). A real older Ice Boat (128 x 16 x 128) fits a plot
+        // and is kept (KeepPlotPinTest).
+        assertTrue(heard().contains("can't be kept: &7Mountain Run v2 courses are too big to keep; they stay in the"
+                + " archive."), "a course too big for a plot is told so at the recall: " + heard());
+        assertFalse(heard().contains("Keep it for good instead"), "and never sent to a keep that is refused: " + heard());
         assertTaken(() -> keep(null, code, "old_boat"), "Mountain Run v2 courses are too big to keep; they stay in the"
                 + " archive", "the advised keep, for a course that big,");
     }

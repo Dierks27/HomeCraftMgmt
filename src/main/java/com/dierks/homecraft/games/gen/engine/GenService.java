@@ -5869,6 +5869,13 @@ public final class GenService implements GeneratedCourses, GenOps {
         Slots.Def fits = Slots.classicFor(orig);
         Slots.Def classic = classicWord != null ? Slots.classicByWord(classicWord) : fits;
         if (fits == null) {
+            PlanCodec.Head head = row.plan() == null ? null : PlanCodec.head(row.plan());
+            if (head != null && !KeepArea.fits(head.half())) {
+                // nor can it be kept (KeepService.tooBig), so don't advise a keep that is refused
+                report.accept("&c" + row.name() + " has no Classics slot, and " + row.code() + " can't be kept: &7"
+                        + KeepService.tooBig(orig, head.half()) + ".");
+                return;
+            }
             report.accept("&c" + row.name() + " has no Classics slot. &7Keep it for good instead: &e/hcm games gen keep "
                     + row.code() + " <new-id> [name]");
             return;

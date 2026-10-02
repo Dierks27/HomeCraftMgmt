@@ -1499,9 +1499,9 @@ par. The clubs are unchanged; the holes grew. Hand-built golf courses don't chan
 | Length class | Par | Path, tee to cup (every hole stays inside its class's band) | What it is |
 |---|---|---|---|
 | S | 2 | 8-12 | A short straight, sometimes with a hump, sand, a tree, a ramp, an island green or a pond to look at |
-| M | 3 | 16-25 | A longer straight or a dogleg with a piece: sand, a hill, a creek, a pond, trees, ice, terraces, two ways, the volcano; a guarded par 3; a Chip layup |
-| L | 4 | 27-38 | A dogleg, a layup, an S-bend or a long straight with a piece |
-| X | 5 | 40-52 | Two or three legs: S-bends, long doglegs, a hairpin, a layup |
+| M | 3 | 16-25 | A longer straight or a dogleg with a piece: sand, a hill, a creek, a pond, trees, ice, terraces, two ways, the volcano; a guarded par 3 |
+| L | 4 | 27-38 | A dogleg, a Swing layup (two legs, or three: an S-bend after it), a Chip layup, an S-bend or a long straight with a piece |
+| X | 5 | 40-52 | Two or three legs: S-bends, long doglegs, a hairpin, a Swing layup; or a long straight of 44-50 with a bunker and a hill |
 
 - **The mix keeps its meaning.** A mix's Easy holes take the lengths S, S, M in turn, its Medium holes
   M, M, L, L and its Hard holes L, X (X, X one time in three), shuffled within each tier. Golf of the
@@ -1514,7 +1514,8 @@ par. The clubs are unchanged; the holes grew. Hand-built golf courses don't chan
   pond and a Chip doesn't) and for approaches. Putt and Tap on the green. Every green on a 40 x 64
   plot has 4 rows of **run-out** behind the cup, so a Drive at the cup rolls on past instead of
   banking back in off the wall. Every course of 7 holes or more is dealt one Swing layup, one Chip
-  layup and one guarded par 3, each checked on the real ball physics along the line a first-timer
+  layup and one guarded par 3 (each exactly once; the Swing layup is on an L or an X hole, and never
+  makes both par 4s layups while an X hole can take it), each checked on the real ball physics along the line a first-timer
   actually aims, and the planner draws holes again until a first-timer chooses Putt, Chip and Swing at
   least 4% of the time each (the summary's `clubs:` line says "met", or "MISSED" if it never could; a
   course is never held back for it). A first-timer with only Tap, Putt and Drive in the bag takes
@@ -1522,10 +1523,13 @@ par. The clubs are unchanged; the holes grew. Hand-built golf courses don't chan
 - **Honest par.** Par is what a first-time player usually takes. A model first-timer plays every hole
   64 times on the real ball physics (it aims at the furthest point of the lane it can see, picks the
   club that ends nearest the cup, takes the wrong club one time in four, and aims a few degrees off),
-  and par is its average, rounded, which must be the hole's class par. The course is then balanced so
-  its total is within one stroke of the summed averages: a hole moves at most one stroke from its
-  class par, and never outside 2-6, so a first-time player scores about par. The sloppy kid player
-  still always finishes within par + 2, never wet, always on the lane.
+  and par is its average, rounded, which must be the hole's class par. Every hole's par is its class
+  par: the planner balances the course by drawing holes again, each time to a shape the course
+  doesn't already have, until its total is within one stroke of the summed averages (it aims for
+  0.6). A first-time player scores about half a stroke over par. The sloppy kid player still always
+  finishes within par + 2, never wet, always on the lane.
+- **No hole twice.** A course never has two holes of the same design and shape (mirrored or not), nor
+  the same design twice in a row.
 - **Tee signs:** Adventure Golf's (below), plus "Lay up short / of the water" (every layup and the
   guarded par 3), "Dogleg / left" or "Dogleg / right" (the way it turns as you face it from the tee)
   and "Three legs / use every club".
@@ -1557,8 +1561,12 @@ par. The clubs are unchanged; the holes grew. Hand-built golf courses don't chan
   - "Golf of the Week: 9 holes, par 31, ... putts simulated (golf v4: par from the first-timer, ...
     over the course; every hole its class's par; kid within par + 2)";
   - one line per hole: its class and recipe, its legs, the first-timer's mean, E (the fewest putts
-    found), par, K (the kid's worst) and the try, then its features; a hole the balance moved says
-    "(its class's 4, a stroke up to balance the course)";
+    found), par, K (the kid's worst) and the try, then its features; a hole drawn again to balance
+    the course or for the club gate says "(try N, drawn again to settle the course)". A moved par is
+    rare (an M hole at exactly 26 blocks raised to par 4, about one course in 300) and reads "(its
+    class's 3, a stroke up to balance the course)"; for example "hole 8: L L_LAYUP_BEND 8 up, 11
+    across, 13 up, a corner pond 3 deep, 8 along - mean 4.16, E 3, par 4, K 5 (try 2); water, layup,
+    three legs";
   - "quota: water 2/2, sand 2/2, height 3/3, trees 1/1, big drop 1/1, layup 1/1, chip layup 1/1,
     guarded par 3 1/1, three legs 1/1, two legs 3/3 (deal ...)";
   - "clubs: Tap ..%, Putt ..%, Chip ..%, Swing ..%, Drive ..%; Putt, Chip, Swing 4%+ each: met": how
@@ -1778,7 +1786,9 @@ slower.
   other.
 - `/hcm games gen plan fresh_boat` shows 5 lines (your numbers differ): "Ice Boat v4 medium: Winding
   Road, 3,412 blocks, 6 bands (2 hairpins, 3 elbows, 0 bulbs), candidate 3 (6 kept), build 1" (the
-  length is the track's, or "the safe road after ..." when the fixed layout was used); "flow 0.81
+  length is the track's, or "the safe road after ..." when the fixed layout was used; a build whose
+  proof failed near a piece is built again without only the pieces near that spot and ends "(1 piece
+  left out for the proof)"); "flow 0.81
   (carry ..., balance ..., period ..., variety ..., brakes .../km) - model T_m 120.6 s"; "drops 26 (9
   big, 44 down), Final Drop 2 (31 before the finish) - staircases 1 - pieces 7 of 8 (pits 2/2, splits
   1/2, caves ..., tunnels ..., forests ..., boosts ...), blue straights 0, run-offs 9 - trees ..." (each
@@ -1786,7 +1796,8 @@ slower.
   "grid 12 (double) - checkpoints 72 - stand at the bottom - 318,604 blocks"; and "reference 96.48 s
   for the stars (0.8 of T_m 120.6 s), shortest ... s - seed ...".
 - **Keep and the archive.** A Mountain Run v2 can't be kept ("Mountain Run v2 courses are too big to
-  keep; they stay in the archive"); there is no Classic boat slot to recall it into. Its archive row is
+  keep; they stay in the archive"); there is no Classic boat slot to recall it into, and a recall says
+  so without sending you to a keep ("Ice Boat has no Classics slot, and BOAT-1 can't be kept: ..."). Its archive row is
   about 0.2-0.4 MB (stored compact), and `history <code>` answers a moment later, because the row is read
   off the main thread.
 - **0.36's spiral** (algo 3) keeps its own rules and size wherever it is still stored (the archive, a

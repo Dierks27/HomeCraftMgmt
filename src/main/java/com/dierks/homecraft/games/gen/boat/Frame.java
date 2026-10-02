@@ -297,13 +297,12 @@ public final class Frame {
      */
     static Link[] links(GenRandom r, MountainTier tier, int n, double total) {
         Frame.LinkKind[] kinds = new Frame.LinkKind[n];
-        int hairpins = 0;
         double avg = total / n;
         int must = tier.road() ? r.nextInt(n) : -1;
+        int hairpins = must >= 0 ? 1 : 0; // the road's own hairpin counts toward the tier's most from the start
         for (int k = 0; k < n; k++) {
             if (k == must) {
                 kinds[k] = LinkKind.HAIRPIN;
-                hairpins++;
                 continue;
             }
             double h = hairpins < tier.hairMost && 2 * tier.hairRMax >= Math.min(avg, PITCH_MAX) - 30 ? 0.45 : 0;

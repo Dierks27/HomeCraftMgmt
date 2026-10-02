@@ -34,9 +34,26 @@ public final class Skeleton {
      * drops 63 apart), so the drops a run needs find their straights.
      */
     public static final double APPROACH = 46;
+    /** A road's sweeper after a long straight (about 38 b/s) is at least this wide (v_c 34.9), after a medium one (about 34) this (31). */
+    static final double CARRY_AFTER_LONG = 140;
+    static final double CARRY_AFTER_MED = 90;
+    /**
+     * Red-team F08: a straight this long or longer lies exactly on an axis (the band's, or a plunge's), so its
+     * walls are flat; in Java a boat that touches a stepped wall's riser loses that whole axis of its speed.
+     * Headings change inside arcs, S-curves and chicanes, which come back onto the axis.
+     */
+    static final double AXIS_LONG = 40;
+    /** Off the axis, how often a short straight comes before the arc back. */
+    static final double OFF_AXIS_SHORT = 0.25;
     /** How much more often a long straight comes on the tiers whose descent needs 2-block drops. */
     static final double LONG_LEAN = 3;
+    static final double LONG_LEAN_HARD = 4;
+    static final double S_LEAN_HARD = 4;
+    /** The tiers that must have a chicane draw one this much more often. */
+    static final double CHICANE_LEAN = 3;
     static final double APPROACH_ROAD = 104;
+    /** The hard road's approach holds two 2-block drops, the second a brake for the link (its descent floor is 44). */
+    static final double APPROACH_HARD = 140;
     /** Draws refused before a band is closed at once. */
     static final int REDRAWS = 32;
     /** The steepest a traverse may run off its band's axis, degrees. */
@@ -65,6 +82,11 @@ public final class Skeleton {
     /** The open run between two gate sets: room for a drop, its zone and the checkpoints round it. */
     static final double OPEN_MIN = 92;
     static final double OPEN_MAX = 124;
+    static final double OPEN_STEEP_MIN = 120;
+    static final double OPEN_STEEP_MAX = 170;
+    static final double GATE_TAIL_STEEP = 120;
+    /** How often a band of a steep slalom ends in that long tail (an open run for a staircase). */
+    static final double TAIL_STEEP_SHARE = 0.4;
 
     /** What an element is for. */
     public enum Role {
@@ -358,7 +380,8 @@ public final class Skeleton {
             this.x0 = out.x();
             this.axis = frame.z[k];
             this.aEnd = dir * (frame.linkX(k) - x0);
-            this.approach = tier.road() && aEnd > APPROACH_ROAD + 120 ? APPROACH_ROAD : APPROACH;
+            double road = tier.hard() ? APPROACH_HARD : APPROACH_ROAD;
+            this.approach = tier.road() && aEnd > road + 120 ? road : APPROACH;
             double[] room = limits(frame, k);
             this.bMin = room[0];
             this.bMax = room[1];
@@ -417,8 +440,18 @@ public final class Skeleton {
             return true;
         }
 
+        /** Whether the heading is off the band's axis (only arcs and short straights may lie there). */
+        boolean offAxis() {
+            return Math.abs(pose.psi()) > 1e-9;
+        }
+
         /** The next beat from the last (§5.3's grammar, a seeded Markov chain). */
         Role nextBeat() {
+            if (offAxis()) {
+                // red-team F08: a straight of 40 or more lies on the axis, so off it the next beat turns back
+                // (a short straight first now and then)
+                return prev != Role.SHORT && r.chance(OFF_AXIS_SHORT) ? Role.SHORT : Role.SWEEP;
+            }
             if (tier.slalom()) {
                 boolean straightLast = prev == Role.LONG || prev == Role.MED || prev == Role.SHORT;
                 if (straightLast) {
@@ -450,20 +483,38 @@ public final class Skeleton {
             w[4] *= sBoost;
             w[5] *= cBoost;
             // where the descent floor asks for more than a block a lip, long straights hold the 2-block drops
-            w[0] *= tier.descentMin > tier.dropsMin ? LONG_LEAN : 1;
+            w[0] *= tier.descentMin > tier.dropsMin ? (tier.hard() ? LONG_LEAN_HARD : LONG_LEAN) : 1;
+            // the medium and hard roads want 3 S-curves beside their long straights: they come more often
+            w[4] *= tier.sCurvesMin >= 3 ? S_LEAN_HARD : 1;
+            w[5] *= tier.chicMin >= 1 ? CHICANE_LEAN : 1;
             return new Role[]{Role.LONG, Role.MED, Role.SHORT, Role.SWEEP, Role.S_CURVE, Role.CHICANE,
                     Role.BEND}[r.weighted(w)];
+        }
+
+        /** The least sweeper radius a road draws after {@code before}: one its speed carries into. */
+        double carryR(Role before) {
+            return switch (before) {
+                case LONG -> Math.max(tier.sweepRMin, CARRY_AFTER_LONG);
+                case MED -> Math.max(tier.sweepRMin, CARRY_AFTER_MED);
+                default -> tier.sweepRMin;
+            };
         }
 
         /** The primitives of one beat of {@code kind}, or {@code null} when none fits the heading rules. */
         List<Prim> draw(Role kind) {
             double room = aEnd - approach - pose.a();
+            if ((kind == Role.LONG || kind == Role.MED) && offAxis()) {
+                return null;
+            }
             return switch (kind) {
                 case LONG -> straight(100, 200, room, kind);
                 case MED -> straight(40, 99, room, kind);
                 case SHORT -> straight(12, 39, room, kind);
                 case SWEEP -> {
-                    double rad = r.nextDouble(tier.sweepRMin, tier.sweepRMax);
+                    // §5.3: after a long straight a sweeper the speed carries into (v_c >= 0.9 v_entry), else a
+                    // brake drop; on the road the sweeper is drawn wide enough, so a lip there is a choice
+                    double lo = tier.road() ? carryR(prev) : tier.sweepRMin;
+                    double rad = r.nextDouble(Math.min(lo, tier.sweepRMax - 10), tier.sweepRMax);
                     // most sweeps are gentle; the tier's sharpest come now and then
                     double u = r.nextDouble();
                     double deg = tier.sweepDegMin + (tier.sweepDegMax - tier.sweepDegMin) * u * u;
@@ -527,6 +578,11 @@ public final class Skeleton {
         /** One arc: its hand alternating from the last unless both are gentle, steered back toward the axis. */
         List<Prim> arcBeat(double rad, double deg, Role kind, boolean sweep) {
             rad = Math.max(rad, linkedMin());
+            if (offAxis()) {
+                // back onto the axis exactly (its hand is against the arc that left it)
+                double back = -pose.psi();
+                return List.of(new Prim(rad * Math.abs(back), rad, back, kind));
+            }
             boolean gentle = sweep && deg <= GENTLE_DEG && tier.road();
             double sign;
             if (lastSign == 0 || (gentle && lastGentle)) {
@@ -552,6 +608,9 @@ public final class Skeleton {
 
         /** Two arcs of opposite hands with a short straight between: an S-curve or a chicane. */
         List<Prim> pair(double rLo, double rHi, double dLo, double dHi, double gLo, double gHi, Role kind) {
+            if (offAxis()) {
+                return null;
+            }
             double r1 = Math.max(r.nextDouble(rLo, rHi), linkedMin());
             if (r1 > rHi + 1e-9) {
                 return null;
@@ -563,9 +622,8 @@ public final class Skeleton {
             if (Math.abs(pose.psi() + sign * d1) > Math.toRadians(MAX_OFF_AXIS)) {
                 return null;
             }
-            // the second arc settles the heading near the axis (a seeded few degrees either way)
-            double settle = pose.psi() + sign * d1 + Math.toRadians(r.nextDouble(-8, 8));
-            double d2 = Math.max(Math.toRadians(dLo), Math.min(Math.toRadians(dHi), sign * settle));
+            // the second arc settles the heading back onto the axis (red-team F08: the straight after lies on it)
+            double d2 = d1;
             List<Prim> out = new ArrayList<>();
             out.add(new Prim(r1 * d1, r1, sign * d1, kind));
             if (gap > 0.5) {
@@ -801,6 +859,12 @@ public final class Skeleton {
                     return null;
                 }
                 len = lo + Math.min(hi - lo, 30) * 0.5;
+                if (len >= AXIS_LONG) {
+                    len = lo; // the shortest that reaches, if that is short enough to lie off the axis
+                }
+                if (len >= AXIS_LONG) {
+                    return null;
+                }
             }
             double total = (q.a() - p.a()) + len * Math.cos(m) + end2.a();
             if (total > room + 1e-6) {
@@ -879,7 +943,8 @@ public final class Skeleton {
         List<GateSet> out = new ArrayList<>();
         // the first band's sets start past the pit, the 40 kept clear after the start and the first lip's room
         double s = from + (k == 0 ? Frame.START + 40 : GATE_LEAD) + r.nextDouble(0, 20);
-        double last = to - GATE_TAIL;
+        boolean steep = tier.descentMin > tier.dropsMin;
+        double last = to - (steep && r.chance(TAIL_STEEP_SHARE) ? GATE_TAIL_STEEP : GATE_TAIL);
         while (true) {
             int n = r.nextInt(tier.gatesMin, tier.gatesMax);
             double gap = Math.round(r.nextDouble(tier.gapMin, tier.gapMax) * 2) / 2.0;
@@ -913,7 +978,8 @@ public final class Skeleton {
                 at[i] = first + i * gap;
             }
             out.add(new GateSet(k, at, gap, side));
-            s = lastGate + gap + r.nextDouble(OPEN_MIN, OPEN_MAX);
+            // where the descent floor asks for 2-block drops, the open runs hold a staircase of them
+            s = lastGate + gap + r.nextDouble(steep ? OPEN_STEEP_MIN : OPEN_MIN, steep ? OPEN_STEEP_MAX : OPEN_MAX);
         }
         return out;
     }

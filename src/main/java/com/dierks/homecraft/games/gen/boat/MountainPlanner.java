@@ -33,7 +33,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * the {@link DropPlan}, the {@link BoatLine} ride and the {@link FlowScore}, each from its own fork of the
  * seed ({@code frame:i}, {@code route:i}, {@code drops:i}); a candidate is kept when every flow gate holds
  * (the model time in the tier's window among them) and its corridors keep their clearance. It stops early
- * once {@value #KEPT} kept candidates score {@value #EARLY} or more.
+ * once {@value #KEPT} kept candidates score {@value #EARLY} or more, and goes on past {@value #CANDIDATES}
+ * (up to {@value #CANDIDATES_MAX}) only while none is kept.
  *
  * <p><b>Stage B</b> (about a second each): the kept candidates by score (ties by number), at most
  * {@value #KEPT}: the pieces ({@code pieces:i}, each kept only while the checkpoints still fit round it),
@@ -53,6 +54,12 @@ final class MountainPlanner {
     static final int ALGO = 4;
     /** Stage A candidates, those Stage B tries, and the score that ends Stage A early. */
     static final int CANDIDATES = 48;
+    /**
+     * While none of the first {@value #CANDIDATES} is kept, Stage A goes on up to this many: the hard road
+     * (descent 44 or more under the checkpoint rules) keeps about one candidate in 60. Within the budget:
+     * {@value #CANDIDATES_MAX} + 4 Stage B builds + the safe reserve is under {@value #BUDGET}.
+     */
+    static final int CANDIDATES_MAX = 360;
     static final int KEPT = 6;
     static final double EARLY = 0.75;
     /** Work units: the whole budget, a Stage B attempt, the safe layout's reserve. */
@@ -129,7 +136,7 @@ final class MountainPlanner {
             out.add(in.slot().name() + " v" + ALGO + " " + tier.id + ": " + tier.style.title() + ", "
                     + String.format(Locale.ROOT, "%,d", Math.round(sk.finish - sk.start)) + " blocks, " + sk.frame.bands
                     + " bands (" + hairpins + " hairpins, " + elbows + " elbows, " + bulbs + " bulbs), " + how);
-            out.add(cand.flow().summary() + String.format(Locale.ROOT, " - model %.1f s", seconds));
+            out.add(cand.flow().summary() + String.format(Locale.ROOT, " - model T_m %.1f s", modelMs(seconds) / 1000.0));
             DropPlan.Drop last = dp.last();
             StringBuilder pieceLine = new StringBuilder();
             if (tier.slalom()) {
@@ -154,11 +161,33 @@ final class MountainPlanner {
                     + " - stand at the bottom - " + String.format(Locale.ROOT, "%,d", plan.ops().size()) + " blocks");
             Course c = ((PlannedTrial) plan.course()).course();
             long ref = ((PlannedTrial) plan.course()).refMs();
-            out.add("reference " + String.format(Locale.ROOT, "%.1f", ref / 1000.0) + " s (the line model), shortest "
-                    + c.minSeconds() + " s - seed " + GenSeed.shortHex(in.seed()));
+            out.add("reference " + String.format(Locale.ROOT, "%.2f", ref / 1000.0) + " s for the stars (0.8 of T_m "
+                    + String.format(Locale.ROOT, "%.1f", modelMs(seconds) / 1000.0) + " s), shortest " + c.minSeconds()
+                    + " s - seed " + GenSeed.shortHex(in.seed()));
             return out;
         }
     }
+
+    /**
+     * The model time T_m in milliseconds: the line model's seconds rounded up to a tenth. It times F-T
+     * and Race Night's windows; the stars get {@link #starRefMs} (red-team F04).
+     */
+    static long modelMs(double seconds) {
+        return (long) Math.ceil(seconds * 10 - 1e-9) * 100;
+    }
+
+    /**
+     * The reference time the stars are set from (red-team F04): {@value #STAR_SHARE} of T_m, so a medium gold
+     * needs about 0.83 of model speed and silver 0.57, never under the shortest time + 1 s. T_m rounded up
+     * to 100 ms times 4/5 is a whole number of milliseconds, so {@link BoatPlanner#modelMs} gets T_m back
+     * exactly from a tag (the floor never binds on a proven plan: the shortest time is the top-speed line).
+     */
+    static long starRefMs(double seconds, int minSeconds) {
+        return Math.max(modelMs(seconds) * 4 / 5, minSeconds * 1000L + 1000);
+    }
+
+    /** The share of T_m the star reference is. */
+    static final double STAR_SHARE = 0.8;
 
     /** How many staircases (two or more lips on one straight run) a drop plan has. */
     static int stairs(DropPlan dp) {
@@ -198,9 +227,9 @@ final class MountainPlanner {
         // Stage A
         List<Candidate> kept = new ArrayList<>();
         int good = 0;
-        for (int i = 0; i < CANDIDATES; i++) {
+        for (int i = 0; i < CANDIDATES_MAX; i++) {
             in.checkCancelled();
-            if (work + 1 > budget - SAFE_RESERVE) {
+            if (work + 1 > budget - SAFE_RESERVE || (i >= CANDIDATES && !kept.isEmpty())) {
                 break;
             }
             work++;
@@ -233,7 +262,7 @@ final class MountainPlanner {
                         root.fork("scenery:" + c.index()), step[0]);
                 if (m != null) {
                     m.work = work;
-                    m.how = "candidate " + (c.index() + 1) + " of " + CANDIDATES + ", build " + tries
+                    m.how = "candidate " + (c.index() + 1) + " (" + kept.size() + " kept), build " + tries
                             + (step[0] == FULL ? "" : step[0] == REDUCED ? " (fewer pieces)" : " (no pieces)");
                     return m;
                 }
@@ -416,7 +445,10 @@ final class MountainPlanner {
         List<double[]> fast = new ArrayList<>(dp.fast());
         fast.addAll(pieces.fast());
         BoatLine.Result ride = BoatLine.run(RideLine.of(sk, dp.drops, fast).segs());
-        long refMs = Math.max((long) Math.ceil(ride.seconds() * 10 - 1e-9) * 100, min * 1000L + 1000);
+        if (modelMs(ride.seconds()) * 4 / 5 < min * 1000L + 1000) {
+            return null; // never on a real run (the shortest time is the top-speed line); keeps T_m exact in the tag
+        }
+        long refMs = starRefMs(ride.seconds(), min);
         Plan plan = Plan.of(slot.id(), ALGO, in.seed(), half, palette, ops, raster.signs, keepClear(raster),
                 new PlannedTrial(course, refMs), List.of(), 0);
         return new Made(in, tier, c, pieces, raster, cps, plan, trees, ride.seconds());
@@ -574,10 +606,24 @@ final class MountainPlanner {
     /** The safe candidates, made once per style, tier and mirror. */
     private static final Map<String, Candidate> SAFE = new ConcurrentHashMap<>();
 
+    /** The safe layouts' fixed streams start here: stream {@code SAFE_BASE + j}, Stage A candidate 0. */
+    static final long SAFE_BASE = 0x5AFE_0000L;
+
     /**
-     * {@code SAFE_ROAD} / {@code SAFE_SLALOM} (§5.2): a fixed route per style, tier and mirror (the mirror
-     * from the seed), proven like any other, its pieces none, its mountain seeded; {@code null} only when
-     * even it can't be built here (a test proves all twelve in both halves and off the shipped range).
+     * Which fixed stream each safe layout is, by style (road, slalom), tier (easy, medium, hard) and mirror
+     * (its start at the west end, the east): the first stream whose candidate passes every flow gate with
+     * that mirror and is proven (MountainPlannerTest holds all twelve to it, in both halves and off the
+     * shipped range, and names the next good stream should a change to the generator move one).
+     */
+    static final int[][][] SAFE_STREAMS = {
+            {{10, 0}, {10, 0}, {84, 76}},
+            {{1, 2}, {1, 0}, {5, 0}}};
+
+    /**
+     * {@code SAFE_ROAD} / {@code SAFE_SLALOM} (§5.2, red-team F06): a fixed route per style, tier and mirror
+     * (the mirror from the seed), an ordinary Stage A candidate that passes every flow gate (F-T, F-F with
+     * the tier's minimums, F-P, F-V and the rest), built with no pieces, its mountain from the seed, proven
+     * like any other; {@code null} only when even it can't be built here.
      */
     static Made safe(PlanInput in, MountainTier tier, GenRandom root) throws GenFailed {
         boolean west = root.fork("safe").nextBoolean();
@@ -585,23 +631,41 @@ final class MountainPlanner {
         if (c == null) {
             return null;
         }
-        Made m = attempt(in, tier, c, root.fork("pieces:safe"), root.fork("scenery:safe"), BASIC);
-        return m;
+        return attempt(in, tier, c, root.fork("pieces:safe"), root.fork("scenery:safe"), BASIC);
     }
 
-    /** The safe candidate of {@code tier}, its start at the west end or the east: the first fixed draw every gate passes. */
+    /** The safe candidate of {@code tier} with its start at the west end or the east ({@link #SAFE_STREAMS}). */
     static Candidate safeCandidate(MountainTier tier, boolean west) {
-        return SAFE.computeIfAbsent(tier.style.id() + ":" + tier.id + ":" + west, k -> findSafe(tier, west));
+        return SAFE.computeIfAbsent(tier.style.id() + ":" + tier.id + ":" + west, k -> {
+            Candidate c = candidate(new GenRandom(SAFE_BASE + safeStream(tier, west)), tier, 0);
+            return c != null && c.sk().frame.west == west ? c : findSafe(tier, west, 0);
+        });
     }
 
-    private static Candidate findSafe(MountainTier tier, boolean west) {
-        GenRandom fixed = new GenRandom(0x5AFE_0000L + (west ? 1 : 0));
-        for (int i = 0; i < 400; i++) {
-            Candidate c = candidate(fixed, tier, i);
+    /** The table's stream for {@code tier} and the mirror. */
+    static int safeStream(MountainTier tier, boolean west) {
+        int t = switch (tier.id) {
+            case "easy" -> 0;
+            case "medium" -> 1;
+            default -> 2;
+        };
+        return SAFE_STREAMS[tier.slalom() ? 1 : 0][t][west ? 0 : 1];
+    }
+
+    /**
+     * The first stream from {@code from} whose candidate passes every gate with the mirror asked: only
+     * reached when a change to the generator has moved the table's (the test fails first, naming it).
+     */
+    static Candidate findSafe(MountainTier tier, boolean west, int from) {
+        for (int j = from; j < from + SAFE_SEARCH; j++) {
+            Candidate c = candidate(new GenRandom(SAFE_BASE + j), tier, 0);
             if (c != null && c.sk().frame.west == west) {
                 return c;
             }
         }
         return null;
     }
+
+    /** How many streams {@link #findSafe} tries. */
+    static final int SAFE_SEARCH = 1_000;
 }

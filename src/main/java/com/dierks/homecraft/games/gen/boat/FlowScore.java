@@ -20,7 +20,10 @@ import java.util.Map;
  *       {@value #CHAIN} apart are one turn and a link is one (≤ 3 road, ≤ 2 slalom).</li>
  *   <li><b>F-K hard brakes:</b> arcs entered over 1.2 v_c with no lip in the {@value #BRAKE_LOOK} before,
  *       per 1,000 blocks (≤ 1, road).</li>
- *   <li><b>F-C carry:</b> the arc length entered at ≤ 1.1 v_c over all the arc length (≥ 0.6, road).</li>
+ *   <li><b>F-C carry:</b> the arc length entered at ≤ 1.1 v_c over all the arc length (≥ 0.6, road),
+ *       hairpin links aside: under the boat model no legal brake drop gets a boat under 1.1 v_c of an
+ *       R 30-55 turn (a 2-block drop lands at about 18 b/s and its 26-block landing strip rebuilds 27), so
+ *       a hairpin is a planned brake, which F-K's lip rule judges.</li>
  *   <li><b>F-P periodicity:</b> the largest mean-removed, normalised autocorrelation of |κ|(s) sampled every
  *       {@value #SAMPLE} blocks, over lags 40..400 (≤ 0.6 road, 0.8 slalom). A slalom's rhythm inside a
  *       gate set is wanted, so there each set counts as its mean |κ|: it is measured over set boundaries.</li>
@@ -125,13 +128,7 @@ public final class FlowScore {
     public static FlowScore of(Skeleton sk, DropPlan drops) {
         RideLine line = drops.ride();
         BoatLine.Result res = BoatLine.run(line.segs());
-        Mark[] marks = new Mark[line.parts.size()];
-        for (int i = 0; i < marks.length; i++) {
-            RideLine.Part p = line.parts.get(i);
-            Skeleton.Role role = sk.tags.get(p.element()).role();
-            marks[i] = p.gate() ? Mark.GATE : role == Skeleton.Role.PIT ? Mark.PIT
-                    : role == Skeleton.Role.HAIRPIN ? Mark.HAIRPIN : role.link() ? Mark.LINK : Mark.NONE;
-        }
+        Mark[] marks = marks(sk, line);
         List<Double> gates = new ArrayList<>();
         for (Skeleton.GateSet g : sk.gates) {
             for (double a : g.at()) {
@@ -139,6 +136,31 @@ public final class FlowScore {
             }
         }
         return of(line, res, marks, sk.tier, gates, drops);
+    }
+
+    /** Each part of {@code line} marked: a gate's, the pit's, a hairpin's, another link's, or none. */
+    static Mark[] marks(Skeleton sk, RideLine line) {
+        Mark[] marks = new Mark[line.parts.size()];
+        for (int i = 0; i < marks.length; i++) {
+            RideLine.Part p = line.parts.get(i);
+            Skeleton.Role role = sk.tags.get(p.element()).role();
+            marks[i] = p.gate() ? Mark.GATE : role == Skeleton.Role.PIT ? Mark.PIT
+                    : role == Skeleton.Role.HAIRPIN ? Mark.HAIRPIN : role.link() ? Mark.LINK : Mark.NONE;
+        }
+        return marks;
+    }
+
+    /** For each lip of {@code drops} in order, whether F-F counts it a brake drop (or one on a long straight). */
+    static boolean[] braking(Skeleton sk, DropPlan drops) {
+        RideLine line = drops.ride();
+        BoatLine.Result res = BoatLine.run(line.segs());
+        Mark[] marks = marks(sk, line);
+        boolean[] out = new boolean[line.lips.size()];
+        for (int k = 0; k < out.length; k++) {
+            RideLine.Lip l = line.lips.get(k);
+            out[k] = onLongStraight(line.parts, l.s()) || brakes(line, res, marks, l, k, drops);
+        }
+        return out;
     }
 
     /**
@@ -189,9 +211,13 @@ public final class FlowScore {
             }
             double vc = res.corner()[i];
             double v = res.entry()[i];
-            arcLen += p.len();
-            if (v <= 1.1 * vc + 1e-12) {
-                carried += p.len();
+            // a hairpin link is a planned brake (F-K's lip rule judges it): no legal brake drop brings a boat
+            // under 1.1 v_c of an R 30-55 turn, its landing strip rebuilds the speed, so F-C reads the rest
+            if (marks[i] != Mark.HAIRPIN) {
+                arcLen += p.len();
+                if (v <= 1.1 * vc + 1e-12) {
+                    carried += p.len();
+                }
             }
             if (p.gate() || v <= 1.2 * vc) {
                 continue;

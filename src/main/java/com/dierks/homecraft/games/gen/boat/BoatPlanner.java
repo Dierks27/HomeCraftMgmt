@@ -419,6 +419,18 @@ public final class BoatPlanner implements Planner {
         return m.finished(m.work, TRIES);
     }
 
+    /**
+     * The model time T_m, in milliseconds, of the boat layout a tag names: what F-T and Race Night's
+     * windows read (red-team F04). An algo-4 tag's {@code refMs} is the star reference, 4/5 of T_m rounded
+     * up to 100 ms, so T_m is {@code refMs * 5 / 4} exactly; an older tag's reference is its own time.
+     */
+    public static long modelMs(GenTag tag) {
+        if (tag == null) {
+            return 0;
+        }
+        return tag.algo() >= ALGO ? tag.refMs() * 5 / 4 : tag.refMs();
+    }
+
     /** Whether {@code half} is Mountain Run v2's (§4.1): exactly 480 x 176 x 640. */
     public static boolean mountain(Box half) {
         return half.sizeX() == MountainPlanner.SIZE_X && half.sizeY() == MountainPlanner.SIZE_Y

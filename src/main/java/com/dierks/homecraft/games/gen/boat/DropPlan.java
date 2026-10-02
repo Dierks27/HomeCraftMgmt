@@ -58,6 +58,8 @@ public final class DropPlan {
     /** A checkpoint's centre keeps this far from a lip cell and a zone cell (V6), and the legs' bound with a margin. */
     static final double CLEAR = 3;
     static final double LEG = DownhillValidator.MAX_LEG;
+    /** An upgrade to a 2-block drop may move its lip this far along its straight. */
+    static final double UPGRADE_SHIFT = 6;
     /** What whole blocks and half-block checkpoint places add to a leg across a drop. */
     static final double ROUNDING = 0.25;
     /** A neck: from this far before a lip to this far after it, with tapers of {@link #NECK_TAPER} either side. */
@@ -246,6 +248,7 @@ public final class DropPlan {
             fill();
             downgrade();
             upgrade();
+            share();
             DropPlan p = new DropPlan(sk, lips, blue);
             int descent = p.descent();
             if (lips.size() < tier.dropsMin - SHORT_BY || lips.size() > tier.dropsMax || descent < tier.descentMin
@@ -414,7 +417,7 @@ public final class DropPlan {
                     if (a > b || a > far + LEG) {
                         return false;
                     }
-                    far = a + 2 * c <= b ? b : Math.min(b, far + LEG);
+                    far = a + spotAt(a) + c + 0.75 <= b ? b : Math.min(b, far + LEG);
                 }
                 prevEnd = le;
             }
@@ -574,7 +577,10 @@ public final class DropPlan {
 
         boolean stair(Run run, int steps, int d) {
             double w = width(run.s0() + 1, d);
-            double gap = BoatEnvelope.zone(d) + LIP_GAP + 1;
+            // 2-block steps stand far enough apart for two checkpoints between them (chains' walk)
+            double mid = (run.s0() + run.s1()) / 2;
+            double gap = d >= 2 ? Math.max(BoatEnvelope.zone(d) + LIP_GAP + 1, BoatEnvelope.zone(d) + 1.5 + CLEAR
+                    + ROUNDING + spotAt(mid) + 2 * before(mid, d) + 1.25) : BoatEnvelope.zone(d) + LIP_GAP + 1;
             double first = run.s0() + MountainTier.runUp(w) + 2;
             double need = first + gap * (steps - 1) + MountainTier.landing(d, false);
             if (need > run.s1()) {
@@ -870,7 +876,12 @@ public final class DropPlan {
         boolean handOn(double qs, double qc, double qEnd, double s, double c) {
             double a = qEnd + CLEAR + ROUNDING;
             double b = s - c;
-            return a + 2 * c <= b || b <= qs - qc + LEG;
+            return a + spotAt(a) + c + 0.75 <= b || b <= qs - qc + LEG;
+        }
+
+        /** A checkpoint's radius {@code s} along on the lane's own width (no neck). */
+        double spotAt(double s) {
+            return MountainTier.spot(sk.width(s)) + (axis(s) ? 0 : RasterV4.ARC_SPOT);
         }
 
         /** How far {@code s} is from its nearest other lip (capped). */
@@ -939,9 +950,17 @@ public final class DropPlan {
                     continue;
                 }
                 remove(i);
-                if (ok(d.s(), 2)) {
-                    add(d.s(), 2, d.kind());
-                } else {
+                // in place, or shifted a little along its straight
+                boolean done = false;
+                for (double t = 0; t <= UPGRADE_SHIFT && !done; t += 0.5) {
+                    for (double at : t == 0 ? new double[]{d.s()} : new double[]{d.s() - t, d.s() + t}) {
+                        if (!done && ok(at, 2)) {
+                            add(at, 2, d.kind());
+                            done = true;
+                        }
+                    }
+                }
+                if (!done) {
                     add(d.s(), d.drop(), d.kind());
                 }
             }
@@ -972,6 +991,39 @@ public final class DropPlan {
                 Drop d = lips.get(pick);
                 remove(pick);
                 add(d.s(), 1, d.kind());
+            }
+        }
+
+        /**
+         * F-F's brake share: while fewer than 80% of the lips brake (or stand on a long straight), drop the
+         * plainest lip that doesn't, as long as the count and the descent stay in the tier's range.
+         */
+        void share() {
+            for (int guard = 0; guard < lips.size(); guard++) {
+                boolean[] brake = FlowScore.braking(sk, new DropPlan(sk, lips, blue));
+                int n = brake.length;
+                int braking = 0;
+                for (boolean b : brake) {
+                    braking += b ? 1 : 0;
+                }
+                if (n != lips.size() || braking >= 0.8 * n - 1e-9 || n - 1 < tier.dropsMin - SHORT_BY) {
+                    return;
+                }
+                int pick = -1;
+                for (int i = 0; i < n; i++) {
+                    Drop d = lips.get(i);
+                    if (brake[i] || d.kind() == Kind.FINAL || descentNow() - d.drop() < tier.descentMin) {
+                        continue;
+                    }
+                    if (pick < 0 || d.drop() < lips.get(pick).drop()
+                            || (d.drop() == lips.get(pick).drop() && rank(d.kind()) > rank(lips.get(pick).kind()))) {
+                        pick = i;
+                    }
+                }
+                if (pick < 0) {
+                    return;
+                }
+                remove(pick);
             }
         }
 

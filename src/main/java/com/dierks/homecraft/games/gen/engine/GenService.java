@@ -28,6 +28,7 @@ import com.dierks.homecraft.games.gen.api.SignText;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.api.Stars;
 import com.dierks.homecraft.games.gen.boat.BoatPlanner;
+import com.dierks.homecraft.games.gen.boat.BoatStyle;
 import com.dierks.homecraft.games.gen.dropper.DropRules;
 import com.dierks.homecraft.games.gen.dropper.DropperPlanner;
 import com.dierks.homecraft.games.gen.golf.GolfPlanner;
@@ -1090,7 +1091,23 @@ public final class GenService implements GeneratedCourses, GenOps {
         GenScheduler.Choice chosen = chosenNow(s); // WP-ADM: the next set's pick, once it has come
         return new GenScheduler.SlotView(s.def.id(), s.on() && p != null, job != null, s.live, !s.healFailed,
                 s.liveMix, s.mix, s.reroll, chosen != null ? chosen.pin() : s.pin, p == null ? 0 : p.algo(), s.triesDay,
-                s.tries, s.lastTryAt, s.oldDirty, secret(), scheduleSince);
+                s.tries, s.lastTryAt, s.oldDirty, secret(), scheduleSince, style(s));
+    }
+
+    /**
+     * The Mountain Run v2 style a new layout of {@code s} must have ({@link StyleSeed#want}): Ice Boat's
+     * configured {@code style}, or the Winding Road while Race Night is on; {@code null} for the edition's own
+     * seed (every other slot, an Ice Boat still in the 0.36 box, a random week with no Race Night).
+     */
+    private BoatStyle style(SlotState s) {
+        DailySettings.SlotConfig c = s.classic ? null : host.settings().slot(s.def.id());
+        boolean night;
+        try {
+            night = host.raceNightOn();
+        } catch (RuntimeException e) {
+            night = false;
+        }
+        return StyleSeed.want(s.def, s.half('A'), c == null ? null : c.style(), night);
     }
 
     /** The edition a slot should show now ({@link GenScheduler#target}). */
@@ -4065,6 +4082,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         long day = t.start();
         int cadence = t.cadence();
         long seed;
+        BoatStyle want = style(s); // a Mountain Run v2 week's seed is its first of the wanted style, as a build's
         if (arg != null && (arg.equalsIgnoreCase("next") || arg.equalsIgnoreCase("tomorrow"))) {
             day = ed.editionStart(t.endsAt());
             cadence = ed.cadenceDays();
@@ -4072,7 +4090,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 report.accept("&cThe seed secret can't be read right now.");
                 return;
             }
-            seed = GenSeed.seed(secret, cadence, day, s.def.id(), 0);
+            seed = StyleSeed.seed(secret, cadence, day, s.def.id(), 0, want);
         } else if (arg != null) {
             Long parsed = GenSeed.parse(arg);
             if (parsed == null) {
@@ -4085,7 +4103,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 report.accept("&cThe seed secret can't be read right now.");
                 return;
             }
-            seed = GenSeed.seed(secret, cadence, day, s.def.id(), s.reroll);
+            seed = StyleSeed.seed(secret, cadence, day, s.def.id(), s.reroll, want);
         }
         char which = s.idleHalf();
         Box half = s.half(which);
@@ -4119,8 +4137,19 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     @Override
     public void preview(String slotId, String seedText, Consumer<String> report) {
+        preview(slotId, seedText, null, report);
+    }
+
+    /**
+     * {@link #preview(String, String, Consumer)} of the style {@code style} ({@code style:road|slalom}, Ice Boat
+     * only): with no seed, the first of this set's next-reroll seeds of that style, by the same search a
+     * build makes; {@code null} for the style a build would pick (Ice Boat's {@code style}, or the Winding
+     * Road while Race Night is on). A typed seed is used as given.
+     */
+    @Override
+    public void preview(String slotId, String seedText, BoatStyle style, Consumer<String> report) {
         SlotState s = slots.get(slotId);
-        if (!readyToTry(s, report)) { // CV final gate: a slot that is off can be previewed before it is switched on
+        if (!styleFits(s, style, report) || !readyToTry(s, report)) { // CV final gate: an off slot can be previewed
             return;
         }
         GenScheduler.Target t = target(s);
@@ -4134,7 +4163,8 @@ public final class GenService implements GeneratedCourses, GenOps {
                 report.accept("&cThe seed secret can't be read right now.");
                 return;
             }
-            seed = GenSeed.seed(secret, t.cadence(), t.start(), s.def.id(), s.reroll + 1);
+            seed = StyleSeed.seed(secret, t.cadence(), t.start(), s.def.id(), s.reroll + 1,
+                    style != null ? style : style(s));
         }
         Job j = new Job(Kind.PREVIEW, s, report);
         j.day = t.start();
@@ -4144,7 +4174,40 @@ public final class GenService implements GeneratedCourses, GenOps {
         j.mix = s.mix;
         queue.add(j);
         report.accept("&7A preview of " + s.def.name() + " (seed " + GenSeed.hex(seed) + ") is on its way into half "
-                + s.idleHalf() + "." + choiceStays(s) + offNote(s));
+                + s.idleHalf() + "." + styleNote(s, seed, style) + choiceStays(s) + offNote(s));
+    }
+
+    /**
+     * Whether {@code style:} can be asked of {@code s}: none asked, or Ice Boat in a Mountain Run v2 area. Says
+     * why not otherwise.
+     */
+    private boolean styleFits(SlotState s, BoatStyle style, Consumer<String> report) {
+        if (style == null) {
+            return true;
+        }
+        if (s == null || !Slots.BOAT.equals(s.def.generator())) {
+            report.accept("&cOnly Ice Boat has styles (style:road or style:slalom).");
+            return false;
+        }
+        if (!BoatPlanner.mountain(s.half('A'))) {
+            report.accept("&c" + s.def.name() + " is still in its old 128-block area, where it makes the spiral"
+                    + " Mountain Run: that has no styles.");
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * " It is the Winding Road." after a Mountain Run v2 preview's line (its style, read off the seed), with a
+     * note when a typed seed isn't the {@code asked} style; {@code ""} for any other slot.
+     */
+    private String styleNote(SlotState s, long seed, BoatStyle asked) {
+        if (!Slots.BOAT.equals(s.def.generator()) || !BoatPlanner.mountain(s.half('A'))) {
+            return "";
+        }
+        BoatStyle got = BoatStyle.of(seed);
+        return " &7It is " + StyleSeed.words(got) + (asked != null && asked != got ? " (that seed is used as typed,"
+                + " so it isn't " + StyleSeed.words(asked) + ")." : ".");
     }
 
     /** WP-ADM: what a preview, reroll or promote adds while a choice waits: it stays chosen. */
@@ -4478,8 +4541,18 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     @Override
     public void previewNext(String slotId, String seedText, Consumer<String> report) {
+        previewNext(slotId, seedText, null, report);
+    }
+
+    /**
+     * {@link #previewNext(String, String, Consumer)} of the style {@code style} ({@code style:road|slalom}, Ice
+     * Boat only): a random candidate of that style ({@code null}: of the style a build would pick). A typed
+     * seed is used as given.
+     */
+    @Override
+    public void previewNext(String slotId, String seedText, BoatStyle style, Consumer<String> report) {
         SlotState s = slots.get(slotId);
-        if (!readyToTry(s, report)) { // CV final gate: a slot that is off can be previewed before it is switched on
+        if (!styleFits(s, style, report) || !readyToTry(s, report)) { // CV final gate: an off slot can be previewed
             return;
         }
         Long seed = seedText == null ? null : GenSeed.parse(seedText);
@@ -4487,8 +4560,9 @@ public final class GenService implements GeneratedCourses, GenOps {
             report.accept("&cA seed is up to 16 hex digits, like 3f2a91c07d1e55b0.");
             return;
         }
-        if (seed == null) {
-            seed = java.util.concurrent.ThreadLocalRandom.current().nextLong(); // a random candidate
+        if (seed == null) { // a random candidate (of the style the next build would have, or the one asked)
+            seed = StyleSeed.random(java.util.concurrent.ThreadLocalRandom.current()::nextLong,
+                    style != null ? style : style(s));
         }
         NextSet n = nextSet(s);
         Job j = new Job(Kind.PREVIEW, s, report);
@@ -4500,6 +4574,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         queue.add(j);
         report.accept("&7A preview of " + s.def.name() + " for " + editionName(n.cadence(), n.day()) + " (" + s.mix
                 + ", seed " + GenSeed.hex(seed) + ") is on its way into half " + s.idleHalf() + "."
+                + styleNote(s, seed, style)
                 + choiceStays(s) // fix2-D (D6): building another candidate doesn't replace the pick
                 + offNote(s));
     }

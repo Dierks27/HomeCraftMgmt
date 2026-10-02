@@ -377,6 +377,16 @@ public final class PartyRaces {
      * Why a party race can't be on {@code c} at all: the course is closed, or it is a Dropper
      * ({@link #offered}); {@code null} when it can.
      */
+    /**
+     * The heads-up a party race on a Mountain Run v2 Slalom gets (red-team F05: Race Night races only the
+     * Winding Road; friends may still race the Slalom): its gates are narrow, so boats bump. {@code null} for
+     * any other course.
+     */
+    static String slalomNote(Course c) {
+        return BoatHype.slalom(c) ? "&eHeads up: &7" + c.name() + " is the Slalom this week. The gates are narrow and"
+                + " boats bump, so give each other room!" : null;
+    }
+
     static String courseProblem(Course c) {
         if (c == null) {
             return "That course is closed right now.";
@@ -479,6 +489,10 @@ public final class PartyRaces {
         results.remove(lobby.id());
         say(lobby, "&dRace on " + base.name() + "! &7" + free.size() + " racers"
                 + (warm > 0 ? " - warm up first (" + Warmup.clock(warm) + ")" : "") + ". Free, just for fun.");
+        String slalom = slalomNote(base);
+        if (slalom != null) {
+            say(lobby, slalom); // MOUNTAIN-V2-SPEC §5.1 (F05): racing is the Winding Road; a Slalom race is allowed
+        }
         for (int i = 0; i < free.size(); i++) {
             Player p = free.get(i);
             Course.Spot spot = grid.spot(i);

@@ -8,6 +8,7 @@ import com.dierks.homecraft.games.gen.api.Edition;
 import com.dierks.homecraft.games.gen.api.GenCopy;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.boat.BoatStyle;
 import com.dierks.homecraft.games.gen.engine.KeepArea;
 import com.dierks.homecraft.games.gen.engine.Regions;
 
@@ -81,6 +82,8 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
 
     /** The tiers a star factor is set for. */
     public static final List<String> TIERS = Slots.TIERS;
+    /** Ice Boat's {@code style} word for "whichever the week's seed makes" (shipped). */
+    public static final String RANDOM = "random";
 
     /** The leaves under {@code games.fresh}, in config order. */
     public static final List<String> KEYS = keys();
@@ -325,9 +328,15 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
      *                   {@code null}: config.yml is still below the revision that moves this area (the update
      *                   couldn't save it), so the spot it holds is an older version's. Never {@code null} with
      *                   {@code placed} true.
+     * @param style      Ice Boat only ({@code style}: {@code random}, {@code road} or {@code slalom}): the Mountain
+     *                   Run v2 style every week's course must have, or {@code null} for {@code random} (shipped:
+     *                   the week's own seed, or the Winding Road every week while Race Night is on,
+     *                   MOUNTAIN-V2-SPEC §5.1 with red-team F05). The engine picks the seed by it; the planner
+     *                   never reads it (the style is a function of the seed). Always {@code null} for every
+     *                   other slot.
      */
     public record SlotConfig(String id, boolean enabled, String tierOrMix, int[] origin, int dailyClear,
-                             int halfGap, boolean placed, String held) {
+                             int halfGap, boolean placed, String held, BoatStyle style) {
 
         public SlotConfig {
             origin = origin == null ? new int[3] : origin.clone();
@@ -340,6 +349,12 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             if (placed) {
                 held = null;
             }
+        }
+
+        /** A slot config with no style of its own ({@code random}: the shape before Mountain Run v2). */
+        public SlotConfig(String id, boolean enabled, String tierOrMix, int[] origin, int dailyClear, int halfGap,
+                          boolean placed, String held) {
+            this(id, enabled, tierOrMix, origin, dailyClear, halfGap, placed, held, null);
         }
 
         /** A slot config places, or (not {@code placed}) can't read the place of. */
@@ -370,23 +385,23 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         }
 
         public SlotConfig withEnabled(boolean on) {
-            return new SlotConfig(id, on, tierOrMix, origin, dailyClear, halfGap, placed, held);
+            return new SlotConfig(id, on, tierOrMix, origin, dailyClear, halfGap, placed, held, style);
         }
 
         public SlotConfig withOrigin(int[] o) {
-            return new SlotConfig(id, enabled, tierOrMix, o, dailyClear, halfGap, placed, held);
+            return new SlotConfig(id, enabled, tierOrMix, o, dailyClear, halfGap, placed, held, style);
         }
 
         public SlotConfig withTierOrMix(String t) {
-            return new SlotConfig(id, enabled, t, origin, dailyClear, halfGap, placed, held);
+            return new SlotConfig(id, enabled, t, origin, dailyClear, halfGap, placed, held, style);
         }
 
         public SlotConfig withDailyClear(int tokens) {
-            return new SlotConfig(id, enabled, tierOrMix, origin, tokens, halfGap, placed, held);
+            return new SlotConfig(id, enabled, tierOrMix, origin, tokens, halfGap, placed, held, style);
         }
 
         public SlotConfig withHalfGap(int gap) {
-            return new SlotConfig(id, enabled, tierOrMix, origin, dailyClear, gap, placed, held);
+            return new SlotConfig(id, enabled, tierOrMix, origin, dailyClear, gap, placed, held, style);
         }
 
         /**
@@ -394,7 +409,17 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
          * half_gap can't be read.
          */
         public SlotConfig unplaced() {
-            return new SlotConfig(id, false, tierOrMix, origin, dailyClear, halfGap, false);
+            return new SlotConfig(id, false, tierOrMix, origin, dailyClear, halfGap, false, null, style);
+        }
+
+        /** The same slot with Ice Boat's {@code style} ({@code null}: random). */
+        public SlotConfig withStyle(BoatStyle s) {
+            return new SlotConfig(id, enabled, tierOrMix, origin, dailyClear, halfGap, placed, held, s);
+        }
+
+        /** The style as config writes it: {@code random}, {@code road} or {@code slalom}. */
+        public String styleWord() {
+            return style == null ? RANDOM : style.id();
         }
 
         /**
@@ -404,7 +429,7 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
          * the file is saved at that revision.
          */
         public SlotConfig held(String why) {
-            return new SlotConfig(id, false, tierOrMix, origin, dailyClear, halfGap, false, why);
+            return new SlotConfig(id, false, tierOrMix, origin, dailyClear, halfGap, false, why, style);
         }
 
         /** The shipped settings of a slot (at the shipped, weekly, cadence). */
@@ -417,20 +442,22 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         public boolean equals(Object o) {
             return o instanceof SlotConfig s && id.equals(s.id) && enabled == s.enabled
                     && tierOrMix.equals(s.tierOrMix) && Arrays.equals(origin, s.origin) && dailyClear == s.dailyClear
-                    && halfGap == s.halfGap && placed == s.placed && java.util.Objects.equals(held, s.held);
+                    && halfGap == s.halfGap && placed == s.placed && java.util.Objects.equals(held, s.held)
+                    && style == s.style;
         }
 
         @Override
         public int hashCode() {
-            return (((id.hashCode() * 31 + Arrays.hashCode(origin)) * 31 + tierOrMix.hashCode() + dailyClear
-                    + (enabled ? 1 : 0)) * 31 + halfGap) * 2 + (placed ? 1 : 0);
+            return ((((id.hashCode() * 31 + Arrays.hashCode(origin)) * 31 + tierOrMix.hashCode() + dailyClear
+                    + (enabled ? 1 : 0)) * 31 + halfGap) * 2 + (placed ? 1 : 0)) * 3
+                    + (style == null ? 0 : style.ordinal() + 1);
         }
 
         @Override
         public String toString() {
             return "SlotConfig[" + id + ", " + (enabled ? "on" : "off") + ", " + tierOrMix + ", "
                     + (placed ? Arrays.toString(origin) + ", gap " + halfGap : held != null ? "held: " + held
-                    : "not placed") + ", " + dailyClear + "]";
+                    : "not placed") + ", " + dailyClear + (style == null ? "" : ", " + style.id()) + "]";
         }
     }
 
@@ -897,6 +924,37 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
      * course there and leave the built one standing.
      */
     private static SlotConfig slot(GamesConfig.Node slots, Slots.Def def, SlotConfig d) {
+        SlotConfig c = place(slots, def, d);
+        return Slots.BOAT.equals(def.generator()) ? c.withStyle(style(slots, def, d.style())) : c;
+    }
+
+    /**
+     * Ice Boat's {@code style} under {@code slots.<id>} (MOUNTAIN-V2-SPEC §5.1): {@code random} (shipped:
+     * {@code null}), {@code road} or {@code slalom}, any case. Anything else is read as {@code random} with
+     * one WARN naming the key: a style only picks which seed a week uses, so a typo never closes the course.
+     */
+    private static BoatStyle style(GamesConfig.Node slots, Slots.Def def, BoatStyle d) {
+        if (!(slots.raw(def.id()) instanceof Map<?, ?>)) {
+            return d;
+        }
+        GamesConfig.Node n = slots.child(def.id());
+        Object raw = n.raw("style");
+        if (raw == null) {
+            return d;
+        }
+        String word = raw instanceof Map<?, ?> || raw instanceof List<?> ? null : String.valueOf(raw).trim();
+        if (word != null && word.equalsIgnoreCase(RANDOM)) {
+            return null;
+        }
+        BoatStyle s = BoatStyle.byWord(word);
+        if (s == null) {
+            n.warn(n.key("style") + " should be random, road or slalom, not \"" + raw + "\" - using random");
+        }
+        return s;
+    }
+
+    /** {@link #slot}'s place, switch and tier or mix (everything but Ice Boat's style). */
+    private static SlotConfig place(GamesConfig.Node slots, Slots.Def def, SlotConfig d) {
         Object raw = slots.raw(def.id());
         String key = slots.key(def.id());
         if (raw == null) {
@@ -1035,6 +1093,9 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             String p = "slots." + d.id() + ".";
             out.add(p + "enabled");
             out.add(p + (d.mixed() ? "mix" : "tier"));
+            if (Slots.BOAT.equals(d.generator())) {
+                out.add(p + "style"); // Ice Boat's Mountain Run v2 style (random, road or slalom)
+            }
             out.add(p + "origin");
         }
         out.addAll(List.of("archive.keep", "feed_history", "classics.days"));

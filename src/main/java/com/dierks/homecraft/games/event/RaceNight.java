@@ -11,7 +11,12 @@ import com.dierks.homecraft.games.GameSpec;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.RestartHold;
 import com.dierks.homecraft.games.RewardKind;
+import com.dierks.homecraft.games.gen.DailyCourses;
+import com.dierks.homecraft.games.gen.DailySettings;
 import com.dierks.homecraft.games.gen.NewCoursesNudge;
+import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.boat.BoatStyle;
+import com.dierks.homecraft.games.trial.BoatHype;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.TimeTrials;
 import com.dierks.homecraft.games.trial.TrackChunks;
@@ -453,7 +458,7 @@ public final class RaceNight implements Game {
         }
         trackFailedAt.remove(o.id());
         NightRules rules = NightRules.of(s, t.races(), s.laps(), false,
-                Math.min(s.maxRacers(), t.track().grid().size()));
+                Math.min(s.maxRacers(), t.track().grid().size()), BoatHype.modelMs(t.track().base())); // F03
         EventPlan plan = new EventPlan(o.id(), t.track().base().id(), o.joinAt(), o.startsAt(), rules, false, "");
         begin(plan, t.track(), EventMachine.State.scheduled());
     }
@@ -553,11 +558,17 @@ public final class RaceNight implements Game {
         return entries;
     }
 
-    /** What the schedule's nights must fit around now: the restarts, the Fresh rebuild, a track, the skips. */
+    /**
+     * What the schedule's nights must fit around now: the restarts, the Fresh rebuild, a track, the skips. A
+     * night's longest is worked out with the candidate tracks' effective windows (red-team F03: a Mountain Run
+     * v2's scale with its model time, the longest of the candidates), so the restart fit and the rebuild guard
+     * see the real length.
+     */
     EventSchedule.Fit fit() {
         RaceNightSettings s = settings();
         String problem = null;
         boolean fresh = false;
+        long model = 0;
         TimeTrials t = trials();
         if (s.autoCourse()) {
             List<String> ids = tracks.candidates();
@@ -567,14 +578,16 @@ public final class RaceNight implements Game {
             for (String id : ids) {
                 Course c = t == null ? null : t.course(id);
                 fresh |= c != null && c.generated();
+                model = Math.max(model, BoatHype.modelMs(c));
             }
         } else {
             Course c = t == null ? null : t.openCourse(s.course());
             problem = c == null ? "the course " + s.course() + " isn't open" : RaceTrack.raceProblem(c, s.minRacers(),
                     s.minRacers()); // the grid itself is checked when the night is made
             fresh = c != null && c.generated();
+            model = BoatHype.modelMs(c);
         }
-        NightRules rules = NightRules.of(s, s.races(), s.laps(), false, s.maxRacers());
+        NightRules rules = NightRules.of(s, s.races(), s.laps(), false, s.maxRacers(), model);
         LocalTime rebuild = fresh ? DailyLookup.edition(games()).rollover() : null;
         return new EventSchedule.Fit(zone(), s.joinMinutes(), rules.worstMillis(), games().restartHold(), rebuild,
                 problem, skipped());
@@ -1001,7 +1014,8 @@ public final class RaceNight implements Game {
         int wantLaps = laps == null ? s.laps() : laps;
         String lapsProblem = t.track() == null ? null : RaceTrack.lapsProblem(t.track().base(), wantLaps);
         NightRules rules = NightRules.of(s, t.track() == null ? wantRaces : t.races(), wantLaps, fun,
-                t.track() == null ? s.maxRacers() : Math.min(s.maxRacers(), t.track().grid().size()));
+                t.track() == null ? s.maxRacers() : Math.min(s.maxRacers(), t.track().grid().size()),
+                t.track() == null ? 0 : BoatHype.modelMs(t.track().base())); // F03: the track's own windows
         EventSchedule.Occurrence next = next();
         String clash = next != null && next.joinAt() < startsAt + rules.worstMillis()
                 && next.startsAt() + rules.worstMillis() > joinAt
@@ -1193,12 +1207,21 @@ public final class RaceNight implements Game {
      * ({@code null} while it isn't picked), the laps it will be raced over, and whether it is the Ice Boat
      * Mountain Run, a downhill sprint ("3 downhill races", COURSE-VARIETY-SPEC §5.2).
      */
-    record Upcoming(String track, int laps, boolean downhill) {
+    record Upcoming(String track, int laps, boolean downhill, String where) {
+
+        Upcoming {
+            where = where == null ? "" : where;
+        }
+
+        /** A track with no style to name ({@link EventCopy#where} {@code ""}). */
+        Upcoming(String track, int laps, boolean downhill) {
+            this(track, laps, downhill, "");
+        }
 
         /** {@code c} ({@code null}: not picked yet) for a night of {@code laps} laps. */
         static Upcoming of(Course c, int laps) {
             return c == null ? new Upcoming(null, laps, false)
-                    : new Upcoming(c.name(), RaceTrack.laps(c, laps), EventCopy.downhill(c));
+                    : new Upcoming(c.name(), RaceTrack.laps(c, laps), EventCopy.downhill(c), EventCopy.where(c));
         }
     }
 
@@ -1214,6 +1237,7 @@ public final class RaceNight implements Game {
         int races = s.races();
         int laps = s.laps();
         boolean downhill = false;
+        String where = "";
         List<Integer> prizes = s.prizes();
         int finisher = s.finisherPrize();
         boolean prizeNight = s.prizeEventsPerWeek() > prizedThisWeek();
@@ -1227,6 +1251,7 @@ public final class RaceNight implements Game {
             races = n.plan().races();
             laps = n.laps();
             downhill = EventCopy.downhill(n.track().base());
+            where = EventCopy.where(n.track().base());
             prizes = n.plan().rules().prizes();
             finisher = n.plan().rules().finisherPrize();
             prizeNight = n.prizeNight() && (n.started() >= 0 || prizeNight);
@@ -1253,6 +1278,7 @@ public final class RaceNight implements Game {
                 track = u.track();
                 laps = u.laps();
                 downhill = u.downhill();
+                where = u.where();
                 opensAt = EventCopy.clock(o.joinAt(), zone) + " (" + EventCopy.when(o.startsAt(), zone) + ")";
                 join = RaceNightMenu.Join.SOON;
             }
@@ -1263,7 +1289,7 @@ public final class RaceNight implements Game {
         return new RaceNightMenu.View(when, state, track, races, laps, prizes, finisher, prizeNight, join, racers, max,
                 opensAt, watchers.watching(id), lastRow == null ? null : winner(lastRow.id()),
                 lastRow == null ? null : EventCopy.nightBoard(lastRow.id()), seasonName, board, seasonPoints(id),
-                newsOn(id), downhill);
+                newsOn(id), downhill, where);
     }
 
     /** Race Night's {@code events} section of the website feed (§A.7). */
@@ -1349,11 +1375,20 @@ public final class RaceNight implements Game {
             Tracks.Found f = tracks.find(id, s.races(), s.minRacers(), s.maxRacers());
             if (f.problem() != null) {
                 out.add(new Check("Race Night can't race on " + id + ": " + f.problem(),
-                        "/hcm games event grid " + id + " auto, or pick another course"));
+                        f.problem().contains(RaceTrack.SLALOM) ? "/hcm games gen reroll " + id + " confirm (with"
+                                + " games.fresh.slots." + id + ".style random or road; unpin it first if it is pinned)"
+                                : "/hcm games event grid " + id + " auto, or pick another course"));
                 continue;
             }
             Course c = f.track().base();
             out.add(new Check("Race Night can race on " + c.name() + ": " + f.track().grid().size() + " grid spots", null));
+            String style = EventCopy.where(c);
+            if (!style.isEmpty()) {
+                out.add(new Check(c.name() + " is a Mountain Run v2: " + EventCopy.format(s.races(), s.laps(), c)
+                        + ", each race's finish window " + NightRules.finishWindow(s.finishWindowSeconds(),
+                        BoatHype.modelMs(c)) + " s and at most " + NightRules.maxRace(s.maxRaceMinutes(),
+                        BoatHype.modelMs(c)) + " minutes (they grow with the track)", null));
+            }
             if (f.track().stand() == null && s.races() > 1) {
                 out.add(new Check(c.name() + " has no viewing stand, so nights there are 1 race",
                         c.generated() ? "it comes with the next Ice Boat layout" : "/hcm games event stand " + c.id() + " set"));
@@ -1361,7 +1396,21 @@ public final class RaceNight implements Game {
                 out.add(new Check(c.name() + "'s viewing stand is in " + c.world() + ", with the course", null));
             }
         }
+        DailySettings.SlotConfig boat = freshBoat();
+        if (boat != null && boat.style() == BoatStyle.SLALOM) {
+            out.add(new Check("Ice Boat is set to style: slalom, and Race Night races only on the Winding Road, so"
+                    + " no night is held on it", "set games.fresh.slots." + boat.id() + ".style to random or road"));
+        }
         return out;
+    }
+
+    /** Fresh Courses' Ice Boat settings ({@code games.fresh.slots.fresh_boat}), or {@code null} when unreadable. */
+    private DailySettings.SlotConfig freshBoat() {
+        try {
+            return games().settings(DailyCourses.SPEC).slot(Slots.ICE_BOAT.id());
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     /** Prize nights used this week. */

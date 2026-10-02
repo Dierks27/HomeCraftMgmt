@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.gen.admin;
 
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.boat.BoatStyle;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.Tier;
 import com.dierks.homecraft.games.trial.TrialKind;
@@ -61,6 +62,16 @@ class GenAdminTest {
         @Override
         public void preview(String slot, String seed, Consumer<String> report) {
             calls.add("preview " + slot + " " + seed);
+        }
+
+        @Override
+        public void preview(String slot, String seed, BoatStyle style, Consumer<String> report) {
+            calls.add("preview " + slot + " " + seed + (style == null ? "" : " " + style.id()));
+        }
+
+        @Override
+        public void previewNext(String slot, String seed, BoatStyle style, Consumer<String> report) {
+            calls.add("previewNext " + slot + " " + seed + (style == null ? "" : " " + style.id()));
         }
 
         @Override
@@ -566,6 +577,37 @@ class GenAdminTest {
         assertEquals(List.of("confirm"), admin.tab(console, new String[]{"retry", "fresh_rings", ""}), "then confirm");
         assertTrue(admin.help().stream().anyMatch(l -> l.contains("retry|regenerate <course|all> confirm")),
                 "and a help line: " + admin.help());
+    }
+
+    /** MOUNTAIN-V2-SPEC §5.1: {@code preview fresh_boat [next] [seed] style:road|slalom}, the style anywhere after the course. */
+    @Test
+    void aPreviewOfIceBoatTakesAStyle() {
+        run("preview fresh_boat style:road");
+        run("preview fresh_boat next style:SLALOM");
+        run("preview fresh_boat style:road 3f2a");
+        run("preview fresh_boat next 3f2a style:slalom");
+        run("preview fresh_boat");
+        assertEquals(List.of("preview fresh_boat null road", "previewNext fresh_boat null slalom",
+                "preview fresh_boat 3f2a road", "previewNext fresh_boat 3f2a slalom", "preview fresh_boat null"),
+                ops.calls, "the style goes to the engine with the seed (or none), now or for the next set");
+        ops.calls.clear();
+        run("preview fresh_boat style:fast");
+        assertTrue(heard().contains("A style is style:road (the Winding Road) or style:slalom."), "a bad style: "
+                + heard());
+        run("preview fresh_parkour style:road");
+        assertTrue(heard().contains("Only Ice Boat has styles"), "another course has none: " + heard());
+        run("preview fresh_boat style:road nope");
+        assertTrue(heard().contains("16 hex digits"), "a bad seed is still refused: " + heard());
+        assertTrue(ops.calls.isEmpty(), "none of them reached the engine: " + ops.calls);
+        assertEquals(List.of("next", "style:road", "style:slalom"),
+                admin.tab(console, new String[]{"preview", "fresh_boat", ""}), "tab offers next and the styles");
+        assertEquals(List.of("style:road", "style:slalom"),
+                admin.tab(console, new String[]{"preview", "fresh_boat", "next", ""}), "and the styles after next");
+        assertEquals(List.of("style:slalom"), admin.tab(console, new String[]{"preview", "fresh_boat", "st", "style:s"})
+                .stream().filter(w -> w.startsWith("style:s")).toList(), "matching what is typed");
+        assertEquals(List.of("next"), admin.tab(console, new String[]{"preview", "fresh_parkour", ""}),
+                "another course: next only, as before");
+        assertTrue(admin.help().stream().anyMatch(l -> l.contains("style:road|slalom")), "and a help line");
     }
 
     /** "Like I could do the course preview a week early or whatever and find a good one." */

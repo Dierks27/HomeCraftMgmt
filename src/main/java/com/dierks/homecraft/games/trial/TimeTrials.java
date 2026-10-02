@@ -142,6 +142,10 @@ public final class TimeTrials implements Game {
     static final int COUNTDOWN_TICKS = 60;
     /** The clock on the action bar is redrawn this often. */
     static final int CLOCK_EVERY = 4;
+    /** Ticks a quiet checkpoint's line keeps the action bar before the clock line comes back (1.5 s). */
+    static final int QUIET_HOLD = 30;
+    /** A quiet checkpoint's ping is this loud (a normal one is 0.6). */
+    static final float SOFT_PING = 0.3f;
     /** Two send-backs closer than this are one (a double click, one fall seen twice). */
     static final long RESET_GAP = 10;
     /** A held sneak in a boat sends the run back at most this often. */
@@ -1199,7 +1203,7 @@ public final class TimeTrials implements Game {
         } else if (run.course.kind() == TrialKind.BOAT && now >= run.reseatUntil && !seated(p, run)) {
             sendBack(p, run, RESET_GAP);
         }
-        if (run.phase == TrialRun.Phase.RUNNING && run.ticks % CLOCK_EVERY == 0) {
+        if (run.phase == TrialRun.Phase.RUNNING && run.ticks % CLOCK_EVERY == 0 && run.ticks >= run.barHold) {
             p.sendActionBar(Text.of(run.warmup ? warmups.bar(run, now) // WP-R1 (D3)
                     : run.drop != null ? run.drop.clockLine(System.nanoTime()) : clockLine(run)));
         }
@@ -1313,7 +1317,13 @@ public final class TimeTrials implements Game {
             return;
         }
         Location to = e.getTo();
-        if (advance(p, run, to) && run.course.fallY() != null && to.getY() < run.course.fallY()) {
+        if (!advance(p, run, to)) {
+            return;
+        }
+        // Mountain Run v2: the leg's own floor, a few blocks under the ice (MOUNTAIN-V2-SPEC §12); anything else:
+        // the course's fall height, as before
+        double floor = FairPlay.boatFloor(run.course, run.progress.lastCheckpoint());
+        if (!Double.isNaN(floor) && to.getY() < floor) {
             run.backDue = true;
         }
     }
@@ -1341,8 +1351,21 @@ public final class TimeTrials implements Game {
     private void reached(Player p, TrialRun run, int index) {
         int of = run.course.checkpoints().size();
         String time = TrialText.time(run.elapsedMs(run.progress.times()[index]));
-        title(p, checkpointBig(run.course, index), "&aCheckpoint " + (index + 1) + " of " + of + " &7- " + time, 25);
-        ping(p, 1.4f + 0.4f * (index + 1) / Math.max(1, of));
+        float pitch = 1.4f + 0.4f * (index + 1) / Math.max(1, of);
+        if (BoatHype.loud(run.course, index)) {
+            title(p, checkpointBig(run.course, index), "&aCheckpoint " + (index + 1) + " of " + of + " &7- " + time,
+                    25);
+            ping(p, pitch);
+        } else {
+            // Mountain Run v2's quiet checkpoints (§12): a line on the action bar, held a moment, and a soft ping
+            try {
+                p.sendActionBar(Text.of(BoatHype.quietBar(index, of, time)));
+            } catch (RuntimeException | LinkageError ignored) {
+                // a line is decoration
+            }
+            run.barHold = run.ticks + QUIET_HOLD;
+            ping(p, pitch, SOFT_PING);
+        }
         if (run.course.kind() == TrialKind.ELYTRA) {
             refillRockets(p);
         }
@@ -1620,7 +1643,8 @@ public final class TimeTrials implements Game {
         switch (verdict.kind()) {
             case TEST -> {
                 p.sendMessage(Text.of("&dTest run &7- nothing was recorded. " + (verdict.reason() == null
-                        ? "It would have counted." : "It wouldn't have counted: " + verdict.reason() + ".")));
+                        ? "It would have counted." : "It wouldn't have counted: " + verdict.reason() + ".")
+                        + topLeg(run)));
                 title(p, "&a" + TrialText.time(ms), "&dTest run", 40);
                 sound(() -> Sounds.received(p));
             }
@@ -1647,6 +1671,23 @@ public final class TimeTrials implements Game {
             }
         });
         showResult(id, result, RESULT_TRIES);
+    }
+
+    /**
+     * A Mountain Run v2 test run's physics readout (MOUNTAIN-V2-SPEC §12, §14 R1): " Top leg speed 38 b/s."
+     * ({@link FairPlay#topLegSpeed}); {@code ""} on any other course, whose test summary reads as before.
+     */
+    static String topLeg(TrialRun run) {
+        if (!BoatHype.mountainV2(run.course) || run.progress == null) {
+            return "";
+        }
+        return topLegLine(FairPlay.topLegSpeed(run.course, run.progress.startNanos(), run.progress.times(),
+                run.progress.reachedTargets()));
+    }
+
+    /** " Top leg speed 38 b/s." for {@code speed} blocks a second, rounded. */
+    static String topLegLine(double speed) {
+        return " Top leg speed " + Math.round(speed) + " b/s.";
     }
 
     /**
@@ -2070,8 +2111,13 @@ public final class TimeTrials implements Game {
     }
 
     static void ping(Player p, float pitch) {
+        ping(p, pitch, 0.6f);
+    }
+
+    /** {@link #ping(Player, float)} at {@code volume} (a quiet checkpoint's is {@link #SOFT_PING}). */
+    static void ping(Player p, float pitch, float volume) {
         try {
-            p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.6f, pitch);
+            p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, volume, pitch);
         } catch (RuntimeException | LinkageError ignored) {
             // a sound is decoration
         }

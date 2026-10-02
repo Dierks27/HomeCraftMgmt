@@ -19,6 +19,7 @@ import com.dierks.homecraft.games.arena.FallingFloorsSettings;
 import com.dierks.homecraft.games.clubhouse.Clubhouse;
 import com.dierks.homecraft.games.clubhouse.ClubhouseRegions;
 import com.dierks.homecraft.games.clubhouse.ClubhouseSettings;
+import com.dierks.homecraft.games.event.RaceNight;
 import com.dierks.homecraft.games.gen.admin.GenAdmin;
 import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.Edition;
@@ -505,6 +506,12 @@ public final class DailyCourses implements Game {
         @Override
         public RestartHold restartHold() {
             return games().restartHold();
+        }
+
+        @Override
+        public boolean raceNightOn() {
+            // a random Ice Boat week is the Winding Road while Race Night is on (MOUNTAIN-V2-SPEC §5.1, F05)
+            return games().settings(RaceNight.SPEC).enabled();
         }
 
         @Override

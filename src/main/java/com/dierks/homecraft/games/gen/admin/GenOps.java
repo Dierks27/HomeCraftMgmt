@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.gen.admin;
 
+import com.dierks.homecraft.games.gen.boat.BoatStyle;
 import com.dierks.homecraft.games.trial.Course;
 
 import java.util.List;
@@ -28,6 +29,14 @@ public interface GenOps {
 
     /** Build into the idle half without flipping. */
     void preview(String slot, String seed, Consumer<String> report);
+
+    /**
+     * {@link #preview(String, String, Consumer)} of a Mountain Run v2 style ({@code style:road|slalom}, Ice Boat
+     * only; {@code null}: the style a build would pick). A typed seed is used as given.
+     */
+    default void preview(String slot, String seed, BoatStyle style, Consumer<String> report) {
+        preview(slot, seed, report);
+    }
 
     /** The preview becomes the current edition's layout. */
     void promote(String slot, boolean confirm, Consumer<String> report);
@@ -155,6 +164,14 @@ public interface GenOps {
     /** Build a candidate for the NEXT set into the idle half: its tier or mix, and {@code seed} (random when null). */
     default void previewNext(String slot, String seed, Consumer<String> report) {
         report.accept("&cThat isn't available.");
+    }
+
+    /**
+     * {@link #previewNext(String, String, Consumer)} of a Mountain Run v2 style ({@code style:road|slalom}, Ice
+     * Boat only; {@code null}: the style a build would pick). A typed seed is used as given.
+     */
+    default void previewNext(String slot, String seed, BoatStyle style, Consumer<String> report) {
+        previewNext(slot, seed, report);
     }
 
     /** The preview's seed becomes the course of exactly the next set (a one-set pin). */

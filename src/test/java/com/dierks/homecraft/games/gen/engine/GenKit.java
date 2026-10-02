@@ -643,6 +643,8 @@ final class GenKit {
         List<Regions.Extra> extras = List.of();
         /** {@code trials.fall_depth}. */
         int fallDepth = 6;
+        /** {@code games.race_night.enabled}: a random Ice Boat week is the Winding Road while it is on. */
+        boolean raceNight;
 
         /** Another bench's clock (the cross-feature journeys: one clock for both), or {@code null}: {@link #now}. */
         java.util.function.LongSupplier clock;
@@ -739,6 +741,11 @@ final class GenKit {
         @Override
         public RestartHold restartHold() {
             return new RestartHold(restarts, ZONE, 5);
+        }
+
+        @Override
+        public boolean raceNightOn() {
+            return raceNight;
         }
 
         @Override

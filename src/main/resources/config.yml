@@ -2030,9 +2030,11 @@ games:
     # the bottom, one level per letter of their mix (at most 5). A dropper switched on later is built
     # with the next set (or /hcm games gen reroll).
     # Golf is Adventure Golf: sand, trees, hills, and ponds in play on M and H holes only (never on
-    # Tiny Golf, whatever its mix). fresh_boat (Ice Boat) is the Mountain Run, a downhill race with 4-6
-    # drops; it ships OFF: ride the boat test strip and a preview first (README "Ice Boat: the
-    # Mountain Run"). /hcm games gen preview and test work on it while it is off.
+    # Tiny Golf, whatever its mix). fresh_boat (Ice Boat) is the Mountain Run, a 2-3 minute run down a
+    # mountain; it ships OFF: ride a preview first (README "Ice Boat: the Mountain Run"). /hcm games gen
+    # preview and test work on it while it is off. Its style: random (each week's own; the Winding Road
+    # every week while Race Night is on), road (the Winding Road: fast, for racing) or slalom (back and
+    # forth through gates, for solo runs; Race Night won't race on it).
     slots:
       fresh_parkour_easy: {enabled: true, tier: easy, origin: [6080, 160, 6592]}
       fresh_parkour: {enabled: true, tier: medium, origin: [6080, 160, 7232]}
@@ -2040,7 +2042,7 @@ games:
       fresh_rings: {enabled: true, tier: easy, origin: [6080, 128, 4096]}
       fresh_golf: {enabled: true, mix: EEEMMMMHH, origin: [8768, 160, 4096]}
       fresh_tiny_golf: {enabled: true, mix: EEE, origin: [7488, 160, 5504]}
-      fresh_boat: {enabled: false, tier: medium, origin: [6080, 96, 2880]}
+      fresh_boat: {enabled: false, tier: medium, style: random, origin: [6080, 96, 2880]}
       fresh_dropper_easy: {enabled: true, mix: EEE, origin: [7488, 160, 6768]}
       fresh_dropper: {enabled: true, mix: EEMMH, origin: [7488, 160, 7360]}
     # Every set that was ever up is archived with its whole layout, so a past course can be brought
@@ -2091,7 +2093,7 @@ games:
     # auto = take turns among the tracks it can race on; or a boat course's id.
     course: auto
     # Races a night, 1-5 (more than 1 needs a track with a viewing stand). The Ice Boat Mountain Run is
-    # a short downhill sprint ("3 downhill races"): 5, with finish_window_seconds: 90, suits family nights.
+    # a 2-3 minute run down the Winding Road ("3 downhill races"): 3 make a night of about 20-25 minutes.
     races: 3
     # Laps a race: 0 = the course's own; 1-5 on a loop track. The Mountain Run is one run, no laps.
     laps: 0
@@ -2107,7 +2109,9 @@ games:
     max_racers: 8
     # A race ends this many seconds after its first finisher...
     finish_window_seconds: 60
-    # ... or after this many minutes.
+    # ... or after this many minutes. On the Ice Boat Mountain Run both grow with the track by themselves
+    # (the window to 1.25 times its model time, the race to 3 times it, at most 15 minutes), so a young
+    # racer still gets down to the finish; they are never made shorter than these.
     max_race_minutes: 4
     # Seconds on the stand between races.
     break_seconds: 20

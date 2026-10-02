@@ -34,25 +34,24 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.Plugin;
 
 import java.io.File;
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.DayOfWeek;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * The live server's facts for {@link GamesCheck}: the config, the worlds, Multiverse, the Fresh
  * Courses engine, the course rows and the website feed, each read and nothing written.
  *
  * <p>Multiverse is a soft dependency and is only ever read: a world's game mode through its API by
- * reflection (Multiverse-Core 5, then 4), and Multiverse-Inventories' groups and game-mode setting from
- * its own files. Whatever can't be read comes back as "can't tell", and the check says what to look
- * at by hand. The website's {@code /api/arcade} is built in memory the way the dashboard builds it
- * (every open game's entries, the Scratch Ticket, prizes, packs, achievements), with each game's
- * {@code feed} called directly, not through the games' guard, so a feed that throws is reported
+ * reflection (Multiverse-Core 5, then 4), then from Multiverse-Core's {@code worlds.yml}
+ * ({@link MvGameMode}); and Multiverse-Inventories' groups and game-mode setting from its own files.
+ * Whatever can't be read comes back as "can't tell", and the check says what to look at by hand. The
+ * website's {@code /api/arcade} is built in memory the way the dashboard builds it (every open game's
+ * entries, the Scratch Ticket, prizes, packs, achievements), with each game's {@code feed} called
+ * directly, not through the games' guard, so a feed that throws is reported
  * instead of switching its game off.
  */
 final class GamesCheckLive implements GamesCheck.Facts {
@@ -106,26 +105,31 @@ final class GamesCheckLive implements GamesCheck.Facts {
         if (mv == null || !mv.isEnabled()) {
             return null;
         }
-        // Multiverse-Core 5: MultiverseCoreApi.get().getWorldManager().getWorld(name) -> Option<MultiverseWorld>.
+        // Multiverse-Core 5: MultiverseCoreApi.get().getWorldManager(), then getWorld(name) -> Option<MultiverseWorld>
+        // (vavr shaded under its own package) and getLoadedWorld(name)
         try {
             Class<?> api = Class.forName("org.mvplugins.multiverse.core.MultiverseCoreApi", true,
                     mv.getClass().getClassLoader());
-            Object core = api.getMethod("get").invoke(null);
-            Object worlds = call(core, "getWorldManager");
-            Object mode = call(unwrap(call(worlds, "getWorld", world)), "getGameMode");
+            String mode = MvGameMode.fromWorldManager(MvGameMode.call(api.getMethod("get").invoke(null),
+                    "getWorldManager"), world);
             if (mode != null) {
-                return String.valueOf(mode);
+                return mode;
             }
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
             // not Multiverse-Core 5
         }
         // Multiverse-Core 4: getMVWorldManager().getMVWorld(name).getGameMode().
         try {
-            Object mode = call(call(call(mv, "getMVWorldManager"), "getMVWorld", world), "getGameMode");
-            return mode == null ? null : String.valueOf(mode);
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-            return null;
+            String mode = MvGameMode.name(MvGameMode.call(MvGameMode.call(MvGameMode.call(mv, "getMVWorldManager"),
+                    "getMVWorld", world), "getGameMode"));
+            if (mode != null) {
+                return mode;
+            }
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
+            // not Multiverse-Core 4
         }
+        // the last resort: Multiverse-Core 5's own file
+        return MvGameMode.fromWorldsFile(yaml(new File(mv.getDataFolder(), "worlds.yml")), world);
     }
 
     @Override
@@ -701,41 +705,5 @@ final class GamesCheckLive implements GamesCheck.Facts {
         } catch (Exception e) {
             return null;
         }
-    }
-
-    /** A public no-arg or one-arg method by name, called; {@code null} target gives {@code null}. */
-    private static Object call(Object target, String name, Object... args) throws ReflectiveOperationException {
-        if (target == null) {
-            return null;
-        }
-        for (Method m : target.getClass().getMethods()) {
-            if (m.getName().equals(name) && m.getParameterCount() == args.length && accepts(m, args)) {
-                m.setAccessible(true);
-                return m.invoke(target, args);
-            }
-        }
-        throw new NoSuchMethodException(target.getClass().getName() + "." + name);
-    }
-
-    /** Whether {@code m} takes these arguments ({@code getWorld(String)}, not {@code getWorld(World)}). */
-    private static boolean accepts(Method m, Object[] args) {
-        Class<?>[] types = m.getParameterTypes();
-        for (int i = 0; i < args.length; i++) {
-            if (args[i] != null && !types[i].isInstance(args[i])) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /** An {@link Optional}, a vavr {@code Option}, or a plain value, unwrapped. */
-    private static Object unwrap(Object o) throws ReflectiveOperationException {
-        if (o instanceof Optional<?> opt) {
-            return opt.orElse(null);
-        }
-        if (o != null && o.getClass().getName().startsWith("io.vavr.")) {
-            return call(o, "getOrNull");
-        }
-        return o;
     }
 }

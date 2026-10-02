@@ -228,11 +228,21 @@ class EconomyMigrationTest {
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(fresh, "world"), "a fresh install migrates nothing");
 
         YamlConfiguration stamped = LayoutFixtures.v036();
-        stamped.set("config_revision", 20);
+        stamped.set("config_revision", HomeCraftManagement.CONFIG_REVISION);
         String before = stamped.saveToString();
         assertEquals(List.of(), HomeCraftManagement.migrateConfig(stamped, "world"),
-                "a file already at 20 is never dragged through 20 again");
+                "a file already at the newest revision is never migrated again");
         assertEquals(before, stamped.saveToString(), "not a byte changes, the old values included");
+
+        // A file already at 20 still takes the later steps (21's areas), but never 20's again.
+        YamlConfiguration at20 = LayoutFixtures.v036();
+        at20.set("config_revision", EconomyMigration.REVISION);
+        HomeCraftManagement.migrateConfig(at20, "world");
+        for (EconomyMigration.Step s : EconomyMigration.STEPS) {
+            assertTrue(EconomyMigration.same(at20.get(s.path()), s.old()),
+                    s.path() + ": a file already at 20 is never dragged through 20 again, so it keeps " + s.old()
+                            + ", not " + at20.get(s.path()));
+        }
 
         YamlConfiguration c = LayoutFixtures.v036();
         List<String> first = new ArrayList<>();
@@ -264,7 +274,8 @@ class EconomyMigrationTest {
         assertEquals(64, EconomyMigration.STEPS.size(), "the 64 values of BALANCE-SPEC §5.3");
         assertEquals(TokenBalance.ROWS.size(), EconomyMigration.STEPS.size(), "the steps are the token balance's rows");
         assertEquals(20, EconomyMigration.REVISION, "it is revision 20");
-        assertEquals(EconomyMigration.REVISION, HomeCraftManagement.CONFIG_REVISION, "and the newest");
+        assertTrue(HomeCraftManagement.CONFIG_REVISION >= EconomyMigration.REVISION,
+                "and this release stamps it (21, the v4 areas, comes after it)");
         assertEquals(19, LayoutGuard.REVISION, "the layout keeps its own revision, 19");
     }
 

@@ -80,7 +80,7 @@ class CupSettingsTest {
         block.clear();
         block.put("server_topup", 1_000);
         warns.clear();
-        assertEquals(100, parse(block, warns).serverTopup(), "a top-up of at most 100");
+        assertEquals(200, parse(block, warns).serverTopup(), "a top-up of at most 200: twice the biggest entry");
     }
 
     @Test
@@ -95,6 +95,6 @@ class CupSettingsTest {
 
     @Test
     void theRecordItselfKeepsItsNumbersInRange() {
-        assertEquals(new CupSettings(true, 1, 100), new CupSettings(true, -5, 5_000), "clamped however it is made");
+        assertEquals(new CupSettings(true, 1, 200), new CupSettings(true, -5, 5_000), "clamped however it is made");
     }
 }

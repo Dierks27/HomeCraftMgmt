@@ -55,8 +55,11 @@ public final class CupRules {
      * and 30% of 4E and 20% of 5E are each at least E, rounding down included).
      */
     public static final int DEFAULT_TOPUP = TokenBalance.CUP_TOPUP;
-    /** The largest top-up a setting may give. */
-    public static final int MAX_TOPUP = 100;
+    /**
+     * The largest top-up a setting may give: twice {@link #MAX_ENTRY}, so every entry a setting may give can have
+     * the family rule's top-up (the v4 audit, ECON-R3-01: at 100 an entry over 50 couldn't).
+     */
+    public static final int MAX_TOPUP = 2 * MAX_ENTRY;
     /** Cup times needed for a contest (and for the top-up). */
     public static final int CONTEST = 2;
 
@@ -332,6 +335,26 @@ public final class CupRules {
             return CupRefusal.NOT_ENOUGH_TOKENS;
         }
         return null;
+    }
+
+    /**
+     * What it costs to enter a Cup: what its entries paid (the first entry's), or {@code setting}
+     * ({@code games.cup.entry}) while nobody is in. Everyone in one Cup pays the same, so the family rule (a
+     * top-up of twice the entry: nobody timed in a Cup of 2 or 3 gets back less than they paid) holds in a week
+     * whose entry changes: the 0.37 update moves 5 to 10 mid-week, and a 10-token entrant third behind two
+     * 5-token ones would get 8 back (the v4 audit, ECON01). A change counts from the next Cup a course opens:
+     * its first entrant pays the setting.
+     */
+    public static int fee(Collection<CupEntry> entries, int setting) {
+        CupEntry first = null;
+        if (entries != null) {
+            for (CupEntry e : entries) {
+                if (e != null && (first == null || BY_ENTRY.compare(e, first) < 0)) {
+                    first = e;
+                }
+            }
+        }
+        return first == null || first.paid() < MIN_ENTRY || first.paid() > MAX_ENTRY ? setting : first.paid();
     }
 
     // ---- the live pool --------------------------------------------------------------------------

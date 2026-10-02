@@ -4,6 +4,9 @@ import com.dierks.homecraft.config.GamesConfig;
 import com.dierks.homecraft.games.arena.FallingFloors;
 import com.dierks.homecraft.games.arena.FallingFloorsSettings;
 import com.dierks.homecraft.games.cabinet.CabinetSettings;
+import com.dierks.homecraft.games.cup.CupRules;
+import com.dierks.homecraft.games.cup.live.CupSettings;
+import com.dierks.homecraft.games.cup.live.WeeklyCup;
 import com.dierks.homecraft.games.gen.DailyCourses;
 import com.dierks.homecraft.games.gen.DailySettings;
 import com.dierks.homecraft.games.gen.api.DailyStars;
@@ -42,6 +45,14 @@ import java.util.function.Consumer;
  * pick) or an uncapped one (a first clear, a Race Night prize) can't be stranded this way, so it isn't
  * checked; nor is the other cadence's end of a table, which pays nothing until the cadence changes.
  * That keeps one clamped value to one WARN.
+ *
+ * <p><b>Falling Floors' milestones together</b> as well as each on its own: one solo round passes every milestone
+ * up to how long it lasted, so the one that first reaches the last passes them all at once (ECON-R3-00).
+ *
+ * <p><b>And the Weekly Cup's family rule</b> (BALANCE-SPEC §3.2): while the Cup is on, a
+ * {@code server_topup} below twice its {@code entry} gives one WARN naming both keys, since third of a Cup
+ * of 3 where everyone set a time then gets back less than they paid (the v4 audit, ECON01). An owner may
+ * choose that (a smaller mint); the WARN says what it costs.
  *
  * <p><b>It only speaks.</b> A cap of 0 means "these pay nothing" and is the owner's choice, so it gives
  * no WARN; a reward over a cap gives exactly one, naming the smallest cap it passes (the one it would
@@ -107,12 +118,68 @@ public final class RewardCeilings {
         String floorsBase = GamesConfig.PATH + "." + GamesConfig.block(FallingFloors.SPEC.id());
         List<Integer> secs = floors.milestones();
         List<Integer> toks = floors.milestoneRewards();
+        Cap floorsCap = new Cap(floorsBase + ".daily_cap", floors.dailyCap());
+        int before = out.size();
         for (int i = 0; i < toks.size(); i++) {
             String which = i < secs.size() ? " (the " + secs.get(i) + " s milestone)" : "";
-            check(out, floorsBase + ".milestone_rewards" + which, toks.get(i),
-                    new Cap(floorsBase + ".daily_cap", floors.dailyCap()), skill);
+            check(out, floorsBase + ".milestone_rewards" + which, toks.get(i), floorsCap, skill);
         }
+        if (out.size() == before) {
+            together(out, floorsBase + ".milestone_rewards", secs, toks, floorsCap, skill);
+        }
+
+        family(out, p.settings(WeeklyCup.SPEC));
         return out;
+    }
+
+    /**
+     * One WARN when Falling Floors' milestones together pass a cap they count toward, though each fits on its own
+     * (the v4 audit, ECON-R3-00): a solo round claims every milestone it passes, in order, each paid whole, so the
+     * round that first lasts to the last milestone passes all of them at once, and whatever the cap can't hold
+     * then waits for another day's run that long again. A cap of 0 is the owner's "pays nothing", as above.
+     */
+    private static void together(List<String> out, String key, List<Integer> secs, List<Integer> toks, Cap... caps) {
+        int sum = 0;
+        int count = 0;
+        int longest = 0;
+        for (int i = 0; i < toks.size() && i < secs.size(); i++) {
+            if (secs.get(i) > 0 && toks.get(i) > 0) {
+                sum += toks.get(i);
+                count++;
+                longest = Math.max(longest, secs.get(i));
+            }
+        }
+        Cap smallest = null;
+        for (Cap c : caps) {
+            if (c.tokens() <= 0) {
+                return;
+            }
+            if (smallest == null || c.tokens() < smallest.tokens()) {
+                smallest = c;
+            }
+        }
+        if (count >= 2 && smallest != null && sum > smallest.tokens()) {
+            out.add(key + " " + sum + " together is more than " + smallest.key() + " " + smallest.tokens()
+                    + ", and one round that first lasts " + longest + " s passes them all, so the last waits for"
+                    + " another day - raise the cap to at least " + sum
+                    + " or lower the rewards");
+        }
+    }
+
+    /**
+     * One WARN when the Cup is on with a top-up below twice its entry: 3 in at E with a top-up T share 3E + T
+     * as 50/30/20, and 20% of it is E only when T is at least 2E.
+     */
+    private static void family(List<String> out, CupSettings cup) {
+        if (cup == null || !cup.enabled() || cup.serverTopup() >= 2 * cup.entry()) {
+            return;
+        }
+        String base = GamesConfig.PATH + "." + GamesConfig.block(WeeklyCup.SPEC.id());
+        int third = CupRules.split(3 * cup.entry() + cup.serverTopup(), CupRules.shares(3))[2];
+        out.add(base + ".server_topup " + cup.serverTopup() + " is less than twice " + base + ".entry " + cup.entry()
+                + ", so in a Cup of 3 where everyone sets a time, third gets back " + third + " of the " + cup.entry()
+                + " they paid - set server_topup to at least " + 2 * cup.entry() + " (or lower the entry) so nobody in"
+                + " a Cup of 2 or 3 loses");
     }
 
     /** {@code games.<game's block>.daily_cap}. */

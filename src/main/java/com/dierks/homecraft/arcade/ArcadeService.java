@@ -8,6 +8,7 @@ import com.dierks.homecraft.config.PluginConfig.LimitPer;
 import com.dierks.homecraft.config.PluginConfig.Prize;
 import com.dierks.homecraft.config.PluginConfig.PrizeType;
 import com.dierks.homecraft.config.PluginConfig.RewardType;
+import com.dierks.homecraft.games.RtpLimits;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.mini.Rarity;
 import com.dierks.homecraft.util.Text;
@@ -415,6 +416,9 @@ public final class ArcadeService {
         if (l.payouts().isEmpty()) {
             return Outcome.fail("The Scratch Ticket isn't set up right now.");
         }
+        if (ticketClosed(l)) {
+            return Outcome.fail(TICKET_CLOSED); // config.yml's WARN at load says why
+        }
         UUID id = player.getUniqueId();
         int have = tokens().balance(id);
         if (have < l.ticketTokens()) {
@@ -552,6 +556,45 @@ public final class ArcadeService {
             return j.cap();
         }
         return Math.min(j.cap(), j.seed() + j.perTicket() / jackpotP);
+    }
+
+    /** What a player is told when the Scratch Ticket is closed ({@link #ticketClosed}). */
+    public static final String TICKET_CLOSED = "The Scratch Ticket is closed right now.";
+
+    /**
+     * Whether the Scratch Ticket is closed: its prizes give back as much as it costs or more ({@link #rtp} at
+     * 100% or above), so every ticket would gain tokens on average and it would be a faucet, not a game of
+     * chance. Unlike the other games of chance it isn't clamped into the house's band ({@code RtpLimits}): its
+     * prizes are a table the owner writes. A ticket with no prizes is "not set up", not closed.
+     */
+    public static boolean ticketClosed(PluginConfig.Lotto l) {
+        return l != null && !l.payouts().isEmpty() && rtp(l) >= 1.0 - 1e-9;
+    }
+
+    /**
+     * The WARN when config.yml loads with the Scratch Ticket's return outside the house's 85-95 band (its price,
+     * prizes and jackpot together), saying so and, at 100% or more, that it is closed; {@code null} inside the
+     * band or with no prizes.
+     */
+    public static String ticketWarning(PluginConfig.Lotto l) {
+        if (l == null || l.payouts().isEmpty()) {
+            return null;
+        }
+        double back = rtp(l);
+        if (RtpLimits.inBand(back)) {
+            return null;
+        }
+        String head = "arcade.lotto: the Scratch Ticket gives back "
+                + RtpLimits.tenthPercent(back) + "% (its ticket_tokens, payouts and jackpot"
+                + " together), ";
+        if (ticketClosed(l)) {
+            return head + "as much as it costs or more, so every ticket would gain tokens on average. Ticket sales are"
+                    + " refused until it gives back less: lower its prizes or jackpot, or raise ticket_tokens, into the"
+                    + " house's 85-95 band.";
+        }
+        return head + (back < RtpLimits.MIN
+                ? "below the house's 85-95 band: raise its prizes or jackpot, or lower ticket_tokens."
+                : "above the house's 85-95 band: lower its prizes or jackpot, or raise ticket_tokens.");
     }
 
     // ---- Card trade-in ---------------------------------------------------------

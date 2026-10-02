@@ -19,7 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Config revision 21 ({@link GamesAreaMigration}): the v4 areas. Golf of the Week and Classic Golf move to
  * x 8768, the Ice Boat north to z 2880, wherever the file still holds an origin this plugin shipped (0.36's,
  * or 0.35's that the legacy guard wrote back, with its {@code half_gap: 32}); an owner's own spot stays, with
- * a WARN; nothing else is touched; and a second run changes nothing.
+ * a WARN, and so does an owner's {@code half_gap: 32} beside 0.36's spot; nothing else is touched; and a
+ * second run changes nothing.
  */
 class GamesAreaMigrationTest {
 
@@ -90,6 +91,35 @@ class GamesAreaMigrationTest {
         assertTrue(log.stream().anyMatch(l -> l.startsWith(LayoutGuard.WARN) && l.contains("kept your own"
                 + " games.fresh.slots.fresh_golf.origin [9024, 160, 4096]") && l.contains("128 x 16 x 224")
                 && l.contains("[8768, 160, 4096]")), "one WARN: theirs, the new size, the shipped spot: " + log);
+    }
+
+    @Test
+    void anOwnersHalfGap32BesideThe036SpotStaysWithOneWarnEach() {
+        // the v4 audit, ECON03: 0.36 never wrote a 32 beside its own spot (only beside 0.35's), so it is the
+        // owner's own choice, a knob the README documents (32-4096): kept and named, never dropped silently
+        YamlConfiguration c = v036();
+        c.set(SLOTS + "fresh_golf.half_gap", 32);
+        c.set(SLOTS + "fresh_boat.half_gap", 32);
+        c.set(SLOTS + "fresh_tiny_golf.half_gap", 32);
+        List<String> log = new ArrayList<>();
+        GamesAreaMigration.apply(c, log);
+        assertEquals(List.of(8768, 160, 4096), list(c.get(SLOTS + "fresh_golf.origin")), "the untouched spot moves");
+        assertEquals(32, c.getInt(SLOTS + "fresh_golf.half_gap"), "while the owner's gap stays");
+        assertEquals(List.of(6080, 96, 2880), list(c.get(SLOTS + "fresh_boat.origin")), "the boat's spot moves too");
+        assertEquals(32, c.getInt(SLOTS + "fresh_boat.half_gap"), "and keeps its gap");
+        assertEquals(32, c.getInt(SLOTS + "fresh_tiny_golf.half_gap"), "Tiny Golf doesn't move: untouched");
+        List<String> warns = log.stream().filter(l -> l.startsWith(LayoutGuard.WARN)).toList();
+        assertEquals(2, warns.size(), "one WARN for each kept gap: " + log);
+        assertTrue(warns.get(0).contains("kept your own games.fresh.slots.fresh_golf.half_gap 32 for Golf of the Week"
+                + " at [8768, 160, 4096]") && warns.get(0).contains("576"), "naming the key, its new spot and the"
+                + " shipped gap: " + warns);
+        assertTrue(warns.get(1).contains("games.fresh.slots.fresh_boat.half_gap 32"), warns.toString());
+        assertTrue(GamesAreaMigration.legacyShape(List.of(4864, 160, 4096), GamesAreaMigration.MOVES.get(0)),
+                "beside 0.35's spot a 32 is 0.35's shape");
+        assertFalse(GamesAreaMigration.legacyShape(List.of(7488, 160, 4096), GamesAreaMigration.MOVES.get(0)),
+                "beside 0.36's it is the owner's");
+        GamesAreaMigration.apply(c, new ArrayList<>());
+        assertEquals(32, c.getInt(SLOTS + "fresh_golf.half_gap"), "a second run keeps it too");
     }
 
     @Test

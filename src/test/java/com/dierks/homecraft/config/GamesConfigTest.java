@@ -396,6 +396,19 @@ class GamesConfigTest {
         }
         assertTrue(skill >= trials + golf, "the skill cap (" + skill + ") pays both on one evening, so a new-set "
                 + "Monday never holds back a big first finish behind the other");
+        // the v4 audit, ECON06: every golf course shares golf's cap, so it holds both Fresh golf first finishes
+        // in one day in either order, after the first course's par and three holes-in-one (BALANCE-SPEC §4.1:
+        // what a cap holds back is never Golf of the Week's 9-hole round)
+        com.dierks.homecraft.games.golf.MiniGolfSettings g =
+                parsed.settings(com.dierks.homecraft.games.golf.MiniGolf.SPEC);
+        int golfClears = 0;
+        for (com.dierks.homecraft.games.gen.DailySettings.SlotConfig c : fresh.slots()) {
+            golfClears += c.def().golf() ? c.dailyClear() : 0;
+        }
+        assertTrue(g.dailyCap() >= golfClears + g.parReward() + 3 * g.holeInOneReward(), "golf's cap ("
+                + g.dailyCap() + ") holds Tiny Golf's and Golf of the Week's first finishes (" + golfClears
+                + ") after par and three holes-in-one");
+        assertTrue(g.dailyCap() <= skill, "and stays under the skill cap");
         assertTrue(skill <= MAX_SKILL_CAP, "and stays a cap: at most " + MAX_SKILL_CAP + ", not " + skill);
         com.dierks.homecraft.games.event.RaceNightSettings night =
                 parsed.settings(com.dierks.homecraft.games.event.RaceNight.SPEC);

@@ -104,6 +104,8 @@ public final class CupDao {
      * Enter {@code player} in {@code key}'s Cup, in one transaction: the checks again, the entry
      * debit, the entry row, and (for the Cup's first entrant) the layout it is raced on.
      *
+     * @param fee         the Cup's fee as the screen showed it; a Cup someone is already in charges what they
+     *                    paid instead ({@link CupRules#fee}), so everyone in one Cup pays the same
      * @param currentWeek the Cup week now; a key of any other week is refused (a screen opened before
      *                    the rollover and clicked after it)
      * @param layout      the course's layout now ({@code CupLayout.encode()}), kept with the first entry
@@ -141,7 +143,9 @@ public final class CupDao {
             if (entry(c, key, player) != null || (live != null && openCup(c, key.course(), player, live) != null)) {
                 return CupRefusal.ALREADY_IN;
             }
-            if (tokens.change(player, -fee, CupSource.GAMES_CUP_ENTRY.name(), detail, now)
+            // one fee a Cup, read again here: an entry that slipped in since the screen was built set it (ECON01)
+            int charge = CupRules.fee(entries(c, key), fee);
+            if (tokens.change(player, -charge, CupSource.GAMES_CUP_ENTRY.name(), detail, now)
                     == TokenDao.REFUSED) {
                 return CupRefusal.NOT_ENOUGH_TOKENS;
             }
@@ -150,7 +154,7 @@ public final class CupDao {
                 ps.setString(1, key.course());
                 ps.setLong(2, key.week());
                 ps.setString(3, player.toString());
-                ps.setInt(4, fee);
+                ps.setInt(4, charge);
                 ps.setLong(5, now);
                 ps.executeUpdate();
             }

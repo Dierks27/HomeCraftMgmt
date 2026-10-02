@@ -84,6 +84,8 @@ public final class HomeCraftManagement extends JavaPlugin {
      * 21 = the v4 areas: Golf of the Week and Classic Golf (128 x 16 x 224 now) move to x 8768 and the Ice
      * Boat (the Mountain Run v2, 480 x 176 x 640) north to z 2880, wherever the owner kept the shipped spot
      * ({@link com.dierks.homecraft.games.gen.GamesAreaMigration}); the engine empties their old areas.
+     * Each of 20 and 21 also refreshes the comments it makes stale, where they are still the plugin's own
+     * words ({@link ShippedComments}).
      */
     static final int CONFIG_REVISION = 21;
 
@@ -1167,11 +1169,14 @@ public final class HomeCraftManagement extends JavaPlugin {
             // The whole-arcade token balance: every reward, cap and prize still at 0.35/0.36's default
             // moves to the new one; the owner's own values stay, with a WARN each. See EconomyMigration.
             EconomyMigration.apply(c, log);
+            // and the comments it makes stale, where they are still the plugin's own words. See ShippedComments.
+            ShippedComments.refresh(c, EconomyMigration.REVISION);
         }
         if (from < 21) {
             // The v4 areas: the bigger golf halves and the Mountain Run v2 move to their new spots, wherever the
             // shipped spot is untouched; the owner's own stay. See GamesAreaMigration.
             com.dierks.homecraft.games.gen.GamesAreaMigration.apply(c, log);
+            ShippedComments.refresh(c, com.dierks.homecraft.games.gen.GamesAreaMigration.REVISION);
         }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);

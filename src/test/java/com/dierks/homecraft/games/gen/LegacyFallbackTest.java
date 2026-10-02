@@ -109,7 +109,10 @@ class LegacyFallbackTest {
         c.set("games.fresh.keep.area", List.of(7488, 128, 4096));
         List<String> warns = new ArrayList<>();
         DailySettings st = fresh(c, warns);
-        assertEquals(1, warns.size(), "only the origin's WARN: " + warns);
+        // (the fixture is 0.35's file before revision 20, so its Falling Floors' 1/2/3 under a cap of 3 have a WARN
+        // of their own, RewardCeilings': not this test's matter)
+        assertEquals(1, warns.stream().filter(w -> w.startsWith("games.fresh.")).count(),
+                "only the origin's WARN: " + warns);
         assertEquals(null, st.archive().keepProblem(), "the keep area isn't checked against an unplaced course's"
                 + " placeholder (the shipped spot)");
 

@@ -25,8 +25,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Pinned here: the shipped block gives no WARN; Golf of the Week's 25 under a golf cap of 20 gives
  * exactly one, naming both keys and what it can pay; a reward over the skill cap names the skill cap;
  * a cap of 0 gives none (nothing pays: the owner's choice); only the configured cadence's amount is
- * checked; the Star Chart goals, a Falling Floors milestone and a cabinet medal are checked too; and a
- * WARN closes nothing and changes no value.
+ * checked; the Star Chart goals, a Falling Floors milestone and a cabinet medal are checked too, and Falling
+ * Floors' milestones together (one round passes them all); a Cup top-up below twice its entry is named (the
+ * family rule); and a WARN closes nothing and changes no value.
  */
 class RewardCeilingsTest {
 
@@ -168,6 +169,55 @@ class RewardCeilingsTest {
         isolated(warns, "snake.daily_cap", 4, "snake.milestone_reward", 5);
         assertEquals(List.of("games.snake.milestone_reward 5 is more than games.snake.daily_cap 4, so it can only "
                 + "ever pay 4 - raise the cap or lower the reward"), warns, "a medal of 5 doesn't fit Snake's 4");
+    }
+
+    @Test
+    void aCupTopUpBelowTwiceTheEntryGivesOneWarnNamingBothKeys() throws Exception {
+        // the v4 audit, ECON01: an owner who had raised server_topup to 15 at 0.36's entry of 5 keeps it when
+        // revision 20 moves the entry to 10; 3 in then share 45 as 23/13/9, and third loses 1 of their 10
+        List<String> warns = new ArrayList<>();
+        GamesConfig.Parsed p = isolated(warns, "cup.entry", 10, "cup.server_topup", 15);
+        assertEquals(List.of("games.cup.server_topup 15 is less than twice games.cup.entry 10, so in a Cup of 3 where "
+                + "everyone sets a time, third gets back 9 of the 10 they paid - set server_topup to at least 20 (or "
+                + "lower the entry) so nobody in a Cup of 2 or 3 loses"), warns, "exactly one WARN");
+        assertEquals(15, p.settings(com.dierks.homecraft.games.cup.live.WeeklyCup.SPEC).serverTopup(),
+                "nothing is changed: a smaller mint is the owner's to choose");
+        warns.clear();
+        isolated(warns, "cup.entry", 10, "cup.server_topup", 20);
+        assertEquals(List.of(), warns, "twice the entry holds the rule");
+        isolated(warns, "cup.entry", 10, "cup.server_topup", 0, "cup.enabled", false);
+        assertEquals(List.of(), warns, "a Cup that is off takes no entries: nothing to say");
+        isolated(warns, "cup.entry", 60, "cup.server_topup", 100);
+        assertEquals(List.of("games.cup.server_topup 100 is less than twice games.cup.entry 60, so in a Cup of 3 where "
+                + "everyone sets a time, third gets back 56 of the 60 they paid - set server_topup to at least 120 (or "
+                + "lower the entry) so nobody in a Cup of 2 or 3 loses"), warns,
+                "an entry over 50 can have its top-up too (ECON-R3-01: the top-up goes to 200)");
+        warns.clear();
+        isolated(warns, "cup.entry", 100, "cup.server_topup", 200);
+        assertEquals(List.of(), warns, "the biggest entry with twice it on top");
+    }
+
+    @Test
+    void fallingFloorsMilestonesTogetherMustFitTheCapsTheyCountToward() throws Exception {
+        // the v4 audit, ECON-R3-00: a solo round that first lasts 2:00 passes 0:30 and 1:00 on the way, and each
+        // medal is paid whole, so at a cap of 20 the 2:00 medal waited for another day's 2:00
+        List<String> warns = new ArrayList<>();
+        isolated(warns, "falling_floors.daily_cap", 20, "falling_floors.milestone_rewards", List.of(5, 10, 15));
+        assertEquals(List.of("games.falling_floors.milestone_rewards 30 together is more than "
+                + "games.falling_floors.daily_cap 20, and one round that first lasts 120 s passes them all, so the last "
+                + "waits for another day - raise the cap to at least 30 or lower the rewards"), warns,
+                "each fits on its own, not together: one WARN");
+        warns.clear();
+        isolated(warns, "falling_floors.daily_cap", 100, "skill_daily_cap", 25,
+                "falling_floors.milestone_rewards", List.of(5, 10, 15));
+        assertEquals(1, warns.size(), warns.toString());
+        assertTrue(warns.get(0).contains("30 together is more than games.skill_daily_cap 25"),
+                "the smaller cap is the one named: " + warns);
+        warns.clear();
+        isolated(warns, "falling_floors.daily_cap", 30, "falling_floors.milestone_rewards", List.of(5, 10, 15));
+        assertEquals(List.of(), warns, "all three fit: quiet");
+        isolated(warns, "falling_floors.daily_cap", 0, "falling_floors.milestone_rewards", List.of(5, 10, 15));
+        assertEquals(List.of(), warns, "a cap of 0 pays nothing at all: the owner's choice");
     }
 
     @Test

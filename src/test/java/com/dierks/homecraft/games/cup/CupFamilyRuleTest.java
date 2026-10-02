@@ -22,8 +22,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Pinned here: the shipped numbers keep the rule (a top-up at least twice the entry), and the exact
  * payouts of the spec's example (10 in, 20 on top); and for every entry 1 to 100 with a top-up of twice
- * it, every Cup of 2 or 3 with everyone timed pays each entrant at least their entry, through the
- * rounding down, the remainder going to 1st, and ties of every shape (which share their places' amounts).
+ * it, each read through {@code games.cup}'s own clamps (so a setting the plugin can run: the top-up goes to
+ * 200), every Cup of 2 or 3 with everyone timed pays each entrant at least their entry, through the
+ * rounding down, the remainder going to 1st, and ties of every shape (which share their places' amounts);
+ * and everyone in one Cup pays the same ({@link CupRules#fee}), so a Cup opened before the entry changed
+ * (the 0.37 upgrade week) keeps the rule. A top-up the owner set below twice the entry is named at load
+ * ({@code RewardCeilingsTest}).
  */
 class CupFamilyRuleTest {
 
@@ -64,8 +68,17 @@ class CupFamilyRuleTest {
 
     @Test
     void withATopUpOfTwiceTheEntryNobodyTimedInACupOfTwoOrThreeLoses() {
-        for (int entry = 1; entry <= 100; entry++) {
-            int topup = 2 * entry;
+        // every entry a setting may give, with a top-up of twice it read through games.cup's own clamps (the v4
+        // audit, ECON-R3-01: at a top-up ceiling of 100, entries over 50 could never have it)
+        for (int e = CupRules.MIN_ENTRY; e <= CupRules.MAX_ENTRY; e++) {
+            List<String> warns = new ArrayList<>();
+            CupSettings s = CupSettings.parse(new com.dierks.homecraft.config.GamesConfig.Node("games.cup",
+                    java.util.Map.of("entry", e, "server_topup", 2 * e), warns::add), CupSettings.defaults());
+            assertEquals(List.of(), warns, "entry " + e + " with a top-up of " + 2 * e + " is a setting games.cup takes");
+            assertEquals(e, s.entry(), "as written: " + s);
+            assertEquals(2 * e, s.serverTopup(), "as written: " + s);
+            int entry = s.entry();
+            int topup = s.serverTopup();
             for (List<CupEntry> cup : shapes(entry)) {
                 CupPlan plan = CupRules.settle(CUP, cup, topup);
                 String why = cup.size() + " in at " + entry + " (top-up " + topup + "), times " + times(cup);
@@ -74,6 +87,27 @@ class CupFamilyRuleTest {
                     assertTrue(tokensOf(plan, n) >= entry,
                             why + ": entrant " + n + " gets " + tokensOf(plan, n) + ", less than the " + entry + " paid");
                 }
+            }
+        }
+    }
+
+    @Test
+    void everyoneInOneCupPaysWhatItsFirstEntrantPaidSoTheRuleHoldsWhenTheEntryChanges() {
+        // the v4 audit, ECON01: the 0.37 update moves the entry 5 -> 10 (and the top-up 10 -> 20) mid-week
+        assertEquals(10, CupRules.fee(List.of(), 10), "a Cup nobody is in yet costs the setting");
+        assertEquals(5, CupRules.fee(List.of(timed(2, 5, 41_000), timed(1, 5, 40_000)), 10),
+                "one with entries costs what its first entrant paid, however they are read");
+        assertEquals(10, CupRules.fee(List.of(timed(1, 0, 40_000)), 10), "a paid amount no fee can be is never used");
+
+        List<CupEntry> mixed = List.of(timed(1, 5, 40_000), timed(2, 5, 41_000), timed(3, 10, 42_000));
+        assertEquals(8, tokensOf(CupRules.settle(CUP, mixed, 20), 3),
+                "why: had the third paid the new 10, third place would get 8 of it back");
+        int fee = CupRules.fee(mixed.subList(0, 2), 10);
+        for (List<CupEntry> cup : shapes(fee)) {
+            CupPlan plan = CupRules.settle(CUP, cup, 20);
+            assertSound(cup, 20, plan, "a Cup of " + cup.size() + " opened at " + fee + ", settled with the new top-up");
+            for (int n = 1; n <= cup.size(); n++) {
+                assertTrue(tokensOf(plan, n) >= fee, "entrant " + n + " gets back at least the " + fee + " they paid");
             }
         }
     }

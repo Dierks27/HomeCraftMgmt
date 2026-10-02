@@ -335,15 +335,28 @@ public final class WeeklyCup implements Game {
             g.tell(player, Refusal.of("The Cup can't take entries right now. Nothing was paid."));
             return false;
         }
+        int fee = fee(c);
         if (r != null) {
-            g.tell(player, Refusal.of(r.message(settings().entry())));
+            g.tell(player, Refusal.of(r.message(fee)));
             return false;
         }
-        player.sendMessage(Text.of(CupWords.entered(c.name(), settings().entry())));
+        player.sendMessage(Text.of(CupWords.entered(c.name(), fee)));
         Sounds.paid(player);
         logger().info("Weekly Cup: " + player.getName() + " entered the Cup on " + c.id() + " ("
-                + CupText.tokens(settings().entry()) + ").");
+                + CupText.tokens(fee) + ").");
         return true;
+    }
+
+    /**
+     * What this week's Cup on {@code c} costs ({@link CupDesk#fee}: what its first entrant paid, so what a player
+     * just in paid; the v4 audit, ECON01), or {@code games.cup.entry} when it can't be read.
+     */
+    private int fee(Course c) {
+        try {
+            return desk().fee(c.id());
+        } catch (SQLException e) {
+            return settings().entry();
+        }
     }
 
     /**

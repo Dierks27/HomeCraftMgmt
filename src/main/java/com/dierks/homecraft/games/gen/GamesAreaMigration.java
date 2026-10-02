@@ -16,8 +16,9 @@ import java.util.List;
  *
  * <p><b>Only untouched shipped values move.</b> An origin still exactly at a value this plugin shipped
  * (0.36's, or 0.35's, which LayoutGuard may have written back on a server that built at 0.35's spots)
- * becomes the v4 one, and a {@code half_gap: 32} that came with 0.35's shape goes with it (the default 576
- * applies; the shape changes anyway). An owner's own origin stays, with one WARN naming the shipped spot:
+ * becomes the v4 one, and a {@code half_gap: 32} that came with 0.35's shape (beside 0.35's spot, or a missing
+ * origin) goes with it (the default 576 applies; the shape changes anyway); a 32 beside 0.36's spot is the
+ * owner's own and stays, with one WARN. An owner's own origin stays, with one WARN naming the shipped spot:
  * the slot is resized in place there, its old area emptied first. A missing origin is left to the
  * backfill, which writes the v4 one. Nothing else is touched: {@code enabled}, {@code tier}, {@code mix}.
  *
@@ -146,8 +147,16 @@ public final class GamesAreaMigration {
                 moved.add(m.def().name() + " " + raw + " -> " + m.to());
             }
             if (ours && gapIs32(c, m)) {
-                c.set(m.entry() + ".half_gap", null); // 0.35's shape went with the old spot
-                changed = true;
+                if (legacyShape(raw, m)) {
+                    c.set(m.entry() + ".half_gap", null); // 0.35's shape went with the old spot
+                    changed = true;
+                } else {
+                    // beside 0.36's spot no version wrote a 32: it is the owner's own, and stays (ECON03)
+                    log.add(LayoutGuard.WARN + "Config migration: kept your own " + m.entry() + ".half_gap "
+                            + Slots.LEGACY_HALF_GAP + " for " + m.def().name() + " at " + m.to() + ": its spare half"
+                            + " is built " + Slots.LEGACY_HALF_GAP + " blocks from the one played, where players can"
+                            + " see it. The shipped gap is " + Slots.HALF_GAP + ", out of sight: take half_gap out for it.");
+                }
             }
             if (!ours) {
                 log.add(LayoutGuard.WARN + "Config migration: kept your own " + m.entry() + ".origin " + raw + " for "
@@ -194,6 +203,15 @@ public final class GamesAreaMigration {
         } else {
             c.set(m.entry() + ".origin", new ArrayList<>(v));
         }
+    }
+
+    /**
+     * Whether a {@code half_gap: 32} beside {@code raw} came with 0.35's shape and goes with the old spot: the
+     * origin is missing or unreadable (0.35 fell back to its own spot), or it is 0.35's shipped spot, beside which
+     * LayoutGuard wrote the 32 back. Beside 0.36's spot (or the new one) no version wrote a 32: it is the owner's.
+     */
+    static boolean legacyShape(Object raw, Move m) {
+        return raw == null || !readable(raw) || LayoutGuard.same(raw, m.shipped().get(m.shipped().size() - 1));
     }
 
     private static boolean gapIs32(FileConfiguration c, Move m) {

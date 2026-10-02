@@ -40,10 +40,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *       shipped token settings with no WARN;</li>
  *   <li>a value the owner changed is kept, with one WARN each naming the key and the new default
  *       (a number, a list and a Scratch Ticket row), and keeps its comment;</li>
+ *   <li>the Scratch Ticket is one unit (the v4 audit, ECON00): a ticket retuned through its price or
+ *       jackpot keeps its 0.36 prizes, with one WARN naming the key and what the new prizes would give
+ *       back with it (99.4% on a 9-token ticket, 104.5% with a seed of 200), and keeps its comment;</li>
  *   <li>an absent key stays absent, and the backfill writes the new default;</li>
  *   <li>a file already at revision 20 is left alone, and the step run twice changes nothing more;</li>
  *   <li>the frozen table: every "old" is what 0.35 and 0.36 shipped, every "new" what this release
- *       ships, 64 values;</li>
+ *       ships, 64 values, each "new" a literal in {@link TokenBalance}'s source, never a constant (ECON04),
+ *       and the ticket's companions what 0.35, 0.36 and this release ship;</li>
  *   <li>a moved key takes the bundled comment ("Keep each at or under 4" and "(each 0-10)" are gone),
  *       and each section gets one INFO line;</li>
  *   <li>a bare {@code games: false} skips the step and the backfill fills in the new defaults;</li>
@@ -191,6 +195,85 @@ class EconomyMigrationTest {
         assertEquals(List.of(), gamesWarns, "the owner's values load without a WARN");
     }
 
+    /** A 0.36 file whose ticket the owner retuned through {@code key}, migrated: its log. */
+    private static List<String> retunedTicket(YamlConfiguration c, String key, Object value) {
+        c.set(key, value);
+        return HomeCraftManagement.migrateConfig(c, "world");
+    }
+
+    @Test
+    void aTicketRetunedThroughItsPriceOrJackpotKeepsItsPrizesWithOneWarnAndItsComment() {
+        // the 0.36 README asked the owner to bring the ticket into 85-95; a key beside the prizes does it
+        // in one number. The new prizes on top of it would leave the band, or pay out more than it takes.
+        String old = EconomyMigration.show(TokenBalance.row(EconomyMigration.TICKET).old());
+        String now = EconomyMigration.show(TokenBalance.TICKET_PAYOUTS);
+        Object[][] cases = {
+                {"arcade.lotto.ticket_tokens", 9, "86.2%", "99.4%"},
+                {"arcade.lotto.ticket_tokens", 8, "97.0%", "111.8%"},
+                {"arcade.lotto.jackpot.seed", 200, "92.6%", "104.5%"},
+                {"arcade.lotto.jackpot.per_ticket", 2, "87.6%", "99.5%"},
+        };
+        for (Object[] k : cases) {
+            YamlConfiguration c = LayoutFixtures.v036();
+            String lottoComment = String.join("\n", c.getComments("arcade.lotto"));
+            String shipped = String.valueOf(TokenBalance.TICKET_SHIPPED.get((String) k[0]));
+            List<String> log = retunedTicket(c, (String) k[0], k[1]);
+            assertEquals(List.of(HomeCraftManagement.WARN + "Config migration: kept arcade.lotto.payouts = " + old
+                            + " because you have changed " + k[0] + " = " + k[1] + " (shipped " + shipped + "), and the"
+                            + " ticket's return is all of them together: yours gives back " + k[2] + ", and the new"
+                            + " prizes " + now + " would give back " + k[3] + " (the house band is 85-95)."), warns(log),
+                    k[0] + " " + k[1] + ": one WARN, naming the key and the return either way");
+            assertTrue(EconomyMigration.same(c.get(EconomyMigration.TICKET),
+                    TokenBalance.row(EconomyMigration.TICKET).old()), k[0] + ": the prizes stay as they were");
+            assertEquals(k[1], c.get((String) k[0]), "and the owner's own value");
+            assertEquals(lottoComment, String.join("\n", c.getComments("arcade.lotto")),
+                    k[0] + ": the ticket's section comment stays, it describes the owner's ticket");
+            for (EconomyMigration.Step s : EconomyMigration.STEPS) {
+                if (!s.path().equals(EconomyMigration.TICKET)) {
+                    assertTrue(EconomyMigration.same(c.get(s.path()), s.now()), s.path() + " moved as usual");
+                }
+            }
+            assertTrue(log.stream().noneMatch(l -> l.startsWith("Config migration: arcade.lotto - ")),
+                    "no line says the ticket moved: " + log);
+        }
+
+        // two keys at once: one WARN naming both
+        YamlConfiguration both = LayoutFixtures.v036();
+        both.set("arcade.lotto.jackpot.cap", 100);
+        List<String> log = retunedTicket(both, "arcade.lotto.ticket_tokens", 9);
+        assertEquals(1, warns(log).size(), "one WARN: " + log);
+        assertTrue(warns(log).get(0).contains("arcade.lotto.ticket_tokens = 9 (shipped 10) and arcade.lotto.jackpot.cap"
+                + " = 100 (shipped 1000)"), "naming both, in table order: " + log);
+    }
+
+    @Test
+    void aTopUpTheOwnerKeptBelowTwiceTheNewEntryIsNamedWhenTheGamesLoad() {
+        // the v4 audit, ECON01: 15 on top of 0.36's 5 kept the family rule; on top of 0.37's 10 it doesn't
+        YamlConfiguration c = LayoutFixtures.v036();
+        c.set("games.cup.server_topup", 15);
+        List<String> log = HomeCraftManagement.migrateConfig(c, "world");
+        assertEquals(1, warns(log).size(), "the kept top-up's one WARN: " + log);
+        assertEquals(TokenBalance.CUP_ENTRY, c.getInt("games.cup.entry"), "the entry moved to 10");
+        HomeCraftManagement.backfillConfig(c, LayoutFixtures.bundled());
+        List<String> gamesWarns = new ArrayList<>();
+        GamesConfig.parse(LayoutFixtures.reread(c), gamesWarns::add, null);
+        assertEquals(List.of("games.cup.server_topup 15 is less than twice games.cup.entry 10, so in a Cup of 3 where "
+                + "everyone sets a time, third gets back 9 of the 10 they paid - set server_topup to at least 20 (or "
+                + "lower the entry) so nobody in a Cup of 2 or 3 loses"), gamesWarns,
+                "and the games say what it costs each time they load");
+    }
+
+    @Test
+    void aTicketWhoseCompanionsStillHoldTheShippedValuesMoves() {
+        YamlConfiguration c = LayoutFixtures.v036();
+        c.set("arcade.lotto.ticket_tokens", 10.0); // the same number, written another way
+        c.set("arcade.lotto.jackpot", null);      // absent: what 0.36 ships is read
+        List<String> log = HomeCraftManagement.migrateConfig(c, "world");
+        assertEquals(List.of(), warns(log), "nothing the owner changed: " + log);
+        assertTrue(EconomyMigration.same(c.get(EconomyMigration.TICKET), TokenBalance.TICKET_PAYOUTS),
+                "the prizes move into the band");
+    }
+
     @Test
     void aValueAlreadyAtTheNewDefaultStaysQuiet() {
         YamlConfiguration c = LayoutFixtures.v036();
@@ -267,16 +350,54 @@ class EconomyMigrationTest {
             assertTrue(paths.add(s.path()), s.path() + " once");
             assertTrue(EconomyMigration.same(v035.get(s.path()), s.old()), s.path() + ": 0.35 shipped " + s.old());
             assertTrue(EconomyMigration.same(v036.get(s.path()), s.old()), s.path() + ": 0.36 shipped " + s.old());
-            assertTrue(EconomyMigration.same(bundled.get(s.path()), s.now()), s.path() + ": this release ships " + s.now()
-                    + ", not " + bundled.get(s.path()));
+            assertTrue(EconomyMigration.same(bundled.get(s.path()), s.now()), s.path() + ": revision 20 moves it to "
+                    + s.now() + " (frozen), but config.yml ships " + bundled.get(s.path()) + ". A retune after 0.37.0"
+                    + " adds a config revision whose old value is " + s.now() + "; revision 20's row never changes");
             assertFalse(EconomyMigration.same(s.old(), s.now()), s.path() + " moves");
         }
         assertEquals(64, EconomyMigration.STEPS.size(), "the 64 values of BALANCE-SPEC §5.3");
+        for (Map.Entry<String, Object> e : TokenBalance.TICKET_SHIPPED.entrySet()) {
+            assertTrue(EconomyMigration.same(v035.get(e.getKey()), e.getValue()), e.getKey() + ": 0.35 shipped " + e.getValue());
+            assertTrue(EconomyMigration.same(v036.get(e.getKey()), e.getValue()), e.getKey() + ": 0.36 shipped " + e.getValue());
+            assertTrue(EconomyMigration.same(bundled.get(e.getKey()), e.getValue()), e.getKey() + ": and this release too");
+        }
+        assertEquals(TokenBalance.TICKET_SHIPPED, TokenBalance.row(EconomyMigration.TICKET).with(),
+                "the ticket's prizes move only with its price and jackpot");
+        assertEquals(1, EconomyMigration.STEPS.stream().filter(s -> !s.with().isEmpty()).count(),
+                "and every other value moves on its own");
         assertEquals(TokenBalance.ROWS.size(), EconomyMigration.STEPS.size(), "the steps are the token balance's rows");
         assertEquals(20, EconomyMigration.REVISION, "it is revision 20");
         assertTrue(HomeCraftManagement.CONFIG_REVISION >= EconomyMigration.REVISION,
                 "and this release stamps it (21, the v4 areas, comes after it)");
         assertEquals(19, LayoutGuard.REVISION, "the layout keeps its own revision, 19");
+    }
+
+    @Test
+    void revision20sTargetsAreLiteralNumbersNotTheConstantsARetuneEdits() throws Exception {
+        // V4-DECISIONS (05:31) and ECONOMY-V2-SPEC §6.1: before release, freeze the targets, so a later
+        // retune of TokenBalance and config.yml fails the pin above instead of rewriting revision 20.
+        String code = java.nio.file.Files.readString(
+                java.nio.file.Path.of("src/main/java/com/dierks/homecraft/games/TokenBalance.java"));
+        String rows = code.substring(code.indexOf("private static List<Row> rows() {"),
+                code.indexOf("private static Map<String, Row> byPath() {"));
+        int seen = 0;
+        for (String line : rows.split("\n")) {
+            if (!line.contains("new Row(")) {
+                continue;
+            }
+            seen++;
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\b[A-Z][A-Z0-9_]{2,}\\b").matcher(line);
+            while (m.find()) {
+                assertEquals("TICKET_SHIPPED", m.group(), "a row reads a constant, so revision 20 would move with "
+                        + "a retune: " + line.trim());
+            }
+        }
+        assertEquals(47, seen, "every row's line: 42 of their own, and five in the cabinets' loops (6 x 3 + 2 x 2)");
+        // the values themselves: what this release's constants are
+        assertEquals(TokenBalance.SKILL_DAILY_CAP, TokenBalance.row("games.skill_daily_cap").now(), "for 0.37.0");
+        assertEquals(TokenBalance.GOLF_DAILY_CAP, TokenBalance.row("games.golf.daily_cap").now(), "for 0.37.0");
+        assertEquals(TokenBalance.RACE_PRIZES, TokenBalance.row("games.race_night.prizes").now(), "for 0.37.0");
+        assertEquals(TokenBalance.TICKET_PAYOUTS, TokenBalance.row(EconomyMigration.TICKET).now(), "for 0.37.0");
     }
 
     @Test

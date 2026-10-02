@@ -202,19 +202,29 @@ public final class Slots {
     private static final Pattern MIX = Pattern.compile("[EMH]+");
 
     /*
-     * Where the courses stand (LAYOUT-SPEC §1.5): two columns far out in the sky, Col W at x 6080 and
-     * Col E at x 7488, each course (and each Classic) in a row of its own from z 4096 to z 7967. Every
-     * box is 576 blocks (36 chunk columns) from every other, a course's own spare half included
-     * (HALF_GAP), so from any course a player sees only that course at every view distance a server
-     * can set (Sight). Every half stays inside x, z 4096..8191, the number range 0.35's halves stood
-     * in, so the golf ball, the Dropper's pilots and the elytra sim give bit-identical answers there.
-     * The kept courses' plots (KeepArea), the Clubhouse and the arena stand further out on the same
-     * rule. An install that built at 0.35's spots keeps them (LayoutGuard).
+     * Where the courses stand (LAYOUT-SPEC §1.5, the v4 layout table): far out in the sky, every box 576
+     * blocks (36 chunk columns) from every other, a course's own spare half included (HALF_GAP), so from
+     * any course a player sees only that course at every view distance a server can set (Sight). The
+     * kept courses' plots (KeepArea), the Clubhouse and the arena stand further out on the same rule. An
+     * install that built at 0.35's spots keeps them (LayoutGuard), except the three areas whose size this
+     * version changed (golf's two and the boat), which take their new spot everywhere.
      *
-     *   Col W, x 6080 (half B at x + size + 576): Sky Rings z 4096, Classic Sky Rings z 4992, Ice Boat
-     *   z 5888, Easy Parkour z 6592, Parkour z 7232, Hard Parkour z 7872.
-     *   Col E, x 7488: Golf of the Week z 4096, Classic Golf z 4800, Tiny Golf z 5504, Classic Parkour
-     *   z 6128, Easy Dropper z 6768, Dropper z 7360, Classic Dropper z 7952.
+     *   Col W, x 6080 (half B at x + size + 576): Sky Rings z 4096, Classic Sky Rings z 4992, Easy Parkour
+     *   z 6592, Parkour z 7232, Hard Parkour z 7872.
+     *   Col E, x 7488: Tiny Golf z 5504, Classic Parkour z 6128, Easy Dropper z 6768, Dropper z 7360,
+     *   Classic Dropper z 7952.
+     *   Col G, x 8768 (v4, Golf v4's bigger halves): Golf of the Week z 4096, Classic Golf z 4896.
+     *   North, z 2880 (v4, the Mountain Run v2): Ice Boat, x 6080..7615, y 96..271.
+     *
+     * The number range. Every half of Col W and Col E stays inside x, z 4096..8191, the range 0.35's halves
+     * stood in, so the golf ball, the Dropper's pilots and the elytra sim give bit-identical answers when a
+     * plan is moved there. Two areas sit outside it, each with its proof: golf's Col G is in one binade with
+     * its own Classic (x 8192..16383, z 4096..8191; a moved golf plan is proven again where it stands before
+     * it opens, and the probe of 857k putts moved across x 8192 found no behaviour change), and the boat,
+     * whose planner and validator work in half-local integers and whose plan is translation-exact, so no
+     * double ever depends on where it stands. The 0.36 spots of the moved areas (Golf of the Week 7488,160,
+     * 4096 and Classic Golf 7488,160,4800 at 64 x 16 x 128, Ice Boat 6080,160,5888 at 128 x 16 x 128) are
+     * emptied by RETIRE after the update (GenService, gen.<slot>.old).
      */
 
     public static final Def DAILY_PARKOUR_EASY = new Def("fresh_parkour_easy", PARKOUR, GAME_TRIALS, "parkour",
@@ -225,12 +235,17 @@ public final class Slots {
             "Hard Parkour", "&c", 64, 48, 64, 0, true, "hard", 6080, 160, 7872, 3, 4);
     public static final Def SKY_RINGS = new Def("fresh_rings", RINGS, GAME_TRIALS, "elytra", "Sky Rings", "&b",
             128, 176, 320, 0, true, "easy", 6080, 128, 4096, 2, 3);
+    /** Golf v4 (GOLF-V4-SPEC §4.1): nine 40 x 64 plots, 3 to a row, in a 128 x 16 x 224 half. */
     public static final Def DAILY_GOLF = new Def("fresh_golf", GOLF, GAME_GOLF, "golf", "Golf of the Week", "&d",
-            64, 16, 128, 9, true, "EEEMMMMHH", 7488, 160, 4096, 2, 3);
+            128, 16, 224, 9, true, "EEEMMMMHH", 8768, 160, 4096, 2, 3);
     public static final Def TINY_GOLF = new Def("fresh_tiny_golf", GOLF, GAME_GOLF, "golf", "Tiny Golf", "&d", 64,
             16, 48, 3, true, "EEE", 7488, 160, 5504, 1, 2);
-    public static final Def ICE_BOAT = new Def("fresh_boat", BOAT, GAME_TRIALS, "boat", "Ice Boat", "&b", 128, 16,
-            128, 0, false, "medium", 6080, 160, 5888, 2, 3);
+    /**
+     * The Mountain Run v2 (MOUNTAIN-V2-SPEC §10.1): a mountain 480 wide, 640 deep and up to 176 tall, its
+     * halves 30 x 40 chunks, north of every other area.
+     */
+    public static final Def ICE_BOAT = new Def("fresh_boat", BOAT, GAME_TRIALS, "boat", "Ice Boat", "&b", 480, 176,
+            640, 0, false, "medium", 6080, 96, 2880, 2, 3);
 
     /*
      * The Dropper (EVENTS-DROPPER-SPEC §B.1.2): a row of glass shafts, one per level of its mix (E, M,
@@ -269,9 +284,13 @@ public final class Slots {
     /** Classic Sky Rings. */
     public static final Def CLASSIC_RINGS = new Def("fresh_classic_rings", RINGS, GAME_TRIALS, "elytra",
             "Classic Sky Rings", "&6", 128, 176, 320, 0, true, "easy", 6080, 128, 4992, 0, 0);
-    /** Classic Golf: holds the big golf course or Tiny Golf. */
+    /**
+     * Classic Golf: holds the big golf course or Tiny Golf, its half as big as Golf of the Week's. A course
+     * of an older golf version (64 x 16 x 128, or Tiny Golf's 64 x 16 x 48) is recalled at its own size, in
+     * the half's corner.
+     */
     public static final Def CLASSIC_GOLF = new Def("fresh_classic_golf", GOLF, GAME_GOLF, "golf", "Classic Golf",
-            "&6", 64, 16, 128, 9, true, "EEEMMMMHH", 7488, 160, 4800, 0, 0);
+            "&6", 128, 16, 224, 9, true, "EEEMMMMHH", 8768, 160, 4896, 0, 0);
 
     /** Classic Dropper: holds a recalled dropper of any mix. */
     public static final Def CLASSIC_DROPPER = new Def("fresh_classic_dropper", DROPPER, GAME_TRIALS, "dropper",

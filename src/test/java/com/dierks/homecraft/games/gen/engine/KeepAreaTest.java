@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -45,8 +46,13 @@ class KeepAreaTest {
             assertTrue(a.area().contains(p), "plot " + n + " is inside the area");
             for (Slots.Def d : Slots.ALL) {
                 Box b = a.build(n, d);
-                assertTrue(p.contains(b), d.id() + " fits plot " + n);
                 assertEquals(p.minX() + KeepArea.MARGIN, b.minX(), "8 in from the plot's edge");
+                if (d == Slots.ICE_BOAT) {
+                    assertFalse(p.contains(b) || KeepArea.fits(b), "the Mountain Run v2's 480 x 176 x 640 is bigger"
+                            + " than a plot: it can't be kept (it stays in the archive)");
+                    continue;
+                }
+                assertTrue(p.contains(b) && KeepArea.fits(b), d.id() + " fits plot " + n);
             }
             for (int m = n + 1; m <= a.maxPlots(); m++) {
                 assertTrue(p.gap(a.plot(m)) >= 0, "plots " + n + " and " + m + " don't overlap");

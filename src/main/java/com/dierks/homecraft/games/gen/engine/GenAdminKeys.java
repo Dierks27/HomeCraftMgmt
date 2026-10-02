@@ -20,6 +20,8 @@ import java.util.List;
  *       change, until its set is over or a new pick is made (round 2);</li>
  *   <li>{@code reroll.<edition>} — how many times an admin rerolled that edition ({@code 7:38});</li>
  *   <li>{@code claim} — {@code world,x,y,z,sx,sy,sz}: the region it may build in ({@link Regions#claim});</li>
+ *   <li>{@code old} — the claims of regions it left behind, until they are emptied ({@link #old});
+ *       {@code retired} — the last one emptied ({@link #retired});</li>
  *   <li>{@code mix} — {@code plan:mix}: the tier or mix the live layout was made with, written with the
  *       flip, so the boot check derives the same plan even after an admin changed the tier.</li>
  * </ul>
@@ -95,6 +97,25 @@ public final class GenAdminKeys {
      */
     public static String wet(String slot) {
         return "gen." + slot + ".wet";
+    }
+
+    /**
+     * A slot's old regions ({@link Regions#oldText}): every claim it held before its region changed whose
+     * halves may still hold its blocks, each with the world, origin, half size and gap it RECORDED. Guarded
+     * until it is emptied (RETIRE: by itself when this version changed the slot's size, or by
+     * {@code /hcm games gen tidy}), or claimed there again. It replaces 0.35's {@link #wet}, which is read
+     * into it once. Unset when there are none.
+     */
+    public static String old(String slot) {
+        return "gen." + slot + ".old";
+    }
+
+    /**
+     * The last time a slot's old region was emptied ({@code OldAreas.Retired#text}): when, which claim, the
+     * blocks taken away and any left there that weren't Fresh Courses', for {@code /hcm games check}.
+     */
+    public static String retired(String slot) {
+        return "gen." + slot + ".retired";
     }
 
     /** What is recalled into a Classics slot ({@link ClassicWant#text()}); unset when it is empty. */

@@ -65,13 +65,13 @@ public final class GenAdmin implements GameAdmin {
     /** The verbs, in help order. */
     public static final List<String> VERBS = List.of("status", "plan", "preview", "test", "promote", "choose", "unchoose",
             "reroll", "retry", "regenerate", "rebuild", "on", "off", "tier", "mix", "pin", "unpin", "tp", "claim", "clear",
-            "history", "recall", "unrecall", "keep", "plots", "clear-plot");
+            "tidy", "retire", "history", "recall", "unrecall", "keep", "plots", "clear-plot");
     /** Other names for a verb (the owner's words): each does exactly what its verb does. */
-    public static final Map<String, String> ALIASES = Map.of("retry", "reroll", "regenerate", "reroll");
+    public static final Map<String, String> ALIASES = Map.of("retry", "reroll", "regenerate", "reroll", "retire", "tidy");
     /** Verbs that change nothing (not logged). */
     private static final List<String> LOOKS = List.of("status", "plan", "tp", "help", "history", "plots", "test");
     /** Verbs that also take a Classics slot's id. */
-    private static final List<String> CLASSIC_VERBS = List.of("status", "rebuild", "tp", "claim");
+    private static final List<String> CLASSIC_VERBS = List.of("status", "rebuild", "tp", "claim", "tidy");
 
     /**
      * Starts an admin's test run on a course that isn't the live one (a preview): Time Trials' test
@@ -134,6 +134,8 @@ public final class GenAdmin implements GameAdmin {
                 "&e/hcm games gen claim <course|plot n> [confirm] &7- count what is in a new area; confirm clears"
                         + " foreign blocks and claims it",
                 "&e/hcm games gen clear <course> confirm &7- empty both halves and switch it off (before moving it)",
+                "&e/hcm games gen tidy|retire <course> [confirm] &7- the old area a course left when it moved or grew:"
+                        + " confirm empties it now (only Fresh Courses' own blocks, water first)",
                 "&e/hcm games gen history <course|all> [page] &7- every past course with its code; history <code> for one",
                 "&e/hcm games gen recall <code> [days|forever] [confirm] &7- bring a past course back into a Classics"
                         + " slot (or: recall <classic|kind> <course> <last|number|date d|seed:hex>)",
@@ -356,6 +358,15 @@ public final class GenAdmin implements GameAdmin {
                 }
                 logChange(sender, args);
                 engine.clear(id, report);
+            }
+            case "tidy" -> {
+                if (confirm) {
+                    if (refusedNearRestart(sender, engine)) {
+                        return;
+                    }
+                    logChange(sender, args);
+                }
+                engine.tidy(id, confirm, report);
             }
             default -> help().forEach(report);
         }
@@ -607,7 +618,7 @@ public final class GenAdmin implements GameAdmin {
                 case "mix" -> match(out, last, def == null ? List.of() : List.of(def.tierOrMix()));
                 case "pin" -> match(out, last, List.of("live"));
                 case "tp" -> match(out, last, List.of("live", "idle"));
-                case "promote", "choose", "reroll", "claim", "clear" -> match(out, last, List.of("confirm"));
+                case "promote", "choose", "reroll", "claim", "clear", "tidy" -> match(out, last, List.of("confirm"));
                 default -> {
                     // nothing more to offer
                 }

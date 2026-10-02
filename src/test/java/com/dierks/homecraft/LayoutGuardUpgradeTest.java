@@ -99,7 +99,8 @@ class LayoutGuardUpgradeTest {
             Disk disk = new Disk(LayoutFixtures.v035());
             migrate(disk);
             FileConfiguration marked = disk.load();
-            assertEquals(19, marked.getInt("config_revision"), "revision 19 is stamped before the database opens");
+            assertEquals(HomeCraftManagement.CONFIG_REVISION, marked.getInt("config_revision"),
+                    "the newest revision is stamped before the database opens (19 marked it on the way)");
             assertTrue(LayoutGuard.pending(marked), "and the file is marked for the guard");
             assertEquals(LayoutGuard.Decision.NEW,
                     LayoutGuard.run(LayoutGuard.Store.of(install.db), disk, NOW).decision(), "nothing was built");
@@ -158,7 +159,10 @@ class LayoutGuardUpgradeTest {
                 assertNull(LayoutScenarios.legacyProblem(after, install), what + ": every place where and as 0.35"
                         + " built it, every claim still matching");
                 for (LayoutGuard.Area a : LayoutGuard.AREAS) {
-                    if (a.gapPath() != null) {
+                    if (a.gapPath() != null && a.resized()) {
+                        assertNull(after.get(a.gapPath()), what + ": " + a.gapPath() + " isn't written: v4 grew it, so"
+                                + " it takes its new spot at the default gap");
+                    } else if (a.gapPath() != null) {
                         assertEquals(a.legacyGap(), after.getInt(a.gapPath(), -1), what + ": " + a.gapPath()
                                 + " written as 0.35's");
                     }
@@ -189,9 +193,12 @@ class LayoutGuardUpgradeTest {
                         (built ? "built" : "never built") + ": the owner's spot stays");
                 assertEquals(32, after.getInt("games.fresh.slots.fresh_parkour.half_gap"),
                         (built ? "built" : "never built") + ": with 0.35's gap, so its shape stays");
-                assertEquals(built ? List.of(4864, 160, 4096) : List.of(7488, 160, 4096),
-                        list(after.get("games.fresh.slots.fresh_golf.origin")),
-                        built ? "built: Golf of the Week stays where it stands" : "never built: the others move");
+                assertEquals(List.of(8768, 160, 4096), list(after.get("games.fresh.slots.fresh_golf.origin")),
+                        (built ? "built" : "never built") + ": Golf of the Week takes its new spot either way (v4 grew"
+                                + " it; whatever stood at its old one is emptied by itself)");
+                assertEquals(built ? List.of(5120, 160, 4096) : List.of(7488, 160, 5504),
+                        list(after.get("games.fresh.slots.fresh_tiny_golf.origin")),
+                        built ? "built: Tiny Golf stays where 0.35 put it" : "never built: the others move");
             }
         }
     }
@@ -227,8 +234,9 @@ class LayoutGuardUpgradeTest {
             Disk disk = new Disk(v035);
             assertEquals(LayoutGuard.Decision.LEGACY, start(disk, LayoutGuard.Store.of(install.db)).decision(), "built");
             FileConfiguration after = disk.load();
-            assertEquals(List.of(4864, 160, 4096), list(after.get("games.fresh.slots.fresh_golf.origin")),
-                    "Golf of the Week's unreadable origin is written as 0.35's, where it was built");
+            assertEquals(List.of(8768, 160, 4096), list(after.get("games.fresh.slots.fresh_golf.origin")),
+                    "Golf of the Week's unreadable origin takes its v4 spot (v4 grew it; 0.35's area, where it was"
+                            + " built, is emptied by itself)");
             assertEquals(List.of(5376, 160, 4448), list(after.get("games.clubhouse.origin")),
                     "and the Clubhouse's, where the room stands");
             assertEquals(java.util.Arrays.asList(5376, 176, "4352"), after.get("games.falling_floors.origin"),

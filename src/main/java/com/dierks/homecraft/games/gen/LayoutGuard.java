@@ -73,6 +73,11 @@ import java.util.function.Function;
  * <p>A stamped server whose file comes back from an older version (a restored config.yml, which
  * revision 19 marks again) gets the STAMPED decision again, never a new one: things may have been
  * built at the decided spots since.
+ *
+ * <p><b>v4: the resized places</b> ({@link #RESIZED}). Golf of the Week, Classic Golf and the Ice Boat are
+ * bigger from v4 on, so no decision keeps their 0.35 spot or shape: both write their shipped spot (an
+ * owner's own stays) and drop a {@code half_gap: 32}. Config revision 21 ({@code GamesAreaMigration}) moves
+ * a file that is already past revision 19 the same way; the engine empties their old areas (RETIRE).
  */
 public final class LayoutGuard {
 
@@ -174,6 +179,14 @@ public final class LayoutGuard {
             };
         }
 
+        /**
+         * Whether a later version changed this place's size, so its 0.35 shape can't be kept
+         * ({@link #RESIZED}): it takes its shipped spot and gap in both decisions.
+         */
+        public boolean resized() {
+            return RESIZED.contains(id);
+        }
+
         /** Its blocks at {@code origin} and {@code gap} ({@code plots} for the keep area), for the crowding rule. */
         List<Box> boxes(int[] origin, int gap, int plots) {
             int x = Math.floorDiv(origin[0], Slots.GAP_GRID) * Slots.GAP_GRID;
@@ -213,6 +226,17 @@ public final class LayoutGuard {
                     com.dierks.homecraft.games.arena.FallingFloorsSettings.ORIGIN, null),
             new Area("clubhouse", "the Clubhouse", Kind.CLUBHOUSE, List.of(5376, 160, 4448),
                     com.dierks.homecraft.games.clubhouse.ClubhouseSettings.ORIGIN, null));
+
+    /**
+     * The places whose size v4 changed (GOLF-V4-SPEC §5.2 step 1, MOUNTAIN-V2-SPEC §10.3 item 7): Golf of the
+     * Week and Classic Golf (128 x 16 x 224 now; a 128-wide half at a 0.35 spot would overlap Tiny Golf's
+     * 0.35 box) and the Ice Boat (the Mountain Run v2's 480 x 176 x 640). None is ever "legacy-held": each
+     * takes its shipped spot and the default gap in BOTH decisions, unless the owner set their own spot,
+     * which stays (the slot then resizes in place). Whatever stood at its old spot is emptied by itself
+     * (RETIRE, {@code gen.<slot>.old}), so moving it never strands blocks.
+     */
+    public static final Set<String> RESIZED = Set.of(Slots.DAILY_GOLF.id(), Slots.CLASSIC_GOLF.id(),
+            Slots.ICE_BOAT.id());
 
     private static Area slot(Slots.Def def, int x, int y, int z) {
         return new Area(def.id(), def.name(), Slots.isClassic(def.id()) ? Kind.CLASSIC : Kind.SLOT,
@@ -337,6 +361,7 @@ public final class LayoutGuard {
     static final List<Evidence> RULES = List.of(
             new Evidence("claims", f -> each(f, id -> GenAdminKeys.claim(id), "'s area is claimed")),
             new Evidence("wet", f -> each(f, id -> GenAdminKeys.wet(id), "'s old area may still hold water")),
+            new Evidence("old", f -> each(f, id -> GenAdminKeys.old(id), "'s old area still stands")),
             new Evidence("recalls", f -> {
                 List<String> out = new ArrayList<>();
                 for (Slots.Def d : Slots.CLASSICS) {
@@ -407,6 +432,7 @@ public final class LayoutGuard {
                 claims.add(claim);
             }
             claims.addAll(Regions.wetClaims(f.meta().get(GenAdminKeys.wet(d.id()))));
+            claims.addAll(Regions.oldClaims(f.meta().get(GenAdminKeys.old(d.id()))));
             for (String c : claims) {
                 if ((c.split(",").length == 8) == shipped) {
                     out.add(d.name() + " was claimed at " + (shipped ? "this version's" : "0.35's") + " shape (" + c
@@ -570,11 +596,14 @@ public final class LayoutGuard {
                 + " server that took the new spots back to 0.35's";
     }
 
-    /** Whether every course and Classic in {@code c} that has a gap holds 0.35's, as {@link #keepLegacy} writes. */
+    /**
+     * Whether every course and Classic in {@code c} that has a gap holds 0.35's, as {@link #keepLegacy} writes
+     * (the {@link #RESIZED} places aside: no decision keeps their 0.35 shape).
+     */
     static boolean legacyShaped(FileConfiguration c) {
         boolean any = false;
         for (Area a : AREAS) {
-            if ((a.kind() == Kind.SLOT || a.kind() == Kind.CLASSIC) && !blocked(c, a)) {
+            if ((a.kind() == Kind.SLOT || a.kind() == Kind.CLASSIC) && !blocked(c, a) && !a.resized()) {
                 any = true;
                 if (!(c.get(a.gapPath(), null) instanceof Number n) || n.intValue() != a.legacyGap()) {
                     return false;
@@ -599,6 +628,10 @@ public final class LayoutGuard {
                 continue;
             }
             Held h = held(c, a);
+            if (a.resized()) {
+                changed |= takeShipped(c, a, h);
+                continue;
+            }
             boolean gapSet = gapSet(c, a);
             boolean backfilled = h == Held.SHIPPED && (missing == null || missing.contains(a.id()));
             // One the plugin can't read: 0.35 fell back to its own shipped spot there, so that is where it built.
@@ -623,7 +656,9 @@ public final class LayoutGuard {
                 + String.join(", ", why == null ? List.of() : why) + "), so every one keeps its 0.35 spot and shape:"
                 + " config.yml now says so (the 0.35 origins, half_gap: 32 for each course and Classic, and"
                 + " keep.plot_gap: 0). From some courses players can see others; /hcm games check lists them and"
-                + " how to move one by hand (README \"Moving an area by hand\")."
+                + " how to move one by hand (README \"Moving an area by hand\"). Golf of the Week, Classic Golf and"
+                + " the Ice Boat are bigger now, so they take their new spots; what stands at their old ones is"
+                + " emptied by itself."
                 + (own.isEmpty() ? "" : " Your own spots stay too: " + String.join(", ", own) + "."));
         return changed;
     }
@@ -635,11 +670,19 @@ public final class LayoutGuard {
         List<Area> candidates = new ArrayList<>();
         List<Area> own = new ArrayList<>();
         List<Box> fixed = new ArrayList<>();
+        List<String> resized = new ArrayList<>();
         for (Area a : AREAS) {
             if (blocked(c, a)) {
                 continue;
             }
             Held h = held(c, a);
+            if (a.resized()) {
+                if (takeShipped(c, a, h)) {
+                    changed = true;
+                    resized.add(a.name());
+                }
+                continue;
+            }
             if (h != Held.OWN && !gapSet(c, a)) {
                 candidates.add(a);
                 continue;
@@ -664,7 +707,7 @@ public final class LayoutGuard {
                 }
             }
         }
-        List<String> moved = new ArrayList<>();
+        List<String> moved = new ArrayList<>(resized);
         for (Area a : candidates) {
             Held h = held(c, a);
             if (stay.contains(a)) {
@@ -708,6 +751,30 @@ public final class LayoutGuard {
         } else {
             log.add("Games layout: nothing was built yet, and every Games place already has its new spot or your"
                     + " own.");
+        }
+        return changed;
+    }
+
+    /**
+     * A {@link Area#resized} place, in either decision: an origin still at a value this plugin shipped (0.35's,
+     * or one that can't be read, which 0.35 fell back from to its own) becomes this version's, and a
+     * {@code half_gap} of 0.35's 32 goes with it, so the default 576 applies; an owner's own readable spot
+     * stays as it is (the slot is resized in place there). Nothing is written for one already at its shipped
+     * spot, or missing (the backfill writes the shipped one).
+     *
+     * @return whether {@code c} changed
+     */
+    private static boolean takeShipped(FileConfiguration c, Area a, Held h) {
+        boolean ours = h == Held.LEGACY || (h == Held.OWN && !readable(a, origin(c, a)));
+        boolean changed = false;
+        if (ours) {
+            writeOrigin(c, a, a.shipped());
+            changed = true;
+        }
+        if ((ours || h == Held.SHIPPED || h == Held.ABSENT) && a.gapPath() != null
+                && c.get(a.gapPath(), null) instanceof Number n && n.intValue() == a.legacyGap()) {
+            c.set(a.gapPath(), null);
+            changed = true;
         }
         return changed;
     }

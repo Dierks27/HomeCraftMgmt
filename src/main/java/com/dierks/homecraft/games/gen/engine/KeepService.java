@@ -803,8 +803,9 @@ final class KeepService {
         }
         j.plan = null;
         if (j.remade) {
-            if (!j.box.contains(buildBox(j))) {
-                return "it doesn't fit a plot";
+            Box made = buildBox(j);
+            if (!KeepArea.fits(made) || !j.box.contains(made)) {
+                return tooBig(j.def, made);
             }
             if (planners.get(j.def.generator()) == null) {
                 return "there is no " + j.def.generator() + " generator";
@@ -821,8 +822,8 @@ final class KeepService {
         // make an old course unbuildable.
         Box half = read.plan().half();
         Box build = at(j.box, half.sizeX(), half.sizeY(), half.sizeZ());
-        if (!j.box.contains(build)) {
-            return "it doesn't fit a plot";
+        if (!KeepArea.fits(half) || !j.box.contains(build)) {
+            return tooBig(j.def, half);
         }
         Plan moved = PlanShift.to(read.plan(), build);
         // (a moved Dropper or golf course is proven again in its plot too, on the planner thread as the
@@ -839,6 +840,20 @@ final class KeepService {
         }
         j.plan = moved;
         return null;
+    }
+
+    /**
+     * Why a course whose half is {@code half} can't be kept: it doesn't fit a plot (pinned at 144 x 176 x
+     * 336, {@link KeepArea#fits}). A Mountain Run v2 (an ice boat course bigger than a plot) says so in the
+     * owner's words: it stays in the archive and on its boards (MOUNTAIN-V2-SPEC D6).
+     */
+    static String tooBig(Slots.Def def, Box half) {
+        if (def != null && Slots.BOAT.equals(def.generator())) {
+            return "Mountain Run v2 courses are too big to keep; they stay in the archive";
+        }
+        return "it doesn't fit a plot (its area is " + (half == null ? "?" : half.sizeX() + " x " + half.sizeY() + " x "
+                + half.sizeZ()) + "; a plot holds " + (KeepArea.PLOT_X - 2 * KeepArea.MARGIN) + " x " + KeepArea.PLOT_Y
+                + " x " + (KeepArea.PLOT_Z - 2 * KeepArea.MARGIN) + ")";
     }
 
     /**

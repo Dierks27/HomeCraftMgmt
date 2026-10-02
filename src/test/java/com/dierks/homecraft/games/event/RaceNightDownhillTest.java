@@ -6,6 +6,7 @@ import com.dierks.homecraft.games.GeneratedCourses;
 import com.dierks.homecraft.games.gen.V2Fixtures;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.CourseCodec;
@@ -58,7 +59,7 @@ class RaceNightDownhillTest {
 
     private static final long T0 = GamesBench.at(2026, 10, 2, 12, 0);
     /** The Ice Boat slot's half A, where {@link MountainRuns} is laid out. */
-    private static final Box HALF = Slots.ICE_BOAT.half('A');
+    private static final Box HALF = LegacyBoxes.v036(Slots.ICE_BOAT, 'A');
     /** The viewing stand's spot over the half's centre, 5 above the pit. */
     private static final Point STAND = RaceStand.spot(HALF, MountainRuns.TOP);
 

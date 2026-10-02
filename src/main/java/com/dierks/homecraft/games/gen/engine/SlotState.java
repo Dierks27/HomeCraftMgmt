@@ -113,10 +113,23 @@ final class SlotState {
     /** The claim matches this world, origin and gap. */
     boolean claimed;
     /**
-     * A Dropper's old regions that may still hold its pools ({@link GenAdminKeys#wet}), as last read:
-     * guarded until it is claimed there again.
+     * The old regions it left behind ({@link GenAdminKeys#old}), as last read: each claim with the sizes it
+     * recorded, guarded until RETIRE empties it (or it is claimed there again).
      */
-    java.util.List<String> wet = java.util.List.of();
+    java.util.List<String> old = java.util.List.of();
+    /** The old claims RETIRE can't empty now, each with what is in the way; tried again every few minutes. */
+    final java.util.Map<String, String> retireHeld = new java.util.LinkedHashMap<>();
+    /** When the last of {@link #retireHeld} was found (epoch ms). */
+    long retireHeldAt;
+    /** The old claims an admin asked to empty ({@code /hcm games gen tidy <slot> confirm}). */
+    final java.util.Set<String> tidyAsked = new java.util.LinkedHashSet<>();
+    /** Where that admin's answer goes when it is done, or {@code null}. */
+    java.util.function.Consumer<String> tidyReport;
+    /**
+     * Its old claim couldn't be recorded in {@code gen.<slot>.old} (the database refused): until it is, it
+     * claims no new region, since the claim key is then the only record of where the old one stood.
+     */
+    boolean oldUnsaved;
     /** Why the slot can't be built or opened (world, hand-built course, foreign blocks), or {@code null}. */
     String problem;
 

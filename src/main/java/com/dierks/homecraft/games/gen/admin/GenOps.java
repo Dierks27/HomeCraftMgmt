@@ -84,6 +84,16 @@ public interface GenOps {
     /** Empty both halves and switch the slot off (decommission, or before moving it). */
     void clear(String slot, Consumer<String> report);
 
+    /**
+     * The old areas a course (or Classics slot) left behind when its area moved or grew: list them, and with
+     * {@code confirm} empty them (RETIRE: only Fresh Courses' own blocks, water first; anything else stays and
+     * is listed). Each is emptied by itself when this version changed the course's size; this is the fallback,
+     * and the way to empty one an owner's own move left.
+     */
+    default void tidy(String slot, boolean confirm, Consumer<String> report) {
+        report.accept("&cThat isn't available.");
+    }
+
     // ---- picking a good course (WP-ADM) --------------------------------------------------------------
 
     /**

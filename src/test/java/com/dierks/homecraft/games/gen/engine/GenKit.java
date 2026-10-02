@@ -105,32 +105,35 @@ final class GenKit {
             blocks.put(pos(x, y, z), canonicalOf(state));
         }
 
-        /** Blocks inside a box. */
+        /**
+         * Blocks inside a box: by the stored blocks, not every point of the box (a Mountain Run v2 half is 54
+         * million points).
+         */
         long count(Box b) {
             long n = 0;
-            for (int x = b.minX(); x <= b.maxX(); x++) {
-                for (int y = b.minY(); y <= b.maxY(); y++) {
-                    for (int z = b.minZ(); z <= b.maxZ(); z++) {
-                        if (blocks.containsKey(pos(x, y, z))) {
-                            n++;
-                        }
-                    }
+            for (long p : blocks.keySet()) {
+                if (inside(b, p)) {
+                    n++;
                 }
             }
             return n;
         }
 
+        /** Whether stored position {@code p} ({@link GenKit#pos}) is inside {@code b}. */
+        static boolean inside(Box b, long p) {
+            int x = (int) (p >> 38);
+            int z = (int) ((p << 26) >> 38);
+            int y = (int) ((p << 52) >> 52);
+            return b.contains(x, y, z);
+        }
+
         /** A copy of what a box holds, for "identical world" checks. */
         Map<Long, String> copy(Box b) {
             Map<Long, String> out = new HashMap<>();
-            for (int x = b.minX(); x <= b.maxX(); x++) {
-                for (int y = b.minY(); y <= b.maxY(); y++) {
-                    for (int z = b.minZ(); z <= b.maxZ(); z++) {
-                        String s = blocks.get(pos(x, y, z));
-                        if (s != null) {
-                            out.put(pos(x, y, z), s + (signs.containsKey(pos(x, y, z)) ? signs.get(pos(x, y, z)) : ""));
-                        }
-                    }
+            for (Map.Entry<Long, String> e : blocks.entrySet()) {
+                long p = e.getKey();
+                if (inside(b, p)) {
+                    out.put(p, e.getValue() + (signs.containsKey(p) ? signs.get(p) : ""));
                 }
             }
             return out;
@@ -441,6 +444,17 @@ final class GenKit {
     /** As {@link #settings}, at the shipped weekly cadence. */
     static DailySettings weekly(String... on) {
         return settings(on).withCadence(Edition.WEEKLY);
+    }
+
+    /**
+     * {@code d} with a budget that loads and reads 64 chunks a tick (the shipped one does 2 and 4): for a test
+     * that builds the Mountain Run v2's 480 x 176 x 640 halves (1,200 chunks each), so it takes seconds of the
+     * test's clock, not minutes. Every rule is the same; only the pace changes.
+     */
+    static DailySettings fast(DailySettings d) {
+        DailySettings.Budget b = d.budget();
+        return d.withBudget(new DailySettings.Budget(b.blocksPerTick(), b.blocksPerTickIdle(), 1_000, 64, 64,
+                b.pauseAboveMspt()));
     }
 
     // ---- the host -----------------------------------------------------------------------------------

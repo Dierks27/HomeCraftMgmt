@@ -22,6 +22,7 @@ import com.dierks.homecraft.games.gen.engine.BukkitWorldPort;
 import com.dierks.homecraft.games.gen.engine.GenAdminKeys;
 import com.dierks.homecraft.games.gen.engine.GenService;
 import com.dierks.homecraft.games.gen.engine.KeptPlot;
+import com.dierks.homecraft.games.gen.engine.OldAreas;
 import com.dierks.homecraft.games.gen.engine.Regions;
 import com.dierks.homecraft.mini.MiniDef;
 import com.dierks.homecraft.mini.MiniService;
@@ -40,6 +41,7 @@ import java.time.DayOfWeek;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The live server's facts for {@link GamesCheck}: the config, the worlds, Multiverse, the Fresh
@@ -55,6 +57,9 @@ import java.util.List;
  * instead of switching its game off.
  */
 final class GamesCheckLive implements GamesCheck.Facts {
+
+    /** How long the check still says an old area was emptied (two weeks). */
+    static final long OLD_NEWS_MS = 14L * 24 * 60 * 60 * 1000;
 
     private final HomeCraftManagement plugin;
 
@@ -219,6 +224,7 @@ final class GamesCheckLive implements GamesCheck.Facts {
         }
 
         List<GamesCheck.SlotFact> slots = null;
+        List<GamesCheck.OldArea> old = new ArrayList<>();
         String next = null;
         if (engine != null) {
             slots = new ArrayList<>();
@@ -240,6 +246,23 @@ final class GamesCheckLive implements GamesCheck.Facts {
             if (at > 0) {
                 next = GenCopy.whenDated(at, zone) + " (in " + GenCopy.span(at - now) + ")";
             }
+            for (OldAreas.Area a : engine.oldAreas()) {
+                Slots.Def def = Slots.any(a.slot());
+                String name = def == null ? a.slot() : GenCopy.slotName(def, st.cadenceDays());
+                old.add(new GamesCheck.OldArea(a.slot(), name, GamesCheck.OldState.valueOf(a.state().name()), a.where(),
+                        a.detail(), a.percent(), 0, 0));
+            }
+            for (Map.Entry<String, OldAreas.Retired> e : engine.retiredAreas().entrySet()) {
+                OldAreas.Retired r = e.getValue();
+                if (now - r.at() > OLD_NEWS_MS) {
+                    continue; // old news: the check stops saying it after two weeks
+                }
+                Slots.Def def = Slots.any(e.getKey());
+                String name = def == null ? e.getKey() : GenCopy.slotName(def, st.cadenceDays());
+                old.add(new GamesCheck.OldArea(e.getKey(), name, GamesCheck.OldState.EMPTIED,
+                        Regions.describeClaim(r.claim()), r.firstLeft().isEmpty() ? null : r.firstLeft().get(0), 100,
+                        r.removed(), r.left()));
+            }
         } else if (st.enabled()) {
             long at = ed.nextChangeAt(now);
             next = GenCopy.whenDated(at, zone) + " (in " + GenCopy.span(at - now) + ")";
@@ -249,7 +272,8 @@ final class GamesCheckLive implements GamesCheck.Facts {
                 next, st.archive().keepProblem() != null ? st.archive().keepProblem()
                 : Regions.keepExtrasProblem(st.archive().keep(), extraBoxes), // or it crowds the arena or the Clubhouse
                 st.archive().keep().describe() + ", " + st.archive().keep().maxPlots() + " plots",
-                facts == null ? null : Regions.keepWorldProblems(st.archive().keep(), facts)); // each plot fits
+                facts == null ? null : Regions.keepWorldProblems(st.archive().keep(), facts), // each plot fits
+                old); // the old areas a move left, and the ones emptied lately
     }
 
     // ---- what players can see (LAYOUT-SPEC §5.1) ----

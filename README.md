@@ -550,7 +550,8 @@ common keys turns the games off, junk in one game's block closes that game.
 `/hcm config reset games` (or `games.<part>`) puts it back as shipped, all but where the Games places
 stand: every `origin` and `half_gap`, `keep.area`, `keep.plot_gap`, `games.worlds` and
 `games.fresh.world` stay as they are (the dry run lists them as kept), since putting those back would
-move what is built. Places move by hand only (see "Moving an area by hand").
+move what is built. Places you set move by hand only (see "Moving an area by hand"); one an update
+moves or grows is moved, and its old area emptied, by itself ("When an update moves or grows an area").
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -976,9 +977,11 @@ next. That's all.
 
 **Where they are.** In your existing Games world (`games.fresh.world: ""` means the first of
 `games.worlds`), far from spawn and high in the sky. Everything the games build stands in x
-1760-8191, z 4096-10367, y 128-303: the courses and the Classics in two columns (x 6080 and x 7488,
-z 4096-7967), the Clubhouse and Falling Floors south of them (z 8544), and the kept courses' plots to
-the west (from x 1760, z 7296). **Every place is 576 blocks (36 chunks) from every other**, a
+1760-9599, z 2880-10367, y 96-303: the courses and the Classics in two columns (x 6080 and x 7488,
+z 4096-7967), Golf of the Week and Classic Golf in a column of their own (x 8768-9599, z 4096-5119,
+their halves 128 x 16 x 224 from v4), the Ice Boat's Mountain Run north of everything (x 6080-7615,
+z 2880-3519, y 96-271: a whole mountain, each half 480 x 176 x 640), the Clubhouse and Falling Floors
+south of them (z 8544), and the kept courses' plots to the west (from x 1760, z 7296). **Every place is 576 blocks (36 chunks) from every other**, a
 course's own spare half included, so from any course players see only that course, whatever view
 distance the server uses (the server sends chunks up to its view distance plus one; 576 blocks is
 clear up to view distance 34, and Paper's largest is 32). Each course owns two halves 576 blocks
@@ -991,9 +994,10 @@ going always counts. The old half is emptied once nobody is on it.
   Classic, Falling Floors, the Clubhouse; the kept courses' area must stay 16 blocks from every
   course, or keeping is off); 576 keeps it out of sight. A place closer than 576
   still works: `/hcm games check` warns that players can see it (see "What players can see").
-- **Keep this sky free.** Don't build anything above y 120 in the Games world between x 1760 and
-  8191, z 4096 and 10367 (further south if you raise `keep.max_plots`: 36 plots reach z 12191, 100
-  plots z 22223). A spot with your blocks in it isn't used: that course stays off and says where.
+- **Keep this sky free ("don't build here").** Don't build anything at y 96 or above in the Games
+  world between x 1760 and 9599, z 2880 and 10367 (further south if you raise `keep.max_plots`: 36
+  plots reach z 12191, 100 plots z 22223). A spot with your blocks in it isn't used: that course stays
+  off and says where.
 - **The world border must be at least 21,000 across** (centred on 0,0; vanilla's is 60 million).
   A course, the Clubhouse or the arena past a smaller one stays off, a kept-course plot past it is
   never used, and `/hcm games check` names each.
@@ -1067,11 +1071,25 @@ ground, biomes and mobs: don't build there. Make sure HomeCraftManagement's jar 
 delete the world with Multiverse (`/mv delete sky`, then confirm) and make it again (step 1 of the list
 above).
 
-**Moving an area by hand.** Nothing moves by itself: a place stays where it was built until you empty
-it and give it another spot. Change an `origin` (or `half_gap`, or `games.fresh.world`) without
+**When an update moves or grows an area** (v4: Golf of the Week and Classic Golf grow to 128 x 16 x
+224 and move to x 8768; the Ice Boat's Mountain Run grows to 480 x 176 x 640 and moves north to z
+2880), nothing is asked of you. The update moves each shipped spot you never changed (an origin you set
+yourself stays, and the course grows in place there). At the restart the course is built again at its
+new spot, this set's next course on a fresh board (a first-finish reward isn't paid twice), and its old
+area is emptied by itself: only once nothing else is being built (so the course is down as briefly as
+it can be), the water drained before any wall goes, and only the plugin's own blocks taken away
+(anything else is left where it is and listed). Nothing is written if something of yours, a kept
+course, the Clubhouse or the arena is within 16 blocks of the old area: it stays guarded and listed,
+with one WARN. `/hcm games check` shows each old area ("Golf of the Week moved to its new area; its old
+area is empty") and what is in the way of one; `/hcm games gen tidy <course> confirm` (also called
+`retire`) empties one by hand. A stop in the middle is finished at the next start.
+
+**Moving an area by hand.** Nothing you set moves by itself: a place stays where it was built until you
+empty it and give it another spot. Change an `origin` (or `half_gap`, or `games.fresh.world`) without
 emptying first and the course is treated as a new one: a new course on a fresh board at the new
-spot, and the old blocks left standing (a Dropper's or a golf course's water stays guarded there until
-you drain it: status says "drain first").
+spot, and the old blocks left standing (a Dropper's or a golf course's old area stays guarded, its
+water with it, until you empty it with `/hcm games gen tidy <course> confirm`, which drains it first:
+status says "drain first").
 
 - **A Fresh course:** `/hcm games gen clear <course> confirm` (both halves emptied, water first, and
   the course switched off; its board and stars stay). Then change `games.fresh.slots.<course>.origin`
@@ -1082,8 +1100,8 @@ you drain it: status says "drain first").
   `games.fresh.classics.slots.<classic>.origin` (and its `half_gap`) and `/hcm reload`: the console
   says "Its old halves were emptied first", and the next recall checks the new spot empty and is
   built there. Changed before its halves are empty, it WARNs and leaves the old halves as they are (a
-  Classic Dropper's or Classic Golf's stay guarded, and status says to move it back and restart, which
-  empties them).
+  Classic Dropper's or Classic Golf's stay guarded until `/hcm games gen tidy <classic> confirm` empties
+  them, water first).
 - **The Clubhouse** (`games.clubhouse.origin`) and **Falling Floors** (`games.falling_floors.origin`):
   change the origin and `/hcm reload`. The new box must be empty; the old room's or arena's blocks stay
   where they are, for you to take down.
@@ -1280,6 +1298,7 @@ point, a checkpoint or finish with its radius, a golf hole's whole bounds box.
 | `/hcm games gen tp <course> [live\|idle]` | Go to the current course, or the spare half |
 | `/hcm games gen claim <course> [confirm]` | Count what is in a new area; with `confirm`, clear it and let the course use it (refused while a hand-built course or the spawn is within 16 blocks) |
 | `/hcm games gen clear <course> confirm` | Empty both halves and switch the course off (do this before moving a course's `origin`: see "Moving an area by hand") |
+| `/hcm games gen tidy <course> [confirm]` (also `retire`) | The old area a course (or Classic) left when an update moved or grew it, or an owner's move left: lists it, and with `confirm` empties it now (only the plugin's own blocks, water first; anything else stays and is listed). An area an update moved is emptied by itself, so this is the fallback (see "When an update moves or grows an area") |
 
 The overrides (`on`/`off`, `tier`/`mix`, `pin`, `choose` (a one-set pin), rerolls per set, the claimed area, and the schedule
 with when it was first seen) live in `hcm_meta` under `gen.*`. Generated courses are ordinary
@@ -1358,7 +1377,8 @@ still dealt, and the flat safe straight is still the fallback a hole always has.
   planner, play exactly as they always did: smooth sandstone is ordinary stone there.
 - **Water, safely**, as for the Dropper: ponds are written last with no physics and drained first,
   the area guard stops any flow into or out of a golf area, `clear` drains them first, and a golf
-  course whose `origin` moves without a `clear` keeps its old area guarded ("drain first"). The boot
+  course whose `origin` moves without a `clear` keeps its old area guarded ("drain first": `/hcm games
+  gen tidy <course> confirm` empties it, ponds first). The boot
   check of a golf layout from an older planner (or a Classic Golf course re-made from its seed)
   scans every hole's whole plot, a pond to look at included, and only full blocks count as sealing a
   pond (not a slab, sign or leaves): a gap keeps that course closed, logs a SEVERE line that contains
@@ -1569,8 +1589,8 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
   area guard stops water flowing into an area **and out of one**; verify puts back a missing water
   block like any other. Time Trials holds every Dropper course's pools itself too, so no pool spills
   even while Fresh Courses is off; a kept Dropper's plot keeps its water in; and a Dropper whose
-  `origin` is moved without a `clear` keeps its old area guarded ("drain first": move it back and
-  `/hcm games gen clear` it; status lists it) until it is cleared there (see "Moving an area by hand").
+  `origin` is moved without a `clear` keeps its old area guarded ("drain first": `/hcm games gen tidy
+  <course> confirm` empties it, pools first; status lists it) (see "Moving an area by hand").
 - **Where:** in the east column: half A x 7488-7551 and half B x 8128-8191, y 160-223, z 6768-6783
   (Easy Dropper) and 7360-7375 (Dropper); Classic Dropper (recalls of either) at z 7952-7967. Each
   half is 64 x 64 x 16. The keep plot size is unchanged.

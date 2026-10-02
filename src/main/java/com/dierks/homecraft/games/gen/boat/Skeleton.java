@@ -15,14 +15,19 @@ import java.util.List;
  * the band's own frame: a along the band, b across it, ψ the heading off its axis. Every beat keeps the
  * heading within ±50° of the axis, the line within the band's lateral room (half the pitch either side,
  * less the corridor and 4 of terrain), and consecutive arcs alternating in sign unless both are gentle
- * sweeps (≤ 25°). <b>Lookahead repair:</b> a beat is kept only while a closure still exists after it, an
+ * sweeps (≤ 25°). <b>Straights of {@value #AXIS_LONG} or more lie on the axis</b> (red-team F08: an
+ * off-axis straight's walls step, and a boat touching a riser loses that axis of its speed): a sweep or
+ * bend that leaves the axis is followed by one back onto it (a short straight between at most), S-curves
+ * and chicanes come back onto it, and a closure's straight off it is shorter. <b>Lookahead repair:</b> a beat is kept only while a closure still exists after it, an
  * arc, a straight and an arc (radii from the tier's sweepers) that bring the line back onto the band's
  * axis heading along it with room for an approach straight of at least {@value #APPROACH} to the link
  * (where a brake drop fits); after {@value #REDRAWS} refused draws the closure is laid at once, and a band
  * that can't close drops the candidate ({@code null}).
  *
  * <p><b>Gate sets</b> (slalom): runs of gates at a seeded spacing on the traverses' straights and sweeps,
- * an open run between sets for a drop; their gate line is what {@link #line} gives {@link BoatLine}.
+ * an open run between sets for a drop; their gate line is what {@link #line} gives {@link BoatLine}. Where
+ * the descent floor asks for 2-block drops (medium and hard), {@value #TAIL_STEEP_SHARE} of the bands end
+ * in a long open tail ({@value #GATE_TAIL_STEEP}) for a staircase.
  *
  * <p>Pure and deterministic: the same frame and stream give the same route on every host.
  */

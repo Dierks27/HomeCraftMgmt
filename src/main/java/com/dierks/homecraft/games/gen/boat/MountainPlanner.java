@@ -429,14 +429,15 @@ final class MountainPlanner {
         int wz = half.minZ();
         double[] st = sk.line.at(sk.start);
         double[] tan = sk.line.tangent(sk.start);
-        Course.Spot start = new Course.Spot(wx + st[0], raster.topIce + 1, wz + st[1],
+        Course.Spot start = new Course.Spot(wx + exact(st[0]), raster.topIce + 1, wz + exact(st[1]),
                 (float) TrackRaster.yaw(tan[0], tan[1]), 0f);
         List<Course.Mark> marks = new ArrayList<>();
         for (RasterV4.Spot s : cps) {
-            marks.add(new Course.Mark(wx + s.x(), s.ice() + 1, wz + s.z(), s.r()));
+            marks.add(new Course.Mark(wx + exact(s.x()), s.ice() + 1, wz + exact(s.z()), s.r()));
         }
         double[] fp = sk.line.at(sk.finish);
-        Course.Mark finish = new Course.Mark(wx + fp[0], raster.finishIce + 1, wz + fp[1], raster.finishRadius());
+        Course.Mark finish = new Course.Mark(wx + exact(fp[0]), raster.finishIce + 1, wz + exact(fp[1]),
+                raster.finishRadius());
         Slots.Def slot = in.slot();
         Course draft = new Course(slot.id(), TrialKind.BOAT, slot.name(), Tier.of(tier.id), "", start, marks, finish,
                 (double) (raster.lowest() - 3), null, true, false, 1);
@@ -458,6 +459,14 @@ final class MountainPlanner {
         if (in.cancelled().getAsBoolean()) {
             throw new Cancelled();
         }
+    }
+
+    /**
+     * A half-local coordinate on a 1/4096 grid, so adding the half's corner is exact and the same layout
+     * has the same hash wherever its half is (§10.2).
+     */
+    static double exact(double v) {
+        return Math.round(v * 4096) / 4096.0;
     }
 
     /** {@code spots} less those a blocked stretch covers. */

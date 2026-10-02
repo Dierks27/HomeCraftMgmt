@@ -976,11 +976,12 @@ public final class DropPlan {
 
         /** Back to 1-block drops, the plainest first, until the 2s are within the tier's share of the count. */
         void downgrade() {
-            for (int guard = 0; guard < lips.size() && bigsNow() > tier.bigFor(lips.size()); guard++) {
+            List<Double> stuck = new ArrayList<>();
+            for (int guard = 0; guard < 2 * lips.size() && bigsNow() > tier.bigFor(lips.size()); guard++) {
                 int pick = -1;
                 for (int i = 0; i < lips.size(); i++) {
                     Drop d = lips.get(i);
-                    if (d.drop() >= 2 && d.kind() != Kind.FINAL
+                    if (d.drop() >= 2 && d.kind() != Kind.FINAL && !stuck.contains(d.s())
                             && (pick < 0 || rank(d.kind()) > rank(lips.get(pick).kind()))) {
                         pick = i;
                     }
@@ -990,7 +991,13 @@ public final class DropPlan {
                 }
                 Drop d = lips.get(pick);
                 remove(pick);
-                add(d.s(), 1, d.kind());
+                // a 1-block drop keeps every rule there too (out of its neck its lane is wider: a longer run-up)
+                if (ok(d.s(), 1)) {
+                    add(d.s(), 1, d.kind());
+                } else {
+                    add(d.s(), d.drop(), d.kind());
+                    stuck.add(d.s());
+                }
             }
         }
 

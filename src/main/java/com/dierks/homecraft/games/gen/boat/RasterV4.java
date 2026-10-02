@@ -48,7 +48,7 @@ final class RasterV4 {
     /** Checkpoint spacing the chain aims at along the track (§3.5, §7.3). */
     static final double SPACING = 45;
     /** A leg's bounds with a margin: across, and along with no drop. */
-    static final double LEG_MAX = DownhillValidator.MAX_LEG;
+    static final double LEG_MAX = DownhillValidator.MAX_LEG - 0.01; // the marks are kept on a 1/4096 grid
     static final double FLAT_LEG = 58.5;
     /** A reset faces within this of the lane (§7.3). */
     static final double FACING = 60;

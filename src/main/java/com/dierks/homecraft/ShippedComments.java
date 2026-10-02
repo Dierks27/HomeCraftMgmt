@@ -20,7 +20,9 @@ import java.util.Set;
  * build stands ... x 1760-8191, z 4096-10367, y 128-303 ... Keep the sky there free" with a Mountain Run
  * archived at "about 50 KB" (revision 21 moves golf to x 8768 and the Ice Boat north to z 2880, y 96, and a
  * v2 run is about 0.4 MB), so the file's own "don't build here" leaves out both new areas. Revision 20
- * refreshes the comments of the keys it moves itself ({@link EconomyMigration}); these are the rest.
+ * refreshes the comments of the keys it moves itself ({@link EconomyMigration}); these are the rest, with the
+ * {@code games.fresh} header ("Adventure Golf": its golf is Golf v4 now) and {@code keep.area}'s (which courses fit a
+ * plot: Golf v4 does, a Mountain Run v2 can't be kept).
  *
  * <p><b>Only the plugin's own words.</b> A comment is replaced only while it is exactly, byte for byte, one
  * an earlier version of this plugin shipped on that key (0.35.0's or 0.36.0's), told apart by a fingerprint
@@ -54,6 +56,8 @@ final class ShippedComments {
     static final List<Stale> STALE = List.of(
             // "skill games pay small, capped rewards" (0.35 = 0.36): the token balance pays about a token a minute
             new Stale("games", EconomyMigration.REVISION, Set.of("50d8aba597d7fd59")),
+            // "mini golf" (0.35) and "Adventure Golf" (0.36): Golf of the Week and Tiny Golf are Golf v4 now
+            new Stale("games.fresh", REV_AREAS, Set.of("afc4d5a1820c28e6", "b9c18e478e6664ef")),
             // "x 4096-5535, z 4096-4671" (0.35) and "x 1760-8191, z 4096-10367, y 128-303" (0.36): the golf column at
             // x 8768 and the Ice Boat at z 2880, y 96 are outside both
             new Stale("games.fresh.world", REV_AREAS, Set.of("cf98000938cc4089", "450d9f6b116ee1a1")),
@@ -61,6 +65,8 @@ final class ShippedComments {
             new Stale("games.fresh.slots", REV_AREAS, Set.of("d0f43fc28a015b8a", "b21c017d24e981a6")),
             // "well under 5 MB" (0.35) and "a Mountain Run about 50 KB ... about 6 MB" (0.36): now 0.4 MB, 25 MB
             new Stale("games.fresh.archive", REV_AREAS, Set.of("58fe358d73bbc064", "0081a1a17d71e8e9")),
+            // the plots, without what fits one (0.35, 0.36): Golf v4 does; a Mountain Run v2 can't be kept
+            new Stale("games.fresh.keep.area", REV_AREAS, Set.of("a49d2cd2068a4432", "fdd47af4be7d3f8b")),
             // "turn on the Ice Boat first": now switch Race Night on first, so the week it builds is the Winding Road
             new Stale("games.race_night", REV_AREAS, Set.of("4e8655d09535e299")),
             // 0.36: "a short downhill sprint: 5, with finish_window_seconds: 90" - a v2 run is 2-3 minutes

@@ -847,9 +847,8 @@ final class KeepService {
         }
         PlanCodec.Read read = PlanCodec.decode(j.row.plan());
         if (!read.ok()) {
-            return "its stored plan can't be read (" + read.problem() + "). Make it again from its seed with today's"
-                    + " generator: /hcm games gen keep " + j.row.slot() + " seed:" + GenSeed.hex(j.row.seed()) + " "
-                    + j.id;
+            return "its stored plan can't be read (" + read.problem() + "). Make " + gen.remakeHint(j.row)
+                    + ": /hcm games gen keep " + j.row.slot() + " seed:" + GenSeed.hex(j.row.seed()) + " " + j.id;
         }
         // Sized by the plan's own half, not the slot's today: a generator that grew since can't
         // make an old course unbuildable.

@@ -49,6 +49,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *       says "made again with today's golf (v4): not the same holes", a keep starts on an empty board, and a
  *       recall says its board's records were set on the old course.</li>
  * </ul>
+ * And the hint beside an edition whose stored plan can't be read says which of the two a {@code seed:} would make
+ * ("the same course again from its seed" or "it again with today's golf (v4: not the same holes)", FX-LAST).
  */
 class GolfRemakeTest {
 
@@ -229,5 +231,58 @@ class GolfRemakeTest {
         GenTag c = gen.liveTag(CLASSIC);
         assertNotNull(c, "made again: " + heard() + " " + gen.status(CLASSIC));
         assertEquals(GolfPlanner.ALGO, c.algo(), "by today's Golf v4");
+    }
+
+    // ---- the hint beside an unreadable plan is true per edition (FX-LAST) ----------------------------------
+
+    /** {@code row}'s stored plan made unreadable. */
+    private void unreadable(GenArchiveDao.Row row) throws Exception {
+        try (PreparedStatement ps = host.connection.prepareStatement(
+                "UPDATE gen_editions SET plan = X'00' WHERE slot = ? AND edition = ?")) {
+            ps.setString(1, row.slot());
+            ps.setString(2, row.edition());
+            ps.executeUpdate();
+        }
+    }
+
+    @Test
+    void anUnreadableAlgo3PlansHintSaysTheSameCourseAgainNotTodaysGenerator() throws Exception {
+        V3GolfFixtures.Fixture f = V3GolfFixtures.named("golf-9-a");
+        GenArchiveDao.Row row = archived(f, GolfPlanner.ALGO_V3);
+        unreadable(row);
+        String hex = GenSeed.hex(f.seed());
+        String history = String.join("\n", gen.historyOf(GOTW, GenArgs.which(row.code())));
+        assertTrue(history.contains("can't be read") && history.contains("&7- make the same course again from its seed:"
+                + " recall ... seed:" + hex), history);
+        said.clear();
+        gen.recall(CLASSIC, GOTW, GenArgs.which(row.code()), GenArgs.DAYS_DEFAULT, false, said::add);
+        assertTrue(heard().contains("&7Make the same course again from its seed, marked re-made: &e/hcm games gen recall "
+                + CLASSIC + " " + GOTW + " seed:" + hex), heard());
+        said.clear();
+        gen.keep(GOTW, GenArgs.which(row.code()), "old_week", null, false, false, said::add);
+        assertTrue(heard().contains("&7Make the same course again from its seed, marked re-made: &e/hcm games gen keep "
+                + GOTW + " seed:" + hex + " old_week"), heard());
+        assertFalse((history + heard()).contains("today's"), "Adventure Golf is kept frozen, not made by Golf v4: "
+                + history + "\n" + heard());
+    }
+
+    @Test
+    void anUnreadablePlanOfAnotherVersionsHintSaysTodaysGolfAndNotTheSameHoles() throws Exception {
+        V3GolfFixtures.Fixture f = V3GolfFixtures.named("golf-3");
+        GenArchiveDao.Row row = archived(f, 2);
+        unreadable(row);
+        String hex = GenSeed.hex(f.seed());
+        String history = String.join("\n", gen.historyOf(TINY, GenArgs.which(row.code())));
+        assertTrue(history.contains("&7- make it again with today's golf (v4: not the same holes): recall ... seed:"
+                + hex), history);
+        said.clear();
+        gen.recall(CLASSIC, TINY, GenArgs.which(row.code()), GenArgs.DAYS_DEFAULT, false, said::add);
+        assertTrue(heard().contains("&7Make it again with today's golf (v4: not the same holes), marked re-made: &e/hcm"
+                + " games gen recall " + CLASSIC + " " + TINY + " seed:" + hex), heard());
+        said.clear();
+        gen.keep(TINY, GenArgs.which(row.code()), "old_tiny", null, false, false, said::add);
+        assertTrue(heard().contains("&7Make it again with today's golf (v4: not the same holes), marked re-made: &e/hcm"
+                + " games gen keep " + TINY + " seed:" + hex + " old_tiny"), heard());
+        assertFalse((history + heard()).contains("the same course"), history + "\n" + heard());
     }
 }

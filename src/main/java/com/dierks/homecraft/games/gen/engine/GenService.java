@@ -5730,6 +5730,16 @@ public final class GenService implements GeneratedCourses, GenOps {
         readStored(r.plan(), offMain, read -> historyLines(r, read).forEach(report));
     }
 
+    /**
+     * What a {@code seed:} recall or keep of {@code r} makes ({@link GenCopy#remakeHint}): the same course when its
+     * planner made it or keeps that version frozen (an algo-3 golf edition), else another course (FX-LAST).
+     */
+    String remakeHint(GenArchiveDao.Row r) {
+        Slots.Def d = Slots.of(r.slot());
+        Planner p = d == null ? null : planners.get(d.generator());
+        return GenCopy.remakeHint(d, p == null ? null : p.remake(d, r.algoVersion()));
+    }
+
     /** One past course's lines: what it was, its plan ({@code read}), its players and top 5. */
     private List<String> historyLines(GenArchiveDao.Row r, PlanCodec.Read read) {
         List<String> out = new ArrayList<>();
@@ -5742,7 +5752,7 @@ public final class GenService implements GeneratedCourses, GenOps {
                 + " · " + r.algo() + " · built " + GenCopy.whenDated(r.builtAt(), host.zone()));
         out.add(read.ok() ? "&7Plan: " + read.plan().ops().size() + " blocks, hash " + read.plan().hash()
                 + " &8(it can be brought back exactly)" : "&cPlan: can't be read (" + read.problem()
-                + ") &7- it can be made again from its seed: recall ... seed:" + GenSeed.hex(r.seed()));
+                + ") &7- make " + remakeHint(r) + ": recall ... seed:" + GenSeed.hex(r.seed()));
         try {
             GenArchiveDao.BoardStats st = host.store().boardStats(game, r.board());
             out.add("&7" + st.players() + " player" + (st.players() == 1 ? "" : "s") + ", " + st.plays() + " play"
@@ -5877,8 +5887,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             PlanCodec.Read read = PlanCodec.decode(row.plan());
             if (!read.ok()) {
                 report.accept("&c" + row.code() + "'s stored plan can't be read (" + read.problem() + ").");
-                report.accept("&7Make it again from its seed with today's generator (marked re-made): &e/hcm games gen"
-                        + " recall " + classic.id() + " " + row.slot() + " seed:" + GenSeed.hex(row.seed()));
+                report.accept("&7Make " + remakeHint(row) + ", marked re-made: &e/hcm games gen recall "
+                        + classic.id() + " " + row.slot() + " seed:" + GenSeed.hex(row.seed()));
                 return;
             }
         }
@@ -6006,8 +6016,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             if (!read.ok()) {
                 report.accept("&c" + row.code() + "'s stored plan can't be read (" + read.problem() + "), so it can't"
                         + " be kept as it was.");
-                report.accept("&7Make it again from its seed with today's generator (marked re-made): &e/hcm games gen"
-                        + " keep " + row.slot() + " seed:" + GenSeed.hex(row.seed()) + " " + id);
+                report.accept("&7Make " + remakeHint(row) + ", marked re-made: &e/hcm games gen keep " + row.slot()
+                        + " seed:" + GenSeed.hex(row.seed()) + " " + id);
                 return;
             }
             keeper.keep(row, false, id, name, freshBoard, confirm, report);

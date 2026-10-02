@@ -597,6 +597,24 @@ public final class GenCopy {
                 + " same " + (golf ? "holes" : "course");
     }
 
+    /**
+     * What a {@code seed:} recall or keep makes of a course whose stored plan can't be read, for the admin's hint
+     * beside that command, true per edition ({@link Planner#remake}): "the same course again from its seed" when
+     * its planner is the version that made it or keeps it frozen (a 0.36 Adventure Golf edition), else "it again
+     * with today's golf (v4: not the same holes)"; with no planner for it ({@code again} null), "it again from its
+     * seed with today's generator". It follows "Make " or "make ".
+     */
+    public static String remakeHint(Slots.Def def, Planner.Remake again) {
+        if (again == null) {
+            return "it again from its seed with today's generator";
+        }
+        if (again.exact()) {
+            return "the same course again from its seed";
+        }
+        return "it again with today's " + (def == null ? "planner" : def.generator()) + " (v" + again.planner().algo()
+                + ": not the same " + (def != null && def.golf() ? "holes" : "course") + ")";
+    }
+
     /** An edition's dates for players: "5 Oct" (a day), "week of 5 Oct" (a week), "5 Oct-7 Oct" (N days). */
     public static String editionDates(int cadence, long startDay) {
         String first = DAY_MONTH.format(Edition.date(startDay));

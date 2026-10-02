@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.gen;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.Edition;
 import com.dierks.homecraft.games.gen.api.Slots;
@@ -97,8 +98,11 @@ class DailySettingsTest {
         assertNull(s.rebuildDay(), "on the quests' week start");
         assertNull(s.safeSpot(), "people are moved to the world's spawn");
         assertEquals(List.of(6, 12), s.starGoals(), "6 and 12 stars a week");
-        assertEquals(List.of(new DailyStars.Goal(6, 1), new DailyStars.Goal(12, 2)), s.starGoalList(),
-                "paying 1 and 2 tokens");
+        List<Integer> wt = TokenBalance.STAR_WEEKLY_TOKENS;
+        assertEquals(List.of(new DailyStars.Goal(6, wt.get(0)), new DailyStars.Goal(12, wt.get(1))), s.starGoalList(),
+                "paying the token balance's tokens");
+        assertEquals(TokenBalance.FRESH_DAILY_CAP, s.dailyCap(), "and games.fresh.daily_cap is the token balance's");
+        assertTrue(s.dailyCap() >= wt.get(0) + wt.get(1), "which holds both goals in one day");
         assertEquals(2.0, s.stars().gold("easy"), 1e-9, "gold on easy is twice the expert time");
         assertEquals(1.8, s.stars().silver("hard"), 1e-9, "silver on hard is 1.8 times");
         for (Slots.Def d : Slots.ALL) {
@@ -107,8 +111,9 @@ class DailySettingsTest {
             assertEquals(d.weeklyClear(), s.rewards().clearWeekly().get(d.id()), d.id() + ": the weekly table");
             assertEquals(d.dailyClear(), s.rewards().clearDaily().get(d.id()), d.id() + ": the daily table");
         }
-        assertEquals(4, s.dailyClear("fresh_parkour_hard"),
-                "hard parkour's first finish in a week pays 4: never above what the trials' daily_cap can pay");
+        assertEquals(TokenBalance.FRESH_PARKOUR_HARD_WEEKLY, s.dailyClear("fresh_parkour_hard"),
+                "hard parkour's first finish in a week pays the token balance's weekly amount");
+        assertEquals(TokenBalance.FRESH_GOLF_WEEKLY, s.dailyClear("fresh_golf"), "and Golf of the Week's");
         assertFalse(s.slot("fresh_boat").enabled(), "the ice boat ships off");
     }
 
@@ -126,7 +131,13 @@ class DailySettingsTest {
                         + ", which its game's daily_cap (" + cap + ") can pay in one go");
             }
         }
-        assertEquals(4, Slots.DAILY_PARKOUR_HARD.weeklyClear(), "the weekly Hard Parkour is 4, the trials' cap");
+        int skillCap = com.dierks.homecraft.config.GamesConfig.Common.defaults().skillDailyCap();
+        for (Slots.Def d : Slots.ALL) {
+            assertTrue(d.weeklyClear() <= skillCap && d.dailyClear() <= skillCap,
+                    d.id() + " fits games.skill_daily_cap (" + skillCap + ") too");
+        }
+        assertEquals(TokenBalance.FRESH_PARKOUR_HARD_WEEKLY, Slots.DAILY_PARKOUR_HARD.weeklyClear(),
+                "the weekly Hard Parkour is the token balance's");
         for (DailyStars.Goal g : s.starGoalList()) {
             assertTrue(g.tokens() <= s.dailyCap(), "a Star Chart goal's " + g.tokens()
                     + " tokens fit games.fresh.daily_cap (" + s.dailyCap() + ")");
@@ -209,12 +220,22 @@ class DailySettingsTest {
                 "an empty rebuild day is the quests' week start");
     }
 
+    /** {@code round(daily + (weekly - daily) * (days - 1) / 6)}, half up: the README's formula. */
+    private static int between(int daily, int weekly, int days) {
+        return (int) Math.floor(daily + (weekly - daily) * (days - 1) / 6.0 + 0.5);
+    }
+
     @Test
     void eachCoursesFirstFinishFollowsTheCadenceBetweenTheTwoTables() throws Exception {
-        assertEquals(3, with("cadence", "daily", new ArrayList<>()).dailyClear("fresh_parkour_hard"), "daily: 3");
-        assertEquals(3, with("cadence", 3, new ArrayList<>()).dailyClear("fresh_parkour_hard"),
-                "every 3 days: round(3 + 1 * 2/6)");
-        assertEquals(4, with("cadence", 14, new ArrayList<>()).dailyClear("fresh_parkour_hard"), "every 14 days: 4");
+        int hd = TokenBalance.FRESH_PARKOUR_HARD_DAILY;
+        int hw = TokenBalance.FRESH_PARKOUR_HARD_WEEKLY;
+        assertEquals(hd, with("cadence", "daily", new ArrayList<>()).dailyClear("fresh_parkour_hard"), "daily: the daily end");
+        assertEquals(between(hd, hw, 3), with("cadence", 3, new ArrayList<>()).dailyClear("fresh_parkour_hard"),
+                "every 3 days: round(daily + (weekly - daily) * 2/6)");
+        assertEquals(between(TokenBalance.FRESH_PARKOUR_DAILY, TokenBalance.FRESH_PARKOUR_WEEKLY, 3),
+                with("cadence", 3, new ArrayList<>()).dailyClear("fresh_parkour"), "Parkour every 3 days the same way");
+        assertEquals(hw, with("cadence", 14, new ArrayList<>()).dailyClear("fresh_parkour_hard"),
+                "every 14 days: the weekly end");
         Map<String, Object> fresh = shipped();
         put(fresh, "cadence", 2);
         put(fresh, "rewards.clear_daily.fresh_golf", 4);
@@ -229,10 +250,12 @@ class DailySettingsTest {
         assertEquals(5, s.dailyClear("fresh_golf", 2), "the configured cadence is the same as dailyClear(id)");
         assertEquals(0, s.dailyClear("river_run", 7), "a course that isn't a slot pays nothing here");
         assertEquals(List.of(10, 25), with("cadence", "daily", new ArrayList<>()).starGoals(), "daily goals");
-        assertEquals(List.of(new DailyStars.Goal(9, 1), new DailyStars.Goal(21, 1)),
+        List<Integer> dt = TokenBalance.STAR_DAILY_TOKENS;
+        assertEquals(List.of(new DailyStars.Goal(9, dt.get(0)), new DailyStars.Goal(21, dt.get(1))),
                 with("cadence", 3, new ArrayList<>()).starGoalList(), "every 3 days: in between, daily tokens");
-        assertEquals(List.of(new DailyStars.Goal(4, 2)), DailySettings.defaults().starGoals(6),
-                "never above 80% of what the week can give");
+        assertEquals(List.of(new DailyStars.Goal(4, java.util.Collections.max(TokenBalance.STAR_WEEKLY_TOKENS))),
+                DailySettings.defaults().starGoals(6),
+                "never above 80% of what the week can give (the two goals meet at 4 and pay the larger)");
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.gen.dropper;
 
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenFailed;
@@ -315,10 +316,12 @@ class DropperPlannerTest {
         assertEquals(7952, DropperSlots.CLASSIC.originZ(), "the Classic Dropper, a row further along z");
         assertTrue(DropperSlots.EASY.enabled() && DropperSlots.DROPPER_SLOT.enabled(),
                 "both ship on (inside games.fresh, which ships off)");
-        assertEquals(List.of(1, 2), List.of(DropperSlots.EASY.dailyClear(), DropperSlots.DROPPER_SLOT.dailyClear()),
-                "a first finish pays 1 and 2 a day");
-        assertEquals(List.of(2, 3), List.of(DropperSlots.EASY.weeklyClear(), DropperSlots.DROPPER_SLOT.weeklyClear()),
-                "and 2 and 3 a week");
+        assertEquals(List.of(TokenBalance.FRESH_DROPPER_EASY_DAILY, TokenBalance.FRESH_DROPPER_DAILY),
+                List.of(DropperSlots.EASY.dailyClear(), DropperSlots.DROPPER_SLOT.dailyClear()),
+                "a first finish pays the token balance's daily amounts");
+        assertEquals(List.of(TokenBalance.FRESH_DROPPER_EASY_WEEKLY, TokenBalance.FRESH_DROPPER_WEEKLY),
+                List.of(DropperSlots.EASY.weeklyClear(), DropperSlots.DROPPER_SLOT.weeklyClear()),
+                "and its weekly ones");
     }
 
     @Test

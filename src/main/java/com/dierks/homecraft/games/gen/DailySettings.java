@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.gen;
 
 import com.dierks.homecraft.config.GamesConfig;
 import com.dierks.homecraft.games.RestartHold;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.Edition;
 import com.dierks.homecraft.games.gen.api.GenCopy;
@@ -247,8 +248,10 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         }
 
         /**
-         * The shipped tables (the addendum's: Easy 2/1, Parkour 3/2, Hard 5/3, Sky Rings 3/2, Golf 3/2, Tiny 2/1;
-         * and EVENTS-DROPPER-SPEC §B.1.8's Easy Dropper 2/1, Dropper 3/2).
+         * The shipped tables, weekly and daily, from each {@link Slots.Def}'s last two numbers, which are
+         * {@link TokenBalance}'s (about a token a minute of first-time play). Each is paid whole under its
+         * game's {@code daily_cap} and {@code skill_daily_cap}, so each must fit both
+         * ({@code RewardCeilings} warns when one doesn't).
          */
         public static Rewards shipped() {
             Map<String, Integer> weekly = new LinkedHashMap<>();
@@ -275,8 +278,10 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
      * The weekly Star Chart goals at both ends of the cadence ({@code star_goals.*}): the stars
      * and what each pays, smallest first.
      *
-     * @param weekly the goals when the cadence is weekly or longer (shipped 6★ +1, 12★ +2)
-     * @param daily  the goals when the cadence is daily (shipped 10★ +1, 25★ +1)
+     * @param weekly the goals when the cadence is weekly or longer (shipped 6★ and 12★, paying
+     *               {@link TokenBalance#STAR_WEEKLY_TOKENS})
+     * @param daily  the goals when the cadence is daily (shipped 10★ and 25★, paying
+     *               {@link TokenBalance#STAR_DAILY_TOKENS})
      */
     public record Goals(List<DailyStars.Goal> weekly, List<DailyStars.Goal> daily) {
 
@@ -286,8 +291,10 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
         }
 
         public static Goals shipped() {
-            return new Goals(List.of(new DailyStars.Goal(6, 1), new DailyStars.Goal(12, 2)),
-                    List.of(new DailyStars.Goal(10, 1), new DailyStars.Goal(25, 1)));
+            List<Integer> w = TokenBalance.STAR_WEEKLY_TOKENS;
+            List<Integer> d = TokenBalance.STAR_DAILY_TOKENS;
+            return new Goals(List.of(new DailyStars.Goal(6, w.get(0)), new DailyStars.Goal(12, w.get(1))),
+                    List.of(new DailyStars.Goal(10, d.get(0)), new DailyStars.Goal(25, d.get(1))));
         }
 
         /** The goals for an N-day cadence, before the week's ceiling ({@link DailyStars#goals}). */
@@ -410,7 +417,7 @@ public record DailySettings(boolean enabled, String world, int cadenceDays, Loca
             slots.add(SlotConfig.shipped(d));
         }
         return new DailySettings(false, "", Edition.DEFAULT_CADENCE, Edition.DEFAULT_ROLLOVER, null, 60, 15, 30, 4,
-                20, 35, true, null, 2, Goals.shipped(), new Budget(500, 5000, 4, 4, 2, 40),
+                20, 35, true, null, TokenBalance.FRESH_DAILY_CAP, Goals.shipped(), new Budget(500, 5000, 4, 4, 2, 40),
                 new Stars(tiers(2.0, 1.5, 1.25), tiers(3.0, 2.2, 1.8)), Rewards.shipped(), slots, Archive.shipped(),
                 true);
     }

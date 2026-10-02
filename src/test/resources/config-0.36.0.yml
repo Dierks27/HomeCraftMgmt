@@ -59,7 +59,7 @@ clock:
 # Written by the plugin: the last config revision applied to this file. Each release
 # runs only the steps a file is behind on, so a value you have tuned is never dragged
 # back through an earlier step. Don't edit this by hand.
-config_revision: 20
+config_revision: 19
 
 # GUI section titles — editable here or live in-game via /hcm admin (Admin Studio).
 # No section label is hard-coded. The store title supports {store} and {url}
@@ -1541,16 +1541,15 @@ arcade:
   # The Scratch Ticket: tokens in, tokens out, decided the moment you buy it. The pot
   # starts at `seed`, grows `per_ticket` with every ticket, tops out at `cap`, and goes
   # back to `seed` when someone wins it (with a shout to the whole server).
-  # The shipped table returns about 89.5% over time, inside the games' 85-95 band (with the pot at
-  # its usual 150) — /hcm arcade odds prints it.
+  # The shipped table returns ~78% over time — /hcm arcade odds prints it.
   lotto:
     ticket_tokens: 10
     payouts:
       - { tokens: 0,  weight: 25 }
       - { tokens: 3,  weight: 40 }     # near-miss: the most common result, not the dud
-      - { tokens: 10, weight: 22 }
-      - { tokens: 25, weight: 9 }
-      - { tokens: 60, weight: 3 }
+      - { tokens: 8,  weight: 22 }
+      - { tokens: 20, weight: 9 }
+      - { tokens: 50, weight: 3 }
       - { jackpot: true, weight: 1 }
     jackpot: { seed: 50, per_ticket: 1, cap: 1000 }
 
@@ -1558,9 +1557,8 @@ arcade:
 #  Games — play games of chance and skill games for tokens (never dollars).
 #  Off until you turn it on. Games of chance give back less than they take
 #  (85-95 of every 100 tokens, worked out and published per stake); skill
-#  games pay capped rewards, about a token a minute of first-time play.
-#  Players' "Take a break" limits and pauses also cover Crates, Scratch
-#  Tickets and Card Packs bought with tokens.
+#  games pay small, capped rewards. Players' "Take a break" limits and pauses
+#  also cover Crates, Scratch Tickets and Card Packs bought with tokens.
 # ---------------------------------------------------------------------
 games:
   # Master switch. false = the games are off and the rest of the plugin is unchanged.
@@ -1577,13 +1575,12 @@ games:
   chance_daily_tokens: 100
   # Most tokens any single play of a game of chance can pay (never below the largest stake).
   max_payout: 250
-  # Most tokens one player can earn from skill games (cabinets, courses, golf) in a day. The games
-  # pay about a token a minute of first-time play; 60 holds a busy evening's first finishes and goals.
-  skill_daily_cap: 60
+  # Most tokens one player can earn from skill games (cabinets, courses, golf) in a day.
+  skill_daily_cap: 6
   # Today's featured game: auto (a skill game or course picked each day) or a game/course id.
   featured: auto
   # Tokens for the first finish of today's featured game (counts toward skill_daily_cap).
-  featured_bonus: 5
+  featured_bonus: 1
   # The website's leaderboards: how many of each game's and course's best scores /api/arcade
   # lists ("top"; past Fresh Courses list up to 3). 0 = none. Names only with
   # web.dashboard.arcade_show_names.
@@ -1717,13 +1714,12 @@ games:
   creeper_sweeper:
     # false = Creeper Sweeper is closed.
     enabled: true
-    # Tokens for each milestone, paid once ever and in full (one today's caps can't pay waits for
-    # another day).
-    milestone_reward: 5
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
     # Tokens for clearing the daily board on your scored try.
-    daily_reward: 5
-    # Most tokens Creeper Sweeper pays a player per day (the daily goal and two medals).
-    daily_cap: 15
+    daily_reward: 1
+    # Most tokens Creeper Sweeper pays a player per day.
+    daily_cap: 2
     # Creepers on the 9x5 board per difficulty (the daily board uses normal's).
     mines:
       # Easy board.
@@ -1745,13 +1741,12 @@ games:
   ore_merge:
     # false = Ore Merge is closed.
     enabled: true
-    # Tokens for each milestone, paid once ever and in full (one today's caps can't pay waits for
-    # another day).
-    milestone_reward: 5
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
     # Tokens for making a diamond on the daily board's scored try.
-    daily_reward: 5
-    # Most tokens Ore Merge pays a player per day (the daily goal and two medals).
-    daily_cap: 15
+    daily_reward: 1
+    # Most tokens Ore Merge pays a player per day.
+    daily_cap: 2
     # Bronze, silver, gold: the biggest tile made (256 diamond, 512 netherite, 1024 nether star).
     milestones: [256, 512, 1024]
   # ---- snake ----
@@ -1759,13 +1754,12 @@ games:
   snake:
     # false = Snake is closed.
     enabled: true
-    # Tokens for each milestone, paid once ever and in full (one today's caps can't pay waits for
-    # another day).
-    milestone_reward: 5
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
     # Tokens for 15 apples on the daily board's scored try.
-    daily_reward: 5
-    # Most tokens Snake pays a player per day (the daily goal and two medals).
-    daily_cap: 15
+    daily_reward: 1
+    # Most tokens Snake pays a player per day.
+    daily_cap: 2
     # Ticks between moves for Java players (20 = 1 second; it speeds up, never below 3).
     tick_java: 6
     # Ticks between moves for Bedrock players.
@@ -1777,13 +1771,12 @@ games:
   mini_match:
     # false = Mini Match is closed.
     enabled: true
-    # Tokens for each milestone, paid once ever and in full (one today's caps can't pay waits for
-    # another day).
-    milestone_reward: 5
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
     # Tokens for finishing the daily board in 24 flips or fewer on your scored try.
-    daily_reward: 5
-    # Most tokens Mini Match pays a player per day (the daily goal and two medals).
-    daily_cap: 15
+    daily_reward: 1
+    # Most tokens Mini Match pays a player per day.
+    daily_cap: 2
     # Bronze, silver, gold: finish in at most this many flips.
     milestones: [30, 24, 20]
   # ---- simon_says ----
@@ -1791,13 +1784,12 @@ games:
   simon_says:
     # false = Simon Says is closed.
     enabled: true
-    # Tokens for each milestone, paid once ever and in full (one today's caps can't pay waits for
-    # another day).
-    milestone_reward: 5
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
     # Tokens for repeating 8 on the daily board's scored try.
-    daily_reward: 5
-    # Most tokens Simon Says pays a player per day (the daily goal and two medals).
-    daily_cap: 15
+    daily_reward: 1
+    # Most tokens Simon Says pays a player per day.
+    daily_cap: 2
     # Bronze, silver, gold: the longest sequence repeated.
     milestones: [5, 10, 15]
   # ---- whack_a_zombie ----
@@ -1805,13 +1797,12 @@ games:
   whack_a_zombie:
     # false = Whack-a-Zombie is closed.
     enabled: true
-    # Tokens for each milestone, paid once ever and in full (one today's caps can't pay waits for
-    # another day).
-    milestone_reward: 5
+    # Tokens for each milestone, paid once ever.
+    milestone_reward: 1
     # Tokens for 20 points on the daily board's scored try.
-    daily_reward: 5
-    # Most tokens Whack-a-Zombie pays a player per day (the daily goal and two medals).
-    daily_cap: 15
+    daily_reward: 1
+    # Most tokens Whack-a-Zombie pays a player per day.
+    daily_cap: 2
     # How long a round lasts, in seconds.
     seconds: 30
     # Bronze, silver, gold: points in one round.
@@ -1822,18 +1813,18 @@ games:
     # false = Connect Four is closed.
     enabled: true
     # Tokens for the first win of the day against the Arcade on normal or hard.
-    daily_reward: 5
+    daily_reward: 1
     # Most tokens Connect Four pays a player per day.
-    daily_cap: 5
+    daily_cap: 1
   # ---- tic_tac_toe ----
   # Tic-Tac-Toe: against the Arcade or a friend (friend games pay nothing).
   tic_tac_toe:
     # false = Tic-Tac-Toe is closed.
     enabled: true
     # Tokens for the first win (easy) or draw-or-better (hard) of the day against the Arcade.
-    daily_reward: 5
+    daily_reward: 1
     # Most tokens Tic-Tac-Toe pays a player per day.
-    daily_cap: 5
+    daily_cap: 1
   # ---- trials ----
   # Time trials: parkour, elytra and boat courses built with /hcm games course.
   trials:
@@ -1842,20 +1833,19 @@ games:
     # Tokens for the first finish of a course, once ever per course, by tier.
     first_clear:
       # Easy courses.
-      easy: 10
+      easy: 5
       # Medium courses.
-      medium: 15
+      medium: 10
       # Hard courses.
-      hard: 25
+      hard: 20
       # "Why did we build this?" courses.
-      extreme: 50
+      extreme: 40
     # Tokens for setting the week's best time on a course (once per course per week).
-    weekly_best_bonus: 10
+    weekly_best_bonus: 5
     # Tokens for finishing the course of the week (once a day).
-    course_of_week_bonus: 5
-    # Most tokens time trials pay a player per day (first clears don't count; Fresh Courses' first
-    # finishes do, so keep it at least as big as the biggest of them).
-    daily_cap: 40
+    course_of_week_bonus: 2
+    # Most tokens time trials pay a player per day (first clears don't count).
+    daily_cap: 4
     # Parkour: blocks below the lower of the last and next checkpoint that count as a fall.
     fall_depth: 6
     # A run faster than this many seconds doesn't count (a course can set its own).
@@ -1875,14 +1865,13 @@ games:
     # false = every mini golf course is closed.
     enabled: true
     # Tokens for finishing a course at par or better (once per course per day).
-    par_reward: 5
+    par_reward: 2
     # Tokens for a hole-in-one on a course you finish (once per hole per day).
-    hole_in_one_reward: 3
+    hole_in_one_reward: 1
     # Tokens for the first finish of a course, once ever per course.
-    first_clear: 15
-    # Most tokens mini golf pays a player per day (first clears don't count; Fresh Courses' first
-    # finishes do, so keep it at least as big as Golf of the Week's).
-    daily_cap: 40
+    first_clear: 5
+    # Most tokens mini golf pays a player per day (first clears don't count).
+    daily_cap: 4
     # Strokes over par before a hole is picked up.
     max_over_par: 3
   # ---- cup ----
@@ -1899,10 +1888,9 @@ games:
     # week and pay out (or refund) at the rollover.
     enabled: true
     # Tokens to enter one course's Cup for one week (1-100).
-    entry: 10
-    # Tokens the server adds to a pool in which 2 or more set a Cup time (0-100). Never with one. At
-    # twice the entry, nobody in a Cup of 2 or 3 who sets a Cup time gets back less than they paid.
-    server_topup: 20
+    entry: 5
+    # Tokens the server adds to a pool in which 2 or more set a Cup time (0-100). Never with one.
+    server_topup: 10
   # ---- fresh ----
   # Fresh Courses: parkour, Sky Rings, Adventure Golf, droppers and the Ice Boat Mountain Run the plugin
   # builds itself - a new set every week (or every day, or every few days: cadence), the same for
@@ -1954,7 +1942,7 @@ games:
     # paid in full or not at all: one the day's caps can't pay whole waits for a finish another day
     # that week. A week's goals are fixed the first time they are shown, even if a course is
     # switched off later that week.
-    daily_cap: 15
+    daily_cap: 2
     # When a new set goes up, one chat line tells each player once ("New courses this week! Easy,
     # Parkour, Hard, Sky Rings and Golf - /hcm play"): at login, or at once for anyone on (not while
     # they play a world game, and after they close a screen). Players turn it off with
@@ -1962,41 +1950,39 @@ games:
     announce: true
     # Tokens for each course's first finish in each set: one table for a weekly cadence and one for
     # a daily one. Anything in between is worked out from the two, so a new cadence needs no retuning.
-    # About a token a minute of first-time play. They count toward games.trials.daily_cap /
-    # games.golf.daily_cap and skill_daily_cap, and are paid in full or not at all: if today's caps
-    # can't pay all of it, nothing is paid or used up, and a finish on another day of the same set
-    # pays it. Each must fit both of its caps: one bigger than a whole day's cap pays that cap, once,
-    # and the plugin warns about it when it loads.
+    # They count toward games.trials.daily_cap / games.golf.daily_cap (4) and skill_daily_cap (6),
+    # and are paid in full or not at all: if today's caps can't pay all of it, nothing is paid or
+    # used up, and a finish on another day of the same set pays it. Keep each at or under 4: one
+    # bigger than a whole day's cap pays that cap, once.
     rewards:
       clear_weekly:
-        fresh_parkour_easy: 10
-        fresh_parkour: 15
-        fresh_parkour_hard: 20
-        fresh_rings: 15
-        fresh_golf: 25
-        fresh_tiny_golf: 10
-        fresh_boat: 15
-        fresh_dropper_easy: 10
-        fresh_dropper: 15
+        fresh_parkour_easy: 2
+        fresh_parkour: 3
+        fresh_parkour_hard: 4
+        fresh_rings: 3
+        fresh_golf: 3
+        fresh_tiny_golf: 2
+        fresh_boat: 3
+        fresh_dropper_easy: 2
+        fresh_dropper: 3
       clear_daily:
-        fresh_parkour_easy: 5
-        fresh_parkour: 8
-        fresh_parkour_hard: 10
-        fresh_rings: 8
-        fresh_golf: 12
-        fresh_tiny_golf: 5
-        fresh_boat: 8
-        fresh_dropper_easy: 5
-        fresh_dropper: 8
+        fresh_parkour_easy: 1
+        fresh_parkour: 2
+        fresh_parkour_hard: 3
+        fresh_rings: 2
+        fresh_golf: 2
+        fresh_tiny_golf: 1
+        fresh_boat: 2
+        fresh_dropper_easy: 1
+        fresh_dropper: 2
     # Star Chart goals: stars a player collects in a week, and the tokens each goal pays (once a
-    # week, in full, under daily_cap above). Weekly and daily ends like the rewards; never above 80%
-    # of what the week can give. A week's goals are fixed the first time they are shown or paid: a
-    # change counts from the next.
+    # week). Weekly and daily ends like the rewards; never above 80% of what the week can give.
+    # A week's goals are fixed the first time they are shown or paid: a change counts from the next.
     star_goals:
       weekly: [6, 12]
-      weekly_tokens: [5, 10]
+      weekly_tokens: [1, 2]
       daily: [10, 25]
-      daily_tokens: [5, 10]
+      daily_tokens: [1, 1]
     # How much building one server tick may do.
     budget:
       # Blocks per tick while anyone is online.
@@ -2117,11 +2103,10 @@ games:
     finish_points: 2
     # Points for anyone still racing when a race ends.
     still_racing_points: 1
-    # Tokens for the night's 1st, 2nd and 3rd (each 0-30; never more than 30 a player a night). 2nd
-    # needs 3 racers, 3rd needs 4.
-    prizes: [20, 12, 8]
-    # Tokens for everyone else who finished a race (0-10).
-    finisher_prize: 5
+    # Tokens for the night's 1st, 2nd and 3rd (each 0-10). 2nd needs 3 racers, 3rd needs 4.
+    prizes: [5, 3, 2]
+    # Tokens for everyone else who finished a race (0-2).
+    finisher_prize: 1
     # Nights a week that pay tokens, server-wide (0-7). Later nights that week are just for fun.
     prize_events_per_week: 3
     # month = points also go on a monthly season board; off = no season board.
@@ -2153,14 +2138,13 @@ games:
     round_seconds: 180
     # Blocks the reset between rounds puts back each tick.
     reset_blocks_per_tick: 400
-    # Tokens for the first full round of the day (0-50).
-    daily_reward: 5
+    # Tokens for the first full round of the day.
+    daily_reward: 1
     # Solo seconds for the three milestones, and the tokens each pays (once ever).
     milestones: [30, 60, 120]
-    # Each 0-50, paid in full: one today's caps can't pay waits for another day.
-    milestone_rewards: [5, 10, 15]
+    milestone_rewards: [1, 2, 3]
     # Most tokens Falling Floors pays a player per day.
-    daily_cap: 20
+    daily_cap: 3
   # ---- clubhouse ----
   # The Clubhouse: one room in the Games world where racers wait before a race and hang out after it
   # (/hcm play clubhouse). It builds itself in an empty box and is checked before anyone comes in;

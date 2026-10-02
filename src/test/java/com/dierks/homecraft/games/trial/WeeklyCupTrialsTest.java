@@ -4,7 +4,6 @@ import com.dierks.homecraft.games.GamesBench;
 import com.dierks.homecraft.games.GamesService;
 import com.dierks.homecraft.games.cup.CupKey;
 import com.dierks.homecraft.games.cup.CupPlan;
-import com.dierks.homecraft.games.cup.CupRules;
 import com.dierks.homecraft.games.cup.live.CupLink;
 import com.dierks.homecraft.games.cup.live.CupSettings;
 import com.dierks.homecraft.games.cup.live.WeeklyCup;
@@ -59,7 +58,7 @@ class WeeklyCupTrialsTest {
     @BeforeEach
     void setUp() throws Exception {
         bench = new GamesBench(T0, List.of(TimeTrials.SPEC, WeeklyCup.SPEC), "trials", TimeTrialsSettings.defaults(),
-                "cup", CupSettings.defaults());
+                "cup", new CupSettings(true, 5, 10)); // 0.36's numbers: the shipped 10/20 is CupSettingsTest's
         games = bench.games();
         trials = (TimeTrials) games.game("trials");
         cup = (WeeklyCup) games.game("cup");
@@ -239,6 +238,6 @@ class WeeklyCupTrialsTest {
         enterBoth();
         assertEquals(" &6· in the Cup, pool 20", CupLink.tile(games, ava, c).suffix(), "in, with the live pool");
         assertEquals(" &6· Cup: 5 tokens, pool 20", CupLink.tile(games, admin, c).suffix(), "or what it costs");
-        assertEquals(CupRules.DEFAULT_ENTRY, cup.settings().entry());
+        assertEquals(5, cup.settings().entry(), "the entry this test runs at");
     }
 }

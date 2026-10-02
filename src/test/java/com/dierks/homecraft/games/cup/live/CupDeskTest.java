@@ -94,7 +94,8 @@ class CupDeskTest {
     private static final class FakeHost implements CupDesk.Host {
         long now = TUESDAY_NOON;
         Edition edition = WEEKLY;
-        CupSettings settings = CupSettings.defaults();
+        /** The Cup's mechanism at 0.36's 5 to enter and 10 on top (the shipped 10/20 is CupSettingsTest's). */
+        CupSettings settings = new CupSettings(true, 5, 10);
         final Map<String, Course> courses = new HashMap<>();
         final Map<String, Boolean> wanted = new HashMap<>();
         final Set<UUID> online = new HashSet<>();

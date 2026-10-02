@@ -1,6 +1,6 @@
 # HomeCraft Arcade: the games guide
 
-> **For the web developer (and their agent):** this is the player-facing guide to every game added in plugin release **0.35.0-arcade-games**, updated for **0.36** (Course Variety: Adventure Golf and the Ice Boat's Mountain Run, and the out-of-sight layout). It was written from the plugin's code and then checked claim by claim against the code a second time, so the numbers, names and commands match what players see in game. Numbers marked *by default* are settings the server owner can change later in `config.yml`. The games ship switched off (`games.enabled: false`), so they appear on the server once the owner turns them on. Live data for the site (open games, odds, records, today's pick) comes from `GET /api/arcade`; see [For the website](#for-the-website) at the end.
+> **For the web developer (and their agent):** this is the player-facing guide to every game added in plugin release **0.35.0-arcade-games**, updated for **0.36** (Course Variety: Adventure Golf and the Ice Boat's Mountain Run, and the out-of-sight layout) and **0.37** (the token balance: the skill games pay about a token a minute of first-time play, and the Scratch Ticket gives back about 89 of every 100). It was written from the plugin's code and then checked claim by claim against the code a second time, so the numbers, names and commands match what players see in game. Numbers marked *by default* are settings the server owner can change later in `config.yml`. The games ship switched off (`games.enabled: false`), so they appear on the server once the owner turns them on. Live data for the site (open games, odds, records, today's pick) comes from `GET /api/arcade`; see [For the website](#for-the-website) at the end.
 
 > **Voice:** the server is for families, and the youngest player is just learning to read. Keep the site copy short and plain. Please keep these words out of player copy: *bet, wager, gamble, casino, lucky, almost, so close*. Say *tokens in* and *tokens back*, *gives back about N of every 100 tokens*, *No win this time.* Games of chance are described honestly: over time they give back less than you put in.
 
@@ -13,22 +13,22 @@
 | **The Wheel** | Game of chance | `/hcm play wheel` | 5, 10 or 20 tokens a spin (by default). | Spin for a prize on 24 spaces: up to 87 tokens at 20 in. Gives back about 87 to 90 of every 100. |
 | **Higher or Lower** | Game of chance | `/hcm play higher_lower` | 10, 20 or 50 tokens a run (by default). | Guess the next card: a right guess grows your pot, and you cash out when you like. About 89 to 90 of every 100 with the best play. |
 | **Coin Flip** | Game of chance | `/hcm play coin_flip` | 5, 10 or 25 tokens each (by default). Both players put in the same. | Two players, one coin: the winner gets 9 for 5 each, 18 for 10 each, 45 for 25 each. Invites are off until you turn them on. |
-| **Creeper Sweeper** | Arcade cabinet (skill) | `/hcm play creeper_sweeper` | Free. No tokens go in. | Milestones (by default): Easy, Normal and Hard each have their own bronze, silver and gold, so there are 9 in all. Each pays 1 token, once ever. |
-| **Ore Merge** | Arcade cabinet (skill) | `/hcm play ore_merge` | Free. No tokens go in. | Milestones (by default, Classic only): bronze a diamond, silver netherite, gold a nether star. Each pays 1 token, once ever. |
-| **Snake** | Arcade cabinet (skill) | `/hcm play snake` | Free. No tokens go in. | Milestones (by default, Classic only): 10, 20 and 30 apples. Each pays 1 token, once ever. |
-| **Mini Match** | Arcade cabinet (skill) | `/hcm play mini_match` | Free. No tokens go in. | Milestones (by default, Classic only): 30, 24 and 20 flips or fewer. Each pays 1 token, once ever. |
-| **Simon Says** | Arcade cabinet (skill) | `/hcm play simon_says` | Free. No tokens go in. | Milestones (by default, Classic only): patterns of 5, 10 and 15. Each pays 1 token, once ever. |
-| **Whack-a-Zombie** | Arcade cabinet (skill) | `/hcm play whack_a_zombie` | Free. No tokens go in. | Milestones (by default, Classic only): 15, 25 and 35 points. Each pays 1 token, once ever. |
-| **Connect Four** | Arcade cabinet (skill) | `/hcm play connect_four` | Free. No tokens go in. | Daily token: your first win of the day on Normal or Hard pays 1 token (by default), once a day. |
-| **Tic-Tac-Toe** | Arcade cabinet (skill) | `/hcm play tic_tac_toe` | Free. No tokens go in. | Daily token: first Easy win or first Hard draw of the day pays 1 token (by default), once a day. |
-| **Time Trials: Parkour** | Time trial (skill) | `/hcm play <course id>` (list: `/hcm play trials`) | Free. It costs no tokens, and you can play as many times as you like. | First finish: tokens the first time you finish each course, once ever. By default: Easy 5, Medium 10, Hard 20, and Why did we build this? 40. This does not… |
-| **Time Trials: Elytra** | Time trial (skill) | `/hcm play <course id>` (list: `/hcm play trials`) | Free. It costs no tokens, and you can play as many times as you like. | First finish: tokens the first time you finish each course, once ever. By default: Easy 5, Medium 10, Hard 20, and Why did we build this? 40. This does not… |
-| **Time Trials: Boat** | Time trial (skill) | `/hcm play <course id>` (list: `/hcm play trials`) | Free. It costs no tokens, and you can play as many times as you like. | First finish: tokens the first time you finish each course, once ever. By default: Easy 5, Medium 10, Hard 20, and Why did we build this? 40. This does not… |
-| **Mini Golf** | Mini golf (skill) | `/hcm play <course id>` (list: `/hcm play golf`) | Free. It costs no tokens, and you can play as many times as you like. | First finish: 5 tokens by default the first time you finish each course, once ever. This does not count toward any daily limit. |
-| **The Dropper** | Fresh Course, time trial (skill) | `/hcm play fresh_dropper_easy` or `/hcm play fresh_dropper` (with Fresh Courses) | Free. | A fall through glass shafts into water. First finish in a set: Easy Dropper 2 tokens, Dropper 3 (by default, weekly sets). A practice drop first, never counted. |
-| **Weekly Cup** | Time-trial contest (skill) | The gold block on a course's screen, on courses that run one | 5 tokens to enter a course's Cup for the week (by default). | Your best time that week is your Cup time. The pool (every entry, plus 10 from the server with 2 or more Cup times) is shared by the best Cup times: 70/30 for 2, 50/30/20 for 3 or more. Fewer than 2 Cup times: every entry comes back. |
-| **Race Night** | Boat races together (skill) | `/hcm play race` | Free. Nobody can lose tokens. | The night's 1st, 2nd and 3rd win 5, 3 and 2 tokens, and everyone else who finished a race wins 1 (2nd needs 3 racers, 3rd needs 4). At most 3 prize nights a week. |
-| **Falling Floors** | Together (skill) | `/hcm play falling_floors` (or `tnt_run`) | Free. No tokens go in. | Your first full round of the day pays 1 token, and lasting 30, 60 and 120 seconds solo pays 1, 2 and 3 tokens, once ever (by default). Winning pays nothing extra. |
+| **Creeper Sweeper** | Arcade cabinet (skill) | `/hcm play creeper_sweeper` | Free. No tokens go in. | Milestones (by default): Easy, Normal and Hard each have their own bronze, silver and gold, so there are 9 in all. Each pays 5 tokens, once ever. |
+| **Ore Merge** | Arcade cabinet (skill) | `/hcm play ore_merge` | Free. No tokens go in. | Milestones (by default, Classic only): bronze a diamond, silver netherite, gold a nether star. Each pays 5 tokens, once ever. |
+| **Snake** | Arcade cabinet (skill) | `/hcm play snake` | Free. No tokens go in. | Milestones (by default, Classic only): 10, 20 and 30 apples. Each pays 5 tokens, once ever. |
+| **Mini Match** | Arcade cabinet (skill) | `/hcm play mini_match` | Free. No tokens go in. | Milestones (by default, Classic only): 30, 24 and 20 flips or fewer. Each pays 5 tokens, once ever. |
+| **Simon Says** | Arcade cabinet (skill) | `/hcm play simon_says` | Free. No tokens go in. | Milestones (by default, Classic only): patterns of 5, 10 and 15. Each pays 5 tokens, once ever. |
+| **Whack-a-Zombie** | Arcade cabinet (skill) | `/hcm play whack_a_zombie` | Free. No tokens go in. | Milestones (by default, Classic only): 15, 25 and 35 points. Each pays 5 tokens, once ever. |
+| **Connect Four** | Arcade cabinet (skill) | `/hcm play connect_four` | Free. No tokens go in. | Daily tokens: your first win of the day on Normal or Hard pays 5 tokens (by default), once a day. |
+| **Tic-Tac-Toe** | Arcade cabinet (skill) | `/hcm play tic_tac_toe` | Free. No tokens go in. | Daily tokens: first Easy win or first Hard draw of the day pays 5 tokens (by default), once a day. |
+| **Time Trials: Parkour** | Time trial (skill) | `/hcm play <course id>` (list: `/hcm play trials`) | Free. It costs no tokens, and you can play as many times as you like. | First finish: tokens the first time you finish each course, once ever. By default: Easy 10, Medium 15, Hard 25, and Why did we build this? 50. This does not… |
+| **Time Trials: Elytra** | Time trial (skill) | `/hcm play <course id>` (list: `/hcm play trials`) | Free. It costs no tokens, and you can play as many times as you like. | First finish: tokens the first time you finish each course, once ever. By default: Easy 10, Medium 15, Hard 25, and Why did we build this? 50. This does not… |
+| **Time Trials: Boat** | Time trial (skill) | `/hcm play <course id>` (list: `/hcm play trials`) | Free. It costs no tokens, and you can play as many times as you like. | First finish: tokens the first time you finish each course, once ever. By default: Easy 10, Medium 15, Hard 25, and Why did we build this? 50. This does not… |
+| **Mini Golf** | Mini golf (skill) | `/hcm play <course id>` (list: `/hcm play golf`) | Free. It costs no tokens, and you can play as many times as you like. | First finish: 15 tokens by default the first time you finish each course, once ever. This does not count toward any daily limit. |
+| **The Dropper** | Fresh Course, time trial (skill) | `/hcm play fresh_dropper_easy` or `/hcm play fresh_dropper` (with Fresh Courses) | Free. | A fall through glass shafts into water. First finish in a set: Easy Dropper 10 tokens, Dropper 15 (by default, weekly sets). A practice drop first, never counted. |
+| **Weekly Cup** | Time-trial contest (skill) | The gold block on a course's screen, on courses that run one | 10 tokens to enter a course's Cup for the week (by default). | Your best time that week is your Cup time. The pool (every entry, plus 20 from the server with 2 or more Cup times) is shared by the best Cup times: 70/30 for 2, 50/30/20 for 3 or more. Fewer than 2 Cup times: every entry comes back. |
+| **Race Night** | Boat races together (skill) | `/hcm play race` | Free. Nobody can lose tokens. | The night's 1st, 2nd and 3rd win 20, 12 and 8 tokens, and everyone else who finished a race wins 5 (2nd needs 3 racers, 3rd needs 4). At most 3 prize nights a week. |
+| **Falling Floors** | Together (skill) | `/hcm play falling_floors` (or `tnt_run`) | Free. No tokens go in. | Your first full round of the day pays 5 tokens, and lasting 30, 60 and 120 seconds solo pays 5, 10 and 15 tokens, once ever (by default). Winning pays nothing extra. |
 
 ## Getting to the games
 
@@ -89,9 +89,9 @@
 - The new games only use tokens. No game takes or pays dollars. No game takes or gives your Cards, Minis or anything you could sell. The only thing a course or golf round gives you is its kit, and the kit stays in the game.
 - Tokens never turn into dollars. Nothing you get with tokens can be sold for money.
 - Ways to earn tokens: log in every day (your streak pays 2, 2, 3, 3, 4, 4, then 5 a day). Play (1 token for every hour). Do quests (3 daily and 2 weekly). Get achievements (39 of them, each pays once). Catch wild Minis (they count toward quests and achievements). Trade in spare Cards. Cabinets, courses, golf and Fresh Courses stars count toward quests and achievements too (see below).
-- Skill games (cabinets, time trials and mini golf) are free to play, and they pay a few tokens. You can earn milestones (bronze, silver and gold, each pays once ever), today's challenge on each cabinet, today's pick, and course rewards like a first finish or a round of golf at par or under.
-- By default you can win up to 6 tokens a day from all skill games together. Each game also has its own smaller cap: 2 a day for most cabinets, 1 for Connect Four and Tic-Tac-Toe, 4 for time trials and 4 for mini golf.
-- The first time you finish a course pays extra, and it doesn't count toward the 6. By default that is 5, 10, 20 or 40 tokens for an Easy, Medium, Hard or "Why did we build this?" course, and 5 for a golf course.
+- Skill games (cabinets, time trials and mini golf) are free to play, and they pay about a token for every minute you spend on something new. You can earn milestones (bronze, silver and gold, each pays once ever), today's challenge on each cabinet, today's pick, and course rewards like a first finish or a round of golf at par or under.
+- By default you can win up to 60 tokens a day from all skill games together. Each game also has its own smaller cap: 15 a day for most cabinets, 5 for Connect Four and Tic-Tac-Toe, 40 for time trials and 40 for mini golf.
+- The first time you finish a course pays extra, and it doesn't count toward the 60. By default that is 10, 15, 25 or 50 tokens for an Easy, Medium, Hard or "Why did we build this?" course, and 15 for a golf course.
 - Past the cap you read "You've won all the game tokens you can today — scores still count!" Your scores still go on the high scores.
 - In creative or spectator mode, or in a world without games, you earn nothing: "No tokens can be earned here — scores still count!" A one-time reward waits for you to earn it later.
 - Beating your own best score is announced and goes on the high scores, but it doesn't pay tokens.
@@ -128,7 +128,7 @@
 ## The fairness promises
 
 - Tokens only. No game uses dollars, and no game takes your Cards, Minis or things you could sell.
-- Games of chance give back less than you put in. Each one is set to give back from 85 to 95 of every 100 tokens over lots of plays. As shipped, they give back about 87 to 90. For the card games, that is when you make the best choices. The older Scratch Ticket gives back about 77. Play them for fun, not to get more tokens.
+- Games of chance give back less than you put in. Each one is set to give back from 85 to 95 of every 100 tokens over lots of plays. As shipped, they give back about 87 to 90. For the card games, that is when you make the best choices. The Scratch Ticket gives back about 89 too. Play them for fun, not to get more tokens.
 - You see the odds first. Before your first play, the screen shows what each result pays and how often. Ore Slots shows "1 in N", the Wheel shows how many of its 24 spaces show each result, and Coin Flip shows a 1 in 2 chance. It also shows "gives back about 89 of every 100 tokens", your plays left today and your tokens today. These come from the same numbers the game plays with. /hcm arcade odds, the How It Works guide and the website show the same numbers.
 - Decided first, then shown. In Ore Slots, the Wheel and Coin Flip, your tokens in, the result and your tokens back are saved in one step before any animation starts. In Twenty-One and Higher or Lower, each card is saved before you see it. If you close the screen early, you just see the result in chat. Nothing changes.
 - What you see is what happened. The reels and the Wheel show exactly what came up, and a spinning frame never shows a paying line.
@@ -165,8 +165,8 @@
 
 - Every day one skill game or course is Today's pick. It is the same for everyone, and it changes at midnight, server time.
 - Look for the nether star on the Games screen's bottom row ("Today's pick: Snake") and on the Arcade's Play row. Click the star to play it. On the Games screen, the game's own tile glows and says "★ Today's pick" in its name.
-- Finish it today for 1 extra token (by default). You get this bonus once a day in total, the first time you finish today's pick. For Connect Four and Tic-Tac-Toe, any finished game against the Arcade counts. Games against a friend don't.
-- The bonus counts toward the 6 tokens a day you can win from skill games.
+- Finish it today for 5 extra tokens (by default). You get this bonus once a day in total, the first time you finish today's pick. For Connect Four and Tic-Tac-Toe, any finished game against the Arcade counts. Games against a friend don't.
+- The bonus counts toward the 60 tokens a day you can win from skill games.
 - The pick comes from the open cabinets, time-trial courses and golf courses. A game of chance is never today's pick.
 - An admin can pin a pick instead of letting the day choose one.
 - If there is nothing to pick, the star says "No pick today".
@@ -589,13 +589,13 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 - If you open a game with /hcm play <id>, its exit button says Close. If you came from the Games screen, it says Back.
 - Every game has a How to play book on its first screen. On Bedrock, press and hold a tile to read its extra lines. The most important facts are in the tile names, so you can see them without holding.
 - Classic play is free and has no limit. Play as much as you like. A new personal best is saved and announced, but a best alone pays no tokens.
-- Milestones: the six solo cabinets (Creeper Sweeper, Ore Merge, Snake, Mini Match, Simon Says, Whack-a-Zombie) have bronze, silver and gold goals on their Classic boards. Each one pays 1 token (by default), once ever. On Creeper Sweeper, Ore Merge and Snake, a green check mark on the board's tile shows a milestone you already got. Connect Four and Tic-Tac-Toe have no milestones.
+- Milestones: the six solo cabinets (Creeper Sweeper, Ore Merge, Snake, Mini Match, Simon Says, Whack-a-Zombie) have bronze, silver and gold goals on their Classic boards. Each one pays 5 tokens (by default), once ever. On Creeper Sweeper, Ore Merge and Snake, a green check mark on the board's tile shows a milestone you already got. Connect Four and Tic-Tac-Toe have no milestones.
 - Today's board (the daily challenge): the same board, pattern or round for everyone today. It changes at midnight, server time. Your FIRST try each day is your scored try. It counts the moment the board appears, so closing the screen uses it up. Every try after that is practice: nothing is saved and nothing is paid. Warm up with Classic first!
-- Meeting the daily goal on your scored try pays 1 token (by default), once a day per game. Connect Four and Tic-Tac-Toe work a little differently: their daily token is for your first win of the day against the Arcade (on Connect Four, only a Normal or Hard win counts; on Tic-Tac-Toe Hard, a draw counts too). See each game.
+- Meeting the daily goal on your scored try pays 5 tokens (by default), once a day per game. Connect Four and Tic-Tac-Toe work a little differently: their daily tokens are for your first win of the day against the Arcade (on Connect Four, only a Normal or Hard win counts; on Tic-Tac-Toe Hard, a draw counts too). See each game.
 - The daily boards are made from a secret only the server knows. Nobody can work out tomorrow's board ahead of time.
-- Daily limits (by default): each solo cabinet pays you at most 2 tokens a day. Connect Four and Tic-Tac-Toe pay at most 1 a day each. The Today's pick token is extra and does not count toward a game's own limit. All skill games together (cabinets, time trials, mini golf and Falling Floors) pay at most 6 tokens a day. (A course's first-finish prize doesn't count toward the 6.) After that you see: "You've won all the game tokens you can today — scores still count!"
-- A milestone you reach after you hit a limit is not paid, and it is not used up either. Reach it again another day to get it. But today's goal token can't wait: your scored try is used either way. So play today's boards early in the day!
-- Today's pick: each day one skill game or course is picked for everyone. Find it on the Nether Star button on the Games screen (or in the Arcade's Play row). Its tile on the Games screen sparkles and says "Today's pick". If it is a cabinet, your first finished game of it today pays 1 extra token (by default). It pays once a day. This extra token counts toward the 6-a-day limit, but not toward that game's own limit. Practice tries, friend games and a Creeper Sweeper Boom don't count for it.
+- Daily limits (by default): each solo cabinet pays you at most 15 tokens a day (the daily goal and two medals). Connect Four and Tic-Tac-Toe pay at most 5 a day each. The Today's pick tokens are extra and do not count toward a game's own limit. All skill games together (cabinets, time trials, mini golf and Falling Floors) pay at most 60 tokens a day. (A course's first-finish prize doesn't count toward the 60.) After that you see: "You've won all the game tokens you can today — scores still count!"
+- A milestone is paid in full or not at all. If today's limit can't pay all of it, it is not paid, and it is not used up either: "You've reached today's token limit - reach this medal again another day for its tokens." Reach it again another day to get all of it. But today's goal token can't wait: your scored try is used either way. So play today's boards early in the day!
+- Today's pick: each day one skill game or course is picked for everyone. Find it on the Nether Star button on the Games screen (or in the Arcade's Play row). Its tile on the Games screen sparkles and says "Today's pick". If it is a cabinet, your first finished game of it today pays 5 extra tokens (by default). It pays once a day. These extra tokens count toward the 60-a-day limit, but not toward that game's own limit. Practice tries, friend games and a Creeper Sweeper Boom don't count for it.
 - Where you can earn: you must be in survival or adventure mode, in a world where games are played. In creative or spectator mode you read "No tokens can be earned here — scores still count!" Today's board is then only practice ("No tokens can be earned here, so today's board is practice. Your scored try waits for later."), and your scored try waits until you can earn.
 - Games only open in the right worlds. Somewhere else you read "Games can't be played in this world." If you read "Games aren't open to you.", games have been switched off for you (a parent or admin can do this). A game the owner has closed says "That game is closed right now."
 - While you are in a world game (a time trial or race, mini golf, Falling Floors, or the Clubhouse), the cabinets stay shut: "Finish your game first (/hcm leave)."
@@ -645,27 +645,27 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 - Your score is your time, shown like 1:23.4 (minutes, seconds, tenths). A shorter time is the goal.
 - Easy, Normal and Hard (Classic): your first dig is always safe. The creepers are hidden only after that first dig, away from it, so it opens a patch to start from. The clock starts on your first dig.
 - Today's board: 8 creepers (by default), the same board for everyone today. It arrives with a safe patch already dug. Its clock starts as soon as the board appears.
-- Clearing today's board on your scored try pays 1 token (by default).
-- Clearing a Classic board at or under a milestone time pays 1 token for each new milestone (by default), once ever.
+- Clearing today's board on your scored try pays 5 tokens (by default).
+- Clearing a Classic board at or under a milestone time pays 5 tokens for each new milestone (by default), once ever.
 - A Boom saves no score and pays nothing. On your scored daily try, a Boom uses the try up. You can still play today's board again for practice.
 
 **Tokens you can earn**
 
-- Milestones (by default): Easy, Normal and Hard each have their own bronze, silver and gold, so there are 9 in all. Each pays 1 token, once ever.
+- Milestones (by default): Easy, Normal and Hard each have their own bronze, silver and gold, so there are 9 in all. Each pays 5 tokens, once ever.
 - Easy: bronze 3:00, silver 1:30, gold 0:45.
 - Normal: bronze 4:00, silver 2:00, gold 1:15.
 - Hard: bronze 5:00, silver 3:00, gold 2:00.
 - Your time must be at or under the milestone time. 45.3 seconds does not count as 45 seconds.
-- Daily goal: clear today's board on your scored try. It pays 1 token (by default), once a day.
-- Creeper Sweeper pays you at most 2 tokens a day (by default), milestones and the daily goal together.
-- When Creeper Sweeper is Today's pick, your first cleared board of the day (Classic or your scored try) pays 1 extra token (by default). This extra token is on top of the 2.
+- Daily goal: clear today's board on your scored try. It pays 5 tokens (by default), once a day.
+- Creeper Sweeper pays you at most 15 tokens a day (by default), milestones and the daily goal together.
+- When Creeper Sweeper is Today's pick, your first cleared board of the day (Classic or your scored try) pays 5 extra tokens (by default). These extra tokens are on top of the 15.
 - A new personal best is saved and announced ("New best!"), but it pays no tokens.
 
 **Limits and rules**
 
 - Classic boards: free, as many as you like.
 - Today's board: one scored try a day. It resets at midnight (server time). After that it is practice.
-- At most 2 tokens a day from Creeper Sweeper, and at most 6 a day from all skill games together (by default).
+- At most 15 tokens a day from Creeper Sweeper, and at most 60 a day from all skill games together (by default).
 - Tokens are only paid in survival or adventure mode, in a world where games are played.
 - Can't be opened while you are in a world game (a time trial or race, mini golf, Falling Floors, or the Clubhouse).
 
@@ -716,23 +716,23 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 - Your score is all your merges added up. For example, merging two coal into a copper adds 4. A higher score is the goal.
 - Each ore merges only once per slide. Four coal in a row become two copper, not one iron.
 - The dragon egg is the top ore. Two dragon eggs don't merge.
-- Milestones look at your BIGGEST ore, not your score: bronze = make a diamond (256), silver = make netherite (512), gold = make a nether star (1024). Each pays 1 token once ever (by default). Only Classic games have milestones.
-- Daily goal: make a diamond on today's board, on your scored try. It pays 1 token (by default).
+- Milestones look at your BIGGEST ore, not your score: bronze = make a diamond (256), silver = make netherite (512), gold = make a nether star (1024). Each pays 5 tokens once ever (by default). Only Classic games have milestones.
+- Daily goal: make a diamond on today's board, on your scored try. It pays 5 tokens (by default).
 - A game only counts when it ends: no moves left, or End game. Closing the screen counts for nothing.
 
 **Tokens you can earn**
 
-- Milestones (by default, Classic only): bronze a diamond, silver netherite, gold a nether star. Each pays 1 token, once ever.
-- Daily goal: make a diamond on today's board on your scored try. 1 token (by default), once a day.
-- Ore Merge pays you at most 2 tokens a day (by default).
-- When Ore Merge is Today's pick, your first finished game of the day (Classic or your scored try) pays 1 extra token (by default). This extra token is on top of the 2.
+- Milestones (by default, Classic only): bronze a diamond, silver netherite, gold a nether star. Each pays 5 tokens, once ever.
+- Daily goal: make a diamond on today's board on your scored try. 5 tokens (by default), once a day.
+- Ore Merge pays you at most 15 tokens a day (by default).
+- When Ore Merge is Today's pick, your first finished game of the day (Classic or your scored try) pays 5 extra tokens (by default). These extra tokens are on top of the 15.
 - A new personal best is saved and announced, but it pays no tokens.
 
 **Limits and rules**
 
 - Classic: free, as many games as you like.
 - Today's board: one scored try a day, reset at midnight (server time). Closing the screen uses it up.
-- At most 2 tokens a day from Ore Merge, and at most 6 a day from all skill games together (by default).
+- At most 15 tokens a day from Ore Merge, and at most 60 a day from all skill games together (by default).
 - Tokens are only paid in survival or adventure mode, in a world where games are played.
 - Can't be opened while you are in a world game (a time trial or race, mini golf, Falling Floors, or the Clubhouse).
 
@@ -781,22 +781,22 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 - Your score is how many apples you eat in one run. More apples is the goal.
 - The snake can move into the square its tail is just leaving. That is safe.
 - Fill the whole field (32 apples) and the run ends: that is the best run there is!
-- Milestones (Classic only, by default): bronze 10 apples, silver 20, gold 30 in one run. Each pays 1 token once ever.
-- Daily goal: 15 apples on today's board, on your scored try. It pays 1 token (by default).
+- Milestones (Classic only, by default): bronze 10 apples, silver 20, gold 30 in one run. Each pays 5 tokens once ever.
+- Daily goal: 15 apples on today's board, on your scored try. It pays 5 tokens (by default).
 
 **Tokens you can earn**
 
-- Milestones (by default, Classic only): 10, 20 and 30 apples. Each pays 1 token, once ever.
-- Daily goal: 15 apples on today's board on your scored try. 1 token (by default), once a day.
-- Snake pays you at most 2 tokens a day (by default).
-- When Snake is Today's pick, your first finished run of the day (Classic or your scored try) pays 1 extra token (by default). This extra token is on top of the 2.
+- Milestones (by default, Classic only): 10, 20 and 30 apples. Each pays 5 tokens, once ever.
+- Daily goal: 15 apples on today's board on your scored try. 5 tokens (by default), once a day.
+- Snake pays you at most 15 tokens a day (by default).
+- When Snake is Today's pick, your first finished run of the day (Classic or your scored try) pays 5 extra tokens (by default). These extra tokens are on top of the 15.
 - A new personal best is saved and announced, but it pays no tokens.
 
 **Limits and rules**
 
 - Classic: free, as many runs as you like.
 - Today's board: one scored try a day, reset at midnight (server time). Closing the screen uses it up.
-- At most 2 tokens a day from Snake, and at most 6 a day from all skill games together (by default).
+- At most 15 tokens a day from Snake, and at most 60 a day from all skill games together (by default).
 - Tokens are only paid in survival or adventure mode, in a world where games are played.
 - Can't be opened while you are in a world game (a time trial or race, mini golf, Falling Floors, or the Clubhouse).
 
@@ -843,22 +843,22 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 
 - Your score is your number of flips. Fewer flips is the goal.
 - 8 flips is the fewest possible (every go a match).
-- Milestones (Classic only, by default): bronze = finish in 30 flips or fewer, silver = 24 or fewer, gold = 20 or fewer. Each pays 1 token once ever.
-- Daily goal: finish today's board in 24 flips or fewer, on your scored try. It pays 1 token (by default).
+- Milestones (Classic only, by default): bronze = finish in 30 flips or fewer, silver = 24 or fewer, gold = 20 or fewer. Each pays 5 tokens once ever.
+- Daily goal: finish today's board in 24 flips or fewer, on your scored try. It pays 5 tokens (by default).
 
 **Tokens you can earn**
 
-- Milestones (by default, Classic only): 30, 24 and 20 flips or fewer. Each pays 1 token, once ever.
-- Daily goal: today's board in 24 flips or fewer on your scored try. 1 token (by default), once a day.
-- Mini Match pays you at most 2 tokens a day (by default).
-- When Mini Match is Today's pick, your first finished board of the day (Classic or your scored try) pays 1 extra token (by default). This extra token is on top of the 2.
+- Milestones (by default, Classic only): 30, 24 and 20 flips or fewer. Each pays 5 tokens, once ever.
+- Daily goal: today's board in 24 flips or fewer on your scored try. 5 tokens (by default), once a day.
+- Mini Match pays you at most 15 tokens a day (by default).
+- When Mini Match is Today's pick, your first finished board of the day (Classic or your scored try) pays 5 extra tokens (by default). These extra tokens are on top of the 15.
 - A new personal best is saved and announced, but it pays no tokens.
 
 **Limits and rules**
 
 - Play (Classic): free, as many boards as you like.
 - Daily challenge: one scored try a day, reset at midnight (server time). Closing the screen uses it up.
-- At most 2 tokens a day from Mini Match, and at most 6 a day from all skill games together (by default).
+- At most 15 tokens a day from Mini Match, and at most 60 a day from all skill games together (by default).
 - Tokens are only paid in survival or adventure mode, in a world where games are played.
 - Can't be opened while you are in a world game (a time trial or race, mini golf, Falling Floors, or the Clubhouse).
 
@@ -905,22 +905,22 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 - Your score is the longest pattern you played back all the way. A longer pattern is the goal.
 - The pattern only ever adds one pad to the end. The pads you already learned never change.
 - The longest pattern there is has 99 pads.
-- Milestones (Classic only, by default): bronze = a pattern of 5, silver = 10, gold = 15. Each pays 1 token once ever.
-- Daily goal: play back a pattern of 8 on today's pattern, on your scored try. It pays 1 token (by default).
+- Milestones (Classic only, by default): bronze = a pattern of 5, silver = 10, gold = 15. Each pays 5 tokens once ever.
+- Daily goal: play back a pattern of 8 on today's pattern, on your scored try. It pays 5 tokens (by default).
 
 **Tokens you can earn**
 
-- Milestones (by default, Classic only): patterns of 5, 10 and 15. Each pays 1 token, once ever.
-- Daily goal: a pattern of 8 on today's pattern on your scored try. 1 token (by default), once a day.
-- Simon Says pays you at most 2 tokens a day (by default).
-- When Simon Says is Today's pick, your first finished game of the day (Classic or your scored try) pays 1 extra token (by default). This extra token is on top of the 2.
+- Milestones (by default, Classic only): patterns of 5, 10 and 15. Each pays 5 tokens, once ever.
+- Daily goal: a pattern of 8 on today's pattern on your scored try. 5 tokens (by default), once a day.
+- Simon Says pays you at most 15 tokens a day (by default).
+- When Simon Says is Today's pick, your first finished game of the day (Classic or your scored try) pays 5 extra tokens (by default). These extra tokens are on top of the 15.
 - A new personal best is saved and announced, but it pays no tokens.
 
 **Limits and rules**
 
 - Play (Classic): free, as many games as you like.
 - Daily challenge: one scored try a day, reset at midnight (server time). Closing the screen uses it up.
-- At most 2 tokens a day from Simon Says, and at most 6 a day from all skill games together (by default).
+- At most 15 tokens a day from Simon Says, and at most 60 a day from all skill games together (by default).
 - Tokens are only paid in survival or adventure mode, in a world where games are played.
 - Can't be opened while you are in a world game (a time trial or race, mini golf, Falling Floors, or the Clubhouse).
 
@@ -965,23 +965,23 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 
 - Your score is points: +1 for each zombie, -1 for each villager. It never goes below 0. More points is the goal.
 - About 1 pop in 7 is a villager. The very first pop is always a zombie.
-- Milestones (Classic only, by default): bronze = 15 points, silver = 25, gold = 35 in one round. Each pays 1 token once ever.
-- Daily goal: 20 points in today's round, on your scored try. It pays 1 token (by default).
+- Milestones (Classic only, by default): bronze = 15 points, silver = 25, gold = 35 in one round. Each pays 5 tokens once ever.
+- Daily goal: 20 points in today's round, on your scored try. It pays 5 tokens (by default).
 - Today's round has the same pops, at the same times and in the same holes, for everyone.
 
 **Tokens you can earn**
 
-- Milestones (by default, Classic only): 15, 25 and 35 points. Each pays 1 token, once ever.
-- Daily goal: 20 points in today's round on your scored try. 1 token (by default), once a day.
-- Whack-a-Zombie pays you at most 2 tokens a day (by default).
-- When Whack-a-Zombie is Today's pick, your first finished round of the day (Classic or your scored try) pays 1 extra token (by default). This extra token is on top of the 2.
+- Milestones (by default, Classic only): 15, 25 and 35 points. Each pays 5 tokens, once ever.
+- Daily goal: 20 points in today's round on your scored try. 5 tokens (by default), once a day.
+- Whack-a-Zombie pays you at most 15 tokens a day (by default).
+- When Whack-a-Zombie is Today's pick, your first finished round of the day (Classic or your scored try) pays 5 extra tokens (by default). These extra tokens are on top of the 15.
 - A new personal best is saved and announced, but it pays no tokens.
 
 **Limits and rules**
 
 - Play (Classic): free, as many rounds as you like.
 - Daily challenge: one scored try a day, reset at midnight (server time). Closing the screen uses it up.
-- At most 2 tokens a day from Whack-a-Zombie, and at most 6 a day from all skill games together (by default).
+- At most 15 tokens a day from Whack-a-Zombie, and at most 60 a day from all skill games together (by default).
 - Tokens are only paid in survival or adventure mode, in a world where games are played.
 - Can't be opened while you are in a world game (a time trial or race, mini golf, Falling Floors, or the Clubhouse).
 
@@ -1033,23 +1033,23 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 - Easy: the Arcade looks 2 moves ahead, and about one move in four it just drops a piece anywhere. Easy wins are just for fun.
 - Normal: the Arcade looks 4 moves ahead.
 - Hard: the Arcade looks 7 moves ahead. It grabs any win it can see and blocks yours.
-- Your first win of the day against the Arcade on Normal or Hard pays 1 token (by default).
+- Your first win of the day against the Arcade on Normal or Hard pays 5 tokens (by default).
 - Every win on Hard adds 1 to your hard wins on the high scores.
 - Friend games pay nothing and don't go on the high scores.
 - No milestones in Connect Four.
 
 **Tokens you can earn**
 
-- Daily token: your first win of the day on Normal or Hard pays 1 token (by default), once a day.
-- Connect Four pays you at most 1 token a day (by default), not counting Today's pick.
-- When Connect Four is Today's pick, your first finished game of the day against the Arcade, on any level (a win, a loss or a draw), pays 1 extra token (by default).
+- Daily tokens: your first win of the day on Normal or Hard pays 5 tokens (by default), once a day.
+- Connect Four pays you at most 5 tokens a day (by default), not counting Today's pick.
+- When Connect Four is Today's pick, your first finished game of the day against the Arcade, on any level (a win, a loss or a draw), pays 5 extra tokens (by default).
 - Friend games never pay tokens.
 
 **Limits and rules**
 
 - Free, as many games as you like, against the Arcade or friends.
 - Only one daily token: after your first Normal or Hard win of the day, the buttons lose "- today's token" and their extra lines say "Today's token is won. Play for fun!"
-- At most 1 token a day from Connect Four, and at most 6 a day from all skill games together (by default).
+- At most 5 tokens a day from Connect Four, and at most 60 a day from all skill games together (by default).
 - Tokens are only paid in survival or adventure mode, in a world where games are played.
 - Friend invites: one invite out at a time, it lasts 60 seconds, and the same two players wait 30 seconds before asking each other again. Your friend must be online, take invites, and be allowed to play where they are.
 - If you or your friend is busy in another game when the invite is accepted, the game does not start. Ask again in a bit.
@@ -1101,23 +1101,23 @@ Free little video games inside a screen. No tokens go in. How well you play deci
 - Get three of your marks in a line: across, up and down, or corner to corner.
 - Easy: the Arcade mostly picks squares at random (about two moves in three). You can beat it!
 - Hard: the Arcade plays perfectly. It never loses, so nobody can beat it. A draw is the best result, and the game cheers for it: "A draw! The best result on hard".
-- Daily token: your first win of the day on Easy, OR your first draw (or win) on Hard, pays 1 token (by default).
+- Daily tokens: your first win of the day on Easy, OR your first draw (or win) on Hard, pays 5 tokens (by default).
 - Every win against the Arcade adds 1 to your wins on the high scores.
 - Friend games pay nothing and don't go on the high scores.
 - No milestones in Tic-Tac-Toe.
 
 **Tokens you can earn**
 
-- Daily token: first Easy win or first Hard draw of the day pays 1 token (by default), once a day.
-- Tic-Tac-Toe pays you at most 1 token a day (by default), not counting Today's pick.
-- When Tic-Tac-Toe is Today's pick, your first finished game of the day against the Arcade, on any level (a win, a loss or a draw), pays 1 extra token (by default).
+- Daily tokens: first Easy win or first Hard draw of the day pays 5 tokens (by default), once a day.
+- Tic-Tac-Toe pays you at most 5 tokens a day (by default), not counting Today's pick.
+- When Tic-Tac-Toe is Today's pick, your first finished game of the day against the Arcade, on any level (a win, a loss or a draw), pays 5 extra tokens (by default).
 - Friend games never pay tokens.
 
 **Limits and rules**
 
 - Free, as many games as you like, against the Arcade or friends.
 - Only one daily token: once you have it, the buttons lose "- today's token" and their extra lines say "Today's token is won. Play for fun!"
-- At most 1 token a day from Tic-Tac-Toe, and at most 6 a day from all skill games together (by default).
+- At most 5 tokens a day from Tic-Tac-Toe, and at most 60 a day from all skill games together (by default).
 - Tokens are only paid in survival or adventure mode, in a world where games are played.
 - Friend invites: one invite out at a time, it lasts 60 seconds, and the same two players wait 30 seconds before asking each other again. Your friend must be online, take invites, and be allowed to play where they are.
 - If you or your friend is busy in another game when the invite is accepted, the game does not start. Ask again in a bit.
@@ -1147,8 +1147,8 @@ These are played in the Games world, on courses the server's builders make. Each
 - While you play you can't be hurt, get hungry or catch fire. You can't pick things up, drop things, eat, open other screens, or place or break blocks. Other players can't hit you, push you or give you potion effects.
 - To leave: click Leave game in the last hotbar slot, then click again within 3 seconds (it says Click again to leave the game), or type /hcm leave. You see: You left the game. Your things are back.
 - The Games world can't be changed by players: no building, breaking or placing. That keeps every course fair.
-- Tokens: only runs and rounds that count earn tokens. Every reward except a first finish counts toward daily limits. By default all skill games together (cabinets, courses and golf) pay at most 6 tokens a day, time trials at most 4 (all courses together), and mini golf at most 4. First finishes don't count toward any limit. When you reach a limit: You've won all the game tokens you can today — scores still count!
-- Today's pick: one skill game or course each day, the same for everyone. The Games screen and the Arcade hub show it as Today's pick: (name), and a time-trial course screen marks it ★ Today's pick. It changes at midnight. Your first finish of it each day pays 1 token by default. It is never a game of chance.
+- Tokens: only runs and rounds that count earn tokens. Every reward except a first finish counts toward daily limits. By default all skill games together (cabinets, courses and golf) pay at most 60 tokens a day, time trials at most 40 (all courses together), and mini golf at most 40. First finishes don't count toward any limit. When you reach a limit: You've won all the game tokens you can today — scores still count!
+- Today's pick: one skill game or course each day, the same for everyone. The Games screen and the Arcade hub show it as Today's pick: (name), and a time-trial course screen marks it ★ Today's pick. It changes at midnight. Your first finish of it each day pays 5 tokens by default. It is never a game of chance.
 - A new personal best is always announced and saved on the high scores, but it never pays tokens.
 - New days start at midnight in the server's time zone. New weeks (for the best time this week and the course of the week) start on Monday.
 - If a builder changes a course's layout, its high scores are cleared (for a time trial: all-time and this week's times), and a run or round that was going on at the time records nothing. Closing or changing a golf course sends its players home. Closing a time-trial course lets runs already going finish, and they still count.
@@ -1177,15 +1177,15 @@ These are played in the Games world, on courses the server's builders make. Each
 
 *Pay a small entry on a course once a week, set your best time, and the best times share the pool.*
 
-- **Where:** a course that runs a Cup has a gold block on its course screen, right of the way out: "Enter this week's Cup: 5 tokens. Best time wins the pool. Cup pool: 20 tokens · 2 in". The course's tile shows the pool too, and so does the party screen when you race friends there. By default the Fresh parkour courses, Sky Rings, Ice Boat and the two Droppers run one. The owner can give other courses a Cup too.
-- **Entering:** click the gold block, then **Pay 5 tokens and enter this week's Cup**. You pay once for each course, each week (5 tokens by default). You need the tokens: "You need 5 tokens to enter the Cup."
+- **Where:** a course that runs a Cup has a gold block on its course screen, right of the way out: "Enter this week's Cup: 10 tokens. Best time wins the pool. Cup pool: 40 tokens · 2 in". The course's tile shows the pool too, and so does the party screen when you race friends there. By default the Fresh parkour courses, Sky Rings, Ice Boat and the two Droppers run one. The owner can give other courses a Cup too.
+- **Entering:** click the gold block, then **Pay 10 tokens and enter this week's Cup**. You pay once for each course, each week (10 tokens by default). You need the tokens: "You need 10 tokens to enter the Cup."
 - **Your Cup time** is your best counted time on that course this week, from runs you start after entering: "New Cup time on Sky Rings: 0:40.0". Party races count, because each finish is a normal run. Warm-ups, the Dropper's practice drop, Race Night races and runs that didn't count never set one.
 - **When it's paid:** when the new week starts, Monday at 4:00 AM by default (the time the Fresh Courses change). The Cup screen says when, like "paid Mon 4:00 AM".
 - **How it's paid:** by Cup times. With 2 Cup times, 1st gets 70% of the pool and 2nd gets 30%. With 3 or more, 1st gets 50%, 2nd 30% and 3rd 20%. Amounts are rounded down and anything left over goes to 1st. Players with the same Cup time share their places' prizes.
-- **The pool** is every entry, plus 10 tokens from the server when 2 or more players set a Cup time. The server keeps nothing: every token in the pool is paid out.
+- **The pool** is every entry, plus 20 tokens from the server when 2 or more players set a Cup time (by default). The server keeps nothing: every token in the pool is paid out. With 2 or 3 players who all set a Cup time, nobody gets back less than they paid: 2 share 40 as 28 and 12, and 3 share 50 as 25, 15 and 10.
 - **No Cup time? No share.** If you enter but never set a Cup time, your entry stays in the pool.
-- **Your entry comes back** when nobody else entered, when fewer than 2 Cup times were set, or when the course is removed, changed or closed during the week. The line says why, like "Nobody else entered the Weekly Cup on Sky Rings, so your 5 tokens came back."
-- When it's paid, a chat line tells you how you did: "Weekly Cup on Sky Rings: you came 1st with 0:40.0 - 15 tokens." If you're offline, you read it when you next join. Cup prizes don't count toward the daily token limits.
+- **Your entry comes back** when nobody else entered, when fewer than 2 Cup times were set, or when the course is removed, changed or closed during the week. The line says why, like "Nobody else entered the Weekly Cup on Sky Rings, so your 10 tokens came back."
+- When it's paid, a chat line tells you how you did: "Weekly Cup on Sky Rings: you came 1st with 0:40.0 - 28 tokens." If you're offline, you read it when you next join. Cup prizes don't count toward the daily token limits.
 - A Fresh course's Cup opens once that week's course is up: "The Cup starts when this week's course is up." A Cup that has been paid out early says "This week's Cup on this course is already paid out. It's back next week."
 - **Don't want to see it?** /hcm play cup off hides the Cup on your course screens, and /hcm play cup on brings it back. /hcm play cup shows the Cups you're in this week.
 - It isn't a game of chance: your time decides it. The owner can switch it off for everyone; Cups already paid into still finish their week and pay out.
@@ -1234,12 +1234,12 @@ These are played in the Games world, on courses the server's builders make. Each
 
 **Tokens you can earn**
 
-- First finish: tokens the first time you finish each course, once ever. By default: Easy 5, Medium 10, Hard 20, and Why did we build this? 40. This does not count toward any daily limit.
-- Best time this week: set the fastest time of the week on a course and get 5 tokens by default, once per course per week. A new week starts on Monday.
-- Course of the week: one course each week has a ★ Course of the week mark. Finish it and get 2 tokens by default, once a day.
-- Today's pick: if this course is today's pick (or the owner made all time trials the pick), your first finish of the day pays 1 token by default. This is once a day across every game.
-- Daily limits: time trials pay at most 4 tokens a day by default, for all courses together. First finishes don't count toward this, and the course of the week and today's pick only count toward the all-games limit. All skill games together pay at most 6 tokens a day by default. After that you see: You've won all the game tokens you can today — scores still count!
-- Because of the 4-a-day limit, the 5-token best time this week pays at most 4 tokens by default.
+- First finish: tokens the first time you finish each course, once ever. By default: Easy 10, Medium 15, Hard 25, and Why did we build this? 50. This does not count toward any daily limit.
+- Best time this week: set the fastest time of the week on a course and get 10 tokens by default, once per course per week. A new week starts on Monday.
+- Course of the week: one course each week has a ★ Course of the week mark. Finish it and get 5 tokens by default, once a day.
+- Today's pick: if this course is today's pick (or the owner made all time trials the pick), your first finish of the day pays 5 tokens by default. This is once a day across every game.
+- Daily limits: time trials pay at most 40 tokens a day by default, for all courses together. First finishes don't count toward this, and the course of the week and today's pick only count toward the all-games limit. All skill games together pay at most 60 tokens a day by default. After that you see: You've won all the game tokens you can today — scores still count!
+- The 10-token best time this week fits inside the 40-a-day limit, so on a normal day it is paid in full.
 - A new personal best pays nothing. New days start at midnight, in the server's time zone.
 
 **Limits and rules**
@@ -1309,12 +1309,12 @@ These are played in the Games world, on courses the server's builders make. Each
 
 **Tokens you can earn**
 
-- First finish: tokens the first time you finish each course, once ever. By default: Easy 5, Medium 10, Hard 20, and Why did we build this? 40. This does not count toward any daily limit.
-- Best time this week: set the fastest time of the week on a course and get 5 tokens by default, once per course per week. A new week starts on Monday.
-- Course of the week: one course each week has a ★ Course of the week mark. Finish it and get 2 tokens by default, once a day.
-- Today's pick: if this course is today's pick (or the owner made all time trials the pick), your first finish of the day pays 1 token by default. This is once a day across every game.
-- Daily limits: time trials pay at most 4 tokens a day by default, for all courses together. First finishes don't count toward this, and the course of the week and today's pick only count toward the all-games limit. All skill games together pay at most 6 tokens a day by default. After that you see: You've won all the game tokens you can today — scores still count!
-- Because of the 4-a-day limit, the 5-token best time this week pays at most 4 tokens by default.
+- First finish: tokens the first time you finish each course, once ever. By default: Easy 10, Medium 15, Hard 25, and Why did we build this? 50. This does not count toward any daily limit.
+- Best time this week: set the fastest time of the week on a course and get 10 tokens by default, once per course per week. A new week starts on Monday.
+- Course of the week: one course each week has a ★ Course of the week mark. Finish it and get 5 tokens by default, once a day.
+- Today's pick: if this course is today's pick (or the owner made all time trials the pick), your first finish of the day pays 5 tokens by default. This is once a day across every game.
+- Daily limits: time trials pay at most 40 tokens a day by default, for all courses together. First finishes don't count toward this, and the course of the week and today's pick only count toward the all-games limit. All skill games together pay at most 60 tokens a day by default. After that you see: You've won all the game tokens you can today — scores still count!
+- The 10-token best time this week fits inside the 40-a-day limit, so on a normal day it is paid in full.
 - A new personal best pays nothing. New days start at midnight, in the server's time zone.
 
 **Limits and rules**
@@ -1385,12 +1385,12 @@ These are played in the Games world, on courses the server's builders make. Each
 
 **Tokens you can earn**
 
-- First finish: tokens the first time you finish each course, once ever. By default: Easy 5, Medium 10, Hard 20, and Why did we build this? 40. This does not count toward any daily limit.
-- Best time this week: set the fastest time of the week on a course and get 5 tokens by default, once per course per week. A new week starts on Monday.
-- Course of the week: one course each week has a ★ Course of the week mark. Finish it and get 2 tokens by default, once a day.
-- Today's pick: if this course is today's pick (or the owner made all time trials the pick), your first finish of the day pays 1 token by default. This is once a day across every game.
-- Daily limits: time trials pay at most 4 tokens a day by default, for all courses together. First finishes don't count toward this, and the course of the week and today's pick only count toward the all-games limit. All skill games together pay at most 6 tokens a day by default. After that you see: You've won all the game tokens you can today — scores still count!
-- Because of the 4-a-day limit, the 5-token best time this week pays at most 4 tokens by default.
+- First finish: tokens the first time you finish each course, once ever. By default: Easy 10, Medium 15, Hard 25, and Why did we build this? 50. This does not count toward any daily limit.
+- Best time this week: set the fastest time of the week on a course and get 10 tokens by default, once per course per week. A new week starts on Monday.
+- Course of the week: one course each week has a ★ Course of the week mark. Finish it and get 5 tokens by default, once a day.
+- Today's pick: if this course is today's pick (or the owner made all time trials the pick), your first finish of the day pays 5 tokens by default. This is once a day across every game.
+- Daily limits: time trials pay at most 40 tokens a day by default, for all courses together. First finishes don't count toward this, and the course of the week and today's pick only count toward the all-games limit. All skill games together pay at most 60 tokens a day by default. After that you see: You've won all the game tokens you can today — scores still count!
+- The 10-token best time this week fits inside the 40-a-day limit, so on a normal day it is paid in full.
 - A new personal best pays nothing. New days start at midnight, in the server's time zone.
 
 **Limits and rules**
@@ -1464,11 +1464,11 @@ These are played in the Games world, on courses the server's builders make. Each
 
 **Tokens you can earn**
 
-- First finish: 5 tokens by default the first time you finish each course, once ever. This does not count toward any daily limit.
-- Par or under: finish a whole course at or under its total par for 2 tokens by default, once per course per day.
-- Hole-in-one: 1 token by default for each hole-in-one in a round you finish, once per hole per day. You also get a big Hole in one! title and a firework.
-- Today's pick: if this course (or mini golf) is today's pick, your first finish of the day pays 1 token by default. This is once a day across every game.
-- Daily limits: mini golf pays at most 4 tokens a day by default. First finishes don't count toward this, and today's pick only counts toward the all-games limit. All skill games together pay at most 6 tokens a day by default. After that you see: You've won all the game tokens you can today — scores still count!
+- First finish: 15 tokens by default the first time you finish each course, once ever. This does not count toward any daily limit.
+- Par or under: finish a whole course at or under its total par for 5 tokens by default, once per course per day.
+- Hole-in-one: 3 tokens by default for each hole-in-one in a round you finish, once per hole per day. You also get a big Hole in one! title and a firework.
+- Today's pick: if this course (or mini golf) is today's pick, your first finish of the day pays 5 tokens by default. This is once a day across every game.
+- Daily limits: mini golf pays at most 40 tokens a day by default. First finishes don't count toward this, and today's pick only counts toward the all-games limit. All skill games together pay at most 60 tokens a day by default. After that you see: You've won all the game tokens you can today — scores still count!
 - A new personal best pays nothing. New days start at midnight, in the server's time zone.
 
 **Limits and rules**
@@ -1544,10 +1544,10 @@ These are played in the Games world, on courses the server's builders make. Each
 
 **Tokens you can win**
 
-- The night's 1st place wins 5 tokens, 2nd 3 tokens and 3rd 2 tokens. Everyone else who finished at least one race gets 1 token.
-- 2nd place needs at least 3 racers, and 3rd needs at least 4. So with 2 racers it's 5 and 1, and with 3 it's 5, 3 and 1.
+- The night's 1st place wins 20 tokens, 2nd 12 tokens and 3rd 8 tokens. Everyone else who finished at least one race gets 5 tokens.
+- 2nd place needs at least 3 racers, and 3rd needs at least 4. So with 2 racers it's 20 and 5, and with 3 it's 20, 12 and 5.
 - A 1st, 2nd or 3rd place prize needs at least one finished race, and someone behind you. If nobody finishes a race all night, no tokens are won.
-- Nobody wins more than 5 tokens a night. Only 3 nights a week pay tokens; after that it's "Just for fun tonight" and only points count.
+- Nobody wins more than 30 tokens a night. Only 3 nights a week pay tokens; after that it's "Just for fun tonight" and only points count.
 - These prizes don't count toward the daily token limit.
 - Not somewhere you can earn tokens when it ends (or offline)? Your prize waits and is paid when you're back.
 
@@ -1576,8 +1576,8 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - Each course stands on its own, far out in the sky: from a course you see only that course, never another course (or the next one being built) floating nearby.
 - Each tile's name shows your stars for this week's course and its course code, like "Hard Parkour - ★★☆ · Course code HARD-40". A golf tile also shows its holes and par. A course being built shows grey: "being built, back soon".
 - Stars: finishing a course gives 1 star. A good time (or a good golf score) gives 2, a great one 3. Your best stars on each course this week count. The Star Chart adds up your best stars from every course this week, and it starts again every week.
-- Star Chart goals: by default 6 stars pays 1 token and 12 stars pays 2 tokens, once each a week. The Star Chart tile shows your stars and the next goal. A week's goals stay the same all week.
-- Tokens: your first finish of each course each week pays a few tokens (by default Easy 2, Parkour 3, Hard 4, Sky Rings 3, Golf 3, Tiny Golf 2, Ice Boat 3, Easy Dropper 2, Dropper 3). A second finish that week, even on another day, pays nothing more. Your very first finish of each course ever pays the usual first finish too. Golf pays for par or better and each hole-in-one once per course each week.
+- Star Chart goals: by default 6 stars pays 5 tokens and 12 stars pays 10 tokens, once each a week. The Star Chart tile shows your stars and the next goal. A week's goals stay the same all week.
+- Tokens: your first finish of each course each week pays about a token for every minute it takes the first time (by default Easy 10, Parkour 15, Hard 20, Sky Rings 15, Golf 25, Tiny Golf 10, Ice Boat 15, Easy Dropper 10, Dropper 15). A second finish that week, even on another day, pays nothing more. Your very first finish of each course ever pays the usual first finish too. Golf pays for par or better and each hole-in-one once per course each week.
 - Daily limits: if today's limit can't pay the whole first-finish reward or a whole goal, none of it is paid and none of it is used up: "You've reached today's token limit - finish it again another day this week for its tokens." Finish it on another day this week and it pays.
 - Course codes: every course has a code, like HARD-40. You see it on its tile, on its screen and in chat when you finish. Loved an old course? Tell an admin its course code, and they can bring it back for a week, or keep it forever.
 - Classic courses: the owner can bring back a past course; its old records are the ones to beat. It shows up as Classic Parkour, Classic Sky Rings, Classic Golf or Classic Dropper on the Fresh Courses screen, like "Classic: Hard Parkour (week of 5 Oct)", with when it goes away again. If you got a course's first-finish tokens back when it first came, you don't get them again; if you didn't, you do. Stars on a classic count toward this week's Star Chart.
@@ -1626,7 +1626,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - **Easy, Medium or Hard:** the owner picks one. Easy is the widest (9 blocks of ice) with only little drops. Medium (the usual one) is 7 wide and can have strips of fast blue ice down the middle. Hard is 5 wide, all fast blue ice.
 - **Safe for everyone:** there is no water, the walls are high, and you can always stay on the ice: you never have to go through sand.
 - **Going back:** Back to checkpoint, trying to get out of the boat (sneak), or falling sends you back to your last checkpoint, never more than about 60 blocks up the track, facing down it. The clock keeps running.
-- **Stars, tokens and the Weekly Cup** work like the other Fresh Courses: your first finish of the week pays 3 tokens by default, and it runs a Weekly Cup.
+- **Stars, tokens and the Weekly Cup** work like the other Fresh Courses: your first finish of the week pays 15 tokens by default, and it runs a Weekly Cup.
 - **Race Night** races it as three downhill races (see [Race Night](#race-night)).
 <!-- ---- end Course Variety ---- -->
 
@@ -1660,7 +1660,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 
 - Your score is your time from Go to the last splash. The lowest time is best. Falling takes the same time for everyone, so fewer bonks and less waiting on ledges make a faster time.
 - Stars like any Fresh Course: 1 for finishing, 2 and 3 for good and great times.
-- First finish in a set: Easy Dropper 2 tokens, Dropper 3 (weekly sets; 1 and 2 when the courses change every day).
+- First finish in a set: Easy Dropper 10 tokens, Dropper 15 (weekly sets; 5 and 8 when the courses change every day).
 - A run with no bonks earns the achievement "Reach the bottom of a Dropper with no bonks" (20 tokens), once.
 - Slow falling (any potion), flying or a changed game mode means the run won't count.
 <!-- ---- end dropper ---- -->
@@ -1680,7 +1680,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - **Every round ends:** after 3 minutes (by default) the edges start falling in, one ring every 2 seconds.
 - **Winning:** the last one standing wins. Players who go out on the same moment share their place. Wins go on this week's wins board.
 - **Solo:** play alone and see how long you last. Your longest solo time goes on this week's solo board (the same arena for everyone all week).
-- **Tokens (by default):** 1 token for your first full round of the day (a round played out with others, or 20 seconds solo); solo milestones of 30, 60 and 120 seconds pay 1, 2 and 3 tokens, once ever; and the usual bonus when it's Today's pick. At most 3 tokens a day from Falling Floors. **Winning pays nothing extra.** Leaving a round early earns nothing.
+- **Tokens (by default):** 5 tokens for your first full round of the day (a round played out with others, or 20 seconds solo); solo milestones of 30, 60 and 120 seconds pay 5, 10 and 15 tokens, once ever (a milestone today's limit can't pay in full waits for another day); and the usual bonus when it's Today's pick. At most 20 tokens a day from Falling Floors. **Winning pays nothing extra.** Leaving a round early earns nothing.
 - **Achievement:** "Last a whole minute on Falling Floors" (15 tokens).
 - **A new arena every week:** each floor is a different shape: a disc, a rounded square, a ring with an island, a plus or a diamond.
 - **Between rounds** the floors are put back, and the next round starts on whole floors a couple of seconds later. Just before a planned restart, no new round starts (and none starts that couldn't finish before it); a round already going finishes.
@@ -1714,7 +1714,7 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 ## The older Arcade games
 
 - Crates: 15 tokens (the Arcade Crate). Before you open one, the crate screen shows every prize and its chance as a percent. You get one of these: a boost, a Firework Show, a Mini Radar, 8 filament, 8 tokens (less than the 15 you put in), a 1-day trail, a hat (once hats are set up), or rarely a Card for any Mini. On average, what comes out is worth less than 15 tokens at Prize Counter prices. The spin is only a show, because your prize is already yours. Bedrock gets a shorter spin. If you get a Card for any Mini, everyone sees it in chat. Take a break covers crates. While the games are on, they count toward the 100 tokens a day. Opening your first crate still earns the "Open an Arcade Crate" achievement (5 tokens).
-- Scratch Ticket: 10 tokens. Clicking its tile buys one straight away. Tap the three squares to scratch them. Three stars or three suns is a win. Three "Tokens back" squares give you some of your tokens back, and that is not a win: "No win this time. You got 3 of your 10 tokens back." It gives back about 77 of every 100 tokens, less than the new games. Out of every 100 tickets, about 25 give nothing, 40 give 3 tokens back, 22 give 8 back, 9 pay 20, 3 pay 50, and 1 pays the jackpot. The jackpot starts at 50 tokens and grows by 1 with every ticket anyone buys, up to 1000. When someone wins it, it goes back to 50. For now, a jackpot win is still announced to everyone in chat, and it has its own achievement (25 tokens). There is no limit on plays a day, but Take a break covers it. While the games are on, it counts toward the 100 tokens a day.
+- Scratch Ticket: 10 tokens. Clicking its tile buys one straight away. Tap the three squares to scratch them. Three stars or three suns is a win. Three "Tokens back" squares give you some of your tokens back, and that is not a win: "No win this time. You got 3 of your 10 tokens back." It gives back about 89 of every 100 tokens, like the new games. Out of every 100 tickets, about 25 give nothing, 40 give 3 tokens back, 22 give 10 back, 9 pay 25, 3 pay 60, and 1 pays the jackpot. The jackpot starts at 50 tokens and grows by 1 with every ticket anyone buys, up to 1000. When someone wins it, it goes back to 50. For now, a jackpot win is still announced to everyone in chat, and it has its own achievement (25 tokens). There is no limit on plays a day, but Take a break covers it. While the games are on, it counts toward the 100 tokens a day.
 - Rare Card: 150 tokens, once a week (by default, weeks start on Monday). Find it on the Prize Counter's Minis tab. You always get a Card that is Rare, Epic or Legendary. Which one is a surprise, and the rarer ones come up less often. If none are left, nothing is charged. When you get one, everyone sees it in chat. Take a break doesn't cover the Rare Card.
 - Card trade-in costs nothing. You swap spare Cards for tokens: Common 3, Uncommon 5, Rare 12, Epic 25 and Legendary 50 tokens each. Go to the Prize Counter, then the Minis tab, then Trade In Cards. Click Cards in your bag to put them on the tray (up to nine stacks). Check "You'll get N tokens", then click "Trade in for N tokens". If you close without trading, every Card comes back to you.
 
@@ -1730,12 +1730,12 @@ New courses the server builds by itself: Easy Parkour, Parkour, Hard Parkour, Sk
 - To match the game's own words, show Math.floor(rtp) as "gives back about N of every 100 tokens" (89.7 becomes "about 89"). Never round up. Show the odds next to every game of chance, and never show a prize or pot on its own.
 - Cabinets (kind cabinet) have board, unit (ms, points, flips, apples or wins), lowerIsBetter, and best (the server record; absent until someone sets one). Creeper Sweeper publishes its normal board, Connect Four its hard board (hard wins), and Tic-Tac-Toe its wins board. Show ms as m:ss.t with tenths rounded down, like the game does (1:23.4).
 - Courses have kind parkour, elytra, boat or dropper; tier easy, medium, hard or extreme; and record {ms, at}. Golf has holes, par, and record {strokes, at}. at is epoch ms and is present when known. record is absent until someone sets one.
-- Weekly Cup: a time-trial course that runs this week's Cup (and it isn't paid out yet) carries cup {entry, pool, entrants, endsAt} on its own games[] entry. entry is the tokens to enter (5 by default). pool is the pool right now: every entry, plus the server's top-up (10 by default) once 2 or more are in; the top-up is only paid if 2 or more set a Cup time, so the paid pool can be smaller than the one shown. entrants is how many are in (a count, never who). endsAt is when it is paid out, in epoch ms (Monday 4:00 AM by default). No player, Cup time or prize is ever published. There is no cup on a course without one, and golf never has one. While the owner has the Cup switched off (games.cup.enabled: false), only a Cup that players already entered is still published, until it is paid out. Say "Cup pool: 35 tokens · 5 in" and "Best time wins the pool", like the game.
+- Weekly Cup: a time-trial course that runs this week's Cup (and it isn't paid out yet) carries cup {entry, pool, entrants, endsAt} on its own games[] entry. entry is the tokens to enter (10 by default). pool is the pool right now: every entry, plus the server's top-up (20 by default) once 2 or more are in; the top-up is only paid if 2 or more set a Cup time, so the paid pool can be smaller than the one shown. entrants is how many are in (a count, never who). endsAt is when it is paid out, in epoch ms (Monday 4:00 AM by default). No player, Cup time or prize is ever published. There is no cup on a course without one, and golf never has one. While the owner has the Cup switched off (games.cup.enabled: false), only a Cup that players already entered is still published, until it is paid out. Say "Cup pool: 70 tokens · 5 in" and "Best time wins the pool", like the game.
 - Falling Floors (only while the owner has it on; it ships off): an entry {id: "falling_floors", name, kind: "arena", shape?, top?}. shape is this week's top floor: disc, square, ring, plus or diamond. top is this week's longest solo times in ms, longest first (higher is better). There is no record field.
-- Race Night: the top-level events object, only while Race Night is on (it ships off), with only the parts that have something in them. next {id, name, joinAt, startsAt, course?: {id, name}, races, laps, entry: "free", prizes, finisherPrize, prizeNight, racers, maxRacers}: the next night (open or coming), its join and start times in epoch ms, its track (absent until the server has picked one), prizes [5, 3, 2] and finisherPrize 1 by default, prizeNight false when that week's prize nights are used up (then it's "Just for fun tonight"), and racers joined so far as a count. upcoming: the start times of the nights after it, at most 4. live {id, state, race, of, racers, standings?}: the night on now; state is open, racing, break or results (results stays for 30 minutes after the end); standings [{rank, points, lap, laps, holder?}], at most 8, best first. recent: the last 5 nights, newest first, {id, at, course?, racers, state: done or called_off, top?: [{rank, value, unit: "points", holder?}]} with at most 8 rows. season? {key: "2026-10", name: "October", until, top?}: this month's season table, with top like any board's (in points). entry is always "free": nobody pays to race, so never show a price.
+- Race Night: the top-level events object, only while Race Night is on (it ships off), with only the parts that have something in them. next {id, name, joinAt, startsAt, course?: {id, name}, races, laps, entry: "free", prizes, finisherPrize, prizeNight, racers, maxRacers}: the next night (open or coming), its join and start times in epoch ms, its track (absent until the server has picked one), prizes [20, 12, 8] and finisherPrize 5 by default, prizeNight false when that week's prize nights are used up (then it's "Just for fun tonight"), and racers joined so far as a count. upcoming: the start times of the nights after it, at most 4. live {id, state, race, of, racers, standings?}: the night on now; state is open, racing, break or results (results stays for 30 minutes after the end); standings [{rank, points, lap, laps, holder?}], at most 8, best first. recent: the last 5 nights, newest first, {id, at, course?, racers, state: done or called_off, top?: [{rank, value, unit: "points", holder?}]} with at most 8 rows. season? {key: "2026-10", name: "October", until, top?}: this month's season table, with top like any board's (in points). entry is always "free": nobody pays to race, so never show a price.
 - Course Variety (0.36) adds no new fields and changes none. Ice Boat (`fresh_boat`, kind boat, tier easy, medium or hard) appears like any Fresh course once the owner switches it on; how many drops it has is only in the game's own tile name, not in the feed, and a golf hole's features (sand, ponds, trees) aren't published either. A Race Night on the Mountain Run has laps 1 (in next and in each live standing): it is a downhill sprint, so say "3 downhill races" as the game does, not "1 lap".
 - featured {game, until}: game is today's pick. It is a game or course id that is in games[], or "trials" / "golf" when the owner pinned a whole world game; then every time-trial course (the Droppers too) or every golf course is today's pick. until is the next local midnight in epoch ms, good for a countdown. It is never a game of chance. It is absent while the games are off or when there is no pick.
-- jackpots [{game: "scratch_ticket", tokens}]: the Scratch Ticket's pot right now. Whenever it is there, games[] also has the scratch_ticket entry, so the pot can always be shown with its odds. That entry's rtp (77.6 as shipped) is the long-run figure with the pot at its steady state.
+- jackpots [{game: "scratch_ticket", tokens}]: the Scratch Ticket's pot right now. Whenever it is there, games[] also has the scratch_ticket entry, so the pot can always be shown with its odds. That entry's rtp (89.5 as shipped) is the long-run figure with the pot at its steady state.
 - prizes: the visible Prize Counter rows {id, name, category, cost, description?}. category is boosts, hunt, cosmetics, perks, trophies or minis. Trade In, Quest Reroll and the Rare Card are left out, and the +1 Home shows its first price. packs: packs sold for tokens {id, name, cost, odds}, with odds as percents per rarity (COMMON, UNCOMMON, RARE, EPIC, LEGENDARY; only rarities above 0).
 - achievements: the enabled ones {id, name, description, tokens}. name and description are the same one line. The Scratch Ticket's jackpot achievement is left out. first_crate ("Open an Arcade Crate") is still published, because the owner hasn't decided about it yet.
 - While the games are off, games[] has only the scratch_ticket entry (plus the pot, prizes, packs and achievements), and there is no featured. With arcade.enabled false, scratch_ticket, jackpots, prizes, packs and achievements go too. If a game throws while writing its entry, that entry is dropped, and the game switches itself off in game like any failing game. The rest of the feed still goes out.

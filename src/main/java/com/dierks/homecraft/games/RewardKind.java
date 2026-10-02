@@ -23,7 +23,11 @@ public enum RewardKind {
     PERSONAL_BEST,
     /** The daily challenge, once per game per day (ref {@code daily:<day>}). */
     DAILY_CHALLENGE,
-    /** A bronze/silver/gold score threshold on a board, once ever (ref {@code ms:<board>:<n>}). */
+    /**
+     * A bronze/silver/gold score threshold on a board, once ever (ref {@code ms:<board>:<n>}). Capped,
+     * and paid whole ({@link SkillRewards#payWhole}) by the cabinets, Falling Floors and the Star Chart,
+     * so it is never recorded short near the cap.
+     */
     MILESTONE,
     /** The first finish of today's featured game, once a day across games (ref {@code featured:<day>}). */
     FEATURED,

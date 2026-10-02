@@ -103,8 +103,10 @@ class DailyCoursesTest {
         host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6), "fresh_courses", on(true).withCadence(3));
         assertEquals("New courses every 3 days: parkour, Sky Rings and golf.", fresh.rules().get(0),
                 "and follow the cadence");
-        assertEquals(3, ((DailyCourses) fresh).dailyClear("fresh_parkour_hard"),
-                "the first finish pays for the cadence: round(3 + 1 * 2/6)");
+        int hd = TokenBalance.FRESH_PARKOUR_HARD_DAILY;
+        int hw = TokenBalance.FRESH_PARKOUR_HARD_WEEKLY;
+        assertEquals((int) Math.floor(hd + (hw - hd) * 2 / 6.0 + 0.5), ((DailyCourses) fresh).dailyClear("fresh_parkour_hard"),
+                "the first finish pays for the cadence: round(daily + (weekly - daily) * 2/6)");
         host.config = GamesKit.config(GamesKit.common(true, 100, 600, 6), "fresh_courses", on(true).withCadence(1));
         assertEquals("New courses every day: parkour, Sky Rings and golf.", fresh.rules().get(0), "daily");
 

@@ -1,6 +1,7 @@
 package com.dierks.homecraft.config;
 
 import com.dierks.homecraft.games.GameCatalog;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.arena.FallingFloors;
 import com.dierks.homecraft.games.arena.FallingFloorsSettings;
 import com.dierks.homecraft.games.clubhouse.Clubhouse;
@@ -40,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>the Weekly Cup ON, and on by default on Fresh parkour, Sky Rings, Ice Boat and Dropper
  *       courses (the shipped weekly Fresh schedule keeps one layout a whole Cup week), never golf;</li>
  *   <li>the two droppers ON inside {@code games.fresh}, which itself ships OFF (the Ice Boat stays off);</li>
- *   <li>Race Night OFF (with the 5/3/2 + 1 prizes when it is on), Falling Floors OFF;</li>
+ *   <li>Race Night OFF (with the 20/12/8 + 5 prizes when it is on), Falling Floors OFF;</li>
  *   <li>the Clubhouse ON (it builds itself in its own empty box, and moves no tokens), 30 minutes a
  *       visit, and back to it after a party race, Race Night and golf together; a boat run with a
  *       rider in the back counts as normal ({@code games.trials.rider_runs_count: true}).</li>
@@ -84,8 +85,9 @@ class EventsShippedDefaultsTest {
         CupSettings cup = parsed.settings(WeeklyCup.SPEC);
         assertTrue(yml.getBoolean("games.cup.enabled"), "config.yml: the Cup is on");
         assertTrue(cup.enabled(), "the Weekly Cup ships ON (D2)");
-        assertEquals(5, cup.entry(), "a 5-token entry");
-        assertEquals(10, cup.serverTopup(), "a top-up of 10");
+        assertEquals(TokenBalance.CUP_ENTRY, cup.entry(), "the token balance's entry");
+        assertEquals(TokenBalance.CUP_TOPUP, cup.serverTopup(), "and top-up");
+        assertTrue(cup.serverTopup() >= 2 * cup.entry(), "at least twice the entry, so nobody in a Cup of 2 or 3 loses");
 
         DailySettings fresh = parsed.settings(DailyCourses.SPEC);
         assertFalse(fresh.enabled(), "Fresh Courses ships OFF: nothing is built until the owner turns it on");
@@ -108,8 +110,8 @@ class EventsShippedDefaultsTest {
         RaceNightSettings night = parsed.settings(RaceNight.SPEC);
         assertFalse(yml.getBoolean("games.race_night.enabled"), "config.yml: Race Night is off");
         assertFalse(night.enabled(), "Race Night ships OFF");
-        assertEquals(List.of(5, 3, 2), night.prizes(), "prizes 5/3/2 when it is on");
-        assertEquals(1, night.finisherPrize(), "plus 1 for every other finisher");
+        assertEquals(TokenBalance.RACE_PRIZES, night.prizes(), "the token balance's prizes when it is on");
+        assertEquals(TokenBalance.RACE_FINISHER_PRIZE, night.finisherPrize(), "plus its prize for every other finisher");
 
         FallingFloorsSettings floors = parsed.settings(FallingFloors.SPEC);
         assertFalse(yml.getBoolean("games.falling_floors.enabled"), "config.yml: Falling Floors is off");

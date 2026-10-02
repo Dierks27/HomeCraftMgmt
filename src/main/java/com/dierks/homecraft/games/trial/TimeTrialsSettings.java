@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.trial;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.TokenBalance;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -70,10 +71,13 @@ public record TimeTrialsSettings(boolean enabled, Map<String, Integer> firstClea
     public static TimeTrialsSettings defaults() {
         return new TimeTrialsSettings(
                 true,
-                map("easy", 5, "medium", 10, "hard", 20, "extreme", 40),
-                5,
-                2,
-                4,
+                map("easy", TokenBalance.TRIALS_FIRST_CLEAR_EASY,
+                        "medium", TokenBalance.TRIALS_FIRST_CLEAR_MEDIUM,
+                        "hard", TokenBalance.TRIALS_FIRST_CLEAR_HARD,
+                        "extreme", TokenBalance.TRIALS_FIRST_CLEAR_EXTREME),
+                TokenBalance.TRIALS_WEEKLY_BEST,
+                TokenBalance.TRIALS_COURSE_OF_WEEK,
+                TokenBalance.TRIALS_DAILY_CAP,
                 6,
                 5,
                 WARMUP_SECONDS,

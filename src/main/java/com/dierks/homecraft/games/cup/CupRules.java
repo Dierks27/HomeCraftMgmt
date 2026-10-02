@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.cup;
 
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.gen.api.Edition;
 import com.dierks.homecraft.games.gen.api.GenTag;
 
@@ -30,7 +31,7 @@ import java.util.UUID;
  * raced anybody: every entry comes back and there is no top-up.
  *
  * <p><b>Why an entrant without a Cup time isn't refunded in a contest.</b> The pool published all
- * week ("Cup pool: 35 tokens · 5 in") counts everyone who paid; refunding the ones who never
+ * week ("Cup pool: 70 tokens · 5 in") counts everyone who paid; refunding the ones who never
  * finished would pay the winners less than the screen promised. Not finishing is simply the slowest
  * result. Only when there is no contest at all (fewer than two times) does everybody get their entry
  * back.
@@ -41,14 +42,19 @@ import java.util.UUID;
  */
 public final class CupRules {
 
-    /** The shipped {@code games.cup.entry}. */
-    public static final int DEFAULT_ENTRY = 5;
+    /** The shipped {@code games.cup.entry} ({@link com.dierks.homecraft.games.TokenBalance#CUP_ENTRY}). */
+    public static final int DEFAULT_ENTRY = TokenBalance.CUP_ENTRY;
     /** The smallest entry a setting may give (a Cup is never free: free play already is). */
     public static final int MIN_ENTRY = 1;
     /** The largest entry a setting may give. */
     public static final int MAX_ENTRY = 100;
-    /** The shipped {@code games.cup.server_topup}. */
-    public static final int DEFAULT_TOPUP = 10;
+    /**
+     * The shipped {@code games.cup.server_topup} ({@link com.dierks.homecraft.games.TokenBalance#CUP_TOPUP}):
+     * at least twice the entry, so in a Cup of 2 or 3 where everyone set a Cup time nobody gets back less
+     * than they paid in (the family rule: with E in each, 2 share 4E as 70/30 and 3 share 5E as 50/30/20,
+     * and 30% of 4E and 20% of 5E are each at least E, rounding down included).
+     */
+    public static final int DEFAULT_TOPUP = TokenBalance.CUP_TOPUP;
     /** The largest top-up a setting may give. */
     public static final int MAX_TOPUP = 100;
     /** Cup times needed for a contest (and for the top-up). */
@@ -339,7 +345,7 @@ public final class CupRules {
      */
     public record LivePool(int tokens, int in) {
 
-        /** "Cup pool: 35 tokens · 5 in". */
+        /** "Cup pool: 70 tokens · 5 in". */
         public String line() {
             return CupText.poolLine(tokens, in);
         }

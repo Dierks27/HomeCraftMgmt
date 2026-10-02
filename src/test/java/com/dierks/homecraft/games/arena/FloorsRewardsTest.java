@@ -4,6 +4,7 @@ import com.dierks.homecraft.arcade.TokenService;
 import com.dierks.homecraft.games.RewardKind;
 import com.dierks.homecraft.games.ScoreResult;
 import com.dierks.homecraft.games.SkillRewards;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.arena.rules.ArenaScoring;
 import com.dierks.homecraft.games.arena.rules.OutReason;
 import com.dierks.homecraft.games.arena.rules.RoundResult;
@@ -113,7 +114,13 @@ class FloorsRewardsTest {
                 new Standing(ANN, 3, annTicks, OutReason.FELL, false, false)));
     }
 
-    private static final ArenaScoring.Rewards SHIPPED = FallingFloorsSettings.defaults().rewards();
+    /**
+     * The rewards these mechanism tests run at: 0.36's 1 a day and 1, 2 and 3 for the milestones, so
+     * each amount reads as the rule it pins (the shipped 5 and 5, 10, 15 are ArenaScoringTest's and
+     * {@link #theShippedRewardsFitTheShippedCap}'s).
+     */
+    private static final ArenaScoring.Rewards SHIPPED = new ArenaScoring.Rewards(1, List.of(30, 60, 120),
+            List.of(1, 2, 3));
 
     // ---- with a fake ledger -------------------------------------------------------------------------
 
@@ -197,6 +204,11 @@ class FloorsRewardsTest {
 
     /** The live ledger's steps on a real database: Scores' submit, addPoints and SkillRewards' payReward. */
     private FloorsRewards.Ledger db(long day, int dailyCap) {
+        return db(day, dailyCap, 6);
+    }
+
+    /** {@link #db(long, int)} under a {@code skill_daily_cap} of {@code skillCap}. */
+    private FloorsRewards.Ledger db(long day, int dailyCap, int skillCap) {
         return new FloorsRewards.Ledger() {
             @Override
             public Long best(UUID player, String board, long value) {
@@ -230,7 +242,7 @@ class FloorsRewardsTest {
             private int paid(UUID player, ArenaScoring.Claim c, boolean whole) {
                 try {
                     return dao.payReward(player, FloorsRewards.GAME, TokenService.Source.GAMES_FLOORS, day, c.kind(),
-                            c.ref(), c.tokens(), c.kind().acrossGames() ? -1 : dailyCap, 6, true, whole, c.detail(),
+                            c.ref(), c.tokens(), c.kind().acrossGames() ? -1 : dailyCap, skillCap, true, whole, c.detail(),
                             NOW);
                 } catch (SQLException e) {
                     throw new IllegalStateException(e);
@@ -296,6 +308,72 @@ class FloorsRewardsTest {
         assertEquals(2 + 2, balance(ANN), "the next day it is paid whole: 2");
         assertTrue(dao.rewardPaid(ANN, FloorsRewards.GAME, RewardKind.MILESTONE, ArenaScoring.milestoneRef(2)),
                 "and now it is once ever");
+    }
+
+    /**
+     * The shipped rewards under the shipped {@code daily_cap}: the cap holds the biggest milestone and the
+     * daily, so a player who reaches every milestone at once is paid each of them in full within a few days,
+     * every day's daily too, and no milestone is ever recorded short.
+     */
+    @Test
+    void theShippedRewardsFitTheShippedCap() throws Exception {
+        FallingFloorsSettings d = FallingFloorsSettings.defaults();
+        List<Integer> ms = d.milestoneRewards();
+        int biggest = ms.stream().mapToInt(Integer::intValue).max().orElse(0);
+        assertTrue(d.dailyCap() >= biggest + d.dailyReward(), "the cap holds the biggest milestone and the daily");
+        int skill = com.dierks.homecraft.config.GamesConfig.Common.defaults().skillDailyCap();
+        for (int day = 0; day < ms.size(); day++) {
+            FloorsRewards.apply(solo(CAT, 125 * 20, OutReason.FELL), DAY + day, WEEK, d.rewards(), 0,
+                    db(DAY + day, d.dailyCap(), skill));
+            assertTrue(dao.rewardsToday(CAT, FloorsRewards.GAME, DAY + day) <= d.dailyCap(), "day " + day + " within the cap");
+        }
+        for (int n = 1; n <= ms.size(); n++) {
+            assertTrue(dao.rewardPaid(CAT, FloorsRewards.GAME, RewardKind.MILESTONE, ArenaScoring.milestoneRef(n)),
+                    "milestone " + n + " was paid within " + ms.size() + " days");
+        }
+        // the rule, day by day: each milestone not yet had is paid whole if it fits what is left of the
+        // cap, in order; then the daily pays what is left
+        int expected = 0;
+        boolean[] had = new boolean[ms.size()];
+        for (int day = 0; day < ms.size(); day++) {
+            int left = Math.min(d.dailyCap(), skill);
+            for (int i = 0; i < ms.size(); i++) {
+                if (!had[i] && ms.get(i) <= left) {
+                    had[i] = true;
+                    left -= ms.get(i);
+                    expected += ms.get(i);
+                }
+            }
+            expected += Math.min(d.dailyReward(), left);
+        }
+        assertEquals(expected, balance(CAT), "each milestone in full, never short, and each day's daily from what is left");
+    }
+
+    @Test
+    void theRewardsClampAtFifty() {
+        // the 0.37 token balance moved them from 0-10
+        java.util.Map<String, Object> block = new java.util.LinkedHashMap<>();
+        int max = FallingFloorsSettings.MAX_REWARD;
+        block.put("daily_reward", max);
+        block.put("milestone_rewards", List.of(5, 10, max));
+        List<String> warns = new ArrayList<>();
+        FallingFloorsSettings at = FallingFloorsSettings.parse(
+                new com.dierks.homecraft.config.GamesConfig.Node("games.falling_floors", block, warns::add),
+                FallingFloorsSettings.defaults());
+        assertEquals(max, at.dailyReward(), "the bound is allowed");
+        assertEquals(List.of(5, 10, max), at.milestoneRewards(), "and so is a milestone at it");
+        assertEquals(List.of(), warns, "with no WARN");
+
+        block.put("daily_reward", max + 1);
+        block.put("milestone_rewards", List.of(5, 10, max + 1));
+        warns.clear();
+        FallingFloorsSettings over = FallingFloorsSettings.parse(
+                new com.dierks.homecraft.config.GamesConfig.Node("games.falling_floors", block, warns::add),
+                FallingFloorsSettings.defaults());
+        assertEquals(max, over.dailyReward(), "one over is held to the bound");
+        assertEquals(List.of(5, 10, max), over.milestoneRewards(), "and so is a milestone");
+        assertEquals(2, warns.size(), "one WARN each: " + warns);
+        assertEquals(TokenBalance.FLOORS_MAX_REWARD, max, "the token balance's bound");
     }
 
     @Test

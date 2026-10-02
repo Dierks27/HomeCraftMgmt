@@ -78,8 +78,11 @@ public final class HomeCraftManagement extends JavaPlugin {
      * the same way. 19 = the Games places move far apart, out of sight of each other: a file from an
      * older version is marked, and once the database is open {@link LayoutGuard} keeps 0.35's spots and
      * shapes on a server that built anything there and moves the untouched ones on one that didn't.
+     * 20 = the whole-arcade token balance: the games' rewards, caps, Cup, Race Night and Falling Floors
+     * prizes and the Scratch Ticket's prizes move from 0.35/0.36's defaults to about a token a minute of
+     * play, wherever the owner hasn't changed them ({@link EconomyMigration}).
      */
-    static final int CONFIG_REVISION = 19;
+    static final int CONFIG_REVISION = 20;
 
     /**
      * Prefix on a migration log line that should be logged as a WARNING rather than INFO: a step
@@ -1156,6 +1159,11 @@ public final class HomeCraftManagement extends JavaPlugin {
             // it built, which only the database knows, and it isn't open yet: mark the file, and
             // LayoutGuard decides right after database.connect(), before the Games read anything.
             LayoutGuard.markPending(c);
+        }
+        if (from < 20) {
+            // The whole-arcade token balance: every reward, cap and prize still at 0.35/0.36's default
+            // moves to the new one; the owner's own values stay, with a WARN each. See EconomyMigration.
+            EconomyMigration.apply(c, log);
         }
         if (from < CONFIG_REVISION) {
             c.set("config_revision", CONFIG_REVISION);

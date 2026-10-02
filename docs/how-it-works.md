@@ -95,7 +95,7 @@ server turns them on.
 
 Before you play, each game of chance tells you how much it gives back, like "gives back about 89
 of every 100 tokens". The games above give back about 90 of every 100 tokens you put in (the
-Scratch Ticket about 77). So if you put 100 tokens into one of them, a little at a time, you get
+Scratch Ticket about 89). So if you put 100 tokens into one of them, a little at a time, you get
 about 90 back. Some days you get more, some days less, but over lots of plays the game keeps
 about 10. Play them for fun, not to get more tokens.
 
@@ -115,11 +115,13 @@ A lower limit starts right away. A higher one waits 7 days, so you can't change 
 hurry. A pause can't be made shorter. It covers Crates, Scratch Tickets and Card Packs bought with
 tokens too.
 
-### Skill games pay a little
+### Skill games pay for your time
 
-The cabinets, time trials and mini golf are free, and they pay a few tokens:
+The cabinets, time trials and mini golf are free, and they pay tokens for every first finish, goal
+and medal: about a token for every minute you spend on something new.
 
-- **Milestones:** bronze, silver and gold. Each pays once, ever.
+- **Milestones:** bronze, silver and gold. Each pays once, ever, and all at once: if today's limit
+  can't pay all of a medal, it waits for another day.
 - **Today's challenge:** the same board for everyone. Your first try of the day counts. In
   Creeper Sweeper the clock starts as soon as today's board appears. If you're somewhere tokens
   can't be earned (like creative mode), today's board is just practice, and your scored try waits
@@ -128,6 +130,6 @@ The cabinets, time trials and mini golf are free, and they pay a few tokens:
 - **Courses and golf:** your first finish of each course, the best time of the week, the course
   of the week, a round of golf at par or better, and a hole-in-one.
 
-You can win up to 6 tokens a day from all skill games together (the first time you finish a
+You can win up to 60 tokens a day from all skill games together (the first time you finish a
 course pays extra). After that, your scores still count. Beating your own best doesn't pay, but
 it goes on the high scores.

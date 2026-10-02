@@ -468,6 +468,13 @@ test strip and a preview first. See [Adventure Golf](#adventure-golf) and [Ice B
 Run](#ice-boat-the-mountain-run). The same release moves every Games place out of sight of the others
 and adds a built-in void world (see "Where they are" in [Fresh Courses](#fresh-courses)).
 
+**The token balance (0.37)** pays the skill games about **a token a minute of first-time play**, the
+same rate as the quests: a course's first finish of the week 10 to 25, a cabinet's daily goal and
+each medal 5, today's pick 5, the Weekly Cup 10 to enter with a 20 top-up, Race Night 20/12/8, and
+the day's cap on all skill games 60 (it was 6). Games of chance, quests, achievements and prices are
+unchanged; the Scratch Ticket comes into the 85-95 band. Config revision 20 moves every value you
+haven't changed. See [The token balance (0.37)](#the-token-balance-037).
+
 ### What players get
 
 - **The Games screen:** `/hcm play`, or the Arcade hub's **Play** row. Tabs for All, **Luck**
@@ -537,10 +544,96 @@ and adds a built-in void world (see "Where they are" in [Fresh Courses](#fresh-c
   next join. A round is never paid twice, and a round whose game can't finish it gives the
   tokens back.
 - **Nothing rewards playing a game of chance:** no quest, achievement, featured bonus or skill
-  reward. Skill games pay small, capped rewards, and scores always count.
+  reward. Skill games pay capped rewards (about a token a minute of first-time play), and scores
+  always count.
 - **A game that breaks switches itself off** ("That game is taking a break. Try another one!")
   until `/hcm reload`. Its screens close, its world sessions end and its open rounds are
   finished. The rest of the plugin carries on.
+
+### The token balance (0.37)
+
+"4 is nothing - that is like walking 1000 blocks and you get 3 tokens." The quests pay about **a
+token a minute of effort** (walk 1,000 blocks, about four minutes, for 4; catch 8 fish for 5), but
+the games paid three to ten times less: a 9-hole Golf of the Week round paid 3, and
+`skill_daily_cap: 6` held every game together to 6 tokens a day. 0.37 pays the games on the same
+rule, **about a token a minute of first-time play**, and raises the caps so a normal evening never
+meets them, while everything that repeats daily stays capped and everything new each week is paid
+once per set.
+
+| Area | Key | Was | Now |
+|---|---|---|---|
+| Common | `skill_daily_cap` | 6 | **60** |
+| | `featured_bonus` (today's pick) | 1 | **5** |
+| Solo cabinets (6) | `milestone_reward` (each medal, now paid whole) | 1 | **5** |
+| | `daily_reward` | 1 | **5** |
+| | `daily_cap` | 2 | **15** (the goal and two medals) |
+| Connect Four, Tic-Tac-Toe | `daily_reward` / `daily_cap` | 1 / 1 | **5 / 5** |
+| Time trials | `first_clear` easy / medium / hard / extreme | 5 / 10 / 20 / 40 | **10 / 15 / 25 / 50** |
+| | `weekly_best_bonus` / `course_of_week_bonus` | 5 / 2 | **10 / 5** |
+| | `daily_cap` | 4 | **40** |
+| Mini golf | `par_reward` / `hole_in_one_reward` / `first_clear` | 2 / 1 / 5 | **5 / 3 / 15** |
+| | `daily_cap` | 4 | **40** (25 + par 5 + three holes-in-one = 39) |
+| Fresh Courses | `rewards.clear_weekly`: Easy, Parkour, Hard, Sky Rings, Golf, Tiny Golf, Ice Boat, Easy Dropper, Dropper | 2, 3, 4, 3, 3, 2, 3, 2, 3 | **10, 15, 20, 15, 25, 10, 15, 10, 15** (a set: 120, or 135 with the boat) |
+| | `rewards.clear_daily` (same order) | 1, 2, 3, 2, 2, 1, 2, 1, 2 | **5, 8, 10, 8, 12, 5, 8, 5, 8** |
+| | `star_goals.weekly_tokens` / `daily_tokens` (the goals stay [6, 12] / [10, 25]) | [1, 2] / [1, 1] | **[5, 10] / [5, 10]** |
+| | `daily_cap` (the Star Chart) | 2 | **15** (both goals in one day) |
+| Weekly Cup | `entry` / `server_topup` | 5 / 10 | **10 / 20** (nobody timed in a Cup of 2 or 3 loses) |
+| Race Night | `prizes` / `finisher_prize` | [5, 3, 2] / 1 | **[20, 12, 8] / 5** (`prize_events_per_week` stays 3) |
+| Falling Floors | `daily_reward` / `milestone_rewards` / `daily_cap` | 1 / [1, 2, 3] / 3 | **5 / [5, 10, 15] / 20** |
+| Scratch Ticket | `arcade.lotto.payouts` | 0×25, 3×40, 8×22, 20×9, 50×3, jackpot×1 (77.6%) | 0×25, 3×40, **10**×22, **25**×9, **60**×3, jackpot×1 (**89.5%**); a ticket still costs 10 |
+
+**Unchanged on purpose:** every game of chance (stakes, daily limits, the 85-95 target, `max_payout`
+250 and `chance_daily_tokens` 100, which is now about half as large next to what a player earns);
+quests and achievements (already on the token-a-minute rate); the login streak and playtime; the
+Prize Counter, crates, packs and the Rare Card (to retune after two weeks of the new income: read
+`/hcm tokens audit 14`).
+
+**The limits that moved with it:** Race Night pays at most **30** a player a night (was 5), each prize
+0-30 and the finisher prize 0-10; Falling Floors' rewards are 0-50 (were 0-10). **A cabinet's medal is
+paid whole**, like Falling Floors' and the Fresh Courses' rewards: one today's token limit can't pay in
+full pays nothing, isn't used up, and is paid by the next run that reaches it on another day ("You've
+reached today's token limit - reach this medal again another day for its tokens."). **A reward paid
+whole that can't fit a cap is announced** at load, one WARN naming both keys (a Fresh first finish
+against `games.trials.daily_cap` or `games.golf.daily_cap`, a Star Chart goal against
+`games.fresh.daily_cap`, a Falling Floors or cabinet medal against its `daily_cap`, and each against
+`games.skill_daily_cap`); it changes and closes nothing. A cap of 0 is never warned about.
+
+**What an evening pays now** (the quests, streak and playtime unchanged):
+
+- **The owner, a 2-hour weeknight:** Hard Parkour's first finish this week 20 and Sky Rings' 15
+  (time trials 35 of 40), today's pick 5, the Snake and Mini Match goals 5 each, the Star Chart's
+  6-star goal 5: **55 from the games** (it was 6), about 77 with everything else (was about 28).
+- **The helper, an hour:** Parkour 15, Easy Dropper 10, the Whack-a-Zombie goal 5, today's pick 5:
+  **35** (was about 5).
+- **The 4-year-old, 45 minutes with help:** Tiny Golf 10, par 5 and a hole-in-one 3, the
+  Whack-a-Zombie goal 5, a Mini Match bronze 5, today's pick 5: **33** (was 6).
+- **A new set's Monday, the cap's worst case:** Parkour 15, Hard Parkour 20 and Golf of the Week 25
+  reach 60; par, holes-in-one and the pick then read "You've won all the game tokens you can today".
+  Golf first instead (25 + 5 + 3 + Parkour 15 = 48), and Hard Parkour's 20 waits for another day of
+  the set: a 5-10 minute replay.
+
+A week roughly doubles (the owner about 205 → 460, the 4-year-old about 100 → 230), and every bound
+stays hard: the capped games pay at most 60 a day, new content at most about 155 a week, first clears
+once ever, Race Night at most 3 prize nights a week, and a Cup pays out only what went in plus 20.
+
+**Upgrading (config revision 20).** On the first start, every value in the table above that still
+holds what 0.35 and 0.36 shipped moves to the new one, with its comment (the old "Keep each at or
+under 4" and "(each 0-10)" lines go), and the console has one INFO line per section ("Config
+migration: games.trials - first_clear 5/10/20/40 → 10/15/25/50, weekly_best_bonus 5 → 10, ...").
+A value you changed is yours: it stays, with one WARN naming it and the new default ("kept
+games.cup.entry = 7 because you have changed it (the new default is 10)"), and keeps its comment. A
+key that isn't in your file is written by the backfill as usual. config.yml is copied first to
+`plugins/HomeCraftManagement/backups/config-<date>-pre-migration.yml`, so you keep the old values. Nothing changes in the database: the caps
+re-count from today's rows, a Cup week already open keeps the 5-token entries it took (new ones pay
+10, and refunds are exact), a Race Night in progress keeps its prizes, the current Fresh set pays the
+new amounts from the restart (a first finish already paid at the old amount isn't topped up), and the
+Star Chart's tokens change from next week (a week's goals are fixed once shown). Upgrading before a
+Monday 04:00 rollover avoids the Cup mix, but nothing breaks if you don't. No command is needed:
+`/hcm tokens audit 1` the next evening shows the new amounts.
+
+**For the youngest (optional):** `/hcm games break <player> limit 25` sets a daily limit on the
+tokens they can put into games of chance that they can't lift, or `/lp user <player> permission set
+hcm.games.chance false` takes the games of chance away from them altogether.
 
 ### Owner knobs (`games`)
 
@@ -560,9 +653,9 @@ move what is built. Places move by hand only (see "Moving an area by hand").
 | `click_cooldown_ms` | `600` | The pause between two plays of a game of chance (never below 250) |
 | `chance_daily_tokens` | `100` | Most tokens a player can put into all games of chance in a day (`0` = off, at most 10000). While the games are on it also counts Crates, Scratch Tickets and token Card Packs |
 | `max_payout` | `250` | Most any single play of a game of chance can pay (never below the game's largest stake) |
-| `skill_daily_cap` | `6` | Most tokens all skill games together pay a player in a day (first clears don't count) |
+| `skill_daily_cap` | `60` | Most tokens all skill games together pay a player in a day (first clears, Cup and Race Night prizes don't count). Keep it at least as big as the biggest reward paid whole (the plugin WARNs at load when one can't fit) |
 | `featured` | `auto` | `auto` picks a skill game or course each day; a game or course id pins it (`/hcm games feature`). `trials` or `golf` pins every course of that game |
-| `featured_bonus` | `1` | Tokens for the first finish of today's pick (counts toward `skill_daily_cap`) |
+| `featured_bonus` | `5` | Tokens for the first finish of today's pick (counts toward `skill_daily_cap`) |
 | `feed_top` | `5` | The website's leaderboards: how many of each game's and course's best scores `/api/arcade` lists as `top` (0-25; 0 = none). Past Fresh courses list at most 3. Names only with `web.dashboard.arcade_show_names` |
 | `restart_times` | `["04:00", "16:00"]` | When the host restarts the server each day: the minute it actually stops, not when its warnings start (quoted 24-hour times in `clock.time_zone`; midnight is `"00:00"`). Just before each one, and through that minute until the server stops (a server back up inside the minute isn't held for the restart it just had), nothing a restart would cut off starts: courses and golf, a new Twenty-One or Higher or Lower hand (an open one plays on), a cabinet's scored daily try (today's board isn't dealt until after, and the try is kept; practice after a used try and Classic play go on). Spins and flips aren't held, and the plugin sends no warnings of its own. `[]` = off; an entry that isn't a time is dropped with a WARN |
 | `restart_hold_minutes` | `5` | How many minutes before each restart that hold starts (1-60) |
@@ -607,9 +700,12 @@ why.
 ### Arcade cabinets
 
 Free to play. Each solo cabinet has three one-time **milestones** (bronze, silver, gold), each
-paying once ever, and a **daily challenge**: today's board is the same for everyone, the first
-try is the scored one, and meeting the goal pays a token. Later tries are practice. A personal
-best is announced but pays nothing, and friend games never pay.
+paying 5 tokens once ever, and a **daily challenge**: today's board is the same for everyone, the
+first try is the scored one, and meeting the goal pays 5 tokens. Later tries are practice. A medal
+is paid in full or not at all: one that today's token limit can't pay whole pays nothing and isn't
+used up ("You've reached today's token limit - reach this medal again another day for its
+tokens."), and the next run that reaches it on another day pays it. A personal best is announced
+but pays nothing, and friend games never pay.
 
 | Cabinet (`id`) | The game | Daily goal | Milestones |
 |---|---|---|---|
@@ -625,9 +721,9 @@ best is announced but pays nothing, and friend games never pay.
 | Key | Default | Meaning |
 |---|---|---|
 | `<cabinet>.enabled` | `true` | The cabinet's own switch |
-| `<cabinet>.milestone_reward` | `1` | Tokens for each milestone, once ever (the six solo cabinets) |
-| `<cabinet>.daily_reward` | `1` | Tokens for the daily goal |
-| `<cabinet>.daily_cap` | `2` (`connect_four`, `tic_tac_toe`: `1`) | Most tokens that cabinet pays a player a day. `games.skill_daily_cap` still applies on top |
+| `<cabinet>.milestone_reward` | `5` | Tokens for each milestone, once ever and in full (the six solo cabinets). The plugin WARNs at load if it is bigger than `daily_cap` or `games.skill_daily_cap` |
+| `<cabinet>.daily_reward` | `5` | Tokens for the daily goal |
+| `<cabinet>.daily_cap` | `15` (`connect_four`, `tic_tac_toe`: `5`) | Most tokens that cabinet pays a player a day (the daily goal and two medals). `games.skill_daily_cap` still applies on top |
 | `<cabinet>.milestones` | as above | Three values (bronze, silver, gold), each better than the last. Mini Match's can't ask for fewer than 8 flips, nor Simon Says' for more than 99 |
 | `creeper_sweeper.mines.<easy\|normal\|hard>` | `6`, `8`, `10` | Creepers per board (1-30). The daily board uses normal's |
 | `creeper_sweeper.milestones.<easy\|normal\|hard>` | `[180, 90, 45]`, `[240, 120, 75]`, `[300, 180, 120]` | Clear times in seconds (at or under) |
@@ -703,10 +799,10 @@ Easy, Medium, Hard and "Why did we build this?".
 | Key | Default | Meaning |
 |---|---|---|
 | `trials.enabled` | `true` | Every time-trial course's switch |
-| `trials.first_clear.<easy\|medium\|hard\|extreme>` | `5`, `10`, `20`, `40` | Tokens for a course's first finish, once ever, by tier (not capped; changing the tier later pays nothing more) |
-| `trials.weekly_best_bonus` | `5` | Tokens for setting the week's best time on a course (once per course per week) |
-| `trials.course_of_week_bonus` | `2` | Tokens for finishing the course of the week (once a day; counts toward `games.skill_daily_cap` only) |
-| `trials.daily_cap` | `4` | Most tokens time trials pay a player a day (first clears don't count) |
+| `trials.first_clear.<easy\|medium\|hard\|extreme>` | `10`, `15`, `25`, `50` | Tokens for a course's first finish, once ever, by tier (not capped; changing the tier later pays nothing more) |
+| `trials.weekly_best_bonus` | `10` | Tokens for setting the week's best time on a course (once per course per week) |
+| `trials.course_of_week_bonus` | `5` | Tokens for finishing the course of the week (once a day; counts toward `games.skill_daily_cap` only) |
+| `trials.daily_cap` | `40` | Most tokens time trials pay a player a day (first clears don't count; Fresh Courses' first finishes do, so keep it at least as big as the biggest of them) |
 | `trials.fall_depth` | `6` | Parkour: blocks below the lower of the last and next checkpoint that count as a fall |
 | `trials.min_seconds` | `5` | A run faster than this doesn't count (a course can set its own) |
 | `trials.warmup_seconds` | `180` | A warm-up's length before a timed run; `0` turns warm-ups off (0-600) |
@@ -791,11 +887,11 @@ start, checkpoint or finish at or under the fall height is refused too.
 #### The Weekly Cup
 
 A course can run a **Weekly Cup**: a player pays a small entry once per course per week
-(`games.cup.entry`, 5 tokens: "Enter this week's Cup: 5 tokens. Best time wins the pool."), and
+(`games.cup.entry`, 10 tokens: "Enter this week's Cup: 10 tokens. Best time wins the pool."), and
 their best counted time that week, from a run started after entering, is their Cup time (a party
 race's finish counts: it is a normal run). Warm-ups, practice drops, test runs, Race Night heats and
 runs that didn't count never set one. The course screen (slot 24, right of the way out), the party
-screen (slot 44) and the course's tile show the pool live ("Cup pool: 35 tokens · 5 in"; the live
+screen (slot 44) and the course's tile show the pool live ("Cup pool: 70 tokens · 5 in"; the live
 pool counts the top-up once 2 or more are in, and it is paid only if 2 or more set a Cup time).
 At the week's rollover (the quests' week start at 04:00, when Fresh Courses change) the pool is
 shared by Cup time: 70/30 with 2 Cup times, 50/30/20 with 3 or more, rounded down with the rest
@@ -804,7 +900,7 @@ pool, so the Cup stops taking entries in its last `games.restart_hold_minutes` (
 rollover, and during a restart hold that runs into them ("This week's Cup is nearly over, so it takes
 no new entries."): no run started then could set a Cup time. It is settled once, and a rollover the
 server was down for is settled at the next start. The
-server keeps nothing: the pool is every entry, plus `games.cup.server_topup` (10) when 2 or more
+server keeps nothing: the pool is every entry, plus `games.cup.server_topup` (20) when 2 or more
 set a Cup time. A lone entrant, fewer than 2 Cup times, a Cup an admin calls off, or a course
 deleted, changed (a layout edit, or a Fresh course re-rolled) or closed mid-week gets every entry
 back, with the reason. Cup prizes aren't under the
@@ -819,7 +915,10 @@ Deleting, closing (`disable`) or changing the layout of a course whose Cup has e
 `confirm`, then refunds them; a deleted course's Cup switch goes with it.
 
 **For the owner:** an entry pool can mean the youngest players pay into a pool the oldest win.
-It is small, opt-in per player and refunded when a player is alone. To switch the Cup off
+It is small, opt-in per player and refunded when a player is alone. With the top-up at twice the
+entry (the shipped 10 and 20), **nobody who sets a Cup time in a Cup of 2 or 3 gets back less than
+they paid**: 2 in share 40 as 28 and 12; 3 in share 50 as 25, 15 and 10. Only a 4th entrant or
+later can lose the entry. Keep `server_topup` at least twice `entry` to keep that true. To switch the Cup off
 server-wide, set `games.cup.enabled: false` and `/hcm reload`: nobody can enter, and Cups already
 paid into still finish their week and pay out or refund. A `games.cup` block that can't be read
 does the same until it is fixed (`/hcm games cup status` says "entries closed (games.cup can't be
@@ -828,8 +927,8 @@ read - see the console)").
 | Key | Default | Meaning |
 |---|---|---|
 | `cup.enabled` | `true` | `false`: no new entries and no Cup on the screens; Cups already paid into still finish their week and pay out or refund |
-| `cup.entry` | `5` | Tokens to enter one course's Cup for one week (1-100) |
-| `cup.server_topup` | `10` | Tokens the server adds to a pool in which 2 or more set a Cup time (0-100); never with fewer |
+| `cup.entry` | `10` | Tokens to enter one course's Cup for one week (1-100) |
+| `cup.server_topup` | `20` | Tokens the server adds to a pool in which 2 or more set a Cup time (0-100); never with fewer. At twice `entry`, nobody timed in a Cup of 2 or 3 loses |
 <!-- ---- /cup ---- -->
 
 ### Mini golf
@@ -899,10 +998,10 @@ on the Golf tab ("Meadow Links - 9 holes, par 27") and its own `/hcm play <cours
 | Key | Default | Meaning |
 |---|---|---|
 | `golf.enabled` | `true` | Every mini golf course's switch |
-| `golf.par_reward` | `2` | Tokens for finishing a course at par or better (once per course per day) |
-| `golf.hole_in_one_reward` | `1` | Tokens for a hole-in-one in a round you finish (once per hole per day) |
-| `golf.first_clear` | `5` | Tokens for a course's first finish, once ever (not capped) |
-| `golf.daily_cap` | `4` | Most tokens mini golf pays a player a day (first clears don't count) |
+| `golf.par_reward` | `5` | Tokens for finishing a course at par or better (once per course per day) |
+| `golf.hole_in_one_reward` | `3` | Tokens for a hole-in-one in a round you finish (once per hole per day) |
+| `golf.first_clear` | `15` | Tokens for a course's first finish, once ever (not capped) |
+| `golf.daily_cap` | `40` | Most tokens mini golf pays a player a day (first clears don't count; Golf of the Week's first finish does: 25 + par 5 + three holes-in-one 9 = 39) |
 | `golf.max_over_par` | `3` | Strokes over par before a hole is picked up |
 
 **Building a course** (`hcm.games.admin`, standing in a `games.worlds` world; the full list is in
@@ -1138,23 +1237,28 @@ lists them as kept).
 **Stars and tokens.** Parkour and Sky Rings: 3 stars under the gold time, 2 under the silver time
 (both fixed when the course is made, from its expert time: see `stars`), 1 for finishing. Golf: 3 at
 par or better, 2 within one stroke per three holes over par, 1 for finishing. Only a counted run
-earns stars. The first counted finish of each course in each set pays from `rewards`: weekly Easy 2,
-Parkour 3, Hard 4, Sky Rings 3, Golf 3, Tiny Golf 2; daily Easy 1, Parkour 2, Hard 3, Sky Rings 2,
-Golf 2, Tiny Golf 1; every 2 to 6 days, in between (`round(daily + (weekly - daily) * (days - 1) /
-6)`). A finish pays by its own set's length: after a switch from weekly to daily, a finish on the
+earns stars. The first counted finish of each course in each set pays from `rewards`, about a token a
+minute of first-time play: weekly Easy 10, Parkour 15, Hard 20, Sky Rings 15, Golf of the Week 25,
+Tiny Golf 10, Ice Boat 15, Easy Dropper 10, Dropper 15 (a set pays 120, or 135 with the boat); daily
+Easy 5, Parkour 8, Hard 10, Sky Rings 8, Golf 12, Tiny Golf 5, Ice Boat 8, Easy Dropper 5, Dropper 8;
+every 2 to 6 days, in between (`round(daily + (weekly - daily) * (days - 1) / 6)`: Parkour every 3
+days pays `round(8 + 7 * 2 / 6)` = 10). A finish pays by its own set's length: after a switch from weekly to daily, a finish on the
 weekly set still up pays the weekly amount, and the first daily set pays the daily one. A second
 finish in the same set, or a finish on a reroll of it, pays no second first-finish token. A course's
 first finish ever pays the usual first clear once; golf pays par and holes-in-one once per set. The
-Star Chart pays each goal its own tokens: at 6 stars (+1) and 12 stars (+2) a week when weekly, 10
-and 25 (+1 each) when daily, and in between for 2 to 6 days - never above 80% of what the week's
+Star Chart pays each goal its own tokens: at 6 stars (+5) and 12 stars (+10) a week when weekly, 10
+(+5) and 25 (+10) when daily, and in between for 2 to 6 days - never above 80% of what the week's
 courses can give. A run's stars go on the chart of the week it is played in, even when its set
 began the week before. **A week's goals are fixed** the first time they are shown or paid, so
 switching a course off (or the cadence) mid-week changes next week's goals, not this week's - even
 when that leaves the top goal above 80% of what the courses still on can give (accepted: goals never
 move under a player's feet).
 
-**All or nothing.** The daily caps are unchanged and still apply, and no weekly amount is above the
-cap of the game that pays it (Hard Parkour's weekly first finish is 4 for that reason). A set's
+**All or nothing.** The daily caps still apply, and no shipped amount is above a cap that pays it:
+a reward paid whole must fit every cap it counts toward, and when one doesn't (a cap lowered, a
+reward raised), the console WARNs once at load, naming both keys ("games.fresh.rewards.clear_weekly.
+fresh_golf 25 is more than games.golf.daily_cap 20, so it can only ever pay 20 - raise the cap or
+lower the reward"). It only warns: nothing is changed or closed. A set's
 first-finish token and a Star Chart goal are paid in full or not at all: if what is left of today's
 caps (the course game's or the server's) is smaller than the reward, nothing is paid and nothing is
 used up, and the player reads once "You've reached today's token limit - finish it again another day
@@ -1162,13 +1266,13 @@ this week for its tokens." when the set is weekly (every 2 to 6 days: "... finis
 day before the courses change for its tokens."; daily, where the set has no other day: "You've
 reached today's token limit - your time and stars still count!"; a Star Chart goal always reads the
 weekly line). A finish on another day of the same set pays it (a goal: any counted
-finish later that week). Every other reward keeps paying what is left of the caps. The parkour and
-Sky Rings courses share `games.trials.daily_cap` (4 a day), the golf courses `games.golf.daily_cap`
-(4), the Star Chart `games.fresh.daily_cap` (2), and every skill game together
-`games.skill_daily_cap` (6). So a player who plays a whole weekly set in one day earns at most 6
-tokens that day (plus the once-ever first clears), and the rest is waiting on the other days of the
-week; reaching both weekly goals on the same day pays the 6 goal's 1, and the 12 goal's 2 the next
-day that player finishes a course.
+finish later that week). Every other reward keeps paying what is left of the caps. The parkour, Sky
+Rings, Ice Boat and Dropper courses share `games.trials.daily_cap` (40 a day), the golf courses
+`games.golf.daily_cap` (40), the Star Chart `games.fresh.daily_cap` (15, both weekly goals in one
+day), and every skill game together `games.skill_daily_cap` (60). So a player who plays a whole
+weekly set in one day earns at most 60 tokens that day (plus the once-ever first clears), and the
+rest waits on the other days of the week: Parkour 15, Hard Parkour 20 and Golf of the Week 25 make
+60, and a finish that doesn't fit whole after that pays on another day of the set.
 
 **What players see.** `/hcm play fresh_courses` (the Fresh Courses tile on the Courses and Golf
 tabs) opens "This week's courses - Mon 28 Sep-Sun 4 Oct" ("Today's courses" when daily, "The
@@ -1178,7 +1282,7 @@ code HARD-40"); then the four Classics (Classic Parkour, Classic Sky Rings, Clas
 Classic Dropper: a course an admin brought back, one being built, or empty
 with the tip "Loved an old course? Tell an admin its course code..."), the Star Chart (this week's
 stars, the next goal and what it pays) and How stars work. Every line follows the cadence: "This
-week's best", "Your best this week", "First finish this week: +2 tokens", "(new this week)" on a
+week's best", "Your best this week", "First finish this week: +10 tokens", "(new this week)" on a
 course's Courses-tab tile and "(last week's)" while the new set is still being built; "today" only
 when daily. A finish ends with the course code in chat ("Course code HARD-40"), and the course and
 result screens show it in their header's NAME. `/hcm play fresh_parkour_tiers` is "Parkour Levels".
@@ -1198,11 +1302,11 @@ result screens show it in their header's NAME. `/hcm play fresh_parkour_tiers` i
 | `fresh.keep_days` | `35` | Course boards and star rows older than this are pruned; each course always keeps its last 8 sets (Star Charts: 12 weeks) |
 | `fresh.world_rules` | `true` | No mobs, fire, random ticks or weather in that world; always noon |
 | `fresh.safe_spot` | `""` | "x y z" where people standing in a building area are moved; `""` = the world's spawn |
-| `fresh.daily_cap` | `2` | Most Star Chart tokens a player earns a day (a goal is paid whole or waits for another day that week) |
+| `fresh.daily_cap` | `15` | Most Star Chart tokens a player earns a day (a goal is paid whole or waits for another day that week) |
 | `fresh.announce` | `true` | When a new set is up, each player reads one chat line about it, once per set: "New courses this week! Easy, Parkour, Hard, Sky Rings, Golf and Dropper - /hcm play" ("today" when daily, "new every 3 days" for 3). It waits until every course of the set is up (or 15 minutes after the first), for players in a world the games are played in and not in a world game, and until a screen is closed (or a minute). Players who log in later read it a few seconds after joining. `/hcm play news off` turns it off for one player; `false` for everyone |
-| `fresh.rewards.clear_weekly.*` / `fresh.rewards.clear_daily.*` | see above | Each course's first-finish tokens at a weekly and at a daily cadence; other cadences are worked out from the two. Paid whole or not at all (on a day whose caps can't hold it all, nothing is paid and it waits for another day of the set). An amount bigger than a whole day's cap (the paying game's `daily_cap`, or `games.skill_daily_cap`) pays that cap once, so keep each at or under them (4) |
-| `fresh.star_goals.weekly` / `.weekly_tokens` | `[6, 12]` / `[1, 2]` | The weekly Star Chart goals and what each pays, at a weekly cadence (a week's goals are fixed once shown: a change counts from the next week) |
-| `fresh.star_goals.daily` / `.daily_tokens` | `[10, 25]` / `[1, 1]` | The same at a daily cadence |
+| `fresh.rewards.clear_weekly.*` / `fresh.rewards.clear_daily.*` | see above | Each course's first-finish tokens at a weekly and at a daily cadence; other cadences are worked out from the two. Paid whole or not at all (on a day whose caps can't hold it all, nothing is paid and it waits for another day of the set). An amount bigger than a whole day's cap (the paying game's `daily_cap`, or `games.skill_daily_cap`) pays that cap once; the plugin WARNs at load when the configured cadence's amount is bigger than either |
+| `fresh.star_goals.weekly` / `.weekly_tokens` | `[6, 12]` / `[5, 10]` | The weekly Star Chart goals and what each pays, at a weekly cadence (a week's goals are fixed once shown: a change counts from the next week) |
+| `fresh.star_goals.daily` / `.daily_tokens` | `[10, 25]` / `[5, 10]` | The same at a daily cadence |
 | `fresh.budget.*` | `500` / `5000` / `4` / `4` / `2` / `40` | Blocks per tick online / idle, ms per tick, snapshots per tick, chunk loads at once, and the average tick time (ms) above which building pauses (it goes on below 3/4 of it) |
 | `fresh.stars.gold.*` / `fresh.stars.silver.*` | easy 2.0 / 3.0, medium 1.5 / 2.2, hard 1.25 / 1.8 | The 3-star and 2-star times as a factor of each course's expert time (tune after the first week) |
 | `fresh.slots.<course>` | see config.yml | Each course: `enabled`, `tier` (or `mix` of golf holes, E/M/H) and `origin` (x y z of its area, x and z a multiple of 16). Move one by hand only (see "Moving an area by hand") |
@@ -1553,8 +1657,8 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
   turns it off with the other warm-ups.
 - **Score and rewards:** the time from Go to the last splash, lower is better, on the set's board.
   Stars use the mix's rounded tier (EEE is easy, EEMMH medium): 3-star times of about 20 s on Easy
-  Dropper and 27 s on the Dropper. First finish in a set: Easy Dropper 2 tokens a week (1 a day),
-  Dropper 3 (2 a day), under `games.trials.daily_cap` like the other trials; the first clear once ever
+  Dropper and 27 s on the Dropper. First finish in a set: Easy Dropper 10 tokens a week (5 a day),
+  Dropper 15 (8 a day), under `games.trials.daily_cap` like the other trials; the first clear once ever
   by tier; the Star Chart counts its stars. A clean counted run unlocks the achievement "Reach the
   bottom of a Dropper with no bonks" (20 tokens; config revision 18 adds it to an unedited list, or
   WARNs with the line to paste).
@@ -1584,8 +1688,8 @@ spare, and 171 late and sloppy walk-only pilots per level, all in vanilla physic
 |---|---|---|
 | `fresh.slots.fresh_dropper_easy` | `{enabled: true, mix: EEE, origin: [7488, 160, 6768]}` | Easy Dropper |
 | `fresh.slots.fresh_dropper` | `{enabled: true, mix: EEMMH, origin: [7488, 160, 7360]}` | The Dropper (at most 5 levels) |
-| `fresh.rewards.clear_weekly.fresh_dropper_easy` / `.fresh_dropper` | `2` / `3` | First finish in a weekly set |
-| `fresh.rewards.clear_daily.fresh_dropper_easy` / `.fresh_dropper` | `1` / `2` | First finish in a daily set |
+| `fresh.rewards.clear_weekly.fresh_dropper_easy` / `.fresh_dropper` | `10` / `15` | First finish in a weekly set |
+| `fresh.rewards.clear_daily.fresh_dropper_easy` / `.fresh_dropper` | `5` / `8` | First finish in a daily set |
 | `fresh.classics.slots.fresh_classic_dropper.origin` | `[7488, 160, 7952]` | Where Classic Dropper is built |
 | `trials.warmup_seconds` | `180` | 0 turns off the practice drop (and the other warm-ups) |
 
@@ -1695,14 +1799,17 @@ course's tile, on its screen and in the finish line, so they can ask for a favou
 13. `/hcm play fresh_courses`: the title says "This week's courses", the header the week's dates,
     and each tile's name ends "Course code HARD-1" (and so on); finish Easy Parkour: the chat says
     "Course code EASY-1" and "First finish this week", never "today".
-14. On one day, finish Easy Parkour for the first time this week (+2 of time trials' `daily_cap` of
-    4), then Hard Parkour for the first time: 2 left and 4 asked, so no "first finish this week"
-    token (the once-ever first clear, which no cap limits, still pays), and one line "You've reached
-    today's token limit - finish it again another day this week for its tokens."; `/hcm tokens
-    history <you>` shows no Hard Parkour "first finish this week" line. The next day a finish pays
-    the week's 4. Then set `games.trials.daily_cap: 3` and `/hcm reload`: on the next set, Hard
-    Parkour's first finish on a day with nothing else earned pays 3 (the whole cap) and says "You've
-    won all the game tokens you can today", never "another day".
+14. Set `games.trials.daily_cap: 25` and `/hcm reload` (the shipped 40 holds both). On one day,
+    finish Easy Parkour for the first time this week (+10 of the 25), then Hard Parkour for the
+    first time: 15 left and 20 asked, so no "first finish this week" token (the once-ever first
+    clear, which no cap limits, still pays), and one line "You've reached today's token limit -
+    finish it again another day this week for its tokens."; `/hcm tokens history <you>` shows no
+    Hard Parkour "first finish this week" line. The next day a finish pays the week's 20. Then set
+    `games.trials.daily_cap: 10` and `/hcm reload`: the console WARNs once for each first finish
+    bigger than 10 ("games.fresh.rewards.clear_weekly.fresh_parkour_hard 20 is more than
+    games.trials.daily_cap 10, so it can only ever pay 10 - ..."); on the next set, Hard Parkour's
+    first finish on a day with nothing else earned pays 10 (the whole cap) and says "You've won all
+    the game tokens you can today", never "another day". Put `daily_cap` back to 40.
 15. Finish a Fresh course twice on two days of the same week: the second pays no first-finish token.
 16. `/hcm games gen history fresh_parkour_hard` → the week's course is HARD-1 "(up now)" with its seed.
 17. `/hcm games gen recall HARD-1` (the next week) → "Bringing back HARD-1…"; within a minute
@@ -1761,9 +1868,9 @@ off (`games.falling_floors.enabled: false`).
   Anyone in the arena who isn't in the gallery is moved out of the way first.
 - **Scores and tokens.** Solo times go on this week's solo board (`ffsolo`, longest first) and
   multiplayer wins on this week's wins board (`ffwins`, a count). Tokens are the normal skill rewards,
-  under `daily_cap` (3): **1** for your first full round of the day (a round played out with others,
-  or 20 seconds solo), the solo milestones of 30, 60 and 120 seconds (**1**, **2**, **3**, once ever),
-  and today's pick. **A win pays nothing extra**, so there's nothing to gain by taking turns to lose.
+  under `daily_cap` (20): **5** for your first full round of the day (a round played out with others,
+  or 20 seconds solo), the solo milestones of 30, 60 and 120 seconds (**5**, **10**, **15**, once ever,
+  each paid in full or waiting for another day), and today's pick. **A win pays nothing extra**, so there's nothing to gain by taking turns to lose.
   Leaving a round earns nothing. Lasting a whole minute counts toward the "Last a whole minute on
   Falling Floors" achievement (15).
 - **The restart hold:** in the minutes before a scheduled restart no new round starts (and nobody
@@ -1794,10 +1901,10 @@ off (`games.falling_floors.enabled: false`).
 | `falling_floors.solo` | `true` | Whether a lone player may play a solo round |
 | `falling_floors.round_seconds` | `180` | Then the edges fall in, 30-900 |
 | `falling_floors.reset_blocks_per_tick` | `400` | How fast the reset between rounds writes |
-| `falling_floors.daily_reward` | `1` | Tokens for the first full round of the day |
+| `falling_floors.daily_reward` | `5` | Tokens for the first full round of the day (0-50) |
 | `falling_floors.milestones` | `[30, 60, 120]` | Solo seconds for the three milestones |
-| `falling_floors.milestone_rewards` | `[1, 2, 3]` | Tokens for each milestone, once ever |
-| `falling_floors.daily_cap` | `3` | Most tokens Falling Floors pays a player a day |
+| `falling_floors.milestone_rewards` | `[5, 10, 15]` | Tokens for each milestone, once ever and in full (each 0-50) |
+| `falling_floors.daily_cap` | `20` | Most tokens Falling Floors pays a player a day (the biggest milestone and the daily) |
 
 **Verify in game** (on Java and on Bedrock, before switching it on for the family)
 
@@ -2134,12 +2241,12 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
   stand, your things come back. A disconnect scores 0 in that race; back online and free before the
   next grid, you are pulled back in.
 - **Prizes** (EVENTS-RECONCILED 1). After the last race the night is ranked by points, then
-  countback (more 1st places, then more 2nd places...); racers still level share the place. **1st 5,
-  2nd 3, 3rd 2 tokens, and 1 to everyone else who finished a race.** 2nd needs 3 or more racers at
-  race 1 and 3rd needs 4 or more, so nobody wins a podium prize for coming last (2 racers get 5 and
-  1; 3 get 5, 3 and 1). A podium prize (and "Win a Race Night") needs at least one finished race
+  countback (more 1st places, then more 2nd places...); racers still level share the place. **1st 20,
+  2nd 12, 3rd 8 tokens, and 5 to everyone else who finished a race** (the 0.37 token balance, for
+  three races of 2-3 minutes). 2nd needs 3 or more racers at race 1 and 3rd needs 4 or more, so
+  nobody wins a podium prize for coming last (2 racers get 20 and 5; 3 get 20, 12 and 5). A podium prize (and "Win a Race Night") needs at least one finished race
   that night and someone ranked below you: racers tied for last came last, and a night where nobody
-  finished pays nothing. A racer who only warmed up (never in a race) gets no place. At most **5
+  finished pays nothing. A racer who only warmed up (never in a race) gets no place. At most **30
   tokens a player a night**, and at most **3 prize nights a week**
   server-wide (`prize_events_per_week`, the week the weekly boards use, counted in the week race 1
   starts in, even for a night announced the evening before). A 4th night that week says
@@ -2200,8 +2307,8 @@ runs at set times (Fridays at 7:00 PM as shipped) or whenever an admin starts on
 | `race_night.warmup_seconds` | `180` | Free warm-up laps before the grid ("Warm-up runs" on the Mountain Run; 0 = none); "Ready" skips |
 | `race_night.points` | `[10, 8, 6, 5, 4, 3, 2]` | Points by place in each race |
 | `race_night.finish_points` / `still_racing_points` | `2` / `1` | A finisher beyond the list; anyone still racing at the end |
-| `race_night.prizes` | `[5, 3, 2]` | Tokens for the night's 1st, 2nd, 3rd (each 0-10; never more than 5 a player a night) |
-| `race_night.finisher_prize` | `1` | Tokens for everyone else who finished a race (0-2) |
+| `race_night.prizes` | `[20, 12, 8]` | Tokens for the night's 1st, 2nd, 3rd (each 0-30; never more than 30 a player a night) |
+| `race_night.finisher_prize` | `5` | Tokens for everyone else who finished a race (0-10) |
 | `race_night.prize_events_per_week` | `3` | Nights a week that pay tokens, server-wide (0-7) |
 | `race_night.season` | `month` | `month` (a monthly season board) or `off` |
 | `race_night.stand_radius` | `4` | How far a racer may wander from the stand (race mode puts them back) |
@@ -2366,11 +2473,14 @@ report a finish, and only a catalog cabinet is taken as a cabinet finish).
 ### For the owner: the older games of chance
 
 The Scratch Ticket and Crates now follow the house rules' copy (no teasing lines, a part refund
-reads "Tokens back", no "Open another" button), and Take a break covers them. Their tables are
-unchanged and are **not** held to 85-95 in this release: the ticket gives back about 77 of every
-100 tokens (77.6%). Decisions left for you:
+reads "Tokens back", no "Open another" button), and Take a break covers them. **The ticket is in the
+85-95 band since 0.37** (the token balance): its middle prizes rose from 8, 20 and 50 to 10, 25 and
+60, so it gives back about 89 of every 100 tokens (89.5%, with the pot at its usual 150), up from
+77.6%; it still costs 10, and its odds are unchanged. Config revision 20 moves a table you haven't
+changed; one you have is kept, with a WARN. The crates' tables are unchanged. Decisions left for
+you:
 
-- retune the ticket into 85-95;
+- ~~retune the ticket into 85-95~~ (done in 0.37);
 - drop its 3-tokens-back row;
 - decide whether its jackpot still gets a server-wide shout;
 - the `first_crate` and `jackpot` achievements and the OPEN_CRATE and SCRATCH quest types still
@@ -2401,7 +2511,7 @@ the backfill never replaces a single value you wrote where a section belongs, it
 2. Set `games.enabled: true` and `/hcm reload`: no games WARN in the console. `/hcm games status`
    lists every game, open or closed with the reason, and today's pick.
 3. `/hcm arcade`: row 1 reads "Luck" and row 4 is the Play row. `/hcm play` opens the Games
-   screen; the Luck tab shows the Scratch Ticket ("gives back about 77 of every 100 tokens") and
+   screen; the Luck tab shows the Scratch Ticket ("gives back about 89 of every 100 tokens") and
    the crates.
 4. `/hcm play blackjack` opens Twenty-One. `/hcm play nope` says there's no game called "nope".
 5. Take a break: pick 25 (it starts now), then 100 (it waits; the clock tile at 17 cancels it).
@@ -2458,16 +2568,16 @@ the backfill never replaces a single value you wrote where a section belongs, it
     m:ss.t!" and "★ New best - and the server record!" (just "★ New best!" when someone else holds
     the record). Today's board: the first try is scored, later ones are practice.
     Double-click "Today's board": the board appears and no square is dug.
-23. Snake: Start, turn with the side buttons, Back pauses. 10 apples pays +1 token once, ever.
+23. Snake: Start, turn with the side buttons, Back pauses. 10 apples pays +5 tokens once, ever.
     Bedrock players move every 10 ticks.
 24. Ore Merge (arrows at 47, 48, 50, 51; End game at 46, tap twice), Mini Match ("All pairs found
     in N flips!"), Simon Says and Whack-a-Zombie (3 seconds to get ready, then a 30-second clock)
     each play and record a score.
-25. Connect Four on hard: the day's first win pays "+1 token (Connect Four: today's win)", once.
+25. Connect Four on hard: the day's first win pays "+5 tokens (Connect Four: today's win)", once.
     Tic-Tac-Toe on hard: a draw pays.
 26. Play a friend: pick them, they accept, you take turns; one leaving says "<name> left the
     game."; nobody is paid.
-27. Past 6 tokens from skill games in a day: "You've won all the game tokens you can today —
+27. Past 60 tokens from skill games in a day: "You've won all the game tokens you can today —
     scores still count!"
 
 **Time trials**
@@ -2481,7 +2591,7 @@ the backfill never replaces a single value you wrote where a section belongs, it
     course screen, with Start, instead.
 30. Each checkpoint shows "Checkpoint 1 of 2 - 0:04.1" with a ping. Fall well below the
     checkpoints: "Back to checkpoint 1", and the clock keeps going.
-31. Finish: your time, "★ Your first finish on Cliffs!", "★ New course record!", "+5 tokens (Cliffs:
+31. Finish: your time, "★ Your first finish on Cliffs!", "★ New course record!", "+10 tokens (Cliffs:
     first finish)" and the best-this-week reward (up to the daily cap). You're sent home with your
     things, and the result screen offers Play again. Finish faster: "★ New best! (was …)", and no
     tokens for the best itself.
@@ -2508,7 +2618,7 @@ the backfill never replaces a single value you wrote where a section belongs, it
     for itself."). `cliffs fall 200` is refused (a fall height must be under the course's lowest
     point), and so is a y under the world's floor.
 39. `/hcm games feature trials`: Cliffs' course screen says "★ Today's pick", and finishing it pays
-    "+1 token (Cliffs: today's pick)" if no pick has paid you yet today. `auto` after.
+    "+5 tokens (Cliffs: today's pick)" if no pick has paid you yet today. `auto` after.
 
 **Mini golf**
 
@@ -2532,7 +2642,7 @@ the backfill never replaces a single value you wrote where a section belongs, it
 45. The ball is only a picture: you can't pick it up, push it or hit it, the Mini you picked is
     still in your collection, and after the round (or a restart mid-round) no ball is left in the
     world.
-46. Finish: the total against par and "New best", then +5 for the first finish and +2 at par or
+46. Finish: the total against par and "New best", then +15 for the first finish and +5 at par or
     better. A second round at par the same day pays no par reward. `meadow disable` while someone
     plays sends them home: "Meadow Links was closed by an admin." It does the same just after a
     player clicks Start, with no scorecard and no tokens.
@@ -2540,7 +2650,7 @@ the backfill never replaces a single value you wrote where a section belongs, it
     while someone plays: they go home at once with their things, told "Meadow Links was changed
     by an admin, so this round can't count. Your things are back."
 48. `/hcm games feature golf`, then finish Meadow Links on a day no pick has paid you yet:
-    "+1 token (Mini Golf: Meadow Links is today's pick)". `auto` after.
+    "+5 tokens (Mini Golf: Meadow Links is today's pick)". `auto` after.
 49. Pick a Mini as your ball, then trade it away: the course screen shows the plain white ball.
 
 **World sessions (any course)**
@@ -2575,7 +2685,7 @@ the backfill never replaces a single value you wrote where a section belongs, it
 **The website feed**
 
 59. With the games off, `/api/arcade` has only the `scratch_ticket` entry (plus the pot, prizes,
-    packs and achievements), no `featured` and no `jackpot` achievement. Its `rtp` (77.6) matches
+    packs and achievements), no `featured` and no `jackpot` achievement. Its `rtp` (89.5) matches
     `/hcm arcade odds`.
 60. With the games on, each open game appears, its `rtpByStake` matching the admin odds; `cliffs`
     appears as `"kind":"parkour","tier":"easy"` with its `record`, and `meadow` as `"kind":"golf"`
@@ -2646,9 +2756,9 @@ Dropper and Falling Floors have their own lists in their sections)
     hole: your round is recorded and paid at once, even if you leave before the others. A friend
     whose trip never arrives: "Ava didn't make it to the course - the rest of you carry on."
 72. The Weekly Cup: on a Fresh parkour course (or after `/hcm games cup on cliffs`), slot 24's name
-    reads "Enter this week's Cup: 5 tokens. Best time wins the pool. Cup pool: 0 tokens · 0 in".
+    reads "Enter this week's Cup: 10 tokens. Best time wins the pool. Cup pool: 0 tokens · 0 in".
     Click it: the Cup screen's book says "How it's paid: 70/30 for 2 Cup times, 50/30/20 for 3 or
-    more". Enter (5 tokens), finish a counted run: "New Cup time on ...". A warm-up lap sets none.
+    more". Enter (10 tokens), finish a counted run: "New Cup time on ...". A warm-up lap sets none.
     `/hcm play cup` lists your Cups and when they are paid; `/hcm play cup off` hides the Cup on
     your course screens (`on` brings it back).
 73. `/hcm games cup settle cliffs`: what it would pay; with `confirm`, prizes by Cup time and a line
@@ -2665,8 +2775,8 @@ Dropper and Falling Floors have their own lists in their sections)
     `games.race_night.enabled`, reload,
     `/hcm games event start in 1`, and join from `/hcm play race` with two friends. One player
     tapping Ready doesn't end the warm-up while a joined racer isn't at the track; it never ends
-    before the advertised time. Three races, the stand between them, then 5, 3 and 1 tokens with 3
-    racers (a 4th racer adds 2 for 3rd), and everyone goes to the Clubhouse: "Race Night is over -
+    before the advertised time. Three races, the stand between them, then 20, 12 and 5 tokens with 3
+    racers (a 4th racer adds 8 for 3rd), and everyone goes to the Clubhouse: "Race Night is over -
     great racing! Everyone to the Clubhouse!" (with `games.clubhouse.race_night_after: false` or no
     Clubhouse: "Race Night is over - great racing! Your things are back.") `/hcm reload` while
     racers are at the track warns first. `event cancel confirm` during race 1 gives the prize night
@@ -2925,7 +3035,7 @@ is the test's (`ArcadeFeedTest`), shortened where it says `…`; a server publis
 { "generatedAt": 1790000000000,
   "games": [
     { "id": "scratch_ticket", "name": "Scratch Ticket", "kind": "chance", "stakes": [10],
-      "rtp": 77.6, "rtpByStake": { "10": 77.6 },
+      "rtp": 89.5, "rtpByStake": { "10": 89.5 },
       "paytable": [ { "stake": 10, "combo": "3 tokens", "pays": 3, "chance": 0.4, "oneIn": 3 },
                     "…",
                     { "stake": 10, "combo": "the jackpot", "pays": 137, "chance": 0.01, "oneIn": 100 } ] },

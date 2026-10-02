@@ -64,7 +64,7 @@ class CourseTilesCupReadsTest {
     @BeforeEach
     void setUp() throws Exception {
         bench = new GamesBench(T0, this::counted, List.of(TimeTrials.SPEC, WeeklyCup.SPEC), "trials",
-                TimeTrialsSettings.defaults(), "cup", CupSettings.defaults());
+                TimeTrialsSettings.defaults(), "cup", new CupSettings(true, 5, 10)); // 0.36's 5 to enter
         GamesService games = bench.games();
         trials = (TimeTrials) games.game("trials");
         cup = (WeeklyCup) games.game("cup");

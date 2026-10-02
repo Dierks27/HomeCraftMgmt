@@ -1,5 +1,7 @@
 package com.dierks.homecraft.games.gen.api;
 
+import com.dierks.homecraft.games.TokenBalance;
+
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -218,19 +220,26 @@ public final class Slots {
      */
 
     public static final Def DAILY_PARKOUR_EASY = new Def("fresh_parkour_easy", PARKOUR, GAME_TRIALS, "parkour",
-            "Easy Parkour", "&a", 64, 48, 64, 0, true, "easy", 6080, 160, 6592, 1, 2);
+            "Easy Parkour", "&a", 64, 48, 64, 0, true, "easy", 6080, 160, 6592,
+            TokenBalance.FRESH_PARKOUR_EASY_DAILY, TokenBalance.FRESH_PARKOUR_EASY_WEEKLY);
     public static final Def DAILY_PARKOUR_MEDIUM = new Def("fresh_parkour", PARKOUR, GAME_TRIALS, "parkour",
-            "Parkour", "&e", 64, 48, 64, 0, true, "medium", 6080, 160, 7232, 2, 3);
+            "Parkour", "&e", 64, 48, 64, 0, true, "medium", 6080, 160, 7232,
+            TokenBalance.FRESH_PARKOUR_DAILY, TokenBalance.FRESH_PARKOUR_WEEKLY);
     public static final Def DAILY_PARKOUR_HARD = new Def("fresh_parkour_hard", PARKOUR, GAME_TRIALS, "parkour",
-            "Hard Parkour", "&c", 64, 48, 64, 0, true, "hard", 6080, 160, 7872, 3, 4);
+            "Hard Parkour", "&c", 64, 48, 64, 0, true, "hard", 6080, 160, 7872,
+            TokenBalance.FRESH_PARKOUR_HARD_DAILY, TokenBalance.FRESH_PARKOUR_HARD_WEEKLY);
     public static final Def SKY_RINGS = new Def("fresh_rings", RINGS, GAME_TRIALS, "elytra", "Sky Rings", "&b",
-            128, 176, 320, 0, true, "easy", 6080, 128, 4096, 2, 3);
+            128, 176, 320, 0, true, "easy", 6080, 128, 4096,
+            TokenBalance.FRESH_RINGS_DAILY, TokenBalance.FRESH_RINGS_WEEKLY);
     public static final Def DAILY_GOLF = new Def("fresh_golf", GOLF, GAME_GOLF, "golf", "Golf of the Week", "&d",
-            64, 16, 128, 9, true, "EEEMMMMHH", 7488, 160, 4096, 2, 3);
+            64, 16, 128, 9, true, "EEEMMMMHH", 7488, 160, 4096,
+            TokenBalance.FRESH_GOLF_DAILY, TokenBalance.FRESH_GOLF_WEEKLY);
     public static final Def TINY_GOLF = new Def("fresh_tiny_golf", GOLF, GAME_GOLF, "golf", "Tiny Golf", "&d", 64,
-            16, 48, 3, true, "EEE", 7488, 160, 5504, 1, 2);
+            16, 48, 3, true, "EEE", 7488, 160, 5504,
+            TokenBalance.FRESH_TINY_GOLF_DAILY, TokenBalance.FRESH_TINY_GOLF_WEEKLY);
     public static final Def ICE_BOAT = new Def("fresh_boat", BOAT, GAME_TRIALS, "boat", "Ice Boat", "&b", 128, 16,
-            128, 0, false, "medium", 6080, 160, 5888, 2, 3);
+            128, 0, false, "medium", 6080, 160, 5888,
+            TokenBalance.FRESH_BOAT_DAILY, TokenBalance.FRESH_BOAT_WEEKLY);
 
     /*
      * The Dropper (EVENTS-DROPPER-SPEC §B.1.2): a row of glass shafts, one per level of its mix (E, M,
@@ -241,10 +250,12 @@ public final class Slots {
 
     /** Easy Dropper: 3 easy levels, every hole ringed with light. */
     public static final Def EASY_DROPPER = new Def("fresh_dropper_easy", DROPPER, GAME_TRIALS, "dropper",
-            "Easy Dropper", "&a", 64, 64, 16, 5, true, "EEE", 7488, 160, 6768, 1, 2);
+            "Easy Dropper", "&a", 64, 64, 16, 5, true, "EEE", 7488, 160, 6768,
+            TokenBalance.FRESH_DROPPER_EASY_DAILY, TokenBalance.FRESH_DROPPER_EASY_WEEKLY);
     /** Dropper: 5 levels, easy to hard. */
     public static final Def FRESH_DROPPER = new Def("fresh_dropper", DROPPER, GAME_TRIALS, "dropper", "Dropper",
-            "&9", 64, 64, 16, 5, true, "EEMMH", 7488, 160, 7360, 2, 3);
+            "&9", 64, 64, 16, 5, true, "EEMMH", 7488, 160, 7360,
+            TokenBalance.FRESH_DROPPER_DAILY, TokenBalance.FRESH_DROPPER_WEEKLY);
 
     /** Every slot, in display and config order. */
     public static final List<Def> ALL = List.of(DAILY_PARKOUR_EASY, DAILY_PARKOUR_MEDIUM, DAILY_PARKOUR_HARD,

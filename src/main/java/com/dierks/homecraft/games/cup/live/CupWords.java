@@ -157,7 +157,7 @@ public final class CupWords {
      * What a course's tile adds to its NAME, the key facts for Bedrock (which shows lore only on
      * tap-and-hold): " · in the Cup, pool 35" once the viewer is in; " · Cup not open yet" while a
      * Fresh course is still on last week's layout; only the pool while the viewer can't enter (entries
-     * closed); else what it costs, and the pool once anyone is in (" · Cup: 5 tokens, pool 35");
+     * closed); else what it costs, and the pool once anyone is in (" · Cup: 10 tokens, pool 70");
      * empty when the Cup isn't shown.
      */
     public static String tileSuffix(CupDesk.View v) {

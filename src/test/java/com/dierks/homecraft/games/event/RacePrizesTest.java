@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.event;
 
+import com.dierks.homecraft.games.TokenBalance;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -15,11 +16,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Race Night's prizes ({@link RacePrizes}, EVENTS-DROPPER-SPEC §A.3, EVENTS-RECONCILED decision 1),
  * with no server.
  *
- * <p>Pinned here: the reconciled amounts (5, 3 and 2 by the night's place, 1 for every other
- * finisher); the podium rule for 1 to 8 racers (2nd needs 3, 3rd needs 4); ties sharing a place and
- * its prize; the finisher prize only for someone who finished a race; the 4th night of a week is
- * "just for fun"; a fun night pays nothing; and nobody ever gets more than 5 tokens a night, whatever
- * config says.
+ * <p>Pinned here: the mechanism at the reconciled amounts (5, 3 and 2 by the night's place, 1 for
+ * every other finisher) and the shipped ones (20, 12 and 8, 5 for every other finisher: the 2 Oct
+ * token balance); the podium rule for 1 to 8 racers (2nd needs 3, 3rd needs 4); ties sharing a place
+ * and its prize; the finisher prize only for someone who finished a race; the 4th night of a week is
+ * "just for fun"; a fun night pays nothing; and nobody ever gets more than 30 tokens a night,
+ * whatever config says.
  */
 class RacePrizesTest {
 
@@ -116,16 +118,42 @@ class RacePrizesTest {
     }
 
     @Test
-    void nobodyEverWinsMoreThanFiveTokensANight() {
+    void nobodyEverWinsMoreThanTheNightsBound() {
+        int max = NightRules.MAX_PRIZE_PER_NIGHT;
         List<UUID> who = racers(4);
-        Map<UUID, RacePrizes.Prize> p = RacePrizes.plan(field(who), 4, who, List.of(10, 10, 10), 2, true);
+        Map<UUID, RacePrizes.Prize> p = RacePrizes.plan(field(who), 4, who, List.of(max + 20, max + 10, max), 2, true);
         for (UUID u : who) {
-            assertTrue(p.get(u).tokens() <= NightRules.MAX_PRIZE_PER_NIGHT,
-                    "config's 10 is held to 5 a player a night: " + p.get(u));
+            assertTrue(p.get(u).tokens() <= max, "a prize over the bound is held to " + max + ": " + p.get(u));
         }
-        assertEquals(5, p.get(who.get(0)).tokens(), "1st: 5");
+        assertEquals(max, p.get(who.get(0)).tokens(), "1st: held to the bound");
+        assertEquals(max, p.get(who.get(1)).tokens(), "2nd: held to the bound");
+        assertEquals(max, p.get(who.get(2)).tokens(), "3rd: the bound itself");
         assertEquals(2, p.get(who.get(3)).tokens(), "a finisher prize of 2 stays 2");
-        assertEquals(5, NightRules.MAX_PRIZE_PER_NIGHT, "the reconciled bound");
+        assertEquals(TokenBalance.RACE_MAX_PRIZE_PER_NIGHT, max, "the token balance's bound");
+        assertTrue(RaceNightSettings.defaults().prizes().get(0) <= max, "the shipped 1st prize is paid in full");
+        assertEquals("Prizes: " + max + ", " + max + ", " + max + " tokens, 2 for every other finisher",
+                RacePrizes.line(List.of(max + 20, max + 10, max), 2, true), "and the screen says what will be paid");
+    }
+
+    @Test
+    void theShippedPrizesForTwoThreeAndFourRacers() {
+        RaceNightSettings d = RaceNightSettings.defaults();
+        List<Integer> pz = TokenBalance.RACE_PRIZES;
+        int f = TokenBalance.RACE_FINISHER_PRIZE;
+        assertEquals(pz, d.prizes(), "the token balance's prizes");
+        assertEquals(f, d.finisherPrize(), "and its finisher prize");
+        int[][] want = {{pz.get(0), f}, {pz.get(0), pz.get(1), f}, {pz.get(0), pz.get(1), pz.get(2), f}};
+        for (int n = 2; n <= 4; n++) {
+            List<UUID> who = racers(n);
+            Map<UUID, RacePrizes.Prize> p = RacePrizes.plan(field(who), n, who, d.prizes(), d.finisherPrize(), true);
+            for (int i = 0; i < n; i++) {
+                assertEquals(want[n - 2][i], p.get(who.get(i)).tokens(), n + " racers, place " + (i + 1)
+                        + ": 2nd needs 3 racers and 3rd needs 4, the rest the finisher's");
+            }
+        }
+        assertEquals("Prizes: " + pz.get(0) + ", " + pz.get(1) + ", " + pz.get(2) + " tokens, " + f
+                + " for every other finisher", RacePrizes.line(d.prizes(), d.finisherPrize(), true),
+                "what the screen and Go say");
     }
 
     @Test

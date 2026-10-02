@@ -1,10 +1,13 @@
 package com.dierks.homecraft.games.gen.golf;
 
 import com.dierks.homecraft.games.gen.V3GolfFixtures;
+import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenFailed;
 import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlanInput;
+import com.dierks.homecraft.games.gen.api.PlanShift;
+import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.PlannedGolf;
 import com.dierks.homecraft.games.gen.api.Putt;
 import com.dierks.homecraft.games.gen.api.Slots;
@@ -79,5 +82,43 @@ class V3GolfFixturesTest {
                     f + ": Golf v4 refuses it (the engine checks an older layout's structure instead)");
         }
         assertEquals(Slots.TINY_GOLF, V3GolfFixtures.named("golf-3").slot(), "golf-3 is Tiny Golf's");
+    }
+
+    /**
+     * The audit's GOLF01-04: an algo-3 edition made again from its seed (a {@code seed:} recall or keep) is made
+     * by the frozen Adventure Golf planner in its own 0.36 size, never by Golf v4, so it is the same course: its
+     * stored plan hash where it was made, and its stored plan moved wherever it is made again (Classic Golf's
+     * corner, a keep plot, across x 8192 too); and the planner it is made by re-derives it from its tag.
+     */
+    @Test
+    void anAlgo3EditionMadeAgainFromItsSeedIsTheSameCourse() throws GenFailed {
+        GolfPlanner engine = new GolfPlanner();
+        for (V3GolfFixtures.Fixture f : V3GolfFixtures.all()) {
+            Planner.Remake again = engine.remake(f.slot(), GolfPlanner.ALGO_V3);
+            assertTrue(again.exact(), f + ": the same course");
+            assertEquals(GolfPlanner.ALGO_V3, again.planner().algo(), f + ": by Adventure Golf's frozen planner");
+            Box made = f.plan().half();
+            assertEquals(List.of(made.sizeX(), made.sizeY(), made.sizeZ()), List.of(again.sizeX(), again.sizeY(),
+                    again.sizeZ()), f + ": in the size it was made in");
+            PlanInput own = new PlanInput(f.slot(), made, f.half(), f.day(), 0, f.seed(), f.mix(), 8,
+                    GolfPlanner.COURSE_BUDGET, null);
+            assertEquals(f.hash(), again.planner().plan(own).hash(), f + ": its stored plan hash");
+            assertEquals(f.hash(), again.planner().rederive(own, f.tag()).hash(), f + ": and from its tag");
+            for (Box there : List.of(Box.sized(8768, 160, 4896, again.sizeX(), again.sizeY(), again.sizeZ()),
+                    Box.sized(1768, 128, 7304, again.sizeX(), again.sizeY(), again.sizeZ()))) {
+                PlanInput in = new PlanInput(f.slot(), there, 'A', f.day(), 0, f.seed(), f.mix(), 8,
+                        GolfPlanner.COURSE_BUDGET, null);
+                assertEquals(PlanShift.to(f.plan(), there).hash(), again.planner().plan(in).hash(),
+                        f + ": its stored plan, moved to " + there.describe());
+            }
+        }
+        Planner.Remake v4 = engine.remake(Slots.DAILY_GOLF, GolfPlanner.ALGO);
+        assertTrue(v4.exact() && v4.planner().algo() == GolfPlanner.ALGO && v4.sizeX() == Slots.DAILY_GOLF.sizeX()
+                && v4.sizeZ() == Slots.DAILY_GOLF.sizeZ(), "a Golf v4 edition: Golf v4 at the slot's size");
+        Planner.Remake v2 = engine.remake(Slots.DAILY_GOLF, 2);
+        assertTrue(!v2.exact() && v2.planner().algo() == GolfPlanner.ALGO,
+                "algo 2: no frozen copy, so today's Golf v4, and not the same course");
+        assertEquals(GolfPlanner.ALGO_V3, GolfPlanner.v3().remake(Slots.TINY_GOLF, GolfPlanner.ALGO_V3).planner()
+                .algo(), "the frozen planner says the same");
     }
 }

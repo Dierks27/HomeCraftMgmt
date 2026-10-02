@@ -548,7 +548,7 @@ public final class GenCopy {
     /**
      * What an archived course recalled into a Classics slot is called: "Classic: Hard Parkour (week
      * of 5 Oct)", "Classic: Parkour (5 Oct)" for a daily one, "Classic: Sky Rings (5 Oct-7 Oct)" for
-     * a 3-day one, with " (re-made)" when it was made again from its seed by today's generator.
+     * a 3-day one, with " (re-made)" when it was made again from its seed, not moved from its stored plan.
      *
      * @param name     the course's own name ("Hard Parkour")
      * @param cadence  its edition's length in days
@@ -574,6 +574,21 @@ public final class GenCopy {
         }
         String bare = "Classic: " + name;
         return bare.length() <= NAME_CHARS ? bare : bare.substring(0, NAME_CHARS).trim();
+    }
+
+    /**
+     * What a course made again from its seed by ANOTHER planner version than the one that made it is, for the
+     * admin's replies to a {@code seed:} recall or keep ({@link Planner.Remake#exact} false; GOLF-V4-SPEC
+     * §5.3): "made again with today's golf (v4): not the same holes". An Adventure Golf edition is never
+     * this: golf keeps that version frozen, so it comes back as it was.
+     *
+     * @param def  the slot it was made for
+     * @param algo the version that makes it now (today's)
+     */
+    public static String remadeOther(Slots.Def def, int algo) {
+        boolean golf = def != null && def.golf();
+        return "made again with today's " + (def == null ? "planner" : def.generator()) + " (v" + algo + "): not the"
+                + " same " + (golf ? "holes" : "course");
     }
 
     /** An edition's dates for players: "5 Oct" (a day), "week of 5 Oct" (a week), "5 Oct-7 Oct" (N days). */

@@ -33,8 +33,9 @@ import java.util.stream.Collectors;
  * from the ordinary player, every club with a job, 40 x 64 plots ({@link PlotGrid}). Adventure Golf,
  * version {@value #ALGO_V3}, is kept frozen as {@link #v3()} — what made every algo-3 layout, for their
  * goldens and fixtures; a live or archived algo-3 layout keeps its rules, its plots and its size
- * (the engine checks its structure instead of re-deriving it). The rest of this comment describes
- * Adventure Golf's planner.
+ * (the engine checks its structure instead of re-deriving it), and one made again from its seed (a
+ * {@code seed:} recall or keep) is made by that frozen planner in its own 0.36 size, so it is the same
+ * course ({@link #remake}). The rest of this comment describes Adventure Golf's planner.
  *
  * <p><b>Plots.</b> A golf half is a grid of plots, each {@value HoleTemplate#PLOT_X} x
  * {@value HoleTemplate#PLOT_Z}, {@value #GAP_X} blocks apart in X and {@value #GAP_Z} in Z, three to
@@ -135,6 +136,32 @@ public final class GolfPlanner implements Planner {
      */
     public static GolfPlanner v3() {
         return new GolfPlanner(ALGO_V3);
+    }
+
+    /**
+     * The halves 0.36 made every Adventure Golf layout in, {x, y, z}, by the slots an edition is archived
+     * for: Golf of the Week's 64 x 16 x 128 and Tiny Golf's 64 x 16 x 48. Written out, not read from
+     * {@link Slots}: Golf of the Week's half is bigger now.
+     */
+    private static final Map<String, int[]> V3_HALVES = Map.of(Slots.DAILY_GOLF.id(), new int[]{64, 16, 128},
+            Slots.TINY_GOLF.id(), new int[]{64, 16, 48});
+
+    /**
+     * Golf keeps Adventure Golf frozen, so a layout of version {@value #ALGO_V3} made again from its seed is
+     * the SAME course (the audit's GOLF01-04): {@link #v3()} in the half 0.36 made it in
+     * ({@link #V3_HALVES}), never Golf v4, whose holes, lengths and pars for that seed are another course's
+     * and must not take over the old one's board. A Golf v4 layout is made again by Golf v4 at the slot's
+     * size; any other version (2: no frozen copy of it is kept) by Golf v4 too, and that is not the same
+     * course ({@link Remake#exact} false).
+     */
+    @Override
+    public Remake remake(Slots.Def def, int algo) {
+        int[] v3 = algo == ALGO_V3 && def != null ? V3_HALVES.get(def.id()) : null;
+        if (v3 != null) {
+            return new Remake(this.algo == ALGO_V3 ? this : v3(), v3[0], v3[1], v3[2], true);
+        }
+        Planner today = this.algo == ALGO ? this : new GolfPlanner();
+        return new Remake(today, def.sizeX(), def.sizeY(), def.sizeZ(), algo == ALGO);
     }
 
     @Override

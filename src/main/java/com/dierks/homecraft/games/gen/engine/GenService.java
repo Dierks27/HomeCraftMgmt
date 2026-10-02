@@ -5027,18 +5027,22 @@ public final class GenService implements GeneratedCourses, GenOps {
         Box target = s.half(j.half);
         j.planDef = orig;
         if (w.remade()) {
-            Box box = Box.sized(target.minX(), target.minY(), target.minZ(), orig.sizeX(), orig.sizeY(), orig.sizeZ());
-            if (!target.contains(box)) {
-                dropWant(j, row.name() + " doesn't fit " + s.def.name());
-                return;
-            }
             Planner p = planners.get(orig.generator());
             if (p == null) {
                 dropWant(j, "there is no " + orig.generator() + " generator");
                 return;
             }
+            // By the version that made it, in its own size, when its planner keeps it (an algo-3 golf edition:
+            // GolfPlanner.v3(), the same holes); else today's at today's size (Planner.remake, FX-GOLF)
+            Planner.Remake again = p.remake(orig, row.algoVersion());
+            Box box = Box.sized(target.minX(), target.minY(), target.minZ(), again.sizeX(), again.sizeY(),
+                    again.sizeZ());
+            if (!target.contains(box)) {
+                dropWant(j, row.name() + " doesn't fit " + s.def.name());
+                return;
+            }
             j.planBox = box;
-            plan(j, p);
+            plan(j, again.planner());
             return;
         }
         PlanCodec.Read read = PlanCodec.decode(row.plan());
@@ -5692,9 +5696,16 @@ public final class GenService implements GeneratedCourses, GenOps {
         s.recallReport = report;
         host.logger().info("Fresh Courses: " + row.code() + " (" + row.slot() + " " + row.edition() + ")"
                 + (remade ? " (re-made)" : "") + " is recalled into " + classic.id() + " " + span + ".");
+        // FX-GOLF: made again by another version than the one that made it, it is not the same course (its board
+        // stays the original edition's: the recall's tag is that edition's)
+        Planner today = remade ? planners.get(orig.generator()) : null;
+        Planner.Remake again = today == null ? null : today.remake(orig, row.algoVersion());
+        boolean other = again != null && !again.exact();
         report.accept("&7Bringing back &f" + row.code() + " &7(" + row.name() + ", " + editionName(Edition.Key.parse(
-                row.edition()), row.day()) + ")" + (remade ? " re-made from its seed" : "") + " into " + classic.name()
-                + " " + span + ". &7It opens once it is built and checked; its old records are the ones to beat.");
+                row.edition()), row.day()) + ")" + (other ? " " + GenCopy.remadeOther(orig, again.planner().algo())
+                + "," : remade ? " re-made from its seed" : "") + " into " + classic.name() + " " + span
+                + ". &7It opens once it is built and checked; " + (other ? "its board is still " + row.code()
+                + "'s, whose records were set on the old course." : "its old records are the ones to beat."));
     }
 
     private boolean storeWant(SlotState s, ClassicWant w, Consumer<String> report) {

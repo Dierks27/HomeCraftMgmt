@@ -282,6 +282,31 @@ public final class DailyCourses implements Game {
         stopEngine();
     }
 
+    /** ENG03: how long after a join the engine looks (the saved-state recovery's own look is one tick after it). */
+    static final long JOIN_LOOK_TICKS = 3;
+
+    /**
+     * ENG03: a moment after a join (after the saved-state recovery has had its turn, which sends anyone with a row
+     * home), the engine is asked about the player: if they logged out where Fresh Courses has emptied since, with
+     * nothing under them now, it moves them to safety before they fall ({@link GenService#joined}). Not for anyone
+     * flying or watching, or in a game or on the way home from one.
+     */
+    @Override
+    public void onJoin(Player player) {
+        UUID id = player.getUniqueId();
+        games().later(this, JOIN_LOOK_TICKS, () -> {
+            Player p = Bukkit.getPlayer(id);
+            GenService e = engine;
+            if (e == null || p == null || !p.isOnline() || p.isFlying()
+                    || p.getGameMode() == org.bukkit.GameMode.SPECTATOR || !games().sessions().home(p)) {
+                return;
+            }
+            Location l = p.getLocation();
+            e.joined(new Person(id, p.getName(), l.getWorld() == null ? "" : l.getWorld().getName(), l.getX(),
+                    l.getY(), l.getZ(), null, null));
+        });
+    }
+
     private void stopEngine() {
         if (engine != null) {
             GenService e = engine;
@@ -481,6 +506,12 @@ public final class DailyCourses implements Game {
         @Override
         public long now() {
             return games().clock().nowMillis();
+        }
+
+        /** ENG-R3-00: the JVM's start, which a plugin or {@code /hcm} reload doesn't move (the clock is the system's). */
+        @Override
+        public long bootedAt() {
+            return java.lang.management.ManagementFactory.getRuntimeMXBean().getStartTime();
         }
 
         @Override

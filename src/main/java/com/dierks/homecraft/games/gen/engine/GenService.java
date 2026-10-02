@@ -48,6 +48,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -276,6 +277,12 @@ public final class GenService implements GeneratedCourses, GenOps {
         boolean sampled;
         /** F12: the whole-half check of a course opened on a sample: it runs with the course open. */
         boolean background;
+        /**
+         * F12 (ENG07): the job's steps so far only read its half against the plan (a {@link #sampled} check, or the
+         * {@link #background} whole-half one): nothing is written and the half's on-disk fact stays, unless the
+         * read finds a difference ({@link #differs}).
+         */
+        boolean reading;
 
         Job(Kind kind, SlotState slot, Consumer<String> report) {
             this.kind = kind;
@@ -437,8 +444,12 @@ public final class GenService implements GeneratedCourses, GenOps {
                 // when the world was last saved (F12): then nothing is loaded there
                 s.oldDirty = s.classic || !EMPTY.equals(s.onDisk.get(s.live.otherHalf()));
                 Job heal = new Job(Kind.HEAL, s, null);
-                // F12: a big half saved right after its last full check is checked by a sample now, the rest later
-                heal.sampled = !s.classic && s.half(s.live.half()).chunkCount() > BIG_HALF_CHUNKS
+                // F12: a big half saved right after its last full check is checked by a sample now, the rest later;
+                // only when today's planner can make its plan again (ENG00: an older planner's layout has no plan
+                // to compare a sample with, so it gets the quick structure check, as every start gave it)
+                Planner p = planners.get(s.def.generator());
+                heal.sampled = !s.classic && p != null && p.algo() == s.live.algo()
+                        && s.half(s.live.half()).chunkCount() > BIG_HALF_CHUNKS
                         && planFact(s.live.planHash()).equals(s.onDisk.get(s.live.half()));
                 heals.add(heal);
             } else {
@@ -489,8 +500,23 @@ public final class GenService implements GeneratedCourses, GenOps {
     private void unclaimedLive(SlotState s) {
         s.verified = false;
         s.healFailed = true;
+        if (movingByVersion(s)) {
+            // ENG-R3-01: the move this version makes (announced as news in refresh), not a fault
+            sayOnce(s, "Fresh Courses: " + s.def.id() + "'s course from before this version stays closed in its old"
+                    + " area; a new one is built in its new area once that is checked.");
+            return;
+        }
         warnOnce(s, "Fresh Courses: " + s.def.id() + "'s live course isn't in its claimed region "
                 + "- a new one will be built once the area is checked");
+    }
+
+    /**
+     * ENG-R3-01: whether {@code s} is moving to the area this version gave it: not claimed there yet, with an old
+     * claim of another size on record (the "area changed with this version" move, its old area emptied by itself).
+     * Its course is rebuilt there as expected, which the check shows as on its way, not as a fault.
+     */
+    private static boolean movingByVersion(SlotState s) {
+        return !s.claimed && s.old.stream().anyMatch(c -> Regions.resized(s.def, c));
     }
 
     /** Stop: give up the running job (its tickets go), forget the queue. The blocks stay as they are. */
@@ -1079,9 +1105,18 @@ public final class GenService implements GeneratedCourses, GenOps {
         s.verified = false;
         s.healFailed = false;
         s.oldDirty = false;
+        host.coursesChanged(s.def.game());
+        if (!s.claimed) {
+            // ENG01: never converge a region Fresh Courses doesn't hold (as forgetRecall): the closed course stood
+            // in the area it was claimed in before (the update moved it), and nothing of it stands here
+            boolean byItself = s.old.stream().anyMatch(c -> Regions.resized(s.def, c));
+            host.logger().info("Fresh Courses: " + s.def.id() + " is closed (" + why + "). Its area isn't claimed, so"
+                    + " nothing is cleared there: the course stood in its old area" + (byItself
+                    ? ", which is emptied by itself." : "."));
+            return;
+        }
         s.bothDirty = true;
         s.lastClearCheck = 0;
-        host.coursesChanged(s.def.game());
         host.logger().info("Fresh Courses: " + s.def.id() + " is closed (" + why + "); its halves are cleared once"
                 + " nobody is on them.");
     }
@@ -1154,6 +1189,7 @@ public final class GenService implements GeneratedCourses, GenOps {
             int gap = c.halfGap();
             boolean was = s.unplaced;
             String wasWhy = unplacedWhy(s);
+            boolean wasHeld = s.heldWhy != null; // F10: its place was its old claim, never an owner's choice
             s.unplaced = !c.placed();
             s.heldWhy = s.unplaced ? c.held() : null;
             if (s.unplaced && (!was || !wasWhy.equals(unplacedWhy(s)))) {
@@ -1173,7 +1209,8 @@ public final class GenService implements GeneratedCourses, GenOps {
             }
             if (!s.sameRegion(world, origin, gap) && (s.claimed || s.live != null) && !s.world.isBlank()
                     && moved(s, world, origin, gap, !s.classic && !s.claimed && meta != null
-                    && meta.get(GenAdminKeys.claim(s.def.id())) == null) && meta != null) {
+                    && meta.get(GenAdminKeys.claim(s.def.id())) == null, wasHeld && !s.unplaced,
+                    meta == null ? null : meta.get(GenAdminKeys.claim(s.def.id()))) && meta != null) {
                 meta = new HashMap<>(meta); // an emptied Classic let its old claim go: nothing to remember as wet
                 meta.remove(GenAdminKeys.claim(s.def.id()));
             }
@@ -1329,6 +1366,15 @@ public final class GenService implements GeneratedCourses, GenOps {
             s.emptied.clear();
             s.emptied.putAll(marks);
             s.emptiedSaves.keySet().retainAll(s.emptied.keySet());
+            long boot = host.bootedAt();
+            for (Map.Entry<String, Long> m : marks.entrySet()) {
+                // ENG-R3-00: one emptied earlier in this server process (the engine started again in it) may be
+                // in memory only: it waits for the world's saves too, and is never let go on a look at memory
+                if (m.getValue() >= boot && !s.emptiedSaves.containsKey(m.getKey())) {
+                    s.emptiedSaves.put(m.getKey(), saves.getOrDefault(
+                            String.valueOf(Regions.claimWorld(m.getKey())).toLowerCase(Locale.ROOT), 0));
+                }
+            }
             s.retireHeld.keySet().retainAll(s.old);
             s.tidyAsked.retainAll(s.old);
         }
@@ -1434,11 +1480,19 @@ public final class GenService implements GeneratedCourses, GenOps {
      * its old claim is let go here, as a clear lets a course's go, so a Golf or Dropper Classic's old
      * place isn't remembered as one that may still hold water.
      *
+     * <p>A slot {@code released} from the F10 hold (config.yml saved at last, read by {@code /hcm reload}) is no
+     * owner's move (ENG08): it stood at its old claim only while held, and goes where revision 21 put it, as a
+     * restart would. Nothing is said here (the "area changed with this version" line and RETIRE say it), and its
+     * old claim stays, so its old area is recorded and emptied by itself.
+     *
+     * @param claim the claim stored now, or {@code null}: the old place is described at its recorded sizes when
+     *              it is that claim's
      * @return whether it was such an emptied Classic and its old claim is gone
      */
-    private boolean moved(SlotState s, String world, int[] origin, int gap, boolean cleared) {
-        boolean emptied = s.classic && s.want == null && s.live == null && s.previous == null && !s.bothDirty
-                && !s.oldDirty && !s.clearing && (job == null || job.slot != s);
+    private boolean moved(SlotState s, String world, int[] origin, int gap, boolean cleared, boolean released,
+                          String claim) {
+        boolean emptied = !released && s.classic && s.want == null && s.live == null && s.previous == null
+                && !s.bothDirty && !s.oldDirty && !s.clearing && (job == null || job.slot != s);
         if (emptied) {
             try {
                 host.store().meta(GenAdminKeys.claim(s.def.id()), null);
@@ -1452,10 +1506,15 @@ public final class GenService implements GeneratedCourses, GenOps {
             cancel(job, "its region moved");
         }
         queue.removeIf(j -> j.slot == s);
+        // the old place as it was built: the claim's recorded sizes when it is that place's (ENG08)
+        boolean recorded = Regions.claimHalves(claim) != null && Arrays.equals(Regions.claimOrigin(claim), s.origin)
+                && s.world.equalsIgnoreCase(Regions.claimWorld(claim));
         String line = "Fresh Courses: " + s.def.id() + " moved from " + s.world + " "
-                + Regions.describe(s.def, s.origin, s.gap) + " to " + world + " "
-                + Regions.describe(s.def, origin, gap);
-        if (!cleared) {
+                + (recorded ? Regions.describeClaim(claim) : Regions.describe(s.def, s.origin, s.gap)) + " to " + world
+                + " " + Regions.describe(s.def, origin, gap);
+        if (released) {
+            // ENG08: out of the F10 hold: the resize line and RETIRE say what happens, as after a restart
+        } else if (!cleared) {
             host.logger().warning(line + ". The old halves were not cleared (" + (s.classic
                     ? "close it first with /hcm games gen unrecall " + s.def.id() + " confirm and wait until its"
                     + " halves are empty" : "use /hcm games gen clear before moving a course") + ")."
@@ -1671,6 +1730,15 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     /**
+     * Whether old claim {@code c} of {@code s} was emptied in this run (F09). One marked emptied in an earlier run
+     * (a hard stop before the world was saved may have brought its blocks back) still stands until its re-look
+     * (ENG06): it is emptied before a region it crowds is scanned, so its blocks are never taken for foreign ones.
+     */
+    private static boolean emptiedThisRun(SlotState s, String c) {
+        return s.emptied.containsKey(c) && s.emptiedSaves.containsKey(c);
+    }
+
+    /**
      * The next old area to empty, or {@code null}: with {@code urgent} only one that a region waiting to be
      * built crowds ({@link #wantedUnclaimed}); else any that is due. One whose world isn't loaded waits for
      * it; one held by something in its way is looked at again every {@value #VET_EVERY_MS} ms.
@@ -1689,8 +1757,8 @@ public final class GenService implements GeneratedCourses, GenOps {
                     continue;
                 }
                 List<Box> halves = oldHalves.of(s.def, c);
-                if (urgent && (s.emptied.containsKey(c) || !OldAreas.crowds(halves, wantedUnclaimed(worldOf(s, c))))) {
-                    continue; // an emptied one crowds nothing
+                if (urgent && (emptiedThisRun(s, c) || !OldAreas.crowds(halves, wantedUnclaimed(worldOf(s, c))))) {
+                    continue; // one emptied in this run crowds nothing (ENG06: one emptied before may be back)
                 }
                 Job j = new Job(Kind.RETIRE, s, s.tidyAsked.contains(c) ? s.tidyReport : null);
                 j.retire = c;
@@ -1732,7 +1800,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         for (SlotState o : slots.values()) {
             for (String c : o.old) {
                 String w = Regions.claimWorld(c);
-                if (o.emptied.containsKey(c)) {
+                if (emptiedThisRun(o, c)) {
                     continue; // emptied already (F09: still recorded until it is known to be on disk)
                 }
                 if (w != null && w.equalsIgnoreCase(s.world) && OldAreas.crowds(oldHalves.of(o.def, c), mine)) {
@@ -2264,6 +2332,18 @@ public final class GenService implements GeneratedCourses, GenOps {
                 case RECALL -> beginRecall(j);
                 case RETIRE -> beginRetire(j);
                 case UNRECALL -> {
+                    if (!s.claimed) {
+                        // ENG01's safety net: never converge a region Fresh Courses doesn't hold (beginHeal's rule);
+                        // nothing of the slot's stands there, and its next recall scans the region first
+                        s.previous = null;
+                        s.clearing = false;
+                        s.bothDirty = false;
+                        s.oldDirty = false;
+                        end(j);
+                        host.logger().info("Fresh Courses: " + s.def.id() + "'s halves aren't claimed, so they"
+                                + " aren't cleared; its next recall checks them first.");
+                        return;
+                    }
                     s.clearing = true; // the closed layout stops standing now
                     j.steps.add(new Step('A', null, BuildJob.Mode.CONVERGE));
                     j.steps.add(new Step('B', null, BuildJob.Mode.CONVERGE));
@@ -2331,7 +2411,9 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         Planner p = planners.get(s.def.generator());
         if (p.algo() != j.tag.algo()) {
-            // An older planner made it: it can't be derived again, so it gets the quick check.
+            // An older planner made it: it can't be derived again, so it gets the quick check. Never by a sample
+            // (ENG00): there is no plan to compare one with, and a plan-less converge would empty the half.
+            j.sampled = false;
             j.steps.add(new Step(j.half, null, BuildJob.Mode.SCAN));
             j.stage = Stage.CONVERGE;
             return;
@@ -2476,8 +2558,14 @@ public final class GenService implements GeneratedCourses, GenOps {
         j.archived = archived;
         j.archivedReady = j.kind == Kind.BUILD;
         j.prepared = index;
-        if (j.sampled) {
+        if (j.kind == Kind.HEAL && j.sampled) {
+            j.reading = true;
             j.steps.add(new Step(j.half, plan, BuildJob.Mode.SCAN, null, sample(s.half(j.half), plan)));
+        } else if (j.kind == Kind.HEAL && j.background) {
+            // ENG07: the whole half is read first, its on-disk fact left alone; it is written (and the fact goes)
+            // only when that read finds a difference, so a clean check keeps the next start's sample
+            j.reading = true;
+            j.steps.add(new Step(j.half, plan, BuildJob.Mode.SCAN));
         } else {
             j.steps.add(new Step(j.half, plan, BuildJob.Mode.CONVERGE));
         }
@@ -2565,7 +2653,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         for (UUID stuck : j.build.stuckPeople()) {
             Person p = find(here, stuck);
-            if (p != null && !(j.kind == Kind.HEAL && p.playing(s.def.id()))) {
+            if (p != null && !(j.kind == Kind.HEAL && p.playing(s.def.id())) && !onOwnHalves(j, p, world)) {
                 moveToSafety(world, p);
             }
         }
@@ -2804,9 +2892,19 @@ public final class GenService implements GeneratedCourses, GenOps {
 
     private void healed(Job j) {
         SlotState s = j.slot;
-        if (j.sampled) {
-            sampledCheck(j);
-            return;
+        if (j.reading && j.plan != null) {
+            // F12: what was read against the plan (a sample, or the whole half in the background). Never a read
+            // with no plan (ENG00: an older planner's layout), which gets the structure check below.
+            j.reading = false;
+            if (j.found > 0) {
+                differs(j);
+                return;
+            }
+            if (j.sampled) {
+                sampledCheck(j);
+                return;
+            }
+            // the whole half in the background, and nothing differs: it ends below, its on-disk fact as it was
         }
         if (j.plan == null) {
             // The quick check of a layout an older planner made.
@@ -2826,7 +2924,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         s.verified = true;
         s.healFailed = false;
         s.fullCheckDue = false;
-        if (j.plan != null) {
+        if (j.plan != null && !planFact(j.plan.hash()).equals(s.onDisk.get(j.half))) {
             pend(s, j.half, planFact(j.plan.hash())); // F12: known on disk after the next saves
         }
         if (!j.background) {
@@ -2834,7 +2932,11 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         String line = (j.background ? "checked the whole of " : "checked ") + s.def.id() + " in half " + j.half + " - "
                 + j.writes + " blocks healed";
-        if (j.writes > 0) {
+        if (j.writes > 0 && j.background) {
+            // ENG02: it opened on its sample and was never closed; the world was saved (that is why it was sampled)
+            host.logger().severe("Fresh Courses: " + line + " (something edited it after its last full check, where"
+                    + " the sample at the start didn't look); it stayed open.");
+        } else if (j.writes > 0) {
             host.logger().severe("Fresh Courses: " + line + " (the world wasn't saved after the last change, or"
                     + " something edited it); it is open again.");
         } else {
@@ -2845,32 +2947,40 @@ public final class GenService implements GeneratedCourses, GenOps {
     }
 
     /**
-     * F12: the sample of a big half known to be on disk as verified is read. Nothing differs: the course opens
-     * now, and the whole half is checked once nothing else is being built ({@link SlotState#fullCheckDue}), with
-     * the course open. Something differs (the world was edited, or a backup put back): the whole half is checked
-     * now, closed, as every start checked it before.
+     * F12: the sample of a big half known to be on disk as verified is read, and nothing differs: the course
+     * opens now, and the whole half is checked once nothing else is being built ({@link SlotState#fullCheckDue}),
+     * with the course open.
      */
     private void sampledCheck(Job j) {
         SlotState s = j.slot;
         int read = j.build == null ? 0 : j.build.chunkCount();
         int of = s.half(j.half).chunkCount();
-        if (j.found == 0) {
-            end(j);
-            s.verified = true;
-            s.healFailed = false;
-            s.fullCheckDue = true;
-            s.builtAt = host.now();
-            host.logger().info("Fresh Courses: checked " + s.def.id() + " in half " + j.half + " by a sample of " + read
-                    + " of its " + of + " chunks (it was saved right after its last full check) - it is open; the whole"
-                    + " half is checked once nothing else is being built.");
-            s.lastLine = lastLine(j);
-            j.report.accept("&a" + s.def.name() + " checked (a sample of " + read + " chunks): &7open; the whole half is"
-                    + " checked later.");
-            return;
+        end(j);
+        s.verified = true;
+        s.healFailed = false;
+        s.fullCheckDue = true;
+        s.builtAt = host.now();
+        host.logger().info("Fresh Courses: checked " + s.def.id() + " in half " + j.half + " by a sample of " + read
+                + " of its " + of + " chunks (it was saved right after its last full check) - it is open; the whole"
+                + " half is checked once nothing else is being built.");
+        s.lastLine = lastLine(j);
+        j.report.accept("&a" + s.def.name() + " checked (a sample of " + read + " chunks): &7open; the whole half is"
+                + " checked later.");
+    }
+
+    /**
+     * F12: a read of a half against its plan found something that differs (the world was edited, or a backup put
+     * back). A sample's: the whole half is converged now, closed, as every start checked it before. The background
+     * whole-half check's (ENG07): the half is converged now with the course open, its on-disk fact dropped first
+     * (as before any write); what it heals is said when it ends.
+     */
+    private void differs(Job j) {
+        SlotState s = j.slot;
+        if (j.sampled) {
+            host.logger().warning("Fresh Courses: " + s.def.id() + "'s check by a sample found " + j.found + " block"
+                    + (j.found == 1 ? "" : "s") + " that differ (first at " + String.join(" ", j.firstFound) + "): the"
+                    + " whole half is checked now, before it opens.");
         }
-        host.logger().warning("Fresh Courses: " + s.def.id() + "'s check by a sample found " + j.found + " block"
-                + (j.found == 1 ? "" : "s") + " that differ (first at " + String.join(" ", j.firstFound) + "): the whole"
-                + " half is checked now, before it opens.");
         if (j.build != null) {
             j.build.release();
             j.build = null;
@@ -3336,10 +3446,13 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         boolean waiting = false;
         if (j.kind == Kind.RETIRE) {
-            // An old area: nobody plays there, so anyone in it (or within 8 of it) is moved out at once.
+            // An old area: nobody plays there, so anyone in it (or within 8 of it) is moved out at once. Never anyone
+            // on the slot's own halves (ENG05): a slot resized in place has its course next to (or over) its old
+            // area, which beginRetire cut out of the parts, and nothing is written there.
             String world = worldOf(j);
+            List<Person> near = people.stream().filter(p -> !onOwnHalves(j, p, world)).toList();
             for (Step st : j.steps) {
-                for (Evacuator.Action a : j.evac.step(people, world, st.box(), s.def.id(), false, null, now, deadline)) {
+                for (Evacuator.Action a : j.evac.step(near, world, st.box(), s.def.id(), false, null, now, deadline)) {
                     act(world, people, a);
                 }
             }
@@ -3375,6 +3488,17 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
     }
 
+    /**
+     * ENG05: whether {@code p} stands on the halves a RETIRE's slot is claimed in now (in {@code world}): a slot
+     * resized in place has its course next to, or over, its old area. Those halves are cut out of what is emptied
+     * ({@link #beginRetire}), so nobody there is moved; a write next to them waits for them instead.
+     */
+    private static boolean onOwnHalves(Job j, Person p, String world) {
+        SlotState s = j.slot;
+        return j.kind == Kind.RETIRE && s.claimed && s.world.equalsIgnoreCase(world)
+                && (p.in(world, s.half('A')) || p.in(world, s.half('B')));
+    }
+
     private void act(String world, List<Person> people, Evacuator.Action a) {
         try {
             switch (a.kind()) {
@@ -3406,6 +3530,84 @@ public final class GenService implements GeneratedCourses, GenOps {
         }
         host.move(p.id(), world, spot[0], spot[1], spot[2]);
         host.tell(p.id(), GenCopy.MOVED);
+    }
+
+    /**
+     * ENG03: someone joined with no world session and nothing on its way home (a saved-state row sends them home
+     * by itself; the host asks a moment after the join, and never for someone flying). An old area's RETIRE, a
+     * clear and an unrecall move only who is online, so someone who logged out on a course, or on an old area
+     * (the owner walking Golf of the Week before the update), may come back over nothing in a void world. When
+     * their feet are in, or within {@value Evacuator#MARGIN} of, a place Fresh Courses empties (any slot's half,
+     * an old area, or the last one emptied, whose record stays) and nothing is under them down to the world's
+     * floor, they are moved to safety at once, before they fall.
+     *
+     * @return whether they were moved
+     */
+    public boolean joined(Person p) {
+        if (!running || p == null || p.world() == null || p.world().isBlank() || p.sessionGame() != null) {
+            return false;
+        }
+        String w = p.world();
+        WorldPort port = emptiedHere(w, p.x(), p.y(), p.z()) ? host.world(w) : null;
+        if (port == null || !overNothing(port, p)) {
+            return false;
+        }
+        moveToSafety(w, p);
+        host.logger().info("Fresh Courses: " + p.name() + " joined over an area that was emptied while they were"
+                + " away (" + w + " " + (int) Math.floor(p.x()) + "," + (int) Math.floor(p.y()) + ","
+                + (int) Math.floor(p.z()) + "): moved to safety before they fell.");
+        return true;
+    }
+
+    /** Whether (x, y, z) in {@code world} is in, or next to, a place Fresh Courses empties (ENG03). */
+    private boolean emptiedHere(String world, double x, double y, double z) {
+        List<Box> boxes = new ArrayList<>();
+        for (Object[] a : areas) {
+            if (world.equalsIgnoreCase((String) a[0])) {
+                boxes.add((Box) a[1]); // every slot's and Classic's halves, and every old area still recorded
+            }
+        }
+        for (OldAreas.Retired r : retiredAreas().values()) {
+            List<Box> h = Regions.claimHalves(r.claim()); // an old area let go (F09) keeps its record
+            if (h != null && world.equalsIgnoreCase(Regions.claimWorld(r.claim()))) {
+                boxes.addAll(h);
+            }
+        }
+        for (Box b : boxes) {
+            if (b.expand(Evacuator.MARGIN).contains(x, y, z)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether nothing but air is under a player's feet, in every column their 0.6-wide body stands over, down to
+     * the world's floor (ENG03). A chunk that isn't loaded says nothing: nobody is moved on a guess.
+     */
+    private static boolean overNothing(WorldPort port, Person p) {
+        int floor = port.minHeight();
+        int top = (int) Math.floor(p.y());
+        Map<Long, WorldPort.ChunkView> views = new HashMap<>();
+        for (int bx = (int) Math.floor(p.x() - Person.HALF_WIDTH); bx <= (int) Math.floor(p.x() + Person.HALF_WIDTH);
+             bx++) {
+            for (int bz = (int) Math.floor(p.z() - Person.HALF_WIDTH); bz <= (int) Math.floor(p.z() + Person.HALF_WIDTH);
+                 bz++) {
+                long key = ((long) (bx >> 4) << 32) | ((bz >> 4) & 0xFFFFFFFFL);
+                WorldPort.ChunkView v = views.computeIfAbsent(key, k -> port.snapshot((int) (k >> 32), (int) (long) k));
+                if (v == null) {
+                    return false;
+                }
+                for (int y = top; y >= floor; y--) {
+                    if (v.sectionEmpty(y)) {
+                        y = (y >> 4) << 4; // the rest of an empty section is skipped
+                    } else if (!v.air(bx, y, bz)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
     }
 
     /**
@@ -3753,10 +3955,12 @@ public final class GenService implements GeneratedCourses, GenOps {
      * @param current   the live layout is vouched for and is its current edition's
      * @param building  a job is running on it now
      * @param lastError why its last try failed, or {@code null}
+     * @param moving    ENG-R3-01: it is moving to the area this version gave it, its course rebuilt there
+     *                  ({@link #movingByVersion}): expected, not a fault
      */
     public record SlotReport(String id, boolean classic, boolean wanted, boolean on, String problem, boolean claimed,
                              String world, GenTag live, boolean verified, boolean current, boolean building,
-                             String lastError, boolean healFailed) {
+                             String lastError, boolean healFailed, boolean moving) {
     }
 
     /** Every slot, then every Classics slot, as they stand now. Read-only. */
@@ -3765,9 +3969,11 @@ public final class GenService implements GeneratedCourses, GenOps {
         for (SlotState s : slots.values()) {
             boolean current = s.live != null && s.verified && (s.classic ? s.want != null && holds(s, s.want)
                     : target(s).holds(s.live));
+            // building: not an old area being emptied (RETIRE), nor the whole-half check of a course that stays
+            // open while it runs (ENG02: the course is live, as trouble() and the status line say)
             out.add(new SlotReport(s.def.id(), s.classic, s.wanted(), s.on(), s.problem, s.claimed, s.world, s.live,
-                    s.verified, current, job != null && job.slot == s && job.kind != Kind.RETIRE, s.lastError,
-                    s.healFailed));
+                    s.verified, current, job != null && job.slot == s && job.kind != Kind.RETIRE && !job.background,
+                    s.lastError, s.healFailed, movingByVersion(s)));
         }
         return out;
     }
@@ -5737,7 +5943,9 @@ public final class GenService implements GeneratedCourses, GenOps {
         } else {
             forgetRecall(s, "it was unrecalled");
         }
-        report.accept("&a" + c.name() + " is closed. &7Its halves are cleared once nobody is on them.");
+        // ENG01: an area it doesn't hold is never cleared, so the admin isn't told it will be
+        report.accept("&a" + c.name() + " is closed. &7" + (s.claimed ? "Its halves are cleared once nobody is on them."
+                : "Its area isn't claimed, so nothing is cleared there."));
     }
 
     @Override

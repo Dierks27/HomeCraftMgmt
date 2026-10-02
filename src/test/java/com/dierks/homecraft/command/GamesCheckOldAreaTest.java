@@ -64,6 +64,26 @@ class GamesCheckOldAreaTest {
     }
 
     @Test
+    void blocksLeftInAnAreaThatIsStillGuardedAreTheOwnersOnceItIsLetGo() {
+        // ENG-R3-02: emptied, but guarded until the world has been saved (F09): breaking them is refused till then
+        Line guarded = GamesCheck.oldArea(new OldArea("fresh_golf", "Golf of the Week", OldState.EMPTIED, WHERE,
+                "7490,161,4100 minecraft:bedrock", 100, 900, 1, true));
+        assertEquals(Status.WARN, guarded.status(), "still a block left that isn't ours");
+        assertEquals("they are yours: remove them by hand once the area is let go (it stays guarded until the world"
+                + " has been saved, or the next start finds it still empty)", guarded.fix(), "never 'nothing guards'");
+        String claim = "games,7488,160,4096,64,16,128,576";
+        List<com.dierks.homecraft.games.gen.engine.OldAreas.Area> standing = List.of(
+                new com.dierks.homecraft.games.gen.engine.OldAreas.Area("fresh_golf", "Golf of the Week", false, claim,
+                        WHERE, com.dierks.homecraft.games.gen.engine.OldAreas.State.EMPTIED, null, 100));
+        assertTrue(com.dierks.homecraft.games.gen.engine.OldAreas.stillGuarded(standing, "fresh_golf", claim),
+                "on the engine's list: guarded");
+        assertEquals(false, com.dierks.homecraft.games.gen.engine.OldAreas.stillGuarded(standing, "fresh_boat", claim),
+                "another slot's");
+        assertEquals(false, com.dierks.homecraft.games.gen.engine.OldAreas.stillGuarded(List.of(), "fresh_golf", claim),
+                "let go: nothing guards it");
+    }
+
+    @Test
     void theFreshSectionListsThemAfterTheCourses() {
         GamesCheck.Fresh fr = new GamesCheck.Fresh(true, "weekly", "New courses every Monday", "games", true, true,
                 List.of(), List.of(), null, null, "x 1760..5503, 24 plots", Map.of(),

@@ -252,6 +252,16 @@ public final class OldAreas {
     }
 
     /**
+     * ENG-R3-02: whether old area {@code claim} of {@code slot} is still among the areas the engine holds
+     * ({@code standing}, as {@code GenService.oldAreas} lists them), so still guarded: one emptied lately stays so
+     * until the world has been saved, or the next start finds it still empty (F09). Until then, what was left
+     * there can't be taken away by hand.
+     */
+    public static boolean stillGuarded(List<Area> standing, String slot, String claim) {
+        return standing.stream().anyMatch(a -> a.slot().equals(slot) && a.claim().equals(claim));
+    }
+
+    /**
      * An old area's state line for status ("its old area (half A ...) is being emptied, 63%"), without the
      * slot id in front.
      */

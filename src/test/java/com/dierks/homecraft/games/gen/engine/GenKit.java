@@ -645,6 +645,11 @@ final class GenKit {
         int fallDepth = 6;
         /** {@code games.race_night.enabled}: a random Ice Boat week is the Winding Road while it is on. */
         boolean raceNight;
+        /**
+         * When the server process started ({@link GenHost#bootedAt}): by default every engine on this host is a new
+         * server run; a test sets it to have engines started again inside one process (ENG-R3-00).
+         */
+        long bootedAt = Long.MAX_VALUE;
 
         /** Another bench's clock (the cross-feature journeys: one clock for both), or {@code null}: {@link #now}. */
         java.util.function.LongSupplier clock;
@@ -746,6 +751,11 @@ final class GenKit {
         @Override
         public boolean raceNightOn() {
             return raceNight;
+        }
+
+        @Override
+        public long bootedAt() {
+            return bootedAt;
         }
 
         @Override

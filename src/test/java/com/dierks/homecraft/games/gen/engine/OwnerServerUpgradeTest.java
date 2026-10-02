@@ -1,8 +1,10 @@
 package com.dierks.homecraft.games.gen.engine;
 
 import com.dierks.homecraft.command.GamesCheck;
+import com.dierks.homecraft.games.gen.api.BlockOp;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.Slots;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -79,6 +81,10 @@ class OwnerServerUpgradeTest {
         assertTrue(server.host.logged(Level.INFO, BOAT + "'s old area in games (half A x 6080..6207") > 0,
                 "and the boat's");
         assertEquals(0, server.host.logged(Level.WARNING, "isn't emptied"), "nothing was in any old area's way");
+        assertEquals(0, server.host.logged(Level.WARNING, "isn't in its claimed region"), "the move this version makes"
+                + " is news, not a WARN (ENG-R3-01)");
+        assertEquals(1, server.host.logged(Level.INFO, GOLF + "'s course from before this version stays closed in its"
+                + " old area; a new one is built in its new area once that is checked."), "said once, as an INFO");
         assertEquals(0, server.host.logged(Level.SEVERE, ""), "no course went off: " + severe());
         for (String id : List.of(GOLF, BOAT, CLASSIC)) {
             OldAreas.Retired r = OldAreas.Retired.parse(server.host.store.meta(GenAdminKeys.retired(id)));
@@ -142,6 +148,10 @@ class OwnerServerUpgradeTest {
                 + " x 224 now") > 0, "the console explains the move as news, not a problem");
         assertEquals(0, server.host.logged(Level.WARNING, "was claimed at another place"),
                 "no 'clear them by hand' WARN for an area this version moved");
+        GenService.SlotReport moving = server.gen.report().stream().filter(r -> r.id().equals(GOLF)).findFirst()
+                .orElseThrow();
+        assertTrue(moving.moving() && moving.lastError() == null, "ENG-R3-01: the check reads golf as moving to its new"
+                + " area (an OK line), not as a course that failed its check: " + moving);
         GamesCheck.Line waiting = GamesCheck.oldArea(new GamesCheck.OldArea(GOLF, "Golf of the Week",
                 GamesCheck.OldState.valueOf(before.get(0).state().name()), before.get(0).where(), null, 0, 0, 0));
         assertEquals(GamesCheck.Status.OK, waiting.status(), "the check: an OK line while it waits");
@@ -159,6 +169,8 @@ class OwnerServerUpgradeTest {
             }
         }
         assertTrue(sawRunning, "each was seen being emptied");
+        assertFalse(server.gen.report().stream().filter(r -> r.id().equals(GOLF)).findFirst().orElseThrow().moving(),
+                "golf is claimed at its new area now: no longer moving");
         assertTrue(server.gen.summary().stream().anyMatch(l -> l.startsWith(GOLF + ": its old area (half A x"
                 + " 7488..7551") && l.contains("is empty; it stays guarded until the world has been saved")),
                 "status says each waits for the world to be saved: " + server.gen.summary());
@@ -252,6 +264,135 @@ class OwnerServerUpgradeTest {
         server.upgrade(GenService.RECORDED, 20);
         assertEquals(List.of(), server.failures(), "moved once, straight to the new spots");
         assertEquals(1, server.gen.liveTag(GOLF).reroll(), "golf rerolled once, not twice");
+    }
+
+    @Test
+    void aHoldLiftedByAReloadMovesTheAreasAsARestartWouldWithNoMoveWarning() throws Exception {
+        // ENG08: config.yml is saved at last and /hcm reload reads revision 21 into the same running engine
+        server = new OwnerServer().at036();
+        String why = "config.yml couldn't be saved at this update (it is still at config revision 19, and revision 21"
+                + " moves this area), so it stays where it was built, closed, and nothing is built or emptied there"
+                + " until the file can be written";
+        server.startHeld(why);
+        server.drive(2 * 60);
+        assertEquals(List.of(), server.writesSinceUpgrade(), "(held: nothing written)");
+        List<String> on = new ArrayList<>(OwnerServer.OTHERS);
+        on.add(GOLF);
+        server.host.settings = GenKit.weekly(on.toArray(String[]::new)); // the reload: revision 21's spots
+        for (int s = 0; s < 20 * 60 && !(server.golfUp() && server.allEmptied()); s++) {
+            server.drive(1);
+        }
+        assertTrue(server.golfUp(), "golf's v4 course is up at its new spot: " + server.gen.summary());
+        assertTrue(GOLF_V4_A.equals(server.gen.half(server.gen.liveTag(GOLF)))
+                || GOLF_V4_B.equals(server.gen.half(server.gen.liveTag(GOLF))), "in the new column");
+        assertEquals(1, server.gen.liveTag(GOLF).reroll(), "this week's next reroll, as after a restart");
+        assertEquals(0, server.world.count(GOLF_A) + server.world.count(GOLF_B), "its old area emptied by itself");
+        assertEquals(0, server.host.logged(Level.WARNING, "moved from"), "no 'moved ... not cleared' WARN, with"
+                + " boxes at the wrong size and advice that can't be followed: " + warnings());
+        assertEquals(0, server.host.logged(Level.INFO, GOLF + " moved from"), "nor any move line: the hold is no move");
+        assertEquals(1, server.host.logged(Level.INFO, GOLF + "'s area changed with this version: its halves are 128"
+                + " x 16 x 224 now"), "the resize line says it, once, as at a restart");
+        assertTrue(server.host.logged(Level.INFO, GOLF + "'s old area in games (half A x 7488..7551") > 0,
+                "and RETIRE, at the area's recorded size");
+    }
+
+    @Test
+    void aClassicRecallThatEndedAroundTheUpdateNeverClearsTheNewClassicAreaNobodyClaimed() throws Exception {
+        // ENG01: a golf course recalled into 0.36's Classic Golf, its recall over before the first v4 start; v4's
+        // Classic Golf halves (x 8768..8895 / 9472..9599, z 4896..5119), never claimed or scanned, hold someone's own
+        server = new OwnerServer().at036();
+        Plan plan = OwnerServer.PondGolf.plan(Slots.DAILY_GOLF, OwnerServer.CLASSIC_A, 0x77L, 3);
+        for (BlockOp op : plan.ops()) {
+            server.world.put(op.x(), op.y(), op.z(), plan.palette().get(op.state()));
+        }
+        GenTag og = server.oldGolf;
+        long from = server.host.now - 6L * 86_400_000L;
+        GenTag tag = new GenTag(og.slot(), og.generator(), plan.algo(), og.day(), og.reroll(), og.seed(), 'A',
+                plan.hash(), og.refMs(), og.goldMs(), og.silverMs(), og.attempts(), og.witness(), from, og.cadence(),
+                new GenTag.Recall(CLASSIC, from, og.day()));
+        server.host.store.flip(GenService.row(Slots.CLASSIC_GOLF, OwnerServer.W, plan.course(), tag, null,
+                server.host.now, "Classic: Golf of the Week"), Map.of());
+        server.host.store.meta(GenAdminKeys.recall(CLASSIC), new ClassicWant(og.slot(), og.editionKey(), from,
+                server.host.now - 3_600_000L, false).text()); // over an hour before the restart
+        server.world.put(8800, 165, 5000, "minecraft:diamond_block"); // v4's Classic Golf half A
+        server.world.put(9500, 165, 5000, "minecraft:diamond_block"); // and half B
+        Box newA = Box.sized(8768, 160, 4896, 128, 16, 224);
+        Box newB = Box.sized(9472, 160, 4896, 128, 16, 224);
+
+        server.upgrade(GenService.RECORDED, 20);
+        assertEquals("minecraft:diamond_block", server.world.at(8800, 165, 5000), "the block in half A stands");
+        assertEquals("minecraft:diamond_block", server.world.at(9500, 165, 5000), "and the one in half B");
+        assertTrue(server.writesSinceUpgrade().stream().noneMatch(w -> newA.contains(w.x(), w.y(), w.z())
+                || newB.contains(w.x(), w.y(), w.z())), "not one write where Fresh Courses holds nothing");
+        assertEquals(1, server.host.logged(Level.INFO, CLASSIC + " is closed (its recall is over). Its area isn't"
+                + " claimed, so nothing is cleared there"), "the close says why nothing is cleared: " + infos());
+        assertEquals(0, server.host.logged(Level.INFO, CLASSIC + "'s halves are empty"), "no clearing ran");
+        assertNull(server.host.store.meta(GenAdminKeys.claim(CLASSIC)), "and nothing was claimed there");
+        assertEquals(0, server.world.count(OwnerServer.CLASSIC_A) + server.world.count(OwnerServer.CLASSIC_B),
+                "the closed course stood in the old area, which was emptied by itself");
+    }
+
+    @Test
+    void anUnrecallOfAClassicThatIsntClaimedClearsNothing() throws Exception {
+        // ENG01's safety net, and the admin's path to closeClassic: an unrecall before the recall's own scan
+        server = new OwnerServer().at036();
+        server.startUpgrade(GenService.RECORDED);
+        server.world.put(8800, 165, 5000, "minecraft:diamond_block");
+        SlotState s = server.gen.slot(CLASSIC);
+        assertFalse(s.claimed, "fixture: v4's Classic Golf area is nobody's yet");
+        s.bothDirty = true; // whatever set it, the clearing must refuse a region it doesn't hold
+        server.drive(20 * 60);
+        assertEquals("minecraft:diamond_block", server.world.at(8800, 165, 5000), "never cleared unscanned");
+        assertFalse(s.bothDirty, "and it isn't tried again");
+        assertEquals(1, server.host.logged(Level.INFO, CLASSIC + "'s halves aren't claimed, so they aren't cleared"),
+                "said once: " + infos());
+    }
+
+    // ---- ENG03: back over an area emptied while they were away -------------------------------------------
+
+    @Test
+    void someoneWhoLoggedOutOnGolfsOldCourseIsMovedToSafetyWhenTheyJoinAfterItWasEmptied() throws Exception {
+        server = new OwnerServer().at036();
+        server.upgrade(GenService.RECORDED, 20);
+        assertEquals(0, server.world.count(GOLF_A), "(golf's old half A was emptied while they were away)");
+        server.saved(); // and its record let go (F09): the check's record of it still says where it was
+        assertNull(server.host.store.meta(GenAdminKeys.old(GOLF)), "(let go)");
+
+        Person owner = standing("Owner", GOLF_A.minX() + 20.5, 161, GOLF_A.minZ() + 40.5, null);
+        assertTrue(server.gen.joined(owner), "over nothing where the course was: moved before they fall");
+        assertTrue(server.host.moved.contains(owner.id()), "to the safe spot");
+        assertTrue(server.host.told.contains(com.dierks.homecraft.games.gen.api.GenCopy.MOVED), "and told why");
+
+        Person golfer = standing("Golfer", GOLF_A.minX() + 20.5, 161, GOLF_A.minZ() + 40.5, "golf");
+        assertFalse(server.gen.joined(golfer), "someone in a game is the game's to look after");
+        Person far = standing("Walker", 100.5, 161, 100.5, null);
+        assertFalse(server.gen.joined(far), "over nothing far from every area Fresh Courses empties: not ours");
+        Box easy = server.gen.half(server.gen.liveTag("fresh_parkour_easy"));
+        long pad = server.world.blocks.keySet().stream().filter(p -> GenKit.FakeWorld.inside(easy, p)).findFirst()
+                .orElseThrow();
+        int px = (int) (pad >> 38);
+        int pz = (int) ((pad << 26) >> 38);
+        int py = (int) ((pad << 52) >> 52);
+        Person onCourse = standing("Runner", px + 0.5, py + 1, pz + 0.5, null);
+        assertFalse(server.gen.joined(onCourse), "someone standing on a course stays where they are");
+        assertEquals(List.of(owner.id()), server.host.moved, "only the one over nothing was moved");
+    }
+
+    /** A player at (x, y, z) in the Games world, in a session of {@code game} or none, their chunk loaded. */
+    private Person standing(String name, double x, double y, double z, String game) {
+        server.world.load((int) Math.floor(x) >> 4, (int) Math.floor(z) >> 4, ok -> { });
+        return new Person(java.util.UUID.randomUUID(), name, OwnerServer.W, x, y, z, game,
+                game == null ? null : GOLF);
+    }
+
+    private String warnings() {
+        return String.join("\n", server.host.logs.stream().filter(r -> r.getLevel() == Level.WARNING)
+                .map(r -> r.getMessage()).toList());
+    }
+
+    private String infos() {
+        return String.join("\n", server.host.logs.stream().filter(r -> r.getLevel() == Level.INFO)
+                .map(r -> r.getMessage()).toList());
     }
 
     private String severe() {

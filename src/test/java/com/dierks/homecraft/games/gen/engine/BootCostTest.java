@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.gen.engine;
 
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.Planner;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.gen.engine.GenKit.Host;
 import org.junit.jupiter.api.AfterEach;
@@ -89,6 +90,8 @@ class BootCostTest {
     private CountingWorld world;
     private GenService gen;
     private int ticks;
+    /** The boat planner's version at the next {@link #boot} (ENG00: a release that bumps it, or a rollback). */
+    private int boatAlgo = 1;
 
     @AfterEach
     void tearDown() throws Exception {
@@ -118,7 +121,9 @@ class BootCostTest {
         if (gen != null) {
             gen.stop();
         }
-        gen = new GenService(host, OwnerServer.planners(4));
+        Map<String, Planner> planners = OwnerServer.planners(4);
+        ((GenKit.FakePlanner) planners.get(Slots.BOAT)).algo = boatAlgo;
+        gen = new GenService(host, planners);
         gen.start();
         gen.worldsReady();
         world.loads = 0;
@@ -240,6 +245,110 @@ class BootCostTest {
         assertFalse(b.boatClosed(), "with the course open the whole time: " + b);
         assertEquals(1, host.logged(Level.SEVERE, "checked the whole of " + BOAT + " in half"),
                 "and said so, as a heal is said: " + host.logs.stream().map(l -> l.getMessage()).toList());
+    }
+
+    // ---- ENG02: the whole-half check of an open course is said as one ---------------------------------
+
+    @Test
+    void theWholeHalfCheckOfACourseOpenOnItsSampleSaysItStayedOpenAndTheCheckSaysLiveNotBeingBuilt() {
+        running();
+        saved();
+        Box half = live(BOAT);
+        char h = gen.liveTag(BOAT).half();
+        int x = half.minX() + 2 * 16 + 5; // off the sample's lattice: only the whole half's check finds it
+        int z = half.minZ() + 2 * 16 + 5;
+        world.put(x, half.minY() + 20, z, "minecraft:stone");
+        boot();
+        int seen = 0;
+        for (int t = 0; t < 20 * 60 * 10; t++) {
+            tick();
+            if (t % 5 == 0 && gen.status(BOAT).stream().anyMatch(l -> l.contains("(the whole half, open)"))) {
+                seen++;
+                assertTrue(open(BOAT), "the course is open while its whole half is checked");
+                GenService.SlotReport r = gen.report().stream().filter(s -> s.id().equals(BOAT)).findFirst()
+                        .orElseThrow();
+                assertFalse(r.building(), "so /hcm games check says live, not 'being built'");
+                assertTrue(r.current(), "(live)");
+            }
+        }
+        assertTrue(seen > 0, "the whole-half check was seen running");
+        assertNull(world.at(x, half.minY() + 20, z), "it took the stray block away");
+        assertEquals(1, host.logged(Level.SEVERE, "Fresh Courses: checked the whole of " + BOAT + " in half " + h
+                + " - 1 blocks healed (something edited it after its last full check, where the sample at the start"
+                + " didn't look); it stayed open."), "said as what it was: " + host.logs.stream()
+                .filter(l -> l.getLevel() == Level.SEVERE).map(l -> l.getMessage()).toList());
+        assertEquals(0, host.logged(Level.SEVERE, "it is open again"), "it was never closed");
+    }
+
+    // ---- ENG07: a clean whole-half check keeps the fact the sample stood on ---------------------------------
+
+    @Test
+    void aCleanWholeHalfCheckKeepsTheFactSoAQuickSecondRestartOpensOnASampleAgain() throws Exception {
+        running();
+        saved();
+        char h = gen.liveTag(BOAT).half();
+        String fact = h + "=" + GenService.planFact(gen.liveTag(BOAT).planHash());
+        assertTrue(String.valueOf(host.store.meta(GenAdminKeys.onDisk(BOAT))).contains(fact), "fixture: known on disk");
+        boot();
+        for (int t = 0; t < 20 * 60 * 10; t++) {
+            tick();
+            if (t % 20 == 0) {
+                assertTrue(String.valueOf(host.store.meta(GenAdminKeys.onDisk(BOAT))).contains(fact),
+                        "the fact stays while the whole half is read (nothing is written): tick " + t);
+            }
+        }
+        assertFalse(gen.slot(BOAT).fullCheckDue, "the whole half was checked in the ten minutes");
+        assertEquals(1, host.logged(Level.INFO, "checked the whole of " + BOAT + " in half " + h + " - 0 blocks healed"),
+                "and found right");
+        long sampled = host.logged(Level.INFO, "by a sample");
+        Boot b = restart(); // no WorldSaveEvent since: the fact is still true on disk
+        assertTrue(b.boatOpen() > 0 && b.boatOpen() <= 200, "the boat opens on a sample again: " + b);
+        assertTrue(b.boatLoads() <= 120, "after reading a sample, not 1,200 chunks: " + b);
+        assertEquals(sampled + 1, host.logged(Level.INFO, "by a sample"), "one more sampled check");
+    }
+
+    // ---- ENG00: a saved big half from another planner version --------------------------------------------
+
+    @Test
+    void aSavedMountainFromAnOlderPlannerVersionKeepsItsBlocksAndGetsTheStructureCheck() throws Exception {
+        running(); // the boat planner at version 1
+        saved();
+        anotherVersionAtTheRestart(2); // the next release bumps it
+    }
+
+    @Test
+    void aSavedMountainFromANewerPlannerVersionKeepsItsBlocksAfterARollback() throws Exception {
+        boatAlgo = 2;
+        running();
+        saved();
+        anotherVersionAtTheRestart(1); // rolled back to the release before
+    }
+
+    /**
+     * A restart with the boat's planner at {@code algo}, not the live course's: there is no plan to compare a
+     * sample with, so the course gets the structure check every start gave it, and not a block changes (it was
+     * emptied by a plan-less converge, and a new course built mid-week).
+     */
+    private void anotherVersionAtTheRestart(int algo) throws Exception {
+        GenTag before = gen.liveTag(BOAT);
+        Map<Long, String> blocks = world.copy(live(BOAT));
+        assertFalse(blocks.isEmpty(), "fixture: the mountain stands");
+        assertTrue(String.valueOf(host.store.meta(GenAdminKeys.onDisk(BOAT))).contains(before.half() + "="
+                + GenService.planFact(before.planHash())), "fixture: it is known on disk, so a sample was due");
+        boatAlgo = algo;
+        Boot b = restart();
+        GenTag after = gen.liveTag(BOAT);
+        assertEquals(before.editionKey(), after.editionKey(), "the same course stays live");
+        assertEquals(before.reroll(), after.reroll(), "on the same board (no reroll)");
+        assertEquals(before.planHash(), after.planHash(), "the same layout");
+        assertTrue(open(BOAT), "and open: " + gen.summary());
+        assertEquals(blocks, world.copy(live(BOAT)), "not a block of it changed");
+        assertEquals(1, host.logged(Level.WARNING, BOAT + "'s course was made by an older version of its planner, so"
+                + " only its structure was checked"), "the structure check, as every start gave it");
+        assertEquals(0, host.logged(Level.WARNING, "check by a sample found"), "never a sample: " + b);
+        assertEquals(0, host.logged(Level.INFO, "by a sample"), "none");
+        assertEquals(0, host.logged(Level.SEVERE, BOAT), "nothing failed: " + host.logs.stream()
+                .filter(l -> l.getLevel() == Level.SEVERE).map(l -> l.getMessage()).toList());
     }
 
     @Test

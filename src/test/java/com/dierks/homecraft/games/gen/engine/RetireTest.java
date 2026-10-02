@@ -220,7 +220,19 @@ class RetireTest {
         world.put(6800, 170, 5950, "minecraft:chest[facing=north,type=single,waterlogged=false]");
         boot(GenService.RECORDED);
         driveUntilNoOldArea(20);
+        // ENG-R3-02: until the world has been saved it stays guarded (F09), and the check doesn't say otherwise
+        OldAreas.Retired early = OldAreas.Retired.parse(host.store.meta(GenAdminKeys.retired(BOAT)));
+        assertTrue(guarded(OwnerServer.BOAT_A), "(still guarded: the emptying may be in memory only)");
+        assertTrue(OldAreas.stillGuarded(gen.oldAreas(), BOAT, early.claim()),
+                "the check sees it still guarded");
+        GamesCheck.Line inWindow = GamesCheck.oldArea(new GamesCheck.OldArea(BOAT, "Ice Boat",
+                GamesCheck.OldState.EMPTIED, Regions.describeClaim(early.claim()), early.firstLeft().get(0), 100,
+                early.removed(), early.left(), true));
+        assertTrue(inWindow.fix().contains("once the area is let go (it stays guarded until the world has been saved")
+                && !inWindow.fix().contains("nothing guards"), "so it doesn't say nothing guards it: " + inWindow.fix());
         saved();
+        assertFalse(OldAreas.stillGuarded(gen.oldAreas(), BOAT, early.claim()),
+                "let go once the world was saved");
         assertEquals(List.of(), gen.oldAreas(), "the old area is done with");
         assertEquals(2, world.count(OwnerServer.BOAT_A) + world.count(OwnerServer.BOAT_B),
                 "only the two foreign blocks are left");
@@ -282,6 +294,28 @@ class RetireTest {
         assertEquals(1, host.logged(Level.INFO, BOAT + "'s old area in games (half A x 6080..6207, y 160..175, z"
                 + " 5888..6015; half B x 6784..6911, y 160..175, z 5888..6015) has been saved empty: it is let go."),
                 "said once: " + host.logs.stream().map(l -> l.getMessage()).toList());
+    }
+
+    @Test
+    void anEngineStartedAgainInTheSameServerProcessKeepsAnEmptiedAreaGuardedUntilTheWorldIsSaved() throws Exception {
+        // ENG-R3-00: the chunks it emptied may be in memory only; a look at them proves nothing about the disk
+        boatAt036();
+        host.bootedAt = host.now - 60_000; // the server process started a minute before
+        boot(GenService.RECORDED);
+        driveUntilNoOldArea(20);
+        String stored = host.store.meta(GenAdminKeys.old(BOAT));
+        assertTrue(Regions.oldEmptied(stored).containsKey(OwnerServer.BOAT_036), "fixture: emptied, marked: " + stored);
+
+        boot(GenService.RECORDED); // a failure and /hcm reload, or a switch: no save, nothing reverted
+        drive(5 * 60);
+        assertEquals(stored, host.store.meta(GenAdminKeys.old(BOAT)), "still recorded, marked as it was");
+        assertTrue(guarded(OwnerServer.BOAT_A) && guarded(OwnerServer.BOAT_B), "and still guarded");
+        assertEquals(OldAreas.State.EMPTIED, gen.oldAreas().get(0).state(), "listed as emptied, waiting for the saves");
+        assertEquals(0, host.logged(Level.INFO, "was still empty at this start"), "never let go on a look at memory: "
+                + host.logs.stream().map(l -> l.getMessage()).toList());
+        saved();
+        assertNull(host.store.meta(GenAdminKeys.old(BOAT)), "let go once the world has been saved twice");
+        assertFalse(guarded(OwnerServer.BOAT_A), "and no longer guarded");
     }
 
     @Test
@@ -466,6 +500,86 @@ class RetireTest {
         host.settings = host.settings.withSlots(slots);
         host.store.meta(GenAdminKeys.claim(GOLF), OwnerServer.GOLF_036);
         pondAndWalls(world, OwnerServer.GOLF_A);
+    }
+
+    @Test
+    void aReLookOfAnOldAreaNextToTheLiveCourseNeverMovesAGolferOffIt() throws Exception {
+        // ENG05: golf grown in place with its 0.36 course live in the old half A, so the v4 course goes into the new
+        // half B (x 8192..8319), right next to the old half B (x 8128..8191)
+        golfInPlace();
+        world.blocks.clear();
+        Plan plan = OwnerServer.PondGolf.plan(Slots.DAILY_GOLF, OwnerServer.GOLF_A, 7L, 3);
+        for (BlockOp op : plan.ops()) {
+            world.put(op.x(), op.y(), op.z(), plan.palette().get(op.state()));
+        }
+        for (SignText st : plan.signs()) {
+            world.put(st.x(), st.y(), st.z(), st.blockData());
+        }
+        GenScheduler.Target t = GenScheduler.target(null, host.now, host.settings.edition(GenKit.ZONE,
+                java.time.DayOfWeek.MONDAY), 0);
+        GenTag old = GenService.tagFor(Slots.DAILY_GOLF, Slots.GOLF, plan, t.start(), 0, 7L, 'A',
+                Slots.DAILY_GOLF.tierOrMix(), host.settings.stars(), host.now, t.cadence());
+        host.store.flip(GenService.row(Slots.DAILY_GOLF, W, plan.course(), old, null, host.now), Map.of());
+        boot(GenService.RECORDED);
+        for (int s = 0; s < 20 * 60 && !(gen.liveTag(GOLF) != null && gen.liveTag(GOLF).algo() == 4
+                && gen.live(GOLF, gen.liveTag(GOLF)) && allEmptied()); s++) {
+            drive(1);
+        }
+        Box live = gen.half(gen.liveTag(GOLF));
+        assertEquals(Box.sized(8192, 160, 4096, 128, 16, 224), live, "fixture: the v4 course is in the new half B");
+
+        // a clean restart a few minutes later, before two autosaves: the old area is looked at again
+        gen.stop();
+        gen = null;
+        host.now += 120_000;
+        boot(GenService.RECORDED);
+        java.util.UUID golfer = java.util.UUID.randomUUID();
+        java.util.UUID admin = java.util.UUID.randomUUID();
+        host.people.add(new Person(golfer, "Golfer", W, live.minX() + 3.5, live.minY() + 1, live.minZ() + 40.5,
+                "golf", GOLF)); // 4 blocks from the old half B, on hole 1
+        host.people.add(new Person(admin, "Admin", W, OwnerServer.GOLF_B.minX() + 20.5, 165,
+                OwnerServer.GOLF_B.minZ() + 40.5, null, null)); // in the old half B itself
+        for (int s = 0; s < 5 * 60 && host.store.meta(GenAdminKeys.old(GOLF)) != null; s++) {
+            drive(1);
+        }
+        assertNull(host.store.meta(GenAdminKeys.old(GOLF)), "the re-look ran and let the old area go");
+        assertFalse(host.moved.contains(golfer), "the golfer on the live course plays on: " + host.told);
+        assertTrue(host.moved.contains(admin), "someone in the old area itself is still moved out of it");
+    }
+
+    @Test
+    void aHardStopAfterTheOldAreaWasEmptiedButBeforeTheNewOneWasClaimedNeverTurnsTheSlotOff() throws Exception {
+        // ENG06: the old blocks come back (nothing was saved) while the record says emptied and nothing is claimed
+        golfInPlace();
+        Map<Long, String> before = new java.util.HashMap<>(world.blocks);
+        boot(GenService.RECORDED);
+        boolean caught = false;
+        for (int s = 0; s < 20 * 60 && !caught; s++) {
+            drive(1);
+            String stored = host.store.meta(GenAdminKeys.old(GOLF));
+            caught = stored != null && Regions.oldEmptied(stored).containsKey(OwnerServer.GOLF_036);
+        }
+        assertTrue(caught, "fixture: caught once the old area was marked emptied");
+        assertNull(host.store.meta(GenAdminKeys.claim(GOLF)), "fixture: and before the new region was claimed");
+        gen.stop(); // kill -9: the chunks on disk still hold the old course
+        gen = null;
+        world.blocks.clear();
+        world.blocks.putAll(before);
+        assertTrue(world.count(OwnerServer.GOLF_A) > 0, "(the old pond and walls are back)");
+        host.now += 60_000;
+        boot(GenService.RECORDED);
+        for (int s = 0; s < 20 * 60 && !(gen.liveTag(GOLF) != null && gen.live(GOLF, gen.liveTag(GOLF))); s++) {
+            drive(1);
+        }
+        assertEquals(0, host.logged(Level.SEVERE, "Region has"), "its own old blocks are never taken for foreign"
+                + " ones: " + host.logs.stream().filter(l -> l.getLevel() == Level.SEVERE).map(l -> l.getMessage())
+                .toList());
+        GenTag golf = gen.liveTag(GOLF);
+        assertTrue(golf != null && golf.algo() == 4 && gen.live(GOLF, golf), "golf is up at its grown area: "
+                + gen.summary());
+        assertEquals(1, host.logged(Level.WARNING, "back at this start (the world wasn't saved after it was emptied):"
+                + " emptied again"), "the re-look emptied it first, and said so");
+        assertEquals(0, world.count(OwnerServer.GOLF_B), "nothing left in the old half B");
     }
 
     @Test

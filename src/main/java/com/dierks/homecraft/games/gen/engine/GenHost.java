@@ -104,6 +104,16 @@ public interface GenHost {
         return false;
     }
 
+    /**
+     * When this server process started, on {@link #now}'s clock (ENG-R3-00). An old area marked emptied at or after
+     * it was emptied in this process: an engine started again in it ({@code /hcm reload}, a switch) waits for the
+     * world to be saved, as the engine that emptied it did, and never lets it go on a look at chunks still in
+     * memory. A host that can't tell says {@link Long#MAX_VALUE}: every mark is an earlier run's.
+     */
+    default long bootedAt() {
+        return Long.MAX_VALUE;
+    }
+
     /** A player's name for admins (history, records); the start of their id when unknown. */
     default String playerName(UUID player) {
         return player == null ? "someone" : player.toString().substring(0, 8);

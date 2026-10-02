@@ -198,8 +198,7 @@ final class GamesCheckLive implements GamesCheck.Facts {
                 continue;
             }
             if (!c.placed()) { // its origin is only a placeholder: nothing about it can be checked
-                regions.add(new GamesCheck.Region(def.id(), GenCopy.slotName(def, st.cadenceDays()),
-                        Slots.isClassic(def.id()), true, List.of(GenService.UNPLACED), "where it was built"));
+                regions.add(unplaced(def, GenCopy.slotName(def, st.cadenceDays()), c.held()));
                 continue;
             }
             List<String> problems = new ArrayList<>();
@@ -240,13 +239,14 @@ final class GamesCheckLive implements GamesCheck.Facts {
                 }
                 slots.add(new GamesCheck.SlotFact(r.id(), def == null ? r.id() : GenCopy.slotName(def, st.cadenceDays()),
                         r.classic(), r.wanted(), r.problem(), r.claimed(), r.live() != null, r.current(), r.building(),
-                        r.lastError(), r.healFailed(), holds));
+                        r.lastError(), r.healFailed(), holds, r.moving()));
             }
             long at = engine.nextChangeAt();
             if (at > 0) {
                 next = GenCopy.whenDated(at, zone) + " (in " + GenCopy.span(at - now) + ")";
             }
-            for (OldAreas.Area a : engine.oldAreas()) {
+            List<OldAreas.Area> standing = engine.oldAreas();
+            for (OldAreas.Area a : standing) {
                 if (a.state() == OldAreas.State.EMPTIED) {
                     continue; // emptied, only waiting to be known on disk (F09): its record below says so
                 }
@@ -264,7 +264,7 @@ final class GamesCheckLive implements GamesCheck.Facts {
                 String name = def == null ? e.getKey() : GenCopy.slotName(def, st.cadenceDays());
                 old.add(new GamesCheck.OldArea(e.getKey(), name, GamesCheck.OldState.EMPTIED,
                         Regions.describeClaim(r.claim()), r.firstLeft().isEmpty() ? null : r.firstLeft().get(0), 100,
-                        r.removed(), r.left()));
+                        r.removed(), r.left(), OldAreas.stillGuarded(standing, e.getKey(), r.claim())));
             }
         } else if (st.enabled()) {
             long at = ed.nextChangeAt(now);
@@ -361,11 +361,9 @@ final class GamesCheckLive implements GamesCheck.Facts {
             boolean stands = r != null ? r.wanted() || r.claimed() : c.enabled() && st.enabled();
             List<Box> halves = def == null ? List.of() : Regions.halves(c);
             if (def != null && !c.placed()) {
-                // config can't say where it is: it stands where it was claimed, if anywhere (GenService)
-                String claim = meta.get(GenAdminKeys.claim(def.id()));
-                int[] at = Regions.claimOrigin(claim);
-                stands = at != null && world.equalsIgnoreCase(Regions.claimWorld(claim));
-                halves = stands ? Regions.halves(def, at, Regions.claimGap(claim)) : List.of();
+                // config can't say where it is (or it is held): it stands where it was claimed, if anywhere (GenService)
+                halves = claimedHalves(def, meta.get(GenAdminKeys.claim(def.id())), world);
+                stands = !halves.isEmpty();
             }
             if (def == null || !stands) {
                 continue;
@@ -417,6 +415,31 @@ final class GamesCheckLive implements GamesCheck.Facts {
                     new Box(x, y, z, x, y, z)));
         }
         return out;
+    }
+
+    /**
+     * The area line of a slot whose config doesn't place it: its spot can't be read ({@link GenService#UNPLACED}),
+     * or it is held where it was built because config.yml couldn't be saved at the update ({@code held}, the
+     * engine's own reason: ENG04).
+     */
+    static GamesCheck.Region unplaced(Slots.Def def, String name, String held) {
+        return new GamesCheck.Region(def.id(), name, Slots.isClassic(def.id()), true,
+                List.of(held != null ? held : GenService.UNPLACED), "where it was built", held != null);
+    }
+
+    /**
+     * The halves of a slot config doesn't place (unreadable, or held) as they stand: where its claim says, in
+     * {@code world}, at the sizes the claim RECORDED (ENG04: a held 0.36 boat is 128 x 16 x 128, never today's
+     * 480 x 176 x 640 at its old spot); today's sizes only for a claim that names none. None when it isn't claimed
+     * there.
+     */
+    static List<Box> claimedHalves(Slots.Def def, String claim, String world) {
+        int[] at = Regions.claimOrigin(claim);
+        if (at == null || !world.equalsIgnoreCase(Regions.claimWorld(claim))) {
+            return List.of();
+        }
+        List<Box> recorded = Regions.claimHalves(claim);
+        return recorded != null ? recorded : Regions.halves(def, at, Regions.claimGap(claim));
     }
 
     /**

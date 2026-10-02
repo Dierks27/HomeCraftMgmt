@@ -2030,8 +2030,10 @@ games:
     # The droppers ship ON (they run only while Fresh Courses is on): glass shafts with water pools at
     # the bottom, one level per letter of their mix (at most 5). A dropper switched on later is built
     # with the next set (or /hcm games gen reroll).
-    # Golf is Adventure Golf: sand, trees, hills, and ponds in play on M and H holes only (never on
-    # Tiny Golf, whatever its mix). fresh_boat (Ice Boat) is the Mountain Run, a 2-3 minute run down a
+    # Golf of the Week is Golf v4: holes of four lengths, par 2 to 5 (the E holes of its mix are the
+    # short ones, the H holes the longest), a job for every club, and par from a first-time player. Sand,
+    # trees, hills, and ponds in play on M and H holes only (never on Tiny Golf, whatever its mix: its 3
+    # holes stay short and kid-easy). fresh_boat (Ice Boat) is the Mountain Run, a 2-3 minute run down a
     # mountain; it ships OFF: ride a preview first (README "Ice Boat: the Mountain Run"). /hcm games gen
     # preview and test work on it while it is off. Its style: random (each week's own; the Winding Road
     # every week while Race Night is on), road (the Winding Road: fast, for racing) or slalom (back and

@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.event;
 
+import com.dierks.homecraft.games.gen.boat.BoatStyle;
 import com.dierks.homecraft.games.trial.BoatHype;
 import com.dierks.homecraft.games.trial.Course;
 
@@ -18,8 +19,9 @@ import java.util.Locale;
  *
  * <p><b>The Mountain Run</b> (COURSE-VARIETY-SPEC §5.2): the Ice Boat's downhill sprint has no laps
  * to count, so its format reads "3 downhill races", and the heads-up and join-open lines can end with
- * its hype ("This week: 5 drops down the mountain!", {@link BoatHype#line}). Every other track reads
- * exactly as before.
+ * its hype ("This week: 5 drops down the mountain!", {@link BoatHype#line}). A Mountain Run v2 says its
+ * style too: "3 downhill races on the Winding Road" ({@link #where}). Every other track reads exactly as
+ * before.
  */
 public final class EventCopy {
 
@@ -117,9 +119,22 @@ public final class EventCopy {
         return downhill ? races + (races == 1 ? " downhill race" : " downhill races") : format(races, laps);
     }
 
-    /** A night's format on {@code track}: "3 downhill races" on a Mountain Run, "3 races, 2 laps" on anything else. */
+    /**
+     * A night's format on {@code track}: "3 downhill races" on a Mountain Run ("3 downhill races on the Winding
+     * Road" on a Mountain Run v2, {@link #where}), "3 races, 2 laps" on anything else.
+     */
     public static String format(int races, int laps, Course track) {
-        return format(races, laps, downhill(track));
+        return format(races, laps, downhill(track)) + where(track);
+    }
+
+    /**
+     * What a Mountain Run v2 night's format ends with (MOUNTAIN-V2-SPEC §12, red-team F05): " on the Winding Road",
+     * or " on the Slalom" (a party race; a night refuses one), its style read off its seed so the copy always
+     * says what the run really is; {@code ""} for any other track.
+     */
+    public static String where(Course track) {
+        BoatStyle s = BoatHype.style(track);
+        return s == null ? "" : " on the " + s.title();
     }
 
     /** Whether {@code track} is raced as a downhill sprint: a Mountain Run, which is never a loop. */

@@ -95,6 +95,15 @@ public interface GenHost {
         return List.of();
     }
 
+    /**
+     * Whether Race Night is switched on ({@code games.race_night.enabled}): while it is, a random Ice Boat
+     * week is the Winding Road (MOUNTAIN-V2-SPEC §5.1, red-team F05; {@link StyleSeed#want}). Off in a host
+     * that doesn't say.
+     */
+    default boolean raceNightOn() {
+        return false;
+    }
+
     /** A player's name for admins (history, records); the start of their id when unknown. */
     default String playerName(UUID player) {
         return player == null ? "someone" : player.toString().substring(0, 8);

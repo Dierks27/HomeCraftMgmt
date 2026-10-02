@@ -3,14 +3,13 @@ package com.dierks.homecraft.games.event;
 import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.GamesBench;
 import com.dierks.homecraft.games.GeneratedCourses;
-import com.dierks.homecraft.games.gen.V2Fixtures;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenTag;
-import com.dierks.homecraft.games.gen.api.LegacyBoxes;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.CourseCodec;
 import com.dierks.homecraft.games.trial.MountainRuns;
+import com.dierks.homecraft.games.trial.MountainRunsV2;
 import com.dierks.homecraft.games.trial.Point;
 import com.dierks.homecraft.games.trial.RaceLink;
 import com.dierks.homecraft.games.trial.RaceStand;
@@ -33,35 +32,29 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Race Night's own reads of a Mountain Run (COURSE-VARIETY-SPEC §5.2), the call sites {@link EventCopyTest}
- * and {@link RaceNightMenu}'s tests can't reach, since those hand their values in: the Race Night screen's
- * view ({@link RaceNight#view}), {@code /hcm games status} ({@link RaceNight#statusLines}) and
- * {@code /hcm games event status} ({@link EventAdmin}) on a night that is on, and the screen's next night
- * before it is made ({@link RaceNight.Upcoming}).
+ * Race Night on a Mountain Run v2 (MOUNTAIN-V2-SPEC §12; red-team F03, F05), end to end with the real framework
+ * and database and no server: Fresh Courses' gate vouches for the course, its half is Ice Boat's v4 half, and
+ * its world is a fake with the summit pit's ice (where the automatic grid goes) and the stand's floor at the
+ * bottom. An admin starts a night on it.
  *
- * <p>The real framework and database with no server: Fresh Courses' gate vouches for the course, and its
- * world is a fake with the Mountain Run's top level (the ice under the launch pit, where the automatic
- * grid goes) and the viewing stand's floor. An admin starts a night on it.
- *
- * <p>Pinned here (the review found every one of these hooks could be taken out with the whole suite still
- * green): on a Fresh Ice Boat layout of algo 3 the screen, the status line and the admin's status say it is
- * a downhill sprint ("3 downhill races", "a downhill sprint"); on the same marks under the algo-2 planner,
- * or hand-built, they read exactly as before ("3 races, 1 lap"). CV final gate: its shared warm-up is
- * "Warm-up runs" on the hub's sign and screen, the tile and the screen ("Warm-up laps" on the others).
+ * <p>Pinned here: a night on a v2 Winding Road stores the track's own windows (150 s and 6 minutes on a
+ * two-minute run, config untouched) and parks finishers on the stand at the bottom, by the finish; its screen
+ * and status say "3 downhill races on the Winding Road"; the schedule's restart fit sees the longer night; a v2
+ * Slalom is refused with a line that says why and what fixes it, and nothing is made. (The algo-3 run's night
+ * keeps config's windows exactly: {@link RaceNightDownhillTest}.)
  */
-class RaceNightDownhillTest {
+class RaceNightV2Test {
 
     private static final long T0 = GamesBench.at(2026, 10, 2, 12, 0);
-    /** The Ice Boat slot's half A, where {@link MountainRuns} is laid out. */
-    private static final Box HALF = LegacyBoxes.v036(Slots.ICE_BOAT, 'A');
-    /** The viewing stand's spot over the half's centre, 5 above the pit. */
-    private static final Point STAND = RaceStand.spot(HALF, MountainRuns.TOP);
+    /** The Ice Boat slot's v4 half A, where {@link MountainRunsV2} is laid out. */
+    private static final Box HALF = MountainRunsV2.HALF;
+    /** The viewing stand at the bottom, 5 above the finish (MOUNTAIN-V2-SPEC §4.1). */
+    private static final Point STAND = RaceStand.spotV4(HALF, MountainRunsV2.finish().y());
 
     private GamesBench bench;
     private RaceNight night;
@@ -115,8 +108,8 @@ class RaceNightDownhillTest {
     }
 
     /**
-     * The Games world: ice at the pit's level (so the grid behind the start fits), and the stand's floor;
-     * every chunk is loaded.
+     * The Games world: ice at the summit pit's level (so the grid behind the start fits), and the floor of
+     * the stand at the bottom; every chunk is loaded.
      */
     private static final class Server implements Tracks.Server, TrackChunks.Loader {
         @Override
@@ -140,7 +133,7 @@ class RaceNightDownhillTest {
         }
 
         private static boolean solid(int x, int y, int z) {
-            return y == (int) MountainRuns.TOP - 1 || x == (int) Math.floor(STAND.x())
+            return y == (int) MountainRunsV2.TOP - 1 || x == (int) Math.floor(STAND.x())
                     && y == (int) Math.floor(STAND.y()) - 1 && z == (int) Math.floor(STAND.z());
         }
 
@@ -304,119 +297,75 @@ class RaceNightDownhillTest {
     }
 
     @Test
-    void aNightOnTheMountainRunSaysDownhillOnTheScreenAndInBothStatuses() throws Exception {
-        NightRunner n = adminNight(MountainRuns.medium());
-        assertEquals(3, n.plan().races(), "fixture: the stand stands, so the night holds 3 races");
-        assertEquals(1, n.laps(), "fixture: a sprint is raced once");
-        assertEquals(RaceNightSettings.defaults().finishWindowSeconds(), n.plan().rules().finishWindowSeconds(),
-                "the algo-3 run keeps config's finish window (only a Mountain Run v2's scales, red-team F03)");
-        assertEquals(RaceNightSettings.defaults().maxRaceMinutes(), n.plan().rules().maxRaceMinutes(),
-                "and its longest race");
+    void aNightOnAV2WindingRoadStoresItsOwnWindowsAndParksAtTheBottom() throws Exception {
+        NightRunner n = adminNight(MountainRunsV2.road());
+        assertEquals(150, n.plan().rules().finishWindowSeconds(), "the finish window: 1.25 x T_m (120 s)");
+        assertEquals(6, n.plan().rules().maxRaceMinutes(), "the longest race: 3 x T_m");
+        assertEquals(60, RaceNightSettings.defaults().finishWindowSeconds(), "config is untouched");
+        assertEquals(STAND, n.track().stand(), "finishers wait on the stand at the bottom, by the finish");
+        assertEquals(3, n.plan().races(), "with its stand, the night holds 3 races");
 
         RaceNightMenu.View v = night.view(admin);
-        assertTrue(v.downhill(), "the screen's view knows the night's track is the Mountain Run");
-        assertEquals("&bIce Boat &7- 3 downhill races",
-                RaceNightMenu.tiles(v, true).get(RaceNightMenu.TRACK).name(),
-                "the Race Night screen's track tile, from the real view: \"3 downhill races\" (§5.2)");
-
+        assertEquals("&bIce Boat &7- 3 downhill races on the Winding Road",
+                RaceNightMenu.tiles(v, true).get(RaceNightMenu.TRACK).name(), "the Race Night screen (§12)");
         String status = night.statusLines().get(0);
-        assertTrue(status.contains(" on Ice Boat (3 downhill races) · "), "/hcm games status: " + status);
-
-        night.admin().handle(admin, new String[]{"status"});
-        String heard = bench.heard(admin.getUniqueId());
-        assertTrue(heard.contains("race 0 of 3, a downhill sprint"), "/hcm games event status: " + heard);
-        assertFalse(heard.contains(" lap"), "no laps on a sprint: " + heard);
+        assertTrue(status.contains(" on Ice Boat (3 downhill races on the Winding Road) · "), "/hcm games status: "
+                + status);
         assertEquals(0, bench.severe(), "nothing threw: " + bench.severeLines());
     }
 
     @Test
-    void theSameMarksUnderTheAlgo2PlannerReadAsBefore() throws Exception {
-        asBefore(MountainRuns.medium(MountainRuns.tag(2, 7)), 3, "the algo-2 planner's layout (it has a stand)");
+    void theRestartFitSeesTheLongerNight() throws Exception {
+        adminNight(MountainRunsV2.road());
+        RaceNightSettings s = on();
+        assertEquals(NightRules.of(s, s.races(), s.laps(), false, s.maxRacers(), 120_000).worstMillis(),
+                night.fit().worstMs(), "the schedule's fit uses the track's effective windows (F03)");
+        assertTrue(night.fit().worstMs() > NightRules.of(s, s.races(), s.laps(), false, s.maxRacers()).worstMillis(),
+                "longer than config's own");
     }
 
     @Test
-    void theSameMarksHandBuiltReadAsBefore() throws Exception {
-        asBefore(MountainRuns.medium(null), 1, "a hand-built track (no stand: one race)");
-    }
-
-    private void asBefore(Course track, int races, String what) throws Exception {
-        NightRunner n = adminNight(track);
-        assertEquals(races, n.plan().races(), what + ": fixture");
-        RaceNightMenu.View v = night.view(admin);
-        assertFalse(v.downhill(), what + ": not downhill on the screen");
-        String format = EventCopy.format(races, 1);
-        assertEquals("&bIce Boat &7- " + format, RaceNightMenu.tiles(v, true).get(RaceNightMenu.TRACK).name(),
-                what + ": the track tile as it always was");
-        String status = night.statusLines().get(0);
-        assertTrue(status.contains(" on Ice Boat (" + format + ") · "), what + ": /hcm games status: " + status);
-        night.admin().handle(admin, new String[]{"status"});
-        String heard = bench.heard(admin.getUniqueId());
-        assertTrue(heard.contains("of " + races + ", 1 lap"), what + ": /hcm games event status: " + heard);
-        assertFalse(heard.contains("downhill"), what + ": " + heard);
-        assertEquals(0, bench.severe(), what + ": nothing threw: " + bench.severeLines());
-    }
-
-    /**
-     * CV final gate: the shared warm-up on the Mountain Run is "Warm-up runs" (a run down from the top) on
-     * the hub's sign and screen, the Race Night tile and its screen; on the same marks under the algo-2
-     * planner, or hand-built, it reads "Warm-up laps" as it always did.
-     */
-    @Test
-    void theWarmUpIsRunsOnTheMountainRunAndLapsOnTheSameMarksOtherwise() throws Exception {
-        warmUp(MountainRuns.medium(), "Warm-up runs", "the Mountain Run");
-        bench.close();
-        bench = null;
-        warmUp(MountainRuns.medium(MountainRuns.tag(2, 7)), "Warm-up laps", "the algo-2 planner's layout");
-        bench.close();
-        bench = null;
-        warmUp(MountainRuns.medium(null), "Warm-up laps", "a hand-built track");
-    }
-
-    /** An admin's night on {@code track} with a warm-up, two racers in, run into its warm-up: what it says. */
-    private void warmUp(Course track, String words, String what) throws Exception {
-        NightRunner n = adminNight(track, on(60));
-        while (n.phase() == EventMachine.Phase.SCHEDULED) {
-            bench.move(1_000);
-            n.tick();
-        }
-        assertEquals(EventMachine.Phase.OPEN, n.phase(), what + ": fixture: the join window opens");
-        assertNull(n.join(new UUID(0, 1), "Ava"), what + ": fixture: Ava joins");
-        assertNull(n.join(new UUID(0, 2), "Ben"), what + ": fixture: Ben joins");
-        while (bench.now() < n.startsAt() - 14_000) {
-            bench.move(1_000);
-            n.tick();
-        }
-        assertEquals(EventMachine.Phase.WARMUP, n.phase(), what + ": fixture: into the shared warm-up");
-        EventBoard.View v = night.board();
-        assertEquals(words, EventBoard.sign(v).get(1), what + ": the hub sign");
-        assertEquals("&6&lRace Night &7- " + words.toLowerCase(java.util.Locale.ROOT), EventBoard.screen(v).get(0),
-                what + ": the hub screen");
-        assertEquals("&cRace Night &7- " + words.toLowerCase(java.util.Locale.ROOT), night.tileName(),
-                what + ": the Race Night tile");
-        assertEquals(words + " are on.", night.view(admin).state(), what + ": the Race Night screen");
-        assertEquals(0, bench.severe(), what + ": nothing threw: " + bench.severeLines());
+    void aV2SlalomIsNeverRacedAndTheLineSaysWhy() throws Exception {
+        Course slalom = MountainRunsV2.slalom();
+        bench = new GamesBench(T0, List.of(TimeTrials.SPEC, RaceNight.SPEC), "trials", TimeTrialsSettings.defaults(),
+                "race_night", on());
+        bench.games().generated(new Gate());
+        bench.dao().saveCourse(new GamesDao.CourseRow(slalom.id(), "trials", slalom.kind().id(), slalom.name(),
+                slalom.world(), slalom.enabled(), CourseCodec.encode(slalom), slalom.rev(), 0, 0), false);
+        night = (RaceNight) bench.games().game("race_night");
+        night.dao(new EventDao(bench.db(), bench.dao()));
+        night.tracks().server(new Server());
+        night.portsFor(id -> new Ports());
+        String why = night.adminStart("Admin", slalom.id(), null, null, 25, false);
+        assertNotNull(why, "a Slalom isn't raced (F05: Race Night is the Winding Road)");
+        assertTrue(why.contains(RaceTrack.SLALOM) && why.contains("reroll"), "and the line says why and what fixes it: "
+                + why);
+        assertNull(night.night(), "nothing was made");
+        assertTrue(night.fit().trackProblem().contains(RaceTrack.SLALOM), "the schedule skips its nights, saying why");
+        assertTrue(night.check().stream().anyMatch(c -> c.what().contains(RaceTrack.SLALOM) && c.fix() != null
+                && c.fix().contains("/hcm games gen reroll fresh_boat confirm")), "/hcm games check says what to do");
     }
 
     @Test
-    void theScreensNextNightIsDownhillOnlyOnTheMountainRun() {
-        RaceNight.Upcoming mountain = RaceNight.Upcoming.of(MountainRuns.medium(), 0);
-        assertEquals(new RaceNight.Upcoming("Ice Boat", 1, true), mountain,
-                "the Mountain Run: raced once, downhill (the tile reads \"3 downhill races\")");
-        assertEquals(new RaceNight.Upcoming("Ice Boat", 1, true), RaceNight.Upcoming.of(MountainRuns.medium(), 2),
-                "laps asked for on a sprint: it's still raced once, downhill");
-        assertEquals(new RaceNight.Upcoming("Ice Boat", 1, false),
-                RaceNight.Upcoming.of(MountainRuns.medium(MountainRuns.tag(2, 7)), 0),
-                "the same marks under the algo-2 planner: not downhill");
-        assertEquals(new RaceNight.Upcoming("Ice Boat", 1, false), RaceNight.Upcoming.of(MountainRuns.medium(null), 0),
-                "hand-built: not downhill");
-        for (V2Fixtures.Fixture f : V2Fixtures.boats()) {
-            Course loop = f.trial().course().withGen(f.tag());
-            RaceNight.Upcoming u = RaceNight.Upcoming.of(loop, 2);
-            assertFalse(u.downhill(), f + ": an algo-2 loop is not downhill");
-            assertEquals(2, u.laps(), f + ": and keeps its 2 laps");
-            assertEquals(loop.name(), u.track(), f + ": by its own name");
-        }
-        assertEquals(new RaceNight.Upcoming(null, 2, false), RaceNight.Upcoming.of(null, 2),
-                "no track picked yet: the settings' laps, not downhill");
+    void withCourseAutoASlalomAsTheOnlyBoatCourseSkipsTheNightToo() throws Exception {
+        Course slalom = MountainRunsV2.slalom();
+        RaceNightSettings d = on();
+        RaceNightSettings auto = new RaceNightSettings(true, List.of(), "auto", d.races(), 0, d.announceMinutes(),
+                d.joinMinutes(), 10, 2, 8, d.finishWindowSeconds(), d.maxRaceMinutes(), d.breakSeconds(),
+                d.warmupSeconds(), d.points(), d.finishPoints(), d.stillRacingPoints(), d.prizes(), d.finisherPrize(),
+                d.prizeEventsPerWeek(), d.season(), d.standRadius(), d.hype());
+        assertTrue(auto.autoCourse(), "fixture: course auto");
+        bench = new GamesBench(T0, List.of(TimeTrials.SPEC, RaceNight.SPEC), "trials", TimeTrialsSettings.defaults(),
+                "race_night", auto);
+        bench.games().generated(new Gate());
+        bench.dao().saveCourse(new GamesDao.CourseRow(slalom.id(), "trials", slalom.kind().id(), slalom.name(),
+                slalom.world(), slalom.enabled(), CourseCodec.encode(slalom), slalom.rev(), 0, 0), false);
+        night = (RaceNight) bench.games().game("race_night");
+        night.dao(new EventDao(bench.db(), bench.dao()));
+        night.tracks().server(new Server());
+        String problem = night.fit().trackProblem();
+        assertTrue(problem != null && problem.contains(RaceTrack.SLALOM), "the schedule skips its nights: " + problem);
+        String why = night.adminStart("Admin", null, null, null, 25, false);
+        assertTrue(why != null && why.contains(RaceTrack.SLALOM), "and an admin's night is refused: " + why);
     }
 }

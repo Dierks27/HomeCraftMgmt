@@ -389,8 +389,8 @@ class BoatPlannerTest {
                                 || Math.abs(r - (level.width() / 2.0 + BoatPlanner.ARC_SPOT)) < 1e-9,
                         level + ": a checkpoint spans its lane (half the width and a half; a bend's a block more): " + r);
             }
-            assertTrue(c.checkpoints().size() >= 5 && c.checkpoints().size() <= Course.MAX_CHECKPOINTS,
-                    level + ": checkpoints all the way down, at most 64: " + c.checkpoints().size());
+            assertTrue(c.checkpoints().size() >= 5 && c.checkpoints().size() <= DownhillValidator.MAX_CHECKPOINTS,
+                    level + ": checkpoints all the way down, at most the spiral's frozen 64: " + c.checkpoints().size());
             boolean sign = false;
             boolean stand = false;
             for (SignText s : p.signs()) {

@@ -18,6 +18,14 @@ import java.util.Map;
  * <p>Pure: no Bukkit, no clock. {@link #decode} never throws: a line it can't read keeps that key's
  * value from {@code fallback}, so a hand-edited row still runs.
  *
+ * <p><b>Windows that scale with the track</b> (red-team F03, MOUNTAIN-V2-SPEC D8): a Mountain Run v2 is a
+ * 2-3 minute run, so on one the night's finish window is at least 1.25 of the track's model time T_m
+ * ({@link #finishWindow}) and its longest race at least 3 T_m ({@link #maxRace}, never over
+ * {@value #MAX_RACE_MINUTES} minutes): a young rider at 0.45 of model speed behind a leader at 0.85 still
+ * finishes inside the window. They are worked out once the track is known ({@link #of(RaceNightSettings,
+ * int, int, boolean, int, long)}) and stored with the night like every other rule; config is untouched, and
+ * any other track (T_m 0) keeps the configured values exactly.
+ *
  * @param races               races tonight (1-5; 1 without a stand)
  * @param laps                0 = the course's own laps, else 1-5 on a loop track
  * @param minRacers           fewer seated at race 1's Go calls the night off
@@ -44,6 +52,10 @@ public record NightRules(int races, int laps, int minRacers, int maxRacers, List
      * has a hard ceiling a little above the shipped 1st prize.
      */
     public static final int MAX_PRIZE_PER_NIGHT = TokenBalance.RACE_MAX_PRIZE_PER_NIGHT;
+    /** The longest a race may be, in minutes, whatever config or the track says. */
+    public static final int MAX_RACE_MINUTES = 15;
+    /** A party race's finish window on any track, in seconds ({@code PartyRace}'s, before the track scales it). */
+    public static final int PARTY_WINDOW_SECONDS = 120;
 
     public NightRules {
         races = Math.max(1, Math.min(5, races));
@@ -57,15 +69,55 @@ public record NightRules(int races, int laps, int minRacers, int maxRacers, List
         finisherPrize = Math.max(0, Math.min(MAX_PRIZE_PER_NIGHT, finisherPrize));
         warmupSeconds = Math.max(0, Math.min(600, warmupSeconds));
         finishWindowSeconds = Math.max(10, Math.min(600, finishWindowSeconds));
-        maxRaceMinutes = Math.max(1, Math.min(15, maxRaceMinutes));
+        maxRaceMinutes = Math.max(1, Math.min(MAX_RACE_MINUTES, maxRaceMinutes));
         breakSeconds = Math.max(5, Math.min(120, breakSeconds));
     }
 
-    /** A night's rules from the live settings. */
+    /** A night's rules from the live settings, on a track whose windows don't scale (the configured ones). */
     public static NightRules of(RaceNightSettings s, int races, int laps, boolean fun, int maxRacers) {
+        return of(s, races, laps, fun, maxRacers, 0);
+    }
+
+    /**
+     * A night's rules from the live settings on a track of model time {@code modelMs} (a Mountain Run v2's
+     * T_m, {@code BoatHype.modelMs}; 0 for any other track): the finish window and the longest race are the
+     * track's effective ones ({@link #finishWindow}, {@link #maxRace}), so they are stored with the night.
+     */
+    public static NightRules of(RaceNightSettings s, int races, int laps, boolean fun, int maxRacers, long modelMs) {
         return new NightRules(races, laps, s.minRacers(), maxRacers, s.points(), s.finishPoints(),
                 s.stillRacingPoints(), s.prizes(), s.finisherPrize(), fun, s.warmupSeconds(),
-                s.finishWindowSeconds(), s.maxRaceMinutes(), s.breakSeconds());
+                finishWindow(s.finishWindowSeconds(), modelMs), maxRace(s.maxRaceMinutes(), modelMs), s.breakSeconds());
+    }
+
+    /**
+     * The finish window, in seconds, on a track of model time {@code modelMs} (red-team F03):
+     * max(config, ⌈1.25 T_m⌉); config itself for {@code modelMs} 0 (any track that doesn't scale).
+     */
+    public static int finishWindow(int configSeconds, long modelMs) {
+        if (modelMs <= 0) {
+            return configSeconds;
+        }
+        return (int) Math.max(configSeconds, Math.ceilDiv(modelMs * 5, 4_000L));
+    }
+
+    /**
+     * The longest race, in minutes, on a track of model time {@code modelMs} (red-team F03):
+     * max(config, ⌈3 T_m / 60⌉), never more than {@value #MAX_RACE_MINUTES}; config itself for {@code modelMs} 0.
+     */
+    public static int maxRace(int configMinutes, long modelMs) {
+        if (modelMs <= 0) {
+            return configMinutes;
+        }
+        long want = Math.min(MAX_RACE_MINUTES, Math.ceilDiv(modelMs * 3, 60_000L));
+        return (int) Math.max(configMinutes, want);
+    }
+
+    /**
+     * A party race's finish window, in seconds, on a track of model time {@code modelMs} (red-team F03):
+     * max({@value #PARTY_WINDOW_SECONDS}, ⌈1.25 T_m⌉); {@value #PARTY_WINDOW_SECONDS} for {@code modelMs} 0.
+     */
+    public static int partyWindow(long modelMs) {
+        return finishWindow(PARTY_WINDOW_SECONDS, modelMs);
     }
 
     /** The night's settings as its row keeps them: one {@code key=value} line each, in a fixed order. */

@@ -5,6 +5,7 @@ import com.dierks.homecraft.games.gen.DailySettings;
 import com.dierks.homecraft.games.gen.api.Edition;
 import com.dierks.homecraft.games.gen.api.GenSeed;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.boat.BoatStyle;
 
 /**
  * When a slot gets a new layout (GEN-SPEC §3.2, weekly addendum §1), as two pure functions:
@@ -42,6 +43,10 @@ import com.dierks.homecraft.games.gen.api.GenTag;
  *
  * <p>No secret, no build: when the database can't give the seed secret the slot keeps its layout
  * and waits. It never falls back to a temporary secret, which would change a layout mid-edition.
+ *
+ * <p><b>Mountain Run v2's style</b> (MOUNTAIN-V2-SPEC §5.1, red-team F05): a view that names a style
+ * ({@link SlotView#style}) builds from the edition's first seed of that style ({@link StyleSeed}); a pin is
+ * used as given.
  */
 public final class GenScheduler {
 
@@ -297,10 +302,21 @@ public final class GenScheduler {
      * @param secret      the seed secret, or {@code null} when the database couldn't give it
      * @param since       when the current schedule (cadence and rebuild day) was first seen (epoch ms),
      *                    or 0 when unknown: a layout of another schedule then stays until its own end
+     * @param style       the Mountain Run v2 style a new layout must have ({@link StyleSeed#want}: Ice Boat's
+     *                    {@code style}, or the Winding Road while Race Night is on), or {@code null} for the
+     *                    edition's own seed (every other slot, and a random week with no Race Night)
      */
     public record SlotView(String slot, boolean enabled, boolean busy, GenTag live, boolean liveOk, String liveMix,
                            String mix, int reroll, Pin pin, int plannerAlgo, long triesDay, int tries,
-                           long lastTryAt, boolean oldDirty, Long secret, long since) {
+                           long lastTryAt, boolean oldDirty, Long secret, long since, BoatStyle style) {
+
+        /** A view whose slot builds from its edition's own seed (no style to steer). */
+        public SlotView(String slot, boolean enabled, boolean busy, GenTag live, boolean liveOk, String liveMix,
+                        String mix, int reroll, Pin pin, int plannerAlgo, long triesDay, int tries, long lastTryAt,
+                        boolean oldDirty, Long secret, long since) {
+            this(slot, enabled, busy, live, liveOk, liveMix, mix, reroll, pin, plannerAlgo, triesDay, tries, lastTryAt,
+                    oldDirty, secret, since, null);
+        }
 
         /** A view with the schedule's start unknown. */
         public SlotView(String slot, boolean enabled, boolean busy, GenTag live, boolean liveOk, String liveMix,
@@ -404,7 +420,9 @@ public final class GenScheduler {
         if (v.secret() == null) {
             return Decision.waiting("the seed secret can't be read");
         }
-        return Decision.build(t, reroll, GenSeed.seed(v.secret(), t.cadence(), t.start(), v.slot(), reroll));
+        // the edition's own seed, or for a Mountain Run v2 week that must be one style, its first seed of that style
+        return Decision.build(t, reroll, StyleSeed.seed(v.secret(), t.cadence(), t.start(), v.slot(), reroll,
+                v.style()));
     }
 
     /** Whether a scheduled restart is due within {@code minutes} of {@code now} (0: never). */

@@ -73,6 +73,54 @@ public final class GamesAreaMigration {
     private GamesAreaMigration() {
     }
 
+    // ---- a file the update couldn't save (F10) --------------------------------------------------------
+
+    /**
+     * Whether {@code c} (config.yml as read from disk, defaults-free) is still below {@link #REVISION}: the
+     * update's config migration couldn't save it (a read-only file, a full disk), so the spots it holds for
+     * the three areas v4 moves are an older version's. As {@link LayoutGuard#unmigrated} is for revision 19.
+     */
+    public static boolean unsaved(ConfigurationSection c) {
+        return c != null && (!(c.get("config_revision", null) instanceof Number n) || n.intValue() < REVISION);
+    }
+
+    /** Why the three moved areas wait while config.yml is below {@link #REVISION} (the engine's SEVERE, the check). */
+    public static String heldWhy(ConfigurationSection c) {
+        Object r = c == null ? null : c.get("config_revision", null);
+        return "config.yml couldn't be saved at this update (it is still at config revision "
+                + (r instanceof Number n ? String.valueOf(n.intValue()) : "?") + ", and revision " + REVISION
+                + " moves this area), so it stays where it was built, closed, and nothing is built or emptied there"
+                + " until the file can be written: fix that (the SEVERE at the start says why it wasn't) and restart";
+    }
+
+    /**
+     * F10: the Games' reading of a file below {@link #REVISION} with the three areas it would move held
+     * ({@link DailySettings.SlotConfig#held}): rather than build Golf v4 at 0.36's spot (half B straddling
+     * x 8192) and move it again once the file is saved, each stays where it was claimed, off, and nothing is
+     * claimed, built, rerolled or emptied for it until revision 21 is written. Everything else reads as it is.
+     */
+    public static GamesConfig.Parsed hold(GamesConfig.Parsed p, String why) {
+        if (p == null || !(p.settings().get(DailyCourses.SPEC.id()) instanceof DailySettings d)) {
+            return p;
+        }
+        List<DailySettings.SlotConfig> slots = new ArrayList<>();
+        for (DailySettings.SlotConfig c : d.slots()) {
+            slots.add(moves(c.id()) ? c.held(why) : c);
+        }
+        List<DailySettings.SlotConfig> classics = new ArrayList<>();
+        for (DailySettings.SlotConfig c : d.archive().classics()) {
+            classics.add(moves(c.id()) ? c.held(why) : c);
+        }
+        java.util.Map<String, Object> settings = new java.util.LinkedHashMap<>(p.settings());
+        settings.put(DailyCourses.SPEC.id(), d.withSlots(slots).withArchive(d.archive().withClassics(classics)));
+        return new GamesConfig.Parsed(p.common(), settings, p.unreadable());
+    }
+
+    /** Whether slot {@code id} is one of the areas v4 moves. */
+    static boolean moves(String id) {
+        return MOVES.stream().anyMatch(m -> m.def().id().equals(id));
+    }
+
     /**
      * Revision 21's step on the on-disk file (defaults-free). One INFO line per area moved, one
      * {@code WARN } line per owner's spot kept ({@link LayoutGuard#WARN}).

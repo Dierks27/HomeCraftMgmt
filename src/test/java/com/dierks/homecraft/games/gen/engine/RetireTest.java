@@ -92,10 +92,21 @@ class RetireTest {
         }
     }
 
+    /** Until every old area is emptied (F09: still recorded, and guarded, until the world is saved). */
     private void driveUntilNoOldArea(int minutes) {
-        for (int s = 0; s < minutes * 60 && !gen.oldAreas().isEmpty(); s++) {
+        for (int s = 0; s < minutes * 60 && !allEmptied(); s++) {
             drive(1);
         }
+    }
+
+    private boolean allEmptied() {
+        return gen.oldAreas().stream().allMatch(a -> a.state() == OldAreas.State.EMPTIED);
+    }
+
+    /** Two saves of the Games world (Paper's autosave, or /save-all): what was emptied is on disk now. */
+    private void saved() {
+        gen.worldSaved(W);
+        gen.worldSaved(W);
     }
 
     /** A pond (water over blue concrete, rimmed with moss) and a wall line at the corner of {@code half}. */
@@ -168,8 +179,15 @@ class RetireTest {
             if (!"minecraft:oak_planks".equals(t.world.at(GOLF_035_B.maxX() + 1, 165, GOLF_035_B.minZ()))) {
                 out.add("the owner's block next to the old area went");
             }
-            if (t.host.store.meta(GenAdminKeys.old(GOLF)) != null || t.host.store.meta(GenAdminKeys.claim(GOLF)) != null) {
-                out.add("the old claim is still on record");
+            if (t.host.store.meta(GenAdminKeys.claim(GOLF)) != null) {
+                out.add("the old claim still holds the claim key");
+            }
+            if (!Regions.oldEmptied(t.host.store.meta(GenAdminKeys.old(GOLF))).containsKey(GOLF_035)) {
+                out.add("the old claim isn't marked emptied (and kept) until the world is saved");
+            }
+            t.saved();
+            if (t.host.store.meta(GenAdminKeys.old(GOLF)) != null) {
+                out.add("the old claim is still on record after the world was saved");
             }
             return out;
         } finally {
@@ -202,6 +220,7 @@ class RetireTest {
         world.put(6800, 170, 5950, "minecraft:chest[facing=north,type=single,waterlogged=false]");
         boot(GenService.RECORDED);
         driveUntilNoOldArea(20);
+        saved();
         assertEquals(List.of(), gen.oldAreas(), "the old area is done with");
         assertEquals(2, world.count(OwnerServer.BOAT_A) + world.count(OwnerServer.BOAT_B),
                 "only the two foreign blocks are left");
@@ -220,6 +239,135 @@ class RetireTest {
         assertTrue(line.what().contains("2 blocks that aren't Fresh Courses' were left there (first at"), line.what());
         assertTrue(line.fix().contains("remove them by hand"), "and says they are the owner's to remove: " + line.fix());
         assertFalse(guarded(OwnerServer.BOAT_A), "nothing guards that area any more");
+    }
+
+    // ---- F09: emptied, then known to be on disk --------------------------------------------------------------
+
+    /** The boat's 0.36 area with a track and a sign in half A, its claim as 0.36 left it. */
+    private void boatAt036() throws SQLException {
+        host();
+        host.store.meta(GenAdminKeys.claim(BOAT), OwnerServer.BOAT_036);
+        for (int x = 6090; x < 6150; x++) {
+            world.put(x, 165, 5900, Palette.TRACK);
+            world.put(x, 166, 5899, Palette.TRACK_WALL);
+        }
+        world.put(6100, 166, 5900, Palette.sign(0));
+    }
+
+    @Test
+    void anEmptiedAreaStaysRecordedAndGuardedUntilTheWorldHasBeenSavedTwice() throws Exception {
+        boatAt036();
+        boot(GenService.RECORDED);
+        driveUntilNoOldArea(20);
+        assertEquals(0, world.count(OwnerServer.BOAT_A), "emptied");
+        String stored = host.store.meta(GenAdminKeys.old(BOAT));
+        assertTrue(Regions.oldEmptied(stored).containsKey(OwnerServer.BOAT_036), "marked emptied@T, kept: " + stored);
+        assertEquals(List.of(OwnerServer.BOAT_036), Regions.oldClaims(stored), "the claim reads as before");
+        assertTrue(guarded(OwnerServer.BOAT_A) && guarded(OwnerServer.BOAT_B), "still guarded");
+        assertEquals(OldAreas.State.EMPTIED, gen.oldAreas().get(0).state(), "listed as emptied");
+        assertTrue(OldAreas.line(gen.oldAreas().get(0)).contains("is empty; it stays guarded until the world has been"
+                + " saved"), "status says what it waits for: " + OldAreas.line(gen.oldAreas().get(0)));
+        assertNotNull(OldAreas.Retired.parse(host.store.meta(GenAdminKeys.retired(BOAT))),
+                "the check's record of it is written at once (it shows for two weeks)");
+
+        gen.worldSaved(W);
+        assertNotNull(host.store.meta(GenAdminKeys.old(BOAT)), "one save may still be writing: kept");
+        gen.worldSaved("some_other_world");
+        gen.worldSaved("some_other_world");
+        assertNotNull(host.store.meta(GenAdminKeys.old(BOAT)), "another world's saves say nothing of this one");
+        gen.worldSaved(W);
+        assertNull(host.store.meta(GenAdminKeys.old(BOAT)), "the second save of its world: let go");
+        assertEquals(List.of(), gen.oldAreas(), "nothing listed");
+        assertFalse(guarded(OwnerServer.BOAT_A), "nor guarded");
+        assertEquals(1, host.logged(Level.INFO, BOAT + "'s old area in games (half A x 6080..6207, y 160..175, z"
+                + " 5888..6015; half B x 6784..6911, y 160..175, z 5888..6015) has been saved empty: it is let go."),
+                "said once: " + host.logs.stream().map(l -> l.getMessage()).toList());
+    }
+
+    @Test
+    void aHardStopBeforeTheSaveBringsTheOldBlocksBackAndTheNextStartEmptiesThemAgain() throws Exception {
+        boatAt036();
+        Map<Long, String> before = new java.util.HashMap<>(world.blocks);
+        boot(GenService.RECORDED);
+        driveUntilNoOldArea(20);
+        assertEquals(0, world.count(OwnerServer.BOAT_A), "emptied in memory");
+        long first = OldAreas.Retired.parse(host.store.meta(GenAdminKeys.retired(BOAT))).at();
+
+        // kill -9 before any save: the chunks on disk still hold the old track, the database says emptied@T
+        gen.stop();
+        gen = null;
+        world.blocks.clear();
+        world.blocks.putAll(before);
+        assertEquals(121, world.count(OwnerServer.BOAT_A), "the old track and its sign are back after the restart");
+        host.now += 60_000;
+        boot(GenService.RECORDED);
+        assertTrue(guarded(OwnerServer.BOAT_A), "the record still guards it at the next start");
+        driveUntilNoOldArea(20);
+        assertEquals(0, world.count(OwnerServer.BOAT_A), "the next start emptied it again");
+        assertEquals(1, host.logged(Level.WARNING, BOAT + "'s old area in games (half A x 6080..6207") , "with a WARN");
+        assertTrue(host.logged(Level.WARNING, "had 121 blocks of its own back at this start (the world wasn't saved"
+                + " after it was emptied): emptied again") == 1, "saying what happened: "
+                + host.logs.stream().map(l -> l.getMessage()).toList());
+        OldAreas.Retired r = OldAreas.Retired.parse(host.store.meta(GenAdminKeys.retired(BOAT)));
+        assertTrue(r.at() > first && r.removed() == 121, "the check's record is the latest emptying: " + r);
+        long marked = Regions.oldEmptied(host.store.meta(GenAdminKeys.old(BOAT))).get(OwnerServer.BOAT_036);
+        assertTrue(marked > first, "marked emptied anew, kept until it is known on disk");
+
+        // a clean start next: it is looked at once more, nothing is written, and it is let go
+        int writes = world.log.size();
+        boot(GenService.RECORDED);
+        driveUntilNoOldArea(20);
+        for (int s = 0; s < 120 && host.store.meta(GenAdminKeys.old(BOAT)) != null; s++) {
+            drive(1);
+        }
+        assertNull(host.store.meta(GenAdminKeys.old(BOAT)), "found still empty at a later start: let go");
+        assertEquals(writes, world.log.size(), "without writing a block");
+        assertEquals(1, host.logged(Level.INFO, "was still empty at this start, so it was saved that way: it is let"
+                + " go"), "said once");
+        assertEquals(121, OldAreas.Retired.parse(host.store.meta(GenAdminKeys.retired(BOAT))).removed(),
+                "and the check still says what was taken away (for two weeks)");
+    }
+
+    @Test
+    void anAreaEmptiedBeforeItsSlotGrewInPlaceIsLookedAtAgainOnlyOutsideTheNewCourse() throws Exception {
+        golfInPlace();
+        Map<Long, String> before = new java.util.HashMap<>(world.blocks);
+        boot(GenService.RECORDED);
+        for (int s = 0; s < 20 * 60 && !(gen.liveTag(GOLF) != null && gen.live(GOLF, gen.liveTag(GOLF))
+                && allEmptied()); s++) {
+            drive(1);
+        }
+        Box newA = Box.sized(7488, 160, 4096, 128, 16, 224);
+        Box newB = Box.sized(8192, 160, 4096, 128, 16, 224);
+        assertEquals(newA, gen.half(gen.liveTag(GOLF)), "golf is up at its own spot, grown, in half A (which holds"
+                + " its old half A)");
+
+        // kill -9 before any save: the old pond is back in the old half A, inside the live course's half A
+        gen.stop();
+        gen = null;
+        for (Map.Entry<Long, String> e : before.entrySet()) {
+            if (GenKit.FakeWorld.inside(OwnerServer.GOLF_A, e.getKey())) {
+                world.blocks.put(e.getKey(), e.getValue());
+            }
+        }
+        int from = world.log.size();
+        host.now += 60_000;
+        boot(GenService.RECORDED);
+        for (int s = 0; s < 20 * 60 && !(host.store.meta(GenAdminKeys.old(GOLF)) == null
+                && gen.live(GOLF, gen.liveTag(GOLF))); s++) {
+            drive(1);
+        }
+        assertNull(host.store.meta(GenAdminKeys.old(GOLF)), "the old area was looked at again (its half B, outside"
+                + " the course) and let go");
+        assertTrue(gen.live(GOLF, gen.liveTag(GOLF)), "the course is open: its own check took the pond out of its"
+                + " half");
+        assertEquals(0, world.count(OwnerServer.GOLF_B), "nothing in the old half B");
+        assertEquals(0, host.logged(Level.WARNING, "old area (half A x 7488..7551"), "never held by its own course: "
+                + host.logs.stream().map(l -> l.getMessage()).toList());
+        for (OwnerServer.LoggingWorld.Write w : world.log.subList(from, world.log.size())) {
+            assertTrue(newA.contains(w.x(), w.y(), w.z()) || newB.contains(w.x(), w.y(), w.z()),
+                    "every write was in the course's own halves (its check, its spare emptied): " + w);
+        }
     }
 
     // ---- something in the way -------------------------------------------------------------------------------
@@ -255,7 +403,8 @@ class RetireTest {
         host.extras = List.of(); // the arena moved away
         drive((int) (GenService.VET_EVERY_MS / 1000) + 60);
         assertEquals(0, world.count(OwnerServer.BOAT_A), "looked at again a few minutes later, and emptied");
-        assertEquals(List.of(), gen.oldAreas(), "and forgotten");
+        saved();
+        assertEquals(List.of(), gen.oldAreas(), "and forgotten once the world is saved");
     }
 
     // ---- an owner's own move -------------------------------------------------------------------------
@@ -345,7 +494,10 @@ class RetireTest {
                 + " new one was placed (emptied first, then scanned, claimed and built)");
         assertEquals(Regions.claim(Slots.DAILY_GOLF, W, new int[]{7488, 160, 4096}, Slots.HALF_GAP),
                 host.store.meta(GenAdminKeys.claim(GOLF)), "claimed at its new size");
-        assertNull(host.store.meta(GenAdminKeys.old(GOLF)), "the old claim forgotten");
+        assertTrue(Regions.oldEmptied(host.store.meta(GenAdminKeys.old(GOLF))).containsKey(OwnerServer.GOLF_036),
+                "the old claim is marked emptied, and kept until the world is saved");
+        saved();
+        assertNull(host.store.meta(GenAdminKeys.old(GOLF)), "then forgotten");
         assertEquals(0, host.logged(Level.SEVERE, "Region has"), "never mistaken for foreign blocks");
     }
 
@@ -399,7 +551,7 @@ class RetireTest {
         boot(GenService.RECORDED);
         boolean opened = false;
         for (int s = 0; s < 20 * 60 && !(gen.liveTag(GOLF) != null && gen.liveTag(GOLF).algo() == 4
-                && gen.oldAreas().isEmpty()); s++) {
+                && allEmptied()); s++) {
             drive(1);
             opened |= gen.liveTag(GOLF) != null && gen.liveTag(GOLF).sameLayout(old) && gen.live(GOLF, old);
         }

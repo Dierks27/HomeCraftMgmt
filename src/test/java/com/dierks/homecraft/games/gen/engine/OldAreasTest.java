@@ -131,4 +131,45 @@ class OldAreasTest {
         assertTrue(OldAreas.line(new OldAreas.Area("fresh_golf", "Golf of the Week", false, GOLF_036, where,
                 OldAreas.State.ELSEWHERE, "old_games", 0)).contains("waits for its world old_games"), "elsewhere");
     }
+
+    @Test
+    void anEmptiedClaimKeepsItsPlaceInTheRecordWithWhenItWasEmptied() {
+        String other = "games,6080,160,5888,128,16,128,576";
+        String text = Regions.oldText(List.of(GOLF_036, other), java.util.Map.of(GOLF_036, 1_790_000_000_000L));
+        assertEquals(GOLF_036 + "|emptied@1790000000000;" + other, text, "the mark follows its claim");
+        assertEquals(List.of(GOLF_036, other), Regions.oldClaims(text), "the claims read as they always did");
+        assertEquals(java.util.Map.of(GOLF_036, 1_790_000_000_000L), Regions.oldEmptied(text), "and when it was emptied");
+        assertEquals(java.util.Map.of(), Regions.oldEmptied(GOLF_036 + "|emptied@soon"),
+                "an unreadable mark reads as not emptied: it is emptied again, writing nothing");
+        assertEquals(List.of(GOLF_036), Regions.oldClaims(GOLF_036 + "|emptied@soon"), "the claim itself still reads");
+        assertNull(Regions.oldText(List.of(), java.util.Map.of()), "none: the key unset");
+    }
+
+    @Test
+    void cuttingAnOldHalfLeavesExactlyThePartsOutsideTheCourseStandingThere() {
+        Box old = Box.sized(7488, 160, 4096, 64, 16, 128);
+        assertEquals(List.of(), OldAreas.minus(old, List.of(Box.sized(7488, 160, 4096, 128, 16, 224))),
+                "inside the grown half A: nothing left to look at");
+        assertEquals(List.of(old), OldAreas.minus(old, List.of(Box.sized(8192, 160, 4096, 128, 16, 224))),
+                "a half it doesn't touch: all of it");
+        Box cut = Box.sized(7500, 162, 4100, 10, 4, 10);
+        List<Box> parts = OldAreas.minus(old, List.of(cut));
+        long volume = parts.stream().mapToLong(Box::volume).sum();
+        assertEquals(old.volume() - cut.volume(), volume, "every block but the cut one, once: " + parts);
+        for (Box p : parts) {
+            assertFalse(p.intersects(cut), "no part overlaps the cut: " + p);
+            assertTrue(old.contains(p), "every part is inside the old half: " + p);
+            for (Box q : parts) {
+                assertTrue(p == q || !p.intersects(q), "no two parts overlap: " + p + " / " + q);
+            }
+        }
+    }
+
+    @Test
+    void anEmptiedAreaSaysItWaitsForTheSave() {
+        String where = Regions.describeClaim(GOLF_036);
+        assertTrue(OldAreas.line(new OldAreas.Area("fresh_golf", "Golf of the Week", false, GOLF_036, where,
+                OldAreas.State.EMPTIED, null, 0)).endsWith("is empty; it stays guarded until the world has been saved"
+                + " (or the next start finds it still empty), then it is let go"), "emptied, waiting for the save");
+    }
 }

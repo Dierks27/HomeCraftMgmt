@@ -69,6 +69,7 @@ class HoleRecipeTest {
             List<String> out = new ArrayList<>();
             int redraws = 0;
             int unsound = 0;
+            int outOfBand = 0;
             Set<Boolean> mirrors = new HashSet<>();
             for (long seed = 0; seed < SEEDS; seed++) {
                 HoleLayout l;
@@ -111,18 +112,27 @@ class HoleRecipeTest {
                         out.add(what + ": " + hp);
                     }
                 }
-                if (dry && LaneMap.of(g, hole, 4).hazards() > 0) {
+                LaneMap lane = LaneMap.of(g, hole, 4);
+                if (dry && lane.hazards() > 0) {
                     out.add(what + ": water in play on Tiny Golf");
+                }
+                if (!dry && !GolfPlannerV4.inBand(GolfPlannerV4.path(g, hole, lane), h.cls)) {
+                    outOfBand++;
                 }
             }
             if (redraws * 4 > SEEDS) {
                 out.add(name + ": " + redraws + " of " + SEEDS + " draws don't fit (a quarter at most)");
             }
+            if (outOfBand * 5 > SEEDS - redraws) {
+                out.add(name + ": " + outOfBand + " of " + (SEEDS - redraws) + " draws aren't its class's length (a fifth"
+                        + " at most; the planner draws them again)");
+            }
             if (SEEDS - redraws > 4 && !mirrors.equals(Set.of(true, false))) {
                 out.add(name + " isn't drawn both ways round");
             }
             synchronized (rates) {
-                rates.put(name, redraws + " redrawn, " + unsound + " unsound");
+                rates.put(name, redraws + " redrawn, " + unsound + " unsound" + (dry ? "" : ", " + outOfBand
+                        + " not its length"));
             }
             return out.stream();
         }).toList();
@@ -133,10 +143,10 @@ class HoleRecipeTest {
     @Test
     void aLayupLaysUpAlongTheLineTheFirstTimerAims() throws Exception {
         Map<String, String> rates = new TreeMap<>();
-        for (HoleRecipe h : List.of(HoleRecipe.L_LAYUP, HoleRecipe.X_LAYUP, HoleRecipe.M_GUARDED, HoleRecipe.L_CHIP_LAYUP,
-                HoleRecipe.M_CHIP_LAYUP)) {
+        for (HoleRecipe h : List.of(HoleRecipe.L_LAYUP, HoleRecipe.X_LAYUP, HoleRecipe.M_GUARDED,
+                HoleRecipe.L_CHIP_LAYUP)) {
             char tier = h.fits('M') ? 'M' : 'H';
-            int club = h == HoleRecipe.L_CHIP_LAYUP || h == HoleRecipe.M_CHIP_LAYUP ? 3 : 4;
+            int club = h == HoleRecipe.L_CHIP_LAYUP ? 3 : 4;
             int held = 0;
             int laidUp = 0;
             int drawn = 0;
@@ -294,8 +304,8 @@ class HoleRecipeTest {
                 "and only X there");
         assertEquals(EnumSet.of(HoleRecipe.L_LAYUP, HoleRecipe.X_LAYUP), with(Quota.Feature.LAYUP),
                 "the Swing layups: L's and X's");
-        assertEquals(EnumSet.of(HoleRecipe.L_CHIP_LAYUP, HoleRecipe.M_CHIP_LAYUP), with(Quota.Feature.CHIP_LAYUP),
-                "the Chip layups: L's and M's");
+        assertEquals(EnumSet.of(HoleRecipe.L_CHIP_LAYUP), with(Quota.Feature.CHIP_LAYUP),
+                "the Chip layup: an L hole's (an M one is never a par 3 at a par 3's length)");
         assertEquals(EnumSet.of(HoleRecipe.M_GUARDED), with(Quota.Feature.GUARDED), "the guarded par 3");
         for (Quota.Feature f : DealV4.PINNED) {
             for (HoleRecipe h : with(f)) {

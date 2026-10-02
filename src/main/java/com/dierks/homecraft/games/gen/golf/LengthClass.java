@@ -6,9 +6,11 @@ package com.dierks.homecraft.games.gen.golf;
  *
  * <p>The clubs stay as they are (Tap 1.9, Putt 3.7, Chip 5.9, Swing 8.9, Drive 12.9 blocks on flat
  * turf), so the measured par bands (§3.2) put par 2 at 8-12 blocks, par 3 at 16-25, par 4 at 27-38
- * and par 5 at 40-52; each class's routings sit inside its band, clear of the rounding edges. A
- * course deals its classes from its tiers ({@link DealV4}): Golf of the Week's EEEMMMMHH gets
- * S2 M3 L3 X1 or S2 M3 L2 X2. Tiny Golf only ever has S and M.
+ * and par 5 at 40-52 (V4-DECISIONS D1). Off Tiny Golf the planner holds every hole but a fallback to
+ * its class's band, give or take a block for the lane's corner cutting ({@link GolfPlannerV4#inBand}),
+ * and the validator a par to its length; Tiny Golf's child's course keeps its own lengths. A course
+ * deals its classes from its tiers ({@link DealV4}): Golf of the Week's EEEMMMMHH gets S2 M3 L3 X1 or
+ * S2 M3 L2 X2. Tiny Golf only ever has S and M.
  */
 enum LengthClass {
 

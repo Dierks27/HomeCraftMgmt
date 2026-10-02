@@ -18,11 +18,13 @@ import com.dierks.homecraft.games.golf.GolfCourse;
 import com.dierks.homecraft.games.golf.GolfShot;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.DoublePredicate;
 import java.util.stream.Collectors;
 
 /**
@@ -37,7 +39,9 @@ import java.util.stream.Collectors;
  * <p><b>A hole is proven</b> where it stands:
  * <ol>
  *   <li>its blocks pass Adventure Golf's per-hole rules, unchanged ({@link GolfValidatorV3#holeProblems});
- *       on Tiny Golf there is no water in play and the path is at most {@value #TINY_PATH} blocks;</li>
+ *       on Tiny Golf there is no water in play and the path is at most {@value #TINY_PATH} blocks;
+ *       anywhere else its path is its class's length ({@link #inBand}: V4-DECISIONS D1, audit
+ *       GOLF-R3-00);</li>
  *   <li>a layup (and a guarded par 3) does its job along the line the first-timer really aims from the
  *       tee, across the corner ({@link #layupHolds}): the longer clubs go in, the layup club stays dry,
  *       and the first-timer's own choice from the tee is the layup club;</li>
@@ -55,12 +59,16 @@ import java.util.stream.Collectors;
  *
  * <p><b>Settling the course</b> ({@link #settle}). Par is each hole's ⌊μ + ½⌋, balanced so the total
  * is within one of the summed means ({@link OrdinaryPar#balance}): a hole moves at most a stroke, never
- * outside 2-6 (Tiny Golf 2-3), so as every hole measures its class's par, every par is its class's or a
- * stroke off it, and the summary says which (red-team F01). A hole the balance lowers must still hold
- * E ≤ par and the kid's bound, a course no par can balance draws its furthest hole again, and on the
- * first-timer's courses of 7 holes or more the club gate holds: Putt, Chip and Swing each at least
- * {@value #GATE_PERCENT}% of its chosen clubs, shown on the summary's {@code clubs:} line (red-team F00);
- * each of these draws a hole again from its next attempt, and the course is settled again.
+ * outside 2-6 (Tiny Golf 2-3), and off Tiny Golf only to a par its length is, which in practice is
+ * never: every par is its class's (and the summary says when one isn't: red-team F01). So off Tiny
+ * Golf a course is balanced by drawing holes again: while it is more than {@value #NEAR} from its
+ * summed means, the hole furthest that way takes its first later attempt that moves it the right way
+ * and keeps its features ({@link Course#improve}); a stroke is the rule, and a course still more than a
+ * stroke off once every hole is stuck lets a hole lose a feature, or take its fallback, to keep it
+ * (rarely: the quota's tests allow for it). A hole the balance lowers (Tiny Golf) must still hold
+ * E ≤ par and the kid's bound, and on the first-timer's courses of 7 holes or more the club gate
+ * holds: Putt, Chip and Swing each at least {@value #GATE_PERCENT}% of its chosen clubs, shown on the
+ * summary's {@code clubs:} line (red-team F00).
  *
  * <p><b>Counted work</b>: at most {@value #ATTEMPT_BUDGET} putts an attempt and the input's budget a
  * course (default {@link GolfPlanner#COURSE_BUDGET}), {@value #FALLBACK_RESERVE} kept back for each
@@ -87,6 +95,11 @@ final class GolfPlannerV4 {
     static final int KID_OVER = 2;
     /** ...and on Tiny Golf. */
     static final int KID_OVER_TINY = 1;
+    /**
+     * Blocks a hole's path may stray outside its class's band ({@link #inBand}): the lane's centre path
+     * cuts corners eight ways, so a routing drawn to a band's edge can measure a block inside or out.
+     */
+    static final double BAND_TOLERANCE = 1;
     /** Tiny Golf's holes are at most this long (path, blocks). */
     static final double TINY_PATH = 22;
 
@@ -112,7 +125,7 @@ final class GolfPlannerV4 {
      * @param chosen  per club, how often the ordinary player chose it ({@code null}: re-derived)
      */
     record Solved(int attempt, HoleLayout layout, LengthClass cls, double mean, List<Putt> witness, int kid,
-                  long[] chosen) {
+                  long[] chosen, double path) {
 
         int expert() {
             return witness.size();
@@ -136,21 +149,44 @@ final class GolfPlannerV4 {
             holes[i] = c.solve(i, 0, cap, used, n - i);
         }
         boolean[] again = new boolean[n];
+        boolean[] stuck = new boolean[n];
+        int loose = 0;
         int gateRounds = 0;
         for (int round = 0; ; round++) {
-            Settle why = settle(holes, c.most, c.kidOver, c.gate && gateRounds < GATE_ROUNDS);
+            Settle why = settle(holes, c.most, c.kidOver, !c.dry, c.gate && gateRounds < GATE_ROUNDS, stuck);
             if (why == null) {
                 break;
             }
+            if (why.hole() < 0 && why.toward() != 0 && why.must() && loose < FALLBACK) {
+                // every hole is stuck: try again letting a hole lose a feature (a later recipe), and then
+                // take its fallback
+                loose++;
+                Arrays.fill(stuck, false);
+                continue;
+            }
+            if (loose > STRICT && why.toward() != 0 && !why.must()) {
+                // within a stroke again: every other hole was stuck keeping its features, so the course stands
+                Arrays.fill(stuck, true);
+                continue;
+            }
             if (why.hole() < 0 || round >= SETTLE_ROUNDS) {
-                if (why.gate()) {
-                    break; // the gate can't be met by drawing again: the course stands, its clubs line says so
+                if (!why.must()) {
+                    break; // the gate, or the balance's aim within a stroke: the course stands as it is
                 }
                 throw new GenFailed("the course can't be balanced: " + why.words());
             }
             gateRounds += why.gate() ? 1 : 0;
             int bad = why.hole();
-            holes[bad] = c.solve(bad, holes[bad].attempt() + 1, cap, used, 1);
+            if (why.toward() != 0) {
+                Solved better = c.improve(bad, holes[bad], why.toward(), loose, cap, used);
+                if (better == null) {
+                    stuck[bad] = true; // no later attempt of it moves the course the right way: keep it
+                    continue;
+                }
+                holes[bad] = better;
+            } else {
+                holes[bad] = c.solve(bad, holes[bad].attempt() + 1, cap, used, 1);
+            }
             again[bad] = true;
         }
         Plan plan = c.assemble(List.of(holes), used[0], again);
@@ -166,9 +202,13 @@ final class GolfPlannerV4 {
     /**
      * Why a course isn't settled yet, and the hole to draw again ({@code -1}: none can be).
      *
-     * @param gate whether it is the club gate (the course stands if no hole can be drawn again for it)
+     * @param gate   whether it is the club gate (the course stands if no hole can be drawn again for it)
+     * @param toward for the course balance, the way the hole's μ must move: -1 lower, +1 higher (a later
+     *               attempt that doesn't is not taken); 0, any attempt that holds
+     * @param must   whether the course can't stand as it is (a par a hole can't take, a total more than a
+     *               stroke off); not for the club gate nor the balance's aim within {@value #NEAR}
      */
-    record Settle(int hole, String words, boolean gate) {
+    record Settle(int hole, String words, boolean gate, int toward, boolean must) {
     }
 
     /**
@@ -176,28 +216,38 @@ final class GolfPlannerV4 {
      * <ol>
      *   <li>a hole the balance gave a par it can't take (its witness over it, or the kid over its bound)
      *       is drawn again;</li>
-     *   <li>a course still more than a stroke from its holes' summed μ once balanced (no hole could move:
-     *       a Tiny Golf par 3 can't go up) draws again the hole furthest that way that isn't its
-     *       fallback;</li>
+     *   <li>a course still more than a stroke from its holes' summed μ once balanced draws again the
+     *       hole furthest that way. Off Tiny Golf no hole's par can move ({@code banded}: a par is its
+     *       length's), so this is how such a course is balanced, aiming within {@value #NEAR} ({@code
+     *       must} only past a stroke): the hole takes a later attempt whose μ moves the course the right
+     *       way ({@code toward}, {@link Course#improve}), and a hole none of whose attempts does is
+     *       {@code stuck} and left as it is. (Tiny Golf, where a par 3 can't go up, draws its hole again
+     *       from its next attempt, as it always did.)</li>
      *   <li>with {@code gate}, the club gate (red-team F00): Putt, Chip and Swing are each at least
      *       {@value #GATE_PERCENT}% of the first-timer's chosen clubs, and if one isn't, the hole that
      *       chose it least (not a fallback) is drawn again.</li>
      * </ol>
      * Pure, so a test can settle made-up holes.
      */
-    static Settle settle(Solved[] holes, int most, int kidOver, boolean gate) {
+    static Settle settle(Solved[] holes, int most, int kidOver, boolean banded, boolean gate, boolean[] stuck) {
         int n = holes.length;
-        int[] par = pars(holes, most);
+        int[] par = pars(holes, most, banded);
         for (int i = 0; i < n; i++) {
             if (holes[i].expert() > par[i] || holes[i].kid() > par[i] + kidOver) {
                 return new Settle(holes[i].attempt() >= ATTEMPTS ? -1 : i, "hole " + (i + 1) + " can't take the par the"
-                        + " course balance gives it (" + par[i] + ")", false);
+                        + " course balance gives it (" + par[i] + ")", false, 0, true);
             }
         }
         double off = OrdinaryPar.off(par, means(holes));
-        if (Math.abs(off) > 1 + 1e-9) {
-            return new Settle(furthest(holes, par, off), String.format(Locale.ROOT, "its par is %+.2f from its holes'"
-                    + " means", off), false);
+        String words = String.format(Locale.ROOT, "its par is %+.2f from its holes' means", off);
+        if (!banded && Math.abs(off) > 1 + 1e-9) {
+            return new Settle(furthest(holes, par, off, null), words, false, 0, true); // Tiny Golf: as it always was
+        }
+        if (banded && Math.abs(off) > NEAR + 1e-9) {
+            int pick = furthest(holes, par, off, stuck);
+            if (pick >= 0 || Math.abs(off) > 1 + 1e-9) {
+                return new Settle(pick, words, false, off < 0 ? -1 : 1, Math.abs(off) > 1 + 1e-9);
+            }
         }
         if (gate) {
             long[] clubs = clubs(holes);
@@ -212,7 +262,7 @@ final class GolfPlannerV4 {
                         }
                     }
                     return new Settle(pick, CLUB_NAMES[club] + " is chosen for under " + GATE_PERCENT + "% of the"
-                            + " first-timer's shots", true);
+                            + " first-timer's shots", true, 0, false);
                 }
             }
         }
@@ -223,6 +273,20 @@ final class GolfPlannerV4 {
     static final int[] GATED = {2, 3, 4};
     /** The least share, percent, each of {@link #GATED} has of the first-timer's chosen clubs on a course. */
     static final int GATE_PERCENT = 4;
+    /**
+     * Off Tiny Golf the balance aims this near (a stroke is the rule, {@link OrdinaryPar#off}): every
+     * par is its class's, and Golf v4's hazard holes measure near the top of their par's half stroke, so
+     * stopping at a stroke would leave the first-timer most of a stroke over par on most courses.
+     */
+    static final double NEAR = 0.6;
+    /** How much a hole drawn again for the course balance must move its μ the right way. */
+    static final double IMPROVE = 0.05;
+    /** {@link Course#improve}'s steps: a hole drawn again keeps its features... */
+    static final int STRICT = 0;
+    /** ...may lose one... */
+    static final int FEATURES = 1;
+    /** ...or may take its fallback. */
+    static final int FALLBACK = 2;
     /** Holes drawn again for the club gate before the course stands as it is. */
     static final int GATE_ROUNDS = 9;
     /** Rounds of drawing a hole again (the balance and the gate) before the plan gives up. */
@@ -259,9 +323,20 @@ final class GolfPlannerV4 {
         return all == 0 ? 0 : (double) chosen[club] / all;
     }
 
-    /** The course's pars from its holes' μ ({@link OrdinaryPar#balance}), at most {@code most}. */
-    static int[] pars(Solved[] holes, int most) {
-        return OrdinaryPar.balance(means(holes), most);
+    /**
+     * The course's pars from its holes' μ ({@link OrdinaryPar#balance}), at most {@code most}; with
+     * {@code banded} (every course but Tiny Golf's) a hole takes only a par its length is.
+     */
+    static int[] pars(Solved[] holes, int most, boolean banded) {
+        return OrdinaryPar.balance(means(holes), banded ? paths(holes) : null, most);
+    }
+
+    static double[] paths(Solved[] holes) {
+        double[] out = new double[holes.length];
+        for (int i = 0; i < holes.length; i++) {
+            out[i] = holes[i].path();
+        }
+        return out;
     }
 
     static double[] means(Solved[] holes) {
@@ -274,14 +349,16 @@ final class GolfPlannerV4 {
 
     /**
      * The hole whose μ is furthest from its par the way the course is {@code off} (the lower number on
-     * a tie), not a fallback; -1 when every hole is.
+     * a tie), not a fallback; with {@code stuck}, nor stuck nor at its last attempt; -1 when none is.
      */
-    private static int furthest(Solved[] holes, int[] par, double off) {
+    private static int furthest(Solved[] holes, int[] par, double off, boolean[] stuck) {
         int pick = -1;
         double far = Double.NEGATIVE_INFINITY;
         for (int i = 0; i < holes.length; i++) {
             double d = off < 0 ? holes[i].mean() - par[i] : par[i] - holes[i].mean();
-            if (holes[i].attempt() < ATTEMPTS && d > far + 1e-9) {
+            boolean open = stuck == null ? holes[i].attempt() < ATTEMPTS
+                    : holes[i].attempt() < ATTEMPTS - 1 && !stuck[i];
+            if (open && d > far + 1e-9) {
                 far = d;
                 pick = i;
             }
@@ -306,6 +383,15 @@ final class GolfPlannerV4 {
      */
     static Solved solve(HoleLayout layout, LengthClass cls, OrdinaryPar.Model model, int kidOver, int most,
                         boolean dry, int attempt, Work work) throws GenFailed {
+        return solve(layout, cls, model, kidOver, most, dry, attempt, m -> true, work);
+    }
+
+    /**
+     * {@link #solve(HoleLayout, LengthClass, OrdinaryPar.Model, int, int, boolean, int, Work)}, its μ
+     * also {@code meanOk}.
+     */
+    static Solved solve(HoleLayout layout, LengthClass cls, OrdinaryPar.Model model, int kidOver, int most,
+                        boolean dry, int attempt, DoublePredicate meanOk, Work work) throws GenFailed {
         if (layout == null) {
             return null;
         }
@@ -315,14 +401,18 @@ final class GolfPlannerV4 {
             return null;
         }
         LaneMap lane = LaneMap.of(grid, hole, ALGO);
-        if (dry && (lane.hazards() > 0 || path(grid, hole, lane) > TINY_PATH)) {
+        double path = path(grid, hole, lane);
+        if (dry && (lane.hazards() > 0 || path > TINY_PATH)) {
             return null;
+        }
+        if (!dry && attempt < ATTEMPTS && !inBand(path, cls)) {
+            return null; // a hole holds its class's length (V4-DECISIONS D1; audit GOLF-R3-00)
         }
         if (!layupHolds(layout, grid, hole, lane, work)) {
             return null;
         }
         OrdinaryPar.Measure m = OrdinaryPar.measure(grid, hole, lane, model, work);
-        if (m == null || m.witness().isEmpty() || m.rounded() != cls.par) {
+        if (m == null || m.witness().isEmpty() || m.rounded() != cls.par || !meanOk.test(m.mean())) {
             return null;
         }
         int layup = layupClub(layout.features());
@@ -342,7 +432,16 @@ final class GolfPlannerV4 {
         if (!kid.within() || off[0]) {
             return null;
         }
-        return new Solved(attempt, layout, cls, m.mean(), m.witness(), kid.worst(), m.chosen());
+        return new Solved(attempt, layout, cls, m.mean(), m.witness(), kid.worst(), m.chosen(), path);
+    }
+
+    /**
+     * Whether a path of {@code path} blocks is {@code cls}'s length (V4-DECISIONS D1: par 2 8-12, par 3
+     * 16-25, par 4 27-38, par 5 40-52), give or take {@value #BAND_TOLERANCE} for the lane's eight-way
+     * corner cutting.
+     */
+    static boolean inBand(double path, LengthClass cls) {
+        return path >= cls.shortest - BAND_TOLERANCE - 1e-9 && path <= cls.longest + BAND_TOLERANCE + 1e-9;
     }
 
     /** The path from the tee to the cup along the lane, blocks. */
@@ -447,7 +546,8 @@ final class GolfPlannerV4 {
             if (mean == null) {
                 throw new GenFailed("hole " + (i + 1) + "'s par couldn't be worked out");
             }
-            holes.add(new Solved(t, layout, c.classes.get(i), mean, witness, -1, null));
+            holes.add(new Solved(t, layout, c.classes.get(i), mean, witness, -1, null, path(grid, hole,
+                    LaneMap.of(grid, hole, ALGO))));
         }
         Plan plan = c.assemble(holes, used);
         if (!tag.planHash().isEmpty() && !tag.planHash().equals(plan.hash())) {
@@ -546,6 +646,33 @@ final class GolfPlannerV4 {
             return s;
         }
 
+        /**
+         * Hole {@code i}'s first later attempt whose μ is at least {@value #IMPROVE} lower ({@code toward}
+         * -1) or higher (+1) than {@code old}'s, so drawing it again moves the course's balance the right
+         * way, and that keeps every feature {@code old} has (the quota); {@code null} when none does, and
+         * {@code old} stands. A course more than a stroke off with every hole stuck loosens this a step
+         * at a time ({@code loose}): a later attempt may lose a feature ({@link #FEATURES}), and then
+         * the hole may take its fallback ({@link #FALLBACK}; its later attempts were all tried).
+         */
+        Solved improve(int i, Solved old, int toward, int loose, long cap, long[] used) throws GenFailed {
+            int from = loose >= FALLBACK ? ATTEMPTS : old.attempt() + 1;
+            for (int t = from; t < (loose >= FALLBACK ? ATTEMPTS + 1 : ATTEMPTS); t++) {
+                in.checkCancelled();
+                long left = spendable(cap, used[0], 0);
+                if (left <= 0) {
+                    return null;
+                }
+                Work work = new Work(Math.min(ATTEMPT_BUDGET, left), in.cancelled());
+                DoublePredicate better = toward < 0 ? m -> m < old.mean() - IMPROVE : m -> m > old.mean() + IMPROVE;
+                Solved s = GolfPlannerV4.solve(draw(i, t), classes.get(i), model, kidOver, most, dry, t, better, work);
+                used[0] += work.used();
+                if (s != null && (loose > STRICT || s.layout().features().containsAll(old.layout().features()))) {
+                    return s; // (a later recipe that lost a feature could break the quota: only if it must)
+                }
+            }
+            return null;
+        }
+
         Plan assemble(List<Solved> holes, long work) {
             return assemble(holes, work, new boolean[holes.size()]);
         }
@@ -568,7 +695,7 @@ final class GolfPlannerV4 {
                          Map<Quota.Feature, Integer> targets, int deal, int kidOver, int most, boolean gate,
                          boolean[] again) {
         GenRandom root = new GenRandom(in.seed());
-        int[] par = pars(holes.toArray(new Solved[0]), most);
+        int[] par = pars(holes.toArray(new Solved[0]), most, !GolfPlanner.dry(in.slot()));
         List<HoleLayout.Placed> placed = new ArrayList<>();
         List<SignText> signs = new ArrayList<>();
         List<GolfCourse.Hole> course = new ArrayList<>();

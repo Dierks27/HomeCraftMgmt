@@ -18,11 +18,20 @@ import java.util.Set;
  *
  * <p><b>Layups</b> (red-team F00: every club has a job). A corner pond past the first elbow, where the
  * first-timer's tee shot goes when it aims across the corner: on a Swing layup ({@link #L_LAYUP},
- * {@link #X_LAYUP}) a first leg of 7-9 puts it 10.5-12 out along that line, so a Drive goes in and a
- * Swing stops in the elbow; on a guarded par 3 ({@link #M_GUARDED}) the same, and water behind the
- * green; on a Chip layup ({@link #L_CHIP_LAYUP}, {@link #M_CHIP_LAYUP}) a first leg of 4-6 and a rock
- * at the inner corner, which keeps the player's aim nearly straight on, so a Swing reaches the pond
- * and a Chip doesn't. The planner checks each on the real physics ({@link GolfPlannerV4#layupHolds}).
+ * {@link #X_LAYUP}) a first leg of 7-8 puts it 11-12 out along that line, so a Drive goes in and a
+ * Swing stops in the elbow, and the fairway past it is 7 wide; on a guarded par 3 ({@link #M_GUARDED})
+ * the same, and water behind the green; on a Chip layup ({@link #L_CHIP_LAYUP}) a first leg of 4-5
+ * and a rock at the inner corner, which keeps the player's aim nearly straight on, so a Swing reaches
+ * the pond and a Chip doesn't. The planner checks each on the real physics
+ * ({@link GolfPlannerV4#layupHolds}).
+ *
+ * <p><b>Lengths</b> (V4-DECISIONS D1, audit GOLF-R3-00). Off Tiny Golf a hole's path along the lane is
+ * held to its class's band, give or take a block ({@link GolfPlannerV4#inBand}), and it must measure
+ * its class's par there. The first-timer pays a stroke for every awkward corner, so the routings are
+ * drawn to the length its par is: a guarded par 3 of about 16-19 (no Chip layup is short enough to be
+ * a par 3: it is an L hole only), layups of about 28-33, and par 5s of about 40-44 with a 7-wide middle
+ * and last leg (two 5-wide corners cost a stroke), or straights of 44-50 ({@link #X_STRAIGHT},
+ * GOLF-V4-SPEC §3.3).
  *
  * <p>Each recipe is one length class and one set of features, so the deal ({@link DealV4}) can count
  * a course's quota before a block is drawn, exactly as Adventure Golf's templates are counted. Each
@@ -66,7 +75,6 @@ enum HoleRecipe {
     M_TWO_WAY(LengthClass.M, "MH"),
     M_VOLCANO(LengthClass.M, "H"),
     M_GUARDED(LengthClass.M, "MH"),
-    M_CHIP_LAYUP(LengthClass.M, "MH"),
 
     // ---- L: par 4, 27-38 ----------------------------------------------------------------------------
     L_LAYUP(LengthClass.L, "MH"),
@@ -90,7 +98,8 @@ enum HoleRecipe {
     X_LONG_DOGLEG_POND(LengthClass.X, "H"),
     X_LONG_DOGLEG_ISLAND(LengthClass.X, "H"),
     X_HAIRPIN(LengthClass.X, "H"),
-    X_LAYUP(LengthClass.X, "H");
+    X_LAYUP(LengthClass.X, "H"),
+    X_STRAIGHT(LengthClass.X, "H");
 
     final LengthClass cls;
     private final String tiers;
@@ -166,7 +175,7 @@ enum HoleRecipe {
                 }
             }
             case L_LAYUP -> f.addAll(EnumSet.of(Quota.Feature.LAYUP, Quota.Feature.WATER, Quota.Feature.TWO_LEGS));
-            case L_CHIP_LAYUP, M_CHIP_LAYUP -> f.addAll(EnumSet.of(Quota.Feature.CHIP_LAYUP, Quota.Feature.WATER,
+            case L_CHIP_LAYUP -> f.addAll(EnumSet.of(Quota.Feature.CHIP_LAYUP, Quota.Feature.WATER,
                     Quota.Feature.TWO_LEGS));
             case M_GUARDED -> f.addAll(EnumSet.of(Quota.Feature.GUARDED, Quota.Feature.WATER, Quota.Feature.TWO_LEGS));
             case L_DOGLEG_SAND_POND -> f.addAll(EnumSet.of(Quota.Feature.SAND, Quota.Feature.WATER,
@@ -188,6 +197,7 @@ enum HoleRecipe {
             case X_LONG_DOGLEG_POND -> f.addAll(EnumSet.of(Quota.Feature.WATER, Quota.Feature.TWO_LEGS));
             case X_LONG_DOGLEG_ISLAND -> f.addAll(EnumSet.of(Quota.Feature.HEIGHT, Quota.Feature.TWO_LEGS));
             case X_LAYUP -> f.addAll(EnumSet.of(Quota.Feature.LAYUP, Quota.Feature.WATER, Quota.Feature.THREE_LEGS));
+            case X_STRAIGHT -> f.addAll(EnumSet.of(Quota.Feature.SAND, Quota.Feature.HEIGHT, Quota.Feature.BIG_DROP));
             default -> throw new IllegalStateException("no features for " + this);
         }
         return f;
@@ -412,8 +422,8 @@ enum HoleRecipe {
                 what = length + " long";
             }
             case M_DOGLEG -> {
-                int up = d.len(10, 14);
-                int across = d.len(6, 10);
+                int up = d.len(dry ? 10 : 11, 14);
+                int across = d.len(dry ? 6 : 8, 10);
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
                 d.first(d.centred(across + d.runout - 1, 3), up, 2);
@@ -424,8 +434,8 @@ enum HoleRecipe {
                 what = up + " up, " + across + " across";
             }
             case M_DOGLEG_DOWN -> {
-                int up = d.len(10, 14);
-                int across = d.len(6, 10);
+                int up = d.len(dry ? 10 : 11, 14);
+                int across = d.len(dry ? 6 : 8, 10);
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
                 d.first(d.centred(across + d.runout - 1, 4), up, 2);
@@ -450,7 +460,7 @@ enum HoleRecipe {
             case M_TERRACES -> {
                 int top = d.pick(6, 8);
                 int middle = d.pick(9, 10);
-                int after = d.len(7, 11);
+                int after = d.len(7, dry ? 11 : 10);
                 boolean pond = d.hard() && !dry;
                 int off = pond ? -1 : d.pick(-1, 1);
                 mirror = r.nextBoolean();
@@ -470,19 +480,24 @@ enum HoleRecipe {
                 what = volcano(d, mid);
                 sign = GenCopy.TeeFeature.VOLCANO;
             }
-            case L_LAYUP, L_CHIP_LAYUP, M_GUARDED, M_CHIP_LAYUP -> {
-                boolean chip = this == L_CHIP_LAYUP || this == M_CHIP_LAYUP;
-                boolean m = cls == LengthClass.M;
+            case L_LAYUP, L_CHIP_LAYUP, M_GUARDED -> {
+                boolean chip = this == L_CHIP_LAYUP;
                 boolean guarded = this == M_GUARDED;
-                int up = chip ? d.pick(4, 6) : d.pick(7, m ? 8 : 9);
-                int across = m ? d.len(10, 12) : d.len(18, 24);
+                int up = chip ? d.pick(4, 5) : d.pick(7, 8);
+                int across = guarded ? d.len(12, 13) : chip ? d.len(24, 26) : d.len(22, 26);
                 int deep = d.pick(3, 4);
-                int reach = m ? across - 5 : d.pick(6, 8); // an M hole's pond keeps clear of its cup ring
+                int reach = guarded ? across - 5 : d.pick(6, 8); // clear of the guarded green's cup ring
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
+                // past a Swing layup the fairway is 7 wide (the corner the tee shot lands in, then the green);
+                // a Chip layup's corner stays 5 wide, so its rock hides the next leg from the tee, and it
+                // opens out past the pond
                 d.first(d.centred(across + d.runout - 1 + (guarded ? 3 : 0), 4), up, 2);
-                d.then(1, 0, across, 2);
+                d.then(1, 0, across, chip ? 2 : 3);
                 d.lay(off);
+                if (chip) {
+                    d.widen(1, reach + 1);
+                }
                 d.cornerPond(0, deep, reach);
                 if (chip) {
                     d.cornerRock(0);
@@ -562,9 +577,9 @@ enum HoleRecipe {
             }
             case L_SBEND, L_SBEND_SAND -> {
                 boolean sand = this == L_SBEND_SAND;
-                int first = d.len(10, 12);
-                int across = d.len(8, 10);
-                int lastLeg = d.len(10, 12);
+                int first = d.len(11, 13);
+                int across = d.len(9, 11);
+                int lastLeg = d.len(11, 13);
                 int rows = sand ? d.pick(3, 4) : 0;
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
@@ -618,16 +633,18 @@ enum HoleRecipe {
             case X_SBEND_SAND, X_SBEND_CREEK, X_SBEND_POND, X_SBEND_ISLAND, X_SBEND_ICE -> {
                 boolean island = this == X_SBEND_ISLAND;
                 boolean ice = this == X_SBEND_ICE;
-                int first = island || ice || this == X_SBEND_CREEK ? d.len(14, 16) : d.len(16, 18);
-                int across = island ? d.len(10, 12) : ice ? d.len(16, 18) : d.len(12, 14);
-                int lastLeg = island || ice ? d.len(12, 14) : d.len(14, 16);
+                // the middle leg 7 wide, and the last too but under an island green: the first-timer's line
+                // through two corners then measures par 5 at 40-43 blocks (5 wide, it is a stroke more)
+                boolean pond = this == X_SBEND_POND;
+                boolean creek = this == X_SBEND_CREEK;
+                int first = pond ? d.len(17, 18) : island || creek ? 16 : d.len(16, 17);
+                int across = ice ? d.len(17, 18) : island || creek ? 14 : d.len(14, 15);
+                int lastLeg = island ? 16 : d.len(16, 17);
                 int off = d.pick(-1, 1);
-                boolean wideMiddle = this == X_SBEND_SAND;
-                boolean wideLast = this == X_SBEND_CREEK;
                 mirror = r.nextBoolean();
                 d.first(d.centred(across, 7), first, 2);
-                d.then(1, 0, across, wideMiddle ? 3 : 2);
-                d.then(0, 1, lastLeg, wideLast ? 3 : 2);
+                d.then(1, 0, across, 3);
+                d.then(0, 1, lastLeg, island ? 2 : 3);
                 d.lay(off);
                 d.bank(0);
                 d.bank(1);
@@ -645,24 +662,24 @@ enum HoleRecipe {
                         sign = GenCopy.TeeFeature.WATER;
                     }
                     case X_SBEND_POND -> {
-                        int len = d.pick(6, 9);
+                        int len = d.pick(6, 8);
                         d.pond(0, d.pick(d.from(0), Math.max(d.from(0), d.to(0) - len + 1)), len, d.pick(3, 4), -1);
                         sign = GenCopy.TeeFeature.WATER;
                     }
-                    case X_SBEND_ISLAND -> d.islandGreen();
-                    default -> d.ice(1, d.from(1), d.pick(4, 6), 2);
+                    case X_SBEND_ISLAND -> d.islandGreen(3);
+                    default -> d.ice(1, d.from(1), d.pick(4, 5), 2);
                 }
                 what = first + " up, " + across + " across, " + lastLeg + " up";
             }
             case X_LONG_DOGLEG_TREES, X_LONG_DOGLEG_POND, X_LONG_DOGLEG_ISLAND -> {
                 boolean island = this == X_LONG_DOGLEG_ISLAND;
-                int up = island ? d.len(20, 24) : d.len(22, 26);
-                int across = island ? d.len(16, 18) : d.len(18, 20);
+                int up = island ? d.len(24, 25) : d.len(26, 28);
+                int across = island ? 18 : d.len(16, 18);
                 int off = d.pick(-1, 1);
                 boolean trees = this == X_LONG_DOGLEG_TREES;
                 mirror = r.nextBoolean();
                 d.first(d.centred(across + d.runout - 1, 4), up, trees ? 3 : 2);
-                d.then(1, 0, across, 2);
+                d.then(1, 0, across, island ? 2 : 3);
                 d.lay(off);
                 d.bank(0);
                 sign = d.legSign(mirror);
@@ -677,14 +694,14 @@ enum HoleRecipe {
                         d.pond(1, d.pick(d.from(1), Math.max(d.from(1), last - len + 1)), len, d.pick(3, 4), -1);
                         sign = GenCopy.TeeFeature.WATER;
                     }
-                    default -> d.islandGreen();
+                    default -> d.islandGreen(3);
                 }
                 what = up + " up, " + across + " across";
             }
             case X_HAIRPIN -> {
-                int up = d.len(18, 22);
-                int across = d.pick(8, 10);
-                int down = d.len(12, 16);
+                int up = d.len(28, 29);
+                int across = d.pick(8, 9);
+                int down = d.len(10, 11);
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
                 d.first(d.centred(across, 4), up, 2);
@@ -697,22 +714,44 @@ enum HoleRecipe {
                 what = up + " up, " + across + " across, " + down + " back down";
             }
             case X_LAYUP -> {
-                int up = d.pick(7, 9);
-                int across = d.len(14, 18);
-                int lastLeg = d.len(14, 18);
+                int up = d.pick(7, 8);
+                int across = d.len(9, 11);
+                int lastLeg = d.len(28, 30);
                 int deep = d.pick(3, 4);
                 int reach = d.pick(6, 8);
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
                 d.first(d.centred(across, 4), up, 2);
-                d.then(1, 0, across, 2);
-                d.then(0, 1, lastLeg, 2);
+                d.then(1, 0, across, 3);
+                d.then(0, 1, lastLeg, 3);
                 d.lay(off);
                 d.bank(1);
                 d.cornerPond(0, deep, reach);
                 d.features.add(Quota.Feature.LAYUP);
                 sign = GenCopy.TeeFeature.LAYUP_WATER;
                 what = up + " up, " + across + " across, " + lastLeg + " up";
+            }
+            case X_STRAIGHT -> {
+                int length = d.len(44, 50);
+                int rows = d.pick(3, 4);
+                int crest = d.pick(3, 5);
+                int off = d.pick(-1, 1);
+                mirror = r.nextBoolean();
+                d.first(mid, length, 3);
+                d.lay(off);
+                int at = d.landing(rows);
+                if (at < 0) {
+                    throw new Draft.Redraw("no landing zone for sand");
+                }
+                d.sand(0, at, rows);
+                int lo = at + rows + 8;
+                int hi = d.to(0) - crest - 9;
+                if (hi < lo) {
+                    throw new Draft.Redraw("no room for a hill past the bunker");
+                }
+                d.hill(0, d.pick(lo, hi), crest);
+                sign = GenCopy.TeeFeature.HILL;
+                what = length + " long";
             }
             default -> throw new IllegalStateException("unknown recipe " + this);
         }

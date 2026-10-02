@@ -548,6 +548,17 @@ final class Draft {
     }
 
     /**
+     * Leg {@code i} widened a block each side from u0 to its end (its run-out on the last leg): a
+     * fairway that opens out past a layup's corner, so the approach and the green are 7 wide.
+     */
+    void widen(int i, int u0) throws Redraw {
+        Leg l = legs.get(i);
+        int u1 = i == legs.size() - 1 ? l.length() + runout : l.length() + legs.get(i + 1).half();
+        lane(l, u0, u1, -l.half() - 1, l.half() + 1, 0);
+        words.add("opening out from " + u0);
+    }
+
+    /**
      * Water behind the green ({@code deep} rows past its run-out, the back wall's width and its
      * corners): a ball played too hard at the cup goes in rather than banking back off a wall.
      */
@@ -583,6 +594,11 @@ final class Draft {
      * its run-out, entered by a slab ramp 3 wide (2 on Hard) across its first row.
      */
     void islandGreen() throws Redraw {
+        islandGreen(hard() ? 2 : 3);
+    }
+
+    /** {@link #islandGreen()} with an entrance {@code width} wide (a par 5's: 3, Hard or not). */
+    void islandGreen(int width) throws Redraw {
         int i = legs.size() - 1;
         Leg l = last();
         if (l.half() != 2) {
@@ -593,8 +609,7 @@ final class Draft {
             throw new Redraw("no room for an island green");
         }
         lane(l, g0, l.length() + Math.max(2, runout), -2, 2, 2); // Adventure Golf's island ran two past its cup
-        int width = hard() ? 2 : 3;
-        int e0 = hard() ? pick(-1, 0) : -1;
+        int e0 = width == 2 ? pick(-1, 0) : -1;
         lane(l, g0, g0, e0, e0 + width - 1, 1);
         features.add(Quota.Feature.HEIGHT);
         words.add("an island green, entrance " + width + " wide");

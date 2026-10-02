@@ -28,7 +28,8 @@ import java.util.Set;
  *   <li><b>Par</b> is worked out again from the blocks: the ordinary player
  *       ({@link OrdinaryPar}, the child on Tiny Golf) plays every hole 64 times on the full plan's
  *       grid, and the course is balanced as the planner balanced it; every hole's par must be that,
- *       2-6, and its tee sign must say it.</li>
+ *       2-6, and its tee sign must say it. Off Tiny Golf a hole's path along the lane is its par's
+ *       length (V4-DECISIONS D1: par 2 8-12, 3 16-25, 4 27-38, 5 40-52, give or take a block).</li>
  *   <li><b>The witness</b> replays from the tee into the cup in exactly its E putts with no penalty,
  *       1 ≤ E ≤ par, every spot it rests at on the lane, and on a hole with water in play every putt's
  *       twins three degrees either side stay dry.</li>
@@ -122,6 +123,7 @@ final class GolfValidatorV4 {
         OrdinaryPar.Model model = OrdinaryPar.model(plan.slot());
         int kidOver = GolfPlannerV4.kidOver(plan.slot());
         double[] means = new double[n];
+        double[] paths = new double[n];
         boolean sound = true;
         List<LaneMap> lanes = new ArrayList<>();
         for (int i = 0; i < n; i++) {
@@ -134,6 +136,7 @@ final class GolfValidatorV4 {
                 sound = false;
                 continue;
             }
+            paths[i] = GolfPlannerV4.path(grid, h, lane);
             try {
                 means[i] = OrdinaryPar.mean(grid, h, lane, model, Work.unlimited());
             } catch (GenFailed never) {
@@ -144,7 +147,8 @@ final class GolfValidatorV4 {
         if (!sound) {
             return out; // par is the course's: it can't be worked out while a hole's blocks are wrong
         }
-        int[] par = OrdinaryPar.balance(means, OrdinaryPar.most(plan.slot()));
+        boolean banded = !GolfPlanner.dry(plan.slot());
+        int[] par = OrdinaryPar.balance(means, banded ? paths : null, OrdinaryPar.most(plan.slot()));
         double off = OrdinaryPar.off(par, means);
         if (Math.abs(off) > 1 + 1e-9) {
             out.add(String.format(Locale.ROOT, "the course's par is %+.2f from what its holes measure (more than one"
@@ -154,6 +158,10 @@ final class GolfValidatorV4 {
             GolfCourse.Hole h = course.holes().get(i);
             Box area = areas.get(i);
             int number = i + 1;
+            if (banded && !GolfPlannerV4.inBand(paths[i], LengthClass.ofPar(h.par()))) {
+                out.add(String.format(Locale.ROOT, "hole %d is %.1f blocks: not a par %d's length", number, paths[i],
+                        h.par()));
+            }
             if (h.par() != par[i]) {
                 out.add(String.format(Locale.ROOT, "hole %d's par is %d, but its blocks measure %d (the %s's mean %.2f,"
                         + " the course balanced)", number, h.par(), par[i], model == OrdinaryPar.Model.CHILD ? "child"

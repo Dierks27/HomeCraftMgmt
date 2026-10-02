@@ -226,6 +226,44 @@ class OrdinaryParTest {
         assertTrue(stuck > 0, "some made-up courses can't be balanced by moving pars (the planner draws a hole again)");
     }
 
+    /**
+     * Audit GOLF-R3-00: given each hole's length, the balance moves a par only to one whose band (D1,
+     * give or take a block) the hole's length is in: never a 33-block par 3 or a 20-block par 4, never a
+     * par 6. A hole at the edge of two bands (an L hole of 26 blocks) may still move.
+     */
+    @Test
+    void givenTheirLengthsTheBalanceMovesAParOnlyToOneOfThatLength() {
+        GenRandom r = new GenRandom(13);
+        int moved = 0;
+        for (int trial = 0; trial < 20_000; trial++) {
+            int n = 1 + r.nextInt(9);
+            double[] means = new double[n];
+            double[] paths = new double[n];
+            for (int i = 0; i < n; i++) {
+                LengthClass c = LengthClass.values()[r.nextInt(4)];
+                means[i] = c.par - 0.5 + r.nextInt(64) / 64.0;
+                double lo = c.shortest - GolfPlannerV4.BAND_TOLERANCE;
+                double hi = c.longest + GolfPlannerV4.BAND_TOLERANCE;
+                paths[i] = lo + r.nextInt(64) / 63.0 * (hi - lo);
+            }
+            int[] par = OrdinaryPar.balance(means, paths, 6);
+            for (int i = 0; i < n; i++) {
+                String what = String.format(Locale.ROOT, "trial %d hole %d (%.1f blocks, μ %.2f): par %d", trial, i + 1,
+                        paths[i], means[i], par[i]);
+                assertTrue(par[i] >= GolfCourse.MIN_PAR && par[i] <= LengthClass.X.par, what + " is 2-5");
+                assertTrue(GolfPlannerV4.inBand(paths[i], LengthClass.ofPar(par[i])), what + " is that length's par");
+                moved += par[i] != (int) Math.floor(means[i] + 0.5) ? 1 : 0;
+            }
+        }
+        assertTrue(moved > 0, "a hole at the edge of two bands may still move");
+        assertArrayEquals(new int[]{3, 4, 5}, OrdinaryPar.balance(new double[]{2.50, 3.60, 4.70}, new double[]{20, 30,
+                45}, 6), "the 20-block 2.50 isn't lowered to a par 2 (the planner draws a hole again)");
+        assertArrayEquals(new int[]{2, 4, 5}, OrdinaryPar.balance(new double[]{2.50, 3.60, 4.70}, new double[]{13, 30,
+                45}, 6), "a 13-block one is (a par 2's length, give or take a block)");
+        assertArrayEquals(OrdinaryPar.balance(new double[]{2.40, 3.30, 4.45}), OrdinaryPar.balance(new double[]{2.40,
+                3.30, 4.45}, null, 6), "no lengths, the balance as it always was (Tiny Golf)");
+    }
+
     @Test
     void theBalanceRaisesTheHoleNearestRoundingUpAndLowersTheOneNearestRoundingDown() {
         // three holes each a little under: 2.40, 3.30, 4.45 round to 2, 3, 4 = 9, the means 10.15: raise one

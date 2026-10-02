@@ -433,6 +433,18 @@ final class OrdinaryPar {
      * stay more than one off; the planner then draws a hole again: {@link #off}.)
      */
     static int[] balance(double[] means, int most) {
+        return balance(means, null, most);
+    }
+
+    /**
+     * {@link #balance(double[], int)}, and with {@code paths} (each hole's path, blocks) a hole moves
+     * only to a par whose length band its path is in ({@link GolfPlannerV4#inBand}, audit GOLF-R3-00):
+     * a par 4 is never shorter than 26 blocks, a par 5 than 39, nor a par 3 longer than 26. On Golf v4's
+     * 40 x 64 plots every hole is its class's length, so that is in practice never: each hole keeps its
+     * class's par and the planner balances the course by drawing a hole again. {@code null}: any par
+     * (Tiny Golf, whose holes a child's par sets and no band holds).
+     */
+    static int[] balance(double[] means, double[] paths, int most) {
         int n = means.length;
         int[] par = new int[n];
         double diff = 0;
@@ -443,7 +455,7 @@ final class OrdinaryPar {
         while (diff < -1 - EPS) {
             int pick = -1;
             for (int i = 0; i < n; i++) {
-                if (par[i] < means[i] - EPS && par[i] < most
+                if (par[i] < means[i] - EPS && par[i] < most && lengthAllows(paths, i, par[i] + 1)
                         && (pick < 0 || means[i] - par[i] > means[pick] - par[pick] + EPS)) {
                     pick = i;
                 }
@@ -457,7 +469,7 @@ final class OrdinaryPar {
         while (diff > 1 + EPS) {
             int pick = -1;
             for (int i = 0; i < n; i++) {
-                if (par[i] > means[i] + EPS && par[i] > GolfCourse.MIN_PAR
+                if (par[i] > means[i] + EPS && par[i] > GolfCourse.MIN_PAR && lengthAllows(paths, i, par[i] - 1)
                         && (pick < 0 || par[i] - means[i] > par[pick] - means[pick] + EPS)) {
                     pick = i;
                 }
@@ -469,6 +481,14 @@ final class OrdinaryPar {
             diff -= 1;
         }
         return par;
+    }
+
+    /**
+     * Whether hole {@code i}'s length lets it take par {@code p}: always without paths; with them, a par
+     * of 2-5 whose band its path is in (no length is a par 6's).
+     */
+    private static boolean lengthAllows(double[] paths, int i, int p) {
+        return paths == null || p <= LengthClass.X.par && GolfPlannerV4.inBand(paths[i], LengthClass.ofPar(p));
     }
 
     /** {@link #balance(double[], int)} for a course whose holes may take any par 2-6. */

@@ -1109,6 +1109,7 @@ public final class GenService implements GeneratedCourses, GenOps {
         if (!s.claimed) {
             // ENG01: never converge a region Fresh Courses doesn't hold (as forgetRecall): the closed course stood
             // in the area it was claimed in before (the update moved it), and nothing of it stands here
+            s.previous = null; // nothing of it stands in the slot's halves
             boolean byItself = s.old.stream().anyMatch(c -> Regions.resized(s.def, c));
             host.logger().info("Fresh Courses: " + s.def.id() + " is closed (" + why + "). Its area isn't claimed, so"
                     + " nothing is cleared there: the course stood in its old area" + (byItself
@@ -2308,6 +2309,14 @@ public final class GenService implements GeneratedCourses, GenOps {
                     archiveOffMain(j); // ready long before its verify pass is done
                 }
                 case CLEAR_OLD -> {
+                    if (!s.claimed) {
+                        // safety net (as UNRECALL's): never converge a region Fresh Courses doesn't hold
+                        s.oldDirty = false;
+                        end(j);
+                        host.logger().info("Fresh Courses: " + s.def.id() + "'s area isn't claimed, so its old half"
+                                + " isn't cleared.");
+                        return;
+                    }
                     s.clearing = true; // the previous layout stops standing now
                     j.steps.add(new Step(s.idleHalf(), null, BuildJob.Mode.CONVERGE));
                     j.stage = Stage.CONVERGE;
@@ -2847,6 +2856,12 @@ public final class GenService implements GeneratedCourses, GenOps {
         SlotState s = j.slot;
         if (j.found == 0) {
             claimed(s);
+            if (!s.claimed) {
+                // the database refused the claim: nothing is built into a region it doesn't record as ours (a build
+                // or a recall is tried again later, and scans first again)
+                fail(j, "its claim couldn't be recorded");
+                return;
+            }
             j.claimedHere = s.claimed; // both halves found empty: nothing of an older layout stands here
             if (j.kind == Kind.SCAN) {
                 end(j);
@@ -2907,16 +2922,19 @@ public final class GenService implements GeneratedCourses, GenOps {
             // the whole half in the background, and nothing differs: it ends below, its on-disk fact as it was
         }
         if (j.plan == null) {
-            // The quick check of a layout an older planner made.
+            // The quick check of a layout another planner version made (older, or newer after a rollback).
+            Planner p = planners.get(s.def.generator());
+            String version = p != null && j.tag != null && p.algo() < j.tag.algo() ? "a different" : "an older";
             List<String> problems = structure(j);
             if (!problems.isEmpty()) {
-                fail(j, "its layout from an older version failed the check: " + String.join("; ", problems));
+                fail(j, "its layout from " + version + " version failed the check: " + String.join("; ", problems));
                 return;
             }
             host.logger().warning("Fresh Courses: " + s.def.id() + (s.classic ? "'s recalled course can't be made"
                     + " again block for block (it was re-made from its seed, or its archived plan is gone), so only"
-                    + " its structure was checked." : "'s course was made by an older version of its planner, so"
-                    + " only its structure was checked; the new version builds from the next set."));
+                    + " its structure was checked." : "'s course was made by " + version + " version of its planner,"
+                    + " so only its structure was checked; " + ("an older".equals(version) ? "the new" : "this")
+                    + " version builds from the next set."));
         } else if (!proven(j)) {
             return;
         }
@@ -5929,7 +5947,8 @@ public final class GenService implements GeneratedCourses, GenOps {
         int on = playing(s);
         if (on > 0 && !confirm) {
             report.accept("&e" + on + " player" + (on == 1 ? " is" : "s are") + " on " + c.name() + " now. &7They"
-                    + " finish; its halves are cleared once nobody is on them.");
+                    + " finish; " + (s.claimed ? "its halves are cleared once nobody is on them."
+                    : "its area isn't claimed, so nothing is cleared there."));
             report.accept("&7Add &econfirm &7at the end to do it.");
             return;
         }

@@ -313,7 +313,7 @@ class BootCostTest {
     void aSavedMountainFromAnOlderPlannerVersionKeepsItsBlocksAndGetsTheStructureCheck() throws Exception {
         running(); // the boat planner at version 1
         saved();
-        anotherVersionAtTheRestart(2); // the next release bumps it
+        anotherVersionAtTheRestart(2, "an older"); // the next release bumps it
     }
 
     @Test
@@ -321,7 +321,7 @@ class BootCostTest {
         boatAlgo = 2;
         running();
         saved();
-        anotherVersionAtTheRestart(1); // rolled back to the release before
+        anotherVersionAtTheRestart(1, "a different"); // rolled back to the release before
     }
 
     /**
@@ -329,7 +329,7 @@ class BootCostTest {
      * sample with, so the course gets the structure check every start gave it, and not a block changes (it was
      * emptied by a plan-less converge, and a new course built mid-week).
      */
-    private void anotherVersionAtTheRestart(int algo) throws Exception {
+    private void anotherVersionAtTheRestart(int algo, String version) throws Exception {
         GenTag before = gen.liveTag(BOAT);
         Map<Long, String> blocks = world.copy(live(BOAT));
         assertFalse(blocks.isEmpty(), "fixture: the mountain stands");
@@ -343,8 +343,9 @@ class BootCostTest {
         assertEquals(before.planHash(), after.planHash(), "the same layout");
         assertTrue(open(BOAT), "and open: " + gen.summary());
         assertEquals(blocks, world.copy(live(BOAT)), "not a block of it changed");
-        assertEquals(1, host.logged(Level.WARNING, BOAT + "'s course was made by an older version of its planner, so"
-                + " only its structure was checked"), "the structure check, as every start gave it");
+        assertEquals(1, host.logged(Level.WARNING, BOAT + "'s course was made by " + version + " version of its"
+                + " planner, so only its structure was checked; " + (algo > 1 ? "the new" : "this") + " version builds"
+                + " from the next set."), "the structure check, as every start gave it, said for what it is");
         assertEquals(0, host.logged(Level.WARNING, "check by a sample found"), "never a sample: " + b);
         assertEquals(0, host.logged(Level.INFO, "by a sample"), "none");
         assertEquals(0, host.logged(Level.SEVERE, BOAT), "nothing failed: " + host.logs.stream()

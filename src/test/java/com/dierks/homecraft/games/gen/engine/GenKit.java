@@ -465,6 +465,8 @@ final class GenKit {
         boolean secretFails;
         boolean flipFails;
         boolean keepFails;
+        /** The meta keys whose writes fail (a locked or full database), or {@code null} for none. */
+        java.util.function.Predicate<String> metaWriteFails;
         int flips;
 
         FlakyStore(GenStore real) {
@@ -505,6 +507,9 @@ final class GenKit {
 
         @Override
         public void meta(String key, String value) throws SQLException {
+            if (metaWriteFails != null && metaWriteFails.test(key)) {
+                throw new SQLException("the database is locked");
+            }
             real.meta(key, value);
         }
 

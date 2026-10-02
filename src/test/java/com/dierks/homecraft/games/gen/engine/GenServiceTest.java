@@ -212,6 +212,44 @@ class GenServiceTest {
     }
 
     @Test
+    void aClaimTheDatabaseWontRecordStopsTheBuildBeforeABlockIsWrittenThere() throws Exception {
+        // FX-ENG follow-up: the region was scanned and found empty, but its claim couldn't be written
+        host.store.metaWriteFails = k -> k.equals(GenAdminKeys.claim(SLOT));
+        boot();
+        drive(5 * 60);
+        assertNull(tag(), "no course goes up in a region the database doesn't record as Fresh Courses'");
+        assertEquals(0, host.world().count(A) + host.world().count(B), "not a block written there");
+        assertNull(host.store.meta(GenAdminKeys.claim(SLOT)), "(nothing claimed)");
+        assertTrue(host.logged(Level.WARNING, SLOT + " couldn't be built - its claim couldn't be recorded") > 0,
+                "the try fails, saying why: " + host.logs.stream().map(l -> l.getMessage()).toList());
+
+        host.store.metaWriteFails = null; // the database can be written again
+        stepUntil(() -> tag() != null && gen.live(SLOT, tag()), 20 * 60 * 30);
+        assertTrue(tag() != null && gen.live(SLOT, tag()), "the next try scans, claims and builds it");
+        assertEquals(Regions.claim(DEF, GenKit.WORLD, DEF.origin(), Slots.HALF_GAP),
+                host.store.meta(GenAdminKeys.claim(SLOT)), "claimed now");
+    }
+
+    @Test
+    void anOldHalfOfARegionTheDatabaseNoLongerRecordsIsNeverCleared() throws Exception {
+        // FX-ENG follow-up: CLEAR_OLD's safety net, as UNRECALL's: never converge a region Fresh Courses doesn't hold
+        boot();
+        drive(70);
+        assertNotNull(tag(), "fixture: the course is up");
+        drive(120); // its idle half checked: nothing more to do
+        Box idle = gen.slot(SLOT).half(gen.slot(SLOT).idleHalf());
+        host.world().put(idle.minX() + 5, idle.minY() + 5, idle.minZ() + 5, "minecraft:diamond_block");
+        host.store.meta(GenAdminKeys.claim(SLOT), null); // the claim is gone from the database
+        gen.slot(SLOT).oldDirty = true;
+        gen.slot(SLOT).lastClearCheck = 0;
+        drive(5 * 60);
+        assertEquals("minecraft:diamond_block", host.world().at(idle.minX() + 5, idle.minY() + 5, idle.minZ() + 5),
+                "never cleared unclaimed");
+        assertEquals(1, host.logged(Level.INFO, SLOT + "'s area isn't claimed, so its old half isn't cleared."),
+                "said once: " + host.logs.stream().map(l -> l.getMessage()).toList());
+    }
+
+    @Test
     void aBootMidHealChecksAgainHealsTheRestAndOpens() {
         boot();
         drive(70);

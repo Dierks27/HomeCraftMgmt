@@ -112,6 +112,21 @@ public final class PiecesV4 {
         this.dealt = Map.copyOf(dealt);
     }
 
+    /** These pieces less those overlapping any of {@code stretches} ([from, to] along); the same run-offs and deck. */
+    PiecesV4 without(List<double[]> stretches) {
+        List<Piece> keep = new ArrayList<>();
+        for (Piece p : list) {
+            boolean hit = false;
+            for (double[] f : stretches) {
+                hit |= p.s2 >= f[0] && p.s1 <= f[1];
+            }
+            if (!hit) {
+                keep.add(p);
+            }
+        }
+        return new PiecesV4(keep, runoff, dealt);
+    }
+
     /** How many of kind {@code k} the deck dealt. */
     public int dealt(Kind k) {
         return dealt.getOrDefault(k, 0);

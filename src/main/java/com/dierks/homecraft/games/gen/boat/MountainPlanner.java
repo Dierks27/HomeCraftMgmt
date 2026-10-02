@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Mountain Run v2's search (MOUNTAIN-V2-SPEC §5.2, BoatPlanner ALGO 4), on the planner thread: cheap
@@ -41,9 +43,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p><b>Stage B</b> (about a second each): the kept candidates by score (ties by number), at most
  * {@value #KEPT}: the pieces ({@code pieces:i}, each kept only while the checkpoints still fit round it),
  * the raster, the checkpoints, the mountain ({@code scenery:i}), the plan, and the proof
- * ({@link MountainValidator}); the first proven plan is the layout. Then fewer pieces (REDUCED), then none
- * (BASIC), on the best candidates; then {@code SAFE_ROAD} / {@code SAFE_SLALOM}: a fixed, proven
- * skeleton per style, tier and mirror ({@link #safe}).
+ * ({@link MountainValidator}); the first proven plan is the layout. A refused build is tried again without
+ * the pieces nearest where its proof failed. Then fewer pieces (REDUCED), then none (BASIC), on the best
+ * candidates; then {@code SAFE_ROAD} / {@code SAFE_SLALOM}: a fixed, proven skeleton per style, tier and
+ * mirror ({@link #safe}).
  *
  * <p><b>Work</b> ({@link #BUDGET} units): a Stage A candidate 1, a Stage B attempt {@value #UNIT_B},
  * {@value #SAFE_RESERVE} kept for the safe layout. Cancels are checked between candidates, between a build's
@@ -102,6 +105,8 @@ final class MountainPlanner {
         final double seconds;
         long work;
         String how;
+        /** Pieces a failed proof's retry left out (the ones nearest where it failed), 0 for none. */
+        int leftOut;
 
         Made(PlanInput in, MountainTier tier, Candidate cand, PiecesV4 pieces, RasterV4 raster,
              List<RasterV4.Spot> checkpoints, Plan plan, int trees, double seconds) {
@@ -269,7 +274,9 @@ final class MountainPlanner {
                 if (m != null) {
                     m.work = work;
                     m.how = "candidate " + (c.index() + 1) + " (" + kept.size() + " kept), build " + tries
-                            + (step[0] == FULL ? "" : step[0] == REDUCED ? " (fewer pieces)" : " (no pieces)");
+                            + (step[0] == FULL ? "" : step[0] == REDUCED ? " (fewer pieces)" : " (no pieces)")
+                            + (m.leftOut == 0 ? "" : " (" + m.leftOut + (m.leftOut == 1 ? " piece" : " pieces")
+                            + " left out for the proof)");
                     return m;
                 }
             }
@@ -359,18 +366,41 @@ final class MountainPlanner {
 
     /**
      * Stage B for candidate {@code c} at {@code richness}: pieces, raster, checkpoints, blocks, mountain,
-     * plan, proof; {@code null} when it doesn't come together or isn't proven.
+     * plan, proof; refused, it is built again (at most {@value #LEAVE_OUT_ROUNDS} times) without the pieces
+     * nearest where the proof failed ({@link #near}); {@code null} when it doesn't come together or isn't proven.
      */
     static Made attempt(PlanInput in, MountainTier tier, Candidate c, GenRandom pieceStream, GenRandom scenery,
                         int richness) throws GenFailed {
         try {
-            Made m = build(in, tier, c, pieceStream, scenery, richness);
+            Base base = base(in, c);
+            if (base == null) {
+                return null;
+            }
+            Made m = build(in, tier, c, base, pieces(in, c, base, pieceStream, richness), scenery);
             if (m == null) {
                 return null;
             }
             cancel(in);
             List<String> problems = proof(m.plan, tier.id, in);
             cancel(in);
+            // a refused plan with pieces is built again without those nearest where the proof failed, so a piece
+            // that upsets a checkpoint costs that piece, not the whole deck (the fewer-pieces build that follows
+            // would put it in the same place)
+            for (int round = 0; round < LEAVE_OUT_ROUNDS && !problems.isEmpty() && !m.pieces.list.isEmpty(); round++) {
+                PiecesV4 fewer = m.pieces.without(near(m, problems));
+                if (fewer.list.size() == m.pieces.list.size()) {
+                    break;
+                }
+                Made again = build(in, tier, c, base, fewer, scenery);
+                if (again == null) {
+                    break;
+                }
+                again.leftOut = m.leftOut + m.pieces.list.size() - fewer.list.size();
+                m = again;
+                cancel(in);
+                problems = proof(m.plan, tier.id, in);
+                cancel(in);
+            }
             return problems.isEmpty() ? m : null;
         } catch (Cancelled e) {
             throw new GenFailed("cancelled");
@@ -394,30 +424,89 @@ final class MountainPlanner {
         }
     }
 
-    /** The plan of candidate {@code c}: every block, sign and mark (not yet proven); {@code null} when it doesn't fit. */
-    static Made build(PlanInput in, MountainTier tier, Candidate c, GenRandom pieceStream, GenRandom scenery,
-                      int richness) {
+    /** How many times a refused plan is built again with the pieces nearest the failure left out. */
+    static final int LEAVE_OUT_ROUNDS = 2;
+    /** Pieces within this along of where the proof failed are left out (a leg either way). */
+    static final double LEAVE_OUT_REACH = 60;
+    /** How the proof names a checkpoint ("checkpoint 58", counted from 1) and a block ("at 6472 121 3121"). */
+    private static final Pattern NAMED_CHECKPOINT = Pattern.compile("checkpoint (\\d+)");
+    private static final Pattern NAMED_BLOCK = Pattern.compile("at (-?\\d+) (-?\\d+) (-?\\d+)");
+
+    /**
+     * The stretches along the line where {@code m}'s proof failed: between the checkpoints a problem names
+     * ("checkpoint 58 to checkpoint 59"), and round the blocks it names ("at x y z"), {@value #LEAVE_OUT_REACH}
+     * either way; none when it names neither.
+     */
+    static List<double[]> near(Made m, List<String> problems) {
+        Skeleton sk = m.cand.sk();
+        Box half = m.in.half();
+        List<double[]> out = new ArrayList<>();
+        for (String p : problems) {
+            double lo = Double.MAX_VALUE;
+            double hi = -Double.MAX_VALUE;
+            Matcher a = NAMED_CHECKPOINT.matcher(p);
+            while (a.find()) {
+                int i = Integer.parseInt(a.group(1)) - 1;
+                if (i >= 0 && i < m.checkpoints.size()) {
+                    lo = Math.min(lo, m.checkpoints.get(i).s());
+                    hi = Math.max(hi, m.checkpoints.get(i).s());
+                }
+            }
+            Matcher b = NAMED_BLOCK.matcher(p);
+            while (b.find()) {
+                Centreline.Near n = sk.line.nearest(Integer.parseInt(b.group(1)) - half.minX() + 0.5,
+                        Integer.parseInt(b.group(3)) - half.minZ() + 0.5);
+                if (n != null) {
+                    lo = Math.min(lo, n.s());
+                    hi = Math.max(hi, n.s());
+                }
+            }
+            if (lo <= hi) {
+                out.add(new double[]{lo - LEAVE_OUT_REACH, hi + LEAVE_OUT_REACH});
+            }
+        }
+        return out;
+    }
+
+    /** A candidate's raster with no pieces and its checkpoint places: what every build of it starts from. */
+    record Base(RasterV4 raster, List<RasterV4.Spot> spots) {
+    }
+
+    /** Candidate {@code c}'s {@link Base}, or {@code null} when it has no raster or no checkpoint chain. */
+    static Base base(PlanInput in, Candidate c) {
+        Skeleton sk = c.sk();
+        cancel(in);
+        RasterV4 raster = new RasterV4(in.half(), sk, c.drops(), PiecesV4.none(sk), () -> cancel(in));
+        if (raster.problem != null) {
+            return null;
+        }
+        cancel(in);
+        List<RasterV4.Spot> spots = raster.spots(List.of());
+        cancel(in);
+        return raster.chain(spots) == null ? null : new Base(raster, spots);
+    }
+
+    /** Candidate {@code c}'s pieces at {@code richness}, each kept only while the base's checkpoint chain holds. */
+    static PiecesV4 pieces(PlanInput in, Candidate c, Base base, GenRandom pieceStream, int richness) {
+        return PiecesV4.draw(pieceStream, c.sk(), c.drops(), richness, blocked -> {
+            cancel(in);
+            return base.raster.chain(without(base.raster, base.spots, blocked)) != null;
+        });
+    }
+
+    /**
+     * The plan of candidate {@code c} from its {@link Base} with {@code pieces}: every block, sign and mark (not
+     * yet proven); {@code null} when it doesn't fit. The base's raster is used as it is when there are no pieces,
+     * so a base is built on that way once.
+     */
+    static Made build(PlanInput in, MountainTier tier, Candidate c, Base from, PiecesV4 pieces, GenRandom scenery) {
         Box half = in.half();
         Skeleton sk = c.sk();
         DropPlan dp = c.drops();
         // the cancel check between the stages and inside their passes (audit MTN04): it only throws or sleeps
         Runnable tick = () -> cancel(in);
-        cancel(in);
-        PiecesV4 bare = PiecesV4.none(sk);
-        RasterV4 base = new RasterV4(half, sk, dp, bare, tick);
-        if (base.problem != null) {
-            return null;
-        }
-        cancel(in);
-        List<RasterV4.Spot> baseSpots = base.spots(List.of());
-        cancel(in);
-        if (base.chain(baseSpots) == null) {
-            return null;
-        }
-        PiecesV4 pieces = PiecesV4.draw(pieceStream, sk, dp, richness, blocked -> {
-            cancel(in);
-            return base.chain(without(base, baseSpots, blocked)) != null;
-        });
+        RasterV4 base = from.raster;
+        List<RasterV4.Spot> baseSpots = from.spots;
         // the ride with the pieces' boost strips: T_m stays in the tier's window (F-T held it without them)
         List<double[]> fast = new ArrayList<>(dp.fast());
         fast.addAll(pieces.fast());

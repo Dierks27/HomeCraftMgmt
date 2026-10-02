@@ -72,12 +72,13 @@ class MountainPlannerTest {
         // A change here means the planner makes different layouts: Mountain Run v2 is unreleased (it ships
         // off), so re-pin with the change; once it is on, bump BoatPlanner.ALGO instead. Re-pinned for audit M00
         // (the HALFWAY! sign by BoatHype.halfway's checkpoint, measured from checkpoint 1): 10 of 18 moved. Then
-        // for audit MTN00/MTN01: road medium 2, hard 4 and 5 only by a chicane sign's words (it bends right
-        // first), road medium 4 and 5 by the chicane cap (they had four; the most is two).
+        // once for the FX-MTN fixes: every road moved (the tier's pieces placed on bends too, MTN-R3-00; SANDY
+        // BEND signs, R3-02; the chicane sign's hand, MTN00; road medium 4 and 5 also by the chicane cap, MTN01);
+        // the slaloms didn't.
         String golden = """
-                road easy 39fccf88f729 0671210ecb90 da67680f8855
-                road medium 3efc0c94fbe3 d4ea61476eea 98ec047c54c2
-                road hard 27aee206b321 49686497ac9c 35fcf2dde74d
+                road easy fd007631bde5 43d2dd016bcb 8ee1381b7442
+                road medium f277c9be3f41 475f73605cc8 4da8daecf8f3
+                road hard 9fe15e052a31 2f304cc00fd1 643a210adc0f
                 slalom easy e5437e73e554 52be95a3b5fd 0df883d71e01
                 slalom medium f874b0413052 c1208132055e 2a1bdd16f106
                 slalom hard fe19c45a486d e6cb568e821d 92c0cf205316
@@ -236,6 +237,134 @@ class MountainPlannerTest {
         Box unaligned = new Box(6088, 96, 2880, 6567, 271, 3519);
         assertThrows(GenFailed.class, () -> MountainPlanner.made(input(unaligned, 2, "medium")), "off a chunk corner");
         assertThrows(GenFailed.class, () -> MountainPlanner.made(input(HALF_A, 2, "EEE")), "a golf mix isn't a tier");
+    }
+
+    /** Extra hard roads for the pieces' floors (hard is the tier with the least room for them). */
+    static final long[] HARD_PIECES = {18, 24};
+
+    @Test
+    void theRoadsGetTheirTiersPieces() {
+        // audit MTN-R3-00: most of the §5.3 deck went unplaced (only the lips' straights were free, the free list
+        // never shrank, pits and boosts were dealt last); now wide bends take pieces too, the deck is dealt the
+        // scarcest first, a card takes the tightest stretch it fits and, failing that, its shortest length. The
+        // soak (60 seeds a tier) placed 93% of the easy deck, 87% of medium's and 79% of hard's
+        for (String tier : List.of("easy", "medium", "hard")) {
+            List<Long> seeds = new ArrayList<>();
+            for (long seed : ROADS) {
+                seeds.add(seed);
+            }
+            if (tier.equals("hard")) {
+                for (long seed : HARD_PIECES) {
+                    seeds.add(seed);
+                }
+            }
+            int placed = 0;
+            int dealt = 0;
+            int twoPits = 0;
+            int twoSplits = 0;
+            for (long seed : seeds) {
+                MountainPlanner.Made m = made(HALF_A, seed, tier);
+                PiecesV4 p = m.pieces;
+                String name = "road " + tier + " seed " + seed + " (" + m.how + ")";
+                int here = 0;
+                int deck = 0;
+                for (PiecesV4.Kind k : PiecesV4.Kind.values()) {
+                    assertTrue(p.count(k) <= p.dealt(k), name + ": no more " + k + " than dealt");
+                    here += p.count(k);
+                    deck += p.dealt(k);
+                }
+                assertTrue(m.finished().summary().get(2).contains("pieces " + here + " of " + deck + " (pits "
+                        + p.count(PiecesV4.Kind.SAND_PIT) + "/" + p.dealt(PiecesV4.Kind.SAND_PIT) + ", "),
+                        name + ": the summary says what was placed of what was dealt: " + m.finished().summary().get(2));
+                assertTrue(deck > 0 && here * 2 >= deck, name + ": " + here + " of a deck of " + deck);
+                assertTrue(p.count(PiecesV4.Kind.SAND_PIT) >= 1, name + ": a sand pit");
+                assertTrue(p.count(PiecesV4.Kind.CAVE) + p.count(PiecesV4.Kind.TUNNEL) >= 1, name + ": a cave or a tunnel");
+                if (!tier.equals("easy")) {
+                    assertTrue(p.count(PiecesV4.Kind.FOREST) >= 1, name + ": a forest");
+                    assertTrue(p.count(PiecesV4.Kind.SPLIT) >= 1, name + ": a split");
+                }
+                if (tier.equals("medium")) {
+                    assertTrue(p.count(PiecesV4.Kind.BOOST) >= 1, name + ": a boost strip");
+                }
+                placed += here;
+                dealt += deck;
+                twoPits += p.count(PiecesV4.Kind.SAND_PIT) >= 2 ? 1 : 0;
+                twoSplits += p.count(PiecesV4.Kind.SPLIT) >= 2 ? 1 : 0;
+            }
+            assertTrue(placed * 4 >= dealt * 3, "road " + tier + ": " + placed + " pieces of " + dealt + " dealt");
+            if (tier.equals("hard")) {
+                assertTrue(twoPits * 2 > seeds.size(), "hard: two sand pits or more in most: " + twoPits);
+                assertTrue(twoSplits * 2 > seeds.size(), "hard: two splits in most: " + twoSplits);
+            }
+        }
+    }
+
+    @Test
+    void aTightBendWithRunOffSandHasASandyBendSign() {
+        // audit MTN-R3-02: v3 signed every run-off bend; v2 signed only hairpins and chicanes
+        int bends = 0;
+        for (String tier : List.of("easy", "medium", "hard")) {
+            for (long seed : ROADS) {
+                MountainPlanner.Made m = made(HALF_A, seed, tier);
+                Skeleton sk = m.cand.sk();
+                String name = "road " + tier + " seed " + seed;
+                List<Double> sandy = new ArrayList<>();
+                for (SignText t : m.finished().signs()) {
+                    if (t.lines().equals(GenCopy.boatSandyBend())) {
+                        sandy.add(along(m, t));
+                    }
+                }
+                List<Double> want = new ArrayList<>();
+                double tight = Double.NEGATIVE_INFINITY;
+                for (Centreline.Element e : sk.line.elements()) {
+                    boolean runoff = e.arc() && m.pieces.runoff[e.index] > 0;
+                    Skeleton.Role role = sk.tag(e).role();
+                    if (runoff && role != Skeleton.Role.HAIRPIN && role != Skeleton.Role.CHICANE
+                            && e.s0 - tight > RasterV4.SIGN_BEFORE && e.s0 > sk.start && e.s0 < sk.finish) {
+                        want.add(e.s0);
+                    }
+                    tight = runoff ? e.s1() : tight;
+                }
+                for (double w : want) {
+                    assertTrue(sandy.stream().anyMatch(u -> w - u > 0 && w - u <= RasterV4.SIGN_BEFORE + 2),
+                            name + ": a SANDY BEND sign before the tight bend at " + Math.round(w));
+                }
+                for (double u : sandy) {
+                    assertTrue(want.stream().anyMatch(w -> w - u > 0 && w - u <= RasterV4.SIGN_BEFORE + 2),
+                            name + ": the SANDY BEND sign at " + Math.round(u) + " stands before a tight bend");
+                }
+                bends += want.size();
+            }
+        }
+        assertTrue(bends >= 6, "fixture: tight bends were read: " + bends);
+    }
+
+    @Test
+    void theDeckIsTheTiersAndMediumAlwaysGetsACaveOrATunnel() {
+        // §5.3's pieces per road tier; medium's "cave or tunnel 1-2" dealt neither now and then (audit MTN-R3-00)
+        for (String tier : List.of("easy", "medium", "hard")) {
+            MountainTier mt = MountainTier.of(BoatStyle.ROAD, tier);
+            for (int i = 0; i < 400; i++) {
+                Map<PiecesV4.Kind, Integer> d = PiecesV4.deal(new GenRandom(0xDEC4L + i), mt, MountainPlanner.FULL);
+                String name = tier + " deal " + i + " " + d;
+                within(d.get(PiecesV4.Kind.SAND_PIT), mt.pits, name + ": sand pits");
+                within(d.get(PiecesV4.Kind.SPLIT), mt.splits, name + ": splits");
+                within(d.get(PiecesV4.Kind.FOREST), mt.forests, name + ": forests");
+                assertTrue(d.get(PiecesV4.Kind.BOOST) >= mt.boostMin && d.get(PiecesV4.Kind.BOOST) <= mt.boostMax,
+                        name + ": boost strips");
+                int roofed = d.get(PiecesV4.Kind.CAVE) + d.get(PiecesV4.Kind.TUNNEL);
+                if (tier.equals("medium")) {
+                    assertTrue(roofed >= 1 && roofed <= 2, name + ": a cave or a tunnel, 1-2");
+                } else {
+                    within(d.get(PiecesV4.Kind.CAVE), mt.caves, name + ": caves");
+                    within(d.get(PiecesV4.Kind.TUNNEL), mt.tunnels, name + ": tunnels");
+                }
+            }
+        }
+    }
+
+    private static void within(int n, int[] range, String what) {
+        assertTrue(n >= range[0] && n <= range[1], what + ": " + n + ", " + range[0] + "-" + range[1]);
     }
 
     @Test
@@ -421,27 +550,33 @@ class MountainPlannerTest {
         }
     }
 
-    /** Each staircase's lips (the STAIR lips of one straight run, two or more), in order along. */
-    static List<Integer> staircases(MountainPlanner.Made m) {
+    /** Each staircase's sign (the STAIR lips of one straight run, two or more: "big" when every step is 2), in order. */
+    static List<List<String>> staircases(MountainPlanner.Made m) {
         DropPlan dp = m.cand.drops();
-        List<Integer> out = new ArrayList<>();
+        List<List<String>> out = new ArrayList<>();
         for (DropPlan.Run run : new DropPlan.Planner(new GenRandom(0), dp.sk).runs) {
             int n = 0;
+            boolean big = true;
             for (int i = 0; i < dp.drops.size() - 1; i++) {
                 DropPlan.Drop d = dp.drops.get(i);
-                n += d.kind() == DropPlan.Kind.STAIR && d.s() >= run.s0() && d.s() <= run.s1() ? 1 : 0;
+                if (d.kind() == DropPlan.Kind.STAIR && d.s() >= run.s0() && d.s() <= run.s1()) {
+                    n++;
+                    big &= d.drop() >= 2;
+                }
             }
             if (n >= 2) {
-                out.add(n);
+                out.add(GenCopy.boatCliffs(n, big));
             }
         }
         return out;
     }
 
     @Test
-    void everyStaircaseHasItsOwnCliffsSignWithItsOwnCount() {
+    void everyStaircaseHasItsOwnCliffsSignWithItsOwnCountAndHeight() {
         // hard road 7 (two staircases of 3) and 41 (two of 2) had theirs next to each other in the drop list:
-        // one sign for both before audit MTN02
+        // one sign for both before audit MTN02; an easy road's staircase of hops said "big drops" (MTN-R3-01)
+        assertEquals(List.of("THE CLIFFS!", "3 big drops!"), GenCopy.boatCliffs(3, true), "every step a 2-block drop");
+        assertEquals(List.of("THE CLIFFS!", "2 drops ahead!"), GenCopy.boatCliffs(2, false), "a hop among them");
         List<Object[]> runs = new ArrayList<>(List.of(new Object[]{"hard", 7L}, new Object[]{"hard", 41L}));
         for (BoatStyle style : BoatStyle.values()) {
             for (String tier : List.of("easy", "medium", "hard")) {
@@ -451,6 +586,7 @@ class MountainPlannerTest {
             }
         }
         int two = 0;
+        int[] words = new int[2];
         for (Object[] run : runs) {
             String tier = (String) run[0];
             long seed = (Long) run[1];
@@ -462,15 +598,40 @@ class MountainPlannerTest {
             List<List<String>> got = new ArrayList<>();
             for (SignText t : cliffs) {
                 got.add(t.lines());
+                words[t.lines().get(1).contains("big") ? 1 : 0]++;
             }
-            List<List<String>> want = new ArrayList<>();
-            for (int n : staircases(m)) {
-                want.add(GenCopy.boatCliffs(n));
-            }
-            assertEquals(want, got, name + ": one THE CLIFFS! sign a staircase, with its own count");
+            List<List<String>> want = staircases(m);
+            assertEquals(want, got, name + ": one THE CLIFFS! sign a staircase, with its own count and words");
             two += want.size() >= 2 ? 1 : 0;
+            assertEquals(want.size(), m.cand.drops().staircases(), name + ": the staircases counted are those");
+            MountainTier mt = MountainTier.of(BoatStyle.of(seed), tier);
+            assertTrue(want.size() >= mt.stairsMin && want.size() <= mt.stairsMax, name + ": " + want.size()
+                    + " staircases, " + mt.stairsMin + "-" + mt.stairsMax);
+            assertTrue(m.finished().summary().get(2).contains(" - staircases " + want.size() + " - "),
+                    name + ": and the summary says so (MTN-R3-03): " + m.finished().summary().get(2));
         }
         assertTrue(two >= 2, "fixture: courses with two staircases were read: " + two);
+        assertTrue(words[0] > 0 && words[1] > 0, "fixture: staircases of hops and of big drops were read: "
+                + words[0] + " and " + words[1]);
+    }
+
+    @Test
+    void theFeaturesGateCountsOnlyRealStaircases() {
+        // audit MTN-R3-03: two lips of any kind on a straight were a "staircase", so F-F's minimum never bit
+        MountainPlanner.Made m = made(HALF_A, 2, "medium");
+        Skeleton sk = m.cand.sk();
+        DropPlan dp = m.cand.drops();
+        assertTrue(dp.staircases() >= 1, "fixture: a staircase");
+        assertTrue(FlowScore.of(sk, dp).missing.stream().noneMatch(x -> x.contains("staircases")),
+                "with its staircase: " + FlowScore.of(sk, dp).missing);
+        List<DropPlan.Drop> flat = new ArrayList<>();
+        for (DropPlan.Drop d : dp.drops) {
+            flat.add(d.kind() == DropPlan.Kind.STAIR ? new DropPlan.Drop(d.s(), d.drop(), DropPlan.Kind.FILL) : d);
+        }
+        DropPlan none = new DropPlan(sk, flat, dp.blue);
+        assertEquals(0, none.staircases(), "the same lips, none of them a staircase's");
+        assertTrue(FlowScore.of(sk, none).missing.stream().anyMatch(x -> x.contains("staircases")),
+                "F-F misses the staircase: " + FlowScore.of(sk, none).missing);
     }
 
     // ---- BoatPlanner: algo 4 in the mountain's half, the spiral elsewhere --------------------------------

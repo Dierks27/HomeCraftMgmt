@@ -150,12 +150,18 @@ final class MountainPlanner {
                 }
                 pieceLine.append("gate sets ").append(sk.gates.size()).append(" (").append(gates).append(" gates)");
             } else {
-                pieceLine.append("pits ").append(pieces.count(PiecesV4.Kind.SAND_PIT)).append(", splits ")
-                        .append(pieces.count(PiecesV4.Kind.SPLIT)).append(", caves ")
-                        .append(pieces.count(PiecesV4.Kind.CAVE)).append(", tunnels ")
-                        .append(pieces.count(PiecesV4.Kind.TUNNEL)).append(", forests ")
-                        .append(pieces.count(PiecesV4.Kind.FOREST)).append(", boosts ")
-                        .append(pieces.count(PiecesV4.Kind.BOOST)).append(", blue straights ")
+                // placed of dealt, per kind (audit MTN-R3-00): a thin deck shows in the preview
+                int dealt = 0;
+                for (PiecesV4.Kind k : PiecesV4.Kind.values()) {
+                    dealt += pieces.dealt(k);
+                }
+                pieceLine.append("pieces ").append(pieces.list.size()).append(" of ").append(dealt).append(" (pits ")
+                        .append(of(pieces, PiecesV4.Kind.SAND_PIT)).append(", splits ")
+                        .append(of(pieces, PiecesV4.Kind.SPLIT)).append(", caves ")
+                        .append(of(pieces, PiecesV4.Kind.CAVE)).append(", tunnels ")
+                        .append(of(pieces, PiecesV4.Kind.TUNNEL)).append(", forests ")
+                        .append(of(pieces, PiecesV4.Kind.FOREST)).append(", boosts ")
+                        .append(of(pieces, PiecesV4.Kind.BOOST)).append("), blue straights ")
                         .append(dp.blue.size()).append(", run-offs ").append(pieces.runoffs());
             }
             out.add("drops " + dp.drops.size() + " (" + dp.bigs() + " big, " + dp.descent() + " down), Final Drop "
@@ -170,6 +176,11 @@ final class MountainPlanner {
                     + " s - seed " + GenSeed.shortHex(in.seed()));
             return out;
         }
+    }
+
+    /** "placed/dealt" of one kind of piece. */
+    static String of(PiecesV4 pieces, PiecesV4.Kind k) {
+        return pieces.count(k) + "/" + pieces.dealt(k);
     }
 
     /**
@@ -193,18 +204,9 @@ final class MountainPlanner {
     /** The share of T_m the star reference is. */
     static final double STAR_SHARE = 0.8;
 
-    /** How many staircases (two or more lips on one straight run) a drop plan has. */
+    /** How many staircases (two or more STAIR lips on one straight run, {@link DropPlan#staircases}) a drop plan has. */
     static int stairs(DropPlan dp) {
-        DropPlan.Planner p = new DropPlan.Planner(new GenRandom(0), dp.sk);
-        int n = 0;
-        for (DropPlan.Run run : p.runs) {
-            int on = 0;
-            for (DropPlan.Drop d : dp.drops) {
-                on += d.s() >= run.s0() && d.s() <= run.s1() ? 1 : 0;
-            }
-            n += on >= 2 ? 1 : 0;
-        }
-        return n;
+        return dp.staircases();
     }
 
     // ---- the search ---------------------------------------------------------------------------------------
@@ -414,8 +416,15 @@ final class MountainPlanner {
         }
         PiecesV4 pieces = PiecesV4.draw(pieceStream, sk, dp, richness, blocked -> {
             cancel(in);
-            return base.chain(without(baseSpots, blocked)) != null;
+            return base.chain(without(base, baseSpots, blocked)) != null;
         });
+        // the ride with the pieces' boost strips: T_m stays in the tier's window (F-T held it without them)
+        List<double[]> fast = new ArrayList<>(dp.fast());
+        fast.addAll(pieces.fast());
+        BoatLine.Result ride = BoatLine.run(RideLine.of(sk, dp.drops, fast).segs());
+        if (ride.seconds() < tier.tMin || ride.seconds() > tier.tMax) {
+            return null;
+        }
         cancel(in);
         RasterV4 raster = pieces.list.isEmpty() ? base : new RasterV4(half, sk, dp, pieces, tick);
         if (raster.problem != null) {
@@ -460,9 +469,6 @@ final class MountainPlanner {
                 (double) (raster.lowest() - 3), null, true, false, 1);
         int min = MountainValidator.minSeconds(draft);
         Course course = draft.withMinSeconds(min);
-        List<double[]> fast = new ArrayList<>(dp.fast());
-        fast.addAll(pieces.fast());
-        BoatLine.Result ride = BoatLine.run(RideLine.of(sk, dp.drops, fast).segs());
         if (modelMs(ride.seconds()) * 4 / 5 < min * 1000L + 1000) {
             return null; // never on a real run (the shortest time is the top-speed line); keeps T_m exact in the tag
         }
@@ -487,11 +493,14 @@ final class MountainPlanner {
         return Math.round(v * 4096) / 4096.0;
     }
 
-    /** {@code spots} less those a blocked stretch covers. */
-    static List<RasterV4.Spot> without(List<RasterV4.Spot> spots, List<double[]> blocked) {
+    /**
+     * {@code spots} of raster {@code t} less those a blocked stretch covers, by the rule {@link RasterV4#spots}
+     * keeps them by ({@link RasterV4#blocks}), so a chain the pieces' trial allows is one their own raster can lay.
+     */
+    static List<RasterV4.Spot> without(RasterV4 t, List<RasterV4.Spot> spots, List<double[]> blocked) {
         List<RasterV4.Spot> out = new ArrayList<>();
         for (RasterV4.Spot s : spots) {
-            if (!RasterV4.isBlocked(blocked, s.s(), s.r())) {
+            if (!t.blocks(blocked, s)) {
                 out.add(s);
             }
         }
@@ -561,7 +570,8 @@ final class MountainPlanner {
 
     /**
      * The signs (§7.1): the start's, before every lip (the Final Drop's its own, a staircase's THE CLIFFS),
-     * piece, hairpin, chicane and gate set, and HALFWAY by the checkpoint nearest half way down ({@link #halfwaySign}).
+     * piece, hairpin, chicane, bend with run-off sand and gate set, and HALFWAY by the checkpoint nearest half
+     * way down ({@link #halfwaySign}).
      */
     static void signs(RasterV4 t, List<RasterV4.Spot> cps, PiecesV4 pieces) {
         Skeleton sk = t.sk;
@@ -570,18 +580,19 @@ final class MountainPlanner {
                 : GenCopy.boatSlalomStart(sk.tier.id), used);
         DropPlan dp = t.dp;
         // a staircase is the STAIR lips of one straight run (audit MTN02): THE CLIFFS! at its first lip, with
-        // that run's count, whatever lies next to it in the list; its other lips get their drop signs
-        List<DropPlan.Run> runs = new DropPlan.Planner(new GenRandom(0), sk).runs;
+        // that run's count, whatever lies next to it in the list; its other lips get their drop signs. "big
+        // drops" only when every step is a 2-block drop (audit MTN-R3-01)
+        List<DropPlan.Run> runs = dp.runs();
         DropPlan.Run signed = null;
         for (int i = 0; i < dp.drops.size(); i++) {
             DropPlan.Drop l = dp.drops.get(i);
             DropPlan.Run run = l.kind() == DropPlan.Kind.STAIR ? runOf(runs, l.s()) : null;
-            int steps = run == null ? 0 : stairsOn(dp, run);
+            int steps = run == null ? 0 : dp.stairsOn(run);
             List<String> lines;
             if (i == dp.drops.size() - 1) {
                 lines = GenCopy.boatFinalDrop();
             } else if (steps >= 2 && !run.equals(signed)) {
-                lines = GenCopy.boatCliffs(steps);
+                lines = GenCopy.boatCliffs(steps, allBig(dp, run));
                 signed = run;
             } else {
                 lines = GenCopy.boatDrop(l.drop());
@@ -602,9 +613,12 @@ final class MountainPlanner {
             }
         }
         int beat = -1;
+        double tight = Double.NEGATIVE_INFINITY; // where the last tight bend (hairpin, chicane, run-off sand) ends
         for (Centreline.Element e : sk.line.elements()) {
             Skeleton.Tag tag = sk.tag(e);
+            boolean sandy = e.arc() && pieces.runoff[e.index] > 0;
             if (tag.beat() == beat) {
+                tight = sandy ? e.s1() : tight;
                 continue;
             }
             if (tag.role() == Skeleton.Role.HAIRPIN) {
@@ -615,7 +629,12 @@ final class MountainPlanner {
                 t.sign(e.s0 - RasterV4.SIGN_BEFORE - 4, e.s0 - RasterV4.SIGN_NEAR, GenCopy.boatChicane(e.turn > 0),
                         used);
                 beat = tag.beat();
+            } else if (sandy && e.s0 - tight > RasterV4.SIGN_BEFORE && e.s0 > sk.start && e.s0 < sk.finish) {
+                // any other bend with run-off sand (an elbow, a bend: R under 40), as v3 signed them (audit
+                // MTN-R3-02); a second one straight after the first is the same turn
+                t.sign(e.s0 - RasterV4.SIGN_BEFORE, e.s0 - RasterV4.SIGN_NEAR, GenCopy.boatSandyBend(), used);
             }
+            tight = sandy ? e.s1() : tight;
         }
         for (Skeleton.GateSet g : sk.gates) {
             double from = g.from() - g.spacing();
@@ -636,14 +655,15 @@ final class MountainPlanner {
         return null;
     }
 
-    /** How many STAIR lips (the Final Drop's never one) stand on {@code run}. */
-    static int stairsOn(DropPlan dp, DropPlan.Run run) {
-        int n = 0;
+    /** Whether every STAIR lip on {@code run} is a 2-block drop (a "big drop"). */
+    static boolean allBig(DropPlan dp, DropPlan.Run run) {
         for (int i = 0; i < dp.drops.size() - 1; i++) {
             DropPlan.Drop d = dp.drops.get(i);
-            n += d.kind() == DropPlan.Kind.STAIR && d.s() >= run.s0() && d.s() <= run.s1() ? 1 : 0;
+            if (d.kind() == DropPlan.Kind.STAIR && d.s() >= run.s0() && d.s() <= run.s1() && d.drop() < 2) {
+                return false;
+            }
         }
-        return n;
+        return true;
     }
 
     /**

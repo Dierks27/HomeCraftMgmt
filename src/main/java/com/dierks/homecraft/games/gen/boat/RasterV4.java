@@ -580,6 +580,15 @@ final class RasterV4 {
         return null;
     }
 
+    /**
+     * Whether a blocked stretch covers spot {@code s} by the rule {@link #spots} drops it by: its rule radius
+     * grown by {@link #GROW}, a gate's 1 (audit MTN-R3-00: the pieces' trial read the spot's own radius and let
+     * pieces through that left their own raster no chain).
+     */
+    boolean blocks(List<double[]> blocked, Spot s) {
+        return isBlocked(blocked, s.s(), s.gate() ? 1 : spotRadius(s.s()) + GROW);
+    }
+
     static boolean isBlocked(List<double[]> blocked, double s, double r) {
         for (double[] b : blocked) {
             if (s + r + 1.5 > b[0] && s - r - 1.5 < b[1]) {
@@ -1042,16 +1051,28 @@ final class RasterV4 {
         }
     }
 
-    /** Columns whose nearest centreline point is in (from, to) on piece {@code p}'s straight. */
+    /** Columns whose nearest centreline point is in (from, to) on piece {@code p}'s stretch (straight or bend). */
     private List<int[]> columnsOf(PiecesV4.Piece p, double from, double to) {
         List<int[]> out = new ArrayList<>();
-        double[] a = sk.line.at(p.s1);
-        double[] b = sk.line.at(p.s2);
+        double minX = Double.MAX_VALUE;
+        double maxX = -Double.MAX_VALUE;
+        double minZ = Double.MAX_VALUE;
+        double maxZ = -Double.MAX_VALUE;
+        for (double s = p.s1; ; s = Math.min(p.s2, s + 2)) {
+            double[] a = sk.line.at(s);
+            minX = Math.min(minX, a[0]);
+            maxX = Math.max(maxX, a[0]);
+            minZ = Math.min(minZ, a[1]);
+            maxZ = Math.max(maxZ, a[1]);
+            if (s >= p.s2) {
+                break;
+            }
+        }
         double reach = tier.width / 2.0 + PiecesV4.WIDEN + 3;
-        int x0 = Math.max(0, (int) Math.floor(Math.min(a[0], b[0]) - reach));
-        int x1 = Math.min(sx - 1, (int) Math.ceil(Math.max(a[0], b[0]) + reach));
-        int z0 = Math.max(0, (int) Math.floor(Math.min(a[1], b[1]) - reach));
-        int z1 = Math.min(sz - 1, (int) Math.ceil(Math.max(a[1], b[1]) + reach));
+        int x0 = Math.max(0, (int) Math.floor(minX - reach));
+        int x1 = Math.min(sx - 1, (int) Math.ceil(maxX + reach));
+        int z0 = Math.max(0, (int) Math.floor(minZ - reach));
+        int z1 = Math.min(sz - 1, (int) Math.ceil(maxZ + reach));
         for (int x = x0; x <= x1; x++) {
             for (int z = z0; z <= z1; z++) {
                 int i = idx(x, z);

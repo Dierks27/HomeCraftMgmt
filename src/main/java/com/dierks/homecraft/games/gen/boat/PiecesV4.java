@@ -3,7 +3,9 @@ package com.dierks.homecraft.games.gen.boat;
 import com.dierks.homecraft.games.gen.api.GenRandom;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Predicate;
 
 /**
@@ -28,9 +30,10 @@ import java.util.function.Predicate;
  *   <li><b>Boost strips</b> (medium): the middle 3 columns blue for 15-30 blocks, never within 30
  *       before a lip.</li>
  * </ul>
- * Placement (§7.1): never in the first 40 after the start, on a run-up or landing strip, in a flight
- * zone, or in the final 120 before the finish; 4 apart. Lateral offsets v are right of the line
- * positive. Pure.
+ * Placement (§7.1, {@link Room}): never in the first 40 after the start, on a run-up or landing strip, in
+ * a flight zone (a split or a forest may stand in a 1-block drop's zone after its landing strip), or in the
+ * final 120 before the finish; 4 apart; splits on straights of 40 or more, the rest on straights and wide
+ * bends. Lateral offsets v are right of the line positive. Pure.
  */
 public final class PiecesV4 {
 
@@ -48,10 +51,8 @@ public final class PiecesV4 {
     static final double FINISH_CLEAR = 120;
     /** Lanterns in a tunnel's walls this often. */
     static final int LANTERN_EVERY = 6;
-    /** Places tried for a piece. */
-    static final int ATTEMPTS = 8;
 
-    /** The kinds, in the order the deck is laid. */
+    /** The kinds (the deck is dealt in {@link #DEAL}'s order). */
     public enum Kind {
         TUNNEL("tunnel"), CAVE("cave"), FOREST("forest"), SPLIT("split"), SAND_PIT("sand pit"), BOOST("boost");
 
@@ -98,10 +99,22 @@ public final class PiecesV4 {
     public final List<Piece> list;
     /** Per element: run-off sand columns outside the bend (0 for none). */
     final int[] runoff;
+    /** How many of each kind the tier's deck dealt (none for the safe and basic layouts). */
+    final Map<Kind, Integer> dealt;
 
     PiecesV4(List<Piece> list, int[] runoff) {
+        this(list, runoff, Map.of());
+    }
+
+    PiecesV4(List<Piece> list, int[] runoff, Map<Kind, Integer> dealt) {
         this.list = List.copyOf(list);
         this.runoff = runoff;
+        this.dealt = Map.copyOf(dealt);
+    }
+
+    /** How many of kind {@code k} the deck dealt. */
+    public int dealt(Kind k) {
+        return dealt.getOrDefault(k, 0);
     }
 
     /** No pieces, but the bends' run-offs (the safe layouts). */
@@ -217,6 +230,11 @@ public final class PiecesV4 {
      * The tier's pieces for {@code sk} and {@code drops} from stream {@code r}, at {@code richness} (0 full,
      * 1 reduced: no forest, one split, one pit, 2 basic: none), each kept only while {@code feasible}
      * accepts the checkpoint-free stretches with it.
+     *
+     * <p>The deck (§5.3, audit MTN-R3-00) is dealt one of each kind before any second copy, the scarcest and
+     * longest first ({@link #DEAL}); each card takes the tightest stretch it fits ({@link Room}), at its drawn
+     * length or else its shortest, and the room it takes, with {@value #APART} either side, is gone for the
+     * cards after it.
      */
     static PiecesV4 draw(GenRandom r, Skeleton sk, DropPlan drops, int richness, Predicate<List<double[]>> feasible) {
         MountainTier tier = sk.tier;
@@ -225,88 +243,168 @@ public final class PiecesV4 {
         if (richness >= 2 || tier.slalom()) {
             return new PiecesV4(placed, runoff);
         }
-        List<Kind> deck = new ArrayList<>();
-        add(deck, Kind.TUNNEL, r, tier.tunnels, richness);
-        add(deck, Kind.CAVE, r, tier.caves, richness);
-        if (richness == 0) {
-            add(deck, Kind.FOREST, r, tier.forests, richness);
+        Map<Kind, Integer> dealt = deal(r, tier, richness);
+        Room room = new Room(sk, drops, runoff);
+        List<double[]> refused = new ArrayList<>();
+        int most = 0;
+        for (int n : dealt.values()) {
+            most = Math.max(most, n);
         }
-        add(deck, Kind.SPLIT, r, tier.splits, richness);
-        add(deck, Kind.SAND_PIT, r, tier.pits, richness);
-        int boosts = tier.boostMax > 0 ? r.nextInt(tier.boostMin, tier.boostMax) : 0;
-        for (int i = 0; i < boosts; i++) {
-            deck.add(Kind.BOOST);
-        }
-        List<double[]> free = freeStretches(sk, drops);
-        for (Kind k : deck) {
-            for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
-                Piece p = place(r, sk, drops, k, free, placed);
-                if (p == null) {
-                    break;
+        for (int copy = 0; copy < most; copy++) {
+            for (Kind k : DEAL) {
+                if (dealt.get(k) <= copy) {
+                    continue;
                 }
-                List<Piece> trial = new ArrayList<>(placed);
-                trial.add(p);
-                PiecesV4 with = new PiecesV4(trial, runoff);
-                if (feasible.test(with.blocked())) {
+                Piece p = place(r, sk, drops, k, room, placed, runoff, feasible, refused);
+                if (p != null) {
                     placed.add(p);
-                    break;
+                    room.take(p.s1, p.s2);
                 }
             }
         }
         placed.sort((a, b) -> Double.compare(a.s1, b.s1));
-        return new PiecesV4(placed, runoff);
-    }
-
-    /** {@code kind} {least..most} times (reduced: at most one of each). */
-    private static void add(List<Kind> deck, Kind kind, GenRandom r, int[] range, int richness) {
-        int n = range[1] <= 0 ? 0 : r.nextInt(range[0], range[1]);
-        if (richness == 1) {
-            n = Math.min(n, 1);
-        }
-        for (int i = 0; i < n; i++) {
-            deck.add(kind);
-        }
+        return new PiecesV4(placed, runoff, dealt);
     }
 
     /**
-     * The stretches a piece may use: every straight run, less the first {@value #START_CLEAR} after the
-     * start, the last {@value #FINISH_CLEAR} before the finish, and every lip's run-up, landing strip and
-     * flight zone.
+     * The order the deck is dealt in, a round of each kind at a time: the scarcest room first (a split stands
+     * only on a long straight), then the longest pieces, the short boost strips last.
      */
-    static List<double[]> freeStretches(Skeleton sk, DropPlan drops) {
-        List<double[]> out = new ArrayList<>();
-        DropPlan.Planner probe = new DropPlan.Planner(new GenRandom(0), sk);
-        for (DropPlan.Run run : probe.runs) {
-            out.add(new double[]{Math.max(run.s0(), sk.start + START_CLEAR), Math.min(run.s1(),
-                    sk.finish - FINISH_CLEAR)});
+    static final List<Kind> DEAL = List.of(Kind.SPLIT, Kind.FOREST, Kind.SAND_PIT, Kind.TUNNEL, Kind.CAVE, Kind.BOOST);
+
+    /**
+     * How many of each kind the tier deals (reduced: at most one of each, no forest). Where neither a cave nor
+     * a tunnel is needed alone but either may come (medium's "cave or tunnel 1-2"), at least one does.
+     */
+    static Map<Kind, Integer> deal(GenRandom r, MountainTier tier, int richness) {
+        Map<Kind, Integer> out = new EnumMap<>(Kind.class);
+        out.put(Kind.TUNNEL, count(r, tier.tunnels, richness));
+        out.put(Kind.CAVE, count(r, tier.caves, richness));
+        out.put(Kind.FOREST, richness == 0 ? count(r, tier.forests, richness) : 0);
+        out.put(Kind.SPLIT, count(r, tier.splits, richness));
+        out.put(Kind.SAND_PIT, count(r, tier.pits, richness));
+        out.put(Kind.BOOST, tier.boostMax > 0 ? r.nextInt(tier.boostMin, tier.boostMax) : 0);
+        boolean either = tier.caves[0] == 0 && tier.tunnels[0] == 0 && tier.caves[1] > 0 && tier.tunnels[1] > 0;
+        if (either && out.get(Kind.CAVE) + out.get(Kind.TUNNEL) == 0) {
+            out.put(r.nextBoolean() ? Kind.CAVE : Kind.TUNNEL, 1);
         }
+        return out;
+    }
+
+    /** {least..most} of a kind (reduced: at most one). */
+    private static int count(GenRandom r, int[] range, int richness) {
+        int n = range[1] <= 0 ? 0 : r.nextInt(range[0], range[1]);
+        return richness == 1 ? Math.min(n, 1) : n;
+    }
+
+    /** Pieces may stand on a bend at least this wide (all but splits; never a link's). */
+    static final double ARC_R = 60;
+    /** A pick-a-path split stands on a straight of at least this (§7.1). */
+    static final double SPLIT_RUN = 40;
+    /** Spots of one card the checkpoint chain is asked about before the card is given up. */
+    static final int CHAIN_TRIES = 4;
+
+    /**
+     * Where each kind of piece may stand (§7.1), as stretches [from, to] along the centreline: never on the
+     * first {@value #START_CLEAR} after the start or the last {@value #FINISH_CLEAR} before the finish, on a
+     * lip's run-up or landing strip, or in a flight zone (a split or a forest may stand in a 1-block drop's
+     * zone after its landing strip, as in v3). A split stands on a straight of {@value #SPLIT_RUN} or more;
+     * the rest also on bends of R {@value #ARC_R} or more that no link or run-off sand is on, and those bends
+     * first ({@link #bends}), so the straights stay for the splits. A placed piece takes its stretch and
+     * {@value #APART} either side from every kind.
+     */
+    static final class Room {
+        final Map<Kind, List<double[]>> free = new EnumMap<>(Kind.class);
+        final Map<Kind, List<double[]>> bends = new EnumMap<>(Kind.class);
+
+        Room(Skeleton sk, DropPlan drops, int[] runoff) {
+            for (Kind k : Kind.values()) {
+                free.put(k, stretches(sk, drops, runoff, k, false));
+                bends.put(k, stretches(sk, drops, runoff, k, true));
+            }
+        }
+
+        /** Where kind {@code k} may stand: on its bends alone ({@code bendsOnly}), or anywhere it may. */
+        List<double[]> of(Kind k, boolean bendsOnly) {
+            return bendsOnly ? bends.get(k) : free.get(k);
+        }
+
+        void take(double s1, double s2) {
+            for (Kind k : Kind.values()) {
+                free.put(k, cut(free.get(k), s1 - APART, s2 + APART));
+                bends.put(k, cut(bends.get(k), s1 - APART, s2 + APART));
+            }
+        }
+    }
+
+    /** {@code stretches} less [from, to]. */
+    static List<double[]> cut(List<double[]> stretches, double from, double to) {
+        List<double[]> next = new ArrayList<>();
+        for (double[] f : stretches) {
+            if (to <= f[0] || from >= f[1]) {
+                next.add(f);
+                continue;
+            }
+            if (from > f[0]) {
+                next.add(new double[]{f[0], from});
+            }
+            if (to < f[1]) {
+                next.add(new double[]{to, f[1]});
+            }
+        }
+        return next;
+    }
+
+    /** Whether element {@code e} may carry a piece of kind {@code k}. */
+    static boolean carries(Skeleton sk, Centreline.Element e, int[] runoff, Kind k) {
+        if (!e.arc()) {
+            return true;
+        }
+        if (k == Kind.SPLIT) {
+            return false;
+        }
+        Skeleton.Role role = sk.tag(e).role();
+        return e.radius >= ARC_R && runoff[e.index] == 0 && !role.link() && role != Skeleton.Role.CHICANE;
+    }
+
+    /** The stretches kind {@code k} may stand on ({@link Room}), on bends alone or anywhere, before any piece is placed. */
+    static List<double[]> stretches(Skeleton sk, DropPlan drops, int[] runoff, Kind k, boolean bendsOnly) {
+        List<double[]> out = new ArrayList<>();
+        double[] open = null;
+        for (Centreline.Element e : sk.line.elements()) {
+            if (carries(sk, e, runoff, k) && (e.arc() || !bendsOnly)) {
+                open = open == null ? new double[]{e.s0, e.s1()} : new double[]{open[0], e.s1()};
+            } else {
+                if (open != null) {
+                    out.add(open);
+                }
+                open = null;
+            }
+        }
+        if (open != null) {
+            out.add(open);
+        }
+        if (k == Kind.SPLIT) {
+            out.removeIf(f -> f[1] - f[0] < SPLIT_RUN);
+        }
+        out = cut(out, Double.NEGATIVE_INFINITY, sk.start + START_CLEAR);
+        out = cut(out, sk.finish - FINISH_CLEAR, Double.POSITIVE_INFINITY);
+        DropPlan.Planner probe = new DropPlan.Planner(new GenRandom(0), sk);
+        boolean zoneOk = k == Kind.SPLIT || k == Kind.FOREST;
         for (DropPlan.Drop d : drops.drops) {
             double w = drops.width(d.s());
             double from = d.s() - MountainTier.runUp(w) - 2;
-            double to = Math.max(d.s() + MountainTier.landing(d.drop(), drops.blueAt(d.s() - 1)) + 2,
-                    probe.zoneEnd(d.s(), d.drop()) + 3);
-            List<double[]> next = new ArrayList<>();
-            for (double[] f : out) {
-                if (to <= f[0] || from >= f[1]) {
-                    next.add(f);
-                    continue;
-                }
-                if (from > f[0]) {
-                    next.add(new double[]{f[0], from});
-                }
-                if (to < f[1]) {
-                    next.add(new double[]{to, f[1]});
-                }
-            }
-            out = next;
+            double landed = d.s() + MountainTier.landing(d.drop(), drops.blueAt(d.s() - 1)) + 2;
+            double to = zoneOk && d.drop() == 1 ? landed : Math.max(landed, probe.zoneEnd(d.s(), d.drop()) + 3);
+            out = cut(out, from, to);
         }
         out.removeIf(f -> f[1] - f[0] < 12);
         return out;
     }
 
-    /** A place for a piece of {@code k} in a free stretch away from the others, or {@code null}. */
-    static Piece place(GenRandom r, Skeleton sk, DropPlan drops, Kind k, List<double[]> free, List<Piece> placed) {
-        double len = switch (k) {
+    /** How long a piece of {@code k} is, along. */
+    static double length(GenRandom r, Skeleton sk, Kind k) {
+        return switch (k) {
             case SAND_PIT -> 2 * TAPER + r.nextInt(10, 14);
             case SPLIT -> 2 * TAPER + 2 + r.nextInt(6, 12);
             case CAVE -> r.nextInt(12, 20);
@@ -314,30 +412,95 @@ public final class PiecesV4 {
             case FOREST -> 2 * TAPER + 6 * (sk.tier.hard() ? 4 : 3) - 2;
             case BOOST -> r.nextInt(15, 30);
         };
+    }
+
+    /** A place for a card of {@code k} at its drawn length, else at its shortest ({@link #shortest}); or {@code null}. */
+    static Piece place(GenRandom r, Skeleton sk, DropPlan drops, Kind k, Room room, List<Piece> placed, int[] runoff,
+                       Predicate<List<double[]>> feasible, List<double[]> refused) {
+        // at its drawn length; where that fits nowhere the checkpoints allow, at its kind's shortest
+        double len = length(r, sk, k);
+        Piece p = place(r, sk, drops, k, len, room, placed, runoff, feasible, refused);
+        double least = shortest(sk, k);
+        return p != null || least >= len ? p : place(r, sk, drops, k, least, room, placed, runoff, feasible, refused);
+    }
+
+    /** The shortest piece of {@code k} ({@link #length}'s least). */
+    static double shortest(Skeleton sk, Kind k) {
+        return switch (k) {
+            case SAND_PIT -> 2 * TAPER + 10;
+            case SPLIT -> 2 * TAPER + 2 + 6;
+            case CAVE -> 12;
+            case TUNNEL -> 20;
+            case FOREST -> 2 * TAPER + 6 * (sk.tier.hard() ? 4 : 3) - 2;
+            case BOOST -> 15;
+        };
+    }
+
+    /**
+     * A place for a piece of {@code k}, {@code len} long: the free stretches it fits, on bends first and then
+     * anywhere it may stand, the tightest first (best fit); each stretch's start, then each one's end, then a
+     * seeded spot in each, so the checkpoints are asked about different stretches before the same one twice.
+     * The first that keeps its own rules (a boost strip never within 30 before a lip, a widening piece §4.2's
+     * clearance) and the checkpoint chain ({@code feasible}, asked at most {@value #CHAIN_TRIES} times; never
+     * about a spot that blocks all a refused one did, since fewer checkpoint places never make a chain).
+     * {@code null} when none does.
+     */
+    static Piece place(GenRandom r, Skeleton sk, DropPlan drops, Kind k, double len, Room room, List<Piece> placed,
+                       int[] runoff, Predicate<List<double[]>> feasible, List<double[]> refused) {
         List<double[]> fits = new ArrayList<>();
-        for (double[] f : free) {
-            if (f[1] - f[0] >= len + 2) {
-                fits.add(f);
+        for (boolean bendsOnly : new boolean[]{true, false}) {
+            List<double[]> these = new ArrayList<>();
+            for (double[] f : room.of(k, bendsOnly)) {
+                if (f[1] - f[0] >= len + 2) {
+                    these.add(f);
+                }
+            }
+            these.sort((a, b) -> a[1] - a[0] != b[1] - b[0] ? Double.compare(a[1] - a[0], b[1] - b[0])
+                    : Double.compare(a[0], b[0]));
+            fits.addAll(these);
+        }
+        List<Double> spots = new ArrayList<>();
+        for (int pass = 0; pass < 3; pass++) {
+            for (double[] f : fits) {
+                double slack = f[1] - f[0] - len - 2;
+                double s1 = switch (pass) {
+                    case 0 -> Math.ceil(f[0] + 1);
+                    case 1 -> Math.floor(f[0] + 1 + slack);
+                    default -> Math.floor(f[0] + 1 + r.nextDouble() * slack);
+                };
+                boolean seen = false;
+                for (double t : spots) {
+                    seen |= Math.abs(t - s1) < 1;
+                }
+                if (!seen) {
+                    spots.add(s1);
+                }
             }
         }
-        for (int attempt = 0; attempt < ATTEMPTS && !fits.isEmpty(); attempt++) {
-            double[] f = fits.get(r.nextInt(fits.size()));
-            double s1 = Math.floor(f[0] + 1 + r.nextDouble() * (f[1] - f[0] - len - 2));
+        int asked = 0;
+        for (double s1 : spots) {
             double s2 = s1 + len;
             boolean clear = true;
-            for (Piece q : placed) {
-                clear &= s2 + APART <= q.s1 || s1 >= q.s2 + APART;
-            }
             if (k == Kind.BOOST) {
                 for (DropPlan.Drop d : drops.drops) {
                     clear &= !(s2 > d.s() - 30 && s1 < d.s());
                 }
             }
-            if (k.widens() && !roomToWiden(sk, s1, s2, drops)) {
-                clear = false;
+            for (double[] no : refused) {
+                clear &= !(s1 - 1 <= no[0] && s2 + 1 >= no[1]);
             }
-            if (clear) {
-                return make(r, sk, k, s1, s2);
+            if (!clear || (k.widens() && !roomToWiden(sk, s1, s2, drops))) {
+                continue;
+            }
+            Piece p = make(r, sk, k, s1, s2);
+            List<Piece> trial = new ArrayList<>(placed);
+            trial.add(p);
+            if (feasible.test(new PiecesV4(trial, runoff).blocked())) {
+                return p;
+            }
+            refused.add(new double[]{s1 - 1, s2 + 1});
+            if (++asked >= CHAIN_TRIES) {
+                return null;
             }
         }
         return null;

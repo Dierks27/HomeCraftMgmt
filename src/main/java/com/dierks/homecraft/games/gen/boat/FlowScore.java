@@ -34,9 +34,9 @@ import java.util.Map;
  *       slalom's of its gate-to-gate distances along the run, the open runs between sets included
  *       (≥ 0.12).</li>
  *   <li><b>F-F features:</b> the tier's S-curves, chicanes (its least to its most), long straights (≥ 120),
- *       hairpins (1 to its most on a road), staircases, and at least 80% of the lips brake drops (a link, or an
- *       arc slower than the landing speed + 4 b/s, within 60 after the landing strip) or on a straight of 100
- *       or more.</li>
+ *       hairpins (1 to its most on a road), staircases (straight runs with two STAIR lips or more), and at
+ *       least 80% of the lips brake drops (a link, or an arc slower than the landing speed + 4 b/s, within 60
+ *       after the landing strip) or on a straight of 100 or more.</li>
  * </ul>
  * The score is 0.15 B + 0.10 (1 - K/km) + 0.20 C + 0.15 (1 - P) + 0.20 V + 0.10 min(1, CV) + 0.10 F, in
  * [0, 1]; a candidate passes when every gate holds and the score is at least {@value #PASS}. Pure and
@@ -582,27 +582,9 @@ public final class FlowScore {
         if (hairpins < hairMin || hairpins > tier.hairMost) {
             out.add(hairpins + " hairpins (" + hairMin + "-" + tier.hairMost + ")");
         }
-        // staircases: two lips or more on one straight
-        int stairs = 0;
-        int lip = 0;
-        double run = 0;
-        int onRun = 0;
-        for (RideLine.Part p : parts) {
-            if (p.arc()) {
-                stairs += onRun >= 2 ? 1 : 0;
-                onRun = 0;
-                run = 0;
-                continue;
-            }
-            run += p.len();
-            while (lip < line.lips.size() && line.lips.get(lip).s() < p.s1()) {
-                if (line.lips.get(lip).s() >= p.s0()) {
-                    onRun++;
-                }
-                lip++;
-            }
-        }
-        stairs += onRun >= 2 ? 1 : 0;
+        // staircases: two STAIR lips or more on one straight run (audit MTN-R3-03: any two lips aren't one); a
+        // line with no drop plan (a hand-made test line) counts two lips or more on one straight
+        int stairs = drops != null ? drops.staircases() : lipPairs(line);
         if (stairs < tier.stairsMin) {
             out.add(stairs + " staircases (" + tier.stairsMin + " wanted)");
         }
@@ -618,6 +600,27 @@ public final class FlowScore {
             out.add(braking + " of " + line.lips.size() + " lips brake (80% wanted)");
         }
         return out;
+    }
+
+    /** Straights of {@code line} with two lips or more on them. */
+    static int lipPairs(RideLine line) {
+        int stairs = 0;
+        int lip = 0;
+        int onRun = 0;
+        for (RideLine.Part p : line.parts) {
+            if (p.arc()) {
+                stairs += onRun >= 2 ? 1 : 0;
+                onRun = 0;
+                continue;
+            }
+            while (lip < line.lips.size() && line.lips.get(lip).s() < p.s1()) {
+                if (line.lips.get(lip).s() >= p.s0()) {
+                    onRun++;
+                }
+                lip++;
+            }
+        }
+        return stairs + (onRun >= 2 ? 1 : 0);
     }
 
     /** Whether the lip at line position {@code s} stands on a straight of 100 or more. */

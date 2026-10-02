@@ -42,7 +42,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *       (a number, a list and a Scratch Ticket row), and keeps its comment;</li>
  *   <li>the Scratch Ticket is one unit (the v4 audit, ECON00): a ticket retuned through its price or
  *       jackpot keeps its 0.36 prizes, with one WARN naming the key and what the new prizes would give
- *       back with it (99.4% on a 9-token ticket, 104.5% with a seed of 200), and keeps its comment;</li>
+ *       back with it (99.4% on a 9-token ticket, 104.5% with a seed of 200), and keeps its comment; its keys
+ *       are read as the plugin plays them, so a quoted "10" or a cap the pot never reaches is no retune; and
+ *       prizes deleted beside a retuned key are written back as 0.36 shipped them, with the same WARN;</li>
  *   <li>an absent key stays absent, and the backfill writes the new default;</li>
  *   <li>a file already at revision 20 is left alone, and the step run twice changes nothing more;</li>
  *   <li>the frozen table: every "old" is what 0.35 and 0.36 shipped, every "new" what this release
@@ -261,6 +263,68 @@ class EconomyMigrationTest {
                 + "everyone sets a time, third gets back 9 of the 10 they paid - set server_topup to at least 20 (or "
                 + "lower the entry) so nobody in a Cup of 2 or 3 loses"), gamesWarns,
                 "and the games say what it costs each time they load");
+    }
+
+    @Test
+    void aCompanionIsReadAsThePlayPlaysItAndOnlyAReturnThatChangesKeepsTheTicket() {
+        // what the plugin plays (PluginConfig.lotto: getInt, a number only), not the raw YAML: these all leave the
+        // new prizes' return as shipped, so the ticket moves into the band like an untouched one, with no WARN
+        Object[][] same = {
+                {"arcade.lotto.ticket_tokens", "10"},   // a quoted number: getInt reads the shipped 10
+                {"arcade.lotto.ticket_tokens", "9"},    // the same, though it reads like a retune: the ticket plays 10
+                {"arcade.lotto.jackpot.cap", 2000},     // a cap the pot never reaches (its steady 150, either table)
+                {"arcade.lotto.jackpot.cap", 150},      // exactly the steady pot
+        };
+        for (Object[] k : same) {
+            YamlConfiguration c = LayoutFixtures.v036();
+            List<String> log = retunedTicket(c, (String) k[0], k[1]);
+            assertEquals(List.of(), warns(log), k[0] + " " + k[1] + ": nothing the plugin plays differently");
+            assertTrue(EconomyMigration.same(c.get(EconomyMigration.TICKET), TokenBalance.TICKET_PAYOUTS),
+                    k[0] + " " + k[1] + ": the prizes move to " + TokenBalance.TICKET_PAYOUTS);
+        }
+        YamlConfiguration both = LayoutFixtures.v036();
+        both.set("arcade.lotto.jackpot.seed", 150);
+        retunedTicket(both, "arcade.lotto.jackpot.per_ticket", 0);
+        assertTrue(EconomyMigration.same(both.get(EconomyMigration.TICKET), TokenBalance.TICKET_PAYOUTS),
+                "a seed of 150 that never grows is the same steady pot: it moves too");
+
+        YamlConfiguration binds = LayoutFixtures.v036();
+        List<String> log = retunedTicket(binds, "arcade.lotto.jackpot.cap", 149);
+        assertEquals(1, warns(log).size(), "a cap just under the steady pot changes the return: " + log);
+        assertTrue(warns(log).get(0).contains("because you have changed arcade.lotto.jackpot.cap = 149 (shipped 1000)"),
+                "naming the cap as the plugin reads it: " + log);
+        YamlConfiguration decimal = LayoutFixtures.v036();
+        log = retunedTicket(decimal, "arcade.lotto.ticket_tokens", 9.9);
+        assertTrue(warns(log).get(0).contains("arcade.lotto.ticket_tokens = 9 (shipped 10)"),
+                "9.9 is played as 9, and named so: " + log);
+    }
+
+    @Test
+    void deletedPrizesBesideARetunedCompanionAreWrittenBackAs036ShippedThem() {
+        // the backfill would otherwise write 0.37's prizes on the owner's 9-token ticket: 99.4%, or 111.8% at 8
+        String old = EconomyMigration.show(TokenBalance.row(EconomyMigration.TICKET).old());
+        String now = EconomyMigration.show(TokenBalance.TICKET_PAYOUTS);
+        for (Object[] k : new Object[][] {{9, "86.2%", "99.4%"}, {8, "97.0%", "111.8%"}}) {
+            YamlConfiguration c = LayoutFixtures.v036();
+            c.set(EconomyMigration.TICKET, null);
+            List<String> log = retunedTicket(c, "arcade.lotto.ticket_tokens", k[0]);
+            assertEquals(List.of(HomeCraftManagement.WARN + "Config migration: arcade.lotto.payouts was missing, so it is"
+                    + " written back as 0.35 and 0.36 shipped it, " + old + ", not as this version ships it, because you"
+                    + " have changed arcade.lotto.ticket_tokens = " + k[0] + " (shipped 10), and the ticket's return is"
+                    + " all of them together: yours gives back " + k[1] + ", and the new prizes " + now + " would give"
+                    + " back " + k[2] + " (the house band is 85-95)."), warns(log), "ticket_tokens " + k[0]);
+            HomeCraftManagement.backfillConfig(c, LayoutFixtures.bundled());
+            assertTrue(EconomyMigration.same(c.get(EconomyMigration.TICKET),
+                    TokenBalance.row(EconomyMigration.TICKET).old()), "and the backfill leaves them: " + k[0]);
+        }
+        YamlConfiguration plain = LayoutFixtures.v036();
+        plain.set(EconomyMigration.TICKET, null);
+        assertEquals(List.of(), warns(HomeCraftManagement.migrateConfig(plain, "world")),
+                "deleted prizes beside a shipped ticket: nothing to say");
+        assertNull(plain.get(EconomyMigration.TICKET, null), "left to the backfill");
+        HomeCraftManagement.backfillConfig(plain, LayoutFixtures.bundled());
+        assertTrue(EconomyMigration.same(plain.get(EconomyMigration.TICKET), TokenBalance.TICKET_PAYOUTS),
+                "which writes this version's");
     }
 
     @Test

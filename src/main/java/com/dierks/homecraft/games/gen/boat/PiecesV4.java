@@ -39,7 +39,7 @@ public final class PiecesV4 {
     /** Run-off sand, columns outside the lane. */
     static final int RUNOFF = 2;
     /** A widened piece's extra lane each side, and its taper length. */
-    static final double WIDEN = 3;
+    static final double WIDEN = 4;
     static final double TAPER = 8;
     /** A piece keeps this far from the next. */
     static final double APART = 4;
@@ -308,7 +308,7 @@ public final class PiecesV4 {
     static Piece place(GenRandom r, Skeleton sk, DropPlan drops, Kind k, List<double[]> free, List<Piece> placed) {
         double len = switch (k) {
             case SAND_PIT -> 2 * TAPER + r.nextInt(10, 14);
-            case SPLIT -> 10 + r.nextInt(8, 16);
+            case SPLIT -> 2 * TAPER + 2 + r.nextInt(6, 12);
             case CAVE -> r.nextInt(12, 20);
             case TUNNEL -> r.nextInt(20, 40);
             case FOREST -> 2 * TAPER + 6 * (sk.tier.hard() ? 4 : 3) - 2;
@@ -380,8 +380,9 @@ public final class PiecesV4 {
                 p.hi = c + sand;
             }
             case SPLIT -> {
-                p.a1 = s1 + 5;
-                p.a2 = s2 - 5;
+                // the island stands where the lane is at its widest, so both ways are P + 2 wide
+                p.a1 = s1 + TAPER + 1;
+                p.a2 = s2 - TAPER - 1;
                 p.lo = -1.5;
                 p.hi = 1.5;
             }

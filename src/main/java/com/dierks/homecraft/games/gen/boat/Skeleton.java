@@ -34,6 +34,8 @@ public final class Skeleton {
      * drops 63 apart), so the drops a run needs find their straights.
      */
     public static final double APPROACH = 46;
+    /** How much more often a long straight comes on the tiers whose descent needs 2-block drops. */
+    static final double LONG_LEAN = 3;
     static final double APPROACH_ROAD = 104;
     /** Draws refused before a band is closed at once. */
     static final int REDRAWS = 32;
@@ -422,7 +424,8 @@ public final class Skeleton {
                 if (straightLast) {
                     return r.weighted(0.85, 0.15) == 0 ? Role.SWEEP : Role.MED;
                 }
-                return switch (r.weighted(0.3, 0.5, 0.2)) {
+                double lean = tier.descentMin > tier.dropsMin ? LONG_LEAN : 1;
+                return switch (r.weighted(0.3 * lean, 0.5, 0.2)) {
                     case 0 -> Role.LONG;
                     case 1 -> Role.MED;
                     default -> Role.SHORT;
@@ -446,6 +449,8 @@ public final class Skeleton {
             };
             w[4] *= sBoost;
             w[5] *= cBoost;
+            // where the descent floor asks for more than a block a lip, long straights hold the 2-block drops
+            w[0] *= tier.descentMin > tier.dropsMin ? LONG_LEAN : 1;
             return new Role[]{Role.LONG, Role.MED, Role.SHORT, Role.SWEEP, Role.S_CURVE, Role.CHICANE,
                     Role.BEND}[r.weighted(w)];
         }

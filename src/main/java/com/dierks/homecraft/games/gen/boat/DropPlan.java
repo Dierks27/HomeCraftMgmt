@@ -31,9 +31,9 @@ import java.util.List;
  * stands past the earlier one's flight zone as the validator floods it (a disc of Z(d) round the lip,
  * walked along the line until the whole lane is out of it) with room for a checkpoint after it; and the
  * leg across a drop, from the checkpoint just before its lip to the first one past its zone, stays within
- * 59.5. With a checkpoint radius of W / 2 + 0.5 that leg is too long for a 2-block drop on a corridor wider
- * than 10, so a slalom's 2-block drop stands in a {@value MountainTier#NECK}-wide neck ({@link #necks}).
- * Pure.
+ * 60 (with {@value #ROUNDING} for whole blocks). With a checkpoint radius of W / 2 + 0.5 that leg is too long
+ * for a 2-block drop on a lane wider than 7, so such a drop stands in a {@value MountainTier#NECK}-wide neck
+ * ({@link #necks}). Pure.
  */
 public final class DropPlan {
 
@@ -57,7 +57,9 @@ public final class DropPlan {
     static final double LONG_RUN = 100;
     /** A checkpoint's centre keeps this far from a lip cell and a zone cell (V6), and the legs' bound with a margin. */
     static final double CLEAR = 3;
-    static final double LEG = 59.5;
+    static final double LEG = DownhillValidator.MAX_LEG;
+    /** What whole blocks and half-block checkpoint places add to a leg across a drop. */
+    static final double ROUNDING = 0.25;
     /** A neck: from this far before a lip to this far after it, with tapers of {@link #NECK_TAPER} either side. */
     static final double NECK_BEFORE = 16;
     static final double NECK_AFTER = 4;
@@ -151,14 +153,11 @@ public final class DropPlan {
         return false;
     }
 
-    /** The necks (slalom 2-block drops): {from, to} along the centreline, tapers outside. */
+    /** The necks (2-block drops on a lane wider than {@value MountainTier#NECK}): {from, to} along the centreline, tapers outside. */
     public List<double[]> necks() {
         List<double[]> out = new ArrayList<>();
-        if (!tier.slalom()) {
-            return out;
-        }
         for (Drop d : drops) {
-            if (d.drop() >= 2 && sk.width(d.s()) > MountainTier.NECK + 1) {
+            if (d.drop() >= 2 && sk.width(d.s()) > MountainTier.NECK) {
                 out.add(new double[]{d.s() - NECK_BEFORE, d.s() + NECK_AFTER});
             }
         }
@@ -269,13 +268,24 @@ public final class DropPlan {
 
         double width(double s, int d) {
             double w = sk.width(s);
-            return tier.slalom() && d >= 2 && w > MountainTier.NECK + 1 ? MountainTier.NECK : w;
+            return necked(s, d) ? MountainTier.NECK : w;
+        }
+
+        /** Whether a {@code d}-block drop {@code s} along stands in a neck. */
+        boolean necked(double s, int d) {
+            return d >= 2 && sk.width(s) > MountainTier.NECK;
         }
 
         /** How far before its lip the checkpoint ahead of a drop sits: past its sphere's flat, 3 from the lip. */
         double before(double s, int d) {
-            double rad = MountainTier.spot(width(s, d));
+            double rad = MountainTier.spot(width(s, d)) + (axis(s) ? 0 : RasterV4.ARC_SPOT);
             return Math.max(rad, CLEAR + 0.5) + 0.25;
+        }
+
+        /** Whether the line {@code s} along is a straight along x or z (its checkpoints the smallest). */
+        boolean axis(double s) {
+            Centreline.Element e = sk.line.elementAt(s);
+            return !e.arc() && Math.abs(Math.sin(2 * e.h0)) < 1e-6;
         }
 
         /**
@@ -289,21 +299,27 @@ public final class DropPlan {
             double nx = -t[1];
             double nz = t[0];
             double half = w / 2.0;
-            double reach = BoatEnvelope.zone(d) + half + 0.75;
-            double end = sk.line.length();
-            for (double u = s; u <= sk.line.length(); u += 1) {
+            double reach = BoatEnvelope.zone(d) + 0.75;
+            double length = sk.line.length();
+            for (double u = s; u <= length; u += 0.5) {
                 double[] p = sk.line.at(u);
-                double dx = p[0] - q[0];
-                double dz = p[1] - q[1];
-                double across = dx * nx + dz * nz;
-                double clamp = Math.max(-half, Math.min(half, across));
-                double dist = Math.hypot(dx - clamp * nx, dz - clamp * nz);
-                if (dist > reach) {
-                    end = u;
-                    break;
+                double[] tu = sk.line.tangent(u);
+                double side = sk.width(u) / 2.0 + (tier.road() ? PiecesV4.RUNOFF : 0);
+                boolean out = true;
+                for (int k = -4; k <= 4 && out; k++) {
+                    double px = p[0] - tu[1] * side * k / 4.0;
+                    double pz = p[1] + tu[0] * side * k / 4.0;
+                    double dx = px - q[0];
+                    double dz = pz - q[1];
+                    double across = dx * nx + dz * nz;
+                    double clamp = Math.max(-half, Math.min(half, across));
+                    out = Math.hypot(dx - clamp * nx, dz - clamp * nz) > reach;
+                }
+                if (out) {
+                    return u;
                 }
             }
-            return end;
+            return length;
         }
 
         /** Whether a gate field (its first fence less 3 to its last plus 3) meets [a, b]. */
@@ -331,7 +347,7 @@ public final class DropPlan {
                 return false;
             }
             double c = before(s, d);
-            if (c + BoatEnvelope.zone(d) + CLEAR - 0.5 > LEG) {
+            if (c + BoatEnvelope.zone(d) + CLEAR + ROUNDING > LEG) {
                 return false; // the leg across it would be longer than 60
             }
             double end = zoneEnd(s, d);
@@ -340,7 +356,7 @@ public final class DropPlan {
                 return false;
             }
             // the necks keep clear of the pit and the finish
-            if (tier.slalom() && d >= 2 && (s - NECK_BEFORE - NECK_TAPER < Frame.PIT)) {
+            if (necked(s, d) && (s - NECK_BEFORE - NECK_TAPER < Frame.PIT)) {
                 return false;
             }
             for (int i = 0; i < lips.size(); i++) {
@@ -356,7 +372,54 @@ public final class DropPlan {
                     }
                 }
             }
-            return true;
+            return chains(s, d, end);
+        }
+
+        /**
+         * Whether checkpoints can still be strung from the start across every lip (and the one at
+         * {@code s}, its zone ending at {@code end}) to the finish, legs at most {@link #LEG}: between two
+         * lips the checkpoints stand from the earlier zone's end + 3 to the later lip less its radius, and
+         * where that window holds only one checkpoint (two spheres need their radii + 0.5 between them) that
+         * one must serve the legs either side. Walked forward, keeping the furthest place the last
+         * checkpoint before each lip can be.
+         */
+        boolean chains(double s, int d, double end) {
+            double far = Double.NaN; // the furthest the last checkpoint before the next lip can be
+            double prevEnd = Double.NaN;
+            int n = lips.size();
+            boolean placed = false;
+            for (int i = 0; i <= n; i++) {
+                double ls;
+                int ld;
+                double le;
+                if (!placed && (i == n || lips.get(i).s() > s)) {
+                    ls = s;
+                    ld = d;
+                    le = end;
+                    placed = true;
+                    i--;
+                } else if (i < n) {
+                    ls = lips.get(i).s();
+                    ld = lips.get(i).drop();
+                    le = zoneEnd.get(i);
+                } else {
+                    break;
+                }
+                double c = before(ls, ld);
+                double b = ls - c;
+                if (Double.isNaN(prevEnd)) {
+                    far = b; // before the first lip the track is open from the start
+                } else {
+                    double a = prevEnd + CLEAR + ROUNDING;
+                    if (a > b || a > far + LEG) {
+                        return false;
+                    }
+                    far = a + 2 * c <= b ? b : Math.min(b, far + LEG);
+                }
+                prevEnd = le;
+            }
+            // the last lip is the Final Drop, the finish's leg its own
+            return Double.isNaN(prevEnd) || sk.finish - far <= LEG - ROUNDING;
         }
 
         boolean inBlue(double s) {
@@ -409,7 +472,7 @@ public final class DropPlan {
             for (int dd = d; dd >= 1; dd--) {
                 double c = before(sk.finish, dd);
                 double lo = BoatEnvelope.zone(dd) + CLEAR + 0.5;
-                double hi = Math.min(70, LEG - c - 0.25);
+                double hi = Math.min(70, LEG - c - ROUNDING);
                 if (lo > hi) {
                     continue;
                 }
@@ -437,7 +500,7 @@ public final class DropPlan {
                 return false;
             }
             double w = width(s, d);
-            return s - run.s0() >= MountainTier.runUp(w) + (tier.slalom() && d >= 2 ? NECK_TAPER : 0);
+            return s - run.s0() >= MountainTier.runUp(w) + (necked(s, d) ? NECK_TAPER : 0);
         }
 
         /** Hard: 2-4 long straights all blue, each ending in a brake drop or a sweeper R >= 150. */
@@ -745,7 +808,9 @@ public final class DropPlan {
          */
         List<double[]> packing() {
             List<double[]> cand = new ArrayList<>(); // s, d, zone end, value
-            double value2 = 1 + Math.min(1, tier.bigShare > 0 ? tier.bigShare : tier.bigMost / (double) target);
+            // where the descent floor asks for more than a block a lip, a 2-block drop is worth nearly two
+            double value2 = tier.descentMin > tier.dropsMin ? 1.95
+                    : 1 + Math.min(1, tier.bigShare > 0 ? tier.bigShare : tier.bigMost / (double) target);
             int offset = r.nextInt(2);
             for (Run run : runs) {
                 boolean longRun = run.length() >= LONG_RUN;
@@ -772,7 +837,8 @@ public final class DropPlan {
                 from[i] = -1;
                 for (int j = i - 1; j >= 0; j--) {
                     double[] q = cand.get(j);
-                    if (c[0] - q[0] < BoatEnvelope.zone((int) q[1]) + LIP_GAP || c[0] < q[2] + CLEAR + ci + 1) {
+                    if (c[0] - q[0] < BoatEnvelope.zone((int) q[1]) + LIP_GAP || c[0] < q[2] + CLEAR + ci + 1
+                            || !handOn(q[0], before(q[0], (int) q[1]), q[2], c[0], ci)) {
                         continue;
                     }
                     if (best[j] + c[3] > best[i] + 1e-9) {
@@ -793,6 +859,18 @@ public final class DropPlan {
                 out.add(0, new double[]{cand.get(i)[0], cand.get(i)[1]});
             }
             return out;
+        }
+
+        /**
+         * Whether the checkpoints between a lip at {@code qs} (its checkpoint {@code qc} before it, its zone
+         * ending at {@code qEnd}) and the next at {@code s} ({@code c} before it) leave the last one before
+         * {@code s} as far on as it can be ({@link #chains}' walk, kept true pair by pair): two fit between
+         * them, or the furthest is within a leg of the one before {@code qs}.
+         */
+        boolean handOn(double qs, double qc, double qEnd, double s, double c) {
+            double a = qEnd + CLEAR + ROUNDING;
+            double b = s - c;
+            return a + 2 * c <= b || b <= qs - qc + LEG;
         }
 
         /** How far {@code s} is from its nearest other lip (capped). */

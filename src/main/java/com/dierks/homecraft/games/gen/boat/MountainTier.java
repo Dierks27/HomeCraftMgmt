@@ -11,15 +11,15 @@ import java.util.Locale;
  * <p>Fun constants, not proof: what the proof checks of a tier (P, B, the drop and descent caps, the
  * descent floor) is restated here only so the planner aims inside it; the validator owns it.
  *
- * <p><b>Where the tables bend.</b> A slalom 2-block drop needs the checkpoint before its lip within
- * 60 across of the one after its flight zone; with a checkpoint radius of W / 2 + 0.5 (7-8 on a 13-15
- * wide corridor) that leg is 61-62 long, so a slalom's 2-block drop sits in a 9-wide neck
- * ({@link #NECK}); easy slaloms keep 1-block drops. Pure, immutable.
+ * <p><b>Where the tables bend.</b> A 2-block drop needs the checkpoint before its lip within 60 across
+ * of the one after its flight zone: its radius + 0.5 + Z(2) 51 + 3 + a block's rounding, which is over
+ * 60 for any lane wider than 7 (W / 2 + 0.5 is 5 on the easy road's 9, 7-8 on a 13-15 wide slalom), so a
+ * 2-block drop on a wider lane sits in a {@value #NECK}-wide neck ({@link #NECK}). Pure, immutable.
  */
 public final class MountainTier {
 
-    /** A slalom 2-block drop's lip stands in a neck this wide (§5.4, see above). */
-    public static final int NECK = 9;
+    /** A 2-block drop's lip on a wider lane stands in a neck this wide (§5.4, see above). */
+    public static final int NECK = 7;
     /** The finish band's design z (§4.2: 572 ± 4), half-local: the finish mark 24.5 from the stand's north edge. */
     public static final int FINISH_BAND = 572;
 

@@ -198,6 +198,75 @@ public final class GenCopy {
         return List.of("FOREST", "Weave through", "the trees!");
     }
 
+    // ---- Mountain Run v2 (MOUNTAIN-V2-SPEC §7.1): its start, its new pieces, its milestones ----------
+
+    /** The Winding Road's start sign ({@code tier}: easy, medium, hard), on the pit wall. */
+    public static List<String> boatRoadStart(String tier) {
+        return List.of("WINDING ROAD", tierWord(tier) + " run", "It's a long", "way down!");
+    }
+
+    /** The Slalom's start sign. */
+    public static List<String> boatSlalomStart(String tier) {
+        return List.of("SLALOM!", tierWord(tier) + " run", "Weave through", "the gates!");
+    }
+
+    private static String tierWord(String tier) {
+        String t = tier == null ? "" : tier.trim().toLowerCase(Locale.ROOT);
+        return switch (t) {
+            case "easy" -> "Easy";
+            case "hard" -> "Hard";
+            default -> "Medium";
+        };
+    }
+
+    /** Before a hairpin link (§7.1: "HAIRPIN - ease off!"). */
+    public static List<String> boatHairpin() {
+        return List.of("HAIRPIN", "Ease off!");
+    }
+
+    /** Before a chicane. */
+    public static List<String> boatChicane() {
+        return List.of("CHICANE", "Left, right!");
+    }
+
+    /** At a staircase of {@code drops} lips down one straight (§7.1: "THE CLIFFS - 3 big drops!"). */
+    public static List<String> boatCliffs(int drops) {
+        return List.of("THE CLIFFS!", drops + " big drops!");
+    }
+
+    /** Before a slalom's gate set of {@code gates} gates ("SLALOM - 8 gates"). */
+    public static List<String> boatGates(int gates) {
+        return List.of("SLALOM", gates + " gates", "Go through", "the gaps!");
+    }
+
+    /** At the checkpoint nearest half way down. */
+    public static List<String> boatHalfway() {
+        return List.of("HALFWAY!", "Keep going!");
+    }
+
+    /** Before a tunnel through the rock. */
+    public static List<String> boatTunnel() {
+        return List.of("TUNNEL", "Lights on!");
+    }
+
+    /**
+     * Race Night's hype line for a Mountain Run v2 (MOUNTAIN-V2-SPEC §12), with {@code when} the set's own
+     * words ({@link #when}): "&amp;bThis week: the Winding Road - 27 drops, 48 blocks down the mountain!" or
+     * "&amp;bThis week: the Slalom - 14 drops through the gates!".
+     */
+    public static String boatV2Hype(String when, boolean slalom, int drops, int descent) {
+        String w = when == null || when.isBlank() ? "on this course" : when;
+        String head = "&b" + w.substring(0, 1).toUpperCase(Locale.ROOT) + w.substring(1) + ": ";
+        String count = drops + (drops == 1 ? " drop" : " drops");
+        return slalom ? head + "the Slalom - " + count + " through the gates!"
+                : head + "the Winding Road - " + count + ", " + descent + " blocks down the mountain!";
+    }
+
+    /** A Mountain Run v2's tile fact before its stars: "Winding Road · 27 drops · " or "Slalom · 14 drops · ". */
+    public static String boatV2Tile(boolean slalom, int drops) {
+        return (slalom ? "Slalom" : "Winding Road") + " · " + drops + (drops == 1 ? " drop" : " drops") + " · ";
+    }
+
     /**
      * A Dropper level's sign, on the wall over its ledge (EVENTS-DROPPER-SPEC §B.1.1): "LEVEL 2 of 5"
      * / "Step off and" / "fall into the" / "WATER!".
@@ -621,7 +690,10 @@ public final class GenCopy {
         List<List<String>> out = new ArrayList<>(List.of(parkourStart("easy"), parkourStart("medium"),
                 parkourStart("hard"), finish(), ringsStart(), ringsHow(), boatStart(2), boatRun(), boatHop(),
                 boatBigDrop(), boatDrop(1), boatDrop(2), boatFinalDrop(), boatSandyBend(), boatSandPit(), boatSplit(),
-                boatIceCave(), boatForest()));
+                boatIceCave(), boatForest(), boatRoadStart("easy"), boatRoadStart("medium"), boatRoadStart("hard"),
+                boatSlalomStart("easy"), boatSlalomStart("medium"), boatSlalomStart("hard"), boatHairpin(),
+                boatChicane(), boatCliffs(2), boatCliffs(3), boatGates(4), boatGates(11), boatHalfway(),
+                boatTunnel()));
         for (int hole = 1; hole <= 18; hole++) {
             out.add(golfTee(hole, 6));
             for (TeeFeature f : TeeFeature.values()) {

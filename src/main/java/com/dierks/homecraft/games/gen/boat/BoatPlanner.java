@@ -26,7 +26,14 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * The planner for Ice Boat's "Mountain Run" (Course Variety §2; the slot ships switched off): a
+ * The planner for Ice Boat (the slot ships switched off). <b>Algo 4, Mountain Run v2</b>
+ * (MOUNTAIN-V2-SPEC): in the 480 x 176 x 640 half, {@link MountainPlanner}'s two-stage search lays a
+ * serpentine down a mountain, a Winding Road or a Slalom ({@link BoatStyle#of} from the seed), timed by
+ * the boat-line model ({@link BoatLine}) at two to three minutes, scored for flow ({@link FlowScore})
+ * and proven by {@link MountainValidator}. The rest of this class is <b>algo 3</b>, which a half of any
+ * other size still gets and an algo-3 tag is made again by (V4-DECISIONS keeps its classes):
+ *
+ * <p>Ice Boat's "Mountain Run" (Course Variety §2): a
  * downhill sprint on a rounded-square spiral that winds from the rim of the half down round the
  * viewing stand, with real drops of 1-2 blocks, sand, pick-a-path splits, an ice cave, a forest and
  * the Final Drop, and the finish under the stand.
@@ -61,10 +68,17 @@ public final class BoatPlanner implements Planner {
 
     /**
      * Its version; bump it whenever what it makes for a seed changes (golden hashes pin three seeds
-     * a tier). 2 added the viewing stand; 3 is the Mountain Run (a layout of algo 2 keeps its stored
-     * plan, judged by {@link LoopValidatorV2}, until its set ends).
+     * a tier and style). 2 added the viewing stand; 3 is the Mountain Run (a layout of algo 2 keeps its
+     * stored plan, judged by {@link LoopValidatorV2}, until its set ends); 4 is Mountain Run v2
+     * ({@link MountainPlanner}, MOUNTAIN-V2-SPEC), made in a 480 x 176 x 640 half.
      */
-    public static final int ALGO = 3;
+    public static final int ALGO = MountainPlanner.ALGO;
+    /**
+     * The spiral's version (V4-DECISIONS: its classes stay for the frozen fixtures and re-derivation):
+     * what a half of any other size still gets (the 0.36 box, until the slot's area grows), and what an
+     * algo-3 tag is made again by.
+     */
+    public static final int ALGO_V3 = 3;
 
     /** How much of the tier's deck a try asks for (§2.9). */
     public enum Richness {
@@ -373,11 +387,12 @@ public final class BoatPlanner implements Planner {
     /** Tries before {@code SAFE_SPIRAL}; after ten, fewer pieces, after fifteen only the basics. */
     public static final int TRIES = 20;
     /**
-     * The work one plan may take: one per try (and, once {@code BoatSim} is ported as algo 4, one per
-     * simulated tick). {@link #SAFE_RESERVE} of it is kept for {@code SAFE_SPIRAL}.
+     * The work one plan may take (§5.2): algo 4 counts a Stage A candidate 1 and a Stage B build
+     * {@value MountainPlanner#UNIT_B}; the spiral counts one per try. {@link #SAFE_RESERVE} of it is kept
+     * for the safe layout ({@code SAFE_ROAD} / {@code SAFE_SLALOM}, or {@code SAFE_SPIRAL}).
      */
-    public static final long WORK_BUDGET = 2_500_000;
-    public static final long SAFE_RESERVE = 100_000;
+    public static final long WORK_BUDGET = MountainPlanner.BUDGET;
+    public static final long SAFE_RESERVE = MountainPlanner.SAFE_RESERVE;
     /** The reference speed along the centreline, blocks a second (the schedule valve's rule). */
     public static final double REF_SPEED = 30;
 
@@ -391,13 +406,32 @@ public final class BoatPlanner implements Planner {
         return ALGO;
     }
 
+    /**
+     * Mountain Run v2 (algo 4) in a 480 x 176 x 640 half; in a half of any other size, the algo-3
+     * spiral it has always made there (so a layout comes only from its inputs, rule R6).
+     */
     @Override
     public Plan plan(PlanInput in) throws GenFailed {
+        if (mountain(in.half())) {
+            return MountainPlanner.made(in).finished();
+        }
         Made m = made(in);
         return m.finished(m.work, TRIES);
     }
 
-    /** The proven layout for {@code in} with what it was made from (its path, drops and pieces; the tests read them). */
+    /** Whether {@code half} is Mountain Run v2's (§4.1): exactly 480 x 176 x 640. */
+    public static boolean mountain(Box half) {
+        return half.sizeX() == MountainPlanner.SIZE_X && half.sizeY() == MountainPlanner.SIZE_Y
+                && half.sizeZ() == MountainPlanner.SIZE_Z;
+    }
+
+    /** The algo-3 spiral for {@code in}, whatever its half (the frozen fixtures' re-derivation). */
+    static Plan planV3(PlanInput in) throws GenFailed {
+        Made m = made(in);
+        return m.finished(m.work, TRIES);
+    }
+
+    /** The proven algo-3 layout for {@code in} with what it was made from (its path, drops and pieces; the tests read them). */
     static Made made(PlanInput in) throws GenFailed {
         Level level = Level.of(in.slot().normalise(in.tierOrMix()));
         if (level == null) {
@@ -435,15 +469,19 @@ public final class BoatPlanner implements Planner {
         return safe;
     }
 
-    /** The layout the tag names, made again from its seed (the tier in {@code in} first, then the others). */
+    /**
+     * The layout the tag names, made again from its seed (the tier in {@code in} first, then the
+     * others): an algo-4 tag by Mountain Run v2, an algo-3 tag by the spiral; any other is refused.
+     */
     @Override
     public Plan rederive(PlanInput in, GenTag tag) throws GenFailed {
         if (tag == null) {
             return plan(in);
         }
-        if (tag.algo() != ALGO) {
+        if (tag.algo() != ALGO && tag.algo() != ALGO_V3) {
             throw new GenFailed("this layout was made by boat planner v" + tag.algo() + ", this is v" + ALGO);
         }
+        boolean v3 = tag.algo() == ALGO_V3;
         List<String> tiers = new ArrayList<>();
         tiers.add(in.slot().normalise(in.tierOrMix()));
         for (Level l : Level.values()) {
@@ -457,7 +495,7 @@ public final class BoatPlanner implements Planner {
                     tier, in.fallDepth(), in.workBudget(), in.cancelled());
             Plan p;
             try {
-                p = plan(again);
+                p = v3 ? planV3(again) : MountainPlanner.made(again).finished();
             } catch (GenFailed e) {
                 if (anyHash) {
                     throw e;
@@ -595,7 +633,7 @@ public final class BoatPlanner implements Planner {
         double length = profile.finish - TrackProfile.START;
         long refMs = Math.max(Math.round(length / REF_SPEED * 1000), min * 1000L + 1000);
         List<Box> keep = keepClear(raster);
-        Plan plan = Plan.of(slot.id(), ALGO, in.seed(), half, raster.palette, ops, signs, keep,
+        Plan plan = Plan.of(slot.id(), ALGO_V3, in.seed(), half, raster.palette, ops, signs, keep,
                 new PlannedTrial(course, refMs), List.of(), 0);
         return new Made(in, level, path, profile, pieces, plan, cps, trees, length);
     }
@@ -640,7 +678,7 @@ public final class BoatPlanner implements Planner {
         List<String> summary(long work, int tries) {
             List<String> out = new ArrayList<>();
             String how = work > tries ? "the safe spiral after " + tries + " tries" : "try " + work + "/" + tries;
-            out.add(in.slot().name() + " v" + ALGO + " " + level.id() + ": Mountain Run, " + Math.round(length)
+            out.add(in.slot().name() + " v" + ALGO_V3 + " " + level.id() + ": Mountain Run, " + Math.round(length)
                     + " blocks, " + path.describe() + ", " + how);
             StringBuilder drops = new StringBuilder();
             for (TrackProfile.Lip l : profile.lips) {

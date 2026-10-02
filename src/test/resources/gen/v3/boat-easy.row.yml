@@ -1,0 +1,72 @@
+name: Ice Boat
+kind: boat
+tier: easy
+world: games
+enabled: true
+pinned: false
+rev: 1
+start:
+  x: 6089.5
+  y: 169.0
+  z: 5981.5
+  yaw: 180.0
+  pitch: 0.0
+checkpoints:
+- x: 6089.5
+  y: 169.0
+  z: 5949.5
+  radius: 5.0
+- x: 6092.586
+  y: 169.0
+  z: 5918.482
+  radius: 6.0
+- x: 6118.447
+  y: 169.0
+  z: 5902.5
+  radius: 6.0
+- x: 6176.85
+  y: 168.0
+  z: 5908.026
+  radius: 6.0
+- x: 6189.385
+  y: 168.0
+  z: 5929.879
+  radius: 6.0
+- x: 6189.5
+  y: 168.0
+  z: 5941.5
+  radius: 5.0
+- x: 6163.5
+  y: 167.0
+  z: 5992.5
+  radius: 5.0
+- x: 6109.5
+  y: 166.0
+  z: 5968.5
+  radius: 5.0
+- x: 6146.5
+  y: 165.0
+  z: 5922.5
+  radius: 5.0
+finish:
+  x: 6169.5
+  y: 165.0
+  z: 5957.5
+  radius: 6.0
+fall_y: 161.0
+min_seconds: 4
+gen:
+  slot: fresh_boat
+  generator: boat
+  algo: 3
+  day: 20725
+  date: '2026-09-29'
+  cadence: 7
+  reroll: 0
+  seed: '0000000000000001'
+  half: A
+  plan: fd8f2e7b7d3b
+  ref_ms: 15331
+  gold_ms: 31000
+  silver_ms: 46000
+  built_at: 1790000000000

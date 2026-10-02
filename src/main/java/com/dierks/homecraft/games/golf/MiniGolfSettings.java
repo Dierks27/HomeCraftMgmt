@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.golf;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.TokenBalance;
 
 import java.util.List;
 
@@ -30,10 +31,10 @@ public record MiniGolfSettings(boolean enabled, int parReward, int holeInOneRewa
     public static MiniGolfSettings defaults() {
         return new MiniGolfSettings(
                 true,
-                2,
-                1,
-                5,
-                4,
+                TokenBalance.GOLF_PAR,
+                TokenBalance.GOLF_HOLE_IN_ONE,
+                TokenBalance.GOLF_FIRST_CLEAR,
+                TokenBalance.GOLF_DAILY_CAP,
                 3);
     }
 

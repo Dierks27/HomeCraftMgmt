@@ -266,7 +266,7 @@ public final class CourseMenu extends GameMenu {
 
     /**
      * The Weekly Cup's item (EVENTS-OWNER-DECISIONS D2, WP-C), when the course runs one and the viewer
-     * hasn't hidden it: "Enter this week's Cup: 5 tokens. Best time wins the pool." in its NAME, or
+     * hasn't hidden it: "Enter this week's Cup: 10 tokens. Best time wins the pool." in its NAME, or
      * that they're in with the pool. It opens the Cup screen, whose Back comes here.
      */
     private void cupButton() {

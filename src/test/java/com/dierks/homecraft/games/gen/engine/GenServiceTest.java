@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.gen.engine;
 
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.DailyStars;
 import com.dierks.homecraft.games.gen.api.GenBoards;
@@ -500,27 +501,32 @@ class GenServiceTest {
                 "fresh_tiny_golf"};
         host.settings = GenKit.weekly(six);
         boot();
-        assertEquals(4, gen.dailyClear("fresh_parkour_hard"), "weekly: Hard Parkour's first finish pays 4");
+        int hd = TokenBalance.FRESH_PARKOUR_HARD_DAILY;
+        int hw = TokenBalance.FRESH_PARKOUR_HARD_WEEKLY;
+        List<Integer> wt = TokenBalance.STAR_WEEKLY_TOKENS;
+        assertEquals(hw, gen.dailyClear("fresh_parkour_hard"), "weekly: Hard Parkour's first finish pays the weekly end");
         assertEquals(0, gen.dailyClear("river_run"), "a hand-built course pays no first-finish reward here");
         assertEquals(18, gen.weekMax(MON_28_SEP), "six courses, one edition a week: 18 stars");
         assertEquals(List.of(6, 12), gen.starGoals(), "6 and 12 stars");
-        assertEquals(2, gen.starGoalReward(12), "12 pays 2");
-        assertEquals(1, gen.starGoalReward(6), "6 pays 1");
-        assertEquals(2, gen.starGoalCap(), "under daily_cap");
+        assertEquals((int) wt.get(1), gen.starGoalReward(12), "12 pays the top goal's tokens");
+        assertEquals((int) wt.get(0), gen.starGoalReward(6), "6 the first's");
+        assertEquals(TokenBalance.FRESH_DAILY_CAP, gen.starGoalCap(), "under daily_cap");
         host.settings = GenKit.settings(six);
         gen.check(); // a reload: the engine reads the settings at its next check
-        assertEquals(3, gen.dailyClear("fresh_parkour_hard"), "daily: 3");
-        assertEquals(4, gen.dailyClear("fresh_parkour_hard", 7),
-                "but a finish on a weekly layout kept over the change pays by its own edition: 4");
-        assertEquals(3, gen.dailyClear("fresh_parkour_hard", 1), "a daily one 3");
-        assertEquals(3, gen.dailyClear("fresh_parkour_hard", 3), "an every-3-days one round(3 + 1 * 2/6) = 3");
+        assertEquals(hd, gen.dailyClear("fresh_parkour_hard"), "daily: the daily end");
+        assertEquals(hw, gen.dailyClear("fresh_parkour_hard", 7),
+                "but a finish on a weekly layout kept over the change pays by its own edition: the weekly end");
+        assertEquals(hd, gen.dailyClear("fresh_parkour_hard", 1), "a daily one the daily end");
+        assertEquals((int) Math.floor(hd + (hw - hd) * 2 / 6.0 + 0.5), gen.dailyClear("fresh_parkour_hard", 3),
+                "an every-3-days one round(daily + (weekly - daily) * 2/6)");
         assertEquals(0, gen.dailyClear("river_run", 7), "a hand-built course nothing, whatever the cadence");
         assertEquals(126, gen.weekMax(MON_28_SEP), "seven editions a week: 126");
         assertEquals(List.of(10, 25), DailyStars.stars(gen.goals(MON_28_SEP + 7)), "10 and 25 from next week");
         assertEquals(List.of(6, 12), gen.starGoals(), "this week's goals stay as they were handed out");
         host.settings = GenKit.weekly(SLOT);
         gen.check();
-        assertEquals(List.of(new DailyStars.Goal(2, 2)), gen.goals(MON_28_SEP + 7),
+        assertEquals(List.of(new DailyStars.Goal(2, java.util.Collections.max(TokenBalance.STAR_WEEKLY_TOKENS))),
+                gen.goals(MON_28_SEP + 7),
                 "one course on: 3 stars a week, so the goals come down to 80% of it");
         host.settings = GenKit.settings(SLOT).withCadence(14);
         gen.check();
@@ -535,8 +541,9 @@ class GenServiceTest {
         host.settings = GenKit.weekly(four);
         boot();
         List<DailyStars.Goal> goals = gen.goals(MON_28_SEP);
-        assertEquals(List.of(new DailyStars.Goal(6, 1), new DailyStars.Goal(9, 2)), goals,
-                "four courses on: 12 stars a week, so 6 (+1) and the top goal clamped to 9 (+2)");
+        List<Integer> wt = TokenBalance.STAR_WEEKLY_TOKENS;
+        assertEquals(List.of(new DailyStars.Goal(6, wt.get(0)), new DailyStars.Goal(9, wt.get(1))), goals,
+                "four courses on: 12 stars a week, so 6 and the top goal clamped to 9, each with its tokens");
         gen.enable("fresh_rings", false, said::add);
         gen.check();
         assertEquals(9, gen.weekMax(MON_28_SEP), "with Sky Rings off the week can give 9");

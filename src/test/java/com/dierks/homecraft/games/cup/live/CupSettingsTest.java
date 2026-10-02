@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.cup.live;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.TokenBalance;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
 
@@ -19,9 +20,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@code games.cup} (EVENTS-OWNER-DECISIONS §D2): the shipped block is exactly the defaults (on, 5
- * tokens to enter, a top-up of 10), its keys are the record's, an out-of-range number is clamped
- * with one WARN naming its full key, and {@code enabled: false} switches new entries off.
+ * {@code games.cup} (EVENTS-OWNER-DECISIONS §D2, the 2 Oct token balance): the shipped block is
+ * exactly the defaults (on, 10 tokens to enter, a top-up of 20), its keys are the record's, an
+ * out-of-range number is clamped with one WARN naming its full key, and {@code enabled: false}
+ * switches new entries off.
  */
 class CupSettingsTest {
 
@@ -41,11 +43,12 @@ class CupSettingsTest {
     }
 
     @Test
-    void theShippedBlockIsOnWithAFiveTokenEntryAndATopUpOfTen() throws Exception {
+    void theShippedBlockIsOnWithATenTokenEntryAndATopUpOfTwenty() throws Exception {
         List<String> warns = new ArrayList<>();
         GamesConfig.Parsed parsed = GamesConfig.parse(shippedGames(), warns::add, null);
         assertEquals(CupSettings.defaults(), parsed.settings(WeeklyCup.SPEC), "config.yml ships the defaults");
-        assertEquals(new CupSettings(true, 5, 10), CupSettings.defaults(), "§D2: 5 tokens, a top-up of 10, on");
+        assertEquals(new CupSettings(true, TokenBalance.CUP_ENTRY, TokenBalance.CUP_TOPUP), CupSettings.defaults(),
+                "the token balance's entry and top-up, on");
         assertTrue(warns.stream().noneMatch(w -> w.startsWith("games.cup")), "and reads without a WARN: " + warns);
         @SuppressWarnings("unchecked")
         Map<String, Object> block = (Map<String, Object>) shippedGames().get("cup");
@@ -85,8 +88,8 @@ class CupSettingsTest {
         List<String> warns = new ArrayList<>();
         CupSettings off = parse(Map.of("enabled", false), warns);
         assertFalse(off.enabled(), "games.cup.enabled: false");
-        assertEquals(5, off.entry(), "the rest as shipped");
-        assertEquals(10, off.serverTopup(), "the rest as shipped");
+        assertEquals(TokenBalance.CUP_ENTRY, off.entry(), "the rest as shipped");
+        assertEquals(TokenBalance.CUP_TOPUP, off.serverTopup(), "the rest as shipped");
         assertEquals(List.of(), warns, "no WARN");
     }
 

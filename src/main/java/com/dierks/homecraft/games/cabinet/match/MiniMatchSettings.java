@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.cabinet.match;
 
 import com.dierks.homecraft.config.GamesConfig;
 import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.cabinet.CabinetSettings;
 
 import java.util.List;
@@ -42,9 +43,9 @@ public record MiniMatchSettings(boolean enabled, int milestoneReward, int dailyR
     public static MiniMatchSettings defaults() {
         return new MiniMatchSettings(
                 true,
-                1,
-                1,
-                2,
+                TokenBalance.CABINET_MILESTONE,
+                TokenBalance.CABINET_DAILY,
+                TokenBalance.CABINET_DAILY_CAP,
                 List.of(30, 24, 20));
     }
 

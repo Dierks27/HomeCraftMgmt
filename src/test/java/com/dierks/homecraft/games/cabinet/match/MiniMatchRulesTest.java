@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.cabinet.match;
 import com.dierks.homecraft.config.GamesConfig;
 import com.dierks.homecraft.games.ScoreResult;
 import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.cabinet.CabinetGame;
 import org.junit.jupiter.api.Test;
 
@@ -31,7 +32,7 @@ class MiniMatchRulesTest {
         MiniMatchSettings s = MiniMatchSettings.defaults();
         assertEquals(List.of(30, 24, 20), s.milestonesFor(Scores.CLASSIC), "bronze, silver, gold in flips");
         assertTrue(s.milestonesFor(Scores.daily(20_000)).isEmpty(), "daily boards have no milestones");
-        assertEquals(1, s.milestoneReward(), "each milestone pays once ever");
+        assertEquals(TokenBalance.CABINET_MILESTONE, s.milestoneReward(), "each milestone pays the token balance's, once ever");
     }
 
     @Test

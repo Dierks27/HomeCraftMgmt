@@ -1,5 +1,6 @@
 package com.dierks.homecraft.games.gen.api;
 
+import com.dierks.homecraft.games.TokenBalance;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -28,9 +29,15 @@ class SlotsTest {
                 "the slots in display and config order (the two droppers of EVENTS-DROPPER-SPEC §B.1.2 last)");
         assertEquals(List.of("easy", "medium", "hard", "easy", "EEEMMMMHH", "EEE", "medium", "EEE", "EEMMH"),
                 Slots.ALL.stream().map(Slots.Def::tierOrMix).toList(), "their shipped tiers and mixes");
-        assertEquals(List.of(1, 2, 3, 2, 2, 1, 2, 1, 2), Slots.ALL.stream().map(Slots.Def::dailyClear).toList(),
-                "their shipped first-finish tokens at a daily cadence (the addendum's table, §B.1.8's droppers)");
-        assertEquals(List.of(2, 3, 4, 3, 3, 2, 3, 2, 3), Slots.ALL.stream().map(Slots.Def::weeklyClear).toList(),
+        assertEquals(List.of(TokenBalance.FRESH_PARKOUR_EASY_DAILY, TokenBalance.FRESH_PARKOUR_DAILY,
+                TokenBalance.FRESH_PARKOUR_HARD_DAILY, TokenBalance.FRESH_RINGS_DAILY, TokenBalance.FRESH_GOLF_DAILY,
+                TokenBalance.FRESH_TINY_GOLF_DAILY, TokenBalance.FRESH_BOAT_DAILY, TokenBalance.FRESH_DROPPER_EASY_DAILY,
+                TokenBalance.FRESH_DROPPER_DAILY), Slots.ALL.stream().map(Slots.Def::dailyClear).toList(),
+                "their shipped first-finish tokens at a daily cadence: the token balance's, in slot order");
+        assertEquals(List.of(TokenBalance.FRESH_PARKOUR_EASY_WEEKLY, TokenBalance.FRESH_PARKOUR_WEEKLY,
+                TokenBalance.FRESH_PARKOUR_HARD_WEEKLY, TokenBalance.FRESH_RINGS_WEEKLY, TokenBalance.FRESH_GOLF_WEEKLY,
+                TokenBalance.FRESH_TINY_GOLF_WEEKLY, TokenBalance.FRESH_BOAT_WEEKLY, TokenBalance.FRESH_DROPPER_EASY_WEEKLY,
+                TokenBalance.FRESH_DROPPER_WEEKLY), Slots.ALL.stream().map(Slots.Def::weeklyClear).toList(),
                 "and at a weekly one");
         assertEquals(List.of(true, true, true, true, true, true, false, true, true),
                 Slots.ALL.stream().map(Slots.Def::enabled).toList(),

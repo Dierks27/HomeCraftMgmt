@@ -278,7 +278,10 @@ public final class LayoutGuard {
         return c.get(PENDING_KEY, null) != null;
     }
 
-    /** The config revision that brings this layout (and the mark): {@code HomeCraftManagement.CONFIG_REVISION} 19. */
+    /**
+     * The config revision that brings this layout (and the mark): step 19 of the config migration. A file
+     * may be at a later revision ({@code HomeCraftManagement.CONFIG_REVISION}); this one stays 19.
+     */
     public static final int REVISION = 19;
 
     /**

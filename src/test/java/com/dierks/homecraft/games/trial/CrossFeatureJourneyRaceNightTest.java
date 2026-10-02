@@ -73,7 +73,7 @@ class CrossFeatureJourneyRaceNightTest {
     @BeforeEach
     void setUp() throws Exception {
         j = new JourneyBench(T0, List.of(TimeTrials.SPEC, WeeklyCup.SPEC, RaceNight.SPEC, Clubhouse.SPEC), "trials",
-                TimeTrialsSettings.defaults(), "cup", CupSettings.defaults(), "race_night", RaceNightSettings.defaults(),
+                TimeTrialsSettings.defaults(), "cup", new CupSettings(true, 5, 10) /* 0.36's Cup: 5 in, 10 on top */, "race_night", RaceNightSettings.defaults(),
                 "clubhouse", ClubhouseSettings.defaults());
         loop = j.loop();
         j.cup.desk().dao().choose(loop.id(), true);
@@ -249,7 +249,8 @@ class CrossFeatureJourneyRaceNightTest {
         assertTrue(j.race.home.isEmpty(), "nobody went home: " + j.race.home.keySet());
         assertEquals(1, j.race.fromClub.get(id(ava)), "Ava was seated from the Clubhouse once");
 
-        // prizes: 5 / 3 / 1 (3rd needs 4 racers), once
+        // prizes: 5 / 3 / 1 (3rd needs 4 racers), once - the bench's night runs at its own 5/3/2 + 1
+        // (JourneyBench.night), whatever games.race_night ships
         assertEquals(before.get(id(ava)) + 5, j.bench.balance(id(ava)), "Ava won the night: 5");
         assertEquals(before.get(id(ben)) + 3, j.bench.balance(id(ben)), "Ben 2nd: 3");
         assertEquals(before.get(id(cal)) + 1, j.bench.balance(id(cal)), "Cal: the finisher's 1 (3rd needs 4 racers)");

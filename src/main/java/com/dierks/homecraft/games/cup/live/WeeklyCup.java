@@ -41,7 +41,7 @@ import java.util.logging.Logger;
 
 /**
  * The Weekly Cup (EVENTS-OWNER-DECISIONS §D2, EVENTS-RECONCILED decision 3): on a time-trial course
- * that runs one, a player pays a small entry once a week ({@code games.cup.entry}, 5 tokens), their
+ * that runs one, a player pays a small entry once a week ({@code games.cup.entry}, 10 tokens), their
  * best counted time that week is their Cup time, and at the week's rollover (the quests' week start
  * at 04:00, when the Fresh Courses change) the pool, every entry plus a small server top-up, is
  * shared by Cup time: 70/30 with 2 Cup times, 50/30/20 with 3 or more, and no share without one.

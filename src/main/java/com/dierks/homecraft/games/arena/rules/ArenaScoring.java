@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.arena.rules;
 
 import com.dierks.homecraft.games.RewardKind;
+import com.dierks.homecraft.games.TokenBalance;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -58,9 +59,10 @@ public final class ArenaScoring {
             milestoneTokens = List.copyOf(toks);
         }
 
-        /** The shipped values: 1 a day; 30 / 60 / 120 s for 1 / 2 / 3. */
+        /** The shipped values: 30 / 60 / 120 s, and {@code TokenBalance}'s daily and milestone tokens. */
         public static Rewards defaults() {
-            return new Rewards(1, List.of(30, 60, 120), List.of(1, 2, 3));
+            return new Rewards(TokenBalance.FLOORS_DAILY, List.of(30, 60, 120),
+                    TokenBalance.FLOORS_MILESTONES);
         }
     }
 

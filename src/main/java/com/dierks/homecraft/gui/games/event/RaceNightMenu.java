@@ -23,7 +23,7 @@ import java.util.List;
  * <pre>
  *  4  CLOCK      "Race Night - Fri 7:00 PM"
  *  10 OAK_BOAT   "Ice Boat - 3 races, 2 laps" ("Ice Boat - 3 downhill races" on the Mountain Run)
- *  12 GOLD_INGOT "Prizes - 5, 3, 2 tokens" (or "Just for fun tonight"), the rules in lore
+ *  12 GOLD_INGOT "Prizes - 20, 12, 8 tokens" (or "Just for fun tonight"), the rules in lore
  *  13 Join       LIME "Join Race Night - 3 of 8 in" / RED "Leave the race list" / GRAY "Joining opens at 6:50 PM"
  *  14 SPYGLASS   "Watch" (a bossbar with the leader, and the finishes in chat)
  *  16 OAK_SIGN   "Last Race Night - won by Sam" (its results)

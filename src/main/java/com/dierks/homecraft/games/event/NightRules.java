@@ -1,5 +1,7 @@
 package com.dierks.homecraft.games.event;
 
+import com.dierks.homecraft.games.TokenBalance;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,8 +37,13 @@ public record NightRules(int races, int laps, int minRacers, int maxRacers, List
                          int stillRacingPoints, List<Integer> prizes, int finisherPrize, boolean fun,
                          int warmupSeconds, int finishWindowSeconds, int maxRaceMinutes, int breakSeconds) {
 
-    /** The most tokens one racer can win in one night, whatever config says (§A.3, EVENTS-RECONCILED 1). */
-    public static final int MAX_PRIZE_PER_NIGHT = 5;
+    /**
+     * The most tokens one racer can win in one night, whatever config says (§A.3). EVENTS-RECONCILED 1
+     * set it at 5 over prizes of 5/3/2; 0.37's token balance raised the prizes and moved this bound with
+     * them ({@link com.dierks.homecraft.games.TokenBalance#RACE_MAX_PRIZE_PER_NIGHT}), so a night still
+     * has a hard ceiling a little above the shipped 1st prize.
+     */
+    public static final int MAX_PRIZE_PER_NIGHT = TokenBalance.RACE_MAX_PRIZE_PER_NIGHT;
 
     public NightRules {
         races = Math.max(1, Math.min(5, races));

@@ -15,12 +15,13 @@ import java.util.logging.Level;
 /**
  * The small token rewards of the skill games (spec §6.1, R1.22, R2.12, R2.16).
  *
- * <p>The games are for fun, not a token farm: the token economy's budget (DESIGN §3.9, about 28
- * tokens on an active day) comes first. So every reward except a first clear counts toward the
- * game's {@code daily_cap} and the server-wide {@code games.skill_daily_cap} (shipped 6); a reward
- * that would pass a cap pays what is left, maybe nothing ("scores still count!"); a personal best
- * pays nothing; and one-time rewards (a milestone, today's challenge, a first clear) carry a stable
- * ref the database refuses to pay twice. Checked BEFORE anything one-time is marked as used: a
+ * <p>The games are for fun, not a token farm. 0.37's token balance pays about a token a minute of
+ * first-time play (the walk quest's rate, DESIGN §3.9), and the caps keep it from being farmed: every
+ * reward except a first clear counts toward the game's {@code daily_cap} and the server-wide
+ * {@code games.skill_daily_cap} ({@link TokenBalance#SKILL_DAILY_CAP}); a reward that would pass a cap
+ * pays what is left, maybe nothing ("scores still count!"), unless it is paid whole ({@link #payWhole});
+ * a personal best pays nothing; and one-time rewards (a milestone, today's challenge, a first clear)
+ * carry a stable ref the database refuses to pay twice. Checked BEFORE anything one-time is marked as used: a
  * player who can't earn here (wrong world, creative) keeps the reward for later. Nothing is ever
  * earned by playing a game of chance (R1.17).
  *

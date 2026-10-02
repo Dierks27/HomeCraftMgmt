@@ -99,7 +99,9 @@ class LayoutGuardUpgradeTest {
             Disk disk = new Disk(LayoutFixtures.v035());
             migrate(disk);
             FileConfiguration marked = disk.load();
-            assertEquals(19, marked.getInt("config_revision"), "revision 19 is stamped before the database opens");
+            assertEquals(HomeCraftManagement.CONFIG_REVISION, marked.getInt("config_revision"),
+                    "this release's revision (19's layout mark among its steps) is stamped before the database opens");
+            assertTrue(marked.getInt("config_revision") >= LayoutGuard.REVISION, "past the layout's revision 19");
             assertTrue(LayoutGuard.pending(marked), "and the file is marked for the guard");
             assertEquals(LayoutGuard.Decision.NEW,
                     LayoutGuard.run(LayoutGuard.Store.of(install.db), disk, NOW).decision(), "nothing was built");

@@ -6,6 +6,7 @@ import com.dierks.homecraft.config.PluginConfig.LottoPayout;
 import com.dierks.homecraft.config.PluginConfig.Quest;
 import com.dierks.homecraft.config.PluginConfig.QuestPeriod;
 import com.dierks.homecraft.config.PluginConfig.QuestType;
+import com.dierks.homecraft.games.TokenBalance;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
 
@@ -59,9 +60,20 @@ class ArcadeOddsTest {
     }
 
     @Test
-    void theShippedTicketReturnsBetweenThreeQuartersAndEightyFivePercent() throws Exception {
+    void theShippedTicketReturnsInsideTheGamesBand() throws Exception {
+        // the 0.37 token balance brings it from 77.6% into the house's 85-95 band
         double rtp = ArcadeService.rtp(shippedLotto());
-        assertTrue(rtp >= 0.75 && rtp <= 0.85, "RTP " + rtp + " is outside 0.75–0.85");
+        assertTrue(rtp >= 0.85 && rtp <= 0.95, "RTP " + rtp + " is outside the 85-95 band");
+        double back = 0;
+        double weights = 0;
+        for (java.util.Map<String, Object> row : TokenBalance.TICKET_PAYOUTS) {
+            int w = ((Number) row.get("weight")).intValue();
+            weights += w;
+            back += w * (Boolean.TRUE.equals(row.get("jackpot")) ? 150.0 : ((Number) row.get("tokens")).doubleValue());
+        }
+        assertEquals(back / weights / shippedLotto().ticketTokens(), rtp, 1e-9,
+                "the token balance's table, with the pot at its steady 150, over a ticket's 10");
+        assertTrue(rtp < 1.0, "and it is still a sink: it returns less than it takes");
     }
 
     @Test

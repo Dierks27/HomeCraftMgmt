@@ -27,7 +27,8 @@ import java.util.concurrent.ThreadLocalRandom;
  *
  * <p><b>Classic</b> play is free and unlimited: a new personal best is recorded and announced but
  * pays nothing (paying for bests invites holding back on purpose). A board's three
- * <b>milestones</b> — bronze, silver, gold — each pay once ever. The <b>daily board</b> is the same
+ * <b>milestones</b> — bronze, silver, gold — each pay once ever, and in full: one that today's caps
+ * can't pay whole pays nothing and is not used up ({@link #MEDAL_LIMIT}). The <b>daily board</b> is the same
  * puzzle for everyone today; each player's FIRST try at it is the scored one (a row written when
  * the board is dealt), later tries are practice. Meeting the daily goal on the scored try pays the
  * daily reward, once a day. Everything goes through {@link SkillRewards}, so the game's and the
@@ -58,6 +59,14 @@ public abstract class CabinetGame implements Game {
      */
     public static final String NOT_HERE_DAILY =
             "&7No tokens can be earned here, so today's board is practice. Your scored try waits for later.";
+
+    /**
+     * A medal today's token limit can't pay whole (0.37's token balance, D9): nothing is paid or
+     * recorded, and the next run that reaches it on another day pays it in full. Medals are once
+     * ever, so they are never short-paid (as Falling Floors' milestones, F review #5).
+     */
+    public static final String MEDAL_LIMIT =
+            "&7You've reached today's token limit - reach this medal again another day for its tokens.";
 
     protected final GameContext ctx;
     /** Read once from the database; a per-run random stand-in if that ever fails. */
@@ -191,9 +200,10 @@ public abstract class CabinetGame implements Game {
         int reward = s.milestoneReward();
         if (reward > 0) {
             for (int n : milestonesReached(s.milestonesFor(board), milestoneValue, lowerIsBetter)) {
-                int got = games().rewards().pay(player, this, source(), RewardKind.MILESTONE,
+                // once ever, so paid whole: a medal near the cap waits for another day, never recorded short
+                int got = games().rewards().payWhole(player, this, source(), RewardKind.MILESTONE,
                         SkillRewards.milestoneRef(board, n), reward, s.dailyCap(),
-                        name() + ": " + medal(n) + " milestone");
+                        name() + ": " + medal(n) + " milestone", MEDAL_LIMIT);
                 if (got > 0) {
                     reached.add(n);
                     paid += got;

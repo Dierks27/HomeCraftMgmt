@@ -1,6 +1,7 @@
 package com.dierks.homecraft.games.cabinet.tictactoe;
 
 import com.dierks.homecraft.config.GamesConfig;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.cabinet.CabinetSettings;
 
 import java.util.List;
@@ -26,8 +27,8 @@ public record TicTacToeSettings(boolean enabled, int dailyReward, int dailyCap) 
     public static TicTacToeSettings defaults() {
         return new TicTacToeSettings(
                 true,
-                1,
-                1);
+                TokenBalance.DUEL_DAILY,
+                TokenBalance.DUEL_DAILY_CAP);
     }
 
     /** Read {@code games.tic_tac_toe} over {@code d}; never throws. */

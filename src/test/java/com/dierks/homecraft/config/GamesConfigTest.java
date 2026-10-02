@@ -3,6 +3,7 @@ package com.dierks.homecraft.config;
 import com.dierks.homecraft.games.GameCatalog;
 import com.dierks.homecraft.games.GameKind;
 import com.dierks.homecraft.games.GameSpec;
+import com.dierks.homecraft.games.TokenBalance;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -44,13 +45,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>a bare switch where a game's section belongs reads as its {@code enabled};</li>
  *   <li>the restart hold ships the owner's schedule (04:00 and 16:00, 5 minutes); a restart time
  *       that isn't one is dropped with one WARN and the rest still hold, {@code []} is off;</li>
- *   <li>the shipped skill cap stays within a quarter of an active day's tokens (DESIGN §3.9).</li>
+ *   <li>the shipped caps hold every whole-paid reward and bound a day (the 2 Oct token balance): the
+ *       skill cap fits the two biggest Fresh first finishes and the day's repeatables, and stays at
+ *       most 75; Race Night's 1st prize is paid in full; the Cup's top-up is twice its entry.</li>
  * </ul>
  */
 class GamesConfigTest {
 
-    /** DESIGN §3.9: tokens earned on an active day. */
-    private static final int ACTIVE_DAY_TOKENS = 28;
+    /** The most the shipped skill cap may be: about an evening and a quarter of first-time play (BALANCE-SPEC §6). */
+    private static final int MAX_SKILL_CAP = 75;
 
     private static YamlConfiguration bundled() throws IOException, InvalidConfigurationException {
         try (InputStream in = GamesConfigTest.class.getResourceAsStream("/config.yml")) {
@@ -281,10 +284,11 @@ class GamesConfigTest {
         clamps.put("trials.party_max", 40);
         clamps.put("race_night.max_racers", 40);
         clamps.put("race_night.min_racers", 20);
-        clamps.put("race_night.prizes", List.of(5, 3, 20));
-        clamps.put("race_night.finisher_prize", 5);
+        clamps.put("race_night.prizes", List.of(5, 3, TokenBalance.RACE_MAX_PRIZE_PER_NIGHT + 10));
+        clamps.put("race_night.finisher_prize", TokenBalance.RACE_MAX_FINISHER_PRIZE + 1);
         clamps.put("race_night.prize_events_per_week", 9);
         clamps.put("race_night.warmup_seconds", 9_999);
+        clamps.put("falling_floors.daily_reward", TokenBalance.FLOORS_MAX_REWARD + 1);
         clamps.put("falling_floors.fade_ticks", 2);
         clamps.put("falling_floors.max_players", 30);
         clamps.put("falling_floors.origin", List.of(5377, 176, 4352));
@@ -311,8 +315,8 @@ class GamesConfigTest {
         assertFalse(rn.enabled(), "Race Night ships off");
         assertEquals(List.of("FRI 19:00"), rn.schedule(), "Fridays at 7:00 PM");
         assertTrue(rn.autoCourse(), "takes turns among the raceable tracks");
-        assertEquals(List.of(5, 3, 2), rn.prizes(), "the judged prizes, not D1's 15/10/5");
-        assertEquals(1, rn.finisherPrize(), "and 1 for every other finisher");
+        assertEquals(TokenBalance.RACE_PRIZES, rn.prizes(), "the token balance's prizes (the judged ones were 5/3/2)");
+        assertEquals(TokenBalance.RACE_FINISHER_PRIZE, rn.finisherPrize(), "and its prize for every other finisher");
         assertEquals(3, rn.prizeEventsPerWeek(), "at most 3 prize nights a week");
         assertEquals(180, rn.warmupSeconds(), "a shared 3-minute warm-up before the grid");
         assertTrue(rn.seasonOn(), "a monthly season board");
@@ -374,11 +378,65 @@ class GamesConfigTest {
     }
 
     @Test
-    void theShippedSkillCapIsAtMostAQuarterOfAnActiveDay() throws Exception {
+    void theShippedCapsHoldEveryWholeRewardAndBoundADay() throws Exception {
         GamesConfig.Parsed parsed = GamesConfig.parse(bundled(), w -> { });
-        assertTrue(parsed.common().skillDailyCap() * 4 <= ACTIVE_DAY_TOKENS,
-                "skill games may add at most 25% of an active day's " + ACTIVE_DAY_TOKENS + " tokens, not "
-                        + parsed.common().skillDailyCap());
+        assertEquals(List.of(), com.dierks.homecraft.games.RewardCeilings.problems(parsed),
+                "every reward paid whole fits each cap it counts toward");
+        int skill = parsed.common().skillDailyCap();
+        com.dierks.homecraft.games.gen.DailySettings fresh =
+                parsed.settings(com.dierks.homecraft.games.gen.DailyCourses.SPEC);
+        int trials = 0;
+        int golf = 0;
+        for (com.dierks.homecraft.games.gen.DailySettings.SlotConfig c : fresh.slots()) {
+            if (c.def().golf()) {
+                golf = Math.max(golf, c.dailyClear());
+            } else {
+                trials = Math.max(trials, c.dailyClear());
+            }
+        }
+        assertTrue(skill >= trials + golf, "the skill cap (" + skill + ") pays both on one evening, so a new-set "
+                + "Monday never holds back a big first finish behind the other");
+        assertTrue(skill <= MAX_SKILL_CAP, "and stays a cap: at most " + MAX_SKILL_CAP + ", not " + skill);
+        com.dierks.homecraft.games.event.RaceNightSettings night =
+                parsed.settings(com.dierks.homecraft.games.event.RaceNight.SPEC);
+        assertTrue(night.prizes().get(0) <= com.dierks.homecraft.games.event.NightRules.MAX_PRIZE_PER_NIGHT,
+                "Race Night's 1st prize is paid in full under the night's bound");
+        com.dierks.homecraft.games.cup.live.CupSettings cup =
+                parsed.settings(com.dierks.homecraft.games.cup.live.WeeklyCup.SPEC);
+        assertTrue(cup.serverTopup() >= 2 * cup.entry(),
+                "the Cup's top-up is at least twice its entry: nobody in a Cup of 2 or 3 who sets a time loses");
+    }
+
+    @Test
+    void aShippedDaysRepeatablesFitTheSkillCapAndASetPaysAboutAWeeksPlay() throws Exception {
+        // BALANCE-SPEC §6 #5: the budget, worked out from the bundled file alone
+        GamesConfig.Parsed parsed = GamesConfig.parse(bundled(), w -> { });
+        int repeatables = 0;
+        for (GameSpec<?> spec : GameCatalog.SPECS) {
+            if (parsed.settings(spec) instanceof com.dierks.homecraft.games.cabinet.CabinetSettings cab) {
+                repeatables += cab.dailyReward();
+            }
+        }
+        assertEquals(6 * TokenBalance.CABINET_DAILY + 2 * TokenBalance.DUEL_DAILY, repeatables, "eight cabinet daily goals");
+        repeatables += parsed.common().featuredBonus();
+        repeatables += parsed.settings(com.dierks.homecraft.games.trial.TimeTrials.SPEC).courseOfWeekBonus();
+        repeatables += parsed.settings(com.dierks.homecraft.games.arena.FallingFloors.SPEC).dailyReward();
+        assertTrue(repeatables <= parsed.common().skillDailyCap(),
+                "everything that repeats daily fits the skill cap (" + parsed.common().skillDailyCap() + ")");
+
+        com.dierks.homecraft.games.gen.DailySettings fresh =
+                parsed.settings(com.dierks.homecraft.games.gen.DailyCourses.SPEC);
+        int set = 0;
+        int sum = 0;
+        for (com.dierks.homecraft.games.gen.DailySettings.SlotConfig c : fresh.slots()) {
+            int weekly = fresh.rewards().clearWeekly().get(c.id());
+            if (c.enabled()) {
+                set += c.dailyClear();
+                sum += weekly;
+            }
+        }
+        assertEquals(sum, set, "a weekly set pays each course's clear_weekly, once per set");
+        assertTrue(set <= 7 * parsed.common().skillDailyCap(), "and a week's skill cap can hold a whole set");
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.dierks.homecraft.games.event;
 import com.dierks.homecraft.games.EndReason;
 import com.dierks.homecraft.games.GamesBench;
 import com.dierks.homecraft.games.GamesService;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.trial.Course;
 import com.dierks.homecraft.games.trial.CourseCodec;
 import com.dierks.homecraft.games.trial.Point;
@@ -248,7 +249,8 @@ class RaceNightPrizeWeekTest {
         assertTrue(bench.now() >= ROLLOVER, "fixture: race 1 went after the week's 04:00 rollover");
         assertEquals(THIS_WEEK, DailyLookup.weekKey(games), "fixture: it is the new week now");
         assertTrue(runner.prizeNight(), "the new week has all its prize nights, so this is one, as the screen said");
-        assertTrue(ports.titles.get(A).contains("Prizes: 5, 3, 2 tokens"), "and Go says so: " + ports.titles.get(A));
+        assertTrue(ports.titles.get(A).contains("Prizes: " + TokenBalance.RACE_PRIZES.get(0) + ", "
+                + TokenBalance.RACE_PRIZES.get(1) + ", " + TokenBalance.RACE_PRIZES.get(2) + " tokens"), "and Go says so: " + ports.titles.get(A));
         assertEquals(1, dao.prizedIn(Long.toString(THIS_WEEK)), "it uses the new week's slot");
         assertEquals(3, dao.prizedIn(Long.toString(LAST_WEEK)), "never last week's, which stays as it was");
         assertEquals(0, bench.severe(), "nothing threw");

@@ -2,6 +2,7 @@ package com.dierks.homecraft.games.cabinet.whack;
 
 import com.dierks.homecraft.config.GamesConfig;
 import com.dierks.homecraft.games.Scores;
+import com.dierks.homecraft.games.TokenBalance;
 import com.dierks.homecraft.games.cabinet.CabinetSettings;
 
 import java.util.List;
@@ -42,9 +43,9 @@ public record WhackAZombieSettings(boolean enabled, int milestoneReward, int dai
     public static WhackAZombieSettings defaults() {
         return new WhackAZombieSettings(
                 true,
-                1,
-                1,
-                2,
+                TokenBalance.CABINET_MILESTONE,
+                TokenBalance.CABINET_DAILY,
+                TokenBalance.CABINET_DAILY_CAP,
                 30,
                 List.of(15, 25, 35));
     }

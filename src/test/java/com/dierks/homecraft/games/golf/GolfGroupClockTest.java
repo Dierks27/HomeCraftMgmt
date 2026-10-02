@@ -1,7 +1,12 @@
 package com.dierks.homecraft.games.golf;
 
+import com.dierks.homecraft.games.gen.api.Box;
 import com.dierks.homecraft.games.gen.api.GenTag;
+import com.dierks.homecraft.games.gen.api.Plan;
+import com.dierks.homecraft.games.gen.api.PlannedGolf;
 import com.dierks.homecraft.games.gen.api.Slots;
+import com.dierks.homecraft.games.gen.engine.KeptCourses;
+import com.dierks.homecraft.storage.GamesDao;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -18,9 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The golf-together hole clock on Golf v4 holes (GOLF-V4-SPEC §6.4, owner decision D9): on a course
  * whose tag is golf planner version 4 or later each hole gives max(120, 30 x (par + 1)) seconds —
- * 120, 120, 150, 180 and 210 for par 2-6 — worked out from the course when the group starts; a
- * hand-built course, a kept one (no tag) and every older layout (algo 2 and 3, and their recalls)
- * keep 120 seconds on every hole.
+ * 120, 120, 150, 180 and 210 for par 2-6 — worked out from the course when the group starts; so
+ * does a course kept from such a plan (red-team F02); a hand-built course and every older layout
+ * (algo 2 and 3, their recalls and the courses kept from them) keep 120 seconds on every hole.
  */
 class GolfGroupClockTest {
 
@@ -70,6 +75,46 @@ class GolfGroupClockTest {
         GenTag boat = new GenTag("fresh_golf", Slots.BOAT, 4, 20725, 0, 1, 'A', "", 0, 0, 0, List.of(), List.of(), 0);
         assertEquals(List.of(120), GolfGroup.clocks(course(boat, 5)), "only a golf planner's tag counts");
         assertEquals(List.of(), GolfGroup.clocks(null), "no course, no clocks");
+    }
+
+    /** A planned course of golf planner version {@code algo}, kept: its row as the keep writes it, read back. */
+    private static GolfCourse kept(int algo, int... pars) {
+        GolfCourse planned = course(null, pars);
+        PlannedGolf g = new PlannedGolf(planned, List.of(), List.of(), List.of(), List.of());
+        Plan plan = Plan.of("fresh_golf", algo, 1, Box.sized(0, 60, -10, 128, 16, 224), List.of(), List.of(),
+                List.of(), List.of(), g, List.of(), 0);
+        return CourseCodec.fromRow(KeptCourses.row("my_links", "My Links", "games", plan, 1000));
+    }
+
+    /**
+     * Red-team F02: a kept course has no tag, but it says the golf planner version it was kept from
+     * ({@code kept_algo}), so a kept Golf v4 course keeps its clock by par (its par 5: three minutes)
+     * and a kept Adventure Golf course, a hand-built one and a row kept before the version was recorded
+     * keep two minutes.
+     */
+    @Test
+    void aKeptGolfV4CourseKeepsItsClockByParAndOlderKeptOnesKeepTwoMinutes() {
+        GolfCourse v4 = kept(4, 3, 5, 6);
+        assertFalse(v4.generated(), "kept: a normal course, no tag");
+        assertEquals(4, v4.keptAlgo(), "that says the version it was kept from");
+        assertEquals(List.of(120, 180, 210), GolfGroup.clocks(v4), "its par 5 is 3:00, its par 6 3:30");
+        assertTrue(CourseCodec.toRow(v4, 1000, 1000).data().contains("kept_algo: 4"), "the row says so");
+        assertEquals(List.of(180), GolfGroup.clocks(kept(5, 5)), "a later version too");
+        GolfCourse renamed = v4.withName("Our Links").withRev(4).withEnabled(false).withHole(1, v4.hole(1).withPar(4));
+        assertEquals(List.of(150, 180, 210), GolfGroup.clocks(renamed), "and keeps it through the editor's changes");
+        assertEquals(renamed, CourseCodec.fromRow(CourseCodec.toRow(renamed, 1000, 2000)), "and through its row");
+        GolfCourse v3 = kept(3, 5, 6);
+        assertEquals(3, v3.keptAlgo(), "kept from Adventure Golf: version 3");
+        assertTrue(v3.adventure(), "(which plays Adventure Golf's rules)");
+        assertEquals(List.of(120, 120), GolfGroup.clocks(v3), "keeps two minutes");
+        GolfCourse before = CourseCodec.fromRow(new GamesDao.CourseRow("old_links", "golf",
+                "golf", "Old Links", "games", true, CourseCodec.write(v4.holes(), null, true), 1, 1000, 1000));
+        assertEquals(0, before.keptAlgo(), "a row kept before the version was recorded says none");
+        assertEquals(List.of(120, 120, 120), GolfGroup.clocks(before), "and keeps two minutes");
+        assertEquals(List.of(120, 120), GolfGroup.clocks(course(null, 5, 6)), "as does a hand-built course");
+        String bad = CourseCodec.write(v4.holes(), null, true) + "kept_algo: four\n";
+        assertThrows(IllegalArgumentException.class, () -> CourseCodec.fromRow(new GamesDao.CourseRow("bad", "golf",
+                "golf", "Bad", "games", true, bad, 1, 1000, 1000)), "a version that isn't one is an error, not a guess");
     }
 
     @Test

@@ -1,11 +1,11 @@
 package com.dierks.homecraft.games.gen.boat;
 
 import com.dierks.homecraft.games.gen.V3Fixtures;
+import com.dierks.homecraft.games.gen.api.GenTag;
 import com.dierks.homecraft.games.gen.api.Plan;
 import com.dierks.homecraft.games.gen.api.PlanInput;
 import com.dierks.homecraft.games.gen.api.Slots;
 import com.dierks.homecraft.games.trial.Course;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -66,15 +66,17 @@ class V3FixturesTest {
     }
 
     @Test
-    void whileThePlannerIsStillAlgoThreeItMakesEachFixtureAgain() {
-        // Once the planner is algo 4 this can't run; the fixtures stay, and keep proving the frozen check.
-        Assumptions.assumeTrue(BoatPlanner.ALGO == 3, "the planner is algo " + BoatPlanner.ALGO + " now");
+    void theAlgoThreeTagStillMakesEachFixtureAgain() {
+        // The planner is algo 4 now; V4-DECISIONS keeps the spiral's classes, so an algo-3 tag is still made
+        // again from its seed by them, block for block.
         for (V3Fixtures.Fixture f : V3Fixtures.all()) {
             PlanInput in = new PlanInput(Slots.ICE_BOAT, f.plan().half(), f.half(), f.day(), 0, f.seed(), f.tier(), 6,
                     BoatPlanner.WORK_BUDGET, null);
+            GenTag tag = new GenTag(Slots.ICE_BOAT.id(), Slots.BOAT, BoatPlanner.ALGO_V3, f.day(), 0, f.seed(),
+                    f.half(), f.hash(), 1, 2, 3, List.of(), List.of(), 0);
             try {
-                assertEquals(f.hash(), new BoatPlanner().plan(in).hash(),
-                        f + ": the algo-3 planner makes the frozen layout from its seed, block for block");
+                assertEquals(f.hash(), new BoatPlanner().rederive(in, tag).hash(),
+                        f + ": the algo-3 planner makes the frozen layout from its tag, block for block");
             } catch (com.dierks.homecraft.games.gen.api.GenFailed e) {
                 throw new AssertionError(f + ": the algo-3 planner failed: " + e.getMessage(), e);
             }

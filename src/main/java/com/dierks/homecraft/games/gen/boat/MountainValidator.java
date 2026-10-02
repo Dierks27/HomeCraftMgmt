@@ -261,11 +261,7 @@ public final class MountainValidator {
      * SplitMix64 finaliser of {@code seed ^ 0x5EED57E1E00DL} (§5.1). {@code BoatStyle.of} must agree.
      */
     public static boolean slalom(long seed) {
-        long z = seed ^ 0x5EED57E1E00DL;
-        z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
-        z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
-        z = z ^ (z >>> 31);
-        return (z & 1L) == 1L;
+        return BoatStyle.of(seed) == BoatStyle.SLALOM;
     }
 
     /** The shortest believable time of a course, whole seconds (V12): v3's leg bound, {@link DownhillValidator#minSeconds}. */

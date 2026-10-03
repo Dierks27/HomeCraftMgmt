@@ -1496,13 +1496,18 @@ club has a job, and par is honest.** In 0.36 every hole had to fit a 20 x 40 plo
 Swing and Putt played every hole, Drive was never needed, and a first-time player shot two under
 par. The clubs are unchanged; the holes grew. Hand-built golf courses don't change at all.
 
-| Length class | Par | Path, tee to cup (every hole stays inside its class's band) | What it is |
+| Length class | Par | Path, tee to cup (every hole stays inside its class's band; most measure near its short end) | What it is |
 |---|---|---|---|
 | S | 2 | 8-12 | A short straight, sometimes with a hump, sand, a tree, a ramp, an island green or a pond to look at |
 | M | 3 | 16-25 | A longer straight or a dogleg with a piece: sand, a hill, a creek, a pond, trees, ice, terraces, two ways, the volcano; a guarded par 3 |
 | L | 4 | 27-38 | A dogleg, a Swing layup (two legs, or three: an S-bend after it), a Chip layup, an S-bend or a long straight with a piece |
 | X | 5 | 40-52 | Two or three legs: S-bends, long doglegs, a hairpin, a Swing layup; or a long straight of 44-50 with a bunker and a hill |
 
+- **Measured lengths** (300 weekly courses): par 2 holes are 7-13 blocks (median 9), par 3s 15-25
+  (most 16-21), par 4s 26-34 (most 26-31), par 5s 39-45 (most 39-42), and the long straight par 5
+  44-50. A hole measures its par near the short end of its class's band: a first-timer pays a stroke
+  for every awkward corner, so a longer routing measures a par more and is drawn again. Courses run
+  about 190-225 blocks.
 - **The mix keeps its meaning.** A mix's Easy holes take the lengths S, S, M in turn, its Medium holes
   M, M, L, L and its Hard holes L, X (X, X one time in three), shuffled within each tier. Golf of the
   Week's `EEEMMMMHH` gets S2 M3 L3 X1 or S2 M3 L2 X2, about par 30-31. (Tiny Golf's Easy holes take S,
@@ -1513,9 +1518,9 @@ par. The clubs are unchanged; the holes grew. Hand-built golf courses don't chan
   on a **Chip layup** (a rock at the inner corner keeps your aim straight on, so a Swing reaches the
   pond and a Chip doesn't) and for approaches. Putt and Tap on the green. Every green on a 40 x 64
   plot has 4 rows of **run-out** behind the cup, so a Drive at the cup rolls on past instead of
-  banking back in off the wall. Every course of 7 holes or more is dealt one Swing layup, one Chip
-  layup and one guarded par 3 (each exactly once; the Swing layup is on an L or an X hole, and never
-  makes both par 4s layups while an X hole can take it), each checked on the real ball physics along the line a first-timer
+  banking back in off the wall. Every course of 7 holes or more is dealt one Swing layup and one Chip
+  layup, and about every other course a guarded par 3 (each at most once; the Swing layup is a par 4
+  unless only a par 5 can take it, and never makes both par 4s layups), each checked on the real ball physics along the line a first-timer
   actually aims, and the planner draws holes again until a first-timer chooses Putt, Chip and Swing at
   least 4% of the time each (the summary's `clubs:` line says "met", or "MISSED" if it never could; a
   course is never held back for it). A first-timer with only Tap, Putt and Drive in the bag takes
@@ -1567,8 +1572,9 @@ par. The clubs are unchanged; the holes grew. Hand-built golf courses don't chan
     class's 3, a stroke up to balance the course)"; for example "hole 8: L L_LAYUP_BEND 8 up, 11
     across, 13 up, a corner pond 3 deep, 8 along - mean 4.16, E 3, par 4, K 5 (try 2); water, layup,
     three legs";
-  - "quota: water 2/2, sand 2/2, height 3/3, trees 1/1, big drop 1/1, layup 1/1, chip layup 1/1,
-    guarded par 3 1/1, three legs 1/1, two legs 3/3 (deal ...)";
+  - "quota: water 2/2, sand 1/1, height 2/2, trees 1/1, big drop 1/1, layup 1/1, chip layup 1/1,
+    guarded par 3 1/1, three legs 1/1, two legs 3/3 (deal ...)" (guarded par 3 0/0 on a week
+    without one);
   - "clubs: Tap ..%, Putt ..%, Chip ..%, Swing ..%, Drive ..%; Putt, Chip, Swing 4%+ each: met": how
     often the first-timer chose each club.
 - **No new settings.** Lengths, recipes, par and the quota are part of the planner's version, so a pin

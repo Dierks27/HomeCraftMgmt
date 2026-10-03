@@ -21,9 +21,11 @@ import java.util.Set;
  * {@link #L_LAYUP_BEND} and {@link #X_LAYUP}, an S-bend after it, so the layup can be a course's hole
  * of three legs) a first leg of 7-8 puts it 11-12 out along that line, so a Drive goes in and a Swing
  * stops in the elbow, and the fairway past it is 7 wide; on a guarded par 3 ({@link #M_GUARDED}) the
- * same, and water behind the green; on a Chip layup ({@link #L_CHIP_LAYUP}) a first leg of 4-5 and a
- * rock at the inner corner, which keeps the player's aim nearly straight on, so a Swing reaches the
- * pond and a Chip doesn't (its pond 3-5 deep and 6-10 along). The planner checks each on the real
+ * same, 11-15 across, its green's leg 5 or 7 wide and water 3-4 deep behind the green; on a Chip
+ * layup ({@link #L_CHIP_LAYUP}) a first leg of 4-5 and a rock at the inner corner, which keeps the
+ * player's aim nearly straight on, so a Swing reaches the pond and a Chip doesn't (its pond 3-5 deep
+ * and 6-10 along, the fairway opening out 1-3 past it; its legs measure par 4 at only four lengths,
+ * and a 7-wide leg or a longer first leg doesn't lay up). The planner checks each on the real
  * physics ({@link GolfPlannerV4#layupHolds}).
  *
  * <p><b>Lengths</b> (V4-DECISIONS D1, audit GOLF-R3-00). Off Tiny Golf a hole's path along the lane is
@@ -494,34 +496,40 @@ enum HoleRecipe {
                 boolean chip = this == L_CHIP_LAYUP;
                 boolean guarded = this == M_GUARDED;
                 int up = chip ? d.pick(4, 5) : d.pick(7, 8);
-                // a Chip layup measures par 4 only at these: 4 up, 24-25 across; 5 up, 23 or 27
-                int across = guarded ? d.len(11, 14) : !chip ? d.len(21, 27) : up == 4 ? d.len(24, 25)
+                // a Chip layup measures par 4 only at these: 4 up, 24-25 across; 5 up, 23 or 27 (5 wide)
+                int across = guarded ? d.len(11, 15) : !chip ? d.len(21, 27) : up == 4 ? d.len(24, 25)
                         : d.pick(0, 1) == 0 ? 23 : 27;
+                // a guarded par 3's green leg is 5 wide only after 7 up (after 8, the first-timer takes 4)
+                int greenHalf = guarded && up == 7 ? d.pick(2, 3) : chip ? 2 : 3;
                 int deep = chip ? d.pick(3, 5) : d.pick(3, 4);
-                int reach = guarded ? across - 5 : chip ? d.pick(6, 10) : d.pick(6, 8); // (clear of a guarded cup ring)
+                // a guarded par 3's corner pond 4-7 short of its cup ring
+                int reach = guarded ? across - d.pick(4, 7) : chip ? d.pick(6, 10) : d.pick(6, 8);
+                int back = guarded ? d.pick(3, 4) : 0;
+                int opening = chip ? reach + d.pick(1, 3) : 0;
                 int off = d.pick(-1, 1);
                 mirror = r.nextBoolean();
                 // past a Swing layup the fairway is 7 wide (the corner the tee shot lands in, then the green);
                 // a Chip layup's corner stays 5 wide, so its rock hides the next leg from the tee, and it
                 // opens out past the pond
                 d.first(d.centred(across + d.runout - 1 + (guarded ? 3 : 0), 4), up, 2);
-                d.then(1, 0, across, chip ? 2 : 3);
+                d.then(1, 0, across, greenHalf);
                 d.lay(off);
                 if (chip) {
-                    d.widen(1, reach + 1);
+                    d.widen(1, opening);
                 }
                 d.cornerPond(0, deep, reach);
                 if (chip) {
                     d.cornerRock(0);
                     d.features.add(Quota.Feature.CHIP_LAYUP);
                 } else if (guarded) {
-                    d.backPond(3);
+                    d.backPond(back);
                     d.features.add(Quota.Feature.GUARDED);
                 } else {
                     d.features.add(Quota.Feature.LAYUP);
                 }
                 sign = GenCopy.TeeFeature.LAYUP_WATER;
-                what = up + " up, " + across + " across";
+                what = up + " up, " + across + " across" + (guarded ? ", the green's leg " + (2 * greenHalf + 1)
+                        + " wide" : "");
             }
             case L_DOGLEG_SAND_POND -> {
                 int up = d.len(18, 20);

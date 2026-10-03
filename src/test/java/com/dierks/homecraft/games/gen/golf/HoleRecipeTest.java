@@ -366,14 +366,23 @@ class HoleRecipeTest {
         assertEquals(2, t.get(Quota.Feature.WATER), "Golf of the Week: water 2");
         assertEquals(1, t.get(Quota.Feature.LAYUP), "a Swing layup");
         assertEquals(1, t.get(Quota.Feature.CHIP_LAYUP), "a Chip layup");
-        assertEquals(1, t.get(Quota.Feature.GUARDED), "a guarded par 3");
+        assertEquals(1, t.get(Quota.Feature.GUARDED), "a guarded par 3, where the deal pins one");
+        int guarded = 0;
         for (long seed = 0; seed < 300; seed++) {
             DealV4.Deal deal = DealV4.deal(new GenRandom(seed), mix, false);
-            assertEquals(DealV4.PINNED.size(), deal.pinned().size(), "seed " + seed + ": a hole pinned to each");
             for (Quota.Feature f : DealV4.PINNED) {
                 long holes = deal.pinned().entrySet().stream().filter(e -> e.getValue().features(mix.charAt(e.getKey()),
                         false).contains(f)).count();
-                assertEquals(1, holes, "seed " + seed + ": one hole pinned to " + f.words());
+                assertEquals(f == Quota.Feature.GUARDED ? deal.targets().get(f) : 1, (int) holes, "seed " + seed
+                        + ": one hole pinned to " + f.words() + " (the guarded par 3 where its target is 1)");
+                if (f == Quota.Feature.GUARDED) {
+                    guarded += (int) holes;
+                    long others = 0;
+                    for (int i = 0; i < mix.length(); i++) {
+                        others += deal.recipe(mix, i, false).features(mix.charAt(i), false).contains(f) ? 1 : 0;
+                    }
+                    assertEquals(holes, others, "seed " + seed + ": no other hole is a guarded par 3");
+                }
             }
             for (Map.Entry<Integer, HoleRecipe> e : deal.pinned().entrySet()) {
                 assertEquals(e.getValue(), deal.recipe(mix, e.getKey(), false), "a pinned hole takes its recipe");
@@ -381,6 +390,8 @@ class HoleRecipeTest {
             }
             assertEquals(DealV4.COUNTED.size(), deal.met(), "seed " + seed + ": the deal meets the whole v4 quota");
         }
+        assertTrue(guarded > 105 && guarded < 195, "a guarded par 3 on about half the courses (the Swing and Chip"
+                + " layups on all): " + guarded + " of 300");
         assertTrue(DealV4.deal(new GenRandom(42), "EEE", true).pinned().isEmpty(), "Tiny Golf pins nothing");
         Map<Quota.Feature, Integer> tiny = DealV4.targets("EEE", List.of(LengthClass.S, LengthClass.S, LengthClass.M), true);
         assertEquals(0, tiny.get(Quota.Feature.WATER), "Tiny Golf: no water");
@@ -390,7 +401,7 @@ class HoleRecipeTest {
 
     /**
      * Owner's complaint, GOLF-R3 skeptics: the pins don't make both par 4s corner-pond layups where an X
-     * hole can take the Swing layup, they leave a course a hole of three legs (a custom mix with no Hard
+     * hole can take the Swing layup, nor take a course's par 5 for it while an L hole is spare, they leave a course a hole of three legs (a custom mix with no Hard
      * tier, whose only L holes take the layups, gets the three-leg Swing layup), no other hole is dealt
      * a pinned feature's recipe, and a hole's later recipe isn't one its group's other holes start with.
      */
@@ -408,6 +419,10 @@ class HoleRecipeTest {
                 long layupLs = deal.pinned().entrySet().stream().filter(e -> c.get(e.getKey()) == LengthClass.L).count();
                 if (x && ls >= 1) {
                     assertTrue(layupLs < ls, what + ": an X hole takes the Swing layup before the last L hole does");
+                }
+                if (ls >= 3) {
+                    assertFalse(deal.pinned().containsValue(HoleRecipe.X_LAYUP), what + ": with an L hole to spare the"
+                            + " Swing layup is a par 4, and the par 5 is left to the S-bends, doglegs and straights");
                 }
                 Map<Quota.Feature, Integer> t = DealV4.targets(mix, c, false);
                 assertTrue(deal.counts().get(Quota.Feature.THREE_LEGS) >= t.get(Quota.Feature.THREE_LEGS), what
@@ -442,7 +457,7 @@ class HoleRecipeTest {
             }
         }
         System.out.println("Golf v4 pins over 1,200 deals: X_LAYUP " + xLayups + ", L_LAYUP_BEND " + bent);
-        assertTrue(xLayups > 200 && bent > 100, "the Swing layup comes in all three shapes: " + xLayups + ", " + bent);
+        assertTrue(xLayups > 100 && bent > 100, "the Swing layup comes in all three shapes: " + xLayups + ", " + bent);
     }
 
     @Test
